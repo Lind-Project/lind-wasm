@@ -1,0 +1,12 @@
+[submodule "wasmtime"]
+	path = wasmtime
+	url = https://github.com/Lind-Project/wasmtime
+[submodule "lind-wasm-tests"]
+	path = lind-wasm-tests
+	url = https://github.com/Lind-Project/lind-wasm-tests
+[submodule "lind-wasm-docs"]
+	path = lind-wasm-docs
+	url = https://github.com/Lind-Project/lind-wasm-docs
+[submodule "glibc"]
+	path = glibc
+	url = https://github.com/Lind-Project/glibc
