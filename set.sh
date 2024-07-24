@@ -2,14 +2,15 @@
 cd /home
 apt-get update
 apt update
-apt install build-essential
-apt install git
-apt install wget
-apt install gcc-i686-linux-gnu g++-i686-linux-gnu
-apt install bison
-apt install gawk
-apt install vim
-apt install python3
+apt install -y build-essential
+apt install -y git
+apt install -y wget
+apt install -y gcc-i686-linux-gnu g++-i686-linux-gnu
+apt install -y bison
+apt install -y gawk
+apt install -y vim
+apt install -y libxml2
+apt install -y python3
 
 #Install clang-16
 wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
@@ -100,8 +101,8 @@ chmod +x gen_sysroot.sh
 
 #Building safeposix-rust
 cd /home
-apt install curl
-apt install gcc
+apt install -y curl
+apt install -y gcc
 git clone --recurse-submodules https://github.com/yzhang71/safeposix-rust.git
 cd safeposix-rust
 git switch 3i-dev
