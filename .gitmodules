@@ -10,3 +10,6 @@
 [submodule "glibc"]
 	path = glibc
 	url = https://github.com/Lind-Project/glibc
+[submodule "safeposix-rust"]
+	path = safeposix-rust
+	url = https://github.com/yzhang71/safeposix-rust.git
