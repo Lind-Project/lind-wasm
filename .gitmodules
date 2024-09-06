@@ -20,3 +20,7 @@
 	path = wasm-micro-runtime
 	url = https://github.com/Lind-Project/wasm-micro-runtime
 	branch = add-lind 
+[submodule "coreutils"]
+	path = coreutils
+	url = https://github.com/Lind-Project/coreutils
+	branch = cat
