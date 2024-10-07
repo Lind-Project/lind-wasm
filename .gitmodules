@@ -24,3 +24,7 @@
 	path = coreutils
 	url = https://github.com/Lind-Project/coreutils
 	branch = cat
+[submodule "RawPosix"]
+	path = RawPosix
+	url = https://github.com/Lind-Project/RawPOSIX.git
+	branch = main
