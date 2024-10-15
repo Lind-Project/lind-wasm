@@ -1,7 +1,7 @@
 [submodule "wasmtime"]
 	path = wasmtime
 	url = https://github.com/Lind-Project/wasmtime
-	branch = add-lind
+	branch = lind-wasm-main
 [submodule "lind-wasm-tests"]
 	path = lind-wasm-tests
 	url = https://github.com/Lind-Project/lind-wasm-tests
@@ -11,7 +11,7 @@
 [submodule "glibc"]
 	path = glibc
 	url = https://github.com/Lind-Project/glibc
-	branch = main
+	branch = lind-wasm-main
 [submodule "safeposix-rust"]
 	path = safeposix-rust
 	url = https://github.com/yzhang71/safeposix-rust
@@ -19,7 +19,7 @@
 [submodule "wasm-micro-runtime"]
 	path = wasm-micro-runtime
 	url = https://github.com/Lind-Project/wasm-micro-runtime
-	branch = add-lind 
+	branch = lind-wasm-main 
 [submodule "coreutils"]
 	path = coreutils
 	url = https://github.com/Lind-Project/coreutils
@@ -27,4 +27,4 @@
 [submodule "RawPOSIX"]
 	path = RawPOSIX
 	url = https://github.com/Lind-Project/RawPOSIX.git
-	branch = main
+	branch = lind-wasm-main
