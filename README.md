@@ -22,7 +22,6 @@ export CLANG=clang_folder
 cd lind-wasm
 mv ./src/glibc/wasi $CLANG/lib/clang/16/lib
 ./lindtool.sh make_all
-./lindtool.sh compile_rawposix
 ./lindtool.sh compile_wasmtime
 ```
 
