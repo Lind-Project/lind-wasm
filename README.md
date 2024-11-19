@@ -1,8 +1,7 @@
 First you need to download lind-wasm in your docker to home directory
 
 ```
-cd /home
-sudo git clone --recurse-submodules https://github.com/Lind-Project/lind-wasm.git
+sudo git clone https://github.com/Lind-Project/lind-wasm.git
 ```
 
 I assume you have rust else use
