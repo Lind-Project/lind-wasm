@@ -13,20 +13,22 @@ rustup install nightly
 rustup default nightly
 ```
 
-Run set.sh file
+set Clang path
+```
+export CLANG=clang_folder
+```
 
 ```
-cd /home/lind-wasm
-./set.sh
+cd lind-wasm
+mv ./src/glibc/wasi $CLANG/lib/clang/16/lib
+./lindtool.sh make_all
+./lindtool.sh compile_rawposix
+./lindtool.sh compile_wasmtime
 ```
 
 Now let try to print `hello world!` by printf
 
 ```
-cd /home/lind-wasm/lind-wasm-tests
-git switch main
-cd hello-world
-export LD_LIBRARY_PATH=/home/lind-wasm/wasmtime/crates/rustposix:$LD_LIBRARY_PATH
-/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang --target=wasm32-unknown-wasi --sysroot /home/lind-wasm/glibc/sysroot hello.c -g -O0 -o hello.wasm
-/home/lind-wasm/wasmtime/target/debug/wasmtime hello.wasm
+./lindtool.sh cptest PATH_TO_TEST
+./lindtool.sh run PATH_TO_TEST
 ```
