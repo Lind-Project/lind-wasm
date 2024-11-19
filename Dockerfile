@@ -4,10 +4,10 @@ FROM --platform=linux/amd64 ubuntu:latest
 # Set the working directory to home
 WORKDIR /home
 
-# Install all the required dependencies 
+# Install all the required dependencies
 RUN apt-get update && \
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
-    bison gawk vim libxml2 python3 curl gcc
+    bison gawk vim libxml2 python3 curl gcc binaryen
 
 # Clone the Lind-wasm repository
 RUN git clone https://github.com/Lind-Project/lind-wasm.git
@@ -35,8 +35,8 @@ RUN mv ./src/glibc/wasi ./clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/cl
 ENV CLANG="/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 
 # Build Lind-wasm
-RUN chmod +x lindtool.sh
+#RUN chmod +x lindtool.sh
 RUN ./lindtool.sh make_all
-# RUN ./lindtool.sh compile_wasmtime
+RUN ./lindtool.sh compile_wasmtime
 
 CMD [ "bash" ]
