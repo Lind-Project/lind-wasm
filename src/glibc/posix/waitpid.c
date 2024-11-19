@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <syscall-template.h>
 
 
 /* Wait for a child matching PID to die.
@@ -35,7 +36,7 @@
 pid_t
 __waitpid (pid_t pid, int *stat_loc, int options)
 {
-  return __wait4 (pid, stat_loc, options, NULL);
+   return MAKE_SYSCALL(173, "syscall|waitpid", (uint64_t) pid, (uint64_t) stat_loc, (uint64_t) options, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__waitpid)
 weak_alias (__waitpid, waitpid)
