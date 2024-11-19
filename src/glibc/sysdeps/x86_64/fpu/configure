@@ -1,0 +1,61 @@
+# This file is generated from configure.ac by Autoconf.  DO NOT EDIT!
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether compiler supports libmvec calls through fopenmp" >&5
+$as_echo_n "checking whether compiler supports libmvec calls through fopenmp... " >&6; }
+if ${libc_cv_libmvec_pragma_omp_simd_support+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+
+cat > conftest.c <<EOF
+__attribute__ ((__simd__)) float sinf (float);
+void
+foo (float *x)
+{
+  #pragma omp simd
+  for (int i = 0; i < 256; i++)
+    x[i] = sinf (x[i]);
+}
+EOF
+libc_cv_libmvec_pragma_omp_simd_support=no
+# Check regardless of the ABI used
+if { ac_try='${CC-cc} $CFLAGS -fno-inline -fopenmp -Wno-unknown-pragmas -S conftest.c -o conftest.s 1>&5'
+  { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_try\""; } >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; }
+  then
+  if { ac_try='grep '_ZGVbN4v_sinf' conftest.s >/dev/null'
+  { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_try\""; } >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; } \
+     || { ac_try='grep '_ZGVcN8v_sinf' conftest.s >/dev/null'
+  { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_try\""; } >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; } \
+     || { ac_try='grep '_ZGVdN8v_sinf' conftest.s >/dev/null'
+  { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_try\""; } >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; } \
+     || { ac_try='grep '_ZGVeN16v_sinf' conftest.s >/dev/null'
+  { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_try\""; } >&5
+  (eval $ac_try) 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; }
+  then
+    libc_cv_libmvec_pragma_omp_simd_support=yes
+  fi
+fi
+rm -f conftest*
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $libc_cv_libmvec_pragma_omp_simd_support" >&5
+$as_echo "$libc_cv_libmvec_pragma_omp_simd_support" >&6; }
+config_vars="$config_vars
+build-mathvec-pragma-simd-omp = $libc_cv_libmvec_pragma_omp_simd_support"

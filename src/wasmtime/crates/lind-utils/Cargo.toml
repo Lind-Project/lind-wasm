@@ -1,0 +1,13 @@
+[package]
+name = "wasmtime-lind-utils"
+version.workspace = true
+authors.workspace = true
+description = "lind utils"
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+log = { workspace = true }
