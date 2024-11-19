@@ -1,0 +1,19 @@
+[package]
+name = "wasmtime-lind-multi-process"
+version.workspace = true
+authors.workspace = true
+description = "lind multi-process implementation inside wasmtime"
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+log = { workspace = true }
+rand = "0.8"
+wasi-common = { workspace = true, features = ["exit"]}
+wasmtime = { workspace = true, features = ['threads'] }
+wasmtime-environ = { workspace = true }
+wasmtime-lind-utils = { path = "../lind-utils" }
+rawposix = { path = "../rawposix" }

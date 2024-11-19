@@ -1,0 +1,101 @@
+gcc \
+  -L "${glibc_install}/lib" \
+  -I "${glibc_install}/include" \
+  -g \
+  -m32 \
+  --sysroot ${glibc_install} \
+  -Wl,--rpath="${glibc_install}/lib -melf_i386" \
+  -Wl,--dynamic-linker="${glibc_install}/lib/ld-linux-x86-64.so.2" \
+  -std=c11 \
+  -o hello.out \
+  -v \
+  hello.c \
+  -pthread \
+;
+ldd ./hello.out
+./hello.out
+
+gcc \
+  -L "${glibc_install}/lib" \
+  -I "${glibc_install}/include" \
+  -g \
+  -m32 \
+  --sysroot ${glibc_install} \
+  -std=c11 \
+  -v \
+  hello.c \
+  -o hello.o \
+  -ffreestanding \
+;
+ldd ./hello.out
+./hello.out
+
+gcc \
+  -g \
+  -m32 \
+  -std=c11 \
+  -o hello.out \
+  -v \
+  hello.c \
+  -pthread \
+;
+
+gcc \
+  -L "${glibc_install}/lib" \
+  -I "${glibc_install}/include" \
+  -Wl,--rpath="${glibc_install}/lib" \
+  -Wl,--dynamic-linker="${glibc_install}/lib/ld-linux-x86-64.so.2" \
+  -std=c11 \
+  -o test_glibc.out \
+  -v \
+  test_glibc.c \
+  -pthread \
+;
+ldd ./test_glibc.out
+./test_glibc.out
+
+export glibc_install="/sysroot-coulson"
+
+
+gcc \
+  -L "${glibc_install}/lib" \
+  -I "${glibc_install}/include" \
+  -g \
+  -Wl,--rpath="${glibc_install}/lib" \
+  -Wl,--dynamic-linker="${glibc_install}/lib/ld-linux-x86-64.so.2" \
+  -std=c11 \
+  -o memchr.out \
+  -v \
+  memchr.c \
+  -pthread \
+;
+ldd ./memchr.out
+
+
+gcc \
+  -L "${glibc_install}/lib" \
+  -I "${glibc_install}/include" \
+  -g \
+  -Wl,--rpath="${glibc_install}/lib" \
+  -Wl,--dynamic-linker="${glibc_install}/lib/ld-linux-x86-64.so.2" \
+  -std=c11 \
+  -o fsync.out \
+  -v \
+  fsync.c \
+  -pthread \
+;
+ldd ./fsync.out
+
+gcc \
+  -L "${glibc_install}/lib" \
+  -I "${glibc_install}/include" \
+  -g \
+  -Wl,--rpath="${glibc_install}/lib" \
+  -Wl,--dynamic-linker="${glibc_install}/lib/ld-linux-x86-64.so.2" \
+  -std=c11 \
+  -o brk.out \
+  -v \
+  brk.c \
+  -pthread \
+;
+ldd ./brk.out

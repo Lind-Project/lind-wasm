@@ -1,0 +1,63 @@
+[package]
+name = "wasmtime-wasi-nn"
+version.workspace = true
+authors.workspace = true
+description = "Wasmtime implementation of the wasi-nn API"
+documentation = "https://docs.rs/wasmtime-wasi-nn"
+license = "Apache-2.0 WITH LLVM-exception"
+categories = ["wasm", "computer-vision"]
+keywords = ["webassembly", "wasm", "neural-network"]
+repository = "https://github.com/bytecodealliance/wasmtime"
+readme = "README.md"
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# These dependencies are necessary for the WITX-generation macros to work:
+anyhow = { workspace = true, features = ['std'] }
+wiggle = { workspace = true, features = ["wasmtime"] }
+
+# This dependency is necessary for the WIT-generation macros to work:
+wasmtime = { workspace = true, features = ["component-model", "runtime"] }
+
+# These dependencies are necessary for the wasi-nn implementation:
+tracing = { workspace = true }
+thiserror = { workspace = true }
+openvino = { version = "0.6.0", features = [
+    "runtime-linking",
+], optional = true }
+
+ort = { version = "2.0.0-rc.0", default-features = false, features = [
+    "copy-dylibs",
+    "download-binaries",
+], optional = true }
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.52"
+features = ["AI_MachineLearning", "Storage_Streams", "Foundation_Collections"]
+optional = true
+
+[build-dependencies]
+walkdir = { workspace = true }
+
+[dev-dependencies]
+cap-std = { workspace = true }
+libtest-mimic = { workspace = true }
+test-programs-artifacts = { workspace = true }
+wasi-common = { workspace = true, features = ["sync"] }
+wasmtime = { workspace = true, features = ["cranelift"] }
+
+[features]
+default = ["openvino", "winml"]
+# openvino is available on all platforms, it requires openvino installed.
+openvino = ["dep:openvino"]
+# onnx is available on all platforms.
+onnx = ["dep:ort"]
+# winml is only available on Windows 10 1809 and later.
+winml = ["dep:windows"]
+
+[[test]]
+name = "test-programs"
+harness = false
