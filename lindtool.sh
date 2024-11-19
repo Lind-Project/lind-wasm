@@ -1,9 +1,9 @@
 #!/bin/bash
 
-glibc_base="/home/lind-wasm/src/glibc"
-wasmtime_base="/home/lind-wasm/src/wasmtime"
-rustposix_base="/home/lind-wasm/src/safeposix-rust"
-rawposix_base="/home/lind-wasm/src/RawPOSIX"
+glibc_base="$PWD/src/glibc"
+wasmtime_base="$PWD/src/wasmtime"
+rustposix_base="$PWD/src/safeposix-rust"
+rawposix_base="$PWD/src/RawPOSIX"
 
 CC="${CLANG:=/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
 
