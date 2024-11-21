@@ -27,6 +27,11 @@
 
 #ifndef _ASM
 
+// theoritically, our jmp_buf in lind-wasm only needs to store an u64
+// which is a hash of the unwind_data. Previously there is a macro that
+// would declare the jmp_buf with different size based on __WORDSIZE,
+// this is deleted since jmp_buf is dealt by wasmtime and wasmtime won't
+// treat it differently whether or not __WORDSIZE is set.
 typedef long int __jmp_buf[8];
 
 #endif

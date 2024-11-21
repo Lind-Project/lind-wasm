@@ -1358,9 +1358,9 @@ impl<'a, T> StoreContextMut<'a, T> {
         hash
     }
 
-    // retrieve the unwind data, given the hash. The entry would also be deleted
+    // retrieve the unwind data, given the hash. The entry would be perserved
     pub fn retrieve_unwind_data(&mut self, hash: u64) -> Option<Vec<u8>> {
-        // Try to retrieve and remove an entry
+        // Try to retrieve an entry
         if let Some(value) = self.0.stack_snapshots.get(&hash) {
             Some(value.clone())
         } else {
