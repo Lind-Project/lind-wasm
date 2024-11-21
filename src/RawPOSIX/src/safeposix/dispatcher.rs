@@ -356,6 +356,16 @@ pub fn lind_syscall_api(
                 .exit_syscall(status)
         }
 
+        SELECT_SYSCALL => {
+            let nfds = arg1 as i32;
+            let readfds = interface::get_fdset(arg2).unwrap();
+            let writefds = interface::get_fdset(arg3).unwrap();
+            let errorfds = interface::get_fdset(arg4).unwrap();
+            let rposix_timeout = interface::duration_fromtimeval(arg5).unwrap();
+            interface::cagetable_getref(cageid)
+                .select_syscall(nfds, readfds, writefds, errorfds, rposix_timeout)
+        }
+
         RENAME_SYSCALL => {
             let old_ptr = (start_address + arg1) as *const u8;
             let new_ptr = (start_address + arg2) as *const u8;
@@ -808,6 +818,26 @@ pub fn lind_syscall_api(
             interface::cagetable_getref(cageid)
                 .epoll_create_syscall(size)
         }
+
+        EPOLL_CTL_SYSCALL=> {
+            let virtual_epfd = arg1 as i32;
+            let op = arg2 as i32;
+            let virtual_fd = arg3 as i32;
+            let epollevent = interface::get_epollevent(arg4).unwrap();
+            
+            interface::cagetable_getref(cageid)
+                .epoll_ctl_syscall(virtual_epfd, op, virtual_fd, epollevent)
+        }
+
+        EPOLL_WAIT_SYSCALL => {
+            let virtual_epfd = arg1 as i32;
+            let maxevents = arg3 as i32;
+            let events = interface::get_epollevent_slice(arg2, maxevents).unwrap();
+            let timeout = arg4 as i32;
+            interface::cagetable_getref(cageid)
+                .epoll_wait_syscall(virtual_epfd, events, maxevents, timeout)
+        }
+
 
         SETSOCKOPT_SYSCALL => {
             let virtual_fd = arg1 as i32;
