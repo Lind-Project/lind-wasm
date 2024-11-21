@@ -70,6 +70,7 @@ sysdep_routines += \
   epoll_pwait \
   epoll_pwait2 \
   epoll_wait \
+  epoll_ctl \
   eventfd \
   eventfd_read \
   eventfd_write \
