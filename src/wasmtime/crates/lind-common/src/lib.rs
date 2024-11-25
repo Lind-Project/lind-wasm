@@ -76,13 +76,13 @@ impl LindCommonCtx {
     // setjmp call. This function needs to be handled within wasmtime, but it is not an actual syscall so we use a different routine from lind_syscall
     pub fn lind_setjmp<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
                         (&self, caller: &mut Caller<'_, T>, jmp_buf: i32) -> i32 {
-        wasmtime_lind_multi_process::setjmp_syscall(caller, jmp_buf)
+        wasmtime_lind_multi_process::setjmp_call(caller, jmp_buf)
     }
 
     // longjmp call. This function needs to be handled within wasmtime, but it is not an actual syscall so we use a different routine from lind_syscall
     pub fn lind_longjmp<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
                         (&self, caller: &mut Caller<'_, T>, jmp_buf: i32, retval: i32) -> i32 {
-        wasmtime_lind_multi_process::longjmp_syscall(caller, jmp_buf, retval)
+        wasmtime_lind_multi_process::longjmp_call(caller, jmp_buf, retval)
     }
 
     // get current process id/cageid

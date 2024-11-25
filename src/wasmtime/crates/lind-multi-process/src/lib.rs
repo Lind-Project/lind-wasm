@@ -1412,8 +1412,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 // if the hash does not exist
                 // according to standard, calling longjmp with invalid jmp_buf would
                 // cause undefined behavior and may lead to crash. Since invalid jmp_buf is not able to be detected,
-                // so it will not return any kind of error.
-                // However, our approach of using Asyncify to implement longjmp do be able to detect it
+                // it will not return any kind of error.
+                // However, our approach of using Asyncify to implement longjmp is able to detect it
                 // and return an error if we want. But let's just follow the standard and just crash the program
                 panic!("invalid longjmp jmp_buf!");
             }
@@ -1595,7 +1595,7 @@ pub fn exit_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sy
     0
 }
 
-pub fn setjmp_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+pub fn setjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
         (caller: &mut Caller<'_, T>, jmp_buf: i32) -> i32 {
     // first let's check if the process is currently in rewind state
     let rewind_res = match catch_rewind(caller) {
@@ -1611,7 +1611,7 @@ pub fn setjmp_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::
     ctx.setjmp_call(caller, jmp_buf).unwrap()
 }
 
-pub fn longjmp_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+pub fn longjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
         (caller: &mut Caller<'_, T>, jmp_buf: i32, retval: i32) -> i32 {
     let host = caller.data().clone();
     let ctx = host.get_ctx();

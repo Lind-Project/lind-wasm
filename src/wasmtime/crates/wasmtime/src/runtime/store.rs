@@ -1337,6 +1337,9 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     // store the unwind data, return its hash
+    // * ptr: start address of the unwind data. This is basically going to be
+    //        base_address of wasm linear memory adding some potential offsets
+    // * len: length of the unwind data
     pub fn store_unwind_data(&mut self, ptr: *const u8, len: usize) -> u64 {
         // Allocate a vector with enough capacity to hold the data.
         let mut data: Vec<u8> = Vec::with_capacity(len);
@@ -1359,6 +1362,7 @@ impl<'a, T> StoreContextMut<'a, T> {
     }
 
     // retrieve the unwind data, given the hash. The entry would be perserved
+    // * hash: data stored in jmp_buf. Essentially the return value of `store_unwind_data`
     pub fn retrieve_unwind_data(&mut self, hash: u64) -> Option<Vec<u8>> {
         // Try to retrieve an entry
         if let Some(value) = self.0.stack_snapshots.get(&hash) {
