@@ -379,10 +379,6 @@ pub fn get_ioctlptrunion<'a>(generic_argument: u64) -> Result<&'a mut u8, i32> {
     ));
 }
 
-pub fn get_i32_ref<'a>(generic_argument: u64) -> Result<&'a mut i32, i32> {
-    unsafe { Ok(&mut *((generic_argument) as *mut i32)) }
-}
-
 pub fn get_pipearray<'a>(generic_argument: u64) -> Result<&'a mut PipeArray, i32> {
     let pointer = generic_argument as *mut PipeArray;
     if !pointer.is_null() {
