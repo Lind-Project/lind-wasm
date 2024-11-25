@@ -16,6 +16,12 @@ pub use super::vmmap_constants::*;
 
 pub use crate::interface::CAGE_TABLE;
 
+#[derive(Debug, Clone, Copy)]
+pub struct Zombie {
+    pub cageid: u64,
+    pub exit_code: i32
+}
+
 #[derive(Debug)]
 pub struct Cage {
     pub cageid: u64,
@@ -36,6 +42,8 @@ pub struct Cage {
     pub pendingsigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
     pub main_threadid: interface::RustAtomicU64,
     pub interval_timer: interface::IntervalTimer,
+    pub zombies: interface::RustLock<Vec<Zombie>>,
+    pub child_num: interface::RustAtomicU64
     pub vmmap:  Vmmap,
 }
 

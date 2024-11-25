@@ -169,6 +169,8 @@ impl Cage {
             pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
+            zombies: interface::RustLock::new(vec![]),
+            child_num: interface::RustAtomicU64::new(0),
         };
 
         let shmtable = &SHM_METADATA.shmtable;
@@ -201,6 +203,11 @@ impl Cage {
         interface::cagetable_remove(self.cageid);
 
         self.unmap_shm_mappings();
+
+        let zombies = self.zombies.read();
+        let cloned_zombies = zombies.clone();
+        let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
+        drop(zombies);
 
         // we grab the parent cages main threads sigset and store it at 0
         // this way the child can initialize the sigset properly when it establishes its own mainthreadid
@@ -241,6 +248,9 @@ impl Cage {
             pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
+            // when a process exec-ed, its child relationship should be perserved
+            zombies: interface::RustLock::new(cloned_zombies),
+            child_num: interface::RustAtomicU64::new(child_num),
         };
         //wasteful clone of fdtable, but mutability constraints exist
 
@@ -257,7 +267,22 @@ impl Cage {
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);
+        // if the cage has parent
+        if self.parent != self.cageid {
+            let parent_cage = interface::cagetable_getref_opt(self.parent);
+            // if parent hasn't exited yet
+            if let Some(parent) = parent_cage {
+                // decrement parent's child counter
+                parent.child_num.fetch_sub(1, interface::RustAtomicOrdering::SeqCst);
 
+                // push the exit status to parent's zombie list
+                let mut zombie_vec = parent.zombies.write();
+                zombie_vec.push(Zombie { cageid: self.cageid, exit_code: status });
+            } else {
+                // if parent already exited
+                // BUG: we currently do not handle the situation where a parent has exited already
+            }
+        }
         // Trigger SIGCHLD
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // dont trigger SIGCHLD for test suite
@@ -269,6 +294,111 @@ impl Cage {
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
+    }
+
+     //------------------------------------WAITPID SYSCALL------------------------------------
+    /*
+    *   waitpid() will return the cageid of waited cage, or 0 when WNOHANG is set and there is no cage already exited
+    *   waitpid_syscall utilizes the zombie list stored in cage struct. When a cage exited, a zombie entry will be inserted
+    *   into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
+    *   zombie list and retrieve the first entry from it (first in, first out).
+    */
+    pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
+        let mut zombies = self.zombies.write();
+        let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
+
+        // if there is no pending zombies to wait, and there is no active child, return ECHILD
+        if zombies.len() == 0 && child_num == 0 {
+            return syscall_error(Errno::ECHILD, "waitpid", "no existing unwaited-for child processes");
+        }
+
+        let mut zombie_opt: Option<Zombie> = None;
+
+        // cageid <= 0 means wait for ANY child
+        // cageid < 0 actually refers to wait for any child process whose process group ID equals -pid
+        // but we do not have the concept of process group in lind, so let's just treat it as cageid == 0
+        if cageid <= 0 {
+            loop {
+                if zombies.len() == 0 && (options & libc::WNOHANG > 0) {
+                    // if there is no pending zombies and WNOHANG is set
+                    // return immediately
+                    return 0;
+                } else if zombies.len() == 0 {
+                    // if there is no pending zombies and WNOHANG is not set
+                    // then we need to wait for children to exit
+                    // drop the zombies list before sleep to avoid deadlock
+                    drop(zombies);
+                    // TODO: replace busy waiting with more efficient mechanism
+                    interface::lind_yield();
+                    // after sleep, get the write access of zombies list back
+                    zombies = self.zombies.write();
+                    continue;
+                } else {
+                    // there are zombies avaliable
+                    // let's retrieve the first zombie
+                    zombie_opt = Some(zombies.remove(0));
+                    break;
+                }
+            }
+        }
+        // if cageid is specified, then we need to look up the zombie list for the id
+        else {
+            // first let's check if the cageid is in the zombie list
+            if let Some(index) = zombies.iter().position(|zombie| zombie.cageid == cageid as u64) {
+                // find the cage in zombie list, remove it from the list and break
+                zombie_opt = Some(zombies.remove(index));
+            } else {
+                // if the cageid is not in the zombie list, then we know either
+                // 1. the child is still running, or
+                // 2. the cage has exited, but it is not the child of this cage, or
+                // 3. the cage does not exist
+                // we need to make sure the child is still running, and it is the child of this cage
+                let child = interface::cagetable_getref_opt(cageid as u64);
+                if let Some(child_cage) = child {
+                    // make sure the child's parent is correct
+                    if child_cage.parent != self.cageid {
+                        return syscall_error(Errno::ECHILD, "waitpid", "waited cage is not the child of the cage");
+                    }
+                } else {
+                    // cage does not exist
+                    return syscall_error(Errno::ECHILD, "waitpid", "cage does not exist");
+                }
+
+                // now we have verified that the cage exists and is the child of the cage
+                loop {
+                    // the cage is not in the zombie list
+                    // we need to wait for the cage to actually exit
+
+                    // drop the zombies list before sleep to avoid deadlock
+                    drop(zombies);
+                    // TODO: replace busy waiting with more efficient mechanism
+                    interface::lind_yield();
+                    // after sleep, get the write access of zombies list back
+                    zombies = self.zombies.write();
+
+                    // let's check if the zombie list contains the cage
+                    if let Some(index) = zombies.iter().position(|zombie| zombie.cageid == cageid as u64) {
+                        // find the cage in zombie list, remove it from the list and break
+                        zombie_opt = Some(zombies.remove(index));
+                        break;
+                    }
+
+                    continue;
+                }
+            }
+        }
+
+        // reach here means we already found the desired exited child
+        let zombie = zombie_opt.unwrap();
+        // update the status
+        *status = zombie.exit_code;
+
+        // return child's cageid
+        zombie.cageid as i32
+    }
+
+    pub fn wait_syscall(&self, status: &mut i32) -> i32 {
+        self.waitpid_syscall(0, status, 0)
     }
 
     pub fn getpid_syscall(&self) -> i32 {

@@ -114,6 +114,8 @@ const SYNC_FILE_RANGE: i32 = 164;
 const WRITEV_SYSCALL: i32 = 170;
 
 const CLONE_SYSCALL: i32 = 171;
+const WAIT_SYSCALL: i32 = 172;
+const WAITPID_SYSCALL: i32 = 173;
 
 const NANOSLEEP_TIME64_SYSCALL : i32 = 181;
 
@@ -352,6 +354,16 @@ pub fn lind_syscall_api(
             let status = arg1 as i32;
             interface::cagetable_getref(cageid)
                 .exit_syscall(status)
+        }
+
+        SELECT_SYSCALL => {
+            let nfds = arg1 as i32;
+            let readfds = interface::get_fdset(arg2).unwrap();
+            let writefds = interface::get_fdset(arg3).unwrap();
+            let errorfds = interface::get_fdset(arg4).unwrap();
+            let rposix_timeout = interface::duration_fromtimeval(arg5).unwrap();
+            interface::cagetable_getref(cageid)
+                .select_syscall(nfds, readfds, writefds, errorfds, rposix_timeout)
         }
 
         RENAME_SYSCALL => {
@@ -807,6 +819,25 @@ pub fn lind_syscall_api(
                 .epoll_create_syscall(size)
         }
 
+        EPOLL_CTL_SYSCALL=> {
+            let virtual_epfd = arg1 as i32;
+            let op = arg2 as i32;
+            let virtual_fd = arg3 as i32;
+            let epollevent = interface::get_epollevent(arg4).unwrap();
+
+            interface::cagetable_getref(cageid)
+                .epoll_ctl_syscall(virtual_epfd, op, virtual_fd, epollevent)
+        }
+
+        EPOLL_WAIT_SYSCALL => {
+            let virtual_epfd = arg1 as i32;
+            let maxevents = arg3 as i32;
+            let events = interface::get_epollevent_slice(arg2, maxevents).unwrap();
+            let timeout = arg4 as i32;
+            interface::cagetable_getref(cageid)
+                .epoll_wait_syscall(virtual_epfd, events, maxevents, timeout)
+        }
+
         SETSOCKOPT_SYSCALL => {
             let virtual_fd = arg1 as i32;
             let level = arg2 as i32;
@@ -1005,6 +1036,22 @@ pub fn lind_syscall_api(
                 .nanosleep_time64_syscall(clockid, flags, req, rem)
         }
 
+        WAIT_SYSCALL => {
+            let mut status = interface::get_i32_ref(start_address + arg1).unwrap();
+
+            interface::cagetable_getref(cageid)
+                .wait_syscall(&mut status)
+        }
+
+        WAITPID_SYSCALL => {
+            let pid = arg1 as i32;
+            let mut status = interface::get_i32_ref(start_address + arg2).unwrap();
+            let options = arg3 as i32;
+
+            interface::cagetable_getref(cageid)
+                .waitpid_syscall(pid, &mut status, options)
+        }
+
         _ => -1, // Return -1 for unknown syscalls
     };
     ret
@@ -1097,6 +1144,8 @@ pub fn lindrustinit(verbosity: isize) {
         pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(0),
+        zombies: interface::RustLock::new(vec![]),
+        child_num: interface::RustAtomicU64::new(0),
     };
 
     interface::cagetable_insert(0, utilcage);
@@ -1136,6 +1185,8 @@ pub fn lindrustinit(verbosity: isize) {
         pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(1),
+        zombies: interface::RustLock::new(vec![]),
+        child_num: interface::RustAtomicU64::new(0),
     };
     interface::cagetable_insert(1, initcage);
     fdtables::init_empty_cage(1);
