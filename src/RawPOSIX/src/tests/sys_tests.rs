@@ -136,7 +136,6 @@ pub mod sys_tests {
         lindrustfinalize();
     }
 
-
     #[test]
     pub fn ut_lind_waitpid() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
