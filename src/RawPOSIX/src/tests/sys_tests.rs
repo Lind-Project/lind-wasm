@@ -136,6 +136,7 @@ pub mod sys_tests {
         lindrustfinalize();
     }
 
+
     #[test]
     pub fn ut_lind_waitpid() {
         // acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
@@ -152,7 +153,7 @@ pub mod sys_tests {
         let child_cage2 = interface::cagetable_getref(2);
         let child_cage3 = interface::cagetable_getref(3);
         let child_cage4 = interface::cagetable_getref(4);
-
+        
         // cage2 exit before parent wait
         child_cage2.exit_syscall(123);
 

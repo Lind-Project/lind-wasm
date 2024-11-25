@@ -173,6 +173,9 @@ impl Cage {
             child_num: interface::RustAtomicU64::new(0),
         };
 
+        // increment child counter for parent
+        self.child_num.fetch_add(1, interface::RustAtomicOrdering::SeqCst);
+
         let shmtable = &SHM_METADATA.shmtable;
         //update fields for shared mappings in cage
         for rev_mapping in cageobj.rev_shm.lock().iter() {
@@ -267,6 +270,7 @@ impl Cage {
 
         //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
         interface::cagetable_remove(self.cageid);
+
         // if the cage has parent
         if self.parent != self.cageid {
             let parent_cage = interface::cagetable_getref_opt(self.parent);
@@ -283,6 +287,7 @@ impl Cage {
                 // BUG: we currently do not handle the situation where a parent has exited already
             }
         }
+
         // Trigger SIGCHLD
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // dont trigger SIGCHLD for test suite
@@ -296,7 +301,7 @@ impl Cage {
         status
     }
 
-     //------------------------------------WAITPID SYSCALL------------------------------------
+    //------------------------------------WAITPID SYSCALL------------------------------------
     /*
     *   waitpid() will return the cageid of waited cage, or 0 when WNOHANG is set and there is no cage already exited
     *   waitpid_syscall utilizes the zombie list stored in cage struct. When a cage exited, a zombie entry will be inserted
