@@ -73,6 +73,18 @@ impl LindCommonCtx {
         }
     }
 
+    // setjmp call. This function needs to be handled within wasmtime, but it is not an actual syscall so we use a different routine from lind_syscall
+    pub fn lind_setjmp<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+                        (&self, caller: &mut Caller<'_, T>, jmp_buf: i32) -> i32 {
+        wasmtime_lind_multi_process::setjmp_call(caller, jmp_buf)
+    }
+
+    // longjmp call. This function needs to be handled within wasmtime, but it is not an actual syscall so we use a different routine from lind_syscall
+    pub fn lind_longjmp<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+                        (&self, caller: &mut Caller<'_, T>, jmp_buf: i32, retval: i32) -> i32 {
+        wasmtime_lind_multi_process::longjmp_call(caller, jmp_buf, retval)
+    }
+
     // get current process id/cageid
     // currently unused interface but may be useful in the future
     pub fn getpid(&self) -> i32 {
@@ -122,6 +134,30 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
             let ctx = get_cx(&host);
 
             ctx.lind_syscall(call_number, call_name, &mut caller, arg1, arg2, arg3, arg4, arg5, arg6)
+        },
+    )?;
+
+    // attach setjmp to wasmtime
+    linker.func_wrap(
+        "lind",
+        "lind-setjmp",
+        move |mut caller: Caller<'_, T>, jmp_buf: i32| -> i32 {
+            let host = caller.data().clone();
+            let ctx = get_cx(&host);
+            
+            ctx.lind_setjmp(&mut caller, jmp_buf)
+        },
+    )?;
+
+    // attach longjmp to wasmtime
+    linker.func_wrap(
+        "lind",
+        "lind-longjmp",
+        move |mut caller: Caller<'_, T>, jmp_buf: i32, retval: i32| -> i32 {
+            let host = caller.data().clone();
+            let ctx = get_cx(&host);
+
+            ctx.lind_longjmp(&mut caller, jmp_buf, retval)
         },
     )?;
 
