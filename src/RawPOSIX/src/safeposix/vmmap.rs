@@ -1,4 +1,8 @@
-use super::vmmap_constants::*;
+use crate::constants::{
+    PROT_NONE, PROT_READ, PROT_WRITE, PROT_EXEC,
+    MAP_SHARED, MAP_PRIVATE, MAP_FIXED, MAP_ANONYMOUS,
+    MAP_FAILED
+};
 use std::io;
 use nodit::NoditMap;
 use nodit::{interval::ie, Interval};
@@ -67,7 +71,7 @@ impl VmmapEntry {
     // this is effectively whatever mode the file was opened with
     // we need this because we shouldnt be able to change filed backed mappings 
     // to have protections exceeding that of the file
-    fn get_max_prot(&self, cage_id: u64, virtual_fd: u64 -> i32 {
+    fn get_max_prot(&self, cage_id: u64, virtual_fd: u64) -> i32 {
 
         let wrappedvfd = fdtables::translate_virtual_fd(cage_id, virtual_fd as u64);
         if wrappedvfd.is_err() {

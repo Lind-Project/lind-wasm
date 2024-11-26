@@ -1,6 +1,14 @@
 #![allow(dead_code)]
 use crate::interface;
-//going to get the datatypes and errnos from the cage file from now on
+use crate::constants::{
+    SIGNAL_MAX,
+    S_IRWXU, S_IRWXG, S_IRWXO,
+    PROT_READ, PROT_WRITE,
+    O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC,
+    MAP_SHARED, MAP_PRIVATE,
+};
+
+// Going to get the datatypes and errnos from the cage file from now on
 pub use crate::interface::errnos::{syscall_error, Errno};
 
 pub use crate::interface::types::{
@@ -8,12 +16,8 @@ pub use crate::interface::types::{
 };
 
 use super::filesystem::normpath;
-pub use super::syscalls::fs_constants::*;
-pub use super::syscalls::net_constants::*;
-pub use super::syscalls::sys_constants::*;
-pub use super::vmmap::*;
-pub use super::vmmap_constants::*;
 
+pub use super::vmmap::*;
 pub use crate::interface::CAGE_TABLE;
 
 #[derive(Debug, Clone, Copy)]

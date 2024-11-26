@@ -1,9 +1,9 @@
 #![allow(dead_code)]
-use super::net_constants;
+use crate::constants::net_constants;
 use crate::{interface::FdSet, safeposix::cage::*};
 use crate::interface::*;
 use crate::interface;
-use super::sys_constants;
+use crate::constants::sys_constants;
 
 use crate::fdtables::{self, FDTableEntry};
 

@@ -1,10 +1,23 @@
 #![allow(dead_code)]
 
 use std::fs;
-use super::fs_constants;
-// File system related system calls
-use super::fs_constants::*;
-use super::sys_constants;
+// Removed these since we'll import from constants directly
+// use super::fs_constants;
+// use super::fs_constants::*;
+// use super::sys_constants;
+
+// Add constants imports
+use crate::constants::{
+    S_IRWXU, S_IRWXG, S_IRWXO,
+    PROT_READ, PROT_WRITE,
+    O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_CLOEXEC,
+    MAP_SHARED, MAP_PRIVATE,
+    SEEK_SET, SEEK_CUR, SEEK_END,
+    SHMMIN, SHMMAX, SHM_RDONLY, SHM_DEST,
+    DEFAULT_UID, DEFAULT_GID,
+    SEM_VALUE_MAX,
+};
+
 use crate::interface;
 use crate::interface::get_errno;
 use crate::interface::handle_errno;
@@ -1178,7 +1191,7 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let prot: i32;
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
-            if 0 != (shmflg & fs_constants::SHM_RDONLY) {
+            if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             } else {
                 prot = PROT_READ | PROT_WRITE;

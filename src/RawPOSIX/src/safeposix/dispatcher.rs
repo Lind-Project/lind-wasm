@@ -135,6 +135,7 @@ use crate::interface::types;
 use crate::interface::{SigactionStruct, StatData};
 use crate::{fdtables, interface};
 use crate::interface::errnos::*;
+use crate::constants::{O_RDONLY, O_WRONLY};
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -1155,8 +1156,8 @@ pub fn lindrustinit(verbosity: isize) {
     // STDIN
     let dev_null = CString::new("/home/lind/lind_project/src/safeposix-rust/tmp/dev/null").unwrap();
     unsafe {
-        libc::open(dev_null.as_ptr(), libc::O_RDONLY);
-        libc::open(dev_null.as_ptr(), libc::O_WRONLY);
+        libc::open(dev_null.as_ptr(), O_RDONLY);
+        libc::open(dev_null.as_ptr(), O_WRONLY);
         libc::dup(1);
     }
     
