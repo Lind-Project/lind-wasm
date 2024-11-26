@@ -135,6 +135,7 @@ use crate::interface::types;
 use crate::interface::{SigactionStruct, StatData};
 use crate::{fdtables, interface};
 use crate::interface::errnos::*;
+use crate::constants::{O_RDONLY, O_WRONLY};
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -824,7 +825,7 @@ pub fn lind_syscall_api(
             let op = arg2 as i32;
             let virtual_fd = arg3 as i32;
             let epollevent = interface::get_epollevent(arg4).unwrap();
-            
+
             interface::cagetable_getref(cageid)
                 .epoll_ctl_syscall(virtual_epfd, op, virtual_fd, epollevent)
         }
@@ -1039,7 +1040,7 @@ pub fn lind_syscall_api(
 
         WAIT_SYSCALL => {
             let mut status = interface::get_i32_ref(start_address + arg1).unwrap();
-            
+
             interface::cagetable_getref(cageid)
                 .wait_syscall(&mut status)
         }
@@ -1155,8 +1156,8 @@ pub fn lindrustinit(verbosity: isize) {
     // STDIN
     let dev_null = CString::new("/home/lind/lind_project/src/safeposix-rust/tmp/dev/null").unwrap();
     unsafe {
-        libc::open(dev_null.as_ptr(), libc::O_RDONLY);
-        libc::open(dev_null.as_ptr(), libc::O_WRONLY);
+        libc::open(dev_null.as_ptr(), O_RDONLY);
+        libc::open(dev_null.as_ptr(), O_WRONLY);
         libc::dup(1);
     }
     
