@@ -1,0 +1,17 @@
+# Disable test result caching
+test --nocache_test_results
+
+# Discard the analysis cache
+build --discard_analysis_cache
+
+# Disable tracking incremental state
+build --nokeep_going
+
+# Force standalone spawn strategy (no sandboxing or cache)
+build --spawn_strategy=standalone
+
+# Ensure test actions do not use cached results
+test --spawn_strategy=standalone
+
+# Set the WORKSPACE_ROOT environment variable
+build --action_env=WORKSPACE_ROOT=/home/lind-wasm
