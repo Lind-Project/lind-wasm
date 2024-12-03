@@ -16,6 +16,10 @@
 ## -------------------- ##
 
 # Be more Bourne compatible
+
+echo "This is the right file"
+exit 0
+
 DUALCASE=1; export DUALCASE # for MKS sh
 as_nop=:
 if test ${ZSH_VERSION+y} && (emulate sh) >/dev/null 2>&1
