@@ -22,24 +22,46 @@ pub struct Zombie {
 
 #[derive(Debug)]
 pub struct Cage {
-    pub cageid: u64,
-    pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>,
+    // Identifying ID number for this cage
+    pub cageid: u64, 
+    // Current working directory of cage, must be able to be unique from other cages
+    pub cwd: interface::RustLock<interface::RustRfc<interface::RustPathBuf>>, 
+    // Cage ID of parent cage
     pub parent: u64,
+    // Flag used in former RustPOSIX to determine if cage needs to terminate due to fault or signal 
+    // (TODO: TO BE REMOVED OR REPURPOSED)
     pub cancelstatus: interface::RustAtomicBool,
+    // Identifiers for gid/uid/egid/euid 
+    // (TODO: WE CAN RENAME THERE GID INSTEAD OF GETGID etc.)
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
     pub getegid: interface::RustAtomicI32,
     pub geteuid: interface::RustAtomicI32,
-    pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, //maps addr within cage to shmid
+    // Reverse mapping for shared memory of addresses in cage to shmid, used for attaching and deattaching 
+    // shared memory segments
+    pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, 
+    // Old rustposix tables for handling concurrency primitives with NaCl's model 
+    // (TODO: TO BE REMOVED AND REPLACED WITH TRACKING FOR FUTEXES
     pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
+    // Old rustposix tables for handling concurrency primitives with NaCl's model 
+    // (TODO: TO BE REMOVED AND REPLACED WITH TRACKING FOR FUTEXES
     pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
+    // Old rustposix tables for handling concurrency primitives with NaCl's model 
+    // (TODO: TO BE REMOVED AND REPLACED WITH TRACKING FOR FUTEXES
     pub sem_table: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>>,
+    // Table of thread IDs for all threads in this cage, formerly used for managing cage exit/destruction 
+    // (TODO: TO BE REMOVED OR REPURPOSED)
     pub thread_table: interface::RustHashMap<u64, bool>,
+    // Mapping of signal numbers to registered for this cage
     pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
+    // Set of registered signals for cage
     pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
-    pub pendingsigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
+    // The kerne thread id of the main thread of current cage, used because when we want to send signals, 
+    // we want to send to the main thread 
     pub main_threadid: interface::RustAtomicU64,
+    // Timer used for alarm() and/or setitimer()
     pub interval_timer: interface::IntervalTimer,
+    // Table of child zombie entries waited on, used in wait_syscall for parents to determine whether to exit child
     pub zombies: interface::RustLock<Vec<Zombie>>,
     pub child_num: interface::RustAtomicU64
 }
