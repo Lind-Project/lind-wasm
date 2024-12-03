@@ -32,7 +32,7 @@ pub struct Cage {
     // (TODO: TO BE REMOVED OR REPURPOSED)
     pub cancelstatus: interface::RustAtomicBool,
     // Identifiers for gid/uid/egid/euid 
-    // (TODO: WE CAN RENAME THERE GID INSTEAD OF GETGID etc.)
+    // (TODO: WE CAN RENAME THESE GID INSTEAD OF GETGID etc.)
     pub getgid: interface::RustAtomicI32,
     pub getuid: interface::RustAtomicI32,
     pub getegid: interface::RustAtomicI32,
@@ -56,7 +56,7 @@ pub struct Cage {
     pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
     // Set of registered signals for cage
     pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
-    // The kerne thread id of the main thread of current cage, used because when we want to send signals, 
+    // The kernel thread id of the main thread of current cage, used because when we want to send signals, 
     // we want to send to the main thread 
     pub main_threadid: interface::RustAtomicU64,
     // Timer used for alarm() and/or setitimer()
