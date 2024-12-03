@@ -166,7 +166,6 @@ impl Cage {
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
             sigset: newsigset,
-            pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
             zombies: interface::RustLock::new(vec![]),
@@ -248,7 +247,6 @@ impl Cage {
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
             sigset: newsigset,
-            pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
             // when a process exec-ed, its child relationship should be perserved
