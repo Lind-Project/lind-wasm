@@ -95,6 +95,8 @@ use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::future::Future;
+use core::hash::Hasher;
+use core::hash::Hash;
 use core::marker;
 use core::mem::{self, ManuallyDrop};
 use core::num::NonZeroU64;
@@ -103,6 +105,8 @@ use core::pin::Pin;
 use core::ptr;
 use core::sync::atomic::AtomicU64;
 use core::task::{Context, Poll};
+use std::collections::HashMap;
+use std::hash::DefaultHasher;
 
 mod context;
 pub use self::context::*;
@@ -334,6 +338,10 @@ pub struct StoreOpaque {
     stack_top: u64,
     // stack bottom
     stack_base: u64,
+    
+    // used by setjmp/longjmp
+    // a mapping of raw unwind data hash to unwind data
+    stack_snapshots: HashMap<u64, Vec<u8>>,
 
     // GC-related fields.
     gc_store: Option<GcStore>,
@@ -540,6 +548,7 @@ impl<T> Store<T> {
                 signal_handler: None,
                 stack_top: 0,
                 stack_base: 0,
+                stack_snapshots: HashMap::new(),
                 gc_store: None,
                 gc_roots: RootSet::default(),
                 gc_roots_list: GcRootsList::default(),
@@ -652,6 +661,7 @@ impl<T> Store<T> {
             signal_handler: None,
             stack_top: 0,
             stack_base: 0,
+            stack_snapshots: HashMap::new(),
             gc_store: None,
             gc_roots: RootSet::default(),
             gc_roots_list: GcRootsList::default(),
@@ -1324,6 +1334,42 @@ impl<'a, T> StoreContextMut<'a, T> {
     /// set current rewinding state
     pub fn set_rewinding_state(&mut self, state: RewindingReturn) {
         self.0.rewinding = state;
+    }
+
+    // store the unwind data, return its hash
+    // * ptr: start address of the unwind data. This is basically going to be
+    //        base_address of wasm linear memory adding some potential offsets
+    // * len: length of the unwind data
+    pub fn store_unwind_data(&mut self, ptr: *const u8, len: usize) -> u64 {
+        // Allocate a vector with enough capacity to hold the data.
+        let mut data: Vec<u8> = Vec::with_capacity(len);
+            
+        unsafe {
+            // Copy bytes from the raw pointer to the vector.
+            ptr::copy_nonoverlapping(ptr, data.as_mut_ptr(), len);
+            
+            // Set the length of the vector since we've manually populated it.
+            data.set_len(len);
+        }
+
+        let mut hasher = DefaultHasher::new();
+        data.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        self.0.stack_snapshots.insert(hash, data);
+
+        hash
+    }
+
+    // retrieve the unwind data, given the hash. The entry would be perserved
+    // * hash: data stored in jmp_buf. Essentially the return value of `store_unwind_data`
+    pub fn retrieve_unwind_data(&mut self, hash: u64) -> Option<Vec<u8>> {
+        // Try to retrieve an entry
+        if let Some(value) = self.0.stack_snapshots.get(&hash) {
+            Some(value.clone())
+        } else {
+            None
+        }
     }
 
     /// get stack top

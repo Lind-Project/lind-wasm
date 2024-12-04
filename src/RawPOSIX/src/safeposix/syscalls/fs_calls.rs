@@ -41,14 +41,8 @@ use std::mem;
 
 use crate::fdtables;
 use crate::safeposix::cage::Cage;
-use libc::{
-    PROT_READ, PROT_WRITE,  // Memory protection flags
-    O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC,  // File open flags
-    MAP_SHARED, MAP_PRIVATE,  // Memory mapping flags
-    SEEK_SET, SEEK_CUR, SEEK_END,  // Seek constants
-    S_IRWXU, S_IRWXG, S_IRWXO,  // Permission flags (user, group, others)
-};
-static LIND_ROOT: &str = "/home/lind/lind_project/src/safeposix-rust/tmp";
+
+static LIND_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
@@ -69,7 +63,6 @@ impl Cage {
         let c_path = CString::new(full_path).unwrap();
 
         let kernel_fd = unsafe { libc::open(c_path.as_ptr(), oflag, mode) };
-
         
         if kernel_fd < 0 {
             let errno = get_errno();
