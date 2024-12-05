@@ -116,6 +116,8 @@ const WRITEV_SYSCALL: i32 = 170;
 const CLONE_SYSCALL: i32 = 171;
 const WAIT_SYSCALL: i32 = 172;
 const WAITPID_SYSCALL: i32 = 173;
+const BRK_SYSCALL: i32 = 175;
+const SBRK_SYSCALL: i32 = 176;
 
 const NANOSLEEP_TIME64_SYSCALL : i32 = 181;
 
@@ -135,6 +137,7 @@ use crate::interface::types;
 use crate::interface::{SigactionStruct, StatData};
 use crate::{fdtables, interface};
 use crate::interface::errnos::*;
+use crate::constants::{O_RDONLY, O_WRONLY};
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -218,23 +221,21 @@ pub fn lind_syscall_api(
         }
 
         MUNMAP_SYSCALL => {
-            let addr = (start_address + arg1) as *mut u8;
+            let addr = arg1 as *mut u8;
             let len = arg2 as usize;
-
-            interface::cagetable_getref(cageid)
-                .munmap_syscall(addr, len)
+            
+            interface::munmap_handler(cageid, addr, len)
         }
 
         MMAP_SYSCALL => {
-            let addr = (start_address + arg1) as *mut u8;
+            let addr = arg1 as *mut u8;
             let len = arg2 as usize;
-            let prot = arg3 as i32;
-            let flags = arg4 as i32;
-            let fildes = arg5 as i32;
+            let mut prot = arg3 as i32;
+            let mut flags = arg4 as i32;
+            let mut fildes = arg5 as i32;
             let off = arg6 as i64;
-
-            interface::cagetable_getref(cageid)
-                .mmap_syscall(addr, len, prot, flags, fildes, off)
+            
+            interface::mmap_handler(cageid, addr, len, prot, flags, fildes, off)
         }
 
         PREAD_SYSCALL => {
@@ -824,7 +825,7 @@ pub fn lind_syscall_api(
             let op = arg2 as i32;
             let virtual_fd = arg3 as i32;
             let epollevent = interface::get_epollevent(arg4).unwrap();
-            
+
             interface::cagetable_getref(cageid)
                 .epoll_ctl_syscall(virtual_epfd, op, virtual_fd, epollevent)
         }
@@ -1039,7 +1040,7 @@ pub fn lind_syscall_api(
 
         WAIT_SYSCALL => {
             let mut status = interface::get_i32_ref(start_address + arg1).unwrap();
-            
+
             interface::cagetable_getref(cageid)
                 .wait_syscall(&mut status)
         }
@@ -1053,9 +1054,43 @@ pub fn lind_syscall_api(
                 .waitpid_syscall(pid, &mut status, options)
         }
 
+
+        SBRK_SYSCALL => {
+            let brk = arg1 as u32;
+
+            interface::sbrk_handler(cageid, brk)
+        }
+
         _ => -1, // Return -1 for unknown syscalls
     };
     ret
+}
+
+// initilize the vmmap, invoked by wasmtime
+pub fn lind_cage_vmmap_init(cageid: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    let mut vmmap = cage.vmmap.write();
+    vmmap.add_entry(VmmapEntry::new(0, 0x30, PROT_WRITE | PROT_READ, 0 /* not sure about this field */, (MAP_PRIVATE | MAP_ANONYMOUS) as i32, false, 0, 0, cageid, MemoryBackingType::Anonymous));
+    // BUG: currently need to insert an entry at the end to indicate the end of memory space. This should be fixed soon so that
+    //      no dummy entries are required to be inserted
+    vmmap.add_entry(VmmapEntry::new(1 << 18, 1, PROT_NONE, 0 /* not sure about this field */, (MAP_PRIVATE | MAP_ANONYMOUS) as i32, false, 0, 0, cageid, MemoryBackingType::Anonymous));
+}
+
+// set the wasm linear memory base address to vmmap
+pub fn set_base_address(cageid: u64, base_address: i64) {
+    let cage = interface::cagetable_getref(cageid);
+    let mut vmmap = cage.vmmap.write();
+    vmmap.set_base_address(base_address);
+}
+
+// clone the cage memory. Invoked by wasmtime after cage is forked
+pub fn fork_vmmap_helper(parent_cageid: u64, child_cageid: u64) {
+    let parent_cage = interface::cagetable_getref(parent_cageid);
+    let child_cage = interface::cagetable_getref(child_cageid);
+    let parent_vmmap = parent_cage.vmmap.read();
+    let child_vmmap = child_cage.vmmap.read();
+
+    interface::fork_vmmap(&parent_vmmap, &child_vmmap);
 }
 
 #[no_mangle]
@@ -1145,6 +1180,7 @@ pub fn lindrustinit(verbosity: isize) {
         pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(0),
+        vmmap: interface::RustLock::new(Vmmap::new()) // Initialize empty virtual memory map for new process
         zombies: interface::RustLock::new(vec![]),
         child_num: interface::RustAtomicU64::new(0),
     };
@@ -1155,8 +1191,8 @@ pub fn lindrustinit(verbosity: isize) {
     // STDIN
     let dev_null = CString::new("/home/lind/lind_project/src/safeposix-rust/tmp/dev/null").unwrap();
     unsafe {
-        libc::open(dev_null.as_ptr(), libc::O_RDONLY);
-        libc::open(dev_null.as_ptr(), libc::O_WRONLY);
+        libc::open(dev_null.as_ptr(), O_RDONLY);
+        libc::open(dev_null.as_ptr(), O_WRONLY);
         libc::dup(1);
     }
     
@@ -1186,6 +1222,7 @@ pub fn lindrustinit(verbosity: isize) {
         pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(1),
+        vmmap: interface::RustLock::new(Vmmap::new()) // Initialize empty virtual memory map for new process
         zombies: interface::RustLock::new(vec![]),
         child_num: interface::RustAtomicU64::new(0),
     };
