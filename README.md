@@ -33,3 +33,17 @@ Now let try to print `hello world!` by printf
 ./lindtool.sh cptest PATH_TO_TEST
 ./lindtool.sh run PATH_TO_TEST
 ```
+
+A quick-way to get start:
+```
+docker pull securesystemslab/lind-wasm
+docker run -it securesystemslab/lind-wasm /bin/bash
+```
+
+New Build System (Bazel):
+
+install bazel on your system: [bazel](https://bazel.build/install)
+```
+bazel build //:make_all
+bazel build //:make_wasmtime
+```
