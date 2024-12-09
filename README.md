@@ -15,6 +15,8 @@ rustup default nightly
 
 set Clang path
 ```
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
 export CLANG=clang_folder
 ```
 
