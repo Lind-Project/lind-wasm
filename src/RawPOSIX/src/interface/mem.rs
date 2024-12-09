@@ -1,8 +1,12 @@
-use libc::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC};
+use crate::constants::{
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC,
+};
 
 use crate::safeposix::cage::{MemoryBackingType, Vmmap, VmmapOps, MAP_SHARED, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE};
 
 use crate::interface::{cagetable_getref, syscall_error, Errno};
+
+use std::result::Result;
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
@@ -225,4 +229,22 @@ pub fn sbrk_handler(cageid: u64, brk: u32) -> i32 {
     // }
 
     (PAGESIZE * heap.npages) as i32
+}
+
+pub fn check_and_convert_addr(cageid: u64, user_addr: u64) -> Result<u64, Errno> {
+    let cage = cagetable_getref(cageid);
+    let mut vmmap = cage.vmmap.write();  // Changed to write() since check_addr_mapping needs &mut self
+    
+    // Convert address to page number
+    let page_num = (user_addr >> PAGESHIFT) as u32;
+    
+    // Use existing check_addr_mapping function
+    // We use 1 page and PROT_READ since we just want to verify the address is valid
+    if vmmap.check_addr_mapping(page_num, 1, PROT_READ).is_none() {
+        return Err(Errno::EFAULT);
+    }
+
+    // If valid, convert user address to system address
+    let sys_addr = vmmap.user_to_sys(user_addr as i32) as u64;
+    Ok(sys_addr)
 }
