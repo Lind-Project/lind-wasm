@@ -105,13 +105,6 @@ software:
     _Exit(EX_SOFTWARE);
 }
 
-int _start() {
-    __libc_setup_tls();
-    __wasi_init_tp();
-    __wasi_initialize_environ();
-    return __main_void();
-}
-
 void __wasm_call_dtors() {
     
 }
@@ -120,6 +113,9 @@ void __wasi_proc_exit(unsigned int exit_code) {
     
 }
 
+__attribute__((__weak__))
+int main(int argc, char *argv[], char *envp[]);
+
 // The user's `main` function, expecting arguments.
 //
 // Note that we make this a weak symbol so that it will have a
@@ -127,7 +123,9 @@ void __wasi_proc_exit(unsigned int exit_code) {
 // it need not be defined (e.g. in reactor-style apps with no main function).
 // See also the TODO comment on `__main_void` below.
 __attribute__((__weak__))
-int __main_argc_argv(int argc, char *argv[]);
+int __main_argc_argv(int argc, char *argv[]) {
+  return main(argc, argv, environ);
+}
 
 // If the user's `main` function expects arguments, the compiler will rename
 // it to `__main_argc_argv`, and this version will get linked in, which
@@ -170,4 +168,11 @@ int __main_void(void) {
 
     // Call `__main_argc_argv` with the arguments!
     return __main_argc_argv(argc, argv);
+}
+
+int _start() {
+    __libc_setup_tls();
+    __wasi_init_tp();
+    __wasi_initialize_environ();
+    return __main_void();
 }
