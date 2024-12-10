@@ -232,16 +232,42 @@ pub fn sbrk_handler(cageid: u64, brk: u32) -> i32 {
 }
 
 
+/// Validates and converts a virtual memory address to a physical address with protection checks
+///
+/// This function performs several critical memory management operations:
+/// 1. Validates that the requested memory region is properly mapped
+/// 2. Checks protection flags match the requested access
+/// 3. Converts virtual addresses to physical addresses
+///
+/// # Arguments
+/// * `cage` - Reference to the memory cage containing the virtual memory map
+/// * `arg` - Virtual memory address to check and convert
+/// * `length` - Length of the memory region being accessed
+/// * `prot` - Protection flags to validate (read/write/execute)
+///
+/// # Returns
+/// * `Ok(u64)` - Physical memory address if validation succeeds
+/// * `Err(Errno)` - EFAULT if memory access would be invalid
+///
+/// # Memory Safety
+/// This is a critical security function that prevents invalid memory accesses by:
+/// - Ensuring addresses are properly aligned to pages
+/// - Validating all pages in the region are mapped with correct permissions
+/// - Preventing access outside of allocated memory regions
 pub fn check_and_convert_addr_ext(cage: &Cage, arg: u64, length: usize, prot: i32) -> Result<u64, Errno> {
+    // Get read lock on virtual memory map
     let vmmap = cage.vmmap.read();
     
-    let page_num = (arg >> PAGESHIFT) as u32;
-    let end_page = ((arg + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32;
-    let npages = end_page - page_num;
+    // Calculate page numbers for start and end of region
+    let page_num = (arg >> PAGESHIFT) as u32;  // Starting page number
+    let end_page = ((arg + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32;  // Ending page number (rounded up)
+    let npages = end_page - page_num;  // Total number of pages spanned
     
+    // Validate memory mapping and permissions
     if vmmap.check_addr_mapping(page_num, npages, prot).is_none() {
-        return Err(Errno::EFAULT);
+        return Err(Errno::EFAULT);  // Return error if mapping invalid
     }
 
+    // Convert to physical address by adding base address
     Ok(vmmap.base_addr as u64 + arg)
 }
