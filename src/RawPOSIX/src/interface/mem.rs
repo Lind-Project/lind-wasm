@@ -231,20 +231,17 @@ pub fn sbrk_handler(cageid: u64, brk: u32) -> i32 {
     (PAGESIZE * heap.npages) as i32
 }
 
-pub fn check_and_convert_addr(cageid: u64, user_addr: u64) -> Result<u64, Errno> {
-    let cage = cagetable_getref(cageid);
-    let mut vmmap = cage.vmmap.write();  // Changed to write() since check_addr_mapping needs &mut self
+
+pub fn check_and_convert_addr_ext(cage: &Cage, arg: u64, length: usize, prot: i32) -> Result<u64, Errno> {
+    let vmmap = cage.vmmap.read();
     
-    // Convert address to page number
-    let page_num = (user_addr >> PAGESHIFT) as u32;
+    let page_num = (arg >> PAGESHIFT) as u32;
+    let end_page = ((arg + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32;
+    let npages = end_page - page_num;
     
-    // Use existing check_addr_mapping function
-    // We use 1 page and PROT_READ since we just want to verify the address is valid
-    if vmmap.check_addr_mapping(page_num, 1, PROT_READ).is_none() {
+    if vmmap.check_addr_mapping(page_num, npages, prot).is_none() {
         return Err(Errno::EFAULT);
     }
 
-    // If valid, convert user address to system address
-    let sys_addr = vmmap.user_to_sys(user_addr as i32) as u64;
-    Ok(sys_addr)
+    Ok(vmmap.base_addr as u64 + arg)
 }
