@@ -34,7 +34,7 @@ pub use serde_cbor::{
 use crate::interface;
 use crate::interface::errnos::VERBOSE;
 use crate::interface::types::SigsetType;
-use crate::safeposix::syscalls::fs_constants::SEM_VALUE_MAX;
+use crate::constants::SEM_VALUE_MAX;
 use std::sync::LazyLock;
 use std::time::Duration;
 
