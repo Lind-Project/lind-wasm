@@ -52,16 +52,29 @@ pub struct Cage {
     // Table of thread IDs for all threads in this cage, formerly used for managing cage exit/destruction 
     // (TODO: TO BE REMOVED OR REPURPOSED)
     pub thread_table: interface::RustHashMap<u64, bool>,
-    // Mapping of signal numbers to registered for this cage
+    // signalhandler is a hash map where the key is a signal number, and the value is a SigactionStruct, which 
+    // defines how the cage should handle a specific signal. Interacts with sigaction_syscall() to register or 
+    // retrieve the handler for a specific signal.
     pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
-    // Set of registered signals for cage
+    // sigset is a mapping of thread IDs (pthreadid) to atomic signal sets. Each entry represents the signals 
+    // currently blocked for the corresponding thread in the cage. Interacts with sigprocmask_syscall() to 
+    // block / unblock / replace the signal mask for a thread.
     pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
     // The kernel thread id of the main thread of current cage, used because when we want to send signals, 
     // we want to send to the main thread 
     pub main_threadid: interface::RustAtomicU64,
-    // Timer used for alarm() and/or setitimer()
+    // The interval_timer can serve as a source for triggering signals and works together with signalhandler 
+    // and sigset to manage and handle signals. The design of the interval_timer supports periodic triggering, 
+    // simulating operations in Linux that need to run at regular intervals. It assists in implementing setitimer() 
+    // in RawPOSIX, and by triggering lind_kill_from_id when the interval_timer expires 
+    // (implemented in src/interface/timer.rs), it facilitates the implementation of signal handling in rawposix 
+    // for the corresponding Cage.
     pub interval_timer: interface::IntervalTimer,
-    // Table of child zombie entries waited on, used in wait_syscall for parents to determine whether to exit child
+    // The zombies field in the Cage struct is used to manage information about child cages that have 
+    // exited, but whose exit status has not yet been retrieved by their parent using wait() / waitpid().
+    // When a cage exits, shared memory segments are detached, file descriptors are removed from fdtable, 
+    // and cage struct is cleaned up, but its exit status are inserted along with its cage id into the end of 
+    // its parent cage's zombies list
     pub zombies: interface::RustLock<Vec<Zombie>>,
     pub child_num: interface::RustAtomicU64
 }
