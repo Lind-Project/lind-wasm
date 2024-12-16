@@ -959,16 +959,17 @@ impl Instance {
     }
 
     fn validate_inbounds(&self, max: usize, ptr: u64, len: u64) -> Result<usize, Trap> {
-        let oob = || Trap::MemoryOutOfBounds;
-        let end = ptr
-            .checked_add(len)
-            .and_then(|i| usize::try_from(i).ok())
-            .ok_or_else(oob)?;
-        if end > max {
-            Err(oob())
-        } else {
-            Ok(ptr as usize)
-        }
+        // let oob = || Trap::MemoryOutOfBounds;
+        // let end = ptr
+        //     .checked_add(len)
+        //     .and_then(|i| usize::try_from(i).ok())
+        //     .ok_or_else(oob)?;
+        // if end > max {
+        //     Err(oob())
+        // } else {
+        //     Ok(ptr as usize)
+        // }
+        return Ok(ptr as usize);
     }
 
     /// Perform the `memory.fill` operation on a locally defined memory.
@@ -984,7 +985,8 @@ impl Instance {
         len: u64,
     ) -> Result<(), Trap> {
         let memory = self.get_memory(memory_index);
-        let dst = self.validate_inbounds(memory.current_length(), dst, len)?;
+        // let dst = self.validate_inbounds(memory.current_length(), dst, len)?;
+        let dst = dst as usize;
 
         // Bounds and casts are checked above, by this point we know that
         // everything is safe.
@@ -1350,6 +1352,10 @@ impl InstanceHandle {
 
     pub fn get_memory(&self, index: MemoryIndex) -> VMMemoryDefinition {
         self.instance().get_memory(index)
+    }
+
+    pub fn get_runtime_memory(&mut self, index: MemoryIndex) -> &mut Memory {
+        self.instance_mut().get_runtime_memory(index)
     }
 
     /// Lookup an item with the given index.

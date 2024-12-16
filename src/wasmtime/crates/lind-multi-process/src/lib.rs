@@ -1,12 +1,15 @@
 #![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
+use longjmp::JmpBuf;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasi_common::WasiCtx;
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
+use std::path::Path;
+use std::process::exit;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
@@ -15,11 +18,14 @@ use wasmtime::{AsContext, AsContextMut, Caller, ExternType, Linker, Module, Shar
 use wasmtime_environ::MemoryIndex;
 
 pub mod clone_constants;
+pub mod longjmp;
 
 const ASYNCIFY_START_UNWIND: &str = "asyncify_start_unwind";
 const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
+
+const LIND_FS_ROOT: &str = "/home/lind-wasm/lind_fs_root";
 
 // Define the trait with the required method
 pub trait LindHost<T, U> {
@@ -406,9 +412,12 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     address_length = defined_memory.current_length();
                 }
 
+                // println!("parent: {}, child: {}, len: {}", cloned_address, child_address as u64, address_length);
+                rawposix::safeposix::dispatcher::set_base_address(child_cageid, child_address as i64);
+                rawposix::safeposix::dispatcher::fork_vmmap_helper(parent_pid as u64, child_cageid);
                 // copy the entire memory area from parent to child
                 // this will be changed after mmap has been integrated into lind-wasm
-                unsafe { std::ptr::copy_nonoverlapping(cloned_address as *mut u8, child_address, address_length); }
+                // unsafe { std::ptr::copy_nonoverlapping(cloned_address as *mut u8, child_address, address_length); }
 
                 // new cage created, increment the cage counter
                 lind_manager.increment();
@@ -865,9 +874,19 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             }
         }
 
+        // if user is passing absolute path, we need to first convert it to a relative path
+        // by removing prefix "/" at the beginning, then join with lind filesystem root folder
+        let usr_path = Path::new(path_str).strip_prefix("/").unwrap_or(Path::new(path_str));
+
+        // NOTE: join method will replace the original path if joined path is an absolute path
+        // so must make sure the usr_path is not absolute otherwise it may escape the lind filesystem
+        let real_path = Path::new(LIND_FS_ROOT).join(usr_path);
+        // println!("real_path: {:?}", real_path);
+        let real_path_str = String::from(real_path.to_str().unwrap());
+        // println!("exec real_path: {}", real_path_str);
+
         // if the file to exec does not exist
-        if !std::path::Path::new(path_str).exists() {
-            // return ENOENT
+        if !std::path::Path::new(&real_path_str).exists() {
             return Ok(-2);
         }
 
@@ -1009,8 +1028,20 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
-            // lind_exec(cloned_pid as u64, cloned_pid as u64);
-            let ret = exec_call(&cloned_run_command, path_str, &args, cloned_pid, &cloned_next_cageid, &cloned_lind_manager, &environs);
+            lind_syscall_api(
+                cloned_pid as u64,
+                69 as u32, // exec syscall
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            );
+
+            let ret = exec_call(&cloned_run_command, &real_path_str, &args, cloned_pid, &cloned_next_cageid, &cloned_lind_manager, &environs);
 
             return Ok(OnCalledAction::Finish(ret.expect("exec-ed module error")));
         }));
@@ -1110,13 +1141,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // after returning from here, unwind process should start
     }
 
-    // setjmp call
-    // Basically do an unwind and rewind to the current process, and store the unwind_data into a hashmap
-    // with the hash of the unwind_data as the key. The hash of the unwind_data also serves as the jmp_buf data.
-    // When longjmp is called, the hash in the jmp_buf is retrieved and the unwind_data is obtained from the hashmap
-    // Then perform an unwind on the current process, but then replace the unwind_data with the saved unwind_data
-    // retrieved from hashmap, and continue the rewind. This approach allows the wasm process to restore to its
-    // previous state
     pub fn setjmp_call(&self, mut caller: &mut Caller<'_, T>, jmp_buf: i32) -> Result<i32> {
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
@@ -1246,9 +1270,14 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             let rewind_start_parent = (cloned_address + rewind_pointer) as *mut u8;
             let rewind_total_size = (unwind_stack_finish - rewind_base) as usize;
 
+            // let mut jmp_buf_struct = unsafe { &mut *((cloned_address + jmp_buf as u64) as *mut JmpBuf) };
+
             // store the unwind data
+            // println!("jmp_buf: {}", jmp_buf);
             let hash = store.store_unwind_data(rewind_start_parent as *const u8, rewind_total_size);
+            // println!("setjmp hash: {}", hash);
             unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) = hash; }
+            // jmp_buf_struct.unwind_data_hash = hash;
 
             // mark the parent to rewind state
             let _ = asyncify_start_rewind_func.call(&mut store, rewind_pointer as i32);
@@ -1267,8 +1296,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         return Ok(0);
     }
 
-    // longjmp call
-    // See comment above `setjmp_call`
     pub fn longjmp_call(&self, mut caller: &mut Caller<'_, T>, jmp_buf: i32, retval: i32) -> Result<i32> {
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
@@ -1399,7 +1426,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             let rewind_start_parent = (cloned_address + rewind_pointer) as *mut u8;
             let rewind_total_size = (unwind_stack_finish - rewind_base) as usize;
 
+            // let mut jmp_buf_struct = unsafe { &mut *((cloned_address + jmp_buf as u64) as *mut JmpBuf) };
+            // let hash = jmp_buf_struct.unwind_data_hash;
+
             let hash = unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) };
+            // println!("longjmp hash: {}", hash);
             // retrieve the unwind data
             let data = store.retrieve_unwind_data(hash);
 
@@ -1409,13 +1440,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 // replace the unwind data
                 unsafe { std::ptr::copy_nonoverlapping(unwind_data.as_ptr(), rewind_start_parent, unwind_data.len()); }
             } else {
-                // if the hash does not exist
-                // according to standard, calling longjmp with invalid jmp_buf would
-                // cause undefined behavior and may lead to crash. Since invalid jmp_buf is not able to be detected,
-                // it will not return any kind of error.
-                // However, our approach of using Asyncify to implement longjmp is able to detect it
-                // and return an error if we want. But let's just follow the standard and just crash the program
-                panic!("invalid longjmp jmp_buf!");
+                println!("hash not found!");
+                result = -1;
+                exit(1);
             }
 
             // mark the parent to rewind state
@@ -1595,7 +1622,7 @@ pub fn exit_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sy
     0
 }
 
-pub fn setjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+pub fn setjmp_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
         (caller: &mut Caller<'_, T>, jmp_buf: i32) -> i32 {
     // first let's check if the process is currently in rewind state
     let rewind_res = match catch_rewind(caller) {
@@ -1611,7 +1638,7 @@ pub fn setjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Syn
     ctx.setjmp_call(caller, jmp_buf).unwrap()
 }
 
-pub fn longjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+pub fn longjmp_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
         (caller: &mut Caller<'_, T>, jmp_buf: i32, retval: i32) -> i32 {
     let host = caller.data().clone();
     let ctx = host.get_ctx();

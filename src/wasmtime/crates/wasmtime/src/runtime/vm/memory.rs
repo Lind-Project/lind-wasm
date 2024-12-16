@@ -85,6 +85,7 @@ pub trait RuntimeLinearMemory: Send + Sync {
         mut store: Option<&mut dyn Store>,
     ) -> Result<Option<(usize, usize)>, Error> {
         let old_byte_size = self.byte_size();
+        // println!("-----grow: {}, old_byte_size: {}", delta_pages, old_byte_size);
 
         // Wasm spec: when growing by 0 pages, always return the current size.
         if delta_pages == 0 {
@@ -149,6 +150,11 @@ pub trait RuntimeLinearMemory: Send + Sync {
     /// Returns an error if memory can't be grown by the specified amount
     /// of bytes.
     fn grow_to(&mut self, size: usize) -> Result<()>;
+
+    /// mmap
+    fn mmap(&mut self, addr: usize, flags: u64) -> Result<()> {
+        unimplemented!()
+    }
 
     /// Return a `VMMemoryDefinition` for exposing the memory to compiled wasm
     /// code.
@@ -221,6 +227,7 @@ impl MmapMemory {
         mut maximum: Option<usize>,
         memory_image: Option<&Arc<MemoryImage>>,
     ) -> Result<Self> {
+        // println!("-----new MmapMemory, plan: {:?}, minimum: {:?}, maximum: {:?}", plan, minimum, maximum);
         // It's a programmer error for these two configuration values to exceed
         // the host available address space, so panic if such a configuration is
         // found (mostly an issue for hypothetical 32-bit hosts).
@@ -260,6 +267,7 @@ impl MmapMemory {
             .and_then(|i| i.checked_add(offset_guard_bytes))
             .ok_or_else(|| format_err!("cannot allocate {} with guard regions", minimum))?;
         assert!(usize_is_multiple_of_host_page_size(request_bytes));
+        // println!("-----request bytes: {}", request_bytes);
 
         let mut mmap = Mmap::accessible_reserved(0, request_bytes)?;
 
@@ -288,6 +296,7 @@ impl MmapMemory {
             None => None,
         };
 
+        // println!("-----new MmapMemory done");
         Ok(Self {
             mmap,
             len: minimum,
@@ -325,12 +334,14 @@ impl RuntimeLinearMemory for MmapMemory {
     }
 
     fn grow_to(&mut self, new_size: usize) -> Result<()> {
+        // println!("-----grow to {}", new_size);
         assert!(usize_is_multiple_of_host_page_size(self.offset_guard_size));
         assert!(usize_is_multiple_of_host_page_size(self.pre_guard_size));
         assert!(usize_is_multiple_of_host_page_size(self.mmap.len()));
 
         let new_accessible = round_usize_up_to_host_pages(new_size)?;
         if new_accessible > self.mmap.len() - self.offset_guard_size - self.pre_guard_size {
+            // println!("-----1");
             // If the new size of this heap exceeds the current size of the
             // allocation we have, then this must be a dynamic heap. Use
             // `new_size` to calculate a new size of an allocation, allocate it,
@@ -365,10 +376,12 @@ impl RuntimeLinearMemory for MmapMemory {
 
             self.mmap = new_mmap;
         } else if let Some(image) = self.memory_image.as_mut() {
+            // println!("-----2");
             // MemoryImageSlot has its own growth mechanisms; defer to its
             // implementation.
             image.set_heap_limit(new_size)?;
         } else {
+            // println!("-----3");
             // If the new size of this heap fits within the existing allocation
             // then all we need to do is to make the new pages accessible. This
             // can happen either for "static" heaps which always hit this case,
@@ -389,6 +402,8 @@ impl RuntimeLinearMemory for MmapMemory {
             // since we are forced to round our accessible range up to the
             // host's page size.
             if new_accessible > self.accessible() {
+                // println!("-----make_accessible, self.accessible: {}, new_accessible: {}", self.accessible(), new_accessible);
+                // println!("-----pre_guard_size: {}", self.pre_guard_size);
                 self.mmap.make_accessible(
                     self.pre_guard_size + self.accessible(),
                     new_accessible - self.accessible(),
@@ -397,6 +412,12 @@ impl RuntimeLinearMemory for MmapMemory {
         }
 
         self.len = new_size;
+
+        Ok(())
+    }
+
+    fn mmap(&mut self, addr: usize, flags: u64) -> Result<()> {
+        // println!("-----mmap syscall!");
 
         Ok(())
     }
@@ -713,6 +734,13 @@ impl Memory {
         self.0
             .grow(delta_pages, store)
             .map(|opt| opt.map(|(old, _new)| old))
+    }
+
+    pub unsafe fn mmap(&mut self) -> Result<Option<usize>, Error> {
+        // self.0
+        //     .mmap(delta_pages, store)
+        //     .map(|opt| opt.map(|(old, _new)| old))
+        Ok(Some(0))
     }
 
     /// Return a `VMMemoryDefinition` for exposing the memory to compiled wasm code.

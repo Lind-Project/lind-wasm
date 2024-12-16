@@ -9,6 +9,7 @@ use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
+use rawposix::safeposix::cage::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
@@ -18,7 +19,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
-use wasmtime::{AsContextMut, Engine, Func, Module, Store, StoreLimits, Val, ValType};
+use wasmtime::{AsContext, AsContextMut, Engine, Func, Module, Store, StoreLimits, Val, ValType};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
@@ -182,7 +183,7 @@ impl RunCommand {
         rawposix::safeposix::dispatcher::lindrustinit(0);
         // new cage is created
         lind_manager.increment();
-
+        rawposix::safeposix::dispatcher::lind_cage_vmmap_init(1);
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
         // call is made that needs to block on a future a Tokio runtime is
@@ -192,7 +193,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules)
+            self.load_main_module(&mut store, &mut linker, &main, modules, 1)
                 .with_context(|| {
                     format!(
                         "failed to run main module `{}`",
@@ -203,14 +204,19 @@ impl RunCommand {
 
         // Load the main wasm module.
         match result {
-            Ok(_) => {
+            Ok(res) => {
+                let mut code = 0;
+                let retval = res.get(0).unwrap();
+                if let Val::I32(res) = retval {
+                    code = *res;
+                }
                 // exit the cage
                 lind_syscall_api(
                     1,
                     30 as u32,
                     0,
                     0,
-                    0 as u64,
+                    code as u64,
                     0,
                     0,
                     0,
@@ -359,6 +365,8 @@ impl RunCommand {
             }
         }
 
+        rawposix::safeposix::dispatcher::lind_cage_vmmap_init(pid as u64);
+
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
         // call is made that needs to block on a future a Tokio runtime is
@@ -368,7 +376,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules)
+            self.load_main_module(&mut store, &mut linker, &main, modules, pid as u64)
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -511,6 +519,7 @@ impl RunCommand {
         linker: &mut CliLinker,
         module: &RunTarget,
         modules: Vec<(String, Module)>,
+        pid: u64
     ) -> Result<Vec<Val>> {
         // The main module might be allowed to have unknown imports, which
         // should be defined as traps:
@@ -571,6 +580,12 @@ impl RunCommand {
 
                 let mut stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
+
+                let handle = store.as_context().0.instance(wasmtime::InstanceId::from_index(0));
+                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
+                let memory_base = defined_memory.base as i64;
+                rawposix::safeposix::dispatcher::set_base_address(pid, memory_base);
+                // rawposix::safeposix::dispatcher::lind_syscall_api(1, 21, 0, memory_base, 0, 327680, (PROT_READ | PROT_WRITE) as u64, (MAP_PRIVATE | MAP_ANONYMOUS) as u64, u64::max_value(), 0);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),

@@ -3,6 +3,7 @@
 
 use crate::runtime::vm::sys::mmap;
 use crate::{prelude::*, vm::usize_is_multiple_of_host_page_size};
+use rustix::mm::MprotectFlags;
 use core::ops::Range;
 #[cfg(feature = "std")]
 use std::{fs::File, path::Path, sync::Arc};
@@ -51,6 +52,7 @@ impl Mmap {
     /// This function will panic if `accessible_size` is greater than
     /// `mapping_size` or if either of them are not page-aligned.
     pub fn accessible_reserved(accessible_size: usize, mapping_size: usize) -> Result<Self> {
+        // println!("-----accessible_reserved: accessible_size: {}, mapping_size: {}", accessible_size, mapping_size);
         assert!(accessible_size <= mapping_size);
         assert!(usize_is_multiple_of_host_page_size(mapping_size));
         assert!(usize_is_multiple_of_host_page_size(accessible_size));
@@ -100,6 +102,16 @@ impl Mmap {
         assert!(start <= self.len() - len);
 
         self.sys.make_accessible(start, len)
+    }
+
+    pub fn mmap(&mut self, start: usize, len: usize, flags: MprotectFlags) -> Result<()> {
+        let page_size = crate::runtime::vm::host_page_size();
+        assert_eq!(start & (page_size - 1), 0);
+        assert_eq!(len & (page_size - 1), 0);
+        assert!(len <= self.len());
+        assert!(start <= self.len() - len);
+
+        self.sys.mmap(start, len, flags)
     }
 
     /// Return the allocated memory as a slice of u8.

@@ -278,6 +278,8 @@ impl VMMemoryDefinition {
     /// observes. Since Wasm memory only grows, this under-estimation may be
     /// acceptable in certain cases.
     pub fn current_length(&self) -> usize {
+        // println!("current_length!");
+        // return 1 << 32;
         self.current_length.load(Ordering::Relaxed)
     }
 

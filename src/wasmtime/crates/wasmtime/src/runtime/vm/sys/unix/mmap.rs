@@ -19,6 +19,7 @@ impl Mmap {
     }
 
     pub fn new(size: usize) -> Result<Self> {
+        // println!("-----new mmap: {}", size);
         let ptr = unsafe {
             rustix::mm::mmap_anonymous(
                 ptr::null_mut(),
@@ -34,6 +35,7 @@ impl Mmap {
     }
 
     pub fn reserve(size: usize) -> Result<Self> {
+        // println!("-----reserve: {}", size);
         let ptr = unsafe {
             rustix::mm::mmap_anonymous(
                 ptr::null_mut(),
@@ -85,6 +87,20 @@ impl Mmap {
                 ptr.byte_add(start).cast(),
                 len,
                 MprotectFlags::READ | MprotectFlags::WRITE,
+            )
+            .err2anyhow()?;
+        }
+
+        Ok(())
+    }
+
+    pub fn mmap(&mut self, start: usize, len: usize, flags: MprotectFlags) -> Result<()> {
+        let ptr = self.memory.as_ptr();
+        unsafe {
+            mprotect(
+                ptr.byte_add(start).cast(),
+                len,
+                flags,
             )
             .err2anyhow()?;
         }

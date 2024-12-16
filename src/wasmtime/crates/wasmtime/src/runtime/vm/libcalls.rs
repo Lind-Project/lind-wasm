@@ -187,6 +187,7 @@ fn memory32_grow(
     delta: u64,
     memory_index: u32,
 ) -> Result<*mut u8, TrapReason> {
+    // println!("-----memory_grow");
     let memory_index = MemoryIndex::from_u32(memory_index);
     let result =
         match instance
