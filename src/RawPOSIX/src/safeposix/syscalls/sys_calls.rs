@@ -177,6 +177,7 @@ impl Cage {
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
             sigset: newsigset,
+            pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
             vmmap: interface::RustLock::new(Vmmap::new()) // Initialize empty virtual memory map for new process
@@ -186,6 +187,7 @@ impl Cage {
 
         // increment child counter for parent
         self.child_num.fetch_add(1, interface::RustAtomicOrdering::SeqCst);
+
 
         let shmtable = &SHM_METADATA.shmtable;
         //update fields for shared mappings in cage
@@ -259,6 +261,7 @@ impl Cage {
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
             sigset: newsigset,
+            pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
             vmmap: interface::RustLock::new(Vmmap::new())  // Fresh clean vmmap
@@ -311,6 +314,7 @@ impl Cage {
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
     }
+
 
     //------------------------------------WAITPID SYSCALL------------------------------------
     /*

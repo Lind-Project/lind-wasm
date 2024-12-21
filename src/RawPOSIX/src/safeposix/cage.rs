@@ -8,7 +8,7 @@ use crate::constants::{
     MAP_SHARED, MAP_PRIVATE,
 };
 
-// Going to get the datatypes and errnos from the cage file from now on
+//going to get the datatypes and errnos from the cage file from now on
 pub use crate::interface::errnos::{syscall_error, Errno};
 
 pub use crate::interface::types::{
@@ -16,8 +16,12 @@ pub use crate::interface::types::{
 };
 
 use super::filesystem::normpath;
-
+pub use super::syscalls::fs_constants::*;
+pub use super::syscalls::net_constants::*;
+pub use super::syscalls::sys_constants::*;
 pub use super::vmmap::*;
+pub use super::vmmap_constants::*;
+
 pub use crate::interface::CAGE_TABLE;
 
 #[derive(Debug, Clone, Copy)]
@@ -83,7 +87,7 @@ pub struct Cage {
     // its parent cage's zombies list
     pub zombies: interface::RustLock<Vec<Zombie>>,
     pub child_num: interface::RustAtomicU64
-    pub vmmap:  Vmmap,
+    pub vmmap: interface::RustLock<Vmmap>,
 }
 
 impl Cage {
