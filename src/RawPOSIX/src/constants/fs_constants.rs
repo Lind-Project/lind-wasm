@@ -110,17 +110,11 @@ pub const LOCK_EX: i32 = 2;
 pub const LOCK_UN: i32 = 8;
 pub const LOCK_NB: i32 = 4;
 //for mmap/munmap syscall
-pub const MAP_SHARED: i32 = 1;
-pub const MAP_PRIVATE: i32 = 2;
-pub const MAP_FIXED: i32 = 16;
-pub const MAP_ANONYMOUS: i32 = 32;
+pub const MAP_FIXED: u32 = 16;
+pub const MAP_ANONYMOUS: u32 = 32;
 pub const MAP_HUGE_SHIFT: i32 = 26;
 pub const MAP_HUGETLB: i32 = 262144;
 
-pub const PROT_NONE: i32 = 0;
-pub const PROT_READ: i32 = 1;
-pub const PROT_WRITE: i32 = 2;
-pub const PROT_EXEC: i32 = 4;
 
 pub const SEEK_SET: i32 = 0;     // Seek from beginning of file
 pub const SEEK_CUR: i32 = 1;     // Seek from current position
@@ -170,9 +164,7 @@ pub const MAP_SHARED: u32 = 0x01;   // Share changes with other processes
 pub const MAP_PRIVATE: u32 = 0x02;  // Changes are private to this process
 pub const MAP_SHARING_MASK: u32 = 0x03;  // Mask to isolate sharing bits
 
-pub const MAP_FIXED: u32 = 0x10;    // Interpret address exactly
 pub const MAP_ANON: u32 = 0x20;     // Don't use a file descriptor
-pub const MAP_ANONYMOUS: u32 = MAP_ANON;  // Linux alias for MAP_ANON
 
 // ===== Page Size Constants =====
 // Note: These values are architecture-dependent
@@ -197,6 +189,3 @@ pub const MREMAP_FIXED: u32 = 0x02;    // New address is specified exactly
 // Source: include/uapi/asm-generic/fcntl.h
 // NOTE: These should probably be moved to fs_constants.rs
 pub const O_ACCMODE: i32 = 0o003;  // Mask for file access modes
-pub const O_RDONLY: i32 = 0o0;     // Open read-only
-pub const O_WRONLY: i32 = 0o1;     // Open write-only
-pub const O_RDWR: i32 = 0o2;       // Open read-write

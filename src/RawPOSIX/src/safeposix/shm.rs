@@ -95,7 +95,7 @@ impl ShmSegment {
             shmaddr,
             self.size as usize,
             prot,
-            MAP_SHARED | MAP_FIXED,
+            (MAP_SHARED as i32) | (MAP_FIXED as i32),
             fobjfdno,
             0,
         )
@@ -108,7 +108,7 @@ impl ShmSegment {
             shmaddr,
             self.size as usize,
             PROT_NONE,
-            MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+            (MAP_PRIVATE as i32) | (MAP_ANONYMOUS as i32) | (MAP_FIXED as i32),
             -1,
             0,
         );

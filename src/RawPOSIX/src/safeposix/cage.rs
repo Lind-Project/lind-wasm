@@ -16,11 +16,8 @@ pub use crate::interface::types::{
 };
 
 use super::filesystem::normpath;
-pub use super::syscalls::fs_constants::*;
-pub use super::syscalls::net_constants::*;
-pub use super::syscalls::sys_constants::*;
+use crate::constants::*;
 pub use super::vmmap::*;
-pub use super::vmmap_constants::*;
 
 pub use crate::interface::CAGE_TABLE;
 
@@ -70,6 +67,9 @@ pub struct Cage {
     // currently blocked for the corresponding thread in the cage. Interacts with sigprocmask_syscall() to 
     // block / unblock / replace the signal mask for a thread.
     pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
+    // pendingsigset is a mapping of thread IDs to atomic signal sets representing signals that are pending
+    // for each thread
+    pub pendingsigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
     // The kernel thread id of the main thread of current cage, used because when we want to send signals, 
     // we want to send to the main thread 
     pub main_threadid: interface::RustAtomicU64,
@@ -86,7 +86,7 @@ pub struct Cage {
     // and cage struct is cleaned up, but its exit status are inserted along with its cage id into the end of 
     // its parent cage's zombies list
     pub zombies: interface::RustLock<Vec<Zombie>>,
-    pub child_num: interface::RustAtomicU64
+    pub child_num: interface::RustAtomicU64,
     pub vmmap: interface::RustLock<Vmmap>,
 }
 

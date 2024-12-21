@@ -180,7 +180,7 @@ impl Cage {
             pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
-            vmmap: interface::RustLock::new(Vmmap::new()) // Initialize empty virtual memory map for new process
+            vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process
             zombies: interface::RustLock::new(vec![]),
             child_num: interface::RustAtomicU64::new(0),
         };
@@ -264,7 +264,7 @@ impl Cage {
             pendingsigset: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
-            vmmap: interface::RustLock::new(Vmmap::new())  // Fresh clean vmmap
+            vmmap: interface::RustLock::new(Vmmap::new()),  // Fresh clean vmmap
             // when a process exec-ed, its child relationship should be perserved
             zombies: interface::RustLock::new(cloned_zombies),
             child_num: interface::RustAtomicU64::new(child_num),

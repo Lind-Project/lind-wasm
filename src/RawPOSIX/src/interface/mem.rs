@@ -2,10 +2,11 @@ use crate::constants::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC,
 };
 
-use crate::safeposix::cage::{MemoryBackingType, Vmmap, VmmapOps, MAP_SHARED, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE};
+use crate::safeposix::vmmap::{MemoryBackingType, Vmmap, VmmapOps};
+use crate::constants::{MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
 
 use crate::interface::{cagetable_getref, syscall_error, Errno};
-
+use crate::safeposix::cage::Cage;
 use std::result::Result;
 
 // heap is placed at the very top of the memory
@@ -88,7 +89,7 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
     let cage = cagetable_getref(cageid);
 
     // only these four flags are allowed
-    let allowed_flags = (MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32);
+    let allowed_flags = MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32;
     if flags & !allowed_flags > 0 {
         // truncate flag to remove flags that are not allowed
         flags &= allowed_flags;
@@ -256,7 +257,8 @@ pub fn sbrk_handler(cageid: u64, brk: u32) -> i32 {
 /// - Preventing access outside of allocated memory regions
 pub fn check_and_convert_addr_ext(cage: &Cage, arg: u64, length: usize, prot: i32) -> Result<u64, Errno> {
     // Get read lock on virtual memory map
-    let vmmap = cage.vmmap.read();
+    // TODO: need to add change here based on the protection, currently fixed for build error
+    let mut vmmap = cage.vmmap.write();
     
     // Calculate page numbers for start and end of region
     let page_num = (arg >> PAGESHIFT) as u32;  // Starting page number
@@ -269,5 +271,5 @@ pub fn check_and_convert_addr_ext(cage: &Cage, arg: u64, length: usize, prot: i3
     }
 
     // Convert to physical address by adding base address
-    Ok(vmmap.base_addr as u64 + arg)
+    Ok(vmmap.base_address.unwrap() as u64 + arg)
 }

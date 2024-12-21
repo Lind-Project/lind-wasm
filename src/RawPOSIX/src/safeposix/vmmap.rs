@@ -6,7 +6,9 @@ use crate::constants::{
 use std::io;
 use nodit::NoditMap;
 use nodit::{interval::ie, Interval};
-
+use crate::fdtables;
+use crate::safeposix::cage::syscall_error;
+use crate::safeposix::cage::Errno;
 /// Used to identify whether the vmmap entry is backed anonymously,
 /// by an fd, or by a shared memory segment
 /// 
