@@ -163,8 +163,6 @@ pub extern "C" fn rustposix_thread_init(cageid: u64, signalflag: u64) {
             .insert(pthreadid, interface::RustAtomicU64::new(0));
     }
 
-    cage.pendingsigset
-        .insert(pthreadid, interface::RustAtomicU64::new(0));
     interface::signalflag_set(signalflag);
 }
 
@@ -1329,7 +1327,6 @@ pub fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(),
-        pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(0),
         vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process
@@ -1371,7 +1368,6 @@ pub fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(),
-        pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(1),
         vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process

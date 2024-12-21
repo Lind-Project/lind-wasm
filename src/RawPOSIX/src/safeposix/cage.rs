@@ -67,9 +67,6 @@ pub struct Cage {
     // currently blocked for the corresponding thread in the cage. Interacts with sigprocmask_syscall() to 
     // block / unblock / replace the signal mask for a thread.
     pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
-    // pendingsigset is a mapping of thread IDs to atomic signal sets representing signals that are pending
-    // for each thread
-    pub pendingsigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
     // The kernel thread id of the main thread of current cage, used because when we want to send signals, 
     // we want to send to the main thread 
     pub main_threadid: interface::RustAtomicU64,
