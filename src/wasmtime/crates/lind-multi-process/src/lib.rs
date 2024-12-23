@@ -523,6 +523,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     pub fn pthread_create_call(&self, mut caller: &mut Caller<'_, T>,
                     stack_addr: i32, stack_size: i32, child_tid: u64
                 ) -> Result<i32> {
+        // println!("pthread create, stack_addr: {}, stack_size: {}", stack_addr, stack_size);
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -530,6 +531,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let parent_addr_len = defined_memory.current_length();
 
         let parent_stack_base = caller.as_context().get_stack_top();
+        let parent_stack_base_sys = (address as u64 + parent_stack_base);
+        // println!("parent_stack_base: {}", parent_stack_base);
 
         // get the stack pointer global
         let stack_pointer = caller.get_stack_pointer().unwrap();
@@ -544,13 +547,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // 8 because we need to store unwind_data_start and unwind_data_end
                             // at the beginning of the unwind stack as the parameter for asyncify_start_unwind
                             // each of them are u64, so together is 8 bytes
-                            let unwind_data_start: u64 = unwind_pointer + 8;
+                            let unwind_data_start: u64 = unwind_pointer + 16;
                             let unwind_data_end: u64 = stack_pointer as u64;
     
                             // store the parameter at the top of the stack
                             unsafe {
-                                *(address as *mut u64) = unwind_data_start;
-                                *(address as *mut u64).add(1) = unwind_data_end;
+                                *(parent_stack_base_sys as *mut u64) = unwind_data_start;
+                                *(parent_stack_base_sys as *mut u64).add(1) = unwind_data_end;
                             }
                             
                             // mark the start of unwind
@@ -629,6 +632,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // we want to send this address to child thread
         let cloned_address = address as u64;
         let parent_stack_bottom = caller.as_context().get_stack_base();
+        // println!("parent_stack_bottom: {:?}, parent stack_pointer: {:?}", parent_stack_bottom, stack_pointer);
 
         // retrieve the child host
         let mut child_host = caller.data().clone();
@@ -659,11 +663,12 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             let unwind_stack_finish;
 
             let address = cloned_address as *mut u64;
-            let unwind_start_address = (cloned_address + 8) as *mut u64;
+            // let unwind_start_address = (parent_stack_base_sys + 16) as *mut u64;
 
             unsafe {
-                unwind_stack_finish = *address;
+                unwind_stack_finish = *(parent_stack_base_sys as *mut u64);
             }
+            // println!("unwind_stack_finish: {}", unwind_stack_finish);
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
@@ -672,10 +677,17 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
             let rewind_pointer: u64 = rewind_base;
             let rewind_pointer_child = stack_addr as u64 - stack_size as u64;
+            // println!("rewind_pointer_child: {}", rewind_pointer_child);
 
             let rewind_start_parent = (cloned_address + rewind_pointer) as *mut u8;
             let rewind_start_child = (cloned_address + rewind_pointer_child) as *mut u8;
             let rewind_total_size = (unwind_stack_finish - rewind_base) as usize;
+
+            // unsafe {
+            //     // Set the memory to zero
+            //     ptr::write_bytes(address, 0, length);
+            // }
+
             // copy the unwind data to child stack
             unsafe { std::ptr::copy_nonoverlapping(rewind_start_parent, rewind_start_child, rewind_total_size); }
             // manage child's unwind context. The unwind context is consumed when the process uses it to rewind the callstack
@@ -686,17 +698,32 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 // let's retrieve it
                 let stack_pointer_address = rewind_start_child.add(12) as *mut u32;
                 // offset = parent's stack bottom - stored sp (how far is stored sp from parent's stack bottom)
+                // println!("stack_pointer_address: {:?}", *stack_pointer_address);
+
+                // let mut index = 0;
+                // loop {
+                //     let tmp = rewind_start_child.add(index) as *mut u32;
+                //     println!("rewind_start_child offset {}: {:?}", index, *tmp);
+                //     index += 4;
+                //     if index > rewind_total_size {
+                //         break;
+                //     }
+                // }
+
                 let offset = parent_stack_bottom as u32 - *stack_pointer_address;
                 // child stored sp = child's stack bottom - offset = child's stack bottom - (parent's stack bottom - stored sp)
                 // child stored sp = child's stack bottom - parent's stack bottom + stored sp
                 // keep child's stored sp same distance from its stack bottom
                 let child_sp_val = stack_addr as u32 - offset;
                 // replace the stored stack pointer in child's unwind data
+                // println!("child_sp_val: {}", child_sp_val);
                 *stack_pointer_address = child_sp_val;
 
                 // first 4 bytes in unwind data represent the address of the end of the unwind data
                 // we also need to change this for child
-                let child_rewind_data_start = *(rewind_start_child as *mut u32) + rewind_pointer_child as u32;
+                // let child_rewind_data_start = *(rewind_start_child as *mut u32) + rewind_total_size as u32;
+                let child_rewind_data_start = rewind_pointer_child as u32 + rewind_total_size as u32;
+                // println!("child_rewind_data_start: {}", child_rewind_data_start);
 
                 *(rewind_start_child as *mut u32) = child_rewind_data_start;
             }
@@ -722,7 +749,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                 // we might also want to perserve the offset of current stack pointer to stack bottom
                 // not very sure if this is required, but just keep everything the same from parent seems to be good
-                let offset = parent_stack_base as i32 - stack_pointer;
+                let offset = parent_stack_bottom as i32 - stack_pointer;
+                // println!("offset: {:?}", offset);
                 let stack_pointer_setter = instance
                     .get_typed_func::<(i32), ()>(&mut store, "set_stack_pointer")
                     .unwrap();
@@ -787,6 +815,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 return 0;
             }).unwrap();
 
+            // loop {}
             // mark the parent to rewind state
             let _ = asyncify_start_rewind_func.call(&mut store, rewind_pointer as i32);
 
