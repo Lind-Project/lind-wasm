@@ -210,97 +210,50 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // get the stack pointer global
         let stack_pointer = caller.get_stack_pointer().unwrap();
 
+        // get the wasm stack top address
+        let stack_low_usr = caller.as_context().get_stack_top();
+
+        // we store the unwind at the top of the user stack
+        let unwind_data_start_usr = stack_low_usr;
+        let unwind_data_start_sys = (address as u64 + unwind_data_start_usr);
+
         // start unwind
-        if let Some(asyncify_start_unwind_extern) = caller.get_export(ASYNCIFY_START_UNWIND) {
-            match asyncify_start_unwind_extern {
-                Extern::Func(asyncify_start_unwind) => {
-                    match asyncify_start_unwind.typed::<i32, ()>(&caller) {
-                        Ok(func) => {
-                            let unwind_pointer: u64 = 0;
-                            // 8 because we need to store unwind_data_start and unwind_data_end
-                            // at the beginning of the unwind stack as the parameter for asyncify_start_unwind
-                            // each of them are u64, so together is 8 bytes
-                            let unwind_data_start: u64 = unwind_pointer + 8;
-                            let unwind_data_end: u64 = stack_pointer as u64;
-    
-                            // store the parameter at the top of the stack
-                            unsafe {
-                                *(address as *mut u64) = unwind_data_start;
-                                *(address as *mut u64).add(1) = unwind_data_end;
-                            }
-                            
-                            // mark the start of unwind
-                            let _res = func.call(&mut caller, unwind_pointer as i32);
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_start_unwind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_start_unwind export is not a function");
-                    return Ok(-1);
-                }
-            }
+        let asyncify_start_unwind_func = caller.get_asyncify_start_unwind().unwrap();
+
+        // store the parameter at the top of the stack
+        // we need to tell two parameters to Asyncify:
+        // unwind_data_start: the start address to store the unwind data.
+        // unwind_data_end: the end address of the avaliable space Asyncify could work with
+        // These two parameters are usually stored on the top of the unwind data.
+        // Below is a graph describing the entire user's stack layout
+        // -------------------------- <----- _usr (stack low)
+        // |   unwind_data_start    | <----- u64
+        // --------------------------
+        // |   unwind_data_end      | <----- u64
+        // -------------------------- <----- unwind_data_start
+        // |         .....          | |
+        // |   actual unwind data   | | unwind data grow direction
+        // |         .....          | V
+        // -------------------------- <----- unwind_data_end (user's current stack pointer)
+        // |         .....          | ^
+        // |         .....          | |
+        // |       stack data       | | user's stack grow direction
+        // |         .....          | |
+        // |         .....          | |
+        // -------------------------- <----- stack high
+        unsafe {
+            // 16 because it is the size of two u64
+            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + 16;
+            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
-        else {
-            println!("asyncify_start_unwind export not found");
-            return Ok(-1);
-        }
+        
+        // mark the start of unwind
+        let _res = asyncify_start_unwind_func.call(&mut caller, unwind_data_start_usr as i32);
 
         // get the asyncify_stop_unwind and asyncify_start_rewind, which will later
         // be used when the unwind process finished
-        let asyncify_stop_unwind_func;
-        let asyncify_start_rewind_func;
-
-        if let Some(asyncify_stop_unwind_extern) = caller.get_export(ASYNCIFY_STOP_UNWIND) {
-            match asyncify_stop_unwind_extern {
-                Extern::Func(asyncify_stop_unwind) => {
-                    match asyncify_stop_unwind.typed::<(), ()>(&caller) {
-                        Ok(func) => {
-                            asyncify_stop_unwind_func = func;
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_stop_unwind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_stop_unwind export is not a function");
-                    return Ok(-1);
-                }
-            }
-        }
-        else {
-            println!("asyncify_stop_unwind export not found");
-            return Ok(-1);
-        }
-
-        if let Some(asyncify_start_rewind_extern) = caller.get_export(ASYNCIFY_START_REWIND) {
-            match asyncify_start_rewind_extern {
-                Extern::Func(asyncify_start_rewind) => {
-                    match asyncify_start_rewind.typed::<i32, ()>(&caller) {
-                        Ok(func) => {
-                            asyncify_start_rewind_func = func;
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_start_rewind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_start_rewind export is not a function");
-                    return Ok(-1);
-                }
-            }
-        }
-        else {
-            println!("asyncify_start_rewind export not found");
-            return Ok(-1);
-        }
+        let asyncify_stop_unwind_func = caller.get_asyncify_stop_unwind().unwrap();
+        let asyncify_start_rewind_func = caller.get_asyncify_start_rewind().unwrap();
 
         // we want to send this address to child thread
         let cloned_address = address as u64;
@@ -310,7 +263,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // get next cage id
         let child_cageid = self.next_cage_id();
         if let None = child_cageid {
-            println!("running out of cageid!");
+            panic!("running out of cageid!");
         }
         let child_cageid = child_cageid.unwrap();
 
@@ -340,8 +293,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         store.set_on_called(Box::new(move |mut store| {
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
-
-            let rewind_pointer: u64 = 0;
 
             // use a barrier to make sure the child has fully copied parent's memory before parent
             // resumes its execution
@@ -386,7 +337,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 }
 
                 // copy the entire memory area from parent to child
-                // this will be changed after mmap has been integrated into lind-wasm
+                // TODO: this will be changed after mmap has been integrated into lind-wasm
                 unsafe { std::ptr::copy_nonoverlapping(cloned_address as *mut u8, child_address, address_length); }
 
                 // new cage created, increment the cage counter
@@ -408,7 +359,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 };
 
                 // mark the child to rewind state
-                let _ = child_rewind_start.call(&mut store, rewind_pointer as i32);
+                let _ = child_rewind_start.call(&mut store, unwind_data_start_usr as i32);
 
                 // set up rewind state and fork return value for child
                 store.as_context_mut().set_rewinding_state(RewindingReturn {
@@ -475,7 +426,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             barrier.wait();
 
             // mark the parent to rewind state
-            let _ = asyncify_start_rewind_func.call(&mut store, rewind_pointer as i32);
+            let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
 
             // set up rewind state and fork return value for parent
             store.set_rewinding_state(RewindingReturn {
@@ -520,26 +471,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let asyncify_start_unwind_func = caller.get_asyncify_start_unwind().unwrap();
 
         // store the parameter at the top of the stack
-        // we need to tell two parameters to Asyncify:
-        // unwind_data_start: the start address to store the unwind data.
-        // unwind_data_end: the end address of the avaliable space Asyncify could work with
-        // These two parameters are usually stored on the top of the unwind data.
-        // Below is a graph describing the entire user's stack layout
-        // -------------------------- <----- _usr (stack low)
-        // |   unwind_data_start    | <----- u64
-        // --------------------------
-        // |   unwind_data_end      | <----- u64
-        // -------------------------- <----- unwind_data_start
-        // |         .....          | |
-        // |   actual unwind data   | | unwind data grow direction
-        // |         .....          | V
-        // -------------------------- <----- unwind_data_end (user's current stack pointer)
-        // |         .....          | ^
-        // |         .....          | |
-        // |       stack data       | | user's stack grow direction
-        // |         .....          | |
-        // |         .....          | |
-        // -------------------------- <----- stack high
+        // reference comments in fork_call
         unsafe {
             // 16 because it is the size of two u64
             *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + 16;
