@@ -9,12 +9,12 @@ CC="${CLANG:=/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bi
 
 export_cmd="export LD_LIBRARY_PATH=$wasmtime_base/crates/rustposix:\$LD_LIBRARY_PATH"
 
-compile_test_cmd_fork="$CC --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--export="__stack_pointer" [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
-compile_test_cmd_noshared="$CC --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--export="__stack_pointer" [input] -g -O0 -o [output]"
-compile_test_cmd="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864 [input] -g -O0 -o [output]"
+compile_test_cmd_fork="$CC --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
+compile_test_cmd_noshared="$CC --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output]"
+compile_test_cmd="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export=__stack_low [input] -g -O0 -o [output]"
 precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output]"
 
-compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer" [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
+compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
 
 run_cmd="$wasmtime_base/target/debug/wasmtime run --wasi threads=y --wasi preview2=n [target]"
 run_cmd_precompile="$wasmtime_base/target/debug/wasmtime run --allow-precompiled --wasi threads=y --wasi preview2=n [target]"
