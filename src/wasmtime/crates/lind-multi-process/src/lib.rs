@@ -2,15 +2,15 @@
 
 use anyhow::{anyhow, Result};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
-use wasi_common::WasiCtx;
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
+use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
-use wasmtime::{AsContext, AsContextMut, Caller, ExternType, Linker, Module, SharedMemory, Store, Val, Extern, OnCalledAction, RewindingReturn, StoreOpaque, InstanceId};
+use wasmtime::{AsContext, AsContextMut, Caller, ExternType, Linker, Module, SharedMemory, Store, Val, OnCalledAction, RewindingReturn, StoreOpaque, InstanceId};
 
 use wasmtime_environ::MemoryIndex;
 
@@ -20,6 +20,8 @@ const ASYNCIFY_START_UNWIND: &str = "asyncify_start_unwind";
 const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
+
+const LIND_FS_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
 
 // Define the trait with the required method
 pub trait LindHost<T, U> {
@@ -215,7 +217,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
         // we store the unwind at the top of the user stack
         let unwind_data_start_usr = stack_low_usr;
-        let unwind_data_start_sys = (address as u64 + unwind_data_start_usr);
+        let unwind_data_start_sys = address as u64 + unwind_data_start_usr;
 
         // start unwind
         let asyncify_start_unwind_func = caller.get_asyncify_start_unwind().unwrap();
@@ -270,7 +272,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // calling fork in rawposix to fork the cage
         lind_syscall_api(
             self.pid as u64,
-            68 as u32, // fork syscall
+            68, // fork syscall
             0,
             0,
             child_cageid,
@@ -285,7 +287,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let engine = self.module.engine().clone();
 
         let get_cx = self.get_cx.clone();
-        let parent_pid = self.pid;
 
         // set up unwind callback function
         let store = caller.as_context_mut().0;
@@ -398,7 +399,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // exit the cage with the exit code
                             lind_syscall_api(
                                 child_cageid,
-                                30 as u32,
+                                30,
                                 0,
                                 0,
                                 *val as u64,
@@ -463,7 +464,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
         // we store the unwind at the top of the user stack
         let parent_unwind_data_start_usr = parent_stack_low_usr;
-        let parent_unwind_data_start_sys = (parent_address as u64 + parent_unwind_data_start_usr);
+        let parent_unwind_data_start_sys = parent_address as u64 + parent_unwind_data_start_usr;
 
         // get the current stack pointer
         let stack_pointer = caller.get_stack_pointer().unwrap();
@@ -499,7 +500,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let engine = self.module.engine().clone();
 
         let get_cx = self.get_cx.clone();
-        let parent_pid = self.pid;
 
         // set up child_tid
         let next_tid = match self.next_thread_id() {
@@ -514,7 +514,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
         // set up unwind callback function
         let store = caller.as_context_mut().0;
-        let is_parent_thread = store.is_thread();
         store.set_on_called(Box::new(move |mut store| {
             // once unwind is finished, the first u64 stored on the unwind_data becomes the actual
             // end address of the unwind_data
@@ -540,7 +539,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             unsafe {
                 // first 4 bytes in unwind data represent the address of the end of the unwind data
                 // we also need to change this for child
-                *(child_unwind_data_start_sys as *mut u64) = child_unwind_data_start_usr + rewind_total_size as u64;;
+                *(child_unwind_data_start_sys as *mut u64) = child_unwind_data_start_usr + rewind_total_size as u64;
             }
 
             let builder = thread::Builder::new().name(format!("lind-thread-{}", next_tid));
@@ -551,7 +550,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 // get child context
                 let child_ctx = get_cx(&mut child_host);
                 // set up child pid
-                child_ctx.pid = child_cageid as i32;
+                child_ctx.pid = child_cageid;
 
                 let instance_pre = Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
 
@@ -567,7 +566,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 // not very sure if this is required, but just keep everything the same from parent seems to be good
                 let offset = parent_stack_high_usr as i32 - stack_pointer;
                 let stack_pointer_setter = instance
-                    .get_typed_func::<(i32), ()>(&mut store, "set_stack_pointer")
+                    .get_typed_func::<i32, ()>(&mut store, "set_stack_pointer")
                     .unwrap();
                 let _ = stack_pointer_setter.call(&mut store, stack_addr - offset);
 
@@ -664,6 +663,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
         let address = defined_memory.base;
 
+        // get the wasm stack top address
+        let parent_stack_low_usr = caller.as_context().get_stack_top();
+
+        // we store the unwind at the top of the user stack
+        let parent_unwind_data_start_usr = parent_stack_low_usr;
+        let parent_unwind_data_start_sys = address as u64 + parent_unwind_data_start_usr;
+
         // parse the path and argv
         let path_ptr = ((address as i64) + path) as *const u8;
         let path_str;
@@ -710,8 +716,17 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             }
         }
 
+        // if user is passing absolute path, we need to first convert it to a relative path
+        // by removing prefix "/" at the beginning, then join with lind filesystem root folder
+        let usr_path = Path::new(path_str).strip_prefix("/").unwrap_or(Path::new(path_str));
+
+        // NOTE: join method will replace the original path if joined path is an absolute path
+        // so must make sure the usr_path is not absolute otherwise it may escape the lind filesystem
+        let real_path = Path::new(LIND_FS_ROOT).join(usr_path);
+        let real_path_str = String::from(real_path.to_str().unwrap());
+
         // if the file to exec does not exist
-        if !std::path::Path::new(path_str).exists() {
+        if !std::path::Path::new(&real_path_str).exists() {
             // return ENOENT
             return Ok(-2);
         }
@@ -747,97 +762,26 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             environs = Some(env_vec);
         }
 
-        // get the stack pointer global
-        let stack_pointer;
-        if let Some(sp_extern) = caller.get_export("__stack_pointer") {
-            match sp_extern {
-                Extern::Global(sp) => {
-                    match sp.get(&mut caller) {
-                        Val::I32(val) => {
-                            stack_pointer = val;
-                        }
-                        _ => {
-                            println!("__stack_pointer export is not an i32");
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("__stack_pointer export is not a Global");
-                    return Ok(-1);
-                }
-            }
-        }
-        else {
-            println!("__stack_pointer export not found");
-            return Ok(-1);
-        }
+        // get the current stack pointer
+        let stack_pointer = caller.get_stack_pointer().unwrap();
 
         // start unwind
-        if let Some(asyncify_start_unwind_extern) = caller.get_export(ASYNCIFY_START_UNWIND) {
-            match asyncify_start_unwind_extern {
-                Extern::Func(asyncify_start_unwind) => {
-                    match asyncify_start_unwind.typed::<i32, ()>(&caller) {
-                        Ok(func) => {
-                            let unwind_pointer: u64 = 0;
-                            // 8 because we need to store unwind_data_start and unwind_data_end
-                            // at the beginning of the unwind stack as the parameter for asyncify_start_unwind
-                            // each of them are u64, so together is 8 bytes
-                            let unwind_data_start: u64 = unwind_pointer + 8;
-                            let unwind_data_end: u64 = stack_pointer as u64;
-    
-                            unsafe {
-                                *(address as *mut u64) = unwind_data_start;
-                                *(address as *mut u64).add(1) = unwind_data_end;
-                            }
-    
-                            // mark the state to unwind
-                            let _res = func.call(&mut caller, unwind_pointer as i32);
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_start_unwind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_start_unwind export is not a function");
-                    return Ok(-1);
-                }
-            }
+        let asyncify_start_unwind_func = caller.get_asyncify_start_unwind().unwrap();
+
+        // store the parameter at the top of the stack
+        // reference comments in fork_call
+        unsafe {
+            // 16 because it is the size of two u64
+            *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + 16;
+            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
-        else {
-            println!("asyncify_start_unwind export not found");
-            return Ok(-1);
-        }
+        
+        // mark the start of unwind
+        let _res = asyncify_start_unwind_func.call(&mut caller, parent_unwind_data_start_usr as i32);
 
         // get the asyncify_stop_unwind and asyncify_start_rewind, which will later
         // be used when the unwind process finished
-        let asyncify_stop_unwind_func;
-
-        if let Some(asyncify_stop_unwind_extern) = caller.get_export(ASYNCIFY_STOP_UNWIND) {
-            match asyncify_stop_unwind_extern {
-                Extern::Func(asyncify_stop_unwind) => {
-                    match asyncify_stop_unwind.typed::<(), ()>(&caller) {
-                        Ok(func) => {
-                            asyncify_stop_unwind_func = func;
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_stop_unwind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_stop_unwind export is not a function");
-                    return Ok(-1);
-                }
-            }
-        }
-        else {
-            println!("asyncify_stop_unwind export not found");
-            return Ok(-1);
-        }
+        let asyncify_stop_unwind_func = caller.get_asyncify_stop_unwind().unwrap();
 
         let store = caller.as_context_mut().0;
 
@@ -855,7 +799,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
             // lind_exec(cloned_pid as u64, cloned_pid as u64);
-            let ret = exec_call(&cloned_run_command, path_str, &args, cloned_pid, &cloned_next_cageid, &cloned_lind_manager, &environs);
+            let ret = exec_call(&cloned_run_command, &real_path_str, &args, cloned_pid, &cloned_next_cageid, &cloned_lind_manager, &environs);
 
             return Ok(OnCalledAction::Finish(ret.expect("exec-ed module error")));
         }));
@@ -867,80 +811,40 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // exit syscall
     // technically this is pthread_exit syscall
     // actual exit syscall that would kill other threads is not supported yet
+    // TODO: exit_call should be switched to epoch interrupt method later
     pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32) {
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
         let address = defined_memory.base;
 
+        // get the wasm stack top address
+        let parent_stack_low_usr = caller.as_context().get_stack_top();
+
+        // we store the unwind at the top of the user stack
+        let parent_unwind_data_start_usr = parent_stack_low_usr;
+        let parent_unwind_data_start_sys = address as u64 + parent_unwind_data_start_usr;
+
         // get the stack pointer global
         let stack_pointer = caller.get_stack_pointer().unwrap();
 
         // start unwind
-        if let Some(asyncify_start_unwind_extern) = caller.get_export(ASYNCIFY_START_UNWIND) {
-            match asyncify_start_unwind_extern {
-                Extern::Func(asyncify_start_unwind) => {
-                    match asyncify_start_unwind.typed::<i32, ()>(&caller) {
-                        Ok(func) => {
-                            let unwind_pointer: u64 = 0;
-                            // 8 because we need to store unwind_data_start and unwind_data_end
-                            // at the beginning of the unwind stack as the parameter for asyncify_start_unwind
-                            // each of them are u64, so together is 8 bytes
-                            let unwind_data_start: u64 = unwind_pointer + 8;
-                            let unwind_data_end: u64 = stack_pointer as u64;
-    
-                            unsafe {
-                                *(address as *mut u64) = unwind_data_start;
-                                *(address as *mut u64).add(1) = unwind_data_end;
-                            }
-    
-                            // mark the state to unwind
-                            let _res = func.call(&mut caller, unwind_pointer as i32);
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_start_unwind function is not correct: {:?}", err);
-                            return;
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_start_unwind export is not a function");
-                    return;
-                }
-            }
-        }
-        else {
-            println!("asyncify_start_unwind export not found");
-            return;
-        }
+        let asyncify_start_unwind_func = caller.get_asyncify_start_unwind().unwrap();
 
-        // get the asyncify_stop_unwind and asyncify_start_rewind, which will later
+        // store the parameter at the top of the stack
+        // reference comments in fork_call
+        unsafe {
+            // 16 because it is the size of two u64
+            *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + 16;
+            *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
+        }
+        
+        // mark the start of unwind
+        let _res = asyncify_start_unwind_func.call(&mut caller, parent_unwind_data_start_usr as i32);
+
+        // get the asyncify_stop_unwind, which will later
         // be used when the unwind process finished
-        let asyncify_stop_unwind_func;
-
-        if let Some(asyncify_stop_unwind_extern) = caller.get_export(ASYNCIFY_STOP_UNWIND) {
-            match asyncify_stop_unwind_extern {
-                Extern::Func(asyncify_stop_unwind) => {
-                    match asyncify_stop_unwind.typed::<(), ()>(&caller) {
-                        Ok(func) => {
-                            asyncify_stop_unwind_func = func;
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_stop_unwind function is not correct: {:?}", err);
-                            return;
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_stop_unwind export is not a function");
-                    return;
-                }
-            }
-        }
-        else {
-            println!("asyncify_stop_unwind export not found");
-            return;
-        }
+        let asyncify_stop_unwind_func = caller.get_asyncify_stop_unwind().unwrap();
 
         let store = caller.as_context_mut().0;
 
@@ -967,136 +871,59 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
         let address = defined_memory.base;
-        let parent_addr_len = defined_memory.current_length();
 
-        let parent_stack_base = caller.as_context().get_stack_top();
+        // get the wasm stack top address
+        let stack_low_usr = caller.as_context().get_stack_top();
+
+        // we store the unwind at the top of the user stack
+        let unwind_data_start_usr = stack_low_usr;
+        let unwind_data_start_sys = address as u64 + unwind_data_start_usr;
 
         // get the stack pointer global
         let stack_pointer = caller.get_stack_pointer().unwrap();
 
         // start unwind
-        if let Some(asyncify_start_unwind_extern) = caller.get_export(ASYNCIFY_START_UNWIND) {
-            match asyncify_start_unwind_extern {
-                Extern::Func(asyncify_start_unwind) => {
-                    match asyncify_start_unwind.typed::<i32, ()>(&caller) {
-                        Ok(func) => {
-                            let unwind_pointer: u64 = parent_stack_base;
-                            // 8 because we need to store unwind_data_start and unwind_data_end
-                            // at the beginning of the unwind stack as the parameter for asyncify_start_unwind
-                            // each of them are u64, so together is 8 bytes
-                            let unwind_data_start: u64 = unwind_pointer + 8;
-                            let unwind_data_end: u64 = stack_pointer as u64;
-    
-                            // store the parameter at the top of the stack
-                            unsafe {
-                                *(address as *mut u64) = unwind_data_start;
-                                *(address as *mut u64).add(1) = unwind_data_end;
-                            }
-                            
-                            // mark the start of unwind
-                            let _res = func.call(&mut caller, unwind_pointer as i32);
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_start_unwind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_start_unwind export is not a function");
-                    return Ok(-1);
-                }
-            }
+        let asyncify_start_unwind_func = caller.get_asyncify_start_unwind().unwrap();
+
+        // store the parameter at the top of the stack
+        // reference comments in fork_call
+        unsafe {
+            // 16 because it is the size of two u64
+            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + 16;
+            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
-        else {
-            println!("asyncify_start_unwind export not found");
-            return Ok(-1);
-        }
+        
+        // mark the start of unwind
+        let _res = asyncify_start_unwind_func.call(&mut caller, unwind_data_start_usr as i32);
 
         // get the asyncify_stop_unwind and asyncify_start_rewind, which will later
         // be used when the unwind process finished
-        let asyncify_stop_unwind_func;
-        let asyncify_start_rewind_func;
-
-        if let Some(asyncify_stop_unwind_extern) = caller.get_export(ASYNCIFY_STOP_UNWIND) {
-            match asyncify_stop_unwind_extern {
-                Extern::Func(asyncify_stop_unwind) => {
-                    match asyncify_stop_unwind.typed::<(), ()>(&caller) {
-                        Ok(func) => {
-                            asyncify_stop_unwind_func = func;
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_stop_unwind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_stop_unwind export is not a function");
-                    return Ok(-1);
-                }
-            }
-        }
-        else {
-            println!("asyncify_stop_unwind export not found");
-            return Ok(-1);
-        }
-
-        if let Some(asyncify_start_rewind_extern) = caller.get_export(ASYNCIFY_START_REWIND) {
-            match asyncify_start_rewind_extern {
-                Extern::Func(asyncify_start_rewind) => {
-                    match asyncify_start_rewind.typed::<i32, ()>(&caller) {
-                        Ok(func) => {
-                            asyncify_start_rewind_func = func;
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_start_rewind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_start_rewind export is not a function");
-                    return Ok(-1);
-                }
-            }
-        }
-        else {
-            println!("asyncify_start_rewind export not found");
-            return Ok(-1);
-        }
+        let asyncify_stop_unwind_func = caller.get_asyncify_stop_unwind().unwrap();
+        let asyncify_start_rewind_func = caller.get_asyncify_start_rewind().unwrap();
 
         // we want to send this address to the thread
         let cloned_address = address as u64;
-        let parent_stack_bottom = caller.as_context().get_stack_base();
 
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         store.set_on_called(Box::new(move |mut store| {
-            let unwind_stack_finish;
-
-            let address = cloned_address as *mut u64;
-            let unwind_start_address = (cloned_address + 8) as *mut u64;
-
-            unsafe {
-                unwind_stack_finish = *address;
-            }
+            // once unwind is finished, the first u64 stored on the unwind_data becomes the actual
+            // end address of the unwind_data
+            let unwind_data_end_usr = unsafe {
+                *(unwind_data_start_sys as *mut u64)
+            };
 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
-            let rewind_base = parent_stack_base;
-            let rewind_pointer: u64 = rewind_base;
-
-            let rewind_start_parent = (cloned_address + rewind_pointer) as *mut u8;
-            let rewind_total_size = (unwind_stack_finish - rewind_base) as usize;
+            let rewind_total_size = (unwind_data_end_usr - unwind_data_start_usr) as usize;
 
             // store the unwind data
-            let hash = store.store_unwind_data(rewind_start_parent as *const u8, rewind_total_size);
+            let hash = store.store_unwind_data(unwind_data_start_sys as *const u8, rewind_total_size);
             unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) = hash; }
 
             // mark the parent to rewind state
-            let _ = asyncify_start_rewind_func.call(&mut store, rewind_pointer as i32);
+            let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
 
             // set up rewind state and return value
             store.set_rewinding_state(RewindingReturn {
@@ -1119,140 +946,54 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
         let address = defined_memory.base;
-        let parent_addr_len = defined_memory.current_length();
 
-        let parent_stack_base = caller.as_context().get_stack_top();
+        // get the wasm stack top address
+        let stack_low_usr = caller.as_context().get_stack_top();
+
+        // we store the unwind at the top of the user stack
+        let unwind_data_start_usr = stack_low_usr;
+        let unwind_data_start_sys = address as u64 + unwind_data_start_usr;
 
         // get the stack pointer global
         let stack_pointer = caller.get_stack_pointer().unwrap();
 
         // start unwind
-        if let Some(asyncify_start_unwind_extern) = caller.get_export(ASYNCIFY_START_UNWIND) {
-            match asyncify_start_unwind_extern {
-                Extern::Func(asyncify_start_unwind) => {
-                    match asyncify_start_unwind.typed::<i32, ()>(&caller) {
-                        Ok(func) => {
-                            let unwind_pointer: u64 = parent_stack_base;
-                            // 8 because we need to store unwind_data_start and unwind_data_end
-                            // at the beginning of the unwind stack as the parameter for asyncify_start_unwind
-                            // each of them are u64, so together is 8 bytes
-                            let unwind_data_start: u64 = unwind_pointer + 8;
-                            let unwind_data_end: u64 = stack_pointer as u64;
-    
-                            // store the parameter at the top of the stack
-                            unsafe {
-                                *(address as *mut u64) = unwind_data_start;
-                                *(address as *mut u64).add(1) = unwind_data_end;
-                            }
-                            
-                            // mark the start of unwind
-                            let _res = func.call(&mut caller, unwind_pointer as i32);
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_start_unwind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_start_unwind export is not a function");
-                    return Ok(-1);
-                }
-            }
+        let asyncify_start_unwind_func = caller.get_asyncify_start_unwind().unwrap();
+
+        // store the parameter at the top of the stack
+        // reference comments in fork_call
+        unsafe {
+            // 16 because it is the size of two u64
+            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + 16;
+            *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
-        else {
-            println!("asyncify_start_unwind export not found");
-            return Ok(-1);
-        }
+        
+        // mark the start of unwind
+        let _res = asyncify_start_unwind_func.call(&mut caller, unwind_data_start_usr as i32);
 
         // get the asyncify_stop_unwind and asyncify_start_rewind, which will later
         // be used when the unwind process finished
-        let asyncify_stop_unwind_func;
-        let asyncify_start_rewind_func;
-
-        if let Some(asyncify_stop_unwind_extern) = caller.get_export(ASYNCIFY_STOP_UNWIND) {
-            match asyncify_stop_unwind_extern {
-                Extern::Func(asyncify_stop_unwind) => {
-                    match asyncify_stop_unwind.typed::<(), ()>(&caller) {
-                        Ok(func) => {
-                            asyncify_stop_unwind_func = func;
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_stop_unwind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_stop_unwind export is not a function");
-                    return Ok(-1);
-                }
-            }
-        }
-        else {
-            println!("asyncify_stop_unwind export not found");
-            return Ok(-1);
-        }
-
-        if let Some(asyncify_start_rewind_extern) = caller.get_export(ASYNCIFY_START_REWIND) {
-            match asyncify_start_rewind_extern {
-                Extern::Func(asyncify_start_rewind) => {
-                    match asyncify_start_rewind.typed::<i32, ()>(&caller) {
-                        Ok(func) => {
-                            asyncify_start_rewind_func = func;
-                        }
-                        Err(err) => {
-                            println!("the signature of asyncify_start_rewind function is not correct: {:?}", err);
-                            return Ok(-1);
-                        }
-                    }
-                },
-                _ => {
-                    println!("asyncify_start_rewind export is not a function");
-                    return Ok(-1);
-                }
-            }
-        }
-        else {
-            println!("asyncify_start_rewind export not found");
-            return Ok(-1);
-        }
+        let asyncify_stop_unwind_func = caller.get_asyncify_stop_unwind().unwrap();
+        let asyncify_start_rewind_func = caller.get_asyncify_start_rewind().unwrap();
 
         // we want to send this address to the thread
         let cloned_address = address as u64;
-        let parent_stack_bottom = caller.as_context().get_stack_base();
 
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         store.set_on_called(Box::new(move |mut store| {
-            let unwind_stack_finish;
-
-            let address = cloned_address as *mut u64;
-            let unwind_start_address = (cloned_address + 8) as *mut u64;
-
-            unsafe {
-                unwind_stack_finish = *address;
-            }
-
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
-
-            let rewind_base = parent_stack_base;
-
-            let rewind_pointer: u64 = rewind_base;
-
-            let rewind_start_parent = (cloned_address + rewind_pointer) as *mut u8;
-            let rewind_total_size = (unwind_stack_finish - rewind_base) as usize;
 
             let hash = unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) };
             // retrieve the unwind data
             let data = store.retrieve_unwind_data(hash);
 
-            let mut result = retval;
+            let result = retval;
 
             if let Some(unwind_data) = data {
                 // replace the unwind data
-                unsafe { std::ptr::copy_nonoverlapping(unwind_data.as_ptr(), rewind_start_parent, unwind_data.len()); }
+                unsafe { std::ptr::copy_nonoverlapping(unwind_data.as_ptr(), unwind_data_start_sys as *mut u8, unwind_data.len()); }
             } else {
                 // if the hash does not exist
                 // according to standard, calling longjmp with invalid jmp_buf would
@@ -1264,7 +1005,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             }
 
             // mark the parent to rewind state
-            let _ = asyncify_start_rewind_func.call(&mut store, rewind_pointer as i32);
+            let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
 
             // set up rewind state and return value
             store.set_rewinding_state(RewindingReturn {
@@ -1393,19 +1134,19 @@ pub fn clone_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
     let flags = args.flags;
     // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
     // otherwise, we are creating a process (i.e. fork)
-    let isthread = flags & (clone_constants::CLONE_VM as u64);
+    let isthread = flags & (clone_constants::CLONE_VM);
 
     if isthread == 0 {
         match lind_fork(caller) {
             Ok(res) => res,
-            Err(e) => -1
+            Err(_e) => -1
         }
     }
     else {
         // pthread_create
         match lind_pthread_create(caller, args.stack as i32, args.stack_size as i32, args.child_tid) {
             Ok(res) => res,
-            Err(e) => -1
+            Err(_e) => -1
         }
     }
 }
@@ -1457,7 +1198,7 @@ pub fn longjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sy
     let host = caller.data().clone();
     let ctx = host.get_ctx();
 
-    ctx.longjmp_call(caller, jmp_buf, retval);
+    let _res = ctx.longjmp_call(caller, jmp_buf, retval);
     
     0
 }
