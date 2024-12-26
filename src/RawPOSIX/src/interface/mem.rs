@@ -96,21 +96,25 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
     }
 
     if prot & PROT_EXEC > 0 {
+        println!("mmap syscall error 1!");
         return syscall_error(Errno::EINVAL, "mmap", "PROT_EXEC is not allowed");
     }
 
     // check if the provided address is multiple of pages
     let rounded_addr = round_up_page(addr as u64);
     if rounded_addr != addr as u64 {
+        println!("mmap syscall error 2!");
         return syscall_error(Errno::EINVAL, "mmap", "address it not aligned");
     }
 
     // offset should be non-negative and multiple of pages
     if off < 0 {
+        println!("mmap syscall error 3!");
         return syscall_error(Errno::EINVAL, "mmap", "offset cannot be negative");
     }
     let rounded_off = round_up_page(off as u64);
     if rounded_off != off as u64 {
+        println!("mmap syscall error 4!");
         return syscall_error(Errno::EINVAL, "mmap", "offset it not aligned");
     }
 
@@ -267,6 +271,7 @@ pub fn check_and_convert_addr_ext(cage: &Cage, arg: u64, length: usize, prot: i3
     
     // Validate memory mapping and permissions
     if vmmap.check_addr_mapping(page_num, npages, prot).is_none() {
+        println!("invalid address: {}", arg);
         return Err(Errno::EFAULT);  // Return error if mapping invalid
     }
 

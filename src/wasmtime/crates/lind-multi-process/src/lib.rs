@@ -334,6 +334,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             println!("running out of cageid!");
         }
         let child_cageid = child_cageid.unwrap();
+        let parent_pid = self.pid;
 
         // calling fork in rawposix to fork the cage
         lind_syscall_api(
@@ -405,10 +406,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     child_address = defined_memory.base;
                     address_length = defined_memory.current_length();
                 }
-
-                // copy the entire memory area from parent to child
-                // this will be changed after mmap has been integrated into lind-wasm
-                unsafe { std::ptr::copy_nonoverlapping(cloned_address as *mut u8, child_address, address_length); }
+                
+                rawposix::safeposix::dispatcher::set_base_address(child_cageid, child_address as i64);
+                rawposix::safeposix::dispatcher::fork_vmmap_helper(parent_pid as u64, child_cageid);
 
                 // new cage created, increment the cage counter
                 lind_manager.increment();
@@ -523,6 +523,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     pub fn pthread_create_call(&self, mut caller: &mut Caller<'_, T>,
                     stack_addr: i32, stack_size: i32, child_tid: u64
                 ) -> Result<i32> {
+        println!("-----stack_addr: {}, stack_size: {}", stack_addr, stack_size);
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));

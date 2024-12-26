@@ -31,8 +31,10 @@ struct SharedMemoryInner {
 impl SharedMemory {
     /// Construct a new [`SharedMemory`].
     pub fn new(plan: MemoryPlan) -> Result<Self> {
+        println!("-----create new memory!");
         let (minimum_bytes, maximum_bytes) = Memory::limit_new(&plan, None)?;
-        let mmap_memory = MmapMemory::new(&plan, minimum_bytes, maximum_bytes, None)?;
+        let mut mmap_memory = MmapMemory::new(&plan, minimum_bytes, maximum_bytes, None)?;
+        mmap_memory.grow_to(2147483648);
         Self::wrap(&plan, Box::new(mmap_memory), plan.memory)
     }
 

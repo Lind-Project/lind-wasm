@@ -84,6 +84,7 @@ pub trait RuntimeLinearMemory: Send + Sync {
         delta_pages: u64,
         mut store: Option<&mut dyn Store>,
     ) -> Result<Option<(usize, usize)>, Error> {
+        println!("memory grow: {}", delta_pages);
         let old_byte_size = self.byte_size();
 
         // Wasm spec: when growing by 0 pages, always return the current size.
@@ -221,6 +222,8 @@ impl MmapMemory {
         mut maximum: Option<usize>,
         memory_image: Option<&Arc<MemoryImage>>,
     ) -> Result<Self> {
+        println!("-----minimum: {}, maximum: {:?}", minimum, maximum);
+        maximum = Some(2147483648);
         // It's a programmer error for these two configuration values to exceed
         // the host available address space, so panic if such a configuration is
         // found (mostly an issue for hypothetical 32-bit hosts).
@@ -325,6 +328,7 @@ impl RuntimeLinearMemory for MmapMemory {
     }
 
     fn grow_to(&mut self, new_size: usize) -> Result<()> {
+        println!("-----grow to {}", new_size);
         assert!(usize_is_multiple_of_host_page_size(self.offset_guard_size));
         assert!(usize_is_multiple_of_host_page_size(self.pre_guard_size));
         assert!(usize_is_multiple_of_host_page_size(self.mmap.len()));
