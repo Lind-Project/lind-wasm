@@ -1,4 +1,17 @@
 #!/bin/bash
+
+# wasmtest.sh is a shell script that can compile and run wasm tests.
+# There are three funtions for wasmteest.sh(1.test single file 2.test all files 3.test all tests from the file user give)
+# To test single file use: ./wasmtest.sh single <your file name>.c 
+# To compile single file use: ./wasmtest.sh singlecompile <your file name>.c
+# To run single file use: ./wasmtest.sh singlecompile <your file name>.c
+# To test all files use: ./wasmtest.sh all
+# To compile all files use: ./wasmtest.sh allcompile
+# To run all files use: ./wasmtest.sh allrun
+# To test all tests from the file user give use: ./wasmtest.sh files
+# To compile all tests from the file user give use: ./wasmtest.sh filescompile
+# To run all tests from the file user give use: ./wasmtest.sh filesrun
+
 glibc_base="/home/lind-wasm/src/glibc"
 wasmtime_base="/home/lind-wasm/src/wasmtime"
 
@@ -12,10 +25,12 @@ run_cmd_precompile="$wasmtime_base/target/debug/wasmtime run --allow-precompiled
 
 test_file_base="/home/lind-wasm/tests/unit-tests"
 
+#color codes for terminal output
 RED='\033[31m'
 GREEN='\033[32m'
 RESET='\033[0m'
 
+#function to compile a single test file
 compile_single_test() {
     local test_name="$1"
 
@@ -46,6 +61,7 @@ compile_single_test() {
     fi
 }
 
+#function to run a single test file
 run_single_test() {
     local test_name="$1"
 
@@ -84,6 +100,7 @@ run_single_test() {
     echo
 }
 
+#function to compile all the .c test files in the unit-tests folder
 compile_all_tests() {
     echo -e "${GREEN}Compiling all test cases in $test_file_base...${RESET}"
 
@@ -99,6 +116,7 @@ compile_all_tests() {
     echo -e "${GREEN}All tests compiled.${RESET}"
 }
 
+#function to run all the .c test files in the unit-tests folder
 run_all_tests() {
     echo -e "${GREEN}Running all test cases in $test_file_base...${RESET}"
 
@@ -114,6 +132,7 @@ run_all_tests() {
     echo -e "${GREEN}All tests completed.${RESET}"
 }
 
+#function to compile all the files from the file user give
 compile_from_files() {
     local file_list="$1"
 
@@ -137,6 +156,7 @@ compile_from_files() {
     echo -e "${GREEN}All specified tests compiled.${RESET}"
 }
 
+#function to run all the files from the file user give
 run_from_files() {
     local file_list="$1"
 
@@ -234,4 +254,3 @@ case "$1" in
         run_all_tests
         ;;
 esac
-
