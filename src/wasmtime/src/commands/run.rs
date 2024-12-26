@@ -214,7 +214,7 @@ impl RunCommand {
                 // exit the cage
                 lind_syscall_api(
                     1,
-                    30 as u32,
+                    30,
                     0,
                     0,
                     code as u64,
@@ -579,8 +579,10 @@ impl RunCommand {
                         .or_else(|| instance.get_func(&mut *store, "_start"))
                 };
 
-                let mut stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
+                let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
+                let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
+                store.as_context_mut().set_stack_top(stack_low as u64);
 
                 let handle = store.as_context().0.instance(wasmtime::InstanceId::from_index(0));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
