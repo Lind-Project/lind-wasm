@@ -310,12 +310,26 @@ pub fn lind_syscall_api(
         MMAP_SYSCALL => {
             let addr = arg1 as *mut u8;
             let len = arg2 as usize;
-            let mut prot = arg3 as i32;
-            let mut flags = arg4 as i32;
-            let mut fildes = arg5 as i32;
+            let prot = arg3 as i32;
+            let flags = arg4 as i32;
+            let fd = arg5 as i32;
             let off = arg6 as i64;
-            
-            interface::mmap_handler(cageid, addr, len, prot, flags, fildes, off)
+        
+            if len == 0 {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "mmap",
+                    "length cannot be zero"
+                );
+            }
+        
+            // TODO(Security): Need NaClSysCommonMmapCheck equivalent to validate:
+            // - W^X protection checks (write XOR execute)
+            // - Address space limit checks
+            // - Overflow checks for length + offset
+            // This should be implemented in interface::mmap_checks()
+        
+            interface::mmap_handler(cageid, addr, len, prot, flags, fd, off)
         }
 
         PREAD_SYSCALL => {
