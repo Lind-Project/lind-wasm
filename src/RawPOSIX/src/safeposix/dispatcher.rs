@@ -278,10 +278,44 @@ pub fn lind_syscall_api(
         }
 
         MUNMAP_SYSCALL => {
+            // NaCl equivalent: NaClSysMunmap
             let addr = arg1 as *mut u8;
-            let len = arg2 as usize;
+            let length = arg2 as usize;
+            let cage = interface::cagetable_getref(cageid);
+        
+            // Validate address alignment (like NaCl's NaClIsAllocPageMultiple)
+            if !interface::is_page_aligned(addr as usize) {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "munmap",
+                    "start address not page-aligned"
+                );
+            }
+        
+            // Check for zero length (NaCl explicitly checks this)
+            if length == 0 {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "munmap",
+                    "length cannot be zero"
+                );
+            }
+        
+            // Round length to page size (like NaCl's NaClRoundAllocPage)
+            let rounded_length = interface::round_to_page_size(length);
             
-            interface::munmap_handler(cageid, addr, len)
+            // Validate address range and check for executable pages
+            // NaCl uses NaClSysCommonAddrRangeContainsExecutablePages
+            if interface::contains_executable_pages(cage, addr as usize, rounded_length) {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "munmap",
+                    "region contains executable pages"
+                );
+            }
+        
+            // Perform the unmapping operation
+            interface::munmap_handler(cageid, addr, rounded_length)
         }
 
         MMAP_SYSCALL => {
