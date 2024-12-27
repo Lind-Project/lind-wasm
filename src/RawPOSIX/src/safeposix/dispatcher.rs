@@ -283,16 +283,18 @@ pub fn lind_syscall_api(
             let length = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
         
-            // Validate address alignment (like NaCl's NaClIsAllocPageMultiple)
-            if !interface::is_page_aligned(addr as usize) {
-                return syscall_error(
-                    Errno::EINVAL,
-                    "munmap",
-                    "start address not page-aligned"
-                );
-            }
-        
-            // Check for zero length (NaCl explicitly checks this)
+            // TODO(Security): Need to implement the following NaCl-style security checks:
+            // 1. is_page_aligned() - Checks if address is page-aligned (4KB boundaries)
+            //    Reference: NaCl checks this via NaClIsAllocPageMultiple
+            // 
+            // 2. round_to_page_size() - Rounds length up to nearest page size
+            //    Reference: NaCl uses NaClRoundAllocPage
+            //
+            // 3. contains_executable_pages() - Prevents unmapping executable pages
+            //    Reference: NaCl uses NaClSysCommonAddrRangeContainsExecutablePages
+            //
+            // These functions might help in the interface module.
+            
             if length == 0 {
                 return syscall_error(
                     Errno::EINVAL,
@@ -301,21 +303,8 @@ pub fn lind_syscall_api(
                 );
             }
         
-            // Round length to page size (like NaCl's NaClRoundAllocPage)
-            let rounded_length = interface::round_to_page_size(length);
-            
-            // Validate address range and check for executable pages
-            // NaCl uses NaClSysCommonAddrRangeContainsExecutablePages
-            if interface::contains_executable_pages(cage, addr as usize, rounded_length) {
-                return syscall_error(
-                    Errno::EINVAL,
-                    "munmap",
-                    "region contains executable pages"
-                );
-            }
-        
             // Perform the unmapping operation
-            interface::munmap_handler(cageid, addr, rounded_length)
+            interface::munmap_handler(cageid, addr, length)
         }
 
         MMAP_SYSCALL => {
