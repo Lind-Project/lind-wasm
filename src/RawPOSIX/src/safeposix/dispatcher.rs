@@ -203,13 +203,38 @@ pub fn lind_syscall_api(
 
     let ret = match call_number {
         WRITE_SYSCALL => {
+            // NaCl equivalent: NaClSysWrite
+            // Handles writing data from user buffer to file descriptor
+            
+            // Get file descriptor - same as NaCl's first argument handling
             let fd = arg1 as i32;
-            let count = arg3 as usize;
+        
+            // Security: Clamp count to prevent integer overflow attacks
+            // NaCl uses similar bounds checking via MAX_IO_BUFFER_BYTES
+            let count = std::cmp::min(arg3 as usize, i32::MAX as usize);
+            if count == 0 {
+                return 0; // Early return for zero-length writes (NaCl behavior)
+            }
+        
+            // Get cage reference for memory operations
+            // NaCl equivalent: struct NaClApp *nap = natp->nap
             let cage = interface::cagetable_getref(cageid);
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
+        
+            // Validate and convert user buffer address to system address
+            // NaCl: Uses NaClUserToSysAddrRangeProt with similar protection flags
+            // PROT_READ is correct because write() reads FROM the buffer
+            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
                 Ok(addr) => addr as *const u8,
-                Err(errno) => return syscall_error(errno, "write", "invalid buffer address"),
+                Err(errno) => {
+                    return syscall_error(
+                        errno,
+                        "write",
+                        "buffer access violation or invalid address"
+                    );
+                }
             };
+        
+            // Perform write operation through cage abstraction
             cage.write_syscall(fd, buf, count)
         }
 
