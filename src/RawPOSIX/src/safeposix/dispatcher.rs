@@ -239,14 +239,42 @@ pub fn lind_syscall_api(
         }
 
         WRITEV_SYSCALL => {
+            // NaCl equivalent: NaClSysWritev
             let fd = arg1 as i32;
-            let cage = interface::cagetable_getref(cageid);
-            let iovec = match check_and_convert_addr_ext(&cage, arg2, size_of::<interface::IovecStruct>(), PROT_READ) {
-                Ok(addr) => addr as *const interface::IovecStruct,
-                Err(errno) => return syscall_error(errno, "writev", "invalid iovec address"),
-            };
             let iovcnt = arg3 as i32;
-            cage.writev_syscall(fd, iovec, iovcnt)
+        
+            // NaCl validates count first
+            if iovcnt <= 0 {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "writev",
+                    "invalid iovec count"
+                );
+            }
+        
+            let cage = interface::cagetable_getref(cageid);
+        
+            // Validate the iovec array address first
+            // This matches NaCl's validation order
+            let iov_base = match check_and_convert_addr_ext(
+                &cage,
+                arg2,
+                (iovcnt as usize) * std::mem::size_of::<interface::IovecStruct>(),
+                PROT_READ
+            ) {
+                Ok(addr) => addr as *const interface::IovecStruct,
+                Err(errno) => {
+                    return syscall_error(
+                        errno,
+                        "writev",
+                        "invalid iovec array address"
+                    );
+                }
+            };
+        
+            // NaCl validates each iovec entry's buffer - we do this in writev_syscall
+            // The actual write operation is delegated to the cage implementation
+            cage.writev_syscall(fd, iov_base, iovcnt)
         }
 
         MUNMAP_SYSCALL => {
