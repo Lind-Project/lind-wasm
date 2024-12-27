@@ -17,3 +17,11 @@ docker run -it securesystemslab/lind-wasm /bin/bash
 
 ## Hello World!
 
+Now let try to print `Hello world!`
+
+```
+./lindtool.sh compile_test hello
+./lindtool.sh run hello
+```
+
+
