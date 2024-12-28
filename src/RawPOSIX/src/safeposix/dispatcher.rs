@@ -1160,11 +1160,17 @@ pub fn lind_syscall_api(
             let key = arg1 as i32;
             let size = arg2 as usize;
             let shmfig = arg3 as i32;
-
+        
+            // Perform shmget operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only dealing with integer values
+            // 2. Shared memory validation handled by cage layer
+            // 3. Simple and straightforward implementation as no memory operations are involved
+            // 4. Size validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .shmget_syscall(key, size, shmfig)
         }
-
         SHMAT_SYSCALL => {
             let shmid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
