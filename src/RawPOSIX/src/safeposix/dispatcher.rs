@@ -1946,11 +1946,26 @@ pub fn lind_syscall_api(
 
         WAIT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing process status
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_WRITE because wait() writes status information TO user space
+            // Size is 4 bytes for status integer
             let status = match check_and_convert_addr_ext(&cage, arg1, 4, PROT_WRITE) {
-                Ok(addr) => interface::get_i32_ref(addr).unwrap(),
+                Ok(addr) => match interface::get_i32_ref(addr) {
+                    Ok(status_ref) => status_ref,
+                    Err(_) => return syscall_error(Errno::EFAULT, "wait", "failed to get status reference"),
+                },
                 Err(errno) => return syscall_error(errno, "wait", "invalid status address"),
             };
-
+        
+            // Perform wait operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_WRITE since wait writes status to user space
+            // 3. Two-step validation: memory region first, then reference creation
+            // 4. Process status handling managed by cage layer
             cage.wait_syscall(status)
         }
 
