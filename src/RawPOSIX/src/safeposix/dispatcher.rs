@@ -308,6 +308,7 @@ pub fn lind_syscall_api(
         }
 
         MMAP_SYSCALL => {
+            // NaCl equivalent: NaClSysMmap
             let addr = arg1 as *mut u8;
             let len = arg2 as usize;
             let prot = arg3 as i32;
@@ -315,6 +316,7 @@ pub fn lind_syscall_api(
             let fd = arg5 as i32;
             let off = arg6 as i64;
         
+            // Basic length validation, similar to NaCl
             if len == 0 {
                 return syscall_error(
                     Errno::EINVAL,
@@ -325,9 +327,17 @@ pub fn lind_syscall_api(
         
             // TODO(Security): Need NaClSysCommonMmapCheck equivalent to validate:
             // - W^X protection checks (write XOR execute)
-            // - Address space limit checks
+            // - Address space limit checks (see NaCl's check at addr_bits)
             // - Overflow checks for length + offset
-            // This should be implemented in interface::mmap_checks()
+            // - Page alignment validation when MAP_FIXED is used
+            // Reference: NaCl implementation in nacl_syscall_common.c:1756
+        
+            // Force MAP_FIXED as NaCl does
+            let flags = flags | MAP_FIXED as i32;
+        
+            // Turn off PROT_EXEC for non-code pages
+            // NaCl does this to prevent execution of data pages
+            let prot = prot & !PROT_EXEC;
         
             interface::mmap_handler(cageid, addr, len, prot, flags, fd, off)
         }
