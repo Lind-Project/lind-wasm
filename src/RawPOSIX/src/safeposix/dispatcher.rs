@@ -360,14 +360,21 @@ pub fn lind_syscall_api(
         }
 
         READ_SYSCALL => {
+            // NaCl equivalent: NaClSysRead
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
+            
+            // Validate and convert user buffer address
+            // Using PROT_WRITE since read() writes TO the buffer
+            // NaCl: Uses NaClUserToSysAddr with similar validation
+            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "read", "invalid buffer address"),
             };
 
+            // File descriptor validation and actual read operation
+            // handled by cage implementation (similar to NaCl's ndp->vtbl->Read)
             cage.read_syscall(fd, buf, count)
         }
 
