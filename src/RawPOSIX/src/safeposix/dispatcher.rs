@@ -1972,12 +1972,27 @@ pub fn lind_syscall_api(
         WAITPID_SYSCALL => {
             let pid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing process status
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_WRITE because waitpid() writes status information TO user space
+            // Size is 4 bytes for status integer
             let status = match check_and_convert_addr_ext(&cage, arg2, 4, PROT_WRITE) {
-                Ok(addr) => interface::get_i32_ref(addr).unwrap(),
+                Ok(addr) => match interface::get_i32_ref(addr) {
+                    Ok(status_ref) => status_ref,
+                    Err(_) => return syscall_error(Errno::EFAULT, "waitpid", "failed to get status reference"),
+                },
                 Err(errno) => return syscall_error(errno, "waitpid", "invalid status address"), 
             };
             let options = arg3 as i32;
             
+            // Perform waitpid operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_WRITE since waitpid writes status to user space
+            // 3. Two-step validation: memory region first, then reference creation
+            // 4. Process status handling managed by cage layer
             cage.waitpid_syscall(pid, status, options)
         }
 
