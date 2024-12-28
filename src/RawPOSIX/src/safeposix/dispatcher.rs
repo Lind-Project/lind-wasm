@@ -829,7 +829,7 @@ pub fn lind_syscall_api(
             let buf = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::StatData>(), PROT_WRITE) {
                 Ok(addr) => match interface::get_statdatastruct(addr) {
                     Ok(val) => val,
-                    Err(errno) => return syscall_error(errno, "fxstat", "invalid stat data format"),
+                    Err(errno) => return syscall_error(Errno::EFAULT, "fxstat", "invalid stat data format"),
                 },
                 Err(errno) => return syscall_error(errno, "fxstat", "invalid buffer address"),
             };
@@ -840,15 +840,22 @@ pub fn lind_syscall_api(
         }
         
         UNLINK_SYSCALL => {
+            // NaCl equivalent: NaClSysUnlink
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
+            // (unlink takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "unlink", "invalid path string"),
                 },
                 Err(errno) => return syscall_error(errno, "unlink", "invalid path address"),
             };
             
+            // Perform unlink operation through cage implementation
             cage.unlink_syscall(path)
         }
 
