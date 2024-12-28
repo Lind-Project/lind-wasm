@@ -965,11 +965,23 @@ pub fn lind_syscall_api(
             let virtual_fd = arg1 as i32;
             let nbytes = arg3 as u32;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing directory entries
+            // NaCl: Uses NaClCopyOutToUser
+            // Using PROT_WRITE because getdents() writes directory entries TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, nbytes as usize, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "getdents", "invalid buffer address"),
             };
-
+        
+            // Perform getdents operation through cage implementation
+            // File descriptor validation handled by cage layer
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's type system for memory safety instead of manual allocation
+            // 2. Buffer validation handled by helper functions
+            // 3. No explicit cleanup needed due to Rust's ownership system
+            // 4. Uses PROT_WRITE since we're writing directory entries to user space
             cage.getdents_syscall(virtual_fd, buf, nbytes)
         }
 
