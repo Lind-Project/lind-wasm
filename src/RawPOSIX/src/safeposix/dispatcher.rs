@@ -808,9 +808,12 @@ pub fn lind_syscall_api(
         }
 
         FCHMOD_SYSCALL => {
+            // NaCl equivalent: NaClSysFchmod
             let fd = arg1 as i32;
             let mode = arg2 as u32;
-
+        
+            // Perform fchmod operation through cage implementation
+            // File descriptor validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .fchmod_syscall(fd, mode)
         }
