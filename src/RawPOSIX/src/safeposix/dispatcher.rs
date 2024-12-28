@@ -389,7 +389,11 @@ pub fn lind_syscall_api(
         }
 
         ACCESS_SYSCALL => {
+            // NaCl equivalent: NaClSysAccess
             let cage = interface::cagetable_getref(cageid);
+            
+            // Validate and convert path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr as u64) {
                     Ok(path_str) => path_str,
@@ -399,6 +403,8 @@ pub fn lind_syscall_api(
             };
             let amode = arg2 as i32;
 
+            // Perform access check through cage implementation
+            // Similar to NaCl's lind_access call
             cage.access_syscall(path, amode)
         }
 
