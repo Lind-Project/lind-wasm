@@ -1439,21 +1439,45 @@ pub fn lind_syscall_api(
         }
 
         GETUID_SYSCALL => {
+            // Get real user ID through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only returning an integer value
+            // 2. Simple and straightforward implementation with no validation needed
+            // 3. User ID management handled by cage layer
             interface::cagetable_getref(cageid)
                 .getuid_syscall()
         }
-
+        
         GETEUID_SYSCALL => {
+            // Get effective user ID through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only returning an integer value
+            // 2. Simple and straightforward implementation with no validation needed
+            // 3. User ID management handled by cage layer
             interface::cagetable_getref(cageid)
                 .geteuid_syscall()
         }
-
+        
         GETGID_SYSCALL => {
+            // Get real group ID through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only returning an integer value
+            // 2. Simple and straightforward implementation with no validation needed
+            // 3. Group ID management handled by cage layer
             interface::cagetable_getref(cageid)
                 .getgid_syscall()
         }
-
+        
         GETEGID_SYSCALL => {
+            // Get effective group ID through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only returning an integer value
+            // 2. Simple and straightforward implementation with no validation needed
+            // 3. Group ID management handled by cage layer
             interface::cagetable_getref(cageid)
                 .getegid_syscall()
         }
