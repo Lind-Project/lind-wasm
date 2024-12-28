@@ -1332,7 +1332,14 @@ pub fn lind_syscall_api(
             let sem_handle = arg1 as u32;
             let pshared = arg2 as i32;
             let value = arg3 as u32;
-
+        
+            // Perform semaphore initialization operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only dealing with integer values
+            // 2. Semaphore handle validation handled by cage layer
+            // 3. Simple and straightforward implementation as no memory operations are involved
+            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .sem_init_syscall(sem_handle, pshared, value)
         }
