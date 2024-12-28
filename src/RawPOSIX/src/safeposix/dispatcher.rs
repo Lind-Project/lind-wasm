@@ -909,6 +909,14 @@ pub fn lind_syscall_api(
             let request = arg2 as u64;
             let ptrunion = (start_address + arg3) as *mut u8;
             
+            // Perform ioctl operation through cage implementation
+            // Note: Like NaCl, we restrict ioctl operations for security
+            // 
+            // Key differences from NaCl:
+            // 1. Uses raw pointer arithmetic for argument handling
+            // 2. File descriptor validation handled by cage layer
+            // 3. Request validation and security checks handled by cage layer
+            // 4. Memory protection handled at the cage level rather than dispatcher
             interface::cagetable_getref(cageid)
                 .ioctl_syscall(virtual_fd, request, ptrunion)
         }
