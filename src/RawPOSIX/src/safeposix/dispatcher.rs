@@ -615,14 +615,21 @@ pub fn lind_syscall_api(
         }
 
         XSTAT_SYSCALL => {
+            // NaCl equivalent: NaClSysStat
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "xstat", "invalid path string"),
                 },
                 Err(errno) => return syscall_error(errno, "xstat", "invalid path address"),
             };
+        
+            // Validate stat buffer and prepare for writing
+            // NaCl: Allocates buffer and uses NaClCopyOutToUser
             let buf = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<StatData>(), PROT_WRITE) {
                 Ok(addr) => match interface::get_statdatastruct(addr) {
                     Ok(val) => val,
@@ -631,6 +638,8 @@ pub fn lind_syscall_api(
                 Err(errno) => return syscall_error(errno, "xstat", "invalid stat buffer address"),
             };
             
+            // Perform stat operation through cage implementation
+            // Results written directly to user buffer by cage layer
             cage.stat_syscall(path, buf)
         }
 
