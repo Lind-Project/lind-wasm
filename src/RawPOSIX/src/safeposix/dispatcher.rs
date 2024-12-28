@@ -644,16 +644,21 @@ pub fn lind_syscall_api(
         }
 
         MKDIR_SYSCALL => {
+            // NaCl equivalent: NaClSysMkdir
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "mkdir", "invalid path string"),
                 },
                 Err(errno) => return syscall_error(errno, "mkdir", "invalid path address"),
             };
             let mode = arg2 as u32;
-
+        
+            // Perform mkdir operation through cage implementation
             cage.mkdir_syscall(path, mode)
         }
 
