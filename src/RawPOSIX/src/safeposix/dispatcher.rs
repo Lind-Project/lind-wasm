@@ -1066,15 +1066,32 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for reading data to send
+            // NaCl: Uses NaClCopyInFromUser
+            // Using PROT_READ because we need to read the data FROM user space
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
                 Ok(addr) => addr as *const u8,
                 Err(errno) => return syscall_error(errno, "sendto", "invalid buffer address"),
             };
             let flag = arg4 as i32;
-
+        
+            // Get and validate socket address
+            // NaCl: Uses NaClCopyInFromUser for sockaddr validation
             let addrlen = arg6 as u32;
-            let addr = interface::get_sockaddr(start_address + arg5, addrlen).unwrap();
-
+            let addr = match interface::get_sockaddr(start_address + arg5, addrlen) {
+                Ok(addr) => addr,
+                Err(_) => return syscall_error(Errno::EFAULT, "sendto", "invalid socket address"),
+            };
+        
+            // Perform sendto operation through cage implementation
+            // File descriptor validation handled by cage layer
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's type system for memory safety instead of manual allocation
+            // 2. Buffer and address validation handled by helper functions
+            // 3. No explicit cleanup needed due to Rust's ownership system
+            // 4. Uses PROT_READ since we're reading data from user space
             cage.sendto_syscall(fd, buf, count, flag, &addr)
         }
 
