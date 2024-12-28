@@ -737,8 +737,14 @@ pub fn lind_syscall_api(
             ret
         }
         FSTATFS_SYSCALL => {
+            // NaCl equivalent: NaClSysFstatfs
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing filesystem information
+            // NaCl: Uses NaClCopyOutToUser
+            // Using PROT_WRITE because fstatfs() writes filesystem information 
+            // TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_WRITE) {
                 Ok(addr) => match interface::get_fsdatastruct(addr) {
                     Ok(val) => val,
@@ -747,6 +753,8 @@ pub fn lind_syscall_api(
                 Err(errno) => return syscall_error(errno, "fstatfs", "invalid buffer address"),
             };
             
+            // Perform fstatfs operation through cage implementation
+            // File descriptor validation and actual operation handled by cage layer
             cage.fstatfs_syscall(fd, buf)
         }
 
