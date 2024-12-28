@@ -1556,8 +1556,15 @@ pub fn lind_syscall_api(
             let virtual_fd = arg1 as i32;
             let how = arg2 as i32;
             
+            // Perform shutdown operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only dealing with integer values
+            // 2. File descriptor validation handled by cage layer
+            // 3. Simple and straightforward implementation as no memory operations are involved
+            // 4. Shutdown mode validation handled by cage layer
             interface::cagetable_getref(cageid)
-                .shutdown_syscall( virtual_fd, how)
+                .shutdown_syscall(virtual_fd, how)
         }
 
         GETPPID_SYSCALL => {
