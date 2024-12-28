@@ -760,15 +760,21 @@ pub fn lind_syscall_api(
 
         CHMOD_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
+            // (chmod takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "chmod", "invalid path string"),
                 },
                 Err(errno) => return syscall_error(errno, "chmod", "invalid path address"),
             };
             let mode = arg2 as u32;
-
+        
+            // Perform chmod operation through cage implementation
             cage.chmod_syscall(path, mode)
         }
         
