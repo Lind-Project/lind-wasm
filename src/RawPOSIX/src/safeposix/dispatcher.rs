@@ -1844,12 +1844,29 @@ pub fn lind_syscall_api(
         POLL_SYSCALL => {
             let nfds = arg2 as u64;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for reading and writing poll file descriptors
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_READ | PROT_WRITE because:
+            // - READ: poll needs to read the fds and events to monitor
+            // - WRITE: poll needs to write back the returned events
+            // Size is nfds * 8 (size of pollfd struct)
             let pollfds = match check_and_convert_addr_ext(&cage, arg1, (nfds * 8) as usize, PROT_READ | PROT_WRITE) {
-                Ok(addr) => interface::get_pollstruct_slice(addr, nfds as usize).unwrap(),
+                Ok(addr) => match interface::get_pollstruct_slice(addr, nfds as usize) {
+                    Ok(poll_array) => poll_array,
+                    Err(_) => return syscall_error(Errno::EFAULT, "poll", "failed to get poll array"),
+                },
                 Err(errno) => return syscall_error(errno, "poll", "invalid fds address"),
             };
             let timeout = arg3 as i32;
-
+        
+            // Perform poll operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses both PROT_READ and PROT_WRITE since poll both reads and writes
+            // 3. Two-step validation: memory region first, then array conversion
+            // 4. File descriptor validation handled by cage layer
             cage.poll_syscall(pollfds, nfds, timeout)
         }
 
