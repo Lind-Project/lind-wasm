@@ -1533,11 +1533,22 @@ pub fn lind_syscall_api(
             let optname = arg3 as i32;
             let optlen = arg5 as u32;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for reading socket option value
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_READ because we need to read the option value FROM user space
             let optval = match check_and_convert_addr_ext(&cage, arg4, optlen as usize, PROT_READ) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "setsockopt", "invalid optval address"),
             };
             
+            // Perform setsockopt operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_READ since we're reading option value from user space
+            // 3. Buffer validation handled by helper function
+            // 4. File descriptor validation handled by cage layer
             cage.setsockopt_syscall(virtual_fd, level, optname, optval, optlen)
         }
 
