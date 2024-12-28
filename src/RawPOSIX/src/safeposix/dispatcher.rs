@@ -861,22 +861,30 @@ pub fn lind_syscall_api(
 
         LINK_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert old path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
             let old_path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "link", "invalid old path string"),
                 },
                 Err(errno) => return syscall_error(errno, "link", "invalid old path address"),
             };
             
+            // Validate and convert new path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
             let new_path = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "link", "invalid new path string"),
                 },
                 Err(errno) => return syscall_error(errno, "link", "invalid new path address"),
             };
-
+        
+            // Perform link operation through cage implementation
             cage.link_syscall(old_path, new_path)
         }
 
