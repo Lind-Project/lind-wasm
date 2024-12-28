@@ -1715,12 +1715,27 @@ pub fn lind_syscall_api(
 
         PIPE2_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing pipe file descriptors
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_WRITE because pipe2() writes two fds TO this user space buffer
+            // Size is 8 bytes for two integers (file descriptors)
             let pipe = match check_and_convert_addr_ext(&cage, arg1, 8, PROT_WRITE) {
-                Ok(addr) => interface::get_pipearray(addr).unwrap(),
+                Ok(addr) => match interface::get_pipearray(addr) {
+                    Ok(pipe_array) => pipe_array,
+                    Err(_) => return syscall_error(Errno::EFAULT, "pipe2", "failed to get pipe array"),
+                },
                 Err(errno) => return syscall_error(errno, "pipe2", "invalid pipe address"),
             };
             let flag = arg2 as i32;
-
+        
+            // Perform pipe2 operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_WRITE since pipe2 writes fds to user space
+            // 3. Two-step validation: memory region first, then array conversion
+            // 4. File descriptor management handled by cage layer
             cage.pipe2_syscall(pipe, flag)
         }
         
