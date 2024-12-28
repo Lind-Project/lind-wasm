@@ -1143,7 +1143,15 @@ pub fn lind_syscall_api(
         FLOCK_SYSCALL => {
             let virtual_fd = arg1 as i32;
             let operation = arg2 as i32;
-
+        
+            // Perform flock operation through cage implementation
+            // File descriptor validation handled by cage layer
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only dealing with integer values
+            // 2. File descriptor validation handled by cage layer
+            // 3. Operation validation handled by cage layer
+            // 4. Simple and straightforward implementation as no memory operations are involved
             interface::cagetable_getref(cageid)
                 .flock_syscall(virtual_fd, operation)
         }
