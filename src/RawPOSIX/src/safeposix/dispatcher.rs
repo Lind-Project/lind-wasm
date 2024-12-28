@@ -699,14 +699,20 @@ pub fn lind_syscall_api(
 
         CHDIR_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
+            // (chdir takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "chdir", "invalid path string"),
                 },
                 Err(errno) => return syscall_error(errno, "chdir", "invalid path address"),
             };
             
+            // Perform chdir operation through cage implementation
             cage.chdir_syscall(path)
         }
 
