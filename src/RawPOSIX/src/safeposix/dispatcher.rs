@@ -379,8 +379,11 @@ pub fn lind_syscall_api(
         }
 
         CLOSE_SYSCALL => {
+            // NaCl equivalent: NaClSysClose
             let fd = arg1 as i32;
 
+            // File descriptor validation and close operation handled by cage
+            // Similar to NaCl's ndp->vtbl->Close after NaClGetDesc validation
             interface::cagetable_getref(cageid)
                 .close_syscall(fd)
         }
