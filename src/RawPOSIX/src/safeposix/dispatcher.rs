@@ -495,20 +495,27 @@ pub fn lind_syscall_api(
         }
 
         ACCEPT_SYSCALL => {
-            let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default()); //value doesn't matter
+            // NaCl equivalent: NaClSysAccept
+            let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
             let nullity1 = interface::arg_nullity(arg2);
             let nullity2 = interface::arg_nullity(arg3);
             let cage = interface::cagetable_getref(cageid);
-
+        
+            // Handle NULL address case (both NULL)
             if nullity1 && nullity2 {
                 cage.accept_syscall(arg1 as i32, &mut Some(&mut addr))
-            } else if !(nullity1 || nullity2) {
+            } 
+            // Handle non-NULL case (both non-NULL)
+            else if !(nullity1 || nullity2) {
+                // Perform accept operation first
                 let rv = cage.accept_syscall(arg1 as i32, &mut Some(&mut addr));
                 if rv >= 0 {
+                    // NaCl: Similar to NaClCopyOutToUser for sockaddr
                     let addr2_addr = match check_and_convert_addr_ext(&cage, arg2, arg3 as usize, PROT_WRITE) {
                         Ok(addr) => addr,
                         Err(errno) => return syscall_error(errno, "accept", "invalid address buffer"),
                     };
+                    // NaCl: Similar to NaClCopyOutToUser for addrlen
                     let len_addr = match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<u32>(), PROT_WRITE) {
                         Ok(addr) => addr,
                         Err(errno) => return syscall_error(errno, "accept", "invalid length buffer"),
@@ -516,7 +523,9 @@ pub fn lind_syscall_api(
                     interface::copy_out_sockaddr(addr2_addr as u64, len_addr as u64, addr);
                 }
                 rv
-            } else {
+            } 
+            // Handle invalid case (one NULL, one non-NULL)
+            else {
                 syscall_error(
                     Errno::EINVAL,
                     "accept",
