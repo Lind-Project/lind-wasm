@@ -2,33 +2,50 @@
 
 # wasmtest.sh is a shell script that can compile and run wasm tests.
 # There are three funtions for wasmteest.sh(1.test single file 2.test all files 3.test all tests from the file user give)
-# To test single file use: ./wasmtest.sh single <your file name>.c 
-# To compile single file use: ./wasmtest.sh singlecompile <your file name>.c
-# To run single file use: ./wasmtest.sh singlecompile <your file name>.c
-# To test all files use: ./wasmtest.sh all
-# To compile all files use: ./wasmtest.sh allcompile
-# To run all files use: ./wasmtest.sh allrun
-# To test all tests from the file user give use: ./wasmtest.sh files
-# To compile all tests from the file user give use: ./wasmtest.sh filescompile
-# To run all tests from the file user give use: ./wasmtest.sh filesrun
+# To test single file use: ./wasmtest.sh single <your file name>.c OR ./wasmtest.sh s <your file name>.c
+# To compile single file use: ./wasmtest.sh singlecompile <your file name>.c OR ./wasmtest.sh sc <your file name>.c
+# To run single file use: ./wasmtest.sh singlerun <your file name>.c OR ./wasmtest.sh sr <your file name>.c
+# To test all files use: ./wasmtest.sh all OR ./wasmtest.sh a
+# To compile all files use: ./wasmtest.sh allcompile OR ./wasmtest.sh ac
+# To run all files use: ./wasmtest.sh allrun OR ./wasmtest.sh ar
+# To test all tests from the file user give use: ./wasmtest.sh files OR ./wasmtest.sh file OR ./wasmtest.sh f
+# To compile all tests from the file user give use: ./wasmtest.sh filescompile OR ./wasmtest.sh filecompile OR /wasmtest.sh fc
+# To run all tests from the file user give use: ./wasmtest.sh filesrun OR ./wasmtest.sh filerun OR /wasmtest.sh fr
+# To modify timeout time use(default is 5s): ./wasmtime <the method> --timeout=<the time you want in second>
+# To modify LIND_WASM_BASE use(default is /home/lind-wasm): export LIND_WASM_BASE=<path you want>
 
-glibc_base="/home/lind-wasm/src/glibc"
-wasmtime_base="/home/lind-wasm/src/wasmtime"
+LIND_WASM_BASE="${LIND_WASM_BASE:-/home/lind-wasm}"
 
-CC="${CLANG:=/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
+DEFAULT_TIMEOUT=5
+TIMEOUT=$DEFAULT_TIMEOUT
 
-export_cmd="export LD_LIBRARY_PATH=$wasmtime_base/crates/rustposix:\$LD_LIBRARY_PATH"
+glibc_base="$LIND_WASM_BASE/src/glibc"
+wasmtime_base="$LIND_WASM_BASE/src/wasmtime"
 
-compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer" [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
+CC="${CLANG:=$LIND_WASM_BASE/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
+
+compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
 precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output]"
 run_cmd_precompile="$wasmtime_base/target/debug/wasmtime run --allow-precompiled --wasi threads=y --wasi preview2=n [target]"
 
-test_file_base="/home/lind-wasm/tests/unit-tests"
+test_file_base="$LIND_WASM_BASE/tests/unit-tests"
 
 #color codes for terminal output
 RED='\033[31m'
 GREEN='\033[32m'
 RESET='\033[0m'
+
+for arg in "$@"; do
+    if [[ "$arg" == --timeout=* ]]; then
+        TIMEOUT="${arg#*=}"
+        if ! [[ "$TIMEOUT" =~ ^[0-9]+$ ]]; then
+            echo -e "${RED}Error: Timeout must be a positive integer.${RESET}"
+            exit 1
+        fi
+        # Remove --timeout argument from the argument list
+        set -- "${@/$arg}"
+    fi
+done
 
 #function to compile a single test file
 compile_single_test() {
@@ -45,8 +62,6 @@ compile_single_test() {
     without_c="${test_name%??}"
     output_file_wasm="${output_dir}/${twithout_c}.wasm"
     output_file_cwasm="${output_dir}/${without_c}.cwasm"
-
-    eval $export_cmd
 
     final_cmd=$(echo "$compile_test_cmd_fork_test" | sed "s|\[input\]|$source_file|g" | sed "s|\[output\]|$output_file_wasm|g")
     pre_compile=$(echo "$precompile_wasm" | sed "s|\[input\]|$output_file_wasm|g" | sed "s|\[output\]|$output_file_cwasm|g")
@@ -84,11 +99,9 @@ run_single_test() {
         final_cmd="${final_cmd} $@"
     fi
 
-    eval $export_cmd
-
     echo -e "${GREEN}Running: $final_cmd${RESET}"
 
-    if timeout 10s bash -c "$final_cmd"; then
+    if timeout "${TIMEOUT}s" bash -c "$final_cmd"; then
         echo
         echo -e "${GREEN}Test $new_test_name completed successfully.${RESET}"
     else
@@ -194,7 +207,7 @@ if [ "${!#}" = "-p" ]; then
 fi
 
 case "$1" in
-    filescompile)
+    filescompile|filecompile|fc)
         if [ -z "$2" ]; then
             echo -e "${RED}error: file list not provided${RESET}"
             exit 1
@@ -202,7 +215,7 @@ case "$1" in
         compile_from_files "$2"
         ;;
 
-    filesrun)
+    filesrun|filerun|fr)
         if [ -z "$2" ]; then
             echo -e "${RED}error: file list not provided${RESET}"
             exit 1
@@ -210,7 +223,7 @@ case "$1" in
         run_from_files "$2"
         ;;
 
-    files)
+    files|file|f)
         if [ -z "$2" ]; then
             echo -e "${RED}error: file list not provided${RESET}"
             exit 1
@@ -219,7 +232,7 @@ case "$1" in
         run_from_files "$2"
         ;;
 
-    singlecompile)
+    singlecompile|sc)
         if [ -z "$2" ]; then
             echo -e "${RED}error: source file name not provided${RESET}"
             exit 1
@@ -227,7 +240,7 @@ case "$1" in
         compile_single_test "$2"
         ;;
 
-    singlerun)
+    singlerun|sr)
         if [ -z "$2" ]; then
             echo -e "${RED}error: source file name not provided${RESET}"
             exit 1
@@ -235,7 +248,7 @@ case "$1" in
         run_single_test "$2"
         ;;
 
-    single)
+    single|s)
         if [ -z "$2" ]; then
             echo -e "${RED}error: source file name not provided${RESET}"
             exit 1
@@ -243,13 +256,13 @@ case "$1" in
         compile_single_test "$2"
         run_single_test "$2"
         ;;
-    allcompile)
+    allcompile|ac)
         compile_all_tests
         ;;
-    allrun)
+    allrun|ar)
         run_all_tests
         ;;
-    all)
+    all|a)
         compile_all_tests
         run_all_tests
         ;;
