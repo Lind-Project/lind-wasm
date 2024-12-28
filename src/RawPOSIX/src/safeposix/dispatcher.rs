@@ -779,13 +779,19 @@ pub fn lind_syscall_api(
         }
         
         DUP_SYSCALL => {
+            // NaCl equivalent: NaClSysDup
             let fd = arg1 as i32;
+            
+            // Convert second argument to Option<i32> if it's within valid range
+            // This is an extension to NaCl's implementation to support both dup and dup2
             let fd2: Option<i32> = if arg1 <= i32::MAX as u64 {
                 Some(arg1 as i32)
             } else {
                 None
             };
-
+        
+            // Perform dup operation through cage implementation
+            // File descriptor validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .dup_syscall(fd, fd2)
         }
