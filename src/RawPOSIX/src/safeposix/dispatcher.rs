@@ -1099,26 +1099,39 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing received data
+            // NaCl: Uses NaClCopyOutToUser
+            // Using PROT_WRITE because recvfrom() writes received data TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "recvfrom", "invalid buffer address"),
             };
             let flag = arg4 as i32;
+        
+            // Check if address and length arguments are provided
             let nullity1 = interface::arg_nullity(arg5);
             let nullity2 = interface::arg_nullity(arg6);
-
+        
+            // Handle different cases based on address arguments
             if nullity1 && nullity2 {
+                // Both address and length are NULL - simple receive
                 cage.recvfrom_syscall(fd, buf, count, flag, &mut None)
             }
             else if !(nullity1 || nullity2) {
-                let mut newsockaddr = interface::GenSockaddr::V4(interface::SockaddrV4::default()); //dummy value, rust would complain if we used an uninitialized value here
-
+                // Both address and length are provided
+                // Create a default sockaddr to store the sender's address
+                let mut newsockaddr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+        
+                // Perform recvfrom operation
                 let rv = cage.recvfrom_syscall(fd, buf, count, flag, &mut Some(&mut newsockaddr));
                 if rv >= 0 {
+                    // Copy address information back to user space on success
                     interface::copy_out_sockaddr(start_address + arg5, start_address + arg6, newsockaddr);
                 }
                 rv
             } else {
+                // Invalid case: one argument is NULL while the other isn't
                 syscall_error(
                     Errno::EINVAL,
                     "recvfrom",
