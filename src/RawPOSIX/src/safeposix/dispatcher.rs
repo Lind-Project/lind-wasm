@@ -430,17 +430,25 @@ pub fn lind_syscall_api(
         }
 
         SOCKET_SYSCALL => {
+            // NaCl equivalent: NaClSysSocket
             let domain = arg1 as i32;
             let socktype = arg2 as i32;
             let protocol = arg3 as i32;
 
+            // Perform socket operation through cage implementation
+            // Domain, type, and protocol validation handled by cage layer
+            // Similar to NaCl's lind_socket call
             interface::cagetable_getref(cageid)
                 .socket_syscall(domain, socktype, protocol)
         }
 
         CONNECT_SYSCALL => {
+            // NaCl equivalent: NaClSysConnect
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
+
+            // Validate and convert sockaddr from user space
+            // NaCl: Uses NaClCopyInFromUser for sockaddr validation
             let addr = match check_and_convert_addr_ext(&cage, arg2, arg3 as usize, PROT_READ) {
                 Ok(addr) => match interface::get_sockaddr(addr as u64, arg3 as u32) {
                     Ok(sockaddr) => sockaddr,
@@ -449,10 +457,14 @@ pub fn lind_syscall_api(
                 Err(errno) => return syscall_error(errno, "connect", "invalid address"),
             };
             
+            // Convert to reference for connect operation
             let remoteaddr = match Ok::<&interface::GenSockaddr, i32>(&addr) {
                 Ok(addr) => addr,
-                Err(_) => panic!("Failed to get sockaddr"), // Handle error appropriately
+                Err(_) => return syscall_error(Errno::EFAULT, "connect", "sockaddr conversion failed"),
             };
+
+            // Perform connect operation through cage implementation
+            // File descriptor validation handled by cage layer
             cage.connect_syscall(fd, remoteaddr)
         }
 
