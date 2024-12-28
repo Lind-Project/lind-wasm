@@ -469,8 +469,12 @@ pub fn lind_syscall_api(
         }
 
         BIND_SYSCALL => {
+            // NaCl equivalent: NaClSysBind
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert sockaddr from user space
+            // NaCl: Uses NaClCopyInFromUser for sockaddr validation
             let addr = match check_and_convert_addr_ext(&cage, arg2, arg3 as usize, PROT_READ) {
                 Ok(addr) => match interface::get_sockaddr(addr as u64, arg3 as u32) {
                     Ok(sockaddr) => sockaddr,
@@ -478,10 +482,15 @@ pub fn lind_syscall_api(
                 },
                 Err(errno) => return syscall_error(errno, "bind", "invalid address"),
             };
+        
+            // Convert to reference for bind operation
             let localaddr = match Ok::<&interface::GenSockaddr, i32>(&addr) {
                 Ok(addr) => addr,
-                Err(_) => panic!("Failed to get sockaddr"), // Handle error appropriately
+                Err(_) => return syscall_error(Errno::EFAULT, "bind", "sockaddr conversion failed"),
             };
+        
+            // Perform bind operation through cage implementation
+            // File descriptor validation handled by cage layer
             cage.bind_syscall(fd, localaddr)
         }
 
