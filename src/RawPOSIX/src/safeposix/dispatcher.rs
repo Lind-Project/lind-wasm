@@ -1576,12 +1576,23 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for reading data to send
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_READ because we need to read the data FROM user space
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
                 Ok(addr) => addr as *const u8,
                 Err(errno) => return syscall_error(errno, "send", "invalid buffer address"),
             };
             let flags = arg4 as i32;
-
+        
+            // Perform send operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_READ since we're reading data from user space
+            // 3. Buffer validation handled by helper function
+            // 4. File descriptor validation handled by cage layer
             cage.send_syscall(fd, buf, count, flags)
         }
 
