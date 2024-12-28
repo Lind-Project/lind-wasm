@@ -987,19 +987,36 @@ pub fn lind_syscall_api(
 
         STATFS_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "statfs", "invalid path string"),
                 },
                 Err(errno) => return syscall_error(errno, "statfs", "invalid path address"),
             };
             
+            // Validate buffer for writing filesystem information
+            // NaCl: Uses NaClCopyOutToUser
+            // Using PROT_WRITE because statfs() writes filesystem information TO this user space buffer
             let rposix_databuf = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_WRITE) {
-                Ok(addr) => interface::get_fsdatastruct(addr).unwrap(),
+                Ok(addr) => match interface::get_fsdatastruct(addr) {
+                    Ok(val) => val,
+                    Err(errno) => return syscall_error(Errno::EFAULT, "statfs", "invalid stat buffer format"),
+                },
                 Err(errno) => return syscall_error(errno, "statfs", "invalid stat buffer address"),
             };
             
+            // Perform statfs operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's type system for memory safety instead of manual allocation
+            // 2. Path and buffer validation handled by helper functions
+            // 3. No explicit cleanup needed due to Rust's ownership system
+            // 4. Uses appropriate PROT flags for reading path and writing filesystem data
             cage.statfs_syscall(&path, rposix_databuf)
         }
 
