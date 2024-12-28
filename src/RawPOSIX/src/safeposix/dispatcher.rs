@@ -343,15 +343,19 @@ pub fn lind_syscall_api(
         }
 
         PREAD_SYSCALL => {
+            // NaCl equivalent: NaClSysPread
             let fd = arg1 as i32;
             let count = arg3 as usize;
+            let offset = arg4 as i64;
             let cage = interface::cagetable_getref(cageid);
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
+            
+            // Validate and convert user buffer address
+            // NaCl uses NaClUserToSysAddr with PROT_WRITE since pread writes TO the buffer
+            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "pread", "invalid buffer address"),
             };
-            let offset = arg4 as i64;
-
+        
             cage.pread_syscall(fd, buf, count, offset)
         }
 
