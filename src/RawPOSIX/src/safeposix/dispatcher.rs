@@ -620,6 +620,8 @@ pub fn lind_syscall_api(
         
             // Validate and convert path string from user space
             // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
+            // (stat takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
@@ -630,6 +632,7 @@ pub fn lind_syscall_api(
         
             // Validate stat buffer and prepare for writing
             // NaCl: Allocates buffer and uses NaClCopyOutToUser
+            // Using PROT_WRITE because stat() writes the results TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<StatData>(), PROT_WRITE) {
                 Ok(addr) => match interface::get_statdatastruct(addr) {
                     Ok(val) => val,
@@ -649,6 +652,8 @@ pub fn lind_syscall_api(
         
             // Validate and convert path string from user space
             // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
+            // (mkdir takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
@@ -663,15 +668,22 @@ pub fn lind_syscall_api(
         }
 
         RMDIR_SYSCALL => {
+            // NaCl equivalent: NaClSysRmdir
             let cage = interface::cagetable_getref(cageid);
+
+            // Validate and convert path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
+            // (rmdir takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "rmdir", "invalid path string"),
                 },
                 Err(errno) => return syscall_error(errno, "rmdir", "invalid path address"),
             };
             
+            // Perform rmdir operation through cage implementation
             cage.rmdir_syscall(path)
         }
 
