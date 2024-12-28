@@ -1174,12 +1174,23 @@ pub fn lind_syscall_api(
         SHMAT_SYSCALL => {
             let shmid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate shared memory address
+            // NaCl: Uses NaClIsValidAddress
+            // Using both PROT_READ and PROT_WRITE since shared memory needs both access types
             let shmaddr = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_READ | PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "shmat", "invalid shared memory address"),
             };
             let shmflg = arg3 as i32;
-
+        
+            // Perform shmat operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for address validation
+            // 2. Uses PROT_READ | PROT_WRITE for shared memory access
+            // 3. Address validation handled by helper function
+            // 4. Shared memory operations handled by cage layer
             cage.shmat_syscall(shmid, shmaddr, shmflg)
         }
 
