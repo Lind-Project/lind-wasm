@@ -24,4 +24,8 @@ Now let try to print `Hello world!`
 ./lindtool.sh run hello
 ```
 
+## Documentation
+
+Check out our [docs]([lind-project.github.io/lind-wasm-docs/](https://lind-project.github.io/lind-wasm-docs/))! 
+
 
