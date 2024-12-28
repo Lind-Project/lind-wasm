@@ -535,7 +535,11 @@ pub fn lind_syscall_api(
         }
 
         EXEC_SYSCALL => {
+            // NaCl equivalent: NaClSysExec
             let child_cageid = arg1 as u64;
+        
+            // Perform exec operation through cage implementation
+            // Child cage validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .exec_syscall(child_cageid)
         }
