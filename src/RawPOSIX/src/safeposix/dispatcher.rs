@@ -1024,7 +1024,15 @@ pub fn lind_syscall_api(
             let virtual_fd = arg1 as i32;
             let cmd = arg2 as i32;
             let arg = arg3 as i32;
-
+        
+            // Perform fcntl operation through cage implementation
+            // File descriptor validation and command validation handled by cage layer
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only dealing with integer values
+            // 2. File descriptor validation handled by cage layer
+            // 3. Command validation handled by cage layer
+            // 4. Simple and straightforward implementation as no memory operations are involved
             interface::cagetable_getref(cageid)
                 .fcntl_syscall(virtual_fd, cmd, arg)
         }
