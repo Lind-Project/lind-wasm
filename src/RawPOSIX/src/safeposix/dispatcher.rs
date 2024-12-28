@@ -1916,15 +1916,31 @@ pub fn lind_syscall_api(
             let flags = arg2 as i32;
             let cage = interface::cagetable_getref(cageid);
             
+            // Validate buffer for reading requested sleep time
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_READ because we need to read the requested time FROM user space
+            // Size is 16 bytes for timespec64 structure
             let req = match check_and_convert_addr_ext(&cage, arg3, 16, PROT_READ) {
                 Ok(addr) => addr as usize,
                 Err(errno) => return syscall_error(errno, "nanosleep", "invalid req address"),
             };
+        
+            // Validate buffer for writing remaining time
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_WRITE because nanosleep writes remaining time TO user space
+            // Size is 16 bytes for timespec64 structure
             let rem = match check_and_convert_addr_ext(&cage, arg4, 16, PROT_WRITE) {
                 Ok(addr) => addr as usize, 
                 Err(errno) => return syscall_error(errno, "nanosleep", "invalid rem address"),
             };
             
+            // Perform nanosleep operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_READ for req and PROT_WRITE for rem
+            // 3. Separate validation for request and remaining time buffers
+            // 4. Additional parameters for clock ID and flags (time64 version)
             cage.nanosleep_time64_syscall(clockid, flags, req, rem)
         }
 
