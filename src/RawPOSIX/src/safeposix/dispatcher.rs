@@ -819,13 +819,23 @@ pub fn lind_syscall_api(
         }
 
         FXSTAT_SYSCALL => {
+            // NaCl equivalent: NaClSysFstat
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate stat buffer and prepare for writing
+            // NaCl: Uses NaClCopyOutToUser
+            // Using PROT_WRITE because fstat() writes the results TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::StatData>(), PROT_WRITE) {
-                Ok(addr) => interface::get_statdatastruct(addr).unwrap(),
+                Ok(addr) => match interface::get_statdatastruct(addr) {
+                    Ok(val) => val,
+                    Err(errno) => return syscall_error(errno, "fxstat", "invalid stat data format"),
+                },
                 Err(errno) => return syscall_error(errno, "fxstat", "invalid buffer address"),
             };
             
+            // Perform fstat operation through cage implementation
+            // File descriptor validation and actual operation handled by cage layer
             cage.fstat_syscall(fd, buf)
         }
         
