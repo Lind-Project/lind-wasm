@@ -1485,6 +1485,13 @@ pub fn lind_syscall_api(
         EPOLL_CREATE_SYSCALL => {
             let size = arg1 as i32;
             
+            // Perform epoll create operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only dealing with integer values
+            // 2. Size validation handled by cage layer
+            // 3. Simple and straightforward implementation as no memory operations are involved
+            // 4. File descriptor management handled by cage layer
             interface::cagetable_getref(cageid)
                 .epoll_create_syscall(size)
         }
