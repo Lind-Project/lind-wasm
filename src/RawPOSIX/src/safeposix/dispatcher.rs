@@ -797,9 +797,12 @@ pub fn lind_syscall_api(
         }
 
         DUP2_SYSCALL => {
+            // NaCl equivalent: NaClSysDup2
             let fd = arg1 as i32;
             let fd2 = arg2 as i32;
             
+            // Perform dup2 operation through cage implementation
+            // File descriptor validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .dup2_syscall(fd, fd2)
         }
