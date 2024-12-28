@@ -545,7 +545,11 @@ pub fn lind_syscall_api(
         }
 
         EXIT_SYSCALL => {
+            // NaCl equivalent: NaClSysExit
             let status = arg1 as i32;
+        
+            // Perform exit operation through cage implementation
+            // Cleanup handled by cage layer
             interface::cagetable_getref(cageid)
                 .exit_syscall(status)
         }
