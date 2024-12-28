@@ -555,11 +555,33 @@ pub fn lind_syscall_api(
         }
 
         SELECT_SYSCALL => {
+            // NaCl equivalent: NaClSysSelect
             let nfds = arg1 as i32;
-            let readfds = interface::get_fdset(arg2).unwrap();
-            let writefds = interface::get_fdset(arg3).unwrap();
-            let errorfds = interface::get_fdset(arg4).unwrap();
-            let rposix_timeout = interface::duration_fromtimeval(arg5).unwrap();
+            
+            // Get and validate fd sets
+            // NaCl: Uses NaClCopyInFromUser for fd_set validation
+            let readfds = match interface::get_fdset(arg2) {
+                Ok(fds) => fds,
+                Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid readfds"),
+            };
+            let writefds = match interface::get_fdset(arg3) {
+                Ok(fds) => fds,
+                Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid writefds"),
+            };
+            let errorfds = match interface::get_fdset(arg4) {
+                Ok(fds) => fds,
+                Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid errorfds"),
+            };
+            
+            // Get and validate timeout
+            // NaCl: Uses NaClCopyInFromUser for timeval validation
+            let rposix_timeout = match interface::duration_fromtimeval(arg5) {
+                Ok(timeout) => timeout,
+                Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid timeout"),
+            };
+        
+            // Perform select operation through cage implementation
+            // Results are handled by the interface layer
             interface::cagetable_getref(cageid)
                 .select_syscall(nfds, readfds, writefds, errorfds, rposix_timeout)
         }
