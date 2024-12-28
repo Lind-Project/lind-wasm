@@ -1883,16 +1883,31 @@ pub fn lind_syscall_api(
 
         FUTEX_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for futex operations
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_READ | PROT_WRITE because:
+            // - READ: futex needs to read current value
+            // - WRITE: futex may modify the value depending on operation
             let uaddr = match check_and_convert_addr_ext(&cage, arg1, 4, PROT_READ | PROT_WRITE) {
                 Ok(addr) => addr,
                 Err(errno) => return syscall_error(errno, "futex", "invalid uaddr address"),
             };
+            
+            // Convert remaining arguments
             let futex_op = arg2 as u32;
             let val = arg3 as u32;
             let timeout = arg4 as u32;
             let uaddr2 = arg5 as u32;
             let val3 = arg6 as u32;
-
+        
+            // Perform futex operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses both PROT_READ and PROT_WRITE since futex both reads and may write
+            // 3. Buffer validation handled by helper function
+            // 4. Operation validation handled by cage layer
             cage.futex_syscall(uaddr, futex_op, val, timeout, uaddr2, val3)
         }
 
