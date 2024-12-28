@@ -717,13 +717,21 @@ pub fn lind_syscall_api(
         }
 
         GETCWD_SYSCALL => {
+            // NaCl equivalent: NaClSysGetcwd
             let bufsize = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing
+            // NaCl: Uses NaClCopyOutToUser
+            // Using PROT_WRITE because getcwd() writes the current working directory path 
+            // TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg1, bufsize, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "getcwd", "invalid buffer address"),
             };
-
+        
+            // Perform getcwd operation through cage implementation
+            // On success (ret == 0), return the buffer address like NaCl does
             let ret = cage.getcwd_syscall(buf, bufsize as u32);
             if ret == 0 { return arg1 as i32; }
             ret
