@@ -923,15 +923,26 @@ pub fn lind_syscall_api(
 
         TRUNCATE_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert path string from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
+            // Using PROT_READ because we need to read the path string FROM user space
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "truncate", "invalid path string"),
                 },
                 Err(errno) => return syscall_error(errno, "truncate", "invalid path address"),
             };
             let length = arg2 as isize;
-
+        
+            // Perform truncate operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's type system for memory safety instead of manual allocation
+            // 2. Path validation handled by helper functions
+            // 3. No explicit cleanup needed due to Rust's ownership system
+            // 4. Uses PROT_READ since we're only reading the path from user space
             cage.truncate_syscall(path, length)
         }
 
