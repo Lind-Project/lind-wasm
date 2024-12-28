@@ -688,8 +688,11 @@ pub fn lind_syscall_api(
         }
 
         FCHDIR_SYSCALL => {
+            // NaCl equivalent: NaClSysFchdir
             let fd = arg1 as i32;
             
+            // Perform fchdir operation through cage implementation
+            // File descriptor validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .fchdir_syscall(fd)
         }
