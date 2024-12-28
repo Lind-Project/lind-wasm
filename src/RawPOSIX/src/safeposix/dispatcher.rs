@@ -1288,7 +1288,14 @@ pub fn lind_syscall_api(
         COND_WAIT_SYSCALL => {
             let cv_handle = arg1 as i32;
             let mutex_handle = arg2 as i32;
-
+        
+            // Perform condition variable wait operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only dealing with integer values
+            // 2. Condition variable and mutex handle validation handled by cage layer
+            // 3. Simple and straightforward implementation as no memory operations are involved
+            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .cond_wait_syscall(cv_handle, mutex_handle)
         }
