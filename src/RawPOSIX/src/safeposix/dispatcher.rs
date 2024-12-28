@@ -949,7 +949,14 @@ pub fn lind_syscall_api(
         FTRUNCATE_SYSCALL => {
             let virtual_fd = arg1 as i32;
             let length = arg2 as isize;
-
+        
+            // Perform ftruncate operation through cage implementation
+            // File descriptor validation handled by cage layer
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only dealing with integer values
+            // 2. File descriptor validation handled by cage layer
+            // 3. Simple and straightforward implementation as no memory operations are involved
             interface::cagetable_getref(cageid)
                 .ftruncate_syscall(virtual_fd, length)
         }
