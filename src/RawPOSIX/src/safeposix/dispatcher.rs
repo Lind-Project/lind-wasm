@@ -1041,12 +1041,24 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing received data
+            // NaCl: Uses NaClCopyOutToUser
+            // Using PROT_WRITE because recv() writes received data TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "recv", "invalid buffer address"),
             };
             let flag = arg4 as i32;
-
+        
+            // Perform recv operation through cage implementation
+            // File descriptor validation handled by cage layer
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's type system for memory safety instead of manual allocation
+            // 2. Buffer validation handled by helper functions
+            // 3. No explicit cleanup needed due to Rust's ownership system
+            // 4. Uses PROT_WRITE since we're writing received data to user space
             cage.recv_syscall(fd, buf, count, flag)
         }
 
