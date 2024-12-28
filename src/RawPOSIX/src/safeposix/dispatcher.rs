@@ -1259,7 +1259,14 @@ pub fn lind_syscall_api(
 
         MUTEX_UNLOCK_SYSCALL => {
             let mutex_handle = arg1 as i32;
-
+        
+            // Perform mutex unlock operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. No memory protection flags needed as we're only dealing with integer values
+            // 2. Mutex handle validation handled by cage layer
+            // 3. Simple and straightforward implementation as no memory operations are involved
+            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .mutex_unlock_syscall(mutex_handle)
         }
