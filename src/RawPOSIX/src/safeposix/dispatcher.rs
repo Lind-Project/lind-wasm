@@ -896,7 +896,7 @@ pub fn lind_syscall_api(
             // Perform lseek operation through cage implementation
             // File descriptor validation and bounds checking handled by cage layer
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. File descriptor validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -912,7 +912,7 @@ pub fn lind_syscall_api(
             // Perform ioctl operation through cage implementation
             // Note: Like NaCl, we restrict ioctl operations for security
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses raw pointer arithmetic for argument handling
             // 2. File descriptor validation handled by cage layer
             // 3. Request validation and security checks handled by cage layer
@@ -938,7 +938,7 @@ pub fn lind_syscall_api(
         
             // Perform truncate operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's type system for memory safety instead of manual allocation
             // 2. Path validation handled by helper functions
             // 3. No explicit cleanup needed due to Rust's ownership system
@@ -953,7 +953,7 @@ pub fn lind_syscall_api(
             // Perform ftruncate operation through cage implementation
             // File descriptor validation handled by cage layer
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. File descriptor validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -977,7 +977,7 @@ pub fn lind_syscall_api(
             // Perform getdents operation through cage implementation
             // File descriptor validation handled by cage layer
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's type system for memory safety instead of manual allocation
             // 2. Buffer validation handled by helper functions
             // 3. No explicit cleanup needed due to Rust's ownership system
@@ -1012,7 +1012,7 @@ pub fn lind_syscall_api(
             
             // Perform statfs operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's type system for memory safety instead of manual allocation
             // 2. Path and buffer validation handled by helper functions
             // 3. No explicit cleanup needed due to Rust's ownership system
@@ -1028,7 +1028,7 @@ pub fn lind_syscall_api(
             // Perform fcntl operation through cage implementation
             // File descriptor validation and command validation handled by cage layer
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. File descriptor validation handled by cage layer
             // 3. Command validation handled by cage layer
@@ -1054,7 +1054,7 @@ pub fn lind_syscall_api(
             // Perform recv operation through cage implementation
             // File descriptor validation handled by cage layer
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's type system for memory safety instead of manual allocation
             // 2. Buffer validation handled by helper functions
             // 3. No explicit cleanup needed due to Rust's ownership system
@@ -1087,7 +1087,7 @@ pub fn lind_syscall_api(
             // Perform sendto operation through cage implementation
             // File descriptor validation handled by cage layer
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's type system for memory safety instead of manual allocation
             // 2. Buffer and address validation handled by helper functions
             // 3. No explicit cleanup needed due to Rust's ownership system
@@ -1147,7 +1147,7 @@ pub fn lind_syscall_api(
             // Perform flock operation through cage implementation
             // File descriptor validation handled by cage layer
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. File descriptor validation handled by cage layer
             // 3. Operation validation handled by cage layer
@@ -1163,7 +1163,7 @@ pub fn lind_syscall_api(
         
             // Perform shmget operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Shared memory validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1186,7 +1186,7 @@ pub fn lind_syscall_api(
         
             // Perform shmat operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for address validation
             // 2. Uses PROT_READ | PROT_WRITE for shared memory access
             // 3. Address validation handled by helper function
@@ -1207,7 +1207,7 @@ pub fn lind_syscall_api(
             
             // Perform shmdt operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for address validation
             // 2. Uses PROT_READ | PROT_WRITE for shared memory access
             // 3. Address validation handled by helper function
@@ -1220,7 +1220,7 @@ pub fn lind_syscall_api(
         
             // Perform mutex destroy operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Mutex handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1234,7 +1234,7 @@ pub fn lind_syscall_api(
         
             // Perform mutex lock operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Mutex handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1248,7 +1248,7 @@ pub fn lind_syscall_api(
         
             // Perform mutex trylock operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Mutex handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1262,7 +1262,7 @@ pub fn lind_syscall_api(
         
             // Perform mutex unlock operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Mutex handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1276,7 +1276,7 @@ pub fn lind_syscall_api(
         
             // Perform condition variable destroy operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Condition variable handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1291,7 +1291,7 @@ pub fn lind_syscall_api(
         
             // Perform condition variable wait operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Condition variable and mutex handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1305,7 +1305,7 @@ pub fn lind_syscall_api(
         
             // Perform condition variable broadcast operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Condition variable handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1319,7 +1319,7 @@ pub fn lind_syscall_api(
         
             // Perform condition variable signal operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Condition variable handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1335,7 +1335,7 @@ pub fn lind_syscall_api(
         
             // Perform semaphore initialization operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Semaphore handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1349,7 +1349,7 @@ pub fn lind_syscall_api(
         
             // Perform semaphore wait operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Semaphore handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1363,7 +1363,7 @@ pub fn lind_syscall_api(
         
             // Perform semaphore try wait operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Semaphore handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1377,7 +1377,7 @@ pub fn lind_syscall_api(
         
             // Perform semaphore post operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Semaphore handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1391,7 +1391,7 @@ pub fn lind_syscall_api(
         
             // Perform semaphore destroy operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Semaphore handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1405,7 +1405,7 @@ pub fn lind_syscall_api(
         
             // Perform semaphore get value operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Semaphore handle validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1430,7 +1430,7 @@ pub fn lind_syscall_api(
         
             // Perform pwrite operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_READ since we're reading data from user space
             // 3. Buffer validation handled by helper function
@@ -1441,7 +1441,7 @@ pub fn lind_syscall_api(
         GETUID_SYSCALL => {
             // Get real user ID through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only returning an integer value
             // 2. Simple and straightforward implementation with no validation needed
             // 3. User ID management handled by cage layer
@@ -1452,7 +1452,7 @@ pub fn lind_syscall_api(
         GETEUID_SYSCALL => {
             // Get effective user ID through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only returning an integer value
             // 2. Simple and straightforward implementation with no validation needed
             // 3. User ID management handled by cage layer
@@ -1463,7 +1463,7 @@ pub fn lind_syscall_api(
         GETGID_SYSCALL => {
             // Get real group ID through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only returning an integer value
             // 2. Simple and straightforward implementation with no validation needed
             // 3. Group ID management handled by cage layer
@@ -1474,7 +1474,7 @@ pub fn lind_syscall_api(
         GETEGID_SYSCALL => {
             // Get effective group ID through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only returning an integer value
             // 2. Simple and straightforward implementation with no validation needed
             // 3. Group ID management handled by cage layer
@@ -1487,7 +1487,7 @@ pub fn lind_syscall_api(
             
             // Perform epoll create operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. Size validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1508,7 +1508,7 @@ pub fn lind_syscall_api(
         
             // Perform epoll_ctl operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's type system for epoll_event validation
             // 2. Event structure validation handled by helper function
             // 3. File descriptor validation handled by cage layer
@@ -1544,7 +1544,7 @@ pub fn lind_syscall_api(
             
             // Perform setsockopt operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_READ since we're reading option value from user space
             // 3. Buffer validation handled by helper function
@@ -1558,7 +1558,7 @@ pub fn lind_syscall_api(
             
             // Perform shutdown operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. No memory protection flags needed as we're only dealing with integer values
             // 2. File descriptor validation handled by cage layer
             // 3. Simple and straightforward implementation as no memory operations are involved
@@ -1588,7 +1588,7 @@ pub fn lind_syscall_api(
         
             // Perform send operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_READ since we're reading data from user space
             // 3. Buffer validation handled by helper function
@@ -1627,7 +1627,7 @@ pub fn lind_syscall_api(
         
             // Perform gethostname operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_WRITE since we're writing hostname to user space
             // 3. Buffer validation handled by helper function
@@ -1649,7 +1649,7 @@ pub fn lind_syscall_api(
         
             // Perform getifaddrs operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_WRITE since we're writing interface data to user space
             // 3. Buffer validation handled by helper function
@@ -1705,7 +1705,7 @@ pub fn lind_syscall_api(
         
             // Perform pipe operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_WRITE since pipe writes fds to user space
             // 3. Two-step validation: memory region first, then array conversion
@@ -1731,7 +1731,7 @@ pub fn lind_syscall_api(
         
             // Perform pipe2 operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_WRITE since pipe2 writes fds to user space
             // 3. Two-step validation: memory region first, then array conversion
@@ -1773,7 +1773,7 @@ pub fn lind_syscall_api(
         
             // Perform getsockname operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_WRITE since we're writing data to user space
             // 3. Separate validation for address and length buffers
@@ -1805,7 +1805,7 @@ pub fn lind_syscall_api(
         
             // Perform getsockopt operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_WRITE since we're writing option value to user space
             // 3. Buffer validation handled by helper function
@@ -1833,7 +1833,7 @@ pub fn lind_syscall_api(
         
             // Perform socketpair operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_WRITE since socketpair writes fds to user space
             // 3. Two-step validation: memory region first, then array conversion
@@ -1862,7 +1862,7 @@ pub fn lind_syscall_api(
         
             // Perform poll operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses both PROT_READ and PROT_WRITE since poll both reads and writes
             // 3. Two-step validation: memory region first, then array conversion
@@ -1903,7 +1903,7 @@ pub fn lind_syscall_api(
         
             // Perform futex operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses both PROT_READ and PROT_WRITE since futex both reads and may write
             // 3. Buffer validation handled by helper function
@@ -1936,7 +1936,7 @@ pub fn lind_syscall_api(
             
             // Perform nanosleep operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_READ for req and PROT_WRITE for rem
             // 3. Separate validation for request and remaining time buffers
@@ -1961,7 +1961,7 @@ pub fn lind_syscall_api(
         
             // Perform wait operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_WRITE since wait writes status to user space
             // 3. Two-step validation: memory region first, then reference creation
@@ -1988,7 +1988,7 @@ pub fn lind_syscall_api(
             
             // Perform waitpid operation through cage implementation
             // 
-            // Key differences from NaCl:
+            // Implementation differences from NaCl:
             // 1. Uses Rust's memory safety features for buffer validation
             // 2. Uses PROT_WRITE since waitpid writes status to user space
             // 3. Two-step validation: memory region first, then reference creation
