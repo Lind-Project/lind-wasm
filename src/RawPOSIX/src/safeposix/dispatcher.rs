@@ -1818,11 +1818,26 @@ pub fn lind_syscall_api(
             let _type = arg2 as i32;
             let protocol = arg3 as i32;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing socket pair file descriptors
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_WRITE because socketpair() writes two fds TO this user space buffer
+            // Size is 8 bytes for two integers (file descriptors)
             let virtual_socket_vector = match check_and_convert_addr_ext(&cage, arg4, 8, PROT_WRITE) {
-                Ok(addr) => interface::get_sockpair(addr).unwrap(),
+                Ok(addr) => match interface::get_sockpair(addr) {
+                    Ok(sock_pair) => sock_pair,
+                    Err(_) => return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair array"),
+                },
                 Err(errno) => return syscall_error(errno, "socketpair", "invalid socket vector address"),
             };
-
+        
+            // Perform socketpair operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_WRITE since socketpair writes fds to user space
+            // 3. Two-step validation: memory region first, then array conversion
+            // 4. Socket domain and type validation handled by cage layer
             cage.socketpair_syscall(domain, _type, protocol, virtual_socket_vector)
         }
 
