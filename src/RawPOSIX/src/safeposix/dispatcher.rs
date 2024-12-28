@@ -1792,13 +1792,24 @@ pub fn lind_syscall_api(
             let level = arg2 as i32;
             let optname = arg3 as i32;
             let cage = interface::cagetable_getref(cageid);
-
+        
+            // Validate buffer for writing socket option value
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_WRITE because getsockopt() writes option value TO user space
+            // Size is 4 bytes for an integer value
             let optval_ptr = match check_and_convert_addr_ext(&cage, arg4, 4, PROT_WRITE) {
                 Ok(addr) => addr as *mut i32,
                 Err(errno) => return syscall_error(errno, "getsockopt", "invalid optval address"),
             };
             let optval = unsafe { &mut *optval_ptr };
-
+        
+            // Perform getsockopt operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_WRITE since we're writing option value to user space
+            // 3. Buffer validation handled by helper function
+            // 4. File descriptor and option validation handled by cage layer
             cage.getsockopt_syscall(virtual_fd, level, optname, optval)
         }
 
