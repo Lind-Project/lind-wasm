@@ -1469,8 +1469,19 @@ pub fn lind_syscall_api(
             let virtual_epfd = arg1 as i32;
             let op = arg2 as i32;
             let virtual_fd = arg3 as i32;
+            
+            // Validate and convert epoll_event structure
+            // NaCl: Uses NaClIsValidAddress for epoll_event validation
+            // Note: get_epollevent handles the validation and conversion internally
             let epollevent = interface::get_epollevent(arg4).unwrap();
-
+        
+            // Perform epoll_ctl operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's type system for epoll_event validation
+            // 2. Event structure validation handled by helper function
+            // 3. File descriptor validation handled by cage layer
+            // 4. Operation validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .epoll_ctl_syscall(virtual_epfd, op, virtual_fd, epollevent)
         }
