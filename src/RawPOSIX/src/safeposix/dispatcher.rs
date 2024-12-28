@@ -1616,10 +1616,22 @@ pub fn lind_syscall_api(
         GETHOSTNAME_SYSCALL => {
             let len = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing hostname
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_WRITE because gethostname() writes hostname TO this user space buffer
             let name = match check_and_convert_addr_ext(&cage, arg1, len, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "gethostname", "invalid name address"),
             };
+        
+            // Perform gethostname operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_WRITE since we're writing hostname to user space
+            // 3. Buffer validation handled by helper function
+            // 4. Length validation handled by cage layer
             cage.gethostname_syscall(name, len as isize)
         }
 
