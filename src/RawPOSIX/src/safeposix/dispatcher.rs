@@ -1742,17 +1742,27 @@ pub fn lind_syscall_api(
         GETSOCKNAME_SYSCALL => {
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate buffer for writing socket address
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_WRITE because getsockname() writes address TO user space
             let name_addr = match check_and_convert_addr_ext(&cage, arg2, 16, PROT_WRITE) {
                 Ok(addr) => addr,
                 Err(errno) => return syscall_error(errno, "getsockname", "invalid name address"),
             };
+        
+            // Validate buffer for writing address length
+            // NaCl: Uses NaClIsValidAddress
+            // Using PROT_WRITE because getsockname() writes length TO user space
             let namelen_addr = match check_and_convert_addr_ext(&cage, arg3, 4, PROT_WRITE) {
                 Ok(addr) => addr,
                 Err(errno) => return syscall_error(errno, "getsockname", "invalid length address"),
             };
-
-            let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default()); //value doesn't matter
-
+        
+            // Initialize default socket address structure
+            let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+        
+            // Check for null pointers
             if interface::arg_nullity(arg2) || interface::arg_nullity(arg3) {
                 return syscall_error(
                     Errno::EINVAL,
@@ -1760,9 +1770,17 @@ pub fn lind_syscall_api(
                     "Either the address or the length were null",
                 );
             }
-
+        
+            // Perform getsockname operation through cage implementation
+            // 
+            // Key differences from NaCl:
+            // 1. Uses Rust's memory safety features for buffer validation
+            // 2. Uses PROT_WRITE since we're writing data to user space
+            // 3. Separate validation for address and length buffers
+            // 4. Explicit null pointer checks
             let rv = cage.getsockname_syscall(fd, &mut Some(&mut addr));
-
+        
+            // Copy out the address if operation was successful
             if rv >= 0 {
                 interface::copy_out_sockaddr(name_addr, namelen_addr, addr);
             }
