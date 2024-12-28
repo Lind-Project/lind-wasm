@@ -587,22 +587,30 @@ pub fn lind_syscall_api(
         }
 
         RENAME_SYSCALL => {
+            // NaCl equivalent: NaClSysRename
             let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert old path from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             let old_path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "rename", "invalid old path string"),
                 },
                 Err(errno) => return syscall_error(errno, "rename", "invalid old path address"),
             };
+        
+            // Validate and convert new path from user space
+            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             let new_path = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
-                    Err(_) => return -1,
+                    Err(_) => return syscall_error(Errno::EFAULT, "rename", "invalid new path string"),
                 },
                 Err(errno) => return syscall_error(errno, "rename", "invalid new path address"),
             };
             
+            // Perform rename operation through cage implementation
             cage.rename_syscall(old_path, new_path)
         }
 
