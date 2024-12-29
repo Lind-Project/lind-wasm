@@ -17,6 +17,7 @@ use hashbrown::hash_map::{Entry, HashMap};
 use log::warn;
 
 use super::store::StoreInner;
+use super::InstantiateType;
 
 /// Structure used to link wasm modules/instances together.
 ///
@@ -1125,6 +1126,16 @@ impl<T> Linker<T> {
     ) -> Result<Instance> {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
             .instantiate(store)
+    }
+
+    pub fn instantiate_with_lind(
+        &self,
+        mut store: impl AsContextMut<Data = T>,
+        module: &Module,
+        instantiate_type: InstantiateType,
+    ) -> Result<Instance> {
+        self._instantiate_pre(module, Some(store.as_context_mut().0))?
+            .instantiate_with_lind(store, instantiate_type)
     }
 
     /// Attempts to instantiate the `module` provided. This is the same as

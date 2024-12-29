@@ -34,7 +34,9 @@ impl SharedMemory {
         println!("-----create new memory!");
         let (minimum_bytes, maximum_bytes) = Memory::limit_new(&plan, None)?;
         let mut mmap_memory = MmapMemory::new(&plan, minimum_bytes, maximum_bytes, None)?;
-        mmap_memory.grow_to(2147483648);
+        if minimum_bytes < 4294967296 {
+            mmap_memory.grow_to(4294967296);
+        }
         Self::wrap(&plan, Box::new(mmap_memory), plan.memory)
     }
 

@@ -9,6 +9,7 @@ use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
+use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
@@ -18,7 +19,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
-use wasmtime::{AsContext, AsContextMut, Engine, Func, Module, Store, StoreLimits, Val, ValType};
+use wasmtime::{AsContext, AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
@@ -182,8 +183,6 @@ impl RunCommand {
         rawposix::safeposix::dispatcher::lindrustinit(0);
         // new cage is created
         lind_manager.increment();
-
-        rawposix::safeposix::dispatcher::lind_cage_vmmap_init(1);
 
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
@@ -365,8 +364,6 @@ impl RunCommand {
                 }
             }
         }
-
-        rawposix::safeposix::dispatcher::lind_cage_vmmap_init(pid as u64);
 
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
@@ -554,7 +551,7 @@ impl RunCommand {
         let result = match linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
-                let instance = linker.instantiate(&mut *store, &module).context(format!(
+                let instance = linker.instantiate_with_lind(&mut *store, &module, InstantiateType::InstantiateFirst(pid)).context(format!(
                     "failed to instantiate {:?}",
                     self.module_and_args[0]
                 ))?;
@@ -583,11 +580,6 @@ impl RunCommand {
                 let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
-
-                let handle = store.as_context().0.instance(wasmtime::InstanceId::from_index(0));
-                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                let memory_base = defined_memory.base as i64;
-                rawposix::safeposix::dispatcher::set_base_address(pid, memory_base);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),

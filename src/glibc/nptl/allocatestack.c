@@ -439,6 +439,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 	  /* Don't allow setxid until cloned.  */
 	  pd->setxid_futex = -1;
 
+    // BUG: TLS related stuff is not working currently
 	  /* Allocate the DTV for this thread.  */
 	  // if (_dl_allocate_tls (TLS_TPADJ (pd)) == NULL)
 	  //   {

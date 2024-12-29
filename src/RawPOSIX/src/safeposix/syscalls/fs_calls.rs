@@ -779,7 +779,8 @@ impl Cage {
         flags: i32,
         virtual_fd: i32,
         off: i64
-    ) -> i64 {
+    ) -> usize {
+        println!("mmap_syscall: addr: {:?}, len: {}, prot: {} flags: {}, fd: {}, off: {}", addr, len, prot, flags, virtual_fd, off);
         if virtual_fd != -1 {
             match fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64) {
                 Ok(kernel_fd) => {
@@ -789,13 +790,13 @@ impl Cage {
 
                     // Check if mmap failed and return the appropriate error if so
                     if ret == -1 {
-                        return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags") as i64;
+                        return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags") as usize;
                     }
 
-                    ret
+                    ret as usize
                 },
                 Err(_e) => {
-                    return syscall_error(Errno::EBADF, "mmap", "Bad File Descriptor") as i64;
+                    return syscall_error(Errno::EBADF, "mmap", "Bad File Descriptor") as usize;
                 }
             }
         } else {
@@ -805,10 +806,10 @@ impl Cage {
             };
             // Check if mmap failed and return the appropriate error if so
             if ret == -1 {
-                return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags") as i64;
+                return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags") as usize;
             }
 
-            ret
+            ret as usize
         }
     }
 

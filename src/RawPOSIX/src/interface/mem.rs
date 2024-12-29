@@ -1,5 +1,5 @@
 use crate::constants::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC,
+    F_GETFL, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC
 };
 
 use crate::safeposix::vmmap::{MemoryBackingType, Vmmap, VmmapOps};
@@ -29,7 +29,7 @@ pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
         // if the entry has PROT_NONE, that means the entry is currently not used
         if entry.prot == PROT_NONE { continue; }
         // translate page number to user address
-        let addr_st = (entry.page_num << PAGESHIFT) as i32;
+        let addr_st = (entry.page_num << PAGESHIFT) as u32;
         let addr_len = (entry.npages << PAGESHIFT) as usize;
 
         // translate user address to system address
@@ -66,7 +66,7 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
     }
 
     let vmmap = cage.vmmap.read();
-    let sysaddr = vmmap.user_to_sys(rounded_addr as i32);
+    let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
     drop(vmmap);
 
     let rounded_length = round_up_page(len as u64) as usize;
@@ -85,8 +85,10 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
     0
 }
 
-pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut flags: i32, mut fildes: i32, off: i64) -> i32 {
+pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut flags: i32, mut fildes: i32, off: i64) -> u32 {
     let cage = cagetable_getref(cageid);
+
+    let mut maxprot = PROT_READ | PROT_WRITE;
 
     // only these four flags are allowed
     let allowed_flags = MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32;
@@ -97,39 +99,40 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
 
     if prot & PROT_EXEC > 0 {
         println!("mmap syscall error 1!");
-        return syscall_error(Errno::EINVAL, "mmap", "PROT_EXEC is not allowed");
+        return syscall_error(Errno::EINVAL, "mmap", "PROT_EXEC is not allowed") as u32;
     }
 
     // check if the provided address is multiple of pages
     let rounded_addr = round_up_page(addr as u64);
     if rounded_addr != addr as u64 {
         println!("mmap syscall error 2!");
-        return syscall_error(Errno::EINVAL, "mmap", "address it not aligned");
+        return syscall_error(Errno::EINVAL, "mmap", "address it not aligned") as u32;
     }
 
     // offset should be non-negative and multiple of pages
     if off < 0 {
         println!("mmap syscall error 3!");
-        return syscall_error(Errno::EINVAL, "mmap", "offset cannot be negative");
+        return syscall_error(Errno::EINVAL, "mmap", "offset cannot be negative") as u32;
     }
     let rounded_off = round_up_page(off as u64);
     if rounded_off != off as u64 {
         println!("mmap syscall error 4!");
-        return syscall_error(Errno::EINVAL, "mmap", "offset it not aligned");
+        return syscall_error(Errno::EINVAL, "mmap", "offset it not aligned") as u32;
     }
 
     // round up length to be multiple of pages
     let rounded_length = round_up_page(len as u64);
 
-    let mut useraddr = addr as i32;
+    let mut useraddr = addr as u32;
     // if MAP_FIXED is not set, then we need to find an address for the user
     if flags & MAP_FIXED as i32 == 0 {
         let mut vmmap = cage.vmmap.write();
         let result;
         
         // pick an address of appropriate size, anywhere
-        if addr as usize == 0 {
+        if useraddr == 0 {
             result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
+            println!("find map space result: {:?}", result);
         } else {
             // use address user provided as hint to find address
             result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
@@ -137,11 +140,11 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
 
         // did not find desired memory region
         if result.is_none() {
-            return syscall_error(Errno::ENOMEM, "mmap", "no memory");
+            return syscall_error(Errno::ENOMEM, "mmap", "no memory") as u32;
         }
 
         let space = result.unwrap();
-        useraddr = (space.start() << PAGESHIFT) as i32;
+        useraddr = (space.start() << PAGESHIFT) as u32;
     }
 
     // TODO: validate useraddr (like checking whether within the program break)
@@ -150,12 +153,13 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
 
     // either MAP_PRIVATE or MAP_SHARED should be set, but not both
     if (flags & MAP_PRIVATE as i32 == 0) == (flags & MAP_SHARED as i32 == 0) {
-        return syscall_error(Errno::EINVAL, "mmap", "invalid flags");
+        return syscall_error(Errno::EINVAL, "mmap", "invalid flags") as u32;
     }
 
     let vmmap = cage.vmmap.read();
 
     let sysaddr = vmmap.user_to_sys(useraddr);
+    println!("useraddr: {}, sysaddr: {}", useraddr, sysaddr);
 
     drop(vmmap);
 
@@ -167,7 +171,9 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
         let result = cage.mmap_syscall(sysaddr as *mut u8, rounded_length as usize, prot, flags, fildes, off);
         
         let vmmap = cage.vmmap.read();
+        println!("sys addr: {}", result);
         let result = vmmap.sys_to_user(result);
+        println!("user addr: {}", result);
         drop(vmmap);
 
         if result >= 0 {
@@ -177,65 +183,118 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
 
             let mut vmmap = cage.vmmap.write();
             let backing = {
-                MemoryBackingType::Anonymous
-                // TODO: should return backing type accordingly
-                // if flags & MAP_ANONYMOUS > 0 {
-                //     MemoryBackingType::Anonymous
-                // } else if flags & MAP_SHARED > 0 {
-
-                // }
+                if flags as u32 & MAP_ANONYMOUS > 0 {
+                    MemoryBackingType::Anonymous
+                } else {
+                    // if we are doing file-backed mapping, we need to set maxprot to the file permission
+                    let flags = cage.fcntl_syscall(fildes, F_GETFL, 0);
+                    if flags < 0 {
+                        return syscall_error(Errno::EINVAL, "mmap", "invalid file descriptor") as u32;
+                    }
+                    maxprot &= flags;
+                    MemoryBackingType::FileDescriptor(fildes as u64)
+                }
             };
-            vmmap.add_entry_with_overwrite((useraddr >> PAGESHIFT) as u32, (rounded_length >> PAGESHIFT) as u32, prot, 0, flags, backing, off, 0, cageid);
+
+            vmmap.add_entry_with_overwrite(useraddr >> PAGESHIFT, (rounded_length >> PAGESHIFT) as u32, prot, maxprot, flags, backing, off, len as i64, cageid);
         }
     }
 
-    useraddr
+    useraddr as u32
 }
 
-pub fn sbrk_handler(cageid: u64, brk: u32) -> i32 {
+pub fn sbrk_handler(cageid: u64, brk: i32) -> u32 {
+    let cage = cagetable_getref(cageid);
+
+    // get the heap entry
+    let mut vmmap = cage.vmmap.read();
+    let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
+
+    assert!(heap.npages == vmmap.program_break);
+
+    if brk == 0 {
+        return (PAGESIZE * heap.npages) as u32;
+    }
+
+    // round up the break to multiple of pages
+    let brk_page;
+    if brk < 0 {
+        brk_page = -((round_up_page(-brk as u64) >> PAGESHIFT) as i32);
+    } else {
+        brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as i32;
+    }
+
+    drop(vmmap);
+
+    if brk_handler(cageid, ((heap.npages as i32 + brk_page) << PAGESHIFT) as u32) < 0 {
+        return syscall_error(Errno::ENOMEM, "sbrk", "no memory") as u32;
+    }
+
+    (PAGESIZE * heap.npages) as u32
+}
+
+pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
     let cage = cagetable_getref(cageid);
 
     let mut vmmap = cage.vmmap.write();
     let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
 
-    if brk == 0 {
-        return (PAGESIZE * heap.npages) as i32;
-    }
+    assert!(heap.npages == vmmap.program_break);
 
-    let brk_page = ((brk + 65536 - 1) / 65536) * 16;
+    let old_brk_page = heap.npages;
+    // round up the break to multiple of pages
+    let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
 
-    let heap_size = heap.npages;
-    vmmap.add_entry_with_overwrite(0, heap_size + brk_page, heap.prot, heap.maxprot, heap.flags, heap.backing, heap.file_offset, heap.file_size, heap.cage_id);
+    // TODO: check if brk has enough space
+
+    vmmap.add_entry_with_overwrite(0, brk_page, heap.prot, heap.maxprot, heap.flags, heap.backing, heap.file_offset, heap.file_size, heap.cage_id);
     
-    let usr_heap_base = (heap_size * PAGESIZE) as i32;
-    let sys_heap_base = vmmap.user_to_sys(usr_heap_base)as *mut u8;
+    let old_heap_end_usr = (old_brk_page * PAGESIZE) as u32;
+    let old_heap_end_sys = vmmap.user_to_sys(old_heap_end_usr)as *mut u8;
+
+    let new_heap_end_usr = (brk_page * PAGESIZE) as u32;
+    let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr)as *mut u8;
+
+    vmmap.set_program_break(brk_page);
 
     drop(vmmap);
 
-    // TODO: Currently we are not calling mmap to change prot here
-    // since this is handled within wasmtime. This will be changed
-    // later
-    // let ret = cage.mmap_syscall(
-    //     sys_heap_base,
-    //     (brk_page * PAGESIZE) as usize,
-    //     heap.prot,
-    //     heap.flags | MAP_FIXED,
-    //     -1,
-    //     0
-    // );
-    //
-    // unsafe {
-    //     let val = *sys_heap_base.add(65);
-    //     println!("val: {}", val);
-    // }
-    //
-    // if ret < 0 {
-    //     panic!("sbrk mmap failed");
-    // }
+    // if new brk is larger than old brk
+    // we need to mmap the new region
+    if brk_page > old_brk_page {
+        let ret = cage.mmap_syscall(
+            old_heap_end_sys,
+            ((brk_page - old_brk_page) * PAGESIZE) as usize,
+            heap.prot,
+            (heap.flags as u32 | MAP_FIXED) as i32,
+            -1,
+            0
+        );
+        
+        if ret < 0 {
+            panic!("brk mmap failed");
+        }
+    }
+    // if we are shrinking the brk
+    // we need to do something similar to munmap
+    // to unmap the extra memory
+    else if brk_page < old_brk_page {
+        let ret = cage.mmap_syscall(
+            new_heap_end_sys,
+            ((old_brk_page - brk_page) * PAGESIZE) as usize,
+            PROT_NONE,
+            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+            -1,
+            0
+        );
+        
+        if ret < 0 {
+            panic!("brk mmap failed");
+        }
+    }
 
-    (PAGESIZE * heap.npages) as i32
+    0
 }
-
 
 /// Validates and converts a virtual memory address to a physical address with protection checks
 ///

@@ -223,7 +223,7 @@ impl MmapMemory {
         memory_image: Option<&Arc<MemoryImage>>,
     ) -> Result<Self> {
         println!("-----minimum: {}, maximum: {:?}", minimum, maximum);
-        maximum = Some(2147483648);
+        maximum = Some(4294967296);
         // It's a programmer error for these two configuration values to exceed
         // the host available address space, so panic if such a configuration is
         // found (mostly an issue for hypothetical 32-bit hosts).

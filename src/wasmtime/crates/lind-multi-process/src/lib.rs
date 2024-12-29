@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
-use wasmtime::{AsContext, AsContextMut, Caller, ExternType, Linker, Module, SharedMemory, Store, Val, OnCalledAction, RewindingReturn, StoreOpaque, InstanceId};
+use wasmtime::{AsContext, AsContextMut, Caller, ExternType, InstanceId, InstantiateType, Linker, Module, OnCalledAction, RewindingReturn, SharedMemory, Store, StoreOpaque, Val};
 
 use wasmtime_environ::MemoryIndex;
 
@@ -323,23 +323,24 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 }
 
                 // instantiate the module
-                let instance = instance_pre.instantiate(&mut store).unwrap();
+                let instance = instance_pre.instantiate_with_lind(&mut store,
+                    InstantiateType::InstantiateChild {
+                        parent_pid: parent_pid as u64, child_pid: child_cageid
+                    }).unwrap();
 
                 // copy the entire memory from parent, note that the unwind data is also copied together
                 // with the memory
-                let child_address: *mut u8;
-                let address_length: usize;
+                // let child_address: *mut u8;
 
-                // get the base address of the memory
-                {
-                    let handle = store.inner_mut().instance(InstanceId::from_index(0));
-                    let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
-                    child_address = defined_memory.base;
-                    address_length = defined_memory.current_length();
-                }
+                // // get the base address of the memory
+                // {
+                //     let handle = store.inner_mut().instance(InstanceId::from_index(0));
+                //     let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
+                //     child_address = defined_memory.base;
+                // }
                 
-                rawposix::safeposix::dispatcher::set_base_address(child_cageid, child_address as i64);
-                rawposix::safeposix::dispatcher::fork_vmmap_helper(parent_pid as u64, child_cageid);
+                // rawposix::safeposix::dispatcher::set_base_address(child_cageid, child_address as i64);
+                // rawposix::safeposix::dispatcher::fork_vmmap_helper(parent_pid as u64, child_cageid);
 
                 // new cage created, increment the cage counter
                 lind_manager.increment();
@@ -1060,7 +1061,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 if m.is_shared() {
                     // define a new shared memory for the child
                     let mut plan = m.clone();
-                    plan.set_minimum((size as u64).div_ceil(m.page_size()));
+                    // plan.set_minimum((size as u64).div_ceil(m.page_size()));
 
                     let mem = SharedMemory::new(self.module.engine(), plan.clone()).unwrap();
                     self.linker.define_with_inner(store, import.module(), import.name(), mem.clone()).unwrap();
