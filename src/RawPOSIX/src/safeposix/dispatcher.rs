@@ -1006,9 +1006,6 @@ pub fn lind_syscall_api(
             // Perform flock operation through cage implementation
             // File descriptor validation handled by cage layer
             interface::cagetable_getref(cageid)
-            // 3. Operation validation handled by cage layer
-            // 4. Simple and straightforward implementation as no memory operations are involved
-            interface::cagetable_getref(cageid)
                 .flock_syscall(virtual_fd, operation)
         }
         
@@ -1250,8 +1247,6 @@ pub fn lind_syscall_api(
             };
             
             // Perform setsockopt operation through cage implementation
-            interface::cagetable_getref(cageid)
-            // 4. File descriptor validation handled by cage layer
             cage.setsockopt_syscall(virtual_fd, level, optname, optval, optlen)
         }
 
@@ -1331,7 +1326,6 @@ pub fn lind_syscall_api(
             };
         
             // Perform getifaddrs operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.getifaddrs_syscall(buf, count)
         }
 
@@ -1380,8 +1374,6 @@ pub fn lind_syscall_api(
                 Err(errno) => return syscall_error(errno, "pipe", "invalid pipe address"),
             };
         
-            // Perform pipe operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.pipe_syscall(pipe)
         }
 
@@ -1400,8 +1392,6 @@ pub fn lind_syscall_api(
             };
             let flag = arg2 as i32;
         
-            // Perform pipe2 operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.pipe2_syscall(pipe, flag)
         }
         
@@ -1435,8 +1425,6 @@ pub fn lind_syscall_api(
                 );
             }
         
-            // Perform getsockname operation through cage implementation
-            interface::cagetable_getref(cageid)
             let rv = cage.getsockname_syscall(fd, &mut Some(&mut addr));
         
             // Copy out the address if operation was successful
@@ -1461,8 +1449,6 @@ pub fn lind_syscall_api(
             };
             let optval = unsafe { &mut *optval_ptr };
         
-            // Perform getsockopt operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.getsockopt_syscall(virtual_fd, level, optname, optval)
         }
 
@@ -1483,8 +1469,6 @@ pub fn lind_syscall_api(
                 Err(errno) => return syscall_error(errno, "socketpair", "invalid socket vector address"),
             };
         
-            // Perform socketpair operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.socketpair_syscall(domain, _type, protocol, virtual_socket_vector)
         }
 
@@ -1506,8 +1490,6 @@ pub fn lind_syscall_api(
             };
             let timeout = arg3 as i32;
         
-            // Perform poll operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.poll_syscall(pollfds, nfds, timeout)
         }
 
@@ -1541,8 +1523,6 @@ pub fn lind_syscall_api(
             let uaddr2 = arg5 as u32;
             let val3 = arg6 as u32;
         
-            // Perform futex operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.futex_syscall(uaddr, futex_op, val, timeout, uaddr2, val3)
         }
 
@@ -1567,8 +1547,6 @@ pub fn lind_syscall_api(
                 Err(errno) => return syscall_error(errno, "nanosleep", "invalid rem address"),
             };
             
-            // Perform nanosleep operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.nanosleep_time64_syscall(clockid, flags, req, rem)
         }
 
@@ -1586,8 +1564,6 @@ pub fn lind_syscall_api(
                 Err(errno) => return syscall_error(errno, "wait", "invalid status address"),
             };
         
-            // Perform wait operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.wait_syscall(status)
         }
 
@@ -1607,8 +1583,6 @@ pub fn lind_syscall_api(
             };
             let options = arg3 as i32;
             
-            // Perform waitpid operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.waitpid_syscall(pid, status, options)
         }
 
