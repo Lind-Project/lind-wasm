@@ -518,8 +518,7 @@ impl Cage {
         let mut fdkindset = HashSet::new();
         fdkindset.insert(FDKIND_KERNEL);
 
-        // added _ to suppress the warning
-        let (selectbittables, _unparsedtables, mappingtable) 
+        let (selectbittables, unparsedtables, mappingtable) 
             = fdtables::prepare_bitmasks_for_select(
                 self.cageid, 
                 nfds as u64, 
@@ -547,8 +546,8 @@ impl Cage {
             .get(2)
             .and_then(|table| table.get(&FDKIND_KERNEL).cloned())
             .unwrap_or((0, fdtables::_init_fd_set()));
-        // removed mut from realnewnfds to avoid warning
-        let realnewnfds = readnfd.max(writenfd).max(errornfd);
+        
+        let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
 
 
         // Ensured that null_mut is used if the Option is None for fd_set parameters.
@@ -566,9 +565,8 @@ impl Cage {
             return handle_errno(errno, "select");
         }
 
-        // removed mut from unreal_read and unreal_write to avoid warning
-        let unreal_read = HashSet::new();
-        let unreal_write = HashSet::new();
+        let mut unreal_read = HashSet::new();
+        let mut unreal_write = HashSet::new();
 
         // Revert result
         let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(

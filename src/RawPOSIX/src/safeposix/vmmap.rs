@@ -111,8 +111,7 @@ impl VmmapEntry {
 
         // Get file stats using fstat
         let mut libc_statbuf: libc::stat = unsafe { std::mem::zeroed() };
-        // added _ to suppress the warning
-        let _libcret = unsafe {
+        let libcret = unsafe {
             libc::fstat(vfd.underfd as i32, &mut libc_statbuf)
         };
 

@@ -462,8 +462,7 @@ pub fn get_sockaddr(generic_argument: u64, addrlen: u32) -> Result<interface::Ge
                 let v6_ptr = pointer as *const interface::SockaddrV6;
                 return Ok(interface::GenSockaddr::V6(unsafe { *v6_ptr }));
             }
-            // added _ to suppress the warning
-            _val => {
+            val => {
                 return Err(syscall_error(
                     Errno::EOPNOTSUPP,
                     "dispatcher",
