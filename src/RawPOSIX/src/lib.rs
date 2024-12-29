@@ -1,4 +1,5 @@
-#![feature(lazy_cell)]
+// Rm for warning this line since lazy_cell is now stable
+// #![feature(lazy_cell)]
 #![feature(rustc_private)] //for private crate imports for tests
 #![feature(vec_into_raw_parts)]
 #![feature(thread_local)]

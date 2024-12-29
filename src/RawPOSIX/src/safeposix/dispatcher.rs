@@ -140,6 +140,7 @@ use crate::interface::errnos::*;
 use crate::constants::*;
 use crate::interface::check_and_convert_addr_ext;
 
+#[allow(unused_macros)]
 macro_rules! get_onearg {
     ($arg: expr) => {
         match (move || Ok($arg?))() {

@@ -21,8 +21,9 @@ pub fn round_up_page(length: u64) -> u64 {
 }
 
 pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
-    let parent_base = parent_vmmap.base_address.unwrap();
-    let child_base = child_vmmap.base_address.unwrap();
+    // added _ to suppress the warning
+    let _parent_base = parent_vmmap.base_address.unwrap();
+    let _child_base = child_vmmap.base_address.unwrap();
 
     // iterate through each vmmap entry
     for (_interval, entry) in parent_vmmap.entries.iter() {
@@ -39,7 +40,8 @@ pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
             // for shared memory, we are using mremap to fork shared memory
             // See "man 2 mremap" for description of what MREMAP_MAYMOVE does with old_size=0
             // when old_address points to a shared mapping
-            let result = unsafe { libc::mremap(parent_st as *mut libc::c_void, 0, addr_len, libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED, child_st as *mut libc::c_void) };
+            // added _ to suppress the warning
+            let _result = unsafe { libc::mremap(parent_st as *mut libc::c_void, 0, addr_len, libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED, child_st as *mut libc::c_void) };
         } else {
             unsafe {
                 // temporarily enable write on child's memory region to write parent data
@@ -80,12 +82,14 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
 
     let mut vmmap = cage.vmmap.write();
 
-    vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, len as u32 >> PAGESHIFT);
+    // added _ to suppress the warning
+    let _ = vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, len as u32 >> PAGESHIFT);
 
     0
 }
 
-pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut flags: i32, mut fildes: i32, off: i64) -> i32 {
+// removed mut from prot to avoid warning
+pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32, mut flags: i32, mut fildes: i32, off: i64) -> i32 {
     let cage = cagetable_getref(cageid);
 
     // only these four flags are allowed
@@ -120,7 +124,8 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
     let mut useraddr = addr as i32;
     // if MAP_FIXED is not set, then we need to find an address for the user
     if flags & MAP_FIXED as i32 == 0 {
-        let mut vmmap = cage.vmmap.write();
+        // removed mut from vmmap to avoid warning
+        let vmmap = cage.vmmap.write();
         let result;
         
         // pick an address of appropriate size, anywhere
@@ -181,7 +186,7 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
 
                 // }
             };
-            vmmap.add_entry_with_overwrite((useraddr >> PAGESHIFT) as u32, (rounded_length >> PAGESHIFT) as u32, prot, 0, flags, backing, off, 0, cageid);
+            let _ = vmmap.add_entry_with_overwrite((useraddr >> PAGESHIFT) as u32, (rounded_length >> PAGESHIFT) as u32, prot, 0, flags, backing, off, 0, cageid);
         }
     }
 
@@ -201,10 +206,13 @@ pub fn sbrk_handler(cageid: u64, brk: u32) -> i32 {
     let brk_page = ((brk + 65536 - 1) / 65536) * 16;
 
     let heap_size = heap.npages;
-    vmmap.add_entry_with_overwrite(0, heap_size + brk_page, heap.prot, heap.maxprot, heap.flags, heap.backing, heap.file_offset, heap.file_size, heap.cage_id);
+    // added _ to suppress the warning
+    let _ = vmmap.add_entry_with_overwrite(0, heap_size + brk_page, heap.prot, heap.maxprot, heap.flags, heap.backing, heap.file_offset, heap.file_size, heap.cage_id);
     
     let usr_heap_base = (heap_size * PAGESIZE) as i32;
-    let sys_heap_base = vmmap.user_to_sys(usr_heap_base)as *mut u8;
+    
+    // added _ to suppress the warning
+    let _sys_heap_base = vmmap.user_to_sys(usr_heap_base)as *mut u8;
 
     drop(vmmap);
 
