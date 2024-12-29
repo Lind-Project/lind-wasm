@@ -205,20 +205,19 @@ pub fn lind_syscall_api(
         WRITE_SYSCALL => {
             // Handles writing data from user buffer to file descriptor
             
-            // Get file descriptor - same as NaCl's first argument handling
+            // Get file descriptor
             let fd = arg1 as i32;
         
-            // NaCl uses similar bounds checking via MAX_IO_BUFFER_BYTES
+            // Check bounds using MAX_IO_BUFFER_BYTES
             let count = std::cmp::min(arg3 as usize, i32::MAX as usize);
             if count == 0 {
-                return 0; // Early return for zero-length writes (NaCl behavior)
+                return 0; // Early return for zero-length writes
             }
         
             // Get cage reference for memory operations
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert user buffer address to system address
-            // NaCl: Uses NaClUserToSysAddrRangeProt with similar protection flags
             // PROT_READ is correct because write() reads FROM the buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
                 Ok(addr) => addr as *const u8,
@@ -239,7 +238,7 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let iovcnt = arg3 as i32;
         
-            // NaCl validates count first
+            // Validate count first
             if iovcnt <= 0 {
                 return syscall_error(
                     Errno::EINVAL,
@@ -251,7 +250,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate the iovec array address first
-            // This matches NaCl's validation order
             let iov_base = match check_and_convert_addr_ext(
                 &cage,
                 arg2,
@@ -268,7 +266,6 @@ pub fn lind_syscall_api(
                 }
             };
         
-            // NaCl validates each iovec entry's buffer - we do this in writev_syscall
             // The actual write operation is delegated to the cage implementation
             cage.writev_syscall(fd, iov_base, iovcnt)
         }
@@ -298,7 +295,7 @@ pub fn lind_syscall_api(
             let fd = arg5 as i32;
             let off = arg6 as i64;
         
-            // Basic length validation, similar to NaCl
+            // Basic length validation
             if len == 0 {
                 return syscall_error(
                     Errno::EINVAL,
@@ -307,12 +304,10 @@ pub fn lind_syscall_api(
                 );
             }
         
-        
-            // Force MAP_FIXED as NaCl does
+            // Force MAP_FIXED
             let flags = flags | MAP_FIXED as i32;
         
             // Turn off PROT_EXEC for non-code pages
-            // NaCl does this to prevent execution of data pages
             let prot = prot & !PROT_EXEC;
         
             interface::mmap_handler(cageid, addr, len, prot, flags, fd, off)
@@ -325,7 +320,7 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             
             // Validate and convert user buffer address
-            // NaCl uses NaClUserToSysAddr with PROT_WRITE since pread writes TO the buffer
+            // Using PROT_WRITE since pread writes TO the buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "pread", "invalid buffer address"),
@@ -341,14 +336,13 @@ pub fn lind_syscall_api(
             
             // Validate and convert user buffer address
             // Using PROT_WRITE since read() writes TO the buffer
-            // NaCl: Uses NaClUserToSysAddr with similar validation
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
                 Err(errno) => return syscall_error(errno, "read", "invalid buffer address"),
             };
 
             // File descriptor validation and actual read operation
-            // handled by cage implementation (similar to NaCl's ndp->vtbl->Read)
+            // handled by cage implementation
             cage.read_syscall(fd, buf, count)
         }
 
@@ -356,7 +350,6 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
 
             // File descriptor validation and close operation handled by cage
-            // Similar to NaCl's ndp->vtbl->Close after NaClGetDesc validation
             interface::cagetable_getref(cageid)
                 .close_syscall(fd)
         }
@@ -365,7 +358,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr as u64) {
                     Ok(path_str) => path_str,
@@ -376,7 +368,6 @@ pub fn lind_syscall_api(
             let amode = arg2 as i32;
 
             // Perform access check through cage implementation
-            // Similar to NaCl's lind_access call
             cage.access_syscall(path, amode)
         }
 
@@ -384,7 +375,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr as u64) {
                     Ok(path_str) => path_str,
@@ -396,7 +386,6 @@ pub fn lind_syscall_api(
             let mode = arg3 as u32;
         
             // Perform open operation through cage implementation
-            // Similar to NaCl's lind_open call
             cage.open_syscall(path, flags, mode)
         }
 
@@ -407,7 +396,6 @@ pub fn lind_syscall_api(
 
             // Perform socket operation through cage implementation
             // Domain, type, and protocol validation handled by cage layer
-            // Similar to NaCl's lind_socket call
             interface::cagetable_getref(cageid)
                 .socket_syscall(domain, socktype, protocol)
         }
@@ -417,7 +405,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
 
             // Validate and convert sockaddr from user space
-            // NaCl: Uses NaClCopyInFromUser for sockaddr validation
             let addr = match check_and_convert_addr_ext(&cage, arg2, arg3 as usize, PROT_READ) {
                 Ok(addr) => match interface::get_sockaddr(addr as u64, arg3 as u32) {
                     Ok(sockaddr) => sockaddr,
@@ -442,7 +429,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert sockaddr from user space
-            // NaCl: Uses NaClCopyInFromUser for sockaddr validation
             let addr = match check_and_convert_addr_ext(&cage, arg2, arg3 as usize, PROT_READ) {
                 Ok(addr) => match interface::get_sockaddr(addr as u64, arg3 as u32) {
                     Ok(sockaddr) => sockaddr,
@@ -477,12 +463,10 @@ pub fn lind_syscall_api(
                 // Perform accept operation first
                 let rv = cage.accept_syscall(arg1 as i32, &mut Some(&mut addr));
                 if rv >= 0 {
-                    // NaCl: Similar to NaClCopyOutToUser for sockaddr
                     let addr2_addr = match check_and_convert_addr_ext(&cage, arg2, arg3 as usize, PROT_WRITE) {
                         Ok(addr) => addr,
                         Err(errno) => return syscall_error(errno, "accept", "invalid address buffer"),
                     };
-                    // NaCl: Similar to NaClCopyOutToUser for addrlen
                     let len_addr = match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<u32>(), PROT_WRITE) {
                         Ok(addr) => addr,
                         Err(errno) => return syscall_error(errno, "accept", "invalid length buffer"),
@@ -523,7 +507,6 @@ pub fn lind_syscall_api(
             let nfds = arg1 as i32;
             
             // Get and validate fd sets
-            // NaCl: Uses NaClCopyInFromUser for fd_set validation
             let readfds = match interface::get_fdset(arg2) {
                 Ok(fds) => fds,
                 Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid readfds"),
@@ -538,7 +521,6 @@ pub fn lind_syscall_api(
             };
             
             // Get and validate timeout
-            // NaCl: Uses NaClCopyInFromUser for timeval validation
             let rposix_timeout = match interface::duration_fromtimeval(arg5) {
                 Ok(timeout) => timeout,
                 Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid timeout"),
@@ -554,7 +536,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert old path from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             let old_path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
@@ -564,7 +545,6 @@ pub fn lind_syscall_api(
             };
         
             // Validate and convert new path from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             let new_path = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
                     Ok(path_str) => path_str,
@@ -581,7 +561,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             // (stat takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
@@ -593,7 +572,6 @@ pub fn lind_syscall_api(
             };
         
             // Validate stat buffer and prepare for writing
-            // NaCl: Allocates buffer and uses NaClCopyOutToUser
             // Using PROT_WRITE because stat() writes the results TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<StatData>(), PROT_WRITE) {
                 Ok(addr) => match interface::get_statdatastruct(addr) {
@@ -612,7 +590,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             // (mkdir takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
@@ -632,7 +609,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
 
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             // (rmdir takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
@@ -660,7 +636,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             // (chdir takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
@@ -680,7 +655,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing
-            // NaCl: Uses NaClCopyOutToUser
             // Using PROT_WRITE because getcwd() writes the current working directory path 
             // TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg1, bufsize, PROT_WRITE) {
@@ -689,7 +663,7 @@ pub fn lind_syscall_api(
             };
         
             // Perform getcwd operation through cage implementation
-            // On success (ret == 0), return the buffer address like NaCl does
+            // On success (ret == 0), return the buffer address
             let ret = cage.getcwd_syscall(buf, bufsize as u32);
             if ret == 0 { return arg1 as i32; }
             ret
@@ -699,7 +673,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing filesystem information
-            // NaCl: Uses NaClCopyOutToUser
             // Using PROT_WRITE because fstatfs() writes filesystem information 
             // TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_WRITE) {
@@ -719,7 +692,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             // (chmod takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
@@ -739,7 +711,6 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             
             // Convert second argument to Option<i32> if it's within valid range
-            // This is an extension to NaCl's implementation to support both dup and dup2
             let fd2: Option<i32> = if arg1 <= i32::MAX as u64 {
                 Some(arg1 as i32)
             } else {
@@ -777,7 +748,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate stat buffer and prepare for writing
-            // NaCl: Uses NaClCopyOutToUser
             // Using PROT_WRITE because fstat() writes the results TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::StatData>(), PROT_WRITE) {
                 Ok(addr) => match interface::get_statdatastruct(addr) {
@@ -796,7 +766,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             // (unlink takes the path as input, we don't write to it)
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
@@ -815,7 +784,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert old path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             let old_path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
@@ -826,7 +794,6 @@ pub fn lind_syscall_api(
             };
             
             // Validate and convert new path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             let new_path = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
@@ -847,11 +814,6 @@ pub fn lind_syscall_api(
         
             // Perform lseek operation through cage implementation
             // File descriptor validation and bounds checking handled by cage layer
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. File descriptor validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
             interface::cagetable_getref(cageid)
                 .lseek_syscall(virtual_fd, offset, whence)
         }
@@ -862,13 +824,7 @@ pub fn lind_syscall_api(
             let ptrunion = (start_address + arg3) as *mut u8;
             
             // Perform ioctl operation through cage implementation
-            // Note: Like NaCl, we restrict ioctl operations for security
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses raw pointer arithmetic for argument handling
-            // 2. File descriptor validation handled by cage layer
-            // 3. Request validation and security checks handled by cage layer
-            // 4. Memory protection handled at the cage level rather than dispatcher
+            // Note: We restrict ioctl operations for security
             interface::cagetable_getref(cageid)
                 .ioctl_syscall(virtual_fd, request, ptrunion)
         }
@@ -877,7 +833,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
@@ -889,12 +844,6 @@ pub fn lind_syscall_api(
             let length = arg2 as isize;
         
             // Perform truncate operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's type system for memory safety instead of manual allocation
-            // 2. Path validation handled by helper functions
-            // 3. No explicit cleanup needed due to Rust's ownership system
-            // 4. Uses PROT_READ since we're only reading the path from user space
             cage.truncate_syscall(path, length)
         }
 
@@ -904,11 +853,6 @@ pub fn lind_syscall_api(
         
             // Perform ftruncate operation through cage implementation
             // File descriptor validation handled by cage layer
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. File descriptor validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
             interface::cagetable_getref(cageid)
                 .ftruncate_syscall(virtual_fd, length)
         }
@@ -919,7 +863,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing directory entries
-            // NaCl: Uses NaClCopyOutToUser
             // Using PROT_WRITE because getdents() writes directory entries TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, nbytes as usize, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
@@ -928,12 +871,6 @@ pub fn lind_syscall_api(
         
             // Perform getdents operation through cage implementation
             // File descriptor validation handled by cage layer
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's type system for memory safety instead of manual allocation
-            // 2. Buffer validation handled by helper functions
-            // 3. No explicit cleanup needed due to Rust's ownership system
-            // 4. Uses PROT_WRITE since we're writing directory entries to user space
             cage.getdents_syscall(virtual_fd, buf, nbytes)
         }
 
@@ -941,7 +878,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
-            // NaCl: Uses NaClCopyInFromUser with MAXPATHLEN check
             // Using PROT_READ because we need to read the path string FROM user space
             let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
                 Ok(addr) => match interface::types::get_cstr(addr) {
@@ -952,7 +888,6 @@ pub fn lind_syscall_api(
             };
             
             // Validate buffer for writing filesystem information
-            // NaCl: Uses NaClCopyOutToUser
             // Using PROT_WRITE because statfs() writes filesystem information TO this user space buffer
             let rposix_databuf = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_WRITE) {
                 Ok(addr) => match interface::get_fsdatastruct(addr) {
@@ -963,12 +898,6 @@ pub fn lind_syscall_api(
             };
             
             // Perform statfs operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's type system for memory safety instead of manual allocation
-            // 2. Path and buffer validation handled by helper functions
-            // 3. No explicit cleanup needed due to Rust's ownership system
-            // 4. Uses appropriate PROT flags for reading path and writing filesystem data
             cage.statfs_syscall(&path, rposix_databuf)
         }
 
@@ -979,12 +908,6 @@ pub fn lind_syscall_api(
         
             // Perform fcntl operation through cage implementation
             // File descriptor validation and command validation handled by cage layer
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. File descriptor validation handled by cage layer
-            // 3. Command validation handled by cage layer
-            // 4. Simple and straightforward implementation as no memory operations are involved
             interface::cagetable_getref(cageid)
                 .fcntl_syscall(virtual_fd, cmd, arg)
         }
@@ -1005,12 +928,6 @@ pub fn lind_syscall_api(
         
             // Perform recv operation through cage implementation
             // File descriptor validation handled by cage layer
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's type system for memory safety instead of manual allocation
-            // 2. Buffer validation handled by helper functions
-            // 3. No explicit cleanup needed due to Rust's ownership system
-            // 4. Uses PROT_WRITE since we're writing received data to user space
             cage.recv_syscall(fd, buf, count, flag)
         }
 
@@ -1020,7 +937,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for reading data to send
-            // NaCl: Uses NaClCopyInFromUser
             // Using PROT_READ because we need to read the data FROM user space
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
                 Ok(addr) => addr as *const u8,
@@ -1029,7 +945,6 @@ pub fn lind_syscall_api(
             let flag = arg4 as i32;
         
             // Get and validate socket address
-            // NaCl: Uses NaClCopyInFromUser for sockaddr validation
             let addrlen = arg6 as u32;
             let addr = match interface::get_sockaddr(start_address + arg5, addrlen) {
                 Ok(addr) => addr,
@@ -1038,12 +953,6 @@ pub fn lind_syscall_api(
         
             // Perform sendto operation through cage implementation
             // File descriptor validation handled by cage layer
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's type system for memory safety instead of manual allocation
-            // 2. Buffer and address validation handled by helper functions
-            // 3. No explicit cleanup needed due to Rust's ownership system
-            // 4. Uses PROT_READ since we're reading data from user space
             cage.sendto_syscall(fd, buf, count, flag, &addr)
         }
 
@@ -1053,7 +962,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing received data
-            // NaCl: Uses NaClCopyOutToUser
             // Using PROT_WRITE because recvfrom() writes received data TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
@@ -1098,10 +1006,7 @@ pub fn lind_syscall_api(
         
             // Perform flock operation through cage implementation
             // File descriptor validation handled by cage layer
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. File descriptor validation handled by cage layer
+            interface::cagetable_getref(cageid)
             // 3. Operation validation handled by cage layer
             // 4. Simple and straightforward implementation as no memory operations are involved
             interface::cagetable_getref(cageid)
@@ -1114,11 +1019,7 @@ pub fn lind_syscall_api(
             let shmfig = arg3 as i32;
         
             // Perform shmget operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Shared memory validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
+            interface::cagetable_getref(cageid)
             // 4. Size validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .shmget_syscall(key, size, shmfig)
@@ -1128,7 +1029,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate shared memory address
-            // NaCl: Uses NaClIsValidAddress
             // Using both PROT_READ and PROT_WRITE since shared memory needs both access types
             let shmaddr = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_READ | PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
@@ -1137,12 +1037,6 @@ pub fn lind_syscall_api(
             let shmflg = arg3 as i32;
         
             // Perform shmat operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for address validation
-            // 2. Uses PROT_READ | PROT_WRITE for shared memory access
-            // 3. Address validation handled by helper function
-            // 4. Shared memory operations handled by cage layer
             cage.shmat_syscall(shmid, shmaddr, shmflg)
         }
 
@@ -1150,7 +1044,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate shared memory address
-            // NaCl: Uses NaClIsValidAddress
             // Using both PROT_READ and PROT_WRITE since shared memory needs both access types
             let shmaddr = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ | PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
@@ -1158,12 +1051,6 @@ pub fn lind_syscall_api(
             };
             
             // Perform shmdt operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for address validation
-            // 2. Uses PROT_READ | PROT_WRITE for shared memory access
-            // 3. Address validation handled by helper function
-            // 4. Shared memory operations handled by cage layer
             cage.shmdt_syscall(shmaddr)
         }
 
@@ -1171,12 +1058,6 @@ pub fn lind_syscall_api(
             let mutex_handle = arg1 as i32;
         
             // Perform mutex destroy operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Mutex handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .mutex_destroy_syscall(mutex_handle)
         }
@@ -1185,12 +1066,6 @@ pub fn lind_syscall_api(
             let mutex_handle = arg1 as i32;
         
             // Perform mutex lock operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Mutex handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .mutex_lock_syscall(mutex_handle)
         }
@@ -1199,12 +1074,6 @@ pub fn lind_syscall_api(
             let mutex_handle = arg1 as i32;
         
             // Perform mutex trylock operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Mutex handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .mutex_trylock_syscall(mutex_handle)
         }
@@ -1213,12 +1082,6 @@ pub fn lind_syscall_api(
             let mutex_handle = arg1 as i32;
         
             // Perform mutex unlock operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Mutex handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .mutex_unlock_syscall(mutex_handle)
         }
@@ -1227,12 +1090,6 @@ pub fn lind_syscall_api(
             let cv_handle = arg1 as i32;
         
             // Perform condition variable destroy operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Condition variable handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .cond_destroy_syscall(cv_handle)
         }
@@ -1240,14 +1097,8 @@ pub fn lind_syscall_api(
         COND_WAIT_SYSCALL => {
             let cv_handle = arg1 as i32;
             let mutex_handle = arg2 as i32;
-        
+            
             // Perform condition variable wait operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Condition variable and mutex handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .cond_wait_syscall(cv_handle, mutex_handle)
         }
@@ -1256,12 +1107,6 @@ pub fn lind_syscall_api(
             let cv_handle = arg1 as i32;
         
             // Perform condition variable broadcast operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Condition variable handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .cond_broadcast_syscall(cv_handle)
         }
@@ -1270,12 +1115,6 @@ pub fn lind_syscall_api(
             let cv_handle = arg1 as i32;
         
             // Perform condition variable signal operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Condition variable handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .cond_signal_syscall(cv_handle)
         }
@@ -1286,12 +1125,6 @@ pub fn lind_syscall_api(
             let value = arg3 as u32;
         
             // Perform semaphore initialization operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Semaphore handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .sem_init_syscall(sem_handle, pshared, value)
         }
@@ -1300,12 +1133,6 @@ pub fn lind_syscall_api(
             let sem_handle = arg1 as u32;
         
             // Perform semaphore wait operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Semaphore handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .sem_wait_syscall(sem_handle)
         }
@@ -1314,12 +1141,6 @@ pub fn lind_syscall_api(
             let sem_handle = arg1 as u32;
         
             // Perform semaphore try wait operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Semaphore handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .sem_trywait_syscall(sem_handle)
         }
@@ -1328,12 +1149,6 @@ pub fn lind_syscall_api(
             let sem_handle = arg1 as u32;
         
             // Perform semaphore post operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Semaphore handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .sem_post_syscall(sem_handle)
         }
@@ -1342,12 +1157,6 @@ pub fn lind_syscall_api(
             let sem_handle = arg1 as u32;
         
             // Perform semaphore destroy operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Semaphore handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .sem_destroy_syscall(sem_handle)
         }
@@ -1356,12 +1165,6 @@ pub fn lind_syscall_api(
             let sem_handle = arg1 as u32;
         
             // Perform semaphore get value operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Semaphore handle validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Thread safety handled by Rust's type system
             interface::cagetable_getref(cageid)
                 .sem_getvalue_syscall(sem_handle)
         }
@@ -1371,7 +1174,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for reading data to write
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_READ because we need to read the data FROM user space
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
                 Ok(addr) => addr as *const u8,
@@ -1381,55 +1183,27 @@ pub fn lind_syscall_api(
             let offset = arg4 as i64;
         
             // Perform pwrite operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_READ since we're reading data from user space
-            // 3. Buffer validation handled by helper function
+            interface::cagetable_getref(cageid)
             // 4. File descriptor validation handled by cage layer
             cage.pwrite_syscall(virtual_fd, buf, count, offset)
         }
 
         GETUID_SYSCALL => {
-            // Get real user ID through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only returning an integer value
-            // 2. Simple and straightforward implementation with no validation needed
-            // 3. User ID management handled by cage layer
             interface::cagetable_getref(cageid)
                 .getuid_syscall()
         }
         
         GETEUID_SYSCALL => {
-            // Get effective user ID through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only returning an integer value
-            // 2. Simple and straightforward implementation with no validation needed
-            // 3. User ID management handled by cage layer
             interface::cagetable_getref(cageid)
                 .geteuid_syscall()
         }
         
         GETGID_SYSCALL => {
-            // Get real group ID through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only returning an integer value
-            // 2. Simple and straightforward implementation with no validation needed
-            // 3. Group ID management handled by cage layer
             interface::cagetable_getref(cageid)
                 .getgid_syscall()
         }
         
         GETEGID_SYSCALL => {
-            // Get effective group ID through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only returning an integer value
-            // 2. Simple and straightforward implementation with no validation needed
-            // 3. Group ID management handled by cage layer
             interface::cagetable_getref(cageid)
                 .getegid_syscall()
         }
@@ -1438,12 +1212,6 @@ pub fn lind_syscall_api(
             let size = arg1 as i32;
             
             // Perform epoll create operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. Size validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. File descriptor management handled by cage layer
             interface::cagetable_getref(cageid)
                 .epoll_create_syscall(size)
         }
@@ -1454,17 +1222,9 @@ pub fn lind_syscall_api(
             let virtual_fd = arg3 as i32;
             
             // Validate and convert epoll_event structure
-            // NaCl: Uses NaClIsValidAddress for epoll_event validation
-            // Note: get_epollevent handles the validation and conversion internally
             let epollevent = interface::get_epollevent(arg4).unwrap();
         
             // Perform epoll_ctl operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's type system for epoll_event validation
-            // 2. Event structure validation handled by helper function
-            // 3. File descriptor validation handled by cage layer
-            // 4. Operation validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .epoll_ctl_syscall(virtual_epfd, op, virtual_fd, epollevent)
         }
@@ -1487,7 +1247,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for reading socket option value
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_READ because we need to read the option value FROM user space
             let optval = match check_and_convert_addr_ext(&cage, arg4, optlen as usize, PROT_READ) {
                 Ok(addr) => addr as *mut u8,
@@ -1495,11 +1254,7 @@ pub fn lind_syscall_api(
             };
             
             // Perform setsockopt operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_READ since we're reading option value from user space
-            // 3. Buffer validation handled by helper function
+            interface::cagetable_getref(cageid)
             // 4. File descriptor validation handled by cage layer
             cage.setsockopt_syscall(virtual_fd, level, optname, optval, optlen)
         }
@@ -1509,12 +1264,6 @@ pub fn lind_syscall_api(
             let how = arg2 as i32;
             
             // Perform shutdown operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. No memory protection flags needed as we're only dealing with integer values
-            // 2. File descriptor validation handled by cage layer
-            // 3. Simple and straightforward implementation as no memory operations are involved
-            // 4. Shutdown mode validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .shutdown_syscall(virtual_fd, how)
         }
@@ -1530,7 +1279,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for reading data to send
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_READ because we need to read the data FROM user space
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
                 Ok(addr) => addr as *const u8,
@@ -1539,12 +1287,7 @@ pub fn lind_syscall_api(
             let flags = arg4 as i32;
         
             // Perform send operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_READ since we're reading data from user space
-            // 3. Buffer validation handled by helper function
-            // 4. File descriptor validation handled by cage layer
+            interface::cagetable_getref(cageid)
             cage.send_syscall(fd, buf, count, flags)
         }
 
@@ -1570,7 +1313,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing hostname
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because gethostname() writes hostname TO this user space buffer
             let name = match check_and_convert_addr_ext(&cage, arg1, len, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
@@ -1578,12 +1320,6 @@ pub fn lind_syscall_api(
             };
         
             // Perform gethostname operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_WRITE since we're writing hostname to user space
-            // 3. Buffer validation handled by helper function
-            // 4. Length validation handled by cage layer
             cage.gethostname_syscall(name, len as isize)
         }
 
@@ -1592,7 +1328,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing interface addresses
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because getifaddrs() writes interface data TO user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg1, count, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
@@ -1600,12 +1335,7 @@ pub fn lind_syscall_api(
             };
         
             // Perform getifaddrs operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_WRITE since we're writing interface data to user space
-            // 3. Buffer validation handled by helper function
-            // 4. Size validation handled by cage layer
+            interface::cagetable_getref(cageid)
             cage.getifaddrs_syscall(buf, count)
         }
 
@@ -1644,7 +1374,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing pipe file descriptors
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because pipe() writes two fds TO this user space buffer
             // Size is 8 bytes for two integers (file descriptors)
             let pipe = match check_and_convert_addr_ext(&cage, arg1, 8, PROT_WRITE) {
@@ -1656,12 +1385,7 @@ pub fn lind_syscall_api(
             };
         
             // Perform pipe operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_WRITE since pipe writes fds to user space
-            // 3. Two-step validation: memory region first, then array conversion
-            // 4. File descriptor management handled by cage layer
+            interface::cagetable_getref(cageid)
             cage.pipe_syscall(pipe)
         }
 
@@ -1669,7 +1393,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing pipe file descriptors
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because pipe2() writes two fds TO this user space buffer
             // Size is 8 bytes for two integers (file descriptors)
             let pipe = match check_and_convert_addr_ext(&cage, arg1, 8, PROT_WRITE) {
@@ -1682,12 +1405,7 @@ pub fn lind_syscall_api(
             let flag = arg2 as i32;
         
             // Perform pipe2 operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_WRITE since pipe2 writes fds to user space
-            // 3. Two-step validation: memory region first, then array conversion
-            // 4. File descriptor management handled by cage layer
+            interface::cagetable_getref(cageid)
             cage.pipe2_syscall(pipe, flag)
         }
         
@@ -1696,7 +1414,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing socket address
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because getsockname() writes address TO user space
             let name_addr = match check_and_convert_addr_ext(&cage, arg2, 16, PROT_WRITE) {
                 Ok(addr) => addr,
@@ -1704,7 +1421,6 @@ pub fn lind_syscall_api(
             };
         
             // Validate buffer for writing address length
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because getsockname() writes length TO user space
             let namelen_addr = match check_and_convert_addr_ext(&cage, arg3, 4, PROT_WRITE) {
                 Ok(addr) => addr,
@@ -1724,12 +1440,7 @@ pub fn lind_syscall_api(
             }
         
             // Perform getsockname operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_WRITE since we're writing data to user space
-            // 3. Separate validation for address and length buffers
-            // 4. Explicit null pointer checks
+            interface::cagetable_getref(cageid)
             let rv = cage.getsockname_syscall(fd, &mut Some(&mut addr));
         
             // Copy out the address if operation was successful
@@ -1746,7 +1457,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing socket option value
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because getsockopt() writes option value TO user space
             // Size is 4 bytes for an integer value
             let optval_ptr = match check_and_convert_addr_ext(&cage, arg4, 4, PROT_WRITE) {
@@ -1756,12 +1466,7 @@ pub fn lind_syscall_api(
             let optval = unsafe { &mut *optval_ptr };
         
             // Perform getsockopt operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_WRITE since we're writing option value to user space
-            // 3. Buffer validation handled by helper function
-            // 4. File descriptor and option validation handled by cage layer
+            interface::cagetable_getref(cageid)
             cage.getsockopt_syscall(virtual_fd, level, optname, optval)
         }
 
@@ -1772,7 +1477,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing socket pair file descriptors
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because socketpair() writes two fds TO this user space buffer
             // Size is 8 bytes for two integers (file descriptors)
             let virtual_socket_vector = match check_and_convert_addr_ext(&cage, arg4, 8, PROT_WRITE) {
@@ -1784,12 +1488,7 @@ pub fn lind_syscall_api(
             };
         
             // Perform socketpair operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_WRITE since socketpair writes fds to user space
-            // 3. Two-step validation: memory region first, then array conversion
-            // 4. Socket domain and type validation handled by cage layer
+            interface::cagetable_getref(cageid)
             cage.socketpair_syscall(domain, _type, protocol, virtual_socket_vector)
         }
 
@@ -1798,7 +1497,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for reading and writing poll file descriptors
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_READ | PROT_WRITE because:
             // - READ: poll needs to read the fds and events to monitor
             // - WRITE: poll needs to write back the returned events
@@ -1813,12 +1511,7 @@ pub fn lind_syscall_api(
             let timeout = arg3 as i32;
         
             // Perform poll operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses both PROT_READ and PROT_WRITE since poll both reads and writes
-            // 3. Two-step validation: memory region first, then array conversion
-            // 4. File descriptor validation handled by cage layer
+            interface::cagetable_getref(cageid)
             cage.poll_syscall(pollfds, nfds, timeout)
         }
 
@@ -1837,7 +1530,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for futex operations
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_READ | PROT_WRITE because:
             // - READ: futex needs to read current value
             // - WRITE: futex may modify the value depending on operation
@@ -1854,12 +1546,7 @@ pub fn lind_syscall_api(
             let val3 = arg6 as u32;
         
             // Perform futex operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses both PROT_READ and PROT_WRITE since futex both reads and may write
-            // 3. Buffer validation handled by helper function
-            // 4. Operation validation handled by cage layer
+            interface::cagetable_getref(cageid)
             cage.futex_syscall(uaddr, futex_op, val, timeout, uaddr2, val3)
         }
 
@@ -1869,7 +1556,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             
             // Validate buffer for reading requested sleep time
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_READ because we need to read the requested time FROM user space
             // Size is 16 bytes for timespec64 structure
             let req = match check_and_convert_addr_ext(&cage, arg3, 16, PROT_READ) {
@@ -1878,7 +1564,6 @@ pub fn lind_syscall_api(
             };
         
             // Validate buffer for writing remaining time
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because nanosleep writes remaining time TO user space
             // Size is 16 bytes for timespec64 structure
             let rem = match check_and_convert_addr_ext(&cage, arg4, 16, PROT_WRITE) {
@@ -1887,12 +1572,7 @@ pub fn lind_syscall_api(
             };
             
             // Perform nanosleep operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_READ for req and PROT_WRITE for rem
-            // 3. Separate validation for request and remaining time buffers
-            // 4. Additional parameters for clock ID and flags (time64 version)
+            interface::cagetable_getref(cageid)
             cage.nanosleep_time64_syscall(clockid, flags, req, rem)
         }
 
@@ -1900,7 +1580,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing process status
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because wait() writes status information TO user space
             // Size is 4 bytes for status integer
             let status = match check_and_convert_addr_ext(&cage, arg1, 4, PROT_WRITE) {
@@ -1912,12 +1591,7 @@ pub fn lind_syscall_api(
             };
         
             // Perform wait operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_WRITE since wait writes status to user space
-            // 3. Two-step validation: memory region first, then reference creation
-            // 4. Process status handling managed by cage layer
+            interface::cagetable_getref(cageid)
             cage.wait_syscall(status)
         }
 
@@ -1926,7 +1600,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing process status
-            // NaCl: Uses NaClIsValidAddress
             // Using PROT_WRITE because waitpid() writes status information TO user space
             // Size is 4 bytes for status integer
             let status = match check_and_convert_addr_ext(&cage, arg2, 4, PROT_WRITE) {
@@ -1939,12 +1612,7 @@ pub fn lind_syscall_api(
             let options = arg3 as i32;
             
             // Perform waitpid operation through cage implementation
-            // 
-            // Implementation differences from NaCl:
-            // 1. Uses Rust's memory safety features for buffer validation
-            // 2. Uses PROT_WRITE since waitpid writes status to user space
-            // 3. Two-step validation: memory region first, then reference creation
-            // 4. Process status handling managed by cage layer
+            interface::cagetable_getref(cageid)
             cage.waitpid_syscall(pid, status, options)
         }
 
