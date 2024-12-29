@@ -1188,17 +1188,17 @@ pub fn lind_syscall_api(
             interface::cagetable_getref(cageid)
                 .getuid_syscall()
         }
-        
+
         GETEUID_SYSCALL => {
             interface::cagetable_getref(cageid)
                 .geteuid_syscall()
         }
-        
+
         GETGID_SYSCALL => {
             interface::cagetable_getref(cageid)
                 .getgid_syscall()
         }
-        
+
         GETEGID_SYSCALL => {
             interface::cagetable_getref(cageid)
                 .getegid_syscall()
