@@ -13,6 +13,7 @@ use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
+use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
@@ -213,7 +214,7 @@ impl RunCommand {
                 // exit the cage
                 lind_syscall_api(
                     1,
-                    30,
+                    EXIT_SYSCALL as u32,
                     0,
                     0,
                     code as u64,
