@@ -203,7 +203,6 @@ pub fn lind_syscall_api(
 
     let ret = match call_number {
         WRITE_SYSCALL => {
-            // NaCl equivalent: NaClSysWrite
             // Handles writing data from user buffer to file descriptor
             
             // Get file descriptor - same as NaCl's first argument handling
@@ -217,7 +216,6 @@ pub fn lind_syscall_api(
             }
         
             // Get cage reference for memory operations
-            // NaCl equivalent: struct NaClApp *nap = natp->nap
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert user buffer address to system address
@@ -239,7 +237,6 @@ pub fn lind_syscall_api(
         }
 
         WRITEV_SYSCALL => {
-            // NaCl equivalent: NaClSysWritev
             let fd = arg1 as i32;
             let iovcnt = arg3 as i32;
         
@@ -278,7 +275,6 @@ pub fn lind_syscall_api(
         }
 
         MUNMAP_SYSCALL => {
-            // NaCl equivalent: NaClSysMunmap
             let addr = arg1 as *mut u8;
             let length = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
@@ -308,7 +304,6 @@ pub fn lind_syscall_api(
         }
 
         MMAP_SYSCALL => {
-            // NaCl equivalent: NaClSysMmap
             let addr = arg1 as *mut u8;
             let len = arg2 as usize;
             let prot = arg3 as i32;
@@ -343,7 +338,6 @@ pub fn lind_syscall_api(
         }
 
         PREAD_SYSCALL => {
-            // NaCl equivalent: NaClSysPread
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let offset = arg4 as i64;
@@ -360,7 +354,6 @@ pub fn lind_syscall_api(
         }
 
         READ_SYSCALL => {
-            // NaCl equivalent: NaClSysRead
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
@@ -379,7 +372,6 @@ pub fn lind_syscall_api(
         }
 
         CLOSE_SYSCALL => {
-            // NaCl equivalent: NaClSysClose
             let fd = arg1 as i32;
 
             // File descriptor validation and close operation handled by cage
@@ -389,7 +381,6 @@ pub fn lind_syscall_api(
         }
 
         ACCESS_SYSCALL => {
-            // NaCl equivalent: NaClSysAccess
             let cage = interface::cagetable_getref(cageid);
             
             // Validate and convert path string from user space
@@ -409,7 +400,6 @@ pub fn lind_syscall_api(
         }
 
         OPEN_SYSCALL => {
-            // NaCl equivalent: NaClSysOpen
             let cage = interface::cagetable_getref(cageid);
             
             // Validate and convert path string from user space
@@ -430,7 +420,6 @@ pub fn lind_syscall_api(
         }
 
         SOCKET_SYSCALL => {
-            // NaCl equivalent: NaClSysSocket
             let domain = arg1 as i32;
             let socktype = arg2 as i32;
             let protocol = arg3 as i32;
@@ -443,7 +432,6 @@ pub fn lind_syscall_api(
         }
 
         CONNECT_SYSCALL => {
-            // NaCl equivalent: NaClSysConnect
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
 
@@ -469,7 +457,6 @@ pub fn lind_syscall_api(
         }
 
         BIND_SYSCALL => {
-            // NaCl equivalent: NaClSysBind
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
         
@@ -495,7 +482,6 @@ pub fn lind_syscall_api(
         }
 
         ACCEPT_SYSCALL => {
-            // NaCl equivalent: NaClSysAccept
             let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
             let nullity1 = interface::arg_nullity(arg2);
             let nullity2 = interface::arg_nullity(arg3);
@@ -535,7 +521,6 @@ pub fn lind_syscall_api(
         }
 
         EXEC_SYSCALL => {
-            // NaCl equivalent: NaClSysExec
             let child_cageid = arg1 as u64;
         
             // Perform exec operation through cage implementation
@@ -545,7 +530,6 @@ pub fn lind_syscall_api(
         }
 
         EXIT_SYSCALL => {
-            // NaCl equivalent: NaClSysExit
             let status = arg1 as i32;
         
             // Perform exit operation through cage implementation
@@ -555,7 +539,6 @@ pub fn lind_syscall_api(
         }
 
         SELECT_SYSCALL => {
-            // NaCl equivalent: NaClSysSelect
             let nfds = arg1 as i32;
             
             // Get and validate fd sets
@@ -587,7 +570,6 @@ pub fn lind_syscall_api(
         }
 
         RENAME_SYSCALL => {
-            // NaCl equivalent: NaClSysRename
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert old path from user space
@@ -615,7 +597,6 @@ pub fn lind_syscall_api(
         }
 
         XSTAT_SYSCALL => {
-            // NaCl equivalent: NaClSysStat
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
@@ -647,7 +628,6 @@ pub fn lind_syscall_api(
         }
 
         MKDIR_SYSCALL => {
-            // NaCl equivalent: NaClSysMkdir
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
@@ -668,7 +648,6 @@ pub fn lind_syscall_api(
         }
 
         RMDIR_SYSCALL => {
-            // NaCl equivalent: NaClSysRmdir
             let cage = interface::cagetable_getref(cageid);
 
             // Validate and convert path string from user space
@@ -688,7 +667,6 @@ pub fn lind_syscall_api(
         }
 
         FCHDIR_SYSCALL => {
-            // NaCl equivalent: NaClSysFchdir
             let fd = arg1 as i32;
             
             // Perform fchdir operation through cage implementation
@@ -717,7 +695,6 @@ pub fn lind_syscall_api(
         }
 
         GETCWD_SYSCALL => {
-            // NaCl equivalent: NaClSysGetcwd
             let bufsize = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
         
@@ -737,7 +714,6 @@ pub fn lind_syscall_api(
             ret
         }
         FSTATFS_SYSCALL => {
-            // NaCl equivalent: NaClSysFstatfs
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
         
@@ -779,7 +755,6 @@ pub fn lind_syscall_api(
         }
         
         DUP_SYSCALL => {
-            // NaCl equivalent: NaClSysDup
             let fd = arg1 as i32;
             
             // Convert second argument to Option<i32> if it's within valid range
@@ -797,7 +772,6 @@ pub fn lind_syscall_api(
         }
 
         DUP2_SYSCALL => {
-            // NaCl equivalent: NaClSysDup2
             let fd = arg1 as i32;
             let fd2 = arg2 as i32;
             
@@ -808,7 +782,6 @@ pub fn lind_syscall_api(
         }
 
         FCHMOD_SYSCALL => {
-            // NaCl equivalent: NaClSysFchmod
             let fd = arg1 as i32;
             let mode = arg2 as u32;
         
@@ -819,7 +792,6 @@ pub fn lind_syscall_api(
         }
 
         FXSTAT_SYSCALL => {
-            // NaCl equivalent: NaClSysFstat
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
         
@@ -840,7 +812,6 @@ pub fn lind_syscall_api(
         }
         
         UNLINK_SYSCALL => {
-            // NaCl equivalent: NaClSysUnlink
             let cage = interface::cagetable_getref(cageid);
         
             // Validate and convert path string from user space
