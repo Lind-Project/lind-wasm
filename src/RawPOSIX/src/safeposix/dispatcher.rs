@@ -1176,8 +1176,6 @@ pub fn lind_syscall_api(
             let virtual_fd = arg1 as i32;
             let offset = arg4 as i64;
         
-            // Perform pwrite operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.pwrite_syscall(virtual_fd, buf, count, offset)
         }
 
@@ -1277,8 +1275,6 @@ pub fn lind_syscall_api(
             };
             let flags = arg4 as i32;
         
-            // Perform send operation through cage implementation
-            interface::cagetable_getref(cageid)
             cage.send_syscall(fd, buf, count, flags)
         }
 
