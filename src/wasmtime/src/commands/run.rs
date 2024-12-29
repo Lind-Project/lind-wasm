@@ -208,7 +208,7 @@ impl RunCommand {
                 // exit the cage
                 lind_syscall_api(
                     1,
-                    EXIT_SYSCALL,
+                    EXIT_SYSCALL as u32,
                     0,
                     0,
                     0,

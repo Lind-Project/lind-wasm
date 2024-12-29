@@ -273,7 +273,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // calling fork in rawposix to fork the cage
         lind_syscall_api(
             self.pid as u64,
-            FORK_SYSCALL, // fork syscall
+            FORK_SYSCALL as u32, // fork syscall
             0,
             0,
             child_cageid,
@@ -400,7 +400,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // exit the cage with the exit code
                             lind_syscall_api(
                                 child_cageid,
-                                EXIT_SYSCALL,
+                                EXIT_SYSCALL as u32,
                                 0,
                                 0,
                                 *val as u64,
