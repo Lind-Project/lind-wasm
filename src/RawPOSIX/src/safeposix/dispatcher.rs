@@ -454,7 +454,7 @@ pub fn lind_syscall_api(
             // Convert to reference for bind operation
             let localaddr = match Ok::<&interface::GenSockaddr, i32>(&addr) {
                 Ok(addr) => addr,
-                Err(_) => return syscall_error(Errno::EFAULT, "bind", "sockaddr conversion failed"),
+                Err(_) => panic!("Failed to get sockaddr"), // Handle error appropriately
             };
         
             // Perform bind operation through cage implementation
@@ -2051,7 +2051,8 @@ pub fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
 pub fn lindrustinit(verbosity: isize) {
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
-
+    
+    // TODO: needs to add close() that handling im-pipe
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
     
     let utilcage = Cage {
