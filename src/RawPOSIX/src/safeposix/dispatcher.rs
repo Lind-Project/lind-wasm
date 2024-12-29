@@ -208,7 +208,6 @@ pub fn lind_syscall_api(
             // Get file descriptor - same as NaCl's first argument handling
             let fd = arg1 as i32;
         
-            // Security: Clamp count to prevent integer overflow attacks
             // NaCl uses similar bounds checking via MAX_IO_BUFFER_BYTES
             let count = std::cmp::min(arg3 as usize, i32::MAX as usize);
             if count == 0 {
