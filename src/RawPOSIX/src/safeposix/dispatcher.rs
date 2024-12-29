@@ -918,7 +918,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
         
             // Validate buffer for writing received data
-            // NaCl: Uses NaClCopyOutToUser
             // Using PROT_WRITE because recv() writes received data TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
                 Ok(addr) => addr as *mut u8,
@@ -1019,8 +1018,6 @@ pub fn lind_syscall_api(
             let shmfig = arg3 as i32;
         
             // Perform shmget operation through cage implementation
-            interface::cagetable_getref(cageid)
-            // 4. Size validation handled by cage layer
             interface::cagetable_getref(cageid)
                 .shmget_syscall(key, size, shmfig)
         }
@@ -1184,7 +1181,6 @@ pub fn lind_syscall_api(
         
             // Perform pwrite operation through cage implementation
             interface::cagetable_getref(cageid)
-            // 4. File descriptor validation handled by cage layer
             cage.pwrite_syscall(virtual_fd, buf, count, offset)
         }
 
@@ -1719,7 +1715,7 @@ pub fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
 pub fn lindrustinit(verbosity: isize) {
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
-    
+
     // TODO: needs to add close() that handling im-pipe
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
     
