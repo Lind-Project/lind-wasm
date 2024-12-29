@@ -504,32 +504,63 @@ pub fn lind_syscall_api(
         }
 
         SELECT_SYSCALL => {
+            // Get the number of file descriptors to check (highest fd + 1)
             let nfds = arg1 as i32;
-            
-            // Get and validate fd sets
-            let readfds = match interface::get_fdset(arg2) {
-                Ok(fds) => fds,
-                Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid readfds"),
-            };
-            let writefds = match interface::get_fdset(arg3) {
-                Ok(fds) => fds,
-                Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid writefds"),
-            };
-            let errorfds = match interface::get_fdset(arg4) {
-                Ok(fds) => fds,
-                Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid errorfds"),
-            };
-            
-            // Get and validate timeout
-            let rposix_timeout = match interface::duration_fromtimeval(arg5) {
-                Ok(timeout) => timeout,
-                Err(_) => return syscall_error(Errno::EFAULT, "select", "invalid timeout"),
+            // Get reference to the cage for memory operations
+            let cage = interface::cagetable_getref(cageid);
+        
+            // Validate and convert readfds buffer
+            // 1. check_and_convert_addr_ext validates memory access and converts user address to system address
+            // 2. PROT_READ | PROT_WRITE because select() both reads from and modifies the fd_sets
+            // 3. get_fdset converts the raw memory into an fd_set structure
+            let readfds = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::FdSet>(), PROT_READ | PROT_WRITE) {
+                Ok(addr) => match interface::get_fdset(addr) {
+                    Ok(fds) => fds,
+                    Err(_) => return syscall_error(Errno::EFAULT, "select", "failed to get readfds"),
+                },
+                Err(errno) => return syscall_error(errno, "select", "invalid readfds address"),
             };
         
-            // Perform select operation through cage implementation
-            // Results are handled by the interface layer
-            interface::cagetable_getref(cageid)
-                .select_syscall(nfds, readfds, writefds, errorfds, rposix_timeout)
+            // Validate and convert writefds buffer
+            // Similar to readfds, this fd_set indicates which descriptors to check for write-ready status
+            // The fd_set will be modified to show which descriptors are actually write-ready
+            let writefds = match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<interface::FdSet>(), PROT_READ | PROT_WRITE) {
+                Ok(addr) => match interface::get_fdset(addr) {
+                    Ok(fds) => fds,
+                    Err(_) => return syscall_error(Errno::EFAULT, "select", "failed to get writefds"),
+                },
+                Err(errno) => return syscall_error(errno, "select", "invalid writefds address"),
+            };
+        
+            // Validate and convert errorfds buffer (also called exceptfds in some implementations)
+            // This fd_set is used to monitor for exceptional conditions (like out-of-band data)
+            // Also requires both read and write access as select() modifies it
+            let errorfds = match check_and_convert_addr_ext(&cage, arg4, std::mem::size_of::<interface::FdSet>(), PROT_READ | PROT_WRITE) {
+                Ok(addr) => match interface::get_fdset(addr) {
+                    Ok(fds) => fds,
+                    Err(_) => return syscall_error(Errno::EFAULT, "select", "failed to get errorfds"),
+                },
+                Err(errno) => return syscall_error(errno, "select", "invalid errorfds address"),
+            };
+        
+            // Validate and convert timeout buffer
+            // 1. Only needs PROT_READ as the timeout value is not modified by select()
+            // 2. duration_fromtimeval converts the timeval structure to a Duration
+            // 3. This specifies how long select() should block waiting for activity
+            let rposix_timeout = match check_and_convert_addr_ext(&cage, arg5, std::mem::size_of::<interface::TimeVal>(), PROT_READ) {
+                Ok(addr) => match interface::duration_fromtimeval(addr) {
+                    Ok(timeout) => timeout,
+                    Err(_) => return syscall_error(Errno::EFAULT, "select", "failed to get timeout"),
+                },
+                Err(errno) => return syscall_error(errno, "select", "invalid timeout address"),
+            };
+        
+            // Delegate to the cage's select implementation
+            // This will:
+            // 1. Monitor the specified file descriptors for activity
+            // 2. Modify the fd_sets to indicate which descriptors are ready
+            // 3. Return the number of ready descriptors or an error code
+            cage.select_syscall(nfds, readfds, writefds, errorfds, rposix_timeout)
         }
 
         RENAME_SYSCALL => {
