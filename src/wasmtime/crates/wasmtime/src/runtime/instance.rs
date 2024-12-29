@@ -478,6 +478,30 @@ impl Instance {
         return Err(());
     }
 
+    pub fn get_stack_low(&self, mut store: impl AsContextMut) -> Result<i32, ()> {
+        if let Some(sp_extern) = self.get_export(store.as_context_mut(), "__stack_low") {
+            match sp_extern {
+                Extern::Global(sp) => {
+                    match sp.get(store.as_context_mut()) {
+                        Val::I32(val) => {
+                            return Ok(val);
+                        }
+                        _ => {
+                            // unexpected stack pointer type (not i32)
+                            return Err(());
+                        }
+                    }
+                },
+                _ => {
+                    // unexpected stack pointer export type (not a Global type)
+                    return Err(());
+                }
+            }
+        }
+        // __stack_pointer export not found
+        return Err(());
+    }
+
     /// Looks up an exported [`Extern`] value by a [`ModuleExport`] value.
     ///
     /// This is similar to [`Instance::get_export`] but uses a [`ModuleExport`] value to avoid
