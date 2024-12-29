@@ -2,6 +2,7 @@
 
 use anyhow::{anyhow, Result};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
+use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
 use std::ffi::CStr;
@@ -22,6 +23,8 @@ const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
 
 const LIND_FS_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
+
+const UNWIND_METADATA_SIZE: u64 = 16;
 
 // Define the trait with the required method
 pub trait LindHost<T, U> {
@@ -228,10 +231,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // unwind_data_end: the end address of the avaliable space Asyncify could work with
         // These two parameters are usually stored on the top of the unwind data.
         // Below is a graph describing the entire user's stack layout
-        // -------------------------- <----- _usr (stack low)
-        // |   unwind_data_start    | <----- u64
-        // --------------------------
-        // |   unwind_data_end      | <----- u64
+        // -------------------------- <----- unwind_data_start_usr (stack low)
+        // |    unwind arguments    | stores where to start and where is the end (16 bytes)
         // -------------------------- <----- unwind_data_start
         // |         .....          | |
         // |   actual unwind data   | | unwind data grow direction
@@ -244,8 +245,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // |         .....          | |
         // -------------------------- <----- stack high
         unsafe {
-            // 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + 16;
+            // UNWIND_METADATA_SIZE is 16 because it is the size of two u64
+            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
             *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
         
@@ -272,7 +273,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // calling fork in rawposix to fork the cage
         lind_syscall_api(
             self.pid as u64,
-            68, // fork syscall
+            FORK_SYSCALL, // fork syscall
             0,
             0,
             child_cageid,
@@ -399,7 +400,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             // exit the cage with the exit code
                             lind_syscall_api(
                                 child_cageid,
-                                30,
+                                EXIT_SYSCALL,
                                 0,
                                 0,
                                 *val as u64,
@@ -474,8 +475,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // store the parameter at the top of the stack
         // reference comments in fork_call
         unsafe {
-            // 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + 16;
+            // UNWIND_METADATA_SIZE is 16 because it is the size of two u64
+            *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + UNWIND_METADATA_SIZE;
             *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
         
