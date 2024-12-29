@@ -429,7 +429,7 @@ pub fn lind_syscall_api(
             // Convert to reference for connect operation
             let remoteaddr = match Ok::<&interface::GenSockaddr, i32>(&addr) {
                 Ok(addr) => addr,
-                Err(_) => return syscall_error(Errno::EFAULT, "connect", "sockaddr conversion failed"),
+                Err(_) => panic!("Failed to get sockaddr"), // Handle error appropriately
             };
 
             // Perform connect operation through cage implementation
