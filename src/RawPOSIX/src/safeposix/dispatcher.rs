@@ -782,10 +782,7 @@ pub fn lind_syscall_api(
             // Validate stat buffer and prepare for writing
             // Using PROT_WRITE because fstat() writes the results TO this user space buffer
             let buf = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::StatData>(), PROT_WRITE) {
-                Ok(addr) => match interface::get_statdatastruct(addr) {
-                    Ok(val) => val,
-                    Err(errno) => return syscall_error(Errno::EFAULT, "fxstat", "invalid stat data format"),
-                },
+                Ok(addr) => interface::get_statdatastruct(addr).unwrap(),
                 Err(errno) => return syscall_error(errno, "fxstat", "invalid buffer address"),
             };
             
