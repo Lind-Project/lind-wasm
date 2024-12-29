@@ -278,18 +278,6 @@ pub fn lind_syscall_api(
             let length = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
         
-            // TODO(Security): Need to implement the following NaCl-style security checks:
-            // 1. is_page_aligned() - Checks if address is page-aligned (4KB boundaries)
-            //    Reference: NaCl checks this via NaClIsAllocPageMultiple
-            // 
-            // 2. round_to_page_size() - Rounds length up to nearest page size
-            //    Reference: NaCl uses NaClRoundAllocPage
-            //
-            // 3. contains_executable_pages() - Prevents unmapping executable pages
-            //    Reference: NaCl uses NaClSysCommonAddrRangeContainsExecutablePages
-            //
-            // These functions might help in the interface module.
-            
             if length == 0 {
                 return syscall_error(
                     Errno::EINVAL,
@@ -319,12 +307,6 @@ pub fn lind_syscall_api(
                 );
             }
         
-            // TODO(Security): Need NaClSysCommonMmapCheck equivalent to validate:
-            // - W^X protection checks (write XOR execute)
-            // - Address space limit checks (see NaCl's check at addr_bits)
-            // - Overflow checks for length + offset
-            // - Page alignment validation when MAP_FIXED is used
-            // Reference: NaCl implementation in nacl_syscall_common.c:1756
         
             // Force MAP_FIXED as NaCl does
             let flags = flags | MAP_FIXED as i32;
@@ -2070,7 +2052,6 @@ pub fn lindrustinit(verbosity: isize) {
     let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
 
-    // TODO: needs to add close() that handling im-pipe
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
     
     let utilcage = Cage {
