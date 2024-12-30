@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    pub mod threei::*;
+    pub mod threei::make_syscall;
     pub mod threeiconstant;
     pub mod syscall_table;
     pub mod syscall_map;
