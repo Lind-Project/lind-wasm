@@ -41,32 +41,5 @@ int
 __brk (void *addr)
 {
 	return MAKE_SYSCALL(175, "syscall|brk", (uint64_t) addr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
-//   __curbrk = __builtin_wasm_memory_size(0) * PAGESIZE;
-
-//     // FIXME: now two threads calling this sbrk simultaneously
-//     // will lead to the corruption of __curbrk, so we should move
-//     // this implementation into the runtime, and protect the __curbrk
-//     // with mutex (i.e.  preventing two brk/sbrk to be executed at the same time)
-
-//     void * linear_mem_end = __builtin_wasm_memory_size(0) * PAGESIZE;
-//     void * old_break = __curbrk;
-//     void * new_break = addr;
-
-//     if (new_break <= linear_mem_end) {
-//         // In this case, we don't need to grow linear mem
-//         __curbrk = new_break;
-//         return old_break;
-//     }
-
-//     // Now we need to grow linear mem
-//     int new_pages = (new_break - linear_mem_end) / PAGESIZE;
-
-//     if (__builtin_wasm_memory_grow(0, new_pages) < 0) {
-//         errno = ENOMEM;
-//         return (void *)-1;
-//     }
-
-//     __curbrk = new_break;
-//     return old_break;
 }
 weak_alias (__brk, brk)

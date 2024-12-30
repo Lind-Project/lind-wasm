@@ -13,6 +13,7 @@ use crate::{
 use alloc::sync::Arc;
 use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
+use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 use core::ptr::NonNull;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
@@ -247,7 +248,7 @@ impl Instance {
 
                 lind_syscall_api(
                     pid,
-                    21,
+                    MMAP_SYSCALL as u32,
                     0,
                     memory_base as u64,
                     0, // the first memory region starts from 0

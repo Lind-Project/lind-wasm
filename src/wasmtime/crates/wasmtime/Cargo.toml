@@ -60,6 +60,7 @@ hashbrown = { workspace = true }
 libm = "0.2.7"
 bitflags = { workspace = true }
 rawposix = { path = "../rawposix" }
+wasmtime-lind-utils = { path = "../lind-utils" }
 
 [target.'cfg(target_os = "windows")'.dependencies.windows-sys]
 workspace = true

@@ -2,7 +2,6 @@ use crate::constants::{
     MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE
 };
 use std::io;
-use nodit::interval::ii;
 use nodit::NoditMap;
 use nodit::{interval::ie, Interval};
 use crate::fdtables;
@@ -896,19 +895,16 @@ impl VmmapOps for Vmmap {
 
         let rounded_num_pages =
             self.round_page_num_up_to_map_multiple(num_pages, pages_per_map);
-        println!("rounded_num_pages: {}", rounded_num_pages);
 
         for gap in self
             .entries
             .gaps_trimmed(ie(start, end))
         {
-            println!("gap: {:?}", gap);
             let aligned_start_page =
                 self.trunc_page_num_down_to_map_multiple(gap.start(), pages_per_map);
             let aligned_end_page =
                 self.round_page_num_up_to_map_multiple(gap.end(), pages_per_map);
 
-            println!("aligned gap: {} {}", aligned_start_page, aligned_end_page);
             let gap_size = aligned_end_page - aligned_start_page;
             if gap_size >= rounded_num_pages {
                 return Some(ie(aligned_end_page - rounded_num_pages, aligned_end_page));

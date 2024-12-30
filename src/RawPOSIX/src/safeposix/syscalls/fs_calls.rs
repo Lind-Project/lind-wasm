@@ -780,7 +780,6 @@ impl Cage {
         virtual_fd: i32,
         off: i64
     ) -> usize {
-        println!("mmap_syscall: addr: {:?}, len: {}, prot: {} flags: {}, fd: {}, off: {}", addr, len, prot, flags, virtual_fd, off);
         if virtual_fd != -1 {
             match fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64) {
                 Ok(kernel_fd) => {

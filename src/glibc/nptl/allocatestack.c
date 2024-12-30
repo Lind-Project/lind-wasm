@@ -324,6 +324,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
       size_t reported_guardsize;
       size_t reqsize;
       void *mem;
+      // lind-wasm: deleted PROT_EXEC since lind disallows PROT_EXEC mapping
       const int prot = (PROT_READ | PROT_WRITE);
 
       /* Adjust the stack size for alignment.  */
@@ -362,18 +363,8 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 	  /* If a guard page is required, avoid committing memory by first
 	     allocate with PROT_NONE and then reserve with required permission
 	     excluding the guard page.  */
-      printf("size: %d\n", size);
 	  mem = __mmap (NULL, size, (guardsize == 0) ? prot : PROT_NONE,
 			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-
-    // Replacement mmap with malloc - Dennis
-    // BUG: changed the malloc size to 16416 (1/4 of the original)
-    //     since currently there is an issue on malloc that it cannot
-    //     automatically grow the memory if memory is running out.
-    //     Once the issue is fixed, we might be able to change the size
-    //     back - Qianxi Chen
-    // size = 16416;
-    // void* mem = malloc(size);
 
     if (mem == NULL) {
         // Handle memory allocation failure
@@ -439,7 +430,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 	  /* Don't allow setxid until cloned.  */
 	  pd->setxid_futex = -1;
 
-    // BUG: TLS related stuff is not working currently
+    // BUG: TLS related stuff is not working in lind-wasm currently
 	  /* Allocate the DTV for this thread.  */
 	  // if (_dl_allocate_tls (TLS_TPADJ (pd)) == NULL)
 	  //   {

@@ -329,20 +329,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         parent_pid: parent_pid as u64, child_pid: child_cageid
                     }).unwrap();
 
-                // copy the entire memory from parent, note that the unwind data is also copied together
-                // with the memory
-                // let child_address: *mut u8;
-
-                // // get the base address of the memory
-                // {
-                //     let handle = store.inner_mut().instance(InstanceId::from_index(0));
-                //     let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
-                //     child_address = defined_memory.base;
-                // }
-                
-                // rawposix::safeposix::dispatcher::set_base_address(child_cageid, child_address as i64);
-                // rawposix::safeposix::dispatcher::fork_vmmap_helper(parent_pid as u64, child_cageid);
-
                 // new cage created, increment the cage counter
                 lind_manager.increment();
                 // create the cage in rustposix via rustposix fork
@@ -456,7 +442,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     pub fn pthread_create_call(&self, mut caller: &mut Caller<'_, T>,
                     stack_addr: i32, stack_size: i32, child_tid: u64
                 ) -> Result<i32> {
-        println!("-----stack_addr: {}, stack_size: {}", stack_addr, stack_size);
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -1062,7 +1047,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 if m.is_shared() {
                     // define a new shared memory for the child
                     let mut plan = m.clone();
-                    // plan.set_minimum((size as u64).div_ceil(m.page_size()));
 
                     let mem = SharedMemory::new(self.module.engine(), plan.clone()).unwrap();
                     self.linker.define_with_inner(store, import.module(), import.name(), mem.clone()).unwrap();

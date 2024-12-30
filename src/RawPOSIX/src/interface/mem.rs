@@ -12,6 +12,13 @@ use std::result::Result;
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
 
+/// Round up the address length to be multiple of pages
+///
+/// # Arguments
+/// * `length` - length of the address
+///
+/// # Returns
+/// * `u64` - rounded up length
 pub fn round_up_page(length: u64) -> u64 {
     if length % PAGESIZE as u64 == 0 {
         length
@@ -20,6 +27,24 @@ pub fn round_up_page(length: u64) -> u64 {
     }
 }
 
+/// Copies the memory regions from parent to child based on the provided `vmmap` memory layout.
+///
+/// This function is designed to replicate the parent's memory space into the child immediately after
+/// a `fork_syscall` in Wasmtime. It assumes that the parent and child share the same `vmmap` structure,
+/// a valid assumption in this context.
+///
+/// The copying behavior varies based on the type of memory region:
+/// 1. **PROT_NONE regions**:
+///    - No action is taken, as memory regions are already configured with `PROT_NONE` by default.
+/// 2. **Shared memory regions**:
+///    - The function uses the `mremap` syscall to replicate shared memory efficiently. Refer to `man 2 mremap` for details.
+/// 3. **Private memory regions**:
+///    - The function uses `std::ptr::copy_nonoverlapping` to copy the memory contents directly.
+///    - **TODO**: Investigate whether using `writev` could improve performance for this case.
+/// 
+/// # Arguments
+/// * `parent_vmmap` - vmmap struct of parent
+/// * `child_vmmap` - vmmap struct of child
 pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
     let parent_base = parent_vmmap.base_address.unwrap();
     let child_base = child_vmmap.base_address.unwrap();
@@ -56,6 +81,20 @@ pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
     }
 }
 
+/// Handler of the `munmap_syscall`, interacting with the `vmmap` structure.
+///
+/// This function processes the `munmap_syscall` by updating the `vmmap` entries and managing
+/// the unmap operation. Instead of invoking the actual `munmap` syscall, the unmap operation
+/// is simulated by setting the specified region to `PROT_NONE`. The memory remains valid but
+/// becomes inaccessible due to the `PROT_NONE` setting.
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that calls the `munmap`
+/// * `addr` - Starting address of the region to unmap
+/// * `length` - Length of the region to unmap
+/// 
+/// # Returns
+/// * `i32` - 0 for success and -1 for failure
 pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
     let cage = cagetable_getref(cageid);
 
@@ -85,6 +124,28 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
     0
 }
 
+/// Handles the `mmap_syscall`, interacting with the `vmmap` structure.
+///
+/// This function processes the `mmap_syscall` by updating the `vmmap` entries and performing
+/// the necessary mmap operations. The handling logic is as follows:
+/// 1. Restrict allowed flags to `MAP_FIXED`, `MAP_SHARED`, `MAP_PRIVATE`, and `MAP_ANONYMOUS`.
+/// 2. Disallow `PROT_EXEC`; return `EINVAL` if the `prot` argument includes `PROT_EXEC`.
+/// 3. If `MAP_FIXED` is not specified, query the `vmmap` structure to locate an available memory region.
+///    Otherwise, use the address provided by the user.
+/// 4. Invoke the actual `mmap` syscall with the `MAP_FIXED` flag to configure the memory region's protections.
+/// 5. Update the corresponding `vmmap` entry.
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that initiated the `mmap` syscall.
+/// * `addr` - Starting address of the memory region to mmap.
+/// * `len` - Length of the memory region to mmap.
+/// * `prot` - Memory protection flags (e.g., `PROT_READ`, `PROT_WRITE`).
+/// * `flags` - Mapping flags (e.g., `MAP_SHARED`, `MAP_ANONYMOUS`).
+/// * `fildes` - File descriptor associated with the mapping, if applicable.
+/// * `off` - Offset within the file, if applicable.
+///
+/// # Returns
+/// * `u32` - Result of the `mmap` operation. See "man mmap" for details
 pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut flags: i32, mut fildes: i32, off: i64) -> u32 {
     let cage = cagetable_getref(cageid);
 
@@ -98,25 +159,21 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
     }
 
     if prot & PROT_EXEC > 0 {
-        println!("mmap syscall error 1!");
         return syscall_error(Errno::EINVAL, "mmap", "PROT_EXEC is not allowed") as u32;
     }
 
     // check if the provided address is multiple of pages
     let rounded_addr = round_up_page(addr as u64);
     if rounded_addr != addr as u64 {
-        println!("mmap syscall error 2!");
         return syscall_error(Errno::EINVAL, "mmap", "address it not aligned") as u32;
     }
 
     // offset should be non-negative and multiple of pages
     if off < 0 {
-        println!("mmap syscall error 3!");
         return syscall_error(Errno::EINVAL, "mmap", "offset cannot be negative") as u32;
     }
     let rounded_off = round_up_page(off as u64);
     if rounded_off != off as u64 {
-        println!("mmap syscall error 4!");
         return syscall_error(Errno::EINVAL, "mmap", "offset it not aligned") as u32;
     }
 
@@ -147,8 +204,6 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
         useraddr = (space.start() << PAGESHIFT) as u32;
     }
 
-    // TODO: validate useraddr (like checking whether within the program break)
-
     flags |= MAP_FIXED as i32;
 
     // either MAP_PRIVATE or MAP_SHARED should be set, but not both
@@ -159,7 +214,6 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
     let vmmap = cage.vmmap.read();
 
     let sysaddr = vmmap.user_to_sys(useraddr);
-    println!("useraddr: {}, sysaddr: {}", useraddr, sysaddr);
 
     drop(vmmap);
 
@@ -171,11 +225,10 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
         let result = cage.mmap_syscall(sysaddr as *mut u8, rounded_length as usize, prot, flags, fildes, off);
         
         let vmmap = cage.vmmap.read();
-        println!("sys addr: {}", result);
         let result = vmmap.sys_to_user(result);
-        println!("user addr: {}", result);
         drop(vmmap);
 
+        // if mmap addr is positive, that would mean the mapping is successful and we need to update the vmmap entry
         if result >= 0 {
             if result != useraddr {
                 panic!("MAP_FIXED not fixed");
@@ -196,13 +249,34 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
                 }
             };
 
-            vmmap.add_entry_with_overwrite(useraddr >> PAGESHIFT, (rounded_length >> PAGESHIFT) as u32, prot, maxprot, flags, backing, off, len as i64, cageid);
+            // update vmmap entry
+            vmmap.add_entry_with_overwrite(useraddr >> PAGESHIFT,
+                                           (rounded_length >> PAGESHIFT) as u32,
+                                           prot,
+                                           maxprot,
+                                           flags,
+                                           backing,
+                                           off,
+                                           len as i64,
+                                           cageid);
         }
     }
 
     useraddr as u32
 }
 
+/// Handles the `sbrk_syscall`, interacting with the `vmmap` structure.
+///
+/// This function processes the `sbrk_syscall` by updating the `vmmap` entries and managing
+/// the program break. It calculates the target program break after applying the specified
+/// increment and delegates further processing to the `brk_handler`.
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that initiated the `sbrk` syscall.
+/// * `brk` - Increment to adjust the program break, which can be negative.
+///
+/// # Returns
+/// * `u32` - Result of the `sbrk` operation. Refer to `man sbrk` for details.
 pub fn sbrk_handler(cageid: u64, brk: i32) -> u32 {
     let cage = cagetable_getref(cageid);
 
@@ -210,13 +284,16 @@ pub fn sbrk_handler(cageid: u64, brk: i32) -> u32 {
     let mut vmmap = cage.vmmap.read();
     let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
 
+    // program break should always be the same as the heap entry end
     assert!(heap.npages == vmmap.program_break);
 
+    // pass 0 to sbrk will just return the current brk
     if brk == 0 {
         return (PAGESIZE * heap.npages) as u32;
     }
 
     // round up the break to multiple of pages
+    // brk increment could possibly be negative
     let brk_page;
     if brk < 0 {
         brk_page = -((round_up_page(-brk as u64) >> PAGESHIFT) as i32);
@@ -224,15 +301,30 @@ pub fn sbrk_handler(cageid: u64, brk: i32) -> u32 {
         brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as i32;
     }
 
+    // drop the vmmap so that brk_handler will not deadlock
     drop(vmmap);
 
     if brk_handler(cageid, ((heap.npages as i32 + brk_page) << PAGESHIFT) as u32) < 0 {
         return syscall_error(Errno::ENOMEM, "sbrk", "no memory") as u32;
     }
 
+    // sbrk syscall should return previous brk address before increment
     (PAGESIZE * heap.npages) as u32
 }
 
+/// Handles the `brk_syscall`, interacting with the `vmmap` structure.
+///
+/// This function processes the `brk_syscall` by updating the `vmmap` entries and performing
+/// the necessary operations to adjust the program break. Specifically, it updates the program 
+/// break by modifying the end of the heap entry (the first entry in `vmmap`) and invokes `mmap` 
+/// to adjust the memory protection as needed.
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that initiated the `brk` syscall.
+/// * `brk` - The new program break address.
+///
+/// # Returns
+/// * `u32` - Returns `0` on success or `-1` on failure.
 pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
     let cage = cagetable_getref(cageid);
 
@@ -247,6 +339,14 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
 
     // TODO: check if brk has enough space
 
+    // if we are incrementing program break, we need to check if we have enough space
+    if brk_page > old_brk_page {
+        if vmmap.check_existing_mapping(old_brk_page, brk_page - old_brk_page, 0) {
+            return syscall_error(Errno::ENOMEM, "brk", "no memory");
+        }
+    }
+
+    // update vmmap entry
     vmmap.add_entry_with_overwrite(0, brk_page, heap.prot, heap.maxprot, heap.flags, heap.backing, heap.file_offset, heap.file_size, heap.cage_id);
     
     let old_heap_end_usr = (old_brk_page * PAGESIZE) as u32;
@@ -330,7 +430,6 @@ pub fn check_and_convert_addr_ext(cage: &Cage, arg: u64, length: usize, prot: i3
     
     // Validate memory mapping and permissions
     if vmmap.check_addr_mapping(page_num, npages, prot).is_none() {
-        println!("invalid address: {}", arg);
         return Err(Errno::EFAULT);  // Return error if mapping invalid
     }
 

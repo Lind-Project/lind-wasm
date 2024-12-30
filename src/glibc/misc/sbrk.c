@@ -44,41 +44,6 @@ void *
 __sbrk (intptr_t increment)
 {
 	return MAKE_SYSCALL(176, "syscall|sbrk", (uint64_t) increment, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
-    // __curbrk = __builtin_wasm_memory_size(0) * PAGESIZE;
-    
-    // // sbrk(0) returns the current memory size.
-    // if (increment == 0) {
-    //     // The wasm spec doesn't guarantee that memory.grow of 0 always succeeds.
-    //     return __curbrk;
-    // }
-
-    // // FIXME: now two threads calling this sbrk simultaneously
-    // // will lead to the corruption of __curbrk, so we should move
-    // // this implementation into the runtime, and protect the __curbrk
-    // // with mutex (i.e.  preventing two sbrk to be executed at the same time)
-
-    // void * linear_mem_end = __builtin_wasm_memory_size(0) * PAGESIZE;
-    // void * old_break = __curbrk;
-    // void * new_break = old_break + increment;
-
-    // if (new_break <= linear_mem_end) {
-    //     // In this case, we don't need to grow linear mem
-    //     __curbrk = new_break;
-    //     return old_break;
-    // }
-
-    // // Now we need to grow linear mem
-    // // int new_pages = (new_break - linear_mem_end) / PAGESIZE;
-    // int new_pages = (new_break - linear_mem_end + PAGESIZE - 1) / PAGESIZE;
-
-	// MAKE_SYSCALL(176, "syscall|sbrk", (uint64_t) increment, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
-    // if (__builtin_wasm_memory_grow(0, new_pages) < 0) {
-    //     errno = ENOMEM;
-    //     return (void *)-1;
-    // }
-
-    // __curbrk = new_break;
-    // return old_break;
 }
 
 // void *
