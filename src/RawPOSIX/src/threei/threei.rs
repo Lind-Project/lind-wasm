@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use std::mem;
-
+use std::{mem, io,};
+use crate::interface;
+use crate::safeposix::vmmap::*;
+use crate::constants::{PROT_READ, PROT_WRITE, MAP_PRIVATE};
 use crate::threeiconstant;
 use crate::syscall_table;
 
@@ -40,7 +42,7 @@ impl CageCallTable {
         for (syscall_num, syscall_name) in syscall_table {
             unsafe {
                 // Get function address
-                let func: CallFunc = unsafe { mem::transmute::(syscall_name as *const()); }
+                let func: CallFunc = unsafe { mem::transmute(syscall_name as *const()); };
                 // Insert 
                 default_mapping.insert(syscall_num, *func);
             }

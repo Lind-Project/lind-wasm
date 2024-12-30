@@ -1,7 +1,10 @@
 pub mod threei;
 pub mod threeiconstant;
 pub mod syscall_table;
-pub mod syscall_map;
+
+pub use threei::*;
+pub use syscall_table::*;
+pub use threeiconstant::*;
 
 #[cfg(test)]
 mod tests {

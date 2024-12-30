@@ -1,3 +1,5 @@
+use crate::threei::threei::CallFunc;
+
 pub const SYSCALL_TABLE: &[(u64, CallFunc)] = &[
     (1, "hello_syscall"), // ONLY for testing purpose 
     (2, "access_syscall"),
