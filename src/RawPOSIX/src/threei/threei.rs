@@ -375,9 +375,10 @@ fn _validate_addr(
     let start_page = addr >> 12;
     let end_page = (addr + len - 1) >> 12;
 
-    for page in start_page..=end_page {
+    let req_prot = required_prot as i32;
+    for page as i32 in start_page..=end_page {
         if let Some(entry) = rawposix_vmmap.find_page(page) {
-            if entry.cage_id != cage_id || entry.prot & required_prot != required_prot {
+            if entry.cage_id != cage_id || entry.prot & req_prot != req_prot {
                 return Ok(false);
             }
         } else {
@@ -401,7 +402,7 @@ fn _attemp_dest_mapping(
 
     // Because we are not sure whether all the pages from destaddr to destaddr+len are mapped, 
     // we loop each page to check and try to map them.
-    for page in start_page..=end_page {
+    for page as i32 in start_page..=end_page {
         if rawposix_vmmap.find_page(page).is_none() {
             let new_entry = VmmapEntry::new(
                 page,
@@ -468,9 +469,9 @@ pub fn make_syscall(
     let handler_table = HANDLERTABLE.lock().unwrap();
     if let Some(cagecall_table) = handler_table.get(&targetcage) {
         let cagecalltable = cagecall_table.lock().unwrap();
-        if let Some(jump_address) = cagecalltable.thiscalltable.get(callnum) {
+        if let Some(jump_address) = cagecalltable.thiscalltable.get(&callnum) {
             unsafe {
-                return func(
+                return CallFunc(
                     targetcage,
                     arg1, arg2, arg3, arg4, arg5, arg6,
                 );
