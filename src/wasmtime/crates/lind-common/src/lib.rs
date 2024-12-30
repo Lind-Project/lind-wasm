@@ -1,12 +1,11 @@
 #![allow(dead_code)]
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
-use wasmtime_environ::MemoryIndex;
 use wasmtime_lind_multi_process::{get_memory_base, LindHost, clone_constants::CloneArgStruct};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Barrier, Condvar, Mutex};
-use wasmtime::{AsContext, AsContextMut, Caller, ExternType, Linker, Module, SharedMemory, Store, Val, Extern, OnCalledAction, RewindingReturn, StoreOpaque, InstanceId};
+use std::sync::Arc;
+use wasmtime::Caller;
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
 // then the syscall would be dispatched into rawposix, or other crates under wasmtime, depending on the syscall, to perform its job

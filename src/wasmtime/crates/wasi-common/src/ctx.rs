@@ -9,7 +9,7 @@ use crate::{Error, StringArrayError};
 use cap_rand::RngCore;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
 /// An `Arc`-wrapper around the wasi-common context to allow mutable access to
 /// the file descriptor table. This wrapper is only necessary due to the

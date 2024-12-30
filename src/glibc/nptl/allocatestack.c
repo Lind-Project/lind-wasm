@@ -324,8 +324,8 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
       size_t reported_guardsize;
       size_t reqsize;
       void *mem;
-      const int prot = (PROT_READ | PROT_WRITE
-			| ((GL(dl_stack_flags) & PF_X) ? PROT_EXEC : 0));
+      // lind-wasm: deleted PROT_EXEC since lind disallows PROT_EXEC mapping
+      const int prot = (PROT_READ | PROT_WRITE);
 
       /* Adjust the stack size for alignment.  */
       size &= ~tls_static_align_m1;
@@ -363,17 +363,8 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 	  /* If a guard page is required, avoid committing memory by first
 	     allocate with PROT_NONE and then reserve with required permission
 	     excluding the guard page.  */
-	  // mem = __mmap (NULL, size, (guardsize == 0) ? prot : PROT_NONE,
-		// 	MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
-
-    // Replacement mmap with malloc - Dennis
-    // BUG: changed the malloc size to 16416 (1/4 of the original)
-    //     since currently there is an issue on malloc that it cannot
-    //     automatically grow the memory if memory is running out.
-    //     Once the issue is fixed, we might be able to change the size
-    //     back - Qianxi Chen
-    size = 16416;
-    void* mem = malloc(size);
+	  mem = __mmap (NULL, size, (guardsize == 0) ? prot : PROT_NONE,
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     if (mem == NULL) {
         // Handle memory allocation failure
@@ -439,17 +430,18 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 	  /* Don't allow setxid until cloned.  */
 	  pd->setxid_futex = -1;
 
+    // BUG: TLS related stuff is not working in lind-wasm currently
 	  /* Allocate the DTV for this thread.  */
-	  if (_dl_allocate_tls (TLS_TPADJ (pd)) == NULL)
-	    {
-	      /* Something went wrong.  */
-	      assert (errno == ENOMEM);
+	  // if (_dl_allocate_tls (TLS_TPADJ (pd)) == NULL)
+	  //   {
+	  //     /* Something went wrong.  */
+	  //     assert (errno == ENOMEM);
 
-	      /* Free the stack memory we just allocated.  */
-	      (void) __munmap (mem, size);
+	  //     /* Free the stack memory we just allocated.  */
+	  //     (void) __munmap (mem, size);
 
-	      return errno;
-	    }
+	  //     return errno;
+	  //   }
 
 
 	  /* Prepare to modify global data.  */

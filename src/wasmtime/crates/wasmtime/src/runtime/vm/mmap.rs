@@ -99,7 +99,9 @@ impl Mmap {
         assert!(len <= self.len());
         assert!(start <= self.len() - len);
 
-        self.sys.make_accessible(start, len)
+        // lind-wasm: mmap prot is managed by rawposix
+        // self.sys.make_accessible(start, len)
+        Ok(())
     }
 
     /// Return the allocated memory as a slice of u8.

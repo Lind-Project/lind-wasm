@@ -179,7 +179,7 @@ impl Cage {
             sigset: newsigset,
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
-            vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process
+            vmmap: interface::RustLock::new(new_vmmap), // Initialize empty virtual memory map for new process
             zombies: interface::RustLock::new(vec![]),
             child_num: interface::RustAtomicU64::new(0),
         };
