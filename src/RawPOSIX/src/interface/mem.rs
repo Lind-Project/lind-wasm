@@ -337,8 +337,6 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
     // round up the break to multiple of pages
     let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
 
-    // TODO: check if brk has enough space
-
     // if we are incrementing program break, we need to check if we have enough space
     if brk_page > old_brk_page {
         if vmmap.check_existing_mapping(old_brk_page, brk_page - old_brk_page, 0) {
