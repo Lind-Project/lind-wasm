@@ -92,17 +92,13 @@ impl VmmapEntry {
         };
     }
 
-    // get maximum protection for file based mappings
-    // this is effectively whatever mode the file was opened with
-    // we need this because we shouldnt be able to change filed backed mappings 
-    // to have protections exceeding that of the file
-    /// Gets the maximum protection flags allowed for file-backed memory mappings
-    ///
-    /// Arguments:
-    /// - cage_id: Security cage identifier
-    /// - virtual_fd: Virtual file descriptor
-    ///
-    /// Returns the maximum protection flags as an i32, based on the file's mode
+    // Gets the maximum protection flags allowed for file-backed memory mappings
+    //
+    // Arguments:
+    // - cage_id: Security cage identifier
+    // - virtual_fd: Virtual file descriptor
+    //
+    // Returns the maximum protection flags as an i32, based on the file's mode
     fn get_max_prot(&self, cage_id: u64, virtual_fd: u64) -> i32 {
         // Translate the virtual file descriptor to a real one
         let wrappedvfd = fdtables::translate_virtual_fd(cage_id, virtual_fd as u64);
