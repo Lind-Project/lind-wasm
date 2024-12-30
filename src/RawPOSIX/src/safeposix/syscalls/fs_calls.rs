@@ -44,6 +44,10 @@ const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
 
 impl Cage {
+    pub extern "C" fn hello_syscall(&self) -> i32 {
+        println!("hello");
+        return 0;
+    }
     //------------------------------------OPEN SYSCALL------------------------------------
     /* 
     *   Open will return a file descriptor 
