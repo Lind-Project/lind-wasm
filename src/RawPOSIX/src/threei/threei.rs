@@ -9,7 +9,7 @@ use crate::syscall_table;
 // by using transmute inside unsafe block
 // Ref: https://doc.rust-lang.org/std/mem/fn.transmute.html
 // Function pointer type, used to save the address of the target function
-type CallFunc = fn(
+pub type CallFunc = fn(
     target_cageid:u64,
     arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64, arg6: u64,
 ) -> u64;
@@ -17,7 +17,7 @@ type CallFunc = fn(
 // Despite the fact that many calls use a callfunc, cage tuple, once I've 
 // checked the cage, I can just convert the callfunc and ignore these u64s
 #[derive(Debug, Clone)]
-struct CageCallTable {
+pub struct CageCallTable {
     defaultcallfunc: Option<HashMap<u64, CallFunc>>,             
     thiscalltable: HashMap<u64, CallFunc>,   // Callnum to jump address mapping
 }
@@ -56,7 +56,7 @@ impl CageCallTable {
 lazy_static::lazy_static! {
     #[derive(Debug)]
     // <self_cageid, <callnum, (addr, dest_cageid)>
-    static ref HANDLERTABLE: Mutex<HashMap<u64, Arc<Mutex<CageCallTable>>>> = Mutex::new(HashMap::new());
+    pub static ref HANDLERTABLE: Mutex<HashMap<u64, Arc<Mutex<CageCallTable>>>> = Mutex::new(HashMap::new());
 }
 
 /************************ Dependency relationship between cage and grate ************************/
@@ -64,7 +64,7 @@ lazy_static::lazy_static! {
 // Use HashSet for better performance
 lazy_static::lazy_static! {
     #[derive(Debug)]
-    static ref DEPENDENCY_TABLE: Mutex<HashMap<u64, HashSet<u64>>> = Mutex::new(HashMap::new());
+    pub static ref DEPENDENCY_TABLE: Mutex<HashMap<u64, HashSet<u64>>> = Mutex::new(HashMap::new());
 }
 
 pub fn add_dependency(cage: u64, dependent_grate: u64) {
@@ -303,7 +303,7 @@ pub fn copy_data_between_cages(
     // Validate destination address, and we will try to map if we don't the memory region 
     // unmapping
     if !_validate_addr(destcage, destaddr, len, PROT_WRITE).unwrap_or(false) {
-        if !_ensure_dest_mapping(destcage, destaddr, len, PROT_WRITE).unwrap_or(false) {
+        if !_attemp_dest_mapping(destcage, destaddr, len, PROT_WRITE).unwrap_or(false) {
             eprintln!("Failed to map destination address.");
             return threeiconstant::ELINDAPIABORTED; // Error: Mapping Failed
         }
@@ -466,7 +466,7 @@ pub fn make_syscall(
     let handler_table = HANDLERTABLE.lock().unwrap();
     if let Some(cagecall_table) = handler_table.get(&targetcage) {
         let cagecalltable = cagecall_table.lock().unwrap();
-        if let Some(jump_address) = cagecalltable.get(callnum) {
+        if let Some(jump_address) = cagecalltable.thiscalltable.get(callnum) {
             unsafe {
                 return func(
                     targetcage,

@@ -1,11 +1,13 @@
-pub mod threei;
-pub mod threeiconstant;
-pub mod syscall_table;
-pub mod syscall_map;
+
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    pub mod threei::*;
+    pub mod threeiconstant;
+    pub mod syscall_table;
+    pub mod syscall_map;
+    use std::sync::{Arc, Mutex};
     #[test]
     fn test_make_syscall() {
         {
