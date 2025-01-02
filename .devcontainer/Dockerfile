@@ -14,7 +14,12 @@ RUN apt install apt-transport-https curl gnupg -y && \
 RUN apt update && apt install -y bazel
 RUN go install github.com/bazelbuild/buildtools/buildifier@latest
 
-RUN useradd -ms /bin/bash lind
+
+
+ARG USERNAME=lind
+
+RUN usermod --login ${USERNAME} --move-home --home /home/${USERNAME} ubuntu && \
+    groupmod --new-name ${USERNAME} ubuntu
 RUN echo "lind ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 

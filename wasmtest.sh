@@ -14,7 +14,9 @@
 # To modify timeout time use(default is 5s): ./wasmtime <the method> --timeout=<the time you want in second>
 # To modify LIND_WASM_BASE use(default is /home/lind-wasm): export LIND_WASM_BASE=<path you want>
 
-LIND_WASM_BASE="${LIND_WASM_BASE:-/home/lind-wasm}"
+set -e -o pipefail
+
+LIND_WASM_BASE="${LIND_WASM_BASE:-/home/lind/lind-wasm}"
 
 DEFAULT_TIMEOUT=5
 TIMEOUT=$DEFAULT_TIMEOUT
