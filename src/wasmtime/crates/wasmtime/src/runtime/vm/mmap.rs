@@ -100,7 +100,7 @@ impl Mmap {
         assert!(start <= self.len() - len);
 
         // lind-wasm: mmap prot is managed by rawposix
-        // self.sys.make_accessible(start, len)
+        // so we are skipping wasmtime's sys mmap here
         Ok(())
     }
 
