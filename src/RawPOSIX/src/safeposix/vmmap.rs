@@ -1,7 +1,5 @@
 use crate::constants::{
-    PROT_NONE, PROT_READ, PROT_WRITE, PROT_EXEC,
-    MAP_SHARED, MAP_PRIVATE, MAP_FIXED, MAP_ANONYMOUS,
-    MAP_FAILED
+    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE
 };
 use std::io;
 use nodit::NoditMap;
@@ -9,6 +7,9 @@ use nodit::{interval::ie, Interval};
 use crate::fdtables;
 use crate::safeposix::cage::syscall_error;
 use crate::safeposix::cage::Errno;
+
+const DEFAULT_VMMAP_SIZE: u32 = 1 << (32 - PAGESHIFT);
+
 /// Used to identify whether the vmmap entry is backed anonymously,
 /// by an fd, or by a shared memory segment
 /// 
@@ -243,8 +244,11 @@ pub struct Vmmap {
     pub entries: NoditMap<u32, Interval<u32>, VmmapEntry>, // Keyed by `page_num`
     pub cached_entry: Option<VmmapEntry>,                  // TODO: is this still needed?
                                                            // Use Option for safety
-    pub base_address: Option<i64>,                         // wasm base address. None means uninitialized yet
+    pub base_address: Option<usize>,                       // wasm base address. None means uninitialized yet
 
+    pub start_address: u32,                                // start address of valid vmmap address range
+    pub end_address: u32,                                  // end address of valid vmmap address range
+    pub program_break: u32,                                // program break (i.e. heap bottom) of the memory
 }
 
 #[allow(dead_code)]
@@ -255,7 +259,10 @@ impl Vmmap {
         Vmmap {
             entries: NoditMap::new(),
             cached_entry: None,
-            base_address: None
+            base_address: None,
+            start_address: 0,
+            end_address: DEFAULT_VMMAP_SIZE,
+            program_break: 0,
         }
     }
 
@@ -287,9 +294,17 @@ impl Vmmap {
     ///
     /// Arguments:
     /// - base_address: The base address to set
-    pub fn set_base_address(&mut self, base_address: i64) {
+    pub fn set_base_address(&mut self, base_address: usize) {
         // Store the provided base address
         self.base_address = Some(base_address);
+    }
+
+    /// Sets the program break for the memory
+    ///
+    /// Arguments:
+    /// - program_break: The program break to set
+    pub fn set_program_break(&mut self, program_break: u32) {
+        self.program_break = program_break;
     }
 
     /// Converts a user address to a system address
@@ -298,9 +313,9 @@ impl Vmmap {
     /// - address: User space address to convert
     ///
     /// Returns the corresponding system address
-    pub fn user_to_sys(&self, address: i32) -> i64 {
+    pub fn user_to_sys(&self, address: u32) -> usize {
         // Add base address to user address to get system address
-        address as i64 + self.base_address.unwrap()
+        address as usize + self.base_address.unwrap()
     }
 
     /// Converts a system address to a user address
@@ -309,9 +324,9 @@ impl Vmmap {
     /// - address: System address to convert
     ///
     /// Returns the corresponding user space address
-    pub fn sys_to_user(&self, address: i64) -> i32 {
+    pub fn sys_to_user(&self, address: usize) -> u32 {
         // Subtract base address from system address to get user address
-        (address as i64 - self.base_address.unwrap()) as i32
+        (address as usize - self.base_address.unwrap()) as u32
     }
 
     // Visits each entry in the vmmap, applying a visitor function to each entry
@@ -814,24 +829,17 @@ impl VmmapOps for Vmmap {
     /// - Some(Interval) containing the found space
     /// - None if no suitable space found
     fn find_space(&self, npages: u32) -> Option<Interval<u32>> {
-        let start = self.first_entry();
-        let end = self.last_entry();
+        let start = self.start_address;
+        let end = self.end_address;
 
-        if start == None || end == None {
-            return None;
-        } else {
-            let start_unwrapped = start.unwrap().0.start();
-            let end_unwrapped = end.unwrap().0.end();
+        let desired_space = npages + 1; // TODO: check if this is correct
 
-            let desired_space = npages + 1; // TODO: check if this is correct
-
-            for gap in self
-                .entries
-                .gaps_trimmed(ie(start_unwrapped, end_unwrapped))
-            {
-                if gap.end() - gap.start() >= desired_space {
-                    return Some(gap);
-                }
+        for gap in self
+            .entries
+            .gaps_trimmed(ie(start, end))
+        {
+            if gap.end() - gap.start() >= desired_space {
+                return Some(gap);
             }
         }
 
@@ -852,19 +860,13 @@ impl VmmapOps for Vmmap {
     /// - None if no suitable space found
     fn find_space_above_hint(&self, npages: u32, hint: u32) -> Option<Interval<u32>> {
         let start = hint;
-        let end = self.last_entry();
+        let end = self.end_address;
 
-        if end == None {
-            return None;
-        } else {
-            let end_unwrapped = end.unwrap().0.end();
+        let desired_space = npages + 1; // TODO: check if this is correct
 
-            let desired_space = npages + 1; // TODO: check if this is correct
-
-            for gap in self.entries.gaps_trimmed(ie(start, end_unwrapped)) {
-                if gap.end() - gap.start() >= desired_space {
-                    return Some(gap);
-                }
+        for gap in self.entries.gaps_trimmed(ie(start, end)) {
+            if gap.end() - gap.start() >= desired_space {
+                return Some(gap);
             }
         }
 
@@ -888,31 +890,24 @@ impl VmmapOps for Vmmap {
     /// - Rounds page numbers up to alignment boundaries
     /// - Handles alignment constraints for start and end addresses
     fn find_map_space(&self, num_pages: u32, pages_per_map: u32) -> Option<Interval<u32>> {
-        let start = self.first_entry();
-        let end = self.last_entry();
+        let start = self.start_address;
+        let end = self.end_address;
 
-        if start == None || end == None {
-            return None;
-        } else {
-            let start_unwrapped = start.unwrap().0.start();
-            let end_unwrapped = end.unwrap().0.end();
+        let rounded_num_pages =
+            self.round_page_num_up_to_map_multiple(num_pages, pages_per_map);
 
-            let rounded_num_pages =
-                self.round_page_num_up_to_map_multiple(num_pages, pages_per_map);
+        for gap in self
+            .entries
+            .gaps_trimmed(ie(start, end))
+        {
+            let aligned_start_page =
+                self.trunc_page_num_down_to_map_multiple(gap.start(), pages_per_map);
+            let aligned_end_page =
+                self.round_page_num_up_to_map_multiple(gap.end(), pages_per_map);
 
-            for gap in self
-                .entries
-                .gaps_trimmed(ie(start_unwrapped, end_unwrapped))
-            {
-                let aligned_start_page =
-                    self.trunc_page_num_down_to_map_multiple(gap.start(), pages_per_map);
-                let aligned_end_page =
-                    self.round_page_num_up_to_map_multiple(gap.end(), pages_per_map);
-
-                let gap_size = aligned_end_page - aligned_start_page;
-                if gap_size >= rounded_num_pages {
-                    return Some(ie(aligned_end_page - rounded_num_pages, aligned_end_page));
-                }
+            let gap_size = aligned_end_page - aligned_start_page;
+            if gap_size >= rounded_num_pages {
+                return Some(ie(aligned_end_page - rounded_num_pages, aligned_end_page));
             }
         }
 
@@ -944,26 +939,20 @@ impl VmmapOps for Vmmap {
         hint: u32,
     ) -> Option<Interval<u32>> {
         let start = hint;
-        let end = self.last_entry();
+        let end = self.end_address;
 
-        if end == None {
-            return None;
-        } else {
-            let end_unwrapped = end.unwrap().0.end();
+        let rounded_num_pages =
+            self.round_page_num_up_to_map_multiple(num_pages, pages_per_map);
 
-            let rounded_num_pages =
-                self.round_page_num_up_to_map_multiple(num_pages, pages_per_map);
+        for gap in self.entries.gaps_trimmed(ie(start, end)) {
+            let aligned_start_page =
+                self.trunc_page_num_down_to_map_multiple(gap.start(), pages_per_map);
+            let aligned_end_page =
+                self.round_page_num_up_to_map_multiple(gap.end(), pages_per_map);
 
-            for gap in self.entries.gaps_trimmed(ie(start, end_unwrapped)) {
-                let aligned_start_page =
-                    self.trunc_page_num_down_to_map_multiple(gap.start(), pages_per_map);
-                let aligned_end_page =
-                    self.round_page_num_up_to_map_multiple(gap.end(), pages_per_map);
-
-                let gap_size = aligned_end_page - aligned_start_page;
-                if gap_size >= rounded_num_pages {
-                    return Some(ie(aligned_end_page - rounded_num_pages, aligned_end_page));
-                }
+            let gap_size = aligned_end_page - aligned_start_page;
+            if gap_size >= rounded_num_pages {
+                return Some(ie(aligned_end_page - rounded_num_pages, aligned_end_page));
             }
         }
 
