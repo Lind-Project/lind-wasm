@@ -525,13 +525,13 @@ impl Instance {
         self._get_export(store, entity, export_name_index)
     }
 
-    pub fn get_stack_pointer(&self, mut store: impl AsContextMut) -> Result<i32, ()> {
+    pub fn get_stack_pointer(&self, mut store: impl AsContextMut) -> Result<u32, ()> {
         if let Some(sp_extern) = self.get_export(store.as_context_mut(), "__stack_pointer") {
             match sp_extern {
                 Extern::Global(sp) => {
                     match sp.get(store.as_context_mut()) {
                         Val::I32(val) => {
-                            return Ok(val);
+                            return Ok(val as u32);
                         }
                         _ => {
                             // unexpected stack pointer type (not i32)

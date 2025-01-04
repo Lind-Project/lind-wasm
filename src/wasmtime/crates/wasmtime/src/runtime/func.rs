@@ -2123,7 +2123,7 @@ impl<T> Caller<'_, T> {
             .get_export(&mut self.store, name)
     }
 
-    pub fn get_stack_pointer(&mut self) -> Result<i32, ()> {
+    pub fn get_stack_pointer(&mut self) -> Result<u32, ()> {
         self.caller
             .host_state()
             .downcast_ref::<Instance>().ok_or(()).unwrap()

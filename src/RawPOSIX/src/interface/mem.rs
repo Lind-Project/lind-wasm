@@ -189,7 +189,6 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
         // pick an address of appropriate size, anywhere
         if useraddr == 0 {
             result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
-            println!("find map space result: {:?}", result);
         } else {
             // use address user provided as hint to find address
             result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);

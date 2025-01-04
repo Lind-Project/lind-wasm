@@ -440,7 +440,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // * stack_size: child's stack size
     // * child_tid: the address of the child's thread id. This should be set by wasmtime
     pub fn pthread_create_call(&self, mut caller: &mut Caller<'_, T>,
-                    stack_addr: i32, stack_size: i32, child_tid: u64
+                    stack_addr: u32, stack_size: u32, child_tid: u64
                 ) -> Result<i32> {
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
@@ -552,11 +552,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                 // we might also want to perserve the offset of current stack pointer to stack bottom
                 // not very sure if this is required, but just keep everything the same from parent seems to be good
-                let offset = parent_stack_high_usr as i32 - stack_pointer;
+                let offset = parent_stack_high_usr as u32 - stack_pointer;
                 let stack_pointer_setter = instance
                     .get_typed_func::<i32, ()>(&mut store, "set_stack_pointer")
                     .unwrap();
-                let _ = stack_pointer_setter.call(&mut store, stack_addr - offset);
+                let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
 
                 // get the asyncify_rewind_start and module start function
                 let child_rewind_start;
@@ -760,7 +760,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // reference comments in fork_call
         unsafe {
             // 16 because it is the size of two u64
-            *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + 16;
+            *(parent_unwind_data_start_sys as *mut u64) = parent_unwind_data_start_usr + UNWIND_METADATA_SIZE;
             *(parent_unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
         
@@ -854,7 +854,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // Then perform an unwind on the current process, but then replace the unwind_data with the saved unwind_data
     // retrieved from hashmap, and continue the rewind. This approach allows the wasm process to restore to its
     // previous state
-    pub fn setjmp_call(&self, mut caller: &mut Caller<'_, T>, jmp_buf: i32) -> Result<i32> {
+    pub fn setjmp_call(&self, mut caller: &mut Caller<'_, T>, jmp_buf: u32) -> Result<i32> {
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -877,7 +877,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // reference comments in fork_call
         unsafe {
             // 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + 16;
+            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
             *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
         
@@ -929,7 +929,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
     // longjmp call
     // See comment above `setjmp_call`
-    pub fn longjmp_call(&self, mut caller: &mut Caller<'_, T>, jmp_buf: i32, retval: i32) -> Result<i32> {
+    pub fn longjmp_call(&self, mut caller: &mut Caller<'_, T>, jmp_buf: u32, retval: i32) -> Result<i32> {
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -952,7 +952,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // reference comments in fork_call
         unsafe {
             // 16 because it is the size of two u64
-            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + 16;
+            *(unwind_data_start_sys as *mut u64) = unwind_data_start_usr + UNWIND_METADATA_SIZE;
             *(unwind_data_start_sys as *mut u64).add(1) = stack_pointer as u64;
         }
         
@@ -1094,7 +1094,7 @@ pub fn lind_fork<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
 // entry point of pthread_create syscall
 pub fn lind_pthread_create<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
         (caller: &mut Caller<'_, T>,
-        stack_addr: i32, stack_size: i32, child_tid: u64) -> Result<i32> {
+        stack_addr: u32, stack_size: u32, child_tid: u64) -> Result<i32> {
     let host = caller.data().clone();
     let ctx = host.get_ctx();
     ctx.pthread_create_call(caller, stack_addr, stack_size, child_tid)
@@ -1131,7 +1131,7 @@ pub fn clone_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
     }
     else {
         // pthread_create
-        match lind_pthread_create(caller, args.stack as i32, args.stack_size as i32, args.child_tid) {
+        match lind_pthread_create(caller, args.stack as u32, args.stack_size as u32, args.child_tid) {
             Ok(res) => res,
             Err(_e) => -1
         }
@@ -1167,7 +1167,7 @@ pub fn exit_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sy
 }
 
 pub fn setjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-        (caller: &mut Caller<'_, T>, jmp_buf: i32) -> i32 {
+        (caller: &mut Caller<'_, T>, jmp_buf: u32) -> i32 {
     // first let's check if the process is currently in rewind state
     let rewind_res = catch_rewind(caller);
     if rewind_res.is_some() {
@@ -1181,7 +1181,7 @@ pub fn setjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Syn
 }
 
 pub fn longjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-        (caller: &mut Caller<'_, T>, jmp_buf: i32, retval: i32) -> i32 {
+        (caller: &mut Caller<'_, T>, jmp_buf: u32, retval: i32) -> i32 {
     let host = caller.data().clone();
     let ctx = host.get_ctx();
 
