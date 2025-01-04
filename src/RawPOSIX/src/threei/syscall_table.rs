@@ -1,4 +1,5 @@
 use crate::threei::threei::CallFunc;
+use crate::safeposix::syscall::*;
 
 pub const SYSCALL_TABLE: &[(u64, CallFunc)] = &[
     (1, hello_syscall), // ONLY for testing purpose 

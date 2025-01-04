@@ -4,8 +4,8 @@ use std::{mem, io,};
 use crate::interface;
 use crate::safeposix::vmmap::*;
 use crate::constants::{PROT_READ, PROT_WRITE, MAP_PRIVATE};
-use crate::threeiconstant;
-use crate::syscall_table;
+use crate::threei::threeiconstant;
+use crate::threei::syscall_table;
 
 // Direct jump to the address. Transfer address to function pointer
 // by using transmute inside unsafe block
@@ -297,15 +297,15 @@ pub fn copy_data_between_cages(
 ) -> u64 {
     // Check address validity and permissions 
     // Validate source address
-     if !_validate_addr(srccage, srcaddr, len, PROT_READ).unwrap_or(false) {
+     if !_validate_addr(srccage, srcaddr, len, PROT_READ as u64).unwrap_or(false) {
         eprintln!("Source address is invalid.");
         return threeiconstant::ELINDAPIABORTED; // Error: Invalid address
     }
 
     // Validate destination address, and we will try to map if we don't the memory region 
     // unmapping
-    if !_validate_addr(destcage, destaddr, len, PROT_WRITE).unwrap_or(false) {
-        if !_attemp_dest_mapping(destcage, destaddr, len, PROT_WRITE).unwrap_or(false) {
+    if !_validate_addr(destcage, destaddr, len, PROT_WRITE as u64).unwrap_or(false) {
+        if !_attemp_dest_mapping(destcage, destaddr, len, PROT_WRITE as u64).unwrap_or(false) {
             eprintln!("Failed to map destination address.");
             return threeiconstant::ELINDAPIABORTED; // Error: Mapping Failed
         }
@@ -365,10 +365,11 @@ fn _validate_addr(
     let end_addr = addr.checked_add(len).expect("Address computation overflowed");
     // Get the base address of the cage and compute the cage valide address range
     // Memory region per cage = 2**64
-    let baseaddr = rawposix_vmmap.base_address;
+    // TODO: Add check for unwrap
+    let baseaddr = rawposix_vmmap.base_address.unwrap() as u64;
     let max_addr = baseaddr.checked_add(1 << 64).expect("Address computation overflowed");
 
-    if addr < baseaddr || end_address > max_address {
+    if addr < baseaddr || end_addr > max_addr {
         return Ok(false); // Address exceeds the cage's valid range
     }
 
@@ -376,7 +377,7 @@ fn _validate_addr(
     let end_page = (addr + len - 1) >> 12;
 
     let req_prot = required_prot as i32;
-    for page as i32 in start_page..=end_page {
+    for const { page as i32 } in start_page..=end_page {
         if let Some(entry) = rawposix_vmmap.find_page(page) {
             if entry.cage_id != cage_id || entry.prot & req_prot != req_prot {
                 return Ok(false);
@@ -402,14 +403,14 @@ fn _attemp_dest_mapping(
 
     // Because we are not sure whether all the pages from destaddr to destaddr+len are mapped, 
     // we loop each page to check and try to map them.
-    for page as i32 in start_page..=end_page {
+    for const { page as i32 } in start_page..=end_page {
         if rawposix_vmmap.find_page(page).is_none() {
             let new_entry = VmmapEntry::new(
                 page,
                 1,                       
                 required_prot as i32,    
                 required_prot as i32,    
-                MAP_PRIVATE,             
+                MAP_PRIVATE as i32,             
                 false,                   // removed = false
                 0,                      
                 0,                       
