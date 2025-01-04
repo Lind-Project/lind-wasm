@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"name": "lind-wasm",
+			"path": "../.."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"compare": "c",
+			"cstdint": "c"
+		}
+	}
+}

@@ -185,8 +185,6 @@ impl RunCommand {
         // new cage is created
         lind_manager.increment();
 
-        rawposix::safeposix::dispatcher::lind_cage_vmmap_init(1);
-
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
         // call is made that needs to block on a future a Tokio runtime is
@@ -367,8 +365,6 @@ impl RunCommand {
                 }
             }
         }
-
-        rawposix::safeposix::dispatcher::lind_cage_vmmap_init(pid as u64);
 
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
@@ -585,11 +581,6 @@ impl RunCommand {
                 let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
-
-                let handle = store.as_context().0.instance(wasmtime::InstanceId::from_index(0));
-                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                let memory_base = defined_memory.base as i64;
-                rawposix::safeposix::dispatcher::set_base_address(pid, memory_base);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),

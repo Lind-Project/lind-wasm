@@ -50,6 +50,13 @@ struct stat
        identifier 'timespec' to appear in the <sys/stat.h> header.
        Therefore we have to handle the use of this header in strictly
        standard-compliant sources special.  */
+    __time_t st_atime;			/* Time of last access.  */
+    __syscall_ulong_t st_atimensec;	/* Nscecs of last access.  */
+    __time_t st_mtime;			/* Time of last modification.  */
+    __syscall_ulong_t st_mtimensec;	/* Nsecs of last modification.  */
+    __time_t st_ctime;			/* Time of last status change.  */
+    __syscall_ulong_t st_ctimensec;	/* Nsecs of last status change.  */
+    
     struct timespec st_atim;		/* Time of last access.  */
     struct timespec st_mtim;		/* Time of last modification.  */
     struct timespec st_ctim;		/* Time of last status change.  */

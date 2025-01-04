@@ -146,11 +146,11 @@ __STD_TYPE __DEV_T_TYPE __dev_t;	/* Type of device numbers.  */
 __STD_TYPE __UID_T_TYPE __uid_t;	/* Type of user identifications.  */
 __STD_TYPE __GID_T_TYPE __gid_t;	/* Type of group identifications.  */
 __STD_TYPE __INO_T_TYPE __ino_t;	/* Type of file serial numbers.  */
-__STD_TYPE __INO64_T_TYPE __ino64_t;	/* Type of file serial numbers (LFS).*/
+__STD_TYPE __uint64_t __ino64_t;	/* Type of file serial numbers (LFS).*/
 __STD_TYPE __MODE_T_TYPE __mode_t;	/* Type of file attribute bitmasks.  */
 __STD_TYPE __NLINK_T_TYPE __nlink_t;	/* Type of file link counts.  */
 __STD_TYPE __OFF_T_TYPE __off_t;	/* Type of file sizes and offsets.  */
-__STD_TYPE __OFF64_T_TYPE __off64_t;	/* Type of file sizes and offsets (LFS).  */
+__STD_TYPE __uint64_t __off64_t;	/* Type of file sizes and offsets (LFS).  */
 __STD_TYPE __PID_T_TYPE __pid_t;	/* Type of process identifications.  */
 __STD_TYPE __FSID_T_TYPE __fsid_t;	/* Type of file system IDs.  */
 __STD_TYPE __CLOCK_T_TYPE __clock_t;	/* Type of CPU usage counts.  */
