@@ -1,49 +1,31 @@
-First you need to download lind-wasm in your docker to home directory
+# Lind
 
-```
-sudo git clone https://github.com/Lind-Project/lind-wasm.git
-```
+## Welcome to Lind!
 
-I assume you have rust else use
+Lind is a single-process sandbox that provides an option to safely execute programs. Lind executes applications using software fault isolation and a kernel microvisor to limit the potential of reaching bugs or security flaws in the application.
 
-```
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs/ | sh
-rustup install nightly
-. "$HOME/.cargo/env"
-rustup default nightly
-```
+In Old Norse, Old High German and Old English a “lind” is a shield constructed with two layers of linden wood. Linden wood shields are lightweight, and do not split easily, an appropriate metaphor for a sandboxing system which employs two technologies.
 
-set Clang path
-```
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
-tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
-export CLANG=clang_folder
-```
+## Getting started
 
-```
-cd lind-wasm
-mv ./src/glibc/wasi $CLANG/lib/clang/16/lib
-./lindtool.sh make_all
-./lindtool.sh compile_wasmtime
-```
+A quick-way to get started is using our container via DockerHub:
 
-Now let try to print `hello world!` by printf
-
-```
-./lindtool.sh cptest PATH_TO_TEST
-./lindtool.sh run PATH_TO_TEST
-```
-
-A quick-way to get start:
 ```
 docker pull securesystemslab/lind-wasm
 docker run -it securesystemslab/lind-wasm /bin/bash
 ```
 
-New Build System (Bazel):
+## Hello World!
 
-install bazel on your system: [bazel](https://bazel.build/install)
+Now let try to print `Hello world!`
+
 ```
-bazel build //:make_all
-bazel build //:make_wasmtime
+./lindtool.sh compile_test hello
+./lindtool.sh run hello
 ```
+
+## Documentation
+
+Check out our [docs]([lind-project.github.io/lind-wasm-docs/](https://lind-project.github.io/lind-wasm-docs/))! 
+
+

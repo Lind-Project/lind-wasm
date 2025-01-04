@@ -32,7 +32,12 @@ impl SharedMemory {
     /// Construct a new [`SharedMemory`].
     pub fn new(plan: MemoryPlan) -> Result<Self> {
         let (minimum_bytes, maximum_bytes) = Memory::limit_new(&plan, None)?;
-        let mmap_memory = MmapMemory::new(&plan, minimum_bytes, maximum_bytes, None)?;
+        let mut mmap_memory = MmapMemory::new(&plan, minimum_bytes, maximum_bytes, None)?;
+        // lind-wasm: we enable maximum use of memory at start
+        let max_size = 1 << 32;
+        if minimum_bytes < max_size {
+            mmap_memory.grow_to(max_size);
+        }
         Self::wrap(&plan, Box::new(mmap_memory), plan.memory)
     }
 

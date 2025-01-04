@@ -239,7 +239,7 @@ pub fn lind_syscall_api(
             let mut fildes = arg5 as i32;
             let off = arg6 as i64;
             
-            interface::mmap_handler(cageid, addr, len, prot, flags, fildes, off)
+            interface::mmap_handler(cageid, addr, len, prot, flags, fildes, off) as i32
         }
 
         PREAD_SYSCALL => {
@@ -1204,33 +1204,32 @@ pub fn lind_syscall_api(
             cage.waitpid_syscall(pid, status, options)
         }
 
-
         SBRK_SYSCALL => {
+            let brk = arg1 as i32;
+
+            interface::sbrk_handler(cageid, brk) as i32
+        }
+
+        BRK_SYSCALL => {
             let brk = arg1 as u32;
 
-            interface::sbrk_handler(cageid, brk)
+            interface::brk_handler(cageid, brk)
         }
 
         _ => -1, // Return -1 for unknown syscalls
     };
+
     ret
 }
 
-// initilize the vmmap, invoked by wasmtime
-pub fn lind_cage_vmmap_init(cageid: u64) {
-    let cage = interface::cagetable_getref(cageid);
-    let mut vmmap = cage.vmmap.write();
-    vmmap.add_entry(VmmapEntry::new(0, 0x30, PROT_WRITE | PROT_READ, 0 /* not sure about this field */, (MAP_PRIVATE | MAP_ANONYMOUS) as i32, false, 0, 0, cageid, MemoryBackingType::Anonymous));
-    // BUG: currently need to insert an entry at the end to indicate the end of memory space. This should be fixed soon so that
-    //      no dummy entries are required to be inserted
-    vmmap.add_entry(VmmapEntry::new(1 << 18, 1, PROT_NONE, 0 /* not sure about this field */, (MAP_PRIVATE | MAP_ANONYMOUS) as i32, false, 0, 0, cageid, MemoryBackingType::Anonymous));
-}
-
 // set the wasm linear memory base address to vmmap
-pub fn set_base_address(cageid: u64, base_address: i64) {
+pub fn init_vmmap_helper(cageid: u64, base_address: usize, program_break: Option<u32>) {
     let cage = interface::cagetable_getref(cageid);
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
+    if program_break.is_some() {
+        vmmap.set_program_break(program_break.unwrap());
+    }
 }
 
 // clone the cage memory. Invoked by wasmtime after cage is forked
@@ -1241,6 +1240,11 @@ pub fn fork_vmmap_helper(parent_cageid: u64, child_cageid: u64) {
     let child_vmmap = child_cage.vmmap.read();
 
     interface::fork_vmmap(&parent_vmmap, &child_vmmap);
+
+    // update program break for child
+    drop(child_vmmap);
+    let mut child_vmmap = child_cage.vmmap.write();
+    child_vmmap.set_program_break(parent_vmmap.program_break);
 }
 
 #[no_mangle]

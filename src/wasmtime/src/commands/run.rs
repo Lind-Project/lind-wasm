@@ -9,16 +9,18 @@ use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
+use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
+use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
-use wasmtime::{AsContext, AsContextMut, Engine, Func, Module, Store, StoreLimits, Val, ValType};
+use wasmtime::{AsContext, AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
@@ -214,7 +216,7 @@ impl RunCommand {
                 // exit the cage
                 lind_syscall_api(
                     1,
-                    30,
+                    EXIT_SYSCALL as u32,
                     0,
                     0,
                     code as u64,
@@ -554,7 +556,7 @@ impl RunCommand {
         let result = match linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
-                let instance = linker.instantiate(&mut *store, &module).context(format!(
+                let instance = linker.instantiate_with_lind(&mut *store, &module, InstantiateType::InstantiateFirst(pid)).context(format!(
                     "failed to instantiate {:?}",
                     self.module_and_args[0]
                 ))?;
