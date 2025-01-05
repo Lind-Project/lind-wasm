@@ -433,6 +433,7 @@ impl Cage {
     
     pub fn readlinkat_syscall(&self, virtual_fd: i32, path: &str, buf: *mut u8, buflen: usize) -> i32 {
         let mut path = path.to_string();
+        let vfd;
         if virtual_fd == libc::AT_FDCWD {
             // Check if the fd is AT_FDCWD
             let cwd_container = self.cwd.read();
@@ -443,7 +444,7 @@ impl Cage {
             if wrappedvfd.is_err() {
                 return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
             }
-            let vfd = wrappedvfd.unwrap();
+            vfd = wrappedvfd.unwrap();
         }
         
         // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
