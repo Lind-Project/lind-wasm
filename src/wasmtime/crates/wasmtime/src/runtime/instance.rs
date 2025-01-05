@@ -11,6 +11,9 @@ use crate::{
     StoreContext, StoreContextMut, Table, TypedFunc,
 };
 use alloc::sync::Arc;
+use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
+use rawposix::safeposix::dispatcher::lind_syscall_api;
+use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 use core::ptr::NonNull;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
@@ -18,6 +21,14 @@ use wasmtime_environ::{
 };
 
 use super::Val;
+
+pub enum InstantiateType {
+    InstantiateFirst(u64),
+    InstantiateChild {
+        parent_pid: u64,
+        child_pid: u64,
+    },
+}
 
 /// An instantiated WebAssembly module.
 ///
@@ -206,6 +217,66 @@ impl Instance {
         imports: Imports<'_>,
     ) -> Result<Instance> {
         let (instance, start) = Instance::new_raw(store.0, module, imports)?;
+
+        if let Some(start) = start {
+            instance.start_raw(store, start)?;
+        }
+        Ok(instance)
+    }
+
+    pub(crate) unsafe fn new_started_impl_with_lind<T>(
+        store: &mut StoreContextMut<'_, T>,
+        module: &Module,
+        imports: Imports<'_>,
+        instantiate_type: InstantiateType,
+    ) -> Result<Instance> {
+        let (instance, start) = Instance::new_raw(store.0, module, imports)?;
+
+        // initialize the memory
+        // the memory initialization should happen inside microvisor, so we should discard the original
+        // memory init in wasmtime and do our own initialization here
+        match instantiate_type {
+            // InstantiateFirst: this is the first wasm instance
+            InstantiateType::InstantiateFirst(pid) => {
+                // if this is the first wasm instance, we need to
+                // 1. set memory base address
+                // 2. manually call mmap_syscall to set up the first memory region
+                let handle = store.0.instance(InstanceId::from_index(0));
+                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
+                let memory_base = defined_memory.base as usize;
+                rawposix::safeposix::dispatcher::init_vmmap_helper(pid, memory_base, Some(0x30));
+
+                lind_syscall_api(
+                    pid,
+                    MMAP_SYSCALL as u32,
+                    0,
+                    memory_base as u64,
+                    0, // the first memory region starts from 0
+                    0x30 << PAGESHIFT, // we allocate 0x30 pages for the first memory region, which is the default value in wasmtime
+                    (PROT_READ | PROT_WRITE) as u64,
+                    (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
+                    // we need to pass -1 here, but since lind_syscall_api only accepts u64
+                    // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
+                    (0 - 1) as u64,
+                    0,
+                );
+            },
+            // InstantiateChild: this is the child wasm instance forked by parent
+            InstantiateType::InstantiateChild { parent_pid, child_pid } => {
+                // if this is a child, we do not need to specifically set up the first memory region
+                // since this should be taken care of when we fork the entire memory region from parent
+                // therefore in this case, we only need to:
+                // 1. set memory base address
+                // 2. fork the memory space from parent
+                let handle = store.0.instance(InstanceId::from_index(0));
+                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
+                let child_address = defined_memory.base as usize;
+            
+                rawposix::safeposix::dispatcher::init_vmmap_helper(child_pid, child_address, None);
+                rawposix::safeposix::dispatcher::fork_vmmap_helper(parent_pid as u64, child_pid);
+            }
+        }
+
         if let Some(start) = start {
             instance.start_raw(store, start)?;
         }
@@ -454,13 +525,13 @@ impl Instance {
         self._get_export(store, entity, export_name_index)
     }
 
-    pub fn get_stack_pointer(&self, mut store: impl AsContextMut) -> Result<i32, ()> {
+    pub fn get_stack_pointer(&self, mut store: impl AsContextMut) -> Result<u32, ()> {
         if let Some(sp_extern) = self.get_export(store.as_context_mut(), "__stack_pointer") {
             match sp_extern {
                 Extern::Global(sp) => {
                     match sp.get(store.as_context_mut()) {
                         Val::I32(val) => {
-                            return Ok(val);
+                            return Ok(val as u32);
                         }
                         _ => {
                             // unexpected stack pointer type (not i32)
@@ -922,6 +993,22 @@ impl<T> InstancePre<T> {
         // constructor of `InstancePre` to assert that all the imports we're passing
         // in match the module we're instantiating.
         unsafe { Instance::new_started(&mut store, &self.module, imports.as_ref()) }
+    }
+
+    pub fn instantiate_with_lind(&self, mut store: impl AsContextMut<Data = T>, instantiate_type: InstantiateType) -> Result<Instance> {
+        let mut store = store.as_context_mut();
+        let imports = pre_instantiate_raw(
+            &mut store.0,
+            &self.module,
+            &self.items,
+            self.host_funcs,
+            &self.func_refs,
+        )?;
+
+        // This unsafety should be handled by the type-checking performed by the
+        // constructor of `InstancePre` to assert that all the imports we're passing
+        // in match the module we're instantiating.
+        unsafe { Instance::new_started_impl_with_lind(&mut store, &self.module, imports.as_ref(), instantiate_type) }
     }
 
     /// Creates a new instance, running the start function asynchronously
