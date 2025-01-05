@@ -370,6 +370,59 @@ impl Cage {
         
     }
 
+    //------------------------------------READLINK and READLINKAT SYSCALL------------------------------------
+    /*
+    *   readlink() places the contents of the symbolic link pathname in
+       the buffer buf, which has size bufsiz.  readlink() does not
+       append a terminating null byte to buf.  It will (silently)
+       truncate the contents (to a length of bufsiz characters), in case
+       the buffer is too small to hold all of the contents.
+       
+       So we need to first 
+    */
+    pub fn readlink_syscall(&self, path: &str, buf: *mut u8, buflen: usize) -> i32 {
+        // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
+        // perspective)
+        let relpath = normpath(convpath(path), self);
+        let relative_path = relpath.to_str().unwrap();
+        let full_path = format!("{}{}", LIND_ROOT, relative_path);
+        let c_path = CString::new(full_path).unwrap();
+
+        let libcret = unsafe {
+            libc::readlink(c_path.as_ptr(), buf as *mut c_char, buflen)
+        };
+
+        if libcret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "readlink");
+        }
+
+    }
+    
+    pub fn readlinkat_syscall(&self, virtual_fd: i32, path: &str, buf: *mut u8, buflen: usize) -> i32 {
+        // Convert the virtual fd into real kernel fd and handle the error case
+        let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
+        }
+        let vfd = wrappedvfd.unwrap();
+        // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
+        // perspective)
+        let relpath = normpath(convpath(path), self);
+        let relative_path = relpath.to_str().unwrap();
+        let full_path = format!("{}{}", LIND_ROOT, relative_path);
+        let c_path = CString::new(full_path).unwrap();
+
+        let libcret = unsafe {
+            libc::readlinkat(vfd.underfd as i32, c_path.as_ptr(), buf as *mut c_char, buflen)
+        };
+
+        if libcret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "readlinkat");
+        }
+    }
+
     //------------------------------------WRITE SYSCALL------------------------------------
     /*
     *   Get the kernel fd with provided virtual fd first

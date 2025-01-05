@@ -153,7 +153,8 @@ extern int __symlink (const char *__from, const char *__to);
 extern int __symlinkat (const char *__from, int __fd, const char *__to);
 extern ssize_t __readlink (const char *__path, char *__buf, size_t __len)
      attribute_hidden;
-extern ssize_t __readlinkat (int __fd, const char *__file_name, char *__buf, size_t __len);
+extern ssize_t __readlinkat (int __fd, const char *__file_name, char *__buf, size_t __len)
+	 attribute_hidden;
 extern int __unlink (const char *__name) attribute_hidden;
 extern int __unlinkat (int __fd, const char *__name, int __flag);
 extern int __gethostname (char *__name, size_t __len) attribute_hidden;

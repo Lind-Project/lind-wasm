@@ -18,18 +18,19 @@
 
 #include <unistd.h>
 #include <fcntl.h>
-#include <sysdep.h>
+#include <sysdep-cancel.h>
+#include <syscall-template.h>
 
 /* Read the contents of the symbolic link PATH into no more than
    LEN bytes of BUF.  The contents are not null-terminated.
    Returns the number of characters read, or -1 for errors.  */
+/*
+* Edit Note:
+* We implement both `readlink` and `readlinkat` in RawPOSIX, so changed the normal 
+*/
 ssize_t
-__readlink (const char *path, char *buf, size_t len)
+__libc_readlink (const char *path, char *buf, size_t len)
 {
-#ifdef __NR_readlink
-  return INLINE_SYSCALL_CALL (readlink, path, buf, len);
-#else
-  return INLINE_SYSCALL_CALL (readlinkat, AT_FDCWD, path, buf, len);
-#endif
+  return MAKE_SYSCALL(165, "syscall|readlink", (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
-weak_alias (__readlink, readlink)
+weak_alias(__libc_readlink, readlink)
