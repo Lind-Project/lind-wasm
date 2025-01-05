@@ -380,7 +380,12 @@ impl Cage {
        
        So we need to first 
     */
-    pub fn readlink_syscall(&self, path: &str, buf: *mut u8, buflen: usize) -> i32 {
+    pub fn readlink_syscall(
+        &self, 
+        path: &str, 
+        buf: *mut u8, 
+        buflen: usize,
+    ) -> i32 {
         // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
         // perspective)
         let relpath = normpath(convpath(path), self);
@@ -431,39 +436,46 @@ impl Cage {
         bytes_to_copy as i32
     }
     
-    pub fn readlinkat_syscall(&self, virtual_fd: i32, path: &str, buf: *mut u8, buflen: usize) -> i32 {
+    pub fn readlinkat_syscall(
+        &self, 
+        virtual_fd: i32, 
+        path: &str, 
+        buf: *mut u8, 
+        buflen: usize,
+    ) -> i32 {
+        let mut libcret;
         let mut path = path.to_string();
-        let vfd;
+        let libc_buflen = buflen + LIND_ROOT.len();
+        let mut libc_buf = vec![0u8; libc_buflen];
         if virtual_fd == libc::AT_FDCWD {
             // Check if the fd is AT_FDCWD
             let cwd_container = self.cwd.read();
             path = format!("{}/{}", cwd_container.to_str().unwrap(), path);
+            // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
+            // perspective)
+            let relpath = normpath(convpath(&path), self);
+            let relative_path = relpath.to_str().unwrap();
+            let full_path = format!("{}{}", LIND_ROOT, relative_path);
+            let c_path = CString::new(full_path).unwrap();
+
+            libcret = unsafe {
+                libc::readlink(c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
+            };
+
         } else {
             // Convert the virtual fd into real kernel fd and handle the error case
             let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
             if wrappedvfd.is_err() {
                 return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
             }
-            vfd = wrappedvfd.unwrap();
-        }
-        
-        // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
-        // perspective)
-        let relpath = normpath(convpath(&path), self);
-        let relative_path = relpath.to_str().unwrap();
-        let full_path = format!("{}{}", LIND_ROOT, relative_path);
-        let c_path = CString::new(full_path).unwrap();
-
-        // Call libc::readlink to get the original symlink target
-        let libc_buflen = buflen + LIND_ROOT.len();
-        let mut libc_buf = vec![0u8; libc_buflen];
-
-        let mut libcret;
-        if virtual_fd == libc::AT_FDCWD {
-            libcret = unsafe {
-                libc::readlink(c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
-            };
-        } else {
+            let vfd = wrappedvfd.unwrap();
+            // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
+            // perspective)
+            let relpath = normpath(convpath(&path), self);
+            let relative_path = relpath.to_str().unwrap();
+            let full_path = format!("{}{}", LIND_ROOT, relative_path);
+            let c_path = CString::new(full_path).unwrap();
+            
             libcret = unsafe {
                 libc::readlinkat(vfd.underfd as i32, c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
             };
@@ -471,8 +483,6 @@ impl Cage {
 
         if libcret < 0 {
             let errno = get_errno();
-            print!("libcret: {:?}", libcret); 
-            io::stdout().flush().unwrap();
             return handle_errno(errno, "readlinkat");
         }
 
@@ -480,9 +490,6 @@ impl Cage {
         let libcbuf_str = unsafe {
             CStr::from_ptr(libc_buf.as_ptr() as *const c_char)
         }.to_str().unwrap();
-
-        print!("libcbuf_str: {:?}", libcbuf_str); 
-        io::stdout().flush().unwrap();
 
         // Use libc::getcwd to get the current working directory
         let mut cwd_buf = vec![0u8; 4096];
@@ -506,9 +513,6 @@ impl Cage {
         unsafe {
             std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf, bytes_to_copy);
         }
-
-        print!("bytes_to_copy: {:?}", bytes_to_copy); 
-        io::stdout().flush().unwrap();
 
         bytes_to_copy as i32
     }

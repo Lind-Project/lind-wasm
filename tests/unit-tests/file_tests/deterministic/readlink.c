@@ -4,13 +4,17 @@
 #include <errno.h>
 #include <string.h>
 
+const char* VALID_SYMBOLIC_PATH = "testfiles/readlinkfile";
+const char* NON_SYMBOLIC_PATH = "testfiles/fstatfile.txt";
+const char* NON_EXISTENT_PATH = "testfiles/nonexistent";
+
 void test_readlink() {
     char buf[1024];
     ssize_t len;
 
     // Test Case 1: Valid symbolic link
     printf("\n=== Test Case 1: Valid symbolic link ===\n");
-    len = readlink("testfiles/readlinkfile", buf, sizeof(buf));
+    len = readlink(VALID_SYMBOLIC_PATH, buf, sizeof(buf));
     if (len != -1) {
         buf[len] = '\0'; // Null-terminate the result to print the result
         printf("Symbolic link points to: %s\n", buf);
@@ -20,7 +24,7 @@ void test_readlink() {
 
     // Test Case 2: Path is not a symbolic link
     printf("\n=== Test Case 2: Path is not a symbolic link ===\n");
-    len = readlink("testfiles/fstatfile.txt", buf, sizeof(buf));
+    len = readlink(NON_SYMBOLIC_PATH, buf, sizeof(buf));
     if (len == -1) {
         printf("Expected failure: %s\n", strerror(errno));
     } else {
@@ -29,7 +33,7 @@ void test_readlink() {
 
     // Test Case 3: Symbolic link with buffer too small
     printf("\n=== Test Case 3: Symbolic link with buffer too small ===\n");
-    len = readlink("testfiles/readlinkfile", buf, 5); // Intentionally small buffer
+    len = readlink(VALID_SYMBOLIC_PATH, buf, 5); // Intentionally small buffer
     if (len != -1) {
         printf("Symbolic link truncated result: %.*s\n", (int)len, buf);
     } else {
@@ -38,7 +42,7 @@ void test_readlink() {
 
     // Test Case 4: Non-existent path
     printf("\n=== Test Case 4: Non-existent path ===\n");
-    len = readlink("testfiles/nonexistent", buf, sizeof(buf));
+    len = readlink(NON_EXISTENT_PATH, buf, sizeof(buf));
     if (len == -1) {
         printf("Expected failure: %s\n", strerror(errno));
     } else {

@@ -5,12 +5,16 @@
 #include <errno.h>
 #include <string.h>
 
+const char* VALID_SYMBOLIC_PATH = "testfiles/readlinkfile";
+const char* NON_SYMBOLIC_PATH = "testfiles/fstatfile.txt";
+const char* NON_EXISTENT_PATH = "testfiles/nonexistent";
+
 void test_readlinkat() {
     char buf[1024];
     ssize_t len;
 
     // Test Case 1: Valid symbolic link with AT_FDCWD
-    len = readlinkat(AT_FDCWD, "testfiles/readlinkfile", buf, sizeof(buf));
+    len = readlinkat(AT_FDCWD, VALID_SYMBOLIC_PATH, buf, sizeof(buf));
     if (len != -1) {
         buf[len] = '\0'; // Null-terminate the result
         printf("Test Case 1: Symbolic link points to: %s\n", buf);
@@ -24,7 +28,7 @@ void test_readlinkat() {
         perror("Failed to open directory");
         return;
     }
-    len = readlinkat(dirfd, "testfiles/readlinkfile", buf, sizeof(buf));
+    len = readlinkat(dirfd, VALID_SYMBOLIC_PATH, buf, sizeof(buf));
     if (len != -1) {
         buf[len] = '\0'; // Null-terminate the result
         printf("Test Case 2: Symbolic link points to: %s\n", buf);
@@ -34,7 +38,7 @@ void test_readlinkat() {
     close(dirfd);
 
     // Test Case 3: Non-existent symbolic link
-    len = readlinkat(AT_FDCWD, "testfiles/readlinkfile.txt", buf, sizeof(buf));
+    len = readlinkat(AT_FDCWD, NON_EXISTENT_PATH, buf, sizeof(buf));
     if (len == -1) {
         printf("Test Case 3: Expected failure: %s\n", strerror(errno));
     } else {
@@ -42,7 +46,7 @@ void test_readlinkat() {
     }
 
     // Test Case 4: Invalid file descriptor
-    len = readlinkat(-1, "testfiles/readlinkfile", buf, sizeof(buf));
+    len = readlinkat(-1, VALID_SYMBOLIC_PATH, buf, sizeof(buf));
     if (len == -1) {
         printf("Test Case 4: Expected failure: %s\n", strerror(errno));
     } else {
