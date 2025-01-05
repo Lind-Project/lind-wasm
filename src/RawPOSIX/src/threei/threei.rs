@@ -39,7 +39,7 @@ impl CageCallTable {
     // This function will only be called when MATCHALL flag has been set in register_handler function
     // to initialize default 
     pub fn set_default_handler(&mut self, targetcage: u64) -> Result<(), Box<dyn std::error::Error>> {
-        for (syscall_num, syscall_name) in syscall_table {
+        for (syscall_num, syscall_name) in SYSCALL_TABLE {
             unsafe {
                 // Get function address
                 let func: CallFunc = unsafe { mem::transmute(syscall_name as *const()); };
