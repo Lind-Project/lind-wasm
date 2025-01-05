@@ -388,8 +388,11 @@ impl Cage {
         let full_path = format!("{}{}", LIND_ROOT, relative_path);
         let c_path = CString::new(full_path).unwrap();
 
+        // Call libc::readlink to get the original symlink target
+        let libc_buflen = buflen + LIND_ROOT.len();
+        let mut libc_buf = vec![0u8; libc_buflen];
         let libcret = unsafe {
-            libc::readlink(c_path.as_ptr(), buf as *mut c_char, buflen)
+            libc::readlink(c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
         };
 
         if libcret < 0 {
@@ -397,7 +400,34 @@ impl Cage {
             return handle_errno(errno, "readlink");
         }
 
-        libcret as i32
+        // Convert the result from readlink to a Rust string
+        let libcbuf_str = unsafe {
+            CStr::from_ptr(libc_buf.as_ptr() as *const c_char)
+        }.to_str().unwrap();
+
+        // Use libc::getcwd to get the current working directory
+        let mut cwd_buf = vec![0u8; 4096];
+        let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut c_char, cwd_buf.len()) };
+        if cwd_ptr.is_null() {
+            let errno = get_errno();
+            return handle_errno(errno, "getcwd");
+        }
+
+        let pwd = unsafe { CStr::from_ptr(cwd_buf.as_ptr() as *const c_char) }
+            .to_str()
+            .unwrap();
+
+        // Adjust the result
+        let adjusted_result = format!("{}/{}", pwd, libcbuf_str);
+        let final_result = adjusted_result.strip_prefix(LIND_ROOT).unwrap_or(&adjusted_result);
+
+        // Check the length and copy the appropriate amount of data to buf
+        let bytes_to_copy = std::cmp::min(buflen, final_result.len());
+        unsafe {
+            std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf, bytes_to_copy);
+        }
+
+        bytes_to_copy as i32
     }
     
     pub fn readlinkat_syscall(&self, virtual_fd: i32, path: &str, buf: *mut u8, buflen: usize) -> i32 {
