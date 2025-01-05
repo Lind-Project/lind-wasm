@@ -10,6 +10,7 @@
 // weak_alias(__GI_readlinkat, _readlinkat)
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
 
@@ -19,10 +20,17 @@
 /*
 * Edit Note:
 * We implement both `readlink` and `readlinkat` in RawPOSIX, so changed the normal 
+* This will bypass return value check in `lind_syscall.c`, so manually handle return value
+* check here
 */
 ssize_t
 __libc_readlinkat (int fd, const char *path, char *buf, size_t len)
 {
-  return MAKE_SYSCALL(166, "syscall|readlinkat",(uint64_t) fd, (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED);
+  int ret =  MAKE_SYSCALL(166, "syscall|readlinkat",(uint64_t) fd, (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED);
+  if (ret < 0) {
+    errno = -ret;
+    return -1;
+  }
+  return ret;
 }
 weak_alias(__libc_readlinkat, readlinkat)

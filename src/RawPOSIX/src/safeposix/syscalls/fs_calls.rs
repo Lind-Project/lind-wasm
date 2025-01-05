@@ -432,12 +432,20 @@ impl Cage {
     }
     
     pub fn readlinkat_syscall(&self, virtual_fd: i32, path: &str, buf: *mut u8, buflen: usize) -> i32 {
-        // Convert the virtual fd into real kernel fd and handle the error case
-        let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
-        if wrappedvfd.is_err() {
-            return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
+        let mut path = path.to_string();
+        if virtual_fd == libc::AT_FDCWD {
+            // Check if the virtual_fd is AT_FDCWD
+            let cwd_container = self.cwd.read();
+            path = format!("{}/{}", cwd_container.to_str().unwrap(), path);
+        } else {
+            // Convert the virtual fd into real kernel fd and handle the error case
+            let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
+            if wrappedvfd.is_err() {
+                return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
+            }
+            let vfd = wrappedvfd.unwrap();
         }
-        let vfd = wrappedvfd.unwrap();
+        
         // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
         // perspective)
         let relpath = normpath(convpath(path), self);
