@@ -450,7 +450,7 @@ impl Cage {
         let mut libc_buf = vec![0u8; libc_buflen];
 
         let libcret = unsafe {
-            libc::readlinkat(vfd.underfd as i32, c_path.as_ptr(), libc_buf as *mut c_char, libc_buflen)
+            libc::readlinkat(vfd.underfd as i32, c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
         };
 
         if libcret < 0 {
@@ -458,8 +458,8 @@ impl Cage {
             return handle_errno(errno, "readlinkat");
         }
 
-         // Convert the result from readlink to a Rust string
-         let libcbuf_str = unsafe {
+        // Convert the result from readlink to a Rust string
+        let libcbuf_str = unsafe {
             CStr::from_ptr(libc_buf.as_ptr() as *const c_char)
         }.to_str().unwrap();
 
