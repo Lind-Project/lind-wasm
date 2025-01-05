@@ -440,7 +440,7 @@ impl Cage {
         let vfd = wrappedvfd.unwrap();
 
         let mut path = path.to_string();
-        if vfd.underfd == libc::AT_FDCWD {
+        if vfd.underfd as i32 == libc::AT_FDCWD {
             // Check if the fd is AT_FDCWD
             let cwd_container = self.cwd.read();
             path = format!("{}/{}", cwd_container.to_str().unwrap(), path);
