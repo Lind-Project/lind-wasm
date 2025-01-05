@@ -463,6 +463,8 @@ impl Cage {
 
         if libcret < 0 {
             let errno = get_errno();
+            print!("libcret: {:?}", libcret); 
+            io::stdout().flush().unwrap();
             return handle_errno(errno, "readlinkat");
         }
 
@@ -470,6 +472,9 @@ impl Cage {
         let libcbuf_str = unsafe {
             CStr::from_ptr(libc_buf.as_ptr() as *const c_char)
         }.to_str().unwrap();
+
+        print!("libcbuf_str: {:?}", libcbuf_str); 
+        io::stdout().flush().unwrap();
 
         // Use libc::getcwd to get the current working directory
         let mut cwd_buf = vec![0u8; 4096];
