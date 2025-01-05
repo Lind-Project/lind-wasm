@@ -20,7 +20,7 @@ void test_readlink() {
 
     // Test Case 2: Path is not a symbolic link
     printf("\n=== Test Case 2: Path is not a symbolic link ===\n");
-    len = readlink("testfiles/readlinkfile.txt", buf, sizeof(buf));
+    len = readlink("testfiles/fstatfile.txt", buf, sizeof(buf));
     if (len == -1) {
         printf("Expected failure: %s\n", strerror(errno));
     } else {

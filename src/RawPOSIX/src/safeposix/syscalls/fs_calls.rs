@@ -417,9 +417,10 @@ impl Cage {
             .to_str()
             .unwrap();
 
-        // Adjust the result
+        // Adjust the result to user perspective
         let adjusted_result = format!("{}/{}", pwd, libcbuf_str);
-        let final_result = adjusted_result.strip_prefix(LIND_ROOT).unwrap_or(&adjusted_result);
+        let new_root = format!("{}/", LIND_ROOT);
+        let final_result = adjusted_result.strip_prefix(new_root).unwrap_or(&adjusted_result);
 
         // Check the length and copy the appropriate amount of data to buf
         let bytes_to_copy = std::cmp::min(buflen, final_result.len());
