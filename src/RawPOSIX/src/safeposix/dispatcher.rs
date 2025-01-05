@@ -208,8 +208,7 @@ pub fn lind_syscall_api(
             // Get file descriptor
             let fd = arg1 as i32;
         
-            // Check bounds using MAX_IO_BUFFER_BYTES
-            let count = std::cmp::min(arg3 as usize, i32::MAX as usize);
+            let count = arg3 as usize;
             if count == 0 {
                 return 0; // Early return for zero-length writes
             }
