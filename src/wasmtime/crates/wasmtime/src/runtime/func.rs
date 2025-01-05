@@ -2123,11 +2123,115 @@ impl<T> Caller<'_, T> {
             .get_export(&mut self.store, name)
     }
 
-    pub fn get_stack_pointer(&mut self) -> Result<i32, ()> {
+    pub fn get_stack_pointer(&mut self) -> Result<u32, ()> {
         self.caller
             .host_state()
             .downcast_ref::<Instance>().ok_or(()).unwrap()
             .get_stack_pointer(&mut self.store)
+    }
+
+    pub fn get_asyncify_start_unwind(&mut self) -> Result<TypedFunc<i32, ()>, ()> {
+        if let Some(asyncify_start_unwind_extern) = self.get_export("asyncify_start_unwind") {
+            match asyncify_start_unwind_extern {
+                Extern::Func(asyncify_start_unwind) => {
+                    match asyncify_start_unwind.typed::<i32, ()>(&self) {
+                        Ok(func) => {
+                            return Ok(func);
+                        }
+                        Err(err) => {
+                            eprintln!("the signature of asyncify_start_unwind function is not correct: {:?}", err);
+                            return Err(())
+                        }
+                    }
+                },
+                _ => {
+                    eprintln!("asyncify_start_unwind export is not a function");
+                    return Err(())
+                }
+            }
+        }
+        else {
+            eprintln!("asyncify_start_unwind export not found");
+            return Err(())
+        }
+    }
+
+    pub fn get_asyncify_stop_unwind(&mut self) -> Result<TypedFunc<(), ()>, ()> {
+        if let Some(asyncify_stop_unwind_extern) = self.get_export("asyncify_stop_unwind") {
+            match asyncify_stop_unwind_extern {
+                Extern::Func(asyncify_stop_unwind) => {
+                    match asyncify_stop_unwind.typed::<(), ()>(&self) {
+                        Ok(func) => {
+                            return Ok(func);
+                        }
+                        Err(err) => {
+                            eprintln!("the signature of asyncify_stop_unwind function is not correct: {:?}", err);
+                            return Err(())
+                        }
+                    }
+                },
+                _ => {
+                    eprintln!("asyncify_stop_unwind export is not a function");
+                    return Err(())
+                }
+            }
+        }
+        else {
+            eprintln!("asyncify_stop_unwind export not found");
+            return Err(())
+        }
+    }
+
+    pub fn get_asyncify_start_rewind(&mut self) -> Result<TypedFunc<i32, ()>, ()> {
+        if let Some(asyncify_start_rewind_extern) = self.get_export("asyncify_start_rewind") {
+            match asyncify_start_rewind_extern {
+                Extern::Func(asyncify_start_rewind) => {
+                    match asyncify_start_rewind.typed::<i32, ()>(&self) {
+                        Ok(func) => {
+                            return Ok(func);
+                        }
+                        Err(err) => {
+                            eprintln!("the signature of asyncify_start_rewind function is not correct: {:?}", err);
+                            return Err(())
+                        }
+                    }
+                },
+                _ => {
+                    eprintln!("asyncify_start_rewind export is not a function");
+                    return Err(())
+                }
+            }
+        }
+        else {
+            eprintln!("asyncify_start_rewind export not found");
+            return Err(())
+        }
+    }
+
+    pub fn get_asyncify_stop_rewind(&mut self) -> Result<TypedFunc<(), ()>, ()> {
+        if let Some(asyncify_stop_rewind_extern) = self.get_export("asyncify_stop_rewind") {
+            match asyncify_stop_rewind_extern {
+                Extern::Func(asyncify_stop_rewind) => {
+                    match asyncify_stop_rewind.typed::<(), ()>(&self) {
+                        Ok(func) => {
+                            return Ok(func);
+                        }
+                        Err(err) => {
+                            eprintln!("the signature of asyncify_stop_rewind is not correct: {:?}", err);
+                            return Err(())
+                        }
+                    }
+                },
+                _ => {
+                    eprintln!("asyncify_stop_rewind export is not a function");
+                    return Err(())
+                }
+            }
+        }
+        else {
+            eprintln!("asyncify_stop_rewind export not found");
+            return Err(())
+        }
     }
 
     /// Access the underlying data owned by this `Store`.
