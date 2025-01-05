@@ -448,7 +448,7 @@ impl Cage {
         
         // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
         // perspective)
-        let relpath = normpath(convpath(path), self);
+        let relpath = normpath(convpath(&path), self);
         let relative_path = relpath.to_str().unwrap();
         let full_path = format!("{}{}", LIND_ROOT, relative_path);
         let c_path = CString::new(full_path).unwrap();
