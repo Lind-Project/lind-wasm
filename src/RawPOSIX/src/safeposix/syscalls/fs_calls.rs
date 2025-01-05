@@ -397,7 +397,7 @@ impl Cage {
             return handle_errno(errno, "readlink");
         }
 
-        libcret
+        libcret as i32
     }
     
     pub fn readlinkat_syscall(&self, virtual_fd: i32, path: &str, buf: *mut u8, buflen: usize) -> i32 {
@@ -423,7 +423,7 @@ impl Cage {
             return handle_errno(errno, "readlinkat");
         }
 
-        libcret
+        libcret as i32
     }
 
     //------------------------------------WRITE SYSCALL------------------------------------
