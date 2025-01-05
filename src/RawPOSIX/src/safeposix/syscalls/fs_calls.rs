@@ -432,18 +432,18 @@ impl Cage {
     }
     
     pub fn readlinkat_syscall(&self, virtual_fd: i32, path: &str, buf: *mut u8, buflen: usize) -> i32 {
-        // Convert the virtual fd into real kernel fd and handle the error case
-        let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
-        if wrappedvfd.is_err() {
-            return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
-        }
-        let vfd = wrappedvfd.unwrap();
-
         let mut path = path.to_string();
-        if vfd.underfd as i32 == libc::AT_FDCWD {
+        if virtual_fd == libc::AT_FDCWD {
             // Check if the fd is AT_FDCWD
             let cwd_container = self.cwd.read();
             path = format!("{}/{}", cwd_container.to_str().unwrap(), path);
+        } else {
+            // Convert the virtual fd into real kernel fd and handle the error case
+            let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
+            if wrappedvfd.is_err() {
+                return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
+            }
+            let vfd = wrappedvfd.unwrap();
         }
         
         // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
@@ -457,9 +457,16 @@ impl Cage {
         let libc_buflen = buflen + LIND_ROOT.len();
         let mut libc_buf = vec![0u8; libc_buflen];
 
-        let libcret = unsafe {
-            libc::readlinkat(vfd.underfd as i32, c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
-        };
+        let mut libcret;
+        if virtual_fd == libc::AT_FDCWD {
+            libcret = unsafe {
+                libc::readlink(c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
+            };
+        } else {
+            libcret = unsafe {
+                libc::readlinkat(vfd.underfd as i32, c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
+            };
+        }
 
         if libcret < 0 {
             let errno = get_errno();
@@ -498,6 +505,9 @@ impl Cage {
         unsafe {
             std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf, bytes_to_copy);
         }
+
+        print!("bytes_to_copy: {:?}", bytes_to_copy); 
+        io::stdout().flush().unwrap();
 
         bytes_to_copy as i32
     }
