@@ -28,7 +28,6 @@ extern __typeof (getlogin_r) __getlogin_r  __nonnull ((1));
 //libc_hidden_proto (seteuid)
 //libc_hidden_proto (setegid)
 //libc_hidden_proto (tcgetpgrp)
-//libc_hidden_proto (readlinkat)
 //libc_hidden_proto (fsync)
 //libc_hidden_proto (fdatasync)
 
