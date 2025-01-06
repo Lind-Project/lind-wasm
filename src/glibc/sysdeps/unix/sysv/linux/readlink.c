@@ -29,10 +29,8 @@
 * We implement both `readlink` and `readlinkat` in RawPOSIX, so changed the normal 
 */
 ssize_t
-__libc_readlink (const char *path, char *buf, size_t len)
+__readlink (const char *path, char *buf, size_t len)
 {
   return MAKE_SYSCALL(165, "syscall|readlink", (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
-weak_alias(__libc_readlink, readlink)
-weak_alias(__libc_readlink, __readlink)
-libc_hidden_weak (__readlink)
+weak_alias (__readlink, readlink)

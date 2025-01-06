@@ -46,7 +46,7 @@ open		-	open		Ci:siv	__libc_open __open open
 profil		-	profil		i:piii	__profil	profil
 ptrace		-	ptrace		i:iiii	ptrace
 read		-	read		Ci:ibU	__libc_read	__read read
-readlink	-	readlink	i:spU	__libc_readlink	readlink
+readlink	-	readlink	i:spU	__readlink	readlink
 readlinkat	-	readlinkat	i:spU	__libc_readlinkat	readlinkat
 readv		-	readv		Ci:ipi	__readv		readv
 reboot		-	reboot		i:i	reboot
