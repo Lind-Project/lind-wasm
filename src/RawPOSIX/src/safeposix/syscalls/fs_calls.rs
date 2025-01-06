@@ -372,17 +372,19 @@ impl Cage {
 
     //------------------------------------READLINK and READLINKAT SYSCALL------------------------------------
     /*
-    * The return value of the readlink syscall represents the number of bytes written into the buf and -1 if 
-    * error. The contents of the buf are the file path pointed to by the symbolic link. Since the file path 
-    * perspectives differ between the user application and the host Linux, we must perform path transformations 
-    * for both the input path passed to the Rust kernel libc and the output buffer returned by the kernel libc.
+    * The return value of the readlink syscall indicates the number of bytes written into the buf and -1 if 
+    * error. The contents of the buf represent the file path that the symbolic link points to. Since the file 
+    * path perspectives differ between the user application and the host Linux, the readlink implementation 
+    * requires handling the paths for both the input passed to the Rust kernel libc and the output buffer 
+    * returned by the kernel libc.
     *
     * For the input path, the transformation is straightforward: we prepend the LIND_ROOT prefix to convert 
     * the user's relative path into a host-compatible absolute path. 
-    * However, for the output buffer, we first trip the LIND_ROOT prefix to adjust the path back to the user's 
-    * perspective. Then, according to the user-provided `buflen`, we truncate the result if it exceeds the buffer 
-    * length. This behavior aligns with the Linux readlink documentation, which states that such truncation is 
-    * performed silently.
+    * However, for the output buffer, we need to first verify whether the path written to buf is an absolute 
+    * path. If it is not, we prepend the current working directory to make it absolute. Next, we remove the 
+    * LIND_ROOT prefix to adjust the path to the user's perspective. Finally, we truncate the adjusted result 
+    * to fit within the user-provided buflen, ensuring compliance with the behavior described in the Linux 
+    * readlink man page, which states that truncation is performed silently if the buffer is too small.
     */
     pub fn readlink_syscall(
         &self, 
@@ -445,6 +447,29 @@ impl Cage {
         bytes_to_copy as i32
     }
     
+    /* 
+    * The readlinkat syscall builds upon the readlink syscall, with additional handling for the provided fd. 
+    * There are two main cases to consider:
+    *
+    * When fd is the special value AT_FDCWD:
+    * In this case, we first retrieve the current working directory path. We then append the user-provided path 
+    * to this directory path to create a complete path. After this, the handling is identical to the readlink 
+    * syscall. Therefore, the implementation delegates the underlying work to the readlink syscall.
+    *
+    * One notable point is that when fd = AT_FDCWD, there is no need to convert the virtual fd. Due to Rust's 
+    * variable scoping rules and for safety considerations (we must use the predefined fdtable API). This results 
+    * in approximately four lines of repetitive code during the path conversion step. If we plan to optimize 
+    * the implementation in the future, we can consider abstracting this step into a reusable function to avoid 
+    * redundancy.
+    *
+    * When fd is a directory fd:
+    * Handling this case is difficult without access to kernel-space code. In Linux, there is no syscall that 
+    * provides a method to resolve the directory path corresponding to a given dirfd. The Linux kernel handles 
+    * this step by utilizing its internal dentry data structure, which is not accessible from user space. 
+    * Therefore, in the RawPOSIX implementation, we assume that all paths are absolute to simplify the resolution 
+    * process.
+    *
+    */
     pub fn readlinkat_syscall(
         &self, 
         virtual_fd: i32, 

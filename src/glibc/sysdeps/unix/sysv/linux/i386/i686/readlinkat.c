@@ -1,13 +1,3 @@
-// #include <unistd.h>
-// #include <fcntl.h>
-// #include <string.h>
-
-// ssize_t __GI_readlinkat (int __fd, const char *__file_name, char *__buf, size_t __len)
-// {
-//   return 0;
-// }
-
-// weak_alias(__GI_readlinkat, _readlinkat)
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -19,9 +9,7 @@
    Returns the number of characters read, or -1 for errors.  */
 /*
 * Edit Note:
-* We implement both `readlink` and `readlinkat` in RawPOSIX, so changed the normal 
-* This will bypass return value check in `lind_syscall.c`, so manually handle return value
-* check here
+* In lind-wasm, we have separately implemented readlink and readlinkat, so we modified this part of the code to handle them individually.
 */
 ssize_t
 __libc_readlinkat (int fd, const char *path, char *buf, size_t len)

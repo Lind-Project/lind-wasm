@@ -27,7 +27,7 @@
    Returns the number of characters read, or -1 for errors.  */
 /*
 * Edit Note:
-* We implement both `readlink` and `readlinkat` in RawPOSIX, so changed the normal 
+* In lind-wasm, we have separately implemented readlink and readlinkat, so we modified this part of the code to handle them individually.
 */
 ssize_t
 __readlink (const char *path, char *buf, size_t len)
