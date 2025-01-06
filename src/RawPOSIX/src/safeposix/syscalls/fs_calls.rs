@@ -372,13 +372,17 @@ impl Cage {
 
     //------------------------------------READLINK and READLINKAT SYSCALL------------------------------------
     /*
-    *   readlink() places the contents of the symbolic link pathname in
-       the buffer buf, which has size bufsiz.  readlink() does not
-       append a terminating null byte to buf.  It will (silently)
-       truncate the contents (to a length of bufsiz characters), in case
-       the buffer is too small to hold all of the contents.
-       
-       So we need to first 
+    * The return value of the readlink syscall represents the number of bytes written into the buf and -1 if 
+    * error. The contents of the buf are the file path pointed to by the symbolic link. Since the file path 
+    * perspectives differ between the user application and the host Linux, we must perform path transformations 
+    * for both the input path passed to the Rust kernel libc and the output buffer returned by the kernel libc.
+    *
+    * For the input path, the transformation is straightforward: we prepend the LIND_ROOT prefix to convert 
+    * the user's relative path into a host-compatible absolute path. 
+    * However, for the output buffer, we first trip the LIND_ROOT prefix to adjust the path back to the user's 
+    * perspective. Then, according to the user-provided `buflen`, we truncate the result if it exceeds the buffer 
+    * length. This behavior aligns with the Linux readlink documentation, which states that such truncation is 
+    * performed silently.
     */
     pub fn readlink_syscall(
         &self, 
@@ -423,7 +427,12 @@ impl Cage {
             .unwrap();
 
         // Adjust the result to user perspective
-        let adjusted_result = format!("{}/{}", pwd, libcbuf_str);
+        // Verify if libcbuf_str starts with the current working directory (pwd)
+        let adjusted_result = if libcbuf_str.starts_with(pwd) {
+            libcbuf_str.to_string()
+        } else {
+            format!("{}/{}", pwd, libcbuf_str)
+        };
         let new_root = format!("{}/", LIND_ROOT);
         let final_result = adjusted_result.strip_prefix(&new_root).unwrap_or(&adjusted_result);
 

@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
+#include <errno.h>
 
 /* Read the contents of the symbolic link PATH into no more than
    LEN bytes of BUF.  The contents are not null-terminated.
@@ -31,6 +32,11 @@
 ssize_t
 __readlink (const char *path, char *buf, size_t len)
 {
-  return MAKE_SYSCALL(165, "syscall|readlink", (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+  int ret = MAKE_SYSCALL(165, "syscall|readlink", (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+  if (ret < 0) {
+    errno = -ret;
+    return -1;
+  }
+  return ret;
 }
 weak_alias (__readlink, readlink)
