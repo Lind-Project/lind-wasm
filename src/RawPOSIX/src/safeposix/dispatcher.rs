@@ -204,7 +204,13 @@ pub fn lind_syscall_api(
     let ret = match call_number {
         WRITE_SYSCALL => {
             let fd = arg1 as i32;
+        
             let count = arg3 as usize;
+            if count == 0 {
+                return 0; // Early return for zero-length writes
+            }
+        
+            // Get cage reference for memory operations
             let cage = interface::cagetable_getref(cageid);
             let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
                 Ok(addr) => addr as *const u8,
@@ -238,8 +244,28 @@ pub fn lind_syscall_api(
             let mut flags = arg4 as i32;
             let mut fildes = arg5 as i32;
             let off = arg6 as i64;
+<<<<<<<<< Temporary merge branch 1
+        
+            // Basic length validation
+            if len == 0 {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "mmap",
+                    "length cannot be zero"
+                );
+            }
+        
+            // Force MAP_FIXED
+            let flags = flags | MAP_FIXED as i32;
+        
+            // Turn off PROT_EXEC for non-code pages
+            let prot = prot & !PROT_EXEC;
+        
+            interface::mmap_handler(cageid, addr, len, prot, flags, fd, off)
+=========
             
             interface::mmap_handler(cageid, addr, len, prot, flags, fildes, off) as i32
+>>>>>>>>> Temporary merge branch 2
         }
 
         PREAD_SYSCALL => {
