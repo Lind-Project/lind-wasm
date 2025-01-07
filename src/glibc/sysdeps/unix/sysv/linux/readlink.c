@@ -32,11 +32,6 @@
 ssize_t
 __readlink (const char *path, char *buf, size_t len)
 {
-  int ret = MAKE_SYSCALL(165, "syscall|readlink", (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
-  if (ret < 0) {
-    errno = -ret;
-    return -1;
-  }
-  return ret;
+  return MAKE_SYSCALL(165, "syscall|readlink", (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__readlink, readlink)

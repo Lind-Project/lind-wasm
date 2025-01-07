@@ -14,11 +14,6 @@
 ssize_t
 __libc_readlinkat (int fd, const char *path, char *buf, size_t len)
 {
-  int ret =  MAKE_SYSCALL(166, "syscall|readlinkat",(uint64_t) fd, (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED);
-  if (ret < 0) {
-    errno = -ret;
-    return -1;
-  }
-  return ret;
+  return MAKE_SYSCALL(166, "syscall|readlinkat",(uint64_t) fd, (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED);
 }
 weak_alias(__libc_readlinkat, readlinkat)
