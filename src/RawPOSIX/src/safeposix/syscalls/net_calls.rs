@@ -27,7 +27,7 @@ use libc::*;
 use std::{os::fd::RawFd, ptr};
 use bit_set::BitSet;
 
-static LIND_ROOT: &str = "/home/lind/lind_project/src/safeposix-rust/tmp/";
+static LIND_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
 const FDKIND_IMSOCK: u32 = 2;

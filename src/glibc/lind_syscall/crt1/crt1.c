@@ -2,6 +2,9 @@
 #include <sysexits.h>
 
 extern char** environ;
+// environ is a global variable that holds the environment variables for a program.
+// It is typically an array of strings, where each string represents an environment variable in the format KEY=VALUE.
+// The environ variable is used to store and access environment variables passed to the program by the runtime or operating system.
 
 static char *empty_environ[1] = { NULL };
 
@@ -66,6 +69,8 @@ void __wasi_initialize_environ(void) {
     size_t environ_count;
     size_t environ_buf_size;
     __wasi_environ_sizes_get(&environ_count, &environ_buf_size);
+    // The __wasi_environ_sizes_get function retrieves the number of environment variables (environ_count) 
+    // and the total size of their contents (environ_buf_size).
     
     if (environ_count == 0) {
         environ = empty_environ;
@@ -96,6 +101,10 @@ void __wasi_initialize_environ(void) {
     // pointers into those chars.
     // TODO: Remove the casts on `environ_ptrs` and `environ_buf` once the witx is updated with char8 support.
     __wasi_environ_get((unsigned char **)environ_ptrs, (unsigned char *)environ_buf);
+    // The implementation relies on the WASI (WebAssembly System Interface) API functions, 
+    // such as __wasi_environ_sizes_get and __wasi_environ_get, to fetch and initialize environment variables.
+    // This is necessary because WebAssembly doesn't inherently provide a standard way to access environment variables, 
+    // so WASI serves as an abstraction for this purpose.
 
     environ = environ_ptrs;
     return;
@@ -103,13 +112,6 @@ oserr:
     _Exit(EX_OSERR);
 software:
     _Exit(EX_SOFTWARE);
-}
-
-int _start() {
-    __libc_setup_tls();
-    __wasi_init_tp();
-    __wasi_initialize_environ();
-    return __main_void();
 }
 
 void __wasm_call_dtors() {
@@ -120,6 +122,9 @@ void __wasi_proc_exit(unsigned int exit_code) {
     
 }
 
+__attribute__((__weak__))
+int main(int argc, char *argv[], char *envp[]);
+
 // The user's `main` function, expecting arguments.
 //
 // Note that we make this a weak symbol so that it will have a
@@ -127,7 +132,16 @@ void __wasi_proc_exit(unsigned int exit_code) {
 // it need not be defined (e.g. in reactor-style apps with no main function).
 // See also the TODO comment on `__main_void` below.
 __attribute__((__weak__))
-int __main_argc_argv(int argc, char *argv[]);
+int __main_argc_argv(int argc, char *argv[]) {
+  // This is an internal function designed to handle the program's main function when it is 
+  // expected to receive arguments (argc, argv).
+  // It serves as a wrapper around the user-defined main function.
+  
+  return main(argc, argv, environ);
+  // This wrapper function allows the runtime system to call main with the correct arguments 
+  // in an environment where the main function's signature follows the standard int main(int argc, char *argv[], char *envp[]).
+  // If the user does not define their own main function, this weakly defined function can serve as a default implementation.
+}
 
 // If the user's `main` function expects arguments, the compiler will rename
 // it to `__main_argc_argv`, and this version will get linked in, which
@@ -170,4 +184,11 @@ int __main_void(void) {
 
     // Call `__main_argc_argv` with the arguments!
     return __main_argc_argv(argc, argv);
+}
+
+int _start() {
+    __libc_setup_tls();
+    __wasi_init_tp();
+    __wasi_initialize_environ();
+    return __main_void();
 }

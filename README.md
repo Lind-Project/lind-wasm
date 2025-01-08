@@ -1,33 +1,31 @@
-First you need to download lind-wasm in your docker to home directory
+# Lind
+
+## Welcome to Lind!
+
+Lind is a single-process sandbox that provides an option to safely execute programs. Lind executes applications using software fault isolation and a kernel microvisor to limit the potential of reaching bugs or security flaws in the application.
+
+In Old Norse, Old High German and Old English a “lind” is a shield constructed with two layers of linden wood. Linden wood shields are lightweight, and do not split easily, an appropriate metaphor for a sandboxing system which employs two technologies.
+
+## Getting started
+
+A quick-way to get started is using our container via DockerHub:
 
 ```
-sudo git clone https://github.com/Lind-Project/lind-wasm.git
+docker pull securesystemslab/lind-wasm
+docker run -it securesystemslab/lind-wasm /bin/bash
 ```
 
-I assume you have rust else use
+## Hello World!
+
+Now let try to print `Hello world!`
 
 ```
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs/ | sh
-rustup install nightly
-. "$HOME/.cargo/env"
-rustup default nightly
+./lindtool.sh compile_test hello
+./lindtool.sh run hello
 ```
 
-set Clang path
-```
-export CLANG=clang_folder
-```
+## Documentation
 
-```
-cd lind-wasm
-mv ./src/glibc/wasi $CLANG/lib/clang/16/lib
-./lindtool.sh make_all
-./lindtool.sh compile_wasmtime
-```
+Check out our [docs]([lind-project.github.io/lind-wasm-docs/](https://lind-project.github.io/lind-wasm-docs/))! 
 
-Now let try to print `hello world!` by printf
 
-```
-./lindtool.sh cptest PATH_TO_TEST
-./lindtool.sh run PATH_TO_TEST
-```

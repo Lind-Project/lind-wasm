@@ -28,7 +28,7 @@ use std::mem;
 
 use crate::fdtables;
 
-static LIND_ROOT: &str = "/home/lind/lind_project/src/safeposix-rust/tmp";
+static LIND_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
@@ -49,7 +49,6 @@ impl Cage {
         let c_path = CString::new(full_path).unwrap();
 
         let kernel_fd = unsafe { libc::open(c_path.as_ptr(), oflag, mode) };
-
         
         if kernel_fd < 0 {
             let errno = get_errno();

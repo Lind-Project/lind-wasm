@@ -159,9 +159,6 @@ pub extern "C" fn rustposix_thread_init(cageid: u64, signalflag: u64) {
         cage.sigset
             .insert(pthreadid, interface::RustAtomicU64::new(0));
     }
-
-    cage.pendingsigset
-        .insert(pthreadid, interface::RustAtomicU64::new(0));
     interface::signalflag_set(signalflag);
 }
 
@@ -1158,7 +1155,6 @@ pub fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(),
-        pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(0),
         zombies: interface::RustLock::new(vec![]),
@@ -1199,7 +1195,6 @@ pub fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(),
-        pendingsigset: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(1),
         zombies: interface::RustLock::new(vec![]),
