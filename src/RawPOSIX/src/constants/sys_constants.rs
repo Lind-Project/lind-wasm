@@ -9,8 +9,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use crate::interface;
-
 // ===== User and Group ID Constants =====
 // Lind-specific default values
 pub const DEFAULT_UID: u32 = 1000;  // Default user ID

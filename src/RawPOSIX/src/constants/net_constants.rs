@@ -358,14 +358,3 @@ pub const EPOLL_CTL_MOD: i32 = 3;  // Change event registration
 
 pub const FD_SET_MAX_FD: i32 = 1024;  // Maximum file descriptor for fd_set
 
-// ===== Connection States =====
-// Lind-specific enum for internal use
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ConnState {
-    NOTCONNECTED,
-    CONNECTED,
-    CONNRDONLY,
-    CONNWRONLY,
-    LISTEN,
-    INPROGRESS,
-}

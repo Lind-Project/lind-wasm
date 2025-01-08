@@ -1196,7 +1196,7 @@ impl Cage {
             if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             } else {
-                prot = libc::PROT_READ | libc::PROT_WRITE;
+                prot = PROT_READ | PROT_WRITE;
             }
             let mut rev_shm = self.rev_shm.lock();
             rev_shm.push((shmaddr as u32, shmid));
