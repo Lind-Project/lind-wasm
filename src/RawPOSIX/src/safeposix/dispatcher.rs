@@ -3,6 +3,7 @@
 // retreive cage table
 
 const ACCESS_SYSCALL: i32 = 2;
+const UNLINKAT_SYSCALL: i32 = 3; 
 const UNLINK_SYSCALL: i32 = 4;
 const LINK_SYSCALL: i32 = 5;
 const RENAME_SYSCALL: i32 = 6;
@@ -499,6 +500,21 @@ pub fn lind_syscall_api(
             
             interface::cagetable_getref(cageid)
                 .fstat_syscall(fd, buf)
+        }
+
+        UNLINKAT_SYSCALL => {
+            let fd = arg1 as i32;
+
+            let pathname_ptr = (start_address + arg2) as *const u8;
+            
+            let pathname = unsafe {
+                CStr::from_ptr(pathname_ptr as *const i8).to_str().unwrap()
+            }; 
+
+            let flags = arg3 as i32;
+
+            interface::cagetable_getref(cageid)
+                .unlinkat_syscall(fd, pathname, flags)
         }
         
         UNLINK_SYSCALL => {
