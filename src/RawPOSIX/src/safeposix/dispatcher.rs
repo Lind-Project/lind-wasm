@@ -18,6 +18,7 @@ const TRUNCATE_SYSCALL: i32 = 16;
 const FXSTAT_SYSCALL: i32 = 17;
 const FTRUNCATE_SYSCALL: i32 = 18;
 const FSTATFS_SYSCALL: i32 = 19;
+const MPROTECT_SYSCALL: i32 = 20;
 const MMAP_SYSCALL: i32 = 21;
 const MUNMAP_SYSCALL: i32 = 22;
 const GETDENTS_SYSCALL: i32 = 23;
@@ -1619,6 +1620,50 @@ pub fn lind_syscall_api(
             let brk = arg1 as u32;
 
             interface::brk_handler(cageid, brk)
+        }
+
+        MPROTECT_SYSCALL => {
+            let addr = arg1 as u64;
+            let len = arg2 as usize;
+            let prot = arg3 as i32;
+            
+            // Early validation of protection bits
+            if (prot & !PROT_ALL) != 0 {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "mprotect",
+                    "invalid protection flags"
+                );
+            }
+
+            // Get cage reference
+            let cage = interface::cagetable_getref(cageid);
+
+            // Round length to page size (using PAGESIZE instead of PAGE_SIZE)
+            let rounded_len = (len + PAGESIZE as usize - 1) & !(PAGESIZE as usize - 1);
+            
+            // Check for overflow in rounding
+            if rounded_len < len {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "mprotect",
+                    "length overflow when rounding to page size"
+                );
+            }
+
+            // Validate memory region using check_and_convert_addr_ext
+            // Use PROT_NONE since we're just validating the address range
+            match check_and_convert_addr_ext(&cage, addr, rounded_len, PROT_NONE) {
+                Ok(sys_addr) => {
+                    // Call the implementation
+                    cage.mprotect_syscall(sys_addr as *mut u8, rounded_len, prot)
+                },
+                Err(errno) => syscall_error(
+                    errno,
+                    "mprotect",
+                    "invalid memory region"
+                ),
+            }
         }
 
         _ => -1, // Return -1 for unknown syscalls

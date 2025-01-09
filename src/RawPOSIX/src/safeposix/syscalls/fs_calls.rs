@@ -764,6 +764,28 @@ impl Cage {
         
     }
 
+    //------------------------------------MPROTECT SYSCALL------------------------------------
+    /*
+    *   mprotect() will return 0 when success, -1 when fail 
+    */
+    pub fn mprotect_syscall(&self, addr: *mut u8, len: usize, prot: i32) -> i32 {
+        // Get vmmap lock
+        let vmmap = self.vmmap.read();  // Changed to read lock since we're not modifying vmmap
+    
+        // Check if the memory region is mapped
+        if !vmmap.is_mapped_range(addr as u64, len) {
+            return -(Errno::ENOMEM as i32);
+        }
+    
+        // Call libc::mprotect
+        unsafe {
+            match libc::mprotect(addr as *mut libc::c_void, len, prot) {
+                0 => 0,  // Success
+                _ => -(Errno::EINVAL as i32)  // Error
+            }
+        }
+    }
+
     //------------------------------------MMAP SYSCALL------------------------------------
     /*
     *   Get the kernel fd with provided virtual fd first

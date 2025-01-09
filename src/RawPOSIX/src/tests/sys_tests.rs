@@ -8,6 +8,8 @@ pub mod sys_tests {
     use crate::interface;
     use crate::constants::{DEFAULT_UID, DEFAULT_GID, EXIT_SUCCESS};
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+    use crate::safeposix::{interface, syscalls::fs_calls::Errno};
+    use libc::{ PROT_READ, PROT_WRITE, PROT_EXEC, PROT_NONE };
 
     #[test]
     pub fn ut_lind_getpid() {
@@ -182,6 +184,54 @@ pub mod sys_tests {
 
         let _ = thread1.join().unwrap();
 
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_mprotect() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Allocate some memory first using mmap
+        let addr = cage.mmap_syscall(
+            std::ptr::null_mut(),  // Let system choose address
+            4096,                  // One page
+            PROT_READ | PROT_WRITE,// Initial protection
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+            -1,                    // No file descriptor
+            0                      // No offset
+        ) as *mut u8;
+
+        assert!(addr != std::ptr::null_mut(), "mmap failed");
+
+        // Test cases
+        
+        // 1. Basic protection change
+        assert_eq!(cage.mprotect_syscall(addr, 4096, PROT_READ), 0);
+
+        // 2. Change to no access
+        assert_eq!(cage.mprotect_syscall(addr, 4096, PROT_NONE), 0);
+
+        // 3. Change to all access
+        assert_eq!(cage.mprotect_syscall(addr, 4096, PROT_READ | PROT_WRITE | PROT_EXEC), 0);
+
+        // 4. Test invalid address
+        assert_eq!(cage.mprotect_syscall(std::ptr::null_mut(), 4096, PROT_READ), 
+                  -(Errno::ENOMEM as i32));
+
+        // 5. Test unaligned address
+        let unaligned_addr = (addr as usize + 1) as *mut u8;
+        assert_eq!(cage.mprotect_syscall(unaligned_addr, 4096, PROT_READ), 
+                  -(Errno::EINVAL as i32));
+
+        // 6. Test invalid protection flags
+        assert_eq!(cage.mprotect_syscall(addr, 4096, -1), 
+                  -(Errno::EINVAL as i32));
+
+        // Clean up
+        cage.munmap_syscall(addr, 4096);
         lindrustfinalize();
     }
 }

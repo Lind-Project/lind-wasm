@@ -149,6 +149,7 @@ pub const PROT_NONE: i32 = 0x0;    // Page cannot be accessed
 pub const PROT_READ: i32 = 0x1;    // Page can be read
 pub const PROT_WRITE: i32 = 0x2;   // Page can be written
 pub const PROT_EXEC: i32 = 0x4;    // Page can be executed
+pub const PROT_ALL: i32 = 0x7;     // All protection bits
 
 // Mask for all protection bits
 // Note: Some architectures may support additional bits
