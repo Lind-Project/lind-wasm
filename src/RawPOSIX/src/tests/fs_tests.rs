@@ -10,6 +10,7 @@ pub mod fs_tests {
     use libc::{c_void, O_DIRECTORY};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
+    use crate::constants::{S_IRWXA,SHMMAX,DEFAULT_UID,DEFAULT_GID};
     use crate::interface::{StatData, FSData};
     use libc::*;
     use crate::interface::{ShmidsStruct, get_errno};
@@ -421,7 +422,7 @@ pub mod fs_tests {
         //Checking if passing 0 as `len` to `mmap_syscall()`
         //correctly results in 'The value of len is 0` error.
         let mmap_result = cage.mmap_syscall(0 as *mut u8, 0, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        assert_eq!(mmap_result, -1, "Expected mmap to fail with -1 due to zero length");
+        assert_eq!(mmap_result as i32, -1, "Expected mmap to fail with -1 due to zero length");
         // Fetch the errno and check that it is `EINVAL` (Invalid argument)
         let errno = get_errno();
         assert_eq!(errno, libc::EINVAL, "Expected errno to be EINVAL for zero-length mmap");
@@ -448,7 +449,7 @@ pub mod fs_tests {
         assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
 
         let mmap_result = cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, 0, fd, 0);
-        assert_eq!(mmap_result, -1, "mmap did not fail as expected");
+        assert_eq!(mmap_result as i32, -1, "mmap did not fail as expected");
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -520,7 +521,7 @@ pub mod fs_tests {
         //allow reading correctly results in `File descriptor
         //is not open for reading` error.
         let mmap_result = cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        assert_eq!(mmap_result, -1, "Expected mmap to fail");
+        assert_eq!(mmap_result as i32, -1, "Expected mmap to fail");
         // Fetch and print the errno for debugging
         let error = get_errno();
         // Assert that the error is EACCES (Permission denied)
@@ -569,7 +570,7 @@ pub mod fs_tests {
             0,
         );        
         // Check if mmap_syscall returns -1 (failure)
-        assert_eq!(mmap_result, -1, "Expected mmap to fail due to lack of write permissions");
+        assert_eq!(mmap_result as i32, -1, "Expected mmap to fail due to lack of write permissions");
         // Fetch and check the errno for debugging
         let err = get_errno();
         // Ensure the errno is EACCES (Permission denied)
@@ -602,7 +603,7 @@ pub mod fs_tests {
 
         /* Native linux will return EINVAL - TESTED locally */
         let result = cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, -10);
-        assert_eq!(result, -1, "Expected mmap to fail with -1 for negative offset");
+        assert_eq!(result as i32, -1, "Expected mmap to fail with -1 for negative offset");
         // Verify errno is set to EINVAL
         let errno = get_errno();
         assert_eq!(errno, libc::EINVAL, "Expected errno to be EINVAL for negative offset");
@@ -613,7 +614,7 @@ pub mod fs_tests {
 
         /* Native linux will return EINVAL - TESTED locally */
         let result_beyond_eof = cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 25);
-        assert_eq!(result_beyond_eof, -1, "Expected mmap to fail with -1 for offset beyond EOF");
+        assert_eq!(result_beyond_eof as i32, -1, "Expected mmap to fail with -1 for offset beyond EOF");
     
         // Verify errno is set to EINVAL
         let errno_beyond_eof = get_errno();
@@ -711,7 +712,7 @@ pub mod fs_tests {
         //Checking if passing the invalid file descriptor
         //correctly results in `Invalid file descriptor` error.
         assert_eq!(
-            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) as i32,
             -(Errno::EBADF as i32)
         );
 

@@ -6,7 +6,7 @@
 pub mod sys_tests {
     use super::super::*;
     use crate::interface;
-    use crate::constants::DEFAULT_UID;
+    use crate::constants::{DEFAULT_UID, DEFAULT_GID, EXIT_SUCCESS};
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
 
     #[test]
