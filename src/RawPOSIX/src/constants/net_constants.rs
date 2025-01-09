@@ -17,7 +17,6 @@ use crate::interface;
 // ===== Lind-specific Configuration =====
 pub const DEFAULT_HOSTNAME: &str = "Lind";
 pub const BLOCK_TIME: interface::RustDuration = interface::RustDuration::from_micros(100);
-pub const UDSOCK_CAPACITY: usize = 212992;  // Unix domain socket buffer size
 
 // ===== Socket Types =====
 // Source: include/linux/net.h
