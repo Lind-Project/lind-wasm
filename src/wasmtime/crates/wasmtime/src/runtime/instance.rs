@@ -231,6 +231,11 @@ impl Instance {
         instantiate_type: InstantiateType,
     ) -> Result<Instance> {
         let (instance, start) = Instance::new_raw(store.0, module, imports)?;
+        // retrieve the initial memory size
+        let plans = module.compiled_module().module().memory_plans.clone();
+        let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
+        // in wasmtime, one page is 65536 bytes, so we need to convert to pagesize in rawposix
+        let minimal_pages = plan.memory.minimum * 0x10;
 
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
@@ -244,7 +249,7 @@ impl Instance {
                 let handle = store.0.instance(InstanceId::from_index(0));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let memory_base = defined_memory.base as usize;
-                rawposix::safeposix::dispatcher::init_vmmap_helper(pid, memory_base, Some(0x30));
+                rawposix::safeposix::dispatcher::init_vmmap_helper(pid, memory_base, Some(minimal_pages as u32));
 
                 lind_syscall_api(
                     pid,
@@ -252,7 +257,7 @@ impl Instance {
                     0,
                     memory_base as u64,
                     0, // the first memory region starts from 0
-                    0x30 << PAGESHIFT, // we allocate 0x30 pages for the first memory region, which is the default value in wasmtime
+                    minimal_pages << PAGESHIFT, // size of first memory region
                     (PROT_READ | PROT_WRITE) as u64,
                     (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
                     // we need to pass -1 here, but since lind_syscall_api only accepts u64
