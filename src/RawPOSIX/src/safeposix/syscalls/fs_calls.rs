@@ -51,7 +51,7 @@ impl Cage {
     *   Then return virtual fd
     */
     pub fn open_syscall(&self, path: &str, oflag: i32, mode: u32) -> i32 {
-
+        // println!("open path: {}", path);
         // Convert data type from &str into *const i8
         let relpath = normpath(convpath(path), self);
         let relative_path = relpath.to_str().unwrap();
@@ -190,6 +190,7 @@ impl Cage {
     *   stat() will return 0 when success and -1 when fail 
     */
     pub fn stat_syscall(&self, path: &str, rposix_statbuf: &mut StatData) -> i32 {
+        // println!("xstat path: {}", path);
         let relpath = normpath(convpath(path), self);
         let relative_path = relpath.to_str().unwrap();
         let full_path = format!("{}{}", LIND_ROOT, relative_path);
@@ -226,6 +227,7 @@ impl Cage {
     *   fstat() will return 0 when success and -1 when fail 
     */
     pub fn fstat_syscall(&self, virtual_fd: i32, rposix_statbuf: &mut StatData) -> i32 {
+        // println!("virtual_fd: {}", virtual_fd);
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {
             return syscall_error(Errno::EBADF, "fstat", "Bad File Descriptor");

@@ -257,7 +257,7 @@ impl Instance {
                     0,
                     memory_base as u64,
                     0, // the first memory region starts from 0
-                    minimal_pages << PAGESHIFT, // we allocate 0x30 pages for the first memory region, which is the default value in wasmtime
+                    minimal_pages << PAGESHIFT, // size of first memory region
                     (PROT_READ | PROT_WRITE) as u64,
                     (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
                     // we need to pass -1 here, but since lind_syscall_api only accepts u64

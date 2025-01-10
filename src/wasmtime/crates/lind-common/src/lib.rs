@@ -160,5 +160,19 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
         },
     )?;
 
+    linker.func_wrap(
+        "lind",
+        "debug",
+        move |mut caller: Caller<'_, T>| -> i32 {
+            let host = caller.data().clone();
+            let ctx = get_cx(&host);
+
+            let stack_pointer = caller.get_stack_pointer().unwrap();
+            println!("stack_pointer: {}", stack_pointer);
+
+            0
+        },
+    )?;
+
     Ok(())
 }

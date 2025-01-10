@@ -201,16 +201,16 @@ pub fn lind_syscall_api(
 ) -> i32 {
     let call_number = call_number as i32;
 
-    if call_number as i32 != WRITE_SYSCALL {
-        match call_name {
-            0 => {
-                println!("\x1b[90mcage {} calls UNNAMED ({})\x1b[0m", cageid, call_number);
-            },
-            _ => {
-                println!("\x1b[90mcage {} calls {} ({})\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number);
-            }
-        }
-    }
+    // if call_number as i32 != WRITE_SYSCALL {
+    //     match call_name {
+    //         0 => {
+    //             println!("\x1b[90mcage {} calls UNNAMED ({})\x1b[0m", cageid, call_number);
+    //         },
+    //         _ => {
+    //             println!("\x1b[90mcage {} calls {} ({})\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number);
+    //         }
+    //     }
+    // }
 
     let ret = match call_number {
         WRITE_SYSCALL => {
@@ -1230,30 +1230,31 @@ pub fn lind_syscall_api(
         _ => -1, // Return -1 for unknown syscalls
     };
 
-    if call_number as i32 != WRITE_SYSCALL {
-        match call_name {
-            0 => {
-                if ret < 0 {
-                    println!("\x1b[31mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
-                } else {
-                    println!("\x1b[90mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
-                }
-            },
-            _ => {
-                if ret < 0 {
-                    println!("\x1b[31mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
-                } else {
-                    println!("\x1b[90mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
-                }
-            }
-        }
-    }
+    // if call_number as i32 != WRITE_SYSCALL {
+    //     match call_name {
+    //         0 => {
+    //             if ret < 0 {
+    //                 println!("\x1b[31mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
+    //             } else {
+    //                 println!("\x1b[90mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
+    //             }
+    //         },
+    //         _ => {
+    //             if ret < 0 {
+    //                 println!("\x1b[31mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
+    //             } else {
+    //                 println!("\x1b[90mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
+    //             }
+    //         }
+    //     }
+    // }
 
     ret
 }
 
 // set the wasm linear memory base address to vmmap
 pub fn init_vmmap_helper(cageid: u64, base_address: usize, program_break: Option<u32>) {
+    println!("base address: {:?}", base_address);
     let cage = interface::cagetable_getref(cageid);
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
