@@ -17,6 +17,10 @@ pub const MAXFD: i32 = 1024;         // Maximum number of file descriptors
 pub const STARTINGPIPE: i32 = 0;     // Starting pipe descriptor number
 pub const MAXPIPE: i32 = 1024;       // Maximum number of pipes
 
+pub const STDIN_FILENO: i32 = 0;    // File descriptor for standard input
+pub const STDOUT_FILENO: i32 = 1;   // File descriptor for standard output
+pub const STDERR_FILENO: i32 = 2;   // File descriptor for standard error
+
 // ===== Inode Constants =====
 pub const ROOTDIRECTORYINODE: usize = 1;  // Root directory inode number
 pub const STREAMINODE: usize = 2;         // Stream inode number
