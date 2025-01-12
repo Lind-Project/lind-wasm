@@ -1920,7 +1920,18 @@ impl Cage {
 }
 
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
+    eprintln!("Requesting close file descriptor: {}", fdentry.underfd);
+    let kernel_fd = fdentry.underfd as i32;
+    if kernel_fd == 0 || kernel_fd == 1 || kernel_fd == 2 {
+        return;
+    }
+    eprintln!("Closing file descriptor: {}", fdentry.underfd);
     let _ret = unsafe {
         libc::close(fdentry.underfd as i32)
     };
+    if ret < 0 {
+        let errno = get_errno();
+        // return handle_errno(errno, "close");
+        panic!("kernel_close failed with errno: {:?}", errno);
+    }
 }
