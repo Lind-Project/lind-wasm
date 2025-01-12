@@ -1918,17 +1918,19 @@ impl Cage {
         ret
     }
 }
-/// In the context of the cage exit, we only need to close STDIN, STDOUT, and STDERR
-/// from the user's or cage's perspective. It is not necessary to close the host kernel's 
-/// STDIN, STDOUT, and STDERR file descriptors. Hence, the check for kernel_fd being 0, 1, or 2. 
-/// 
-/// If the host kernel's `close` call fails, the current implementation panics as dictated by 
-/// the existing API requirements. TODO: if we decide to introduce a more robust  error-handling 
-/// mechanism, it will require a systematic redesign of all related API functions.
+
+/// By using conditional compilation to handle different scenarios, it ensures that these standard fds 
+/// are not closed during RawPOSIX inner tests, preventing issues where other threads might reassign 
+/// these fds, causing unintended behavior or errors. However, in real-world applications, where 
+/// standard streams may need to be closed or redirected (e.g., for daemon processes), the function 
+/// retains its ability to close them under normal execution.
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     let kernel_fd = fdentry.underfd as i32;
     if kernel_fd == STDIN_FILENO || kernel_fd == STDOUT_FILENO || kernel_fd == STDERR_FILENO {
-        return;
+        #[cfg(test)]
+        {
+            return;
+        }
     }
 
     let ret = unsafe {
