@@ -1761,11 +1761,11 @@ pub fn lindrustinit(verbosity: isize) {
         libc::dup(1);
     }
     // STDIN
-    fdtables::get_specific_virtual_fd(0, STDIN_FILENO, FDKIND_KERNEL, STDIN_FILENO, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(0, STDIN_FILENO as u64, FDKIND_KERNEL, STDIN_FILENO as u64, false, 0).unwrap();
     // STDOUT
-    fdtables::get_specific_virtual_fd(0, STDOUT_FILENO, FDKIND_KERNEL, STDOUT_FILENO, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(0, STDOUT_FILENO as u64, FDKIND_KERNEL, STDOUT_FILENO as u64, false, 0).unwrap();
     // STDERR
-    fdtables::get_specific_virtual_fd(0, STDERR_FILENO, FDKIND_KERNEL, STDERR_FILENO, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(0, STDERR_FILENO as u64, FDKIND_KERNEL, STDERR_FILENO as u64, false, 0).unwrap();
 
     //init cage is its own parent
     let initcage = Cage {
@@ -1794,11 +1794,11 @@ pub fn lindrustinit(verbosity: isize) {
     fdtables::init_empty_cage(1);
     // Set the first 3 fd to STDIN / STDOUT / STDERR
     // STDIN
-    fdtables::get_specific_virtual_fd(1, STDIN_FILENO, FDKIND_KERNEL, STDIN_FILENO, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(1, STDIN_FILENO as u64, FDKIND_KERNEL, STDIN_FILENO as u64, false, 0).unwrap();
     // STDOUT
-    fdtables::get_specific_virtual_fd(1, STDOUT_FILENO, FDKIND_KERNEL, STDOUT_FILENO, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(1, STDOUT_FILENO as u64, FDKIND_KERNEL, STDOUT_FILENO as u64, false, 0).unwrap();
     // STDERR
-    fdtables::get_specific_virtual_fd(1, STDERR_FILENO, FDKIND_KERNEL, STDERR_FILENO, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(1, STDERR_FILENO as u64, FDKIND_KERNEL, STDERR_FILENO as u64, false, 0).unwrap();
 
 }
 
