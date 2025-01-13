@@ -1919,18 +1919,13 @@ impl Cage {
     }
 }
 
-/// By using conditional compilation to handle different scenarios, it ensures that these standard fds 
-/// are not closed during RawPOSIX inner tests, preventing issues where other threads might reassign 
-/// these fds, causing unintended behavior or errors. However, in real-world applications, where 
-/// standard streams may need to be closed or redirected (e.g., for daemon processes), the function 
-/// retains its ability to close them under normal execution.
+/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't 
+/// be closed in Lind-WASM execution, which preventing issues where other threads might reassign these 
+/// fds, causing unintended behavior or errors. 
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     let kernel_fd = fdentry.underfd as i32;
     if kernel_fd == STDIN_FILENO || kernel_fd == STDOUT_FILENO || kernel_fd == STDERR_FILENO {
-        #[cfg(test)]
-        {
-            return;
-        }
+        return;
     }
 
     let ret = unsafe {
