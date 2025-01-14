@@ -1746,19 +1746,27 @@ pub fn lindrustinit(verbosity: isize) {
     interface::cagetable_insert(0, utilcage);
     fdtables::init_empty_cage(0);
     // Set the first 3 fd to STDIN / STDOUT / STDERR
-    // STDIN
-    let dev_null = CString::new("/home/lind/lind_project/src/safeposix-rust/tmp/dev/null").unwrap();
+    // TODO:
+    // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
+    let dev_null = CString::new("/home/lind-wasm/src/RawPOSIX/tmp/dev/null").unwrap();
+
+    // Make sure that the standard file descriptor (stdin, stdout, stderr) is always valid, even if they 
+    // are closed before.
+    // Standard input (fd = 0) is redirected to /dev/null
+    // Standard output (fd = 1) is redirected to /dev/null
+    // Standard error (fd = 2) is set to copy of stdout
     unsafe {
         libc::open(dev_null.as_ptr(), O_RDONLY);
         libc::open(dev_null.as_ptr(), O_WRONLY);
         libc::dup(1);
     }
     
-    fdtables::get_specific_virtual_fd(0, 0, FDKIND_KERNEL, 0, false, 0).unwrap();
+    // STDIN
+    fdtables::get_specific_virtual_fd(0, STDIN_FILENO as u64, FDKIND_KERNEL, STDIN_FILENO as u64, false, 0).unwrap();
     // STDOUT
-    fdtables::get_specific_virtual_fd(0, 1, FDKIND_KERNEL, 1, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(0, STDOUT_FILENO as u64, FDKIND_KERNEL, STDOUT_FILENO as u64, false, 0).unwrap();
     // STDERR
-    fdtables::get_specific_virtual_fd(0, 2, FDKIND_KERNEL, 2, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(0, STDERR_FILENO as u64, FDKIND_KERNEL, STDERR_FILENO as u64, false, 0).unwrap();
 
     //init cage is its own parent
     let initcage = Cage {
@@ -1787,11 +1795,11 @@ pub fn lindrustinit(verbosity: isize) {
     fdtables::init_empty_cage(1);
     // Set the first 3 fd to STDIN / STDOUT / STDERR
     // STDIN
-    fdtables::get_specific_virtual_fd(1, 0, FDKIND_KERNEL, 0, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(1, STDIN_FILENO as u64, FDKIND_KERNEL, STDIN_FILENO as u64, false, 0).unwrap();
     // STDOUT
-    fdtables::get_specific_virtual_fd(1, 1, FDKIND_KERNEL, 1, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(1, STDOUT_FILENO as u64, FDKIND_KERNEL, STDOUT_FILENO as u64, false, 0).unwrap();
     // STDERR
-    fdtables::get_specific_virtual_fd(1, 2, FDKIND_KERNEL, 2, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(1, STDERR_FILENO as u64, FDKIND_KERNEL, STDERR_FILENO as u64, false, 0).unwrap();
 
 }
 
