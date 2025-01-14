@@ -4,6 +4,13 @@
 
 use crate::interface;
 
+/// TODO:
+/// This is a temporary location for those three constants. Need to move after 
+/// merging with vmmap-alice
+pub const STDIN_FILENO: i32 = 0;    // File descriptor for standard input
+pub const STDOUT_FILENO: i32 = 1;   // File descriptor for standard output
+pub const STDERR_FILENO: i32 = 2;   // File descriptor for standard error
+
 // Define constants using static or const
 // Imported into fs_calls file
 // pub const DT_UNKNOWN: u8 = 0;
