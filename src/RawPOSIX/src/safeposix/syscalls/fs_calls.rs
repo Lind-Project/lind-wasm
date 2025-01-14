@@ -1903,8 +1903,20 @@ impl Cage {
     }
 }
 
+/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't 
+/// be closed in Lind-WASM execution, which preventing issues where other threads might reassign these 
+/// fds, causing unintended behavior or errors. 
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
-    let _ret = unsafe {
+    let kernel_fd = fdentry.underfd as i32;
+    if kernel_fd == STDIN_FILENO || kernel_fd == STDOUT_FILENO || kernel_fd == STDERR_FILENO {
+        return;
+    }
+
+    let ret = unsafe {
         libc::close(fdentry.underfd as i32)
     };
+    if ret < 0 {
+        let errno = get_errno();
+        panic!("kernel_close failed with errno: {:?}", errno);
+    }
 }
