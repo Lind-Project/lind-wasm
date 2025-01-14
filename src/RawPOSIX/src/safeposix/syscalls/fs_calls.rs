@@ -1908,7 +1908,12 @@ impl Cage {
 /// fds, causing unintended behavior or errors. 
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     let kernel_fd = fdentry.underfd as i32;
-    if kernel_fd == STDIN_FILENO || kernel_fd == STDOUT_FILENO || kernel_fd == STDERR_FILENO {
+
+    // TODO:
+    // Need to update once we merge with vmmap-alice
+    if kernel_fd == fs_constants::STDIN_FILENO 
+        || kernel_fd == fs_constants::STDOUT_FILENO 
+        || kernel_fd == fs_constants::STDERR_FILENO {
         return;
     }
 
