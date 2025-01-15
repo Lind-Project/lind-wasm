@@ -1,7 +1,7 @@
 all: crt1.o lind_syscall.o
 
 crt1.o: crt1/crt1.c
-	/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang \
+	/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang \
 	--target=wasm32-unkown-wasi -v -Wno-int-conversion crt1/crt1.c -c \
 	-std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g -Wall -Wwrite-strings -Wundef \
 	-fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common -Wp,-U_FORTIFY_SOURCE \
@@ -15,12 +15,12 @@ crt1.o: crt1/crt1.c
 	-I../sysdeps/x86/include -I../sysdeps/x86 -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/float128 \
 	-I../sysdeps/ieee754/ldbl-96/include -I../sysdeps/ieee754/ldbl-96 -I../sysdeps/ieee754/dbl-64 \
 	-I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754 -I../sysdeps/generic -I.. -I../libio -I. -nostdinc -isystem \
-	/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/include -isystem /usr/i686-linux-gnu/include \
+	/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/include -isystem /usr/i686-linux-gnu/include \
 	-D_LIBC_REENTRANT -include /home/lind-wasm/src/glibc/build/libc-modules.h -DMODULE_NAME=libc -include ../include/libc-symbols.h \
 	-DPIC -DTOP_NAMESPACE=glibc -o ./crt1.o
 
 lind_syscall.o: lind_syscall.c
-	/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang \
+	/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang \
 	--target=wasm32-unkown-wasi -v -Wno-int-conversion lind_syscall.c -c \
 	-std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g -Wall -Wwrite-strings \
 	-Wundef -fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common \
@@ -34,7 +34,7 @@ lind_syscall.o: lind_syscall.c
 	-I../sysdeps/i386 -I../sysdeps/x86/include -I../sysdeps/x86 -I../sysdeps/wordsize-32 -I../sysdeps/ieee754/float128 \
 	-I../sysdeps/ieee754/ldbl-96/include -I../sysdeps/ieee754/ldbl-96 -I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754/flt-32 \
 	-I../sysdeps/ieee754 -I../sysdeps/generic -I.. -I../libio -I. -nostdinc -isystem \
-	/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/include -isystem /usr/i686-linux-gnu/include \
+	/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/include -isystem /usr/i686-linux-gnu/include \
 	-D_LIBC_REENTRANT -include /home/lind-wasm/src/glibc/build/libc-modules.h -DMODULE_NAME=libc \
 	-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc -o ./lind_syscall.o
 
