@@ -4,7 +4,6 @@
 //      is any faster...
 
 use crate::fdtables::threei;
-use crate::safeposix::cage;
 
 
 use dashmap::DashMap;
@@ -18,7 +17,7 @@ use std::sync::Mutex;
 // This uses a Dashmap (for cages) with an array of FDTableEntry items.
 
 // Get constants about the fd table sizes, etc.
-pub use super::commonconstants::*;
+pub use crate::fdtables::commonconstants::*;
 
 // algorithm name.  Need not be listed.  Used in benchmarking output
 #[doc(hidden)]
