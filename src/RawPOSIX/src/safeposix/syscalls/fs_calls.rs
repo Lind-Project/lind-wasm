@@ -11,7 +11,7 @@ use crate::constants::{
     SEEK_SET, SEEK_CUR, SEEK_END,
     SHMMIN, SHMMAX, SHM_RDONLY, SHM_DEST,
     DEFAULT_UID, DEFAULT_GID,
-    SEM_VALUE_MAX,
+    SEM_VALUE_MAX, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO
 };
 
 use crate::interface;
@@ -1927,9 +1927,9 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 
     // TODO:
     // Need to update once we merge with vmmap-alice
-    if kernel_fd == fs_constants::STDIN_FILENO 
-        || kernel_fd == fs_constants::STDOUT_FILENO 
-        || kernel_fd == fs_constants::STDERR_FILENO {
+    if kernel_fd == STDIN_FILENO 
+        || kernel_fd == STDOUT_FILENO 
+        || kernel_fd == STDERR_FILENO {
         return;
     }
 
