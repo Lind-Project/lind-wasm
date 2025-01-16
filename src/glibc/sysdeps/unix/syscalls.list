@@ -47,6 +47,7 @@ profil		-	profil		i:piii	__profil	profil
 ptrace		-	ptrace		i:iiii	ptrace
 read		-	read		Ci:ibU	__libc_read	__read read
 readlink	-	readlink	i:spU	__readlink	readlink
+readlinkat	-	readlinkat	i:spU	__libc_readlinkat	readlinkat
 readv		-	readv		Ci:ipi	__readv		readv
 reboot		-	reboot		i:i	reboot
 recv		-	recv		Ci:ibUi	__libc_recv	recv
