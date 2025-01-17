@@ -221,6 +221,8 @@ impl MmapMemory {
         mut maximum: Option<usize>,
         memory_image: Option<&Arc<MemoryImage>>,
     ) -> Result<Self> {
+        // lind-wasm: we enable maximum use of memory at start
+        maximum = Some(1 << 32);
         // It's a programmer error for these two configuration values to exceed
         // the host available address space, so panic if such a configuration is
         // found (mostly an issue for hypothetical 32-bit hosts).

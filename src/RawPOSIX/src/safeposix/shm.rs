@@ -1,8 +1,12 @@
 // Filesystem metadata struct
 #![allow(dead_code)]
 
-use super::syscalls::fs_constants::*;
-use super::syscalls::sys_constants::*;
+use crate::constants::{
+    PROT_NONE, PROT_READ, PROT_WRITE,
+    MAP_SHARED, MAP_PRIVATE, MAP_FIXED, MAP_ANONYMOUS,
+    SHM_RDONLY, SHM_DEST,
+};
+
 use crate::interface;
 
 use libc::*;
@@ -91,7 +95,7 @@ impl ShmSegment {
             shmaddr,
             self.size as usize,
             prot,
-            MAP_SHARED | MAP_FIXED,
+            (MAP_SHARED as i32) | (MAP_FIXED as i32),
             fobjfdno,
             0,
         )
@@ -104,7 +108,7 @@ impl ShmSegment {
             shmaddr,
             self.size as usize,
             PROT_NONE,
-            MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+            (MAP_PRIVATE as i32) | (MAP_ANONYMOUS as i32) | (MAP_FIXED as i32),
             -1,
             0,
         );
@@ -118,7 +122,7 @@ impl ShmSegment {
                 }
             }
             interface::RustHashEntry::Vacant(_) => {
-                panic!("Cage not avilable in segment attached cages");
+                panic!("Cage not available in segment attached cages");
             }
         };
     }

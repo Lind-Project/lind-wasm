@@ -74,13 +74,13 @@ impl LindCommonCtx {
 
     // setjmp call. This function needs to be handled within wasmtime, but it is not an actual syscall so we use a different routine from lind_syscall
     pub fn lind_setjmp<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-                        (&self, caller: &mut Caller<'_, T>, jmp_buf: i32) -> i32 {
+                        (&self, caller: &mut Caller<'_, T>, jmp_buf: u32) -> i32 {
         wasmtime_lind_multi_process::setjmp_call(caller, jmp_buf)
     }
 
     // longjmp call. This function needs to be handled within wasmtime, but it is not an actual syscall so we use a different routine from lind_syscall
     pub fn lind_longjmp<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-                        (&self, caller: &mut Caller<'_, T>, jmp_buf: i32, retval: i32) -> i32 {
+                        (&self, caller: &mut Caller<'_, T>, jmp_buf: u32, retval: i32) -> i32 {
         wasmtime_lind_multi_process::longjmp_call(caller, jmp_buf, retval)
     }
 
@@ -144,7 +144,7 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
             let host = caller.data().clone();
             let ctx = get_cx(&host);
             
-            ctx.lind_setjmp(&mut caller, jmp_buf)
+            ctx.lind_setjmp(&mut caller, jmp_buf as u32)
         },
     )?;
 
@@ -156,7 +156,7 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
             let host = caller.data().clone();
             let ctx = get_cx(&host);
 
-            ctx.lind_longjmp(&mut caller, jmp_buf, retval)
+            ctx.lind_longjmp(&mut caller, jmp_buf as u32, retval)
         },
     )?;
 

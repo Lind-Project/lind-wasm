@@ -347,7 +347,7 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   args->flags = clone_flags;
   args->stack = stackaddr;
   args->stack = stackaddr + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE;
-  args->stack_size = 16416 - sizeof(struct clone_args) - TLS_TCB_SIZE;
+  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE;
   args->child_tid = &pd->tid;
 
   int ret = __clone_internal(args, &start_thread, pd);
