@@ -424,6 +424,8 @@ impl RunCommand {
                 thread::sleep(timeout);
                 engine.increment_epoch();
             });
+        // if epoch_interruption is enabled, we need to set the epoch deadline to at least 1
+        // otherwise the wasm process will be interrupted immediately once started as the default deadline is 0
         } else if self.run.common.wasm.epoch_interruption.is_some() {
             store.set_epoch_deadline(1);
         }

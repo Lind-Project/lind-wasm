@@ -1115,6 +1115,7 @@ impl<T> Store<T> {
         self.inner.set_epoch_deadline(ticks_beyond_current);
     }
 
+    // get current epoch deadline
     pub fn get_epoch_deadline(&self) -> u64 {
         self.inner.get_epoch_deadline()
     }

@@ -316,6 +316,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                 let lind_manager = child_ctx.lind_manager.clone();
                 let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+                // set epoch deadline for new wasm instance to 1
                 store.set_epoch_deadline(1);
 
                 // if parent is a thread, so does the child
@@ -557,6 +558,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 let instance_pre = Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
 
                 let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+                // set epoch deadline for new wasm instance to 1
                 store.set_epoch_deadline(1);
 
                 // mark as thread

@@ -634,6 +634,7 @@ impl Engine {
         self.inner.epoch.fetch_add(1, Ordering::Relaxed);
     }
 
+    // decrement the value of epoch. Potentially serving as a way to restore epoch
     pub fn decrement_epoch(&self) {
         self.inner.epoch.fetch_sub(1, Ordering::Relaxed);
     }
