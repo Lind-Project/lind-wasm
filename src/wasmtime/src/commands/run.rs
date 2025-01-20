@@ -19,7 +19,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
-use wasmtime::{AsContextMut, Engine, Func, Module, Store, StoreLimits, Val, ValType};
+use wasmtime::{AsContextMut, Engine, Func, Module, Store, StoreLimits, UpdateDeadline, Val, ValType};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
@@ -424,6 +424,8 @@ impl RunCommand {
                 thread::sleep(timeout);
                 engine.increment_epoch();
             });
+        } else if self.run.common.wasm.epoch_interruption.is_some() {
+            store.set_epoch_deadline(1);
         }
 
         Ok(Box::new(|_store| {}))

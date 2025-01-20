@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
-use wasmtime::{AsContext, AsContextMut, Caller, ExternType, Linker, Module, SharedMemory, Store, Val, OnCalledAction, RewindingReturn, StoreOpaque, InstanceId};
+use wasmtime::{AsContext, AsContextMut, Caller, Engine, ExternType, InstanceId, Linker, Module, OnCalledAction, RewindingReturn, SharedMemory, Store, StoreOpaque, Val};
 
 use wasmtime_environ::MemoryIndex;
 
@@ -316,6 +316,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                 let lind_manager = child_ctx.lind_manager.clone();
                 let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+                store.set_epoch_deadline(1);
 
                 // if parent is a thread, so does the child
                 if is_parent_thread {
@@ -556,6 +557,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 let instance_pre = Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
 
                 let mut store = Store::new_with_inner(&engine, child_host, store_inner);
+                store.set_epoch_deadline(1);
 
                 // mark as thread
                 store.set_is_thread(true);
