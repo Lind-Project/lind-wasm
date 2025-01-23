@@ -198,6 +198,54 @@ run_from_files() {
     echo -e "${GREEN}All tests from file list completed.${RESET}"
 }
 
+#function to create the expected outputs 
+create_expected_outputs() {
+    set +e +o pipefail
+
+    total_files=0
+    total_success=0
+    total_failure=0
+
+    for deterministic_dir in $(find tests/unit-tests -type d -name deterministic); do
+        mkdir -p "$deterministic_dir/expected"
+        for c_file in "$deterministic_dir"/*.c; do
+            total_files=$((total_files + 1))
+
+            compile_output=$(gcc "$c_file" -o "${c_file%.c}" 2>&1)
+            if [ $? -ne 0 ]; then
+                echo "$c_file: Compilation Error"
+                echo "$compile_output"
+                echo "------------------------------------"
+                total_failure=$((total_failure + 1))
+                echo "$compile_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
+                continue
+            fi
+
+            run_output=$("${c_file%.c}" 2>&1)
+            if [ $? -ne 0 ]; then
+                echo "$c_file: Runtime Error"
+                echo "$run_output"
+                echo "------------------------------------"
+                total_failure=$((total_failure + 1))
+                echo "$compile_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
+                rm -f "${c_file%.c}"
+                continue
+            fi
+
+            echo "$run_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
+
+            rm -f "${c_file%.c}"
+            total_success=$((total_success + 1))
+        done
+    done
+
+    echo "Total:    $total_files"
+    echo "Success:  $total_success"
+    echo "Failure:  $total_failure"
+
+    set -e -o pipefail
+}
+
 pmode=0
 if [ "${!#}" = "-p" ]; then
     pmode=1
@@ -267,5 +315,8 @@ case "$1" in
     all|a)
         compile_all_tests
         run_all_tests
+        ;;
+    createexpected|ce)
+        create_expected_outputs
         ;;
 esac
