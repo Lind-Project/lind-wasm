@@ -32,8 +32,8 @@ run_cmd_precompile="$wasmtime_base/target/debug/wasmtime run --allow-precompiled
 
 test_file_base="$LIND_WASM_BASE/tests/unit-tests"
 deterministic_dir="deterministic"
-safe_test_list="testlist_safe.txt"
-unsafe_test_list="testlist_unsafe.txt"
+testlist_safe="testlist_safe.txt"
+testlist_unsafe="testlist_unsafe.txt"
 
 #color codes for terminal output
 RED='\033[31m'
@@ -201,15 +201,35 @@ run_from_files() {
     echo -e "${GREEN}All tests from file list completed.${RESET}"
 }
 
-#function to create the expected outputs 
-create_expected_outputs() {
+# ----------------------------------------------------------------------
+# Function: generate_expected_outputs
+#
+# Purpose:
+# Compiles `.c` files in "tests/unit-tests/deterministic" directories, 
+# runs the binaries, and saves their output in "expected" subdirectories.
+#
+# Variables:
+# - Input: None required; works on `.c` files in specific directories.
+# - Output: Logs total processed, successes, and failures to stdout.
+#           Creates a file testlist_safe.txt which has the paths of all the successful test files
+#           Creates a file testlist_unsafe.txt which has the paths of all the failed test files
+#
+# Exceptions:
+# - Compilation errors: Logged to stdout and corresponding `.output` files.
+# - Runtime errors: Logged to stdout and corresponding `.output` files.
+# - Skips directories or files if not found; no explicit errors thrown.
+#
+# Note:
+# Temporarily disables `set -e` and `set -o pipefail` for error handling.
+# ----------------------------------------------------------------------
+generate_expected_outputs() {
     set +e +o pipefail
 
-    [ ! -f "$safe_test_list" ] && touch "$safe_test_list"
-    echo -n "" > "$safe_test_list"
+    [ ! -f "$testlist_safe" ] && touch "$testlist_safe"
+    echo -n "" > "$testlist_safe"
 
-    [ ! -f "$unsafe_test_list" ] && touch "$unsafe_test_list"
-    echo -n "" > "$unsafe_test_list"
+    [ ! -f "$testlist_unsafe" ] && touch "$testlist_unsafe"
+    echo -n "" > "$testlist_unsafe"
 
     total_files=0
     total_success=0
@@ -228,7 +248,7 @@ create_expected_outputs() {
                 echo "------------------------------------"
                 total_failure=$((total_failure + 1))
                 echo "$compile_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
-                echo "$c_file" >> "$unsafe_test_list"
+                echo "$c_file" >> "$testlist_unsafe"
                 continue
             fi
 
@@ -240,7 +260,7 @@ create_expected_outputs() {
                 total_failure=$((total_failure + 1))
                 echo "$compile_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
                 rm -f "${c_file%.c}"
-                echo "$c_file" >> "$unsafe_test_list"
+                echo "$c_file" >> "$testlist_unsafe"
                 continue
             fi
 
@@ -249,7 +269,7 @@ create_expected_outputs() {
             rm -f "${c_file%.c}"
             total_success=$((total_success + 1))
 
-            echo "$c_file" >> "$safe_test_list"
+            echo "$c_file" >> "$testlist_safe"
         done
     done
 
@@ -258,6 +278,31 @@ create_expected_outputs() {
     echo "Failure:  $total_failure"
 
     set -e -o pipefail
+}
+
+# ----------------------------------------------------------------------
+# Function: cleanup_expected
+# Purpose:
+# For cleaning up all expected outputs.
+# Deletes the folder "expected" under each of the subfolders
+#
+# Variables:
+# - Input: None required; Works on the created expected folders 
+# - Output: Logs the deleted expected folders to stdout.
+#
+# ----------------------------------------------------------------------
+cleanup_expected() {
+    for deterministic_dir in $(find "$test_file_base" -type d -name "$deterministic_dir"); do
+        if [ -d "$deterministic_dir/expected" ]; then
+            rm -rf "$deterministic_dir/expected"
+            echo "Deleted: $deterministic_dir/expected"
+        fi
+    done
+
+    [ -f "$testlist_safe" ] && rm -f "$testlist_safe"
+    echo "Deleted: $testlist_safe"
+    [ -f "$testlist_unsafe" ] && rm -f "$testlist_unsafe"
+    echo "Deleted: $testlist_unsafe"
 }
 
 pmode=0
@@ -330,7 +375,10 @@ case "$1" in
         compile_all_tests
         run_all_tests
         ;;
-    createexpected|ce)
-        create_expected_outputs
+    generateexpected|ge)
+        generate_expected_outputs
+        ;;
+    cleanexpected|cle)
+        cleanup_expected
         ;;
 esac
