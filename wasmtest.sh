@@ -284,11 +284,11 @@ generate_expected_outputs() {
 # Function: cleanup_expected
 # Purpose:
 # For cleaning up all expected outputs.
-# Deletes the folder "expected" under each of the subfolders
+# Deletes the folder "expected" under each of the subfolders and the test lists(testlist_safe.txt and testlist_unsafe.txt).
 #
 # Variables:
 # - Input: None required; Works on the created expected folders 
-# - Output: Logs the deleted expected folders to stdout.
+# - Output: Logs the deleted folders and files to stdout.
 #
 # ----------------------------------------------------------------------
 cleanup_expected() {
