@@ -31,6 +31,9 @@ precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output
 run_cmd_precompile="$wasmtime_base/target/debug/wasmtime run --allow-precompiled --wasi threads=y --wasi preview2=n [target]"
 
 test_file_base="$LIND_WASM_BASE/tests/unit-tests"
+deterministic_dir="deterministic"
+safe_test_list="testlist_safe.txt"
+unsafe_test_list="testlist_unsafe.txt"
 
 #color codes for terminal output
 RED='\033[31m'
@@ -202,12 +205,19 @@ run_from_files() {
 create_expected_outputs() {
     set +e +o pipefail
 
+    [ ! -f "$safe_test_list" ] && touch "$safe_test_list"
+    echo -n "" > "$safe_test_list"
+
+    [ ! -f "$unsafe_test_list" ] && touch "$unsafe_test_list"
+    echo -n "" > "$unsafe_test_list"
+
     total_files=0
     total_success=0
     total_failure=0
 
-    for deterministic_dir in $(find tests/unit-tests -type d -name deterministic); do
+    for deterministic_dir in $(find "$test_file_base" -type d -name "$deterministic_dir"); do
         mkdir -p "$deterministic_dir/expected"
+
         for c_file in "$deterministic_dir"/*.c; do
             total_files=$((total_files + 1))
 
@@ -218,6 +228,7 @@ create_expected_outputs() {
                 echo "------------------------------------"
                 total_failure=$((total_failure + 1))
                 echo "$compile_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
+                echo "$c_file" >> "$unsafe_test_list"
                 continue
             fi
 
@@ -229,6 +240,7 @@ create_expected_outputs() {
                 total_failure=$((total_failure + 1))
                 echo "$compile_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
                 rm -f "${c_file%.c}"
+                echo "$c_file" >> "$unsafe_test_list"
                 continue
             fi
 
@@ -236,6 +248,8 @@ create_expected_outputs() {
 
             rm -f "${c_file%.c}"
             total_success=$((total_success + 1))
+
+            echo "$c_file" >> "$safe_test_list"
         done
     done
 
