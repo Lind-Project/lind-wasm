@@ -26,6 +26,10 @@
 #include <syscall-template.h>
 
 /* Get current value of CLOCK and store it in TP.  */
+
+// Now after clang compile it will call gettime64 first(but in real case we have only 32 bit)
+// In this case, we need “#if __TIMESIZE != 64” and this is always true. And always call __clock_gettime at last.
+
 int
 __clock_gettime64 (clockid_t clock_id, struct __timespec64 *tp)
 {
