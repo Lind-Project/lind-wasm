@@ -1901,6 +1901,15 @@ impl Cage {
         }
         ret
     }
+
+    pub fn clock_gettime(&self, clockid: u32, tp: usize) -> i32 {
+        let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "clock_gettime");
+        }
+        ret
+    }
 }
 
 /// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't 
