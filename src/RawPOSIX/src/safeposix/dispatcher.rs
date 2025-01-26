@@ -1040,7 +1040,7 @@ pub fn lind_syscall_api(
             let tp = (start_address + arg2) as usize;
             
             interface::cagetable_getref(cageid)
-                .clock_gettime(clockid, tp)
+                .clock_gettime_syscall(clockid, tp)
         }
 
         WAIT_SYSCALL => {

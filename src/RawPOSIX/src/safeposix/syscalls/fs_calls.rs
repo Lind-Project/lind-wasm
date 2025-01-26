@@ -1902,7 +1902,7 @@ impl Cage {
         ret
     }
 
-    pub fn clock_gettime(&self, clockid: u32, tp: usize) -> i32 {
+    pub fn clock_gettime_syscall(&self, clockid: u32, tp: usize) -> i32 {
         let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
         if ret < 0 {
             let errno = get_errno();
