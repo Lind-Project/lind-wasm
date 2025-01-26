@@ -118,7 +118,7 @@ const WAIT_SYSCALL: i32 = 172;
 const WAITPID_SYSCALL: i32 = 173;
 
 const NANOSLEEP_TIME64_SYSCALL : i32 = 181;
-const CLOCK_GETTIME : i32 = 191;
+const CLOCK_GETTIME_SYSCALL : i32 = 191;
 
 use std::ffi::CString;
 use std::ffi::CStr;
@@ -1035,7 +1035,7 @@ pub fn lind_syscall_api(
                 .nanosleep_time64_syscall(clockid, flags, req, rem)
         }
 
-        CLOCK_GETTIME => {
+        CLOCK_GETTIME_SYSCALL => {
             let clockid = arg1 as u32;
             let tp = (start_address + arg2) as usize;
             
