@@ -262,12 +262,6 @@ pub fn lind_syscall_api(
                 );
             }
 
-            // Force MAP_FIXED
-            let flags = flags | MAP_FIXED as i32;
-
-            // Turn off PROT_EXEC for non-code pages
-            let prot = prot & !PROT_EXEC;
-
             interface::mmap_handler(cageid, addr, len, prot, flags, fd, off) as i32
         }
 
