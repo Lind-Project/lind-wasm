@@ -211,11 +211,21 @@ pub fn lind_syscall_api(
 
         WRITEV_SYSCALL => {
             let fd = arg1 as i32;
-            let iovec = (start_address + arg2) as *const interface::IovecStruct;
             let iovcnt = arg3 as i32;
+            let iovec = (start_address + arg2) as *const interface::IovecStruct;
 
-            interface::cagetable_getref(cageid)
-                .writev_syscall(fd, iovec, iovcnt)
+            // Validate count first
+            if iovcnt <= 0 {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "writev",
+                    "invalid iovec count"
+                );
+            }
+
+            let cage = interface::cagetable_getref(cageid);
+            // The actual write operation is delegated to the cage implementation
+            cage.writev_syscall(fd, iovec, iovcnt)
         }
 
         MUNMAP_SYSCALL => {
@@ -262,22 +272,23 @@ pub fn lind_syscall_api(
         }
 
         PREAD_SYSCALL => {
-            let fd = arg1 as i32;
             let buf = (start_address + arg2) as *mut u8;
+            let fd = arg1 as i32;
             let count = arg3 as usize;
             let offset = arg4 as i64;
-
-            interface::cagetable_getref(cageid)
-                .pread_syscall(fd, buf, count, offset)
+            let cage = interface::cagetable_getref(cageid);
+            cage.pread_syscall(fd, buf, count, offset)
         }
 
         READ_SYSCALL => {
             let fd = arg1 as i32;
-            let buf = (start_address + arg2) as *mut u8;
             let count = arg3 as usize;
+            let cage = interface::cagetable_getref(cageid);
+            let buf = (start_address + arg2) as *mut u8;
 
-            interface::cagetable_getref(cageid)
-                .read_syscall(fd, buf, count)
+            // File descriptor validation and actual read operation
+            // handled by cage implementation
+            cage.read_syscall(fd, buf, count)
         }
 
         CLOSE_SYSCALL => {
@@ -289,26 +300,27 @@ pub fn lind_syscall_api(
         }
 
         ACCESS_SYSCALL => {
+            let cage = interface::cagetable_getref(cageid);
             let path = match interface::types::get_cstr(start_address + arg1) {
                 Ok(path_str) => path_str,
                 Err(_) => return -1, // Handle error appropriately, return an error code
             };
             let amode = arg2 as i32;
 
-            interface::cagetable_getref(cageid)
-                .access_syscall(path, amode)
+            // Perform access check through cage implementation
+            cage.access_syscall(path, amode)
         }
 
         OPEN_SYSCALL => {
+            let cage = interface::cagetable_getref(cageid);
             let path = match interface::types::get_cstr(start_address + arg1) {
                 Ok(path_str) => path_str,
                 Err(_) => return -1, // Handle error appropriately, return an error code
             };
             let flags = arg2 as i32;
             let mode = arg3 as u32;
-
-            interface::cagetable_getref(cageid)
-                .open_syscall(path, flags, mode)
+            // Perform open operation through cage implementation
+            cage.open_syscall(path, flags, mode)
         }
 
         SOCKET_SYSCALL => {
