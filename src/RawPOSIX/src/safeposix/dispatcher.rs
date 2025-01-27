@@ -219,23 +219,46 @@ pub fn lind_syscall_api(
         }
 
         MUNMAP_SYSCALL => {
-            let addr = (start_address + arg1) as *mut u8;
-            let len = arg2 as usize;
+            let addr = arg1 as *mut u8;
+            let length = arg2 as usize;
+            let cage = interface::cagetable_getref(cageid);
 
-            interface::cagetable_getref(cageid)
-                .munmap_syscall(addr, len)
+            if length == 0 {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "munmap",
+                    "length cannot be zero"
+                );
+            }
+
+            // Perform the unmapping operation
+            interface::munmap_handler(cageid, addr, length)
         }
 
         MMAP_SYSCALL => {
-            let addr = (start_address + arg1) as *mut u8;
+            let addr = arg1 as *mut u8;
             let len = arg2 as usize;
             let prot = arg3 as i32;
             let flags = arg4 as i32;
-            let fildes = arg5 as i32;
+            let fd = arg5 as i32;
             let off = arg6 as i64;
 
-            interface::cagetable_getref(cageid)
-                .mmap_syscall(addr, len, prot, flags, fildes, off)
+            // Basic length validation
+            if len == 0 {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "mmap",
+                    "length cannot be zero"
+                );
+            }
+
+            // Force MAP_FIXED
+            let flags = flags | MAP_FIXED as i32;
+
+            // Turn off PROT_EXEC for non-code pages
+            let prot = prot & !PROT_EXEC;
+
+            interface::mmap_handler(cageid, addr, len, prot, flags, fd, off) as i32
         }
 
         PREAD_SYSCALL => {
@@ -1103,6 +1126,7 @@ pub fn lind_syscall_api(
             let pid = arg1 as i32;
             let mut status = interface::get_i32_ref(start_address + arg2).unwrap();
             let options = arg3 as i32;
+            let cage = interface::cagetable_getref(cageid);
             
             cage.waitpid_syscall(pid, status, options)
         }
