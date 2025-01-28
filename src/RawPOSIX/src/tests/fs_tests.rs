@@ -2395,8 +2395,8 @@ pub mod fs_tests {
         let path = "/fooFileMode";
     
         //Ensure umask is logged for debugging
-        let current_umask = libc::umask(0);
-        libc::umask(current_umask); // Restore the umask
+        let current_umask = unsafe {libc::umask(0)};
+        unsafe {libc::umask(current_umask)}; // Restore the umask
         println!("Current umask: {:#o}", current_umask);
     
         // Create a file with full permissions
