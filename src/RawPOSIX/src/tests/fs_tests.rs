@@ -2394,7 +2394,7 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
         let path = "/fooFileMode";
     
-        Ensure umask is logged for debugging
+        //Ensure umask is logged for debugging
         let current_umask = libc::umask(0);
         libc::umask(current_umask); // Restore the umask
         println!("Current umask: {:#o}", current_umask);
