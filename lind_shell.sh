@@ -1,8 +1,8 @@
 
 # Set the default directory where all file-related operations will occur
-DEFAULT_PATH="$HOME/home/lind-wasm/src/RawPOSIX/tmp" 
+DEFAULT_PATH="/home/lind-wasm/src/RawPOSIX/tmp" 
 CURRENT_PATH="$DEFAULT_PATH"
-#mkdir -p "$DEFAULT_PATH" # Ensure the directory exists
+mkdir -p "$DEFAULT_PATH" # Ensure the directory exists
 
 # Notify the user about the default path
 echo "All file-related changes will occur in: $DEFAULT_PATH"
