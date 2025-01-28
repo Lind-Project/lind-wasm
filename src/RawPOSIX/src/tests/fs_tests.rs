@@ -2388,31 +2388,66 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_stat_file_mode() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
+        // Acquire a lock and set up the test environment
         let _thelock = setup::lock_and_init();
-
+    
         let cage = interface::cagetable_getref(1);
         let path = "/fooFileMode";
+    
+        // Ensure umask is logged for debugging
+        let current_umask = libc::umask(0);
+        libc::umask(current_umask); // Restore the umask
+        println!("Current umask: {:#o}", current_umask);
+    
+        // Create a file with full permissions
         let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
-
+    
         let mut statdata = StatData::default();
         assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
-        assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
-
-        //make a file without permissions and check that it is a reg file without
-        // permissions
+    
+        // Check the actual mode against expected mode (considering umask)
+        let expected_mode = (S_IRWXA & !current_umask) | S_IFREG as u32;
+        assert_eq!(statdata.st_mode, expected_mode);
+    
+        // Create a file without permissions
         let path2 = "/fooFileMode2";
         let _fd2 = cage.open_syscall(path2, O_CREAT | O_EXCL | O_WRONLY, 0);
         assert_eq!(cage.stat_syscall(path2, &mut statdata), 0);
         assert_eq!(statdata.st_mode, S_IFREG as u32);
-
-        //check that stat can be done on the current (root) dir
+    
+        // Stat the current directory
         assert_eq!(cage.stat_syscall(".", &mut statdata), 0);
-
+    
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
+    // pub fn ut_lind_fs_stat_file_mode() {
+    //     //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+    //     // and also performs clean env setup
+    //     let _thelock = setup::lock_and_init();
+
+    //     let cage = interface::cagetable_getref(1);
+    //     let path = "/fooFileMode";
+    //     let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
+
+    //     let mut statdata = StatData::default();
+    //     assert_eq!(cage.stat_syscall(path, &mut statdata), 0);
+    //     assert_eq!(statdata.st_mode, S_IRWXA | S_IFREG as u32);
+
+    //     //make a file without permissions and check that it is a reg file without
+    //     // permissions
+    //     let path2 = "/fooFileMode2";
+    //     let _fd2 = cage.open_syscall(path2, O_CREAT | O_EXCL | O_WRONLY, 0);
+    //     assert_eq!(cage.stat_syscall(path2, &mut statdata), 0);
+    //     assert_eq!(statdata.st_mode, S_IFREG as u32);
+
+    //     //check that stat can be done on the current (root) dir
+    //     assert_eq!(cage.stat_syscall(".", &mut statdata), 0);
+
+    //     assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+    //     lindrustfinalize();
+    // }
 
     // #[test]
     // pub fn ut_lind_fs_statfs() {
