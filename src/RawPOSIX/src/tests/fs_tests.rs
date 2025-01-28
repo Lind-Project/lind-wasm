@@ -2394,10 +2394,10 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
         let path = "/fooFileMode";
     
-        // Ensure umask is logged for debugging
-        // let current_umask = libc::umask(0);
-        // libc::umask(current_umask); // Restore the umask
-        // println!("Current umask: {:#o}", current_umask);
+        Ensure umask is logged for debugging
+        let current_umask = libc::umask(0);
+        libc::umask(current_umask); // Restore the umask
+        println!("Current umask: {:#o}", current_umask);
     
         // Create a file with full permissions
         let _fd = cage.open_syscall(path, O_CREAT | O_EXCL | O_WRONLY, S_IRWXA);
