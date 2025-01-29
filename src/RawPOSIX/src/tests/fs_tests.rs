@@ -660,18 +660,25 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_mmap_unsupported_file() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
+        // Acquire a lock for clean test environment
         let _thelock = setup::lock_and_init();
-
+    
         let cage = interface::cagetable_getref(1);
-        // Removing the test directory if it exists
+    
+        // Ensure the test directory does not exist before creating
+        let _ = cage.unlink_syscall("/testdir/somefile"); 
         let _ = cage.rmdir_syscall("/testdir");
-
-        //Creating a directory.
+    
+        // Debugging: Check if /testdir still exists
+        let mut statdata = StatData::default();
+        if cage.stat_syscall("/testdir", &mut statdata) == 0 {
+            println!("/testdir already exists before mkdir!");
+        }
+    
+        // Create the test directory
         assert_eq!(cage.mkdir_syscall("/testdir", S_IRWXA), 0);
-
-        /* Native linux require specific flags to open a dir */
+    
+        /* Native Linux requires specific flags to open a directory */
         let fd = cage.open_syscall("/testdir", O_RDONLY | O_DIRECTORY, S_IRWXA);
 
         
