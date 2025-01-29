@@ -667,13 +667,23 @@ pub mod fs_tests {
     
         // Ensure the test directory does not exist before creating
         let _ = cage.unlink_syscall("/testdir/somefile");
-        let _ = cage.rmdir_syscall("/testdir");
-    
-        // Ensure that the directory is fully removed before proceeding
+        
+        // Attempt to remove directory, check if it was successful
         let mut statdata = StatData::default();
         if cage.stat_syscall("/testdir", &mut statdata) == 0 {
             println!("/testdir already exists before mkdir! Removing it now.");
-            assert_eq!(cage.rmdir_syscall("/testdir"), 0); // Ensure the directory is removed
+            
+            // Try to remove all files in the directory before removing the directory itself
+            let _ = cage.unlink_syscall("/testdir/somefile"); // Remove any specific files in the directory if they exist
+            
+            // Remove the directory
+            let rmdir_result = cage.rmdir_syscall("/testdir");
+            if rmdir_result != 0 {
+                println!("Failed to remove /testdir: Error code {}", rmdir_result);
+                // You can try changing permissions if you suspect a permission issue
+                let _ = cage.chmod_syscall("/testdir", S_IRWXA); // Change permissions before trying again
+                assert_eq!(cage.rmdir_syscall("/testdir"), 0);
+            }
         }
     
         // Create the test directory
@@ -699,7 +709,7 @@ pub mod fs_tests {
         assert_eq!(cage.rmdir_syscall("/testdir"), 0);
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
-    }
+    }    
     
 
     #[test]
