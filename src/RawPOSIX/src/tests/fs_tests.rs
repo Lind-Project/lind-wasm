@@ -660,51 +660,35 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_mmap_unsupported_file() {
-        // Acquire a lock for clean test environment
+      //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
-    
+
         let cage = interface::cagetable_getref(1);
-    
-        // Ensure the test directory does not exist before creating
-        let _ = cage.unlink_syscall("/testdir/somefile");
-        
-        // Attempt to remove directory, check if it was successful
-        let mut statdata = StatData::default();
-        if cage.stat_syscall("/testdir", &mut statdata) == 0 {
-            println!("/testdir already exists before mkdir! Removing it now.");
-            
-            // Try to remove all files in the directory before removing the directory itself
-            let _ = cage.unlink_syscall("/testdir/somefile"); // Remove any specific files in the directory if they exist
-            
-            // Remove the directory
-            let rmdir_result = cage.rmdir_syscall("/testdir");
-            if rmdir_result != 0 {
-                println!("Failed to remove /testdir: Error code {}", rmdir_result);
-                // You can try changing permissions if you suspect a permission issue
-                let _ = cage.chmod_syscall("/testdir", S_IRWXA); // Change permissions before trying again
-                assert_eq!(cage.rmdir_syscall("/testdir"), 0);
-            }
-        }
-    
-        // Create the test directory
+        // Removing the test directory if it exists
+        let _ = cage.rmdir_syscall("/testdir");
+
+        //Creating a directory.
         assert_eq!(cage.mkdir_syscall("/testdir", S_IRWXA), 0);
-    
-        // Native Linux requires specific flags to open a directory
+
+        /* Native linux require specific flags to open a dir */
         let fd = cage.open_syscall("/testdir", O_RDONLY | O_DIRECTORY, S_IRWXA);
-    
-        // Checking if passing the created directory to `mmap_syscall()` correctly results in
-        // `The fildes argument refers to a file whose type is not supported by mmap` error.
+
+        
+
+        //Checking if passing the created directory to
+        //`mmap_syscall()` correctly results in `The `fildes`
+        //argument refers to a file whose type is not
+        //supported by mmap` error.
         let mmap_result = unsafe {
             libc::mmap(
                 0 as *mut c_void, 5, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0
             )
         };
-    
         // Verify errno is set to ENODEV
         let errno = get_errno();
         /* Native linux will return ENODEV */
         assert_eq!(errno, libc::ENODEV, "Expected errno to be ENODEV for unsupported file type");
-    
         // Clean up and finalize
         assert_eq!(cage.rmdir_syscall("/testdir"), 0);
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
