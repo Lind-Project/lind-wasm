@@ -666,41 +666,41 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
     
         // Ensure the test directory does not exist before creating
-        let _ = cage.unlink_syscall("/testdir/somefile"); 
+        let _ = cage.unlink_syscall("/testdir/somefile");
         let _ = cage.rmdir_syscall("/testdir");
     
-        // Debugging: Check if /testdir still exists
+        // Ensure that the directory is fully removed before proceeding
         let mut statdata = StatData::default();
         if cage.stat_syscall("/testdir", &mut statdata) == 0 {
-            println!("/testdir already exists before mkdir!");
+            println!("/testdir already exists before mkdir! Removing it now.");
+            assert_eq!(cage.rmdir_syscall("/testdir"), 0); // Ensure the directory is removed
         }
     
         // Create the test directory
         assert_eq!(cage.mkdir_syscall("/testdir", S_IRWXA), 0);
     
-        /* Native Linux requires specific flags to open a directory */
+        // Native Linux requires specific flags to open a directory
         let fd = cage.open_syscall("/testdir", O_RDONLY | O_DIRECTORY, S_IRWXA);
-
-        
-
-        //Checking if passing the created directory to
-        //`mmap_syscall()` correctly results in `The `fildes`
-        //argument refers to a file whose type is not
-        //supported by mmap` error.
+    
+        // Checking if passing the created directory to `mmap_syscall()` correctly results in
+        // `The fildes argument refers to a file whose type is not supported by mmap` error.
         let mmap_result = unsafe {
             libc::mmap(
                 0 as *mut c_void, 5, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0
             )
         };
+    
         // Verify errno is set to ENODEV
         let errno = get_errno();
         /* Native linux will return ENODEV */
         assert_eq!(errno, libc::ENODEV, "Expected errno to be ENODEV for unsupported file type");
+    
         // Clean up and finalize
         assert_eq!(cage.rmdir_syscall("/testdir"), 0);
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
 
     #[test]
     pub fn ut_lind_fs_mmap_invalid_fildes() {
