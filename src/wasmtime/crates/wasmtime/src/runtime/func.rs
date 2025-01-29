@@ -1,3 +1,4 @@
+use crate::vm::TrapReason;
 use crate::{prelude::*, OnCalledAction};
 use crate::runtime::vm::{
     ExportFunction, SendSyncPtr, StoreBox, VMArrayCallHostFuncContext, VMContext, VMFuncRef,
@@ -1624,13 +1625,25 @@ pub(crate) fn invoke_wasm_and_catch_traps<T>(
             exit_wasm(store, exit);
             return Err(trap);
         }
-        let result = crate::runtime::vm::catch_traps(
+        let mut result = crate::runtime::vm::catch_traps(
             store.0.signal_handler(),
             store.0.engine().config().wasm_backtrace,
             store.0.engine().config().coredump_on_trap,
             store.0.default_caller(),
             closure,
         );
+
+        // let result_clone;
+        // if let Box(e) = result.as_ref() {
+        //     match result.unwrap_err().reason {
+        //         TrapReason::User {error, needs_backtrace} => {
+        //             if error.to_string() == "wasm trap: interrupt" {
+        //                 println!("interrupt!");
+        //             }
+        //         },
+        //         _ => {}
+        //     }
+        // }
         
         exit_wasm(store, exit);
         store.0.call_hook(CallHook::ReturningFromWasm)?;
@@ -2234,6 +2247,32 @@ impl<T> Caller<'_, T> {
         }
     }
 
+    pub fn get_signal_callback(&mut self) -> Result<TypedFunc<i32, ()>, ()> {
+        if let Some(signal_callback_extern) = self.get_export("signal_callback") {
+            match signal_callback_extern {
+                Extern::Func(signal_callback) => {
+                    match signal_callback.typed::<i32, ()>(&self) {
+                        Ok(func) => {
+                            return Ok(func);
+                        }
+                        Err(err) => {
+                            eprintln!("the signature of signal_callback function is not correct: {:?}", err);
+                            return Err(())
+                        }
+                    }
+                },
+                _ => {
+                    eprintln!("signal_callback export is not a function");
+                    return Err(())
+                }
+            }
+        }
+        else {
+            eprintln!("signal_callback export not found");
+            return Err(())
+        }
+    }
+
     /// Access the underlying data owned by this `Store`.
     ///
     /// Same as [`Store::data`](crate::Store::data)
@@ -2593,10 +2632,10 @@ impl HostFunc {
         // `self` into the `store` provided, otherwise the type information we
         // have listed won't be correct. This is possible to hit with the public
         // API of Wasmtime, and should be documented in relevant functions.
-        assert!(
-            Engine::same(&self.engine, store.engine()),
-            "cannot use a store with a different engine than a linker was created with",
-        );
+        // assert!(
+        //     Engine::same(&self.engine, store.engine()),
+        //     "cannot use a store with a different engine than a linker was created with",
+        // );
     }
 
     pub(crate) fn sig_index(&self) -> VMSharedTypeIndex {

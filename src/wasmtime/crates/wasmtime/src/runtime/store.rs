@@ -1120,6 +1120,10 @@ impl<T> Store<T> {
         self.inner.get_epoch_deadline()
     }
 
+    pub fn set_stack_snapshots(&mut self, stack_snapshots: HashMap<u64, Vec<u8>>) {
+        self.inner.stack_snapshots = stack_snapshots;
+    }
+
     /// Configures epoch-deadline expiration to trap.
     ///
     /// When epoch-interruption-instrumented code is executed on this
@@ -1361,9 +1365,19 @@ impl<'a, T> StoreContextMut<'a, T> {
         data.hash(&mut hasher);
         let hash = hasher.finish();
 
+        // println!("setjmp unwind_data: {:?}", data);
+
         self.0.stack_snapshots.insert(hash, data);
 
         hash
+    }
+
+    pub fn get_stack_snapshots(&self) -> HashMap<u64, Vec<u8>> {
+        self.0.stack_snapshots.clone()
+    }
+
+    pub fn set_stack_snapshots(&mut self, stack_snapshots: HashMap<u64, Vec<u8>>) {
+        self.0.stack_snapshots = stack_snapshots;
     }
 
     // retrieve the unwind data, given the hash. The entry would be perserved

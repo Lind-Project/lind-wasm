@@ -82,10 +82,18 @@ extern void restore (void) {
 
 // RESTORE (restore, __NR_sigreturn)
 
+__sighandler_t callback = 0;
+
+__attribute__((export_name("signal_callback")))
+void signal_callback(int signal) {
+  if(callback != 0)
+    callback(signal);
+}
+
 int
 __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
 {
-  // Dennis Edit
+  callback = act->sa_handler;
   return 0;
 }
 libc_hidden_def (__libc_sigaction)

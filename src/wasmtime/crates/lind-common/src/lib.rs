@@ -54,6 +54,10 @@ impl LindCommonCtx {
             30 => {
                 wasmtime_lind_multi_process::exit_syscall(caller, arg1 as i32)
             }
+            // kill syscall
+            148 => {
+                wasmtime_lind_multi_process::kill_call(caller, arg1 as i32, arg2 as i32)
+            }
             // other syscalls goes into rawposix
             _ => {
                 lind_syscall_api(
@@ -157,6 +161,15 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
             let ctx = get_cx(&host);
 
             ctx.lind_longjmp(&mut caller, jmp_buf as u32, retval)
+        },
+    )?;
+
+    linker.func_wrap(
+        "wasi_snapshot_preview1",
+        "epoch_callback",
+        move |mut caller: Caller<'_, T>| {
+            // panic!("epoch callback!!!");
+            wasmtime_lind_multi_process::signal_handler(&mut caller);
         },
     )?;
 

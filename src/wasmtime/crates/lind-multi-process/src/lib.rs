@@ -11,7 +11,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
-use wasmtime::{AsContext, AsContextMut, Caller, ExternType, InstanceId, InstantiateType, Linker, Module, OnCalledAction, RewindingReturn, SharedMemory, Store, StoreOpaque, Val};
+use std::time::Duration;
+use wasmtime::{AsContext, AsContextMut, Caller, Engine, ExternType, InstanceId, InstantiateType, Linker, Module, OnCalledAction, RewindingReturn, SharedMemory, Store, StoreOpaque, Val};
 
 use wasmtime_environ::MemoryIndex;
 
@@ -206,6 +207,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // 6. start the rewind for both parent and child
     pub fn fork_call(&self, mut caller: &mut Caller<'_, T>
                 ) -> Result<i32> {
+        // println!("fork call");
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -290,10 +292,15 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
         let get_cx = self.get_cx.clone();
 
+        let parent_stack_snapshots = caller.as_context_mut().get_stack_snapshots();
+        let parent_stack_low = caller.as_context().get_stack_top();
+        let parent_stack_high = caller.as_context().get_stack_base();
+
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         let is_parent_thread = store.is_thread();
         store.set_on_called(Box::new(move |mut store| {
+            // println!("fork set_on_called");
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
@@ -317,8 +324,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                 let lind_manager = child_ctx.lind_manager.clone();
                 let mut store = Store::new_with_inner(&engine, child_host, store_inner);
-                // set epoch deadline for new wasm instance to 1
-                store.set_epoch_deadline(1);
+                store.set_stack_snapshots(parent_stack_snapshots);
 
                 // if parent is a thread, so does the child
                 if is_parent_thread {
@@ -330,6 +336,14 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     InstantiateType::InstantiateChild {
                         parent_pid: parent_pid as u64, child_pid: child_cageid
                     }).unwrap();
+                
+                // get epoch global pointer
+                let lind_epoch = instance
+                    .get_export(&mut store, "epoch")
+                    .and_then(|export| export.into_global())
+                    .expect("Failed to find shared_global");
+                let pointer = lind_epoch.get_handler(&mut store);
+                lind_manager.add_cage_signal_handler(child_cageid as i32, 1, pointer);
 
                 // new cage created, increment the cage counter
                 lind_manager.increment();
@@ -371,6 +385,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     let values = Vec::new();
                     let mut results = vec![Val::null_func_ref(); ty.results().len()];
+
+                    store.as_context_mut().set_stack_top(parent_stack_low);
+                    store.as_context_mut().set_stack_base(parent_stack_high);
 
                     let invoke_res = child_start_func
                         .call(&mut store, &values, &mut results);
@@ -429,6 +446,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             return Ok(OnCalledAction::InvokeAgain);
         }));
 
+        // println!("fork call return");
         // after returning from here, unwind process should start
         return Ok(0);
     }
@@ -487,7 +505,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let child_cageid = self.pid;
 
         // use the same engine for parent and child
-        let engine = self.module.engine().clone();
+        // let engine = self.module.engine().clone();
+        let config = self.module.engine().config();
+        let engine = Engine::new(config)?;
 
         let get_cx = self.get_cx.clone();
 
@@ -546,7 +566,20 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                 let mut store = Store::new_with_inner(&engine, child_host, store_inner);
                 // set epoch deadline for new wasm instance to 1
-                store.set_epoch_deadline(1);
+                // store.set_epoch_deadline(1);
+
+                // store.epoch_deadline_callback(move |store| {
+                //     println!("epoch deadline callback!");
+                //     loop {}
+                //     Ok(wasmtime::UpdateDeadline::Continue(1))
+                // });
+
+                // let engine_clone = engine.clone();
+                // thread::spawn(move || {
+                //     thread::sleep(Duration::new(2, 0));
+                //     println!("increment epoch");
+                //     engine_clone.increment_epoch();
+                // });
 
                 // mark as thread
                 store.set_is_thread(true);
@@ -912,6 +945,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
             // store the unwind data
             let hash = store.store_unwind_data(unwind_data_start_sys as *const u8, rewind_total_size);
+            // println!("setjmp hash={}", hash);
             unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) = hash; }
 
             // mark the parent to rewind state
@@ -979,11 +1013,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
             let hash = unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) };
             // retrieve the unwind data
+            // println!("longjmp hash={}", hash);
             let data = store.retrieve_unwind_data(hash);
 
             let result = retval;
 
             if let Some(unwind_data) = data {
+                // println!("longjmp unwind_data: {:?}", unwind_data);
                 // replace the unwind data
                 unsafe { std::ptr::copy_nonoverlapping(unwind_data.as_ptr(), unwind_data_start_sys as *mut u8, unwind_data.len()); }
             } else {
@@ -1005,6 +1041,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 retval: result,
             });
 
+            // println!("longjmp ready");
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
         }));
@@ -1190,6 +1227,40 @@ pub fn longjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sy
     let ctx = host.get_ctx();
 
     let _res = ctx.longjmp_call(caller, jmp_buf, retval);
+    
+    0
+}
+
+pub fn kill_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+        (caller: &mut Caller<'_, T>, pid: i32, signal: i32) -> i32 {
+    let host = caller.data().clone();
+    let ctx = host.get_ctx();
+    
+    let handler = ctx.lind_manager.get_handler(pid, 1).unwrap();
+    let epoch = handler as *mut u64;
+    // println!("{} kill {}, set epoch to 1 from {}", ctx.pid, pid, unsafe{ *epoch });
+    unsafe { *epoch = 1; }
+    
+    0
+}
+
+pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+        (caller: &mut Caller<'_, T>) -> i32 {
+    if !caller.as_context().get_rewinding_state().rewinding {
+        let host = caller.data().clone();
+        let ctx = host.get_ctx();
+        
+        let handler = ctx.lind_manager.get_handler(ctx.pid, 1).unwrap();
+        let epoch = handler as *mut u64;
+        // println!("signal triggered for {}, epoch={}", ctx.pid, unsafe { *epoch });
+    
+        unsafe { *epoch = 0; }
+    }
+    // println!("reached signal handler");
+    let signal_func = caller.get_signal_callback().unwrap();
+    let _res = signal_func.call(caller, 1 as i32);
+
+    // println!("signal_func return");
     
     0
 }

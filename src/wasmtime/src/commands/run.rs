@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
 use wasmtime::{AsContext, AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType};
 use wasmtime_wasi::WasiView;
@@ -134,7 +135,13 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
-        self.populate_with_wasi(&mut linker, &mut store, &main, lind_manager.clone(), None, None)?;
+        // let lind_signal_manager = Arc::new(LindSignalManager::new());
+        self.populate_with_wasi(&mut linker,
+                                &mut store,
+                                &main,
+                                lind_manager.clone(),
+                                None,
+                                None)?;
 
         store.data_mut().limits = self.run.store_limits();
         store.limiter(|t| &mut t.limits);
@@ -194,7 +201,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules, 1)
+            self.load_main_module(&mut store, &mut linker, &main, modules, lind_manager.clone(), 1)
                 .with_context(|| {
                     format!(
                         "failed to run main module `{}`",
@@ -375,7 +382,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules, pid as u64)
+            self.load_main_module(&mut store, &mut linker, &main, modules, lind_manager.clone(), pid as u64)
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -522,6 +529,7 @@ impl RunCommand {
         linker: &mut CliLinker,
         module: &RunTarget,
         modules: Vec<(String, Module)>,
+        lind_manager: Arc<LindCageManager>,
         pid: u64,
     ) -> Result<Vec<Val>> {
         // The main module might be allowed to have unknown imports, which
@@ -585,6 +593,22 @@ impl RunCommand {
                 let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
+
+                let lind_epoch = instance
+                    .get_export(&mut *store, "epoch")
+                    .and_then(|export| export.into_global())
+                    .expect("Failed to find shared_global");
+
+                // lind_epoch.set(&mut *store, Val::I64(1));
+                let pointer = lind_epoch.get_handler(&mut *store);
+
+                lind_manager.add_cage_signal_handler(pid as i32, 1, pointer);
+
+                // thread::spawn(move || {
+                //     thread::sleep(Duration::from_secs(1));
+                //     let epoch = pointer as *mut u64;
+                //     unsafe { *epoch = 1 };
+                // });
 
                 match func {
                     Some(func) => self.invoke_func(store, func),
