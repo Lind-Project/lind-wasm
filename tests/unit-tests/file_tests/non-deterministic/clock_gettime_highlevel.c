@@ -1,32 +1,32 @@
 #include <stdio.h>
-#include <unistd.h>
 #include <time.h>
 
+/*
+    This is higher level test for clock_gettime, which we don't directly call clock_gettime function but still call this syscall eventually
+*/
+
 int main() {
-    struct timespec begin, end, diff;
+    // Get the start time using clock()
+    clock_t begin = clock();
 
-    // Get the start time
-    clock_gettime(CLOCK_REALTIME, &begin);
+    printf("Running 1,000,000 iterations...\n");
 
-    printf("Sleeping for 2 seconds...\n");
-    sleep(2);
-
-    // Get the end time
-    clock_gettime(CLOCK_REALTIME, &end);
-
-    // Calculate elapsed time directly using start and end times
-    if ((end.tv_nsec - begin.tv_nsec) < 0) {
-        diff.tv_sec = end.tv_sec - begin.tv_sec - 1;
-        diff.tv_nsec = 1000000000 + end.tv_nsec - begin.tv_nsec;
-    } else {
-        diff.tv_sec = end.tv_sec - begin.tv_sec;
-        diff.tv_nsec = end.tv_nsec - begin.tv_nsec;
+    volatile long long sum = 0;
+    for (long long i = 0; i < 1000000; i++) {
+        sum += i;
     }
 
+    // Get the end time using clock()
+    clock_t end = clock();
+
+    // Calculate elapsed time in seconds
+    double elapsed_time = (double)(end - begin) / CLOCKS_PER_SEC;
+
     // Display results
-    printf("\nStart time: %lld.%09ld seconds\n", (long long)begin.tv_sec, begin.tv_nsec);
-    printf("End time: %lld.%09ld seconds\n", (long long)end.tv_sec, end.tv_nsec);
-    printf("Elapsed time: %lld.%09ld seconds\n", (long long)diff.tv_sec, diff.tv_nsec);
+    printf("\nStart time: %lld clock ticks\n", begin);
+    printf("End time: %lld clock ticks\n", end);
+    printf("Elapsed CPU time: %.9f seconds\n", elapsed_time);
 
     return 0;
 }
+
