@@ -3812,50 +3812,6 @@ pub mod fs_tests {
     }
 
     #[test]
-    // pub fn ut_lind_fs_read_from_chardev_file() {
-    //     //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-    //     // and also performs clean env setup
-    //     let _thelock = setup::lock_and_init();
-
-    //     let cage = interface::cagetable_getref(1);
-
-    //     // This test mainly tests the case for reading from a character device type
-    //     // file. In this case, we are trying to read 100 bytes from the
-    //     // "/dev/zero" file, which should return 100 bytes of "0" filled
-    //     // characters.
-    //     let path = "/dev/zero";
-    //     // We are creating /dev/zero manually in this test since we are in the sandbox env. 
-    //     // In a real system, /dev/zero typically exists as a special device file. 
-    //     // Create a /dev directory if it doesn't exist
-    //     cage.mkdir_syscall("/dev", S_IRWXA);
-    //     if cage.access_syscall(path, F_OK) != 0 {
-    //         let fd = cage.open_syscall(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
-    //         // Write 100 bytes of 0 to mimic /dev/zero behavior
-    //         let write_data = vec![0u8; 100];
-    //         assert_eq!(cage.write_syscall(fd, write_data.as_ptr(), 100), 100, "Failed to write zeros to /dev/zero");
-    //         assert_eq!(cage.close_syscall(fd), 0);
-    //     }
-    //     // Open the test file again for reading
-    //     let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
-
-    //     // Verify if the returned count of bytes is 100.
-    //     // Seek to the beginning of the file
-    //     assert_eq!(cage.lseek_syscall(fd, 0, libc::SEEK_SET), 0, "Failed to seek to the beginning of /dev/zero");
-    //     // Read 100 bytes from the file
-    //     let mut read_bufzero = sizecbuf(100);
-    //     assert_eq!(cage.read_syscall(fd, read_bufzero.as_mut_ptr(), 100), 100);
-    //     // Verify if the characters present in the buffer are all "0".
-    //     assert_eq!(
-    //         cbuf2str(&read_bufzero),
-    //         std::iter::repeat("\0")
-    //             .take(100)
-    //             .collect::<String>()
-    //             .as_str()
-    //     );
-    //     assert_eq!(cage.close_syscall(fd), 0);
-    //     assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
-    //     lindrustfinalize();
-    // }
     pub fn ut_lind_fs_read_from_chardev_file() {
         // Acquire a lock to ensure test isolation
         let _thelock = setup::lock_and_init();
@@ -3865,8 +3821,6 @@ pub mod fs_tests {
     
         // Ensure /dev directory exists
         cage.mkdir_syscall("/dev", S_IRWXA);
-    
-        // If /dev/zero does not exist, create and initialize it
         if cage.access_syscall(path, F_OK) != 0 {
             let fd = cage.open_syscall(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
             assert!(fd >= 0, "Failed to create /dev/zero");
@@ -3887,7 +3841,6 @@ pub mod fs_tests {
     
         // Open /dev/zero for reading
         let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
-        assert!(fd >= 0, "Failed to open /dev/zero for reading");
     
         // Seek to the beginning before reading
         assert_eq!(
@@ -3922,15 +3875,11 @@ pub mod fs_tests {
             read_bufzero.iter().all(|&b| b == 0),
             "Read buffer contains non-zero values"
         );
-    
-        // Clean up
-        assert_eq!(cage.close_syscall(fd), 0, "Failed to close /dev/zero");
+        assert_eq!(cage.close_syscall(fd), 0);
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
-    
         lindrustfinalize();
-    }    
+    }
     
-
     #[test]
     pub fn ut_lind_fs_read_from_sockets() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
