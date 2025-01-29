@@ -3912,7 +3912,7 @@ pub mod fs_tests {
                 panic!("Unexpected end of file or read error");
             }
     
-            total_bytes_read += bytes_read;
+            total_bytes_read += bytes_read as usize;
         }
     
         assert_eq!(total_bytes_read, 100, "Failed to read expected 100 bytes from /dev/zero");
