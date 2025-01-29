@@ -2286,36 +2286,76 @@ pub mod fs_tests {
     }
 
     #[test]
+    // pub fn ut_lind_fs_rmdir_nowriteperm_parent_dir() {
+    //     //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+    //     // and also performs clean env setup
+    //     let _thelock = setup::lock_and_init();
+
+    //     let cage = interface::cagetable_getref(1);
+
+    //     //We create a new parent directory `/parent_dir` with all write permission
+    //     //flags (to be able to create its child directory) and its child directory
+    //     //'/parent_dir/dir` with all write permision flags.
+    //     let parent_dir = "/parent_dir_nowriteperm";
+    //     let path = "/parent_dir_nowriteperm/dir";
+    //     assert_eq!(cage.mkdir_syscall(parent_dir, S_IRWXA), 0);
+    //     assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
+    //     //Now, we change the parent directories write permission flags to 0,
+    //     //thus calling `rmdir_syscall()`on the child directory
+    //     //should return `Directory does not allow write permission` error
+    //     //because the directory cannot be removed if its parent directory
+    //     //does not allow write permission
+    //     assert_eq!(cage.chmod_syscall(parent_dir, 0o500), 0); // Set parent to read + execute only
+    //     assert_eq!(cage.rmdir_syscall(path), -(Errno::EACCES as i32));
+
+    //     // Restore write permissions to the parent to clean up
+    //     assert_eq!(cage.chmod_syscall(parent_dir, S_IRWXA), 0);
+    //     // Clean up
+    //     assert_eq!(cage.rmdir_syscall(path), 0);
+    //     assert_eq!(cage.rmdir_syscall(parent_dir), 0);
+    //     assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+    //     lindrustfinalize();
+    // }
     pub fn ut_lind_fs_rmdir_nowriteperm_parent_dir() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
+        // Acquire a lock for clean test environment
         let _thelock = setup::lock_and_init();
-
+    
         let cage = interface::cagetable_getref(1);
-
-        //We create a new parent directory `/parent_dir` with all write permission
-        //flags (to be able to create its child directory) and its child directory
-        //'/parent_dir/dir` with all write permision flags.
+    
         let parent_dir = "/parent_dir_nowriteperm";
         let path = "/parent_dir_nowriteperm/dir";
+    
+        // Ensure the directory does not exist before creating
+        let _ = cage.rmdir_syscall(path);
+        let _ = cage.rmdir_syscall(parent_dir);
+    
+        // Debugging: Check if directory exists before creating
+        let mut statdata = StatData::default();
+        if cage.stat_syscall(parent_dir, &mut statdata) == 0 {
+            println!("Directory {} already exists before mkdir!", parent_dir);
+        }
+    
+        // Create the parent directory
         assert_eq!(cage.mkdir_syscall(parent_dir, S_IRWXA), 0);
         assert_eq!(cage.mkdir_syscall(path, S_IRWXA), 0);
-        //Now, we change the parent directories write permission flags to 0,
-        //thus calling `rmdir_syscall()`on the child directory
-        //should return `Directory does not allow write permission` error
-        //because the directory cannot be removed if its parent directory
-        //does not allow write permission
-        assert_eq!(cage.chmod_syscall(parent_dir, 0o500), 0); // Set parent to read + execute only
+    
+        // Restrict the parent directory’s write permissions
+        assert_eq!(cage.chmod_syscall(parent_dir, 0o500), 0); // Read + Execute only
+    
+        // Try to remove the child directory (should fail with EACCES)
         assert_eq!(cage.rmdir_syscall(path), -(Errno::EACCES as i32));
-
-        // Restore write permissions to the parent to clean up
+    
+        // Restore write permissions to clean up
         assert_eq!(cage.chmod_syscall(parent_dir, S_IRWXA), 0);
-        // Clean up
+    
+        // Remove directories
         assert_eq!(cage.rmdir_syscall(path), 0);
         assert_eq!(cage.rmdir_syscall(parent_dir), 0);
+    
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
+    
 
     #[test]
     //BUG:
