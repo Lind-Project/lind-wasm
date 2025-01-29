@@ -432,3 +432,10 @@ pub fn check_and_convert_addr_ext(cage: &Cage, arg: u64, length: usize, prot: i3
     // Convert to physical address by adding base address
     Ok(vmmap.base_address.unwrap() as u64 + arg)
 }
+
+// Add the base address of the vmmap to the argument
+pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
+    // Get read lock on virtual memory map
+    let vmmap = cage.vmmap.read();
+    Ok(vmmap.base_address.unwrap() as u64 + arg)
+}
