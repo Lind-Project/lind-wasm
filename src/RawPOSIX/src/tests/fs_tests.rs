@@ -2361,26 +2361,30 @@ pub mod fs_tests {
         let _ = cage.rmdir_syscall("/parent_dir_permissionbug/dir");
         let _ = cage.rmdir_syscall("/parent_dir_permissionbug");
     
-        // Create the parent directory with full permissions first, then restrict
+        // Create the parent directory with full permissions first
         assert_eq!(cage.mkdir_syscall("/parent_dir_permissionbug", S_IRWXU), 0);
-        assert_eq!(cage.chmod_syscall("/parent_dir_permissionbug", 0o200 | 0o020 | 0o002), 0);
+        
+        // Restrict the parent directory's permissions (no read or execute)
+        assert_eq!(cage.chmod_syscall("/parent_dir_permissionbug", 0o000), 0);
     
         // Debugging output
         let mut statdata = StatData::default();
         cage.stat_syscall("/parent_dir_permissionbug", &mut statdata);
-        println!("Parent dir mode: {:#o}", statdata.st_mode);
+        println!("Parent dir mode before mkdir: {:#o}", statdata.st_mode);
     
         // Try to create a child directory inside the restricted parent (should fail with EACCES)
         let path = "/parent_dir_permissionbug/dir";
         assert_eq!(cage.mkdir_syscall(path, S_IRWXA), -(Errno::EACCES as i32));
     
-        // Remove the parent directory
+        // Restore execute permissions before removing the directory
+        assert_eq!(cage.chmod_syscall("/parent_dir_permissionbug", 0o700), 0);
+    
+        // Now, remove the parent directory
         assert_eq!(cage.rmdir_syscall("/parent_dir_permissionbug"), 0);
     
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
-    }
-    
+    }  
     #[test]
     pub fn ut_lind_fs_stat_file_complex() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
