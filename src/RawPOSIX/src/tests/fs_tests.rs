@@ -3857,15 +3857,10 @@ pub mod fs_tests {
     //     lindrustfinalize();
     // }
     pub fn ut_lind_fs_read_from_chardev_file() {
-        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
+        // Acquire a lock to ensure test isolation
         let _thelock = setup::lock_and_init();
-    
         let cage = interface::cagetable_getref(1);
     
-        // This test mainly verifies reading from a character device type file.
-        // We are trying to read 100 bytes from "/dev/zero", which should return 
-        // 100 bytes of "0" filled characters.
         let path = "/dev/zero";
     
         // Ensure /dev directory exists
@@ -3876,7 +3871,7 @@ pub mod fs_tests {
             let fd = cage.open_syscall(path, O_CREAT | O_TRUNC | O_RDWR, S_IRWXA);
             assert!(fd >= 0, "Failed to create /dev/zero");
     
-            // Write 100 bytes of zero to mimic /dev/zero behavior
+            // Write exactly 100 bytes of zero to mimic /dev/zero behavior
             let write_data = vec![0u8; 100];
             assert_eq!(
                 cage.write_syscall(fd, write_data.as_ptr(), 100),
@@ -3884,7 +3879,7 @@ pub mod fs_tests {
                 "Failed to write zeros to /dev/zero"
             );
     
-            // Ensure data is flushed
+            // Flush data to ensure consistency
             cage.fsync_syscall(fd);
     
             assert_eq!(cage.close_syscall(fd), 0, "Failed to close /dev/zero after writing");
@@ -3894,19 +3889,33 @@ pub mod fs_tests {
         let fd = cage.open_syscall(path, O_RDWR, S_IRWXA);
         assert!(fd >= 0, "Failed to open /dev/zero for reading");
     
-        // Seek to the beginning of the file before reading
+        // Seek to the beginning before reading
         assert_eq!(
             cage.lseek_syscall(fd, 0, libc::SEEK_SET),
             0,
             "Failed to seek to the beginning of /dev/zero"
         );
     
-        // Allocate buffer properly
+        // Allocate buffer for reading
         let mut read_bufzero = vec![0u8; 100];
+        
+        // Implement a read loop to ensure full 100-byte read
+        let mut total_bytes_read = 0;
+        while total_bytes_read < 100 {
+            let bytes_read = cage.read_syscall(
+                fd,
+                read_bufzero.as_mut_ptr().add(total_bytes_read),
+                100 - total_bytes_read,
+            );
     
-        // Read 100 bytes from /dev/zero
-        let bytes_read = cage.read_syscall(fd, read_bufzero.as_mut_ptr(), 100);
-        assert_eq!(bytes_read, 100, "Failed to read expected 100 bytes from /dev/zero");
+            if bytes_read <= 0 {
+                panic!("Unexpected end of file or read error");
+            }
+    
+            total_bytes_read += bytes_read;
+        }
+    
+        assert_eq!(total_bytes_read, 100, "Failed to read expected 100 bytes from /dev/zero");
     
         // Verify that all bytes read are zero
         assert!(
@@ -3919,7 +3928,7 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
     
         lindrustfinalize();
-    }
+    }    
     
 
     #[test]
