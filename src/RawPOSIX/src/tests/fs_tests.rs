@@ -2327,31 +2327,60 @@ pub mod fs_tests {
     //directory does not check for search permission. Thus, the following test
     //will not return any errors and run normally even though the parent
     //directory does not grand search permission.
+    // pub fn ut_lind_fs_search_permission_bug_with_rmdir() {
+    //     //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+    //     //and also performs clean env setup
+    //     let _thelock = setup::lock_and_init();
+
+    //     let cage = interface::cagetable_getref(1);
+
+    //     //Creating the parent directory that does not allow search permission
+    //     //by excluding any read flags and specifying only write flags
+    //     //to be able to delete the child directory.
+    //     let path = "/parent_dir_permissionbug/dir";
+    //     assert_eq!(
+    //         cage.mkdir_syscall("/parent_dir_permissionbug", 0o200 | 0o020 | 0o002),
+    //         0
+    //     );
+    //     //Creating the child directory with all the required flags
+    //     //and then deleting it. Because of the bug described above,
+    //     //removing the directory will not return any errors.
+    //     assert_eq!(cage.mkdir_syscall(path, S_IRWXA), -(Errno::EACCES as i32));
+    //     assert_eq!(cage.rmdir_syscall("/parent_dir_permissionbug"), 0);
+
+    //     assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+    //     lindrustfinalize();
+    // }
     pub fn ut_lind_fs_search_permission_bug_with_rmdir() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        //and also performs clean env setup
+        // Acquire a lock for clean test environment
         let _thelock = setup::lock_and_init();
-
+    
         let cage = interface::cagetable_getref(1);
-
-        //Creating the parent directory that does not allow search permission
-        //by excluding any read flags and specifying only write flags
-        //to be able to delete the child directory.
+    
+        // Ensure a clean state
+        let _ = cage.rmdir_syscall("/parent_dir_permissionbug/dir");
+        let _ = cage.rmdir_syscall("/parent_dir_permissionbug");
+    
+        // Create the parent directory with full permissions first, then restrict
+        assert_eq!(cage.mkdir_syscall("/parent_dir_permissionbug", S_IRWXU), 0);
+        assert_eq!(cage.chmod_syscall("/parent_dir_permissionbug", 0o200 | 0o020 | 0o002), 0);
+    
+        // Debugging output
+        let mut statdata = StatData::default();
+        cage.stat_syscall("/parent_dir_permissionbug", &mut statdata);
+        println!("Parent dir mode: {:#o}", statdata.st_mode);
+    
+        // Try to create a child directory inside the restricted parent (should fail with EACCES)
         let path = "/parent_dir_permissionbug/dir";
-        assert_eq!(
-            cage.mkdir_syscall("/parent_dir_permissionbug", 0o200 | 0o020 | 0o002),
-            0
-        );
-        //Creating the child directory with all the required flags
-        //and then deleting it. Because of the bug described above,
-        //removing the directory will not return any errors.
         assert_eq!(cage.mkdir_syscall(path, S_IRWXA), -(Errno::EACCES as i32));
+    
+        // Remove the parent directory
         assert_eq!(cage.rmdir_syscall("/parent_dir_permissionbug"), 0);
-
+    
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
-
+    
     #[test]
     pub fn ut_lind_fs_stat_file_complex() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
