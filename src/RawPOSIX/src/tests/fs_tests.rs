@@ -3366,7 +3366,7 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     #[test]
-    pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file_1() {
+    pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file() {
         // Acquire a lock for test isolation
         let _thelock = setup::lock_and_init();
     
@@ -3375,15 +3375,15 @@ pub mod fs_tests {
         let parent_dir = "/dir";
     
         // Ensure parent directory does not exist before the test
-        let _ = cage.rmdir_syscall(parent_dir);
+        if cage.access_syscall(parent_dir, F_OK) == 0 {
+            assert_eq!(cage.rmdir_syscall(parent_dir), 0, "Failed to remove parent directory");
+        }
         let _ = cage.unlink_syscall(path);
     
-        // Verify parent directory truly doesn't exist
-        assert_eq!(
-            cage.access_syscall(parent_dir, F_OK),
-            -1,
-            "Expected parent directory to be absent"
-        );
+        // Debugging: Print actual error code
+        let err_code = cage.access_syscall(parent_dir, F_OK);
+        println!("Debug: access_syscall returned {}", err_code);
+        assert_eq!(err_code, -1, "Expected parent directory to be absent, got {}", err_code);
     
         // Attempt to open a file in a non-existent directory without O_CREAT
         let fd = cage.open_syscall(path, O_RDONLY, S_IRWXA);
@@ -3404,6 +3404,7 @@ pub mod fs_tests {
         
         lindrustfinalize();
     }
+
 
     #[test]
     pub fn ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file() {
