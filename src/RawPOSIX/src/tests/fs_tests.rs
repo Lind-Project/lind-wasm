@@ -3365,6 +3365,37 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
+    #[test]  
+    pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file_1() {
+        // Acquire a lock for test isolation
+        let _thelock = setup::lock_and_init();
+    
+        let cage = interface::cagetable_getref(1);
+        let path = "/dir/file";
+        let parent_dir = "/dir";
+    
+        // Ensure parent directory doesn't exist before running the test
+        let _ = cage.rmdir_syscall(parent_dir);
+    
+        // Attempt to open a file in a non-existent directory without O_CREAT
+        let fd = cage.open_syscall(path, O_RDONLY, S_IRWXA);
+        let err = get_errno();
+        assert_eq!(fd, -1, "Expected failure, but open_syscall succeeded");
+        assert_eq!(err, libc::ENOENT, "Expected ENOENT, got {}", err);
+    
+        // Attempt to open a file with O_CREAT in a non-existent directory
+        let fd2 = cage.open_syscall(path, O_CREAT | O_RDWR, S_IRWXA);
+        let err2 = get_errno();
+        assert_eq!(fd2, -1, "Expected failure, but open_syscall succeeded with O_CREAT");
+        assert_eq!(err2, libc::ENOENT, "Expected ENOENT, got {}", err2);
+    
+        // Clean up and finalize
+        let _ = cage.unlink_syscall(path);
+        let _ = cage.rmdir_syscall(parent_dir);
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        
+        lindrustfinalize();
+    }
 
     #[test]
     pub fn ut_lind_fs_open_existing_parentdirectory_and_nonexisting_file() {
