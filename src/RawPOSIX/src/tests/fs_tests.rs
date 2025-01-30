@@ -159,77 +159,8 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
-
     #[test]
     pub fn ut_lind_fs_broken_close() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
-        let _thelock = setup::lock_and_init();
-
-        //testing a muck up with the inode table where the regular close does not work
-        // as intended
-
-        let cage = interface::cagetable_getref(1);
-
-        //write should work
-        let mut fd = cage.open_syscall("/broken_close_file", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
-        assert_eq!(cage.write_syscall(fd, str2cbuf("Hello There!"), 12), 12);
-        println!("fd1: {}", fd);
-        for entry in FDTABLE.iter() {
-            let (key, fd_array) = entry.pair();
-            println!("Cage ID: {}", key);
-            for fd_entry in fd_array.iter().flatten() { // Flatten removes None elements
-                println!("{}", fd_entry.underfd); // Using Display trait
-            }
-        }
-        println!("");
-        
-        assert_eq!(cage.close_syscall(fd), 0);
-
-
-        println!("fd1: {}", fd);
-        for entry in FDTABLE.iter() {
-            let (key, fd_array) = entry.pair();
-            println!("Cage ID: {}", key);
-            for fd_entry in fd_array.iter().flatten() { // Flatten removes None elements
-                println!("{}", fd_entry.underfd); // Using Display trait
-            }
-        }
-
-        //close the file and then open it again... and then close it again
-        fd = cage.open_syscall("/broken_close_file", O_RDWR, S_IRWXA);
-
-        assert_eq!(cage.close_syscall(fd), 0);
-
-        println!("\nfd2: {}", fd);
-        for entry in FDTABLE.iter() {
-            let (key, fd_array) = entry.pair();
-            println!("Cage ID: {}", key);
-            for fd_entry in fd_array.iter().flatten() { // Flatten removes None elements
-                println!("{}", fd_entry.underfd); // Using Display trait
-            }
-        }
-
-        //let's try some things with connect
-        //we are going to open a socket with a UDP specification...
-        let sockfd = cage.socket_syscall(libc::AF_INET, libc::SOCK_STREAM, 0);
-
-        //bind should not be interesting
-        let mut sockad = interface::GenSockaddr::V4(interface::SockaddrV4::default());
-        sockad.set_family(libc::AF_INET as u16);
-        assert_eq!(cage.bind_syscall(sockfd, &sockad), 0);
-        fd = cage.open_syscall("/broken_close_file", O_RDWR, S_IRWXA);
-        assert_eq!(cage.close_syscall(fd), 0);
-
-        fd = cage.open_syscall("/broken_close_file", O_RDWR, S_IRWXA);
-        assert_eq!(cage.close_syscall(fd), 0);
-
-        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
-
-        lindrustfinalize();
-    }
-    #[test]
-    pub fn ut_lind_fs_broken_close_1() {
         // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently
         // and also performs a clean environment setup
         let _thelock = setup::lock_and_init();
