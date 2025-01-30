@@ -228,6 +228,90 @@ pub mod fs_tests {
 
         lindrustfinalize();
     }
+    #[test]
+    pub fn ut_lind_fs_broken_close_1() {
+        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently
+        // and also performs a clean environment setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+        let filepath = "/broken_close_file";
+    
+        // Ensure the file does not already exist from a previous test run
+        let _ = cage.unlink_syscall(filepath);
+    
+        // Open the file for reading and writing, creating it if necessary
+        let mut fd = cage.open_syscall(filepath, O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
+        if fd < 0 {
+            let err = get_errno();
+            panic!("Failed to open file '{}'. Errno: {}", filepath, err);
+        }
+        println!("Debug: Opened file '{}' with fd {}", filepath, fd);
+    
+        // Write data to the file
+        let write_result = cage.write_syscall(fd, str2cbuf("Hello There!"), 12);
+        if write_result < 0 {
+            let err = get_errno();
+            panic!("write_syscall failed. Errno: {}", err);
+        }
+        assert_eq!(write_result, 12, "write_syscall wrote an unexpected number of bytes");
+    
+        println!("Debug: Successfully wrote 12 bytes to file '{}'", filepath);
+    
+        // Print file descriptor table before closing
+        println!("Debug: File Descriptor Table Before Close");
+        for entry in FDTABLE.iter() {
+            let (key, fd_array) = entry.pair();
+            println!("Cage ID: {}", key);
+            for fd_entry in fd_array.iter().flatten() {
+                println!("FD: {}", fd_entry.underfd);
+            }
+        }
+    
+        // Close the file descriptor
+        let close_result = cage.close_syscall(fd);
+        assert_eq!(close_result, 0, "close_syscall failed");
+    
+        println!("Debug: Successfully closed fd {}", fd);
+    
+        // Reopen the file and close it again to test correct behavior
+        fd = cage.open_syscall(filepath, O_RDWR, S_IRWXA);
+        if fd < 0 {
+            let err = get_errno();
+            panic!("Re-opening file failed. Errno: {}", err);
+        }
+        assert_eq!(cage.close_syscall(fd), 0, "Failed to close reopened file");
+    
+        println!("Debug: Successfully reopened and closed file '{}'", filepath);
+    
+        // Open a socket and perform basic operations
+        let sockfd = cage.socket_syscall(libc::AF_INET, libc::SOCK_STREAM, 0);
+        assert!(sockfd >= 0, "socket_syscall failed");
+    
+        let mut sockad = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+        sockad.set_family(libc::AF_INET as u16);
+        assert_eq!(cage.bind_syscall(sockfd, &sockad), 0, "bind_syscall failed");
+    
+        // Perform additional open/close operations on the file
+        for _ in 0..2 {
+            fd = cage.open_syscall(filepath, O_RDWR, S_IRWXA);
+            assert!(fd >= 0, "Failed to open file '{}'", filepath);
+            assert_eq!(cage.close_syscall(fd), 0, "Failed to close file '{}'", filepath);
+        }
+    
+        // Cleanup: Remove the test file
+        let unlink_result = cage.unlink_syscall(filepath);
+        if unlink_result < 0 {
+            let err = get_errno();
+            println!("Warning: Failed to remove test file '{}'. Errno: {}", filepath, err);
+        } else {
+            println!("Debug: Successfully removed test file '{}'", filepath);
+        }
+    
+        // Finalize test
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+    
 
     #[test]
     pub fn ut_lind_fs_chmod_valid_args() {
