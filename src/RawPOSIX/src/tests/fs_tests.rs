@@ -3366,7 +3366,7 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     #[test]
-    pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file() {
+    pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file_1() {
         // Acquire a lock for test isolation
         let _thelock = setup::lock_and_init();
     
