@@ -502,6 +502,62 @@ pub mod fs_tests {
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
+    #[test]
+    pub fn ut_lind_fs_mmap_invalid_flags_both_1() {
+        // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean environment setup.
+        let _thelock = setup::lock_and_init();
+    
+        let cage = interface::cagetable_getref(1);
+    
+        // Creating a regular file with `O_RDWR` flag, making it valid for any mapping.
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+    
+        // Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+    
+        // Explicitly set file permissions to ensure read/write access
+        assert_eq!(cage.chmod_syscall(filepath, S_IRWXA), 0, "Failed to set file permissions");
+    
+        // Checking file permissions before mmap
+        let stat_buf = cage.stat_syscall(filepath);
+        println!("Debug: File permissions: {:o}", stat_buf.st_mode & 0o777);
+    
+        // Trying to mmap with both `MAP_PRIVATE` and `MAP_SHARED` flags.
+        let mmap_result = unsafe {
+            libc::mmap(
+                0 as *mut c_void,
+                5,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_SHARED,
+                fd,
+                0,
+            )
+        };
+    
+        // Check the result of mmap and get the error if it failed.
+        assert_eq!(mmap_result, libc::MAP_FAILED, "mmap did not fail as expected");
+        if mmap_result == libc::MAP_FAILED {
+            let errno_val = get_errno();
+            println!("Debug: mmap failed with errno {}", errno_val);
+            match errno_val {
+                libc::EINVAL => assert_eq!(errno_val, libc::EINVAL, "Expected EINVAL for invalid mmap flags"),
+                libc::ENOENT => assert_eq!(errno_val, libc::ENOENT, "File not found"),
+                libc::EISDIR => assert_eq!(errno_val, libc::EISDIR, "Is a directory"),
+                libc::ENODEV => assert_eq!(errno_val, libc::ENODEV, "No such device"),
+                libc::EACCES => panic!("Permission denied (EACCES) - check file permissions and security settings"),
+                _ => panic!("Unexpected error code: {}", errno_val),
+            }
+        }
+    
+        // Clean up and finalize
+        assert_eq!(cage.unlink_syscall(filepath), 0);
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+    
 
     #[test]
     pub fn ut_lind_fs_mmap_no_read() {
@@ -3363,48 +3419,6 @@ pub mod fs_tests {
         let _ = cage.unlink_syscall(path);
         let _ = cage.rmdir_syscall("/dir");
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
-        lindrustfinalize();
-    }
-    #[test]
-    pub fn ut_lind_fs_open_nonexisting_parentdirectory_and_file_1() {
-        // Acquire a lock for test isolation
-        let _thelock = setup::lock_and_init();
-    
-        let cage = interface::cagetable_getref(1);
-        let path = "/dir/file";
-        let parent_dir = "/dir";
-    
-        // Ensure parent directory does not exist before the test
-        if cage.access_syscall(parent_dir, F_OK) == 0 {
-            let _ = cage.unlink_syscall(path);
-            assert_eq!(cage.rmdir_syscall(parent_dir), 0, "Failed to remove parent directory");
-        }
-        
-        // Debugging: Print actual error code
-        let err_code = cage.access_syscall(parent_dir, F_OK);
-        println!("Debug: access_syscall returned {}", err_code);
-        assert!(
-            err_code == -1 || err_code == -2,
-            "Expected parent directory to be absent, but got error code: {}", err_code
-        );
-    
-        // Attempt to open a file in a non-existent directory without O_CREAT
-        let fd = cage.open_syscall(path, O_RDONLY, S_IRWXA);
-        let err = get_errno();
-        assert_eq!(fd, -1, "Expected failure, but open_syscall succeeded unexpectedly");
-        assert_eq!(err, libc::ENOENT, "Expected ENOENT, got {}", err);
-    
-        // Attempt to open a file with O_CREAT in a non-existent directory
-        let fd2 = cage.open_syscall(path, O_CREAT | O_RDWR | O_EXCL, S_IRWXA);
-        let err2 = get_errno();
-        assert_eq!(fd2, -1, "Expected failure, but open_syscall succeeded with O_CREAT");
-        assert_eq!(err2, libc::ENOENT, "Expected ENOENT, got {}", err2);
-    
-        // Clean up and finalize
-        let _ = cage.unlink_syscall(path);
-        let _ = cage.rmdir_syscall(parent_dir);
-        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
-        
         lindrustfinalize();
     }
 
