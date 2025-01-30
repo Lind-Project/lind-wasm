@@ -503,7 +503,7 @@ pub mod fs_tests {
         lindrustfinalize();
     }
     #[test]
-    pub fn ut_lind_fs_mmap_invalid_flags_both_1() {
+    pub fn ut_lind_fs_mmap_invalid_flags_both() {
         // Acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean environment setup.
         let _thelock = setup::lock_and_init();
@@ -522,7 +522,10 @@ pub mod fs_tests {
         assert_eq!(cage.chmod_syscall(filepath, S_IRWXA), 0, "Failed to set file permissions");
     
         // Checking file permissions before mmap
-        let stat_buf = cage.stat_syscall(filepath);
+        let mut stat_buf: stat = unsafe { std::mem::zeroed() };
+        assert_eq!(cage.stat_syscall(filepath, &mut stat_buf), 0, "Failed to get file stat");
+    
+        // Print file permissions (st_mode is usually stored in the stat struct)
         println!("Debug: File permissions: {:o}", stat_buf.st_mode & 0o777);
     
         // Trying to mmap with both `MAP_PRIVATE` and `MAP_SHARED` flags.
