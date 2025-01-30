@@ -3376,10 +3376,10 @@ pub mod fs_tests {
     
         // Ensure parent directory does not exist before the test
         if cage.access_syscall(parent_dir, F_OK) == 0 {
+            let _ = cage.unlink_syscall(path);
             assert_eq!(cage.rmdir_syscall(parent_dir), 0, "Failed to remove parent directory");
         }
-        let _ = cage.unlink_syscall(path);
-    
+        
         // Debugging: Print actual error code
         let err_code = cage.access_syscall(parent_dir, F_OK);
         println!("Debug: access_syscall returned {}", err_code);
