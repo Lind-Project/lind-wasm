@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
-use rawposix::safeposix::dispatcher::lind_syscall_api;
+use rawposix::interface::signal_epoch_reset;
+use rawposix::safeposix::dispatcher::{lind_signal_init, lind_syscall_api, lind_update_signal_triggerable, lindgetpendingsignals, lindgetsighandler, lindremovependingsignals};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -9,7 +10,7 @@ use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Barrier};
+use std::sync::{Arc, Barrier, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 use wasmtime::{AsContext, AsContextMut, Caller, Engine, ExternType, InstanceId, InstantiateType, Linker, Module, OnCalledAction, RewindingReturn, SharedMemory, Store, StoreOpaque, Val};
@@ -343,7 +344,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     .and_then(|export| export.into_global())
                     .expect("Failed to find shared_global");
                 let pointer = lind_epoch.get_handler(&mut store);
-                lind_manager.add_cage_signal_handler(child_cageid as i32, 1, pointer);
+                lind_signal_init(child_cageid, pointer);
 
                 // new cage created, increment the cage counter
                 lind_manager.increment();
@@ -1231,36 +1232,78 @@ pub fn longjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sy
     0
 }
 
-pub fn kill_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-        (caller: &mut Caller<'_, T>, pid: i32, signal: i32) -> i32 {
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
+// pub fn kill_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+//         (caller: &mut Caller<'_, T>, pid: i32, signal: i32) -> i32 {
+//     let host = caller.data().clone();
+//     let ctx = host.get_ctx();
     
-    let handler = ctx.lind_manager.get_handler(pid, 1).unwrap();
-    let epoch = handler as *mut u64;
-    // println!("{} kill {}, set epoch to 1 from {}", ctx.pid, pid, unsafe{ *epoch });
-    unsafe { *epoch = 1; }
+//     let handler = ctx.lind_manager.get_handler(pid, 1).unwrap();
+//     let epoch = handler as *mut u64;
+//     // println!("{} kill {}, set epoch to 1 from {}", ctx.pid, pid, unsafe{ *epoch });
+//     unsafe { *epoch = 1; }
     
-    0
+//     0
+// }
+struct SignalAsyncifyManager {
+    signal_handler: i32,
+    signo: i32,
+}
+
+impl SignalAsyncifyManager {
+    fn set(&mut self, signal_handler: i32, signo: i32) {
+        self.signal_handler = signal_handler;
+        self.signo = signo;
+    }
+}
+
+fn get_signal_asyncify_manager() -> &'static Mutex<SignalAsyncifyManager> {
+    static SIGNAL_ASYNCIFY_MANAGER: OnceLock<Mutex<SignalAsyncifyManager>> = OnceLock::new();
+    SIGNAL_ASYNCIFY_MANAGER.get_or_init(|| Mutex::new(SignalAsyncifyManager { signal_handler: 0, signo: 0 }))
 }
 
 pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
         (caller: &mut Caller<'_, T>) -> i32 {
-    if !caller.as_context().get_rewinding_state().rewinding {
-        let host = caller.data().clone();
-        let ctx = host.get_ctx();
-        
-        let handler = ctx.lind_manager.get_handler(ctx.pid, 1).unwrap();
-        let epoch = handler as *mut u64;
-        // println!("signal triggered for {}, epoch={}", ctx.pid, unsafe { *epoch });
-    
-        unsafe { *epoch = 0; }
-    }
-    // println!("reached signal handler");
+    println!("signal handler!");
     let signal_func = caller.get_signal_callback().unwrap();
-    let _res = signal_func.call(caller, 1 as i32);
 
-    // println!("signal_func return");
+    if caller.as_context().get_rewinding_state().rewinding {
+        let manager = get_signal_asyncify_manager().lock().unwrap();
+        signal_func.call(caller.as_context_mut(), (manager.signal_handler, manager.signo));
+        return 0;
+    }
+
+    let host = caller.data().clone();
+    let ctx = host.get_ctx();
+
+    lind_update_signal_triggerable(ctx.pid as u64, false);
+    signal_epoch_reset(ctx.pid as u64);
+    
+    loop {
+        let pending_signals = lindgetpendingsignals(ctx.pid as u64);
+        println!("pending_signals: {}", pending_signals);
+        if pending_signals == 0 {
+            break;
+        }
+        for signo in 1..=31 {
+            if pending_signals & (1 << signo) > 0 {
+                lindremovependingsignals(ctx.pid as u64, signo);
+                let signal_handler = lindgetsighandler(ctx.pid as u64, signo);
+                println!("signo: {}, handler: {}", signo, signal_handler);
+                if signal_handler == 0 { // default handler
+                    // TODO
+                // } else if signal_handler == 1 { // ignore
+                //     continue;
+                } else {
+                    let mut manager = get_signal_asyncify_manager().lock().unwrap();
+                    manager.set(signal_handler as i32, signo as i32);
+                    drop(manager);
+                    let _res = signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo as i32));
+                }
+            }
+        }
+    }
+
+    lind_update_signal_triggerable(ctx.pid as u64, true);
     
     0
 }

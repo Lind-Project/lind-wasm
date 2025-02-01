@@ -214,7 +214,7 @@ impl Global {
         Ok(())
     }
 
-    pub fn get_handler(&self, mut store: impl AsContextMut) -> u64 {
+    pub fn get_handler(&self, mut store: impl AsContextMut) -> *mut u64 {
         let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
         let global_ty = self._ty(&store);
         // if global_ty.mutability() != Mutability::Var {
@@ -224,8 +224,7 @@ impl Global {
         //     .context("type mismatch: attempt to set global to value of wrong type")?;
         unsafe {
             let definition = &mut *store[self.0].definition;
-            let raw_ptr: *mut i64 = definition.as_i64_mut();
-            return raw_ptr as u64;
+            definition.as_u64_mut()
         }
     }
 

@@ -2247,11 +2247,11 @@ impl<T> Caller<'_, T> {
         }
     }
 
-    pub fn get_signal_callback(&mut self) -> Result<TypedFunc<i32, ()>, ()> {
+    pub fn get_signal_callback(&mut self) -> Result<TypedFunc<(i32, i32), ()>, ()> {
         if let Some(signal_callback_extern) = self.get_export("signal_callback") {
             match signal_callback_extern {
                 Extern::Func(signal_callback) => {
-                    match signal_callback.typed::<i32, ()>(&self) {
+                    match signal_callback.typed::<(i32, i32), ()>(&self) {
                         Ok(func) => {
                             return Ok(func);
                         }

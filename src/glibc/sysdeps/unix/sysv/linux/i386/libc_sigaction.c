@@ -18,6 +18,7 @@
 
 #include <signal.h>
 #include <ldsodefs.h>
+#include <syscall-template.h>
 
 #define SA_RESTORER 0x04000000
 
@@ -82,10 +83,8 @@ extern void restore (void) {
 
 // RESTORE (restore, __NR_sigreturn)
 
-__sighandler_t callback = 0;
-
 __attribute__((export_name("signal_callback")))
-void signal_callback(int signal) {
+void signal_callback(__sighandler_t callback, int signal) {
   if(callback != 0)
     callback(signal);
 }
@@ -93,7 +92,6 @@ void signal_callback(int signal) {
 int
 __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
 {
-  callback = act->sa_handler;
-  return 0;
+  return MAKE_SYSCALL(147, "syscall|sigaction", (uint64_t) sig, (uint64_t) act, (uint64_t) oact, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__libc_sigaction)

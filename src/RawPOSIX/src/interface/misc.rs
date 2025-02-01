@@ -201,6 +201,22 @@ pub fn sigcheck() -> bool {
     sigbool
 }
 
+pub fn signal_epoch_trigger(cageid: u64) {
+    let cage = cagetable_getref(cageid);
+    let epoch = *cage.epoch_handler.write();
+    unsafe {
+        *epoch = 1;
+    }
+}
+
+pub fn signal_epoch_reset(cageid: u64) {
+    let cage = cagetable_getref(cageid);
+    let epoch = *cage.epoch_handler.write();
+    unsafe {
+        *epoch = 0;
+    }
+}
+
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
     let slice = unsafe { std::slice::from_raw_parts_mut(bufptr, count) };
     let mut f = std::fs::OpenOptions::new()

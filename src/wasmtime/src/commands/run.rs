@@ -10,7 +10,7 @@ use crate::common::{Profile, RunCommon, RunTarget};
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
 use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
-use rawposix::safeposix::dispatcher::lind_syscall_api;
+use rawposix::safeposix::dispatcher::{lind_signal_init, lind_syscall_api};
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
@@ -599,16 +599,9 @@ impl RunCommand {
                     .and_then(|export| export.into_global())
                     .expect("Failed to find shared_global");
 
-                // lind_epoch.set(&mut *store, Val::I64(1));
                 let pointer = lind_epoch.get_handler(&mut *store);
 
-                lind_manager.add_cage_signal_handler(pid as i32, 1, pointer);
-
-                // thread::spawn(move || {
-                //     thread::sleep(Duration::from_secs(1));
-                //     let epoch = pointer as *mut u64;
-                //     unsafe { *epoch = 1 };
-                // });
+                lind_signal_init(pid, pointer as *mut u64);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),

@@ -54,10 +54,6 @@ impl LindCommonCtx {
             30 => {
                 wasmtime_lind_multi_process::exit_syscall(caller, arg1 as i32)
             }
-            // kill syscall
-            148 => {
-                wasmtime_lind_multi_process::kill_call(caller, arg1 as i32, arg2 as i32)
-            }
             // other syscalls goes into rawposix
             _ => {
                 lind_syscall_api(

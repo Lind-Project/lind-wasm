@@ -86,6 +86,8 @@ pub const SIGIO: i32 = 29;          // I/O now possible
 pub const SIGPOLL: i32 = 29;        // Pollable event (same as SIGIO)
 pub const SIGPWR: i32 = 30;         // Power failure
 
+pub const SIG_MAX: i32 = 32;        // maximum value of signal numbers
+
 // Signal actions
 pub const SIG_BLOCK: i32 = 0;       // Block signals in signal mask
 pub const SIG_UNBLOCK: i32 = 1;     // Unblock signals in signal mask
