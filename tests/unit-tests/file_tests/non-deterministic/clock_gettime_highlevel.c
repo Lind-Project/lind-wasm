@@ -2,7 +2,13 @@
 #include <time.h>
 
 /*
-    This is higher level test for clock_gettime, which we don't directly call clock_gettime function but still call this syscall eventually
+    This test indirectly calls the clock_gettime syscall through the clock() function.
+    The clock() function in glibc internally uses clock_gettime to measure CPU time 
+    consumed by the process.
+
+    The program measures the CPU time taken to run 1,000,000 iterations of a simple loop.
+    It records the start time using clock(), performs the computation, then records the
+    end time and calculates the elapsed CPU time.
 */
 
 int main() {
