@@ -170,7 +170,7 @@ impl Cage {
             sigset: interface::RustAtomicU64::new(
                 self.sigset.load(interface::RustAtomicOrdering::Relaxed),
             ),
-            pending_signals: interface::RustAtomicU64::new(0),
+            pending_signals: interface::RustLock::new(vec![]),
             signal_triggerable: interface::RustAtomicBool::new(true),
             epoch_handler: interface::RustLock::new(0 as *mut u64),
             main_threadid: interface::RustAtomicU64::new(0),
@@ -258,8 +258,8 @@ impl Cage {
             sigset: interface::RustAtomicU64::new(
                 self.sigset.load(interface::RustAtomicOrdering::Relaxed),
             ),
-            pending_signals: interface::RustAtomicU64::new(
-                self.pending_signals.load(interface::RustAtomicOrdering::Relaxed),
+            pending_signals: interface::RustLock::new(
+                self.pending_signals.read().clone(),
             ),
             signal_triggerable: interface::RustAtomicBool::new(true),
             epoch_handler: interface::RustLock::new(0 as *mut u64),
@@ -484,7 +484,7 @@ impl Cage {
         }
 
         if let Some(some_act) = act {
-            println!("sigaction: sa_handler: {}", some_act.sa_handler);
+            // println!("sigaction: sa_handler: {}", some_act.sa_handler);
             if sig == SIGKILL as i32 || sig == SIGSTOP as i32 {
                 // Disallow changing the action for SIGKILL and SIGSTOP
                 return syscall_error(
@@ -510,8 +510,13 @@ impl Cage {
         }
 
         if let Some(cage) = interface::cagetable_getref_opt(cage_id as u64) {
-            cage.pending_signals.fetch_or(1 << sig, interface::RustAtomicOrdering::SeqCst);
-            if cage.signal_triggerable.load(interface::RustAtomicOrdering::SeqCst) {
+            let mut pending_signals = cage.pending_signals.write();
+            pending_signals.push(sig);
+            // cage.pending_signals.fetch_or(1 << sig, interface::RustAtomicOrdering::SeqCst);
+            // if cage.signal_triggerable.load(interface::RustAtomicOrdering::SeqCst) {
+                // interface::signal_epoch_trigger(cage_id as u64);
+            // }
+            if !interface::signal_check_block(cage_id as u64, sig) {
                 interface::signal_epoch_trigger(cage_id as u64);
             }
             0
@@ -549,12 +554,16 @@ impl Cage {
                     self.sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
                     // send pending signals
                     // TODO: check if the signal is set here is more efficient
-                    if self.signal_triggerable.load(interface::RustAtomicOrdering::SeqCst) {
-                        interface::signal_epoch_trigger(self.cageid);
-                    }
+                    // if self.signal_triggerable.load(interface::RustAtomicOrdering::SeqCst) {
+                        // interface::signal_epoch_trigger(self.cageid);
+                    // }
+                    // let pending_signals = self.pending_signals.read();
+                    // pending_signals.contains()
+                    interface::signal_epoch_trigger(self.cageid);
                     0
                 }
                 SIG_SETMASK => {
+                    // TODO: handle signal get unblocked
                     // Set sigset to set
                     self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0

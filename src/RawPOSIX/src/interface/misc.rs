@@ -203,7 +203,8 @@ pub fn sigcheck() -> bool {
 
 pub fn signal_epoch_trigger(cageid: u64) {
     let cage = cagetable_getref(cageid);
-    let epoch = *cage.epoch_handler.write();
+    let guard = cage.epoch_handler.write();
+    let epoch = *guard;
     unsafe {
         *epoch = 1;
     }
@@ -211,10 +212,18 @@ pub fn signal_epoch_trigger(cageid: u64) {
 
 pub fn signal_epoch_reset(cageid: u64) {
     let cage = cagetable_getref(cageid);
-    let epoch = *cage.epoch_handler.write();
+    let guard = cage.epoch_handler.write();
+    let epoch = *guard;
     unsafe {
         *epoch = 0;
     }
+}
+
+pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
+    let cage = cagetable_getref(cageid);
+    let sigset = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
+    
+    (sigset & ((1 << signo) as u64)) > 0
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {

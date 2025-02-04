@@ -202,16 +202,16 @@ pub fn lind_syscall_api(
 ) -> i32 {
     let call_number = call_number as i32;
 
-    if call_number as i32 != WRITE_SYSCALL {
-        match call_name {
-            0 => {
-                println!("\x1b[90mcage {} calls UNNAMED ({})\x1b[0m", cageid, call_number);
-            },
-            _ => {
-                println!("\x1b[90mcage {} calls {} ({})\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number);
-            }
-        }
-    }
+    // if call_number as i32 != WRITE_SYSCALL {
+    //     match call_name {
+    //         0 => {
+    //             println!("\x1b[90mcage {} calls UNNAMED ({})\x1b[0m", cageid, call_number);
+    //         },
+    //         _ => {
+    //             println!("\x1b[90mcage {} calls {} ({})\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number);
+    //         }
+    //     }
+    // }
 
     let ret = match call_number {
         WRITE_SYSCALL => {
@@ -1698,24 +1698,24 @@ pub fn lind_syscall_api(
         _ => -1, // Return -1 for unknown syscalls
     };
 
-    if call_number as i32 != WRITE_SYSCALL {
-        match call_name {
-            0 => {
-                if ret < 0 {
-                    println!("\x1b[31mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
-                } else {
-                    println!("\x1b[90mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
-                }
-            },
-            _ => {
-                if ret < 0 {
-                    println!("\x1b[31mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
-                } else {
-                    println!("\x1b[90mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
-                }
-            }
-        }
-    }
+    // if call_number as i32 != WRITE_SYSCALL {
+    //     match call_name {
+    //         0 => {
+    //             if ret < 0 {
+    //                 println!("\x1b[31mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
+    //             } else {
+    //                 println!("\x1b[90mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
+    //             }
+    //         },
+    //         _ => {
+    //             if ret < 0 {
+    //                 println!("\x1b[31mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
+    //             } else {
+    //                 println!("\x1b[90mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
+    //             }
+    //         }
+    //     }
+    // }
 
     ret
 }
@@ -1792,20 +1792,36 @@ pub fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
     };
 }
 
-pub fn lindgetpendingsignals(cageid: u64) -> i32 {
+pub fn lindgetpendingsignals(cageid: u64) -> Vec<i32> {
     let cage = interface::cagetable_getref(cageid);
-    let pending_signals = cage.pending_signals.load(interface::RustAtomicOrdering::Relaxed);
-    let signal_mask = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
-    (pending_signals & !signal_mask) as i32
+    let pending_signals = cage.pending_signals.read();
+    // let signal_mask = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
+    // (pending_signals & !signal_mask) as i32
+    pending_signals.clone()
+}
+
+pub fn lindgetlastsignal(cageid: u64) -> Option<i32> {
+    let cage = interface::cagetable_getref(cageid);
+    let mut pending_signals = cage.pending_signals.write();
+
+    // let signal_mask = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
+    // (pending_signals & !signal_mask) as i32
+    if let Some(index) = pending_signals.iter().rposition(
+        |&signo| !interface::signal_check_block(cageid, signo)
+    ) {
+        Some(pending_signals.remove(index))
+    } else {
+        None
+    }
 }
 
 pub fn lindremovependingsignals(cageid: u64, signo: i32) {
-    let cage = interface::cagetable_getref(cageid);
-    let pending_signals = cage.pending_signals.load(interface::RustAtomicOrdering::Relaxed);
+    // let cage = interface::cagetable_getref(cageid);
+    // let pending_signals = cage.pending_signals.load(interface::RustAtomicOrdering::Relaxed);
 
-    let updated_signal = pending_signals & !((1 << signo) as u64);
-    println!("after remove: {}: {}", signo, updated_signal);
-    cage.pending_signals.store(updated_signal, interface::RustAtomicOrdering::Relaxed);
+    // let updated_signal = pending_signals & !((1 << signo) as u64);
+    // println!("after remove: {}: {}", signo, updated_signal);
+    // cage.pending_signals.store(updated_signal, interface::RustAtomicOrdering::Relaxed);
 }
 
 pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64) {
@@ -1843,7 +1859,7 @@ pub fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
-        pending_signals: interface::RustAtomicU64::new(0),
+        pending_signals: interface::RustLock::new(vec![]),
         signal_triggerable: interface::RustAtomicBool::new(true),
         epoch_handler: interface::RustLock::new(0 as *mut u64),
         main_threadid: interface::RustAtomicU64::new(0),
@@ -1887,7 +1903,7 @@ pub fn lindrustinit(verbosity: isize) {
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
-        pending_signals: interface::RustAtomicU64::new(0),
+        pending_signals: interface::RustLock::new(vec![]),
         signal_triggerable: interface::RustAtomicBool::new(true),
         epoch_handler: interface::RustLock::new(0 as *mut u64),
         main_threadid: interface::RustAtomicU64::new(0),

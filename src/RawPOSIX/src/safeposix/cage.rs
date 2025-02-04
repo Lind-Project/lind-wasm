@@ -68,7 +68,7 @@ pub struct Cage {
     // block / unblock / replace the signal mask for a thread.
     pub sigset: interface::RustAtomicU64,
     // pending_signals are signals that are pending to be handled
-    pub pending_signals: interface::RustAtomicU64,
+    pub pending_signals: interface::RustLock<Vec<i32>>,
     pub signal_triggerable: interface::RustAtomicBool,
     pub epoch_handler: interface::RustLock<*mut u64>,
     // The kernel thread id of the main thread of current cage, used because when we want to send signals, 
