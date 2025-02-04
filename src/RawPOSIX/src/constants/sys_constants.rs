@@ -1,11 +1,3 @@
-//! System Constants Module
-//! 
-//! Primary Source References:
-//! - Linux kernel v6.5: include/uapi/asm-generic/signal.h
-//! - Linux kernel v6.5: include/uapi/asm-generic/resource.h
-//! - POSIX.1-2017 (IEEE Std 1003.1-2017)
-//! - Linux man-pages project: signal(7)
-
 #![allow(dead_code)]
 #![allow(unused_variables)]
 

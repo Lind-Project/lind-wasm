@@ -1,11 +1,3 @@
-//! File System Constants Module
-//! These constants define file system-related flags and parameters
-//! 
-//! Primary Source References:
-//! - Linux kernel v6.5: include/uapi/asm-generic/fcntl.h
-//! - Linux kernel v6.5: include/uapi/linux/stat.h
-//! - POSIX.1-2017 (IEEE Std 1003.1-2017)
-
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
@@ -188,5 +180,4 @@ pub const MREMAP_FIXED: u32 = 0x02;    // New address is specified exactly
 
 // ===== File Access Modes =====
 // Source: include/uapi/asm-generic/fcntl.h
-// NOTE: These should probably be moved to fs_constants.rs
 pub const O_ACCMODE: i32 = 0o003;  // Mask for file access modes

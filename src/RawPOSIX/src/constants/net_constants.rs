@@ -1,14 +1,3 @@
-//! Network Constants Module
-//! These constants define network-related flags and parameters
-//! 
-//! Primary Source References:
-//! - Linux kernel v6.5: include/uapi/linux/socket.h
-//! - Linux kernel v6.5: include/uapi/linux/in.h
-//! - Linux kernel v6.5: include/uapi/linux/tcp.h
-//! - Linux kernel v6.5: include/uapi/linux/poll.h
-//! - Linux kernel v6.5: include/uapi/linux/eventpoll.h
-//! - POSIX.1-2017 (IEEE Std 1003.1-2017)
-
 #![allow(dead_code)]
 #![allow(non_upper_case_globals)]
 
