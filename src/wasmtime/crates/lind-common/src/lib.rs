@@ -60,7 +60,6 @@ impl LindCommonCtx {
                     self.pid as u64,
                     call_number,
                     call_name,
-                    start_address,
                     arg1,
                     arg2,
                     arg3,

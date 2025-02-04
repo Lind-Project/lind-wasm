@@ -216,7 +216,6 @@ impl RunCommand {
                     1,
                     EXIT_SYSCALL as u32,
                     0,
-                    0,
                     code as u64,
                     0,
                     0,

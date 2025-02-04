@@ -393,6 +393,31 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
     0
 }
 
+// set the wasm linear memory base address to vmmap
+pub fn init_vmmap_helper(cageid: u64, base_address: usize, program_break: Option<u32>) {
+    let cage = cagetable_getref(cageid);
+    let mut vmmap = cage.vmmap.write();
+    vmmap.set_base_address(base_address);
+    if program_break.is_some() {
+        vmmap.set_program_break(program_break.unwrap());
+    }
+}
+
+// clone the cage memory. Invoked by wasmtime after cage is forked
+pub fn fork_vmmap_helper(parent_cageid: u64, child_cageid: u64) {
+    let parent_cage = cagetable_getref(parent_cageid);
+    let child_cage = cagetable_getref(child_cageid);
+    let parent_vmmap = parent_cage.vmmap.read();
+    let child_vmmap = child_cage.vmmap.read();
+
+    fork_vmmap(&parent_vmmap, &child_vmmap);
+
+    // update program break for child
+    drop(child_vmmap);
+    let mut child_vmmap = child_cage.vmmap.write();
+    child_vmmap.set_program_break(parent_vmmap.program_break);
+}
+
 /// Validates and converts a virtual memory address to a physical address with protection checks
 ///
 /// This function performs several critical memory management operations:

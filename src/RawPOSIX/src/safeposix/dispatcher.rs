@@ -177,8 +177,6 @@ pub extern "C" fn rustposix_thread_init(cageid: u64, signalflag: u64) {
 /// * `call_number` - Unique number for each system call, used to identify which syscall to invoke.
 /// * `call_name` - A legacy argument from the initial 3i proposal, currently unused and subject to 
 ///                 change with future 3i integration.
-/// * `start_address` - Base address of WebAssembly linear memory, used for address translation
-///                     between virtual and system memory address.
 /// * `arg1 - arg6` - Syscall-specific arguments. Any unused argument is set to `0xdeadbeefdeadbeef`.
 /// 
 /// ### Returns:
@@ -191,7 +189,6 @@ pub fn lind_syscall_api(
     cageid: u64,
     call_number: u32,
     call_name: u64,
-    start_address: u64,
     arg1: u64,
     arg2: u64,
     arg3: u64,
@@ -615,9 +612,10 @@ pub fn lind_syscall_api(
         }
 
         IOCTL_SYSCALL => {
+            let cage = interface::cagetable_getref(cageid);
             let virtual_fd = arg1 as i32;
             let request = arg2 as u64;
-            let ptrunion = (start_address + arg3) as *mut u8;
+            let ptrunion = translate_vmmap_addr(&cage, arg3).unwrap() as *mut u8;
             
             // Perform ioctl operation through cage implementation
             // Note: We restrict ioctl operations for security
@@ -699,11 +697,12 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             // Convert buffer address for reading data to send
             let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *const u8;
+            let sockaddr = translate_vmmap_addr(&cage, arg5).unwrap();
             let flag = arg4 as i32;
         
             // Get and validate socket address
             let addrlen = arg6 as u32;
-            let addr = match interface::get_sockaddr(start_address + arg5, addrlen) {
+            let addr = match interface::get_sockaddr(sockaddr, addrlen) {
                 Ok(addr) => addr,
                 Err(_) => return syscall_error(Errno::EFAULT, "sendto", "invalid socket address"),
             };
@@ -736,7 +735,9 @@ pub fn lind_syscall_api(
                 let rv = cage.recvfrom_syscall(fd, buf, count, flag, &mut Some(&mut newsockaddr));
                 if rv >= 0 {
                     // Copy address information back to user space on success
-                    interface::copy_out_sockaddr(start_address + arg5, start_address + arg6, newsockaddr);
+                    interface::copy_out_sockaddr(translate_vmmap_addr(&cage, arg5).unwrap(),
+                                                translate_vmmap_addr(&cage, arg6).unwrap(),
+                                                newsockaddr);
                 }
                 rv
             } else {
@@ -1205,31 +1206,6 @@ pub fn lind_syscall_api(
     };
 
     ret
-}
-
-// set the wasm linear memory base address to vmmap
-pub fn init_vmmap_helper(cageid: u64, base_address: usize, program_break: Option<u32>) {
-    let cage = interface::cagetable_getref(cageid);
-    let mut vmmap = cage.vmmap.write();
-    vmmap.set_base_address(base_address);
-    if program_break.is_some() {
-        vmmap.set_program_break(program_break.unwrap());
-    }
-}
-
-// clone the cage memory. Invoked by wasmtime after cage is forked
-pub fn fork_vmmap_helper(parent_cageid: u64, child_cageid: u64) {
-    let parent_cage = interface::cagetable_getref(parent_cageid);
-    let child_cage = interface::cagetable_getref(child_cageid);
-    let parent_vmmap = parent_cage.vmmap.read();
-    let child_vmmap = child_cage.vmmap.read();
-
-    interface::fork_vmmap(&parent_vmmap, &child_vmmap);
-
-    // update program break for child
-    drop(child_vmmap);
-    let mut child_vmmap = child_cage.vmmap.write();
-    child_vmmap.set_program_break(parent_vmmap.program_break);
 }
 
 #[no_mangle]
