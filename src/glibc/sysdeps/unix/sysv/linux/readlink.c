@@ -27,7 +27,9 @@
    Returns the number of characters read, or -1 for errors.  */
 /*
 * Edit Note:
-* In lind-wasm, we have separately implemented readlink and readlinkat, so we modified this part of the code to handle them individually.
+* Linux kernel has two different implementations for `readlink` and `readlinkat` syscall.
+* In original glibc implementaion, there was only one entry point and `readlinkat` will be redirected through `readlink`, 
+* and kernel has different callnums for them so in lind-wasm, we have separately implemented `readlink` and `readlinkat`.
 */
 ssize_t
 __readlink (const char *path, char *buf, size_t len)
