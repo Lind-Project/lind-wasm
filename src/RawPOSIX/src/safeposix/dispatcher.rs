@@ -111,6 +111,9 @@ const FSYNC_SYSCALL: i32 = 162;
 const FDATASYNC_SYSCALL: i32 = 163;
 const SYNC_FILE_RANGE: i32 = 164;
 
+const READLINK_SYSCALL: i32 = 165;
+const READLINKAT_SYSCALL: i32 = 166;
+
 const WRITEV_SYSCALL: i32 = 170;
 
 const CLONE_SYSCALL: i32 = 171;
@@ -119,6 +122,7 @@ const WAITPID_SYSCALL: i32 = 173;
 
 const NANOSLEEP_TIME64_SYSCALL : i32 = 181;
 const CLOCK_GETTIME_SYSCALL : i32 = 191;
+
 
 use std::ffi::CString;
 use std::ffi::CStr;
@@ -1057,6 +1061,36 @@ pub fn lind_syscall_api(
             
             interface::cagetable_getref(cageid)
                 .waitpid_syscall(pid, &mut status, options)
+        }
+
+        READLINK_SYSCALL => {
+            let path_ptr = (start_address + arg1) as *const u8;
+            let path = unsafe {
+                CStr::from_ptr(path_ptr as *const i8).to_str().unwrap()
+            }; 
+
+            let buf = (start_address + arg2) as *mut u8;
+            
+            let buflen = arg3 as usize;
+
+            interface::cagetable_getref(cageid)
+                .readlink_syscall(path, buf, buflen)
+        }
+
+        READLINKAT_SYSCALL => {
+            let fd = arg1 as i32;
+
+            let path_ptr = (start_address + arg2) as *const u8;
+            let path = unsafe {
+                CStr::from_ptr(path_ptr as *const i8).to_str().unwrap()
+            }; 
+
+            let buf = (start_address + arg3) as *mut u8;
+
+            let buflen = arg4 as usize;
+
+            interface::cagetable_getref(cageid)
+                .readlinkat_syscall(fd, path, buf, buflen)
         }
 
         _ => -1, // Return -1 for unknown syscalls
