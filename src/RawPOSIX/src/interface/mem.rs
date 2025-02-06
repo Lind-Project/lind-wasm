@@ -51,8 +51,6 @@ pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
 
     // iterate through each vmmap entry
     for (_interval, entry) in parent_vmmap.entries.iter() {
-        // if the entry has PROT_NONE, that means the entry is currently not used
-        if entry.prot == PROT_NONE { continue; }
         // translate page number to user address
         let addr_st = (entry.page_num << PAGESHIFT) as u32;
         let addr_len = (entry.npages << PAGESHIFT) as usize;

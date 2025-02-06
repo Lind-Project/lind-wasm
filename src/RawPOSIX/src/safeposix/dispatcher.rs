@@ -1178,7 +1178,8 @@ pub fn lind_syscall_api(
 
         CLOCK_GETTIME_SYSCALL => {
             let clockid = arg1 as u32;
-            let tp = (start_address + arg2) as usize;
+            let cage = interface::cagetable_getref(cageid);
+            let tp = translate_vmmap_addr(&cage, arg2).unwrap() as usize;
             
             interface::cagetable_getref(cageid)
                 .clock_gettime_syscall(clockid, tp)
@@ -1216,12 +1217,11 @@ pub fn lind_syscall_api(
         }
 
         READLINK_SYSCALL => {
-            let path_ptr = (start_address + arg1) as *const u8;
-            let path = unsafe {
-                CStr::from_ptr(path_ptr as *const i8).to_str().unwrap()
-            }; 
+            let cage = interface::cagetable_getref(cageid);
+            let addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(addr).unwrap();
 
-            let buf = (start_address + arg2) as *mut u8;
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             
             let buflen = arg3 as usize;
 
@@ -1232,12 +1232,11 @@ pub fn lind_syscall_api(
         READLINKAT_SYSCALL => {
             let fd = arg1 as i32;
 
-            let path_ptr = (start_address + arg2) as *const u8;
-            let path = unsafe {
-                CStr::from_ptr(path_ptr as *const i8).to_str().unwrap()
-            }; 
+            let cage = interface::cagetable_getref(cageid);
+            let addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let path = interface::types::get_cstr(addr).unwrap();
 
-            let buf = (start_address + arg3) as *mut u8;
+            let buf = translate_vmmap_addr(&cage, arg3).unwrap() as *mut u8;
 
             let buflen = arg4 as usize;
 
