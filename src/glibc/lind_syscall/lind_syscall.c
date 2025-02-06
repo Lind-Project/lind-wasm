@@ -32,16 +32,23 @@ int __imported_wasi_snapshot_preview1_lind_syscall(unsigned int callnumber, unsi
 //            handled here instead
 int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6)
 {
-  int ret = __imported_wasi_snapshot_preview1_lind_syscall(callnumber, callname, arg1, arg2, arg3, arg4, arg5, arg6);
-  // handle the errno
-  if(ret < 0)
-  {
-    errno = -ret;
-    return -1;
-  }
-  else
-  {
-    errno = 0;
-  }
-  return ret;
+    int ret = __imported_wasi_snapshot_preview1_lind_syscall(callnumber, callname, arg1, arg2, arg3, arg4, arg5, arg6);
+    // handle the errno
+    // in rawposix, we use -errno as the return value to indicate the error
+    // but this may cause some issues for mmap syscall, because mmap syscall
+    // is returning an 32-bit address, which may overflow the int type (i32)
+    // luckily we can handle this easily because the return value of mmap is always
+    // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
+    // the errno and mmap result by simply checking if the return value is
+    // within the valid errno range
+    if(ret < 0 && ret > -256)
+    {
+        errno = -ret;
+        return -1;
+    }
+    else
+    {
+        errno = 0;
+    }
+    return ret;
 }

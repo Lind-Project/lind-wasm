@@ -2406,7 +2406,8 @@ pub mod net_tests {
         // this test is used for testing select on AF_UNIX socket pipe writefds
         // currently would fail since select_syscall does not handle socket pipe
         // writefds correctly
-        let byte_chunk: usize = UDSOCK_CAPACITY;
+        // Unix domain socket buffer size
+        let byte_chunk: usize = 212992;
 
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup

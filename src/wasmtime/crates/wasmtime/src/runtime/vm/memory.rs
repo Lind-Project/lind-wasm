@@ -15,6 +15,8 @@ use core::ptr::NonNull;
 use core::time::Duration;
 use wasmtime_environ::{MemoryPlan, MemoryStyle, Trap};
 
+pub const MAX_MEMORY_SIZE: usize = 1 << 32;
+
 /// A memory allocator
 pub trait RuntimeMemoryCreator: Send + Sync {
     /// Create new RuntimeLinearMemory
@@ -221,6 +223,8 @@ impl MmapMemory {
         mut maximum: Option<usize>,
         memory_image: Option<&Arc<MemoryImage>>,
     ) -> Result<Self> {
+        // lind-wasm: we enable maximum use of memory at start
+        maximum = Some(MAX_MEMORY_SIZE);
         // It's a programmer error for these two configuration values to exceed
         // the host available address space, so panic if such a configuration is
         // found (mostly an issue for hypothetical 32-bit hosts).

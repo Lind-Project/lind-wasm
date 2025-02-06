@@ -3,6 +3,7 @@ use crate::runtime::vm::memory::{validate_atomic_addr, MmapMemory};
 use crate::runtime::vm::threads::parking_spot::{ParkingSpot, Waiter};
 use crate::runtime::vm::vmcontext::VMMemoryDefinition;
 use crate::runtime::vm::{Memory, RuntimeLinearMemory, Store, WaitResult};
+use crate::vm::memory::MAX_MEMORY_SIZE;
 use std::cell::RefCell;
 use std::ops::Range;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -32,7 +33,12 @@ impl SharedMemory {
     /// Construct a new [`SharedMemory`].
     pub fn new(plan: MemoryPlan) -> Result<Self> {
         let (minimum_bytes, maximum_bytes) = Memory::limit_new(&plan, None)?;
-        let mmap_memory = MmapMemory::new(&plan, minimum_bytes, maximum_bytes, None)?;
+        let mut mmap_memory = MmapMemory::new(&plan, minimum_bytes, maximum_bytes, None)?;
+        // lind-wasm: we enable maximum use of memory at start
+        let max_size = MAX_MEMORY_SIZE;
+        if minimum_bytes < max_size {
+            mmap_memory.grow_to(max_size);
+        }
         Self::wrap(&plan, Box::new(mmap_memory), plan.memory)
     }
 
