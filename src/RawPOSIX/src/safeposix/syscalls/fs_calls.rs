@@ -130,6 +130,38 @@ impl Cage {
         ret
     }
 
+    //------------------------------------UNLINKAT SYSCALL------------------------------------
+    /*
+    *   unlinkat() will return 0 when success and -1 when fail 
+    */
+    pub fn unlinkat_syscall(&self, dirfd: i32, pathname: &str, flags: i32) -> i32 {
+        let relpath = normpath(convpath(pathname), self);
+        let relative_path = relpath.to_str().unwrap();
+        let full_path = format!("{}{}", LIND_ROOT, relative_path);
+        let c_path = CString::new(full_path).unwrap();
+
+        let kernel_fd = if dirfd == libc::AT_FDCWD {
+            libc::AT_FDCWD
+        } else {
+            let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, dirfd as u64);
+            if wrappedvfd.is_err() {
+                return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
+            }
+            let vfd = wrappedvfd.unwrap(); 
+            vfd.underfd as i32
+        };
+
+        let ret = unsafe {
+            libc::unlinkat(kernel_fd, c_path.as_ptr(), flags)
+        };
+        
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "unlinkat");
+        }
+        ret
+    }
+
     //------------------------------------UNLINK SYSCALL------------------------------------
     /*
     *   unlink() will return 0 when success and -1 when fail 
