@@ -735,7 +735,7 @@ impl Cage {
         0 
     }
 
-    //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
+    //------------------------------------DUP & DUP2 & DUP3 SYSCALLS------------------------------------
     /* 
     *   dup() / dup2() will return a file descriptor 
     *   Mapping a new virtual fd and kernel fd that libc::dup returned
@@ -775,6 +775,44 @@ impl Cage {
             },
             Err(_e) => {
                 return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
+            }
+        }
+        
+    }
+
+    pub fn dup3_syscall(&self, old_virtualfd: i32, new_virtualfd: i32, flags: i32) -> i32 {
+        if old_virtualfd < 0 || new_virtualfd < 0 {
+            return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
+        }
+
+        //if flags is not 0 or O_CLOEXEC return error
+        if flags != 0 && flags != O_CLOEXEC{
+            return syscall_error(Errno::EINVAL, "dup3", "Invalid flags");
+        }
+
+        //newfd can not be equal to oldfd
+        if old_virtualfd == new_virtualfd {
+            return syscall_error(Errno::EINVAL, "dup3", "oldfd and newfd must be different");
+        }
+
+        match fdtables::translate_virtual_fd(self.cageid, old_virtualfd as u64) {
+            Ok(old_vfd) => {
+                let new_kernelfd = unsafe {
+                    libc::dup(old_vfd.underfd as i32)
+                };
+                let _ret_kernelfd = unsafe{ libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
+
+                if flags == O_CLOEXEC{   
+                    let _ = fdtables::get_specific_virtual_fd(self.cageid, new_virtualfd as u64, old_vfd.fdkind, new_kernelfd as u64, true, old_vfd.perfdinfo).unwrap();
+                    return new_virtualfd; 
+                }
+                else {
+                    let _ = fdtables::get_specific_virtual_fd(self.cageid, new_virtualfd as u64, old_vfd.fdkind, new_kernelfd as u64, false, old_vfd.perfdinfo).unwrap();
+                    return new_virtualfd;
+                }
+            },
+            Err(_e) => {
+                return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
             }
         }
         
