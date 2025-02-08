@@ -802,14 +802,9 @@ impl Cage {
                 };
                 let _ret_kernelfd = unsafe{ libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
 
-                if flags == O_CLOEXEC{   
-                    let _ = fdtables::get_specific_virtual_fd(self.cageid, new_virtualfd as u64, old_vfd.fdkind, new_kernelfd as u64, true, old_vfd.perfdinfo).unwrap();
-                    return new_virtualfd; 
-                }
-                else {
-                    let _ = fdtables::get_specific_virtual_fd(self.cageid, new_virtualfd as u64, old_vfd.fdkind, new_kernelfd as u64, false, old_vfd.perfdinfo).unwrap();
-                    return new_virtualfd;
-                }
+                let _ = fdtables::get_specific_virtual_fd(self.cageid, new_virtualfd as u64, old_vfd.fdkind, new_kernelfd as u64, flags != 0, old_vfd.perfdinfo).unwrap();
+                
+                return new_virtualfd; 
             },
             Err(_e) => {
                 return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
