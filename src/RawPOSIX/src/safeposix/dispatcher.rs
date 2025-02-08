@@ -1875,10 +1875,35 @@ pub fn lindremovependingsignals(cageid: u64, signo: i32) {
     // cage.pending_signals.store(updated_signal, interface::RustAtomicOrdering::Relaxed);
 }
 
-pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64) {
+pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_mainthread: bool) {
     let cage = interface::cagetable_getref(cageid);
-    let mut cage_epoch_handler = cage.epoch_handler.write();
-    *cage_epoch_handler = epoch_handler;
+
+    if is_mainthread {
+        cage.main_threadid.store(threadid as u64, interface::RustAtomicOrdering::SeqCst);
+    }
+    let epoch_handler = interface::RustLock::new(epoch_handler);
+    cage.epoch_handler.insert(threadid, epoch_handler);
+}
+
+pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
+    let cage = interface::cagetable_getref(cageid);
+    let main_threadid = cage.main_threadid.load(interface::RustAtomicOrdering::SeqCst);
+
+    cage.epoch_handler.remove(&(thread_id as i32)).expect("thread id does not exist!");
+
+    if thread_id == main_threadid {
+        // if main thread exits, we should find a new main thread
+        // unless this is the last thread in the cage
+        if let Some(entry) = cage.epoch_handler.iter().next() {
+            let id = *entry.key() as u64;
+            cage.main_threadid.store(id, interface::RustAtomicOrdering::SeqCst);
+        } else {
+            // we just exits the last thread in the cage
+            return true;
+        }
+    }
+
+    false
 }
 
 pub fn lind_update_signal_triggerable(cageid: u64, triggerable: bool) {
@@ -1912,7 +1937,7 @@ pub fn lindrustinit(verbosity: isize) {
         sigset: interface::RustAtomicU64::new(0),
         pending_signals: interface::RustLock::new(vec![]),
         signal_triggerable: interface::RustAtomicBool::new(true),
-        epoch_handler: interface::RustLock::new(0 as *mut u64),
+        epoch_handler: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(0),
         vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process
@@ -1956,7 +1981,7 @@ pub fn lindrustinit(verbosity: isize) {
         sigset: interface::RustAtomicU64::new(0),
         pending_signals: interface::RustLock::new(vec![]),
         signal_triggerable: interface::RustAtomicBool::new(true),
-        epoch_handler: interface::RustLock::new(0 as *mut u64),
+        epoch_handler: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(1),
         vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process

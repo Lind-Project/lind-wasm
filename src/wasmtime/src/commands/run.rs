@@ -10,7 +10,7 @@ use crate::common::{Profile, RunCommon, RunTarget};
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
 use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
-use rawposix::safeposix::dispatcher::{lind_signal_init, lind_syscall_api};
+use rawposix::safeposix::dispatcher::{lind_signal_init, lind_syscall_api, lind_thread_exit};
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
@@ -218,19 +218,21 @@ impl RunCommand {
                 if let Val::I32(res) = retval {
                     code = *res;
                 }
-                // exit the cage
-                lind_syscall_api(
-                    1,
-                    EXIT_SYSCALL as u32,
-                    0,
-                    0,
-                    code as u64,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                );
+                if lind_thread_exit(1, 1) {
+                    // exit the cage
+                    lind_syscall_api(
+                        1,
+                        EXIT_SYSCALL as u32,
+                        0,
+                        0,
+                        code as u64,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    );
+                }
                 
                 // main cage exits
                 lind_manager.decrement();
@@ -601,7 +603,7 @@ impl RunCommand {
 
                 let pointer = lind_epoch.get_handler(&mut *store);
 
-                lind_signal_init(pid, pointer as *mut u64);
+                lind_signal_init(pid, pointer as *mut u64, 1, true);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),

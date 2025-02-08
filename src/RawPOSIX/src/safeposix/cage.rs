@@ -70,7 +70,7 @@ pub struct Cage {
     // pending_signals are signals that are pending to be handled
     pub pending_signals: interface::RustLock<Vec<i32>>,
     pub signal_triggerable: interface::RustAtomicBool,
-    pub epoch_handler: interface::RustLock<*mut u64>,
+    pub epoch_handler: interface::RustHashMap<i32, interface::RustLock<*mut u64>>,
     // The kernel thread id of the main thread of current cage, used because when we want to send signals, 
     // we want to send to the main thread 
     pub main_threadid: interface::RustAtomicU64,

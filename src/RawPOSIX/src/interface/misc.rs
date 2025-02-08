@@ -203,20 +203,61 @@ pub fn sigcheck() -> bool {
 
 pub fn signal_epoch_trigger(cageid: u64) {
     let cage = cagetable_getref(cageid);
-    let guard = cage.epoch_handler.write();
+    let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
+    let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
+    let guard = epoch_handler.write();
     let epoch = *guard;
     unsafe {
         *epoch = 1;
     }
 }
 
+pub fn signal_epoch_trigger_all(cageid: u64) {
+    println!("-----signal_epoch_trigger_all");
+    let cage = cagetable_getref(cageid);
+    let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
+    for entry in cage.epoch_handler.iter() {
+        if entry.key() == &main_threadid {
+            // main thread should be the one invoke this method
+            // which means its epoch should already in "trigger" state
+            continue;
+        }
+        println!("-----signal_epoch_trigger_all, trigger epoch for {}", entry.key());
+        let epoch_handler = entry.value();
+        let guard = epoch_handler.write();
+        let epoch = *guard;
+        unsafe {
+            *epoch = 2;
+        }
+    }
+}
+
+pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
+    let cage = cagetable_getref(cageid);
+    let epoch_handler = cage.epoch_handler.get(&(thread_id as i32)).unwrap();
+    let guard = epoch_handler.write();
+    let epoch = *guard;
+    unsafe {
+        *epoch == 2
+    }
+}
+
 pub fn signal_epoch_reset(cageid: u64) {
     let cage = cagetable_getref(cageid);
-    let guard = cage.epoch_handler.write();
+    let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
+    let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
+    let guard = epoch_handler.write();
     let epoch = *guard;
     unsafe {
         *epoch = 0;
     }
+}
+
+pub fn check_is_mainthread(cageid: u64, thread_id: u64) -> bool {
+    let cage = cagetable_getref(cageid);
+    let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed);
+
+    main_threadid == thread_id
 }
 
 pub fn signal_check_block(cageid: u64, signo: i32) -> bool {

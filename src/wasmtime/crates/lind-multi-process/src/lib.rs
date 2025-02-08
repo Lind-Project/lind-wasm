@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Result};
 use rawposix::interface::signal_epoch_reset;
-use rawposix::safeposix::dispatcher::{lind_check_no_pending_signal, lind_signal_init, lind_syscall_api, lind_update_signal_triggerable, lindgetfirstsignal, lindgetpendingsignals, lindgetsighandler, lindremovependingsignals};
+use rawposix::safeposix::dispatcher::{lind_check_no_pending_signal, lind_signal_init, lind_syscall_api, lind_thread_exit, lind_update_signal_triggerable, lindgetfirstsignal, lindgetpendingsignals, lindgetsighandler, lindremovependingsignals};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -46,6 +46,9 @@ pub struct LindCtx<T, U> {
 
     // process id, should be same as cage id
     pid: i32,
+
+    // thread id
+    tid: i32,
     
     // next cage id
     next_cageid: Arc<AtomicU64>,
@@ -95,8 +98,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         
         // cage id starts from 1
         let pid = 1;
+        let tid = 1;
         let next_threadid = Arc::new(AtomicU32::new(1)); // cageid starts from 1
-        Ok(Self { linker, module: module.clone(), pid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
+        Ok(Self { linker, module: module.clone(), pid, tid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
     }
 
     // create a new LindContext with provided pid (cageid). This function is used by exec_syscall to create a new lindContext
@@ -119,9 +123,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let fork_host = Arc::new(fork_host);
         let exec_host = Arc::new(exec);
 
-        let next_threadid = Arc::new(AtomicU32::new(1)); // cageid starts from 1
+        let next_threadid = Arc::new(AtomicU32::new(1)); // thread id starts from 1
+        let tid = 1;
 
-        Ok(Self { linker, module: module.clone(), pid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
+        Ok(Self { linker, module: module.clone(), pid, tid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -345,7 +350,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     .and_then(|export| export.into_global())
                     .expect("Failed to find shared_global");
                 let pointer = lind_epoch.get_handler(&mut store);
-                lind_signal_init(child_cageid, pointer);
+                lind_signal_init(child_cageid, pointer, 1, true);
 
                 // new cage created, increment the cage counter
                 lind_manager.increment();
@@ -407,18 +412,20 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     match exit_code {
                         Val::I32(val) => {
                             // exit the cage with the exit code
-                            lind_syscall_api(
-                                child_cageid,
-                                EXIT_SYSCALL as u32,
-                                0,
-                                0,
-                                *val as u64,
-                                0,
-                                0,
-                                0,
-                                0,
-                                0,
-                            );
+                            if lind_thread_exit(child_cageid, 1) {
+                                lind_syscall_api(
+                                    child_cageid,
+                                    EXIT_SYSCALL as u32,
+                                    0,
+                                    0,
+                                    *val as u64,
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                );
+                            }
                             // let _ = on_child_exit(*val);
                         },
                         _ => {
@@ -513,9 +520,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let child_cageid = self.pid;
 
         // use the same engine for parent and child
-        // let engine = self.module.engine().clone();
-        let config = self.module.engine().config();
-        let engine = Engine::new(config)?;
+        let engine = self.module.engine().clone();
+        // let config = self.module.engine().config();
+        // let engine = Engine::new(config)?;
 
         let get_cx = self.get_cx.clone();
 
@@ -569,6 +576,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 let child_ctx = get_cx(&mut child_host);
                 // set up child pid
                 child_ctx.pid = child_cageid;
+                child_ctx.tid = next_tid as i32;
 
                 let instance_pre = Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
 
@@ -602,6 +610,14 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     .get_typed_func::<i32, ()>(&mut store, "set_stack_pointer")
                     .unwrap();
                 let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
+
+                // get epoch global pointer
+                let lind_epoch = instance
+                    .get_export(&mut store, "epoch")
+                    .and_then(|export| export.into_global())
+                    .expect("Failed to find shared_global");
+                let pointer = lind_epoch.get_handler(&mut store);
+                lind_signal_init(child_cageid as u64, pointer, next_tid as i32, false);
 
                 // get the asyncify_rewind_start and module start function
                 let child_rewind_start;
@@ -651,9 +667,21 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 // get the exit code of the module
                 let exit_code = results.get(0).expect("_start function does not have a return value");
                 match exit_code {
-                    Val::I32(_val) => {
-                        // technically we need to do some clean up here like cleaning up signal stuff
-                        // but signal is still WIP so this is a placeholder for it in the future
+                    Val::I32(val) => {
+                        if lind_thread_exit(child_cageid as u64, next_tid as u64) {
+                            lind_syscall_api(
+                                child_cageid as u64,
+                                EXIT_SYSCALL as u32,
+                                0,
+                                0,
+                                *val as u64,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                            );
+                        }
                     },
                     _ => {
                         eprintln!("unexpected _start function return type: {:?}", exit_code);
@@ -843,6 +871,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // argument to change the process id. If we pass the same cageid, it would cause some error
             // lind_exec(cloned_pid as u64, cloned_pid as u64);
             let ret = exec_call(&cloned_run_command, &real_path_str, &args, cloned_pid, &cloned_next_cageid, &cloned_lind_manager, &environs);
+
+            // TODO: add exit here??
 
             return Ok(OnCalledAction::Finish(ret.expect("exec-ed module error")));
         }));
@@ -1142,6 +1172,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             linker: self.linker.clone(),
             module: self.module.clone(),
             pid: 0, // pid is managed by lind-common
+            tid: 1, // thread id starts from 1
             next_cageid: self.next_cageid.clone(),
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
@@ -1300,7 +1331,7 @@ pub fn longjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sy
 
 pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
         (caller: &mut Caller<'_, T>) -> i32 {
-    // println!("signal handler!");
+    println!("signal handler!");
     let signal_func = caller.get_signal_callback().unwrap();
 
     if caller.as_context().get_rewinding_state().rewinding == AsyncifyState::Rewind {
@@ -1312,6 +1343,18 @@ pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::
 
     let host = caller.data().clone();
     let ctx = host.get_ctx();
+
+    if rawposix::interface::thread_check_killed(ctx.pid as u64, ctx.tid as u64) {
+        // currently we do not support thread specific signals, all the signals delivered to the cage
+        // will always be directed to the main thread
+        // if any non-main thread enters epoch callback, the only situation would be the thread needs to be killed
+        println!("pid: {}, tid: {} killed", ctx.pid, ctx.tid);
+        let err = Trap::Interrupt;
+        unsafe {
+            raise_trap(err.into())
+        }
+        return 0;
+    }
 
     // lind_update_signal_triggerable(ctx.pid as u64, false);
     
@@ -1325,7 +1368,7 @@ pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::
         // since any new signals (from kill) or switching of blocked signal to unblocked signal (from sigprocmask)
         // should incremenet their epoch
         if lind_check_no_pending_signal(ctx.pid as u64) {
-            println!("reset epoch");
+            // println!("reset epoch");
             signal_epoch_reset(ctx.pid as u64);
         }
 
@@ -1334,7 +1377,7 @@ pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::
         // println!("signo: {}, handler: {}", signo, signal_handler);
         if signal_handler == 0 { // default handler
             println!("default handler");
-            // TODO
+            rawposix::interface::signal_epoch_trigger_all(ctx.pid as u64);
             let err = Trap::Interrupt;
             unsafe {
                 raise_trap(err.into())
