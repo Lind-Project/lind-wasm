@@ -1695,6 +1695,29 @@ pub fn lind_syscall_api(
             interface::brk_handler(cageid, brk)
         }
 
+        SETITIMER_SYSCALL => {
+            let cage = interface::cagetable_getref(cageid);
+            let which = arg1 as i32;
+
+            let itimeval = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::ITimerVal>(), PROT_READ) {
+                Ok(addr) => match interface::get_constitimerval(addr) {
+                    Ok(itimeval) => itimeval,
+                    Err(_) => return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair array"),
+                },
+                Err(errno) => return syscall_error(errno, "setitimer", "invalid itimeval struct address"),
+            };
+
+            let old_itimeval = match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<interface::ITimerVal>(), PROT_WRITE) {
+                Ok(addr) => match interface::get_itimerval(addr) {
+                    Ok(itimeval) => itimeval,
+                    Err(_) => return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair array"),
+                },
+                Err(errno) => return syscall_error(errno, "setitimer", "invalid itimeval struct address"),
+            };
+
+            cage.setitimer_syscall(which, itimeval, old_itimeval)
+        }
+
         _ => -1, // Return -1 for unknown syscalls
     };
 

@@ -5,7 +5,7 @@ use crate::constants::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX
 };
 
-use crate::interface;
+use crate::interface::{self, lind_send_signal};
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
 use crate::safeposix::shm::*;
@@ -266,10 +266,7 @@ impl Cage {
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // if the cage has parent (i.e. it is not the "root" cage)
             if self.cageid != self.parent {
-                // this syscall may fail with errno if parent already exited.
-                // but it shouldn't matter since the goal is just to send SIGCHLD to
-                // parent if it still lives
-                self.kill_syscall(self.parent as i32, SIGCHLD);
+                lind_send_signal(self.parent, SIGCHLD);
             }
         }
 
@@ -471,20 +468,11 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid signal number");
         }
 
-        if let Some(cage) = interface::cagetable_getref_opt(cage_id as u64) {
-            let mut pending_signals = cage.pending_signals.write();
-            pending_signals.push(sig);
-            // cage.pending_signals.fetch_or(1 << sig, interface::RustAtomicOrdering::SeqCst);
-            // if cage.signal_triggerable.load(interface::RustAtomicOrdering::SeqCst) {
-                // interface::signal_epoch_trigger(cage_id as u64);
-            // }
-            if !interface::signal_check_block(cage_id as u64, sig) {
-                interface::signal_epoch_trigger(cage_id as u64);
-            }
-            0
-        } else {
+        if !lind_send_signal(cage_id as u64, sig) {
             return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
         }
+
+        0
     }
 
     pub fn sigprocmask_syscall(

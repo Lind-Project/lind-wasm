@@ -1,4 +1,4 @@
-use crate::interface::{cagetable_getref, RustAtomicOrdering};
+use crate::interface::{cagetable_getref, cagetable_getref_opt, RustAtomicOrdering};
 
 pub fn signal_epoch_trigger(cageid: u64) {
     let cage = cagetable_getref(cageid);
@@ -92,4 +92,19 @@ pub fn signal_reset_handler(cageid: u64, signo: i32) {
     };
     act.sa_handler = 0;
     cage.signalhandler.insert(signo, act);
+}
+
+pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
+    if let Some(cage) = cagetable_getref_opt(cageid) {
+        let mut pending_signals = cage.pending_signals.write();
+        pending_signals.push(signo);
+
+        if !signal_check_block(cageid, signo) {
+            signal_epoch_trigger(cageid);
+        }
+        
+        true
+    } else {
+        false
+    }
 }
