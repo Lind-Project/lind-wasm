@@ -473,6 +473,7 @@ impl Cage {
         act: Option<&interface::SigactionStruct>,
         oact: Option<&mut interface::SigactionStruct>,
     ) -> i32 {
+        // println!("sigaction: {:?}", act);
         if let Some(some_oact) = oact {
             let old_sigactionstruct = self.signalhandler.get(&sig);
 

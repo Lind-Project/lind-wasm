@@ -18,12 +18,17 @@
 #include <signal.h>
 #include <pthreadP.h>              /* SIGCANCEL, SIGSETXID */
 #include <syscall-template.h>
+#include <stdio.h>
 
 /* Get and/or change the set of blocked signals.  */
 int
 __sigprocmask (int how, const sigset_t *set, sigset_t *oset)
 {
-   return MAKE_SYSCALL(149, "syscall|sigprocmask", (uint64_t) how, (uint64_t) set, (uint64_t) oset, NOTUSED, NOTUSED, NOTUSED);
+   unsigned long long rawposix_set, rawposix_oset;
+   rawposix_set = set->__val[0];
+   int retval = MAKE_SYSCALL(149, "syscall|sigprocmask", (uint64_t) how, (uint64_t) &rawposix_set, (uint64_t) &rawposix_oset, NOTUSED, NOTUSED, NOTUSED);
+   oset->__val[0] = (unsigned long int) rawposix_oset;
+   return retval;
 }
 libc_hidden_def (__sigprocmask)
 weak_alias (__sigprocmask, sigprocmask)

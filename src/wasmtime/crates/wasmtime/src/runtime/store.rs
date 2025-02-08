@@ -2859,6 +2859,7 @@ unsafe impl<T> crate::runtime::vm::Store for StoreInner<T> {
     }
 
     fn new_epoch(&mut self) -> Result<u64, anyhow::Error> {
+        println!("new epoch");
         // Temporarily take the configured behavior to avoid mutably borrowing
         // multiple times.
         let mut behavior = self.epoch_deadline_behavior.take();

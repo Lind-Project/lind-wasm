@@ -1800,18 +1800,69 @@ pub fn lindgetpendingsignals(cageid: u64) -> Vec<i32> {
     pending_signals.clone()
 }
 
-pub fn lindgetlastsignal(cageid: u64) -> Option<i32> {
+// realistically, this method should not care about thread safety since
+// it should only be access by one thread one time. This method should only be
+// invoked by wasmtime's epoch callback function. Since all threads currently share
+// one signal handler (main thread's signal handler), so each cage should only have at most
+// one epoch callback function running.
+pub fn lindgetfirstsignal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)> {
+    let cage = interface::cagetable_getref(cageid);
+    let mut pending_signals = cage.pending_signals.write();
+    let sigset = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
+    // println!("lindgetfirstsignal: pending signals: {:?}", pending_signals);
+    // let signal_mask = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
+    // (pending_signals & !signal_mask) as i32
+    if let Some(index) = pending_signals.iter().position(
+        |&signo| (sigset & ((1 << (signo - 1)) as u64)) == 0
+    ) {
+        let signo = pending_signals.remove(index);
+        match cage.signalhandler.get(&signo) {
+            Some(handler) => {
+                // NEED SOURCE: according to experiments, if sigprocmask is called during the execution
+                // of the signal handler, the signal mask will not be perseved once handler is finished
+                // by default, we block the same signal during its execution
+                let mut mask_self = 1 << (signo - 1);
+                let signal_handler = interface::signal_get_handler(cageid, signo);
+                if handler.sa_flags as u32 & SA_RESETHAND > 0 {
+                    interface::signal_reset_handler(cageid, signo);
+                }
+                if handler.sa_flags as u32 & SA_NODEFER > 0 {
+                    // if SA_NODEFER is set, we allow the same signal to interrupt itself
+                    mask_self = 0;
+                }
+                cage.sigset.fetch_or(handler.sa_mask | mask_self, interface::RustAtomicOrdering::Relaxed);
+                let restorer = Box::new(move |cageid| {
+                    let cage = interface::cagetable_getref(cageid);
+                    cage.sigset.store(sigset, interface::RustAtomicOrdering::Relaxed);
+                });
+                Some((signo, signal_handler, restorer))
+            }
+            None => {
+                // NEED SOURCE: according to experiments, if sigprocmask is called during the execution
+                // of the signal handler, the signal mask will not be perseved once handler is finished
+                let signal_handler = interface::signal_get_handler(cageid, signo);
+                let restorer = Box::new(move |cageid| {
+                    let cage = interface::cagetable_getref(cageid);
+                    cage.sigset.store(sigset, interface::RustAtomicOrdering::Relaxed);
+                });
+                Some((signo, signal_handler, restorer))
+            }
+        }
+    } else {
+        None
+    }
+}
+
+pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
     let cage = interface::cagetable_getref(cageid);
     let mut pending_signals = cage.pending_signals.write();
 
-    // let signal_mask = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
-    // (pending_signals & !signal_mask) as i32
-    if let Some(index) = pending_signals.iter().rposition(
+    if let Some(index) = pending_signals.iter().position(
         |&signo| !interface::signal_check_block(cageid, signo)
     ) {
-        Some(pending_signals.remove(index))
+        false
     } else {
-        None
+        true
     }
 }
 

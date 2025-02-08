@@ -93,5 +93,16 @@ pub const SIG_BLOCK: i32 = 0;       // Block signals in signal mask
 pub const SIG_UNBLOCK: i32 = 1;     // Unblock signals in signal mask
 pub const SIG_SETMASK: i32 = 2;     // Set the signal mask
 
+// Signal flags
+pub const SA_NOCLDSTOP: u32 = 0x00000001;
+pub const SA_NOCLDWAIT: u32 = 0x00000002;
+pub const SA_SIGINFO: u32 = 0x00000004;
+pub const SA_UNSUPPORTED: u32 = 0x00000400;
+pub const SA_EXPOSE_TAGBITS: u32 = 0x00000800;
+pub const SA_ONSTACK: u32 = 0x08000000;
+pub const SA_RESTART: u32 = 0x10000000;
+pub const SA_NODEFER: u32 = 0x40000000;
+pub const SA_RESETHAND: u32 = 0x80000000;
+
 // Timer types
 pub const ITIMER_REAL: i32 = 0;     // Real-time timer

@@ -223,7 +223,30 @@ pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
     let cage = cagetable_getref(cageid);
     let sigset = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
     
-    (sigset & ((1 << signo) as u64)) > 0
+    (sigset & ((1 << (signo - 1)) as u64)) > 0
+}
+
+pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
+    let cage = cagetable_getref(cageid);
+    let handler = match cage.signalhandler.get(&signo) {
+        Some(action_struct) => {
+            action_struct.sa_handler // if we have a handler and its not blocked return it
+        }
+        None => 0, // if we dont have a handler return 0
+    };
+    handler
+}
+
+pub fn signal_reset_handler(cageid: u64, signo: i32) {
+    let cage = cagetable_getref(cageid);
+    let mut act = match cage.signalhandler.get(&signo) {
+        Some(action_struct) => {
+            action_struct.clone()
+        }
+        None => { return; },
+    };
+    act.sa_handler = 0;
+    cage.signalhandler.insert(signo, act);
 }
 
 pub fn fillrandom(bufptr: *mut u8, count: usize) -> i32 {
