@@ -2,7 +2,7 @@
 
 // System related system calls
 use crate::constants::{
-    DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGNAL_MAX, SIG_BLOCK, SIG_MAX, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX
+    DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX
 };
 
 use crate::interface;
@@ -107,27 +107,6 @@ impl Cage {
         }
         drop(cvtable);
 
-        // we grab the parent cages main threads sigset and store it at 0
-        // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
-        // let newsigset = interface::RustHashMap::new();
-        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // we don't add these for the test suite
-            // BUG: Signals are commented out until we add them to lind-wasm
-            // let mainsigsetatomic = self
-            //     .sigset
-            //     .get(
-            //         &self
-            //             .main_threadid
-            //             .load(interface::RustAtomicOrdering::Relaxed),
-            //     )
-            //     .unwrap();
-            // let mainsigset = interface::RustAtomicU64::new(
-            //     mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed),
-            // );
-            // newsigset.insert(0, mainsigset);
-        }
-
         /*
          *  Construct a new semaphore table in child cage which equals to the one in the parent cage
          */
@@ -220,26 +199,6 @@ impl Cage {
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
         drop(zombies);
 
-        // we grab the parent cages main threads sigset and store it at 0
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
-        // let newsigset = interface::RustHashMap::new();
-        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // we don't add these for the test suite
-            // BUG: Signals are commented out until we add them to lind-wasm
-            // let mainsigsetatomic = self
-            //     .sigset
-            //     .get(
-            //         &self
-            //             .main_threadid
-            //             .load(interface::RustAtomicOrdering::Relaxed),
-            //     )
-            //     .unwrap();
-            // let mainsigset = interface::RustAtomicU64::new(
-            //     mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed),
-            // );
-            // newsigset.insert(0, mainsigset);
-        }
-
         let newcage = Cage {
             cageid: child_cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
@@ -303,13 +262,15 @@ impl Cage {
             }
         }
 
-        // Trigger SIGCHLD
+        // Trigger SIGCHLD if we are currently not running rawposix test suite
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // dont trigger SIGCHLD for test suite
-            // BUG: Signals are commented out until we add them to lind-wasm
-            // if self.cageid != self.parent {
-            //     interface::lind_kill_from_id(self.parent, libc::SIGCHLD);
-            // }
+            // if the cage has parent (i.e. it is not the "root" cage)
+            if self.cageid != self.parent {
+                // this syscall may fail with errno if parent already exited.
+                // but it shouldn't matter since the goal is just to send SIGCHLD to
+                // parent if it still lives
+                self.kill_syscall(self.parent as i32, SIGCHLD);
+            }
         }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc

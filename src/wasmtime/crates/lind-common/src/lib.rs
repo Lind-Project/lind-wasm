@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
+use rawposix::interface::signal_check_trigger;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_multi_process::{get_memory_base, LindHost, clone_constants::CloneArgStruct};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -132,7 +133,12 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
             let host = caller.data().clone();
             let ctx = get_cx(&host);
 
-            ctx.lind_syscall(call_number, call_name, &mut caller, arg1, arg2, arg3, arg4, arg5, arg6)
+            let retval = ctx.lind_syscall(call_number, call_name, &mut caller, arg1, arg2, arg3, arg4, arg5, arg6);
+            
+            // TODO: add a signal check here as Linux also has a signal check when transition from kernel to userspace
+            // However, Asyncify management in this function should be carefully rethinking if adding signal check here
+
+            retval
         },
     )?;
 
@@ -165,7 +171,7 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
         "epoch_callback",
         move |mut caller: Caller<'_, T>| {
             // panic!("epoch callback!!!");
-            wasmtime_lind_multi_process::signal_handler(&mut caller);
+            wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
         },
     )?;
 

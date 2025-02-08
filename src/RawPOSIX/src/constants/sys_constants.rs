@@ -45,6 +45,8 @@ pub const SIGHUP: i32 = 1;          // Hangup
 pub const SIGINT: i32 = 2;          // Interrupt (Ctrl+C)
 pub const SIGQUIT: i32 = 3;         // Quit (Ctrl+\)
 pub const SIGTERM: i32 = 15;        // Termination request
+pub const SIGKILL: i32 = 9;         // Forcefully kill a proces
+pub const SIGSTKFLT: i32 = 16;      // Stack fault (unused on most systems)
 
 // Error signals
 pub const SIGILL: i32 = 4;          // Illegal instruction

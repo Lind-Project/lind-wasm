@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
-use rawposix::interface::signal_epoch_reset;
-use rawposix::safeposix::dispatcher::{lind_check_no_pending_signal, lind_signal_init, lind_syscall_api, lind_thread_exit, lind_update_signal_triggerable, lindgetfirstsignal, lindgetpendingsignals, lindgetsighandler, lindremovependingsignals};
+use rawposix::safeposix::dispatcher::{lind_signal_init, lind_syscall_api, lind_thread_exit};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -13,11 +12,12 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
-use wasmtime::{raise_trap, AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId, InstantiateType, Linker, Module, OnCalledAction, RewindingReturn, SharedMemory, Store, StoreOpaque, Trap, Val};
+use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId, InstantiateType, Linker, Module, OnCalledAction, RewindingReturn, SharedMemory, Store, StoreOpaque, Trap, Val};
 
 use wasmtime_environ::MemoryIndex;
 
 pub mod clone_constants;
+pub mod signal;
 
 const ASYNCIFY_START_UNWIND: &str = "asyncify_start_unwind";
 const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
@@ -1296,135 +1296,6 @@ pub fn longjmp_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sy
     let ctx = host.get_ctx();
 
     let _res = ctx.longjmp_call(caller, jmp_buf, retval);
-    
-    0
-}
-
-// pub fn kill_call<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-//         (caller: &mut Caller<'_, T>, pid: i32, signal: i32) -> i32 {
-//     let host = caller.data().clone();
-//     let ctx = host.get_ctx();
-    
-//     let handler = ctx.lind_manager.get_handler(pid, 1).unwrap();
-//     let epoch = handler as *mut u64;
-//     // println!("{} kill {}, set epoch to 1 from {}", ctx.pid, pid, unsafe{ *epoch });
-//     unsafe { *epoch = 1; }
-    
-//     0
-// }
-// struct SignalAsyncifyManager {
-//     signal_handler: i32,
-//     signo: i32,
-// }
-
-// impl SignalAsyncifyManager {
-//     fn set(&mut self, signal_handler: i32, signo: i32) {
-//         self.signal_handler = signal_handler;
-//         self.signo = signo;
-//     }
-// }
-
-// fn get_signal_asyncify_manager() -> &'static Mutex<SignalAsyncifyManager> {
-//     static SIGNAL_ASYNCIFY_MANAGER: OnceLock<Mutex<SignalAsyncifyManager>> = OnceLock::new();
-//     SIGNAL_ASYNCIFY_MANAGER.get_or_init(|| Mutex::new(SignalAsyncifyManager { signal_handler: 0, signo: 0 }))
-// }
-
-pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-        (caller: &mut Caller<'_, T>) -> i32 {
-    println!("signal handler!");
-    let signal_func = caller.get_signal_callback().unwrap();
-
-    if caller.as_context().get_rewinding_state().rewinding == AsyncifyState::Rewind {
-        // let manager = get_signal_asyncify_manager().lock().unwrap();
-        let data = caller.as_context_mut().get_current_signal_rewind_data().unwrap();
-        signal_func.call(caller.as_context_mut(), (data.signal_handler, data.signo));
-        return 0;
-    }
-
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
-
-    if rawposix::interface::thread_check_killed(ctx.pid as u64, ctx.tid as u64) {
-        // currently we do not support thread specific signals, all the signals delivered to the cage
-        // will always be directed to the main thread
-        // if any non-main thread enters epoch callback, the only situation would be the thread needs to be killed
-        println!("pid: {}, tid: {} killed", ctx.pid, ctx.tid);
-        let err = Trap::Interrupt;
-        unsafe {
-            raise_trap(err.into())
-        }
-        return 0;
-    }
-
-    // lind_update_signal_triggerable(ctx.pid as u64, false);
-    
-    loop {
-        let signal = lindgetfirstsignal(ctx.pid as u64);
-        if signal.is_none() {
-            break;
-        }
-
-        // if there is no pending (unblocked) signal in list, we can reset epoch
-        // since any new signals (from kill) or switching of blocked signal to unblocked signal (from sigprocmask)
-        // should incremenet their epoch
-        if lind_check_no_pending_signal(ctx.pid as u64) {
-            // println!("reset epoch");
-            signal_epoch_reset(ctx.pid as u64);
-        }
-
-        let (signo, signal_handler, restorer) = signal.unwrap();
-        // let signal_handler = lindgetsighandler(ctx.pid as u64, signo);
-        // println!("signo: {}, handler: {}", signo, signal_handler);
-        if signal_handler == 0 { // default handler
-            println!("default handler");
-            rawposix::interface::signal_epoch_trigger_all(ctx.pid as u64);
-            let err = Trap::Interrupt;
-            unsafe {
-                raise_trap(err.into())
-            }
-        // } else if signal_handler == 1 { // ignore
-        //     println!("------ignore {}------", signo);
-        //     continue;
-        } else {
-            // let mut manager = get_signal_asyncify_manager().lock().unwrap();
-            // manager.set(signal_handler as i32, signo);
-            caller.as_context_mut().append_signal_asyncify_data(signal_handler as i32, signo);
-            // drop(manager);
-            let _res = signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo));
-            if caller.as_context().get_rewinding_state().rewinding == AsyncifyState::Unwind {
-                return 0;
-            } else {
-                // restore signal mask
-                restorer(ctx.pid as u64);
-                caller.as_context_mut().pop_signal_asyncify_data(signal_handler as i32, signo);
-            }
-        }
-
-        // let pending_signals = lindgetpendingsignals(ctx.pid as u64);
-        // println!("pending_signals: {:?}", pending_signals);
-        // if pending_signals.is_empty() {
-        //     break;
-        // }
-        // for signo in 1..=31 {
-        //     if pending_signals & (1 << signo) > 0 {
-        //         lindremovependingsignals(ctx.pid as u64, signo);
-        //         let signal_handler = lindgetsighandler(ctx.pid as u64, signo);
-        //         println!("signo: {}, handler: {}", signo, signal_handler);
-        //         if signal_handler == 0 { // default handler
-        //             // TODO
-        //         // } else if signal_handler == 1 { // ignore
-        //         //     continue;
-        //         } else {
-        //             let mut manager = get_signal_asyncify_manager().lock().unwrap();
-        //             manager.set(signal_handler as i32, signo as i32);
-        //             drop(manager);
-        //             let _res = signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo as i32));
-        //         }
-        //     }
-        // }
-    }
-
-    // lind_update_signal_triggerable(ctx.pid as u64, true);
     
     0
 }
