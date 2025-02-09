@@ -21,10 +21,23 @@ pub enum OnCalledAction {
     Trap(Box<dyn std::error::Error + Send + Sync>),
 }
 
+#[derive(Copy, Clone, PartialEq)]
+pub enum AsyncifyState {
+    Normal,
+    Unwind,
+    Rewind,
+}
+
 #[derive(Copy, Clone)]
 pub struct RewindingReturn {
-    pub rewinding: bool,
+    pub rewinding: AsyncifyState,
     pub retval: i32
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SignalAsyncifyData {
+    pub signal_handler: i32,
+    pub signo: i32,
 }
 
 // Externals

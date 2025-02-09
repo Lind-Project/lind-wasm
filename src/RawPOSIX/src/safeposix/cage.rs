@@ -66,7 +66,11 @@ pub struct Cage {
     // sigset is a mapping of thread IDs (pthreadid) to atomic signal sets. Each entry represents the signals 
     // currently blocked for the corresponding thread in the cage. Interacts with sigprocmask_syscall() to 
     // block / unblock / replace the signal mask for a thread.
-    pub sigset: interface::RustHashMap<u64, interface::RustAtomicU64>,
+    pub sigset: interface::RustAtomicU64,
+    // pending_signals are signals that are pending to be handled
+    pub pending_signals: interface::RustLock<Vec<i32>>,
+    pub signal_triggerable: interface::RustAtomicBool,
+    pub epoch_handler: interface::RustHashMap<i32, interface::RustLock<*mut u64>>,
     // The kernel thread id of the main thread of current cage, used because when we want to send signals, 
     // we want to send to the main thread 
     pub main_threadid: interface::RustAtomicU64,

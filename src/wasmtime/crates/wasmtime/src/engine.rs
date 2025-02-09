@@ -634,6 +634,11 @@ impl Engine {
         self.inner.epoch.fetch_add(1, Ordering::Relaxed);
     }
 
+    // decrement the value of epoch. Potentially serving as a way to restore epoch
+    pub fn decrement_epoch(&self) {
+        self.inner.epoch.fetch_sub(1, Ordering::Relaxed);
+    }
+
     /// Returns a [`std::hash::Hash`] that can be used to check precompiled WebAssembly compatibility.
     ///
     /// The outputs of [`Engine::precompile_module`] and [`Engine::precompile_component`]

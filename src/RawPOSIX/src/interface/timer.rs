@@ -7,7 +7,10 @@ pub use std::time::Duration as RustDuration;
 pub use std::time::Instant as RustInstant;
 use std::time::SystemTime;
 
+use crate::constants::SIGALRM;
 use crate::interface::lind_kill_from_id;
+
+use super::lind_send_signal;
 
 pub fn timestamp() -> u64 {
     SystemTime::now()
@@ -111,7 +114,7 @@ impl IntervalTimer {
                         .saturating_sub(guard.start_instant.elapsed());
 
                     if remaining_seconds == RustDuration::ZERO {
-                        lind_kill_from_id(guard.cageid, 14);
+                        lind_send_signal(guard.cageid, SIGALRM);
 
                         let new_curr_duration = guard.next_duration;
                         // Repeat the intervals until user cancel it

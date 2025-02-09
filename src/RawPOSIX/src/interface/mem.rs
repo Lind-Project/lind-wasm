@@ -246,7 +246,7 @@ pub fn mmap_handler(cageid: u64, addr: *mut u8, len: usize, mut prot: i32, mut f
             };
 
             // update vmmap entry
-            vmmap.add_entry_with_overwrite(useraddr >> PAGESHIFT,
+            let _ = vmmap.add_entry_with_overwrite(useraddr >> PAGESHIFT,
                                            (rounded_length >> PAGESHIFT) as u32,
                                            prot,
                                            maxprot,
@@ -414,7 +414,6 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
 /// - Preventing access outside of allocated memory regions
 pub fn check_and_convert_addr_ext(cage: &Cage, arg: u64, length: usize, prot: i32) -> Result<u64, Errno> {
     // Get read lock on virtual memory map
-    // TODO: need to add change here based on the protection, currently fixed for build error
     let mut vmmap = cage.vmmap.write();
     
     // Calculate page numbers for start and end of region

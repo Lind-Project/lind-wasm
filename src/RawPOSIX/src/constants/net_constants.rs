@@ -17,7 +17,6 @@ use crate::interface;
 // ===== Lind-specific Configuration =====
 pub const DEFAULT_HOSTNAME: &str = "Lind";
 pub const BLOCK_TIME: interface::RustDuration = interface::RustDuration::from_micros(100);
-pub const UDSOCK_CAPACITY: usize = 212992;  // Unix domain socket buffer size
 
 // ===== Socket Types =====
 // Source: include/linux/net.h
@@ -358,14 +357,3 @@ pub const EPOLL_CTL_MOD: i32 = 3;  // Change event registration
 
 pub const FD_SET_MAX_FD: i32 = 1024;  // Maximum file descriptor for fd_set
 
-// ===== Connection States =====
-// Lind-specific enum for internal use
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ConnState {
-    NOTCONNECTED,
-    CONNECTED,
-    CONNRDONLY,
-    CONNWRONLY,
-    LISTEN,
-    INPROGRESS,
-}

@@ -250,11 +250,22 @@ where
 
     return match result {
         Ok(x) => Ok(x),
-        Err((UnwindReason::Trap(reason), backtrace, coredumpstack)) => Err(Box::new(Trap {
-            reason,
-            backtrace,
-            coredumpstack,
-        })),
+        Err((UnwindReason::Trap(reason), backtrace, coredumpstack)) => {
+            if let TrapReason::Wasm(trap) = reason {
+                if let wasmtime_environ::Trap::Interrupt = trap {
+                    // if the trap is Interrupt, then the trap is invoked by epoch
+                    // we should treat it as a normal termination without printing any
+                    // error messages
+                    println!("trap reason: {:?}", reason);
+                    return Ok(());
+                }
+            }
+            Err(Box::new(Trap {
+                reason,
+                backtrace,
+                coredumpstack,
+            }))
+        },
         #[cfg(all(feature = "std", panic = "unwind"))]
         Err((UnwindReason::Panic(panic), _, _)) => std::panic::resume_unwind(panic),
     };

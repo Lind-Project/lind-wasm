@@ -10,7 +10,7 @@ use crate::common::{Profile, RunCommon, RunTarget};
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
 use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
-use rawposix::safeposix::dispatcher::lind_syscall_api;
+use rawposix::safeposix::dispatcher::{lind_signal_init, lind_syscall_api, lind_thread_exit};
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
 use wasmtime::{AsContext, AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType};
 use wasmtime_wasi::WasiView;
@@ -134,7 +135,13 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
-        self.populate_with_wasi(&mut linker, &mut store, &main, lind_manager.clone(), None, None)?;
+        // let lind_signal_manager = Arc::new(LindSignalManager::new());
+        self.populate_with_wasi(&mut linker,
+                                &mut store,
+                                &main,
+                                lind_manager.clone(),
+                                None,
+                                None)?;
 
         store.data_mut().limits = self.run.store_limits();
         store.limiter(|t| &mut t.limits);
@@ -194,7 +201,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules, 1)
+            self.load_main_module(&mut store, &mut linker, &main, modules, lind_manager.clone(), 1)
                 .with_context(|| {
                     format!(
                         "failed to run main module `{}`",
@@ -211,19 +218,21 @@ impl RunCommand {
                 if let Val::I32(res) = retval {
                     code = *res;
                 }
-                // exit the cage
-                lind_syscall_api(
-                    1,
-                    EXIT_SYSCALL as u32,
-                    0,
-                    0,
-                    code as u64,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                );
+                if lind_thread_exit(1, 1) {
+                    // exit the cage
+                    lind_syscall_api(
+                        1,
+                        EXIT_SYSCALL as u32,
+                        0,
+                        0,
+                        code as u64,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    );
+                }
                 
                 // main cage exits
                 lind_manager.decrement();
@@ -375,7 +384,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules, pid as u64)
+            self.load_main_module(&mut store, &mut linker, &main, modules, lind_manager.clone(), pid as u64)
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -430,6 +439,10 @@ impl RunCommand {
                 thread::sleep(timeout);
                 engine.increment_epoch();
             });
+        // if epoch_interruption is enabled, we need to set the epoch deadline to at least 1
+        // otherwise the wasm process will be interrupted immediately once started as the default deadline is 0
+        } else if self.run.common.wasm.epoch_interruption.is_some() {
+            store.set_epoch_deadline(1);
         }
 
         Ok(Box::new(|_store| {}))
@@ -518,6 +531,7 @@ impl RunCommand {
         linker: &mut CliLinker,
         module: &RunTarget,
         modules: Vec<(String, Module)>,
+        lind_manager: Arc<LindCageManager>,
         pid: u64,
     ) -> Result<Vec<Val>> {
         // The main module might be allowed to have unknown imports, which
@@ -581,6 +595,15 @@ impl RunCommand {
                 let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
+
+                let lind_epoch = instance
+                    .get_export(&mut *store, "epoch")
+                    .and_then(|export| export.into_global())
+                    .expect("Failed to find shared_global");
+
+                let pointer = lind_epoch.get_handler(&mut *store);
+
+                lind_signal_init(pid, pointer as *mut u64, 1, true);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),

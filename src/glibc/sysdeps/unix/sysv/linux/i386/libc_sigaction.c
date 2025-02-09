@@ -18,6 +18,7 @@
 
 #include <signal.h>
 #include <ldsodefs.h>
+#include <syscall-template.h>
 
 #define SA_RESTORER 0x04000000
 
@@ -82,10 +83,35 @@ extern void restore (void) {
 
 // RESTORE (restore, __NR_sigreturn)
 
+__attribute__((export_name("signal_callback")))
+void signal_callback(__sighandler_t callback, int signal) {
+  if(callback != 0)
+    callback(signal);
+}
+
+struct rawposix_sigaction {
+  __sighandler_t handler;
+  unsigned long long sa_mask;
+  int sa_flags;
+};
+
 int
 __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
 {
-  // Dennis Edit
-  return 0;
+  struct rawposix_sigaction rawposix_act;
+  struct rawposix_sigaction rawposix_oact;
+  rawposix_act.handler = act->sa_handler;
+  rawposix_act.sa_mask = act->sa_mask.__val[0];
+  rawposix_act.sa_flags = act->sa_flags;
+  // for(int i = 0; i < sizeof(act->sa_mask) / sizeof(unsigned long int); ++i)
+  //   printf("%d ", act->sa_mask.__val[i]);
+  // printf("\n");
+  int retval = MAKE_SYSCALL(147, "syscall|sigaction", (uint64_t) sig, (uint64_t) &rawposix_act, (uint64_t) &rawposix_oact, NOTUSED, NOTUSED, NOTUSED);
+
+  oact->sa_handler = rawposix_oact.handler;
+  oact->sa_mask.__val[0] = rawposix_oact.sa_mask;
+  oact->sa_flags = rawposix_oact.sa_flags;
+
+  return retval;
 }
 libc_hidden_def (__libc_sigaction)

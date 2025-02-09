@@ -115,7 +115,7 @@ pub use self::data::*;
 mod func_refs;
 use func_refs::FuncRefs;
 
-use super::{OnCalledAction, RewindingReturn};
+use super::{OnCalledAction, RewindingReturn, SignalAsyncifyData};
 
 /// A [`Store`] is a collection of WebAssembly instances and host-defined state.
 ///
@@ -334,6 +334,8 @@ pub struct StoreOpaque {
     host_globals: Vec<StoreBox<VMHostGlobalContext>>,
 
     rewinding: RewindingReturn,
+    signal_asyncify_data: Vec<SignalAsyncifyData>,
+    signal_asyncify_counter: u64,
     // stack top
     stack_top: u64,
     // stack bottom
@@ -540,9 +542,11 @@ impl<T> Store<T> {
                 runtime_limits: Default::default(),
                 instances: Vec::new(),
                 rewinding: RewindingReturn {
-                    rewinding: false,
+                    rewinding: super::AsyncifyState::Normal,
                     retval: 0
                 },
+                signal_asyncify_data: Vec::new(),
+                signal_asyncify_counter: 0,
                 #[cfg(feature = "component-model")]
                 num_component_instances: 0,
                 signal_handler: None,
@@ -653,9 +657,11 @@ impl<T> Store<T> {
             runtime_limits: Default::default(),
             instances: Vec::new(),
             rewinding: RewindingReturn {
-                rewinding: false,
+                rewinding: super::AsyncifyState::Normal,
                 retval: 0
             },
+            signal_asyncify_data: Vec::new(),
+            signal_asyncify_counter: 0,
             #[cfg(feature = "component-model")]
             num_component_instances: 0,
             signal_handler: None,
@@ -1115,6 +1121,15 @@ impl<T> Store<T> {
         self.inner.set_epoch_deadline(ticks_beyond_current);
     }
 
+    // get current epoch deadline
+    pub fn get_epoch_deadline(&self) -> u64 {
+        self.inner.get_epoch_deadline()
+    }
+
+    pub fn set_stack_snapshots(&mut self, stack_snapshots: HashMap<u64, Vec<u8>>) {
+        self.inner.stack_snapshots = stack_snapshots;
+    }
+
     /// Configures epoch-deadline expiration to trap.
     ///
     /// When epoch-interruption-instrumented code is executed on this
@@ -1356,9 +1371,19 @@ impl<'a, T> StoreContextMut<'a, T> {
         data.hash(&mut hasher);
         let hash = hasher.finish();
 
+        // println!("setjmp unwind_data: {:?}", data);
+
         self.0.stack_snapshots.insert(hash, data);
 
         hash
+    }
+
+    pub fn get_stack_snapshots(&self) -> HashMap<u64, Vec<u8>> {
+        self.0.stack_snapshots.clone()
+    }
+
+    pub fn set_stack_snapshots(&mut self, stack_snapshots: HashMap<u64, Vec<u8>>) {
+        self.0.stack_snapshots = stack_snapshots;
     }
 
     // retrieve the unwind data, given the hash. The entry would be perserved
@@ -1370,6 +1395,32 @@ impl<'a, T> StoreContextMut<'a, T> {
         } else {
             None
         }
+    }
+
+    pub fn append_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
+        self.0.signal_asyncify_data.push(SignalAsyncifyData { signal_handler, signo });
+        // println!("append signal asyncify data: {:?}", self.0.signal_asyncify_data);
+    }
+
+    pub fn pop_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
+        self.0.signal_asyncify_data.pop();
+        // println!("pop signal asyncify data: {:?}", self.0.signal_asyncify_data);
+    }
+
+    pub fn get_current_signal_rewind_data(&mut self) -> Option<SignalAsyncifyData> {
+        let data = self.0.signal_asyncify_data.get(self.0.signal_asyncify_counter as usize).cloned();
+        // println!("get current signal asyncify data: {:?} (counter={})", data, self.0.signal_asyncify_counter);
+        if data.is_some() {
+            self.0.signal_asyncify_counter += 1;
+        } else {
+            self.0.signal_asyncify_counter = 0;
+        }
+        data
+    }
+
+    pub fn set_signal_rewind_data(&mut self, data: Vec<SignalAsyncifyData>) {
+        self.0.signal_asyncify_data = data;
+        self.0.signal_asyncify_counter = 0;
     }
 
     /// get stack top
@@ -2808,6 +2859,7 @@ unsafe impl<T> crate::runtime::vm::Store for StoreInner<T> {
     }
 
     fn new_epoch(&mut self) -> Result<u64, anyhow::Error> {
+        println!("new epoch");
         // Temporarily take the configured behavior to avoid mutably borrowing
         // multiple times.
         let mut behavior = self.epoch_deadline_behavior.take();
@@ -2905,6 +2957,15 @@ impl<T> StoreInner<T> {
     pub fn set_on_called(&mut self, callback: Box<dyn FnOnce(&mut StoreContextMut<'_, T>) -> Result<OnCalledAction, Box<dyn std::error::Error + Send + Sync>> + Send + Sync>)
     {
         self.on_called = Some(callback);
+    }
+
+    /// set current rewinding state
+    pub fn set_rewinding_state(&mut self, state: RewindingReturn) {
+        self.rewinding = state;
+    }
+
+    pub fn get_signal_asyncify_data(&mut self) -> Vec<SignalAsyncifyData> {
+        self.signal_asyncify_data.clone()
     }
 
     pub fn is_thread(&self) -> bool {
