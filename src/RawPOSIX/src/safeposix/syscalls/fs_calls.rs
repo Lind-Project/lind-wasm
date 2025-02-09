@@ -780,6 +780,11 @@ impl Cage {
         
     }
 
+    /* 
+    *   dup3(): duplicates oldfd to newfd, similar to dup2, but with additional functionality
+    *   First, it allows specifying flags, such as O_CLOEXEC, to set the close-on-exec flag atomically
+    *   second, unlike dup2, dup3 prevents newfd from being the same as oldfd, returning an error (EINVAL) instead of closing newfd
+    */
     pub fn dup3_syscall(&self, old_virtualfd: i32, new_virtualfd: i32, flags: i32) -> i32 {
         if old_virtualfd < 0 || new_virtualfd < 0 {
             return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
@@ -802,6 +807,7 @@ impl Cage {
                 };
                 let _ret_kernelfd = unsafe{ libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
 
+                //right now flags can only be O_CLOEXEC or 0, by definition of O_CLOEXEC should_cleexec will be true(the value of O_CLOEXEC is a positive value)
                 let _ = fdtables::get_specific_virtual_fd(self.cageid, new_virtualfd as u64, old_vfd.fdkind, new_kernelfd as u64, flags != 0, old_vfd.perfdinfo).unwrap();
                 
                 return new_virtualfd; 
