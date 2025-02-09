@@ -872,8 +872,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // lind_exec(cloned_pid as u64, cloned_pid as u64);
             let ret = exec_call(&cloned_run_command, &real_path_str, &args, cloned_pid, &cloned_next_cageid, &cloned_lind_manager, &environs);
 
-            // TODO: add exit here??
-
             return Ok(OnCalledAction::Finish(ret.expect("exec-ed module error")));
         }));
 
