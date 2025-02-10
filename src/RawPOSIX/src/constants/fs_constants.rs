@@ -165,10 +165,6 @@ pub const MAP_ANON: u32 = 0x20;     // Don't use a file descriptor
 pub const PAGESHIFT: u32 = 12;           // 4KB pages (1 << 12 = 4096)
 pub const PAGESIZE: u32 = 1 << PAGESHIFT;
 
-// Lind-specific page size constants
-pub const MAP_PAGESHIFT: u32 = 16;       // Custom value for Lind
-pub const MAP_PAGESIZE: u32 = 1 << MAP_PAGESHIFT;
-
 // ===== Memory Mapping Error Value =====
 // Source: include/uapi/asm-generic/mman-common.h
 pub const MAP_FAILED: *mut std::ffi::c_void = (-1isize) as *mut std::ffi::c_void;
