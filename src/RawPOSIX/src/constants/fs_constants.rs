@@ -7,19 +7,7 @@ pub const STDOUT_FILENO: i32 = 1;   // File descriptor for standard output
 pub const STDERR_FILENO: i32 = 2;   // File descriptor for standard error
 
 // ===== File Descriptor Constants =====
-pub const DT_UNKNOWN: u8 = 0;
-
-pub const STARTINGFD: i32 = 0;       // Starting file descriptor number
-pub const MAXFD: i32 = 1024;         // Maximum number of file descriptors
-pub const STARTINGPIPE: i32 = 0;     // Starting pipe descriptor number
-pub const MAXPIPE: i32 = 1024;       // Maximum number of pipes
-
-// ===== Inode Constants =====
-pub const ROOTDIRECTORYINODE: usize = 1;  // Root directory inode number
-pub const STREAMINODE: usize = 2;         // Stream inode number
-
-// ===== Pipe Constants =====
-pub const PIPE_CAPACITY: usize = 65536;   // Maximum pipe buffer size
+pub const DT_UNKNOWN: u8 = 0; //source: include/dirent.h
 
 // ===== File Access Permission Flags =====
 pub const F_OK: u32 = 0;     // Test for existence
@@ -44,8 +32,6 @@ pub const O_NONBLOCK: i32 = 0o4000;  // Non-blocking mode
 pub const O_SYNC: i32 = 0o10000;     // Synchronous writes
 pub const O_ASYNC: i32 = 0o20000;    // Signal-driven I/O
 pub const O_CLOEXEC: i32 = 0o2000000; // Close on exec
-
-pub const DEFAULTTIME: u64 = 1323630836;  // Default timestamp value
 
 // ===== File Permissions =====
 // Source: include/uapi/linux/stat.h
