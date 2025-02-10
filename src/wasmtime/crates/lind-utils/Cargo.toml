@@ -11,4 +11,3 @@ workspace = true
 [dependencies]
 anyhow = { workspace = true }
 log = { workspace = true }
-dashmap = { version = "5.1", features=["serde"] }

@@ -11,7 +11,6 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
 use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId, InstantiateType, Linker, Module, OnCalledAction, RewindingReturn, SharedMemory, Store, StoreOpaque, Trap, Val};
 
 use wasmtime_environ::MemoryIndex;
@@ -213,7 +212,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // 6. start the rewind for both parent and child
     pub fn fork_call(&self, mut caller: &mut Caller<'_, T>
                 ) -> Result<i32> {
-        // println!("fork call");
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -306,7 +304,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let signal_asyncify_data = store.get_signal_asyncify_data();
         let is_parent_thread = store.is_thread();
         store.set_on_called(Box::new(move |mut store| {
-            // println!("fork set_on_called");
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
@@ -519,8 +516,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
         // use the same engine for parent and child
         let engine = self.module.engine().clone();
-        // let config = self.module.engine().config();
-        // let engine = Engine::new(config)?;
 
         let get_cx = self.get_cx.clone();
 
@@ -579,21 +574,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 let instance_pre = Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
 
                 let mut store = Store::new_with_inner(&engine, child_host, store_inner);
-                // set epoch deadline for new wasm instance to 1
-                // store.set_epoch_deadline(1);
-
-                // store.epoch_deadline_callback(move |store| {
-                //     println!("epoch deadline callback!");
-                //     loop {}
-                //     Ok(wasmtime::UpdateDeadline::Continue(1))
-                // });
-
-                // let engine_clone = engine.clone();
-                // thread::spawn(move || {
-                //     thread::sleep(Duration::new(2, 0));
-                //     println!("increment epoch");
-                //     engine_clone.increment_epoch();
-                // });
 
                 // mark as thread
                 store.set_is_thread(true);
@@ -998,7 +978,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
             // store the unwind data
             let hash = store.store_unwind_data(unwind_data_start_sys as *const u8, rewind_total_size);
-            // println!("setjmp hash={}", hash);
             unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) = hash; }
 
             // mark the parent to rewind state
@@ -1071,13 +1050,11 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
             let hash = unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) };
             // retrieve the unwind data
-            // println!("longjmp hash={}", hash);
             let data = store.retrieve_unwind_data(hash);
 
             let result = retval;
 
             if let Some(unwind_data) = data {
-                // println!("longjmp unwind_data: {:?}", unwind_data);
                 // replace the unwind data
                 unsafe { std::ptr::copy_nonoverlapping(unwind_data.as_ptr(), unwind_data_start_sys as *mut u8, unwind_data.len()); }
             } else {
@@ -1099,7 +1076,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 retval: result,
             });
 
-            // println!("longjmp ready");
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
         }));

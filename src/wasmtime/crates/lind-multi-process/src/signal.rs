@@ -15,7 +15,6 @@ pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::
     let signal_func = caller.get_signal_callback().unwrap();
 
     if caller.as_context().get_rewinding_state().rewinding == AsyncifyState::Rewind {
-        // let manager = get_signal_asyncify_manager().lock().unwrap();
         let data = caller.as_context_mut().get_current_signal_rewind_data().unwrap();
         signal_func.call(caller.as_context_mut(), (data.signal_handler, data.signo));
         return 0;
@@ -39,17 +38,14 @@ pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::
         // since any new signals (from kill) or switching of blocked signal to unblocked signal (from sigprocmask)
         // should incremenet their epoch
         if lind_check_no_pending_signal(ctx.pid as u64) {
-            // println!("reset epoch");
             signal_epoch_reset(ctx.pid as u64);
         }
 
         let (signo, signal_handler, restorer) = signal.unwrap();
-        // let signal_handler = lindgetsighandler(ctx.pid as u64, signo);
-        // println!("signo: {}, handler: {}", signo, signal_handler);
         if signal_handler == 0 { // default handler
             match signal_default_handler_dispatcher(signo) {
                 SignalDefaultHandler::Terminate => {
-                    rawposix::interface::signal_epoch_trigger_all(ctx.pid as u64);
+                    rawposix::interface::epoch_kill_all(ctx.pid as u64);
                     thread_suicide();
                 },
                 SignalDefaultHandler::Ignore => {
@@ -66,14 +62,10 @@ pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::
                     continue;
                 }
             }
-        // } else if signal_handler == 1 { // ignore
-        //     println!("------ignore {}------", signo);
-        //     continue;
+        } else if signal_handler == 1 { // ignore
+            continue;
         } else {
-            // let mut manager = get_signal_asyncify_manager().lock().unwrap();
-            // manager.set(signal_handler as i32, signo);
             caller.as_context_mut().append_signal_asyncify_data(signal_handler as i32, signo);
-            // drop(manager);
             let _res = signal_func.call(caller.as_context_mut(), (signal_handler as i32, signo));
             if caller.as_context().get_rewinding_state().rewinding == AsyncifyState::Unwind {
                 return 0;

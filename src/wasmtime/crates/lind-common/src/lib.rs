@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use rawposix::interface::signal_check_trigger;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_multi_process::{get_memory_base, LindHost, clone_constants::CloneArgStruct};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -165,11 +164,11 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
         },
     )?;
 
+    // epoch callback function
     linker.func_wrap(
         "wasi_snapshot_preview1",
         "epoch_callback",
         move |mut caller: Caller<'_, T>| {
-            // panic!("epoch callback!!!");
             wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
         },
     )?;

@@ -1121,11 +1121,6 @@ impl<T> Store<T> {
         self.inner.set_epoch_deadline(ticks_beyond_current);
     }
 
-    // get current epoch deadline
-    pub fn get_epoch_deadline(&self) -> u64 {
-        self.inner.get_epoch_deadline()
-    }
-
     pub fn set_stack_snapshots(&mut self, stack_snapshots: HashMap<u64, Vec<u8>>) {
         self.inner.stack_snapshots = stack_snapshots;
     }
@@ -1371,8 +1366,6 @@ impl<'a, T> StoreContextMut<'a, T> {
         data.hash(&mut hasher);
         let hash = hasher.finish();
 
-        // println!("setjmp unwind_data: {:?}", data);
-
         self.0.stack_snapshots.insert(hash, data);
 
         hash
@@ -1399,17 +1392,14 @@ impl<'a, T> StoreContextMut<'a, T> {
 
     pub fn append_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
         self.0.signal_asyncify_data.push(SignalAsyncifyData { signal_handler, signo });
-        // println!("append signal asyncify data: {:?}", self.0.signal_asyncify_data);
     }
 
     pub fn pop_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
         self.0.signal_asyncify_data.pop();
-        // println!("pop signal asyncify data: {:?}", self.0.signal_asyncify_data);
     }
 
     pub fn get_current_signal_rewind_data(&mut self) -> Option<SignalAsyncifyData> {
         let data = self.0.signal_asyncify_data.get(self.0.signal_asyncify_counter as usize).cloned();
-        // println!("get current signal asyncify data: {:?} (counter={})", data, self.0.signal_asyncify_counter);
         if data.is_some() {
             self.0.signal_asyncify_counter += 1;
         } else {
@@ -2859,7 +2849,6 @@ unsafe impl<T> crate::runtime::vm::Store for StoreInner<T> {
     }
 
     fn new_epoch(&mut self) -> Result<u64, anyhow::Error> {
-        println!("new epoch");
         // Temporarily take the configured behavior to avoid mutably borrowing
         // multiple times.
         let mut behavior = self.epoch_deadline_behavior.take();

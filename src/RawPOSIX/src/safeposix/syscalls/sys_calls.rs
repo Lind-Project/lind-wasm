@@ -150,7 +150,6 @@ impl Cage {
                 self.sigset.load(interface::RustAtomicOrdering::Relaxed),
             ),
             pending_signals: interface::RustLock::new(vec![]),
-            signal_triggerable: interface::RustAtomicBool::new(true),
             epoch_handler: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
@@ -220,7 +219,6 @@ impl Cage {
             pending_signals: interface::RustLock::new(
                 self.pending_signals.read().clone(),
             ),
-            signal_triggerable: interface::RustAtomicBool::new(true),
             epoch_handler: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
@@ -431,7 +429,6 @@ impl Cage {
         act: Option<&interface::SigactionStruct>,
         oact: Option<&mut interface::SigactionStruct>,
     ) -> i32 {
-        // println!("sigaction: {:?}", act);
         if let Some(some_oact) = oact {
             let old_sigactionstruct = self.signalhandler.get(&sig);
 
@@ -443,7 +440,6 @@ impl Cage {
         }
 
         if let Some(some_act) = act {
-            // println!("sigaction: sa_handler: {}", some_act.sa_handler);
             if sig == SIGKILL as i32 || sig == SIGSTOP as i32 {
                 // Disallow changing the action for SIGKILL and SIGSTOP
                 return syscall_error(
@@ -504,11 +500,6 @@ impl Cage {
                     self.sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
                     // send pending signals
                     // TODO: check if the signal is set here is more efficient
-                    // if self.signal_triggerable.load(interface::RustAtomicOrdering::SeqCst) {
-                        // interface::signal_epoch_trigger(self.cageid);
-                    // }
-                    // let pending_signals = self.pending_signals.read();
-                    // pending_signals.contains()
                     interface::signal_epoch_trigger(self.cageid);
                     0
                 }

@@ -3,8 +3,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Condvar, Mutex};
 
-use dashmap::DashMap;
-
 pub mod lind_syscall_numbers;
 
 // used to manage global active cage count. Used to determine when wasmtime can exit
@@ -16,7 +14,6 @@ pub mod lind_syscall_numbers;
 pub struct LindCageManager {
     cage_count: Mutex<i32>,
     condvar: Condvar,
-    signal_handlers: DashMap<i32, DashMap<i32, u64>>,
 }
 
 impl LindCageManager {
@@ -24,7 +21,6 @@ impl LindCageManager {
         LindCageManager {
             cage_count: Mutex::new(value),
             condvar: Condvar::new(),
-            signal_handlers: DashMap::new(),
         }
     }
 
@@ -47,58 +43,7 @@ impl LindCageManager {
             cage_count = self.condvar.wait(cage_count).unwrap();
         }
     }
-
-
-    pub fn add_cage_signal_handler(&self, pid: i32, tid: i32, handler: u64) {
-        let row_map = self.signal_handlers.entry(pid).or_insert_with(DashMap::new);
-        row_map.insert(tid, handler);
-    }
-
-    pub fn remove_cage_signal_handler(&self, pid: i32, tid: i32) {
-        todo!()
-    }
-
-    pub fn get_handler(&self, pid: i32, tid: i32) -> Option<u64> {
-        if let Some(row_map) = self.signal_handlers.get(&pid) {
-            // Get the value for the given column
-            if let Some(value) = row_map.get(&tid) {
-                return Some(value.clone()); // Clone because DashMap stores values by reference
-            }
-        }
-        None // Return None if row or column doesn't exist
-    }
 }
-
-// pub struct LindSignalManager {
-//     handlers: DashMap<i32, DashMap<i32, u64>>,
-// }
-
-// impl LindSignalManager {
-//     pub fn new() -> Self {
-//         LindSignalManager {
-//             handlers: DashMap::new()
-//         }
-//     }
-
-//     pub fn add_cage_signal_handler(&mut self, pid: i32, tid: i32, handler: u64) {
-//         let row_map = self.handlers.entry(pid).or_insert_with(DashMap::new);
-//         row_map.insert(tid, handler);
-//     }
-
-//     pub fn remove_cage_signal_handler(&mut self, pid: i32, tid: i32) {
-//         todo!()
-//     }
-
-//     pub fn get_handler(&self, pid: i32, tid: i32) -> Option<u64> {
-//         if let Some(row_map) = self.handlers.get(&pid) {
-//             // Get the value for the given column
-//             if let Some(value) = row_map.get(&tid) {
-//                 return Some(value.clone()); // Clone because DashMap stores values by reference
-//             }
-//         }
-//         None // Return None if row or column doesn't exist
-//     }
-// }
 
 // parse an environment variable, return its name and value
 pub fn parse_env_var(env_var: &str) -> (String, Option<String>) {

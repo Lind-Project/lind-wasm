@@ -135,7 +135,6 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
-        // let lind_signal_manager = Arc::new(LindSignalManager::new());
         self.populate_with_wasi(&mut linker,
                                 &mut store,
                                 &main,
@@ -438,10 +437,6 @@ impl RunCommand {
                 thread::sleep(timeout);
                 engine.increment_epoch();
             });
-        // if epoch_interruption is enabled, we need to set the epoch deadline to at least 1
-        // otherwise the wasm process will be interrupted immediately once started as the default deadline is 0
-        } else if self.run.common.wasm.epoch_interruption.is_some() {
-            store.set_epoch_deadline(1);
         }
 
         Ok(Box::new(|_store| {}))
