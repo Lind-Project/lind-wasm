@@ -28,7 +28,7 @@ use std::mem;
 
 use crate::fdtables;
 
-static LIND_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
+static LIND_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
@@ -126,6 +126,69 @@ impl Cage {
         if ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "link");
+        }
+        ret
+    }
+
+    //------------------------------------UNLINKAT SYSCALL------------------------------------
+    /*
+    *   `unlinkat` removes a file or directory relative to a directory file descriptor.
+    *   Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+    *
+    *   ## Arguments:
+    *   - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
+    *   - `pathname`: Path of the file/directory to be removed.
+    *   - `flags`: Can include `AT_REMOVEDIR` to indicate directory removal.
+    *
+    *   ## Handling:
+    *   - If `dirfd` is `AT_FDCWD`, the path is used as-is.
+    *   - If `dirfd` is a valid file descriptor (other than AT_FDCWD), we would translate it to the corresponding
+    *     kernel file descriptor. **Note:** In our current implementation, only `AT_FDCWD` is supported.
+    *
+    *   ## Cases Handled:
+    *   - Removing files.
+    *   - Removing empty directories when `AT_REMOVEDIR` is specified.
+    *   - Handling invalid file descriptors (returns `EBADF` if translation fails).
+    *
+    *   ## Cases NOT Handled:
+    *   - Removing non-empty directories (this will fail with `ENOTEMPTY`).
+    *   - Removing files/directories using a directory file descriptor other than `AT_FDCWD`.
+    *
+    *   ## Return Value:
+    *   - `0` on success.
+    *   - `-1` on failure, with `errno` set appropriately.
+    */
+    pub fn unlinkat_syscall(&self, dirfd: i32, pathname: &str, flags: i32) -> i32 {
+        let mut c_path;
+        // Handling of the directory file descriptor:
+        // We currently only support the case when `dirfd` is AT_FDCWD
+        // If dirfd is anything else, we return an error indicating that such usage is not supported
+        let kernel_fd = if dirfd == libc::AT_FDCWD {
+            // Normalize and convert the provided pathname
+            let relpath = normpath(convpath(pathname), self);
+            let relative_path = relpath.to_str().unwrap();
+            let full_path = format!("{}{}", LIND_ROOT, relative_path);
+            c_path = CString::new(full_path).unwrap();
+            libc::AT_FDCWD
+        } else {
+            let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, dirfd as u64);
+            if wrappedvfd.is_err() {
+                return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
+            }
+            let vfd = wrappedvfd.unwrap(); 
+            c_path = CString::new(pathname).unwrap();
+            vfd.underfd as i32
+        };
+
+        // Call the underlying libc::unlinkat() function using AT_FDCWD
+        let ret = unsafe {
+            libc::unlinkat(kernel_fd, c_path.as_ptr(), flags)
+        };
+        
+        // If the call failed, retrieve and handle the errno
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "unlinkat");
         }
         ret
     }
