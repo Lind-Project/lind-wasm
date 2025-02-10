@@ -25,9 +25,11 @@ int
 __sigprocmask (int how, const sigset_t *set, sigset_t *oset)
 {
    unsigned long long rawposix_set, rawposix_oset;
-   rawposix_set = set->__val[0];
-   int retval = MAKE_SYSCALL(149, "syscall|sigprocmask", (uint64_t) how, (uint64_t) &rawposix_set, (uint64_t) &rawposix_oset, NOTUSED, NOTUSED, NOTUSED);
-   oset->__val[0] = (unsigned long int) rawposix_oset;
+   if(set)
+      rawposix_set = set->__val[0];
+   int retval = MAKE_SYSCALL(149, "syscall|sigprocmask", (uint64_t) how, (uint64_t) (set ? &rawposix_set : set), (uint64_t) (oset ? &rawposix_oset : oset), NOTUSED, NOTUSED, NOTUSED);
+   if(oset)
+      oset->__val[0] = (unsigned long int) rawposix_oset;
    return retval;
 }
 libc_hidden_def (__sigprocmask)

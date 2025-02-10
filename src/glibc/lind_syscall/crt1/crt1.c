@@ -187,7 +187,12 @@ int __main_void(void) {
     return __main_argc_argv(argc, argv);
 }
 
+int __unused_1() {
+    return 1 + 1;
+}
+
 int _start() {
+    int __tmp = (int) __unused_1;
     __libc_setup_tls();
     __wasi_init_tp();
     __wasi_initialize_environ();

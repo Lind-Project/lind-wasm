@@ -45,7 +45,6 @@ pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::
 
         let (signo, signal_handler, restorer) = signal.unwrap();
         // let signal_handler = lindgetsighandler(ctx.pid as u64, signo);
-        // println!("signo: {}, handler: {}", signo, signal_handler);
         if signal_handler == 0 { // default handler
             match signal_default_handler_dispatcher(signo) {
                 SignalDefaultHandler::Terminate => {
@@ -66,9 +65,9 @@ pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::
                     continue;
                 }
             }
-        // } else if signal_handler == 1 { // ignore
-        //     println!("------ignore {}------", signo);
-        //     continue;
+        } else if signal_handler == 1 { // ignore
+            println!("------ignore {}------", signo);
+            continue;
         } else {
             // let mut manager = get_signal_asyncify_manager().lock().unwrap();
             // manager.set(signal_handler as i32, signo);

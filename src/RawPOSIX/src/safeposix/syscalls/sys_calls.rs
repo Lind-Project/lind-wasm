@@ -266,6 +266,7 @@ impl Cage {
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // if the cage has parent (i.e. it is not the "root" cage)
             if self.cageid != self.parent {
+                // println!("send SIGCHLD");
                 lind_send_signal(self.parent, SIGCHLD);
             }
         }
@@ -431,7 +432,7 @@ impl Cage {
         act: Option<&interface::SigactionStruct>,
         oact: Option<&mut interface::SigactionStruct>,
     ) -> i32 {
-        // println!("sigaction: {:?}", act);
+        // println!("sig: {}, sigaction: {:?}", sig, act);
         if let Some(some_oact) = oact {
             let old_sigactionstruct = self.signalhandler.get(&sig);
 
@@ -467,8 +468,12 @@ impl Cage {
         if (sig < 0) || (sig >= SIG_MAX) {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid signal number");
         }
+        let mut real_cage_id = cage_id as u64;
+        if cage_id == 0 {
+            real_cage_id = self.cageid;
+        }
 
-        if !lind_send_signal(cage_id as u64, sig) {
+        if !lind_send_signal(real_cage_id as u64, sig) {
             return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
         }
 
@@ -513,7 +518,11 @@ impl Cage {
                     0
                 }
                 SIG_SETMASK => {
-                    // TODO: handle signal get unblocked
+                    let pending_signals = self.pending_signals.read();
+                    let unblocked_signals = (curr_sigset ^ *some_set) & !curr_sigset;
+                    if pending_signals.iter().any(|signo| unblocked_signals & (1 << (signo - 1)) != 0) {
+                        interface::signal_epoch_trigger(self.cageid);
+                    }
                     // Set sigset to set
                     self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0

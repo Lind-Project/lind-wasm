@@ -7,4 +7,5 @@ __GI_getsid (void)
 }
 
 weak_alias(__GI_getsid, __setsid)
+weak_alias(__GI_getsid, setsid)
 
