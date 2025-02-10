@@ -784,6 +784,7 @@ impl Cage {
     *   dup3(): duplicates oldfd to newfd, similar to dup2, but with additional functionality
     *   First, it allows specifying flags, such as O_CLOEXEC, to set the close-on-exec flag atomically
     *   second, unlike dup2, dup3 prevents newfd from being the same as oldfd, returning an error (EINVAL) instead of closing newfd
+    *   Link to the manpage: https://linux.die.net/man/2/dup3
     */
     pub fn dup3_syscall(&self, old_virtualfd: i32, new_virtualfd: i32, flags: i32) -> i32 {
         if old_virtualfd < 0 || new_virtualfd < 0 {
