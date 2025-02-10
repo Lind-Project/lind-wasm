@@ -1062,47 +1062,5 @@ impl Cage {
         virtual_socket_vector.sock2 = vsv_2 as i32;
         return 0;
     }
-
-    /*
-    *   Get result back from libc::getifaddrs and fill the content of name field into a buf 
-    *   as rustposix, so that i don’t need to change the dispatcher interface
-    */
-    pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
-        let mut ifaddr: *mut ifaddrs = ptr::null_mut();
-
-        unsafe {
-            if getifaddrs(&mut ifaddr) < 0 {
-                let errno = get_errno();
-                return handle_errno(errno, "getifaddrs");
-            }
-            let mut ifa = ifaddr;
-            let mut offset = 0;
-            while !ifa.is_null() {
-                let ifa_ref = &*ifa;
-                let name_cstr = CStr::from_ptr(ifa_ref.ifa_name);
-                let name_bytes = name_cstr.to_bytes();
-
-                // Check if there's enough space in the buffer
-                if offset + name_bytes.len() + 1 > count {
-                    println!("Buffer size exceeded");
-                    freeifaddrs(ifaddr);
-                    return -1;
-                }
-
-                let name_vec = name_bytes.to_vec();
-                fill(buf.add(offset), name_vec.len(), &name_vec);
-
-                // Add a null terminator to separate names
-                *buf.add(offset + name_vec.len()) = 0;
-                offset += name_vec.len() + 1; // Move offset past the name and null terminator
-            
-                ifa = ifa_ref.ifa_next;
-            
-            }
-            freeifaddrs(ifaddr);
-            0
-        }
-    }
-
 }
 

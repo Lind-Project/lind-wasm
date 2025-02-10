@@ -99,7 +99,6 @@ const SOCKET_SYSCALL: i32 = 136;
 
 const GETSOCKNAME_SYSCALL: i32 = 144;
 const GETPEERNAME_SYSCALL: i32 = 145;
-const GETIFADDRS_SYSCALL: i32 = 146;
 
 const SIGACTION_SYSCALL: i32 = 147;
 const KILL_SYSCALL: i32 = 148;
@@ -898,13 +897,6 @@ pub fn lind_syscall_api(
             let ret = interface::cagetable_getref(cageid)
                 .gethostname_syscall(name, len);
             ret
-        } 
-
-        GETIFADDRS_SYSCALL => {
-            let buf = (start_address + arg1) as *mut u8;
-            let count = arg2 as usize;
-            interface::cagetable_getref(cageid)
-                .getifaddrs_syscall(buf, count)
         }
 
         KILL_SYSCALL => {
