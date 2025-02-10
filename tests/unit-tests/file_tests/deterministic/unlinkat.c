@@ -12,12 +12,10 @@ const char* NON_EXISTENT_FILE = "testfiles/nonexistent";
 const char* VALID_SUBDIR = "testfiles/unlinkatsubdir";
 const char* FILE_IN_SUBDIR = "testfiles/unlinkatsubdir/testfile.txt";
 
-// Set up the test environment by creating necessary directories and files
 void create_test_environment() {
-    // Create the test directory if it does not exist
+    // Create test directory and files
     mkdir(TEST_DIR, 0755);
 
-    // Create a test file with sample content
     FILE* file = fopen(VALID_FILE, "w");
     if (file) {
         fputs("Test file content", file);
@@ -27,54 +25,72 @@ void create_test_environment() {
         exit(1);
     }
 
-    // Create a valid subdirectory for testing directory removal
     mkdir(VALID_SUBDIR, 0755);
+
+    file = fopen(FILE_IN_SUBDIR, "w");
+    if (file) {
+        fputs("Subdirectory test file content", file);
+        fclose(file);
+    } else {
+        perror("Failed to create file in subdirectory");
+        exit(1);
+    }
 }
 
-// Test the unlinkat system call with different scenarios
 void test_unlinkat() {
+    int dirfd;
     int result;
 
-    // Test Case 1: Remove a valid file
     printf("\n=== Test Case 1: Remove valid file ===\n");
     result = unlinkat(AT_FDCWD, VALID_FILE, 0);
     if (result == 0) {
         printf("Test Case 1: Successfully removed %s\n", VALID_FILE);
     } else {
-        printf("Test Case 1 failed: %s\n", strerror(errno));
+        perror("Test Case 1 failed");
     }
 
-    // Test Case 2: Attempt to remove a non-existent file
     printf("\n=== Test Case 2: Remove non-existent file ===\n");
     result = unlinkat(AT_FDCWD, NON_EXISTENT_FILE, 0);
     if (result == -1) {
-        printf("Test Case 2: Expected failure: %d\n", result);
+        printf("Test Case 2: Expected failure: %s\n", strerror(errno));
     } else {
-        printf("Test Case 2 failed: Unexpectedly succeeded: %s\n", strerror(errno));
+        printf("Test Case 2 failed: Unexpectedly succeeded\n");
     }
 
-    // Test Case 3: Remove a directory with the AT_REMOVEDIR flag
-    printf("\n=== Test Case 3: Remove a directory with AT_REMOVEDIR ===\n");
+    printf("\n=== Test Case 3: Remove file in a subdirectory ===\n");
+    dirfd = open(VALID_SUBDIR, O_RDONLY);
+    if (dirfd == -1) {
+        perror("Failed to open subdirectory");
+        return;
+    }
+    result = unlinkat(dirfd, "testfile.txt", 0);
+    if (result == 0) {
+        printf("Test Case 3: Successfully removed file in subdirectory\n");
+    } else {
+        perror("Test Case 3 failed");
+    }
+    close(dirfd);
+
+    printf("\n=== Test Case 4: Remove a directory with AT_REMOVEDIR ===\n");
     result = unlinkat(AT_FDCWD, VALID_SUBDIR, AT_REMOVEDIR);
     if (result == 0) {
-        printf("Test Case 3: Successfully removed directory %s\n", VALID_SUBDIR);
+        printf("Test Case 4: Successfully removed directory %s\n", VALID_SUBDIR);
     } else {
-        printf("Test Case 3 failed: %s\n", strerror(errno));
+        perror("Test Case 4 failed");
     }
 
-    // Test Case 4: Attempt to remove a directory without the AT_REMOVEDIR flag
-    printf("\n=== Test Case 4: Remove a directory without AT_REMOVEDIR ===\n");
+    printf("\n=== Test Case 5: Remove a directory without AT_REMOVEDIR ===\n");
     mkdir(VALID_SUBDIR, 0755); // Recreate directory for testing
     result = unlinkat(AT_FDCWD, VALID_SUBDIR, 0);
     if (result == -1) {
-        printf("Test Case 4: Expected failure: %s\n", strerror(errno));
+        printf("Test Case 5: Expected failure: %s\n", strerror(errno));
     } else {
-        printf("Test Case 4 failed: Unexpectedly succeeded\n");
+        printf("Test Case 5 failed: Unexpectedly succeeded\n");
     }
 }
 
 int main() {
-    create_test_environment();  
-    test_unlinkat();            
+    create_test_environment();
+    test_unlinkat();
     return 0;
 }
