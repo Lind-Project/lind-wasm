@@ -307,10 +307,6 @@ pub const PERSIST_TIMEOUT: i32 = 0x40;  // Persist timeout
 pub const TCP_RXT_CONNDROPTIME: i32 = 0x80; // Retransmission timeout before drop
 pub const TCP_RXT_FINDROP: i32 = 0x100; // Drop after 3 FIN retransmissions
 
-// ===== Socket Object ID Range =====
-// Lind-specific constants
-pub const MINSOCKOBJID: i32 = 0;
-
 
 // ===== Poll Constants =====
 // Source: include/uapi/asm-generic/poll.h
