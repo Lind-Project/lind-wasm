@@ -159,16 +159,16 @@ impl Cage {
     *   - `-1` on failure, with `errno` set appropriately.
     */
     pub fn unlinkat_syscall(&self, dirfd: i32, pathname: &str, flags: i32) -> i32 {
-        // Normalize and convert the provided pathname
-        let relpath = normpath(convpath(pathname), self);
-        let relative_path = relpath.to_str().unwrap();
-        let full_path = format!("{}{}", LIND_ROOT, relative_path);
-        let c_path = CString::new(full_path).unwrap();
-
+        let mut c_path;
         // Handling of the directory file descriptor:
         // We currently only support the case when `dirfd` is AT_FDCWD
         // If dirfd is anything else, we return an error indicating that such usage is not supported
         let kernel_fd = if dirfd == libc::AT_FDCWD {
+            // Normalize and convert the provided pathname
+            let relpath = normpath(convpath(pathname), self);
+            let relative_path = relpath.to_str().unwrap();
+            let full_path = format!("{}{}", LIND_ROOT, relative_path);
+            c_path = CString::new(full_path).unwrap();
             libc::AT_FDCWD
         } else {
             let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, dirfd as u64);
@@ -176,6 +176,7 @@ impl Cage {
                 return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
             }
             let vfd = wrappedvfd.unwrap(); 
+            c_path = CString::new(pathname).unwrap();
             vfd.underfd as i32
         };
 
