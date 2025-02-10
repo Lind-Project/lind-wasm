@@ -433,6 +433,187 @@ impl Cage {
         
     }
 
+    //------------------------------------READLINK and READLINKAT SYSCALL------------------------------------
+    /*
+    * The return value of the readlink syscall indicates the number of bytes written into the buf and -1 if 
+    * error. The contents of the buf represent the file path that the symbolic link points to. Since the file 
+    * path perspectives differ between the user application and the host Linux, the readlink implementation 
+    * requires handling the paths for both the input passed to the Rust kernel libc and the output buffer 
+    * returned by the kernel libc.
+    *
+    * For the input path, the transformation is straightforward: we prepend the LIND_ROOT prefix to convert 
+    * the user's relative path into a host-compatible absolute path. 
+    * However, for the output buffer, we need to first verify whether the path written to buf is an absolute 
+    * path. If it is not, we prepend the current working directory to make it absolute. Next, we remove the 
+    * LIND_ROOT prefix to adjust the path to the user's perspective. Finally, we truncate the adjusted result 
+    * to fit within the user-provided buflen, ensuring compliance with the behavior described in the Linux 
+    * readlink man page, which states that truncation is performed silently if the buffer is too small.
+    */
+    pub fn readlink_syscall(
+        &self, 
+        path: &str, 
+        buf: *mut u8, 
+        buflen: usize,
+    ) -> i32 {
+        // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
+        // perspective)
+        let relpath = normpath(convpath(path), self);
+        let relative_path = relpath.to_str().unwrap();
+        let full_path = format!("{}{}", LIND_ROOT, relative_path);
+        let c_path = CString::new(full_path).unwrap();
+
+        // Call libc::readlink to get the original symlink target
+        let libc_buflen = buflen + LIND_ROOT.len();
+        let mut libc_buf = vec![0u8; libc_buflen];
+        let libcret = unsafe {
+            libc::readlink(c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
+        };
+
+        if libcret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "readlink");
+        }
+
+        // Convert the result from readlink to a Rust string
+        let libcbuf_str = unsafe {
+            CStr::from_ptr(libc_buf.as_ptr() as *const c_char)
+        }.to_str().unwrap();
+
+        // Use libc::getcwd to get the current working directory
+        let mut cwd_buf = vec![0u8; 4096];
+        let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut c_char, cwd_buf.len()) };
+        if cwd_ptr.is_null() {
+            let errno = get_errno();
+            return handle_errno(errno, "getcwd");
+        }
+
+        let pwd = unsafe { CStr::from_ptr(cwd_buf.as_ptr() as *const c_char) }
+            .to_str()
+            .unwrap();
+
+        // Adjust the result to user perspective
+        // Verify if libcbuf_str starts with the current working directory (pwd)
+        let adjusted_result = if libcbuf_str.starts_with(pwd) {
+            libcbuf_str.to_string()
+        } else {
+            format!("{}/{}", pwd, libcbuf_str)
+        };
+        let new_root = format!("{}/", LIND_ROOT);
+        let final_result = adjusted_result.strip_prefix(&new_root).unwrap_or(&adjusted_result);
+
+        // Check the length and copy the appropriate amount of data to buf
+        let bytes_to_copy = std::cmp::min(buflen, final_result.len());
+        unsafe {
+            std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf, bytes_to_copy);
+        }
+
+        bytes_to_copy as i32
+    }
+    
+    /* 
+    * The readlinkat syscall builds upon the readlink syscall, with additional handling for the provided fd. 
+    * There are two main cases to consider:
+    *
+    * When fd is the special value AT_FDCWD:
+    * In this case, we first retrieve the current working directory path. We then append the user-provided path 
+    * to this directory path to create a complete path. After this, the handling is identical to the readlink 
+    * syscall. Therefore, the implementation delegates the underlying work to the readlink syscall.
+    *
+    * One notable point is that when fd = AT_FDCWD, there is no need to convert the virtual fd. Due to Rust's 
+    * variable scoping rules and for safety considerations (we must use the predefined fdtable API). This results 
+    * in approximately four lines of repetitive code during the path conversion step. If we plan to optimize 
+    * the implementation in the future, we can consider abstracting this step into a reusable function to avoid 
+    * redundancy.
+    *
+    * When fd is a directory fd:
+    * Handling this case is difficult without access to kernel-space code. In Linux, there is no syscall that 
+    * provides a method to resolve the directory path corresponding to a given dirfd. The Linux kernel handles 
+    * this step by utilizing its internal dentry data structure, which is not accessible from user space. 
+    * Therefore, in the RawPOSIX implementation, we assume that all paths are absolute to simplify the resolution 
+    * process.
+    *
+    */
+    pub fn readlinkat_syscall(
+        &self, 
+        virtual_fd: i32, 
+        path: &str, 
+        buf: *mut u8, 
+        buflen: usize,
+    ) -> i32 {
+        let mut libcret;
+        let mut path = path.to_string();
+        let libc_buflen = buflen + LIND_ROOT.len();
+        let mut libc_buf = vec![0u8; libc_buflen];
+        if virtual_fd == libc::AT_FDCWD {
+            // Check if the fd is AT_FDCWD
+            let cwd_container = self.cwd.read();
+            path = format!("{}/{}", cwd_container.to_str().unwrap(), path);
+            // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
+            // perspective)
+            let relpath = normpath(convpath(&path), self);
+            let relative_path = relpath.to_str().unwrap();
+            let full_path = format!("{}{}", LIND_ROOT, relative_path);
+            let c_path = CString::new(full_path).unwrap();
+
+            libcret = unsafe {
+                libc::readlink(c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
+            };
+
+        } else {
+            // Convert the virtual fd into real kernel fd and handle the error case
+            let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
+            if wrappedvfd.is_err() {
+                return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
+            }
+            let vfd = wrappedvfd.unwrap();
+            // Convert the path from relative path (lind-wasm perspective) to real kernel path (host kernel
+            // perspective)
+            let relpath = normpath(convpath(&path), self);
+            let relative_path = relpath.to_str().unwrap();
+            let full_path = format!("{}{}", LIND_ROOT, relative_path);
+            let c_path = CString::new(full_path).unwrap();
+            
+            libcret = unsafe {
+                libc::readlinkat(vfd.underfd as i32, c_path.as_ptr(), libc_buf.as_mut_ptr() as *mut c_char, libc_buflen)
+            };
+        }
+
+        if libcret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "readlinkat");
+        }
+
+        // Convert the result from readlink to a Rust string
+        let libcbuf_str = unsafe {
+            CStr::from_ptr(libc_buf.as_ptr() as *const c_char)
+        }.to_str().unwrap();
+
+        // Use libc::getcwd to get the current working directory
+        let mut cwd_buf = vec![0u8; 4096];
+        let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut c_char, cwd_buf.len()) };
+        if cwd_ptr.is_null() {
+            let errno = get_errno();
+            return handle_errno(errno, "getcwd");
+        }
+
+        let pwd = unsafe { CStr::from_ptr(cwd_buf.as_ptr() as *const c_char) }
+            .to_str()
+            .unwrap();
+
+        // Adjust the result to user perspective
+        let adjusted_result = format!("{}/{}", pwd, libcbuf_str);
+        let new_root = format!("{}/", LIND_ROOT);
+        let final_result = adjusted_result.strip_prefix(&new_root).unwrap_or(&adjusted_result);
+
+        // Check the length and copy the appropriate amount of data to buf
+        let bytes_to_copy = std::cmp::min(buflen, final_result.len());
+        unsafe {
+            std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf, bytes_to_copy);
+        }
+
+        bytes_to_copy as i32
+    }
+
     //------------------------------------WRITE SYSCALL------------------------------------
     /*
     *   Get the kernel fd with provided virtual fd first
@@ -1961,6 +2142,15 @@ impl Cage {
         if ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "fcntl");
+        }
+        ret
+    }
+
+    pub fn clock_gettime_syscall(&self, clockid: u32, tp: usize) -> i32 {
+        let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "clock_gettime");
         }
         ret
     }
