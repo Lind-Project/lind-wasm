@@ -28,7 +28,7 @@ use std::mem;
 
 use crate::fdtables;
 
-static LIND_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
+static LIND_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
