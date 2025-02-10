@@ -284,7 +284,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             self.pid as u64,
             FORK_SYSCALL as u32, // fork syscall
             0,
-            0,
             child_cageid,
             0,
             0,
@@ -416,7 +415,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                 lind_syscall_api(
                                     child_cageid,
                                     EXIT_SYSCALL as u32,
-                                    0,
                                     0,
                                     *val as u64,
                                     0,
@@ -672,7 +670,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                             lind_syscall_api(
                                 child_cageid as u64,
                                 EXIT_SYSCALL as u32,
-                                0,
                                 0,
                                 *val as u64,
                                 0,

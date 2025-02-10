@@ -23,66 +23,17 @@
 #include "kernel-posix-cpu-timers.h"
 #include <sysdep-vdso.h>
 #include <shlib-compat.h>
+#include <syscall-template.h>
 
 /* Get current value of CLOCK and store it in TP.  */
+
+// Now after clang compile it will call gettime64 first(but in real case we have only 32 bit)
+// In this case, we need “#if __TIMESIZE != 64” and this is always true. And always call __clock_gettime at last.
+
 int
 __clock_gettime64 (clockid_t clock_id, struct __timespec64 *tp)
 {
-  int r;
-
-#ifndef __NR_clock_gettime64
-# define __NR_clock_gettime64 __NR_clock_gettime
-#endif
-
-#ifdef HAVE_CLOCK_GETTIME64_VSYSCALL
-  int (*vdso_time64) (clockid_t clock_id, struct __timespec64 *tp)
-    = GLRO(dl_vdso_clock_gettime64);
-  if (vdso_time64 != NULL)
-    {
-      r = INTERNAL_VSYSCALL_CALL (vdso_time64, 2, clock_id, tp);
-      if (r == 0)
-	return 0;
-      return INLINE_SYSCALL_ERROR_RETURN_VALUE (-r);
-    }
-#endif
-
-#ifdef HAVE_CLOCK_GETTIME_VSYSCALL
-  int (*vdso_time) (clockid_t clock_id, struct timespec *tp)
-    = GLRO(dl_vdso_clock_gettime);
-  if (vdso_time != NULL)
-    {
-      struct timespec tp32;
-      r = INTERNAL_VSYSCALL_CALL (vdso_time, 2, clock_id, &tp32);
-      if (r == 0 && tp32.tv_sec >= 0)
-	{
-	  *tp = valid_timespec_to_timespec64 (tp32);
-	  return 0;
-	}
-      else if (r != 0)
-	return INLINE_SYSCALL_ERROR_RETURN_VALUE (-r);
-
-      /* Fallback to syscall if the 32-bit time_t vDSO returns overflows.  */
-    }
-#endif
-
-  r = INTERNAL_SYSCALL_CALL (clock_gettime64, clock_id, tp);
-  if (r == 0)
-    return 0;
-  if (r != -ENOSYS)
-    return INLINE_SYSCALL_ERROR_RETURN_VALUE (-r);
-
-#ifndef __ASSUME_TIME64_SYSCALLS
-  /* Fallback code that uses 32-bit support.  */
-  struct timespec tp32;
-  r = INTERNAL_SYSCALL_CALL (clock_gettime, clock_id, &tp32);
-  if (r == 0)
-    {
-      *tp = valid_timespec_to_timespec64 (tp32);
-      return 0;
-    }
-#endif
-
-  return INLINE_SYSCALL_ERROR_RETURN_VALUE (-r);
+  return MAKE_SYSCALL(191, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 #if __TIMESIZE != 64
@@ -91,26 +42,11 @@ libc_hidden_def (__clock_gettime64)
 int
 __clock_gettime (clockid_t clock_id, struct timespec *tp)
 {
-  int ret;
-  struct __timespec64 tp64;
-
-  ret = __clock_gettime64 (clock_id, &tp64);
-
-  if (ret == 0)
-    {
-      if (! in_time_t_range (tp64.tv_sec))
-        {
-          __set_errno (EOVERFLOW);
-          return -1;
-        }
-
-      *tp = valid_timespec64_to_timespec (tp64);
-    }
-
-  return ret;
+  return MAKE_SYSCALL(191, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
+
 #endif
-libc_hidden_def (__clock_gettime)
+libc_hidden_def (__clock_gettime);
 
 versioned_symbol (libc, __clock_gettime, clock_gettime, GLIBC_2_17);
 /* clock_gettime moved to libc in version 2.17;

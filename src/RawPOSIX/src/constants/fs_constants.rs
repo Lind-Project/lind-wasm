@@ -1,13 +1,10 @@
-//! File System Constants Module
-//! These constants define file system-related flags and parameters
-//! 
-//! Primary Source References:
-//! - Linux kernel v6.5: include/uapi/asm-generic/fcntl.h
-//! - Linux kernel v6.5: include/uapi/linux/stat.h
-//! - POSIX.1-2017 (IEEE Std 1003.1-2017)
-
 #![allow(dead_code)]
 #![allow(unused_variables)]
+
+// ===== Standard File Descriptors =====
+pub const STDIN_FILENO: i32 = 0;    // File descriptor for standard input
+pub const STDOUT_FILENO: i32 = 1;   // File descriptor for standard output
+pub const STDERR_FILENO: i32 = 2;   // File descriptor for standard error
 
 // ===== File Descriptor Constants =====
 pub const DT_UNKNOWN: u8 = 0;
@@ -168,10 +165,6 @@ pub const MAP_ANON: u32 = 0x20;     // Don't use a file descriptor
 pub const PAGESHIFT: u32 = 12;           // 4KB pages (1 << 12 = 4096)
 pub const PAGESIZE: u32 = 1 << PAGESHIFT;
 
-// Lind-specific page size constants
-pub const MAP_PAGESHIFT: u32 = 16;       // Custom value for Lind
-pub const MAP_PAGESIZE: u32 = 1 << MAP_PAGESHIFT;
-
 // ===== Memory Mapping Error Value =====
 // Source: include/uapi/asm-generic/mman-common.h
 pub const MAP_FAILED: *mut std::ffi::c_void = (-1isize) as *mut std::ffi::c_void;
@@ -183,5 +176,4 @@ pub const MREMAP_FIXED: u32 = 0x02;    // New address is specified exactly
 
 // ===== File Access Modes =====
 // Source: include/uapi/asm-generic/fcntl.h
-// NOTE: These should probably be moved to fs_constants.rs
 pub const O_ACCMODE: i32 = 0o003;  // Mask for file access modes

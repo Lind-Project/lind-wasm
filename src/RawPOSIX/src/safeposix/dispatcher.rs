@@ -111,6 +111,9 @@ const FSYNC_SYSCALL: i32 = 162;
 const FDATASYNC_SYSCALL: i32 = 163;
 const SYNC_FILE_RANGE: i32 = 164;
 
+const READLINK_SYSCALL: i32 = 165;
+const READLINKAT_SYSCALL: i32 = 166;
+
 const WRITEV_SYSCALL: i32 = 170;
 
 const CLONE_SYSCALL: i32 = 171;
@@ -120,6 +123,8 @@ const BRK_SYSCALL: i32 = 175;
 const SBRK_SYSCALL: i32 = 176;
 
 const NANOSLEEP_TIME64_SYSCALL : i32 = 181;
+const CLOCK_GETTIME_SYSCALL : i32 = 191;
+
 
 use std::ffi::CString;
 use std::ffi::CStr;
@@ -133,13 +138,14 @@ const FDKIND_IMSOCK: u32 = 2;
 use std::io::{Read, Write};
 use std::io;
 
+use crate::interface::check_and_convert_addr_ext;
 use crate::interface::types;
 use crate::interface::SigsetType;
 use crate::interface::{SigactionStruct, StatData};
 use crate::{fdtables, interface};
 use crate::interface::errnos::*;
 use crate::constants::*;
-use crate::interface::check_and_convert_addr_ext;
+use crate::interface::translate_vmmap_addr;
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -178,8 +184,6 @@ macro_rules! get_onearg {
 /// * `call_number` - Unique number for each system call, used to identify which syscall to invoke.
 /// * `call_name` - A legacy argument from the initial 3i proposal, currently unused and subject to 
 ///                 change with future 3i integration.
-/// * `start_address` - Base address of WebAssembly linear memory, used for address translation
-///                     between virtual and system memory address.
 /// * `arg1 - arg6` - Syscall-specific arguments. Any unused argument is set to `0xdeadbeefdeadbeef`.
 /// 
 /// ### Returns:
@@ -192,7 +196,6 @@ pub fn lind_syscall_api(
     cageid: u64,
     call_number: u32,
     call_name: u64,
-    start_address: u64,
     arg1: u64,
     arg2: u64,
     arg3: u64,
@@ -215,32 +218,17 @@ pub fn lind_syscall_api(
 
     let ret = match call_number {
         WRITE_SYSCALL => {
-            // Handles writing data from user buffer to file descriptor
-            
+            // Handles writing data from user buffer to file descriptor    
             // Get file descriptor
             let fd = arg1 as i32;
-        
             let count = arg3 as usize;
             if count == 0 {
                 return 0; // Early return for zero-length writes
             }
-        
             // Get cage reference for memory operations
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert user buffer address to system address
-            // PROT_READ is correct because write() reads FROM the buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
-                Ok(addr) => addr as *const u8,
-                Err(errno) => {
-                    return syscall_error(
-                        errno,
-                        "write",
-                        "buffer access violation or invalid address"
-                    );
-                }
-            };
-        
+            // Convert user buffer address to system address
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *const u8;
             // Perform write operation through cage abstraction
             cage.write_syscall(fd, buf, count)
         }
@@ -248,7 +236,6 @@ pub fn lind_syscall_api(
         WRITEV_SYSCALL => {
             let fd = arg1 as i32;
             let iovcnt = arg3 as i32;
-        
             // Validate count first
             if iovcnt <= 0 {
                 return syscall_error(
@@ -257,26 +244,9 @@ pub fn lind_syscall_api(
                     "invalid iovec count"
                 );
             }
-        
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate the iovec array address first
-            let iov_base = match check_and_convert_addr_ext(
-                &cage,
-                arg2,
-                (iovcnt as usize) * std::mem::size_of::<interface::IovecStruct>(),
-                PROT_READ
-            ) {
-                Ok(addr) => addr as *const interface::IovecStruct,
-                Err(errno) => {
-                    return syscall_error(
-                        errno,
-                        "writev",
-                        "invalid iovec array address"
-                    );
-                }
-            };
-        
+            // Convert iovec array address
+            let iov_base = translate_vmmap_addr(&cage, arg2).unwrap() as *const interface::IovecStruct;
             // The actual write operation is delegated to the cage implementation
             cage.writev_syscall(fd, iov_base, iovcnt)
         }
@@ -285,7 +255,7 @@ pub fn lind_syscall_api(
             let addr = arg1 as *mut u8;
             let length = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
-        
+
             if length == 0 {
                 return syscall_error(
                     Errno::EINVAL,
@@ -293,7 +263,7 @@ pub fn lind_syscall_api(
                     "length cannot be zero"
                 );
             }
-        
+
             // Perform the unmapping operation
             interface::munmap_handler(cageid, addr, length)
         }
@@ -305,7 +275,7 @@ pub fn lind_syscall_api(
             let flags = arg4 as i32;
             let fd = arg5 as i32;
             let off = arg6 as i64;
-        
+
             // Basic length validation
             if len == 0 {
                 return syscall_error(
@@ -314,7 +284,6 @@ pub fn lind_syscall_api(
                     "length cannot be zero"
                 );
             }
-        
             interface::mmap_handler(cageid, addr, len, prot, flags, fd, off) as i32
         }
 
@@ -323,14 +292,7 @@ pub fn lind_syscall_api(
             let count = arg3 as usize;
             let offset = arg4 as i64;
             let cage = interface::cagetable_getref(cageid);
-            
-            // Validate and convert user buffer address
-            // Using PROT_WRITE since pread writes TO the buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "pread", "invalid buffer address"),
-            };
-        
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             cage.pread_syscall(fd, buf, count, offset)
         }
 
@@ -338,13 +300,7 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
-            
-            // Validate and convert user buffer address
-            // Using PROT_WRITE since read() writes TO the buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "read", "invalid buffer address"),
-            };
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
 
             // File descriptor validation and actual read operation
             // handled by cage implementation
@@ -361,15 +317,8 @@ pub fn lind_syscall_api(
 
         ACCESS_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-            
-            // Validate and convert path string from user space
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr as u64) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return -1,
-                },
-                Err(errno) => return syscall_error(errno, "access", "invalid path address"),
-            };
+            let addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(addr).unwrap();
             let amode = arg2 as i32;
 
             // Perform access check through cage implementation
@@ -378,18 +327,10 @@ pub fn lind_syscall_api(
 
         OPEN_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-            
-            // Validate and convert path string from user space
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr as u64) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return -1,
-                },
-                Err(errno) => return syscall_error(errno, "open", "invalid path address"),
-            };
+            let addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(addr).unwrap();
             let flags = arg2 as i32;
             let mode = arg3 as u32;
-        
             // Perform open operation through cage implementation
             cage.open_syscall(path, flags, mode)
         }
@@ -408,21 +349,9 @@ pub fn lind_syscall_api(
         CONNECT_SYSCALL => {
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
-
-            // Validate and convert sockaddr from user space
-            let addr = match check_and_convert_addr_ext(&cage, arg2, arg3 as usize, PROT_READ) {
-                Ok(addr) => match interface::get_sockaddr(addr as u64, arg3 as u32) {
-                    Ok(sockaddr) => sockaddr,
-                    Err(_) => return syscall_error(Errno::EINVAL, "connect", "invalid sockaddr format"),
-                },
-                Err(errno) => return syscall_error(errno, "connect", "invalid address"),
-            };
-            
-            // Convert to reference for connect operation
-            let remoteaddr = match Ok::<&interface::GenSockaddr, i32>(&addr) {
-                Ok(addr) => addr,
-                Err(_) => panic!("Failed to get sockaddr"), // Handle error appropriately
-            };
+            let addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let sockaddr = interface::get_sockaddr(addr as u64, arg3 as u32).unwrap();
+            let remoteaddr = &sockaddr;
 
             // Perform connect operation through cage implementation
             // File descriptor validation handled by cage layer
@@ -432,22 +361,10 @@ pub fn lind_syscall_api(
         BIND_SYSCALL => {
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert sockaddr from user space
-            let addr = match check_and_convert_addr_ext(&cage, arg2, arg3 as usize, PROT_READ) {
-                Ok(addr) => match interface::get_sockaddr(addr as u64, arg3 as u32) {
-                    Ok(sockaddr) => sockaddr,
-                    Err(_) => return syscall_error(Errno::EINVAL, "bind", "invalid sockaddr format"),
-                },
-                Err(errno) => return syscall_error(errno, "bind", "invalid address"),
-            };
-        
-            // Convert to reference for bind operation
-            let localaddr = match Ok::<&interface::GenSockaddr, i32>(&addr) {
-                Ok(addr) => addr,
-                Err(_) => panic!("Failed to get sockaddr"), // Handle error appropriately
-            };
-        
+            let addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let sockaddr = interface::get_sockaddr(addr as u64, arg3 as u32).unwrap();
+            let localaddr = &sockaddr;
+
             // Perform bind operation through cage implementation
             // File descriptor validation handled by cage layer
             cage.bind_syscall(fd, localaddr)
@@ -458,7 +375,6 @@ pub fn lind_syscall_api(
             let nullity1 = interface::arg_nullity(arg2);
             let nullity2 = interface::arg_nullity(arg3);
             let cage = interface::cagetable_getref(cageid);
-        
             // Handle NULL address case (both NULL)
             if nullity1 && nullity2 {
                 cage.accept_syscall(arg1 as i32, &mut Some(&mut addr))
@@ -468,14 +384,8 @@ pub fn lind_syscall_api(
                 // Perform accept operation first
                 let rv = cage.accept_syscall(arg1 as i32, &mut Some(&mut addr));
                 if rv >= 0 {
-                    let addr2_addr = match check_and_convert_addr_ext(&cage, arg2, arg3 as usize, PROT_WRITE) {
-                        Ok(addr) => addr,
-                        Err(errno) => return syscall_error(errno, "accept", "invalid address buffer"),
-                    };
-                    let len_addr = match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<u32>(), PROT_WRITE) {
-                        Ok(addr) => addr,
-                        Err(errno) => return syscall_error(errno, "accept", "invalid length buffer"),
-                    };
+                    let addr2_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+                    let len_addr = translate_vmmap_addr(&cage, arg3).unwrap();
                     interface::copy_out_sockaddr(addr2_addr as u64, len_addr as u64, addr);
                 }
                 rv
@@ -513,53 +423,18 @@ pub fn lind_syscall_api(
             let nfds = arg1 as i32;
             // Get reference to the cage for memory operations
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert readfds buffer
-            // 1. check_and_convert_addr_ext validates memory access and converts user address to system address
-            // 2. PROT_READ | PROT_WRITE because select() both reads from and modifies the fd_sets
-            // 3. get_fdset converts the raw memory into an fd_set structure
-            let readfds = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::FdSet>(), PROT_READ | PROT_WRITE) {
-                Ok(addr) => match interface::get_fdset(addr) {
-                    Ok(fds) => fds,
-                    Err(_) => return syscall_error(Errno::EFAULT, "select", "failed to get readfds"),
-                },
-                Err(errno) => return syscall_error(errno, "select", "invalid readfds address"),
-            };
-        
-            // Validate and convert writefds buffer
-            // Similar to readfds, this fd_set indicates which descriptors to check for write-ready status
-            // The fd_set will be modified to show which descriptors are actually write-ready
-            let writefds = match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<interface::FdSet>(), PROT_READ | PROT_WRITE) {
-                Ok(addr) => match interface::get_fdset(addr) {
-                    Ok(fds) => fds,
-                    Err(_) => return syscall_error(Errno::EFAULT, "select", "failed to get writefds"),
-                },
-                Err(errno) => return syscall_error(errno, "select", "invalid writefds address"),
-            };
-        
-            // Validate and convert errorfds buffer (also called exceptfds in some implementations)
-            // This fd_set is used to monitor for exceptional conditions (like out-of-band data)
-            // Also requires both read and write access as select() modifies it
-            let errorfds = match check_and_convert_addr_ext(&cage, arg4, std::mem::size_of::<interface::FdSet>(), PROT_READ | PROT_WRITE) {
-                Ok(addr) => match interface::get_fdset(addr) {
-                    Ok(fds) => fds,
-                    Err(_) => return syscall_error(Errno::EFAULT, "select", "failed to get errorfds"),
-                },
-                Err(errno) => return syscall_error(errno, "select", "invalid errorfds address"),
-            };
-        
-            // Validate and convert timeout buffer
-            // 1. Only needs PROT_READ as the timeout value is not modified by select()
-            // 2. duration_fromtimeval converts the timeval structure to a Duration
-            // 3. This specifies how long select() should block waiting for activity
-            let rposix_timeout = match check_and_convert_addr_ext(&cage, arg5, std::mem::size_of::<interface::TimeVal>(), PROT_READ) {
-                Ok(addr) => match interface::duration_fromtimeval(addr) {
-                    Ok(timeout) => timeout,
-                    Err(_) => return syscall_error(Errno::EFAULT, "select", "failed to get timeout"),
-                },
-                Err(errno) => return syscall_error(errno, "select", "invalid timeout address"),
-            };
-        
+            // Convert readfds buffer address
+            let readfds_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let readfds = interface::get_fdset(readfds_addr).unwrap();
+            // Convert writefds buffer address 
+            let writefds_addr = translate_vmmap_addr(&cage, arg3).unwrap();
+            let writefds = interface::get_fdset(writefds_addr).unwrap();
+            // Convert errorfds buffer address
+            let errorfds_addr = translate_vmmap_addr(&cage, arg4).unwrap();
+            let errorfds = interface::get_fdset(errorfds_addr).unwrap();
+            // Convert timeout buffer address
+            let timeout_addr = translate_vmmap_addr(&cage, arg5).unwrap();
+            let rposix_timeout = interface::duration_fromtimeval(timeout_addr).unwrap();
             // Delegate to the cage's select implementation
             // This will:
             // 1. Monitor the specified file descriptors for activity
@@ -570,53 +445,29 @@ pub fn lind_syscall_api(
 
         RENAME_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert old path from user space
-            let old_path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "rename", "invalid old path string"),
-                },
-                Err(errno) => return syscall_error(errno, "rename", "invalid old path address"),
+            // Convert old path address
+            let old_ptr = translate_vmmap_addr(&cage, arg1).unwrap();
+            // Convert new path address
+            let new_ptr = translate_vmmap_addr(&cage, arg2).unwrap();
+            // Convert the raw pointers to `&str`
+            let old = unsafe {
+                CStr::from_ptr(old_ptr as *const i8).to_str().unwrap()
             };
-        
-            // Validate and convert new path from user space
-            let new_path = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "rename", "invalid new path string"),
-                },
-                Err(errno) => return syscall_error(errno, "rename", "invalid new path address"),
+            let new = unsafe {
+                CStr::from_ptr(new_ptr as *const i8).to_str().unwrap()
             };
-            
             // Perform rename operation through cage implementation
-            cage.rename_syscall(old_path, new_path)
+            cage.rename_syscall(old, new)
         }
 
         XSTAT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            // (stat takes the path as input, we don't write to it)
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "xstat", "invalid path string"),
-                },
-                Err(errno) => return syscall_error(errno, "xstat", "invalid path address"),
-            };
-        
-            // Validate stat buffer and prepare for writing
-            // Using PROT_WRITE because stat() writes the results TO this user space buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<StatData>(), PROT_WRITE) {
-                Ok(addr) => match interface::get_statdatastruct(addr) {
-                    Ok(val) => val,
-                    Err(errno) => return errno,
-                },
-                Err(errno) => return syscall_error(errno, "xstat", "invalid stat buffer address"),
-            };
-            
+            // Convert path string address
+            let path_addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(path_addr).unwrap();
+            // Convert stat buffer address
+            let buf_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let buf = interface::get_statdatastruct(buf_addr).unwrap();
             // Perform stat operation through cage implementation
             // Results written directly to user buffer by cage layer
             cage.stat_syscall(path, buf)
@@ -624,37 +475,18 @@ pub fn lind_syscall_api(
 
         MKDIR_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            // (mkdir takes the path as input, we don't write to it)
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "mkdir", "invalid path string"),
-                },
-                Err(errno) => return syscall_error(errno, "mkdir", "invalid path address"),
-            };
+            // Convert path string address
+            let path_addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(path_addr).unwrap();
             let mode = arg2 as u32;
-        
             // Perform mkdir operation through cage implementation
             cage.mkdir_syscall(path, mode)
         }
-
         RMDIR_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-
-            // Validate and convert path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            // (rmdir takes the path as input, we don't write to it)
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "rmdir", "invalid path string"),
-                },
-                Err(errno) => return syscall_error(errno, "rmdir", "invalid path address"),
-            };
-            
+            // Convert path string address
+            let path_addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(path_addr).unwrap();
             // Perform rmdir operation through cage implementation
             cage.rmdir_syscall(path)
         }
@@ -670,17 +502,9 @@ pub fn lind_syscall_api(
 
         CHDIR_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            // (chdir takes the path as input, we don't write to it)
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "chdir", "invalid path string"),
-                },
-                Err(errno) => return syscall_error(errno, "chdir", "invalid path address"),
-            };
+            // Convert path string address
+            let path_addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(path_addr).unwrap();
             
             // Perform chdir operation through cage implementation
             cage.chdir_syscall(path)
@@ -689,36 +513,22 @@ pub fn lind_syscall_api(
         GETCWD_SYSCALL => {
             let bufsize = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing
-            // Using PROT_WRITE because getcwd() writes the current working directory path 
-            // TO this user space buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg1, bufsize, PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "getcwd", "invalid buffer address"),
-            };
-        
+            // Convert buffer address
+            let buf_addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let buf = buf_addr as *mut u8;
             // Perform getcwd operation through cage implementation
             // On success (ret == 0), return the buffer address
             let ret = cage.getcwd_syscall(buf, bufsize as u32);
             if ret == 0 { return arg1 as i32; }
             ret
         }
+
         FSTATFS_SYSCALL => {
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing filesystem information
-            // Using PROT_WRITE because fstatfs() writes filesystem information 
-            // TO this user space buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_WRITE) {
-                Ok(addr) => match interface::get_fsdatastruct(addr) {
-                    Ok(val) => val,
-                    Err(errno) => return errno,
-                },
-                Err(errno) => return syscall_error(errno, "fstatfs", "invalid buffer address"),
-            };
-            
+            // Convert buffer address
+            let buf_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let buf = interface::get_fsdatastruct(buf_addr).unwrap();
             // Perform fstatfs operation through cage implementation
             // File descriptor validation and actual operation handled by cage layer
             cage.fstatfs_syscall(fd, buf)
@@ -726,19 +536,10 @@ pub fn lind_syscall_api(
 
         CHMOD_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            // (chmod takes the path as input, we don't write to it)
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "chmod", "invalid path string"),
-                },
-                Err(errno) => return syscall_error(errno, "chmod", "invalid path address"),
-            };
+            // Convert path string address
+            let path_addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(path_addr).unwrap();
             let mode = arg2 as u32;
-        
             // Perform chmod operation through cage implementation
             cage.chmod_syscall(path, mode)
         }
@@ -782,14 +583,9 @@ pub fn lind_syscall_api(
         FXSTAT_SYSCALL => {
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate stat buffer and prepare for writing
-            // Using PROT_WRITE because fstat() writes the results TO this user space buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::StatData>(), PROT_WRITE) {
-                Ok(addr) => interface::get_statdatastruct(addr).unwrap(),
-                Err(errno) => return syscall_error(errno, "fxstat", "invalid buffer address"),
-            };
-            
+            // Convert stat buffer address
+            let buf_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let buf = interface::get_statdatastruct(buf_addr).unwrap();
             // Perform fstat operation through cage implementation
             // File descriptor validation and actual operation handled by cage layer
             cage.fstat_syscall(fd, buf)
@@ -797,47 +593,28 @@ pub fn lind_syscall_api(
         
         UNLINK_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            // (unlink takes the path as input, we don't write to it)
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "unlink", "invalid path string"),
-                },
-                Err(errno) => return syscall_error(errno, "unlink", "invalid path address"),
-            };
-            
+            // Convert path string address
+            let path_addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(path_addr).unwrap();
             // Perform unlink operation through cage implementation
             cage.unlink_syscall(path)
         }
 
         LINK_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert old path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            let old_path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "link", "invalid old path string"),
-                },
-                Err(errno) => return syscall_error(errno, "link", "invalid old path address"),
-            };
-            
-            // Validate and convert new path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            let new_path = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "link", "invalid new path string"),
-                },
-                Err(errno) => return syscall_error(errno, "link", "invalid new path address"),
-            };
-        
+            // Convert old path string address
+            let old_ptr = translate_vmmap_addr(&cage, arg1).unwrap();
+            // Convert new path string address
+            let new_ptr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let old_fd= unsafe {
+                CStr::from_ptr(old_ptr as *const i8).to_str().unwrap()
+            }; 
+            let new_fd = unsafe {
+                CStr::from_ptr(new_ptr as *const i8).to_str().unwrap()
+            }; 
+
             // Perform link operation through cage implementation
-            cage.link_syscall(old_path, new_path)
+            cage.link_syscall(old_fd, new_fd)
         }
 
         LSEEK_SYSCALL => {
@@ -852,9 +629,10 @@ pub fn lind_syscall_api(
         }
 
         IOCTL_SYSCALL => {
+            let cage = interface::cagetable_getref(cageid);
             let virtual_fd = arg1 as i32;
             let request = arg2 as u64;
-            let ptrunion = (start_address + arg3) as *mut u8;
+            let ptrunion = translate_vmmap_addr(&cage, arg3).unwrap() as *mut u8;
             
             // Perform ioctl operation through cage implementation
             // Note: We restrict ioctl operations for security
@@ -864,18 +642,10 @@ pub fn lind_syscall_api(
 
         TRUNCATE_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "truncate", "invalid path string"),
-                },
-                Err(errno) => return syscall_error(errno, "truncate", "invalid path address"),
-            };
+            // Convert path string address
+            let path_addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(path_addr).unwrap();
             let length = arg2 as isize;
-        
             // Perform truncate operation through cage implementation
             cage.truncate_syscall(path, length)
         }
@@ -894,14 +664,8 @@ pub fn lind_syscall_api(
             let virtual_fd = arg1 as i32;
             let nbytes = arg3 as u32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing directory entries
-            // Using PROT_WRITE because getdents() writes directory entries TO this user space buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg2, nbytes as usize, PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "getdents", "invalid buffer address"),
-            };
-        
+            // Convert buffer address
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             // Perform getdents operation through cage implementation
             // File descriptor validation handled by cage layer
             cage.getdents_syscall(virtual_fd, buf, nbytes)
@@ -909,26 +673,13 @@ pub fn lind_syscall_api(
 
         STATFS_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate and convert path string from user space
-            // Using PROT_READ because we need to read the path string FROM user space
-            let path = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ) {
-                Ok(addr) => match interface::types::get_cstr(addr) {
-                    Ok(path_str) => path_str,
-                    Err(_) => return syscall_error(Errno::EFAULT, "statfs", "invalid path string"),
-                },
-                Err(errno) => return syscall_error(errno, "statfs", "invalid path address"),
-            };
+            // Convert path string address
+            let path_addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(path_addr).unwrap();
             
-            // Validate buffer for writing filesystem information
-            // Using PROT_WRITE because statfs() writes filesystem information TO this user space buffer
-            let rposix_databuf = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_WRITE) {
-                Ok(addr) => match interface::get_fsdatastruct(addr) {
-                    Ok(val) => val,
-                    Err(errno) => return syscall_error(Errno::EFAULT, "statfs", "invalid stat buffer format"),
-                },
-                Err(errno) => return syscall_error(errno, "statfs", "invalid stat buffer address"),
-            };
+            // Convert buffer address
+            let buf_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let rposix_databuf = interface::get_fsdatastruct(buf_addr).unwrap();
             
             // Perform statfs operation through cage implementation
             cage.statfs_syscall(&path, rposix_databuf)
@@ -949,15 +700,9 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing received data
-            // Using PROT_WRITE because recv() writes received data TO this user space buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "recv", "invalid buffer address"),
-            };
+            // Convert buffer address for writing received data
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             let flag = arg4 as i32;
-        
             // Perform recv operation through cage implementation
             // File descriptor validation handled by cage layer
             cage.recv_syscall(fd, buf, count, flag)
@@ -967,22 +712,17 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for reading data to send
-            // Using PROT_READ because we need to read the data FROM user space
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
-                Ok(addr) => addr as *const u8,
-                Err(errno) => return syscall_error(errno, "sendto", "invalid buffer address"),
-            };
+            // Convert buffer address for reading data to send
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *const u8;
+            let sockaddr = translate_vmmap_addr(&cage, arg5).unwrap();
             let flag = arg4 as i32;
         
             // Get and validate socket address
             let addrlen = arg6 as u32;
-            let addr = match interface::get_sockaddr(start_address + arg5, addrlen) {
+            let addr = match interface::get_sockaddr(sockaddr, addrlen) {
                 Ok(addr) => addr,
                 Err(_) => return syscall_error(Errno::EFAULT, "sendto", "invalid socket address"),
             };
-        
             // Perform sendto operation through cage implementation
             // File descriptor validation handled by cage layer
             cage.sendto_syscall(fd, buf, count, flag, &addr)
@@ -992,15 +732,9 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing received data
-            // Using PROT_WRITE because recvfrom() writes received data TO this user space buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "recvfrom", "invalid buffer address"),
-            };
+            // Convert buffer address for writing received data
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             let flag = arg4 as i32;
-        
             // Check if address and length arguments are provided
             let nullity1 = interface::arg_nullity(arg5);
             let nullity2 = interface::arg_nullity(arg6);
@@ -1014,12 +748,13 @@ pub fn lind_syscall_api(
                 // Both address and length are provided
                 // Create a default sockaddr to store the sender's address
                 let mut newsockaddr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
-        
                 // Perform recvfrom operation
                 let rv = cage.recvfrom_syscall(fd, buf, count, flag, &mut Some(&mut newsockaddr));
                 if rv >= 0 {
                     // Copy address information back to user space on success
-                    interface::copy_out_sockaddr(start_address + arg5, start_address + arg6, newsockaddr);
+                    interface::copy_out_sockaddr(translate_vmmap_addr(&cage, arg5).unwrap(),
+                                                translate_vmmap_addr(&cage, arg6).unwrap(),
+                                                newsockaddr);
                 }
                 rv
             } else {
@@ -1051,31 +786,21 @@ pub fn lind_syscall_api(
             interface::cagetable_getref(cageid)
                 .shmget_syscall(key, size, shmfig)
         }
+
         SHMAT_SYSCALL => {
             let shmid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate shared memory address
-            // Using both PROT_READ and PROT_WRITE since shared memory needs both access types
-            let shmaddr = match check_and_convert_addr_ext(&cage, arg2, 1, PROT_READ | PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "shmat", "invalid shared memory address"),
-            };
+            // Convert virtual address to physical address
+            let shmaddr = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             let shmflg = arg3 as i32;
-        
             // Perform shmat operation through cage implementation
             cage.shmat_syscall(shmid, shmaddr, shmflg)
         }
 
         SHMDT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate shared memory address
-            // Using both PROT_READ and PROT_WRITE since shared memory needs both access types
-            let shmaddr = match check_and_convert_addr_ext(&cage, arg1, 1, PROT_READ | PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "shmdt", "invalid shared memory address"),
-            };
+            // Convert virtual address to physical address
+            let shmaddr = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
             
             // Perform shmdt operation through cage implementation
             cage.shmdt_syscall(shmaddr)
@@ -1199,16 +924,10 @@ pub fn lind_syscall_api(
         PWRITE_SYSCALL => {
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for reading data to write
-            // Using PROT_READ because we need to read the data FROM user space
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
-                Ok(addr) => addr as *const u8,
-                Err(errno) => return syscall_error(errno, "pwrite", "invalid buffer address"),
-            };
+            // Convert buffer address to physical address
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *const u8;
             let virtual_fd = arg1 as i32;
             let offset = arg4 as i64;
-        
             cage.pwrite_syscall(virtual_fd, buf, count, offset)
         }
 
@@ -1269,14 +988,8 @@ pub fn lind_syscall_api(
             let optname = arg3 as i32;
             let optlen = arg5 as u32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for reading socket option value
-            // Using PROT_READ because we need to read the option value FROM user space
-            let optval = match check_and_convert_addr_ext(&cage, arg4, optlen as usize, PROT_READ) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "setsockopt", "invalid optval address"),
-            };
-            
+            // Convert user space address to physical address
+            let optval = translate_vmmap_addr(&cage, arg4).unwrap() as *mut u8;
             // Perform setsockopt operation through cage implementation
             cage.setsockopt_syscall(virtual_fd, level, optname, optval, optlen)
         }
@@ -1299,15 +1012,9 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for reading data to send
-            // Using PROT_READ because we need to read the data FROM user space
-            let buf = match check_and_convert_addr_ext(&cage, arg2, count, PROT_READ) {
-                Ok(addr) => addr as *const u8,
-                Err(errno) => return syscall_error(errno, "send", "invalid buffer address"),
-            };
+            // Convert user space buffer address to physical address
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *const u8;
             let flags = arg4 as i32;
-        
             cage.send_syscall(fd, buf, count, flags)
         }
 
@@ -1331,14 +1038,8 @@ pub fn lind_syscall_api(
         GETHOSTNAME_SYSCALL => {
             let len = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing hostname
-            // Using PROT_WRITE because gethostname() writes hostname TO this user space buffer
-            let name = match check_and_convert_addr_ext(&cage, arg1, len, PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "gethostname", "invalid name address"),
-            };
-        
+            // Convert user space buffer address to physical address
+            let name = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
             // Perform gethostname operation through cage implementation
             cage.gethostname_syscall(name, len as isize)
         }
@@ -1346,14 +1047,8 @@ pub fn lind_syscall_api(
         GETIFADDRS_SYSCALL => {
             let count = arg2 as usize;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing interface addresses
-            // Using PROT_WRITE because getifaddrs() writes interface data TO user space buffer
-            let buf = match check_and_convert_addr_ext(&cage, arg1, count, PROT_WRITE) {
-                Ok(addr) => addr as *mut u8,
-                Err(errno) => return syscall_error(errno, "getifaddrs", "invalid address"),
-            };
-        
+            // Convert user space buffer address to physical address 
+            let buf = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
             // Perform getifaddrs operation through cage implementation
             cage.getifaddrs_syscall(buf, count)
         }
@@ -1459,60 +1154,27 @@ pub fn lind_syscall_api(
 
         PIPE_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing pipe file descriptors
-            // Using PROT_WRITE because pipe() writes two fds TO this user space buffer
-            // Size is 8 bytes for two integers (file descriptors)
-            let pipe = match check_and_convert_addr_ext(&cage, arg1, 8, PROT_WRITE) {
-                Ok(addr) => match interface::get_pipearray(addr) {
-                    Ok(pipe_array) => pipe_array,
-                    Err(_) => return syscall_error(Errno::EFAULT, "pipe", "failed to get pipe array"),
-                },
-                Err(errno) => return syscall_error(errno, "pipe", "invalid pipe address"),
-            };
-        
+            // Convert user space buffer address to physical address
+            let pipe = interface::get_pipearray(translate_vmmap_addr(&cage, arg1).unwrap() as u64).unwrap();
             cage.pipe_syscall(pipe)
         }
 
         PIPE2_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing pipe file descriptors
-            // Using PROT_WRITE because pipe2() writes two fds TO this user space buffer
-            // Size is 8 bytes for two integers (file descriptors)
-            let pipe = match check_and_convert_addr_ext(&cage, arg1, 8, PROT_WRITE) {
-                Ok(addr) => match interface::get_pipearray(addr) {
-                    Ok(pipe_array) => pipe_array,
-                    Err(_) => return syscall_error(Errno::EFAULT, "pipe2", "failed to get pipe array"),
-                },
-                Err(errno) => return syscall_error(errno, "pipe2", "invalid pipe address"),
-            };
+            // Convert user space buffer address to physical address
+            let pipe = interface::get_pipearray(translate_vmmap_addr(&cage, arg1).unwrap() as u64).unwrap();
             let flag = arg2 as i32;
-        
             cage.pipe2_syscall(pipe, flag)
         }
         
         GETSOCKNAME_SYSCALL => {
             let fd = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing socket address
-            // Using PROT_WRITE because getsockname() writes address TO user space
-            let name_addr = match check_and_convert_addr_ext(&cage, arg2, 16, PROT_WRITE) {
-                Ok(addr) => addr,
-                Err(errno) => return syscall_error(errno, "getsockname", "invalid name address"),
-            };
-        
-            // Validate buffer for writing address length
-            // Using PROT_WRITE because getsockname() writes length TO user space
-            let namelen_addr = match check_and_convert_addr_ext(&cage, arg3, 4, PROT_WRITE) {
-                Ok(addr) => addr,
-                Err(errno) => return syscall_error(errno, "getsockname", "invalid length address"),
-            };
-        
+            // Convert user space buffer addresses to physical addresses
+            let name_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let namelen_addr = translate_vmmap_addr(&cage, arg3).unwrap();
             // Initialize default socket address structure
             let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
-        
             // Check for null pointers
             if interface::arg_nullity(arg2) || interface::arg_nullity(arg3) {
                 return syscall_error(
@@ -1521,9 +1183,7 @@ pub fn lind_syscall_api(
                     "Either the address or the length were null",
                 );
             }
-        
             let rv = cage.getsockname_syscall(fd, &mut Some(&mut addr));
-        
             // Copy out the address if operation was successful
             if rv >= 0 {
                 interface::copy_out_sockaddr(name_addr, namelen_addr, addr);
@@ -1536,16 +1196,9 @@ pub fn lind_syscall_api(
             let level = arg2 as i32;
             let optname = arg3 as i32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing socket option value
-            // Using PROT_WRITE because getsockopt() writes option value TO user space
-            // Size is 4 bytes for an integer value
-            let optval_ptr = match check_and_convert_addr_ext(&cage, arg4, 4, PROT_WRITE) {
-                Ok(addr) => addr as *mut i32,
-                Err(errno) => return syscall_error(errno, "getsockopt", "invalid optval address"),
-            };
+            // Convert user space buffer address to physical address
+            let optval_ptr = translate_vmmap_addr(&cage, arg4).unwrap() as *mut i32;
             let optval = unsafe { &mut *optval_ptr };
-        
             cage.getsockopt_syscall(virtual_fd, level, optname, optval)
         }
 
@@ -1554,39 +1207,18 @@ pub fn lind_syscall_api(
             let _type = arg2 as i32;
             let protocol = arg3 as i32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing socket pair file descriptors
-            // Using PROT_WRITE because socketpair() writes two fds TO this user space buffer
-            // Size is 8 bytes for two integers (file descriptors)
-            let virtual_socket_vector = match check_and_convert_addr_ext(&cage, arg4, 8, PROT_WRITE) {
-                Ok(addr) => match interface::get_sockpair(addr) {
-                    Ok(sock_pair) => sock_pair,
-                    Err(_) => return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair array"),
-                },
-                Err(errno) => return syscall_error(errno, "socketpair", "invalid socket vector address"),
-            };
-        
+            // Convert user space buffer address to physical address
+            let virtual_socket_vector = interface::get_sockpair(translate_vmmap_addr(&cage, arg4).unwrap() as u64).unwrap();
             cage.socketpair_syscall(domain, _type, protocol, virtual_socket_vector)
         }
 
         POLL_SYSCALL => {
             let nfds = arg2 as u64;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for reading and writing poll file descriptors
-            // Using PROT_READ | PROT_WRITE because:
-            // - READ: poll needs to read the fds and events to monitor
-            // - WRITE: poll needs to write back the returned events
-            // Size is nfds * 8 (size of pollfd struct)
-            let pollfds = match check_and_convert_addr_ext(&cage, arg1, (nfds * 8) as usize, PROT_READ | PROT_WRITE) {
-                Ok(addr) => match interface::get_pollstruct_slice(addr, nfds as usize) {
-                    Ok(poll_array) => poll_array,
-                    Err(_) => return syscall_error(Errno::EFAULT, "poll", "failed to get poll array"),
-                },
-                Err(errno) => return syscall_error(errno, "poll", "invalid fds address"),
-            };
+            // Convert user space buffer address to physical address
+            let addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let pollfds = interface::get_pollstruct_slice(addr, nfds as usize).unwrap();
             let timeout = arg3 as i32;
-        
             cage.poll_syscall(pollfds, nfds, timeout)
         }
 
@@ -1603,23 +1235,14 @@ pub fn lind_syscall_api(
 
         FUTEX_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for futex operations
-            // Using PROT_READ | PROT_WRITE because:
-            // - READ: futex needs to read current value
-            // - WRITE: futex may modify the value depending on operation
-            let uaddr = match check_and_convert_addr_ext(&cage, arg1, 4, PROT_READ | PROT_WRITE) {
-                Ok(addr) => addr,
-                Err(errno) => return syscall_error(errno, "futex", "invalid uaddr address"),
-            };
-            
+            // Convert user space buffer address to physical address
+            let uaddr = translate_vmmap_addr(&cage, arg1).unwrap();
             // Convert remaining arguments
             let futex_op = arg2 as u32;
             let val = arg3 as u32;
             let timeout = arg4 as u32;
             let uaddr2 = arg5 as u32;
             let val3 = arg6 as u32;
-        
             cage.futex_syscall(uaddr, futex_op, val, timeout, uaddr2, val3)
         }
 
@@ -1627,57 +1250,35 @@ pub fn lind_syscall_api(
             let clockid = arg1 as u32;
             let flags = arg2 as i32;
             let cage = interface::cagetable_getref(cageid);
-            
-            // Validate buffer for reading requested sleep time
-            // Using PROT_READ because we need to read the requested time FROM user space
-            // Size is 16 bytes for timespec64 structure
-            let req = match check_and_convert_addr_ext(&cage, arg3, 16, PROT_READ) {
-                Ok(addr) => addr as usize,
-                Err(errno) => return syscall_error(errno, "nanosleep", "invalid req address"),
-            };
-        
-            // Validate buffer for writing remaining time
-            // Using PROT_WRITE because nanosleep writes remaining time TO user space
-            // Size is 16 bytes for timespec64 structure
-            let rem = match check_and_convert_addr_ext(&cage, arg4, 16, PROT_WRITE) {
-                Ok(addr) => addr as usize, 
-                Err(errno) => return syscall_error(errno, "nanosleep", "invalid rem address"),
-            };
-            
+            // Convert user space buffer address to physical address
+            let req = translate_vmmap_addr(&cage, arg3).unwrap() as usize;
+            let rem = translate_vmmap_addr(&cage, arg4).unwrap() as usize;
             cage.nanosleep_time64_syscall(clockid, flags, req, rem)
+        }
+
+        CLOCK_GETTIME_SYSCALL => {
+            let clockid = arg1 as u32;
+            let cage = interface::cagetable_getref(cageid);
+            let tp = translate_vmmap_addr(&cage, arg2).unwrap() as usize;
+            
+            interface::cagetable_getref(cageid)
+                .clock_gettime_syscall(clockid, tp)
         }
 
         WAIT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing process status
-            // Using PROT_WRITE because wait() writes status information TO user space
-            // Size is 4 bytes for status integer
-            let status = match check_and_convert_addr_ext(&cage, arg1, 4, PROT_WRITE) {
-                Ok(addr) => match interface::get_i32_ref(addr) {
-                    Ok(status_ref) => status_ref,
-                    Err(_) => return syscall_error(Errno::EFAULT, "wait", "failed to get status reference"),
-                },
-                Err(errno) => return syscall_error(errno, "wait", "invalid status address"),
-            };
-        
+            // Convert user space buffer address to physical address
+            let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
+            let status = interface::get_i32_ref(status_addr).unwrap();
             cage.wait_syscall(status)
         }
 
         WAITPID_SYSCALL => {
             let pid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
-        
-            // Validate buffer for writing process status
-            // Using PROT_WRITE because waitpid() writes status information TO user space
-            // Size is 4 bytes for status integer
-            let status = match check_and_convert_addr_ext(&cage, arg2, 4, PROT_WRITE) {
-                Ok(addr) => match interface::get_i32_ref(addr) {
-                    Ok(status_ref) => status_ref,
-                    Err(_) => return syscall_error(Errno::EFAULT, "waitpid", "failed to get status reference"),
-                },
-                Err(errno) => return syscall_error(errno, "waitpid", "invalid status address"), 
-            };
+            // Convert user space buffer address to physical address
+            let status_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let status = interface::get_i32_ref(status_addr).unwrap();
             let options = arg3 as i32;
             
             cage.waitpid_syscall(pid, status, options)
@@ -1717,6 +1318,34 @@ pub fn lind_syscall_api(
 
             cage.setitimer_syscall(which, itimeval, old_itimeval)
         }
+        
+        READLINK_SYSCALL => {
+            let cage = interface::cagetable_getref(cageid);
+            let addr = translate_vmmap_addr(&cage, arg1).unwrap();
+            let path = interface::types::get_cstr(addr).unwrap();
+
+            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
+            
+            let buflen = arg3 as usize;
+
+            interface::cagetable_getref(cageid)
+                .readlink_syscall(path, buf, buflen)
+        }
+
+        READLINKAT_SYSCALL => {
+            let fd = arg1 as i32;
+
+            let cage = interface::cagetable_getref(cageid);
+            let addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let path = interface::types::get_cstr(addr).unwrap();
+
+            let buf = translate_vmmap_addr(&cage, arg3).unwrap() as *mut u8;
+
+            let buflen = arg4 as usize;
+
+            interface::cagetable_getref(cageid)
+                .readlinkat_syscall(fd, path, buf, buflen)
+        }
 
         _ => -1, // Return -1 for unknown syscalls
     };
@@ -1741,31 +1370,6 @@ pub fn lind_syscall_api(
     // }
 
     ret
-}
-
-// set the wasm linear memory base address to vmmap
-pub fn init_vmmap_helper(cageid: u64, base_address: usize, program_break: Option<u32>) {
-    let cage = interface::cagetable_getref(cageid);
-    let mut vmmap = cage.vmmap.write();
-    vmmap.set_base_address(base_address);
-    if program_break.is_some() {
-        vmmap.set_program_break(program_break.unwrap());
-    }
-}
-
-// clone the cage memory. Invoked by wasmtime after cage is forked
-pub fn fork_vmmap_helper(parent_cageid: u64, child_cageid: u64) {
-    let parent_cage = interface::cagetable_getref(parent_cageid);
-    let child_cage = interface::cagetable_getref(child_cageid);
-    let parent_vmmap = parent_cage.vmmap.read();
-    let child_vmmap = child_cage.vmmap.read();
-
-    interface::fork_vmmap(&parent_vmmap, &child_vmmap);
-
-    // update program break for child
-    drop(child_vmmap);
-    let mut child_vmmap = child_cage.vmmap.write();
-    child_vmmap.set_program_break(parent_vmmap.program_break);
 }
 
 #[no_mangle]
@@ -1971,19 +1575,27 @@ pub fn lindrustinit(verbosity: isize) {
     interface::cagetable_insert(0, utilcage);
     fdtables::init_empty_cage(0);
     // Set the first 3 fd to STDIN / STDOUT / STDERR
-    // STDIN
-    let dev_null = CString::new("/home/lind/lind_project/src/safeposix-rust/tmp/dev/null").unwrap();
+    // TODO:
+    // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
+    let dev_null = CString::new("/home/lind-wasm/src/RawPOSIX/tmp/dev/null").unwrap();
+
+    // Make sure that the standard file descriptor (stdin, stdout, stderr) is always valid, even if they 
+    // are closed before.
+    // Standard input (fd = 0) is redirected to /dev/null
+    // Standard output (fd = 1) is redirected to /dev/null
+    // Standard error (fd = 2) is set to copy of stdout
     unsafe {
         libc::open(dev_null.as_ptr(), O_RDONLY);
         libc::open(dev_null.as_ptr(), O_WRONLY);
         libc::dup(1);
     }
     
-    fdtables::get_specific_virtual_fd(0, 0, FDKIND_KERNEL, 0, false, 0).unwrap();
+    // STDIN
+    fdtables::get_specific_virtual_fd(0, STDIN_FILENO as u64, FDKIND_KERNEL, STDIN_FILENO as u64, false, 0).unwrap();
     // STDOUT
-    fdtables::get_specific_virtual_fd(0, 1, FDKIND_KERNEL, 1, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(0, STDOUT_FILENO as u64, FDKIND_KERNEL, STDOUT_FILENO as u64, false, 0).unwrap();
     // STDERR
-    fdtables::get_specific_virtual_fd(0, 2, FDKIND_KERNEL, 2, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(0, STDERR_FILENO as u64, FDKIND_KERNEL, STDERR_FILENO as u64, false, 0).unwrap();
 
     //init cage is its own parent
     let initcage = Cage {
@@ -2015,11 +1627,11 @@ pub fn lindrustinit(verbosity: isize) {
     fdtables::init_empty_cage(1);
     // Set the first 3 fd to STDIN / STDOUT / STDERR
     // STDIN
-    fdtables::get_specific_virtual_fd(1, 0, FDKIND_KERNEL, 0, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(1, STDIN_FILENO as u64, FDKIND_KERNEL, STDIN_FILENO as u64, false, 0).unwrap();
     // STDOUT
-    fdtables::get_specific_virtual_fd(1, 1, FDKIND_KERNEL, 1, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(1, STDOUT_FILENO as u64, FDKIND_KERNEL, STDOUT_FILENO as u64, false, 0).unwrap();
     // STDERR
-    fdtables::get_specific_virtual_fd(1, 2, FDKIND_KERNEL, 2, false, 0).unwrap();
+    fdtables::get_specific_virtual_fd(1, STDERR_FILENO as u64, FDKIND_KERNEL, STDERR_FILENO as u64, false, 0).unwrap();
 
 }
 
