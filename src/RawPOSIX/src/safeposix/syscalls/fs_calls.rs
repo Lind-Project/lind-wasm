@@ -160,13 +160,11 @@ impl Cage {
     */
     pub fn unlinkat_syscall(&self, dirfd: i32, pathname: &str, flags: i32) -> i32 {
         // Normalize and convert the provided pathname
-        // let relpath = normpath(convpath(pathname), self);
-        // let relative_path = relpath.to_str().unwrap();
-        // let full_path = format!("{}{}", LIND_ROOT, relative_path);
-        // let c_path = CString::new(full_path).unwrap();
+        let relpath = normpath(convpath(pathname), self);
+        let relative_path = relpath.to_str().unwrap();
+        let full_path = format!("{}{}", LIND_ROOT, relative_path);
+        let c_path = CString::new(full_path).unwrap();
 
-        let c_path = CString::new(pathname).unwrap();
-        
         // Handling of the directory file descriptor:
         // We currently only support the case when `dirfd` is AT_FDCWD
         // If dirfd is anything else, we return an error indicating that such usage is not supported
