@@ -96,18 +96,6 @@ pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
     handler
 }
 
-// reset the signal handler of the specified signal of the cage to SIG_DFL
-// used by SA_RESETHAND flag
-pub fn signal_reset_handler(cageid: u64, signo: i32) {
-    let cage = cagetable_getref(cageid);
-    match cage.signalhandler.get_mut(&signo) {
-        Some(mut action_struct) => {
-            action_struct.sa_handler = SIG_DFL as u32;
-        }
-        None => {},
-    };
-}
-
 // send specified signal to the cage, return value indicates whether the cage exists
 pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
     if let Some(cage) = cagetable_getref_opt(cageid) {
@@ -150,17 +138,17 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
         // retrieve the signal number
         let signo = pending_signals.remove(index);
         // retrieve the corresponding signal handler
-        match cage.signalhandler.get(&signo) {
-            Some(sigaction) => {
+        match cage.signalhandler.get_mut(&signo) {
+            Some(mut sigaction) => {
                 // if sigprocmask is called during the execution of the signal handler
                 // the signal mask will not be perseved once handler is finished
 
                 // by default, we block the same signal during its execution
                 let mut mask_self = convert_signal_mask(signo);
-                let signal_handler = signal_get_handler(cageid, signo);
+                let signal_handler = sigaction.sa_handler;
                 // if SA_RESETHAND is set, we reset the signal handler to default for this signal
                 if sigaction.sa_flags as u32 & SA_RESETHAND > 0 {
-                    signal_reset_handler(cageid, signo);
+                    sigaction.sa_handler = SIG_DFL as u32;
                 }
 
                 // if SA_NODEFER is set, we allow the same signal to interrupt itself
