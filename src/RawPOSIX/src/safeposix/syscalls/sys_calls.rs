@@ -5,7 +5,7 @@ use crate::constants::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX
 };
 
-use crate::interface::{self, lind_send_signal};
+use crate::interface::{self, convert_signal_mask, lind_send_signal};
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
 use crate::safeposix::shm::*;
@@ -498,13 +498,27 @@ impl Cage {
                     // Unblock signals in set
                     let newset = curr_sigset & !*some_set;
                     self.sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
-                    // send pending signals
-                    // TODO: check if the signal is set here is more efficient
-                    interface::signal_epoch_trigger(self.cageid);
+                    // check if any of the unblocked signals are in the pending signal list
+                    // and trigger the epoch if it has
+                    let pending_signals = self.pending_signals.read();
+                    if pending_signals.iter().any(|signo| (*some_set & convert_signal_mask(*signo)) != 0) {
+                        interface::signal_epoch_trigger(self.cageid);
+                    }
                     0
                 }
                 SIG_SETMASK => {
-                    // TODO: handle signal get unblocked
+                    let pending_signals = self.pending_signals.read();
+                    // find all signals switched from blocking to nonblocking
+                    // 1. perform a xor operation to find signals that switched state
+                    // all the signal masks changed from 0 to 1, or 1 to 0 are filtered in this step
+                    // 2. perform an and operation to the old sigset, this further filtered masks and only
+                    // left masks changed from 1 to 0
+                    let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+                    // check if any of the unblocked signals are in the pending signal list
+                    // and trigger the epoch if it has
+                    if pending_signals.iter().any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0) {
+                        interface::signal_epoch_trigger(self.cageid);
+                    }
                     // Set sigset to set
                     self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0
