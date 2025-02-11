@@ -1185,7 +1185,7 @@ pub fn lindrustinit(verbosity: isize) {
     // Set the first 3 fd to STDIN / STDOUT / STDERR
     // TODO:
     // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
-    let dev_null = CString::new("/home/lind-wasm/src/RawPOSIX/tmp/dev/null").unwrap();
+    let dev_null = CString::new("/home/lind/lind-wasm/src/RawPOSIX/tmp/dev/null").unwrap();
 
     // Make sure that the standard file descriptor (stdin, stdout, stderr) is always valid, even if they 
     // are closed before.
