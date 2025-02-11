@@ -682,107 +682,6 @@ pub fn lind_syscall_api(
                 .shmdt_syscall(shmaddr)
         }
 
-        MUTEX_DESTROY_SYSCALL => {
-            let mutex_handle = arg1 as i32;
-
-            interface::cagetable_getref(cageid)
-                .mutex_destroy_syscall(mutex_handle)
-        }
-
-        MUTEX_LOCK_SYSCALL => {
-            let mutex_handle = arg1 as i32;
-
-            interface::cagetable_getref(cageid)
-                .mutex_lock_syscall(mutex_handle)
-        }
-
-        MUTEX_TRYLOCK_SYSCALL => {
-            let mutex_handle = arg1 as i32;
-
-            interface::cagetable_getref(cageid)
-                .mutex_trylock_syscall(mutex_handle)
-        }
-
-        MUTEX_UNLOCK_SYSCALL => {
-            let mutex_handle = arg1 as i32;
-
-            interface::cagetable_getref(cageid)
-                .mutex_unlock_syscall(mutex_handle)
-        }
-
-        COND_DESTROY_SYSCALL => {
-            let cv_handle = arg1 as i32;
-
-            interface::cagetable_getref(cageid)
-                .cond_destroy_syscall(cv_handle)
-        }
-
-        COND_WAIT_SYSCALL => {
-            let cv_handle = arg1 as i32;
-            let mutex_handle = arg2 as i32;
-
-            interface::cagetable_getref(cageid)
-                .cond_wait_syscall(cv_handle, mutex_handle)
-        }
-
-        COND_BROADCAST_SYSCALL => {
-            let cv_handle = arg1 as i32;
-
-            interface::cagetable_getref(cageid)
-                .cond_broadcast_syscall(cv_handle)
-        }
-
-        COND_SIGNAL_SYSCALL => {
-            let cv_handle = arg1 as i32;
-
-            interface::cagetable_getref(cageid)
-                .cond_signal_syscall(cv_handle)
-        }
-
-        SEM_INIT_SYSCALL => {
-            let sem_handle = arg1 as u32;
-            let pshared = arg2 as i32;
-            let value = arg3 as u32;
-
-            interface::cagetable_getref(cageid)
-                .sem_init_syscall(sem_handle, pshared, value)
-        }
-
-        SEM_WAIT_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            interface::cagetable_getref(cageid)
-                .sem_wait_syscall(sem_handle)
-        }
-
-        SEM_TRYWAIT_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            interface::cagetable_getref(cageid)
-                .sem_trywait_syscall(sem_handle)
-        }
-
-        SEM_POST_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            interface::cagetable_getref(cageid)
-                .sem_post_syscall(sem_handle)
-        }
-
-        SEM_DESTROY_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            interface::cagetable_getref(cageid)
-                .sem_destroy_syscall(sem_handle)
-        }
-
-        SEM_GETVALUE_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            interface::cagetable_getref(cageid)
-                .sem_getvalue_syscall(sem_handle)
-        }
-
         PWRITE_SYSCALL => {
             let virtual_fd = arg1 as i32;
             let buf = (start_address + arg2) as *const u8;
@@ -880,16 +779,6 @@ pub fn lind_syscall_api(
             interface::cagetable_getref(cageid)
                 .listen_syscall(virtual_fd, backlog)
         }
-
-        MUTEX_CREATE_SYSCALL => {
-            interface::cagetable_getref(cageid)
-                .mutex_create_syscall()
-        }
-
-        COND_CREATE_SYSCALL => {
-            interface::cagetable_getref(cageid)
-                .cond_create_syscall()
-        } 
 
         GETHOSTNAME_SYSCALL => {
             let name = (start_address + arg1) as *mut u8;
@@ -1095,7 +984,6 @@ pub fn lindcancelinit(cageid: u64) {
     let cage = interface::cagetable_getref(cageid);
     cage.cancelstatus
         .store(true, interface::RustAtomicOrdering::Relaxed);
-    cage.signalcvs();
 }
 
 #[no_mangle]
@@ -1168,9 +1056,6 @@ pub fn lindrustinit(verbosity: isize) {
         getegid: interface::RustAtomicI32::new(-1),
         geteuid: interface::RustAtomicI32::new(-1),
         rev_shm: interface::Mutex::new(vec![]),
-        mutex_table: interface::RustLock::new(vec![]),
-        cv_table: interface::RustLock::new(vec![]),
-        sem_table: interface::RustHashMap::new(),
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(),
@@ -1216,9 +1101,6 @@ pub fn lindrustinit(verbosity: isize) {
         getegid: interface::RustAtomicI32::new(-1),
         geteuid: interface::RustAtomicI32::new(-1),
         rev_shm: interface::Mutex::new(vec![]),
-        mutex_table: interface::RustLock::new(vec![]),
-        cv_table: interface::RustLock::new(vec![]),
-        sem_table: interface::RustHashMap::new(),
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustHashMap::new(),
