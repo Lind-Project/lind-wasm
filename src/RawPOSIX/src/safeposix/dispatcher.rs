@@ -4,9 +4,12 @@
 
 const ACCESS_SYSCALL: i32 = 2;
 const UNLINKAT_SYSCALL: i32 = 3;
-const UNLINK_SYSCALL: i32 = 4;
-const LINK_SYSCALL: i32 = 5;
-const RENAME_SYSCALL: i32 = 6;
+// const UNLINK_SYSCALL: i32 = 4;
+// const LINK_SYSCALL: i32 = 5;
+// const RENAME_SYSCALL: i32 = 6;
+const UNLINK_SYSCALL: i32 = 87;
+const LINK_SYSCALL: i32 = 86;
+const RENAME_SYSCALL: i32 = 82;
 
 const XSTAT_SYSCALL: i32 = 9;
 const OPEN_SYSCALL: i32 = 10;
