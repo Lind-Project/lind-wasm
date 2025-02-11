@@ -25,13 +25,7 @@ pub enum OnCalledAction {
 pub enum AsyncifyState {
     Normal,
     Unwind,
-    Rewind,
-}
-
-#[derive(Copy, Clone)]
-pub struct RewindingReturn {
-    pub rewinding: AsyncifyState,
-    pub retval: i32
+    Rewind(i32),
 }
 
 #[derive(Debug, Clone, Copy)]

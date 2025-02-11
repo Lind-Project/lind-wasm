@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
-use rawposix::safeposix::dispatcher::{lind_signal_init, lind_syscall_api, lind_thread_exit};
+use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier, Mutex, OnceLock};
 use std::thread;
-use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId, InstantiateType, Linker, Module, OnCalledAction, RewindingReturn, SharedMemory, Store, StoreOpaque, Trap, Val};
+use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId, InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Trap, Val};
 
 use wasmtime_environ::MemoryIndex;
 
@@ -183,19 +183,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     // check if current process is in rewind state
     // if yes, stop the rewind and return the clone syscall result
     pub fn catch_rewind(&self, mut caller: &mut Caller<'_, T>) -> Option<i32> {
-        if caller.as_context().get_rewinding_state().rewinding == AsyncifyState::Rewind {
+        if let AsyncifyState::Rewind(retval) = caller.as_context().get_asyncify_state() {
             // stop the rewind
             let asyncify_stop_rewind_func = caller.get_asyncify_stop_rewind().unwrap();
             let _res = asyncify_stop_rewind_func.call(&mut caller, ());
 
-            // retrieve the fork return value
-            let retval = caller.as_context().get_rewinding_state().retval;
-
-            // set rewinding state to false
-            caller.as_context_mut().set_rewinding_state(RewindingReturn {
-                rewinding: AsyncifyState::Normal,
-                retval: 0,
-            });
+            // set asyncify state to normal
+            caller.as_context_mut().set_asyncify_state(AsyncifyState::Normal);
 
             return Some(retval);
         }
@@ -340,13 +334,15 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         parent_pid: parent_pid as u64, child_pid: child_cageid
                     }).unwrap();
                 
-                // get epoch global pointer
+                // retrieve the epoch global
                 let lind_epoch = instance
                     .get_export(&mut store, "epoch")
                     .and_then(|export| export.into_global())
                     .expect("Failed to find shared_global");
+                // retrieve the handler (underlying pointer) for the epoch global
                 let pointer = lind_epoch.get_handler(&mut store);
-                lind_signal_init(child_cageid, pointer, 1, true);
+                // initialize the signal for the main thread of forked cage
+                rawposix::interface::lind_signal_init(child_cageid, pointer, 1, true);
 
                 // new cage created, increment the cage counter
                 lind_manager.increment();
@@ -370,10 +366,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 let _ = child_rewind_start.call(&mut store, unwind_data_start_usr as i32);
 
                 // set up rewind state and fork return value for child
-                store.as_context_mut().set_rewinding_state(RewindingReturn {
-                    rewinding: AsyncifyState::Rewind,
-                    retval: 0,
-                });
+                store.as_context_mut().set_asyncify_state(AsyncifyState::Rewind(0));
 
                 if store.is_thread() {
                     // fork inside a thread is currently not supported
@@ -391,7 +384,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
                     store.as_context_mut().set_stack_top(parent_stack_low);
                     store.as_context_mut().set_stack_base(parent_stack_high);
-                    store.as_context_mut().set_signal_rewind_data(signal_asyncify_data);
+                    store.as_context_mut().set_signal_asyncify_data(signal_asyncify_data);
 
                     let invoke_res = child_start_func
                         .call(&mut store, &values, &mut results);
@@ -407,8 +400,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     let exit_code = results.get(0).expect("_start function does not have a return value");
                     match exit_code {
                         Val::I32(val) => {
-                            // exit the cage with the exit code
-                            if lind_thread_exit(child_cageid, 1) {
+                            // exit the thread
+                            if rawposix::interface::lind_thread_exit(child_cageid, 1) {
+                                // we clean the cage only if this is the last thread in the cage
+                                // exit the cage with the exit code
                                 lind_syscall_api(
                                     child_cageid,
                                     EXIT_SYSCALL as u32,
@@ -441,22 +436,16 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // mark the parent to rewind state
             let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
 
-            // set up rewind state and fork return value for parent
-            store.set_rewinding_state(RewindingReturn {
-                rewinding: AsyncifyState::Rewind,
-                retval: child_cageid as i32,
-            });
+            // set up asyncify state and fork return value for parent
+            store.set_asyncify_state(AsyncifyState::Rewind(child_cageid as i32));
 
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
         }));
 
-        store.set_rewinding_state(RewindingReturn {
-            rewinding: AsyncifyState::Unwind,
-            retval: child_cageid as i32,
-        });
+        // set asyncify state to unwind
+        store.set_asyncify_state(AsyncifyState::Unwind);
 
-        // println!("fork call return");
         // after returning from here, unwind process should start
         return Ok(0);
     }
@@ -589,13 +578,15 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     .unwrap();
                 let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
 
-                // get epoch global pointer
+                // retrieve the epoch global
                 let lind_epoch = instance
                     .get_export(&mut store, "epoch")
                     .and_then(|export| export.into_global())
                     .expect("Failed to find shared_global");
+                // retrieve the handler (underlying pointer) for the epoch global
                 let pointer = lind_epoch.get_handler(&mut store);
-                lind_signal_init(child_cageid as u64, pointer, next_tid as i32, false);
+                // initialize the signal for the thread of the cage
+                rawposix::interface::lind_signal_init(child_cageid as u64, pointer, next_tid as i32, false);
 
                 // get the asyncify_rewind_start and module start function
                 let child_rewind_start;
@@ -612,11 +603,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 // mark the child to rewind state
                 let _ = child_rewind_start.call(&mut store, child_stack_low_usr as i32);
 
-                // set up rewind state and fork return value for child
-                store.as_context_mut().set_rewinding_state(RewindingReturn {
-                    rewinding: AsyncifyState::Rewind,
-                    retval: 0,
-                });
+                // set up asyncify state and thread return value for child
+                store.as_context_mut().set_asyncify_state(AsyncifyState::Rewind(0));
 
                 // store stack low and stack high for child
                 store.as_context_mut().set_stack_top(child_stack_low_usr);
@@ -646,7 +634,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 let exit_code = results.get(0).expect("_start function does not have a return value");
                 match exit_code {
                     Val::I32(val) => {
-                        if lind_thread_exit(child_cageid as u64, next_tid as u64) {
+                        // exit the thread
+                        if rawposix::interface::lind_thread_exit(child_cageid as u64, next_tid as u64) {
+                            // we clean the cage only if this is the last thread in the cage
+                            // exit the cage with the exit code
                             lind_syscall_api(
                                 child_cageid as u64,
                                 EXIT_SYSCALL as u32,
@@ -672,20 +663,15 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // mark the parent to rewind state
             let _ = asyncify_start_rewind_func.call(&mut store, parent_unwind_data_start_usr as i32);
 
-            // set up rewind state and fork return value for parent
-            store.set_rewinding_state(RewindingReturn {
-                rewinding: AsyncifyState::Rewind,
-                retval: next_tid as i32,
-            });
+            // set up asyncify state and thread return value for parent
+            store.set_asyncify_state(AsyncifyState::Rewind(next_tid as i32));
 
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
         }));
 
-        store.set_rewinding_state(RewindingReturn {
-            rewinding: AsyncifyState::Unwind,
-            retval: child_cageid as i32,
-        });
+        // set asyncify state to unwind for parent
+        store.set_asyncify_state(AsyncifyState::Unwind);
 
         // after returning from here, unwind process should start
         return Ok(0);
@@ -839,10 +825,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
-            store.set_rewinding_state(RewindingReturn {
-                rewinding: AsyncifyState::Normal,
-                retval: 0,
-            });
+            // for exec, we do not need to do rewind after unwinding is done
+            store.set_asyncify_state(AsyncifyState::Normal);
 
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
@@ -852,10 +836,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             return Ok(OnCalledAction::Finish(ret.expect("exec-ed module error")));
         }));
 
-        store.set_rewinding_state(RewindingReturn {
-            rewinding: AsyncifyState::Unwind,
-            retval: 0,
-        });
+        // set asyncify state to unwind
+        store.set_asyncify_state(AsyncifyState::Unwind);
 
         // after returning from here, unwind process should start
         return Ok(0);
@@ -910,10 +892,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             return Ok(OnCalledAction::Finish(vec![Val::I32(code)]));
         }));
 
-        store.set_rewinding_state(RewindingReturn {
-            rewinding: AsyncifyState::Unwind,
-            retval: 0,
-        });
+        // set asyncify state to unwind
+        store.set_asyncify_state(AsyncifyState::Unwind);
         // after returning from here, unwind process should start
     }
 
@@ -983,20 +963,15 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // mark the parent to rewind state
             let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
 
-            // set up rewind state and return value
-            store.set_rewinding_state(RewindingReturn {
-                rewinding: AsyncifyState::Rewind,
-                retval: 0,
-            });
+            // set up asyncify state and return value
+            store.set_asyncify_state(AsyncifyState::Rewind(0));
 
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
         }));
 
-        store.set_rewinding_state(RewindingReturn {
-            rewinding: AsyncifyState::Unwind,
-            retval: 0,
-        });
+        // set asyncify state to unwind
+        store.set_asyncify_state(AsyncifyState::Unwind);
 
         // after returning from here, unwind process should start
         return Ok(0);
@@ -1070,20 +1045,15 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // mark the parent to rewind state
             let _ = asyncify_start_rewind_func.call(&mut store, unwind_data_start_usr as i32);
 
-            // set up rewind state and return value
-            store.set_rewinding_state(RewindingReturn {
-                rewinding: AsyncifyState::Rewind,
-                retval: result,
-            });
+            // set up asyncify state and return value
+            store.set_asyncify_state(AsyncifyState::Rewind(result));
 
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
         }));
 
-        store.set_rewinding_state(RewindingReturn {
-            rewinding: AsyncifyState::Unwind,
-            retval: 0,
-        });
+        // set asyncify state to unwind
+        store.set_asyncify_state(AsyncifyState::Unwind);
 
         // after returning from here, unwind process should start
         return Ok(0);

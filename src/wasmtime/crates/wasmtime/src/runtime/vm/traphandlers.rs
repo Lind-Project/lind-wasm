@@ -253,10 +253,14 @@ where
         Err((UnwindReason::Trap(reason), backtrace, coredumpstack)) => {
             if let TrapReason::Wasm(trap) = reason {
                 if let wasmtime_environ::Trap::Interrupt = trap {
-                    // if the trap is Interrupt, then the trap is invoked by epoch
+                    // if the trap type is Interrupt, then the trap must be invoked by epoch
                     // we should treat it as a normal termination without printing any
                     // error messages
-                    println!("trap reason: {:?}", reason);
+
+                    // print a short notification message
+                    // TODO: Linux has different notification message for termination caused by different signals
+                    // we need to try to mimic that behavior
+                    println!("Terminated");
                     return Ok(());
                 }
             }

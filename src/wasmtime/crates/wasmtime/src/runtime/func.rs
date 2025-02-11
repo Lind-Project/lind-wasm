@@ -2235,6 +2235,7 @@ impl<T> Caller<'_, T> {
         }
     }
 
+    // retrieve the exported signal_callback function from glibc
     pub fn get_signal_callback(&mut self) -> Result<TypedFunc<(i32, i32), ()>, ()> {
         if let Some(signal_callback_extern) = self.get_export("signal_callback") {
             match signal_callback_extern {
