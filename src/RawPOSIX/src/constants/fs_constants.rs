@@ -10,7 +10,8 @@ pub const STDOUT_FILENO: i32 = 1;   // File descriptor for standard output
 pub const STDERR_FILENO: i32 = 2;   // File descriptor for standard error
 
 // ===== Directory Entry Constant =====
-pub const DT_UNKNOWN: u8 = 0; //source: include/dirent.h
+// Source: include/dirent.h
+pub const DT_UNKNOWN: u8 = 0; 
 
 // ===== File Access Permission Flags =====
 pub const F_OK: u32 = 0;     // Test for existence
@@ -26,6 +27,7 @@ pub const O_RDWR: i32 = 0o2;         // Open read-write
 pub const O_RDWRFLAGS: i32 = 0o3;    // Mask for access modes
 
 // ===== File Creation and Status Flags =====
+// Source: include/linux/coda.h
 pub const O_CREAT: i32 = 0o100;      // Create file if it doesn't exist
 pub const O_EXCL: i32 = 0o200;       // Error if O_CREAT and file exists
 pub const O_NOCTTY: i32 = 0o400;     // Don't assign controlling terminal
@@ -53,6 +55,7 @@ pub const S_IWOTH: u32 = 0o002;  // Others write
 pub const S_IXOTH: u32 = 0o001;  // Others execute
 
 //Commands for FCNTL
+// Source: include/linux/fcntl.h
 pub const F_DUPFD: i32 = 0;
 pub const F_GETFD: i32 = 1;
 pub const F_SETFD: i32 = 2;
@@ -77,6 +80,7 @@ pub const FIONBIO: u32 = 21537;
 pub const FIOASYNC: u32 = 21586;
 
 //File types for open/stat etc.
+// Source: include/linux/stat.h
 pub const S_IFBLK: i32 = 0o60000;
 pub const S_IFCHR: i32 = 0o20000;
 pub const S_IFDIR: i32 = 0o40000;
@@ -97,11 +101,12 @@ pub const MAP_ANONYMOUS: u32 = 32;
 pub const MAP_HUGE_SHIFT: i32 = 26;
 pub const MAP_HUGETLB: i32 = 262144;
 
-
+// Source: include/linux/fs.h
 pub const SEEK_SET: i32 = 0;     // Seek from beginning of file
 pub const SEEK_CUR: i32 = 1;     // Seek from current position
 pub const SEEK_END: i32 = 2;     // Seek from end of file
 
+// Source: include/linux/ipc.h
 pub const IPC_PRIVATE: i32 = 0o0;
 pub const IPC_CREAT: i32 = 0o1000;
 pub const IPC_EXCL: i32 = 0o2000;
@@ -110,6 +115,7 @@ pub const IPC_RMID: i32 = 0;
 pub const IPC_SET: i32 = 1;
 pub const IPC_STAT: i32 = 2;
 
+// Source: linux/bits/shm.h
 pub const SHM_DEST: i32 = 0o1000;    // Destroy segment when last process detaches
 pub const SHM_LOCKED: i32 = 0o2000;  // Lock segment in memory
 pub const SHM_HUGETLB: i32 = 0o4000; // Use huge TLB pages
