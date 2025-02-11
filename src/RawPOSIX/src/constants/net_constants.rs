@@ -3,9 +3,6 @@
 
 use crate::interface;
 
-pub const DEFAULT_HOSTNAME: &str = "Lind";
-pub const BLOCK_TIME: interface::RustDuration = interface::RustDuration::from_micros(100);
-
 // ===== Socket Types =====
 // Source: include/linux/net.h
 pub const SOCK_STREAM: i32 = 1;    // Stream (connection) socket
