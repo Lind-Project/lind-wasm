@@ -1031,15 +1031,6 @@ pub fn lind_syscall_api(
             cage.gethostname_syscall(name, len as isize)
         }
 
-        GETIFADDRS_SYSCALL => {
-            let count = arg2 as usize;
-            let cage = interface::cagetable_getref(cageid);
-            // Convert user space buffer address to physical address 
-            let buf = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
-            // Perform getifaddrs operation through cage implementation
-            cage.getifaddrs_syscall(buf, count)
-        }
-
         KILL_SYSCALL => {
             let cage_id = arg1 as i32;
             let sig = arg2 as i32;
