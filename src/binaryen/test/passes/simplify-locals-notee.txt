@@ -1,0 +1,73 @@
+(module
+ (type $0 (func))
+ (func $contrast
+  (local $x i32)
+  (local $y i32)
+  (local $z i32)
+  (local $a i32)
+  (local $b i32)
+  (local.set $x
+   (i32.const 1)
+  )
+  (if
+   (local.get $x)
+   (then
+    (nop)
+   )
+  )
+  (if
+   (local.get $x)
+   (then
+    (nop)
+   )
+  )
+  (nop)
+  (drop
+   (if (result i32)
+    (i32.const 2)
+    (then
+     (i32.const 3)
+    )
+    (else
+     (i32.const 4)
+    )
+   )
+  )
+  (nop)
+  (drop
+   (block (result i32)
+    (i32.const 5)
+   )
+  )
+  (nop)
+  (drop
+   (if (result i32)
+    (i32.const 6)
+    (then
+     (nop)
+     (i32.const 7)
+    )
+    (else
+     (nop)
+     (i32.const 8)
+    )
+   )
+  )
+  (nop)
+  (drop
+   (block $val (result i32)
+    (if
+     (i32.const 10)
+     (then
+      (nop)
+      (br $val
+       (i32.const 11)
+      )
+     )
+    )
+    (nop)
+    (i32.const 12)
+   )
+  )
+ )
+)

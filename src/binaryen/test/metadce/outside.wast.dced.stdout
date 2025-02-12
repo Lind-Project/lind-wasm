@@ -1,0 +1,3 @@
+unused: export$wasm_func_unused
+unused: func$an_unused_wasm_func
+unused: global$__THREW__unused
