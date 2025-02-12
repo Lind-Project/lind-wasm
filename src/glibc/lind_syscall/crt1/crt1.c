@@ -186,6 +186,19 @@ int __main_void(void) {
     return __main_argc_argv(argc, argv);
 }
 
+// define an unused function pointer
+// the reason for this is that function pointer are translated to function index in WebAssembly
+// which starts from 1. But in native environment, function pointer are real address so they are
+// assumed that it cannot be 1. Hence, some constant value like SIG_IGN will have conflict with function
+// indexes in WebAssembly.
+// The workaround we are using here is to define an unused function pointer to occupy the function index of 1
+// so that normal function pointer could have their index starting from 2.
+int __unused_function_pointer() {
+    return 42;
+}
+// explicitly marked this as "used" so it will not be optimized by compiler
+void *___dummy_reference __attribute__((used)) = __unused_function_pointer;
+
 int _start() {
     __libc_setup_tls();
     __wasi_init_tp();
