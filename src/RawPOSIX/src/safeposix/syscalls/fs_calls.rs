@@ -792,6 +792,7 @@ impl Cage {
         }
 
         //if flags is not 0 or O_CLOEXEC return error
+        //after this if statement flags can only be O_CLOEXEC or 0 
         if flags != 0 && flags != O_CLOEXEC{
             return syscall_error(Errno::EINVAL, "dup3", "Invalid flags");
         }
@@ -808,7 +809,7 @@ impl Cage {
                 };
                 let _ret_kernelfd = unsafe{ libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
 
-                //right now flags can only be O_CLOEXEC or 0, by definition of O_CLOEXEC should_cleexec will be true(the value of O_CLOEXEC is a positive value)
+                // by definition of O_CLOEXEC should_cleexec will be true(the value of O_CLOEXEC is a positive value)
                 let _ = fdtables::get_specific_virtual_fd(self.cageid, new_virtualfd as u64, old_vfd.fdkind, new_kernelfd as u64, flags != 0, old_vfd.perfdinfo).unwrap();
                 
                 return new_virtualfd; 
