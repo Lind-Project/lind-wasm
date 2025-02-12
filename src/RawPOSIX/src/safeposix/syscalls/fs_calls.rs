@@ -1,10 +1,20 @@
 #![allow(dead_code)]
 
 use std::fs;
-use super::fs_constants;
-// File system related system calls
-use super::fs_constants::*;
-use super::sys_constants;
+
+// Add constants imports
+use crate::constants::{
+    S_IRWXU, S_IRWXG, S_IRWXO,
+    PROT_READ, PROT_WRITE,
+    O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_CLOEXEC,
+    MAP_SHARED, MAP_PRIVATE,
+    SEEK_SET, SEEK_CUR, SEEK_END,
+    SHMMIN, SHMMAX, SHM_RDONLY, SHM_DEST,
+    DEFAULT_UID, DEFAULT_GID,
+    SEM_VALUE_MAX, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO,
+    LIND_ROOT
+};
+
 use crate::interface;
 use crate::interface::get_errno;
 use crate::interface::handle_errno;
@@ -27,8 +37,7 @@ use std::ptr;
 use std::mem;
 
 use crate::fdtables;
-
-static LIND_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
+use crate::safeposix::cage::Cage;
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
@@ -949,19 +958,24 @@ impl Cage {
         prot: i32,
         flags: i32,
         virtual_fd: i32,
-        off: i64,
-    ) -> i32 {
+        off: i64
+    ) -> usize {
         if virtual_fd != -1 {
             match fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64) {
                 Ok(kernel_fd) => {
                     let ret = unsafe {
-                        ((libc::mmap(addr as *mut c_void, len, prot, flags, kernel_fd.underfd as i32, off) as i64) 
-                            & 0xffffffff) as i32
+                        (libc::mmap(addr as *mut c_void, len, prot, flags, kernel_fd.underfd as i32, off) as i64)
                     };
-                    return ret;
+
+                    // Check if mmap failed and return the appropriate error if so
+                    if ret == -1 {
+                        return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags") as usize;
+                    }
+
+                    ret as usize
                 },
                 Err(_e) => {
-                    return syscall_error(Errno::EBADF, "mmap", "Bad File Descriptor");
+                    return syscall_error(Errno::EBADF, "mmap", "Bad File Descriptor") as usize;
                 }
             }
         } else {
@@ -971,9 +985,10 @@ impl Cage {
             };
             // Check if mmap failed and return the appropriate error if so
             if ret == -1 {
-                return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags");
+                return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags") as usize;
             }
-            return (ret & 0xffffffff) as i32;
+
+            ret as usize
         }
     }
 
@@ -1358,7 +1373,7 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let prot: i32;
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
-            if 0 != (shmflg & fs_constants::SHM_RDONLY) {
+            if 0 != (shmflg & SHM_RDONLY) {
                 prot = PROT_READ;
             } else {
                 prot = PROT_READ | PROT_WRITE;
@@ -2101,9 +2116,9 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 
     // TODO:
     // Need to update once we merge with vmmap-alice
-    if kernel_fd == fs_constants::STDIN_FILENO 
-        || kernel_fd == fs_constants::STDOUT_FILENO 
-        || kernel_fd == fs_constants::STDERR_FILENO {
+    if kernel_fd == STDIN_FILENO 
+        || kernel_fd == STDOUT_FILENO 
+        || kernel_fd == STDERR_FILENO {
         return;
     }
 
