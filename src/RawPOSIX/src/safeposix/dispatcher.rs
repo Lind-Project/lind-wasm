@@ -99,7 +99,6 @@ const SOCKET_SYSCALL: i32 = 136;
 
 const GETSOCKNAME_SYSCALL: i32 = 144;
 const GETPEERNAME_SYSCALL: i32 = 145;
-const GETIFADDRS_SYSCALL: i32 = 146;
 
 const SIGACTION_SYSCALL: i32 = 147;
 const KILL_SYSCALL: i32 = 148;
@@ -1014,15 +1013,6 @@ pub fn lind_syscall_api(
             let name = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
             // Perform gethostname operation through cage implementation
             cage.gethostname_syscall(name, len as isize)
-        }
-
-        GETIFADDRS_SYSCALL => {
-            let count = arg2 as usize;
-            let cage = interface::cagetable_getref(cageid);
-            // Convert user space buffer address to physical address 
-            let buf = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
-            // Perform getifaddrs operation through cage implementation
-            cage.getifaddrs_syscall(buf, count)
         }
 
         SIGACTION_SYSCALL => {

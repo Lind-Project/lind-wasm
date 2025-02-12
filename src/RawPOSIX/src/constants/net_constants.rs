@@ -3,9 +3,6 @@
 
 use crate::interface;
 
-pub const DEFAULT_HOSTNAME: &str = "Lind";
-pub const BLOCK_TIME: interface::RustDuration = interface::RustDuration::from_micros(100);
-
 // ===== Socket Types =====
 // Source: include/linux/net.h
 pub const SOCK_STREAM: i32 = 1;    // Stream (connection) socket
@@ -306,10 +303,6 @@ pub const TCP_CONNECTIONTIMEOUT: i32 = 0x20; // Connection timeout
 pub const PERSIST_TIMEOUT: i32 = 0x40;  // Persist timeout
 pub const TCP_RXT_CONNDROPTIME: i32 = 0x80; // Retransmission timeout before drop
 pub const TCP_RXT_FINDROP: i32 = 0x100; // Drop after 3 FIN retransmissions
-
-// ===== Socket Object ID Range =====
-// Lind-specific constants
-pub const MINSOCKOBJID: i32 = 0;
 
 
 // ===== Poll Constants =====

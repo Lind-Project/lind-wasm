@@ -11,7 +11,8 @@ use crate::constants::{
     SEEK_SET, SEEK_CUR, SEEK_END,
     SHMMIN, SHMMAX, SHM_RDONLY, SHM_DEST,
     DEFAULT_UID, DEFAULT_GID,
-    SEM_VALUE_MAX, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO
+    SEM_VALUE_MAX, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO,
+    LIND_ROOT
 };
 
 use crate::interface;
@@ -37,8 +38,6 @@ use std::mem;
 
 use crate::fdtables;
 use crate::safeposix::cage::Cage;
-
-static LIND_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
