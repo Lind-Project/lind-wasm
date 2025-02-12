@@ -1,0 +1,12 @@
+(module
+ (type $0 (func))
+ (func $0
+  (block $block
+   (unreachable)
+   (block
+    (br $block)
+   )
+  )
+ )
+)
+

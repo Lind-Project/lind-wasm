@@ -1,0 +1,1 @@
+(invoke "add" (i32.const 0) (i32.const 0) ) (invoke "no_return" (i32.const 0) ) (invoke "types" (i32.const 0) (i64.const 0) (f32.const 0) (f64.const 0) ) (invoke "types2" (i32.const 0) (f32.const 0) (f64.const 0) ) (invoke "types3" (i32.const 0) (f32.const 0) (f64.const 0) ) 

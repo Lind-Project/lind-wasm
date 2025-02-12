@@ -1,0 +1,2 @@
+// ExpressionRunner.Flags.Default = 0
+// ExpressionRunner.Flags.PreserveSideeffects = 1
