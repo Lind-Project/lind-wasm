@@ -22,13 +22,14 @@ HTML_OUTPUT = "report.html"
 SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will not run
 RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will run
 
+LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
+TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
+
 DETERMINISTIC_PARENT_NAME = "deterministic"
 NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
-
-LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
-TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
+PATH_TO_LIND_ROOT = Path(LIND_WASM_BASE) / "src/RawPOSIX/tmp"
 
 error_types = {
     "Failure_native_compiling": "native_compile_failures",
@@ -95,14 +96,14 @@ def add_test_result(result, file_path, status, error_type, output):
         "output": output
     }
 
-    if status == "Success":
+    if status.lower() == "success":
         result["number_of_success"] += 1
-        print("SUCCESS")
         result["success"].append(file_path)
+        print("SUCCESS")
     else:
         result["number_of_failures"] += 1
-        print("FAILURE")
         result["failure"].append(file_path)
+        print(f"FAILURE: {error_type}")
         if error_type in error_types:
             result[f"number_of_{error_types[error_type]}"] += 1
             result[error_types[error_type]].append(file_path)
@@ -263,6 +264,7 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
 
     native_output = source_file.parent / f"{source_file.stem}.o"
     native_compile_cmd = f"gcc {source_file} -o {native_output}"
+    original_cwd = os.getcwd()
 
     if expected_output_file.is_file():
         try:
@@ -276,14 +278,17 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
     else:
         print(f"No expected output found at {expected_output_file}")
         #trying native compile
+        os.chdir(PATH_TO_LIND_ROOT)
         try:
             proc_compile = subprocess.run(native_compile_cmd, shell=True, capture_output=True, text=True)
             if proc_compile.returncode != 0:
                 add_test_result(result, str(source_file), "Failure", "Failure_native_compiling",
                                 proc_compile.stdout + proc_compile.stderr)
+                os.chdir(original_cwd)
                 return
         except Exception as e:
             add_test_result(result, str(source_file), "Failure", "Failure_native_compiling", f"Exception: {e}")
+            os.chdir(original_cwd)
             return
 
         #trying native run
@@ -292,17 +297,21 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
             if proc_run.returncode != 0:
                 add_test_result(result, str(source_file), "Failure", "Failure_native_running",
                                 proc_run.stdout + proc_run.stderr)
+                os.chdir(PATH_TO_LIND_ROOT)
                 return
             native_run_output = proc_run.stdout
         except Exception as e:
             add_test_result(result, str(source_file), "Failure", "Failure_native_running", f"Exception: {e}")
+            os.chdir(PATH_TO_LIND_ROOT)
             return
-    
 
+        os.chdir(original_cwd)
+    
     #wasm compile
     wasm_file, compile_err = compile_c_to_wasm(source_file)
     if wasm_file is None:
         add_test_result(result, str(source_file), "Failure", "Compilation_Error", compile_err)
+        os.chdir(original_cwd)
         return
 
     #wasm run
@@ -334,6 +343,8 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
                 add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
     except:
         add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
+    
+    os.chdir(original_cwd)
 
 
 # ----------------------------------------------------------------------
@@ -379,7 +390,7 @@ def generate_html_report(report):
         html_content.append(f'<tr><td>Number of Successes</td><td>{test_result.get("number_of_success", 0)}</td></tr>')
         html_content.append(f'<tr><td>Number of Failures</td><td>{test_result.get("number_of_failures", 0)}</td></tr>')
         for error_type in error_types:
-            html_content.append(f'<tr><td>Number of Segfaults</td><td>{test_result.get(f"number_of_{error_types[error_type]}", 0)}</td></tr>')
+            html_content.append(f'<tr><td>Number of {error_type}</td><td>{test_result.get(f"number_of_{error_types[error_type]}", 0)}</td></tr>')
         html_content.append('</table>')
 
     for test_type, test_result in report.items():
