@@ -1,10 +1,19 @@
 #![allow(dead_code)]
 
 // System related system calls
-use super::fs_constants::*;
-use super::net_constants::*;
-use super::sys_constants;
-use super::sys_constants::*;
+use crate::constants::{
+    DEFAULT_UID, DEFAULT_GID,
+    SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK,
+    SIGNAL_MAX,
+    ITIMER_REAL,
+    RLIMIT_NOFILE, RLIMIT_STACK,
+    NOFILE_CUR, NOFILE_MAX,
+    STACK_CUR, STACK_MAX,
+    SHMMIN, SHMMAX,
+    SHM_RDONLY, SHM_DEST,
+    SEM_VALUE_MAX,
+};
+
 use crate::interface;
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
@@ -140,6 +149,8 @@ impl Cage {
         for pair in semtable.iter() {
             new_semtable.insert((*pair.key()).clone(), pair.value().clone());
         }
+        let parent_vmmap = self.vmmap.read();
+        let new_vmmap = parent_vmmap.clone();
 
         let cageobj = Cage {
             cageid: child_cageid,
@@ -168,12 +179,14 @@ impl Cage {
             sigset: newsigset,
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
+            vmmap: interface::RustLock::new(new_vmmap), // clone the vmmap for the child
             zombies: interface::RustLock::new(vec![]),
             child_num: interface::RustAtomicU64::new(0),
         };
 
         // increment child counter for parent
         self.child_num.fetch_add(1, interface::RustAtomicOrdering::SeqCst);
+
 
         let shmtable = &SHM_METADATA.shmtable;
         //update fields for shared mappings in cage
@@ -249,8 +262,8 @@ impl Cage {
             sigset: newsigset,
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
-            // when a process exec-ed, its child relationship should be perserved
-            zombies: interface::RustLock::new(cloned_zombies),
+            vmmap: interface::RustLock::new(Vmmap::new()), // memory is cleared after exec
+            zombies: interface::RustLock::new(cloned_zombies), // when a process exec-ed, its child relationship should be perserved
             child_num: interface::RustAtomicU64::new(child_num),
         };
         //wasteful clone of fdtable, but mutability constraints exist
@@ -298,6 +311,7 @@ impl Cage {
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
     }
+
 
     //------------------------------------WAITPID SYSCALL------------------------------------
     /*
@@ -516,7 +530,7 @@ impl Cage {
         if let Some(some_set) = set {
             let curr_sigset = sigset.load(interface::RustAtomicOrdering::Relaxed);
             res = match how {
-                cage::SIG_BLOCK => {
+                SIG_BLOCK => {
                     // Block signals in set
                     sigset.store(
                         curr_sigset | *some_set,
@@ -524,7 +538,7 @@ impl Cage {
                     );
                     0
                 }
-                cage::SIG_UNBLOCK => {
+                SIG_UNBLOCK => {
                     // Unblock signals in set
                     let newset = curr_sigset & !*some_set;
                     let pendingsignals = curr_sigset & some_set;
@@ -532,7 +546,7 @@ impl Cage {
                     self.send_pending_signals(pendingsignals, pthreadid);
                     0
                 }
-                cage::SIG_SETMASK => {
+                SIG_SETMASK => {
                     // Set sigset to set
                     sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0
@@ -550,7 +564,7 @@ impl Cage {
         old_value: Option<&mut interface::ITimerVal>,
     ) -> i32 {
         match which {
-            sys_constants::ITIMER_REAL => {
+            ITIMER_REAL => {
                 if let Some(some_old_value) = old_value {
                     let (curr_duration, next_duration) = self.interval_timer.get_itimer();
                     some_old_value.it_value.tv_sec = curr_duration.as_secs() as i64;
@@ -580,11 +594,11 @@ impl Cage {
 
     pub fn getrlimit(&self, res_type: u64, rlimit: &mut interface::Rlimit) -> i32 {
         match res_type {
-            sys_constants::RLIMIT_NOFILE => {
+            RLIMIT_NOFILE => {
                 rlimit.rlim_cur = NOFILE_CUR;
                 rlimit.rlim_max = NOFILE_MAX;
             }
-            sys_constants::RLIMIT_STACK => {
+            RLIMIT_STACK => {
                 rlimit.rlim_cur = STACK_CUR;
                 rlimit.rlim_max = STACK_MAX;
             }
@@ -595,7 +609,7 @@ impl Cage {
 
     pub fn setrlimit(&self, res_type: u64, _limit_value: u64) -> i32 {
         match res_type {
-            sys_constants::RLIMIT_NOFILE => {
+            RLIMIT_NOFILE => {
                 if NOFILE_CUR > NOFILE_MAX {
                     -1
                 } else {

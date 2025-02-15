@@ -42,7 +42,7 @@ pub use code_memory::CodeMemory;
 pub use externals::*;
 pub use func::*;
 pub use gc::*;
-pub use instance::{Instance, InstancePre};
+pub use instance::{Instance, InstancePre, InstantiateType};
 pub use instantiate::CompiledModule;
 pub use limits::*;
 pub use linker::*;
