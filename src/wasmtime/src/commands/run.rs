@@ -9,7 +9,9 @@ use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
-use rawposix::safeposix::dispatcher::lind_syscall_api;
+use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
+use threei::threei::make_syscall;
+use rawposix::{lindrustinit, lindrustfinalize};
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
@@ -19,7 +21,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
-use wasmtime::{AsContextMut, Engine, Func, Module, Store, StoreLimits, Val, ValType};
+use wasmtime::{AsContext, AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
@@ -180,7 +182,7 @@ impl RunCommand {
         }
 
         // Initialize Lind here
-        rawposix::safeposix::dispatcher::lindrustinit(0);
+        rawposix::lindrustinit(0);
         // new cage is created
         lind_manager.increment();
 
@@ -193,7 +195,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules)
+            self.load_main_module(&mut store, &mut linker, &main, modules, 1)
                 .with_context(|| {
                     format!(
                         "failed to run main module `{}`",
@@ -204,11 +206,21 @@ impl RunCommand {
 
         // Load the main wasm module.
         match result {
-            Ok(_) => {
+            Ok(res) => {
+                let mut code = 0;
+                let retval = res.get(0).unwrap();
+                if let Val::I32(res) = retval {
+                    code = *res;
+                }
                 // exit the cage
-                lind_syscall_api(
+                make_syscall(
                     1,
-                    EXIT_SYSCALL as u32,
+                    EXIT_SYSCALL,
+                    1,
+                    code as u64, // Exit type
+                    1,
+                    0,
+                    0,
                     0,
                     0,
                     0,
@@ -224,7 +236,7 @@ impl RunCommand {
                 // we wait until all other cage exits
                 lind_manager.wait();
                 // after all cage exits, finalize the lind
-                rawposix::safeposix::dispatcher::lindrustfinalize();
+                rawposix::lindrustfinalize();
             },
             Err(e) => {
                 // Exit the process if Wasmtime understands the error;
@@ -369,7 +381,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules)
+            self.load_main_module(&mut store, &mut linker, &main, modules, pid as u64)
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -512,6 +524,7 @@ impl RunCommand {
         linker: &mut CliLinker,
         module: &RunTarget,
         modules: Vec<(String, Module)>,
+        pid: u64,
     ) -> Result<Vec<Val>> {
         // The main module might be allowed to have unknown imports, which
         // should be defined as traps:
@@ -545,7 +558,7 @@ impl RunCommand {
         let result = match linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
-                let instance = linker.instantiate(&mut *store, &module).context(format!(
+                let instance = linker.instantiate_with_lind(&mut *store, &module, InstantiateType::InstantiateFirst(pid)).context(format!(
                     "failed to instantiate {:?}",
                     self.module_and_args[0]
                 ))?;
