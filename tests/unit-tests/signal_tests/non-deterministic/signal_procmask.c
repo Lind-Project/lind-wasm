@@ -61,8 +61,9 @@ int main() {
         check_signal_status(SIGINT);
 
         printf("Parent: Waiting for SIGINT...\n");
-        while (1) {
-            // pause();  // Wait for signals
+        int counter = 3;
+        while (counter--) {
+            sleep(1);
         }
     }
 

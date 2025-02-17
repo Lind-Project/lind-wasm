@@ -45,11 +45,11 @@ int main() {
     }
     else
     {
-        while (1) {
+        int counter = 5;
+        while (counter--) {
             printf("parent in loop, pid=%d\n", getpid());
             sleep(1);
         }
-        printf("parent outside loop (should not reach)\n");
     }
 
     return 0;

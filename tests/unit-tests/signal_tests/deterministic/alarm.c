@@ -5,7 +5,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+int signal_counter = 3;
+
 void alarm_handler(int sig) {
+    signal_counter -= 1;
     printf("Alarm triggered! Signal received: %d\n", sig);
 
     // Manually reset the alarm for periodic execution (every 3 seconds)
@@ -23,7 +26,7 @@ int main() {
     printf("Setting an alarm to trigger in 1 seconds...\n");
     alarm(1);  // First alarm triggers after 2 seconds
 
-    while (1) {
+    while (signal_counter > 0) {
         // Wait for signals
     }
 

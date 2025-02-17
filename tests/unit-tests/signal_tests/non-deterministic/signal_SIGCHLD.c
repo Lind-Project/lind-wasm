@@ -6,9 +6,12 @@
 #include <unistd.h>
 #include <setjmp.h>
 
+int sigchld_received = 0;
+
 // Custom signal handler
 void handle_signal(int signal) {
     printf("Caught signal %d\n", signal);
+    if(signal == SIGCHLD) sigchld_received = 1;
 }
 
 int main() {
@@ -37,11 +40,10 @@ int main() {
     }
     else
     {
-        while (1) {
+        while (!sigchld_received) {
             printf("parent in loop, pid=%d\n", getpid());
             sleep(1);
         }
-        printf("parent outside loop (should not reach)\n");
     }
 
     return 0;

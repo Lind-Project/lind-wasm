@@ -30,7 +30,8 @@ int main() {
         printf("child ready to kill\n");
         kill(getppid(), SIGINT);
         printf("child done kill\n");
-        while(1) {
+        int counter = 5;
+        while(counter--) {
             printf("child in loop, pid=%d\n", getpid());
             sleep(1);
         }

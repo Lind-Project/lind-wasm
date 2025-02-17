@@ -29,6 +29,8 @@ int main() {
         printf("child ready to kill\n");
         kill(getppid(), SIGUSR1);
         printf("child done kill\n");
+        sleep(2);
+        kill(getppid(), SIGINT);
     }
     else
     {

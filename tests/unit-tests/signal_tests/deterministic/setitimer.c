@@ -6,7 +6,10 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+int signal_counter = 3;
+
 void alarm_handler(int sig) {
+    signal_counter -= 1;
     printf("Timer expired! Signal received: %d\n", sig);
 }
 
@@ -32,7 +35,7 @@ int main() {
 
     printf("Timer started! SIGALRM will fire every 3 seconds.\n");
 
-    while (1) {
+    while (signal_counter > 0) {
         // Wait for signals
     }
 
