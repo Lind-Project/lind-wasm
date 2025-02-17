@@ -20,7 +20,6 @@ const FTRUNCATE_SYSCALL: i32 = 18;
 const FSTATFS_SYSCALL: i32 = 19;
 const MMAP_SYSCALL: i32 = 21;
 const MUNMAP_SYSCALL: i32 = 22;
-
 const GETDENTS_SYSCALL: i32 = 23;
 const DUP_SYSCALL: i32 = 24;
 const DUP2_SYSCALL: i32 = 25;
