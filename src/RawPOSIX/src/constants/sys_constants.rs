@@ -87,7 +87,7 @@ pub const SIG_BLOCK: i32 = 0;       // Block signals in signal mask
 pub const SIG_UNBLOCK: i32 = 1;     // Unblock signals in signal mask
 pub const SIG_SETMASK: i32 = 2;     // Set the signal mask
 
-// Signal flags
+// Signal flags (from src/glibc/target/include/asm-generic/signal-defs.h)
 pub const SA_NOCLDSTOP: u32 = 0x00000001;       // Don't send SIGCHLD when children stop
 pub const SA_NOCLDWAIT: u32 = 0x00000002;       // Don't create zombie on child death
 pub const SA_SIGINFO: u32 = 0x00000004;         // Signal handler with SA_SIGINFO args

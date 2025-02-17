@@ -69,8 +69,9 @@ pub struct Cage {
     pub sigset: interface::RustAtomicU64,
     // pending_signals are signals that are pending to be handled
     pub pending_signals: interface::RustLock<Vec<i32>>,
-    // epoch_handler is a hash map where key is the thread id of the cage, and the value is the epoch handler
-    // address
+    // epoch_handler is a hash map where key is the thread id of the cage, and the value is the epoch
+    // address of the wasm thread. The epoch is a u64 value that guest thread is frequently checking for
+    // and just to host once the value is changed
     pub epoch_handler: interface::RustHashMap<i32, interface::RustLock<*mut u64>>,
     // The kernel thread id of the main thread of current cage, used because when we want to send signals, 
     // we want to send to the main thread 

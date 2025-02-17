@@ -8,9 +8,14 @@ const EPOCH_KILLED: u64 = 2;
 pub fn signal_epoch_trigger(cageid: u64) {
     let cage = cagetable_getref(cageid);
     let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
-    let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
+    let epoch_handler = cage.epoch_handler.get(&main_threadid).expect("main threadid does not exist");
     let guard = epoch_handler.write();
     let epoch = *guard;
+    // SAFETY: the pointer is locked with write access so no one is able to modify it concurrently
+    // However, Potential BUG (TODO): We still need to verify the lifetime of the pointer. This pointer
+    // is created by wasmtime and will be destroyed at some point when the wasm instance is destroyed
+    // we still need to figure out when is the destroy happening and make sure it is destroyed after the
+    // information in rawposix is updated
     unsafe {
         *epoch = EPOCH_SIGNAL;
     }

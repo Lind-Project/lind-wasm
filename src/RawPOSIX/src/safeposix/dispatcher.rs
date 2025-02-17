@@ -1059,11 +1059,12 @@ pub fn lind_syscall_api(
         SIGPROCMASK_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
             let how = arg1 as i32;
-            let mut set = {
+            // sigset struct, essentially an u64
+            let mut sigset = {
                 if arg2 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::SigsetType>(), PROT_WRITE) {
+                    match translate_vmmap_addr(&cage, arg2) {
                         Ok(addr) => match interface::get_constsigsett(addr) {
                             Ok(val) => val,
                             Err(errno) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
@@ -1072,11 +1073,12 @@ pub fn lind_syscall_api(
                     }
                 }
             };
-            let mut old_set = {
+            // sigset struct, essentially an u64
+            let mut old_sigset = {
                 if arg3 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<interface::SigsetType>(), PROT_WRITE) {
+                    match translate_vmmap_addr(&cage, arg3) {
                         Ok(addr) => match interface::get_sigsett(addr) {
                             Ok(val) => val,
                             Err(errno) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
@@ -1087,7 +1089,7 @@ pub fn lind_syscall_api(
             };
 
             interface::cagetable_getref(cageid)
-                .sigprocmask_syscall(how, set, old_set)
+                .sigprocmask_syscall(how, sigset, old_sigset)
         }
 
         FSYNC_SYSCALL => {
@@ -1266,10 +1268,10 @@ pub fn lind_syscall_api(
                 if arg2 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::ITimerVal>(), PROT_READ) {
+                    match translate_vmmap_addr(&cage, arg2) {
                         Ok(addr) => match interface::get_constitimerval(addr) {
                             Ok(itimeval) => itimeval,
-                            Err(_) => return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair array"),
+                            Err(_) => return syscall_error(Errno::EFAULT, "setitimer", "failed to get itimerval struct"),
                         },
                         Err(errno) => return syscall_error(errno, "setitimer", "invalid itimeval struct address"),
                     }
@@ -1280,10 +1282,10 @@ pub fn lind_syscall_api(
                 if arg3 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<interface::ITimerVal>(), PROT_WRITE) {
+                    match translate_vmmap_addr(&cage, arg3) {
                         Ok(addr) => match interface::get_itimerval(addr) {
                             Ok(itimeval) => itimeval,
-                            Err(_) => return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair array"),
+                            Err(_) => return syscall_error(Errno::EFAULT, "setitimer", "failed to get itimerval struct"),
                         },
                         Err(errno) => return syscall_error(errno, "setitimer", "invalid itimeval struct address"),
                     }
