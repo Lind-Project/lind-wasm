@@ -1022,7 +1022,7 @@ pub fn lind_syscall_api(
                 if arg2 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::SigactionStruct>(), PROT_WRITE) {
+                    match translate_vmmap_addr(&cage, arg2) {
                         Ok(addr) => match interface::get_constsigactionstruct(addr) {
                             Ok(val) => val,
                             Err(errno) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
@@ -1035,7 +1035,7 @@ pub fn lind_syscall_api(
                 if arg3 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<interface::SigactionStruct>(), PROT_WRITE) {
+                    match translate_vmmap_addr(&cage, arg3) {
                         Ok(addr) => match interface::get_sigactionstruct(addr) {
                             Ok(val) => val,
                             Err(errno) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),

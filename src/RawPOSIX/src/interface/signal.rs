@@ -35,6 +35,7 @@ pub fn epoch_kill_all(cageid: u64) {
         let epoch_handler = entry.value();
         let guard = epoch_handler.write();
         let epoch = *guard;
+        // SAFETY: see comment at `signal_epoch_trigger`
         unsafe {
             *epoch = EPOCH_KILLED;
         }
@@ -47,6 +48,7 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
     let epoch_handler = cage.epoch_handler.get(&(thread_id as i32)).unwrap();
     let guard = epoch_handler.write();
     let epoch = *guard;
+    // SAFETY: see comment at `signal_epoch_trigger`
     unsafe {
         *epoch == EPOCH_KILLED
     }
@@ -60,6 +62,7 @@ pub fn signal_epoch_reset(cageid: u64) {
     let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
     let guard = epoch_handler.write();
     let epoch = *guard;
+    // SAFETY: see comment at `signal_epoch_trigger`
     unsafe {
         *epoch = EPOCH_NORMAL;
     }
@@ -74,6 +77,7 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
     let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
     let guard = epoch_handler.write();
     let epoch = *guard;
+    // SAFETY: see comment at `signal_epoch_trigger`
     unsafe {
         *epoch > EPOCH_NORMAL
     }
