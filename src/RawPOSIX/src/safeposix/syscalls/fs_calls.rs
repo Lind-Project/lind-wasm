@@ -132,27 +132,36 @@ impl Cage {
 
     //------------------------------------UNLINKAT SYSCALL------------------------------------
     /*
-    *   `unlinkat` removes a file or directory relative to a directory file descriptor.
-    *   Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+    *  `unlinkat` removes a file or directory relative to a directory file descriptor.
+    *  Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
     *
-    *   ## Arguments:
+    *  ## Arguments:
     *   - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
     *   - `pathname`: Path of the file/directory to be removed.
     *   - `flags`: Can include `AT_REMOVEDIR` to indicate directory removal.
     *
-    *   ## Handling:
-    *   - If `dirfd` is `AT_FDCWD`, the path is used as-is.
-    *   - If `dirfd` is a valid file descriptor (other than AT_FDCWD), we would translate it to the corresponding
-    *     kernel file descriptor. **Note:** In our current implementation, only `AT_FDCWD` is supported.
+    *  There are two cases:
+    *  Case 1: When `dirfd` is AT_FDCWD:
+    *    - RawPOSIX maintains its own notion of the current working directory.
+    *    - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
+    *      path by prepending the LIND_ROOT prefix.
+    *    - Then we call libc::unlinkat() with AT_FDCWD and the converted pathname. This is necessary because
+    *      the RawPOSIX working directory is different from the host's; thus, we must convert the path so that
+    *      the host kernel removes the correct file.
     *
-    *   ## Cases Handled:
-    *   - Removing files.
-    *   - Removing empty directories when `AT_REMOVEDIR` is specified.
-    *   - Handling invalid file descriptors (returns `EBADF` if translation fails).
+    *    This branch handles:
+    *     - Test Case 1: Removing a valid file (using AT_FDCWD)
+    *     - Test Case 2: Attempting to remove a non-existent file (using AT_FDCWD)
+    *     - Test Case 4: Removing a directory with AT_REMOVEDIR flag
+    *     - Test Case 5: Attempting to remove a directory without AT_REMOVEDIR (expected to fail)
     *
-    *   ## Cases NOT Handled:
-    *   - Removing non-empty directories (this will fail with `ENOTEMPTY`).
-    *   - Removing files/directories using a directory file descriptor other than `AT_FDCWD`.
+    *  Case 2: When `dirfd` is not AT_FDCWD:
+    *    - We translate the RawPOSIX virtual file descriptor to the corresponding kernel file descriptor.
+    *    - In this case, we simply create a C string from the provided `pathname` (without further conversion)
+    *      and let the underlying kernel call resolve the path relative to the directory represented by that fd.
+    *
+    *    This branch handles:
+    *     - Test Case 3: Removing a file within a subdirectory by passing a valid directory fd.
     *
     *   ## Return Value:
     *   - `0` on success.
@@ -160,27 +169,30 @@ impl Cage {
     */
     pub fn unlinkat_syscall(&self, dirfd: i32, pathname: &str, flags: i32) -> i32 {
         let mut c_path;
-        // Handling of the directory file descriptor:
-        // We currently only support the case when `dirfd` is AT_FDCWD
-        // If dirfd is anything else, we return an error indicating that such usage is not supported
+        // Determine the appropriate kernel file descriptor and pathname conversion based on dirfd.
         let kernel_fd = if dirfd == libc::AT_FDCWD {
-            // Normalize and convert the provided pathname
+            // Case 1: When AT_FDCWD is used.
+            // Convert the provided pathname from the RawPOSIX working directory (which is different from the host's)
+            // into a host-absolute path by prepending LIND_ROOT.
             let relpath = normpath(convpath(pathname), self);
             let relative_path = relpath.to_str().unwrap();
             let full_path = format!("{}{}", LIND_ROOT, relative_path);
             c_path = CString::new(full_path).unwrap();
             libc::AT_FDCWD
         } else {
+            // Case 2: When a specific directory fd is provided.
+            // Translate the virtual file descriptor to the corresponding kernel file descriptor.
             let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, dirfd as u64);
             if wrappedvfd.is_err() {
                 return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
             }
             let vfd = wrappedvfd.unwrap(); 
+            // For this case, we pass the provided pathname directly.
             c_path = CString::new(pathname).unwrap();
             vfd.underfd as i32
         };
 
-        // Call the underlying libc::unlinkat() function using AT_FDCWD
+        // Call the underlying libc::unlinkat() function with the fd and pathname.
         let ret = unsafe {
             libc::unlinkat(kernel_fd, c_path.as_ptr(), flags)
         };

@@ -505,17 +505,14 @@ pub fn lind_syscall_api(
 
         UNLINKAT_SYSCALL => {
             let fd = arg1 as i32;
+
+            let cage = interface::cagetable_getref(cageid);
+            let addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let pathname = interface::types::get_cstr(addr).unwrap();
             
-            let pathname = match interface::types::get_cstr(start_address + arg2) {
-                Ok(path) => path,
-                Err(_) => return -1, // Handle error appropriately, return an error code
-            };
-        
             let flags = arg3 as i32;
-        
-            interface::cagetable_getref(cageid)
-                .unlinkat_syscall(fd, pathname, flags)
-        }        
+            cage.unlinkat_syscall(fd, pathname, flags)
+        }          
         
         UNLINK_SYSCALL => {
             let fd_ptr = (start_address + arg1) as *const u8;
