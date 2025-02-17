@@ -20,6 +20,7 @@ const FTRUNCATE_SYSCALL: i32 = 18;
 const FSTATFS_SYSCALL: i32 = 19;
 const MMAP_SYSCALL: i32 = 21;
 const MUNMAP_SYSCALL: i32 = 22;
+
 const GETDENTS_SYSCALL: i32 = 23;
 const DUP_SYSCALL: i32 = 24;
 const DUP2_SYSCALL: i32 = 25;
@@ -120,6 +121,7 @@ const WAIT_SYSCALL: i32 = 172;
 const WAITPID_SYSCALL: i32 = 173;
 const BRK_SYSCALL: i32 = 175;
 const SBRK_SYSCALL: i32 = 176;
+const MPROTECT_SYSCALL: i32 = 177;
 
 const NANOSLEEP_TIME64_SYSCALL : i32 = 181;
 const CLOCK_GETTIME_SYSCALL : i32 = 191;
@@ -272,6 +274,15 @@ pub fn lind_syscall_api(
             }
 
             interface::mmap_handler(cageid, addr, len, prot, flags, fd, off) as i32
+        }
+
+        MPROTECT_SYSCALL => {
+            let addr = arg1 as *mut u8;
+            let len = arg2 as usize;
+            let prot = arg3 as i32;
+            
+            interface::cagetable_getref(cageid)
+                .mprotect_syscall(addr, len, prot)
         }
 
         PREAD_SYSCALL => {

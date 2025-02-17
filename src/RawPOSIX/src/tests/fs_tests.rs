@@ -725,6 +725,20 @@ pub mod fs_tests {
     }
 
     #[test]
+    pub fn ut_lind_fs_mprotect_unmapped_addr() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Try to protect an unmapped address
+        let unmapped_addr = 0x1000 as *mut u8; // Some arbitrary address
+        let result = cage.mprotect_syscall(unmapped_addr, 4096, PROT_READ);
+        assert_eq!(result, -(Errno::ENOMEM as i32), "mprotect should fail with ENOMEM for unmapped address");
+
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_fs_munmap_zerolen() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
