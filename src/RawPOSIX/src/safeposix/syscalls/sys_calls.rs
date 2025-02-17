@@ -79,6 +79,8 @@ impl Cage {
             // newsigset.insert(0, mainsigset);
         }
 
+        let parent_vmmap = self.vmmap.read();
+        let new_vmmap = parent_vmmap.clone();
         let cageobj = Cage {
             cageid: child_cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
