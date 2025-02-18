@@ -230,10 +230,11 @@ impl RunCommand {
                         0,
                         0,
                     );
-                }
                 
-                // main cage exits
-                lind_manager.decrement();
+                    // main cage exits
+                    lind_manager.decrement();
+                }
+
                 // we wait until all other cage exits
                 lind_manager.wait();
                 // after all cage exits, finalize the lind

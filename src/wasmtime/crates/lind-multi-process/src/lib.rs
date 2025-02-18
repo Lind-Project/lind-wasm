@@ -415,16 +415,15 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                     0,
                                     0,
                                 );
+
+                                // the cage just exited, decrement the cage counter
+                                lind_manager.decrement();
                             }
-                            // let _ = on_child_exit(*val);
                         },
                         _ => {
                             eprintln!("unexpected _start function return type!");
                         }
                     }
-
-                    // the cage just exited, decrement the cage counter
-                    lind_manager.decrement();
                 }
 
                 return 0;
@@ -561,6 +560,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 child_ctx.tid = next_tid as i32;
 
                 let instance_pre = Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
+                let lind_manager = child_ctx.lind_manager.clone();
 
                 let mut store = Store::new_with_inner(&engine, child_host, store_inner);
 
@@ -649,6 +649,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                                 0,
                                 0,
                             );
+
+                            // the cage just exited, decrement the cage counter
+                            lind_manager.decrement();
                         }
                     },
                     _ => {
