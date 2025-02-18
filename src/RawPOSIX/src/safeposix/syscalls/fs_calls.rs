@@ -145,23 +145,14 @@ impl Cage {
     *    - RawPOSIX maintains its own notion of the current working directory.
     *    - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
     *      path by prepending the LIND_ROOT prefix.
-    *    - Then we call libc::unlinkat() with AT_FDCWD and the converted pathname. This is necessary because
-    *      the RawPOSIX working directory is different from the host's; thus, we must convert the path so that
-    *      the host kernel removes the correct file.
-    *
-    *    This branch handles:
-    *     - Test Case 1: Removing a valid file (using AT_FDCWD)
-    *     - Test Case 2: Attempting to remove a non-existent file (using AT_FDCWD)
-    *     - Test Case 4: Removing a directory with AT_REMOVEDIR flag
-    *     - Test Case 5: Attempting to remove a directory without AT_REMOVEDIR (expected to fail)
+    *    - After this conversion, the path is already absolute from the host’s perspective, so `AT_FDCWD`
+    *     doesn't actually rely on the host’s working directory. This avoids mismatches between RawPOSIX
+    *     and the host environment.
     *
     *  Case 2: When `dirfd` is not AT_FDCWD:
     *    - We translate the RawPOSIX virtual file descriptor to the corresponding kernel file descriptor.
     *    - In this case, we simply create a C string from the provided `pathname` (without further conversion)
     *      and let the underlying kernel call resolve the path relative to the directory represented by that fd.
-    *
-    *    This branch handles:
-    *     - Test Case 3: Removing a file within a subdirectory by passing a valid directory fd.
     *
     *   ## Return Value:
     *   - `0` on success.
