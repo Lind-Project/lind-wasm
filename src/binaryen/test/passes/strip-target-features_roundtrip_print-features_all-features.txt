@@ -1,0 +1,33 @@
+--enable-threads
+--enable-mutable-globals
+--enable-nontrapping-float-to-int
+--enable-simd
+--enable-bulk-memory
+--enable-sign-ext
+--enable-exception-handling
+--enable-tail-call
+--enable-reference-types
+--enable-multivalue
+--enable-gc
+--enable-memory64
+--enable-relaxed-simd
+--enable-extended-const
+--enable-strings
+--enable-multimemory
+--enable-typed-continuations
+--enable-shared-everything
+--enable-fp16
+--enable-bulk-memory-opt
+--enable-call-indirect-overlong
+(module
+ (type $0 (func (result v128 externref)))
+ (func $foo (type $0) (result v128 externref)
+  (tuple.make 2
+   (v128.const i32x4 0x00000000 0x00000000 0x00000000 0x00000000)
+   (ref.null noextern)
+  )
+ )
+ (func $bar (type $0) (result v128 externref)
+  (return_call $foo)
+ )
+)

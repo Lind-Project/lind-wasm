@@ -1,0 +1,40 @@
+(module
+ (type $0 (func (param i32)))
+ (type $1 (func))
+ (tag $e (type $0) (param i32))
+ (func $test
+  (try $l0
+   (do
+    (throw $e
+     (i32.const 0)
+    )
+   )
+   (catch $e
+    (drop
+     (pop i32)
+    )
+    (rethrow $l0)
+   )
+  )
+  (try $try_outer
+   (do
+    (try
+     (do
+      (throw $e
+       (i32.const 0)
+      )
+     )
+     (delegate $try_outer)
+    )
+   )
+   (catch_all
+    (nop)
+   )
+  )
+ )
+)
+
+getExpressionInfo(throw) = {"id":54,"type":1,"tag":"e"}
+getExpressionInfo(rethrow) = {"id":55,"type":1,"target":"l0"}
+getExpressionInfo(try_catch) = {"id":52,"type":1,"name":"l0","hasCatchAll":0,"delegateTarget":"","isDelegate":0}
+getExpressionInfo(try_delegate) = {"id":52,"type":0,"name":"try_outer","hasCatchAll":1,"delegateTarget":"","isDelegate":0}

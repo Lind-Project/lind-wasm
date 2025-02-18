@@ -1,0 +1,17 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+PointerAlignment: Left
+IndentCaseLabels: true
+ContinuationIndentWidth: 2
+ConstructorInitializerIndentWidth: 2
+SpaceAfterTemplateKeyword: false
+BinPackArguments: false
+BinPackParameters: false
+---
+Language: JavaScript
+DisableFormat: true
+---
+Language: Json
+BasedOnStyle: LLVM
+---

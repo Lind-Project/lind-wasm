@@ -1,0 +1,40 @@
+(module
+ (type $0 (func))
+ (tag $tag$0 (type $0))
+ (func $0
+  (try $label
+   (do
+    (try
+     (do
+     )
+     (delegate $label)
+    )
+   )
+   (catch $tag$0
+   )
+  )
+ )
+ (func $1
+  (try $label
+   (do
+    (try
+     (do
+     )
+     (catch $tag$0
+      (drop
+       (i32.const 0)
+      )
+      (try
+       (do
+       )
+       (delegate $label)
+      )
+     )
+    )
+   )
+   (catch $tag$0
+   )
+  )
+ )
+)
+

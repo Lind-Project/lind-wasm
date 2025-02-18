@@ -1,0 +1,71 @@
+(module
+ (type $0 (func))
+ (memory $0 1024 1024)
+ (export "memory" (memory $0))
+ (export "main" (func $main))
+ (export "rust_entry" (func $__wasm_start))
+ (func $main
+  (local $0 i32)
+  (local $1 i32)
+  (local $2 i64)
+  (block $block$2$break
+   (local.set $0
+    (i32.load
+     (i32.const 0)
+    )
+   )
+   (block
+    (br $block$2$break)
+   )
+  )
+  (block
+   (block
+    (i32.store
+     (i32.const 0)
+     (local.get $0)
+    )
+    (return)
+   )
+  )
+ )
+ (func $__wasm_start
+  (i32.store
+   (i32.const 0)
+   (i32.const 65535)
+  )
+  (call $main)
+ )
+)
+133
+(module
+ (type $0 (func))
+ (memory $0 1024 1024)
+ (export "memory" (memory $0))
+ (export "main" (func $main))
+ (export "rust_entry" (func $__wasm_start))
+ (func $main
+  (local $0 i32)
+  (local $1 i32)
+  (local $2 i64)
+  (block $block
+   (local.set $0
+    (i32.load
+     (i32.const 0)
+    )
+   )
+   (br $block)
+  )
+  (i32.store
+   (i32.const 0)
+   (local.get $0)
+  )
+  (return)
+ )
+ (func $__wasm_start
+  (i32.store
+   (i32.const 0)
+   (i32.const 65535)
+  )
+  (call $main)
+ )
+)
