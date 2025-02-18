@@ -20,8 +20,8 @@ docker run -it securesystemslab/lind-wasm /bin/bash
 Now let try to print `Hello world!`
 
 ```
-./lindtool.sh compile_test hello
-./lindtool.sh run hello
+./lindtool.sh compile_test tests/unit-tests/file_tests/deterministic/printf
+./lindtool.sh run tests/unit-tests/file_tests/deterministic/printf
 ```
 
 ## Documentation

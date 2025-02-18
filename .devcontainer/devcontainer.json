@@ -1,0 +1,15 @@
+{
+    "name": "Lind-WASM Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+      },
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/lind/lind-wasm,type=bind",
+    "workspaceFolder": "/home/lind/lind-wasm",
+    "postCreateCommand": "echo 'Devcontainer setup complete!'",
+    "remoteUser": "lind",
+    "containerUser": "lind",
+    "containerEnv": {
+      "SHELL": "/bin/bash"
+      }
+  }

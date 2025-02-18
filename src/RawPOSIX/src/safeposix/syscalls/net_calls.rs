@@ -3,7 +3,7 @@ use crate::constants::net_constants;
 use crate::{interface::FdSet, safeposix::cage::*};
 use crate::interface::*;
 use crate::interface;
-use crate::constants::sys_constants;
+use crate::constants::{sys_constants,LIND_ROOT};
 
 use crate::fdtables::{self, FDTableEntry};
 
@@ -27,7 +27,6 @@ use libc::*;
 use std::{os::fd::RawFd, ptr};
 use bit_set::BitSet;
 
-static LIND_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
 const FDKIND_IMSOCK: u32 = 2;
@@ -1062,47 +1061,5 @@ impl Cage {
         virtual_socket_vector.sock2 = vsv_2 as i32;
         return 0;
     }
-
-    /*
-    *   Get result back from libc::getifaddrs and fill the content of name field into a buf 
-    *   as rustposix, so that i don’t need to change the dispatcher interface
-    */
-    pub fn getifaddrs_syscall(&self, buf: *mut u8, count: usize) -> i32 {
-        let mut ifaddr: *mut ifaddrs = ptr::null_mut();
-
-        unsafe {
-            if getifaddrs(&mut ifaddr) < 0 {
-                let errno = get_errno();
-                return handle_errno(errno, "getifaddrs");
-            }
-            let mut ifa = ifaddr;
-            let mut offset = 0;
-            while !ifa.is_null() {
-                let ifa_ref = &*ifa;
-                let name_cstr = CStr::from_ptr(ifa_ref.ifa_name);
-                let name_bytes = name_cstr.to_bytes();
-
-                // Check if there's enough space in the buffer
-                if offset + name_bytes.len() + 1 > count {
-                    println!("Buffer size exceeded");
-                    freeifaddrs(ifaddr);
-                    return -1;
-                }
-
-                let name_vec = name_bytes.to_vec();
-                fill(buf.add(offset), name_vec.len(), &name_vec);
-
-                // Add a null terminator to separate names
-                *buf.add(offset + name_vec.len()) = 0;
-                offset += name_vec.len() + 1; // Move offset past the name and null terminator
-            
-                ifa = ifa_ref.ifa_next;
-            
-            }
-            freeifaddrs(ifaddr);
-            0
-        }
-    }
-
 }
 

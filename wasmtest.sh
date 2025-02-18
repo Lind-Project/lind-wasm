@@ -14,7 +14,9 @@
 # To modify timeout time use(default is 5s): ./wasmtime <the method> --timeout=<the time you want in second>
 # To modify LIND_WASM_BASE use(default is /home/lind-wasm): export LIND_WASM_BASE=<path you want>
 
-LIND_WASM_BASE="${LIND_WASM_BASE:-/home/lind-wasm}"
+set -e -o pipefail
+
+LIND_WASM_BASE="${LIND_WASM_BASE:-/home/lind/lind-wasm}"
 
 DEFAULT_TIMEOUT=5
 TIMEOUT=$DEFAULT_TIMEOUT
@@ -29,6 +31,9 @@ precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output
 run_cmd_precompile="$wasmtime_base/target/debug/wasmtime run --allow-precompiled --wasi threads=y --wasi preview2=n [target]"
 
 test_file_base="$LIND_WASM_BASE/tests/unit-tests"
+deterministic_dir="deterministic"
+testlist_safe="testlist_safe.txt"
+testlist_unsafe="testlist_unsafe.txt"
 
 #color codes for terminal output
 RED='\033[31m'
@@ -196,6 +201,110 @@ run_from_files() {
     echo -e "${GREEN}All tests from file list completed.${RESET}"
 }
 
+# ----------------------------------------------------------------------
+# Function: generate_expected_outputs
+#
+# Purpose:
+# Compiles `.c` files in "tests/unit-tests/deterministic" directories, 
+# runs the binaries, and saves their output in "expected" subdirectories.
+#
+# Variables:
+# - Input: None required; works on `.c` files in specific directories.
+# - Output: Logs total processed, successes, and failures to stdout.
+#           Creates a file testlist_safe.txt which has the paths of all the successful test files
+#           Creates a file testlist_unsafe.txt which has the paths of all the failed test files
+#
+# Exceptions:
+# - Compilation errors: Logged to stdout and corresponding `.output` files.
+# - Runtime errors: Logged to stdout and corresponding `.output` files.
+# - Skips directories or files if not found; no explicit errors thrown.
+#
+# Note:
+# Temporarily disables `set -e` and `set -o pipefail` for error handling.
+# ----------------------------------------------------------------------
+generate_expected_outputs() {
+    set +e +o pipefail
+
+    [ ! -f "$testlist_safe" ] && touch "$testlist_safe"
+    echo -n "" > "$testlist_safe"
+
+    [ ! -f "$testlist_unsafe" ] && touch "$testlist_unsafe"
+    echo -n "" > "$testlist_unsafe"
+
+    total_files=0
+    total_success=0
+    total_failure=0
+
+    for deterministic_dir in $(find "$test_file_base" -type d -name "$deterministic_dir"); do
+        mkdir -p "$deterministic_dir/expected"
+
+        for c_file in "$deterministic_dir"/*.c; do
+            total_files=$((total_files + 1))
+
+            compile_output=$(gcc "$c_file" -o "${c_file%.c}" 2>&1)
+            if [ $? -ne 0 ]; then
+                echo "$c_file: Compilation Error"
+                echo "$compile_output"
+                echo "------------------------------------"
+                total_failure=$((total_failure + 1))
+                echo "$compile_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
+                echo "$c_file" >> "$testlist_unsafe"
+                continue
+            fi
+
+            run_output=$("${c_file%.c}" 2>&1)
+            if [ $? -ne 0 ]; then
+                echo "$c_file: Runtime Error"
+                echo "$run_output"
+                echo "------------------------------------"
+                total_failure=$((total_failure + 1))
+                echo "$compile_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
+                rm -f "${c_file%.c}"
+                echo "$c_file" >> "$testlist_unsafe"
+                continue
+            fi
+
+            echo "$run_output" > "$deterministic_dir/expected/$(basename "$c_file" .c).output"
+
+            rm -f "${c_file%.c}"
+            total_success=$((total_success + 1))
+
+            echo "$c_file" >> "$testlist_safe"
+        done
+    done
+
+    echo "Total:    $total_files"
+    echo "Success:  $total_success"
+    echo "Failure:  $total_failure"
+
+    set -e -o pipefail
+}
+
+# ----------------------------------------------------------------------
+# Function: cleanup_expected
+# Purpose:
+# For cleaning up all expected outputs.
+# Deletes the folder "expected" under each of the subfolders and the test lists(testlist_safe.txt and testlist_unsafe.txt).
+#
+# Variables:
+# - Input: None required; Works on the created expected folders 
+# - Output: Logs the deleted folders and files to stdout.
+#
+# ----------------------------------------------------------------------
+cleanup_expected() {
+    for deterministic_dir in $(find "$test_file_base" -type d -name "$deterministic_dir"); do
+        if [ -d "$deterministic_dir/expected" ]; then
+            rm -rf "$deterministic_dir/expected"
+            echo "Deleted: $deterministic_dir/expected"
+        fi
+    done
+
+    [ -f "$testlist_safe" ] && rm -f "$testlist_safe"
+    echo "Deleted: $testlist_safe"
+    [ -f "$testlist_unsafe" ] && rm -f "$testlist_unsafe"
+    echo "Deleted: $testlist_unsafe"
+}
+
 pmode=0
 if [ "${!#}" = "-p" ]; then
     pmode=1
@@ -265,5 +374,11 @@ case "$1" in
     all|a)
         compile_all_tests
         run_all_tests
+        ;;
+    generateexpected|ge)
+        generate_expected_outputs
+        ;;
+    cleanexpected|cle)
+        cleanup_expected
         ;;
 esac

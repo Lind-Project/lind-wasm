@@ -48,8 +48,6 @@ pub fn round_up_page(length: u64) -> u64 {
 pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
     // iterate through each vmmap entry
     for (_interval, entry) in parent_vmmap.entries.iter() {
-        // if the entry has PROT_NONE, that means the entry is currently not used
-        if entry.prot == PROT_NONE { continue; }
         // translate page number to user address
         let addr_st = (entry.page_num << PAGESHIFT) as u32;
         let addr_len = (entry.npages << PAGESHIFT) as usize;
@@ -390,6 +388,31 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
     0
 }
 
+// set the wasm linear memory base address to vmmap
+pub fn init_vmmap_helper(cageid: u64, base_address: usize, program_break: Option<u32>) {
+    let cage = cagetable_getref(cageid);
+    let mut vmmap = cage.vmmap.write();
+    vmmap.set_base_address(base_address);
+    if program_break.is_some() {
+        vmmap.set_program_break(program_break.unwrap());
+    }
+}
+
+// clone the cage memory. Invoked by wasmtime after cage is forked
+pub fn fork_vmmap_helper(parent_cageid: u64, child_cageid: u64) {
+    let parent_cage = cagetable_getref(parent_cageid);
+    let child_cage = cagetable_getref(child_cageid);
+    let parent_vmmap = parent_cage.vmmap.read();
+    let child_vmmap = child_cage.vmmap.read();
+
+    fork_vmmap(&parent_vmmap, &child_vmmap);
+
+    // update program break for child
+    drop(child_vmmap);
+    let mut child_vmmap = child_cage.vmmap.write();
+    child_vmmap.set_program_break(parent_vmmap.program_break);
+}
+
 /// Validates and converts a virtual memory address to a physical address with protection checks
 ///
 /// This function performs several critical memory management operations:
@@ -427,5 +450,19 @@ pub fn check_and_convert_addr_ext(cage: &Cage, arg: u64, length: usize, prot: i3
     }
 
     // Convert to physical address by adding base address
+    Ok(vmmap.base_address.unwrap() as u64 + arg)
+}
+
+/// This function translates a virtual memory address to a physical address by adding the base address of the vmmap to the argument.
+///
+/// # Arguments
+/// * `cage` - Reference to the memory cage containing the virtual memory map
+/// * `arg` - Virtual memory address to translate
+///
+/// # Returns
+/// * `Ok(u64)` - Translated physical memory address
+pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
+    // Get read lock on virtual memory map
+    let vmmap = cage.vmmap.read();
     Ok(vmmap.base_address.unwrap() as u64 + arg)
 }
