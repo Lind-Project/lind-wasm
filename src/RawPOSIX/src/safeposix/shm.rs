@@ -23,7 +23,6 @@ pub struct ShmSegment {
     pub filebacking: interface::ShmFile,
     pub rmid: bool,
     pub attached_cages: interface::RustHashMap<u64, i32>, // attached cages, number of references in cage
-    pub semaphor_offsets: interface::RustHashSet<u32>,
 }
 
 pub fn new_shm_segment(
@@ -73,7 +72,6 @@ impl ShmSegment {
             filebacking: filebacking,
             rmid: false,
             attached_cages: interface::RustHashMap::new(),
-            semaphor_offsets: interface::RustHashSet::new(),
         }
     }
     // mmap shared segment into cage, and increase attachments
