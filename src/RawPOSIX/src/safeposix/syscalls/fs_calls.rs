@@ -1013,6 +1013,7 @@ impl Cage {
     /*
     *   mprotect() changes protection for memory pages
     *   Returns 0 on success, -1 on failure
+    *   Manual page: https://man7.org/linux/man-pages/man2/mprotect.2.html
     */
     pub fn mprotect_syscall(&self, addr: *mut u8, len: usize, prot: i32) -> i32 {
         let ret = unsafe {

@@ -276,7 +276,7 @@ pub fn lind_syscall_api(
         }
 
         MPROTECT_SYSCALL => {
-            let addr = arg1 as *mut u8;
+            let addr = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
             let len = arg2 as usize;
             let prot = arg3 as i32;
             
