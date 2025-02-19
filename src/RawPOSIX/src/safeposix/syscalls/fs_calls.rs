@@ -139,6 +139,72 @@ impl Cage {
         ret
     }
 
+    //------------------------------------UNLINKAT SYSCALL------------------------------------
+    /*
+    *  `unlinkat` removes a file or directory relative to a directory file descriptor.
+    *  Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+    *
+    *  ## Arguments:
+    *   - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
+    *   - `pathname`: Path of the file/directory to be removed.
+    *   - `flags`: Can include `AT_REMOVEDIR` to indicate directory removal.
+    *
+    *  There are two cases:
+    *  Case 1: When `dirfd` is AT_FDCWD:
+    *    - RawPOSIX maintains its own notion of the current working directory.
+    *    - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
+    *      path by prepending the LIND_ROOT prefix.
+    *    - After this conversion, the path is already absolute from the host’s perspective, so `AT_FDCWD`
+    *     doesn't actually rely on the host’s working directory. This avoids mismatches between RawPOSIX
+    *     and the host environment.
+    *
+    *  Case 2: When `dirfd` is not AT_FDCWD:
+    *    - We translate the RawPOSIX virtual file descriptor to the corresponding kernel file descriptor.
+    *    - In this case, we simply create a C string from the provided `pathname` (without further conversion)
+    *      and let the underlying kernel call resolve the path relative to the directory represented by that fd.
+    *
+    *   ## Return Value:
+    *   - `0` on success.
+    *   - `-1` on failure, with `errno` set appropriately.
+    */
+    pub fn unlinkat_syscall(&self, dirfd: i32, pathname: &str, flags: i32) -> i32 {
+        let mut c_path;
+        // Determine the appropriate kernel file descriptor and pathname conversion based on dirfd.
+        let kernel_fd = if dirfd == libc::AT_FDCWD {
+            // Case 1: When AT_FDCWD is used.
+            // Convert the provided pathname from the RawPOSIX working directory (which is different from the host's)
+            // into a host-absolute path by prepending LIND_ROOT.
+            let relpath = normpath(convpath(pathname), self);
+            let relative_path = relpath.to_str().unwrap();
+            let full_path = format!("{}{}", LIND_ROOT, relative_path);
+            c_path = CString::new(full_path).unwrap();
+            libc::AT_FDCWD
+        } else {
+            // Case 2: When a specific directory fd is provided.
+            // Translate the virtual file descriptor to the corresponding kernel file descriptor.
+            let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, dirfd as u64);
+            if wrappedvfd.is_err() {
+                return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
+            }
+            let vfd = wrappedvfd.unwrap(); 
+            // For this case, we pass the provided pathname directly.
+            c_path = CString::new(pathname).unwrap();
+            vfd.underfd as i32
+        };
+
+        // Call the underlying libc::unlinkat() function with the fd and pathname.
+        let ret = unsafe {
+            libc::unlinkat(kernel_fd, c_path.as_ptr(), flags)
+        };
+        
+        // If the call failed, retrieve and handle the errno
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "unlinkat");
+        }
+        ret
+    }
+
     //------------------------------------UNLINK SYSCALL------------------------------------
     /*
     *   unlink() will return 0 when success and -1 when fail 

@@ -3,6 +3,7 @@
 // retreive cage table
 
 const ACCESS_SYSCALL: i32 = 2;
+const UNLINKAT_SYSCALL: i32 = 3;
 const UNLINK_SYSCALL: i32 = 4;
 const LINK_SYSCALL: i32 = 5;
 const RENAME_SYSCALL: i32 = 6;
@@ -563,6 +564,17 @@ pub fn lind_syscall_api(
             // File descriptor validation and actual operation handled by cage layer
             cage.fstat_syscall(fd, buf)
         }
+
+        UNLINKAT_SYSCALL => {
+            let fd = arg1 as i32;
+
+            let cage = interface::cagetable_getref(cageid);
+            let addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let pathname = interface::types::get_cstr(addr).unwrap();
+            
+            let flags = arg3 as i32;
+            cage.unlinkat_syscall(fd, pathname, flags)
+        }          
         
         UNLINK_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
