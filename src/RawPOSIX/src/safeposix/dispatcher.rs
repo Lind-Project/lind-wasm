@@ -276,12 +276,12 @@ pub fn lind_syscall_api(
         }
 
         MPROTECT_SYSCALL => {
+            let cage = interface::cagetable_getref(cageid);
             let addr = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
             let len = arg2 as usize;
             let prot = arg3 as i32;
             
-            interface::cagetable_getref(cageid)
-                .mprotect_syscall(addr, len, prot)
+            interface::mprotect_handler(cageid, addr, len, prot)
         }
 
         PREAD_SYSCALL => {

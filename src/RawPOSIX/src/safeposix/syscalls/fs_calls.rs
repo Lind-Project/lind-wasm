@@ -964,7 +964,7 @@ impl Cage {
             match fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64) {
                 Ok(kernel_fd) => {
                     let ret = unsafe {
-                        (libc::mmap(addr as *mut c_void, len, prot, flags, kernel_fd.underfd as i32, off) as i64)
+                        libc::mmap(addr as *mut c_void, len, prot, flags, kernel_fd.underfd as i32, off) as i64
                     };
 
                     // Check if mmap failed and return the appropriate error if so
