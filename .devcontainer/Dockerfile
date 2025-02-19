@@ -1,5 +1,10 @@
 # Use an official Ubuntu as a parent image
 FROM ubuntu:latest
+ARG DEV_MODE
+ENV DEV_MODE=${DEV_MODE:-false}
+
+ARG BRANCH_NAME
+ENV BRANCH_NAME=${BRANCH_NAME:-main}
 
 # Install all the required dependencies
 RUN apt-get update && \
@@ -28,7 +33,7 @@ USER lind
 WORKDIR /home/lind
 
 # Clone the Lind-wasm repository
-RUN git clone https://github.com/Lind-Project/lind-wasm.git
+RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch $BRANCH_NAME https://github.com/Lind-Project/lind-wasm.git; fi
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
@@ -43,21 +48,21 @@ ENV PATH="/home/lind/.cargo/bin:/home/lind/go/bin:${PATH}"
 
 # Install clang-16 for compiling the code
 RUN wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
-    tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
-    mv clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04
+    tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+RUN if [ "$DEV_MODE" != "true" ]; then mv clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04; fi
 
 # Go inside Lind-wasm repository and clone rustposix
 WORKDIR /home/lind/lind-wasm
 
 # Move wasi directory
-RUN mv ./src/glibc/wasi ./clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/lib
+RUN if [ "$DEV_MODE" != "true" ]; then mv ./src/glibc/wasi ./clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/lib; fi
 
 ENV CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 
 # Build Lind-wasm
 #RUN chmod +x lindtool.sh
-RUN bazel build //:make_all
-RUN bazel build //:make_wasmtime
+RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
+RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_wasmtime; fi
 
 
 SHELL ["/bin/bash", "-c"]
