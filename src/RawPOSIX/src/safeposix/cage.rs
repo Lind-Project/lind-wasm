@@ -1,5 +1,13 @@
 #![allow(dead_code)]
 use crate::interface;
+use crate::constants::{
+    SIGNAL_MAX,
+    S_IRWXU, S_IRWXG, S_IRWXO,
+    PROT_READ, PROT_WRITE,
+    O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC,
+    MAP_SHARED, MAP_PRIVATE,
+};
+
 //going to get the datatypes and errnos from the cage file from now on
 pub use crate::interface::errnos::{syscall_error, Errno};
 
@@ -8,9 +16,8 @@ pub use crate::interface::types::{
 };
 
 use super::filesystem::normpath;
-pub use super::syscalls::fs_constants::*;
-pub use super::syscalls::net_constants::*;
-pub use super::syscalls::sys_constants::*;
+use crate::constants::*;
+pub use super::vmmap::*;
 
 pub use crate::interface::CAGE_TABLE;
 
@@ -41,14 +48,6 @@ pub struct Cage {
     // shared memory segments
     pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, 
     // Old rustposix tables for handling concurrency primitives with NaCl's model 
-    // (TODO: TO BE REMOVED AND REPLACED WITH TRACKING FOR FUTEXES
-    pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
-    // Old rustposix tables for handling concurrency primitives with NaCl's model 
-    // (TODO: TO BE REMOVED AND REPLACED WITH TRACKING FOR FUTEXES
-    pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
-    // Old rustposix tables for handling concurrency primitives with NaCl's model 
-    // (TODO: TO BE REMOVED AND REPLACED WITH TRACKING FOR FUTEXES
-    pub sem_table: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>>,
     // Table of thread IDs for all threads in this cage, formerly used for managing cage exit/destruction 
     // (TODO: TO BE REMOVED OR REPURPOSED)
     pub thread_table: interface::RustHashMap<u64, bool>,
@@ -76,7 +75,8 @@ pub struct Cage {
     // and cage struct is cleaned up, but its exit status are inserted along with its cage id into the end of 
     // its parent cage's zombies list
     pub zombies: interface::RustLock<Vec<Zombie>>,
-    pub child_num: interface::RustAtomicU64
+    pub child_num: interface::RustAtomicU64,
+    pub vmmap: interface::RustLock<Vmmap>,
 }
 
 impl Cage {
@@ -84,18 +84,6 @@ impl Cage {
         let newwd = interface::RustRfc::new(normpath(newdir, self));
         let mut cwdbox = self.cwd.write();
         *cwdbox = newwd;
-    }
-
-    // function to signal all cvs in a cage when forcing exit
-    pub fn signalcvs(&self) {
-        let cvtable = self.cv_table.read();
-
-        for cv_handle in 0..cvtable.len() {
-            if cvtable[cv_handle as usize].is_some() {
-                let clonedcv = cvtable[cv_handle as usize].as_ref().unwrap().clone();
-                clonedcv.broadcast();
-            }
-        }
     }
 
     pub fn send_pending_signals(&self, sigset: interface::SigsetType, pthreadid: u64) {

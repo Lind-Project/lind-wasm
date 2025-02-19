@@ -10,6 +10,7 @@ pub mod fs_tests {
     use libc::{c_void, O_DIRECTORY};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
+    use crate::constants::{S_IRWXA,SHMMAX,DEFAULT_UID,DEFAULT_GID};
     use crate::interface::{StatData, FSData};
     use libc::*;
     use crate::interface::{ShmidsStruct, get_errno};
@@ -421,7 +422,7 @@ pub mod fs_tests {
         //Checking if passing 0 as `len` to `mmap_syscall()`
         //correctly results in 'The value of len is 0` error.
         let mmap_result = cage.mmap_syscall(0 as *mut u8, 0, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        assert_eq!(mmap_result, -1, "Expected mmap to fail with -1 due to zero length");
+        assert_eq!(mmap_result as i32, -EINVAL as i32, "Expected to fail with EINVAL due to zero length");
         // Fetch the errno and check that it is `EINVAL` (Invalid argument)
         let errno = get_errno();
         assert_eq!(errno, libc::EINVAL, "Expected errno to be EINVAL for zero-length mmap");
@@ -439,16 +440,18 @@ pub mod fs_tests {
 
         let cage = interface::cagetable_getref(1);
 
-        //Creating a regular file with `O_RDWR` flag
-        //making it valid for any mapping.
+        // Creating a regular file with `O_RDWR` flag
+        // making it valid for any mapping.
         let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
         let filepath = "/mmapTestFile1";
         let fd = cage.open_syscall(filepath, flags, S_IRWXA);
-        //Writing into that file's first 9 bytes.
+        // Writing into that file's first 9 bytes.
         assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
 
+        // When no flags are specified (flags = 0), mmap should fail with EINVAL
         let mmap_result = cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, 0, fd, 0);
-        assert_eq!(mmap_result, -1, "mmap did not fail as expected");
+        assert_eq!(mmap_result as i32, -EINVAL as i32, "mmap did not fail with EINVAL as expected");
+        
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -520,7 +523,8 @@ pub mod fs_tests {
         //allow reading correctly results in `File descriptor
         //is not open for reading` error.
         let mmap_result = cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        assert_eq!(mmap_result, -1, "Expected mmap to fail");
+        assert_eq!(mmap_result as i32, -EINVAL as i32, "Expected to fail with EINVAL");
+
         // Fetch and print the errno for debugging
         let error = get_errno();
         // Assert that the error is EACCES (Permission denied)
@@ -569,7 +573,7 @@ pub mod fs_tests {
             0,
         );        
         // Check if mmap_syscall returns -1 (failure)
-        assert_eq!(mmap_result, -1, "Expected mmap to fail due to lack of write permissions");
+        assert_eq!(mmap_result as i32, -EINVAL as i32, "Expected to fail with EINVAL due to no write permission");
         // Fetch and check the errno for debugging
         let err = get_errno();
         // Ensure the errno is EACCES (Permission denied)
@@ -602,7 +606,8 @@ pub mod fs_tests {
 
         /* Native linux will return EINVAL - TESTED locally */
         let result = cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, -10);
-        assert_eq!(result, -1, "Expected mmap to fail with -1 for negative offset");
+        assert_eq!(result as i32, -EINVAL as i32, "Expected mmap to fail with EINVAL for negative offset");
+        
         // Verify errno is set to EINVAL
         let errno = get_errno();
         assert_eq!(errno, libc::EINVAL, "Expected errno to be EINVAL for negative offset");
@@ -613,8 +618,8 @@ pub mod fs_tests {
 
         /* Native linux will return EINVAL - TESTED locally */
         let result_beyond_eof = cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 25);
-        assert_eq!(result_beyond_eof, -1, "Expected mmap to fail with -1 for offset beyond EOF");
-    
+        assert_eq!(result_beyond_eof as i32, -EINVAL as i32, "Expected mmap to fail with EINVAL for offset beyond EOF");
+
         // Verify errno is set to EINVAL
         let errno_beyond_eof = get_errno();
         assert_eq!(errno_beyond_eof, libc::EINVAL, "Expected errno to be EINVAL for offset beyond EOF");
@@ -711,7 +716,7 @@ pub mod fs_tests {
         //Checking if passing the invalid file descriptor
         //correctly results in `Invalid file descriptor` error.
         assert_eq!(
-            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0),
+            cage.mmap_syscall(0 as *mut u8, 5, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) as i32,
             -(Errno::EBADF as i32)
         );
 
@@ -2917,186 +2922,6 @@ pub mod fs_tests {
 
         child.join().unwrap();
         assert_eq!(cage1.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
-        lindrustfinalize();
-    }
-
-    // This test verifies the functionality of semaphores in a fork scenario.
-    // The test involves a parent process and a child process that synchronize
-    //their execution using a shared semaphore. The test aims to ensure:
-    //   1. The semaphore is initialized correctly.
-    //   2. The child process can acquire and release the semaphore.
-    //   3. The parent process can acquire and release the semaphore after the child
-    //      process exits.
-    //   4. The semaphore can be destroyed safely.
-    #[test]
-    pub fn ut_lind_fs_sem_fork() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
-        let _thelock = setup::lock_and_init();
-
-        let cage = interface::cagetable_getref(1);
-        let key = 31337;
-
-        // Create a shared memory region of 1024 bytes. This region will be
-        // shared between the parent and child process.
-        // IPC_CREAT tells the system to create a new memory segment for the shared
-        // memory and 0666 sets the access permissions of the memory segment.
-        let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
-
-        // Attach shared memory for semaphore access.
-        let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
-        assert_ne!(shmatret, -1);
-        // Initialize semaphore in shared memory (initial value: 1, available).
-        let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
-        assert_eq!(ret_init, 0);
-        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
-        // Fork process to create child (new cagetable ID 2) for semaphore testing.
-        assert_eq!(cage.fork_syscall(2), 0);
-        // Create thread to simulate child process behavior after forking.
-        let thread_child = interface::helper_thread(move || {
-            // Set reference to child process's cagetable (ID 2) for independent operation.
-            let cage1 = interface::cagetable_getref(2);
-            // Child process blocks on semaphore wait (decrementing it from 1 to 0).
-            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            // Simulate processing time with 40ms delay.
-            interface::sleep(interface::RustDuration::from_millis(40));
-            // Child process releases semaphore, signaling its availability to parent
-            //(value increases from 0 to 1).
-            assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
-            cage1.exit_syscall(libc::EXIT_SUCCESS);
-        });
-
-        // Parent waits on semaphore (blocks until released by child, decrementing to
-        // 0).
-        assert_eq!(cage.sem_wait_syscall(shmatret as u32), 0);
-        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
-        // Simulate parent process processing time with 100ms delay to ensure
-        // synchronization.
-        interface::sleep(interface::RustDuration::from_millis(100));
-        // Wait for child process to finish to prevent race conditions before destroying
-        // semaphore. Release semaphore, making it available again (value
-        // increases to 1).
-        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
-        thread_child.join().unwrap();
-
-        // Destroy the semaphore
-        assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
-        // Mark the shared memory segment to be removed.
-        let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
-        assert_eq!(shmctlret2, 0);
-        //detach from shared memory
-        let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
-        assert_eq!(shmdtret, shmid);
-        cage.exit_syscall(libc::EXIT_SUCCESS);
-
-        lindrustfinalize();
-    }
-
-    // This test verifies the functionality of timed semaphores in a fork scenario.
-    // It involves a parent process and a child process that synchronize their
-    // execution using a shared semaphore with a timeout. The test aims to
-    // ensure:
-    //  1. The semaphore is initialized correctly.
-    //  2. The child process can acquire and release the semaphore.
-    //  3. The parent process can acquire the semaphore using a timed wait operation
-    //     with a
-    //  timeout, and the semaphore is acquired successfully.
-    //  4. The parent process can release the semaphore.
-    //  5. The semaphore can be destroyed safely.
-    #[test]
-    pub fn ut_lind_fs_sem_trytimed() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
-        let _thelock = setup::lock_and_init();
-
-        let cage = interface::cagetable_getref(1);
-        let key = 31337;
-        // Create a shared memory region of 1024 bytes.
-        //This region will be shared between the parent and child process.
-        // IPC_CREAT tells the system to create a new memory segment for the shared
-        // memory and 0666 sets the access permissions of the memory segment.
-        let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
-        // Attach the shared memory region to the address space of the process
-        // to make sure for both processes to access the shared semaphore.
-        let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
-        assert_ne!(shmatret, -1);
-        // Initialize semaphore in shared memory (initial value: 1, available).
-        let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 1);
-        assert_eq!(ret_init, 0);
-        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 1);
-        // Fork process, creating a child process with its own independent cagetable (ID
-        // 2).
-        assert_eq!(cage.fork_syscall(2), 0);
-        // Define the child process behavior in a separate thread
-        let thread_child = interface::helper_thread(move || {
-            // Get reference to child's cagetable (ID 2) for independent operations.
-            let cage1 = interface::cagetable_getref(2);
-            // Child process blocks on semaphore, waiting until it becomes available
-            //(semaphore decremented to 0).
-            assert_eq!(cage1.sem_wait_syscall(shmatret as u32), 0);
-            // Simulate some work by sleeping for 20 milliseconds.
-            interface::sleep(interface::RustDuration::from_millis(20));
-            // Child process releases semaphore, signaling its availability to the parent
-            // process
-            //(value increases from 0 to 1).
-            assert_eq!(cage1.sem_post_syscall(shmatret as u32), 0);
-            cage1.exit_syscall(libc::EXIT_SUCCESS);
-        });
-        // Parent process waits (with 100ms timeout) for semaphore release by child
-        //returns 0 if acquired successfully before timeout.
-        assert_eq!(
-            cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)),
-            0
-        );
-        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), 0);
-        // Simulate some work by sleeping for 10 milliseconds.
-        interface::sleep(interface::RustDuration::from_millis(10));
-        // Release semaphore, signaling its availability for parent
-        //(value increases from 0 to 1).
-        assert_eq!(cage.sem_post_syscall(shmatret as u32), 0);
-
-        // wait for the child process to exit before destroying the semaphore.
-        thread_child.join().unwrap();
-
-        // Destroy the semaphore
-        assert_eq!(cage.sem_destroy_syscall(shmatret as u32), 0);
-        // Mark the shared memory segment to be removed.
-        let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
-        assert_eq!(shmctlret2, 0);
-        // Detach from the shared memory region.
-        let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
-        assert_eq!(shmdtret, shmid);
-
-        cage.exit_syscall(libc::EXIT_SUCCESS);
-
-        lindrustfinalize();
-    }
-
-    #[test]
-    pub fn ut_lind_fs_sem_test() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
-        let _thelock = setup::lock_and_init();
-
-        let cage = interface::cagetable_getref(1);
-        let key = 31337;
-        // Create a shared memory region
-        let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
-        // Attach the shared memory region
-        let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
-        assert_ne!(shmatret, -1);
-        assert_eq!(cage.sem_destroy_syscall(shmatret as u32), -22);
-        assert_eq!(cage.sem_getvalue_syscall(shmatret as u32), -22);
-        assert_eq!(cage.sem_post_syscall(shmatret as u32), -22);
-        // Initialize the semaphore with shared between process
-        let ret_init = cage.sem_init_syscall(shmatret as u32, 1, 0);
-        assert_eq!(ret_init, 0);
-        // Should return errno
-        assert_eq!(
-            cage.sem_timedwait_syscall(shmatret as u32, interface::RustDuration::from_millis(100)),
-            -110
-        );
-        assert_eq!(cage.sem_trywait_syscall(shmatret as u32), -11);
         lindrustfinalize();
     }
 
