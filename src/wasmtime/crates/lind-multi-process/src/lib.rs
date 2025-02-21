@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, Result};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
-use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, FORK_SYSCALL};
+use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, FORK_SYSCALL, EXEC_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
 use std::ffi::CStr;
@@ -785,8 +785,20 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
             // lind_exec(cloned_pid as u64, cloned_pid as u64);
-            let ret = exec_call(&cloned_run_command, &real_path_str, &args, cloned_pid, &cloned_next_cageid, &cloned_lind_manager, &environs);
+            lind_syscall_api(
+                cloned_pid as u64,
+                EXEC_SYSCALL as u32, // exec syscall
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            );
 
+            let ret = exec_call(&cloned_run_command, &real_path_str, &args, cloned_pid, &cloned_next_cageid, &cloned_lind_manager, &environs);
+            
             return Ok(OnCalledAction::Finish(ret.expect("exec-ed module error")));
         }));
 

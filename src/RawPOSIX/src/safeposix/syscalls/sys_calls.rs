@@ -133,17 +133,8 @@ impl Cage {
     /*
     *   exec() will only return if error happens 
     */
-    pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        // Empty fd with flag should_cloexec 
+    pub fn exec_syscall(&self) -> i32 { 
         fdtables::empty_fds_for_exec(self.cageid);
-        // Add the new one to fdtable
-        let _ = fdtables::copy_fdtable_for_cage(self.cageid, child_cageid);
-        // Delete the original one
-        let _newfdtable = fdtables::remove_cage_from_fdtable(self.cageid);
-
-        interface::cagetable_remove(self.cageid);
-
-        self.unmap_shm_mappings();
 
         let zombies = self.zombies.read();
         let cloned_zombies = zombies.clone();
@@ -156,22 +147,22 @@ impl Cage {
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // we don't add these for the test suite
             // BUG: Signals are commented out until we add them to lind-wasm
-            // let mainsigsetatomic = self
-            //     .sigset
-            //     .get(
-            //         &self
-            //             .main_threadid
-            //             .load(interface::RustAtomicOrdering::Relaxed),
-            //     )
-            //     .unwrap();
-            // let mainsigset = interface::RustAtomicU64::new(
-            //     mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed),
-            // );
-            // newsigset.insert(0, mainsigset);
+            let mainsigsetatomic = self
+                .sigset
+                .get(
+                    &self
+                        .main_threadid
+                        .load(interface::RustAtomicOrdering::Relaxed),
+                )
+                .unwrap();
+            let mainsigset = interface::RustAtomicU64::new(
+                mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed),
+            );
+            newsigset.insert(0, mainsigset);
         }
 
         let newcage = Cage {
-            cageid: child_cageid,
+            cageid: self.cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
             parent: self.parent,
             cancelstatus: interface::RustAtomicBool::new(false),
@@ -184,14 +175,15 @@ impl Cage {
             signalhandler: interface::RustHashMap::new(),
             sigset: newsigset,
             main_threadid: interface::RustAtomicU64::new(0),
-            interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
-            vmmap: interface::RustLock::new(Vmmap::new()), // memory is cleared after exec
+            interval_timer: self.interval_timer.clone_with_new_cageid(self.cageid), //
             zombies: interface::RustLock::new(cloned_zombies), // when a process exec-ed, its child relationship should be perserved
-            child_num: interface::RustAtomicU64::new(child_num),
+            child_num: interface::RustAtomicU64::new(0),
+            vmmap: interface::RustLock::new(Vmmap::new()), // memory is cleared after exec
         };
         //wasteful clone of fdtable, but mutability constraints exist
+        interface::cagetable_remove(self.cageid);
 
-        interface::cagetable_insert(child_cageid, newcage);
+        interface::cagetable_insert(self.cageid, newcage);
         0
     }
 
