@@ -32,10 +32,16 @@ SKIP_TESTS_FILE = "skip_test_cases.txt"
 PATH_TO_LIND_ROOT = Path(LIND_WASM_BASE) / "src/RawPOSIX/tmp"
 
 error_types = {
-    "Failure_native_compiling": "native_compile_failures",
-    "Failure_native_running": "native_runtime_failures",
-    "Segmentation_Fault": "segfaults",
-    "Timeout": "timeouts"
+    "Failure_native_compiling": "Compilation Failure Native",
+    "Failure_native_running": "Runtime Failure Native",
+    "Native_Segmentation_Fault": "Segmentation Fault Native",
+    "Native_Timeout": "Timeout During Native",
+    "Lind_wasm_compiling": "Lind Wasm Compile Failure",
+    "Lind_wasm_runtime": "Lind Wasm Runtime Failure",
+    "Lind_wasm_Segmentation_Fault": "Lind Wasm Segmentation Failure",
+    "Lind_wasm_Timeout": "Timeout During Lind Wasm run",
+    "Unknown_Failure": "Unknown Failure",
+    "Output_mismatch": "GCC and Wasm Output mismatch"
     }
 
 # ----------------------------------------------------------------------
@@ -215,20 +221,20 @@ def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_
 
     wasm_file, compile_err = compile_c_to_wasm(source_file)
     if wasm_file is None:
-        add_test_result(result, str(source_file), "Failure", "Compilation_Error", compile_err)
+        add_test_result(result, str(source_file), "Failure", "Lind_wasm_compiling", compile_err)
         return
 
     try:
         retcode, output = run_compiled_wasm(wasm_file, timeout_sec)
         if retcode == "timeout":
-            add_test_result(result, str(source_file), "Failure", "Timeout", output)
+            add_test_result(result, str(source_file), "Failure", "Lind_wasm_Timeout", output)
         elif retcode == "unknown_error":
-            add_test_result(result, str(source_file), "Failure", "Runtime_Error", output)
+            add_test_result(result, str(source_file), "Failure", "Lind_wasm_runtime", output)
         else:
             if retcode == 0:
                 add_test_result(result, str(source_file), "Success", None, output)
             elif retcode == 134 or retcode == 139:
-                add_test_result(result, str(source_file), "Failure", "Segmentation_Fault", output)
+                add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", output)
             else:
                 add_test_result(result, str(source_file), "Failure", "Unknown_Failure", output)
     finally:
@@ -310,7 +316,7 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
     #wasm compile
     wasm_file, compile_err = compile_c_to_wasm(source_file)
     if wasm_file is None:
-        add_test_result(result, str(source_file), "Failure", "Compilation_Error", compile_err)
+        add_test_result(result, str(source_file), "Failure", "Lind_wasm_compiling", compile_err)
         os.chdir(original_cwd)
         return
 
@@ -318,9 +324,9 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
     try:
         retcode, wasm_run_output = run_compiled_wasm(wasm_file, timeout_sec)
         if retcode == "timeout":
-            add_test_result(result, str(source_file), "Failure", "Timeout", wasm_run_output)
+            add_test_result(result, str(source_file), "Failure", "Lind_wasm_timeout", wasm_run_output)
         elif retcode == "unknown_error":
-            add_test_result(result, str(source_file), "Failure", "Runtime_Error", wasm_run_output)
+            add_test_result(result, str(source_file), "Failure", "Lind_wasm_runtime", wasm_run_output)
         else:
             if retcode == 0:
                 expected_content = native_run_output.strip()
@@ -338,7 +344,7 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
                     )
                     add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info)
             elif retcode == 139 or retcode == 134:
-                add_test_result(result, str(source_file), "Failure", "Segmentation_Fault", wasm_run_output)
+                add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", wasm_run_output)
             else:
                 add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
     except:
@@ -544,6 +550,25 @@ def parse_arguments():
 
     args = parser.parse_args()
     return args
+
+def compare_test_results(file1, file2):
+    with open(file1, 'r') as f1, open(file2, 'r') as f2:
+        main_report = json.load(f1)
+        curr_report = json.load(f2)
+    
+    new_failures = []
+    status = True
+    
+    for test_type in main_report:
+        prev_failures = set(main_report[test_type].get("failure", []))
+        curr_failures = set(curr_report[test_type].get("failure", []))
+
+        new_fails = curr_failures - prev_failures
+        if new_fails:
+            status = False
+            new_failures.extend(new_fails)
+    
+    return (status, new_failures)
 
 def main():
     args = parse_arguments()
