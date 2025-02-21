@@ -131,17 +131,15 @@ sh_test(
 py_binary(
     name = "python_tests",
     srcs = ["wasmtestreport.py"],
-    main = "wasmtestreport.py",
-    # The dependencies ensure lind and wasmtime are both built
-    #deps = [
-    #    ":make_all",
-    #    ":make_wasmtime"
-    #],
-    # This ensures the tests have acess to the folders required
+    main = "wasmtestreport.py",    
+    # This ensures the tests have acess to the folders required.
+    # The logs from the previous steps are included to ensure 
+    # the rules that create them are run.  This is a requirement
+    # to use a genrule as a dependency.
     data = [
         "tests",
          "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
          "check.log",
          "check_wasm.log"
-    ],
+    ],    
 )
