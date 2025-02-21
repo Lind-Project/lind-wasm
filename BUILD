@@ -125,3 +125,23 @@ sh_test(
          "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
     ],
 )
+
+# This build rule is to run the series of tests defined in 
+# wasmtestreport.py
+py_binary(
+    name = "python_tests",
+    srcs = ["wasmtestreport.py"],
+    main = "wasmtestreport.py",
+    # The dependencies ensure lind and wasmtime are both built
+    #deps = [
+    #    ":make_all",
+    #    ":make_wasmtime"
+    #],
+    # This ensures the tests have acess to the folders required
+    data = [
+        "tests",
+         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+         "check.log",
+         "check_wasm.log"
+    ],
+)
