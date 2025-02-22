@@ -324,7 +324,7 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
 
     // Update vmmap entries with new protection
     let mut vmmap = cage.vmmap.write();
-    // vmmap.update_protections(start_page, npages, prot);
+    vmmap.update_protections(start_page, npages, prot);
 
     0
 }

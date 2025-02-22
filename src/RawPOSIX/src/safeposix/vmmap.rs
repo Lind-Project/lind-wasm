@@ -231,6 +231,19 @@ pub trait VmmapOps {
         pages_per_map: u32,
         hint: u32,
     ) -> Option<Interval<u32>>;
+
+    /// Updates protection flags for a range of pages, handling mprotect operations
+    ///
+    /// Arguments:
+    /// - start_page: Starting page number to update
+    /// - npages: Number of pages to update
+    /// - new_prot: New protection flags to apply
+    ///
+    /// This function:
+    /// - Updates protection flags for the specified range
+    /// - Handles splitting of regions if necessary
+    /// - Maintains vmmap consistency
+    fn update_protections(&mut self, start_page: u32, npages: u32, new_prot: i32);
 }
 
 /// Represents a virtual memory map that manages memory regions and their attributes
@@ -957,5 +970,55 @@ impl VmmapOps for Vmmap {
         }
 
         None
+    }
+
+    /// Updates protection flags for a range of pages, handling mprotect operations
+    ///
+    /// Arguments:
+    /// - start_page: Starting page number to update
+    /// - npages: Number of pages to update
+    /// - new_prot: New protection flags to apply
+    ///
+    /// This function:
+    /// - Updates protection flags for the specified range
+    /// - Handles splitting of regions if necessary
+    /// - Maintains vmmap consistency
+    fn update_protections(&mut self, start_page: u32, npages: u32, new_prot: i32) {
+        // Calculate page range
+        let region_end_page = start_page + npages;
+        let region_interval = ie(start_page, region_end_page);
+
+        // Store intervals that need to be inserted after iteration
+        let mut to_insert = Vec::new();
+
+        // Iterate over overlapping entries
+        for (interval, entry) in self.entries.overlapping_mut(region_interval) {
+            let entry_start = interval.start();
+            let entry_end = interval.end();
+
+            // Case 1: Entry starts before region
+            if entry_start < start_page {
+                // Split entry and keep original protection for first part
+                let first_part = entry.clone();
+                to_insert.push((ie(entry_start, start_page), first_part));
+            }
+
+            // Case 2: Entry extends beyond region
+            if entry_end > region_end_page {
+                // Split entry and keep original protection for last part
+                let last_part = entry.clone();
+                to_insert.push((ie(region_end_page, entry_end), last_part));
+            }
+
+            // Update protection for the overlapping part
+            entry.prot = new_prot;
+        }
+
+        // Insert the split regions
+        for (interval, mut entry) in to_insert {
+            entry.page_num = interval.start();
+            entry.npages = interval.end() - interval.start();
+            let _ = self.entries.insert_overwrite(interval, entry);
+        }
     }
 }
