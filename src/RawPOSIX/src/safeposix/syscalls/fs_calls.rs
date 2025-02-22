@@ -17,6 +17,7 @@ use crate::constants::{
 
 use crate::interface;
 use crate::interface::get_errno;
+use crate::interface::shmdt_handler;
 use crate::interface::handle_errno;
 use crate::interface::FSData;
 use crate::safeposix::cage::Errno::EINVAL;
@@ -1386,7 +1387,11 @@ impl Cage {
         }
         let shmid: i32;
         let metadata = &SHM_METADATA;
-
+    
+        // Round up size to nearest page size (typically 4096 bytes)
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
+        let rounded_size = (size + page_size - 1) & !(page_size - 1);
+    
         match metadata.shmkeyidtable.entry(key) {
             interface::RustHashEntry::Occupied(occupied) => {
                 if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
@@ -1406,22 +1411,22 @@ impl Cage {
                         "tried to use a key that did not exist, and IPC_CREAT was not specified",
                     );
                 }
-
-                if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
+    
+                if (rounded_size as u32) < SHMMIN || (rounded_size as u32) > SHMMAX {
                     return syscall_error(
                         Errno::EINVAL,
                         "shmget",
                         "Size is less than SHMMIN or more than SHMMAX",
                     );
                 }
-
+    
                 shmid = metadata.new_keyid();
                 vacant.insert(shmid);
-                let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
-
+                let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag
+    
                 let segment = new_shm_segment(
                     key,
-                    size,
+                    rounded_size,  // Use the rounded size instead of original size
                     self.cageid as u32,
                     DEFAULT_UID,
                     DEFAULT_GID,
@@ -1468,8 +1473,22 @@ impl Cage {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
 
-                    segment.unmap_shm(shmaddr, self.cageid);
-
+                    // Use shmdt_handler to unmap and remove from vmmap
+                    let result = shmdt_handler(self.cageid, shmaddr, segment.size);
+                    if result < 0 {
+                        return result;
+                    }
+                    segment.shminfo.shm_nattch -= 1;
+                    segment.shminfo.shm_dtime = interface::timestamp() as isize;
+                    
+                    // Update attached cages count
+                    if let Some(mut count) = segment.attached_cages.get_mut(&self.cageid) {
+                        *count -= 1;
+                        if *count == 0 {
+                            segment.attached_cages.remove(&self.cageid);
+                        }
+                    }
+    
                     if segment.rmid && segment.shminfo.shm_nattch == 0 {
                         rm = true;
                     }

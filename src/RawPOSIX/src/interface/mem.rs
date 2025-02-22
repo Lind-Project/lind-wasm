@@ -122,6 +122,123 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
     0
 }
 
+// ... existing code ...
+
+/// Handles shared memory attach operations by finding appropriate memory space and mapping it
+///
+/// This function processes shared memory attachment requests by:
+/// 1. Finding an appropriate hole in vmmap if no address is specified
+/// 2. Validating the requested address if one is provided
+/// 3. Setting up proper protection flags based on SHM_RDONLY
+/// 4. Using mmap_handler to perform the actual mapping
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that initiated the shmat
+/// * `addr` - Requested address for attachment (can be null)
+/// * `length` - Size of the shared memory segment
+/// * `prot` - Protection flags (affected by SHM_RDONLY)
+/// * `flags` - Mapping flags
+///
+/// # Returns
+/// * `u32` - Mapped address on success, or error code on failure
+pub fn shmat_handler(cageid: u64, addr: *mut u8, length: usize, prot: i32, flags: i32) -> u32 {
+    let cage = cagetable_getref(cageid);
+    
+    // Check if address is page-aligned if provided
+    let mut useraddr = addr as u32;
+    if useraddr != 0 {
+        let rounded_addr = round_up_page(addr as u64);
+        if rounded_addr != addr as u64 {
+            return syscall_error(Errno::EINVAL, "shmat", "address not aligned") as u32;
+        }
+    }
+
+    // If no address specified or using address as hint, find appropriate space
+    if useraddr == 0 {
+        let mut vmmap = cage.vmmap.write();
+        let result = vmmap.find_map_space(round_up_page(length as u64) as u32 >> PAGESHIFT, 1);
+        
+        if result.is_none() {
+            return syscall_error(Errno::ENOMEM, "shmat", "no memory") as u32;
+        }
+        
+        let space = result.unwrap();
+        useraddr = (space.start() << PAGESHIFT) as u32;
+        drop(vmmap);
+    }
+
+    let vmmap = cage.vmmap.read();
+    let sysaddr = vmmap.user_to_sys(useraddr);
+    drop(vmmap);
+
+    // Use mmap_handler to perform the actual mapping with MAP_FIXED
+    let result = cage.mmap_syscall(
+        sysaddr as *mut u8,
+        round_up_page(length as u64) as usize,
+        prot,
+        flags | MAP_FIXED as i32,
+        -1,
+        0
+    );
+
+    if result != sysaddr {
+        panic!("MAP_FIXED not fixed in shmat");
+    }
+
+    useraddr
+}
+
+/// Handles shared memory detach operations by unmapping the memory region
+///
+/// This function processes shared memory detachment requests by:
+/// 1. Validating the address is page-aligned
+/// 2. Converting user address to system address
+/// 3. Unmapping the memory region using PROT_NONE
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that initiated the shmdt
+/// * `addr` - Address of shared memory segment to detach
+/// * `length` - Size of the shared memory segment
+///
+/// # Returns
+/// * `i32` - 0 on success, or error code on failure
+pub fn shmdt_handler(cageid: u64, addr: *mut u8, length: usize) -> i32 {
+    let cage = cagetable_getref(cageid);
+    
+    // Check if address is page-aligned
+    let rounded_addr = round_up_page(addr as u64);
+    if rounded_addr != addr as u64 {
+        return syscall_error(Errno::EINVAL, "shmdt", "address not aligned");
+    }
+
+    let vmmap = cage.vmmap.read();
+    let sysaddr = vmmap.user_to_sys(addr as u32);
+    drop(vmmap);
+
+    // Use mmap with PROT_NONE to effectively unmap the region
+    let result = cage.mmap_syscall(
+        sysaddr as *mut u8,
+        round_up_page(length as u64) as usize,
+        PROT_NONE,
+        (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+        -1,
+        0
+    );
+
+    if result != sysaddr {
+        panic!("MAP_FIXED not fixed in shmdt");
+    }
+
+    // Remove entry from vmmap
+    let mut vmmap = cage.vmmap.write();
+    vmmap.remove_entry(
+        addr as u32 >> PAGESHIFT,
+        round_up_page(length as u64) as u32 >> PAGESHIFT
+    );
+
+    0
+}
+
 /// Handles the `mmap_syscall`, interacting with the `vmmap` structure.
 ///
 /// This function processes the `mmap_syscall` by updating the `vmmap` entries and performing
