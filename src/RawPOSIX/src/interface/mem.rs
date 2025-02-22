@@ -122,8 +122,6 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
     0
 }
 
-// ... existing code ...
-
 /// Handles shared memory attach operations by finding appropriate memory space and mapping it
 ///
 /// This function processes shared memory attachment requests by:
