@@ -739,6 +739,115 @@ pub mod fs_tests {
     }
 
     #[test]
+    pub fn ut_lind_fs_mprotect_split_region() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+    
+        //Creating a regular file with `O_RDWR` flag
+        //making it valid for any mapping.
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        assert!(fd >= 0, "Failed to open file, fd: {}, errno: {}", fd, get_errno());
+        
+        // Create a large mapping (4 pages)
+        let npages = 4;
+        let page_size = 4096;
+        let total_size = npages * page_size;
+        
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+        
+        // Ensure file is large enough for mapping
+        assert_eq!(cage.ftruncate_syscall(fd, total_size as isize), 0);
+        
+        let addr = cage.mmap_syscall(
+            0 as *mut u8,
+            total_size,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE,  // Using MAP_PRIVATE
+            fd,
+            0
+        );
+        assert!(addr as i32 >= 0, "mmap failed with error: {}", addr as i32);
+    
+        // Change protection for middle two pages only
+        let middle_addr = (addr as usize + page_size) as *mut u8;
+        let result = cage.mprotect_syscall(middle_addr, 2 * page_size, PROT_READ);
+        assert_eq!(result, 0, "mprotect should succeed");
+    
+        // Verify the protections were split correctly
+        let vmmap = cage.vmmap.write();
+        
+        // First page should still be RW
+        let first_page = vmmap.find_page(addr as u32 / page_size as u32);
+        assert!(first_page.is_some(), "First page not found");
+        assert_eq!(first_page.unwrap().prot, PROT_READ | PROT_WRITE);
+        
+        // Middle pages should be read-only
+        let middle_page = vmmap.find_page((addr as u32 / page_size as u32) + 1);
+        assert!(middle_page.is_some(), "Middle page not found");
+        assert_eq!(middle_page.unwrap().prot, PROT_READ);
+        
+        // Last page should still be RW
+        let last_page = vmmap.find_page((addr as u32 / page_size as u32) + 3);
+        assert!(last_page.is_some(), "Last page not found");
+        assert_eq!(last_page.unwrap().prot, PROT_READ | PROT_WRITE);
+    
+        // Clean up
+        assert_eq!(cage.munmap_syscall(addr as *mut u8, total_size), 0);
+        assert_eq!(cage.unlink_syscall(filepath), 0);
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+    
+    #[test]
+    pub fn ut_lind_fs_mprotect_exec_denied() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+    
+        //Creating a regular file with `O_RDWR` flag
+        //making it valid for any mapping.
+        let flags: i32 = O_TRUNC | O_CREAT | O_RDWR;
+        let filepath = "/mmapTestFile1";
+        let fd = cage.open_syscall(filepath, flags, S_IRWXA);
+        assert!(fd >= 0, "Failed to open file, fd: {}, errno: {}", fd, get_errno());
+        
+        //Writing into that file's first 9 bytes.
+        assert_eq!(cage.write_syscall(fd, str2cbuf("Test text"), 9), 9);
+        
+        // Ensure file is large enough for mapping
+        let page_size = 4096;
+        assert_eq!(cage.ftruncate_syscall(fd, page_size as isize), 0);
+        
+        let addr = cage.mmap_syscall(
+            0 as *mut u8,
+            page_size,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE,  // Using MAP_PRIVATE
+            fd,
+            0
+        );
+        assert!(addr as i32 >= 0, "mmap failed with error: {}", addr as i32);
+    
+        // Try to set PROT_EXEC, should fail with EINVAL
+        let result = cage.mprotect_syscall(addr as *mut u8, page_size, PROT_EXEC);
+        assert_eq!(result, -(Errno::EINVAL as i32));
+    
+        // Clean up
+        assert_eq!(cage.munmap_syscall(addr as *mut u8, page_size), 0);
+        assert_eq!(cage.unlink_syscall(filepath), 0);
+        assert_eq!(cage.close_syscall(fd), 0);
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
     pub fn ut_lind_fs_munmap_zerolen() {
         //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
         // and also performs clean env setup
