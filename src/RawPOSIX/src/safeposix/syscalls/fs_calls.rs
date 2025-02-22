@@ -811,29 +811,56 @@ impl Cage {
     }
 
     //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
-    /* 
-    *   dup() / dup2() will return a file descriptor 
-    *   Mapping a new virtual fd and kernel fd that libc::dup returned
-    *   Then return virtual fd
-    */
-    pub fn dup_syscall(&self, virtual_fd: i32, _start_desc: Option<i32>) -> i32 {
+    /// Reference: https://man7.org/linux/man-pages/man2/dup.2.html
+    /// 
+    /// Duplicates a virtual file descriptor by translating it to a kernel FD though fdtables then 
+    /// calling kernel `dup()`, and mapping the new kernel fd back to a new virtual fd.
+    /// 
+    /// ## Arguments:
+    /// - `virtual_fd`: virtual file descriptor
+    /// 
+    /// ## Return type:
+    /// - `0` on success.
+    /// - `-1` on failure, with `errno` set appropriately.
+    pub fn dup_syscall(&self, virtual_fd: i32) -> i32 {
+        // Validate virtual fd
         if virtual_fd < 0 {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
         }
+        // Get underlying kernel fd
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
         }
         let vfd = wrappedvfd.unwrap();
+        // Call underlying kernel dup to get new file descriptor
         let ret_kernelfd = unsafe{ libc::dup(vfd.underfd as i32) };
+        if ret_kernelfd < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "dup");
+        }
+        // Map new kernel fd to a new virtual fd
         let ret_virtualfd = fdtables::get_unused_virtual_fd(self.cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
         return ret_virtualfd as i32;
         
     }
 
-    /* 
-    */
+    /// Reference: https://man7.org/linux/man-pages/man2/dup.2.html
+    /// 
+    /// `dup2` duplicates oldfd to newfd, closing newfd first if it is already open, so that both file descriptors 
+    /// refer to the same open file description. RawPOSIX utilizes underlying kernel `dup` to first get a new kernel
+    /// fd and then uses new kernel fd as kernel `dup2`'s second input argument to finish the process. After the result
+    /// succeeds from kernel, then RawPOSIX will map `new_kernelfd` with `new_virtualfd`.
+    /// 
+    /// ## Arguments:
+    /// - `old_virtualfd`: original virtual file descriptor
+    /// - `new_virtualfd`: specified new virtual file descriptor
+    /// 
+    /// ## Return type:
+    /// - `0` on success.
+    /// - `-1` on failure, with `errno` set appropriately.
     pub fn dup2_syscall(&self, old_virtualfd: i32, new_virtualfd: i32) -> i32 {
+        // Validate both virtual fds
         if old_virtualfd < 0 || new_virtualfd < 0 {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
         }
@@ -844,7 +871,11 @@ impl Cage {
                     libc::dup(old_vfd.underfd as i32)
                 };
                 // Map new kernel fd with provided kernel fd
-                let _ret_kernelfd = unsafe{ libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
+                let ret_kernelfd = unsafe{ libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
+                if ret_kernelfd < 0 {
+                    let errno = get_errno();
+                    return handle_errno(errno, "dup");
+                }
                 let _ = fdtables::get_specific_virtual_fd(self.cageid, new_virtualfd as u64, old_vfd.fdkind, new_kernelfd as u64, false, old_vfd.perfdinfo).unwrap();
                 return new_virtualfd;
             },
