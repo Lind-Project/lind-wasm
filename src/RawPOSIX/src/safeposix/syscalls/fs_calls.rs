@@ -862,7 +862,7 @@ impl Cage {
     pub fn dup2_syscall(&self, old_virtualfd: i32, new_virtualfd: i32) -> i32 {
         // Validate both virtual fds
         if old_virtualfd < 0 || new_virtualfd < 0 {
-            return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
+            return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
         }
 
         match fdtables::translate_virtual_fd(self.cageid, old_virtualfd as u64) {
@@ -874,7 +874,7 @@ impl Cage {
                 let ret_kernelfd = unsafe{ libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
                 if ret_kernelfd < 0 {
                     let errno = get_errno();
-                    return handle_errno(errno, "dup");
+                    return handle_errno(errno, "dup2");
                 }
                 let _ = fdtables::get_specific_virtual_fd(self.cageid, new_virtualfd as u64, old_vfd.fdkind, new_kernelfd as u64, false, old_vfd.perfdinfo).unwrap();
                 return new_virtualfd;
