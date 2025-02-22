@@ -397,7 +397,7 @@ fn _decrement_fdcount(entry:FDTableEntry) {
     let mytuple = (entry.fdkind, entry.underfd);
 
     let newcount:u64 = FDCOUNT.get(&mytuple).unwrap().value() - 1;
-
+    println!("[FD] entry.underfd: {:?}\nnew count: {:?}", entry.underfd, newcount);
     let intermediatech;
     let lastch;
     // Doing this to release the lock so I can call it recursively...
