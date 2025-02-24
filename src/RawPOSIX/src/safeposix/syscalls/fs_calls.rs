@@ -814,7 +814,14 @@ impl Cage {
     /// Reference: https://man7.org/linux/man-pages/man2/dup.2.html
     /// 
     /// Duplicates a virtual file descriptor by translating it to a kernel FD though fdtables then 
-    /// calling kernel `dup()`, and mapping the new kernel fd back to a new virtual fd.
+    /// calling kernel `dup()`, and mapping the new kernel fd back to a new virtual fd. 
+    /// 
+    /// In Linux, `dup` / `dup2` needs to duplicate the actual kernel file descriptor, ensuring that 
+    /// the new fd references the same underlying kernel object (e.g., a file, socket, or pipe). 
+    /// While fdtables enables virtual fd management on top of kernel fds, it does not bypass the 
+    /// kernel's role in fd duplication. Since users will perform standard fd operations on the 
+    /// duplicated fd, kernel intervention remains necessary, meaning that `dup` / `dup2` in RawPOSIX 
+    /// must still involve the kernel.
     /// 
     /// ## Arguments:
     /// - `virtual_fd`: virtual file descriptor
@@ -851,6 +858,8 @@ impl Cage {
     /// refer to the same open file description. RawPOSIX utilizes underlying kernel `dup` to first get a new kernel
     /// fd and then uses new kernel fd as kernel `dup2`'s second input argument to finish the process. After the result
     /// succeeds from kernel, then RawPOSIX will map `new_kernelfd` with `new_virtualfd`.
+    /// 
+    /// Regarding the necessity of kernel involvement for `dup2`, see the comment of `dup`
     /// 
     /// ## Arguments:
     /// - `old_virtualfd`: original virtual file descriptor
