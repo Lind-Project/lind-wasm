@@ -712,7 +712,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let real_path_str = String::from(real_path.to_str().unwrap());
 
         // if the file to exec does not exist
-        println!("");
         if !std::path::Path::new(&real_path_str).exists() {
             // return ENOENT
             return Ok(-2);
