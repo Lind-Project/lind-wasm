@@ -22,7 +22,7 @@ const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
 
-const LIND_FS_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
+const LIND_FS_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
 
 const UNWIND_METADATA_SIZE: u64 = 16;
 
@@ -644,6 +644,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                              argv: i64,
                              envs: Option<i64>
                      ) -> Result<i32> {
+        println!("execve");
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -712,6 +713,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let real_path_str = String::from(real_path.to_str().unwrap());
 
         // if the file to exec does not exist
+        println!("");
         if !std::path::Path::new(&real_path_str).exists() {
             // return ENOENT
             return Ok(-2);
