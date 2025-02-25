@@ -284,8 +284,12 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
     let cage = cagetable_getref(cageid);
 
     // PROT_EXEC is not allowed in WASM
+    // TODO: Remove this panic when we support PROT_EXEC for real user code
     if prot & PROT_EXEC > 0 {
-        return syscall_error(Errno::EINVAL, "mprotect", "PROT_EXEC is not allowed");
+        // Log the attempt through syscall_error's verbose logging
+        let _ = syscall_error(Errno::EINVAL, "mprotect", "PROT_EXEC attempt detected - this will panic in development");
+        // Panic during development for early detection of unsupported operations
+        panic!("PROT_EXEC is not currently supported in WASM");
     }
 
     // check if the provided address is multiple of pages
@@ -313,13 +317,11 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
     
     drop(vmmap);
 
-    // Perform the actual mprotect syscall
-    let result = unsafe {
-        libc::mprotect(sysaddr as *mut libc::c_void, rounded_length as usize, prot)
-    };
+    // Perform mprotect through cage implementation
+    let result = cage.mprotect_syscall(sysaddr as *mut u8, rounded_length as usize, prot);
 
     if result < 0 {
-        return -1;
+        return result;
     }
 
     // Update vmmap entries with new protection

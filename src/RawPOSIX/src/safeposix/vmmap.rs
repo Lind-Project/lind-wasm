@@ -999,25 +999,29 @@ impl VmmapOps for Vmmap {
             // Case 1: Entry starts before region
             if entry_start < start_page {
                 // Split entry and keep original protection for first part
-                let first_part = entry.clone();
+                let mut first_part = entry.clone();
+                first_part.page_num = entry_start;
+                first_part.npages = start_page - entry_start;
                 to_insert.push((ie(entry_start, start_page), first_part));
             }
 
             // Case 2: Entry extends beyond region
             if entry_end > region_end_page {
                 // Split entry and keep original protection for last part
-                let last_part = entry.clone();
+                let mut last_part = entry.clone();
+                last_part.page_num = region_end_page;
+                last_part.npages = entry_end - region_end_page;
                 to_insert.push((ie(region_end_page, entry_end), last_part));
             }
 
             // Update protection for the overlapping part
             entry.prot = new_prot;
+            entry.page_num = start_page.max(entry_start);
+            entry.npages = region_end_page.min(entry_end) - entry.page_num;
         }
 
         // Insert the split regions
-        for (interval, mut entry) in to_insert {
-            entry.page_num = interval.start();
-            entry.npages = interval.end() - interval.start();
+        for (interval, entry) in to_insert {
             let _ = self.entries.insert_overwrite(interval, entry);
         }
     }
