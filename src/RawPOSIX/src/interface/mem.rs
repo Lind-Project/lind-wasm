@@ -165,13 +165,9 @@ pub fn shmat_handler(cageid: u64, addr: *mut u8, length: usize, prot: i32, flags
         drop(vmmap);
     }
 
-    let vmmap = cage.vmmap.read();
-    let sysaddr = vmmap.user_to_sys(useraddr);
-    drop(vmmap);
-
     // Use mmap_handler to perform the actual mapping with MAP_FIXED
     let result = cage.mmap_syscall(
-        sysaddr as *mut u8,
+        useraddr as *mut u8,
         round_up_page(length as u64) as usize,
         prot,
         flags | MAP_FIXED as i32,
@@ -179,7 +175,7 @@ pub fn shmat_handler(cageid: u64, addr: *mut u8, length: usize, prot: i32, flags
         0
     );
 
-    if result != sysaddr {
+    if result != useraddr as usize {
         panic!("MAP_FIXED not fixed in shmat");
     }
 

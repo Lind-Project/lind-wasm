@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-use std::fs;
-
 // Add constants imports
 use crate::constants::{
     S_IRWXU, S_IRWXG, S_IRWXO,
@@ -15,27 +13,26 @@ use crate::constants::{
     LIND_ROOT
 };
 
-use crate::interface;
-use crate::interface::get_errno;
-use crate::interface::shmdt_handler;
-use crate::interface::handle_errno;
-use crate::interface::FSData;
-use crate::safeposix::cage::Errno::EINVAL;
-use crate::safeposix::cage::*;
-use crate::safeposix::filesystem::convpath;
-use crate::safeposix::filesystem::normpath;
-use crate::safeposix::shm::*;
-use crate::interface::ShmidsStruct;
-use crate::interface::StatData;
+use crate::interface::{
+    self, get_errno, shmdt_handler, handle_errno, FSData,
+    ShmidsStruct, StatData, round_up_page
+};
+
+use crate::safeposix::{
+    cage::{Errno::EINVAL, *},
+    filesystem::{convpath, normpath},
+    shm::*
+};
 
 use libc::*;
-use std::io::stdout;
-use std::os::unix::io::RawFd;
-use std::io::{self, Write};
-use std::ffi::CStr;
-use std::ffi::CString;
-use std::ptr;
-use std::mem;
+use std::{
+    fs,
+    io::{self, stdout, Write},
+    ffi::{CStr, CString},
+    mem,
+    os::unix::io::RawFd,
+    ptr
+};
 
 use crate::fdtables;
 use crate::safeposix::cage::Cage;
@@ -1380,7 +1377,21 @@ impl Cage {
     }
 
     //------------------SHMGET SYSCALL------------------
-
+    /*
+     * shmget() creates or accesses a System V shared memory segment.
+     * Reference: https://man7.org/linux/man-pages/man2/shmget.2.html
+     *
+     * - Uses a global SHM_METADATA to track shared memory segments and key-to-id mappings
+     * - Rounds up size to nearest page size for memory alignment
+     * - Does not support IPC_PRIVATE key (returns ENOENT)
+     * - Maintains a mapping between keys and shmids in shmkeyidtable
+     * - Creates new segments with default UID/GID rather than using current process credentials
+     *
+     * Differences from Linux:
+     * - IPC_PRIVATE not implemented (Linux allows IPC_PRIVATE for private segments)
+     * - Simplified permissions model using default UID/GID
+     * - Size rounding handled explicitly rather than by kernel
+     */
     pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 {
         if key == IPC_PRIVATE {
             return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
@@ -1388,9 +1399,8 @@ impl Cage {
         let shmid: i32;
         let metadata = &SHM_METADATA;
     
-        // Round up size to nearest page size (typically 4096 bytes)
-        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
-        let rounded_size = (size + page_size - 1) & !(page_size - 1);
+        // Round up size to nearest page size using round_up_page function
+        let rounded_size = round_up_page(size as u64) as usize;
     
         match metadata.shmkeyidtable.entry(key) {
             interface::RustHashEntry::Occupied(occupied) => {
@@ -1439,7 +1449,20 @@ impl Cage {
     }
 
     //------------------SHMAT SYSCALL------------------
-
+    /*
+     * shmat() attaches a System V shared memory segment to the address space of the calling process.
+     * Reference: https://man7.org/linux/man-pages/man2/shmat.2.html
+     *
+     * - Uses shmat_handler() to find appropriate memory space and perform mapping
+     * - Maintains a reverse mapping (rev_shm) to track attached segments by address
+     * - Supports read-only attachment via SHM_RDONLY flag
+     * - Updates segment metadata to track attachments
+     *
+     * Differences from Linux:
+     * - Simplified address selection when shmaddr is NULL
+     * - Does not support SHM_REMAP or SHM_EXEC flags
+     * - Memory mapping done through vmmap abstraction rather than direct syscalls
+     */
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32) -> i32 {
         let metadata = &SHM_METADATA;
         let prot: i32;
@@ -1460,7 +1483,20 @@ impl Cage {
     }
 
     //------------------SHMDT SYSCALL------------------
-
+    /*
+     * shmdt() detaches a System V shared memory segment from the address space of the calling process.
+     * Reference: http://man7.org/linux/man-pages/man3/shmdt.3p.html
+     *
+     * - Uses shmdt_handler() to unmap memory and update vmmap
+     * - Maintains reverse mapping cleanup in rev_shm
+     * - Handles segment cleanup when last attachment is removed and segment is marked for deletion
+     * - Updates per-cage attachment tracking
+     *
+     * Differences from Linux:
+     * - Returns shmid on success (non-POSIX behavior required by NaCl) instead of 0
+     * - Memory unmapping done through vmmap abstraction rather than direct syscalls
+     * - More explicit tracking of attached cages for multi-process support
+     */
     pub fn shmdt_syscall(&self, shmaddr: *mut u8) -> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
@@ -1473,18 +1509,25 @@ impl Cage {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
 
-                    // Use shmdt_handler to unmap and remove from vmmap
+                    // Call shmdt_handler to:
+                    // 1. Unmap the shared memory region by setting it to PROT_NONE
+                    // 2. Update the vmmap entries to remove the mapping
+                    // 3. Handle address translation from user to system space
                     let result = shmdt_handler(self.cageid, shmaddr, segment.size);
                     if result < 0 {
                         return result;
                     }
+
+                    // Update segment metadata to reflect detachment
                     segment.shminfo.shm_nattch -= 1;
                     segment.shminfo.shm_dtime = interface::timestamp() as isize;
                     
-                    // Update attached cages count
+                    // Update per-cage attachment tracking
+                    // Each cage maintains a count of how many times it has attached this segment
                     if let Some(mut count) = segment.attached_cages.get_mut(&self.cageid) {
                         *count -= 1;
                         if *count == 0 {
+                            // Remove cage entry when no more attachments exist
                             segment.attached_cages.remove(&self.cageid);
                         }
                     }
@@ -1500,7 +1543,7 @@ impl Cage {
                         metadata.shmkeyidtable.remove(&key);
                     }
 
-                    return shmid; //NaCl relies on this non-posix behavior of returning the shmid on success
+                    return shmid as i32;
                 }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");

@@ -775,7 +775,8 @@ pub fn lind_syscall_api(
 
         SHMAT_SYSCALL => {
             let shmid = arg1 as i32;
-            let shmaddr = arg2 as *mut u8; // No need to translate - shmat_handler will handle address translation
+            let cage = interface::cagetable_getref(cageid);
+            let shmaddr = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             let shmflg = arg3 as i32;
             
             // Get reference to global shared memory metadata
