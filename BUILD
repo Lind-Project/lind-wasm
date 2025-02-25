@@ -138,11 +138,36 @@ py_binary(
     # to use a genrule as a dependency.
     data = [
         "tests",
-        'src/RawPOSIX',
-        'src/wasmtime',
-         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+         #"clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
          "lindtool.sh",
          "check.log",
-         "check_wasm.log"
-    ],    
+         "check_wasm.log",
+         ":rawposix_files",
+         ":wasmtime_files",
+         ":all_files",
+         ":clang_files",
+    ],   
+)
+
+# FileGroup for src/RawPOSIX files
+filegroup(
+    name = "rawposix_files",
+    srcs = glob(["src/RawPOSIX/**"]),
+)
+
+# FileGroup for src/wasmtime files
+filegroup(
+    name = "wasmtime_files",
+    srcs = glob(["src/wasmtime/**"]),
+)
+
+# FileGroup for clang files
+filegroup(
+    name = "clang_files",
+    srcs = glob(["clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/**/*"])
+)       
+# FileGroup for src files
+filegroup(
+    name="all_files",
+    srcs = glob(["**/*"]),
 )
