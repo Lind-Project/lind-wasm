@@ -132,15 +132,65 @@ py_binary(
     name = "python_tests",
     srcs = ["wasmtestreport.py"],
     main = "wasmtestreport.py",    
-    # This ensures the tests have acess to the folders required.
+    # This ensures the tests have access to the folders required.
     # The logs from the previous steps are included to ensure 
     # the rules that create them are run.  This is a requirement
     # to use a genrule as a dependency.
     data = [
         "tests",
-         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
-         "lindtool.sh",
-         "check.log",
-         "check_wasm.log"
+        "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+        "lindtool.sh",
+        "check.log",
+        "check_wasm.log",
+
+        # Include paths that lindtool.sh needs:
+        "//:glibc_base",
+        "//:wasmtime_base", 
+        "//:librustposix_so",  
+        "//:wasmtime_executable",         
+        "//:clang_executable",  
+        "//:wasm_opt",
     ],    
+)
+
+filegroup(
+    name = "glibc_base",
+    srcs = [
+        "src/glibc",
+    ],
+)
+
+filegroup(
+    name = "wasmtime_base",
+    srcs = [
+        "src/wasmtime",
+    ],
+)
+
+filegroup(
+    name = "librustposix_so",
+    srcs = [
+        "src/glibc/librustposix.so",
+    ],
+)
+
+filegroup(
+    name = "clang_executable",
+    srcs = [
+        "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang", 
+    ],
+)
+
+filegroup(
+    name = "wasm_opt",
+    srcs = [
+        "src/wasmtime/target/debug/wasmtime",
+    ],
+)
+
+filegroup(
+    name = "wasmtime_executable",
+    srcs = [
+        "src/wasmtime/target/debug/wasmtime",
+    ],
 )
