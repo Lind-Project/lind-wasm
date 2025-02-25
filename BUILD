@@ -138,59 +138,11 @@ py_binary(
     # to use a genrule as a dependency.
     data = [
         "tests",
-        "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
-        "lindtool.sh",
-        "check.log",
-        "check_wasm.log",
-
-        # Include paths that lindtool.sh needs:
-        "//:glibc_base",
-        "//:wasmtime_base", 
-        "//:librustposix_so",  
-        "//:wasmtime_executable",         
-        "//:clang_executable",  
-        "//:wasm_opt",
+        'src/RawPOSIX',
+        'src/wasmtime',
+         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+         "lindtool.sh",
+         "check.log",
+         "check_wasm.log"
     ],    
-)
-
-filegroup(
-    name = "glibc_base",
-    srcs = [
-        "src/glibc",
-    ],
-)
-
-filegroup(
-    name = "wasmtime_base",
-    srcs = [
-        "src/wasmtime",
-    ],
-)
-
-filegroup(
-    name = "librustposix_so",
-    srcs = [
-        "src/glibc/librustposix.so",
-    ],
-)
-
-filegroup(
-    name = "clang_executable",
-    srcs = [
-        "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang", 
-    ],
-)
-
-filegroup(
-    name = "wasm_opt",
-    srcs = [
-        "src/wasmtime/target/debug/wasmtime",
-    ],
-)
-
-filegroup(
-    name = "wasmtime_executable",
-    srcs = [
-        "src/wasmtime/target/debug/wasmtime",
-    ],
 )
