@@ -139,6 +139,7 @@ py_binary(
     data = [
         "tests",
          "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+         "lindtool.sh",
          "check.log",
          "check_wasm.log"
     ],    
