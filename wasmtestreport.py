@@ -622,6 +622,7 @@ def compare_test_results(file1, file2):
     return (status, new_failures)
 
 def main():
+    os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
     run_folders = args.run
@@ -705,7 +706,7 @@ def main():
             out.write(report_html)
         print(f"'{output_html_file}' generated.")
 
-    print(f"'{output_file}' generated.")
+    print(f"'{os.path.abspath(output_file)}' generated.")
 
 if __name__ == "__main__":
     main()
