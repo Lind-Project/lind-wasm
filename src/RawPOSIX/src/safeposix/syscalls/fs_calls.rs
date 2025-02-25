@@ -1030,7 +1030,7 @@ impl Cage {
             match fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64) {
                 Ok(kernel_fd) => {
                     let ret = unsafe {
-                        (libc::mmap(addr as *mut c_void, len, prot, flags, kernel_fd.underfd as i32, off) as i64)
+                        libc::mmap(addr as *mut c_void, len, prot, flags, kernel_fd.underfd as i32, off) as i64
                     };
 
                     // Check if mmap failed and return the appropriate error if so
@@ -1071,6 +1071,23 @@ impl Cage {
         if ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "munmap");
+        }
+        ret
+    }
+
+    //------------------------------------MPROTECT SYSCALL------------------------------------
+    /*
+    *   mprotect() changes protection for memory pages
+    *   Returns 0 on success, -1 on failure
+    *   Manual page: https://man7.org/linux/man-pages/man2/mprotect.2.html
+    */
+    pub fn mprotect_syscall(&self, addr: *mut u8, len: usize, prot: i32) -> i32 {
+        let ret = unsafe {
+            libc::mprotect(addr as *mut c_void, len, prot)
+        };
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "mprotect");
         }
         ret
     }
