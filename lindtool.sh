@@ -1,20 +1,24 @@
 #!/bin/bash
+LIND_WASM_DEFAULT_BASE=/home/lind-wasm
+LIND_WASM_BASE="${LIND_WASM_BASE:-/home/lind-wasm}"
 
-glibc_base="$PWD/src/glibc"
-wasmtime_base="$PWD/src/wasmtime"
-rustposix_base="$PWD/src/safeposix-rust"
-rawposix_base="$PWD/src/RawPOSIX"
+glibc_base="$LIND_WASM_BASE/src/glibc"
+wasmtime_base="$LIND_WASM_BASE/src/wasmtime"
+rustposix_base="$LIND_WASM_BASE/src/safeposix-rust"
+rawposix_base="$LIND_WASM_BASE/src/RawPOSIX"
+
+wasm_opt_base="$LIND_WASM_BASE/tools/binaryen/bin/wasm-opt"
 
 CC="${CLANG:=/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
 
 export_cmd="export LD_LIBRARY_PATH=$wasmtime_base/crates/rustposix:\$LD_LIBRARY_PATH"
 
-compile_test_cmd_fork="$CC --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
+compile_test_cmd_fork="$CC --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && $wasm_opt_base --epoch-injection --asyncify --debuginfo [output] -o [output]"
 compile_test_cmd_noshared="$CC --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output]"
 compile_test_cmd="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export=__stack_low [input] -g -O0 -o [output]"
 precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output]"
 
-compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
+compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && $wasm_opt_base --epoch-injection --asyncify --debuginfo [output] -o [output]"
 
 run_cmd="$wasmtime_base/target/debug/wasmtime run --wasi threads=y --wasi preview2=n [target]"
 run_cmd_precompile="$wasmtime_base/target/debug/wasmtime run --allow-precompiled --wasi threads=y --wasi preview2=n [target]"
@@ -23,6 +27,8 @@ run_cmd_debug="gdb --args $wasmtime_base/target/debug/wasmtime run -D debug-info
 compile_wasmtime_cmd="cd $wasmtime_base && cargo build"
 compile_rustposix_cmd="cd $rustposix_base && cargo build && cp $rustposix_base/target/debug/librustposix.so $wasmtime_base/crates/rustposix"
 compile_rawposix_cmd="cd $rawposix_base && cargo build && cp $rawposix_base/target/debug/librustposix.so $wasmtime_base/crates/rustposix"
+
+compile_binaryen_cmd="cd $binaryen_base && cmake . && make"
 
 compile_pthread_create="$CC --target=wasm32-unkown-wasi -v -Wno-int-conversion pthread_create.c -c -std=gnu11 -fgnu89-inline  -matomics -mbulk-memory -O0 -g -Wall -Wwrite-strings -Wundef -fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common -Wp,-U_FORTIFY_SOURCE -Wstrict-prototypes -Wold-style-definition -fmath-errno    -fPIE     -ftls-model=local-exec     -I../include -I$glibc_base/build/nptl  -I$glibc_base/build  -I../sysdeps/lind  -I../lind_syscall  -I../sysdeps/unix/sysv/linux/i386/i686  -I../sysdeps/unix/sysv/linux/i386  -I../sysdeps/unix/sysv/linux/x86/include -I../sysdeps/unix/sysv/linux/x86  -I../sysdeps/x86/nptl  -I../sysdeps/i386/nptl  -I../sysdeps/unix/sysv/linux/include -I../sysdeps/unix/sysv/linux  -I../sysdeps/nptl  -I../sysdeps/pthread  -I../sysdeps/gnu  -I../sysdeps/unix/inet  -I../sysdeps/unix/sysv  -I../sysdeps/unix/i386  -I../sysdeps/unix  -I../sysdeps/posix  -I../sysdeps/i386/fpu  -I../sysdeps/x86/fpu  -I../sysdeps/i386  -I../sysdeps/x86/include -I../sysdeps/x86  -I../sysdeps/wordsize-32  -I../sysdeps/ieee754/float128  -I../sysdeps/ieee754/ldbl-96/include -I../sysdeps/ieee754/ldbl-96  -I../sysdeps/ieee754/dbl-64  -I../sysdeps/ieee754/flt-32  -I../sysdeps/ieee754  -I../sysdeps/generic  -I.. -I../libio -I. -nostdinc -isystem $CLANG/lib/clang/16/include -isystem /usr/i686-linux-gnu/include -D_LIBC_REENTRANT -include $glibc_base/build/libc-modules.h -DMODULE_NAME=libc -include ../include/libc-symbols.h  -DPIC     -DTOP_NAMESPACE=glibc -o $glibc_base/build/nptl/pthread_create.o -MD -MP -MF $glibc_base/build/nptl/pthread_create.o.dt -MT $glibc_base/build/nptl/pthread_create.o"
 compile_wasi_thread_start="$CC --target=wasm32-wasi-threads -matomics -o $glibc_base/build/csu/wasi_thread_start.o -c $glibc_base/csu/wasm32/wasi_thread_start.s"
@@ -195,6 +201,12 @@ case $1 in
         echo -e "${GREEN}$compile_wasmtime_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
             eval "$compile_wasmtime_cmd"
+        fi
+        ;;
+    compile_binaryen|cpopt)
+        echo -e "${GREEN}$compile_binaryen_cmd${RESET}"
+        if [ "$pmode" -eq 0 ]; then
+            eval "$compile_binaryen_cmd"
         fi
         ;;
     compile_rustposix|cpposix)
