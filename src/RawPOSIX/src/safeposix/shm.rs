@@ -2,12 +2,11 @@
 #![allow(dead_code)]
 
 use crate::constants::{
-    PROT_NONE, PROT_READ, PROT_WRITE,
-    MAP_SHARED, MAP_PRIVATE, MAP_FIXED, MAP_ANONYMOUS,
-    SHM_RDONLY, SHM_DEST,
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE, SHM_DEST, SHM_RDONLY
 };
 
-use crate::interface;
+use crate::interface::{self, syscall_error, Errno};
+use crate::safeposix::cage::{MemoryBackingType, VmmapOps};
 
 use libc::*;
 
@@ -91,21 +90,63 @@ impl ShmSegment {
                 vacant.insert(1);
             }
         };
-        interface::libc_mmap(
-            shmaddr,
-            self.size as usize,
+        // println!("shmaddr: {:?}, size: {:?}", shmaddr, self.size);
+        let rounded_length = interface::round_up_page(self.size as u64);
+
+        let mut useraddr = shmaddr as u32;
+        let cage = interface::cagetable_getref(cageid);
+        let mut vmmap = cage.vmmap.write();
+        let result;
+        // pick an address of appropriate size, anywhere
+        if useraddr == 0 {
+            result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
+        } else {
+            // use address user provided as hint to find address
+            result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, useraddr as u32);
+        }
+
+        // did not find desired memory region
+        if result.is_none() {
+            return syscall_error(Errno::ENOMEM, "shm", "no memory") as i32;
+        }
+
+        let space = result.unwrap();
+        useraddr = (space.start() << PAGESHIFT) as u32;
+        // println!("useraddr: {:?}, len: {}, prot: {}", useraddr as *mut u8, rounded_length, prot);
+
+        let sysaddr = vmmap.user_to_sys(useraddr);
+        // println!("sysaddr: {:?}", sysaddr as *mut u8);
+
+        let result = cage.mmap_syscall(sysaddr as *mut u8, rounded_length as usize, prot, (MAP_SHARED as i32) | (MAP_FIXED as i32) | (MAP_ANONYMOUS as i32), -1, 0);
+        // println!("result raw: {}({:?})", result as i64, result as *mut u8);
+        // unsafe {
+        //     *(result as *mut u64) = 10;
+        // }
+
+        let result = vmmap.sys_to_user(result);
+        // println!("result: {:?}", result as *mut u8);
+
+        let _ = vmmap.add_entry_with_overwrite(useraddr >> PAGESHIFT,
+            (rounded_length >> PAGESHIFT) as u32,
             prot,
+            PROT_READ | PROT_WRITE,
             (MAP_SHARED as i32) | (MAP_FIXED as i32),
-            fobjfdno,
+            MemoryBackingType::SharedMemory(0),
             0,
-        )
+            0,
+            cageid);
+
+        return result as i32;
     }
 
     // unmap shared segment, decrease attachments
     // decrease references within attached cages map
     pub fn unmap_shm(&mut self, shmaddr: *mut u8, cageid: u64) {
+        let cage = interface::cagetable_getref(cageid);
+        let vmmap = cage.vmmap.read();
+        let sysaddr = vmmap.user_to_sys(shmaddr as u32);
         interface::libc_mmap(
-            shmaddr,
+            sysaddr as *mut u8,
             self.size as usize,
             PROT_NONE,
             (MAP_PRIVATE as i32) | (MAP_ANONYMOUS as i32) | (MAP_FIXED as i32),

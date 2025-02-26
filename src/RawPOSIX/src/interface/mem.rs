@@ -48,6 +48,7 @@ pub fn round_up_page(length: u64) -> u64 {
 pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
     // iterate through each vmmap entry
     for (_interval, entry) in parent_vmmap.entries.iter() {
+        // println!("fork_vmmap: {:?}", entry);
         // translate page number to user address
         let addr_st = (entry.page_num << PAGESHIFT) as u32;
         let addr_len = (entry.npages << PAGESHIFT) as usize;
@@ -74,6 +75,7 @@ pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
             };
         }
     }
+    // println!("fork_vmmap done");
 }
 
 /// Handler of the `munmap_syscall`, interacting with the `vmmap` structure.
@@ -339,7 +341,10 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
     }
 
     // update vmmap entry
+    // println!("before brk update, vmmap: {:?}", vmmap);
+    vmmap.remove_entry(0, old_brk_page);
     vmmap.add_entry_with_overwrite(0, brk_page, heap.prot, heap.maxprot, heap.flags, heap.backing, heap.file_offset, heap.file_size, heap.cage_id);
+    // println!("after brk update, vmmap: {:?}", vmmap);
     
     let old_heap_end_usr = (old_brk_page * PAGESIZE) as u32;
     let old_heap_end_sys = vmmap.user_to_sys(old_heap_end_usr)as *mut u8;

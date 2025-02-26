@@ -5,12 +5,12 @@ use crate::constants::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX
 };
 
-use crate::interface::{self, lind_send_signal};
+use crate::interface::{self, convert_signal_mask, lind_send_signal};
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
 use crate::safeposix::shm::*;
 
-use crate::fdtables;
+use crate::fdtables::{self, FDTABLE};
 
 use libc::*;
 
@@ -18,6 +18,8 @@ use std::io::Write;
 use std::io;
 
 use std::sync::Arc as RustRfc;
+
+use super::kernel_close;
 
 impl Cage {
     fn unmap_shm_mappings(&self) {
@@ -150,7 +152,6 @@ impl Cage {
                 self.sigset.load(interface::RustAtomicOrdering::Relaxed),
             ),
             pending_signals: interface::RustLock::new(vec![]),
-            signal_triggerable: interface::RustAtomicBool::new(true),
             epoch_handler: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
@@ -184,11 +185,26 @@ impl Cage {
     */
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         // Empty fd with flag should_cloexec 
+        // let table = FDTABLE.get(&self.cageid).unwrap();
+        // for (index, entry) in table.iter().enumerate() {
+        //     if entry.is_some() {
+        //         let fd = entry.unwrap();
+        //         println!("{}: {}", index, fd.underfd);
+        //     }
+        // }
+        // drop(table);
         fdtables::empty_fds_for_exec(self.cageid);
+        // let table = FDTABLE.get(&self.cageid).unwrap();
+        // for (index, entry) in table.iter().enumerate() {
+        //     if entry.is_some() {
+        //         let fd = entry.unwrap();
+        //         println!("{}: {}", index, fd.underfd);
+        //     }
+        // }
         // Add the new one to fdtable
-        let _ = fdtables::copy_fdtable_for_cage(self.cageid, child_cageid);
+        // let _ = fdtables::copy_fdtable_for_cage(self.cageid, child_cageid);
         // Delete the original one
-        let _newfdtable = fdtables::remove_cage_from_fdtable(self.cageid);
+        // let _newfdtable = fdtables::remove_cage_from_fdtable(self.cageid);
 
         interface::cagetable_remove(self.cageid);
 
@@ -220,7 +236,6 @@ impl Cage {
             pending_signals: interface::RustLock::new(
                 self.pending_signals.read().clone(),
             ),
-            signal_triggerable: interface::RustAtomicBool::new(true),
             epoch_handler: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
@@ -235,9 +250,25 @@ impl Cage {
     }
 
     pub fn exit_syscall(&self, status: i32) -> i32 {
+        // println!("cage {} exit", self.cageid);
         //flush anything left in stdout
         interface::flush_stdout();
         self.unmap_shm_mappings();
+
+        // let table = FDTABLE.get(&self.cageid).unwrap();
+        // for (index, entry) in table.iter().enumerate() {
+        //     if entry.is_some() {
+        //         let fd = entry.unwrap();
+        //         println!("{}: {}", index, fd.underfd);
+        //         // if fd.underfd == 13 && self.cageid == 2 {
+        //         //     kernel_close(fd, 0);
+        //         // }
+        //     }
+        // }
+        // if self.cageid == 2 {
+        //     // self.close_syscall(1);
+        // }
+        // drop(table);
 
         let _ = fdtables::remove_cage_from_fdtable(self.cageid);
 
@@ -270,6 +301,7 @@ impl Cage {
             }
         }
 
+        // println!("cage {} exit done", self.cageid);
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
     }
@@ -283,6 +315,7 @@ impl Cage {
     *   zombie list and retrieve the first entry from it (first in, first out).
     */
     pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
+        println!("waitpid wait for {}", cageid);
         let mut zombies = self.zombies.write();
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
 
@@ -345,6 +378,7 @@ impl Cage {
 
                 // now we have verified that the cage exists and is the child of the cage
                 loop {
+                    // println!("zombie: {:?}", zombies);
                     // the cage is not in the zombie list
                     // we need to wait for the cage to actually exit
 
@@ -395,7 +429,7 @@ impl Cage {
         if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getgid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
-            return -1;
+            return DEFAULT_GID as i32;
         }
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
@@ -403,7 +437,7 @@ impl Cage {
         if self.getegid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getegid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
-            return -1;
+            return DEFAULT_GID as i32;
         }
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
@@ -412,7 +446,7 @@ impl Cage {
         if self.getuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
-            return -1;
+            return DEFAULT_UID as i32;
         }
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
@@ -420,7 +454,7 @@ impl Cage {
         if self.geteuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.geteuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
-            return -1;
+            return DEFAULT_UID as i32;
         }
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
@@ -431,7 +465,6 @@ impl Cage {
         act: Option<&interface::SigactionStruct>,
         oact: Option<&mut interface::SigactionStruct>,
     ) -> i32 {
-        // println!("sig: {}, sigaction: {:?}", sig, act);
         if let Some(some_oact) = oact {
             let old_sigactionstruct = self.signalhandler.get(&sig);
 
@@ -443,7 +476,6 @@ impl Cage {
         }
 
         if let Some(some_act) = act {
-            // println!("sigaction: sa_handler: {}", some_act.sa_handler);
             if sig == SIGKILL as i32 || sig == SIGSTOP as i32 {
                 // Disallow changing the action for SIGKILL and SIGSTOP
                 return syscall_error(
@@ -460,6 +492,7 @@ impl Cage {
     }
 
     pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
+        println!("kill cage {} on signal {}", cage_id, sig);
         if (cage_id < 0) || (cage_id >= interface::MAXCAGEID) {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid cage id.");
         }
@@ -506,20 +539,25 @@ impl Cage {
                     // Unblock signals in set
                     let newset = curr_sigset & !*some_set;
                     self.sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
-                    // send pending signals
-                    // TODO: check if the signal is set here is more efficient
-                    // if self.signal_triggerable.load(interface::RustAtomicOrdering::SeqCst) {
-                        // interface::signal_epoch_trigger(self.cageid);
-                    // }
-                    // let pending_signals = self.pending_signals.read();
-                    // pending_signals.contains()
-                    interface::signal_epoch_trigger(self.cageid);
+                    // check if any of the unblocked signals are in the pending signal list
+                    // and trigger the epoch if it has
+                    let pending_signals = self.pending_signals.read();
+                    if pending_signals.iter().any(|signo| (*some_set & convert_signal_mask(*signo)) != 0) {
+                        interface::signal_epoch_trigger(self.cageid);
+                    }
                     0
                 }
                 SIG_SETMASK => {
                     let pending_signals = self.pending_signals.read();
-                    let unblocked_signals = (curr_sigset ^ *some_set) & !curr_sigset;
-                    if pending_signals.iter().any(|signo| unblocked_signals & (1 << (signo - 1)) != 0) {
+                    // find all signals switched from blocking to nonblocking
+                    // 1. perform a xor operation to find signals that switched state
+                    // all the signal masks changed from 0 to 1, or 1 to 0 are filtered in this step
+                    // 2. perform an and operation to the old sigset, this further filtered masks and only
+                    // left masks changed from 1 to 0
+                    let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+                    // check if any of the unblocked signals are in the pending signal list
+                    // and trigger the epoch if it has
+                    if pending_signals.iter().any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0) {
                         interface::signal_epoch_trigger(self.cageid);
                     }
                     // Set sigset to set

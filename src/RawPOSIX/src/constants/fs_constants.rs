@@ -2,7 +2,7 @@
 #![allow(unused_variables)]
 
 // Root directory for Lind filesystem
-pub const LIND_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
+pub const LIND_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
 
 // ===== Standard File Descriptors =====
 pub const STDIN_FILENO: i32 = 0;    // File descriptor for standard input

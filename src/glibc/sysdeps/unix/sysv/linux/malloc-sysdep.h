@@ -56,4 +56,4 @@ check_may_shrink_heap (void)
   return may_shrink_heap;
 }
 
-#define HAVE_MREMAP 1
+#define HAVE_MREMAP 0

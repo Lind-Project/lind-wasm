@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use rawposix::interface::signal_check_trigger;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_multi_process::{get_memory_base, LindHost, clone_constants::CloneArgStruct};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -43,6 +42,7 @@ impl LindCommonCtx {
         match call_number as i32 {
             // clone syscall
             171 => {
+                // println!("clone syscall");
                 let clone_args = unsafe { &mut *((arg1 + start_address) as *mut CloneArgStruct) };
                 clone_args.child_tid += start_address;
                 wasmtime_lind_multi_process::clone_syscall(caller, clone_args)
@@ -165,14 +165,82 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
         },
     )?;
 
+    // epoch callback function
     linker.func_wrap(
         "wasi_snapshot_preview1",
         "epoch_callback",
         move |mut caller: Caller<'_, T>| {
-            // panic!("epoch callback!!!");
             wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
         },
     )?;
+
+    linker.func_wrap(
+        "debug",
+        "libc_assert_fail",
+        move |mut caller: Caller<'_, T>, assertion: i32, file: i32, line: i32, function: i32| {
+            let mem_base = get_memory_base(&caller);
+            let assertion = rawposix::interface::get_cstr(mem_base + assertion as u64).unwrap();
+            let file = rawposix::interface::get_cstr(mem_base + file as u64).unwrap();
+            let function = rawposix::interface::get_cstr(mem_base + function as u64).unwrap();
+            println!("Fatal glibc error: {}:{} ({}): assertion failed: {}\n", assertion, file, line, function);
+        },
+    )?;
+
+    linker.func_wrap(
+        "debug",
+        "malloc_printerr",
+        move |mut caller: Caller<'_, T>, msg: i32| {
+            let mem_base = get_memory_base(&caller);
+            let msg = rawposix::interface::get_cstr(mem_base + msg as u64).unwrap();
+            println!("malloc_printerr: {}", msg);
+        },
+    )?;
+
+    // linker.func_wrap(
+    //     "debug",
+    //     "debug",
+    //     move |mut caller: Caller<'_, T>, val: i32| -> i32 {
+    //         let mem_base = get_memory_base(&caller);
+    //         unsafe {
+    //             println!("inside debug: val: {}, addr: {}", val, *((33883296 + mem_base) as *mut u32));
+    //         }
+
+    //         return val;
+    //     },
+    // )?;
+
+    linker.func_wrap(
+        "debug",
+        "debug-print-1",
+        move |mut caller: Caller<'_, T>, str1: i32, str2: i32| -> i32 {
+            let mem_base = get_memory_base(&caller);
+            let str1_ptr = mem_base + str1 as u64;
+            let str2_ptr = mem_base + str2 as u64;
+            println!("copy dir from {} to {}", rawposix::interface::get_cstr(str1_ptr).unwrap(), rawposix::interface::get_cstr(str2_ptr).unwrap());
+
+            return 0;
+        },
+    )?;
+
+    linker.func_wrap(
+        "debug",
+        "debug-print-2",
+        move |mut caller: Caller<'_, T>, str1: i32, val1: i32, val2: i32, val3: i32| -> i32 {
+            let mem_base = get_memory_base(&caller);
+            let str1_ptr = mem_base + str1 as u64;
+            println!("process file: {}, st_mode: {}, isreg: {}, val3: {}", rawposix::interface::get_cstr(str1_ptr).unwrap(), val1, val2, val3);
+
+            return 0;
+        },
+    )?;
+
+    // linker.func_wrap(
+    //     "debug",
+    //     "debug",
+    //     move |mut caller: Caller<'_, T>, val: i32| {
+    //         println!("debug val: {}", val);
+    //     },
+    // )?;
 
     Ok(())
 }

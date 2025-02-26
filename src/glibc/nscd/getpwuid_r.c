@@ -15,6 +15,7 @@
    along with this program; if not, see <https://www.gnu.org/licenses/>.  */
 
 #include <pwd.h>
+#include <stdlib.h>
 
 
 #define LOOKUP_TYPE	struct passwd
@@ -27,4 +28,23 @@
 /* We are nscd, so we don't want to be talking to ourselves.  */
 #undef	USE_NSCD
 
-#include <nss/getXXbyYY_r.c>
+// #include <nss/getXXbyYY_r.c>
+
+int
+getpwuid_r (uid_t uid, struct passwd *resbuf, char *buffer,
+   size_t buflen, struct passwd **result)
+{
+   if(uid != 1000) return -1;
+
+   resbuf->pw_name = "lind";
+   resbuf->pw_passwd = "";
+   resbuf->pw_uid = 1000;
+   resbuf->pw_gid = 1000;
+   resbuf->pw_gecos = "lind";
+   resbuf->pw_dir = "/home";
+   resbuf->pw_shell = "/bin/sh";
+
+   result = &resbuf;
+
+   return 0;
+}

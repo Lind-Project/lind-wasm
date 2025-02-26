@@ -942,6 +942,13 @@ impl Instance {
         let src_mem = self.get_memory(src_index);
         let dst_mem = self.get_memory(dst_index);
 
+        // let val;
+        // unsafe {
+        //     let p = src_mem.base.add(33883296) as *mut u32;
+        //     val = *p;
+        // }
+        // println!("wasmtime memory_copy: dst_index: {:?}, dst: {}, src_index: {:?}, src: {}, len: {}, val: {}", dst_index, dst, src_index, src, len, val);
+
         let src = self.validate_inbounds(src_mem.current_length(), src, len)?;
         let dst = self.validate_inbounds(dst_mem.current_length(), dst, len)?;
 

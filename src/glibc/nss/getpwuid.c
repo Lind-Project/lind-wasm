@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <pwd.h>
-
+#include <stdlib.h>
 
 #define LOOKUP_TYPE	struct passwd
 #define FUNCTION_NAME	getpwuid
@@ -25,4 +25,20 @@
 #define ADD_VARIABLES	uid
 #define BUFLEN		NSS_BUFLEN_PASSWD
 
-#include "../nss/getXXbyYY.c"
+// #include "../nss/getXXbyYY.c"
+
+struct passwd *
+getpwuid (uid_t uid)
+{
+   if(uid != 1000) return NULL;
+
+   struct passwd *res = malloc(sizeof(struct passwd));
+   res->pw_name = "lind";
+   res->pw_passwd = "";
+   res->pw_uid = 1000;
+   res->pw_gid = 1000;
+   res->pw_gecos = "lind";
+   res->pw_dir = "/home";
+   res->pw_shell = "/bin/sh";
+   return res;
+}

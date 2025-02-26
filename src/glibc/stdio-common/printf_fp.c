@@ -1102,14 +1102,16 @@ __printf_fp_l_buffer (struct __printf_buffer *buf, locale_t loc,
   if (info->extra)
     {
       tmp.thousands_sep = _nl_lookup (loc, LC_MONETARY, MON_THOUSANDS_SEP);
-      tmp.decimal = _nl_lookup (loc, LC_MONETARY, MON_DECIMAL_POINT);
+    //   tmp.decimal = _nl_lookup (loc, LC_MONETARY, MON_DECIMAL_POINT);
+	  tmp.decimal = ".";
       if (tmp.decimal[0] == '\0')
 	tmp.decimal = _nl_lookup (loc, LC_NUMERIC, DECIMAL_POINT);
     }
   else
     {
       tmp.thousands_sep = _nl_lookup (loc, LC_NUMERIC, THOUSANDS_SEP);
-      tmp.decimal = _nl_lookup (loc, LC_NUMERIC, DECIMAL_POINT);
+    //   tmp.decimal = _nl_lookup (loc, LC_NUMERIC, DECIMAL_POINT);
+	  tmp.decimal = ".";
     }
 
   tmp.thousands_sep_length = strlen (tmp.thousands_sep);

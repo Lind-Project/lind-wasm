@@ -23,10 +23,11 @@
 #include <paths.h>
 #include <shlib-compat.h>
 #include <spawn.h>
-#include <spawn_int.h>
+#include <posix/spawn_int.h>
 #include <sysdep.h>
 #include <sys/resource.h>
 #include <clone_internal.h>
+#include <stdio.h>
 
 /* The Linux implementation of posix_spawn{p} uses the clone syscall directly
    with CLONE_VM and CLONE_VFORK flags and an allocated stack.  The new stack
@@ -140,36 +141,54 @@ __spawni_child (void *arguments)
 
       __libc_sigaction (sig, &sa, 0);
     }
-
 #ifdef _POSIX_PRIORITY_SCHEDULING
   /* Set the scheduling algorithm and parameters.  */
   if ((attr->__flags & (POSIX_SPAWN_SETSCHEDPARAM | POSIX_SPAWN_SETSCHEDULER))
       == POSIX_SPAWN_SETSCHEDPARAM)
     {
       if (__sched_setparam (0, &attr->__sp) == -1)
-	goto fail;
+      {
+        // printf("__sched_setparam fail");
+        fflush(stdout);
+        goto fail;
+      }
     }
   else if ((attr->__flags & POSIX_SPAWN_SETSCHEDULER) != 0)
     {
       if (__sched_setscheduler (0, attr->__policy, &attr->__sp) == -1)
-	goto fail;
+      {
+        // printf("__sched_setscheduler fail");
+        fflush(stdout);
+        goto fail;
+      }
     }
 #endif
 
   if ((attr->__flags & POSIX_SPAWN_SETSID) != 0
       && __setsid () < 0)
-    goto fail;
+      {
+        // printf("setsid fail");
+        fflush(stdout);
+        goto fail;
+      }
 
   /* Set the process group ID.  */
   if ((attr->__flags & POSIX_SPAWN_SETPGROUP) != 0
       && __setpgid (0, attr->__pgrp) != 0)
-    goto fail;
+      {
+        // printf("setsid fail");
+        fflush(stdout);
+        goto fail;
+      }
 
   /* Set the effective user and group IDs.  */
   if ((attr->__flags & POSIX_SPAWN_RESETIDS) != 0
       && (local_seteuid (__getuid ()) != 0
 	  || local_setegid (__getgid ()) != 0))
-    goto fail;
+    {
+      // printf("__getgid fail");
+      goto fail;
+    }
 
   /* Execute the file actions.  */
   if (file_actions != 0)
@@ -196,7 +215,10 @@ __spawni_child (void *arguments)
 		  /* Signal errors only for file descriptors out of range.  */
 		  if (action->action.close_action.fd < 0
 		      || action->action.close_action.fd >= fdlimit.rlim_cur)
-		    goto fail;
+        {
+          // printf("signal error fail");
+          goto fail;
+        }
 		}
 	      break;
 
@@ -216,7 +238,10 @@ __spawni_child (void *arguments)
 					   action->action.open_action.mode);
 
 		if (ret == -1)
+    {
+      // printf("__open_nocancel fail");
 		  goto fail;
+    }
 
 		int new_fd = ret;
 
@@ -225,10 +250,16 @@ __spawni_child (void *arguments)
 		  {
 		    if (__dup2 (new_fd, action->action.open_action.fd)
 			!= action->action.open_action.fd)
-		      goto fail;
+          {
+            // printf("dup2 fail");
+            goto fail;
+          }
 
 		    if (__close_nocancel (new_fd) != 0)
-		      goto fail;
+          {
+            // printf("__close_nocancel fail");
+            goto fail;
+          }
 		  }
 	      }
 	      break;
@@ -242,24 +273,39 @@ __spawni_child (void *arguments)
 		  int fd = action->action.dup2_action.newfd;
 		  int flags = __fcntl (fd, F_GETFD, 0);
 		  if (flags == -1)
-		    goto fail;
+        {
+          // printf("__fcntl 1 fail");
+          goto fail;
+        }
 		  if (__fcntl (fd, F_SETFD, flags & ~FD_CLOEXEC) == -1)
-		    goto fail;
+        {
+          // printf("__fcntl 2 fail");
+          goto fail;
+        }
 		}
 	      else if (__dup2 (action->action.dup2_action.fd,
 			       action->action.dup2_action.newfd)
 		       != action->action.dup2_action.newfd)
-		goto fail;
+           {
+            //  printf("__dup2 2 fail");
+             goto fail;
+           }
 	      break;
 
 	    case spawn_do_chdir:
 	      if (__chdir (action->action.chdir_action.path) != 0)
-		goto fail;
+        {
+          // printf("__chdir 1 fail");
+          goto fail;
+        }
 	      break;
 
 	    case spawn_do_fchdir:
 	      if (__fchdir (action->action.fchdir_action.fd) != 0)
-		goto fail;
+        {
+          // printf("__chdir 2 fail");
+          goto fail;
+        }
 	      break;
 
 	    case spawn_do_closefrom:
@@ -267,7 +313,9 @@ __spawni_child (void *arguments)
 		int lowfd = action->action.closefrom_action.from;
 	        int r = INLINE_SYSCALL_CALL (close_range, lowfd, ~0U, 0);
 		if (r != 0 && !__closefrom_fallback (lowfd, false))
-		  goto fail;
+    {
+      goto fail;
+    }
 	      } break;
 
 	    case spawn_do_tcsetpgrp:
@@ -277,7 +325,9 @@ __spawni_child (void *arguments)
 			       && attr->__pgrp != 0
 			     ? attr->__pgrp : __getpgid (0);
 		if (__tcsetpgrp (action->action.setpgrp_action.fd, pgrp) != 0)
-		  goto fail;
+    {
+      goto fail;
+    }
 	      }
 	    }
 	}
@@ -290,6 +340,9 @@ __spawni_child (void *arguments)
   else
     internal_sigprocmask (SIG_SETMASK, &args->oldmask, NULL);
 
+    // int tmp = args->argv;
+    printf("", 1);
+    // printf("");
   args->exec (args->file, args->argv, args->envp);
 
   /* This is compatibility function required to enable posix_spawn run
@@ -298,6 +351,7 @@ __spawni_child (void *arguments)
   maybe_script_execute (args);
 
 fail:
+
   /* errno should have an appropriate non-zero value; otherwise,
      there's a bug in glibc or the kernel.  For lack of an error code
      (EINTERNALBUG) describing that, use ECHILD.  Another option would
@@ -348,8 +402,8 @@ __spawnix (int *pid, const char *file,
 	return errno;
       }
 
-  int prot = (PROT_READ | PROT_WRITE
-	     | ((GL (dl_stack_flags) & PF_X) ? PROT_EXEC : 0));
+  // lind-wasm: disallow PROC_EXEC
+  int prot = (PROT_READ | PROT_WRITE);
 
   /* Add a slack area for child's stack.  */
   size_t argv_size = (argc * sizeof (void *)) + 512;
@@ -361,8 +415,9 @@ __spawnix (int *pid, const char *file,
      where it might use about 1k extra stack space).  */
   argv_size += (32 * 1024);
   size_t stack_size = ALIGN_UP (argv_size, GLRO(dl_pagesize));
+  // lind-wasm: remove MAP_STACK
   void *stack = __mmap (NULL, stack_size, prot,
-			MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (__glibc_unlikely (stack == MAP_FAILED))
     return errno;
 
@@ -378,6 +433,7 @@ __spawnix (int *pid, const char *file,
   args.fa = file_actions;
   args.attr = attrp ? attrp : &(const posix_spawnattr_t) { 0 };
   args.argv = argv;
+  printf("args.argv=%d\n", args.argv);
   args.argc = argc;
   args.envp = envp;
   args.pidfd = 0;
@@ -401,7 +457,7 @@ __spawnix (int *pid, const char *file,
       .flags = (set_cgroup ? CLONE_INTO_CGROUP : 0)
 	       | (use_pidfd ? CLONE_PIDFD : 0)
 	       | CLONE_CLEAR_SIGHAND
-	       | CLONE_VM
+	      //  | CLONE_VM
 	       | CLONE_VFORK,
       .exit_signal = SIGCHLD,
       .stack = (uintptr_t) stack,

@@ -394,6 +394,7 @@ pub fn register_close_handlers(fdkind:u32, intermediate: fn(FDTableEntry,u64), l
 #[doc(hidden)]
 fn _decrement_fdcount(entry:FDTableEntry) {
 
+    // println!("decrement kernel fd: {}", entry.underfd);
     let mytuple = (entry.fdkind, entry.underfd);
 
     let newcount:u64 = FDCOUNT.get(&mytuple).unwrap().value() - 1;

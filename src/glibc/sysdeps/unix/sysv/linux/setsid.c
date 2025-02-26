@@ -1,11 +1,12 @@
 #include <unistd.h>
+#include <syscall-template.h>
 
 int
-__GI_getsid (void)
+__GI_setsid (void)
 {
-  return -1;
+  return MAKE_SYSCALL(31, "syscall|getpid(setsid)", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
-weak_alias(__GI_getsid, __setsid)
-weak_alias(__GI_getsid, setsid)
+weak_alias(__GI_setsid, __setsid)
+weak_alias(__GI_setsid, setsid)
 

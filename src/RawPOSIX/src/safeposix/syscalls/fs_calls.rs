@@ -50,7 +50,7 @@ impl Cage {
     *   Then return virtual fd
     */
     pub fn open_syscall(&self, path: &str, oflag: i32, mode: u32) -> i32 {
-        // println!("open path: {}", path);
+        println!("open path: {}", path);
         // Convert data type from &str into *const i8
         let relpath = normpath(convpath(path), self);
         let relative_path = relpath.to_str().unwrap();
@@ -77,6 +77,7 @@ impl Cage {
     *   mkdir() will return 0 when success and -1 when fail 
     */
     pub fn mkdir_syscall(&self, path: &str, mode: u32) -> i32 {
+        println!("mkdir: {}", path);
         // Convert data type from &str into *const i8
         let relpath = normpath(convpath(path), self);
         let relative_path = relpath.to_str().unwrap();
@@ -189,11 +190,12 @@ impl Cage {
     *   stat() will return 0 when success and -1 when fail 
     */
     pub fn stat_syscall(&self, path: &str, rposix_statbuf: &mut StatData) -> i32 {
-        // println!("xstat path: {}", path);
+        println!("xstat path: {}", path);
         let relpath = normpath(convpath(path), self);
         let relative_path = relpath.to_str().unwrap();
         let full_path = format!("{}{}", LIND_ROOT, relative_path);
         let c_path = CString::new(full_path).unwrap();
+        // println!("cpath: {:?}", c_path);
 
         // Declare statbuf by ourselves 
         let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
@@ -216,6 +218,7 @@ impl Cage {
         rposix_statbuf.st_rdev = libc_statbuf.st_rdev as u64;
         rposix_statbuf.st_size = libc_statbuf.st_size as usize;
         rposix_statbuf.st_uid = libc_statbuf.st_uid;
+        println!("st_mode={}", rposix_statbuf.st_mode);
 
         libcret
     }
@@ -346,10 +349,12 @@ impl Cage {
         }
 
         let vfd = wrappedvfd.unwrap();
+        // println!("read on fd: {}, real fd: {}", virtual_fd, vfd.underfd);
         //kernel fd
         let ret = unsafe {
             libc::read(vfd.underfd as i32, readbuf as *mut c_void, count) as i32
         };
+        // println!("read: {}", interface::get_cstr(readbuf as u64).unwrap());
         if ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "read");
@@ -663,6 +668,7 @@ impl Cage {
     *   access() will return 0 when sucess, -1 when fail 
     */
     pub fn access_syscall(&self, path: &str, amode: i32) -> i32 {
+        println!("access: {}, amode: {}", path, amode);
         let relpath = normpath(convpath(path), self);
         let relative_path = relpath.to_str().unwrap();
         let full_path = format!("{}{}", LIND_ROOT, relative_path);
@@ -762,7 +768,12 @@ impl Cage {
         }
         let vfd = wrappedvfd.unwrap();
         let ret_kernelfd = unsafe{ libc::dup(vfd.underfd as i32) };
+        if ret_kernelfd < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "dup");
+        }
         let ret_virtualfd = fdtables::get_unused_virtual_fd(self.cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
+        // println!("dup: {}({}) -> {}({})", virtual_fd, vfd.underfd, ret_virtualfd, ret_kernelfd);
         return ret_virtualfd as i32;
         
     }
@@ -770,6 +781,7 @@ impl Cage {
     /* 
     */
     pub fn dup2_syscall(&self, old_virtualfd: i32, new_virtualfd: i32) -> i32 {
+        // println!("dup2: {} -> {}", old_virtualfd, new_virtualfd);
         if old_virtualfd < 0 || new_virtualfd < 0 {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
         }
@@ -797,6 +809,7 @@ impl Cage {
     *   close() will return 0 when sucess, -1 when fail 
     */
     pub fn close_syscall(&self, virtual_fd: i32) -> i32 {
+        // println!("close fd: {}", virtual_fd);
         match fdtables::close_virtualfd(self.cageid, virtual_fd as u64) {
             Ok(()) => {
                 return 0;
@@ -1161,6 +1174,7 @@ impl Cage {
     *   ftruncate() will return 0 when sucess, -1 when fail 
     */
     pub fn ftruncate_syscall(&self, virtual_fd: i32, length: isize) -> i32 {
+        println!("ftruncate: {}, length: {}", virtual_fd, length);
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {
             return syscall_error(Errno::EBADF, "ftruncate", "Bad File Descriptor");
@@ -1222,7 +1236,7 @@ impl Cage {
 
         pipefd.readfd = fdtables::get_unused_virtual_fd(self.cageid, FDKIND_KERNEL, kernel_fds[0] as u64, should_cloexec, 0).unwrap() as i32;
         pipefd.writefd = fdtables::get_unused_virtual_fd(self.cageid, FDKIND_KERNEL, kernel_fds[1] as u64, should_cloexec, 0).unwrap() as i32;
-
+        // println!("pipe: {:?}, kernel fds: {:?}", pipefd, kernel_fds);
         return ret;
     }
 
@@ -1261,6 +1275,7 @@ impl Cage {
         
         let cwd_container = self.cwd.read();
         let path = cwd_container.to_str().unwrap();
+        println!("getcwd: {}", path);
         // The required size includes the null terminator
         let required_size = path.len() + 1;
         if required_size > bufsize as usize {
@@ -1316,7 +1331,7 @@ impl Cage {
 
     //------------------SHMGET SYSCALL------------------
 
-    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 {
+    pub fn shmget_syscall(&self, key: i32, mut size: usize, shmflg: i32) -> i32 {
         if key == IPC_PRIVATE {
             return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
         }
@@ -1342,6 +1357,8 @@ impl Cage {
                         "tried to use a key that did not exist, and IPC_CREAT was not specified",
                     );
                 }
+
+                size = interface::round_up_page(size as u64) as usize;
 
                 if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
                     return syscall_error(
@@ -1372,6 +1389,7 @@ impl Cage {
     //------------------SHMAT SYSCALL------------------
 
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32) -> i32 {
+        // println!("shmat: shmaddr: {:?}", shmaddr);
         let metadata = &SHM_METADATA;
         let prot: i32;
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
@@ -1380,9 +1398,6 @@ impl Cage {
             } else {
                 prot = PROT_READ | PROT_WRITE;
             }
-            let mut rev_shm = self.rev_shm.lock();
-            rev_shm.push((shmaddr as u32, shmid));
-            drop(rev_shm);
 
             // update semaphores
             if !segment.semaphor_offsets.is_empty() {
@@ -1404,7 +1419,16 @@ impl Cage {
                 }
             }
 
-            segment.map_shm(shmaddr, prot, self.cageid)
+            let result = segment.map_shm(shmaddr, prot, self.cageid);
+            if result < 0 && result > -256 {
+                return result;
+            }
+
+            let mut rev_shm = self.rev_shm.lock();
+            rev_shm.push((result as u32, shmid));
+            drop(rev_shm);
+
+            return result;
         } else {
             syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value")
         }
@@ -1416,6 +1440,7 @@ impl Cage {
         let metadata = &SHM_METADATA;
         let mut rm = false;
         let mut rev_shm = self.rev_shm.lock();
+        // println!("rev_shm: {:?}, shmaddr: {:?}", rev_shm, shmaddr);
         let rev_shm_index = Self::rev_shm_find_index_by_addr(&rev_shm, shmaddr as u32);
 
         if let Some(index) = rev_shm_index {
@@ -1442,7 +1467,7 @@ impl Cage {
                         metadata.shmkeyidtable.remove(&key);
                     }
 
-                    return shmid; //NaCl relies on this non-posix behavior of returning the shmid on success
+                    return 0;
                 }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");

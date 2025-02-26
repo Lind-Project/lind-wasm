@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <syscall-template.h>
 
 #include <not-cancel.h>
 
@@ -36,8 +37,8 @@ __open64_nocancel (const char *file, int oflag, ...)
       va_end (arg);
     }
 
-  return INLINE_SYSCALL_CALL (openat, AT_FDCWD, file, oflag | O_LARGEFILE,
-			      mode);
+  // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
+  return MAKE_SYSCALL(10, "syscall|open", (uint64_t) file, (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
 }
 
 hidden_def (__open64_nocancel)

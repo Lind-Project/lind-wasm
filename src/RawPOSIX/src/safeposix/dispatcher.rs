@@ -137,6 +137,7 @@ const FDKIND_IMSOCK: u32 = 2;
 use std::io::{Read, Write};
 use std::io;
 
+use crate::interface::check_and_convert_addr_ext;
 use crate::interface::types;
 use crate::interface::SigsetType;
 use crate::interface::{SigactionStruct, StatData};
@@ -153,23 +154,6 @@ macro_rules! get_onearg {
         }
     };
 }
-
-// #[no_mangle]
-// pub extern "C" fn rustposix_thread_init(cageid: u64, signalflag: u64) {
-//     let cage = interface::cagetable_getref(cageid);
-//     let pthreadid = interface::get_pthreadid();
-//     cage.main_threadid
-//         .store(pthreadid, interface::RustAtomicOrdering::Relaxed);
-//     let inheritedsigset = cage.sigset.remove(&0); // in cases of a forked cage, we've stored the inherited sigset at entry 0
-//     if inheritedsigset.is_some() {
-//         cage.sigset.insert(pthreadid, inheritedsigset.unwrap().1);
-//     } else {
-//         cage.sigset
-//             .insert(pthreadid, interface::RustAtomicU64::new(0));
-//     }
-
-//     interface::signalflag_set(signalflag);
-// }
 
 /// The `lind_syscall_api` function acts as the main dispatcher for handling system calls 
 /// within the Lind virtualized environment. It identifies the syscall to execute based on 
@@ -203,7 +187,12 @@ pub fn lind_syscall_api(
 ) -> i32 {
     let call_number = call_number as i32;
 
-    if call_number as i32 != WRITE_SYSCALL {
+    let cage = interface::cagetable_getref(cageid);
+    let vmmap = cage.vmmap.read();
+    let start_address = vmmap.base_address.unwrap() as u64;
+    drop(vmmap);
+    drop(cage);
+    if call_number as i32 != WRITE_SYSCALL && cageid != 0 {
         match call_name {
             0 => {
                 println!("\x1b[90mcage {} calls UNNAMED ({})\x1b[0m", cageid, call_number);
@@ -227,6 +216,15 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             // Convert user buffer address to system address
             let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *const u8;
+            // unsafe {
+            //     if *buf.add(count - 1) == 0 {
+            //         if let Ok(str) = interface::get_cstr(buf as u64) {
+            //             println!("write syscall: {}", str);
+            //         }
+            //     }
+            // }
+            // println!("write syscall: {}", interface::get_cstr(buf as u64).unwrap());
+            // println!("write syscall: fd={}", fd);
             // Perform write operation through cage abstraction
             cage.write_syscall(fd, buf, count)
         }
@@ -790,7 +788,8 @@ pub fn lind_syscall_api(
             let shmid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
             // Convert virtual address to physical address
-            let shmaddr = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
+            // let shmaddr = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
+            let shmaddr = arg2 as *mut u8;
             let shmflg = arg3 as i32;
             // Perform shmat operation through cage implementation
             cage.shmat_syscall(shmid, shmaddr, shmflg)
@@ -799,7 +798,8 @@ pub fn lind_syscall_api(
         SHMDT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
             // Convert virtual address to physical address
-            let shmaddr = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
+            // let shmaddr = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
+            let shmaddr = arg1 as *mut u8;
             
             // Perform shmdt operation through cage implementation
             cage.shmdt_syscall(shmaddr)
@@ -1050,7 +1050,7 @@ pub fn lind_syscall_api(
                 if arg2 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::SigactionStruct>(), PROT_WRITE) {
+                    match translate_vmmap_addr(&cage, arg2) {
                         Ok(addr) => match interface::get_constsigactionstruct(addr) {
                             Ok(val) => val,
                             Err(errno) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
@@ -1063,7 +1063,7 @@ pub fn lind_syscall_api(
                 if arg3 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<interface::SigactionStruct>(), PROT_WRITE) {
+                    match translate_vmmap_addr(&cage, arg3) {
                         Ok(addr) => match interface::get_sigactionstruct(addr) {
                             Ok(val) => val,
                             Err(errno) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
@@ -1087,11 +1087,12 @@ pub fn lind_syscall_api(
         SIGPROCMASK_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
             let how = arg1 as i32;
-            let mut set = {
+            // sigset struct, essentially an u64
+            let mut sigset = {
                 if arg2 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::SigsetType>(), PROT_WRITE) {
+                    match translate_vmmap_addr(&cage, arg2) {
                         Ok(addr) => match interface::get_constsigsett(addr) {
                             Ok(val) => val,
                             Err(errno) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
@@ -1100,11 +1101,12 @@ pub fn lind_syscall_api(
                     }
                 }
             };
-            let mut old_set = {
+            // sigset struct, essentially an u64
+            let mut old_sigset = {
                 if arg3 == 0 {
                     None
                 } else {
-                    match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<interface::SigsetType>(), PROT_WRITE) {
+                    match translate_vmmap_addr(&cage, arg3) {
                         Ok(addr) => match interface::get_sigsett(addr) {
                             Ok(val) => val,
                             Err(errno) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
@@ -1115,7 +1117,7 @@ pub fn lind_syscall_api(
             };
 
             interface::cagetable_getref(cageid)
-                .sigprocmask_syscall(how, set, old_set)
+                .sigprocmask_syscall(how, sigset, old_sigset)
         }
 
         FSYNC_SYSCALL => {
@@ -1189,7 +1191,8 @@ pub fn lind_syscall_api(
             // Convert user space buffer address to physical address
             let optval_ptr = translate_vmmap_addr(&cage, arg4).unwrap() as *mut i32;
             let optval = unsafe { &mut *optval_ptr };
-            cage.getsockopt_syscall(virtual_fd, level, optname, optval)
+            let optlen = arg5 as u32;
+            cage.getsockopt_syscall(virtual_fd, level, optname, optval, optlen)
         }
 
         SOCKETPAIR_SYSCALL => {
@@ -1290,20 +1293,32 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             let which = arg1 as i32;
 
-            let itimeval = match check_and_convert_addr_ext(&cage, arg2, std::mem::size_of::<interface::ITimerVal>(), PROT_READ) {
-                Ok(addr) => match interface::get_constitimerval(addr) {
-                    Ok(itimeval) => itimeval,
-                    Err(_) => return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair array"),
-                },
-                Err(errno) => return syscall_error(errno, "setitimer", "invalid itimeval struct address"),
+            let itimeval = {
+                if arg2 == 0 {
+                    None
+                } else {
+                    match translate_vmmap_addr(&cage, arg2) {
+                        Ok(addr) => match interface::get_constitimerval(addr) {
+                            Ok(itimeval) => itimeval,
+                            Err(_) => return syscall_error(Errno::EFAULT, "setitimer", "failed to get itimerval struct"),
+                        },
+                        Err(errno) => return syscall_error(errno, "setitimer", "invalid itimeval struct address"),
+                    }
+                }
             };
 
-            let old_itimeval = match check_and_convert_addr_ext(&cage, arg3, std::mem::size_of::<interface::ITimerVal>(), PROT_WRITE) {
-                Ok(addr) => match interface::get_itimerval(addr) {
-                    Ok(itimeval) => itimeval,
-                    Err(_) => return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair array"),
-                },
-                Err(errno) => return syscall_error(errno, "setitimer", "invalid itimeval struct address"),
+            let old_itimeval = {
+                if arg3 == 0 {
+                    None
+                } else {
+                    match translate_vmmap_addr(&cage, arg3) {
+                        Ok(addr) => match interface::get_itimerval(addr) {
+                            Ok(itimeval) => itimeval,
+                            Err(_) => return syscall_error(Errno::EFAULT, "setitimer", "failed to get itimerval struct"),
+                        },
+                        Err(errno) => return syscall_error(errno, "setitimer", "invalid itimeval struct address"),
+                    }
+                }
             };
 
             cage.setitimer_syscall(which, itimeval, old_itimeval)
@@ -1340,7 +1355,7 @@ pub fn lind_syscall_api(
         _ => -1, // Return -1 for unknown syscalls
     };
 
-    if call_number as i32 != WRITE_SYSCALL {
+    if call_number as i32 != WRITE_SYSCALL && cageid != 0 {
         match call_name {
             0 => {
                 if ret < 0 {
@@ -1360,172 +1375,6 @@ pub fn lind_syscall_api(
     }
 
     ret
-}
-
-#[no_mangle]
-pub fn lindcancelinit(cageid: u64) {
-    let cage = interface::cagetable_getref(cageid);
-    cage.cancelstatus
-        .store(true, interface::RustAtomicOrdering::Relaxed);
-    cage.signalcvs();
-}
-
-#[no_mangle]
-pub fn lindsetthreadkill(cageid: u64, pthreadid: u64, kill: bool) {
-    let cage = interface::cagetable_getref(cageid);
-    cage.thread_table.insert(pthreadid, kill);
-    if cage
-        .main_threadid
-        .load(interface::RustAtomicOrdering::Relaxed)
-        == 0
-    {
-        cage.main_threadid.store(
-            interface::get_pthreadid(),
-            interface::RustAtomicOrdering::Relaxed,
-        );
-    }
-}
-
-#[no_mangle]
-pub fn lindcheckthread(cageid: u64, pthreadid: u64) -> bool {
-    interface::check_thread(cageid, pthreadid)
-}
-
-#[no_mangle]
-pub fn lindthreadremove(cageid: u64, pthreadid: u64) {
-    let cage = interface::cagetable_getref(cageid);
-    cage.thread_table.remove(&pthreadid);
-}
-
-#[no_mangle]
-pub fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
-    let cage = interface::cagetable_getref(cageid);
-
-    return match cage.signalhandler.get(&signo) {
-        Some(action_struct) => {
-            action_struct.sa_handler // if we have a handler and its not blocked return it
-        }
-        None => 0, // if we dont have a handler return 0
-    };
-}
-
-pub fn lindgetpendingsignals(cageid: u64) -> Vec<i32> {
-    let cage = interface::cagetable_getref(cageid);
-    let pending_signals = cage.pending_signals.read();
-    // let signal_mask = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
-    // (pending_signals & !signal_mask) as i32
-    pending_signals.clone()
-}
-
-// realistically, this method should not care about thread safety since
-// it should only be access by one thread one time. This method should only be
-// invoked by wasmtime's epoch callback function. Since all threads currently share
-// one signal handler (main thread's signal handler), so each cage should only have at most
-// one epoch callback function running.
-pub fn lindgetfirstsignal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)> {
-    let cage = interface::cagetable_getref(cageid);
-    let mut pending_signals = cage.pending_signals.write();
-    let sigset = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
-    // println!("lindgetfirstsignal: pending signals: {:?}", pending_signals);
-    // let signal_mask = cage.sigset.load(interface::RustAtomicOrdering::Relaxed);
-    // (pending_signals & !signal_mask) as i32
-    if let Some(index) = pending_signals.iter().position(
-        |&signo| (sigset & ((1 << (signo - 1)) as u64)) == 0
-    ) {
-        let signo = pending_signals.remove(index);
-        match cage.signalhandler.get(&signo) {
-            Some(handler) => {
-                // NEED SOURCE: according to experiments, if sigprocmask is called during the execution
-                // of the signal handler, the signal mask will not be perseved once handler is finished
-                // by default, we block the same signal during its execution
-                let mut mask_self = 1 << (signo - 1);
-                let signal_handler = interface::signal_get_handler(cageid, signo);
-                if handler.sa_flags as u32 & SA_RESETHAND > 0 {
-                    interface::signal_reset_handler(cageid, signo);
-                }
-                if handler.sa_flags as u32 & SA_NODEFER > 0 {
-                    // if SA_NODEFER is set, we allow the same signal to interrupt itself
-                    mask_self = 0;
-                }
-                cage.sigset.fetch_or(handler.sa_mask | mask_self, interface::RustAtomicOrdering::Relaxed);
-                let restorer = Box::new(move |cageid| {
-                    let cage = interface::cagetable_getref(cageid);
-                    cage.sigset.store(sigset, interface::RustAtomicOrdering::Relaxed);
-                });
-                Some((signo, signal_handler, restorer))
-            }
-            None => {
-                // NEED SOURCE: according to experiments, if sigprocmask is called during the execution
-                // of the signal handler, the signal mask will not be perseved once handler is finished
-                let signal_handler = interface::signal_get_handler(cageid, signo);
-                let restorer = Box::new(move |cageid| {
-                    let cage = interface::cagetable_getref(cageid);
-                    cage.sigset.store(sigset, interface::RustAtomicOrdering::Relaxed);
-                });
-                Some((signo, signal_handler, restorer))
-            }
-        }
-    } else {
-        None
-    }
-}
-
-pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
-    let cage = interface::cagetable_getref(cageid);
-    let mut pending_signals = cage.pending_signals.write();
-
-    if let Some(index) = pending_signals.iter().position(
-        |&signo| !interface::signal_check_block(cageid, signo)
-    ) {
-        false
-    } else {
-        true
-    }
-}
-
-pub fn lindremovependingsignals(cageid: u64, signo: i32) {
-    // let cage = interface::cagetable_getref(cageid);
-    // let pending_signals = cage.pending_signals.load(interface::RustAtomicOrdering::Relaxed);
-
-    // let updated_signal = pending_signals & !((1 << signo) as u64);
-    // println!("after remove: {}: {}", signo, updated_signal);
-    // cage.pending_signals.store(updated_signal, interface::RustAtomicOrdering::Relaxed);
-}
-
-pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_mainthread: bool) {
-    let cage = interface::cagetable_getref(cageid);
-
-    if is_mainthread {
-        cage.main_threadid.store(threadid as u64, interface::RustAtomicOrdering::SeqCst);
-    }
-    let epoch_handler = interface::RustLock::new(epoch_handler);
-    cage.epoch_handler.insert(threadid, epoch_handler);
-}
-
-pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
-    let cage = interface::cagetable_getref(cageid);
-    let main_threadid = cage.main_threadid.load(interface::RustAtomicOrdering::SeqCst);
-
-    cage.epoch_handler.remove(&(thread_id as i32)).expect("thread id does not exist!");
-
-    if thread_id == main_threadid {
-        // if main thread exits, we should find a new main thread
-        // unless this is the last thread in the cage
-        if let Some(entry) = cage.epoch_handler.iter().next() {
-            let id = *entry.key() as u64;
-            cage.main_threadid.store(id, interface::RustAtomicOrdering::SeqCst);
-        } else {
-            // we just exits the last thread in the cage
-            return true;
-        }
-    }
-
-    false
-}
-
-pub fn lind_update_signal_triggerable(cageid: u64, triggerable: bool) {
-    let cage = interface::cagetable_getref(cageid);
-    cage.signal_triggerable.store(triggerable, interface::RustAtomicOrdering::SeqCst);
 }
 
 #[no_mangle]
@@ -1553,7 +1402,6 @@ pub fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
         pending_signals: interface::RustLock::new(vec![]),
-        signal_triggerable: interface::RustAtomicBool::new(true),
         epoch_handler: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(0),
@@ -1605,7 +1453,6 @@ pub fn lindrustinit(verbosity: isize) {
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
         pending_signals: interface::RustLock::new(vec![]),
-        signal_triggerable: interface::RustAtomicBool::new(true),
         epoch_handler: interface::RustHashMap::new(),
         main_threadid: interface::RustAtomicU64::new(0),
         interval_timer: interface::IntervalTimer::new(1),

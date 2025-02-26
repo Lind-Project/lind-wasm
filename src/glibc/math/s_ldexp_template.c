@@ -17,8 +17,8 @@ static char rcsid[] = "$NetBSD: s_ldexp.c,v 1.6 1995/05/10 20:47:40 jtc Exp $";
 #include <math.h>
 #include <errno.h>
 
-FLOAT
-M_SUF (__ldexp) (FLOAT value, int exp)
+double
+M_SUF (__ldexp) (double value, int exp)
 {
 	if(!isfinite(value)||value==0) return value + value;
 	value = M_SCALBN(value,exp);

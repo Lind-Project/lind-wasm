@@ -1625,25 +1625,13 @@ pub(crate) fn invoke_wasm_and_catch_traps<T>(
             exit_wasm(store, exit);
             return Err(trap);
         }
-        let mut result = crate::runtime::vm::catch_traps(
+        let result = crate::runtime::vm::catch_traps(
             store.0.signal_handler(),
             store.0.engine().config().wasm_backtrace,
             store.0.engine().config().coredump_on_trap,
             store.0.default_caller(),
             closure,
         );
-
-        // let result_clone;
-        // if let Box(e) = result.as_ref() {
-        //     match result.unwrap_err().reason {
-        //         TrapReason::User {error, needs_backtrace} => {
-        //             if error.to_string() == "wasm trap: interrupt" {
-        //                 println!("interrupt!");
-        //             }
-        //         },
-        //         _ => {}
-        //     }
-        // }
         
         exit_wasm(store, exit);
         store.0.call_hook(CallHook::ReturningFromWasm)?;
@@ -2247,6 +2235,7 @@ impl<T> Caller<'_, T> {
         }
     }
 
+    // retrieve the exported signal_callback function from glibc
     pub fn get_signal_callback(&mut self) -> Result<TypedFunc<(i32, i32), ()>, ()> {
         if let Some(signal_callback_extern) = self.get_export("signal_callback") {
             match signal_callback_extern {
@@ -2632,10 +2621,10 @@ impl HostFunc {
         // `self` into the `store` provided, otherwise the type information we
         // have listed won't be correct. This is possible to hit with the public
         // API of Wasmtime, and should be documented in relevant functions.
-        // assert!(
-        //     Engine::same(&self.engine, store.engine()),
-        //     "cannot use a store with a different engine than a linker was created with",
-        // );
+        assert!(
+            Engine::same(&self.engine, store.engine()),
+            "cannot use a store with a different engine than a linker was created with",
+        );
     }
 
     pub(crate) fn sig_index(&self) -> VMSharedTypeIndex {

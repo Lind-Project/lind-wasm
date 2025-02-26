@@ -5766,14 +5766,20 @@ libc_hidden_def (__libc_mallopt)
 
 extern char **__libc_argv attribute_hidden;
 
+void __imported__malloc_printerr(const char *str) __attribute__((
+  __import_module__("debug"),
+  __import_name__("malloc_printerr")
+));
+
 static void
 malloc_printerr (const char *str)
 {
-#if IS_IN (libc)
-  __libc_message ("%s\n", str);
-#else
-  __libc_fatal (str);
-#endif
+// #if IS_IN (libc)
+//   __libc_message ("%s\n", str);
+// #else
+//   __libc_fatal (str);
+// #endif
+  __imported__malloc_printerr(str);
   __builtin_unreachable ();
 }
 
