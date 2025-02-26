@@ -18,6 +18,9 @@ use wasmtime_environ::MemoryIndex;
 pub mod clone_constants;
 pub mod signal;
 
+pub const CAGE_START_ID: i32 = 1; // cage id starts from 1
+pub const THREAD_START_ID: i32 = 1; // thread id starts from 1
+
 const ASYNCIFY_START_UNWIND: &str = "asyncify_start_unwind";
 const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
@@ -96,9 +99,9 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let exec_host = Arc::new(exec);
         
         // cage id starts from 1
-        let pid = 1;
-        let tid = 1;
-        let next_threadid = Arc::new(AtomicU32::new(1)); // cageid starts from 1
+        let pid = CAGE_START_ID;
+        let tid = THREAD_START_ID;
+        let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self { linker, module: module.clone(), pid, tid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
     }
 
@@ -122,8 +125,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         let fork_host = Arc::new(fork_host);
         let exec_host = Arc::new(exec);
 
-        let next_threadid = Arc::new(AtomicU32::new(1)); // thread id starts from 1
-        let tid = 1;
+        let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32));
+        let tid = THREAD_START_ID;
 
         Ok(Self { linker, module: module.clone(), pid, tid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
     }
@@ -342,7 +345,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 // retrieve the handler (underlying pointer) for the epoch global
                 let pointer = lind_epoch.get_handler(&mut store);
                 // initialize the signal for the main thread of forked cage
-                rawposix::interface::lind_signal_init(child_cageid, pointer, 1, true);
+                rawposix::interface::lind_signal_init(child_cageid,
+                                        pointer,
+                                             THREAD_START_ID,
+                                        true /* this is the main thread */);
 
                 // new cage created, increment the cage counter
                 lind_manager.increment();
@@ -400,8 +406,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     let exit_code = results.get(0).expect("_start function does not have a return value");
                     match exit_code {
                         Val::I32(val) => {
-                            // exit the thread
-                            if rawposix::interface::lind_thread_exit(child_cageid, 1) {
+                            // exit the main thread
+                            if rawposix::interface::lind_thread_exit(child_cageid, THREAD_START_ID as u64) {
                                 // we clean the cage only if this is the last thread in the cage
                                 // exit the cage with the exit code
                                 lind_syscall_api(
@@ -586,7 +592,10 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 // retrieve the handler (underlying pointer) for the epoch global
                 let pointer = lind_epoch.get_handler(&mut store);
                 // initialize the signal for the thread of the cage
-                rawposix::interface::lind_signal_init(child_cageid as u64, pointer, next_tid as i32, false);
+                rawposix::interface::lind_signal_init(child_cageid as u64,
+                                        pointer,
+                                             next_tid as i32,
+                                        false /* this is not the main thread */);
 
                 // get the asyncify_rewind_start and module start function
                 let child_rewind_start;
