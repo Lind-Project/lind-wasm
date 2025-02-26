@@ -2,19 +2,10 @@
 
 // System related system calls
 use crate::constants::{
-    DEFAULT_UID, DEFAULT_GID,
-    SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK,
-    SIGNAL_MAX,
-    ITIMER_REAL,
-    RLIMIT_NOFILE, RLIMIT_STACK,
-    NOFILE_CUR, NOFILE_MAX,
-    STACK_CUR, STACK_MAX,
-    SHMMIN, SHMMAX,
-    SHM_RDONLY, SHM_DEST,
-    SEM_VALUE_MAX,
+    DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX
 };
 
-use crate::interface;
+use crate::interface::{self, convert_signal_mask, lind_send_signal};
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
 use crate::safeposix::shm::*;
@@ -57,27 +48,6 @@ impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
         // Modify the fdtable manually 
         fdtables::copy_fdtable_for_cage(self.cageid, child_cageid).unwrap();
-        
-        // we grab the parent cages main threads sigset and store it at 0
-        // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
-        let newsigset = interface::RustHashMap::new();
-        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // we don't add these for the test suite
-            // BUG: Signals are commented out until we add them to lind-wasm
-            // let mainsigsetatomic = self
-            //     .sigset
-            //     .get(
-            //         &self
-            //             .main_threadid
-            //             .load(interface::RustAtomicOrdering::Relaxed),
-            //     )
-            //     .unwrap();
-            // let mainsigset = interface::RustAtomicU64::new(
-            //     mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed),
-            // );
-            // newsigset.insert(0, mainsigset);
-        }
 
         let parent_vmmap = self.vmmap.read();
         let new_vmmap = parent_vmmap.clone();
@@ -102,7 +72,11 @@ impl Cage {
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
-            sigset: newsigset,
+            sigset: interface::RustAtomicU64::new(
+                self.sigset.load(interface::RustAtomicOrdering::Relaxed),
+            ),
+            pending_signals: interface::RustLock::new(vec![]),
+            epoch_handler: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
             vmmap: interface::RustLock::new(new_vmmap), // clone the vmmap for the child
@@ -150,26 +124,6 @@ impl Cage {
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
         drop(zombies);
 
-        // we grab the parent cages main threads sigset and store it at 0
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
-        let newsigset = interface::RustHashMap::new();
-        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // we don't add these for the test suite
-            // BUG: Signals are commented out until we add them to lind-wasm
-            // let mainsigsetatomic = self
-            //     .sigset
-            //     .get(
-            //         &self
-            //             .main_threadid
-            //             .load(interface::RustAtomicOrdering::Relaxed),
-            //     )
-            //     .unwrap();
-            // let mainsigset = interface::RustAtomicU64::new(
-            //     mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed),
-            // );
-            // newsigset.insert(0, mainsigset);
-        }
-
         let newcage = Cage {
             cageid: child_cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
@@ -182,7 +136,13 @@ impl Cage {
             rev_shm: interface::Mutex::new(vec![]),
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
-            sigset: newsigset,
+            sigset: interface::RustAtomicU64::new(
+                self.sigset.load(interface::RustAtomicOrdering::Relaxed),
+            ),
+            pending_signals: interface::RustLock::new(
+                self.pending_signals.read().clone(),
+            ),
+            epoch_handler: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
             vmmap: interface::RustLock::new(Vmmap::new()), // memory is cleared after exec
@@ -222,13 +182,12 @@ impl Cage {
             }
         }
 
-        // Trigger SIGCHLD
+        // Trigger SIGCHLD if we are currently not running rawposix test suite
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // dont trigger SIGCHLD for test suite
-            // BUG: Signals are commented out until we add them to lind-wasm
-            // if self.cageid != self.parent {
-            //     interface::lind_kill_from_id(self.parent, libc::SIGCHLD);
-            // }
+            // if the cage has parent (i.e. it is not the "root" cage)
+            if self.cageid != self.parent {
+                lind_send_signal(self.parent, SIGCHLD);
+            }
         }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
@@ -403,7 +362,7 @@ impl Cage {
         }
 
         if let Some(some_act) = act {
-            if sig == 9 || sig == 19 {
+            if sig == SIGKILL as i32 || sig == SIGSTOP as i32 {
                 // Disallow changing the action for SIGKILL and SIGSTOP
                 return syscall_error(
                     Errno::EINVAL,
@@ -423,16 +382,15 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid cage id.");
         }
 
-        if let Some(cage) = interface::cagetable_getref_opt(cage_id as u64) {
-            interface::lind_threadkill(
-                cage.main_threadid
-                    .load(interface::RustAtomicOrdering::Relaxed),
-                sig,
-            );
-            return 0;
-        } else {
+        if (sig < 0) || (sig >= SIG_MAX) {
+            return syscall_error(Errno::EINVAL, "sigkill", "Invalid signal number");
+        }
+
+        if !lind_send_signal(cage_id as u64, sig) {
             return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
         }
+
+        0
     }
 
     pub fn sigprocmask_syscall(
@@ -442,20 +400,17 @@ impl Cage {
         oldset: Option<&mut interface::SigsetType>,
     ) -> i32 {
         let mut res = 0;
-        let pthreadid = interface::get_pthreadid();
-
-        let sigset = self.sigset.get(&pthreadid).unwrap();
 
         if let Some(some_oldset) = oldset {
-            *some_oldset = sigset.load(interface::RustAtomicOrdering::Relaxed);
+            *some_oldset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
         }
 
         if let Some(some_set) = set {
-            let curr_sigset = sigset.load(interface::RustAtomicOrdering::Relaxed);
+            let curr_sigset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
             res = match how {
                 SIG_BLOCK => {
                     // Block signals in set
-                    sigset.store(
+                    self.sigset.store(
                         curr_sigset | *some_set,
                         interface::RustAtomicOrdering::Relaxed,
                     );
@@ -464,14 +419,30 @@ impl Cage {
                 SIG_UNBLOCK => {
                     // Unblock signals in set
                     let newset = curr_sigset & !*some_set;
-                    let pendingsignals = curr_sigset & some_set;
-                    sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
-                    self.send_pending_signals(pendingsignals, pthreadid);
+                    self.sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
+                    // check if any of the unblocked signals are in the pending signal list
+                    // and trigger the epoch if it has
+                    let pending_signals = self.pending_signals.read();
+                    if pending_signals.iter().any(|signo| (*some_set & convert_signal_mask(*signo)) != 0) {
+                        interface::signal_epoch_trigger(self.cageid);
+                    }
                     0
                 }
                 SIG_SETMASK => {
+                    let pending_signals = self.pending_signals.read();
+                    // find all signals switched from blocking to nonblocking
+                    // 1. perform a xor operation to find signals that switched state
+                    // all the signal masks changed from 0 to 1, or 1 to 0 are filtered in this step
+                    // 2. perform an and operation to the old sigset, this further filtered masks and only
+                    // left masks changed from 1 to 0
+                    let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+                    // check if any of the unblocked signals are in the pending signal list
+                    // and trigger the epoch if it has
+                    if pending_signals.iter().any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0) {
+                        interface::signal_epoch_trigger(self.cageid);
+                    }
                     // Set sigset to set
-                    sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
+                    self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 }
                 _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
