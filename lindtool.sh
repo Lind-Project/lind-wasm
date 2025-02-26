@@ -1,6 +1,5 @@
 #!/bin/bash
-LIND_WASM_DEFAULT_BASE=/home/lind-wasm
-LIND_WASM_BASE="${LIND_WASM_BASE:-/home/lind-wasm}"
+LIND_WASM_BASE="${LIND_WASM_BASE:-/home/lind/lind-wasm}"
 
 glibc_base="$LIND_WASM_BASE/src/glibc"
 wasmtime_base="$LIND_WASM_BASE/src/wasmtime"
@@ -109,7 +108,7 @@ compile_src() {
 }
 
 pmode=0
-if [ "${!#}" = "-p" ]; then    git push --set-upstream origin migrate-binaryen-bin
+if [ "${!#}" = "-p" ]; then
     pmode=1
 
     # Remove the last argument
