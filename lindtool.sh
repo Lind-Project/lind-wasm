@@ -109,7 +109,7 @@ compile_src() {
 }
 
 pmode=0
-if [ "${!#}" = "-p" ]; then
+if [ "${!#}" = "-p" ]; then    git push --set-upstream origin migrate-binaryen-bin
     pmode=1
 
     # Remove the last argument
@@ -201,12 +201,6 @@ case $1 in
         echo -e "${GREEN}$compile_wasmtime_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
             eval "$compile_wasmtime_cmd"
-        fi
-        ;;
-    compile_binaryen|cpopt)
-        echo -e "${GREEN}$compile_binaryen_cmd${RESET}"
-        if [ "$pmode" -eq 0 ]; then
-            eval "$compile_binaryen_cmd"
         fi
         ;;
     compile_rustposix|cpposix)
