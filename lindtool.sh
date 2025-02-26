@@ -5,7 +5,7 @@ wasmtime_base="$PWD/src/wasmtime"
 rustposix_base="$PWD/src/safeposix-rust"
 rawposix_base="$PWD/src/RawPOSIX"
 
-CC="${CLANG:=/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
+CC="${CLANG:=/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
 
 export_cmd="export LD_LIBRARY_PATH=$wasmtime_base/crates/rustposix:\$LD_LIBRARY_PATH"
 
