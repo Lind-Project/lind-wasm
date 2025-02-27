@@ -5,7 +5,7 @@ use crate::constants::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX
 };
 
-use crate::interface::{self, convert_signal_mask, lind_send_signal};
+use crate::interface::{self, convert_signal_mask, lind_send_signal, signal_check_trigger};
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
 use crate::safeposix::shm::*;
@@ -227,6 +227,10 @@ impl Cage {
                     // then we need to wait for children to exit
                     // drop the zombies list before sleep to avoid deadlock
                     drop(zombies);
+                    // before yield, let's check the signal
+                    if signal_check_trigger(self.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted");
+                    }
                     // TODO: replace busy waiting with more efficient mechanism
                     interface::lind_yield();
                     // after sleep, get the write access of zombies list back
