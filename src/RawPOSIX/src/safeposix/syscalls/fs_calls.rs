@@ -1543,7 +1543,7 @@ impl Cage {
                         metadata.shmkeyidtable.remove(&key);
                     }
 
-                    return shmid as i32;
+                    return 1;
                 }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");
