@@ -1,8 +1,8 @@
 use crate::{constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL}, interface::{cagetable_getref, cagetable_getref_opt, RustAtomicOrdering}};
 
 const EPOCH_NORMAL: u64 = 0;
-const EPOCH_SIGNAL: u64 = 1;
-const EPOCH_KILLED: u64 = 2;
+const EPOCH_SIGNAL: u64 = 0xc0ffee;
+const EPOCH_KILLED: u64 = 0xdead;
 
 // switch the epoch of the main thread of the cage to "signal" state
 pub fn signal_epoch_trigger(cageid: u64) {
@@ -21,7 +21,7 @@ pub fn signal_epoch_trigger(cageid: u64) {
     }
 }
 
-// swtich the epoch of all threads of the cage to "killed" state
+// switch the epoch of all threads of the cage to "killed" state
 pub fn epoch_kill_all(cageid: u64) {
     let cage = cagetable_getref(cageid);
     let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
@@ -93,7 +93,7 @@ pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
 }
 
 // retrieve the signal handler for the specified signal of the cage
-// if the signal handler does not exist, then return
+// if the signal handler does not exist, then return SIG_DFL
 pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
     let cage = cagetable_getref(cageid);
     let handler = match cage.signalhandler.get(&signo) {
@@ -179,6 +179,7 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
             }
             None => {
                 // retrieve the signal handler
+                // if no signal handler is found, SIG_DFL will be returned
                 let signal_handler = signal_get_handler(cageid, signo);
                 let restorer = Box::new(move |cageid| {
                     let cage = cagetable_getref(cageid);
@@ -194,6 +195,7 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
 }
 
 // check if there is any pending unblocked signals
+// return true if no pending unblocked signals are found
 pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
     let cage = cagetable_getref(cageid);
     let mut pending_signals = cage.pending_signals.write();

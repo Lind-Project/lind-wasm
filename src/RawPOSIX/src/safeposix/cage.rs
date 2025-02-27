@@ -48,14 +48,6 @@ pub struct Cage {
     // shared memory segments
     pub rev_shm: interface::Mutex<Vec<(u32, i32)>>, 
     // Old rustposix tables for handling concurrency primitives with NaCl's model 
-    // (TODO: TO BE REMOVED AND REPLACED WITH TRACKING FOR FUTEXES
-    pub mutex_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawMutex>>>>,
-    // Old rustposix tables for handling concurrency primitives with NaCl's model 
-    // (TODO: TO BE REMOVED AND REPLACED WITH TRACKING FOR FUTEXES
-    pub cv_table: interface::RustLock<Vec<Option<interface::RustRfc<interface::RawCondvar>>>>,
-    // Old rustposix tables for handling concurrency primitives with NaCl's model 
-    // (TODO: TO BE REMOVED AND REPLACED WITH TRACKING FOR FUTEXES
-    pub sem_table: interface::RustHashMap<u32, interface::RustRfc<interface::RustSemaphore>>,
     // Table of thread IDs for all threads in this cage, formerly used for managing cage exit/destruction 
     // (TODO: TO BE REMOVED OR REPURPOSED)
     pub thread_table: interface::RustHashMap<u64, bool>,
@@ -98,18 +90,6 @@ impl Cage {
         let newwd = interface::RustRfc::new(normpath(newdir, self));
         let mut cwdbox = self.cwd.write();
         *cwdbox = newwd;
-    }
-
-    // function to signal all cvs in a cage when forcing exit
-    pub fn signalcvs(&self) {
-        let cvtable = self.cv_table.read();
-
-        for cv_handle in 0..cvtable.len() {
-            if cvtable[cv_handle as usize].is_some() {
-                let clonedcv = cvtable[cv_handle as usize].as_ref().unwrap().clone();
-                clonedcv.broadcast();
-            }
-        }
     }
 
     pub fn send_pending_signals(&self, sigset: interface::SigsetType, pthreadid: u64) {

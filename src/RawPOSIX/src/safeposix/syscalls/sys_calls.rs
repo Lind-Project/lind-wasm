@@ -5,7 +5,7 @@ use crate::constants::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX
 };
 
-use crate::interface::{self, convert_signal_mask, lind_send_signal};
+use crate::interface::{self, convert_signal_mask, lind_send_signal, signal_check_trigger};
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
 use crate::safeposix::shm::*;
@@ -50,80 +50,9 @@ impl Cage {
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
         // Modify the fdtable manually 
         fdtables::copy_fdtable_for_cage(self.cageid, child_cageid).unwrap();
-        
-        //construct a new mutex in the child cage where each initialized mutex is in the parent cage
-        let mutextable = self.mutex_table.read();
-        let mut new_mutex_table = vec![];
-        for elem in mutextable.iter() {
-            if elem.is_some() {
-                let new_mutex_result = interface::RawMutex::create();
-                match new_mutex_result {
-                    Ok(new_mutex) => new_mutex_table.push(Some(interface::RustRfc::new(new_mutex))),
-                    Err(_) => {
-                        match Errno::from_discriminant(interface::get_errno()) {
-                            Ok(i) => {
-                                return syscall_error(
-                                    i,
-                                    "fork",
-                                    "The libc call to pthread_mutex_init failed!",
-                                );
-                            }
-                            Err(()) => {
-                                panic!("Unknown errno value from pthread_mutex_init returned!")
-                            }
-                        };
-                    }
-                }
-            } else {
-                new_mutex_table.push(None);
-            }
-        }
-        drop(mutextable);
 
-        //construct a new condvar in the child cage where each initialized condvar is in the parent cage
-        let cvtable = self.cv_table.read();
-        let mut new_cv_table = vec![];
-        for elem in cvtable.iter() {
-            if elem.is_some() {
-                let new_cv_result = interface::RawCondvar::create();
-                match new_cv_result {
-                    Ok(new_cv) => new_cv_table.push(Some(interface::RustRfc::new(new_cv))),
-                    Err(_) => {
-                        match Errno::from_discriminant(interface::get_errno()) {
-                            Ok(i) => {
-                                return syscall_error(
-                                    i,
-                                    "fork",
-                                    "The libc call to pthread_cond_init failed!",
-                                );
-                            }
-                            Err(()) => {
-                                panic!("Unknown errno value from pthread_cond_init returned!")
-                            }
-                        };
-                    }
-                }
-            } else {
-                new_cv_table.push(None);
-            }
-        }
-        drop(cvtable);
-
-        /*
-         *  Construct a new semaphore table in child cage which equals to the one in the parent cage
-         */
-        let semtable = &self.sem_table;
-        let new_semtable: interface::RustHashMap<
-            u32,
-            interface::RustRfc<interface::RustSemaphore>,
-        > = interface::RustHashMap::new();
-        // Loop all pairs
-        for pair in semtable.iter() {
-            new_semtable.insert((*pair.key()).clone(), pair.value().clone());
-        }
         let parent_vmmap = self.vmmap.read();
         let new_vmmap = parent_vmmap.clone();
-
         let cageobj = Cage {
             cageid: child_cageid,
             cwd: interface::RustLock::new(self.cwd.read().clone()),
@@ -143,9 +72,6 @@ impl Cage {
                 self.geteuid.load(interface::RustAtomicOrdering::Relaxed),
             ),
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
-            mutex_table: interface::RustLock::new(new_mutex_table),
-            cv_table: interface::RustLock::new(new_cv_table),
-            sem_table: new_semtable,
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
             sigset: interface::RustAtomicU64::new(
@@ -225,9 +151,6 @@ impl Cage {
             getegid: interface::RustAtomicI32::new(-1),
             geteuid: interface::RustAtomicI32::new(-1),
             rev_shm: interface::Mutex::new(vec![]),
-            mutex_table: interface::RustLock::new(vec![]),
-            cv_table: interface::RustLock::new(vec![]),
-            sem_table: interface::RustHashMap::new(),
             thread_table: interface::RustHashMap::new(),
             signalhandler: interface::RustHashMap::new(),
             sigset: interface::RustAtomicU64::new(
@@ -340,6 +263,10 @@ impl Cage {
                     // then we need to wait for children to exit
                     // drop the zombies list before sleep to avoid deadlock
                     drop(zombies);
+                    // before yield, let's check the signal
+                    if signal_check_trigger(self.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted");
+                    }
                     // TODO: replace busy waiting with more efficient mechanism
                     interface::lind_yield();
                     // after sleep, get the write access of zombies list back

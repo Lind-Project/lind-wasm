@@ -140,6 +140,72 @@ impl Cage {
         ret
     }
 
+    //------------------------------------UNLINKAT SYSCALL------------------------------------
+    /*
+    *  `unlinkat` removes a file or directory relative to a directory file descriptor.
+    *  Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+    *
+    *  ## Arguments:
+    *   - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
+    *   - `pathname`: Path of the file/directory to be removed.
+    *   - `flags`: Can include `AT_REMOVEDIR` to indicate directory removal.
+    *
+    *  There are two cases:
+    *  Case 1: When `dirfd` is AT_FDCWD:
+    *    - RawPOSIX maintains its own notion of the current working directory.
+    *    - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
+    *      path by prepending the LIND_ROOT prefix.
+    *    - After this conversion, the path is already absolute from the host’s perspective, so `AT_FDCWD`
+    *     doesn't actually rely on the host’s working directory. This avoids mismatches between RawPOSIX
+    *     and the host environment.
+    *
+    *  Case 2: When `dirfd` is not AT_FDCWD:
+    *    - We translate the RawPOSIX virtual file descriptor to the corresponding kernel file descriptor.
+    *    - In this case, we simply create a C string from the provided `pathname` (without further conversion)
+    *      and let the underlying kernel call resolve the path relative to the directory represented by that fd.
+    *
+    *   ## Return Value:
+    *   - `0` on success.
+    *   - `-1` on failure, with `errno` set appropriately.
+    */
+    pub fn unlinkat_syscall(&self, dirfd: i32, pathname: &str, flags: i32) -> i32 {
+        let mut c_path;
+        // Determine the appropriate kernel file descriptor and pathname conversion based on dirfd.
+        let kernel_fd = if dirfd == libc::AT_FDCWD {
+            // Case 1: When AT_FDCWD is used.
+            // Convert the provided pathname from the RawPOSIX working directory (which is different from the host's)
+            // into a host-absolute path by prepending LIND_ROOT.
+            let relpath = normpath(convpath(pathname), self);
+            let relative_path = relpath.to_str().unwrap();
+            let full_path = format!("{}{}", LIND_ROOT, relative_path);
+            c_path = CString::new(full_path).unwrap();
+            libc::AT_FDCWD
+        } else {
+            // Case 2: When a specific directory fd is provided.
+            // Translate the virtual file descriptor to the corresponding kernel file descriptor.
+            let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, dirfd as u64);
+            if wrappedvfd.is_err() {
+                return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
+            }
+            let vfd = wrappedvfd.unwrap(); 
+            // For this case, we pass the provided pathname directly.
+            c_path = CString::new(pathname).unwrap();
+            vfd.underfd as i32
+        };
+
+        // Call the underlying libc::unlinkat() function with the fd and pathname.
+        let ret = unsafe {
+            libc::unlinkat(kernel_fd, c_path.as_ptr(), flags)
+        };
+        
+        // If the call failed, retrieve and handle the errno
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "unlinkat");
+        }
+        ret
+    }
+
     //------------------------------------UNLINK SYSCALL------------------------------------
     /*
     *   unlink() will return 0 when success and -1 when fail 
@@ -1399,36 +1465,7 @@ impl Cage {
                 prot = PROT_READ | PROT_WRITE;
             }
 
-            // update semaphores
-            if !segment.semaphor_offsets.is_empty() {
-                // lets just look at the first cage in the set, since we only need to grab the ref from one
-                if let Some(cageid) = segment
-                    .attached_cages
-                    .clone()
-                    .into_read_only()
-                    .keys()
-                    .next()
-                {
-                    let cage2 = interface::cagetable_getref(*cageid);
-                    let cage2_rev_shm = cage2.rev_shm.lock();
-                    let addrs = Self::rev_shm_find_addrs_by_shmid(&cage2_rev_shm, shmid); // find all the addresses assoc. with shmid
-                    for offset in segment.semaphor_offsets.iter() {
-                        let sementry = cage2.sem_table.get(&(addrs[0] + *offset)).unwrap().clone(); //add  semaphors into semtable at addr + offsets
-                        self.sem_table.insert(shmaddr as u32 + *offset, sementry);
-                    }
-                }
-            }
-
-            let result = segment.map_shm(shmaddr, prot, self.cageid);
-            if result < 0 && result > -256 {
-                return result;
-            }
-
-            let mut rev_shm = self.rev_shm.lock();
-            rev_shm.push((result as u32, shmid));
-            drop(rev_shm);
-
-            return result;
+            segment.map_shm(shmaddr, prot, self.cageid)
         } else {
             syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value")
         }
@@ -1448,11 +1485,6 @@ impl Cage {
             match metadata.shmtable.entry(shmid) {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
-
-                    // update semaphores
-                    for offset in segment.semaphor_offsets.iter() {
-                        self.sem_table.remove(&(shmaddr as u32 + *offset));
-                    }
 
                     segment.unmap_shm(shmaddr, self.cageid);
 
@@ -1515,589 +1547,6 @@ impl Cage {
         }
 
         0 //shmctl has succeeded!
-    }
-
-    //------------------MUTEX SYSCALLS------------------
-    pub fn mutex_create_syscall(&self) -> i32 {
-        let mut mutextable = self.mutex_table.write();
-        let mut index_option = None;
-        for i in 0..mutextable.len() {
-            if mutextable[i].is_none() {
-                index_option = Some(i);
-                break;
-            }
-        }
-
-        let index = if let Some(ind) = index_option {
-            ind
-        } else {
-            mutextable.push(None);
-            mutextable.len() - 1
-        };
-
-        let mutex_result = interface::RawMutex::create();
-        match mutex_result {
-            Ok(mutex) => {
-                mutextable[index] = Some(interface::RustRfc::new(mutex));
-                index as i32
-            }
-            Err(_) => match Errno::from_discriminant(interface::get_errno()) {
-                Ok(i) => syscall_error(
-                    i,
-                    "mutex_create",
-                    "The libc call to pthread_mutex_init failed!",
-                ),
-                Err(()) => panic!("Unknown errno value from pthread_mutex_init returned!"),
-            },
-        }
-    }
-
-    pub fn mutex_destroy_syscall(&self, mutex_handle: i32) -> i32 {
-        let mut mutextable = self.mutex_table.write();
-        if mutex_handle < mutextable.len() as i32
-            && mutex_handle >= 0
-            && mutextable[mutex_handle as usize].is_some()
-        {
-            mutextable[mutex_handle as usize] = None;
-            0
-        } else {
-            //undefined behavior
-            syscall_error(
-                Errno::EBADF,
-                "mutex_destroy",
-                "Mutex handle does not refer to a valid mutex!",
-            )
-        }
-        //the RawMutex is destroyed on Drop
-
-        //this is currently assumed to always succeed, as the man page does not list possible
-        //errors for pthread_mutex_destroy
-    }
-
-    pub fn mutex_lock_syscall(&self, mutex_handle: i32) -> i32 {
-        let mutextable = self.mutex_table.read();
-        if mutex_handle < mutextable.len() as i32
-            && mutex_handle >= 0
-            && mutextable[mutex_handle as usize].is_some()
-        {
-            let clonedmutex = mutextable[mutex_handle as usize].as_ref().unwrap().clone();
-            drop(mutextable);
-            let retval = clonedmutex.lock();
-
-            if retval < 0 {
-                match Errno::from_discriminant(interface::get_errno()) {
-                    Ok(i) => {
-                        return syscall_error(
-                            i,
-                            "mutex_lock",
-                            "The libc call to pthread_mutex_lock failed!",
-                        );
-                    }
-                    Err(()) => panic!("Unknown errno value from pthread_mutex_lock returned!"),
-                };
-            }
-
-            retval
-        } else {
-            //undefined behavior
-            syscall_error(
-                Errno::EBADF,
-                "mutex_lock",
-                "Mutex handle does not refer to a valid mutex!",
-            )
-        }
-    }
-
-    pub fn mutex_trylock_syscall(&self, mutex_handle: i32) -> i32 {
-        let mutextable = self.mutex_table.read();
-        if mutex_handle < mutextable.len() as i32
-            && mutex_handle >= 0
-            && mutextable[mutex_handle as usize].is_some()
-        {
-            let clonedmutex = mutextable[mutex_handle as usize].as_ref().unwrap().clone();
-            drop(mutextable);
-            let retval = clonedmutex.trylock();
-
-            if retval < 0 {
-                match Errno::from_discriminant(interface::get_errno()) {
-                    Ok(i) => {
-                        return syscall_error(
-                            i,
-                            "mutex_trylock",
-                            "The libc call to pthread_mutex_trylock failed!",
-                        );
-                    }
-                    Err(()) => panic!("Unknown errno value from pthread_mutex_trylock returned!"),
-                };
-            }
-
-            retval
-        } else {
-            //undefined behavior
-            syscall_error(
-                Errno::EBADF,
-                "mutex_trylock",
-                "Mutex handle does not refer to a valid mutex!",
-            )
-        }
-    }
-
-    pub fn mutex_unlock_syscall(&self, mutex_handle: i32) -> i32 {
-        let mutextable = self.mutex_table.read();
-        if mutex_handle < mutextable.len() as i32
-            && mutex_handle >= 0
-            && mutextable[mutex_handle as usize].is_some()
-        {
-            let clonedmutex = mutextable[mutex_handle as usize].as_ref().unwrap().clone();
-            drop(mutextable);
-            let retval = clonedmutex.unlock();
-
-            if retval < 0 {
-                match Errno::from_discriminant(interface::get_errno()) {
-                    Ok(i) => {
-                        return syscall_error(
-                            i,
-                            "mutex_unlock",
-                            "The libc call to pthread_mutex_unlock failed!",
-                        );
-                    }
-                    Err(()) => panic!("Unknown errno value from pthread_mutex_unlock returned!"),
-                };
-            }
-
-            retval
-        } else {
-            //undefined behavior
-            syscall_error(
-                Errno::EBADF,
-                "mutex_unlock",
-                "Mutex handle does not refer to a valid mutex!",
-            )
-        }
-    }
-
-    //------------------CONDVAR SYSCALLS------------------
-
-    pub fn cond_create_syscall(&self) -> i32 {
-        let mut cvtable = self.cv_table.write();
-        let mut index_option = None;
-        for i in 0..cvtable.len() {
-            if cvtable[i].is_none() {
-                index_option = Some(i);
-                break;
-            }
-        }
-
-        let index = if let Some(ind) = index_option {
-            ind
-        } else {
-            cvtable.push(None);
-            cvtable.len() - 1
-        };
-
-        let cv_result = interface::RawCondvar::create();
-        match cv_result {
-            Ok(cv) => {
-                cvtable[index] = Some(interface::RustRfc::new(cv));
-                index as i32
-            }
-            Err(_) => match Errno::from_discriminant(interface::get_errno()) {
-                Ok(i) => syscall_error(
-                    i,
-                    "cond_create",
-                    "The libc call to pthread_cond_init failed!",
-                ),
-                Err(()) => panic!("Unknown errno value from pthread_cond_init returned!"),
-            },
-        }
-    }
-
-    pub fn cond_destroy_syscall(&self, cv_handle: i32) -> i32 {
-        let mut cvtable = self.cv_table.write();
-        if cv_handle < cvtable.len() as i32
-            && cv_handle >= 0
-            && cvtable[cv_handle as usize].is_some()
-        {
-            cvtable[cv_handle as usize] = None;
-            0
-        } else {
-            //undefined behavior
-            syscall_error(
-                Errno::EBADF,
-                "cond_destroy",
-                "Condvar handle does not refer to a valid condvar!",
-            )
-        }
-        //the RawCondvar is destroyed on Drop
-
-        //this is currently assumed to always succeed, as the man page does not list possible
-        //errors for pthread_cv_destroy
-    }
-
-    pub fn cond_signal_syscall(&self, cv_handle: i32) -> i32 {
-        let cvtable = self.cv_table.read();
-        if cv_handle < cvtable.len() as i32
-            && cv_handle >= 0
-            && cvtable[cv_handle as usize].is_some()
-        {
-            let clonedcv = cvtable[cv_handle as usize].as_ref().unwrap().clone();
-            drop(cvtable);
-            let retval = clonedcv.signal();
-
-            if retval < 0 {
-                match Errno::from_discriminant(interface::get_errno()) {
-                    Ok(i) => {
-                        return syscall_error(
-                            i,
-                            "cond_signal",
-                            "The libc call to pthread_cond_signal failed!",
-                        );
-                    }
-                    Err(()) => panic!("Unknown errno value from pthread_cond_signal returned!"),
-                };
-            }
-
-            retval
-        } else {
-            //undefined behavior
-            syscall_error(
-                Errno::EBADF,
-                "cond_signal",
-                "Condvar handle does not refer to a valid condvar!",
-            )
-        }
-    }
-
-    pub fn cond_broadcast_syscall(&self, cv_handle: i32) -> i32 {
-        let cvtable = self.cv_table.read();
-        if cv_handle < cvtable.len() as i32
-            && cv_handle >= 0
-            && cvtable[cv_handle as usize].is_some()
-        {
-            let clonedcv = cvtable[cv_handle as usize].as_ref().unwrap().clone();
-            drop(cvtable);
-            let retval = clonedcv.broadcast();
-
-            if retval < 0 {
-                match Errno::from_discriminant(interface::get_errno()) {
-                    Ok(i) => {
-                        return syscall_error(
-                            i,
-                            "cond_broadcast",
-                            "The libc call to pthread_cond_broadcast failed!",
-                        );
-                    }
-                    Err(()) => panic!("Unknown errno value from pthread_cond_broadcast returned!"),
-                };
-            }
-
-            retval
-        } else {
-            //undefined behavior
-            syscall_error(
-                Errno::EBADF,
-                "cond_broadcast",
-                "Condvar handle does not refer to a valid condvar!",
-            )
-        }
-    }
-
-    pub fn cond_wait_syscall(&self, cv_handle: i32, mutex_handle: i32) -> i32 {
-        let cvtable = self.cv_table.read();
-        if cv_handle < cvtable.len() as i32
-            && cv_handle >= 0
-            && cvtable[cv_handle as usize].is_some()
-        {
-            let clonedcv = cvtable[cv_handle as usize].as_ref().unwrap().clone();
-            drop(cvtable);
-
-            let mutextable = self.mutex_table.read();
-            if mutex_handle < mutextable.len() as i32
-                && mutex_handle >= 0
-                && mutextable[mutex_handle as usize].is_some()
-            {
-                let clonedmutex = mutextable[mutex_handle as usize].as_ref().unwrap().clone();
-                drop(mutextable);
-                let retval = clonedcv.wait(&*clonedmutex);
-
-                // if the cancel status is set in the cage, we trap around a cancel point
-                // until the individual thread is signaled to cancel itself
-                if self
-                    .cancelstatus
-                    .load(interface::RustAtomicOrdering::Relaxed)
-                {
-                    loop {
-                        interface::cancelpoint(self.cageid);
-                    } // we check cancellation status here without letting the function return
-                }
-
-                if retval < 0 {
-                    match Errno::from_discriminant(interface::get_errno()) {
-                        Ok(i) => {
-                            return syscall_error(
-                                i,
-                                "cond_wait",
-                                "The libc call to pthread_cond_wait failed!",
-                            );
-                        }
-                        Err(()) => panic!("Unknown errno value from pthread_cond_wait returned!"),
-                    };
-                }
-
-                retval
-            } else {
-                //undefined behavior
-                syscall_error(
-                    Errno::EBADF,
-                    "cond_wait",
-                    "Mutex handle does not refer to a valid mutex!",
-                )
-            }
-        } else {
-            //undefined behavior
-            syscall_error(
-                Errno::EBADF,
-                "cond_wait",
-                "Condvar handle does not refer to a valid condvar!",
-            )
-        }
-    }
-
-    pub fn cond_timedwait_syscall(
-        &self,
-        cv_handle: i32,
-        mutex_handle: i32,
-        time: interface::RustDuration,
-    ) -> i32 {
-        let cvtable = self.cv_table.read();
-        if cv_handle < cvtable.len() as i32
-            && cv_handle >= 0
-            && cvtable[cv_handle as usize].is_some()
-        {
-            let clonedcv = cvtable[cv_handle as usize].as_ref().unwrap().clone();
-            drop(cvtable);
-
-            let mutextable = self.mutex_table.read();
-            if mutex_handle < mutextable.len() as i32
-                && mutex_handle >= 0
-                && mutextable[mutex_handle as usize].is_some()
-            {
-                let clonedmutex = mutextable[mutex_handle as usize].as_ref().unwrap().clone();
-                drop(mutextable);
-                let retval = clonedcv.timedwait(&*clonedmutex, time);
-                if retval < 0 {
-                    match Errno::from_discriminant(interface::get_errno()) {
-                        Ok(i) => {
-                            return syscall_error(
-                                i,
-                                "cond_wait",
-                                "The libc call to pthread_cond_wait failed!",
-                            );
-                        }
-                        Err(()) => panic!("Unknown errno value from pthread_cond_wait returned!"),
-                    };
-                }
-
-                retval
-            } else {
-                //undefined behavior
-                syscall_error(
-                    Errno::EBADF,
-                    "cond_wait",
-                    "Mutex handle does not refer to a valid mutex!",
-                )
-            }
-        } else {
-            //undefined behavior
-            syscall_error(
-                Errno::EBADF,
-                "cond_wait",
-                "Condvar handle does not refer to a valid condvar!",
-            )
-        }
-    }
-
-    //------------------SEMAPHORE SYSCALLS------------------
-    /*
-     *  Initialize semaphore object SEM to value
-     *  pshared used to indicate whether the semaphore is shared in threads (when equals to 0)
-     *  or shared between processes (when nonzero)
-     */
-    pub fn sem_init_syscall(&self, sem_handle: u32, pshared: i32, value: u32) -> i32 {
-        // Boundary check
-        if value > SEM_VALUE_MAX {
-            return syscall_error(Errno::EINVAL, "sem_init", "value exceeds SEM_VALUE_MAX");
-        }
-
-        let metadata = &SHM_METADATA;
-        let is_shared = pshared != 0;
-
-        // Iterate semaphore table, if semaphore is already initialzed return error
-        let semtable = &self.sem_table;
-
-        // Will initialize only it's new
-        if !semtable.contains_key(&sem_handle) {
-            let new_semaphore =
-                interface::RustRfc::new(interface::RustSemaphore::new(value, is_shared));
-            semtable.insert(sem_handle, new_semaphore.clone());
-
-            if is_shared {
-                let rev_shm = self.rev_shm.lock();
-                // if its shared and exists in an existing mapping we need to add it to other cages
-                if let Some((mapaddr, shmid)) =
-                    Self::search_for_addr_in_region(&rev_shm, sem_handle)
-                {
-                    let offset = mapaddr - sem_handle;
-                    if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
-                        for cageid in segment.attached_cages.clone().into_read_only().keys() {
-                            // iterate through all cages with segment attached and add semaphor in segments at attached addr + offset
-                            let cage = interface::cagetable_getref(*cageid);
-                            let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
-                            for addr in addrs.iter() {
-                                cage.sem_table.insert(addr + offset, new_semaphore.clone());
-                            }
-                        }
-                        segment.semaphor_offsets.insert(offset);
-                    }
-                }
-            }
-            return 0;
-        }
-
-        return syscall_error(Errno::EBADF, "sem_init", "semaphore already initialized");
-    }
-
-    pub fn sem_wait_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = &self.sem_table;
-        // Check whether semaphore exists
-        if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            let semaphore = sementry.clone();
-            drop(sementry);
-            semaphore.lock();
-        } else {
-            return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
-        }
-        return 0;
-    }
-
-    pub fn sem_post_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = &self.sem_table;
-        if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            let semaphore = sementry.clone();
-            drop(sementry);
-            if !semaphore.unlock() {
-                return syscall_error(
-                    Errno::EOVERFLOW,
-                    "sem_post",
-                    "The maximum allowable value for a semaphore would be exceeded",
-                );
-            }
-        } else {
-            return syscall_error(Errno::EINVAL, "sem_wait", "sem is not a valid semaphore");
-        }
-        return 0;
-    }
-
-    pub fn sem_destroy_syscall(&self, sem_handle: u32) -> i32 {
-        let metadata = &SHM_METADATA;
-
-        let semtable = &self.sem_table;
-        // remove entry from semaphore table
-        if let Some(sementry) = semtable.remove(&sem_handle) {
-            if sementry
-                .1
-                .is_shared
-                .load(interface::RustAtomicOrdering::Relaxed)
-            {
-                // if its shared we'll need to remove it from other attachments
-                let rev_shm = self.rev_shm.lock();
-                if let Some((mapaddr, shmid)) =
-                    Self::search_for_addr_in_region(&rev_shm, sem_handle)
-                {
-                    // find all segments that contain semaphore
-                    let offset = mapaddr - sem_handle;
-                    if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
-                        for cageid in segment.attached_cages.clone().into_read_only().keys() {
-                            // iterate through all cages containing segment
-                            let cage = interface::cagetable_getref(*cageid);
-                            let addrs = Self::rev_shm_find_addrs_by_shmid(&rev_shm, shmid);
-                            for addr in addrs.iter() {
-                                cage.sem_table.remove(&(addr + offset)); //remove semapoores at attached addresses + the offset
-                            }
-                        }
-                    }
-                }
-            }
-            return 0;
-        } else {
-            return syscall_error(Errno::EINVAL, "sem_destroy", "sem is not a valid semaphore");
-        }
-    }
-
-    /*
-     * Take only sem_t *sem as argument, and return int *sval
-     */
-    pub fn sem_getvalue_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = &self.sem_table;
-        if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            let semaphore = sementry.clone();
-            drop(sementry);
-            return semaphore.get_value();
-        }
-        return syscall_error(
-            Errno::EINVAL,
-            "sem_getvalue",
-            "sem is not a valid semaphore",
-        );
-    }
-
-    pub fn sem_trywait_syscall(&self, sem_handle: u32) -> i32 {
-        let semtable = &self.sem_table;
-        // Check whether semaphore exists
-        if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            let semaphore = sementry.clone();
-            drop(sementry);
-            if !semaphore.trylock() {
-                return syscall_error(
-                    Errno::EAGAIN,
-                    "sem_trywait",
-                    "The operation could not be performed without blocking",
-                );
-            }
-        } else {
-            return syscall_error(Errno::EINVAL, "sem_trywait", "sem is not a valid semaphore");
-        }
-        return 0;
-    }
-
-    pub fn sem_timedwait_syscall(&self, sem_handle: u32, time: interface::RustDuration) -> i32 {
-        let abstime = libc::timespec {
-            tv_sec: time.as_secs() as i64,
-            tv_nsec: (time.as_nanos() % 1000000000) as i64,
-        };
-        if abstime.tv_nsec < 0 {
-            return syscall_error(Errno::EINVAL, "sem_timedwait", "Invalid timedout");
-        }
-        let semtable = &self.sem_table;
-        // Check whether semaphore exists
-        if let Some(sementry) = semtable.get_mut(&sem_handle) {
-            let semaphore = sementry.clone();
-            drop(sementry);
-            if !semaphore.timedlock(time) {
-                return syscall_error(
-                    Errno::ETIMEDOUT,
-                    "sem_timedwait",
-                    "The call timed out before the semaphore could be locked",
-                );
-            }
-        } else {
-            return syscall_error(
-                Errno::EINVAL,
-                "sem_timedwait",
-                "sem is not a valid semaphore",
-            );
-        }
-        return 0;
     }
 
     // We're directly patching in the libc futex call for experimentation with lind-wasm
