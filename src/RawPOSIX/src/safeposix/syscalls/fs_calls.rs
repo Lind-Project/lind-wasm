@@ -1399,7 +1399,7 @@ impl Cage {
         let shmid: i32;
         let metadata = &SHM_METADATA;
     
-        // Round up size to nearest page size using round_up_page function
+        // Round up size to page boundary since shared memory mappings must be page-aligned
         let rounded_size = round_up_page(size as u64) as usize;
     
         match metadata.shmkeyidtable.entry(key) {
