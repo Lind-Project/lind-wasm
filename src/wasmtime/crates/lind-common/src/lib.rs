@@ -5,7 +5,7 @@ use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_multi_process::{get_memory_base, LindHost, clone_constants::CloneArgStruct};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use wasmtime::Caller;
+use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
 // then the syscall would be dispatched into rawposix, or other crates under wasmtime, depending on the syscall, to perform its job
@@ -37,7 +37,7 @@ impl LindCommonCtx {
 
     // entry point for lind_syscall in glibc, dispatching syscalls to rawposix or wasmtime
     pub fn lind_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-                        (&self, call_number: u32, call_name: u64, caller: &mut Caller<'_, T>, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64, arg6: u64) -> i32 {
+                        (&self, call_number: u32, call_name: u64, mut caller: &mut Caller<'_, T>, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64, arg6: u64) -> i32 {
         let start_address = get_memory_base(&caller);
         match call_number as i32 {
             // clone syscall
@@ -56,7 +56,13 @@ impl LindCommonCtx {
             }
             // other syscalls goes into rawposix
             _ => {
-                lind_syscall_api(
+                if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
+                    let retval = caller.as_context_mut().get_current_syscall_rewind_data().unwrap();
+                    wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                    return retval;
+                }
+
+                let retval = lind_syscall_api(
                     self.pid as u64,
                     call_number,
                     call_name,
@@ -66,7 +72,22 @@ impl LindCommonCtx {
                     arg4,
                     arg5,
                     arg6,
-                )
+                );
+
+                // assumption: lind_syscall_api will not switch asyncify state, which holds true for now
+                caller.as_context_mut().append_syscall_asyncify_data(retval);
+
+                if retval == rawposix::interface::Errno::EINTR as i32 {
+                    wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+
+                    if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
+                        return 0;
+                    } else {
+                        caller.as_context_mut().pop_syscall_asyncify_data();
+                    }
+                }
+
+                retval
             }
         }
     }
@@ -132,7 +153,7 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
             let ctx = get_cx(&host);
 
             let retval = ctx.lind_syscall(call_number, call_name, &mut caller, arg1, arg2, arg3, arg4, arg5, arg6);
-            
+
             // TODO: add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
 
@@ -170,6 +191,16 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
         "epoch_callback",
         move |mut caller: Caller<'_, T>| {
             wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+        },
+    )?;
+    
+    linker.func_wrap(
+        "debug",
+        "malloc_printerr",
+        move |mut caller: Caller<'_, T>, msg: i32| {
+            let mem_base = get_memory_base(&caller);
+            let msg = rawposix::interface::get_cstr(mem_base + msg as u64).unwrap();
+            println!("malloc_printerr: {}", msg);
         },
     )?;
 

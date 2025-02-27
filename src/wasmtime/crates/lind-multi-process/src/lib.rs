@@ -299,6 +299,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         let signal_asyncify_data = store.get_signal_asyncify_data();
+        let syscall_asyncify_data = store.get_syscall_asyncify_data();
         let is_parent_thread = store.is_thread();
         store.set_on_called(Box::new(move |mut store| {
             // unwind finished and we need to stop the unwind
@@ -391,6 +392,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     store.as_context_mut().set_stack_top(parent_stack_low);
                     store.as_context_mut().set_stack_base(parent_stack_high);
                     store.as_context_mut().set_signal_asyncify_data(signal_asyncify_data);
+                    store.as_context_mut().set_syscall_asyncify_data(syscall_asyncify_data);
 
                     let invoke_res = child_start_func
                         .call(&mut store, &values, &mut results);
