@@ -266,7 +266,7 @@ impl Vmmap {
         }
     }
 
-    // Clear the vmmap struct
+    // Clear the vmmap struct, used for exec syscall
     pub fn clear(&mut self){
         self.entries = NoditMap::new();
         self.cached_entry = None;

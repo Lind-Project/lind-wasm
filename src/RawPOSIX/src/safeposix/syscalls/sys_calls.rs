@@ -131,7 +131,17 @@ impl Cage {
     }
 
     /*
-    *   exec() will only return if error happens 
+    *   Here is the linux man page for execve: https://man7.org/linux/man-pages/man2/execve.2.html
+    *   exec() will only return if error happens
+    *   Unlike the `exec` syscalls from linux manual, exec syscall here does not take any arguments,
+    *   such as the argument list or environment variables. This is because, in rawposix, 
+    *   the `exec` syscall only functions as a "cage-level exec," focusing only on updating 
+    *   the `cage` struct with the necessary changes. The actual logic for process replacement 
+    *   is handled within the wasmtime codebase, which will eventually call this function to perform
+    *   only a specific part of the `exec` operation.
+    *
+    *   The method we used here is remain the same cage and replace the component that need to be replaced,
+    *   since cageid, cwd, zombies and other components still exist, only need to replace cancelstatus, rev_shm, thread_table, vmmap.
     */
     pub fn exec_syscall(&self) -> i32 { 
         fdtables::empty_fds_for_exec(self.cageid);
@@ -140,7 +150,7 @@ impl Cage {
         self.rev_shm.lock().clear(); 
         self.thread_table.clear();
         let mut vmmap = self.vmmap.write();
-        vmmap.clear(); //this just clean the vmmap in the cage still need some modify for wasmtime and call to kernal
+        vmmap.clear(); //this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
 
         0
     }
