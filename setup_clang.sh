@@ -25,10 +25,10 @@
 #!/bin/bash
 
 # Define variables
-CLANG_DIR="lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
+CLANG_DIR="clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 CLANG_TAR="clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
 CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/$CLANG_TAR"
-LIND_WASM_DIR="lind-wasm"
+LIND_WASM_DIR="."
 WASI_SRC="./src/glibc/wasi"
 WASI_DEST="$CLANG_DIR/lib/clang/16/lib"
 
@@ -36,8 +36,7 @@ WASI_DEST="$CLANG_DIR/lib/clang/16/lib"
 if [ ! -d "$CLANG_DIR" ]; then
     echo "Clang not found. Downloading and extracting..."
     wget "$CLANG_URL" && \
-    tar -xf "$CLANG_TAR" && \
-    mv clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 "$CLANG_DIR"
+    tar -xf "$CLANG_TAR"    
 else
     echo "Clang is already installed in $CLANG_DIR."
 fi
