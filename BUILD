@@ -144,7 +144,6 @@ py_binary(
          "check_wasm.log",
          ":rawposix_files",
          ":wasmtime_files",
-         ":all_files",
          ":clang_files",
     ],   
 )
@@ -166,8 +165,3 @@ filegroup(
     name = "clang_files",
     srcs = glob(["clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/**/*"])
 )       
-# FileGroup for src files
-filegroup(
-    name="all_files",
-    srcs = glob(["**/*"]),
-)

@@ -1,9 +1,10 @@
 #!/bin/bash
 
-glibc_base="$PWD/src/glibc"
-wasmtime_base="$PWD/src/wasmtime"
-rustposix_base="$PWD/src/safeposix-rust"
-rawposix_base="$PWD/src/RawPOSIX"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+glibc_base="$script_dir/src/glibc"
+wasmtime_base="$script_dir/src/wasmtime"
+rustposix_base="$script_dir/src/safeposix-rust"
+rawposix_base="$script_dir/src/RawPOSIX"
 
 CC="${CLANG:=/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
 
