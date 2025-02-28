@@ -136,8 +136,8 @@ impl Cage {
     *   Unlike the `exec` syscalls from linux manual, exec syscall here does not take any arguments,
     *   such as the argument list or environment variables. This is because, in rawposix, 
     *   the `exec` syscall only functions as a "cage-level exec," focusing only on updating 
-    *   the `cage` struct with the necessary changes. The actual logic for process replacement 
-    *   is handled within the wasmtime codebase, which will eventually call this function to perform
+    *   the `cage` struct with the necessary changes. In a word in this Rawposix part it handles the cage resources management.
+    *   The excution and memory management is handled within the wasmtime codebase, which will eventually call this function to perform
     *   only a specific part of the `exec` operation.
     *
     *   The method we used here is remain the same cage and replace the component that need to be replaced,
