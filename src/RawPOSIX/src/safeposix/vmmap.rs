@@ -266,6 +266,15 @@ impl Vmmap {
         }
     }
 
+    // Clear the vmmap struct, used for exec syscall
+    pub fn clear(&mut self){
+        self.entries = NoditMap::new();
+        self.cached_entry = None;
+        self.base_address = None;
+        self.start_address = 0;
+        self.end_address = DEFAULT_VMMAP_SIZE;
+        self.program_break = 0;
+    }
     /// Rounds up a page number to the nearest multiple of pages_per_map
     ///
     /// Arguments:

@@ -131,67 +131,27 @@ impl Cage {
     }
 
     /*
-    *   exec() will only return if error happens 
+    *   Here is the linux man page for execve: https://man7.org/linux/man-pages/man2/execve.2.html
+    *   exec() will only return if error happens
+    *   Unlike the `exec` syscalls from linux manual, exec syscall here does not take any arguments,
+    *   such as the argument list or environment variables. This is because, in rawposix, 
+    *   the `exec` syscall only functions as a "cage-level exec," focusing only on updating 
+    *   the `cage` struct with the necessary changes. In a word in this Rawposix part it handles the cage resources management.
+    *   The excution and memory management is handled within the wasmtime codebase, which will eventually call this function to perform
+    *   only a specific part of the `exec` operation.
+    *
+    *   The method we used here is remain the same cage and replace the component that need to be replaced,
+    *   since cageid, cwd, zombies and other components still exist, only need to replace cancelstatus, rev_shm, thread_table, vmmap.
     */
-    pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        // Empty fd with flag should_cloexec 
+    pub fn exec_syscall(&self) -> i32 { 
         fdtables::empty_fds_for_exec(self.cageid);
-        // Add the new one to fdtable
-        let _ = fdtables::copy_fdtable_for_cage(self.cageid, child_cageid);
-        // Delete the original one
-        let _newfdtable = fdtables::remove_cage_from_fdtable(self.cageid);
 
-        interface::cagetable_remove(self.cageid);
+        self.cancelstatus.store(false, interface::RustAtomicOrdering::Relaxed);
+        self.rev_shm.lock().clear(); 
+        self.thread_table.clear();
+        let mut vmmap = self.vmmap.write();
+        vmmap.clear(); //this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
 
-        self.unmap_shm_mappings();
-
-        let zombies = self.zombies.read();
-        let cloned_zombies = zombies.clone();
-        let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
-        drop(zombies);
-
-        // we grab the parent cages main threads sigset and store it at 0
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
-        let newsigset = interface::RustHashMap::new();
-        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // we don't add these for the test suite
-            // BUG: Signals are commented out until we add them to lind-wasm
-            // let mainsigsetatomic = self
-            //     .sigset
-            //     .get(
-            //         &self
-            //             .main_threadid
-            //             .load(interface::RustAtomicOrdering::Relaxed),
-            //     )
-            //     .unwrap();
-            // let mainsigset = interface::RustAtomicU64::new(
-            //     mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed),
-            // );
-            // newsigset.insert(0, mainsigset);
-        }
-
-        let newcage = Cage {
-            cageid: child_cageid,
-            cwd: interface::RustLock::new(self.cwd.read().clone()),
-            parent: self.parent,
-            cancelstatus: interface::RustAtomicBool::new(false),
-            getgid: interface::RustAtomicI32::new(-1),
-            getuid: interface::RustAtomicI32::new(-1),
-            getegid: interface::RustAtomicI32::new(-1),
-            geteuid: interface::RustAtomicI32::new(-1),
-            rev_shm: interface::Mutex::new(vec![]),
-            thread_table: interface::RustHashMap::new(),
-            signalhandler: interface::RustHashMap::new(),
-            sigset: newsigset,
-            main_threadid: interface::RustAtomicU64::new(0),
-            interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
-            vmmap: interface::RustLock::new(Vmmap::new()), // memory is cleared after exec
-            zombies: interface::RustLock::new(cloned_zombies), // when a process exec-ed, its child relationship should be perserved
-            child_num: interface::RustAtomicU64::new(child_num),
-        };
-        //wasteful clone of fdtable, but mutability constraints exist
-
-        interface::cagetable_insert(child_cageid, newcage);
         0
     }
 
