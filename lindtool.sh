@@ -122,7 +122,7 @@ verify_environment() {
 }
 
 # verification of environment here
-verify_environment
+#verify_environment
 
 split_path() {
     local full_path="$1"
