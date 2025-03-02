@@ -122,19 +122,20 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
     0
 }
 
-/// Handles shared memory attach operations by finding appropriate memory space and mapping it
+/// Handles shared memory attach operations by mapping memory at the specified address
 ///
 /// This function processes shared memory attachment requests by:
-/// 1. Finding an appropriate hole in vmmap if no address is specified
-/// 2. Validating the requested address if one is provided
-/// 3. Setting up proper protection flags based on SHM_RDONLY
-/// 4. Using mmap_handler to perform the actual mapping
+/// 1. Validating the requested address is page-aligned if provided
+/// 2. Performing a two-step mapping process:
+///    - First reserves the memory region with PROT_NONE
+///    - Then maps it with the requested protection flags
+/// 3. Using MAP_SHARED | MAP_FIXED | MAP_ANONYMOUS for the mapping
 ///
 /// # Arguments
 /// * `cageid` - Identifier of the cage that initiated the shmat
-/// * `addr` - Requested address for attachment (can be null)
+/// * `addr` - Requested address for attachment (must be page-aligned if non-zero)
 /// * `length` - Size of the shared memory segment
-/// * `prot` - Protection flags (affected by SHM_RDONLY)
+/// * `prot` - Protection flags for the memory mapping
 /// * `flags` - Mapping flags
 ///
 /// # Returns
@@ -151,31 +152,38 @@ pub fn shmat_handler(cageid: u64, addr: *mut u8, length: usize, prot: i32, flags
         }
     }
 
-    // If no address specified or using address as hint, find appropriate space
-    if useraddr == 0 {
-        let mut vmmap = cage.vmmap.write();
-        let result = vmmap.find_map_space(round_up_page(length as u64) as u32 >> PAGESHIFT, 1);
-        
-        if result.is_none() {
-            return syscall_error(Errno::ENOMEM, "shmat", "no memory") as u32;
-        }
-        
-        let space = result.unwrap();
-        useraddr = (space.start() << PAGESHIFT) as u32;
-        drop(vmmap);
-    }
+    let mmap_flags = MAP_SHARED | MAP_FIXED | MAP_ANONYMOUS;
+    let rounded_length = round_up_page(length as u64) as usize;
 
-    // Use mmap_handler to perform the actual mapping with MAP_FIXED
-    let result = cage.mmap_syscall(
-        useraddr as *mut u8,
-        round_up_page(length as u64) as usize,
-        prot,
-        flags | MAP_FIXED as i32,
+    let vmmap = cage.vmmap.read();
+    let sysaddr = vmmap.user_to_sys(useraddr);
+    drop(vmmap);
+
+    // First reserve the memory with PROT_NONE
+    let reserve_result = cage.mmap_syscall(
+        sysaddr as *mut u8,
+        rounded_length,
+        PROT_NONE,
+        mmap_flags as i32,
         -1,
         0
     );
 
-    if result != useraddr as usize {
+    if (reserve_result as i64) < 0 {
+        return syscall_error(Errno::EINVAL, "shmat", "failed to reserve memory") as u32;
+    }
+
+    // Then map with actual protection
+    let result = cage.mmap_syscall(
+        sysaddr as *mut u8,
+        rounded_length,
+        prot,
+        mmap_flags as i32,
+        -1,
+        0
+    );
+
+    if result != sysaddr {
         panic!("MAP_FIXED not fixed in shmat");
     }
 
