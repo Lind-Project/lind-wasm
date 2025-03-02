@@ -152,8 +152,8 @@ impl Cage {
     *    - RawPOSIX maintains its own notion of the current working directory.
     *    - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
     *      path by prepending the LIND_ROOT prefix.
-    *    - After this conversion, the path is already absolute from the host’s perspective, so `AT_FDCWD`
-    *     doesn't actually rely on the host’s working directory. This avoids mismatches between RawPOSIX
+    *    - After this conversion, the path is already absolute from the host's perspective, so `AT_FDCWD`
+    *     doesn't actually rely on the host's working directory. This avoids mismatches between RawPOSIX
     *     and the host environment.
     *
     *  Case 2: When `dirfd` is not AT_FDCWD:
@@ -1539,20 +1539,9 @@ impl Cage {
                         return result;
                     }
 
-                    // Update segment metadata to reflect detachment
-                    segment.shminfo.shm_nattch -= 1;
-                    segment.shminfo.shm_dtime = interface::timestamp() as isize;
+                    // Use unmap_shm for segment metadata updates
+                    segment.unmap_shm(shmaddr, self.cageid);
                     
-                    // Update per-cage attachment tracking
-                    // Each cage maintains a count of how many times it has attached this segment
-                    if let Some(mut count) = segment.attached_cages.get_mut(&self.cageid) {
-                        *count -= 1;
-                        if *count == 0 {
-                            // Remove cage entry when no more attachments exist
-                            segment.attached_cages.remove(&self.cageid);
-                        }
-                    }
-    
                     if segment.rmid && segment.shminfo.shm_nattch == 0 {
                         rm = true;
                     }
