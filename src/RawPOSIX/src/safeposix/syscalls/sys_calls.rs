@@ -130,18 +130,21 @@ impl Cage {
         0
     }
 
-    /*
-    *   Here is the linux man page for execve: https://man7.org/linux/man-pages/man2/execve.2.html
-    *   exec() will only return if error happens
-    *   Unlike the `exec` syscalls from linux manual, exec syscall here does not take any arguments,
-    *   such as the argument list or environment variables. This is because, in rawposix, 
-    *   the `exec` syscall only functions as a "cage-level exec," focusing only on updating 
-    *   the `cage` struct with the necessary changes. In a word in this Rawposix part it handles the cage resources management.
-    *   The excution and memory management is handled within the wasmtime codebase, which will eventually call this function to perform
-    *   only a specific part of the `exec` operation.
-    *
-    *   The method we used here is remain the same cage and replace the component that need to be replaced,
-    *   since cageid, cwd, zombies and other components still exist, only need to replace cancelstatus, rev_shm, thread_table, vmmap.
+   /*
+    *  Here is the Linux man page for execve: https://man7.org/linux/man-pages/man2/execve.2.html
+    *  
+    *  exec() only returns if an error occurs.
+    *  
+    *  Unlike the `exec` syscalls in the Linux manual, the `exec` syscall here does not take any arguments,
+    *  such as an argument list or environment variables. This is because, in Rawposix, `exec` functions
+    *  solely as a "cage-level exec," focusing only on updating the `cage` struct with necessary changes.
+    *  
+    *  In short, this syscall in Rawposix part is responsible for managing cage resources.
+    *  Execution and memory management are handled within the Wasmtime codebase, which eventually calls
+    *  this function to perform only a specific part of the `exec` operation.
+    *  
+    *  Here, we retain the same cage and only replace the necessary components since `cageid`, `cwd`, `zombies`,
+    *  and other elements remain unchanged. Only `cancelstatus`, `rev_shm`, `thread_table`, and `vmmap` need to be replaced.
     */
     pub fn exec_syscall(&self) -> i32 { 
         fdtables::empty_fds_for_exec(self.cageid);
