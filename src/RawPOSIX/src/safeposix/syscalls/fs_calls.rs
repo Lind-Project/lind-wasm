@@ -152,8 +152,8 @@ impl Cage {
     *    - RawPOSIX maintains its own notion of the current working directory.
     *    - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
     *      path by prepending the LIND_ROOT prefix.
-    *    - After this conversion, the path is already absolute from the host's perspective, so `AT_FDCWD`
-    *     doesn't actually rely on the host's working directory. This avoids mismatches between RawPOSIX
+    *    - After this conversion, the path is already absolute from the host’s perspective, so `AT_FDCWD`
+    *     doesn't actually rely on the host’s working directory. This avoids mismatches between RawPOSIX
     *     and the host environment.
     *
     *  Case 2: When `dirfd` is not AT_FDCWD:
@@ -1553,7 +1553,7 @@ impl Cage {
                         metadata.shmkeyidtable.remove(&key);
                     }
 
-                    return 1;
+                    return 0;  // Return 0 on success as per man page
                 }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");
