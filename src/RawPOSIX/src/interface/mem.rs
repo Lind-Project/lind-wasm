@@ -159,7 +159,11 @@ pub fn shmat_handler(cageid: u64, addr: *mut u8, length: usize, prot: i32, flags
     let sysaddr = vmmap.user_to_sys(useraddr);
     drop(vmmap);
 
-    // First reserve the memory with PROT_NONE
+    // Two-step mapping process:
+    // 1. First, we reserve the memory region with PROT_NONE to ensure:
+    //    - The address range is available and not in use
+    //    - No other concurrent mappings can claim this space
+    //    - We don't accidentally access the memory before it's properly set up
     let reserve_result = cage.mmap_syscall(
         sysaddr as *mut u8,
         rounded_length,
@@ -173,7 +177,10 @@ pub fn shmat_handler(cageid: u64, addr: *mut u8, length: usize, prot: i32, flags
         return syscall_error(Errno::EINVAL, "shmat", "failed to reserve memory") as u32;
     }
 
-    // Then map with actual protection
+    // 2. Then map with actual protection flags:
+    //    - This ensures atomic transition from inaccessible to properly protected memory
+    //    - Prevents potential race conditions where memory might be accessed with wrong permissions
+    //    - MAP_FIXED ensures we get exactly the same address as our reservation
     let result = cage.mmap_syscall(
         sysaddr as *mut u8,
         rounded_length,
