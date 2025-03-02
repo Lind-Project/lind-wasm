@@ -133,6 +133,7 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
 ///
 /// # Arguments
 /// * `cageid` - Identifier of the cage that initiated the shmat
+/// * `shmid` - Shared memory identifier
 /// * `addr` - Requested address for attachment (must be page-aligned if non-zero)
 /// * `length` - Size of the shared memory segment
 /// * `prot` - Protection flags for the memory mapping
@@ -140,7 +141,7 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
 ///
 /// # Returns
 /// * `u32` - Mapped address on success, or error code on failure
-pub fn shmat_handler(cageid: u64, addr: *mut u8, length: usize, prot: i32, flags: i32) -> u32 {
+pub fn shmat_handler(cageid: u64, shmid: i32, addr: *mut u8, length: usize, prot: i32, flags: i32) -> u32 {
     let cage = cagetable_getref(cageid);
     
     // Check if address is page-aligned if provided

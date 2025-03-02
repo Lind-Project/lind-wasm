@@ -1480,6 +1480,7 @@ impl Cage {
                 
                 let result = interface::shmat_handler(
                     self.cageid,
+                    shmid,
                     shmaddr,
                     segment.size,
                     prot,
