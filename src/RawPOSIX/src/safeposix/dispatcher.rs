@@ -778,50 +778,7 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             let shmaddr = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             let shmflg = arg3 as i32;
-            
-            // Get reference to global shared memory metadata
-            let shm_metadata = &SHM_METADATA;
-            
-            // Look up the shared memory segment by ID
-            match shm_metadata.shmtable.get_mut(&shmid) {
-                Some(mut segment) => {
-                    // Set protection flags based on SHM_RDONLY flag
-                    // Default is read+write access unless read-only requested
-                    let mut prot = PROT_READ | PROT_WRITE;
-                    if (shmflg & SHM_RDONLY) != 0 {
-                        prot = PROT_READ;
-                    }
-                    
-                    // Set mapping flags - shared memory must use MAP_SHARED
-                    let flags = MAP_SHARED;
-                    
-                    // Call shmat_handler which:
-                    // 1. Handles address translation from user to system space
-                    // 2. Finds appropriate memory region if addr is NULL
-                    // 3. Validates alignment if addr is specified
-                    // 4. Performs the actual mapping
-                    let result = interface::shmat_handler(
-                        cageid,
-                        shmaddr,
-                        segment.size,
-                        prot,
-                        flags as i32
-                    );
-                    
-                    if (result as i32) < 0 {
-                        result as i32  // Propagate error code from handler
-                    } else {
-                        // Update segment metadata with new mapping info
-                        segment.map_shm(result as *mut u8, prot, cageid);
-                        result as i32
-                    }
-                },
-                None => syscall_error(
-                    Errno::EINVAL,
-                    "shmat", 
-                    "invalid shared memory identifier"
-                )
-            }
+            cage.shmat_syscall(shmid, shmaddr, shmflg)
         }
 
         SHMDT_SYSCALL => {

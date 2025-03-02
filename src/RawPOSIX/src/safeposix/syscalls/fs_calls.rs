@@ -1465,20 +1465,41 @@ impl Cage {
      */
     pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32) -> i32 {
         let metadata = &SHM_METADATA;
-        let prot: i32;
-        if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
-            if 0 != (shmflg & SHM_RDONLY) {
-                prot = PROT_READ;
-            } else {
-                prot = PROT_READ | PROT_WRITE;
-            }
-            let mut rev_shm = self.rev_shm.lock();
-            rev_shm.push((shmaddr as u32, shmid));
-            drop(rev_shm);
-
-            segment.map_shm(shmaddr, prot, self.cageid)
-        } else {
-            syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value")
+        
+        match metadata.shmtable.get_mut(&shmid) {
+            Some(mut segment) => {
+                // Set protection flags based on SHM_RDONLY flag
+                let prot = if (shmflg & SHM_RDONLY) != 0 {
+                    PROT_READ
+                } else {
+                    PROT_READ | PROT_WRITE
+                };
+                
+                // Set mapping flags - shared memory must use MAP_SHARED
+                let flags = MAP_SHARED;
+                
+                let result = interface::shmat_handler(
+                    self.cageid,
+                    shmaddr,
+                    segment.size,
+                    prot,
+                    flags as i32
+                );
+                
+                if (result as i32) < 0 {
+                    result as i32
+                } else {
+                    let mut rev_shm = self.rev_shm.lock();
+                    rev_shm.push((result, shmid));
+                    drop(rev_shm);
+                    segment.map_shm(result as *mut u8, prot, self.cageid)
+                }
+            },
+            None => syscall_error(
+                Errno::EINVAL,
+                "shmat", 
+                "invalid shared memory identifier"
+            )
         }
     }
 
