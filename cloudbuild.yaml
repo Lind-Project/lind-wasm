@@ -26,7 +26,7 @@
   logging: CLOUD_LOGGING_ONLY
  availableSecrets:
    secretManager:
-   - versionName: projects/1816387136/secrets/docker-password/versions/1
+   - versionName: projects/1049119266483/secrets/docker-password/versions/1
      env: 'PASSWORD'
-   - versionName: projects/1816387136/secrets/docker-username/versions/1
+   - versionName: projects/1049119266483/secrets/docker-username/versions/1
      env: 'USERNAME'
