@@ -122,6 +122,133 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
     0
 }
 
+/// Handles shared memory attach operations by mapping memory at the specified address
+///
+/// This function processes shared memory attachment requests by:
+/// 1. Validating the requested address is page-aligned if provided
+/// 2. Performing a two-step mapping process:
+///    - First reserves the memory region with PROT_NONE
+///    - Then maps it with the requested protection flags
+/// 3. Using MAP_SHARED | MAP_FIXED | MAP_ANONYMOUS for the mapping
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that initiated the shmat
+/// * `shmid` - Shared memory identifier
+/// * `addr` - Requested address for attachment (must be page-aligned if non-zero)
+/// * `length` - Size of the shared memory segment
+/// * `prot` - Protection flags for the memory mapping
+/// * `flags` - Mapping flags
+///
+/// # Returns
+/// * `u32` - Mapped address on success, or error code on failure
+pub fn shmat_handler(cageid: u64, shmid: i32, addr: *mut u8, length: usize, prot: i32, flags: i32) -> u32 {
+    let cage = cagetable_getref(cageid);
+    
+    // Check if address is page-aligned if provided
+    let mut useraddr = addr as u32;
+    if useraddr != 0 {
+        let rounded_addr = round_up_page(addr as u64);
+        if rounded_addr != addr as u64 {
+            return syscall_error(Errno::EINVAL, "shmat", "address not aligned") as u32;
+        }
+    }
+
+    let mmap_flags = MAP_SHARED | MAP_FIXED | MAP_ANONYMOUS;
+    let rounded_length = round_up_page(length as u64) as usize;
+
+    let vmmap = cage.vmmap.read();
+    let sysaddr = vmmap.user_to_sys(useraddr);
+    drop(vmmap);
+
+    // Two-step mapping process:
+    // 1. First, we reserve the memory region with PROT_NONE to ensure:
+    //    - The address range is available and not in use
+    //    - No other concurrent mappings can claim this space
+    //    - We don't accidentally access the memory before it's properly set up
+    let reserve_result = cage.mmap_syscall(
+        sysaddr as *mut u8,
+        rounded_length,
+        PROT_NONE,
+        mmap_flags as i32,
+        -1,
+        0
+    );
+
+    if (reserve_result as i64) < 0 {
+        return syscall_error(Errno::EINVAL, "shmat", "failed to reserve memory") as u32;
+    }
+
+    // 2. Then map with actual protection flags:
+    //    - This ensures atomic transition from inaccessible to properly protected memory
+    //    - Prevents potential race conditions where memory might be accessed with wrong permissions
+    //    - MAP_FIXED ensures we get exactly the same address as our reservation
+    let result = cage.mmap_syscall(
+        sysaddr as *mut u8,
+        rounded_length,
+        prot,
+        mmap_flags as i32,
+        -1,
+        0
+    );
+
+    if result != sysaddr {
+        panic!("MAP_FIXED not fixed in shmat");
+    }
+
+    useraddr
+}
+
+/// Handles shared memory detach operations by unmapping the memory region
+///
+/// This function processes shared memory detachment requests by:
+/// 1. Validating the address is page-aligned
+/// 2. Converting user address to system address
+/// 3. Unmapping the memory region using PROT_NONE
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that initiated the shmdt
+/// * `addr` - Address of shared memory segment to detach
+/// * `length` - Size of the shared memory segment
+///
+/// # Returns
+/// * `i32` - 0 on success, or error code on failure
+pub fn shmdt_handler(cageid: u64, addr: *mut u8, length: usize) -> i32 {
+    let cage = cagetable_getref(cageid);
+    
+    // Check if address is page-aligned
+    let rounded_addr = round_up_page(addr as u64);
+    if rounded_addr != addr as u64 {
+        return syscall_error(Errno::EINVAL, "shmdt", "address not aligned");
+    }
+
+    let vmmap = cage.vmmap.read();
+    let sysaddr = vmmap.user_to_sys(addr as u32);
+    drop(vmmap);
+
+    // Use mmap with PROT_NONE to effectively unmap the region
+    let result = cage.mmap_syscall(
+        sysaddr as *mut u8,
+        round_up_page(length as u64) as usize,
+        PROT_NONE,
+        (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+        -1,
+        0
+    );
+
+    if result != sysaddr {
+        panic!("MAP_FIXED not fixed in shmdt");
+    }
+
+    // Remove entry from vmmap
+    let mut vmmap = cage.vmmap.write();
+    vmmap.remove_entry(
+        addr as u32 >> PAGESHIFT,
+        round_up_page(length as u64) as u32 >> PAGESHIFT
+    );
+
+    0
+}
+
 /// Handles the `mmap_syscall`, interacting with the `vmmap` structure.
 ///
 /// This function processes the `mmap_syscall` by updating the `vmmap` entries and performing

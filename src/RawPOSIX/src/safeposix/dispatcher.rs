@@ -125,6 +125,7 @@ use std::io::{Read, Write};
 use std::io;
 
 use crate::interface::types;
+use crate::safeposix::shm::SHM_METADATA;
 use crate::interface::{SigactionStruct, StatData};
 use crate::{fdtables, interface};
 use crate::interface::errnos::*;
@@ -773,10 +774,8 @@ pub fn lind_syscall_api(
         SHMAT_SYSCALL => {
             let shmid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
-            // Convert virtual address to physical address
             let shmaddr = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             let shmflg = arg3 as i32;
-            // Perform shmat operation through cage implementation
             cage.shmat_syscall(shmid, shmaddr, shmflg)
         }
 

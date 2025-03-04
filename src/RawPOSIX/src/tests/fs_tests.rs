@@ -2862,39 +2862,50 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_shm() {
-        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
-        // and also performs clean env setup
         let _thelock = setup::lock_and_init();
-
         let cage = interface::cagetable_getref(1);
+        
+        {
+            let mut vmmap = cage.vmmap.write();
+            vmmap.set_base_address(0x10000000);
+            let _ = vmmap.find_map_space(1, 1);
+        }
+    
         let key = 31337;
         let mut shmidstruct = ShmidsStruct::default();
-
-        // shmget returns an identifier in shmid
+    
+        // Create shared memory segment
         let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
-
-        // shmat to attach to shared memory
-        let shmatret = cage.shmat_syscall(shmid, 0xfffff000 as *mut u8, 0);
-
-        assert_ne!(shmatret, -1);
-
-        // get struct info
+        assert!(shmid > 0, "shmget failed with shmid: {}", shmid);
+    
+        // Check initial attachment count
+        let initial_stat = cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct));
+        assert_eq!(initial_stat, 0, "Initial shmctl failed");
+        assert_eq!(shmidstruct.shm_nattch, 0, "Initial attachment count should be 0");
+    
+        // Attach to shared memory at a valid address
+        let shmatret = cage.shmat_syscall(shmid, 0x40000000 as *mut u8, 0);
+        assert!(shmatret >= 0, "shmat failed with return value: {}", shmatret);
+    
+        // Verify attachment count increased
         let shmctlret1 = cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct));
-
-        assert_eq!(shmctlret1, 0);
-
-        assert_eq!(shmidstruct.shm_nattch, 1);
-
-        // mark the shared memory to be rmoved
+        assert_eq!(shmctlret1, 0, "shmctl failed after attach");
+        assert_eq!(shmidstruct.shm_nattch, 1, "Attachment count should be 1 after shmat");
+    
+        // Detach shared memory
+        let shmdtret = cage.shmdt_syscall(shmatret as *mut u8);
+        assert_eq!(shmdtret, 0, "shmdt should return 0 on success");
+    
+        // Verify attachment count decreased
+        let final_stat = cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct));
+        assert_eq!(final_stat, 0, "Final shmctl failed");
+        assert_eq!(shmidstruct.shm_nattch, 0, "Final attachment count should be 0");
+    
+        // Mark for removal after we're done with all operations
         let shmctlret2 = cage.shmctl_syscall(shmid, IPC_RMID, None);
-
-        assert_eq!(shmctlret2, 0);
-
-        //detach from shared memory
-        let shmdtret = cage.shmdt_syscall(0xfffff000 as *mut u8);
-
-        assert_eq!(shmdtret, shmid); //NaCl requires shmdt to return the shmid, so this is non-posixy
-
+        assert_eq!(shmctlret2, 0, "shmctl RMID failed");
+    
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
 
@@ -4781,4 +4792,112 @@ pub mod fs_tests {
     //     lindrustfinalize();
     //     return;
     // }
+   
+
+    #[test]
+    pub fn ut_lind_fs_shm_basic() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+        
+        {
+            let mut vmmap = cage.vmmap.write();
+            vmmap.set_base_address(0x10000000);
+            let _ = vmmap.find_map_space(1, 1);
+            let _ = vmmap.find_map_space(1, 1);
+        }
+
+        let key = 12345;
+        let size = 4096;
+        let shmid = cage.shmget_syscall(key, size, (IPC_CREAT | (S_IRWXA as i32)));
+        assert!(shmid > 0, "shmget failed with shmid: {}", shmid);
+
+        let addr = cage.shmat_syscall(shmid, 0x40000000 as *mut u8, 0);
+        assert!(addr >= 0, "shmat failed with return value: {}", addr);
+
+        let result = cage.shmdt_syscall(addr as *mut u8);
+        assert_eq!(result, 0, "shmdt failed with return value: {}", result);
+
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_shm_readonly() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+        
+        {
+            let mut vmmap = cage.vmmap.write();
+            vmmap.set_base_address(0x10000000);
+            let _ = vmmap.find_map_space(1, 1);
+            let _ = vmmap.find_map_space(1, 1);
+        }
+
+        let key = 12346;
+        let size = 4096;
+        let shmid = cage.shmget_syscall(key, size, (IPC_CREAT | (S_IRWXA as i32)));
+        assert!(shmid > 0, "shmget failed with shmid: {}", shmid);
+
+        let addr = cage.shmat_syscall(shmid, 0x40001000 as *mut u8, SHM_RDONLY);
+        assert!(addr >= 0, "shmat failed with return value: {}", addr);
+
+        let result = cage.shmdt_syscall(addr as *mut u8);
+        assert_eq!(result, 0, "shmdt failed with return value: {}", result);
+
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_shm_invalid() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+        
+        {
+            let mut vmmap = cage.vmmap.write();
+            vmmap.set_base_address(0x10000000);
+        }
+
+        let addr = cage.shmat_syscall(-1, 0 as *mut u8, 0);
+        assert!(addr < 0, "shmat should fail with invalid shmid, got: {}", addr);
+
+        let result = cage.shmdt_syscall(0 as *mut u8);
+        assert_eq!(result, -(Errno::EINVAL as i32), 
+            "shmdt should fail with EINVAL for invalid address, got: {}", result);
+
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_shm_multiple_attach() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+        
+        {
+            let mut vmmap = cage.vmmap.write();
+            vmmap.set_base_address(0x10000000);
+            let _ = vmmap.find_map_space(1, 1);
+            let _ = vmmap.find_map_space(1, 1);
+        }
+
+        let key = 12347;
+        let size = 4096;
+        let shmid = cage.shmget_syscall(key, size, (IPC_CREAT | (S_IRWXA as i32)));
+        assert!(shmid > 0, "shmget failed with shmid: {}", shmid);
+
+        let addr1 = cage.shmat_syscall(shmid, 0x40002000 as *mut u8, 0);
+        assert!(addr1 >= 0, "First shmat failed with return value: {}", addr1);
+
+        let addr2 = cage.shmat_syscall(shmid, 0x40003000 as *mut u8, 0);
+        assert!(addr2 >= 0, "Second shmat failed with return value: {}", addr2);
+
+        assert_eq!(cage.shmdt_syscall(addr1 as *mut u8), 0, 
+            "First shmdt failed with return value: {}", cage.shmdt_syscall(addr1 as *mut u8));
+        assert_eq!(cage.shmdt_syscall(addr2 as *mut u8), 0,
+            "Second shmdt failed with return value: {}", cage.shmdt_syscall(addr2 as *mut u8));
+
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 }
