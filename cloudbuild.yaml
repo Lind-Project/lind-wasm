@@ -9,7 +9,7 @@
    entrypoint: 'bash'
    args: [
      '-c',
-     'echo "docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer"'
+     'docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer'
    ]
    env:
     - 'BRANCH_NAME=$BRANCH_NAME'
