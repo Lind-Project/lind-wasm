@@ -6,9 +6,8 @@ ENV DEV_MODE=${DEV_MODE:-false}
 ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-main}
 
-
-ARG BRANCH_NAME
-ENV BRANCH_NAME=${BRANCH_NAME:-main}
+RUN echo "$BRANCH_NAME"
+RUN exit 0
 
 # Install all the required dependencies
 RUN apt-get update && \
