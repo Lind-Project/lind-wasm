@@ -37,7 +37,7 @@ WORKDIR /home/lind
 RUN whoami
 RUN touch test.txt
 RUN echo "test" > test.txt
-RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
+
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
@@ -50,16 +50,13 @@ RUN go install github.com/bazelbuild/buildtools/buildifier@latest
 # Ensure the Rust environment is available in future RUN instructions
 ENV PATH="/home/lind/.cargo/bin:/home/lind/go/bin:${PATH}"
 
-WORKDIR /home/lind/lind-wasm
-
 ENV CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 
 ### non-DEV_MODE Commmands begin here
 
 WORKDIR /home/lind
 # Clone the Lind-wasm repository
-# RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch enable-tests-in-ci --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
-
+RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
 # Install clang-16 for compiling the code
 RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
     tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
