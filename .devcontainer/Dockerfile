@@ -6,6 +6,10 @@ ENV DEV_MODE=${DEV_MODE:-false}
 ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-main}
 
+
+ARG BRANCH_NAME
+ENV BRANCH_NAME=${BRANCH_NAME:-main}
+
 # Install all the required dependencies
 RUN apt-get update && \
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
@@ -48,7 +52,9 @@ ENV CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 
 WORKDIR /home/lind
 # Clone the Lind-wasm repository
-RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch $BRANCH_NAME https://github.com/Lind-Project/lind-wasm.git; fi
+RUN : "${BRANCH_NAME:=main}" && \
+    if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" https://github.com/Lind-Project/lind-wasm.git; fi
+
 # Install clang-16 for compiling the code
 RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
     tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
