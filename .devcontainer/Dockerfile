@@ -14,7 +14,7 @@ RUN apt-get update && \
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
     bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash
 
-RUN git clone --branch enable-tests-in-ci --single-branch https://github.com/Lind-Project/lind-wasm.git
+
 
 RUN apt install apt-transport-https curl gnupg -y && \
     curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \
@@ -33,6 +33,11 @@ RUN echo "lind ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 USER lind
 
 WORKDIR /home/lind
+
+RUN whoami
+RUN touch test.txt
+RUN echo "test" > test.txt
+RUN git clone --branch enable-tests-in-ci --single-branch https://github.com/Lind-Project/lind-wasm.git
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
