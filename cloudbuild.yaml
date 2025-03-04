@@ -14,13 +14,13 @@
    env:
     - 'BRANCH_NAME=$BRANCH_NAME'
    secretEnv: ['USERNAME'] 
-# # Run the container and execute the bazel command
-#  - name: 'gcr.io/cloud-builders/docker'
-#    entrypoint: 'bash'
-#    args: ['-c', 'docker run -e BRANCH_NAME=$BRANCH_NAME --rm -v $$PWD:/workspace -w /workspace $$USERNAME/lind-wasm:latest bazel run //:python_tests']
-#    env:
-#     - 'BRANCH_NAME=$BRANCH_NAME'
-#    secretEnv: ['USERNAME']   
+# # Run the container and execute the bazel test run command
+ - name: 'gcr.io/cloud-builders/docker'
+   entrypoint: 'bash'
+   args: ['-c', 'docker run -e BRANCH_NAME=$BRANCH_NAME --rm -v $$PWD:/workspace -w /workspace $$USERNAME/lind-wasm:latest bazel run //:python_tests']
+   env:
+    - 'BRANCH_NAME=$BRANCH_NAME'
+   secretEnv: ['USERNAME']   
 # Copy the analysis file from the container to the host
 #  - name: 'gcr.io/cloud-builders/docker'
 #    entrypoint: 'bash'
