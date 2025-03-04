@@ -11,9 +11,7 @@
      '-c',
      'docker build --build-arg BRANCH_NAME=$$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer'
    ]
-   secretEnv: ['USERNAME']
-   options:
-    machineType: 'E2_HIGHCPU_8'
+   secretEnv: ['USERNAME'] 
 # Run the container and execute the bazel command
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
@@ -29,7 +27,8 @@
 # This is where we will need to put the check to validate results.json
 
  options:
-  logging: CLOUD_LOGGING_ONLY
+  logging: CLOUD_LOGGING_ONLY  
+  machineType: 'E2_HIGHCPU_8'
  availableSecrets:
    secretManager:
    - versionName: projects/1049119266483/secrets/docker-password/versions/1
