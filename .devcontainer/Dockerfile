@@ -37,7 +37,7 @@ WORKDIR /home/lind
 RUN whoami
 RUN touch test.txt
 RUN echo "test" > test.txt
-RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch enable-tests-in-ci --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
+RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
