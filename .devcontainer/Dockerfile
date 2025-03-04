@@ -14,6 +14,8 @@ RUN apt-get update && \
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
     bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash
 
+RUN git clone --branch enable-tests-in-ci --single-branch https://github.com/Lind-Project/lind-wasm.git
+
 RUN apt install apt-transport-https curl gnupg -y && \
     curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \
     mv bazel-archive-keyring.gpg /usr/share/keyrings && \
@@ -51,7 +53,7 @@ ENV CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 
 WORKDIR /home/lind
 # Clone the Lind-wasm repository
-RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch enable-tests-in-ci --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
+# RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch enable-tests-in-ci --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
 
 # Install clang-16 for compiling the code
 RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
