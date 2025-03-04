@@ -51,8 +51,7 @@ ENV CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 
 WORKDIR /home/lind
 # Clone the Lind-wasm repository
-RUN : "${BRANCH_NAME:=main}" && \
-    if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" https://github.com/Lind-Project/lind-wasm.git; fi
+RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" https://github.com/Lind-Project/lind-wasm.git; fi
 
 # Install clang-16 for compiling the code
 RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
