@@ -7,17 +7,23 @@
  # Build the Docker image from .devcontainer folder
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
-   args: ['-c', 'docker build -t $$USERNAME/lind-wasm:latest ./.devcontainer']
+   args: [
+     '-c',
+     'docker build --build-arg BRANCH_NAME=$$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer'
+   ]
    secretEnv: ['USERNAME']
+   options:
+    machineType: 'E2_HIGHCPU_8'
 # Run the container and execute the bazel command
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
    args: ['-c', 'docker run -e BRANCH_NAME=$$BRANCH_NAME --rm -v $$PWD:/workspace -w /workspace $$USERNAME/lind-wasm:latest bazel run //:python_tests']
-
+   secretEnv: ['USERNAME']   
 # Copy the analysis file from the container to the host
 #  - name: 'gcr.io/cloud-builders/docker'
 #    entrypoint: 'bash'
 #    args: ['-c', 'docker cp $$USERNAME/lind-wasm/src/RawPOSIX/tmp/results.json:/workspace/results.json ./']
+#    secretEnv: ['USERNAME']
 
 # Validate the analysis file (Example: Check for errors)
 # This is where we will need to put the check to validate results.json
