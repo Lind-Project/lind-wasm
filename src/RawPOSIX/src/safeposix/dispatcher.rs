@@ -918,8 +918,7 @@ pub fn lind_syscall_api(
                 }
             };
 
-            interface::cagetable_getref(cageid)
-                .sigaction_syscall(sig, sigaction, old_sigaction)
+            cage.sigaction_syscall(sig, sigaction, old_sigaction)
         }
 
         KILL_SYSCALL => {
@@ -961,8 +960,7 @@ pub fn lind_syscall_api(
                 }
             };
 
-            interface::cagetable_getref(cageid)
-                .sigprocmask_syscall(how, sigset, old_sigset)
+            cage.sigprocmask_syscall(how, sigset, old_sigset)
         }
 
         FSYNC_SYSCALL => {
