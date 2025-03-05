@@ -77,7 +77,7 @@ impl Cage {
             ),
             pending_signals: interface::RustLock::new(vec![]),
             epoch_handler: interface::RustHashMap::new(),
-            main_threadid: interface::RustAtomicU64::new(0),
+            main_threadid: interface::RustLock::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
             vmmap: interface::RustLock::new(new_vmmap), // clone the vmmap for the child
             zombies: interface::RustLock::new(vec![]),
@@ -143,7 +143,7 @@ impl Cage {
                 self.pending_signals.read().clone(),
             ),
             epoch_handler: interface::RustHashMap::new(),
-            main_threadid: interface::RustAtomicU64::new(0),
+            main_threadid: interface::RustLock::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
             vmmap: interface::RustLock::new(Vmmap::new()), // memory is cleared after exec
             zombies: interface::RustLock::new(cloned_zombies), // when a process exec-ed, its child relationship should be perserved

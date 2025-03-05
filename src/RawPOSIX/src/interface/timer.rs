@@ -8,7 +8,6 @@ pub use std::time::Instant as RustInstant;
 use std::time::SystemTime;
 
 use crate::constants::SIGALRM;
-use crate::interface::lind_kill_from_id;
 
 use super::lind_send_signal;
 

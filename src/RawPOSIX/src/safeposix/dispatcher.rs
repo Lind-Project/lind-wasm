@@ -1223,7 +1223,7 @@ pub fn lindrustinit(verbosity: isize) {
         sigset: interface::RustAtomicU64::new(0),
         pending_signals: interface::RustLock::new(vec![]),
         epoch_handler: interface::RustHashMap::new(),
-        main_threadid: interface::RustAtomicU64::new(0),
+        main_threadid: interface::RustLock::new(0),
         interval_timer: interface::IntervalTimer::new(0),
         vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process
         zombies: interface::RustLock::new(vec![]),
@@ -1271,7 +1271,7 @@ pub fn lindrustinit(verbosity: isize) {
         sigset: interface::RustAtomicU64::new(0),
         pending_signals: interface::RustLock::new(vec![]),
         epoch_handler: interface::RustHashMap::new(),
-        main_threadid: interface::RustAtomicU64::new(0),
+        main_threadid: interface::RustLock::new(0),
         interval_timer: interface::IntervalTimer::new(1),
         vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process
         zombies: interface::RustLock::new(vec![]),

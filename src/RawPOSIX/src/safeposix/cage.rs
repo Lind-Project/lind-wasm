@@ -65,9 +65,10 @@ pub struct Cage {
     // address of the wasm thread. The epoch is a u64 value that guest thread is frequently checking for
     // and just to host once the value is changed
     pub epoch_handler: interface::RustHashMap<i32, interface::RustLock<*mut u64>>,
-    // The kernel thread id of the main thread of current cage, used because when we want to send signals, 
-    // we want to send to the main thread 
-    pub main_threadid: interface::RustAtomicU64,
+    // The virtual thread id of the main thread of current cage, used because when we want to send signals, 
+    // we want to send to the main thread. We need to have a lock over threadid because we need to correctly
+    // handle switching main_threadid in a thread safe way 
+    pub main_threadid: interface::RustLock<i32>,
     // The interval_timer can serve as a source for triggering signals and works together with signalhandler 
     // and sigset to manage and handle signals. The design of the interval_timer supports periodic triggering, 
     // simulating operations in Linux that need to run at regular intervals. It assists in implementing setitimer() 
