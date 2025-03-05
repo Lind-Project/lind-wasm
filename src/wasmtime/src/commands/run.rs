@@ -604,6 +604,9 @@ impl RunCommand {
                                                pointer as *mut u64,
                                                     THREAD_START_ID,
                                                true /* this is the main thread */);
+                
+                // see comments at signal_may_trigger for more details
+                rawposix::interface::signal_may_trigger(pid);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),

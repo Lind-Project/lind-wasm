@@ -289,3 +289,18 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
 
     last_thread
 }
+
+// trigger the epoch if pending signal list is not empty
+// This function is invoked only by a newly exec-ed cage 
+// immediately after it completes its initialization. 
+// Its purpose is to handle the scenario where Linux resets 
+// the signal mask but preserves pending signals after exec. 
+// As a result, the new process may receive signals that were 
+// pending in the previous process right after it starts.
+pub fn signal_may_trigger(cageid: u64) {
+    let cage = cagetable_getref(cageid);
+    let pending_siangls = cage.pending_signals.read();
+    if !pending_siangls.is_empty() {
+        signal_epoch_trigger(cageid);
+    }
+}
