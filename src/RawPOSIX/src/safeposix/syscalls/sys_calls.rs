@@ -104,54 +104,45 @@ impl Cage {
         0
     }
 
-    /*
-    *   exec() will only return if error happens 
+   /*
+    *  Here is the Linux man page for execve: https://man7.org/linux/man-pages/man2/execve.2.html
+    *  
+    *  exec() only returns if an error occurs.
+    *  
+    *  Unlike the `exec` syscalls in the Linux manual, the `exec` syscall here does not take any arguments,
+    *  such as an argument list or environment variables. This is because, in Rawposix, `exec` functions
+    *  solely as a "cage-level exec," focusing only on updating the `cage` struct with necessary changes.
+    *  
+    *  In short, this syscall in Rawposix part is responsible for managing cage resources.
+    *  Execution and memory management are handled within the Wasmtime codebase, which eventually calls
+    *  this function to perform only a specific part of the `exec` operation.
+    *  
+    *  Here, we retain the same cage and only replace the necessary components since `cageid`, `cwd`, `zombies`,
+    *  and other elements remain unchanged. Only `cancelstatus`, `rev_shm`, `thread_table`, and `vmmap` need to be replaced.
     */
-    pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        // Empty fd with flag should_cloexec 
+    pub fn exec_syscall(&self) -> i32 { 
         fdtables::empty_fds_for_exec(self.cageid);
-        // Add the new one to fdtable
-        let _ = fdtables::copy_fdtable_for_cage(self.cageid, child_cageid);
-        // Delete the original one
-        let _newfdtable = fdtables::remove_cage_from_fdtable(self.cageid);
 
-        interface::cagetable_remove(self.cageid);
+        self.cancelstatus.store(false, interface::RustAtomicOrdering::Relaxed);
+        self.rev_shm.lock().clear(); 
+        self.thread_table.clear();
+        let mut vmmap = self.vmmap.write();
+        vmmap.clear(); //this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
 
-        self.unmap_shm_mappings();
+        // perform signal related clean up
 
-        let zombies = self.zombies.read();
-        let cloned_zombies = zombies.clone();
-        let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
-        drop(zombies);
+        // all the signal handler becomes default after exec
+        // pending signals should be perserved though
+        self.signalhandler.clear();
+        // the sigset will be reset after exec
+        self.sigset.store(0, interface::RustAtomicOrdering::Relaxed);
+        // we also clean up epoch handler and main thread id
+        // since they will be re-established from wasmtime
+        self.epoch_handler.clear();
+        let mut threadid_guard = self.main_threadid.write();
+        *threadid_guard = 0;
+        drop(threadid_guard);
 
-        let newcage = Cage {
-            cageid: child_cageid,
-            cwd: interface::RustLock::new(self.cwd.read().clone()),
-            parent: self.parent,
-            cancelstatus: interface::RustAtomicBool::new(false),
-            getgid: interface::RustAtomicI32::new(-1),
-            getuid: interface::RustAtomicI32::new(-1),
-            getegid: interface::RustAtomicI32::new(-1),
-            geteuid: interface::RustAtomicI32::new(-1),
-            rev_shm: interface::Mutex::new(vec![]),
-            thread_table: interface::RustHashMap::new(),
-            signalhandler: interface::RustHashMap::new(),
-            sigset: interface::RustAtomicU64::new(
-                self.sigset.load(interface::RustAtomicOrdering::Relaxed),
-            ),
-            pending_signals: interface::RustLock::new(
-                self.pending_signals.read().clone(),
-            ),
-            epoch_handler: interface::RustHashMap::new(),
-            main_threadid: interface::RustLock::new(0),
-            interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
-            vmmap: interface::RustLock::new(Vmmap::new()), // memory is cleared after exec
-            zombies: interface::RustLock::new(cloned_zombies), // when a process exec-ed, its child relationship should be perserved
-            child_num: interface::RustAtomicU64::new(child_num),
-        };
-        //wasteful clone of fdtable, but mutability constraints exist
-
-        interface::cagetable_insert(child_cageid, newcage);
         0
     }
 
