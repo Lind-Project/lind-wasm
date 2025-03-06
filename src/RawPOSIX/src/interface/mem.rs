@@ -292,6 +292,11 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
         panic!("PROT_EXEC is not currently supported in WASM");
     }
 
+    // Validate length
+    if len == 0 {
+        return syscall_error(Errno::EINVAL, "mprotect", "length cannot be zero");
+    }
+
     // check if the provided address is multiple of pages
     let rounded_addr = round_up_page(addr as u64);
     if rounded_addr != addr as u64 {
@@ -308,7 +313,7 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
     let npages = (rounded_length >> PAGESHIFT) as u32;
 
     // Check if the region is mapped
-    if vmmap.check_existing_mapping(start_page, npages, 0) {
+    if !vmmap.check_existing_mapping(start_page, npages, 0) {
         return syscall_error(Errno::ENOMEM, "mprotect", "Address range not mapped");
     }
 

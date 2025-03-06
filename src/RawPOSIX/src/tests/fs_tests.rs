@@ -10,7 +10,7 @@ pub mod fs_tests {
     use libc::{c_void, O_DIRECTORY};
     use std::fs::OpenOptions;
     use std::os::unix::fs::PermissionsExt;
-    use crate::constants::{S_IRWXA,SHMMAX,DEFAULT_UID,DEFAULT_GID};
+    use crate::constants::{S_IRWXA,SHMMAX,DEFAULT_UID,DEFAULT_GID, PAGESIZE};
     use crate::interface::{StatData, FSData};
     use libc::*;
     use crate::interface::{ShmidsStruct, get_errno};
@@ -720,6 +720,68 @@ pub mod fs_tests {
             -(Errno::EBADF as i32)
         );
 
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mprotect_readwrite_test() {
+        // Acquire test lock and initialize environment
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        println!("Starting mprotect test (C program simulation)");
+
+        // Create an anonymous memory mapping with read-only permissions
+        // This simulates the C program's mmap() call to allocate a read-only page
+        let readonlydata = cage.mmap_syscall(
+            std::ptr::null_mut(),      // Let kernel choose address
+            PAGESIZE as usize,         // Map one page
+            PROT_READ,                 // Initially read-only
+            (MAP_ANONYMOUS | MAP_PRIVATE) as i32,  // Private anonymous mapping
+            -1,                        // No file descriptor for anonymous mapping
+            0                         // Offset is ignored for anonymous mappings
+        );
+        println!("mmap result: {:p}", readonlydata as *mut u8);
+        assert!(readonlydata >= 0, "mmap should succeed");
+
+        // Change the protection to allow writing
+        // This simulates the C program's mprotect() call to make the page writable
+        let result = cage.mprotect_syscall(
+            readonlydata as *mut u8,
+            PAGESIZE as usize,
+            PROT_READ | PROT_WRITE    // Add write permission
+        );
+        println!("mprotect result: {}", result);
+        assert_eq!(result, 0, "mprotect should succeed");
+
+        // Test string to write to the now-writable memory
+        let text = b"Mprotect write test text\0";
+        unsafe {
+            // Copy test string into the mapped memory
+            // This simulates the C program's memcpy() call
+            let result = libc::memcpy(
+                readonlydata as *mut libc::c_void,
+                text.as_ptr() as *const libc::c_void,
+                text.len()
+            );
+            println!("memcpy result: {:p}", result);
+            
+            // Verify that the write operation succeeded by comparing memory contents
+            let written = std::slice::from_raw_parts(readonlydata as *const u8, text.len());
+            assert_eq!(written, text, "Written data should match test string");
+
+            // Print the written text to verify it's readable
+            // This simulates the C program's puts() call
+            println!("Written text: {}", std::str::from_utf8(written).unwrap());
+        }
+
+        // Clean up by unmapping the memory
+        // This simulates the C program's munmap() call
+        let result = cage.munmap_syscall(readonlydata as *mut u8, PAGESIZE as usize);
+        assert_eq!(result, 0, "munmap should succeed");
+
+        // Clean up and exit
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
