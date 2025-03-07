@@ -730,7 +730,6 @@ pub mod fs_tests {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
-        println!("Starting mprotect test (C program simulation)");
 
         // Create an anonymous memory mapping with read-only permissions
         // This simulates the C program's mmap() call to allocate a read-only page
@@ -742,7 +741,6 @@ pub mod fs_tests {
             -1,                        // No file descriptor for anonymous mapping
             0                         // Offset is ignored for anonymous mappings
         );
-        println!("mmap result: {:p}", readonlydata as *mut u8);
         assert!(readonlydata >= 0, "mmap should succeed");
 
         // Change the protection to allow writing
@@ -752,7 +750,6 @@ pub mod fs_tests {
             PAGESIZE as usize,
             PROT_READ | PROT_WRITE    // Add write permission
         );
-        println!("mprotect result: {}", result);
         assert_eq!(result, 0, "mprotect should succeed");
 
         // Test string to write to the now-writable memory
@@ -765,7 +762,6 @@ pub mod fs_tests {
                 text.as_ptr() as *const libc::c_void,
                 text.len()
             );
-            println!("memcpy result: {:p}", result);
             
             // Verify that the write operation succeeded by comparing memory contents
             let written = std::slice::from_raw_parts(readonlydata as *const u8, text.len());
@@ -773,7 +769,6 @@ pub mod fs_tests {
 
             // Print the written text to verify it's readable
             // This simulates the C program's puts() call
-            println!("Written text: {}", std::str::from_utf8(written).unwrap());
         }
 
         // Clean up by unmapping the memory
@@ -3320,7 +3315,6 @@ pub mod fs_tests {
         // Now try to create a subdirectory under the parent directory
         let c_subdir_path = std::ffi::CString::new(subdir_path).unwrap();
         let result = unsafe { libc::mkdir(c_subdir_path.as_ptr(), invalid_mode) };
-        println!("mkdir returned for subdir: {}", result);
     
         // Check if mkdir failed
         if result != 0 {
