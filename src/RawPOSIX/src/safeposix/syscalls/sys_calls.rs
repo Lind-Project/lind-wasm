@@ -2,16 +2,9 @@
 
 // System related system calls
 use crate::constants::{
-    DEFAULT_UID, DEFAULT_GID,
-    SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK,
-    SIGNAL_MAX,
-    ITIMER_REAL,
-    RLIMIT_NOFILE, RLIMIT_STACK,
-    NOFILE_CUR, NOFILE_MAX,
-    STACK_CUR, STACK_MAX,
-    SHMMIN, SHMMAX,
-    SHM_RDONLY, SHM_DEST,
-    SEM_VALUE_MAX,
+    DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK,
+    SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGNAL_MAX, SIG_BLOCK, SIG_SETMASK,
+    SIG_UNBLOCK, STACK_CUR, STACK_MAX,
 };
 
 use crate::interface;
@@ -23,8 +16,8 @@ use crate::fdtables;
 
 use libc::*;
 
-use std::io::Write;
 use std::io;
+use std::io::Write;
 
 use std::sync::Arc as RustRfc;
 
@@ -55,9 +48,9 @@ impl Cage {
     }
 
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        // Modify the fdtable manually 
+        // Modify the fdtable manually
         fdtables::copy_fdtable_for_cage(self.cageid, child_cageid).unwrap();
-        
+
         // we grab the parent cages main threads sigset and store it at 0
         // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
         // this way the child can initialize the sigset properly when it establishes its own mainthreadid
@@ -111,8 +104,8 @@ impl Cage {
         };
 
         // increment child counter for parent
-        self.child_num.fetch_add(1, interface::RustAtomicOrdering::SeqCst);
-
+        self.child_num
+            .fetch_add(1, interface::RustAtomicOrdering::SeqCst);
 
         let shmtable = &SHM_METADATA.shmtable;
         //update fields for shared mappings in cage
@@ -130,27 +123,28 @@ impl Cage {
         0
     }
 
-   /*
-    *  Here is the Linux man page for execve: https://man7.org/linux/man-pages/man2/execve.2.html
-    *  
-    *  exec() only returns if an error occurs.
-    *  
-    *  Unlike the `exec` syscalls in the Linux manual, the `exec` syscall here does not take any arguments,
-    *  such as an argument list or environment variables. This is because, in Rawposix, `exec` functions
-    *  solely as a "cage-level exec," focusing only on updating the `cage` struct with necessary changes.
-    *  
-    *  In short, this syscall in Rawposix part is responsible for managing cage resources.
-    *  Execution and memory management are handled within the Wasmtime codebase, which eventually calls
-    *  this function to perform only a specific part of the `exec` operation.
-    *  
-    *  Here, we retain the same cage and only replace the necessary components since `cageid`, `cwd`, `zombies`,
-    *  and other elements remain unchanged. Only `cancelstatus`, `rev_shm`, `thread_table`, and `vmmap` need to be replaced.
-    */
-    pub fn exec_syscall(&self) -> i32 { 
+    /*
+     *  Here is the Linux man page for execve: https://man7.org/linux/man-pages/man2/execve.2.html
+     *
+     *  exec() only returns if an error occurs.
+     *
+     *  Unlike the `exec` syscalls in the Linux manual, the `exec` syscall here does not take any arguments,
+     *  such as an argument list or environment variables. This is because, in Rawposix, `exec` functions
+     *  solely as a "cage-level exec," focusing only on updating the `cage` struct with necessary changes.
+     *
+     *  In short, this syscall in Rawposix part is responsible for managing cage resources.
+     *  Execution and memory management are handled within the Wasmtime codebase, which eventually calls
+     *  this function to perform only a specific part of the `exec` operation.
+     *
+     *  Here, we retain the same cage and only replace the necessary components since `cageid`, `cwd`, `zombies`,
+     *  and other elements remain unchanged. Only `cancelstatus`, `rev_shm`, `thread_table`, and `vmmap` need to be replaced.
+     */
+    pub fn exec_syscall(&self) -> i32 {
         fdtables::empty_fds_for_exec(self.cageid);
 
-        self.cancelstatus.store(false, interface::RustAtomicOrdering::Relaxed);
-        self.rev_shm.lock().clear(); 
+        self.cancelstatus
+            .store(false, interface::RustAtomicOrdering::Relaxed);
+        self.rev_shm.lock().clear();
         self.thread_table.clear();
         let mut vmmap = self.vmmap.write();
         vmmap.clear(); //this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
@@ -174,11 +168,16 @@ impl Cage {
             // if parent hasn't exited yet
             if let Some(parent) = parent_cage {
                 // decrement parent's child counter
-                parent.child_num.fetch_sub(1, interface::RustAtomicOrdering::SeqCst);
+                parent
+                    .child_num
+                    .fetch_sub(1, interface::RustAtomicOrdering::SeqCst);
 
                 // push the exit status to parent's zombie list
                 let mut zombie_vec = parent.zombies.write();
-                zombie_vec.push(Zombie { cageid: self.cageid, exit_code: status });
+                zombie_vec.push(Zombie {
+                    cageid: self.cageid,
+                    exit_code: status,
+                });
             } else {
                 // if parent already exited
                 // BUG: we currently do not handle the situation where a parent has exited already
@@ -198,21 +197,24 @@ impl Cage {
         status
     }
 
-
     //------------------------------------WAITPID SYSCALL------------------------------------
     /*
-    *   waitpid() will return the cageid of waited cage, or 0 when WNOHANG is set and there is no cage already exited
-    *   waitpid_syscall utilizes the zombie list stored in cage struct. When a cage exited, a zombie entry will be inserted
-    *   into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
-    *   zombie list and retrieve the first entry from it (first in, first out).
-    */
+     *   waitpid() will return the cageid of waited cage, or 0 when WNOHANG is set and there is no cage already exited
+     *   waitpid_syscall utilizes the zombie list stored in cage struct. When a cage exited, a zombie entry will be inserted
+     *   into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
+     *   zombie list and retrieve the first entry from it (first in, first out).
+     */
     pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
         let mut zombies = self.zombies.write();
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
 
         // if there is no pending zombies to wait, and there is no active child, return ECHILD
         if zombies.len() == 0 && child_num == 0 {
-            return syscall_error(Errno::ECHILD, "waitpid", "no existing unwaited-for child processes");
+            return syscall_error(
+                Errno::ECHILD,
+                "waitpid",
+                "no existing unwaited-for child processes",
+            );
         }
 
         let mut zombie_opt: Option<Zombie> = None;
@@ -247,7 +249,10 @@ impl Cage {
         // if cageid is specified, then we need to look up the zombie list for the id
         else {
             // first let's check if the cageid is in the zombie list
-            if let Some(index) = zombies.iter().position(|zombie| zombie.cageid == cageid as u64) {
+            if let Some(index) = zombies
+                .iter()
+                .position(|zombie| zombie.cageid == cageid as u64)
+            {
                 // find the cage in zombie list, remove it from the list and break
                 zombie_opt = Some(zombies.remove(index));
             } else {
@@ -260,7 +265,11 @@ impl Cage {
                 if let Some(child_cage) = child {
                     // make sure the child's parent is correct
                     if child_cage.parent != self.cageid {
-                        return syscall_error(Errno::ECHILD, "waitpid", "waited cage is not the child of the cage");
+                        return syscall_error(
+                            Errno::ECHILD,
+                            "waitpid",
+                            "waited cage is not the child of the cage",
+                        );
                     }
                 } else {
                     // cage does not exist
@@ -280,7 +289,10 @@ impl Cage {
                     zombies = self.zombies.write();
 
                     // let's check if the zombie list contains the cage
-                    if let Some(index) = zombies.iter().position(|zombie| zombie.cageid == cageid as u64) {
+                    if let Some(index) = zombies
+                        .iter()
+                        .position(|zombie| zombie.cageid == cageid as u64)
+                    {
                         // find the cage in zombie list, remove it from the list and break
                         zombie_opt = Some(zombies.remove(index));
                         break;
@@ -312,9 +324,9 @@ impl Cage {
     }
 
     /*
-    * if its negative 1
-    * return -1, but also set the values in the cage struct to the DEFAULTs for future calls
-    */
+     * if its negative 1
+     * return -1, but also set the values in the cage struct to the DEFAULTs for future calls
+     */
     pub fn getgid_syscall(&self) -> i32 {
         if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getgid

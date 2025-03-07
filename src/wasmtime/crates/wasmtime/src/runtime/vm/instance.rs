@@ -14,7 +14,7 @@ use crate::runtime::vm::vmcontext::{
 };
 use crate::runtime::vm::{
     ExportFunction, ExportGlobal, ExportMemory, ExportTable, GcStore, Imports, ModuleRuntimeInfo,
-    SendSyncPtr, Store, VMFunctionBody, VMGcRef, WasmFault
+    SendSyncPtr, Store, VMFunctionBody, VMGcRef, WasmFault,
 };
 use alloc::sync::Arc;
 use core::alloc::Layout;

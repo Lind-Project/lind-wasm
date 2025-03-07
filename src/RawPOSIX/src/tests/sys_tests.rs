@@ -5,8 +5,8 @@
 #[cfg(test)]
 pub mod sys_tests {
     use super::super::*;
+    use crate::constants::{DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS};
     use crate::interface;
-    use crate::constants::{DEFAULT_UID, DEFAULT_GID, EXIT_SUCCESS};
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
 
     #[test]
@@ -132,7 +132,7 @@ pub mod sys_tests {
         let child_cage = interface::cagetable_getref(2);
         assert_eq!(child_cage.getuid_syscall(), -1);
         assert_eq!(child_cage.getuid_syscall(), DEFAULT_UID as i32);
-        
+
         lindrustfinalize();
     }
 
@@ -152,7 +152,7 @@ pub mod sys_tests {
         let child_cage2 = interface::cagetable_getref(2);
         let child_cage3 = interface::cagetable_getref(3);
         let child_cage4 = interface::cagetable_getref(4);
-        
+
         // cage2 exit before parent wait
         child_cage2.exit_syscall(123);
 

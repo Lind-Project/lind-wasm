@@ -173,9 +173,9 @@ pub fn handle_errno(e: i32, syscall: &str) -> i32 {
         // ESRCH = 3,	// No such process
         3 => syscall_error(Errno::ESRCH, syscall, "No such process"),
         // EINTR = 4,	// Interrupted system call
-        4=> syscall_error(Errno::EINTR, syscall, "Interrupted system call"),
+        4 => syscall_error(Errno::EINTR, syscall, "Interrupted system call"),
         // EIO = 5,	// I/O error
-        5=> syscall_error(Errno::EIO, syscall, "I/O error"),
+        5 => syscall_error(Errno::EIO, syscall, "I/O error"),
         // ENXIO = 6,	// No such device or address
         6 => syscall_error(Errno::ENXIO, syscall, "No such device or address"),
         // EBIG = 7,	// Argument list too long
@@ -183,7 +183,7 @@ pub fn handle_errno(e: i32, syscall: &str) -> i32 {
         // ENOEXEC = 8,	// Exec format error
         8 => syscall_error(Errno::ENOEXEC, syscall, "Exec format error"),
         // EBADF = 9,	// Bad file number
-        9=> syscall_error(Errno::EBADF, syscall, "Bad file number"),
+        9 => syscall_error(Errno::EBADF, syscall, "Bad file number"),
         // ECHILD = 10,	// No child processes
         10 => syscall_error(Errno::ECHILD, syscall, "No child processes"),
         // EAGAIN = 11,	// Try again
@@ -312,7 +312,11 @@ pub fn handle_errno(e: i32, syscall: &str) -> i32 {
         // EBADMSG = 74,	// Not a data message
         74 => syscall_error(Errno::EBADMSG, syscall, "Not a data message"),
         // EOVERFLOW = 75,	// Value too large for defined data type
-        75 => syscall_error(Errno::EOVERFLOW, syscall, "Value too large for defined data type"),
+        75 => syscall_error(
+            Errno::EOVERFLOW,
+            syscall,
+            "Value too large for defined data type",
+        ),
         // ENOTUNIQ = 76,	// Name not unique on network
         76 => syscall_error(Errno::ENOTUNIQ, syscall, "Name not unique on network"),
         // EBADFD = 77,	// File descriptor in bad state
@@ -320,19 +324,39 @@ pub fn handle_errno(e: i32, syscall: &str) -> i32 {
         // EREMCHG = 78,	// Remote address changed
         78 => syscall_error(Errno::EREMCHG, syscall, "Remote address changed"),
         // ELIBACC = 79,	// Can not access a needed shared library
-        79 => syscall_error(Errno::ELIBACC, syscall, "Can not access a needed shared library"),
+        79 => syscall_error(
+            Errno::ELIBACC,
+            syscall,
+            "Can not access a needed shared library",
+        ),
         // ELIBBAD = 80,	// Accessing a corrupted shared library
-        80 => syscall_error(Errno::ELIBBAD, syscall, "Accessing a corrupted shared library"),
+        80 => syscall_error(
+            Errno::ELIBBAD,
+            syscall,
+            "Accessing a corrupted shared library",
+        ),
         // ELIBSCN = 81,	// .lib section in a.out corrupted
         81 => syscall_error(Errno::ELIBSCN, syscall, ".lib section in a.out corrupted"),
         // ELIBMAX = 82,	// Attempting to link in too many shared libraries
-        82 => syscall_error(Errno::ELIBMAX, syscall, "Attempting to link in too many shared libraries"),
+        82 => syscall_error(
+            Errno::ELIBMAX,
+            syscall,
+            "Attempting to link in too many shared libraries",
+        ),
         // ELIBEXEC = 83,	// Cannot exec a shared library directly
-        83 => syscall_error(Errno::ELIBEXEC, syscall, "Cannot exec a shared library directly"),
+        83 => syscall_error(
+            Errno::ELIBEXEC,
+            syscall,
+            "Cannot exec a shared library directly",
+        ),
         // EILSEQ = 84,	// Illegal byte sequence
         84 => syscall_error(Errno::EILSEQ, syscall, "Illegal byte sequence"),
         // ERESTART = 85,	// Interrupted system call should be restarted
-        85 => syscall_error(Errno::ERESTART, syscall, "Interrupted system call should be restarted"),
+        85 => syscall_error(
+            Errno::ERESTART,
+            syscall,
+            "Interrupted system call should be restarted",
+        ),
         // ESTRPIPE = 86,	// Streams pipe error
         86 => syscall_error(Errno::ESTRPIPE, syscall, "Streams pipe error"),
         // EUSERS = 87,	// Too many users
@@ -352,37 +376,77 @@ pub fn handle_errno(e: i32, syscall: &str) -> i32 {
         // ESOCKTNOSUPPORT = 94,	// Socket type not supported
         94 => syscall_error(Errno::ESOCKTNOSUPPORT, syscall, "Socket type not supported"),
         // EOPNOTSUPP = 95,	// Operation not supported on transport endpoint
-        95 => syscall_error(Errno::EOPNOTSUPP, syscall, "Operation not supported on transport endpoint"),
+        95 => syscall_error(
+            Errno::EOPNOTSUPP,
+            syscall,
+            "Operation not supported on transport endpoint",
+        ),
         // EPFNOSUPPORT = 96,	// Protocol family not supported
-        96 => syscall_error(Errno::EPFNOSUPPORT, syscall, "Protocol family not supported"),
+        96 => syscall_error(
+            Errno::EPFNOSUPPORT,
+            syscall,
+            "Protocol family not supported",
+        ),
         // EAFNOSUPPORT = 97,	// Address family not supported by protocol
-        97 => syscall_error(Errno::EAFNOSUPPORT, syscall, "Address family not supported by protocol"),
+        97 => syscall_error(
+            Errno::EAFNOSUPPORT,
+            syscall,
+            "Address family not supported by protocol",
+        ),
         // EADDRINUSE = 98,	// Address already in use
         98 => syscall_error(Errno::EADDRINUSE, syscall, "Address already in use"),
         // EADDRNOTAVAIL = 99,	// Cannot assign requested address
-        99 => syscall_error(Errno::EADDRNOTAVAIL, syscall, "Cannot assign requested address"),
+        99 => syscall_error(
+            Errno::EADDRNOTAVAIL,
+            syscall,
+            "Cannot assign requested address",
+        ),
         // ENETDOWN = 100,	// Network is down
         100 => syscall_error(Errno::ENETDOWN, syscall, "Network is down"),
         // ENETUNREACH = 101,	// Network is unreachable
         101 => syscall_error(Errno::ENETUNREACH, syscall, "Network is unreachable"),
         // ENETRESET = 102,	// Network dropped connection because of reset
-        102 => syscall_error(Errno::ENETRESET, syscall, "Network dropped connection because of reset"),
+        102 => syscall_error(
+            Errno::ENETRESET,
+            syscall,
+            "Network dropped connection because of reset",
+        ),
         // ECONNABORTED = 103,	// Software caused connection abort
-        103 => syscall_error(Errno::ECONNABORTED, syscall, "Software caused connection abort"),
+        103 => syscall_error(
+            Errno::ECONNABORTED,
+            syscall,
+            "Software caused connection abort",
+        ),
         // ECONNRESET = 104,	// Connection reset by peer
         104 => syscall_error(Errno::ECONNRESET, syscall, "Connection reset by peer"),
         // ENOBUFS = 105,	// No buffer space available
         105 => syscall_error(Errno::ENOBUFS, syscall, "No buffer space available"),
         // EISCONN = 106,	// Transport endpoint is already connected
-        106 => syscall_error(Errno::EISCONN, syscall, "Transport endpoint is already connected"),
+        106 => syscall_error(
+            Errno::EISCONN,
+            syscall,
+            "Transport endpoint is already connected",
+        ),
         // ENOTCONN = 107,	// Transport endpoint is not connected
-        107 => syscall_error(Errno::ENOTCONN, syscall, "Transport endpoint is not connected"),
+        107 => syscall_error(
+            Errno::ENOTCONN,
+            syscall,
+            "Transport endpoint is not connected",
+        ),
         // ESHUTDOWN = 108,	// Cannot send after transport endpoint shutdown
-        108 => syscall_error(Errno::ESHUTDOWN, syscall, "Cannot send after transport endpoint shutdown"),
+        108 => syscall_error(
+            Errno::ESHUTDOWN,
+            syscall,
+            "Cannot send after transport endpoint shutdown",
+        ),
         // ETOOMANYREFS = 109,	// Too many references cannot splice
-        109 => syscall_error(Errno::ETOOMANYREFS, syscall, "Too many references cannot splice"),
+        109 => syscall_error(
+            Errno::ETOOMANYREFS,
+            syscall,
+            "Too many references cannot splice",
+        ),
         // ETIMEDOUT = 110,	// Connection timed out
-        110=> syscall_error(Errno::ETIMEDOUT, syscall, "Connection timed out"),
+        110 => syscall_error(Errno::ETIMEDOUT, syscall, "Connection timed out"),
         // ECONNREFUSED = 111,	// Connection refused
         111 => syscall_error(Errno::ECONNREFUSED, syscall, "Connection refused"),
         // EHOSTDOWN = 112,	// Host is down
@@ -420,7 +484,11 @@ pub fn handle_errno(e: i32, syscall: &str) -> i32 {
         // EKEYREVOKED = 128,	// Key has been revoked
         128 => syscall_error(Errno::EKEYREVOKED, syscall, "Key has been revoked"),
         // EKEYREJECTED = 129,	// Key was rejected by service  for robust mutexes
-        129 => syscall_error(Errno::EKEYREJECTED, syscall, "Key was rejected by service  for robust mutexes"),
+        129 => syscall_error(
+            Errno::EKEYREJECTED,
+            syscall,
+            "Key was rejected by service  for robust mutexes",
+        ),
         // EOWNERDEAD = 130,	// Owner died
         130 => syscall_error(Errno::EOWNERDEAD, syscall, "Owner died"),
         // ENOTRECOVERABLE = 131, // State not recoverable

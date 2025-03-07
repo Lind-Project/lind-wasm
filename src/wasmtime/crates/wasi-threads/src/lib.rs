@@ -80,7 +80,7 @@ impl<T: Clone + Send + 'static> WasiThreadsCtx<T> {
                 );
 
                 match thread_entry_point.call(&mut store, (wasi_thread_id, thread_start_arg)) {
-                    Ok(_) => { 
+                    Ok(_) => {
                         log::trace!("exiting thread id = {} normally", wasi_thread_id);
                     }
                     Err(e) => {
