@@ -276,6 +276,8 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
             let state = get_epoch_state(cageid, thread_id);
             let new_thread_epoch_handler = entry.value().write();
             let new_thread_epoch = *new_thread_epoch_handler;
+            // TODO: we should also make sure the new thread is not in EPOCH_KILLED state.
+            // Will be integrated with process exiting fix
             unsafe {
                 *new_thread_epoch = state;
             };
@@ -299,8 +301,8 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
 // pending in the previous process right after it starts.
 pub fn signal_may_trigger(cageid: u64) {
     let cage = cagetable_getref(cageid);
-    let pending_siangls = cage.pending_signals.read();
-    if !pending_siangls.is_empty() {
+    let pending_signals = cage.pending_signals.read();
+    if !pending_signals.is_empty() {
         signal_epoch_trigger(cageid);
     }
 }
