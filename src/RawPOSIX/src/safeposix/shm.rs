@@ -2,9 +2,8 @@
 #![allow(dead_code)]
 
 use crate::constants::{
-    PROT_NONE, PROT_READ, PROT_WRITE,
-    MAP_SHARED, MAP_PRIVATE, MAP_FIXED, MAP_ANONYMOUS,
-    SHM_RDONLY, SHM_DEST,
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHM_DEST,
+    SHM_RDONLY,
 };
 
 use crate::interface;

@@ -1,10 +1,10 @@
 use parking_lot::Mutex;
-use std::fs::{self, canonicalize, File, OpenOptions};
-use std::sync::Arc;
 use std::convert::TryInto;
+use std::fs::{self, canonicalize, File, OpenOptions};
 use std::os::unix::io::{AsRawFd, RawFd};
-pub use std::sync::LazyLock as RustLazyGlobal;
 pub use std::path::{Component as RustPathComponent, Path as RustPath, PathBuf as RustPathBuf};
+use std::sync::Arc;
+pub use std::sync::LazyLock as RustLazyGlobal;
 
 #[derive(Debug)]
 pub struct ShmFile {
