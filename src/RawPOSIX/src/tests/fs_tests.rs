@@ -3,7 +3,7 @@
 pub mod fs_tests {
 
     use super::super::*;
-    use crate::constants::{DEFAULT_GID, DEFAULT_UID, SHMMAX, S_IRWXA};
+    use crate::constants::{DEFAULT_GID, DEFAULT_UID, SHMMAX, S_IRWXA,PAGESIZE};
     use crate::fdtables::translate_virtual_fd;
     use crate::fdtables::FDTABLE;
     use crate::interface;
@@ -2993,7 +2993,7 @@ pub mod fs_tests {
         assert_eq!(cage.fstat_syscall(fd1, &mut uselessstatdata), 0);
         assert_eq!(cage.fstat_syscall(fd2, &mut uselessstatdata), 0);
 
-        assert_eq!(cage.exec_syscall(2), 0);
+        assert_eq!(cage.exec_syscall(), 0);
 
         let execcage = interface::cagetable_getref(2);
         assert_eq!(
