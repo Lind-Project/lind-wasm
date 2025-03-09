@@ -113,8 +113,8 @@ impl IntervalTimer {
                         .saturating_sub(guard.start_instant.elapsed());
 
                     if remaining_seconds == RustDuration::ZERO {
-                        // Sends a SIGALRM signal to the cage when the timer expires. 
-                        // This struct/method is used exclusively by the setitimer syscall, 
+                        // Sends a SIGALRM signal to the cage when the timer expires.
+                        // This struct/method is used exclusively by the setitimer syscall,
                         // which is expected to send a SIGALRM signal upon expiration.
                         lind_send_signal(guard.cageid, SIGALRM);
 

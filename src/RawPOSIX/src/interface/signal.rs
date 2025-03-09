@@ -1,4 +1,7 @@
-use crate::{constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL}, interface::{cagetable_getref, cagetable_getref_opt, RustAtomicOrdering}};
+use crate::{
+    constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL},
+    interface::{cagetable_getref, cagetable_getref_opt, RustAtomicOrdering},
+};
 
 const EPOCH_NORMAL: u64 = 0;
 const EPOCH_SIGNAL: u64 = 0xc0ffee;
@@ -11,7 +14,10 @@ pub fn signal_epoch_trigger(cageid: u64) {
 
     let threadid_guard = cage.main_threadid.read();
     let main_threadid = *threadid_guard;
-    let epoch_handler = cage.epoch_handler.get(&main_threadid).expect("main threadid does not exist");
+    let epoch_handler = cage
+        .epoch_handler
+        .get(&main_threadid)
+        .expect("main threadid does not exist");
     let guard = epoch_handler.write();
     let epoch = *guard;
     // SAFETY: the pointer is locked with write access so no one is able to modify it concurrently
@@ -52,13 +58,14 @@ pub fn epoch_kill_all(cageid: u64) {
 // thread safety: this function will only be invoked by main thread of the cage
 fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
     let cage = cagetable_getref(cageid);
-    let epoch_handler = cage.epoch_handler.get(&(thread_id as i32)).expect("threadid does not exist");
+    let epoch_handler = cage
+        .epoch_handler
+        .get(&(thread_id as i32))
+        .expect("threadid does not exist");
     let guard = epoch_handler.read();
     let epoch = *guard;
     // SAFETY: see comment at `signal_epoch_trigger`
-    unsafe {
-        *epoch
-    }
+    unsafe { *epoch }
 }
 
 // check the specified thread with specified cage is in "killed" state
@@ -70,9 +77,7 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
     let guard = epoch_handler.write();
     let epoch = *guard;
     // SAFETY: see comment at `signal_epoch_trigger`
-    unsafe {
-        *epoch == EPOCH_KILLED
-    }
+    unsafe { *epoch == EPOCH_KILLED }
 }
 
 // reset the epoch of the main thread of the cage to "normal" state
@@ -105,9 +110,7 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
     let guard = epoch_handler.write();
     let epoch = *guard;
     // SAFETY: see comment at `signal_epoch_trigger`
-    unsafe {
-        *epoch > EPOCH_NORMAL
-    }
+    unsafe { *epoch > EPOCH_NORMAL }
 }
 
 // check if the signal of the cage is in blocked state
@@ -116,8 +119,8 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
 pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
     let cage = cagetable_getref(cageid);
     let sigset = cage.sigset.load(RustAtomicOrdering::Relaxed);
-    
-    // check if the corresponding signal bit is set in sigset 
+
+    // check if the corresponding signal bit is set in sigset
     (sigset & convert_signal_mask(signo)) > 0
 }
 
@@ -151,7 +154,7 @@ pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
         if !signal_check_block(cageid, signo) {
             signal_epoch_trigger(cageid);
         }
-        
+
         true
     } else {
         false
@@ -174,7 +177,7 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
 
     // we iterate through signal and retrieve the first unblocked signals in the pending list
     if let Some(index) = pending_signals.iter().position(
-        |&signo| (sigset & convert_signal_mask(signo)) == 0 // check if signal is blocked
+        |&signo| (sigset & convert_signal_mask(signo)) == 0, // check if signal is blocked
     ) {
         // retrieve the signal number
         let signo = pending_signals.remove(index);
@@ -197,8 +200,9 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
                     mask_self = 0;
                 }
                 // temporily update the signal mask
-                cage.sigset.fetch_or(sigaction.sa_mask | mask_self, RustAtomicOrdering::Relaxed);
-                
+                cage.sigset
+                    .fetch_or(sigaction.sa_mask | mask_self, RustAtomicOrdering::Relaxed);
+
                 // restorer is called when the signal handler finishes. It should restore the signal mask
                 let restorer = Box::new(move |cageid| {
                     let cage = cagetable_getref(cageid);
@@ -233,7 +237,7 @@ pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
     // iterate through each pending signal
     if let Some(index) = pending_signals.iter().position(
         // check if the signal is blocked
-        |&signo| !signal_check_block(cageid, signo)
+        |&signo| !signal_check_block(cageid, signo),
     ) {
         false
     } else {
@@ -268,7 +272,11 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
     if thread_id == main_threadid {
         // if main thread exits, we should find a new main thread
         // unless this is the last thread in the cage
-        if let Some(entry) = cage.epoch_handler.iter().find(|entry| *entry.key() as u64 != thread_id) {
+        if let Some(entry) = cage
+            .epoch_handler
+            .iter()
+            .find(|entry| *entry.key() as u64 != thread_id)
+        {
             let id = *entry.key();
             *threadid_guard = id;
 
@@ -287,17 +295,19 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
         }
     }
     // remove the epoch handler of the thread
-    cage.epoch_handler.remove(&(thread_id as i32)).expect("thread id does not exist!");
+    cage.epoch_handler
+        .remove(&(thread_id as i32))
+        .expect("thread id does not exist!");
 
     last_thread
 }
 
 // trigger the epoch if pending signal list is not empty
-// This function is invoked only by a newly exec-ed cage 
-// immediately after it completes its initialization. 
-// Its purpose is to handle the scenario where Linux resets 
-// the signal mask but preserves pending signals after exec. 
-// As a result, the new process may receive signals that were 
+// This function is invoked only by a newly exec-ed cage
+// immediately after it completes its initialization.
+// Its purpose is to handle the scenario where Linux resets
+// the signal mask but preserves pending signals after exec.
+// As a result, the new process may receive signals that were
 // pending in the previous process right after it starts.
 pub fn signal_may_trigger(cageid: u64) {
     let cage = cagetable_getref(cageid);

@@ -269,7 +269,7 @@ where
                 backtrace,
                 coredumpstack,
             }))
-        },
+        }
         #[cfg(all(feature = "std", panic = "unwind"))]
         Err((UnwindReason::Panic(panic), _, _)) => std::panic::resume_unwind(panic),
     };

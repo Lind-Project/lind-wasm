@@ -95,8 +95,8 @@ use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::future::Future;
-use core::hash::Hasher;
 use core::hash::Hash;
+use core::hash::Hasher;
 use core::marker;
 use core::mem::{self, ManuallyDrop};
 use core::num::NonZeroU64;
@@ -231,7 +231,7 @@ pub struct StoreInner<T> {
 
     pub(crate) on_called: Option<OnCalledHandler<T>>,
     is_thread: bool,
-    
+
     // for comments about `ManuallyDrop`, see `Store::into_data`
     data: ManuallyDrop<T>,
 }
@@ -290,7 +290,11 @@ impl<T> DerefMut for StoreInner<T> {
 }
 
 pub type OnCalledHandler<T> = Box<
-    dyn FnOnce(&mut StoreContextMut<'_, T>) -> Result<OnCalledAction, Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
+    dyn FnOnce(
+            &mut StoreContextMut<'_, T>,
+        ) -> Result<OnCalledAction, Box<dyn std::error::Error + Send + Sync>>
+        + Send
+        + Sync,
 >;
 
 /// Monomorphic storage for a `Store<T>`.
@@ -340,7 +344,7 @@ pub struct StoreOpaque {
     stack_top: u64,
     // stack bottom
     stack_base: u64,
-    
+
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
     stack_snapshots: HashMap<u64, Vec<u8>>,
@@ -695,7 +699,6 @@ impl<T> Store<T> {
             host_resource_data: Default::default(),
         }
     }
-
 
     /// Creates a new [`Store`] to be associated with the given [`Engine`] and
     /// `data` provided.
@@ -1349,11 +1352,11 @@ impl<'a, T> StoreContextMut<'a, T> {
     pub fn store_unwind_data(&mut self, ptr: *const u8, len: usize) -> u64 {
         // Allocate a vector with enough capacity to hold the data.
         let mut data: Vec<u8> = Vec::with_capacity(len);
-            
+
         unsafe {
             // Copy bytes from the raw pointer to the vector.
             ptr::copy_nonoverlapping(ptr, data.as_mut_ptr(), len);
-            
+
             // Set the length of the vector since we've manually populated it.
             data.set_len(len);
         }
@@ -1391,7 +1394,10 @@ impl<'a, T> StoreContextMut<'a, T> {
 
     // append the signal callstack information
     pub fn append_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
-        self.0.signal_asyncify_data.push(SignalAsyncifyData { signal_handler, signo });
+        self.0.signal_asyncify_data.push(SignalAsyncifyData {
+            signal_handler,
+            signo,
+        });
     }
 
     // pop the signal callstack information
@@ -1401,7 +1407,11 @@ impl<'a, T> StoreContextMut<'a, T> {
 
     // get the current signal callstack information
     pub fn get_current_signal_rewind_data(&mut self) -> Option<SignalAsyncifyData> {
-        let data = self.0.signal_asyncify_data.get(self.0.signal_asyncify_counter as usize).cloned();
+        let data = self
+            .0
+            .signal_asyncify_data
+            .get(self.0.signal_asyncify_counter as usize)
+            .cloned();
         let length = self.0.signal_asyncify_data.len();
         if self.0.signal_asyncify_counter == (length - 1) as u64 {
             self.0.signal_asyncify_counter = 0;
@@ -2948,8 +2958,17 @@ impl<T> StoreInner<T> {
         *epoch_deadline = self.engine().current_epoch() + delta;
     }
 
-    pub fn set_on_called(&mut self, callback: Box<dyn FnOnce(&mut StoreContextMut<'_, T>) -> Result<OnCalledAction, Box<dyn std::error::Error + Send + Sync>> + Send + Sync>)
-    {
+    pub fn set_on_called(
+        &mut self,
+        callback: Box<
+            dyn FnOnce(
+                    &mut StoreContextMut<'_, T>,
+                )
+                    -> Result<OnCalledAction, Box<dyn std::error::Error + Send + Sync>>
+                + Send
+                + Sync,
+        >,
+    ) {
         self.on_called = Some(callback);
     }
 

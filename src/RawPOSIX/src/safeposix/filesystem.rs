@@ -7,9 +7,8 @@ use crate::interface;
 
 use super::cage::Cage;
 
-pub fn convpath(cpath: &str) ->
-    interface:: RustPathBuf {
-    interface::RustPathBuf:: from(cpath)
+pub fn convpath(cpath: &str) -> interface::RustPathBuf {
+    interface::RustPathBuf::from(cpath)
 }
 
 pub fn normpath(origp: interface::RustPathBuf, cage: &Cage) -> interface::RustPathBuf {

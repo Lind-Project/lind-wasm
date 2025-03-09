@@ -1,5 +1,3 @@
-use crate::vm::TrapReason;
-use crate::{prelude::*, OnCalledAction};
 use crate::runtime::vm::{
     ExportFunction, SendSyncPtr, StoreBox, VMArrayCallHostFuncContext, VMContext, VMFuncRef,
     VMFunctionImport, VMOpaqueContext,
@@ -7,6 +5,8 @@ use crate::runtime::vm::{
 use crate::runtime::Uninhabited;
 use crate::store::{AutoAssertNoGc, StoreData, StoreOpaque, Stored};
 use crate::type_registry::RegisteredType;
+use crate::vm::TrapReason;
+use crate::{prelude::*, OnCalledAction};
 use crate::{
     AsContext, AsContextMut, CallHook, Engine, Extern, FuncType, Instance, Module, Ref,
     StoreContext, StoreContextMut, Val, ValRaw, ValType,
@@ -1085,7 +1085,7 @@ impl Func {
                     // This is set when we finished the unwind and starts the rewind process
                     Ok(OnCalledAction::InvokeAgain) => {
                         continue;
-                    },
+                    }
                     // Finish means we can just do the normal exit and there is no need to invoke again
                     // For example, exit syscall uses this routine after it finishes the unwind process
                     Ok(OnCalledAction::Finish(ret)) => {
@@ -1095,11 +1095,11 @@ impl Func {
                             *params_and_returns = ValRaw::i32(*res);
                         }
                         break;
-                    },
+                    }
                     // these two state are used for error handling
                     Ok(OnCalledAction::Trap(trap)) => {
                         eprintln!("encounter a trap: {:?}", trap);
-                    },
+                    }
                     Err(err) => {
                         eprintln!("encounter a error: {:?}", err);
                     }
@@ -1632,7 +1632,7 @@ pub(crate) fn invoke_wasm_and_catch_traps<T>(
             store.0.default_caller(),
             closure,
         );
-        
+
         exit_wasm(store, exit);
         store.0.call_hook(CallHook::ReturningFromWasm)?;
         result.map_err(|t| crate::trap::from_runtime_box(store.0, t))
@@ -2127,7 +2127,9 @@ impl<T> Caller<'_, T> {
     pub fn get_stack_pointer(&mut self) -> Result<u32, ()> {
         self.caller
             .host_state()
-            .downcast_ref::<Instance>().ok_or(()).unwrap()
+            .downcast_ref::<Instance>()
+            .ok_or(())
+            .unwrap()
             .get_stack_pointer(&mut self.store)
     }
 
@@ -2141,19 +2143,18 @@ impl<T> Caller<'_, T> {
                         }
                         Err(err) => {
                             eprintln!("the signature of asyncify_start_unwind function is not correct: {:?}", err);
-                            return Err(())
+                            return Err(());
                         }
                     }
-                },
+                }
                 _ => {
                     eprintln!("asyncify_start_unwind export is not a function");
-                    return Err(())
+                    return Err(());
                 }
             }
-        }
-        else {
+        } else {
             eprintln!("asyncify_start_unwind export not found");
-            return Err(())
+            return Err(());
         }
     }
 
@@ -2167,19 +2168,18 @@ impl<T> Caller<'_, T> {
                         }
                         Err(err) => {
                             eprintln!("the signature of asyncify_stop_unwind function is not correct: {:?}", err);
-                            return Err(())
+                            return Err(());
                         }
                     }
-                },
+                }
                 _ => {
                     eprintln!("asyncify_stop_unwind export is not a function");
-                    return Err(())
+                    return Err(());
                 }
             }
-        }
-        else {
+        } else {
             eprintln!("asyncify_stop_unwind export not found");
-            return Err(())
+            return Err(());
         }
     }
 
@@ -2193,19 +2193,18 @@ impl<T> Caller<'_, T> {
                         }
                         Err(err) => {
                             eprintln!("the signature of asyncify_start_rewind function is not correct: {:?}", err);
-                            return Err(())
+                            return Err(());
                         }
                     }
-                },
+                }
                 _ => {
                     eprintln!("asyncify_start_rewind export is not a function");
-                    return Err(())
+                    return Err(());
                 }
             }
-        }
-        else {
+        } else {
             eprintln!("asyncify_start_rewind export not found");
-            return Err(())
+            return Err(());
         }
     }
 
@@ -2218,20 +2217,22 @@ impl<T> Caller<'_, T> {
                             return Ok(func);
                         }
                         Err(err) => {
-                            eprintln!("the signature of asyncify_stop_rewind is not correct: {:?}", err);
-                            return Err(())
+                            eprintln!(
+                                "the signature of asyncify_stop_rewind is not correct: {:?}",
+                                err
+                            );
+                            return Err(());
                         }
                     }
-                },
+                }
                 _ => {
                     eprintln!("asyncify_stop_rewind export is not a function");
-                    return Err(())
+                    return Err(());
                 }
             }
-        }
-        else {
+        } else {
             eprintln!("asyncify_stop_rewind export not found");
-            return Err(())
+            return Err(());
         }
     }
 
@@ -2245,20 +2246,22 @@ impl<T> Caller<'_, T> {
                             return Ok(func);
                         }
                         Err(err) => {
-                            eprintln!("the signature of signal_callback function is not correct: {:?}", err);
-                            return Err(())
+                            eprintln!(
+                                "the signature of signal_callback function is not correct: {:?}",
+                                err
+                            );
+                            return Err(());
                         }
                     }
-                },
+                }
                 _ => {
                     eprintln!("signal_callback export is not a function");
-                    return Err(())
+                    return Err(());
                 }
             }
-        }
-        else {
+        } else {
             eprintln!("signal_callback export not found");
-            return Err(())
+            return Err(());
         }
     }
 
