@@ -24,7 +24,7 @@ pub enum OnCalledAction {
 #[derive(Copy, Clone)]
 pub struct RewindingReturn {
     pub rewinding: bool,
-    pub retval: i32
+    pub retval: i32,
 }
 
 // Externals

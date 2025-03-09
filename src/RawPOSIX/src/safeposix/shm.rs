@@ -2,9 +2,8 @@
 #![allow(dead_code)]
 
 use crate::constants::{
-    PROT_NONE, PROT_READ, PROT_WRITE,
-    MAP_SHARED, MAP_PRIVATE, MAP_FIXED, MAP_ANONYMOUS,
-    SHM_RDONLY, SHM_DEST,
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHM_DEST,
+    SHM_RDONLY,
 };
 
 use crate::interface;
@@ -23,7 +22,6 @@ pub struct ShmSegment {
     pub filebacking: interface::ShmFile,
     pub rmid: bool,
     pub attached_cages: interface::RustHashMap<u64, i32>, // attached cages, number of references in cage
-    pub semaphor_offsets: interface::RustHashSet<u32>,
 }
 
 pub fn new_shm_segment(
@@ -73,7 +71,6 @@ impl ShmSegment {
             filebacking: filebacking,
             rmid: false,
             attached_cages: interface::RustHashMap::new(),
-            semaphor_offsets: interface::RustHashSet::new(),
         }
     }
     // mmap shared segment into cage, and increase attachments
