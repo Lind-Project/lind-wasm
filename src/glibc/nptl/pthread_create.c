@@ -54,6 +54,8 @@ int32_t __wasi_thread_spawn(void* start_arg) {
     return __imported_wasi_thread_spawn((int32_t) start_arg);
 }
 
+void *__copy_tls(unsigned char *);
+
 /* Globally enabled events.  */
 extern td_thr_events_t __nptl_threads_events;
 libc_hidden_proto (__nptl_threads_events)
@@ -270,6 +272,11 @@ struct start_args {
     pthread_t *thread;
 };
 
+struct thread_args {
+  struct pthread* pd;
+  void* tls_base;
+};
+
 void __wasi_thread_start_C(int tid, void *p)
 {
     struct start_args *args = p;
@@ -341,14 +348,23 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   TLS_DEFINE_INIT_TP (tp, pd);
 
   unsigned char *stack = 0;
+  size_t tls_size = __builtin_wasm_tls_size();
 
-  struct clone_args *args = (void *)pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE;
+  printf("pd->stackblock: %u, pd->stackblock_size: %d, sizeof(struct clone_args): %d, TLS_TCB_SIZE: %d, stackaddr: %u\n", pd->stackblock, pd->stackblock_size, sizeof(struct clone_args), TLS_TCB_SIZE, stackaddr);
+  struct clone_args *args = (void *)pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size;
   memset(args, 0, sizeof(struct clone_args));
   args->flags = clone_flags;
-  args->stack = stackaddr;
-  args->stack = stackaddr + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE;
-  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE;
+  args->stack = stackaddr + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
+  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
   args->child_tid = &pd->tid;
+
+  printf("child tls base: %u\n", (void *)pd->stackblock + pd->stackblock_size - TLS_TCB_SIZE - tls_size);
+  void* tls_base = __copy_tls((void *)pd->stackblock + pd->stackblock_size - TLS_TCB_SIZE - tls_size);
+  uintptr_t* tls_base_addr = stackaddr + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
+  printf("tls_base_addr: %u\n", tls_base_addr);
+  *tls_base_addr = (uintptr_t)tls_base;
+
+  printf("before clone, pd: %u\n", pd);
 
   int ret = __clone_internal(args, &start_thread, pd);
   if (__glibc_unlikely (ret == -1))
@@ -392,6 +408,14 @@ static int _Noreturn
 start_thread (void *arg)
 {
   struct pthread *pd = arg;
+
+  size_t tls_size = __builtin_wasm_tls_size();
+  uintptr_t* tls_base_addr = pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
+  printf("in thread: tls_base_addr: %u\n", tls_base_addr);
+  void* tls_base = (void*)(*tls_base_addr);
+	__asm__("local.get %0\n"
+    "global.set __tls_base\n"
+    :: "r"(tls_base));
 
   /* We are either in (a) or (b), and in either case we either own PD already
      (2) or are about to own PD (1), and so our only restriction would be that

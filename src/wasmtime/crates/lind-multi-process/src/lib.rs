@@ -440,6 +440,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     pub fn pthread_create_call(&self, mut caller: &mut Caller<'_, T>,
                     stack_addr: u32, stack_size: u32, child_tid: u64
                 ) -> Result<i32> {
+        println!("stack_addr: {}, stack_size: {}", stack_addr, stack_size);
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
