@@ -1,19 +1,21 @@
 //! File System Syscall Implementation
 //!
 //! This file provides all system related syscall implementation in RawPOSIX
-use typemap::syscall_conv::*;
 use cage::get_cage;
 use cage::memory::mem_helper::*;
 use cage::memory::vmmap::{VmmapOps, *};
 use fdtables;
-use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, F_GETFL, PAGESIZE, F_GETOWN, F_SETOWN
-};
-use sysdefs::constants::fs_const;
 use libc::*;
-use std::sync::atomic::{AtomicI32, AtomicU64};
 use parking_lot::RwLock;
+use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::fs_const;
+use sysdefs::constants::fs_const::{
+    F_GETFL, F_GETOWN, F_SETOWN, MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED,
+    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+};
+use typemap::syscall_conv::*;
 
 /// Helper function for close_syscall
 ///
@@ -237,10 +239,10 @@ pub fn dup_syscall(
         return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
     }
     let vfd = wrappedvfd.unwrap();
-    let ret_kernelfd = unsafe{ libc::dup(vfd.underfd as i32) };
-    let ret_virtualfd = fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
+    let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
+    let ret_virtualfd =
+        fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
     return ret_virtualfd as i32;
-    
 }
 
 pub fn dup2_syscall(
@@ -273,19 +275,24 @@ pub fn dup2_syscall(
 
     match fdtables::translate_virtual_fd(cageid, old_virtualfd) {
         Ok(old_vfd) => {
-            let new_kernelfd = unsafe {
-                libc::dup(old_vfd.underfd as i32)
-            };
+            let new_kernelfd = unsafe { libc::dup(old_vfd.underfd as i32) };
             // Map new kernel fd with provided kernel fd
-            let _ret_kernelfd = unsafe{ libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
-            let _ = fdtables::get_specific_virtual_fd(cageid, new_virtualfd, old_vfd.fdkind, new_kernelfd as u64, false, old_vfd.perfdinfo).unwrap();
+            let _ret_kernelfd = unsafe { libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
+            let _ = fdtables::get_specific_virtual_fd(
+                cageid,
+                new_virtualfd,
+                old_vfd.fdkind,
+                new_kernelfd as u64,
+                false,
+                old_vfd.perfdinfo,
+            )
+            .unwrap();
             return new_virtualfd as i32;
-        },
+        }
         Err(_e) => {
             return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
         }
     }
-    
 }
 
 /// Handles the `mmap_syscall`, interacting with the `vmmap` structure.
@@ -326,7 +333,10 @@ pub fn mmap_syscall(
     off_cageid: u64,
 ) -> i32 {
     // TODO: Check will perform in the below logic??
-    println!("[mmap_syscall] selfcageid: {:?}, FD Cageid: {:?}", cageid, vfd_cageid);
+    println!(
+        "[mmap_syscall] selfcageid: {:?}, FD Cageid: {:?}",
+        cageid, vfd_cageid
+    );
     let mut addr = addr_arg as *mut u8;
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
@@ -436,7 +446,21 @@ pub fn mmap_syscall(
                     MemoryBackingType::Anonymous
                 } else {
                     // if we are doing file-backed mapping, we need to set maxprot to the file permission
-                    let flags = fcntl_syscall(cageid, fildes as u64, vfd_cageid, F_GETFL as u64, flags_cageid, 0, 0, 0, 0, 0, 0, 0, 0);
+                    let flags = fcntl_syscall(
+                        cageid,
+                        fildes as u64,
+                        vfd_cageid,
+                        F_GETFL as u64,
+                        flags_cageid,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    );
                     if flags < 0 {
                         return syscall_error(Errno::EINVAL, "mmap", "invalid file descriptor")
                             as i32;
@@ -831,12 +855,10 @@ pub fn fcntl_syscall(
     }
     match (cmd, arg) {
         (F_GETOWN, ..) => {
-            // 
+            //
             1000
         }
-        (F_SETOWN, arg) if arg >= 0 => {
-            0
-        }
+        (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
             let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd as u64);
             if wrappedvfd.is_err() {

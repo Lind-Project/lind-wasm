@@ -128,14 +128,14 @@ impl WasiCtx {
     pub fn fork(&self) -> Self {
         let forked_ctx = WasiCtxInner {
             args: self.args.clone(), // we want to clone the entire args
-            env: self.env.clone(), // as well as environment variables
+            env: self.env.clone(),   // as well as environment variables
             // below are currently not used by glibc in lind-wasm, so doesn't really matter how to handle them for now
             random: Mutex::new(random_ctx()),
             clocks: clocks_ctx(),
             sched: sched_ctx(),
             table: Table::new(),
         };
-        
+
         let ctx = Self(Arc::new(forked_ctx));
 
         return ctx;

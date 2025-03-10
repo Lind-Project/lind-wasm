@@ -12,16 +12,14 @@ pub use std::{mem, ptr};
 pub use sysdefs::constants::fs_const;
 
 use std::env;
-/// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression 
-/// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation 
-/// error will be emitted if the environment variable is not a valid Unicode string). If the environment 
+/// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
+/// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
+/// error will be emitted if the environment variable is not a valid Unicode string). If the environment
 /// variable is not present, then this will expand to None, and will be set to default path.
 pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
     Some(path) => path,
     None => "/home/lind/lind-wasm/src/RawPOSIX/tmp",
 };
-
-
 
 /// Convert data type from `&str` to `PathBuf`
 pub fn convpath(cpath: &str) -> PathBuf {

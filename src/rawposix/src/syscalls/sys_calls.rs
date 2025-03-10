@@ -1,21 +1,21 @@
 //! System syscalls implementation
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
-use std::sync::atomic::Ordering::*;
-use typemap::syscall_conv::*;
-use std::path::PathBuf;
-use std::ffi::CString;
-use std::sync::atomic::{AtomicI32, AtomicU64};
-use parking_lot::RwLock;
-use std::sync::Arc;
 use crate::syscalls::fs_calls::kernel_close;
 use cage::memory::mem_helper::*;
 use cage::memory::vmmap::{VmmapOps, *};
-use cage::{Cage, get_cage, add_cage, cagetable_clear, Zombie, remove_cage};
+use cage::{add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie};
 use fdtables;
+use parking_lot::RwLock;
+use std::ffi::CString;
+use std::path::PathBuf;
+use std::sync::atomic::Ordering::*;
+use std::sync::atomic::{AtomicI32, AtomicU64};
+use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::*;
 use sysdefs::constants::{EXIT_SUCCESS, VERBOSE};
+use typemap::syscall_conv::*;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
 ///
@@ -25,8 +25,8 @@ use sysdefs::constants::{EXIT_SUCCESS, VERBOSE};
 /// with this cloned tables.
 pub fn fork_syscall(
     cageid: u64,
-    child_arg: u64, // Child's cage id
-    child_arg_cageid: u64, // Child's cage id arguments cageid 
+    child_arg: u64,        // Child's cage id
+    child_arg_cageid: u64, // Child's cage id arguments cageid
     arg2: u64,
     arg2_cageid: u64,
     arg3: u64,
@@ -168,10 +168,10 @@ pub fn exec_syscall(
         return syscall_error(Errno::EFAULT, "exec", "Invalide Cage ID");
     }
 
-    // Empty fd with flag should_cloexec 
+    // Empty fd with flag should_cloexec
     fdtables::empty_fds_for_exec(cageid);
 
-    // Copy necessary data from current cage 
+    // Copy necessary data from current cage
     let selfcage = get_cage(cageid).unwrap();
 
     let zombies = selfcage.zombies.read();
@@ -188,7 +188,7 @@ pub fn exec_syscall(
         egid: AtomicI32::new(-1),
         euid: AtomicI32::new(-1),
         main_threadid: AtomicU64::new(0),
-        zombies: RwLock::new(cloned_zombies),   // When a process exec-ed, its child relationship should be perserved 
+        zombies: RwLock::new(cloned_zombies), // When a process exec-ed, its child relationship should be perserved
         child_num: AtomicU64::new(0),
         vmmap: RwLock::new(Vmmap::new()), // Memory is cleared after exec
     };
@@ -200,7 +200,8 @@ pub fn exec_syscall(
     0
 }
 
-pub fn getpid_syscall(cageid: u64,
+pub fn getpid_syscall(
+    cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
     arg2: u64,
@@ -230,7 +231,8 @@ pub fn getpid_syscall(cageid: u64,
     return cage.cageid as i32;
 }
 
-pub fn getppid_syscall(cageid: u64,
+pub fn getppid_syscall(
+    cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
     arg2: u64,
@@ -256,7 +258,7 @@ pub fn getppid_syscall(cageid: u64,
     }
 
     let cage = get_cage(cageid).unwrap();
-    
+
     return cage.parent as i32;
 }
 
@@ -265,11 +267,7 @@ pub fn getppid_syscall(cageid: u64,
 pub fn lindrustinit(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
 
-    fdtables::register_close_handlers(
-        FDKIND_KERNEL,
-        fdtables::NULL_FUNC,
-        kernel_close,
-    );
+    fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
 
     let utilcage = Cage {
         cageid: 0,
@@ -397,9 +395,9 @@ pub fn lindrustfinalize() {
 
     for cageid in exitvec {
         exit_syscall(
-            cageid as u64,  // target cageid
-            EXIT_SUCCESS as u64,  // status arg
-            cageid as u64, // status arg's cageid 
+            cageid as u64,       // target cageid
+            EXIT_SUCCESS as u64, // status arg
+            cageid as u64,       // status arg's cageid
             0,
             0,
             0,
@@ -412,5 +410,4 @@ pub fn lindrustfinalize() {
             0,
         );
     }
-
 }

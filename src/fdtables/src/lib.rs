@@ -970,15 +970,9 @@ mod tests {
         let mut bad_fds_to_check = _init_fd_set();
 
         // check all "None" is okay...
-        assert!(prepare_bitmasks_for_select(
-            cage_id,
-            6,
-            None,
-            None,
-            None,
-            &HashSet::from([0])
-        )
-        .is_ok());
+        assert!(
+            prepare_bitmasks_for_select(cage_id, 6, None, None, None, &HashSet::from([0])).is_ok()
+        );
 
         // check a few different "empty" bitmask cases too...
         assert!(prepare_bitmasks_for_select(
@@ -1008,7 +1002,6 @@ mod tests {
             &HashSet::from([0])
         )
         .is_ok());
-
 
         // Okay!   Now, set a fd...
         _fd_set(2, &mut bad_fds_to_check);
@@ -1512,14 +1505,16 @@ mod tests {
         // Acquire a virtual fd...
         let my_virt_fd =
             get_unused_virtual_fd(threei::TESTING_CAGEID, FDKIND, UNDERFD, false, 100).unwrap();
-        
+
         close_virtualfd(threei::TESTING_CAGEID, my_virt_fd).unwrap();
 
-        // translate_virtual_fd should return error, because there should have 
+        // translate_virtual_fd should return error, because there should have
         // no requested my_virt_fd after close
         match translate_virtual_fd(threei::TESTING_CAGEID, my_virt_fd) {
             Ok(_) => panic!("translate_virtual_fd should return error!!"),
-            Err(_e) => {TESTMUTEX.clear_poison();}
+            Err(_e) => {
+                TESTMUTEX.clear_poison();
+            }
         }
     }
 }
