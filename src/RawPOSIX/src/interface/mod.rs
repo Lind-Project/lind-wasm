@@ -1,10 +1,8 @@
-mod comm;
 mod file;
 mod mem;
 mod misc;
 mod timer;
 pub mod types;
-pub use comm::*;
 pub use file::*;
 pub use mem::*;
 pub use misc::*;
