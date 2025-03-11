@@ -1,19 +1,19 @@
 #![allow(dead_code)]
 // Import constants
+use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::fs_const::{
     MAP_PRIVATE, MAP_SHARED, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, PROT_READ, PROT_WRITE,
     S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use sysdefs::constants::sys_const::SIGNAL_MAX;
-use sysdefs::constants::err_const::{syscall_error, Errno};
 // Import data structure
 use sysdefs::data::fs_struct::{EpollEvent, IoctlPtrUnion, PipeArray, SigactionStruct, SigsetType};
 use sysdefs::data::net_struct::PollStruct;
 
 //going to get the datatypes and errnos from the cage file from now on
-use crate::interface;
 use super::filesystem::normpath;
 pub use super::vmmap::*;
+use crate::interface;
 pub use crate::interface::CAGE_TABLE;
 
 #[derive(Debug, Clone, Copy)]

@@ -4,7 +4,7 @@ use crate::interface;
 use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::data::fs_struct::*;
 use sysdefs::data::net_struct::*;
-use sysdefs::data::{net_struct, fs_struct};
+use sysdefs::data::{fs_struct, net_struct};
 
 use libc::*;
 use std::ffi::CStr;
@@ -14,7 +14,6 @@ use std::ptr::null;
 use std::str::Utf8Error;
 
 const SIZEOF_SOCKADDR: u32 = 16;
-
 
 /*
 This file provides essential functions for handling and validating `u64` inputs,

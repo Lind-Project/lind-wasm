@@ -127,12 +127,14 @@ use crate::interface;
 use crate::interface::{translate_vmmap_addr, types};
 
 // Import constants
-use sysdefs::constants::*;
 use sysdefs::constants::err_const::{VERBOSE, *};
+use sysdefs::constants::*;
 // Import data structure
-use sysdefs::data::fs_struct::{SigactionStruct, StatData, PipeArray, EpollEvent, SockPair, IovecStruct};
+use sysdefs::data::fs_struct::{
+    EpollEvent, IovecStruct, PipeArray, SigactionStruct, SockPair, StatData,
+};
 use sysdefs::data::net_struct;
-// Import fdtables 
+// Import fdtables
 use fdtables;
 
 macro_rules! get_onearg {
@@ -219,8 +221,7 @@ pub fn lind_syscall_api(
             }
             let cage = interface::cagetable_getref(cageid);
             // Convert iovec array address
-            let iov_base =
-                translate_vmmap_addr(&cage, arg2).unwrap() as *const IovecStruct;
+            let iov_base = translate_vmmap_addr(&cage, arg2).unwrap() as *const IovecStruct;
             // The actual write operation is delegated to the cage implementation
             cage.writev_syscall(fd, iov_base, iovcnt)
         }
@@ -704,7 +705,8 @@ pub fn lind_syscall_api(
             } else if !(nullity1 || nullity2) {
                 // Both address and length are provided
                 // Create a default sockaddr to store the sender's address
-                let mut newsockaddr = net_struct::GenSockaddr::V4(net_struct::SockaddrV4::default());
+                let mut newsockaddr =
+                    net_struct::GenSockaddr::V4(net_struct::SockaddrV4::default());
                 // Perform recvfrom operation
                 let rv = cage.recvfrom_syscall(fd, buf, count, flag, &mut Some(&mut newsockaddr));
                 if rv >= 0 {

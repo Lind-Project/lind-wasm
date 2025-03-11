@@ -1,18 +1,15 @@
 #![allow(dead_code)]
 
 // System related system calls
-use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
-use sysdefs::constants::fs_const::{
-    SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY,
-};
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::fs_const::{SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY};
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK,
-    SIGNAL_MAX, SIG_BLOCK, SIG_SETMASK,
-    SIG_UNBLOCK, STACK_CUR, STACK_MAX,
+    SIGNAL_MAX, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX,
 };
 // Import data structure
 use sysdefs::data::{fs_struct, net_struct};
-// Import fdtables 
+// Import fdtables
 use fdtables;
 
 use crate::interface;

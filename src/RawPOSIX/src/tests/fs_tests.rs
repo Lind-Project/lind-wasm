@@ -3,13 +3,13 @@
 pub mod fs_tests {
 
     use super::super::*;
-    
+
+    use fdtables::{translate_virtual_fd, FDTABLE};
+    use sysdefs::constants::err_const::get_errno;
     use sysdefs::constants::fs_const::{SHMMAX, S_IRWXA};
     use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
-    use sysdefs::constants::err_const::get_errno;
-    use sysdefs::data::fs_struct::{FSData, StatData, ShmidsStruct};
-    use fdtables::{translate_virtual_fd, FDTABLE};
-    
+    use sysdefs::data::fs_struct::{FSData, ShmidsStruct, StatData};
+
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};

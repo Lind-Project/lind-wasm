@@ -7,8 +7,8 @@ use sysdefs::constants::fs_const::{
 };
 use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
 
-use crate::interface;
 use super::cage::Cage;
+use crate::interface;
 
 use libc::*;
 

@@ -1,19 +1,16 @@
 #![allow(dead_code)]
 
 // Import constants
-use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    LIND_ROOT, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, O_CREAT, O_RDONLY,
-    O_RDWR, O_TRUNC, O_WRONLY, PROT_READ, PROT_WRITE, SEEK_CUR, SEEK_END, SEEK_SET, SEM_VALUE_MAX,
-    SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO, S_IRWXG,
-    S_IRWXO, S_IRWXU,
+    LIND_ROOT, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY,
+    PROT_READ, PROT_WRITE, SEEK_CUR, SEEK_END, SEEK_SET, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST,
+    SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO, S_IRWXG, S_IRWXO, S_IRWXU,
 };
-use sysdefs::constants::sys_const::{
-    DEFAULT_GID, DEFAULT_UID, 
-};
+use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
 // Import data structure
-use sysdefs::data::fs_struct::{FSData, ShmidsStruct, StatData, IovecStruct, PipeArray};
-// Import fdtables 
+use sysdefs::data::fs_struct::{FSData, IovecStruct, PipeArray, ShmidsStruct, StatData};
+// Import fdtables
 use fdtables;
 
 use crate::interface;
@@ -27,8 +24,8 @@ use std::ffi::CStr;
 use std::ffi::CString;
 use std::io::stdout;
 use std::io::{self, Write};
-use std::{mem, ptr, fs};
 use std::os::unix::io::RawFd;
+use std::{fs, mem, ptr};
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
@@ -662,12 +659,7 @@ impl Cage {
 
     //------------------------------------WRITEV SYSCALL------------------------------------
 
-    pub fn writev_syscall(
-        &self,
-        virtual_fd: i32,
-        iovec: *const IovecStruct,
-        iovcnt: i32,
-    ) -> i32 {
+    pub fn writev_syscall(&self, virtual_fd: i32, iovec: *const IovecStruct, iovcnt: i32) -> i32 {
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {
             return syscall_error(Errno::EBADF, "write", "Bad File Descriptor");
