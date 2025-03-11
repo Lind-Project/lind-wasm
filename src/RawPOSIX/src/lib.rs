@@ -7,8 +7,6 @@
 
 // interface and safeposix are public because otherwise there isn't a great
 // way to 'use' them for benchmarking.
-pub mod constants;
-pub mod fdtables;
 pub mod interface;
 pub mod safeposix;
 pub mod tests;

@@ -123,12 +123,17 @@ const FDKIND_IMSOCK: u32 = 2;
 use std::io;
 use std::io::{Read, Write};
 
-use crate::constants::*;
-use crate::interface::errnos::*;
-use crate::interface::translate_vmmap_addr;
-use crate::interface::types;
-use crate::interface::{SigactionStruct, StatData};
-use crate::{fdtables, interface};
+use crate::interface;
+use crate::interface::{translate_vmmap_addr, types};
+
+// Import constants
+use sysdefs::constants::*;
+use sysdefs::constants::err_const::{VERBOSE, *};
+// Import data structure
+use sysdefs::data::fs_struct::{SigactionStruct, StatData, PipeArray, EpollEvent, SockPair, IovecStruct};
+use sysdefs::data::net_struct;
+// Import fdtables 
+use fdtables;
 
 macro_rules! get_onearg {
     ($arg: expr) => {
@@ -215,7 +220,7 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             // Convert iovec array address
             let iov_base =
-                translate_vmmap_addr(&cage, arg2).unwrap() as *const interface::IovecStruct;
+                translate_vmmap_addr(&cage, arg2).unwrap() as *const IovecStruct;
             // The actual write operation is delegated to the cage implementation
             cage.writev_syscall(fd, iov_base, iovcnt)
         }
@@ -331,7 +336,7 @@ pub fn lind_syscall_api(
         }
 
         ACCEPT_SYSCALL => {
-            let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+            let mut addr = net_struct::GenSockaddr::V4(net_struct::SockaddrV4::default());
             let nullity1 = interface::arg_nullity(arg2);
             let nullity2 = interface::arg_nullity(arg3);
             let cage = interface::cagetable_getref(cageid);
@@ -699,7 +704,7 @@ pub fn lind_syscall_api(
             } else if !(nullity1 || nullity2) {
                 // Both address and length are provided
                 // Create a default sockaddr to store the sender's address
-                let mut newsockaddr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+                let mut newsockaddr = net_struct::GenSockaddr::V4(net_struct::SockaddrV4::default());
                 // Perform recvfrom operation
                 let rv = cage.recvfrom_syscall(fd, buf, count, flag, &mut Some(&mut newsockaddr));
                 if rv >= 0 {
@@ -912,7 +917,7 @@ pub fn lind_syscall_api(
             let name_addr = translate_vmmap_addr(&cage, arg2).unwrap();
             let namelen_addr = translate_vmmap_addr(&cage, arg3).unwrap();
             // Initialize default socket address structure
-            let mut addr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+            let mut addr = net_struct::GenSockaddr::V4(net_struct::SockaddrV4::default());
             // Check for null pointers
             if interface::arg_nullity(arg2) || interface::arg_nullity(arg3) {
                 return syscall_error(
@@ -1123,7 +1128,7 @@ pub fn lindgetsighandler(cageid: u64, signo: i32) -> u32 {
 
 #[no_mangle]
 pub fn lindrustinit(verbosity: isize) {
-    let _ = interface::VERBOSE.set(verbosity); //assigned to suppress unused result warning
+    let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
     interface::cagetable_init();
 
     // TODO: needs to add close() that handling im-pipe

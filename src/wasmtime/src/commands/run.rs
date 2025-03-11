@@ -9,9 +9,6 @@ use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
-use rawposix::constants::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
-};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

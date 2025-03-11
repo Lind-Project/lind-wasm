@@ -1,22 +1,22 @@
 // Filesystem metadata struct
 #![allow(dead_code)]
 
-use crate::constants::{
+use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHM_DEST,
     SHM_RDONLY,
 };
+use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
 
 use crate::interface;
+use super::cage::Cage;
 
 use libc::*;
-
-use super::cage::Cage;
 
 pub static SHM_METADATA: interface::RustLazyGlobal<interface::RustRfc<ShmMetadata>> =
     interface::RustLazyGlobal::new(|| interface::RustRfc::new(ShmMetadata::init_shm_metadata()));
 
 pub struct ShmSegment {
-    pub shminfo: interface::ShmidsStruct,
+    pub shminfo: ShmidsStruct,
     pub key: i32,
     pub size: usize,
     pub filebacking: interface::ShmFile,
@@ -40,7 +40,7 @@ impl ShmSegment {
         let filebacking = interface::new_shm_backing(key, size).unwrap();
 
         let time = interface::timestamp() as isize; //We do a real timestamp now
-        let permstruct = interface::IpcPermStruct {
+        let permstruct = IpcPermStruct {
             __key: key,
             uid: uid,
             gid: gid,
@@ -53,7 +53,7 @@ impl ShmSegment {
             __unused1: 0,
             __unused2: 0,
         };
-        let shminfo = interface::ShmidsStruct {
+        let shminfo = ShmidsStruct {
             shm_perm: permstruct,
             shm_segsz: size as u32,
             shm_atime: 0,

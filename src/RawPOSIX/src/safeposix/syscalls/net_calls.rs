@@ -1,18 +1,21 @@
 #![allow(dead_code)]
-use crate::constants::net_constants;
-use crate::constants::{sys_constants, LIND_ROOT};
+use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
+use sysdefs::constants::fs_const::LIND_ROOT;
+use sysdefs::constants::{sys_const, net_const};
+use sysdefs::data::fs_struct::*;
+use sysdefs::data::net_struct::*;
+use fdtables;
+
 use crate::interface;
 use crate::interface::*;
-use crate::{interface::FdSet, safeposix::cage::*};
-
-use crate::fdtables::{self, FDTableEntry};
+use crate::safeposix::cage::*;
+use crate::safeposix::filesystem::normpath;
 
 use dashmap::mapref::entry;
 use lazy_static::lazy_static;
 use libc::*;
 use parking_lot::Mutex;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::ffi::CStr;
 use std::ffi::CString;
@@ -20,9 +23,6 @@ use std::io;
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::sync::Arc;
-
-use crate::safeposix::filesystem::normpath;
-
 use bit_set::BitSet;
 use libc::*;
 use std::{os::fd::RawFd, ptr};
