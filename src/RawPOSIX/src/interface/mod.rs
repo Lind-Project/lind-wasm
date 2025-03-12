@@ -1,14 +1,14 @@
 mod comm;
 pub mod errnos;
 mod file;
+mod mem;
 mod misc;
 mod timer;
-mod mem;
 pub mod types;
 pub use comm::*;
 pub use errnos::*;
 pub use file::*;
+pub use mem::*;
 pub use misc::*;
 pub use timer::*;
 pub use types::*;
-pub use mem::*;

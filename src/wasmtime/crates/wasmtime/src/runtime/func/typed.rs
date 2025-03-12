@@ -1,7 +1,7 @@
 use super::invoke_wasm_and_catch_traps;
-use crate::{prelude::*, OnCalledAction};
 use crate::runtime::vm::{VMFuncRef, VMOpaqueContext};
 use crate::store::{AutoAssertNoGc, StoreOpaque};
+use crate::{prelude::*, OnCalledAction};
 use crate::{
     AsContext, AsContextMut, Engine, Func, FuncType, HeapType, NoFunc, RefType, StoreContextMut,
     ValRaw, ValType,
@@ -242,17 +242,17 @@ where
                     // This is set when we finished the unwind and starts the rewind process
                     Ok(OnCalledAction::InvokeAgain) => {
                         continue;
-                    },
+                    }
                     // Finish means we can just do the normal exit and there is no need to invoke again
                     // For example, exit syscall uses this routine after it finishes the unwind process
                     Ok(OnCalledAction::Finish(_ret)) => {
                         // TO-DO: handle exit code here
                         break;
-                    },
+                    }
                     // these two state are used for error handling
                     Ok(OnCalledAction::Trap(trap)) => {
                         eprintln!("encounter a trap: {:?}", trap);
-                    },
+                    }
                     Err(err) => {
                         eprintln!("encounter a error: {:?}", err);
                     }
