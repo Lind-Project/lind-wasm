@@ -1,1 +1,0 @@
-/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang --target=wasm32-wasi-threads -matomics  -o /home/lind/lind-wasm/src/glibc/build/csu/set_stack_pointer.o -c set_stack_pointer.s
