@@ -440,7 +440,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
     pub fn pthread_create_call(&self, mut caller: &mut Caller<'_, T>,
                     stack_addr: u32, stack_size: u32, child_tid: u64
                 ) -> Result<i32> {
-        println!("wasmtime: create new thread!");
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -592,10 +591,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 let values = Vec::new();
                 let mut results = vec![Val::null_func_ref(); ty.results().len()];
 
-                println!("wasmtime: thread {} ready to start!", next_tid);
                 let invoke_res = child_start_func
                     .call(&mut store, &values, &mut results);
-                println!("wasmtime: thread {} done!", next_tid);
 
                 // print errors if any when running the thread
                 if let Err(err) = invoke_res {

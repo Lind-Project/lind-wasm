@@ -41,7 +41,7 @@ _Unwind_Resume (struct _Unwind_Exception *exc)
 // _Unwind_Reason_Code
 __gcc_personality_v0 PERSONALITY_PROTO
 {
-  return UNWIND_LINK_PTR (unwind_link (), personality) PERSONALITY_ARGS;
+  return UNWIND_LINK_PTR (link (), personality) PERSONALITY_ARGS;
 }
 
 _Unwind_Reason_Code

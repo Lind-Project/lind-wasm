@@ -68,6 +68,3 @@ lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(NO
              (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), RAW_SYSCALL)
 
 #define MAKE_RAW_SYSCALL MAKE_RAW_SYSCALL6
-// #define GET_MACRO(_1,_2,_3,_4,_5,_6,_7,_8,NAME,...) NAME
-// #define MAKE_SYSCALL(...) GET_MACRO(__VA_ARGS__, MAKE_SYSCALL6, MAKE_SYSCALL5, MAKE_SYSCALL4, MAKE_SYSCALL3, MAKE_SYSCALL2, MAKE_SYSCALL1, MAKE_SYSCALL0)(__VA_ARGS__)
-// #undef GET_MACRO

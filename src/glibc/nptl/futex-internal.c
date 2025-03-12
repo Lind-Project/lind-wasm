@@ -145,7 +145,6 @@ __futex_lock_pi64 (int *futex_word, clockid_t clockid,
   int op_pi2 = __lll_private_flag (FUTEX_LOCK_PI2 | clockbit, private);
 #if __ASSUME_FUTEX_LOCK_PI2
   /* Assume __ASSUME_TIME64_SYSCALLS since FUTEX_LOCK_PI2 was added later.  */
-//   err = INTERNAL_SYSCALL_CALL (futex_time64, futex_word, op_pi2, 0, abstime);
   err = MAKE_RAW_SYSCALL(98, "syscall|futex", (uint64_t) futex_word, (uint64_t) op_pi2, (uint64_t) 0, (uint64_t)abstime, 0, (uint64_t)0);
 #else
   /* FUTEX_LOCK_PI does not support clock selection, so for CLOCK_MONOTONIC
@@ -154,7 +153,6 @@ __futex_lock_pi64 (int *futex_word, clockid_t clockid,
   int op_pi = abstime != NULL && clockid != CLOCK_REALTIME ? op_pi2 : op_pi1;
 
 # ifdef __ASSUME_TIME64_SYSCALLS
-//   err = INTERNAL_SYSCALL_CALL (futex_time64, futex_word, op_pi, 0, abstime);
   err = MAKE_RAW_SYSCALL(98, "syscall|futex", (uint64_t) futex_word, (uint64_t) op_pi, (uint64_t) 0, (uint64_t)abstime, 0, (uint64_t)0);
 # else
   bool need_time64 = abstime != NULL && !in_int32_t_range (abstime->tv_sec);

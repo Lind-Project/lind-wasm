@@ -238,7 +238,7 @@ libc_hidden_proto (__pthread_current_priority)
 extern void __pthread_unwind (__pthread_unwind_buf_t *__buf)
      __cleanup_fct_attribute __attribute ((__noreturn__))
 #if !defined SHARED && !IS_IN (libpthread)
-    //  weak_function
+     weak_function
 #endif
      ;
 libc_hidden_proto (__pthread_unwind)

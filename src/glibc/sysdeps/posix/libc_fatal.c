@@ -132,18 +132,12 @@ __libc_message_impl (const char *fmt, ...)
   abort ();
 }
 
-int __imported_libc_fatal(char* str) __attribute__((
-  __import_module__("lind"),
-  __import_name__("libc_fatal")
-));
 
 void
 __libc_fatal (const char *message)
 {
   /* The loop is added only to keep gcc happy.  */
-  // while (1)
-  //   __libc_message ("%s", message);
-  __imported_libc_fatal(message);
-  abort();
+  while (1)
+    __libc_message ("%s", message);
 }
 libc_hidden_def (__libc_fatal)
