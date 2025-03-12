@@ -6,12 +6,6 @@
 #![allow(dead_code)]
 #![allow(non_upper_case_globals)]
 
-// use crate::interface;
-
-// ===== Lind-specific Configuration =====
-pub const DEFAULT_HOSTNAME: &str = "Lind";
-// pub const BLOCK_TIME: interface::RustDuration = interface::RustDuration::from_micros(100);
-
 // ===== Socket Types =====
 // Source: include/linux/net.h
 pub const SOCK_STREAM: i32 = 1; // Stream (connection) socket
@@ -90,7 +84,6 @@ pub const PF_ATMPVC: i32 = AF_ATMPVC;
 pub const PF_X25: i32 = AF_X25;
 pub const PF_INET6: i32 = AF_INET6;
 pub const PF_ROSE: i32 = AF_ROSE;
-pub const PF_DECnet: i32 = AF_DECnet;
 pub const PF_NETBEUI: i32 = AF_NETBEUI;
 pub const PF_SECURITY: i32 = AF_SECURITY;
 pub const PF_KEY: i32 = AF_KEY;
@@ -313,11 +306,6 @@ pub const TCP_CONNECTIONTIMEOUT: i32 = 0x20; // Connection timeout
 pub const PERSIST_TIMEOUT: i32 = 0x40; // Persist timeout
 pub const TCP_RXT_CONNDROPTIME: i32 = 0x80; // Retransmission timeout before drop
 pub const TCP_RXT_FINDROP: i32 = 0x100; // Drop after 3 FIN retransmissions
-
-// ===== Socket Object ID Range =====
-// Lind-specific constants
-pub const MINSOCKOBJID: i32 = 0;
-pub const MAXSOCKOBJID: i32 = 1024;
 
 // ===== Poll Constants =====
 // Source: include/uapi/asm-generic/poll.h

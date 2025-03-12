@@ -920,7 +920,6 @@ pub fn virtualize_epoll_ctl(cageid:u64, epfd:u64, op:i32, virtfd:u64, event:epol
     }
 
     let mut eptable = EPOLLTABLE.lock().unwrap();
-//    let userhm = eptable.thisepolltable.get_mut(&epentrynum).unwrap().userhandledhashmap.entry(virtfdkind).or_default();
     let userhm = &mut eptable.thisepolltable.get_mut(&epentrynum).unwrap().userhandledhashmap;
 
     match op {
