@@ -2,7 +2,6 @@
 
 use anyhow::Result;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
-use wasmtime_lind_multi_process::get_tid;
 use wasmtime_lind_multi_process::{get_memory_base, LindHost, clone_constants::CloneArgStruct};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -40,7 +39,6 @@ impl LindCommonCtx {
     pub fn lind_syscall<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
                         (&self, call_number: u32, call_name: u64, caller: &mut Caller<'_, T>, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64, arg6: u64) -> i32 {
         let start_address = get_memory_base(&caller);
-        let tid = get_tid(&caller);
         match call_number as i32 {
             // clone syscall
             171 => {
@@ -58,9 +56,6 @@ impl LindCommonCtx {
             }
             // other syscalls goes into rawposix
             _ => {
-                if call_number != 13 {
-                    println!("cage {} thread {} calls syscall {}", self.pid, tid, call_number);
-                }
                 lind_syscall_api(
                     self.pid as u64,
                     call_number,
@@ -161,17 +156,6 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
             let ctx = get_cx(&host);
 
             ctx.lind_longjmp(&mut caller, jmp_buf as u32, retval)
-        },
-    )?;
-
-    linker.func_wrap(
-        "lind",
-        "libc_fatal",
-        move |mut caller: Caller<'_, T>, msg: i32| -> i32 {
-            let start_address = get_memory_base(&caller);
-            println!("libc fatal: {}", rawposix::interface::get_cstr(start_address + msg as u64).unwrap());
-
-            0
         },
     )?;
 

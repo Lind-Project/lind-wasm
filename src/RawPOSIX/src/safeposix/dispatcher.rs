@@ -189,22 +189,6 @@ pub fn lind_syscall_api(
 ) -> i32 {
     let call_number = call_number as i32;
 
-    let cage = interface::cagetable_getref(cageid);
-    let vmmap = cage.vmmap.read();
-    let start_address = vmmap.base_address.unwrap() as u64;
-    drop(vmmap);
-    drop(cage);
-    if call_number as i32 != WRITE_SYSCALL && cageid != 0 {
-        match call_name {
-            0 => {
-                println!("\x1b[90mcage {} calls UNNAMED ({})\x1b[0m", cageid, call_number);
-            },
-            _ => {
-                println!("\x1b[90mcage {} calls {} ({})\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number);
-            }
-        }
-    }
-
     let ret = match call_number {
         WRITE_SYSCALL => {
             // Handles writing data from user buffer to file descriptor    
@@ -1034,21 +1018,16 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
             let uaddr = translate_vmmap_addr(&cage, arg1).unwrap();
-            // println!("futex raw uaddr: {}", arg1);
             // Convert remaining arguments
             let futex_op = arg2 as u32;
             let val = arg3 as u32;
-            // let timeout = arg4 as usize;
             let timeout = match futex_op as i32 {
                 libc::FUTEX_WAIT => {
-                    if arg4 == 0 { 0 }
-                    else {
-                        translate_vmmap_addr(&cage, arg4).unwrap() as usize
-                    }
+                    translate_vmmap_addr(&cage, arg4).unwrap() as usize
                 }
                 _ => arg4 as usize
             };
-            let uaddr2 = arg5 as u32;
+            let uaddr2 = translate_vmmap_addr(&cage, arg1).unwrap();
             let val3 = arg6 as u32;
             cage.futex_syscall(uaddr, futex_op, val, timeout, uaddr2, val3)
         }
@@ -1133,25 +1112,6 @@ pub fn lind_syscall_api(
 
         _ => -1, // Return -1 for unknown syscalls
     };
-
-    if call_number as i32 != WRITE_SYSCALL && cageid != 0 {
-        match call_name {
-            0 => {
-                if ret < 0 {
-                    println!("\x1b[31mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
-                } else {
-                    println!("\x1b[90mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
-                }
-            },
-            _ => {
-                if ret < 0 {
-                    println!("\x1b[31mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
-                } else {
-                    println!("\x1b[90mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
-                }
-            }
-        }
-    }
 
     ret
 }

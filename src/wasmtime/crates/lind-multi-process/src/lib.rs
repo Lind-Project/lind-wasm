@@ -44,8 +44,6 @@ pub struct LindCtx<T, U> {
 
     // process id, should be same as cage id
     pid: i32,
-
-    tid: i32,
     
     // next cage id
     next_cageid: Arc<AtomicU64>,
@@ -95,9 +93,8 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
         
         // cage id starts from 1
         let pid = 1;
-        let tid = 1;
         let next_threadid = Arc::new(AtomicU32::new(1)); // cageid starts from 1
-        Ok(Self { linker, module: module.clone(), pid, tid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
+        Ok(Self { linker, module: module.clone(), pid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
     }
 
     // create a new LindContext with provided pid (cageid). This function is used by exec_syscall to create a new lindContext
@@ -122,7 +119,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
         let next_threadid = Arc::new(AtomicU32::new(1)); // cageid starts from 1
 
-        Ok(Self { linker, module: module.clone(), pid, tid: 1, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
+        Ok(Self { linker, module: module.clone(), pid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
     }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
@@ -541,7 +538,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                 let child_ctx = get_cx(&mut child_host);
                 // set up child pid
                 child_ctx.pid = child_cageid;
-                child_ctx.tid = next_tid as i32;
 
                 let instance_pre = Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
 
@@ -1080,7 +1076,6 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
             linker: self.linker.clone(),
             module: self.module.clone(),
             pid: 0, // pid is managed by lind-common
-            tid: 1,
             next_cageid: self.next_cageid.clone(),
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
@@ -1099,13 +1094,6 @@ pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(caller: &C
     let handle = caller.as_context().0.instance(InstanceId::from_index(0));
     let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
     defined_memory.base as u64
-}
-
-pub fn get_tid<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-        (caller: &Caller<'_, T>) -> i32 {
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
-    ctx.tid
 }
 
 // entry point of fork syscall
