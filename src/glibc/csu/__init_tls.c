@@ -11,11 +11,6 @@
 #include <stdint.h> 
 #include <wasi-pthread.h>
 #include "pthreadP.h"
-// #include "pthread_impl.h"
-// #include "libc.h"
-// #include "atomic.h"
-// #include "syscall.h"
-#include <stdio.h>
 
 size_t __sysinfo;
 
@@ -94,68 +89,6 @@ extern unsigned char __global_base;
 extern unsigned char __stack_high;
 extern unsigned char __stack_low;
 
-// #define pthread __pthread
-
-// struct pthread {
-// 	/* Part 1 -- these fields may be external or
-// 	 * internal (accessed via asm) ABI. Do not change. */
-// 	struct pthread *self;
-// #ifdef __wasilibc_unmodified_upstream
-// #ifndef TLS_ABOVE_TP
-// 	uintptr_t *dtv;
-// #endif
-// #endif
-// 	struct pthread *prev, *next; /* non-ABI */
-// 	uintptr_t sysinfo;
-// #ifndef TLS_ABOVE_TP
-// #ifdef CANARY_PAD
-// 	uintptr_t canary_pad;
-// #endif
-// 	uintptr_t canary;
-// #endif
-
-// 	/* Part 2 -- implementation details, non-ABI. */
-// 	int tid;
-// 	int errno_val;
-// 	volatile int detach_state;
-// 	volatile int cancel;
-// 	volatile unsigned char canceldisable, cancelasync;
-// 	unsigned char tsd_used:1;
-// 	unsigned char dlerror_flag:1;
-// 	unsigned char *map_base;
-// 	size_t map_size;
-// 	void *stack;
-// 	size_t stack_size;
-// 	size_t guard_size;
-// 	void *result;
-// 	struct __ptcb *cancelbuf;
-// 	void **tsd;
-// 	struct {
-// 		volatile void *volatile head;
-// 		long off;
-// 		volatile void *volatile pending;
-// 	} robust_list;
-// 	int h_errno_val;
-// 	volatile int timer_id;
-// 	locale_t locale;
-// 	volatile int killlock[1];
-// 	char *dlerror_buf;
-// 	void *stdio_locks;
-
-// 	/* Part 3 -- the positions of these fields relative to
-// 	 * the end of the structure is external and internal ABI. */
-// #ifdef TLS_ABOVE_TP
-// 	uintptr_t canary;
-// 	uintptr_t *dtv;
-// #endif
-// };
-
-// extern _Thread_local struct pthread __wasilibc_pthread_self;
-
-// static inline uintptr_t __get_tp() {
-//   return (uintptr_t)&__wasilibc_pthread_self;
-// }
-
 struct stack_bounds {
 	void *base;
 	size_t size;
@@ -190,7 +123,7 @@ static inline struct stack_bounds get_stack_bounds()
 int __init_tp(void *p)
 {
 	struct pthread *td = p;
-	// td->self = td;
+	// TODO: check what other attribute in pthread struct need to be initialized here
 #ifdef __wasilibc_unmodified_upstream
 	int r = __set_thread_area(TP_ADJ(p));
 	if (r < 0) return -1;
@@ -202,7 +135,6 @@ int __init_tp(void *p)
 	__default_stacksize =
 		bounds.size < DEFAULT_STACK_MAX ?
 		bounds.size : DEFAULT_STACK_MAX;
-	// td->detach_state = DT_JOINABLE;
 	td->stackblock = bounds.base;
 	td->stackblock_size = bounds.size;
 	td->guardsize = 0;
@@ -218,10 +150,6 @@ int __init_tp(void *p)
 	 */
 	td->tid = 0x3fffffff;
 #endif
-	// td->locale = &libc.global_locale;
-	// td->robust_list.head = &td->robust_list.head;
-	// td->sysinfo = __sysinfo;
-	// td->next = td->prev = td;
 	return 0;
 }
 
