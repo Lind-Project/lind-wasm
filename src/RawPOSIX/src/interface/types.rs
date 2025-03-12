@@ -98,12 +98,14 @@ pub struct SockaddrDummy {
     pub _sa_data: [u16; 14],
 }
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct TimeVal {
     pub tv_sec: i64,
     pub tv_usec: i64,
 }
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct ITimerVal {
     pub it_interval: TimeVal,
