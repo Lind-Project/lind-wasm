@@ -350,7 +350,7 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   unsigned char *stack = 0;
   size_t tls_size = __builtin_wasm_tls_size();
 
-  printf("pd->stackblock: %u, pd->stackblock_size: %d, sizeof(struct clone_args): %d, TLS_TCB_SIZE: %d, stackaddr: %u\n", pd->stackblock, pd->stackblock_size, sizeof(struct clone_args), TLS_TCB_SIZE, stackaddr);
+  // printf("pd->stackblock: %u, pd->stackblock_size: %d, sizeof(struct clone_args): %d, TLS_TCB_SIZE: %d, stackaddr: %u\n", pd->stackblock, pd->stackblock_size, sizeof(struct clone_args), TLS_TCB_SIZE, stackaddr);
   struct clone_args *args = (void *)pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size;
   memset(args, 0, sizeof(struct clone_args));
   args->flags = clone_flags;
@@ -358,13 +358,13 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
   args->child_tid = &pd->tid;
 
-  printf("child tls base: %u\n", (void *)pd->stackblock + pd->stackblock_size - TLS_TCB_SIZE - tls_size);
+  // printf("child tls base: %u\n", (void *)pd->stackblock + pd->stackblock_size - TLS_TCB_SIZE - tls_size);
   void* tls_base = __copy_tls((void *)pd->stackblock + pd->stackblock_size - TLS_TCB_SIZE - tls_size);
   uintptr_t* tls_base_addr = stackaddr + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
-  printf("tls_base_addr: %u\n", tls_base_addr);
+  // printf("tls_base_addr: %u\n", tls_base_addr);
   *tls_base_addr = (uintptr_t)tls_base;
 
-  printf("before clone, pd: %u\n", pd);
+  // printf("before clone, pd: %u\n", pd);
 
   int ret = __clone_internal(args, &start_thread, pd);
   if (__glibc_unlikely (ret == -1))
@@ -411,7 +411,9 @@ start_thread (void *arg)
 
   size_t tls_size = __builtin_wasm_tls_size();
   uintptr_t* tls_base_addr = pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
-  printf("in thread: tls_base_addr: %u\n", tls_base_addr);
+  // printf("in glibc: thread %d just launched\n", pd->tid);
+  // fflush(stdout);
+  // printf("in thread: tls_base_addr: %u\n", tls_base_addr);
   void* tls_base = (void*)(*tls_base_addr);
 	__asm__("local.get %0\n"
     "global.set __tls_base\n"
@@ -500,8 +502,12 @@ start_thread (void *arg)
   unwind_buf.priv.data.cleanup = NULL;
 
   /* Allow setxid from now onwards.  */
+  // printf("in glibc: thread %d before 504\n", pd->tid);
+  // fflush(stdout);
   if (__glibc_unlikely (atomic_exchange_acquire (&pd->setxid_futex, 0) == -2))
     futex_wake (&pd->setxid_futex, 1, FUTEX_PRIVATE);
+  // printf("in glibc: thread %d after 507\n", pd->tid);
+  // fflush(stdout);
 
   if (__glibc_likely (! not_first_call))
     {
@@ -527,6 +533,8 @@ start_thread (void *arg)
         ret = pd->start_routine (pd->arg);
       THREAD_SETMEM (pd, result, ret);
     }
+    // printf("in glibc: thread %d after 532\n", pd->tid);
+    // fflush(stdout);
 
   // BUG: thread local variable is a half-broken feature right now
   //      have to comment these out so that no error is raising - Qianxi Chen
@@ -562,6 +570,8 @@ start_thread (void *arg)
 	  __nptl_death_event ();
 	}
     }
+    // printf("in glibc: thread %d after 568\n", pd->tid);
+    // fflush(stdout);
 
   /* The thread is exiting now.  Don't set this bit until after we've hit
      the event-reporting breakpoint, so that td_thr_get_info on us while at
@@ -603,6 +613,8 @@ start_thread (void *arg)
   /* We let the kernel do the notification if it is able to do so.
      If we have to do it here there for sure are no PI mutexes involved
      since the kernel support for them is even more recent.  */
+  // printf("in glibc: thread %d before 612\n", pd->tid);
+  // fflush(stdout);
   if (!__nptl_set_robust_list_avail
       && __builtin_expect (robust != (void *) &pd->robust_head, 0))
     {
@@ -619,8 +631,12 @@ start_thread (void *arg)
 	  this->__list.__next = NULL;
 
 	  atomic_fetch_or_acquire (&this->__lock, FUTEX_OWNER_DIED);
+    // printf("in glibc: thread %d before 625\n", pd->tid);
+    // fflush(stdout);
 	  futex_wake ((unsigned int *) &this->__lock, 1,
 		      /* XYZ */ FUTEX_SHARED);
+    // printf("in glibc: thread %d after 627\n", pd->tid);
+    // fflush(stdout);
 	}
       while (robust != (void *) &pd->robust_head);
     }
@@ -630,6 +646,8 @@ start_thread (void *arg)
     {
       /* Some other thread might call any of the setXid functions and expect
 	 us to reply.  In this case wait until we did that.  */
+  // printf("in glibc: thread %d before 639\n", pd->tid);
+  // fflush(stdout);
       do
 	/* XXX This differs from the typical futex_wait_simple pattern in that
 	   the futex_wait condition (setxid_futex) is different from the
@@ -637,6 +655,8 @@ start_thread (void *arg)
 	   to check and document why this is correct.  */
 	futex_wait_simple (&pd->setxid_futex, 0, FUTEX_PRIVATE);
       while (pd->cancelhandling & SETXID_BITMASK);
+      // printf("in glibc: thread %d after 645\n", pd->tid);
+      // fflush(stdout);
 
       /* Reset the value so that the stack can be reused.  */
       pd->setxid_futex = 0;

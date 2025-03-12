@@ -225,7 +225,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 
   assert (powerof2 (pagesize_m1 + 1));
   assert (TCB_ALIGNMENT >= STACK_ALIGN);
-  printf("allocate_stack, attr->stacksize: %d\n", attr->stacksize);
+  // printf("allocate_stack, attr->stacksize: %d\n", attr->stacksize);
 
   /* Get the stack size from the attribute if it is set.  Otherwise we
      use the default we determined at start time.  */
@@ -237,7 +237,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
       size = __default_pthread_attr.internal.stacksize;
       // lll_unlock (__default_pthread_attr_lock, LLL_PRIVATE);
     }
-  printf("size(1): %d\n", size);
+  // printf("size(1): %d\n", size);
   /* Get memory for the stack.  */
   if (__glibc_unlikely (attr->flags & ATTR_FLAG_STACKADDR))
     {
@@ -351,7 +351,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 	return EINVAL;
   
       size += guardsize;
-      printf("size(2): %d, guardsize: %d\n", size, guardsize);
+      // printf("size(2): %d, guardsize: %d\n", size, guardsize);
       if (__builtin_expect (size < ((guardsize + tls_static_size_for_stack
 				     + MINIMAL_REST_STACK + pagesize_m1)
 				    & ~pagesize_m1),
@@ -365,17 +365,17 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 
       if (pd == NULL)
 	{
-    printf("size(3): %d\n", size);
+    // printf("size(3): %d\n", size);
     size_t tls_size = __builtin_wasm_tls_size();
     size_t tls_align = __builtin_wasm_tls_align();
     void* tls_base = __builtin_wasm_tls_base();
-    printf("tls_size: %d, tls_align: %d, tls_base: %d\n", tls_size, tls_align, tls_base);
+    // printf("tls_size: %d, tls_align: %d, tls_base: %d\n", tls_size, tls_align, tls_base);
 	  /* If a guard page is required, avoid committing memory by first
 	     allocate with PROT_NONE and then reserve with required permission
 	     excluding the guard page.  */
 	  mem = __mmap (NULL, size, (guardsize == 0) ? prot : PROT_NONE,
 			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    printf("mmap returns: %d\n", mem);
+    // printf("mmap returns: %d\n", mem);
 
     if (mem == NULL) {
         // Handle memory allocation failure
@@ -397,7 +397,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 
 	  /* Place the thread descriptor at the end of the stack.  */
 #if TLS_TCB_AT_TP
-    printf("TLS_TCB_AT_TP, mem+size=%u, mem+size-TLS_TCB_SIZE=%u\n", (uintptr_t) mem + size, (((uintptr_t) mem + size) - TLS_TCB_SIZE));
+    // printf("TLS_TCB_AT_TP, mem+size=%u, mem+size-TLS_TCB_SIZE=%u\n", (uintptr_t) mem + size, (((uintptr_t) mem + size) - TLS_TCB_SIZE));
 	  pd = (struct pthread *) ((((uintptr_t) mem + size)
 				    - TLS_TCB_SIZE)
 				   & ~tls_static_align_m1);

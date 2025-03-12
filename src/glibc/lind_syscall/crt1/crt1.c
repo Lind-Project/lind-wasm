@@ -187,7 +187,7 @@ int __main_void(void) {
 }
 
 int _start() {
-    // __libc_setup_tls();
+    __libc_setup_tls();
     __wasi_init_tp();
     __wasi_initialize_environ();
     return __main_void();
