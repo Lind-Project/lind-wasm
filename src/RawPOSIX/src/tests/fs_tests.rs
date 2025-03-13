@@ -3,14 +3,17 @@
 pub mod fs_tests {
 
     use super::super::*;
-    use crate::constants::{DEFAULT_GID, DEFAULT_UID, SHMMAX, S_IRWXA};
-    use crate::fdtables::translate_virtual_fd;
-    use crate::fdtables::FDTABLE;
+
+    use fdtables::{translate_virtual_fd, FDTABLE};
+    use sysdefs::constants::err_const::get_errno;
+    use sysdefs::constants::fs_const::{SHMMAX, S_IRWXA};
+    use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
+    use sysdefs::data::fs_struct::{FSData, ShmidsStruct, StatData};
+
     use crate::interface;
-    use crate::interface::{get_errno, ShmidsStruct};
-    use crate::interface::{FSData, StatData};
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+
     use libc::*;
     use libc::{c_void, O_DIRECTORY};
     pub use std::ffi::CStr as RustCStr;

@@ -1,10 +1,12 @@
-use crate::constants::{F_GETFL, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PROT_EXEC};
+use sysdefs::constants::err_const::{syscall_error, Errno};
+use sysdefs::constants::fs_const::{
+    F_GETFL, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PAGESIZE, PROT_EXEC,
+    PROT_NONE, PROT_READ, PROT_WRITE,
+};
 
-use crate::constants::{MAP_SHARED, PAGESHIFT, PAGESIZE, PROT_NONE, PROT_READ, PROT_WRITE};
-use crate::safeposix::vmmap::{MemoryBackingType, Vmmap, VmmapOps};
-
-use crate::interface::{cagetable_getref, syscall_error, Errno};
+use crate::interface::cagetable_getref;
 use crate::safeposix::cage::Cage;
+use crate::safeposix::vmmap::{MemoryBackingType, Vmmap, VmmapOps};
 use std::result::Result;
 
 // heap is placed at the very top of the memory

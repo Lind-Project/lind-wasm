@@ -4,8 +4,9 @@
 #[allow(unused_parens)]
 #[cfg(test)]
 pub mod sys_tests {
+    use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS};
+
     use super::super::*;
-    use crate::constants::{DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS};
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
 
