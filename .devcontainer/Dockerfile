@@ -6,9 +6,6 @@ ENV DEV_MODE=${DEV_MODE:-false}
 ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-main}
 
-RUN echo "$BRANCH_NAME"
-RUN exit 0
-
 # Install all the required dependencies
 RUN apt-get update && \
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
@@ -33,11 +30,6 @@ RUN echo "lind ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 USER lind
 
 WORKDIR /home/lind
-
-RUN whoami
-RUN touch test.txt
-RUN echo "test" > test.txt
-
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
