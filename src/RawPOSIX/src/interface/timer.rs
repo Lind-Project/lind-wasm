@@ -7,7 +7,7 @@ pub use std::time::Duration as RustDuration;
 pub use std::time::Instant as RustInstant;
 use std::time::SystemTime;
 
-use crate::constants::SIGALRM;
+use sysdefs::constants::SIGALRM;
 
 use super::lind_send_signal;
 

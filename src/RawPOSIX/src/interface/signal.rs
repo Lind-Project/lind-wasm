@@ -1,7 +1,5 @@
-use crate::{
-    constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL},
-    interface::{cagetable_getref, cagetable_getref_opt, RustAtomicOrdering},
-};
+use crate::interface::{cagetable_getref, cagetable_getref_opt, RustAtomicOrdering};
+use sysdefs::constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL};
 
 const EPOCH_NORMAL: u64 = 0;
 const EPOCH_SIGNAL: u64 = 0xc0ffee;
