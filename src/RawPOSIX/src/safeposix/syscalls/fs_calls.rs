@@ -780,7 +780,7 @@ impl Cage {
      *   Mapping a new virtual fd and kernel fd that libc::dup returned
      *   Then return virtual fd
      */
-    pub fn dup_syscall(&self, virtual_fd: i32, _start_desc: Option<i32>) -> i32 {
+    pub fn dup_syscall(&self, virtual_fd: i32) -> i32 {
         if virtual_fd < 0 {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
         }
@@ -789,15 +789,14 @@ impl Cage {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
         }
         let vfd = wrappedvfd.unwrap();
-        let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
+    
         let ret_virtualfd =
-            fdtables::get_unused_virtual_fd(self.cageid, vfd.fdkind, ret_kernelfd as u64, false, 0)
+            fdtables::get_unused_virtual_fd(self.cageid, vfd.fdkind, vfd.underfd, false, 0)
                 .unwrap();
         return ret_virtualfd as i32;
     }
 
-    /*
-     */
+    /// 
     pub fn dup2_syscall(&self, old_virtualfd: i32, new_virtualfd: i32) -> i32 {
         if old_virtualfd < 0 || new_virtualfd < 0 {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
@@ -805,18 +804,27 @@ impl Cage {
 
         match fdtables::translate_virtual_fd(self.cageid, old_virtualfd as u64) {
             Ok(old_vfd) => {
-                let new_kernelfd = unsafe { libc::dup(old_vfd.underfd as i32) };
-                // Map new kernel fd with provided kernel fd
-                let _ret_kernelfd = unsafe { libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
-                let _ = fdtables::get_specific_virtual_fd(
+                // let new_kernelfd = unsafe { libc::dup(old_vfd.underfd as i32) };
+                // // Map new kernel fd with provided kernel fd
+                // let _ret_kernelfd = unsafe { libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
+                // let _ = fdtables::get_specific_virtual_fd(
+                //     self.cageid,
+                //     new_virtualfd as u64,
+                //     old_vfd.fdkind,
+                //     new_kernelfd as u64,
+                //     false,
+                //     old_vfd.perfdinfo,
+                // )
+                // .unwrap();
+                let new_virtualfd = fdtables::get_specific_virtual_fd(
                     self.cageid,
                     new_virtualfd as u64,
                     old_vfd.fdkind,
-                    new_kernelfd as u64,
-                    false,
+                    old_vfd.underfd, // Use old kernel fd
+                    old_vfd.should_cloexec,
                     old_vfd.perfdinfo,
-                )
-                .unwrap();
+                ).unwrap();
+
                 return new_virtualfd;
             }
             Err(_e) => {
