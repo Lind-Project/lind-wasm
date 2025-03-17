@@ -21,7 +21,7 @@ import shutil
 
 DEFAULT_TIMEOUT = 5 # in seconds
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
