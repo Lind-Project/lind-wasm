@@ -9,11 +9,15 @@
 #   "./wasmtestreport.py --generate-html" to generate the html file
 #   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 10"
 #
+#   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
+#   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
+#   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
 import json
 import os
 import subprocess
 from pathlib import Path
 import argparse
+import shutil
 
 DEFAULT_TIMEOUT = 5 # in seconds
 
@@ -23,13 +27,16 @@ SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will 
 RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will run
 
 LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
-TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
+LIND_FS_ROOT = os.environ.get("LIND_FS_ROOT", "/home/lind/lind-wasm/src/RawPOSIX/tmp")
 
+TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
+TESTFILES_SRC = Path(f"{LIND_WASM_BASE}/tests/testfiles")
+TESTFILES_DST = Path(f"{LIND_FS_ROOT}/testfiles")
 DETERMINISTIC_PARENT_NAME = "deterministic"
 NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
-PATH_TO_LIND_ROOT = Path(LIND_WASM_BASE) / "src/RawPOSIX/tmp"
+
 
 error_types = {
     "Failure_native_compiling": "Compilation Failure Native",
@@ -59,22 +66,20 @@ error_types = {
 #   This is used for initializing a empty "results" dictionary for storing test stats.
 # ----------------------------------------------------------------------
 def get_empty_result():
-    return {
+    result = {
         "total_test_cases": 0,
         "number_of_success": 0,
-        "number_of_failures": 0,
-        "number_of_segfaults": 0,
-        "number_of_timeouts": 0,
-        "number_of_native_compile_failures": 0,
-        "number_of_native_runtime_failures": 0,
-        "native_compile_failures": [],
-        "native_runtime_failures": [],
         "success": [],
-        "failure": [],
-        "segfaults": [],
-        "timeouts": [],
+        "number_of_failures": 0,
+        "failures": [],
         "test_cases": {}
     }
+    
+    for err in error_types.keys():
+        result[f"number_of_{err}"] = 0
+        result[err] = []
+    
+    return result
 
 
 # ----------------------------------------------------------------------
@@ -108,11 +113,17 @@ def add_test_result(result, file_path, status, error_type, output):
         print("SUCCESS")
     else:
         result["number_of_failures"] += 1
-        result["failure"].append(file_path)
-        print(f"FAILURE: {error_type}")
+        result["failures"].append(file_path)
+        
+        error_message = error_types.get(error_type, "Undefined Failure")
+
+        print(f"FAILURE: {error_message}")
         if error_type in error_types:
-            result[f"number_of_{error_types[error_type]}"] += 1
-            result[error_types[error_type]].append(file_path)
+            result[f"number_of_{error_type}"] += 1
+            result[error_type].append(file_path)
+        else:
+            result["number_of_Unknown_Failure"] += 1
+            result["Unknown_Failure"].append(file_path)
 
 
 # ----------------------------------------------------------------------
@@ -284,7 +295,7 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
     else:
         print(f"No expected output found at {expected_output_file}")
         #trying native compile
-        os.chdir(PATH_TO_LIND_ROOT)
+        os.chdir(LIND_FS_ROOT)
         try:
             proc_compile = subprocess.run(native_compile_cmd, shell=True, capture_output=True, text=True)
             if proc_compile.returncode != 0:
@@ -303,12 +314,12 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
             if proc_run.returncode != 0:
                 add_test_result(result, str(source_file), "Failure", "Failure_native_running",
                                 proc_run.stdout + proc_run.stderr)
-                os.chdir(PATH_TO_LIND_ROOT)
+                os.chdir(LIND_FS_ROOT)
                 return
             native_run_output = proc_run.stdout
         except Exception as e:
             add_test_result(result, str(source_file), "Failure", "Failure_native_running", f"Exception: {e}")
-            os.chdir(PATH_TO_LIND_ROOT)
+            os.chdir(LIND_FS_ROOT)
             return
 
         os.chdir(original_cwd)
@@ -354,6 +365,30 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
 
 
 # ----------------------------------------------------------------------
+# Function: pre_test
+#
+# Purpose:
+#   Creates /src/RawPOSIX/tmp/testfiles directory, 
+#   Creates readlinkfile.txt file and a soft link to it as readlinkfile(for the purpose of readlinkfile tests)
+#   Copies the required test files from TESTFILES_SRC to TESTFILES_DST defined above
+#
+# Variables:
+# - Input:
+#   None
+# - Output:
+#   None
+# ----------------------------------------------------------------------
+def pre_test():
+    os.makedirs(TESTFILES_DST, exist_ok=True) 
+
+    shutil.copytree(TESTFILES_SRC, TESTFILES_DST, dirs_exist_ok=True)
+
+    readlinkfile_path = TESTFILES_DST / "readlinkfile.txt"
+    symlink_path = TESTFILES_DST / "readlinkfile"
+    open(readlinkfile_path, 'a').close()
+    os.symlink(readlinkfile_path, symlink_path)
+
+# ----------------------------------------------------------------------
 # Function: generate_html_report
 #
 # Purpose:
@@ -396,7 +431,7 @@ def generate_html_report(report):
         html_content.append(f'<tr><td>Number of Successes</td><td>{test_result.get("number_of_success", 0)}</td></tr>')
         html_content.append(f'<tr><td>Number of Failures</td><td>{test_result.get("number_of_failures", 0)}</td></tr>')
         for error_type in error_types:
-            html_content.append(f'<tr><td>Number of {error_type}</td><td>{test_result.get(f"number_of_{error_types[error_type]}", 0)}</td></tr>')
+            html_content.append(f'<tr><td>Number of {error_types[error_type]}</td><td>{test_result.get(f"number_of_{error_types[error_type]}", 0)}</td></tr>')
         html_content.append('</table>')
 
     for test_type, test_result in report.items():
@@ -495,8 +530,6 @@ def is_file_in_folder(file_path, folder_list):
 #   Otherwise False;
 # ----------------------------------------------------------------------
 def should_run_file(file_path, run_folders, skip_folders, skip_test_cases):
-
-
     if file_path in skip_test_cases:
         print(f"skipping {file_path}")
         return False
@@ -547,6 +580,8 @@ def parse_arguments():
     parser.add_argument("--output", default=JSON_OUTPUT, help="Name of the output file")
     parser.add_argument("--report", default=HTML_OUTPUT, help="Name of the report HTML file")
     parser.add_argument("--generate-html", action="store_true", help="Flag to generate HTML file")
+    parser.add_argument("--pre-test-only", action="store_true", help="Flag to run only the copying of required testfiles")
+    parser.add_argument("--clean-testfiles", action="store_true", help="Flag to remove the testfiles")
 
     args = parser.parse_args()
     return args
@@ -578,11 +613,28 @@ def main():
     output_file = str(Path(args.output).with_suffix('.json'))
     output_html_file = str(Path(args.report).with_suffix('.html'))
     should_generate_html = args.generate_html
+    pre_test_only = args.pre_test_only
+    clean_testfiles = args.clean_testfiles
 
     results = {
         "deterministic": get_empty_result(),
         "non_deterministic": get_empty_result()
     }
+
+
+    try:
+        shutil.rmtree(TESTFILES_DST)
+        print(f"Testfiles at {LIND_FS_ROOT} deleted")
+    except FileNotFoundError as e:
+        print(f"Testfiles not present at {LIND_FS_ROOT}")
+    
+    if clean_testfiles:
+        return
+
+    pre_test()
+    if pre_test_only:
+        print(f"Testfiles copied to {LIND_FS_ROOT}")
+        return
 
     skip_folders_paths = [Path(sf) for sf in skip_folders]
     run_folders_paths = [Path(rf) for rf in run_folders]
@@ -626,6 +678,8 @@ def main():
         if native_file and native_file.exists():
             native_file.unlink()
     
+    shutil.rmtree(TESTFILES_DST) # removes the test files from the lind fs root
+
     with open(output_file, "w") as fp:
         json.dump(results, fp, indent=4)
 

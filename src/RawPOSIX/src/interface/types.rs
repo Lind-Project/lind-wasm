@@ -1,188 +1,27 @@
 #![allow(dead_code)]
 use crate::interface;
-use crate::interface::errnos::{syscall_error, Errno};
 
-use std::ffi::CStr;
-use std::str::Utf8Error;
-use std::io::{Read, Write};
-use std::io;
-use std::ptr::null;
+use sysdefs::constants::err_const::{syscall_error, Errno};
+use sysdefs::data::fs_struct::*;
+use sysdefs::data::net_struct::*;
+use sysdefs::data::{fs_struct, net_struct};
+
 use libc::*;
+use std::ffi::CStr;
+use std::io;
+use std::io::{Read, Write};
+use std::ptr::null;
+use std::str::Utf8Error;
 
 const SIZEOF_SOCKADDR: u32 = 16;
 
-//redefining the FSData struct in this file so that we maintain flow of program
-//derive eq attributes for testing whether the structs equal other fsdata structs from stat/fstat
-#[derive(Eq, PartialEq)]
-#[repr(C)]
-pub struct FSData {
-    pub f_type: u64,
-    pub f_bsize: u64,
-    pub f_blocks: u64,
-    pub f_bfree: u64,
-    pub f_bavail: u64,
-    //total files in the file system -- should be infinite
-    pub f_files: u64,
-    //free files in the file system -- should be infinite
-    pub f_ffiles: u64,
-    pub f_fsid: u64,
-    //not really a limit for naming, but 254 works
-    pub f_namelen: u64,
-    //arbitrary val for blocksize as well
-    pub f_frsize: u64,
-    pub f_spare: [u8; 32],
-}
-
-//redefining the StatData struct in this file so that we maintain flow of program
-//derive eq attributes for testing whether the structs equal other statdata structs from stat/fstat
-#[derive(Eq, PartialEq, Default, Debug)]
-#[repr(C)]
-pub struct StatData {
-    pub st_dev: u64,
-    pub st_ino: usize,
-    pub st_mode: u32,
-    pub st_nlink: u32,
-    pub st_uid: u32,
-    pub st_gid: u32,
-    pub st_rdev: u64,
-    pub st_size: usize,
-    pub st_blksize: i32,
-    pub st_blocks: u32,
-    //currently we don't populate or care about the time bits here
-    pub st_atim: (u64, u64),
-    pub st_mtim: (u64, u64),
-    pub st_ctim: (u64, u64),
-}
-
-//R Limit for getrlimit system call
-#[repr(C)]
-pub struct Rlimit {
-    pub rlim_cur: u64,
-    pub rlim_max: u64,
-}
-
-#[derive(Eq, PartialEq, Default, Copy, Clone, Debug)]
-#[repr(C)]
-pub struct PipeArray {
-    pub readfd: i32,
-    pub writefd: i32,
-}
-
-#[derive(Eq, PartialEq, Default, Copy, Clone, Debug)]
-#[repr(C)]
-pub struct SockPair {
-    pub sock1: i32,
-    pub sock2: i32,
-}
-
-//EPOLL
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub struct EpollEvent {
-    pub events: u32,
-    pub fd: i32, //in native this is a union which could be one of a number of things
-                 //however, we only support EPOLL_CTL subcommands which take the fd
-}
-
-#[derive(Debug, Default)]
-#[repr(C)]
-pub struct PollStruct {
-    pub fd: i32,
-    pub events: i16,
-    pub revents: i16,
-}
-
-#[repr(C)]
-pub struct SockaddrDummy {
-    pub sa_family: u16,
-    pub _sa_data: [u16; 14],
-}
-
-#[repr(C)]
-pub struct TimeVal {
-    pub tv_sec: i64,
-    pub tv_usec: i64,
-}
-
-#[repr(C)]
-pub struct ITimerVal {
-    pub it_interval: TimeVal,
-    pub it_value: TimeVal,
-}
-
-#[repr(C)]
-pub struct TimeSpec {
-    pub tv_sec: i64,
-    pub tv_nsec: i64,
-}
-
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub union IoctlPtrUnion {
-    pub int_ptr: *mut i32,
-    pub c_char_ptr: *mut u8, //Right now, we do not support passing struct pointers to ioctl as the related call are not implemented
-}
-
-#[derive(Copy, Clone, Default)]
-#[repr(C)]
-pub struct IpcPermStruct {
-    pub __key: i32,
-    pub uid: u32,
-    pub gid: u32,
-    pub cuid: u32,
-    pub cgid: u32,
-    pub mode: u16,
-    pub __pad1: u16,
-    pub __seq: u16,
-    pub __pad2: u16,
-    pub __unused1: u32,
-    pub __unused2: u32,
-}
-
-#[derive(Copy, Clone, Default)]
-#[repr(C)]
-pub struct ShmidsStruct {
-    pub shm_perm: IpcPermStruct,
-    pub shm_segsz: u32,
-    pub shm_atime: isize,
-    pub shm_dtime: isize,
-    pub shm_ctime: isize,
-    pub shm_cpid: u32,
-    pub shm_lpid: u32,
-    pub shm_nattch: u32,
-}
-
-pub type SigsetType = u64;
-
-pub type IovecStruct = libc::iovec;
-
-#[derive(Copy, Clone, Debug, Default)]
-#[repr(C)]
-pub struct SigactionStruct {
-    pub sa_handler: u32,
-    pub sa_mask: SigsetType,
-    pub sa_flags: i32,
-}
-
-use std::mem::size_of;
-
-// Represents a Dirent struct without the string, as rust has no flexible array member support
-#[repr(C, packed(1))]
-pub struct ClippedDirent {
-    pub d_ino: u64,
-    pub d_off: u64,
-    pub d_reclen: u16,
-}
-
-pub const CLIPPED_DIRENT_SIZE: u32 = size_of::<interface::ClippedDirent>() as u32;
-
 /*
-This file provides essential functions for handling and validating `u64` inputs, 
-converting them to various system-specific data types needed in system calls. 
+This file provides essential functions for handling and validating `u64` inputs,
+converting them to various system-specific data types needed in system calls.
 It includes utilities for transforming raw pointers to typed structures, such as integer,
-buffer, and string pointers, as well as complex structures like polling, signal handling, 
-timing, and socket-related types. Each function ensures safe and correct usage by performing 
-null checks, boundary validations, and type casting, returning either a valid reference 
+buffer, and string pointers, as well as complex structures like polling, signal handling,
+timing, and socket-related types. Each function ensures safe and correct usage by performing
+null checks, boundary validations, and type casting, returning either a valid reference
 or an error if data is invalid. This design promotes secure, reliable access to memory and
  resources in a low-level systems environment.
 */
@@ -264,7 +103,6 @@ pub fn get_mutcbuf_null(generic_argument: u64) -> Result<Option<*mut u8>, i32> {
     }
     return Ok(None);
 }
-
 
 pub fn get_fdset(generic_argument: u64) -> Result<Option<&'static mut fd_set>, i32> {
     let data = generic_argument as *mut libc::fd_set;
@@ -368,9 +206,7 @@ pub fn get_shmidstruct<'a>(generic_argument: u64) -> Result<&'a mut ShmidsStruct
 pub fn get_ioctlptrunion<'a>(generic_argument: u64) -> Result<&'a mut u8, i32> {
     let pointer = generic_argument as *mut u8;
     if !pointer.is_null() {
-        return Ok(unsafe {
-            &mut *pointer
-        });
+        return Ok(unsafe { &mut *pointer });
     }
     return Err(syscall_error(
         Errno::EFAULT,
@@ -410,7 +246,7 @@ pub fn get_sockpair<'a>(generic_argument: u64) -> Result<&'a mut SockPair, i32> 
 pub fn get_constsockaddr<'a>(generic_argument: u64) -> Result<&'a SockaddrDummy, i32> {
     let pointer = generic_argument as *const SockaddrDummy;
     if !pointer.is_null() {
-        return Ok(unsafe { & *pointer });
+        return Ok(unsafe { &*pointer });
     }
     return Err(syscall_error(
         Errno::EFAULT,
@@ -419,7 +255,7 @@ pub fn get_constsockaddr<'a>(generic_argument: u64) -> Result<&'a SockaddrDummy,
     ));
 }
 
-pub fn get_sockaddr(generic_argument: u64, addrlen: u32) -> Result<interface::GenSockaddr, i32> {
+pub fn get_sockaddr(generic_argument: u64, addrlen: u32) -> Result<net_struct::GenSockaddr, i32> {
     let pointer = generic_argument as *const SockaddrDummy;
     if !pointer.is_null() {
         let tmpsock = unsafe { &*pointer };
@@ -427,7 +263,7 @@ pub fn get_sockaddr(generic_argument: u64, addrlen: u32) -> Result<interface::Ge
             /*AF_UNIX*/
             1 => {
                 if addrlen < SIZEOF_SOCKADDR
-                    || addrlen > size_of::<interface::SockaddrUnix>() as u32
+                    || addrlen > size_of::<net_struct::SockaddrUnix>() as u32
                 {
                     return Err(syscall_error(
                         Errno::EINVAL,
@@ -435,32 +271,32 @@ pub fn get_sockaddr(generic_argument: u64, addrlen: u32) -> Result<interface::Ge
                         "input length incorrect for family of sockaddr",
                     ));
                 }
-                let unix_ptr = pointer as *const interface::SockaddrUnix;
-                return Ok(interface::GenSockaddr::Unix(unsafe { *unix_ptr }));
+                let unix_ptr = pointer as *const net_struct::SockaddrUnix;
+                return Ok(net_struct::GenSockaddr::Unix(unsafe { *unix_ptr }));
             }
             /*AF_INET*/
             2 => {
-                if addrlen < size_of::<interface::SockaddrV4>() as u32 {
+                if addrlen < size_of::<net_struct::SockaddrV4>() as u32 {
                     return Err(syscall_error(
                         Errno::EINVAL,
                         "dispatcher",
                         "input length too small for family of sockaddr",
                     ));
                 }
-                let v4_ptr = pointer as *const interface::SockaddrV4;
-                return Ok(interface::GenSockaddr::V4(unsafe { *v4_ptr }));
+                let v4_ptr = pointer as *const net_struct::SockaddrV4;
+                return Ok(net_struct::GenSockaddr::V4(unsafe { *v4_ptr }));
             }
             /*AF_INET6*/
             30 => {
-                if addrlen < size_of::<interface::SockaddrV6>() as u32 {
+                if addrlen < size_of::<net_struct::SockaddrV6>() as u32 {
                     return Err(syscall_error(
                         Errno::EINVAL,
                         "dispatcher",
                         "input length too small for family of sockaddr",
                     ));
                 }
-                let v6_ptr = pointer as *const interface::SockaddrV6;
-                return Ok(interface::GenSockaddr::V6(unsafe { *v6_ptr }));
+                let v6_ptr = pointer as *const net_struct::SockaddrV6;
+                return Ok(net_struct::GenSockaddr::V6(unsafe { *v6_ptr }));
             }
             val => {
                 return Err(syscall_error(
@@ -478,7 +314,10 @@ pub fn get_sockaddr(generic_argument: u64, addrlen: u32) -> Result<interface::Ge
     ));
 }
 
-pub fn set_gensockaddr(generic_argument: u64, generic_argument1: u64) -> Result<interface::GenSockaddr, i32> {
+pub fn set_gensockaddr(
+    generic_argument: u64,
+    generic_argument1: u64,
+) -> Result<net_struct::GenSockaddr, i32> {
     let received = generic_argument as *mut SockaddrDummy;
     let received_addrlen = (generic_argument1 as *mut u32) as u32;
     let tmpsock = unsafe { &*received };
@@ -486,7 +325,7 @@ pub fn set_gensockaddr(generic_argument: u64, generic_argument1: u64) -> Result<
         /*AF_UNIX*/
         1 => {
             if received_addrlen < SIZEOF_SOCKADDR
-                || received_addrlen > size_of::<interface::SockaddrUnix>() as u32
+                || received_addrlen > size_of::<net_struct::SockaddrUnix>() as u32
             {
                 return Err(syscall_error(
                     Errno::EINVAL,
@@ -494,41 +333,45 @@ pub fn set_gensockaddr(generic_argument: u64, generic_argument1: u64) -> Result<
                     "input length incorrect for family of sockaddr",
                 ));
             }
-            let unix_addr = interface::GenSockaddr::Unix(interface::SockaddrUnix::default());
+            let unix_addr = net_struct::GenSockaddr::Unix(net_struct::SockaddrUnix::default());
             return Ok(unix_addr);
         }
         /*AF_INET*/
         2 => {
-            if received_addrlen < size_of::<interface::SockaddrV4>() as u32 {
+            if received_addrlen < size_of::<net_struct::SockaddrV4>() as u32 {
                 return Err(syscall_error(
                     Errno::EINVAL,
                     "dispatcher",
                     "input length too small for family of sockaddr",
                 ));
             }
-            let v4_addr = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+            let v4_addr = net_struct::GenSockaddr::V4(net_struct::SockaddrV4::default());
             return Ok(v4_addr);
         }
         /*AF_INET6*/
         30 => {
-            if received_addrlen < size_of::<interface::SockaddrV6>() as u32 {
+            if received_addrlen < size_of::<net_struct::SockaddrV6>() as u32 {
                 return Err(syscall_error(
                     Errno::EINVAL,
                     "dispatcher",
                     "input length too small for family of sockaddr",
                 ));
             }
-            let v6_addr = interface::GenSockaddr::V6(interface::SockaddrV6::default());
+            let v6_addr = net_struct::GenSockaddr::V6(net_struct::SockaddrV6::default());
             return Ok(v6_addr);
         }
         _ => {
-            let null_addr = interface::GenSockaddr::Unix(interface::SockaddrUnix::default());
+            let null_addr = net_struct::GenSockaddr::Unix(net_struct::SockaddrUnix::default());
             return Ok(null_addr);
         }
     }
 }
 
-pub fn copy_out_sockaddr(generic_argument: u64, generic_argument1: u64, gensock: interface::GenSockaddr) {
+pub fn copy_out_sockaddr(
+    generic_argument: u64,
+    generic_argument1: u64,
+    gensock: net_struct::GenSockaddr,
+) {
     let copyoutaddr = (generic_argument as *mut SockaddrDummy) as *mut u8;
     let addrlen = generic_argument1 as *mut u32;
     assert!(!copyoutaddr.is_null());
@@ -536,13 +379,13 @@ pub fn copy_out_sockaddr(generic_argument: u64, generic_argument1: u64, gensock:
     let initaddrlen = unsafe { *addrlen };
     let mut mutgensock = gensock;
     match mutgensock {
-        interface::GenSockaddr::Unix(ref mut unixa) => {
-            let unixlen = size_of::<interface::SockaddrUnix>() as u32;
+        net_struct::GenSockaddr::Unix(ref mut unixa) => {
+            let unixlen = size_of::<net_struct::SockaddrUnix>() as u32;
 
             let fullcopylen = interface::rust_min(initaddrlen, unixlen);
             unsafe {
                 std::ptr::copy(
-                    (unixa) as *mut interface::SockaddrUnix as *mut u8,
+                    (unixa) as *mut net_struct::SockaddrUnix as *mut u8,
                     copyoutaddr,
                     initaddrlen as usize,
                 )
@@ -552,14 +395,14 @@ pub fn copy_out_sockaddr(generic_argument: u64, generic_argument1: u64, gensock:
             }
         }
 
-        interface::GenSockaddr::V4(ref mut v4a) => {
-            let v4len = size_of::<interface::SockaddrV4>() as u32;
-            
+        net_struct::GenSockaddr::V4(ref mut v4a) => {
+            let v4len = size_of::<net_struct::SockaddrV4>() as u32;
+
             let fullcopylen = interface::rust_min(initaddrlen, v4len);
-          
+
             unsafe {
                 std::ptr::copy(
-                    (v4a) as *mut interface::SockaddrV4 as *mut u8,
+                    (v4a) as *mut net_struct::SockaddrV4 as *mut u8,
                     copyoutaddr,
                     initaddrlen as usize,
                 )
@@ -569,13 +412,13 @@ pub fn copy_out_sockaddr(generic_argument: u64, generic_argument1: u64, gensock:
             }
         }
 
-        interface::GenSockaddr::V6(ref mut v6a) => {
-            let v6len = size_of::<interface::SockaddrV6>() as u32;
+        net_struct::GenSockaddr::V6(ref mut v6a) => {
+            let v6len = size_of::<net_struct::SockaddrV6>() as u32;
 
             let fullcopylen = interface::rust_min(initaddrlen, v6len);
             unsafe {
                 std::ptr::copy(
-                    (v6a) as *mut interface::SockaddrV6 as *mut u8,
+                    (v6a) as *mut net_struct::SockaddrV6 as *mut u8,
                     copyoutaddr,
                     initaddrlen as usize,
                 )
@@ -655,7 +498,7 @@ pub fn get_socklen_t_ptr(generic_argument: u64) -> Result<u32, i32> {
 
 //arg checked for nullity beforehand
 pub fn get_int_from_intptr(generic_argument: u64) -> i32 {
-    return unsafe { *(generic_argument as *mut i32)};
+    return unsafe { *(generic_argument as *mut i32) };
 }
 
 pub fn copy_out_intptr(generic_argument: u64, intval: i32) {
@@ -681,7 +524,7 @@ pub fn get_timerval<'a>(generic_argument: u64) -> Result<&'a mut timeval, i32> {
     let pointer = generic_argument as *mut timeval;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
-    } 
+    }
     return Err(syscall_error(
         Errno::EFAULT,
         "dispatcher",
@@ -734,9 +577,7 @@ pub fn duration_fromtimespec(generic_argument: u64) -> Result<interface::RustDur
 pub fn get_timespec<'a>(generic_argument: u64) -> Result<&'a timespec, i32> {
     let pointer = generic_argument as *mut timespec;
     if !pointer.is_null() {
-        return Ok( unsafe {
-            &*pointer
-        });
+        return Ok(unsafe { &*pointer });
     }
     return Err(syscall_error(
         Errno::EFAULT,
@@ -767,7 +608,9 @@ pub fn arg_nullity(generic_argument: u64) -> bool {
     (generic_argument as *const u8).is_null()
 }
 
-pub fn get_sigactionstruct<'a>(generic_argument: u64) -> Result<Option<&'a mut SigactionStruct>, i32> {
+pub fn get_sigactionstruct<'a>(
+    generic_argument: u64,
+) -> Result<Option<&'a mut SigactionStruct>, i32> {
     let pointer = generic_argument as *mut SigactionStruct;
 
     if !pointer.is_null() {
@@ -777,7 +620,9 @@ pub fn get_sigactionstruct<'a>(generic_argument: u64) -> Result<Option<&'a mut S
     }
 }
 
-pub fn get_constsigactionstruct<'a>(generic_argument: u64) -> Result<Option<&'a SigactionStruct>, i32> {
+pub fn get_constsigactionstruct<'a>(
+    generic_argument: u64,
+) -> Result<Option<&'a SigactionStruct>, i32> {
     let pointer = generic_argument as *const SigactionStruct;
 
     if !pointer.is_null() {
@@ -807,8 +652,8 @@ pub fn get_constsigsett<'a>(generic_argument: u64) -> Result<Option<&'a SigsetTy
     }
 }
 
-pub fn get_iovecstruct(generic_argument: u64) -> Result<*const interface::IovecStruct, i32> {
-    let data = generic_argument as *const interface::IovecStruct;
+pub fn get_iovecstruct(generic_argument: u64) -> Result<*const fs_struct::IovecStruct, i32> {
+    let data = generic_argument as *const fs_struct::IovecStruct;
     if !data.is_null() {
         return Ok(data);
     }

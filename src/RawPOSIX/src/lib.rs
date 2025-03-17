@@ -10,5 +10,3 @@
 pub mod interface;
 pub mod safeposix;
 pub mod tests;
-pub mod fdtables;
-pub mod constants;

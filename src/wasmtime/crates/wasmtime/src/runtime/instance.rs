@@ -11,23 +11,22 @@ use crate::{
     StoreContext, StoreContextMut, Table, TypedFunc,
 };
 use alloc::sync::Arc;
-use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
-use rawposix::safeposix::dispatcher::lind_syscall_api;
-use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 use core::ptr::NonNull;
+use rawposix::safeposix::dispatcher::lind_syscall_api;
+use sysdefs::constants::fs_const::{
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
+};
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, PrimaryMap, TableIndex, TypeTrace,
 };
+use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 
 use super::Val;
 
 pub enum InstantiateType {
     InstantiateFirst(u64),
-    InstantiateChild {
-        parent_pid: u64,
-        child_pid: u64,
-    },
+    InstantiateChild { parent_pid: u64, child_pid: u64 },
 }
 
 /// An instantiated WebAssembly module.
@@ -249,13 +248,17 @@ impl Instance {
                 let handle = store.0.instance(InstanceId::from_index(0));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let memory_base = defined_memory.base as usize;
-                rawposix::interface::init_vmmap_helper(pid, memory_base, Some(minimal_pages as u32));
+                rawposix::interface::init_vmmap_helper(
+                    pid,
+                    memory_base,
+                    Some(minimal_pages as u32),
+                );
 
                 lind_syscall_api(
                     pid,
                     MMAP_SYSCALL as u32,
                     0,
-                    0, // the first memory region starts from 0
+                    0,                          // the first memory region starts from 0
                     minimal_pages << PAGESHIFT, // size of first memory region
                     (PROT_READ | PROT_WRITE) as u64,
                     (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
@@ -264,9 +267,12 @@ impl Instance {
                     (0 - 1) as u64,
                     0,
                 );
-            },
+            }
             // InstantiateChild: this is the child wasm instance forked by parent
-            InstantiateType::InstantiateChild { parent_pid, child_pid } => {
+            InstantiateType::InstantiateChild {
+                parent_pid,
+                child_pid,
+            } => {
                 // if this is a child, we do not need to specifically set up the first memory region
                 // since this should be taken care of when we fork the entire memory region from parent
                 // therefore in this case, we only need to:
@@ -275,7 +281,7 @@ impl Instance {
                 let handle = store.0.instance(InstanceId::from_index(0));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let child_address = defined_memory.base as usize;
-            
+
                 rawposix::interface::init_vmmap_helper(child_pid, child_address, None);
                 rawposix::interface::fork_vmmap_helper(parent_pid as u64, child_pid);
             }
@@ -542,7 +548,7 @@ impl Instance {
                             return Err(());
                         }
                     }
-                },
+                }
                 _ => {
                     // unexpected stack pointer export type (not a Global type)
                     return Err(());
@@ -566,7 +572,7 @@ impl Instance {
                             return Err(());
                         }
                     }
-                },
+                }
                 _ => {
                     // unexpected stack pointer export type (not a Global type)
                     return Err(());
@@ -999,7 +1005,11 @@ impl<T> InstancePre<T> {
         unsafe { Instance::new_started(&mut store, &self.module, imports.as_ref()) }
     }
 
-    pub fn instantiate_with_lind(&self, mut store: impl AsContextMut<Data = T>, instantiate_type: InstantiateType) -> Result<Instance> {
+    pub fn instantiate_with_lind(
+        &self,
+        mut store: impl AsContextMut<Data = T>,
+        instantiate_type: InstantiateType,
+    ) -> Result<Instance> {
         let mut store = store.as_context_mut();
         let imports = pre_instantiate_raw(
             &mut store.0,
@@ -1012,7 +1022,14 @@ impl<T> InstancePre<T> {
         // This unsafety should be handled by the type-checking performed by the
         // constructor of `InstancePre` to assert that all the imports we're passing
         // in match the module we're instantiating.
-        unsafe { Instance::new_started_impl_with_lind(&mut store, &self.module, imports.as_ref(), instantiate_type) }
+        unsafe {
+            Instance::new_started_impl_with_lind(
+                &mut store,
+                &self.module,
+                imports.as_ref(),
+                instantiate_type,
+            )
+        }
     }
 
     /// Creates a new instance, running the start function asynchronously

@@ -32,11 +32,14 @@ pub use serde_cbor::{
 };
 
 use crate::interface;
-use crate::interface::errnos::VERBOSE;
-use crate::interface::types::SigsetType;
-use crate::constants::SEM_VALUE_MAX;
 use std::sync::LazyLock;
 use std::time::Duration;
+
+// Import constants
+use sysdefs::constants::err_const::VERBOSE;
+use sysdefs::constants::fs_const::SEM_VALUE_MAX;
+// Import data struct
+use sysdefs::data::fs_struct::SigsetType;
 
 pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS: i32 = 0;
