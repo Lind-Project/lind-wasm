@@ -4,7 +4,6 @@ pub mod vmmap_tests {
     use crate::interface;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem}; 
     use crate::safeposix::syscalls::*;
-    use crate::interface;
 
     // Constants for testing
     // Base address for test memory regions (4KB aligned)

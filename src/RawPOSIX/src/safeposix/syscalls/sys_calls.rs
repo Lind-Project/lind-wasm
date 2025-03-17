@@ -1,24 +1,25 @@
 #![allow(dead_code)]
 
 // System related system calls
-use crate::constants::{
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::fs_const::{SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY};
+use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK,
-    SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX,
-    SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX,
+    SIGNAL_MAX, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX,
 };
+// Import data structure
+use sysdefs::data::{fs_struct, net_struct};
+// Import fdtables
+use fdtables;
 
 use crate::interface::{self, convert_signal_mask, lind_send_signal};
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
 use crate::safeposix::shm::*;
 
-use crate::fdtables;
-
 use libc::*;
-
 use std::io;
 use std::io::Write;
-
 use std::sync::Arc as RustRfc;
 
 impl Cage {
@@ -360,8 +361,8 @@ impl Cage {
     pub fn sigaction_syscall(
         &self,
         sig: i32,
-        act: Option<&interface::SigactionStruct>,
-        oact: Option<&mut interface::SigactionStruct>,
+        act: Option<&fs_struct::SigactionStruct>,
+        oact: Option<&mut fs_struct::SigactionStruct>,
     ) -> i32 {
         if let Some(some_oact) = oact {
             let old_sigactionstruct = self.signalhandler.get(&sig);
@@ -369,7 +370,7 @@ impl Cage {
             if let Some(entry) = old_sigactionstruct {
                 some_oact.clone_from(entry.value());
             } else {
-                some_oact.clone_from(&interface::SigactionStruct::default()); // leave handler field as NULL
+                some_oact.clone_from(&fs_struct::SigactionStruct::default()); // leave handler field as NULL
             }
         }
 
@@ -394,7 +395,7 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid cage id.");
         }
 
-        if (sig < 0) || (sig >= SIG_MAX) {
+        if (sig < 0) || (sig >= 32) {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid signal number");
         }
 
@@ -408,8 +409,8 @@ impl Cage {
     pub fn sigprocmask_syscall(
         &self,
         how: i32,
-        set: Option<&interface::SigsetType>,
-        oldset: Option<&mut interface::SigsetType>,
+        set: Option<&fs_struct::SigsetType>,
+        oldset: Option<&mut fs_struct::SigsetType>,
     ) -> i32 {
         let mut res = 0;
 
@@ -474,8 +475,8 @@ impl Cage {
     pub fn setitimer_syscall(
         &self,
         which: i32,
-        new_value: Option<&interface::ITimerVal>,
-        old_value: Option<&mut interface::ITimerVal>,
+        new_value: Option<&fs_struct::ITimerVal>,
+        old_value: Option<&mut fs_struct::ITimerVal>,
     ) -> i32 {
         match which {
             ITIMER_REAL => {
@@ -506,7 +507,7 @@ impl Cage {
         0
     }
 
-    pub fn getrlimit(&self, res_type: u64, rlimit: &mut interface::Rlimit) -> i32 {
+    pub fn getrlimit(&self, res_type: u64, rlimit: &mut fs_struct::Rlimit) -> i32 {
         match res_type {
             RLIMIT_NOFILE => {
                 rlimit.rlim_cur = NOFILE_CUR;
