@@ -780,6 +780,13 @@ impl Cage {
     /// Since the two file descriptors refer to the same open file description, they share file offset 
     /// and file status flags. Then, in RawPOSIX, we mapped duplicated file descriptor to same underlying 
     /// kernel fd.
+    /// 
+    /// ## Arguments:
+    /// - `virtual_fd`: virtual file descriptor
+    /// 
+    /// ## Return type:
+    /// - `0` on success.
+    /// - `-1` on failure, with `errno` set appropriately.
     pub fn dup_syscall(&self, virtual_fd: i32) -> i32 {
         if virtual_fd < 0 {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
@@ -798,6 +805,14 @@ impl Cage {
 
     /// dup2() performs the same task as dup(), so we utilize dup() here and mapping underlying kernel
     /// fd with specific `new_virutalfd`
+    /// 
+    /// ## Arguments:
+    /// - `old_virtualfd`: original virtual file descriptor
+    /// - `new_virtualfd`: specified new virtual file descriptor
+    /// 
+    /// ## Return type:
+    /// - `0` on success.
+    /// - `-1` on failure, with `errno` set appropriately.
     pub fn dup2_syscall(&self, old_virtualfd: i32, new_virtualfd: i32) -> i32 {
         if old_virtualfd < 0 || new_virtualfd < 0 {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
@@ -814,7 +829,7 @@ impl Cage {
                 // The two file descriptors do not share file descriptor flags (the
                 // close-on-exec flag).  The close-on-exec flag (FD_CLOEXEC; see fcntl_syscall()) 
                 // for the duplicate descriptor is off
-                let new_virtualfd = fdtables::get_specific_virtual_fd(
+                let _ = fdtables::get_specific_virtual_fd(
                     self.cageid,
                     new_virtualfd as u64,
                     old_vfd.fdkind,
