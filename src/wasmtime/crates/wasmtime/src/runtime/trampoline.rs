@@ -8,6 +8,7 @@ mod table;
 pub use self::func::*;
 pub use self::global::*;
 pub(crate) use memory::MemoryCreatorProxy;
+use table::create_table_test;
 
 use self::memory::create_memory;
 use self::table::create_table;
@@ -40,7 +41,7 @@ fn create_handle(
         let module = Arc::new(module);
         let runtime_info = &ModuleRuntimeInfo::bare_maybe_imported_func(module, one_signature);
         let allocator = OnDemandInstanceAllocator::new(config.mem_creator.clone(), 0);
-        let handle = allocator.allocate_module(InstanceAllocationRequest {
+        let handle = allocator.allocate_module2(InstanceAllocationRequest {
             imports,
             host_state,
             store: StorePtr::new(store.traitobj()),
@@ -50,6 +51,38 @@ fn create_handle(
         })?;
 
         Ok(store.add_dummy_instance(handle))
+    }
+}
+
+
+fn create_handle_test(
+    module: Module,
+    store: &mut StoreOpaque,
+    host_state: Box<dyn Any + Send + Sync>,
+    func_imports: &[VMFunctionImport],
+    one_signature: Option<VMSharedTypeIndex>,
+) {
+    let mut imports = Imports::default();
+    imports.functions = func_imports;
+
+    unsafe {
+        let config = store.engine().config();
+        // Use the on-demand allocator when creating handles associated with host objects
+        // The configured instance allocator should only be used when creating module instances
+        // as we don't want host objects to count towards instance limits.
+        let module = Arc::new(module);
+        let runtime_info = &ModuleRuntimeInfo::bare_maybe_imported_func(module, one_signature);
+        let allocator = OnDemandInstanceAllocator::new(config.mem_creator.clone(), 0);
+        let handle = allocator.allocate_module(InstanceAllocationRequest {
+            imports,
+            host_state,
+            store: StorePtr::new(store.traitobj()),
+            runtime_info,
+            wmemcheck: false,
+            pkey: None,
+        }).unwrap();
+
+        store.add_dummy_instance_test(handle);
     }
 }
 
@@ -72,4 +105,14 @@ pub fn generate_table_export(
     Ok(store
         .instance_mut(instance)
         .get_exported_table(TableIndex::from_u32(0)))
+}
+
+pub fn generate_table_export_test(
+    store: &mut StoreOpaque,
+    t: &TableType,
+) {
+    let instance = create_table_test(store, t);
+    // Ok(store
+    //     .instance_mut(instance)
+    //     .get_exported_table(TableIndex::from_u32(0)));
 }

@@ -321,6 +321,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                             EntityType::Global(self.convert_global_type(&ty))
                         }
                         TypeRef::Table(ty) => {
+                            println!("found imported table: {:?}", ty);
                             self.result.module.num_imported_tables += 1;
                             EntityType::Table(self.convert_table_type(&ty)?)
                         }
@@ -669,6 +670,7 @@ and for re-adding support for interface types you can see this issue:
             }
 
             Payload::CustomSection(s) => {
+                println!("encountered custom section: {}", s.name());
                 self.register_custom_section(&s);
             }
 
@@ -762,11 +764,42 @@ and for re-adding support for interface types you can see this issue:
     }
 
     fn register_custom_section(&mut self, section: &CustomSectionReader<'data>) {
+        println!("register_custom_section name: {}", section.name());
         match section.as_known() {
             KnownCustom::Name(name) => {
                 let result = self.name_section(name);
                 if let Err(e) = result {
                     log::warn!("failed to parse name section {:?}", e);
+                }
+            }
+            KnownCustom::Dylink0(dylinks) => {
+                println!("known field: dylink section");
+
+                for subsection in dylinks {
+                    let subsection = subsection.unwrap();
+                    match subsection {
+                        wasmparser::Dylink0Subsection::MemInfo(meminfo) => {
+                            println!("meminfo: {:?}", meminfo);
+                            self.result.module.dylink_mem_info.insert(crate::DylinkMemInfo {
+                                memory_size: meminfo.memory_size,
+                                memory_alignment: meminfo.memory_alignment,
+                                table_size: meminfo.table_size,
+                                table_alignment: meminfo.table_alignment
+                            });
+                        },
+                        wasmparser::Dylink0Subsection::Needed(needed) => {
+                            println!("needed: {:?}", needed);
+                        },
+                        wasmparser::Dylink0Subsection::ExportInfo(exportinfo) => {
+                            println!("exportinfo: {:?}", exportinfo);
+                        },
+                        wasmparser::Dylink0Subsection::ImportInfo(importinfo) => {
+                            println!("importinfo: {:?}", importinfo);
+                        },
+                        _ => {
+                            println!("unknown dylink subsection");
+                        },
+                    }
                 }
             }
             _ => {
@@ -896,6 +929,7 @@ and for re-adding support for interface types you can see this issue:
 
     /// Parses the Name section of the wasm module.
     fn name_section(&mut self, names: NameSectionReader<'data>) -> WasmResult<()> {
+        println!("name section");
         for subsection in names {
             match subsection? {
                 wasmparser::Name::Function(names) => {

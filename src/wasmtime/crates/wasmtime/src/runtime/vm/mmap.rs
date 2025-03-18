@@ -101,6 +101,14 @@ impl Mmap {
 
         // lind-wasm: mmap prot is managed by rawposix
         // so we are skipping wasmtime's sys mmap here
+        // self.sys.make_accessible(start, 0x50000)
+        // if len > 1000000 {
+        //     unsafe {
+        //         let ptr = 0 as *mut u8;
+        //         *ptr = 1;
+        //     }
+        // }
+        // println!("make accessible: start: {}, len: {}", start, len);
         Ok(())
     }
 

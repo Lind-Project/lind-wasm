@@ -1076,7 +1076,7 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
 
 // get the base address of the wasm process
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(caller: &Caller<'_, T>) -> u64 {
-    let handle = caller.as_context().0.instance(InstanceId::from_index(0));
+    let handle = caller.as_context().0.instance(InstanceId::from_index(1));
     let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
     defined_memory.base as u64
 }

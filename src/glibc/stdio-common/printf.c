@@ -18,6 +18,8 @@
 #include <libioP.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <string.h>
 
 #undef printf
 

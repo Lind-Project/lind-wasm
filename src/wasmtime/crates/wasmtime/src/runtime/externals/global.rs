@@ -214,6 +214,25 @@ impl Global {
         Ok(())
     }
 
+
+    pub fn get_handler(&self, mut store: impl AsContextMut) -> u64 {
+        let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
+        let global_ty = self._ty(&store);
+
+        let handler = unsafe {
+            let definition = &mut *store[self.0].definition;
+            match global_ty.content() {
+                ValType::I32 => definition.as_i32_mut() as *mut i32 as u64,
+                ValType::I64 => definition.as_i64_mut() as *mut i64 as u64,
+                ValType::F32 => definition.as_u32_mut() as *mut u32 as u64,
+                ValType::F64 => definition.as_u64_mut() as *mut u64 as u64,
+                _ => panic!("get handler")
+            }
+        };
+        
+        handler
+    }
+
     pub(crate) fn trace_root(&self, store: &mut StoreOpaque, gc_roots_list: &mut GcRootsList) {
         if let Some(ref_ty) = self._ty(store).content().as_ref() {
             if !ref_ty.is_vmgcref_type_and_points_to_object() {

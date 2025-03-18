@@ -372,6 +372,47 @@ pub trait InstanceAllocator: InstanceAllocatorImpl {
         &self,
         mut request: InstanceAllocationRequest,
     ) -> Result<InstanceHandle> {
+        println!("allocate module");
+        let module = request.runtime_info.module();
+
+        #[cfg(debug_assertions)]
+        InstanceAllocatorImpl::validate_module_impl(self, module, request.runtime_info.offsets())
+            .expect("module should have already been validated before allocation");
+
+        self.increment_core_instance_count()?;
+
+        let num_defined_memories = module.memory_plans.len() - module.num_imported_memories;
+        let mut memories = PrimaryMap::with_capacity(num_defined_memories);
+
+        let num_defined_tables = module.table_plans.len() - module.num_imported_tables;
+        let mut tables = PrimaryMap::with_capacity(num_defined_tables);
+
+        match (|| {
+            self.allocate_memories(&mut request, &mut memories)?;
+            self.allocate_tables(&mut request, &mut tables)?;
+            Ok(())
+        })() {
+            Ok(_) => Ok(Instance::new(
+                request,
+                memories,
+                tables,
+                &module.memory_plans,
+            )),
+            Err(e) => {
+                self.deallocate_memories(&mut memories);
+                self.deallocate_tables(&mut tables);
+                self.decrement_core_instance_count();
+                Err(e)
+            }
+        }
+    }
+
+
+    unsafe fn allocate_module2(
+        &self,
+        mut request: InstanceAllocationRequest,
+    ) -> Result<InstanceHandle> {
+        println!("allocate module 2");
         let module = request.runtime_info.module();
 
         #[cfg(debug_assertions)]
@@ -490,6 +531,7 @@ pub trait InstanceAllocator: InstanceAllocatorImpl {
         request: &mut InstanceAllocationRequest,
         tables: &mut PrimaryMap<DefinedTableIndex, (TableAllocationIndex, Table)>,
     ) -> Result<()> {
+        println!("allocate_tables");
         let module = request.runtime_info.module();
 
         #[cfg(debug_assertions)]
@@ -719,6 +761,7 @@ fn initialize_memories(instance: &mut Instance, module: &Module) -> Result<()> {
             memory_index: wasmtime_environ::MemoryIndex,
             init: &wasmtime_environ::StaticMemoryInitializer,
         ) -> bool {
+            println!("init: {:?}", init);
             // If this initializer applies to a defined memory but that memory
             // doesn't need initialization, due to something like copy-on-write
             // pre-initializing it via mmap magic, then this initializer can be
@@ -732,11 +775,108 @@ fn initialize_memories(instance: &mut Instance, module: &Module) -> Result<()> {
 
             unsafe {
                 let src = self.instance.wasm_data(init.data.clone());
+                println!("wasm data: {:?}", src);
                 let dst = memory.base.add(usize::try_from(init.offset).unwrap());
                 // FIXME audit whether this is safe in the presence of shared
                 // memory
                 // (https://github.com/bytecodealliance/wasmtime/issues/4203).
-                ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len())
+                // ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len())
+            }
+            true
+        }
+    }
+
+    let ok = module
+        .memory_initialization
+        .init_memory(&mut InitMemoryAtInstantiation {
+            instance,
+            module,
+            const_evaluator: ConstExprEvaluator::default(),
+        });
+    if !ok {
+        return Err(Trap::MemoryOutOfBounds).err2anyhow();
+    }
+
+    Ok(())
+}
+
+
+fn initialize_memories_lib(instance: &mut Instance, module: &Module, sysaddr: u64) -> Result<()> {
+    // Delegates to the `init_memory` method which is sort of a duplicate of
+    // `instance.memory_init_segment` but is used at compile-time in other
+    // contexts so is shared here to have only one method of memory
+    // initialization.
+    //
+    // This call to `init_memory` notably implements all the bells and whistles
+    // so errors only happen if an out-of-bounds segment is found, in which case
+    // a trap is returned.
+
+    struct InitMemoryAtInstantiation<'a> {
+        instance: &'a mut Instance,
+        module: &'a Module,
+        const_evaluator: ConstExprEvaluator,
+    }
+
+    impl InitMemory for InitMemoryAtInstantiation<'_> {
+        fn memory_size_in_bytes(
+            &mut self,
+            memory: wasmtime_environ::MemoryIndex,
+        ) -> Result<u64, SizeOverflow> {
+            let len = self.instance.get_memory(memory).current_length();
+            let len = u64::try_from(len).unwrap();
+            Ok(len)
+        }
+
+        fn eval_offset(
+            &mut self,
+            memory: wasmtime_environ::MemoryIndex,
+            expr: &wasmtime_environ::ConstExpr,
+        ) -> Option<u64> {
+            let mem64 = self.instance.module().memory_plans[memory].memory.memory64;
+            let mut context = ConstEvalContext::new(self.instance, self.module);
+            let val = unsafe { self.const_evaluator.eval(&mut context, expr) }
+                .expect("const expression should be valid");
+            Some(if mem64 {
+                val.get_u64()
+            } else {
+                val.get_u32().into()
+            })
+        }
+
+        fn write(
+            &mut self,
+            memory_index: wasmtime_environ::MemoryIndex,
+            init: &wasmtime_environ::StaticMemoryInitializer,
+        ) -> bool {
+            println!("init: {:?}", init);
+            // If this initializer applies to a defined memory but that memory
+            // doesn't need initialization, due to something like copy-on-write
+            // pre-initializing it via mmap magic, then this initializer can be
+            // skipped entirely.
+            if let Some(memory_index) = self.module.defined_memory_index(memory_index) {
+                if !self.instance.memories[memory_index].1.needs_init() {
+                    return true;
+                }
+            }
+            let memory = self.instance.get_memory(memory_index);
+
+            unsafe {
+                let src = self.instance.wasm_data(init.data.clone());
+                let length = src.len();
+                println!("length: {}", src.len());
+                // println!("wasm data: {:?}", src);
+                let addr = rawposix::safeposix::dispatcher::libgetst(1);
+                let dst = memory.base.add(usize::try_from(init.offset).unwrap());
+                // FIXME audit whether this is safe in the presence of shared
+                // memory
+                // (https://github.com/bytecodealliance/wasmtime/issues/4203).
+
+                // let end = 110960;
+                let end = 30000;
+
+                // ptr::copy_nonoverlapping(src.as_ptr(), (addr + 1312) as *mut u8, end);
+                // ptr::copy_nonoverlapping(src.as_ptr().add(end), (addr + end as u64) as *mut u8, src.len() - end);
+                ptr::copy_nonoverlapping(src.as_ptr(), addr as *mut u8, src.len());
             }
             true
         }
@@ -788,6 +928,29 @@ pub(super) fn initialize_instance(
 
     // Initialize the memories
     initialize_memories(instance, &module)?;
+
+    Ok(())
+}
+
+pub(super) fn initialize_instance_lib(
+    instance: &mut Instance,
+    module: &Module,
+    is_bulk_memory: bool,
+    sysaddr: u64,
+) -> Result<()> {
+    // If bulk memory is not enabled, bounds check the data and element segments before
+    // making any changes. With bulk memory enabled, initializers are processed
+    // in-order and side effects are observed up to the point of an out-of-bounds
+    // initializer, so the early checking is not desired.
+    if !is_bulk_memory {
+        check_init_bounds(instance, module)?;
+    }
+
+    // Initialize the tables
+    initialize_tables(instance, module)?;
+
+    // Initialize the memories
+    initialize_memories_lib(instance, &module, sysaddr)?;
 
     Ok(())
 }

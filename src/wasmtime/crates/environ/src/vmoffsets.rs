@@ -781,6 +781,7 @@ impl<P: PtrSize> VMOffsets<P> {
     /// Return the offset to the `*mut VMMemoryDefinition` at index `index`.
     #[inline]
     pub fn vmctx_vmmemory_pointer(&self, index: DefinedMemoryIndex) -> u32 {
+        // println!("index: {}, num_defined_memories: {} (addr: {:?})", index.as_u32(), self.num_defined_memories, unsafe { &self.num_defined_memories as *const u32 });
         assert!(index.as_u32() < self.num_defined_memories);
         self.vmctx_memories_begin()
             + index.as_u32() * u32::from(self.ptr.size_of_vmmemory_pointer())

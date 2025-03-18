@@ -1392,6 +1392,10 @@ impl<'a, T> StoreContextMut<'a, T> {
         self.0.stack_base = stack_base;
     }
 
+    // pub fn get_wasm_data(&mut self) {
+    //     self.0.inner.default_caller.
+    // }
+
     /// Configures epoch-deadline expiration to yield to the async
     /// caller and the update the deadline.
     ///
@@ -1609,6 +1613,7 @@ impl StoreOpaque {
         handle: InstanceHandle,
         module_id: RegisteredModuleId,
     ) -> InstanceId {
+        println!("add instance");
         self.instances.push(StoreInstance {
             handle: handle.clone(),
             kind: StoreInstanceKind::Real { module_id },
@@ -1622,6 +1627,7 @@ impl StoreOpaque {
     /// else (e.g. host-created memories that are not actually defined in any
     /// Wasm module) and therefore shouldn't show up in things like core dumps.
     pub unsafe fn add_dummy_instance(&mut self, handle: InstanceHandle) -> InstanceId {
+        println!("add_dummy_instance");
         self.instances.push(StoreInstance {
             handle: handle.clone(),
             kind: StoreInstanceKind::Dummy,
@@ -1629,16 +1635,27 @@ impl StoreOpaque {
         InstanceId(self.instances.len() - 1)
     }
 
+    pub unsafe fn add_dummy_instance_test(&mut self, handle: InstanceHandle)  {
+        // self.instances.push(StoreInstance {
+        //     handle: handle.clone(),
+        //     kind: StoreInstanceKind::Dummy,
+        // });
+        // InstanceId(self.instances.len() - 1);
+    }
+
     pub fn instance(&self, id: InstanceId) -> &InstanceHandle {
+        // println!("get instance: {:?}", id);
         &self.instances[id.0].handle
     }
 
     pub fn instance_mut(&mut self, id: InstanceId) -> &mut InstanceHandle {
+        // println!("get instance mut: {:?}", id);
         &mut self.instances[id.0].handle
     }
 
     /// Get all instances (ignoring dummy instances) within this store.
     pub fn all_instances<'a>(&'a mut self) -> impl ExactSizeIterator<Item = Instance> + 'a {
+        println!("all instances");
         let instances = self
             .instances
             .iter()
@@ -1659,6 +1676,7 @@ impl StoreOpaque {
 
     /// Get all memories (host- or Wasm-defined) within this store.
     pub fn all_memories<'a>(&'a mut self) -> impl Iterator<Item = Memory> + 'a {
+        println!("all_memories");
         // NB: Host-created memories have dummy instances. Therefore, we can get
         // all memories in the store by iterating over all instances (including
         // dummy instances) and getting each of their defined memories.

@@ -396,7 +396,7 @@ _IO_default_xsputn (FILE *f, const void *data, size_t n)
 	    }
 	  more -= count;
 	}
-      if (more == 0 || _IO_OVERFLOW (f, (unsigned char) *s++) == EOF)
+      if (more == 0 || _IO_str_overflow (f, (unsigned char) *s++) == EOF)
 	break;
       more--;
     }

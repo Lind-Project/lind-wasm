@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use crate::runtime::vm::{self as runtime};
 use crate::store::{AutoAssertNoGc, StoreData, StoreOpaque, Stored};
-use crate::trampoline::generate_table_export;
+use crate::trampoline::{generate_table_export, generate_table_export_test};
 use crate::{AnyRef, AsContext, AsContextMut, ExternRef, Func, HeapType, Ref, TableType};
 use core::iter;
 use core::ptr::NonNull;
@@ -77,6 +77,11 @@ impl Table {
         Table::_new(store.as_context_mut().0, ty, init)
     }
 
+    /// test
+    pub fn new_test(mut store: impl AsContextMut, ty: TableType, init: Ref) {
+        Table::_new_test(store.as_context_mut().0, ty, init);
+    }
+
     /// Async variant of [`Table::new`]. You must use this variant with
     /// [`Store`](`crate::Store`)s which have a
     /// [`ResourceLimiterAsync`](`crate::ResourceLimiterAsync`).
@@ -105,6 +110,7 @@ impl Table {
     }
 
     fn _new(store: &mut StoreOpaque, ty: TableType, init: Ref) -> Result<Table> {
+        println!("new table");
         let wasmtime_export = generate_table_export(store, &ty)?;
         let init = init.into_table_element(store, ty.element())?;
         unsafe {
@@ -114,6 +120,19 @@ impl Table {
                 .fill(store.gc_store_mut()?, 0, init, ty.minimum())
                 .err2anyhow()?;
             Ok(table)
+        }
+    }
+
+    fn _new_test(store: &mut StoreOpaque, ty: TableType, init: Ref) {
+        generate_table_export_test(store, &ty);
+        // let init = init.into_table_element(store, ty.element())?;
+        unsafe {
+            // Table::from_wasmtime_table_test(wasmtime_export, store);
+            // let wasmtime_table = table.wasmtime_table(store, iter::empty());
+            // (*wasmtime_table)
+            //     .fill(store.gc_store_mut()?, 0, init, ty.minimum())
+            //     .err2anyhow()?;
+            // Ok(table);
         }
     }
 
@@ -137,6 +156,7 @@ impl Table {
         store: &mut StoreOpaque,
         lazy_init_range: impl Iterator<Item = u32>,
     ) -> *mut runtime::Table {
+        println!("new wasmtime_table");
         unsafe {
             let export = &store[self.0];
             crate::runtime::vm::Instance::from_vmctx(export.vmctx, |handle| {
@@ -398,6 +418,7 @@ impl Table {
         mut wasmtime_export: crate::runtime::vm::ExportTable,
         store: &mut StoreOpaque,
     ) -> Table {
+        println!("from_wasmtime_table");
         // Ensure that the table's type is engine-level canonicalized.
         wasmtime_export
             .table
@@ -410,6 +431,25 @@ impl Table {
             });
 
         Table(store.store_data_mut().insert(wasmtime_export))
+    }
+
+    pub(crate) unsafe fn from_wasmtime_table_test(
+        mut wasmtime_export: crate::runtime::vm::ExportTable,
+        store: &mut StoreOpaque,
+    ) {
+        println!("from_wasmtime_table_test");
+        // Ensure that the table's type is engine-level canonicalized.
+        // wasmtime_export
+        //     .table
+        //     .table
+        //     .wasm_ty
+        //     .canonicalize_for_runtime_usage(&mut |module_index| {
+        //         crate::runtime::vm::Instance::from_vmctx(wasmtime_export.vmctx, |instance| {
+        //             instance.engine_type_index(module_index)
+        //         })
+        //     });
+
+        // Table(store.store_data_mut().insert(wasmtime_export));
     }
 
     pub(crate) fn wasmtime_ty<'a>(&self, data: &'a StoreData) -> &'a wasmtime_environ::Table {

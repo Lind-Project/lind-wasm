@@ -90,8 +90,8 @@
 #endif
 
 // don't put vtables to relro section - Dennis
-// const struct _IO_jump_t __io_vtables[] attribute_relro =
-const struct _IO_jump_t __io_vtables[] =
+const struct _IO_jump_t __io_vtables[] attribute_relro =
+// const struct _IO_jump_t __io_vtables[] =
 {
   /* _IO_str_jumps  */
   [IO_STR_JUMPS] =
@@ -120,14 +120,14 @@ const struct _IO_jump_t __io_vtables[] =
   /* _IO_wstr_jumps  */
   [IO_WSTR_JUMPS] = {
     JUMP_INIT_DUMMY,
-    JUMP_INIT (finish, _IO_wstr_finish),
-    JUMP_INIT (overflow, (_IO_overflow_t) _IO_wstr_overflow),
-    JUMP_INIT (underflow, (_IO_underflow_t) _IO_wstr_underflow),
+    JUMP_INIT (finish, NULL),
+    JUMP_INIT (overflow, (_IO_overflow_t) NULL),
+    JUMP_INIT (underflow, (_IO_underflow_t) NULL),
     JUMP_INIT (uflow, (_IO_underflow_t) _IO_wdefault_uflow),
-    JUMP_INIT (pbackfail, (_IO_pbackfail_t) _IO_wstr_pbackfail),
+    JUMP_INIT (pbackfail, (_IO_pbackfail_t) NULL),
     JUMP_INIT (xsputn, _IO_wdefault_xsputn),
     JUMP_INIT (xsgetn, _IO_wdefault_xsgetn),
-    JUMP_INIT (seekoff, _IO_wstr_seekoff),
+    JUMP_INIT (seekoff, NULL),
     JUMP_INIT (seekpos, _IO_default_seekpos),
     JUMP_INIT (setbuf, _IO_default_setbuf),
     JUMP_INIT (sync, _IO_default_sync),
@@ -223,7 +223,7 @@ const struct _IO_jump_t __io_vtables[] =
     JUMP_INIT (seekpos, _IO_default_seekpos),
     JUMP_INIT (setbuf, _IO_new_file_setbuf),
     JUMP_INIT (sync, (_IO_sync_t) _IO_wfile_sync),
-    JUMP_INIT (doallocate, _IO_wfile_doallocate),
+    JUMP_INIT (doallocate, NULL),
     JUMP_INIT (read, _IO_file_read),
     JUMP_INIT (write, _IO_new_file_write),
     JUMP_INIT (seek, _IO_file_seek),
@@ -246,7 +246,7 @@ const struct _IO_jump_t __io_vtables[] =
     JUMP_INIT (seekpos, _IO_default_seekpos),
     JUMP_INIT (setbuf, _IO_file_setbuf_mmap),
     JUMP_INIT (sync, (_IO_sync_t) _IO_wfile_sync),
-    JUMP_INIT (doallocate, _IO_wfile_doallocate),
+    JUMP_INIT (doallocate, NULL),
     JUMP_INIT (read, _IO_file_read),
     JUMP_INIT (write, _IO_new_file_write),
     JUMP_INIT (seek, _IO_file_seek),
@@ -269,7 +269,7 @@ const struct _IO_jump_t __io_vtables[] =
     JUMP_INIT (seekpos, _IO_default_seekpos),
     JUMP_INIT (setbuf, _IO_file_setbuf_mmap),
     JUMP_INIT (sync, (_IO_sync_t) _IO_wfile_sync),
-    JUMP_INIT (doallocate, _IO_wfile_doallocate),
+    JUMP_INIT (doallocate, NULL),
     JUMP_INIT (read, _IO_file_read),
     JUMP_INIT (write, _IO_new_file_write),
     JUMP_INIT (seek, _IO_file_seek),
@@ -288,15 +288,15 @@ const struct _IO_jump_t __io_vtables[] =
     JUMP_INIT (pbackfail, _IO_default_pbackfail),
     JUMP_INIT (xsputn, _IO_file_xsputn),
     JUMP_INIT (xsgetn, _IO_default_xsgetn),
-    JUMP_INIT (seekoff, _IO_cookie_seekoff),
+    JUMP_INIT (seekoff, NULL),
     JUMP_INIT (seekpos, _IO_default_seekpos),
     JUMP_INIT (setbuf, _IO_file_setbuf),
     JUMP_INIT (sync, _IO_file_sync),
     JUMP_INIT (doallocate, _IO_file_doallocate),
-    JUMP_INIT (read, _IO_cookie_read),
-    JUMP_INIT (write, _IO_cookie_write),
-    JUMP_INIT (seek, _IO_cookie_seek),
-    JUMP_INIT (close, _IO_cookie_close),
+    JUMP_INIT (read, NULL),
+    JUMP_INIT (write, NULL),
+    JUMP_INIT (seek, NULL),
+    JUMP_INIT (close, NULL),
     JUMP_INIT (stat, _IO_default_stat),
     JUMP_INIT (showmanyc, _IO_default_showmanyc),
     JUMP_INIT (imbue, _IO_default_imbue),
@@ -319,7 +319,7 @@ const struct _IO_jump_t __io_vtables[] =
     JUMP_INIT (read, _IO_file_read),
     JUMP_INIT (write, _IO_new_file_write),
     JUMP_INIT (seek, _IO_file_seek),
-    JUMP_INIT (close, _IO_new_proc_close),
+    JUMP_INIT (close, NULL),
     JUMP_INIT (stat, _IO_file_stat),
     JUMP_INIT (showmanyc, _IO_default_showmanyc),
     JUMP_INIT (imbue, _IO_default_imbue)
@@ -327,7 +327,7 @@ const struct _IO_jump_t __io_vtables[] =
   /* _IO_mem_jumps  */
   [IO_MEM_JUMPS] = {
     JUMP_INIT_DUMMY,
-    JUMP_INIT (finish, _IO_mem_finish),
+    JUMP_INIT (finish, NULL),
     JUMP_INIT (overflow, _IO_str_overflow),
     JUMP_INIT (underflow, _IO_str_underflow),
     JUMP_INIT (uflow, _IO_default_uflow),
@@ -337,7 +337,7 @@ const struct _IO_jump_t __io_vtables[] =
     JUMP_INIT (seekoff, _IO_str_seekoff),
     JUMP_INIT (seekpos, _IO_default_seekpos),
     JUMP_INIT (setbuf, _IO_default_setbuf),
-    JUMP_INIT (sync, _IO_mem_sync),
+    JUMP_INIT (sync, NULL),
     JUMP_INIT (doallocate, _IO_default_doallocate),
     JUMP_INIT (read, _IO_default_read),
     JUMP_INIT (write, _IO_default_write),
@@ -350,17 +350,17 @@ const struct _IO_jump_t __io_vtables[] =
   /* _IO_wmem_jumps  */
   [IO_WMEM_JUMPS] = {
     JUMP_INIT_DUMMY,
-    JUMP_INIT (finish, _IO_wmem_finish),
-    JUMP_INIT (overflow, (_IO_overflow_t) _IO_wstr_overflow),
-    JUMP_INIT (underflow, (_IO_underflow_t) _IO_wstr_underflow),
+    JUMP_INIT (finish, NULL),
+    JUMP_INIT (overflow, (_IO_overflow_t) NULL),
+    JUMP_INIT (underflow, (_IO_underflow_t) NULL),
     JUMP_INIT (uflow, (_IO_underflow_t) _IO_wdefault_uflow),
-    JUMP_INIT (pbackfail, (_IO_pbackfail_t) _IO_wstr_pbackfail),
+    JUMP_INIT (pbackfail, (_IO_pbackfail_t) NULL),
     JUMP_INIT (xsputn, _IO_wdefault_xsputn),
     JUMP_INIT (xsgetn, _IO_wdefault_xsgetn),
-    JUMP_INIT (seekoff, _IO_wstr_seekoff),
+    JUMP_INIT (seekoff, NULL),
     JUMP_INIT (seekpos, _IO_default_seekpos),
     JUMP_INIT (setbuf, _IO_default_setbuf),
-    JUMP_INIT (sync, _IO_wmem_sync),
+    JUMP_INIT (sync, NULL),
     JUMP_INIT (doallocate, _IO_wdefault_doallocate),
     JUMP_INIT (read, _IO_default_read),
     JUMP_INIT (write, _IO_default_write),

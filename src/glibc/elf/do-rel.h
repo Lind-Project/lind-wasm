@@ -109,9 +109,9 @@ elf_dynamic_do_Rel (struct link_map *map, struct r_scope_elem *scope[],
 	 _dl_rtld_map, which is incompatible with a weak decl in the same
 	 file.  */
 # ifndef SHARED
-      weak_extern (GL(dl_rtld_map));
+    //   weak_extern (GL(dl_rtld_map));
 # endif
-      if (map != &GL(dl_rtld_map)) /* Already done in rtld itself.  */
+      if (false) /* Already done in rtld itself.  */
 # if !defined DO_RELA || defined ELF_MACHINE_REL_RELATIVE
 	/* Rela platforms get the offset from r_addend and this must
 	   be copied in the relocation address.  Therefore we can skip

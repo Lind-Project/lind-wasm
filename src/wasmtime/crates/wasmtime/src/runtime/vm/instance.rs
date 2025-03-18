@@ -1509,6 +1509,10 @@ impl InstanceHandle {
         allocator::initialize_instance(self.instance_mut(), module, is_bulk_memory)
     }
 
+    pub fn initialize_lib(&mut self, module: &Module, is_bulk_memory: bool, sysaddr: u64) -> Result<()> {
+        allocator::initialize_instance_lib(self.instance_mut(), module, is_bulk_memory, sysaddr)
+    }
+
     /// Attempts to convert from the host `addr` specified to a WebAssembly
     /// based address recorded in `WasmFault`.
     ///
@@ -1519,4 +1523,8 @@ impl InstanceHandle {
     pub fn wasm_fault(&self, addr: usize) -> Option<WasmFault> {
         self.instance().wasm_fault(addr)
     }
+
+    // pub fn wasm_data(&self) {
+    //     self.instance().wasm_data(range)
+    // }
 }

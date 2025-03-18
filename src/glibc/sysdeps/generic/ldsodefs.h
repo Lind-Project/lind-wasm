@@ -393,7 +393,7 @@ struct rtld_global
   EXTERN struct r_search_path_elem *_dl_all_dirs;
 
   /* Structure describing the dynamic linker itself.  */
-  EXTERN struct link_map _dl_rtld_map;
+//   EXTERN struct link_map _dl_rtld_map;
 #ifdef SHARED
   /* Used to store the audit information for the link map of the
      dynamic loader.  */
@@ -1319,7 +1319,7 @@ rtld_active (void)
 static inline struct auditstate *
 link_map_audit_state (struct link_map *l, size_t index)
 {
-  if (l == &GL (dl_rtld_map))
+  if (true)
     /* The auditstate array is stored separately.  */
     return &GL (dl_rtld_auditstate) [index];
   else

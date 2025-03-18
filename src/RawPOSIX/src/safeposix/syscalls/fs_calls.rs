@@ -575,7 +575,7 @@ impl Cage {
 
         let vfd = wrappedvfd.unwrap();
         let ret = unsafe {
-            libc::write(vfd.underfd as i32, buf as *const c_void, count) as i32
+            libc::write(vfd.underfd as c_int, buf as *const c_void, count) as i32
         };
         if ret < 0 {
             let errno = get_errno();

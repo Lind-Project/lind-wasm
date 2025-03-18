@@ -11,6 +11,7 @@ use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
 use rawposix::constants::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
+use wasmtime_environ::EntityType;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
@@ -20,7 +21,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
-use wasmtime::{AsContext, AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType};
+use wasmtime::{AsContext, AsContextMut, Engine, Func, InstantiateType, Module, RefType, Store, StoreLimits, Table, TableType, Val, ValType};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
@@ -111,6 +112,7 @@ impl RunCommand {
                 bail!("the coredump-on-trap path does not support patterns yet.")
             }
         }
+        println!("before linker");
 
         let mut linker = match &main {
             RunTarget::Core(_) => CliLinker::Core(wasmtime::Linker::new(&engine)),
@@ -134,6 +136,40 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
+        println!("before populate_with_wasi");
+
+        // Initialize Lind here
+        rawposix::safeposix::dispatcher::lindrustinit(0);
+        // new cage is created
+        lind_manager.increment();
+
+
+        if let CliLinker::Core(linker) = &mut linker {
+            println!("define a table");
+            // let mut main_module_table_size = None;
+            // match &main {
+            //     RunTarget::Core(module) => {
+            //         for import in module.imports() {
+            //             if let EntityType::Table(table) = import.ty() {
+            //                 main_module_table_size = Some(table.minimum);
+            //             }
+            //         }
+            //     }
+            //     #[cfg(feature = "component-model")]
+            //     RunTarget::Component(_) => {
+            //         panic!("component model not supported")
+            //     }
+            // };
+            
+
+            let ty = TableType::new(RefType::FUNCREF, 262, None);
+            let table = Table::new(&mut store, ty, wasmtime::Ref::Func(None));
+            linker.define(&mut store, "env", "__indirect_function_table", table.unwrap());
+            // for (module_name, item_name, item) in linker.iter(&mut store) {
+            //     println!("{} {}: {:?}", module_name, item_name, item);
+            // }
+        }
+
         self.populate_with_wasi(&mut linker, &mut store, &main, lind_manager.clone(), None, None)?;
 
         store.data_mut().limits = self.run.store_limits();
@@ -145,6 +181,7 @@ impl RunCommand {
             store.set_fuel(fuel)?;
         }
 
+        println!("preload");
         // Load the preload wasm modules.
         let mut modules = Vec::new();
         if let RunTarget::Core(m) = &main {
@@ -179,11 +216,6 @@ impl RunCommand {
                 }
             }
         }
-
-        // Initialize Lind here
-        rawposix::safeposix::dispatcher::lindrustinit(0);
-        // new cage is created
-        lind_manager.increment();
 
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
@@ -550,6 +582,7 @@ impl RunCommand {
 
         let result = match linker {
             CliLinker::Core(linker) => {
+                println!("main process init");
                 let module = module.unwrap_core();
                 let instance = linker.instantiate_with_lind(&mut *store, &module, InstantiateType::InstantiateFirst(pid)).context(format!(
                     "failed to instantiate {:?}",
@@ -581,6 +614,9 @@ impl RunCommand {
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
 
+                // let got_base = instance.get_export(store.as_context_mut(), "GOT_memory_base").unwrap();
+
+                println!("start guest");
                 match func {
                     Some(func) => self.invoke_func(store, func),
                     None => Ok(vec![]),
@@ -919,17 +955,17 @@ impl RunCommand {
 
         // must create wasi_threads context here, because pre_instance requires all
         // imports are fully imported/linked to be created
-        if self.run.common.wasi.threads == Some(true) {
-            let linker = match linker {
-                CliLinker::Core(linker) => linker,
-                _ => bail!("wasi-threads does not support components yet"),
-            };
-            let module = module.unwrap_core();
-            store.data_mut().wasi_threads = Some(Arc::new(WasiThreadsCtx::new(
-                module.clone(),
-                Arc::new(linker.clone()),
-            )?));
-        }
+        // if self.run.common.wasi.threads == Some(true) {
+        //     let linker = match linker {
+        //         CliLinker::Core(linker) => linker,
+        //         _ => bail!("wasi-threads does not support components yet"),
+        //     };
+        //     let module = module.unwrap_core();
+        //     store.data_mut().wasi_threads = Some(Arc::new(WasiThreadsCtx::new(
+        //         module.clone(),
+        //         Arc::new(linker.clone()),
+        //     )?));
+        // }
 
         if self.run.common.wasi.http == Some(true) {
             #[cfg(not(all(feature = "wasi-http", feature = "component-model")))]

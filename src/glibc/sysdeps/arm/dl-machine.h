@@ -361,7 +361,7 @@ elf_machine_rel (struct link_map *map, struct r_scope_elem *scope[],
 	      rtld.c contains the common defn for _dl_rtld_map, which
 	      is incompatible with a weak decl in the same file.  */
 #  ifndef SHARED
-	    weak_extern (_dl_rtld_map);
+	    // weak_extern (_dl_rtld_map);
 #  endif
 	    if (map == &GL(dl_rtld_map))
 	      /* Undo the relocation done here during bootstrapping.

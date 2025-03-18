@@ -27,6 +27,12 @@ pub struct Zombie {
     pub exit_code: i32
 }
 
+// #[derive(Debug, Clone, Copy)]
+// pub struct LibInfo {
+//     pub cageid: u64,
+//     pub exit_code: i32
+// }
+
 #[derive(Debug)]
 pub struct Cage {
     // Identifying ID number for this cage
@@ -85,6 +91,7 @@ pub struct Cage {
     pub zombies: interface::RustLock<Vec<Zombie>>,
     pub child_num: interface::RustAtomicU64,
     pub vmmap: interface::RustLock<Vmmap>,
+    pub lib_st: interface::RustAtomicU64,
 }
 
 impl Cage {

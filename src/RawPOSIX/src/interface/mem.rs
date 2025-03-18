@@ -393,12 +393,27 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
 
 // set the wasm linear memory base address to vmmap
 pub fn init_vmmap_helper(cageid: u64, base_address: usize, program_break: Option<u32>) {
+    println!("init_vmmap_helper: base_address: {} for cage {}", base_address, cageid);
     let cage = cagetable_getref(cageid);
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
     if program_break.is_some() {
         vmmap.set_program_break(program_break.unwrap());
     }
+}
+
+// set the wasm linear memory base address to vmmap
+pub fn init_vmmap_helper_early(cageid: u64, base_address: usize) {
+    println!("init_vmmap_helper_early: base_address: {}", base_address);
+    let cage = cagetable_getref(cageid);
+    let mut vmmap = cage.vmmap.write();
+    vmmap.set_base_address(base_address);
+}
+
+pub fn init_vmmap_program_break(cageid: u64, program_break: u32) {
+    let cage = cagetable_getref(cageid);
+    let mut vmmap = cage.vmmap.write();
+    vmmap.set_program_break(program_break);
 }
 
 // clone the cage memory. Invoked by wasmtime after cage is forked

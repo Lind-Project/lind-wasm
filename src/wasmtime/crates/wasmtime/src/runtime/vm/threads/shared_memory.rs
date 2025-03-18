@@ -81,6 +81,10 @@ impl SharedMemory {
         &self.0.def.0
     }
 
+    pub fn vmmemory_base(&self) -> u64 {
+        self.0.def.0.base as u64
+    }
+
     /// Same as `RuntimeLinearMemory::grow`, except with `&self`.
     pub fn grow(
         &self,

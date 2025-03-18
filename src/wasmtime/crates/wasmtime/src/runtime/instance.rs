@@ -1,5 +1,5 @@
 use crate::linker::{Definition, DefinitionType};
-use crate::prelude::*;
+use crate::{prelude::*, AsContext};
 use crate::runtime::vm::{
     Imports, InstanceAllocationRequest, ModuleRuntimeInfo, StorePtr, VMFuncRef, VMFunctionImport,
     VMGlobalImport, VMMemoryImport, VMOpaqueContext, VMTableImport,
@@ -221,6 +221,112 @@ impl Instance {
         if let Some(start) = start {
             instance.start_raw(store, start)?;
         }
+
+        Ok(instance)
+    }
+
+    pub(crate) unsafe fn new_started_impl_lib<T>(
+        store: &mut StoreContextMut<'_, T>,
+        module: &Module,
+        imports: Imports<'_>,
+        memory_base: *mut u32,
+    ) -> Result<Instance> {
+        let plans = module.compiled_module().module().memory_plans.clone();
+        let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
+        // in wasmtime, one page is 65536 bytes, so we need to convert to pagesize in rawposix
+        let minimal_pages = (plan.memory.minimum * 0x10) * 2;
+        println!("minimal pages: {}", minimal_pages);
+
+        // store.as_context_mut()
+
+        let mut addr = lind_syscall_api(
+            1,
+            MMAP_SYSCALL as u32,
+            0,
+            4096000, // the first memory region starts from 0
+            minimal_pages << PAGESHIFT, // size of first memory region
+            (PROT_READ | PROT_WRITE) as u64,
+            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
+            // we need to pass -1 here, but since lind_syscall_api only accepts u64
+            // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
+            (0 - 1) as u64,
+            0,
+        ) as u32;
+
+        // lind_syscall_api(
+        //     1,
+        //     MMAP_SYSCALL as u32,
+        //     0,
+        //     40960000 - (minimal_pages << PAGESHIFT), // the first memory region starts from 0
+        //     minimal_pages << PAGESHIFT, // size of first memory region
+        //     (PROT_READ | PROT_WRITE) as u64,
+        //     (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
+        //     // we need to pass -1 here, but since lind_syscall_api only accepts u64
+        //     // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
+        //     (0 - 1) as u64,
+        //     0,
+        // ) as u32;
+
+        // addr += 4096;
+
+        // let real_addr = (base + addr as u64);
+        unsafe {
+            *memory_base = (addr);
+        }
+
+        let (instance, start, base) = Instance::new_raw_lib(store.0, module, imports, addr)?;
+
+        // let data: [u8; 8] = [97, 98, 99, 0, 0, 0, 0, 0];
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(data.as_ptr(), (base + addr as u64) as *mut u8, 8);
+        // }
+        if let Some(start) = start {
+            println!("start raw");
+            instance.start_raw(store, start)?;
+        }
+        unsafe {
+            *memory_base = (addr);
+        }
+        
+        let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+        println!("start reloc func");
+        let res = reloc.call(store.as_context_mut(), ());
+        println!("reloc result: {:?}", res);
+
+        println!("reloc done");
+
+        unsafe {
+            let ptr = (base + addr as u64 + 26727) as *const u8;
+            for i in 0..100 {
+                let byte = std::ptr::read(ptr.add(i as usize));
+                if byte.is_ascii_alphanumeric() {
+                    print!("{} ", char::from(byte));
+                } else {
+                    print!("{} ", byte);
+                }
+            }
+            println!();
+        }
+        // unsafe {
+        //     *memory_base = (addr - 1312);
+        // }
+
+        // let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
+        // let data_length = stack_low - 1024;
+
+        // unsafe {
+        //     let ptr = (base + 1024) as *const u8;
+        //     for i in 0..data_length {
+        //         let byte = std::ptr::read(ptr.add(i as usize));
+        //         print!("{:02X} ", byte);
+        //     }
+        //     println!();
+        // }
+
+        // for (index, global) in instance.all_globals(store.as_context_mut()) {
+        //     println!("global name: {}", global);
+        // }
+
         Ok(instance)
     }
 
@@ -230,10 +336,12 @@ impl Instance {
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
     ) -> Result<Instance> {
+        println!("new_started_impl_with_lind");
         let (instance, start) = Instance::new_raw(store.0, module, imports)?;
         // retrieve the initial memory size
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
+        println!("plan: {:?}", plan);
         // in wasmtime, one page is 65536 bytes, so we need to convert to pagesize in rawposix
         let minimal_pages = plan.memory.minimum * 0x10;
 
@@ -246,10 +354,11 @@ impl Instance {
                 // if this is the first wasm instance, we need to
                 // 1. set memory base address
                 // 2. manually call mmap_syscall to set up the first memory region
-                let handle = store.0.instance(InstanceId::from_index(0));
+                let handle = store.0.instance(InstanceId::from_index(1));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let memory_base = defined_memory.base as usize;
-                rawposix::interface::init_vmmap_helper(pid, memory_base, Some(minimal_pages as u32));
+                // rawposix::interface::init_vmmap_helper(pid, memory_base, Some(minimal_pages as u32));
+                rawposix::interface::init_vmmap_program_break(pid, minimal_pages as u32);
 
                 lind_syscall_api(
                     pid,
@@ -264,6 +373,32 @@ impl Instance {
                     (0 - 1) as u64,
                     0,
                 );
+
+                // lind_syscall_api(
+                //     pid,
+                //     MMAP_SYSCALL as u32,
+                //     0,
+                //     4096000, // the first memory region starts from 0
+                //     1040, // size of first memory region
+                //     (PROT_READ | PROT_WRITE) as u64,
+                //     (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
+                //     // we need to pass -1 here, but since lind_syscall_api only accepts u64
+                //     // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
+                //     (0 - 1) as u64,
+                //     0,
+                // );
+                // let data: [u8; 16] = [0x61, 0x62, 0x63, 0, 0, 0x4, 0, 0, 0x2, 0, 0, 0, 0, 0, 0, 0];
+                // unsafe {
+                //     std::ptr::copy_nonoverlapping(data.as_ptr() as *const u8, (memory_base + 4096000 + 1024) as *mut u8, 16);
+                // }
+                // unsafe {
+                //     let ptr = (memory_base + 4096000 + 1024) as *const u8;
+                //     for i in 0..16 {
+                //         let byte = std::ptr::read(ptr.add(i as usize));
+                //         print!("{:02X} ", byte);
+                //     }
+                //     println!();
+                // }
             },
             // InstantiateChild: this is the child wasm instance forked by parent
             InstantiateType::InstantiateChild { parent_pid, child_pid } => {
@@ -424,6 +559,117 @@ impl Instance {
         )?;
 
         Ok((instance, compiled_module.module().start_func))
+    }
+
+    unsafe fn new_raw_lib(
+        store: &mut StoreOpaque,
+        module: &Module,
+        imports: Imports<'_>,
+        addr: u32,
+    ) -> Result<(Instance, Option<FuncIndex>, u64)> {
+        // println!("new_raw_lib");
+        if !Engine::same(store.engine(), module.engine()) {
+            bail!("cross-`Engine` instantiation is not currently supported");
+        }
+        store.bump_resource_counts(module)?;
+
+        // Allocate the GC heap, if necessary.
+        let _ = store.gc_store_mut()?;
+
+        let compiled_module = module.compiled_module();
+
+        // Register the module just before instantiation to ensure we keep the module
+        // properly referenced while in use by the store.
+        let module_id = store.modules_mut().register_module(module);
+        store.fill_func_refs();
+
+        // The first thing we do is issue an instance allocation request
+        // to the instance allocator. This, on success, will give us an
+        // instance handle.
+        //
+        // Note that the `host_state` here is a pointer back to the
+        // `Instance` we'll be returning from this function. This is a
+        // circular reference so we can't construct it before we construct
+        // this instance, so we determine what the ID is and then assert
+        // it's the same later when we do actually insert it.
+        let instance_to_be = store.store_data().next_id::<InstanceData>();
+
+        let mut instance_handle =
+            store
+                .engine()
+                .allocator()
+                .allocate_module(InstanceAllocationRequest {
+                    runtime_info: &ModuleRuntimeInfo::Module(module.clone()),
+                    imports,
+                    host_state: Box::new(Instance(instance_to_be)),
+                    store: StorePtr::new(store.traitobj()),
+                    wmemcheck: store.engine().config().wmemcheck,
+                    pkey: store.get_pkey(),
+                })?;
+
+        // The instance still has lots of setup, for example
+        // data/elements/start/etc. This can all fail, but even on failure
+        // the instance may persist some state via previous successful
+        // initialization. For this reason once we have an instance handle
+        // we immediately insert it into the store to keep it alive.
+        //
+        // Note that we `clone` the instance handle just to make easier
+        // working the borrow checker here easier. Technically the `&mut
+        // instance` has somewhat of a borrow on `store` (which
+        // conflicts with the borrow on `store.engine`) but this doesn't
+        // matter in practice since initialization isn't even running any
+        // code here anyway.
+        let id = store.add_instance(instance_handle.clone(), module_id);
+
+        // Additionally, before we start doing fallible instantiation, we
+        // do one more step which is to insert an `InstanceData`
+        // corresponding to this instance. This `InstanceData` can be used
+        // via `Caller::get_export` if our instance's state "leaks" into
+        // other instances, even if we don't return successfully from this
+        // function.
+        //
+        // We don't actually load all exports from the instance at this
+        // time, instead preferring to lazily load them as they're demanded.
+        // For module/instance exports, though, those aren't actually
+        // stored in the instance handle so we need to immediately handle
+        // those here.
+        let instance = {
+            let exports = vec![None; compiled_module.module().exports.len()];
+            let data = InstanceData { id, exports };
+            Instance::from_wasmtime(data, store)
+        };
+
+        // double-check our guess of what the new instance's ID would be
+        // was actually correct.
+        assert_eq!(instance.0, instance_to_be);
+
+        let mem = instance_handle.get_memory(MemoryIndex::from_u32(0));
+        println!("memory base: {:?}", mem.base);
+        let sys_addr = mem.base as u64 + addr as u64;
+
+        rawposix::safeposix::dispatcher::libsetst(1, sys_addr);
+
+        // Now that we've recorded all information we need to about this
+        // instance within a `Store` we can start performing fallible
+        // initialization. Note that we still defer the `start` function to
+        // later since that may need to run asynchronously.
+        //
+        // If this returns an error (or if the start function traps) then
+        // any other initialization which may have succeeded which placed
+        // items from this instance into other instances should be ok when
+        // those items are loaded and run we'll have all the metadata to
+        // look at them.
+        instance_handle.initialize_lib(
+            compiled_module.module(),
+            store
+                .engine()
+                .config()
+                .features
+                .contains(WasmFeatures::BULK_MEMORY),
+                sys_addr,
+        )?;
+
+        Ok((instance, compiled_module.module().start_func, mem.base as u64))
     }
 
     pub(crate) fn from_wasmtime(handle: InstanceData, store: &mut StoreOpaque) -> Instance {
@@ -806,6 +1052,7 @@ impl OwnedImports {
     }
 
     fn push(&mut self, item: &Extern, store: &mut StoreOpaque, module: &Module) {
+        // println!("push: {:?}", item);
         match item {
             Extern::Func(i) => {
                 self.functions.push(i.vmimport(store, module));
@@ -823,6 +1070,7 @@ impl OwnedImports {
                 self.memories.push(i.vmimport(store));
             }
         }
+        // println!("done push");
     }
 
     /// Note that this is unsafe as the validity of `item` is not verified and
@@ -999,7 +1247,8 @@ impl<T> InstancePre<T> {
         unsafe { Instance::new_started(&mut store, &self.module, imports.as_ref()) }
     }
 
-    pub fn instantiate_with_lind(&self, mut store: impl AsContextMut<Data = T>, instantiate_type: InstantiateType) -> Result<Instance> {
+    pub fn instantiate_lib(&self, mut store: impl AsContextMut<Data = T>, memory_base: *mut u32) -> Result<Instance> {
+        println!("instantiate_lib");
         let mut store = store.as_context_mut();
         let imports = pre_instantiate_raw(
             &mut store.0,
@@ -1012,6 +1261,24 @@ impl<T> InstancePre<T> {
         // This unsafety should be handled by the type-checking performed by the
         // constructor of `InstancePre` to assert that all the imports we're passing
         // in match the module we're instantiating.
+        unsafe { Instance::new_started_impl_lib(&mut store, &self.module, imports.as_ref(), memory_base) }
+    }
+
+    pub fn instantiate_with_lind(&self, mut store: impl AsContextMut<Data = T>, instantiate_type: InstantiateType) -> Result<Instance> {
+        println!("instantiate_with_lind 2");
+        let mut store = store.as_context_mut();
+        let imports = pre_instantiate_raw(
+            &mut store.0,
+            &self.module,
+            &self.items,
+            self.host_funcs,
+            &self.func_refs,
+        )?;
+
+        // This unsafety should be handled by the type-checking performed by the
+        // constructor of `InstancePre` to assert that all the imports we're passing
+        // in match the module we're instantiating.
+        println!("before new_started_impl_with_lind");
         unsafe { Instance::new_started_impl_with_lind(&mut store, &self.module, imports.as_ref(), instantiate_type) }
     }
 
@@ -1062,6 +1329,7 @@ fn pre_instantiate_raw(
     host_funcs: usize,
     func_refs: &Arc<[VMFuncRef]>,
 ) -> Result<OwnedImports> {
+    println!("in pre_instantiate_raw");
     if host_funcs > 0 {
         // Any linker-defined function of the `Definition::HostFunc` variant
         // will insert a function into the store automatically as part of
@@ -1077,9 +1345,11 @@ fn pre_instantiate_raw(
         store.push_instance_pre_func_refs(func_refs.clone());
     }
 
+    // println!("in pre_instantiate_raw 2");
     let mut func_refs = func_refs.iter().map(|f| NonNull::from(f));
     let mut imports = OwnedImports::new(module);
     for import in items.iter() {
+        // println!("import: {:?}", import.);
         if !import.comes_from_same_store(store) {
             bail!("cross-`Store` instantiation is not currently supported");
         }
@@ -1088,8 +1358,12 @@ fn pre_instantiate_raw(
         // `T` of the store. Additionally the rooting necessary has happened
         // above.
         let item = match import {
-            Definition::Extern(e, _) => e.clone(),
+            Definition::Extern(e, _) => {
+                // println!("extern: {:?}", e);
+                e.clone()
+            },
             Definition::HostFunc(func) => unsafe {
+                // println!("hosfunc");
                 func.to_func_store_rooted(
                     store,
                     if func.func_ref().wasm_call.is_none() {
@@ -1104,6 +1378,7 @@ fn pre_instantiate_raw(
         imports.push(&item, store, module);
     }
 
+    // println!("exit pre_instantiate_raw");
     Ok(imports)
 }
 

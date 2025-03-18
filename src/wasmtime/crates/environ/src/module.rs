@@ -101,6 +101,11 @@ impl MemoryPlan {
             },
         }
     }
+
+    /// Set memory type to be shared memory
+    pub fn set_memory_shared(&mut self) {
+        self.memory.shared = true;
+    }
 }
 
 /// A WebAssembly linear memory initializer.
@@ -290,6 +295,8 @@ impl MemoryInitialization {
         return true;
     }
 }
+
+
 
 /// The various callbacks provided here are used to drive the smaller bits of
 /// memory initialization.
@@ -502,6 +509,29 @@ pub struct Module {
 
     /// WebAssembly global initializers for locally-defined globals.
     pub global_initializers: PrimaryMap<DefinedGlobalIndex, ConstExpr>,
+
+    /// dylink memory information
+    pub dylink_mem_info: Option<DylinkMemInfo>
+}
+
+/// dylink memory information
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DylinkMemInfo {
+    /// Size of the memory area the loader should reserve for the module, which
+    /// will begin at `env.__memory_base`.
+    pub memory_size: u32,
+
+    /// The required alignment of the memory area, in bytes, encoded as a power
+    /// of 2.
+    pub memory_alignment: u32,
+
+    /// Size of the table area the loader should reserve for the module, which
+    /// will begin at `env.__table_base`.
+    pub table_size: u32,
+
+    /// The required alignment of the table area, in elements, encoded as a
+    /// power of 2.
+    pub table_alignment: u32,
 }
 
 /// Initialization routines for creating an instance, encompassing imports,

@@ -156,6 +156,8 @@ pub fn add_to_linker<T: Clone + Send + 'static>(
         if let Some(m) = import.ty().memory() {
             if m.is_shared() {
                 let mem = SharedMemory::new(module.engine(), m.clone())?;
+                let memory_base = mem.get_memory_base();
+                rawposix::interface::init_vmmap_helper_early(1, memory_base as usize);
                 linker.define(store, import.module(), import.name(), mem.clone())?;
             } else {
                 return Err(anyhow!(

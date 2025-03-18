@@ -1,7 +1,7 @@
 use crate::func::HostFunc;
 use crate::instance::InstancePre;
 use crate::store::StoreOpaque;
-use crate::{prelude::*, IntoFunc};
+use crate::{prelude::*, Global, GlobalType, IntoFunc};
 use crate::{
     AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, ImportType,
     Instance, Module, StoreContextMut, Val, ValRaw, ValType, WasmTyList,
@@ -124,7 +124,7 @@ pub(crate) enum Definition {
 /// This is a sort of slimmed down `ExternType` which notably doesn't have a
 /// `FuncType`, which is an allocation, and additionally retains the current
 /// size of the table/memory.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum DefinitionType {
     Func(wasmtime_environ::VMSharedTypeIndex),
     Global(wasmtime_environ::Global),
@@ -811,6 +811,7 @@ impl<T> Linker<T> {
         );
         match ModuleKind::categorize(module)? {
             ModuleKind::Command => {
+                println!("command");
                 self.command(
                     store,
                     module_name,
@@ -840,7 +841,56 @@ impl<T> Linker<T> {
                 )
             }
             ModuleKind::Reactor => {
-                let instance = self.instantiate(&mut store, &module)?;
+                println!("reactor");
+                self.func_wrap(
+                    "tmp",
+                    "debug",
+                    move |mut caller: Caller<'_, T>, val: i32| -> i32 {
+                        println!("debug: {}", val);
+                        val
+                    },
+                )?;
+                self.func_wrap(
+                    "env",
+                    "log_execution",
+                    move |mut caller: Caller<'_, T>, val: i32| {
+                        println!("log_execution: {}", val);
+                    },
+                )?;
+
+                self.func_wrap(
+                    "env",
+                    "__printf_buffer_flush_dprintf",
+                    move |mut caller: Caller<'_, T>, val: i32| {
+                        unreachable!();
+                    },
+                )?;
+                // self.func_wrap(
+                //     "env",
+                //     "__pthread_unwind",
+                //     move |mut caller: Caller<'_, T>, val: i32| {
+                //         unreachable!();
+                //     },
+                // )?;
+
+                let dylink_info = module.dylink_meminfo();
+                // let dylink_info = dylink_info.unwrap();
+
+                let stack_pointer = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Var), Val::I32(192864)).unwrap();
+                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
+                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(130)).unwrap();
+                self.define(&mut store, "env", "__stack_pointer", stack_pointer);
+                self.define(&mut store, "env", "__memory_base", memory_base);
+                self.define(&mut store, "env", "__table_base", table_base);
+                let handler = memory_base.get_handler(&mut store) as *mut u32;
+                let instance = self.instantiate_lib(&mut store, &module, handler)?;
+
+                // let got_base = instance.get_export(&mut store, "GOT_memory_base").unwrap();
+                // let got_base_global = got_base.into_global().unwrap();
+                // got_base_global.set(store.as_context_mut(), Val::I32(4096000));
+
+                // let mem = instance.get_memory(&mut store, "memory").unwrap();
+                // println!("lib memory: {:?}", mem.data(&mut store));
 
                 if let Some(export) = instance.get_export(&mut store, "_initialize") {
                     if let Extern::Func(func) = export {
@@ -1128,6 +1178,17 @@ impl<T> Linker<T> {
             .instantiate(store)
     }
 
+    pub fn instantiate_lib(
+        &self,
+        mut store: impl AsContextMut<Data = T>,
+        module: &Module,
+        memory_base: *mut u32,
+    ) -> Result<Instance> {
+        println!("instantiate_lib before");
+        self._instantiate_pre(module, Some(store.as_context_mut().0))?
+            .instantiate_lib(store, memory_base)
+    }
+
     pub fn instantiate_with_lind(
         &self,
         mut store: impl AsContextMut<Data = T>,
@@ -1221,6 +1282,7 @@ impl<T> Linker<T> {
         module: &Module,
         store: Option<&StoreOpaque>,
     ) -> Result<InstancePre<T>> {
+        println!("_instantiate_pre");
         let mut imports = module
             .imports()
             .map(|import| self._get_by_import(&import))
@@ -1231,6 +1293,7 @@ impl<T> Linker<T> {
                 import.update_size(store);
             }
         }
+        println!("_instantiate_pre 2");
         unsafe { InstancePre::new(module, imports) }
     }
 

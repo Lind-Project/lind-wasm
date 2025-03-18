@@ -1520,7 +1520,6 @@ group_number (struct Xprintf_buffer *buf,
     }
 }
 
-
 /* The FILE-based function.  */
 int
 vfprintf (FILE *s, const CHAR_T *format, va_list ap, unsigned int mode_flags)
@@ -1538,8 +1537,10 @@ vfprintf (FILE *s, const CHAR_T *format, va_list ap, unsigned int mode_flags)
   if (_IO_vtable_offset (s) == 0
       && _IO_fwide (s, sizeof (CHAR_T) == 1 ? -1 : 1)
       != (sizeof (CHAR_T) == 1 ? -1 : 1))
+      {
     /* The stream is already oriented otherwise.  */
     return EOF;
+      }
 #endif
 
   if (!_IO_need_lock (s))

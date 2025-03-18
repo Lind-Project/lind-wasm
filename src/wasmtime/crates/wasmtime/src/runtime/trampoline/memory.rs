@@ -73,6 +73,7 @@ pub fn create_memory(
         }
         .allocate_module(request)?;
         let instance_id = store.add_dummy_instance(handle.clone());
+        println!("instance id: {:?}", instance_id);
         Ok(instance_id)
     }
 }
@@ -237,6 +238,7 @@ unsafe impl InstanceAllocatorImpl for SingleMemoryInstance<'_> {
         table_plan: &wasmtime_environ::TablePlan,
         table_index: DefinedTableIndex,
     ) -> Result<(TableAllocationIndex, Table)> {
+        println!("allocate_table 1");
         self.ondemand.allocate_table(req, table_plan, table_index)
     }
 

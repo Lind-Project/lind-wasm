@@ -202,6 +202,24 @@ pub fn lind_syscall_api(
 ) -> i32 {
     let call_number = call_number as i32;
 
+    let cage = interface::cagetable_getref(cageid);
+    let vmmap = cage.vmmap.read();
+    let start_address = vmmap.base_address.unwrap() as u64;
+    drop(vmmap);
+    drop(cage);
+    // println!("dispatcher start_address: {}", start_address);
+
+    if call_number as i32 != WRITE_SYSCALL {
+        match call_name {
+            0 => {
+                println!("\x1b[90mcage {} calls UNNAMED ({})\x1b[0m", cageid, call_number);
+            },
+            _ => {
+                println!("\x1b[90mcage {} calls {} ({})\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number);
+            }
+        }
+    }
+
     let ret = match call_number {
         WRITE_SYSCALL => {
             // Handles writing data from user buffer to file descriptor    
@@ -211,6 +229,7 @@ pub fn lind_syscall_api(
             if count == 0 {
                 return 0; // Early return for zero-length writes
             }
+            // println!("\nwrite addr: {}", arg2);
             // Get cage reference for memory operations
             let cage = interface::cagetable_getref(cageid);
             // Convert user buffer address to system address
@@ -1031,15 +1050,6 @@ pub fn lind_syscall_api(
             cage.gethostname_syscall(name, len as isize)
         }
 
-        GETIFADDRS_SYSCALL => {
-            let count = arg2 as usize;
-            let cage = interface::cagetable_getref(cageid);
-            // Convert user space buffer address to physical address 
-            let buf = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
-            // Perform getifaddrs operation through cage implementation
-            cage.getifaddrs_syscall(buf, count)
-        }
-
         KILL_SYSCALL => {
             let cage_id = arg1 as i32;
             let sig = arg2 as i32;
@@ -1246,7 +1256,37 @@ pub fn lind_syscall_api(
         _ => -1, // Return -1 for unknown syscalls
     };
 
+
+    if call_number as i32 != WRITE_SYSCALL {
+        match call_name {
+            0 => {
+                if ret < 0 {
+                    println!("\x1b[31mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
+                } else {
+                    println!("\x1b[90mcage {} calls UNNAMED ({}) returns {}\x1b[0m", cageid, call_number, ret);
+                }
+            },
+            _ => {
+                if ret < 0 {
+                    println!("\x1b[31mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
+                } else {
+                    println!("\x1b[90mcage {} calls {} ({}) returns {}\x1b[0m", cageid, interface::types::get_cstr(start_address + call_name).unwrap(), call_number, ret);
+                }
+            }
+        }
+    }
+
     ret
+}
+
+pub fn libsetst(cageid: u64, st_addr: u64) {
+    let cage = interface::cagetable_getref(cageid);
+    cage.lib_st.store(st_addr, interface::RustAtomicOrdering::Relaxed);
+}
+
+pub fn libgetst(cageid: u64) -> u64 {
+    let cage = interface::cagetable_getref(cageid);
+    cage.lib_st.load(interface::RustAtomicOrdering::Relaxed)
 }
 
 #[no_mangle]
@@ -1338,6 +1378,7 @@ pub fn lindrustinit(verbosity: isize) {
         vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process
         zombies: interface::RustLock::new(vec![]),
         child_num: interface::RustAtomicU64::new(0),
+        lib_st: interface::RustAtomicU64::new(0),
     };
 
     interface::cagetable_insert(0, utilcage);
@@ -1387,6 +1428,7 @@ pub fn lindrustinit(verbosity: isize) {
         vmmap: interface::RustLock::new(Vmmap::new()), // Initialize empty virtual memory map for new process
         zombies: interface::RustLock::new(vec![]),
         child_num: interface::RustAtomicU64::new(0),
+        lib_st: interface::RustAtomicU64::new(0),
     };
     interface::cagetable_insert(1, initcage);
     fdtables::init_empty_cage(1);

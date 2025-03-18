@@ -628,6 +628,7 @@ unsafe impl InstanceAllocatorImpl for PoolingInstanceAllocator {
         table_plan: &TablePlan,
         _table_index: DefinedTableIndex,
     ) -> Result<(super::TableAllocationIndex, Table)> {
+        println!("allocate_table 3");
         self.with_flush_and_retry(|| self.tables.allocate(request, table_plan))
     }
 

@@ -295,6 +295,7 @@ impl Vmmap {
     /// Arguments:
     /// - base_address: The base address to set
     pub fn set_base_address(&mut self, base_address: usize) {
+        println!("set base address to {}", base_address);
         // Store the provided base address
         self.base_address = Some(base_address);
     }

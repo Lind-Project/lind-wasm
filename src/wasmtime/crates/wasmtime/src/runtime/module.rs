@@ -18,8 +18,7 @@ use core::ptr::NonNull;
 use std::path::Path;
 use wasmparser::{Parser, ValidPayload, Validator};
 use wasmtime_environ::{
-    CompiledModuleInfo, EntityIndex, HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets,
-    VMSharedTypeIndex,
+    CompiledModuleInfo, DylinkMemInfo, EntityIndex, HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex
 };
 mod registry;
 
@@ -446,10 +445,15 @@ impl Module {
         // Acquire this module's metadata and type information, deserializing
         // it from the provided artifact if it wasn't otherwise provided
         // already.
-        let (info, types) = match info_and_types {
+        let (mut info, types) = match info_and_types {
             Some((info, types)) => (info, types),
             None => postcard::from_bytes(code_memory.wasmtime_info()).err2anyhow()?,
         };
+
+        // lind-wasm: we always want the memory to be shared
+        for (_index, memory) in info.module.memory_plans.iter_mut() {
+            memory.set_memory_shared();
+        }
 
         // Register function type signatures into the engine for the lifetime
         // of the `Module` that will be returned. This notably also builds up
@@ -1016,6 +1020,10 @@ impl Module {
                 len: loc.length as usize,
             }
         })
+    }
+
+    pub fn dylink_meminfo<'a>(&'a self) -> &Option<DylinkMemInfo> {
+        self.compiled_module().dylink_mem_info()
     }
 
     pub(crate) fn id(&self) -> CompiledModuleId {
