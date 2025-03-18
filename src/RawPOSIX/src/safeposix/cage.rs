@@ -1,19 +1,19 @@
 #![allow(dead_code)]
-use crate::constants::{
+// Import constants
+use sysdefs::constants::err_const::{syscall_error, Errno};
+use sysdefs::constants::fs_const::{
     MAP_PRIVATE, MAP_SHARED, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, PROT_READ, PROT_WRITE,
-    SIGNAL_MAX, S_IRWXG, S_IRWXO, S_IRWXU,
+    S_IRWXG, S_IRWXO, S_IRWXU,
 };
-use crate::interface;
+use sysdefs::constants::sys_const::SIGNAL_MAX;
+// Import data structure
+use sysdefs::data::fs_struct::{EpollEvent, IoctlPtrUnion, PipeArray, SigactionStruct, SigsetType};
+use sysdefs::data::net_struct::PollStruct;
 
 //going to get the datatypes and errnos from the cage file from now on
-pub use crate::interface::errnos::{syscall_error, Errno};
-
-pub use crate::interface::types::{EpollEvent, IoctlPtrUnion, PipeArray, PollStruct};
-
 use super::filesystem::normpath;
 pub use super::vmmap::*;
-use crate::constants::*;
-
+use crate::interface;
 pub use crate::interface::CAGE_TABLE;
 
 #[derive(Debug, Clone, Copy)]
@@ -49,7 +49,7 @@ pub struct Cage {
     // signalhandler is a hash map where the key is a signal number, and the value is a SigactionStruct, which
     // defines how the cage should handle a specific signal. Interacts with sigaction_syscall() to register or
     // retrieve the handler for a specific signal.
-    pub signalhandler: interface::RustHashMap<i32, interface::SigactionStruct>,
+    pub signalhandler: interface::RustHashMap<i32, SigactionStruct>,
     // sigset is a mapping of thread IDs (pthreadid) to atomic signal sets. Each entry represents the signals
     // currently blocked for the corresponding thread in the cage. Interacts with sigprocmask_syscall() to
     // block / unblock / replace the signal mask for a thread.
@@ -81,7 +81,7 @@ impl Cage {
         *cwdbox = newwd;
     }
 
-    pub fn send_pending_signals(&self, sigset: interface::SigsetType, pthreadid: u64) {
+    pub fn send_pending_signals(&self, sigset: SigsetType, pthreadid: u64) {
         for signo in 1..SIGNAL_MAX {
             if interface::lind_sigismember(sigset, signo) {
                 interface::lind_threadkill(pthreadid, signo);

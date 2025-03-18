@@ -31,12 +31,15 @@ pub use serde_cbor::{
     from_slice as serde_deserialize_from_bytes, ser::to_vec_packed as serde_serialize_to_bytes,
 };
 
-use crate::constants::SEM_VALUE_MAX;
 use crate::interface;
-use crate::interface::errnos::VERBOSE;
-use crate::interface::types::SigsetType;
 use std::sync::LazyLock;
 use std::time::Duration;
+
+// Import constants
+use sysdefs::constants::err_const::VERBOSE;
+use sysdefs::constants::fs_const::SEM_VALUE_MAX;
+// Import data struct
+use sysdefs::data::fs_struct::SigsetType;
 
 pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS: i32 = 0;

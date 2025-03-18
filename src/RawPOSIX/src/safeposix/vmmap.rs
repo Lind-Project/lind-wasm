@@ -1,10 +1,10 @@
-use crate::constants::{
+use fdtables;
+use sysdefs::constants::err_const::{syscall_error, Errno};
+use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_EXEC, PROT_NONE,
     PROT_READ, PROT_WRITE,
 };
-use crate::fdtables;
-use crate::safeposix::cage::syscall_error;
-use crate::safeposix::cage::Errno;
+
 use nodit::NoditMap;
 use nodit::{interval::ie, Interval};
 use std::io;

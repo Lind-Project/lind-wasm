@@ -1,18 +1,23 @@
 #![allow(dead_code)]
-use crate::constants::net_constants;
-use crate::constants::{sys_constants, LIND_ROOT};
+use fdtables;
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::fs_const::LIND_ROOT;
+use sysdefs::constants::{net_const, sys_const};
+use sysdefs::data::fs_struct::*;
+use sysdefs::data::net_struct::*;
+
 use crate::interface;
 use crate::interface::*;
-use crate::{interface::FdSet, safeposix::cage::*};
+use crate::safeposix::cage::*;
+use crate::safeposix::filesystem::normpath;
 
-use crate::fdtables::{self, FDTableEntry};
-
+use bit_set::BitSet;
 use dashmap::mapref::entry;
 use lazy_static::lazy_static;
 use libc::*;
+use libc::*;
 use parking_lot::Mutex;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::ffi::CStr;
 use std::ffi::CString;
@@ -20,11 +25,6 @@ use std::io;
 use std::io::{Read, Write};
 use std::mem::size_of;
 use std::sync::Arc;
-
-use crate::safeposix::filesystem::normpath;
-
-use bit_set::BitSet;
-use libc::*;
 use std::{os::fd::RawFd, ptr};
 
 const FDKIND_KERNEL: u32 = 0;
