@@ -1,10 +1,12 @@
 mod file;
 mod mem;
 mod misc;
+mod signal;
 mod timer;
 pub mod types;
 pub use file::*;
 pub use mem::*;
 pub use misc::*;
+pub use signal::*;
 pub use timer::*;
 pub use types::*;

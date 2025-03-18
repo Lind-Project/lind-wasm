@@ -42,6 +42,8 @@ pub const SIGHUP: i32 = 1; // Hangup
 pub const SIGINT: i32 = 2; // Interrupt (Ctrl+C)
 pub const SIGQUIT: i32 = 3; // Quit (Ctrl+\)
 pub const SIGTERM: i32 = 15; // Termination request
+pub const SIGKILL: i32 = 9; // Forcefully kill a proces
+pub const SIGSTKFLT: i32 = 16; // Stack fault (unused on most systems)
 
 // Error signals
 pub const SIGILL: i32 = 4; // Illegal instruction
@@ -83,10 +85,28 @@ pub const SIGIO: i32 = 29; // I/O now possible
 pub const SIGPOLL: i32 = 29; // Pollable event (same as SIGIO)
 pub const SIGPWR: i32 = 30; // Power failure
 
+pub const SIG_MAX: i32 = 32; // maximum value of signal numbers
+
 // Signal actions
 pub const SIG_BLOCK: i32 = 0; // Block signals in signal mask
 pub const SIG_UNBLOCK: i32 = 1; // Unblock signals in signal mask
 pub const SIG_SETMASK: i32 = 2; // Set the signal mask
+
+// Signal flags (from src/glibc/target/include/asm-generic/signal-defs.h)
+pub const SA_NOCLDSTOP: u32 = 0x00000001; // Don't send SIGCHLD when children stop
+pub const SA_NOCLDWAIT: u32 = 0x00000002; // Don't create zombie on child death
+pub const SA_SIGINFO: u32 = 0x00000004; // Signal handler with SA_SIGINFO args
+pub const SA_UNSUPPORTED: u32 = 0x00000400; // Unsupported
+pub const SA_EXPOSE_TAGBITS: u32 = 0x00000800; // exposes an architecture-defined set of tag bits in siginfo.si_addr
+pub const SA_ONSTACK: u32 = 0x08000000; // Take signal on signal stack
+pub const SA_RESTART: u32 = 0x10000000; // Restart syscall on signal return
+pub const SA_NODEFER: u32 = 0x40000000; // Don't automatically block the signal when its handler is being executed
+pub const SA_RESETHAND: u32 = 0x80000000; // Reset to SIG_DFL on entry to handler
+
+// Special Signal Handlers
+pub const SIG_ERR: i32 = -1; // Error return
+pub const SIG_DFL: i32 = 0; // Default action
+pub const SIG_IGN: i32 = 1; // Ignore signal
 
 // Timer types
 pub const ITIMER_REAL: i32 = 0; // Real-time timer
