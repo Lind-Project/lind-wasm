@@ -305,6 +305,80 @@ pub fn mmap_handler(
     useraddr as u32
 }
 
+/// Handles the `mprotect_syscall`, interacting with the `vmmap` structure.
+///
+/// This function processes the `mprotect_syscall` by updating the `vmmap` entries and performing
+/// the necessary protection changes. The handling logic is as follows:
+/// 1. Validate protection flags - specifically disallow `PROT_EXEC`
+/// 2. Verify address alignment and round to page boundaries
+/// 3. Check if the memory region is mapped in vmmap
+/// 4. Perform the actual mprotect syscall
+/// 5. Update the protection flags in vmmap entries, splitting entries if necessary
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that initiated the `mprotect` syscall
+/// * `addr` - Starting address of the region to change protection
+/// * `len` - Length of the region to change protection
+/// * `prot` - New protection flags (e.g., `PROT_READ`, `PROT_WRITE`)
+///
+/// # Returns
+/// * `i32` - Returns 0 on success, -1 on failure
+pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i32 {
+    let cage = cagetable_getref(cageid);
+
+    // PROT_EXEC is not allowed in WASM
+    // TODO: Remove this panic when we support PROT_EXEC for real user code
+    if prot & PROT_EXEC > 0 {
+        // Log the attempt through syscall_error's verbose logging
+        let _ = syscall_error(Errno::EINVAL, "mprotect", "PROT_EXEC attempt detected - this will panic in development");
+        // Panic during development for early detection of unsupported operations
+        panic!("PROT_EXEC is not currently supported in WASM");
+    }
+
+    // Validate length
+    if len == 0 {
+        return syscall_error(Errno::EINVAL, "mprotect", "length cannot be zero");
+    }
+
+    // check if the provided address is multiple of pages
+    let rounded_addr = round_up_page(addr as u64);
+    if rounded_addr != addr as u64 {
+        return syscall_error(Errno::EINVAL, "mprotect", "address is not aligned");
+    }
+
+    // round up length to be multiple of pages
+    let rounded_length = round_up_page(len as u64);
+
+    let mut vmmap = cage.vmmap.write();
+    
+    // Convert to page numbers for vmmap checking
+    let start_page = (addr as u32) >> PAGESHIFT;
+    let npages = (rounded_length >> PAGESHIFT) as u32;
+
+    // Check if the region is mapped
+    if !vmmap.check_existing_mapping(start_page, npages, 0) {
+        return syscall_error(Errno::ENOMEM, "mprotect", "Address range not mapped");
+    }
+
+    // Get system address for the actual mprotect call
+    let sysaddr = vmmap.user_to_sys(addr as u32);
+    
+    drop(vmmap);
+
+    // Perform mprotect through cage implementation
+    let result = cage.mprotect_syscall(sysaddr as *mut u8, rounded_length as usize, prot);
+
+    if result < 0 {
+        return result;
+    }
+
+    // Update vmmap entries with new protection
+    let mut vmmap = cage.vmmap.write();
+    vmmap.update_protections(start_page, npages, prot);
+
+    0
+}
+
 /// Handles the `sbrk_syscall`, interacting with the `vmmap` structure.
 ///
 /// This function processes the `sbrk_syscall` by updating the `vmmap` entries and managing

@@ -6,7 +6,7 @@ pub mod fs_tests {
 
     use fdtables::{translate_virtual_fd, FDTABLE};
     use sysdefs::constants::err_const::get_errno;
-    use sysdefs::constants::fs_const::{SHMMAX, S_IRWXA};
+    use sysdefs::constants::fs_const::{SHMMAX, S_IRWXA, PAGESIZE};
     use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
     use sysdefs::data::fs_struct::{FSData, ShmidsStruct, StatData};
 
@@ -770,6 +770,107 @@ pub mod fs_tests {
 
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mprotect_readwrite_test() {
+        // Acquire test lock and initialize environment
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+
+        // Create an anonymous memory mapping with read-only permissions
+        // This simulates the C program's mmap() call to allocate a read-only page
+        let readonlydata = cage.mmap_syscall(
+            std::ptr::null_mut(),      // Let kernel choose address
+            PAGESIZE as usize,         // Map one page
+            PROT_READ,                 // Initially read-only
+            (MAP_ANONYMOUS | MAP_PRIVATE) as i32,  // Private anonymous mapping
+            -1,                        // No file descriptor for anonymous mapping
+            0                         // Offset is ignored for anonymous mappings
+        );
+        assert!(readonlydata >= 0, "mmap should succeed");
+
+        // Change the protection to allow writing
+        // This simulates the C program's mprotect() call to make the page writable
+        let result = cage.mprotect_syscall(
+            readonlydata as *mut u8,
+            PAGESIZE as usize,
+            PROT_READ | PROT_WRITE    // Add write permission
+        );
+        assert_eq!(result, 0, "mprotect should succeed");
+
+        // Test string to write to the now-writable memory
+        let text = b"Mprotect write test text\0";
+        unsafe {
+            // Copy test string into the mapped memory
+            // This simulates the C program's memcpy() call
+            let result = libc::memcpy(
+                readonlydata as *mut libc::c_void,
+                text.as_ptr() as *const libc::c_void,
+                text.len()
+            );
+            
+            // Verify that the write operation succeeded by comparing memory contents
+            let written = std::slice::from_raw_parts(readonlydata as *const u8, text.len());
+            assert_eq!(written, text, "Written data should match test string");
+
+            // Print the written text to verify it's readable
+            // This simulates the C program's puts() call
+        }
+
+        // Clean up by unmapping the memory
+        // This simulates the C program's munmap() call
+        let result = cage.munmap_syscall(readonlydata as *mut u8, PAGESIZE as usize);
+        assert_eq!(result, 0, "munmap should succeed");
+
+        // Clean up and exit
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mprotect_unmapped_addr() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Try to protect an unmapped address
+        let unmapped_addr = 0x1000 as *mut u8; // Some arbitrary address
+        let result = cage.mprotect_syscall(unmapped_addr, 4096, PROT_READ);
+        assert_eq!(result, -(Errno::ENOMEM as i32), "mprotect should fail with ENOMEM for unmapped address");
+
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_mprotect_split_region() {
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+    
+        // Map 4 pages with anonymous mapping
+        let addr = cage.mmap_syscall(
+            std::ptr::null_mut(),
+            PAGESIZE as usize * 4,
+            PROT_READ | PROT_WRITE,
+            (MAP_PRIVATE | MAP_ANONYMOUS) as i32,
+            -1,
+            0
+        );
+        
+        assert!(addr >= 0, "mmap failed with error: {}", addr);
+    
+        // Change protection for middle two pages
+        let middle_addr = (addr as usize + PAGESIZE as usize) as *mut u8;
+        let result = cage.mprotect_syscall(
+            middle_addr,
+            PAGESIZE as usize * 2,
+            PROT_READ
+        );
+        assert_eq!(result, 0, "mprotect failed");
+    
+        // Clean up
+        assert_eq!(cage.munmap_syscall(addr as *mut u8, PAGESIZE as usize * 4), 0);
     }
 
     #[test]
@@ -2895,7 +2996,7 @@ pub mod fs_tests {
         assert_eq!(cage.fstat_syscall(fd1, &mut uselessstatdata), 0);
         assert_eq!(cage.fstat_syscall(fd2, &mut uselessstatdata), 0);
 
-        assert_eq!(cage.exec_syscall(2), 0);
+        assert_eq!(cage.exec_syscall(), 0);
 
         let execcage = interface::cagetable_getref(2);
         assert_eq!(
@@ -3101,7 +3202,6 @@ pub mod fs_tests {
         // Now try to create a subdirectory under the parent directory
         let c_subdir_path = std::ffi::CString::new(subdir_path).unwrap();
         let result = unsafe { libc::mkdir(c_subdir_path.as_ptr(), invalid_mode) };
-        println!("mkdir returned for subdir: {}", result);
 
         // Check if mkdir failed
         if result != 0 {

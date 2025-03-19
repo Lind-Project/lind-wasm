@@ -1040,6 +1040,23 @@ impl Cage {
         ret
     }
 
+    //------------------------------------MPROTECT SYSCALL------------------------------------
+    /*
+    *   mprotect() changes protection for memory pages
+    *   Returns 0 on success, -1 on failure
+    *   Manual page: https://man7.org/linux/man-pages/man2/mprotect.2.html
+    */
+    pub fn mprotect_syscall(&self, addr: *mut u8, len: usize, prot: i32) -> i32 {
+        let ret = unsafe {
+            libc::mprotect(addr as *mut c_void, len, prot)
+        };
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "mprotect");
+        }
+        ret
+    }
+
     //------------------------------------FLOCK SYSCALL------------------------------------
     /*
      *   Get the kernel fd with provided virtual fd first

@@ -128,7 +128,7 @@ pub mod sys_tests {
         let _thelock = setup::lock_and_init();
         let cage1 = interface::cagetable_getref(1);
         // Exec a new child
-        assert_eq!(cage1.exec_syscall(2), 0);
+        assert_eq!(cage1.exec_syscall(), 0);
         // Assert that the fork was correct
         let child_cage = interface::cagetable_getref(2);
         assert_eq!(child_cage.getuid_syscall(), -1);
