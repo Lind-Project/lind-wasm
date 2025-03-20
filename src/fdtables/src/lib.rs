@@ -1517,4 +1517,43 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    // Do more complex things work with get and translate?
+    fn more_complex_get_and_translate_from_arg() {
+        let mut _thelock = TESTMUTEX.lock().unwrap_or_else(|e| {
+            refresh();
+            TESTMUTEX.clear_poison();
+            e.into_inner()
+        });
+        refresh();
+
+        let arg_fd1 = 5; // fd1 should look for free fd starting from this arguments
+        let arg_fd2 = 10; // fd2 should look for free fd starting from this arguments
+        // Acquire a virtual fd...
+        let my_virt_fd = get_unused_virtual_fd_from_arg(threei::TESTING_CAGEID, 1, 2, false, 3, arg_fd1).unwrap();
+        let my_virt_fd2 = get_unused_virtual_fd_from_arg(threei::TESTING_CAGEID, 7, 8, true, 9, arg_fd2).unwrap();
+        // Check if fd and fd2 is starting from corresponding args
+        assert_eq!(my_virt_fd, 5);
+        assert_eq!(my_virt_fd2, 10);
+
+        assert_eq!(
+            FDTableEntry {
+                fdkind: 1,
+                underfd: 2,
+                should_cloexec: false,
+                perfdinfo: 3
+            },
+            translate_virtual_fd(threei::TESTING_CAGEID, my_virt_fd).unwrap()
+        );
+        assert_eq!(
+            FDTableEntry {
+                fdkind: 7,
+                underfd: 8,
+                should_cloexec: true,
+                perfdinfo: 9
+            },
+            translate_virtual_fd(threei::TESTING_CAGEID, my_virt_fd2).unwrap()
+        );
+    }
 }
