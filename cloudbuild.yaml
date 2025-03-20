@@ -24,7 +24,7 @@
 
  options:
   logging: CLOUD_LOGGING_ONLY  
-  machineType: 'E2_HIGHCPU_16'
+  machineType: 'E2_HIGHCPU_32'
  availableSecrets:
    secretManager:
    - versionName: projects/1049119266483/secrets/docker-password/versions/1
