@@ -21,14 +21,6 @@
    env:
     - 'BRANCH_NAME=$BRANCH_NAME'
    secretEnv: ['USERNAME']   
-# Copy the analysis file from the container to the host
-#  - name: 'gcr.io/cloud-builders/docker'
-#    entrypoint: 'bash'
-#    args: ['-c', 'docker cp $$USERNAME/lind-wasm/src/RawPOSIX/tmp/results.json:/workspace/results.json ./']
-#    secretEnv: ['USERNAME']
-
-# Validate the analysis file (Example: Check for errors)
-# This is where we will need to put the check to validate results.json
 
  options:
   logging: CLOUD_LOGGING_ONLY  
