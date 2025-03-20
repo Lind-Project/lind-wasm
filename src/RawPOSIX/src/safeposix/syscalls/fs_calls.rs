@@ -871,19 +871,19 @@ impl Cage {
     //------------------------------------FCNTL SYSCALL------------------------------------
     /// Reference: https://man7.org/linux/man-pages/man2/fcntl.2.html
     ///
-    /// Due to the design of `fdtables` library, different virtual fds created by `dup`/`dup2` are 
-    /// actually refer to the same underlying kernel fd. Therefore, in `fcntl_syscall` we need to 
+    /// Due to the design of `fdtables` library, different virtual fds created by `dup`/`dup2` are
+    /// actually refer to the same underlying kernel fd. Therefore, in `fcntl_syscall` we need to
     /// handle the cases of `F_DUPFD`, `F_DUPFD_CLOEXEC`, `F_GETFD`, and `F_SETFD` separately.
-    /// 
-    /// Among these, `F_DUPFD` and `F_DUPFD_CLOEXEC` cannot directly use the `dup_syscall` because, 
-    /// in `fcntl`, the duplicated fd is assigned to the lowest available number starting from `arg`, 
-    /// whereas the `dup_syscall` does not have this restriction and instead assigns the lowest 
+    ///
+    /// Among these, `F_DUPFD` and `F_DUPFD_CLOEXEC` cannot directly use the `dup_syscall` because,
+    /// in `fcntl`, the duplicated fd is assigned to the lowest available number starting from `arg`,
+    /// whereas the `dup_syscall` does not have this restriction and instead assigns the lowest
     /// available fd number globally.
-    /// 
-    /// Additionally, `F_DUPFD_CLOEXEC` and `F_SETFD` require updating the fd flag information 
+    ///
+    /// Additionally, `F_DUPFD_CLOEXEC` and `F_SETFD` require updating the fd flag information
     /// (`O_CLOEXEC`) in fdtables after modifying the underlying kernel fd.
-    /// 
-    /// For all other command operations, after translating the virtual fd to the corresponding 
+    ///
+    /// For all other command operations, after translating the virtual fd to the corresponding
     /// kernel fd, they are redirected to the kernel `fcntl` syscall.
     ///
     /// ## Arguments
@@ -940,7 +940,7 @@ impl Cage {
                     Ok(entry) => entry,
                     Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
                 };
-                // Get lowest-numbered available file descriptor greater than or equal to `arg` 
+                // Get lowest-numbered available file descriptor greater than or equal to `arg`
                 // and set the `O_CLOEXEC` flag
                 match fdtables::get_unused_virtual_fd_from_arg(
                     self.cageid,
@@ -1667,7 +1667,7 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 
 /// This function will be different in new code base (when splitting out type conversion function)
 /// since the conversion from u64 -> i32 in negative number will be different
-/// 
+///
 /// ## Return
 ///
 pub fn _fcntl_helper(cageid: u64, virtual_fd: i32) -> Result<fdtables::FDTableEntry, Errno> {
