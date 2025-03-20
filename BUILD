@@ -164,4 +164,4 @@ filegroup(
 filegroup(
     name = "clang_files",
     srcs = glob(["clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/**/*"])
-)       
+)
