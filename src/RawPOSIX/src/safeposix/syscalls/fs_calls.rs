@@ -926,9 +926,9 @@ impl Cage {
                     vfd.underfd,
                     false,
                     0,
-                    arg,
+                    arg as u64,
                 ) {
-                    Ok(new_vfd) => return new_vfd,
+                    Ok(new_vfd) => return new_vfd as i32,
                     Err(_) => return syscall_error(Errno::EBADFD, "fcntl", "Bad File Descriptor"),
                 }
             }
@@ -948,9 +948,9 @@ impl Cage {
                     vfd.underfd,
                     true,
                     0,
-                    arg,
+                    arg as u64,
                 ) {
-                    Ok(new_vfd) => return new_vfd,
+                    Ok(new_vfd) => return new_vfd as i32,
                     Err(_) => return syscall_error(Errno::EBADFD, "fcntl", "Bad File Descriptor"),
                 }
             }
@@ -961,7 +961,7 @@ impl Cage {
                     Ok(entry) => entry,
                     Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
                 };
-                return vfd.should_cloexec;
+                return vfd.should_cloexec as i32;
             }
             // Set the file descriptor flags to the value specified by arg.
             (F_SETFD, arg) => {
@@ -977,7 +977,8 @@ impl Cage {
                     return handle_errno(errno, "fcntl");
                 }
                 // Set virtual fd flag
-                match fdtables::set_cloexec(self.cageid, virtual_fd, arg) {
+                let cloexec_flag: bool = arg != 0;
+                match fdtables::set_cloexec(self.cageid, virtual_fd as u64, cloexec_flag) {
                     Ok(_) => return 0,
                     Err(_e) => return syscall_error(Errno::EBADFD, "fcntl", "Bad File Descriptor"),
                 }
@@ -1669,7 +1670,7 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 /// 
 /// ## Return
 ///
-pub fn _fcntl_helper(cageid: u64, virutal_fd: i32) -> Result<fdtables::FDTableEntry, Errno> {
+pub fn _fcntl_helper(cageid: u64, virtual_fd: i32) -> Result<fdtables::FDTableEntry, Errno> {
     if virtual_fd < 0 {
         return Err(Errno::EBADFD);
     }
