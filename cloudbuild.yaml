@@ -1,17 +1,33 @@
  steps:
+ # Authenticate with Docker
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
    args: ['-c', 'docker login --username=$$USERNAME --password=$$PASSWORD']
    secretEnv: ['USERNAME', 'PASSWORD']
+ # Build the Docker image from .devcontainer folder
  - name: 'gcr.io/cloud-builders/docker'
    entrypoint: 'bash'
-   args: ['-c', 'docker build -t $$USERNAME/lind-wasm:latest ./.devcontainer']
-   secretEnv: ['USERNAME']
+   args: [
+     '-c',
+     'docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer'
+   ]
+   env:
+    - 'BRANCH_NAME=$BRANCH_NAME'
+   secretEnv: ['USERNAME'] 
+# # Run the container and execute the bazel test run command
+ - name: 'gcr.io/cloud-builders/docker'
+   entrypoint: 'bash'
+   args: ['-c', 'docker run -e BRANCH_NAME=$BRANCH_NAME --rm $$USERNAME/lind-wasm:latest bazel run //:python_tests']   
+   env:
+    - 'BRANCH_NAME=$BRANCH_NAME'
+   secretEnv: ['USERNAME']   
+
  options:
-  logging: CLOUD_LOGGING_ONLY
+  logging: CLOUD_LOGGING_ONLY  
+  machineType: 'E2_HIGHCPU_8'
  availableSecrets:
    secretManager:
-   - versionName: projects/1816387136/secrets/docker-password/versions/1
+   - versionName: projects/1049119266483/secrets/docker-password/versions/1
      env: 'PASSWORD'
-   - versionName: projects/1816387136/secrets/docker-username/versions/1
+   - versionName: projects/1049119266483/secrets/docker-username/versions/1
      env: 'USERNAME'
