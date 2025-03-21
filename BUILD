@@ -137,8 +137,7 @@ py_binary(
     # the rules that create them are run.  This is a requirement
     # to use a genrule as a dependency.
     data = [
-        "tests",
-         #"clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+        "tests",         
          "lindtool.sh",
          "check.log",
          "check_wasm.log",
