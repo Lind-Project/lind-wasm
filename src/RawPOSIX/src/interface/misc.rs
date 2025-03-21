@@ -32,11 +32,14 @@ pub use serde_cbor::{
 };
 
 use crate::interface;
-use crate::interface::errnos::VERBOSE;
-use crate::interface::types::SigsetType;
-use crate::constants::SEM_VALUE_MAX;
 use std::sync::LazyLock;
 use std::time::Duration;
+
+// Import constants
+use sysdefs::constants::err_const::VERBOSE;
+use sysdefs::constants::fs_const::SEM_VALUE_MAX;
+// Import data struct
+use sysdefs::data::fs_struct::SigsetType;
 
 pub const MAXCAGEID: i32 = 1024;
 const EXIT_SUCCESS: i32 = 0;
@@ -293,15 +296,6 @@ pub fn lind_sigdelset(set: SigsetType, signum: i32) -> SigsetType {
 
 pub fn lind_sigismember(set: SigsetType, signum: i32) -> bool {
     set & (1 << (signum - 1)) != 0
-}
-
-// Signals
-pub fn lind_kill_from_id(cage_id: u64, sig: i32) {
-    if let Some(cage) = cagetable_getref_opt(cage_id as u64) {
-        let cage_main_thread_id = cage.main_threadid.load(RustAtomicOrdering::Relaxed);
-        assert!(cage_main_thread_id != 0);
-        lind_threadkill(cage_main_thread_id, sig);
-    }
 }
 
 #[derive(Debug)]

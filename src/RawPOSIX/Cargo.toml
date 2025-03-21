@@ -26,6 +26,8 @@ parking_lot = "0.12"
 bit-set = "0.5"
 nodit = "0.9.2" # Used for VMMAP
 quick_cache = "0.6.9"
+fdtables = { path = "../fdtables" }
+sysdefs = { path = "../sysdefs" }
 
 [dependencies.lazy_static]
 version = "1.0"

@@ -1,0 +1,2 @@
+mod vanillaglobal;
+pub use crate::vanillaglobal::*;

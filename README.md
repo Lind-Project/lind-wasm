@@ -24,6 +24,8 @@ Now let try to print `Hello world!`
 ./lindtool.sh run tests/unit-tests/file_tests/deterministic/printf
 ```
 
+Further examples can be found [here](https://lind-project.github.io/lind-wasm-docs/use/examples/)
+
 ## Documentation
 
 Check out our [docs]([lind-project.github.io/lind-wasm-docs/](https://lind-project.github.io/lind-wasm-docs/))! 

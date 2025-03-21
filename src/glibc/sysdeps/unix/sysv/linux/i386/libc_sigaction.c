@@ -18,6 +18,7 @@
 
 #include <signal.h>
 #include <ldsodefs.h>
+#include <syscall-template.h>
 
 #define SA_RESTORER 0x04000000
 
@@ -82,10 +83,43 @@ extern void restore (void) {
 
 // RESTORE (restore, __NR_sigreturn)
 
+// entry point of epoch callback in glibc, invoked by wasmtime
+__attribute__((export_name("signal_callback")))
+void signal_callback(__sighandler_t callback, int signal) {
+  // directly call into user's custom signal handler
+  if(callback != 0)
+    callback(signal);
+}
+
+// rawposix sigaction struct
+struct rawposix_sigaction {
+  __sighandler_t handler;
+  unsigned long long sa_mask;
+  int sa_flags;
+};
+
 int
 __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
 {
-  // Dennis Edit
-  return 0;
+  // we do the manual translation between glibc sigaction struct and rawposix sigaction struct here
+  struct rawposix_sigaction rawposix_act, rawposix_oact;
+  // check for NULL pointer
+  if (act)
+  {
+    rawposix_act.handler = act->sa_handler;
+    rawposix_act.sa_mask = act->sa_mask.__val[0];
+    rawposix_act.sa_flags = act->sa_flags;
+  }
+  int retval = MAKE_SYSCALL(147, "syscall|sigaction", (uint64_t) sig, (uint64_t) (act ? &rawposix_act : NULL), (uint64_t) (oact ? &rawposix_oact : NULL), NOTUSED, NOTUSED, NOTUSED);
+
+  // check for NULL pointer
+  if (oact)
+  {
+    oact->sa_handler = rawposix_oact.handler;
+    oact->sa_mask.__val[0] = rawposix_oact.sa_mask;
+    oact->sa_flags = rawposix_oact.sa_flags;
+  }
+
+  return retval;
 }
 libc_hidden_def (__libc_sigaction)
