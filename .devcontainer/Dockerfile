@@ -55,7 +55,7 @@ RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project
     mv clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04; fi
 WORKDIR /home/lind/lind-wasm
 # Move wasi directory
-RUN if [ "$DEV_MODE" != "true" ]; then mv ./src/glibc/wasi ./clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/lib; fi
+RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/lib; fi
 # Build Lind-wasm
 #RUN chmod +x lindtool.sh
 RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
