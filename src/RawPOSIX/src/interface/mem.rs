@@ -8,6 +8,7 @@ use crate::interface::cagetable_getref;
 use crate::safeposix::cage::Cage;
 use crate::safeposix::vmmap::{MemoryBackingType, Vmmap, VmmapOps};
 use std::result::Result;
+use sysdefs::constants::SHM_RDONLY;
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
@@ -300,6 +301,93 @@ pub fn mmap_handler(
                 cageid,
             );
         }
+    }
+
+    useraddr as u32
+}
+
+
+/// Handles the `shmat_syscall`, interacting with the `vmmap` structure.
+/// Similar to mmap_handler but for shared memory attachment.
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that initiated the shmat syscall
+/// * `shmid` - Shared memory segment identifier
+/// * `shmaddr` - Requested address for attachment (can be null)
+/// * `shmflg` - Attachment flags
+///
+/// # Returns
+/// * `i32` - Result of the shmat operation
+pub fn shmat_handler(
+    cageid: u64,
+    addr: *mut u8,
+    len: usize,
+    mut prot: i32,
+    shmflag: i32,
+    shmid: i32,
+) -> u32 {
+    // Get the cage reference.
+    let cage = cagetable_getref(cageid);
+
+    // If SHM_RDONLY is set in shmflag, then use read-only protection,
+    // otherwise default to read–write.
+    prot = if shmflag & SHM_RDONLY != 0 {
+        PROT_READ
+    } else {
+        PROT_READ | PROT_WRITE
+    };
+
+    // Check that the provided address is page aligned.
+    let rounded_addr = round_up_page(addr as u64);
+    if rounded_addr != addr as u64 {
+        return syscall_error(Errno::EINVAL, "shmat", "address is not aligned") as u32;
+    }
+
+    // Round up the length to a multiple of the page size.
+    let rounded_length = round_up_page(len as u64);
+
+    // Determine the user address.
+    // If addr==0, then we need to allocate space from the vmmap.
+    let mut useraddr = addr as u32;
+    if useraddr == 0 {
+        let mut vmmap = cage.vmmap.write();
+        let result = vmmap.find_map_space((rounded_length >> PAGESHIFT) as u32, 1);
+        if result.is_none() {
+            return syscall_error(Errno::ENOMEM, "shmat", "no memory") as u32;
+        }
+        let space = result.unwrap();
+        useraddr = (space.start() << PAGESHIFT) as u32;
+    }
+
+    // Convert the user address into a system address.
+    let vmmap = cage.vmmap.read();
+    let sysaddr = vmmap.user_to_sys(useraddr);
+    drop(vmmap);
+
+    // Call the raw shmat syscall.
+    let result = cage.shmat_syscall(shmid, sysaddr as *mut u8, shmflag);
+
+    // If the syscall succeeded, update the vmmap entry.
+    if result as i32 >= 0 {
+        // The syscall should return the same fixed address.
+        if result as u32 != useraddr {
+            panic!("shmat did not attach at the expected address");
+        }
+        let mut vmmap = cage.vmmap.write();
+        let backing = MemoryBackingType::SharedMemory(shmid as u64);
+        // Use the effective protection (prot) for both the current and maximum protection.
+        let maxprot = prot;
+        let _ = vmmap.add_entry_with_overwrite(
+            useraddr >> PAGESHIFT,
+            (rounded_length >> PAGESHIFT) as u32,
+            prot,
+            maxprot,
+            0, // No flags for shared memory mapping
+            backing,
+            0, // Offset is not applicable for shared memory
+            len as i64,
+            cageid,
+        );
     }
 
     useraddr as u32
