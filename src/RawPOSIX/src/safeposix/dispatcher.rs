@@ -755,12 +755,13 @@ pub fn lind_syscall_api(
                 
 
         SHMDT_SYSCALL => {
-            let cage = interface::cagetable_getref(cageid);
-            // Convert virtual address to physical address
-            let shmaddr = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
+            let addr = arg1 as *mut u8;
+            let length = arg2 as usize;
 
-            // Perform shmdt operation through cage implementation
-            cage.shmdt_syscall(shmaddr)
+            if length == 0 {
+                return syscall_error(Errno::EINVAL, "shmdt", "length cannot be zero");
+            }
+            interface::shmdt_handler(cageid, addr, length)
         }
 
         PWRITE_SYSCALL => {

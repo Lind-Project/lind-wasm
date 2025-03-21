@@ -146,6 +146,49 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
     0
 }
 
+/// Handler of the `shmdt_syscall`, interacting with the `vmmap` structure.
+///
+/// This function processes the `shmdt_syscall` by updating the `vmmap` entries and managing
+/// the shared memory detachment operation. It performs address validation, converts user 
+/// addresses to system addresses, and updates the virtual memory mappings accordingly.
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that calls the `shmdt`
+/// * `addr` - Starting address of the shared memory region to detach
+/// * `length` - Length of the shared memory region to detach
+///
+/// # Returns
+/// * `i32` - 0 for success and negative errno for failure
+pub fn shmdt_handler(cageid: u64, addr: *mut u8, length: usize) -> i32 {
+    // Retrieve the cage reference.
+    let cage = cagetable_getref(cageid);
+
+    // Check that the provided address is aligned on a page boundary.
+    let rounded_addr = round_up_page(addr as u64) as usize;
+    if rounded_addr != addr as usize {
+        return syscall_error(Errno::EINVAL, "shmdt", "address is not aligned");
+    }
+
+    // Convert the user address into a system address using the vmmap.
+    let vmmap = cage.vmmap.read();
+    let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
+    drop(vmmap);
+
+    let shmid = cage.shmdt_syscall(sysaddr as *mut u8);
+    if shmid < 0 {
+        return shmid;
+    }
+
+    // Remove the mapping from the vmmap.
+    // This call removes the range starting at the page-aligned user address,
+    // for the number of pages that cover the shared memory region.
+    let mut vmmap = cage.vmmap.write();
+    vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, (length as u32) >> PAGESHIFT);
+
+    0
+}
+
+
 /// Handles the `mmap_syscall`, interacting with the `vmmap` structure.
 ///
 /// This function processes the `mmap_syscall` by updating the `vmmap` entries and performing
