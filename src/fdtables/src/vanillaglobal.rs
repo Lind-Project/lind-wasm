@@ -175,8 +175,8 @@ pub fn get_unused_virtual_fd(
 /// This is used to request an unused fd from specific starting position. This is 
 /// similar to `get_unused_virtual_fd` except this function starts from a specific 
 /// starting position mentioned by `arg` arguments. This will be used for `fcntl`.
-#[doc = include_str!("../docs/get_unused_virtual_fd_from_arg.md")]
-pub fn get_unused_virtual_fd_from_arg(
+#[doc = include_str!("../docs/get_unused_virtual_fd_from_startfd.md")]
+pub fn get_unused_virtual_fd_from_startfd(
     cageid: u64,
     fdkind: u32,
     underfd: u64,

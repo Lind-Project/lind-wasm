@@ -797,7 +797,8 @@ impl Cage {
             return syscall_error(Errno::EBADFD, "dup", "Bad File Descriptor");
         }
         let vfd = wrappedvfd.unwrap();
-
+        // Request another virtual fd to refer to same underlying kernel fd as `virtual_fd`
+        // from input
         let ret_virtualfd =
             fdtables::get_unused_virtual_fd(self.cageid, vfd.fdkind, vfd.underfd, false, 0)
                 .unwrap();
@@ -828,6 +829,8 @@ impl Cage {
         // This step is handled inside `fdtables`
         match fdtables::translate_virtual_fd(self.cageid, old_virtualfd as u64) {
             Ok(old_vfd) => {
+                // Request another virtual fd to refer to same underlying kernel fd as `virtual_fd`
+                // from input.
                 // The two file descriptors do not share file descriptor flags (the
                 // close-on-exec flag).  The close-on-exec flag (FD_CLOEXEC; see fcntl_syscall())
                 // for the duplicate descriptor is off
@@ -920,7 +923,7 @@ impl Cage {
                     Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
                 };
                 // Get lowest-numbered available file descriptor greater than or equal to `arg`
-                match fdtables::get_unused_virtual_fd_from_arg(
+                match fdtables::get_unused_virtual_fd_from_startfd(
                     self.cageid,
                     vfd.fdkind,
                     vfd.underfd,
@@ -942,7 +945,7 @@ impl Cage {
                 };
                 // Get lowest-numbered available file descriptor greater than or equal to `arg`
                 // and set the `O_CLOEXEC` flag
-                match fdtables::get_unused_virtual_fd_from_arg(
+                match fdtables::get_unused_virtual_fd_from_startfd(
                     self.cageid,
                     vfd.fdkind,
                     vfd.underfd,
@@ -986,7 +989,7 @@ impl Cage {
             // Return (as the function result) the process ID or process
             // group ID currently receiving SIGIO and SIGURG signals for
             // events on file descriptor fd.
-            (F_GETOWN, ..) => 1000,
+            (F_GETOWN, ..) => DEFAULT_GID as i32,
             // Set the process ID or process group ID that will receive
             // SIGIO and SIGURG signals for events on the file descriptor
             // fd.
@@ -1666,10 +1669,23 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 }
 
 /// This function will be different in new code base (when splitting out type conversion function)
-/// since the conversion from u64 -> i32 in negative number will be different
+/// since the conversion from u64 -> i32 in negative number will be different. These lines are repeated
+/// in 5 out of 6 fcntl_syscall cases, so wrapped these loc into helper functions to make code cleaner.
 ///
-/// ## Return
+/// ## Arguments
+/// cageid: cage ID associate with virtual file descriptor
+/// virtual_fd: virtual file descriptor
 ///
+/// ## Return Type
+/// On success:
+/// Return corresponding FDTableEntry that contains
+/// (1) underlying kernel fd.
+/// (2) file descriptor kind.
+/// (3) O_CLOEXEC flag.
+/// (4) file descriptor specific extra information.
+///
+/// On error:
+/// Return error num EBADFD(Bad File Descriptor)
 pub fn _fcntl_helper(cageid: u64, virtual_fd: i32) -> Result<fdtables::FDTableEntry, Errno> {
     if virtual_fd < 0 {
         return Err(Errno::EBADFD);
