@@ -307,17 +307,24 @@ pub fn mmap_handler(
 }
 
 
-/// Handles the `shmat_syscall`, interacting with the `vmmap` structure.
-/// Similar to mmap_handler but for shared memory attachment.
+/// Handles the shmat syscall by mapping shared memory segments into the cage's address space.
+/// This function manages the attachment of shared memory segments by updating the cage's vmmap
+/// and handling the raw shmat syscall.
 ///
 /// # Arguments
-/// * `cageid` - Identifier of the cage that initiated the shmat syscall
-/// * `shmid` - Shared memory segment identifier
-/// * `shmaddr` - Requested address for attachment (can be null)
-/// * `shmflg` - Attachment flags
+/// * `cageid` - The cage ID that is performing the shmat operation
+/// * `addr` - The requested address to attach the shared memory segment (can be null)
+/// * `len` - The size of the shared memory segment to attach
+/// * `prot` - The memory protection flags for the mapping
+/// * `shmflag` - Flags controlling the shared memory attachment behavior
+/// * `shmid` - The ID of the shared memory segment to attach
 ///
 /// # Returns
-/// * `i32` - Result of the shmat operation
+/// * `u32` - The address where the shared memory segment was attached, or an error code
+///
+/// # Errors
+/// * `EINVAL` - If the provided address is not page-aligned
+/// * `ENOMEM` - If there is insufficient memory to complete the attachment
 pub fn shmat_handler(
     cageid: u64,
     addr: *mut u8,
