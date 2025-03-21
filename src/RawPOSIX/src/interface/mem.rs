@@ -384,6 +384,9 @@ pub fn shmat_handler(
         let backing = MemoryBackingType::SharedMemory(shmid as u64);
         // Use the effective protection (prot) for both the current and maximum protection.
         let maxprot = prot;
+        // Add a new vmmap entry for the shared memory segment.
+        // Since shared memory is not file-backed, there are no extra mapping flags
+        // or file offset parameters to consider; thus, we pass 0 for both.
         let _ = vmmap.add_entry_with_overwrite(
             useraddr >> PAGESHIFT,
             (rounded_length >> PAGESHIFT) as u32,
