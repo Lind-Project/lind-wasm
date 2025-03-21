@@ -8,6 +8,9 @@ use crate::interface::cagetable_getref;
 use crate::safeposix::cage::Cage;
 use crate::safeposix::vmmap::{MemoryBackingType, Vmmap, VmmapOps};
 use std::result::Result;
+use crate::safeposix::shm::{SHM_METADATA,get_shm_length};
+use crate::safeposix::shm::ShmMetadata;
+use std::sync::Arc;
 use sysdefs::constants::SHM_RDONLY;
 
 // heap is placed at the very top of the memory
@@ -155,11 +158,10 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
 /// # Arguments
 /// * `cageid` - Identifier of the cage that calls the `shmdt`
 /// * `addr` - Starting address of the shared memory region to detach
-/// * `length` - Length of the shared memory region to detach
 ///
 /// # Returns
 /// * `i32` - 0 for success and negative errno for failure
-pub fn shmdt_handler(cageid: u64, addr: *mut u8, length: usize) -> i32 {
+pub fn shmdt_handler(cageid: u64, addr: *mut u8) -> i32 {
     // Retrieve the cage reference.
     let cage = cagetable_getref(cageid);
 
@@ -179,11 +181,18 @@ pub fn shmdt_handler(cageid: u64, addr: *mut u8, length: usize) -> i32 {
         return shmid;
     }
 
+    // Get a reference to the inner ShmMetadata
+    // let shm_metadata = SHM_METADATA.get();
+    // let length = match shm_metadata.get_shm_length(shmid) {
+    //     Some(size) => size,
+    //     None => return syscall_error(Errno::EINVAL, "shmat", "invalid shmid")
+    // };
+
     // Remove the mapping from the vmmap.
     // This call removes the range starting at the page-aligned user address,
     // for the number of pages that cover the shared memory region.
     let mut vmmap = cage.vmmap.write();
-    vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, (length as u32) >> PAGESHIFT);
+    // vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, (length as u32) >> PAGESHIFT);
 
     0
 }
@@ -357,7 +366,6 @@ pub fn mmap_handler(
 /// # Arguments
 /// * `cageid` - The cage ID that is performing the shmat operation
 /// * `addr` - The requested address to attach the shared memory segment (can be null)
-/// * `len` - The size of the shared memory segment to attach
 /// * `prot` - The memory protection flags for the mapping
 /// * `shmflag` - Flags controlling the shared memory attachment behavior
 /// * `shmid` - The ID of the shared memory segment to attach
@@ -371,7 +379,6 @@ pub fn mmap_handler(
 pub fn shmat_handler(
     cageid: u64,
     addr: *mut u8,
-    len: usize,
     mut prot: i32,
     shmflag: i32,
     shmid: i32,
@@ -386,7 +393,19 @@ pub fn shmat_handler(
     } else {
         PROT_READ | PROT_WRITE
     };
+    let len = match get_shm_length(shmid) {
+        Some(l) => l,
+        None => return syscall_error(Errno::EINVAL, "shmat", "invalid shmid") as u32,
+    };
+    
 
+    
+
+    // let shm_metadata = &SHM_METADATA.read();
+    // let len = match shm_metadata.get_shm_length(shmid) {
+    //     Some(size) => size,
+    //     None => return syscall_error(Errno::EINVAL, "shmat", "invalid shmid") as u32
+    // };
     // Check that the provided address is page aligned.
     let rounded_addr = round_up_page(addr as u64);
     if rounded_addr != addr as u64 {

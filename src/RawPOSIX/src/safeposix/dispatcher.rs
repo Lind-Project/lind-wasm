@@ -742,26 +742,13 @@ pub fn lind_syscall_api(
             let shmid = arg1 as i32;
             let addr = arg2 as *mut u8;
             let shmflg = arg3 as i32;
-            let len = arg4 as usize;
-        
-            // Retrieve the shared memory segment length.
-            if len == 0 {
-                return syscall_error(Errno::EINVAL, "shmat", "length cannot be zero");
-            }
-            // Call the shmat handler with a dummy prot (0) since the handler will determine
-            // the effective protection based on shmflg.
-            interface::shmat_handler(cageid, addr, len, 0, shmflg, shmid) as i32
+            interface::shmat_handler(cageid, addr, 0, shmflg, shmid) as i32
         }
                 
 
         SHMDT_SYSCALL => {
             let addr = arg1 as *mut u8;
-            let length = arg2 as usize;
-
-            if length == 0 {
-                return syscall_error(Errno::EINVAL, "shmdt", "length cannot be zero");
-            }
-            interface::shmdt_handler(cageid, addr, length)
+            interface::shmdt_handler(cageid, addr)
         }
 
         PWRITE_SYSCALL => {
