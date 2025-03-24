@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Load configuration
 source "$(dirname "$0")/lind_config.sh"
 
