@@ -1,24 +1,25 @@
 #![allow(dead_code)]
 
 // System related system calls
-use crate::constants::{
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::fs_const::{SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY};
+use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK,
-    SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGNAL_MAX, SIG_BLOCK, SIG_SETMASK,
-    SIG_UNBLOCK, STACK_CUR, STACK_MAX,
+    SIGNAL_MAX, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX,
 };
+// Import data structure
+use sysdefs::data::{fs_struct, net_struct};
+// Import fdtables
+use fdtables;
 
-use crate::interface;
+use crate::interface::{self, convert_signal_mask, lind_send_signal};
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
 use crate::safeposix::shm::*;
 
-use crate::fdtables;
-
 use libc::*;
-
 use std::io;
 use std::io::Write;
-
 use std::sync::Arc as RustRfc;
 
 impl Cage {
@@ -51,27 +52,6 @@ impl Cage {
         // Modify the fdtable manually
         fdtables::copy_fdtable_for_cage(self.cageid, child_cageid).unwrap();
 
-        // we grab the parent cages main threads sigset and store it at 0
-        // we do this because we haven't established a thread for the cage yet, and dont have a threadid to store it at
-        // this way the child can initialize the sigset properly when it establishes its own mainthreadid
-        let newsigset = interface::RustHashMap::new();
-        if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // we don't add these for the test suite
-            // BUG: Signals are commented out until we add them to lind-wasm
-            // let mainsigsetatomic = self
-            //     .sigset
-            //     .get(
-            //         &self
-            //             .main_threadid
-            //             .load(interface::RustAtomicOrdering::Relaxed),
-            //     )
-            //     .unwrap();
-            // let mainsigset = interface::RustAtomicU64::new(
-            //     mainsigsetatomic.load(interface::RustAtomicOrdering::Relaxed),
-            // );
-            // newsigset.insert(0, mainsigset);
-        }
-
         let parent_vmmap = self.vmmap.read();
         let new_vmmap = parent_vmmap.clone();
         let cageobj = Cage {
@@ -95,8 +75,12 @@ impl Cage {
             rev_shm: interface::Mutex::new((*self.rev_shm.lock()).clone()),
             thread_table: interface::RustHashMap::new(),
             signalhandler: self.signalhandler.clone(),
-            sigset: newsigset,
-            main_threadid: interface::RustAtomicU64::new(0),
+            sigset: interface::RustAtomicU64::new(
+                self.sigset.load(interface::RustAtomicOrdering::Relaxed),
+            ),
+            pending_signals: interface::RustLock::new(vec![]),
+            epoch_handler: interface::RustHashMap::new(),
+            main_threadid: interface::RustLock::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
             vmmap: interface::RustLock::new(new_vmmap), // clone the vmmap for the child
             zombies: interface::RustLock::new(vec![]),
@@ -149,6 +133,20 @@ impl Cage {
         let mut vmmap = self.vmmap.write();
         vmmap.clear(); //this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
 
+        // perform signal related clean up
+
+        // all the signal handler becomes default after exec
+        // pending signals should be perserved though
+        self.signalhandler.clear();
+        // the sigset will be reset after exec
+        self.sigset.store(0, interface::RustAtomicOrdering::Relaxed);
+        // we also clean up epoch handler and main thread id
+        // since they will be re-established from wasmtime
+        self.epoch_handler.clear();
+        let mut threadid_guard = self.main_threadid.write();
+        *threadid_guard = 0;
+        drop(threadid_guard);
+
         0
     }
 
@@ -184,13 +182,12 @@ impl Cage {
             }
         }
 
-        // Trigger SIGCHLD
+        // Trigger SIGCHLD if we are currently not running rawposix test suite
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
-            // dont trigger SIGCHLD for test suite
-            // BUG: Signals are commented out until we add them to lind-wasm
-            // if self.cageid != self.parent {
-            //     interface::lind_kill_from_id(self.parent, libc::SIGCHLD);
-            // }
+            // if the cage has parent (i.e. it is not the "root" cage)
+            if self.cageid != self.parent {
+                lind_send_signal(self.parent, SIGCHLD);
+            }
         }
 
         //fdtable will be dropped at end of dispatcher scope because of Arc
@@ -364,8 +361,8 @@ impl Cage {
     pub fn sigaction_syscall(
         &self,
         sig: i32,
-        act: Option<&interface::SigactionStruct>,
-        oact: Option<&mut interface::SigactionStruct>,
+        act: Option<&fs_struct::SigactionStruct>,
+        oact: Option<&mut fs_struct::SigactionStruct>,
     ) -> i32 {
         if let Some(some_oact) = oact {
             let old_sigactionstruct = self.signalhandler.get(&sig);
@@ -373,12 +370,12 @@ impl Cage {
             if let Some(entry) = old_sigactionstruct {
                 some_oact.clone_from(entry.value());
             } else {
-                some_oact.clone_from(&interface::SigactionStruct::default()); // leave handler field as NULL
+                some_oact.clone_from(&fs_struct::SigactionStruct::default()); // leave handler field as NULL
             }
         }
 
         if let Some(some_act) = act {
-            if sig == 9 || sig == 19 {
+            if sig == SIGKILL as i32 || sig == SIGSTOP as i32 {
                 // Disallow changing the action for SIGKILL and SIGSTOP
                 return syscall_error(
                     Errno::EINVAL,
@@ -398,39 +395,35 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid cage id.");
         }
 
-        if let Some(cage) = interface::cagetable_getref_opt(cage_id as u64) {
-            interface::lind_threadkill(
-                cage.main_threadid
-                    .load(interface::RustAtomicOrdering::Relaxed),
-                sig,
-            );
-            return 0;
-        } else {
+        if (sig < 0) || (sig >= 32) {
+            return syscall_error(Errno::EINVAL, "sigkill", "Invalid signal number");
+        }
+
+        if !lind_send_signal(cage_id as u64, sig) {
             return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
         }
+
+        0
     }
 
     pub fn sigprocmask_syscall(
         &self,
         how: i32,
-        set: Option<&interface::SigsetType>,
-        oldset: Option<&mut interface::SigsetType>,
+        set: Option<&fs_struct::SigsetType>,
+        oldset: Option<&mut fs_struct::SigsetType>,
     ) -> i32 {
         let mut res = 0;
-        let pthreadid = interface::get_pthreadid();
-
-        let sigset = self.sigset.get(&pthreadid).unwrap();
 
         if let Some(some_oldset) = oldset {
-            *some_oldset = sigset.load(interface::RustAtomicOrdering::Relaxed);
+            *some_oldset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
         }
 
         if let Some(some_set) = set {
-            let curr_sigset = sigset.load(interface::RustAtomicOrdering::Relaxed);
+            let curr_sigset = self.sigset.load(interface::RustAtomicOrdering::Relaxed);
             res = match how {
                 SIG_BLOCK => {
                     // Block signals in set
-                    sigset.store(
+                    self.sigset.store(
                         curr_sigset | *some_set,
                         interface::RustAtomicOrdering::Relaxed,
                     );
@@ -439,14 +432,38 @@ impl Cage {
                 SIG_UNBLOCK => {
                     // Unblock signals in set
                     let newset = curr_sigset & !*some_set;
-                    let pendingsignals = curr_sigset & some_set;
-                    sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
-                    self.send_pending_signals(pendingsignals, pthreadid);
+                    self.sigset
+                        .store(newset, interface::RustAtomicOrdering::Relaxed);
+                    // check if any of the unblocked signals are in the pending signal list
+                    // and trigger the epoch if it has
+                    let pending_signals = self.pending_signals.read();
+                    if pending_signals
+                        .iter()
+                        .any(|signo| (*some_set & convert_signal_mask(*signo)) != 0)
+                    {
+                        interface::signal_epoch_trigger(self.cageid);
+                    }
                     0
                 }
                 SIG_SETMASK => {
+                    let pending_signals = self.pending_signals.read();
+                    // find all signals switched from blocking to nonblocking
+                    // 1. perform a xor operation to find signals that switched state
+                    // all the signal masks changed from 0 to 1, or 1 to 0 are filtered in this step
+                    // 2. perform an and operation to the old sigset, this further filtered masks and only
+                    // left masks changed from 1 to 0
+                    let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+                    // check if any of the unblocked signals are in the pending signal list
+                    // and trigger the epoch if it has
+                    if pending_signals
+                        .iter()
+                        .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
+                    {
+                        interface::signal_epoch_trigger(self.cageid);
+                    }
                     // Set sigset to set
-                    sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
+                    self.sigset
+                        .store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 }
                 _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
@@ -458,8 +475,8 @@ impl Cage {
     pub fn setitimer_syscall(
         &self,
         which: i32,
-        new_value: Option<&interface::ITimerVal>,
-        old_value: Option<&mut interface::ITimerVal>,
+        new_value: Option<&fs_struct::ITimerVal>,
+        old_value: Option<&mut fs_struct::ITimerVal>,
     ) -> i32 {
         match which {
             ITIMER_REAL => {
@@ -490,7 +507,7 @@ impl Cage {
         0
     }
 
-    pub fn getrlimit(&self, res_type: u64, rlimit: &mut interface::Rlimit) -> i32 {
+    pub fn getrlimit(&self, res_type: u64, rlimit: &mut fs_struct::Rlimit) -> i32 {
         match res_type {
             RLIMIT_NOFILE => {
                 rlimit.rlim_cur = NOFILE_CUR;

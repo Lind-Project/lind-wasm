@@ -1,10 +1,10 @@
-use crate::constants::{
+use fdtables;
+use sysdefs::constants::err_const::{syscall_error, Errno};
+use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_EXEC, PROT_NONE,
     PROT_READ, PROT_WRITE,
 };
-use crate::fdtables;
-use crate::safeposix::cage::syscall_error;
-use crate::safeposix::cage::Errno;
+
 use nodit::NoditMap;
 use nodit::{interval::ie, Interval};
 use std::io;
@@ -226,6 +226,19 @@ pub trait VmmapOps {
         pages_per_map: u32,
         hint: u32,
     ) -> Option<Interval<u32>>;
+
+    /// Updates protection flags for a range of pages, handling mprotect operations
+    ///
+    /// Arguments:
+    /// - start_page: Starting page number to update
+    /// - npages: Number of pages to update
+    /// - new_prot: New protection flags to apply
+    ///
+    /// This function:
+    /// - Updates protection flags for the specified range
+    /// - Handles splitting of regions if necessary
+    /// - Maintains vmmap consistency
+    fn update_protections(&mut self, start_page: u32, npages: u32, new_prot: i32);
 }
 
 /// Represents a virtual memory map that manages memory regions and their attributes
@@ -950,5 +963,59 @@ impl VmmapOps for Vmmap {
         }
 
         None
+    }
+
+    /// Updates protection flags for a range of pages, handling mprotect operations
+    ///
+    /// Arguments:
+    /// - start_page: Starting page number to update
+    /// - npages: Number of pages to update
+    /// - new_prot: New protection flags to apply
+    ///
+    /// This function:
+    /// - Updates protection flags for the specified range
+    /// - Handles splitting of regions if necessary
+    /// - Maintains vmmap consistency
+    fn update_protections(&mut self, start_page: u32, npages: u32, new_prot: i32) {
+        // Calculate page range
+        let region_end_page = start_page + npages;
+        let region_interval = ie(start_page, region_end_page);
+
+        // Store intervals that need to be inserted after iteration
+        let mut to_insert = Vec::new();
+
+        // Iterate over overlapping entries
+        for (interval, entry) in self.entries.overlapping_mut(region_interval) {
+            let entry_start = interval.start();
+            let entry_end = interval.end();
+
+            // Case 1: Entry starts before region
+            if entry_start < start_page {
+                // Split entry and keep original protection for first part
+                let mut first_part = entry.clone();
+                first_part.page_num = entry_start;
+                first_part.npages = start_page - entry_start;
+                to_insert.push((ie(entry_start, start_page), first_part));
+            }
+
+            // Case 2: Entry extends beyond region
+            if entry_end > region_end_page {
+                // Split entry and keep original protection for last part
+                let mut last_part = entry.clone();
+                last_part.page_num = region_end_page;
+                last_part.npages = entry_end - region_end_page;
+                to_insert.push((ie(region_end_page, entry_end), last_part));
+            }
+
+            // Update protection for the overlapping part
+            entry.prot = new_prot;
+            entry.page_num = start_page.max(entry_start);
+            entry.npages = region_end_page.min(entry_end) - entry.page_num;
+        }
+
+        // Insert the split regions
+        for (interval, entry) in to_insert {
+            let _ = self.entries.insert_overwrite(interval, entry);
+        }
     }
 }

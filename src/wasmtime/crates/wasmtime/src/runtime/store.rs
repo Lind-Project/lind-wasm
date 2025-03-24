@@ -115,7 +115,7 @@ pub use self::data::*;
 mod func_refs;
 use func_refs::FuncRefs;
 
-use super::{OnCalledAction, RewindingReturn};
+use super::{AsyncifyState, OnCalledAction, SignalAsyncifyData};
 
 /// A [`Store`] is a collection of WebAssembly instances and host-defined state.
 ///
@@ -337,7 +337,9 @@ pub struct StoreOpaque {
     func_refs: FuncRefs,
     host_globals: Vec<StoreBox<VMHostGlobalContext>>,
 
-    rewinding: RewindingReturn,
+    asyncify_state: AsyncifyState,
+    signal_asyncify_data: Vec<SignalAsyncifyData>,
+    signal_asyncify_counter: u64,
     // stack top
     stack_top: u64,
     // stack bottom
@@ -543,10 +545,9 @@ impl<T> Store<T> {
                 engine: engine.clone(),
                 runtime_limits: Default::default(),
                 instances: Vec::new(),
-                rewinding: RewindingReturn {
-                    rewinding: false,
-                    retval: 0,
-                },
+                asyncify_state: super::AsyncifyState::Normal,
+                signal_asyncify_data: Vec::new(),
+                signal_asyncify_counter: 0,
                 #[cfg(feature = "component-model")]
                 num_component_instances: 0,
                 signal_handler: None,
@@ -656,10 +657,9 @@ impl<T> Store<T> {
             engine: engine.clone(),
             runtime_limits: Default::default(),
             instances: Vec::new(),
-            rewinding: RewindingReturn {
-                rewinding: false,
-                retval: 0,
-            },
+            asyncify_state: super::AsyncifyState::Normal,
+            signal_asyncify_data: Vec::new(),
+            signal_asyncify_counter: 0,
             #[cfg(feature = "component-model")]
             num_component_instances: 0,
             signal_handler: None,
@@ -1118,6 +1118,12 @@ impl<T> Store<T> {
         self.inner.set_epoch_deadline(ticks_beyond_current);
     }
 
+    // set the stack snapshots
+    // used by fork to copy stack snapshots information to child
+    pub fn set_stack_snapshots(&mut self, stack_snapshots: HashMap<u64, Vec<u8>>) {
+        self.inner.stack_snapshots = stack_snapshots;
+    }
+
     /// Configures epoch-deadline expiration to trap.
     ///
     /// When epoch-interruption-instrumented code is executed on this
@@ -1235,9 +1241,9 @@ impl<'a, T> StoreContext<'a, T> {
         self.0.get_fuel()
     }
 
-    /// get current rewinding state
-    pub fn get_rewinding_state(&self) -> RewindingReturn {
-        self.0.rewinding
+    /// get current asyncify state
+    pub fn get_asyncify_state(&self) -> AsyncifyState {
+        self.0.asyncify_state
     }
 
     /// get stack top
@@ -1329,14 +1335,14 @@ impl<'a, T> StoreContextMut<'a, T> {
         self.0.epoch_deadline_trap();
     }
 
-    /// get current rewinding state
-    pub fn get_rewinding_state(&self) -> RewindingReturn {
-        self.0.rewinding
+    /// get current asyncify state
+    pub fn get_asyncify_state(&self) -> AsyncifyState {
+        self.0.asyncify_state
     }
 
-    /// set current rewinding state
-    pub fn set_rewinding_state(&mut self, state: RewindingReturn) {
-        self.0.rewinding = state;
+    /// set current asyncify state
+    pub fn set_asyncify_state(&mut self, state: AsyncifyState) {
+        self.0.asyncify_state = state;
     }
 
     // store the unwind data, return its hash
@@ -1364,6 +1370,17 @@ impl<'a, T> StoreContextMut<'a, T> {
         hash
     }
 
+    // get the stack snapshots information
+    pub fn get_stack_snapshots(&self) -> HashMap<u64, Vec<u8>> {
+        self.0.stack_snapshots.clone()
+    }
+
+    // set the stack snapshots
+    // used by fork to copy stack snapshots information to child
+    pub fn set_stack_snapshots(&mut self, stack_snapshots: HashMap<u64, Vec<u8>>) {
+        self.0.stack_snapshots = stack_snapshots;
+    }
+
     // retrieve the unwind data, given the hash. The entry would be perserved
     // * hash: data stored in jmp_buf. Essentially the return value of `store_unwind_data`
     pub fn retrieve_unwind_data(&mut self, hash: u64) -> Option<Vec<u8>> {
@@ -1373,6 +1390,42 @@ impl<'a, T> StoreContextMut<'a, T> {
         } else {
             None
         }
+    }
+
+    // append the signal callstack information
+    pub fn append_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
+        self.0.signal_asyncify_data.push(SignalAsyncifyData {
+            signal_handler,
+            signo,
+        });
+    }
+
+    // pop the signal callstack information
+    pub fn pop_signal_asyncify_data(&mut self, signal_handler: i32, signo: i32) {
+        self.0.signal_asyncify_data.pop();
+    }
+
+    // get the current signal callstack information
+    pub fn get_current_signal_rewind_data(&mut self) -> Option<SignalAsyncifyData> {
+        let data = self
+            .0
+            .signal_asyncify_data
+            .get(self.0.signal_asyncify_counter as usize)
+            .cloned();
+        let length = self.0.signal_asyncify_data.len();
+        if self.0.signal_asyncify_counter == (length - 1) as u64 {
+            self.0.signal_asyncify_counter = 0;
+        } else {
+            self.0.signal_asyncify_counter += 1;
+        }
+        data
+    }
+
+    // set the signal asyncify information
+    // used by fork to copy asyncify information
+    pub fn set_signal_asyncify_data(&mut self, data: Vec<SignalAsyncifyData>) {
+        self.0.signal_asyncify_data = data;
+        self.0.signal_asyncify_counter = 0;
     }
 
     /// get stack top
@@ -2917,6 +2970,16 @@ impl<T> StoreInner<T> {
         >,
     ) {
         self.on_called = Some(callback);
+    }
+
+    /// set current asyncify state
+    pub fn set_asyncify_state(&mut self, state: AsyncifyState) {
+        self.asyncify_state = state;
+    }
+
+    // get the signal asyncify information
+    pub fn get_signal_asyncify_data(&mut self) -> Vec<SignalAsyncifyData> {
+        self.signal_asyncify_data.clone()
     }
 
     pub fn is_thread(&self) -> bool {

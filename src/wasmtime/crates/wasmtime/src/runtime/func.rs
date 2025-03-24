@@ -5,6 +5,7 @@ use crate::runtime::vm::{
 use crate::runtime::Uninhabited;
 use crate::store::{AutoAssertNoGc, StoreData, StoreOpaque, Stored};
 use crate::type_registry::RegisteredType;
+use crate::vm::TrapReason;
 use crate::{prelude::*, OnCalledAction};
 use crate::{
     AsContext, AsContextMut, CallHook, Engine, Extern, FuncType, Instance, Module, Ref,
@@ -2231,6 +2232,35 @@ impl<T> Caller<'_, T> {
             }
         } else {
             eprintln!("asyncify_stop_rewind export not found");
+            return Err(());
+        }
+    }
+
+    // retrieve the exported signal_callback function from glibc
+    pub fn get_signal_callback(&mut self) -> Result<TypedFunc<(i32, i32), ()>, ()> {
+        if let Some(signal_callback_extern) = self.get_export("signal_callback") {
+            match signal_callback_extern {
+                Extern::Func(signal_callback) => {
+                    match signal_callback.typed::<(i32, i32), ()>(&self) {
+                        Ok(func) => {
+                            return Ok(func);
+                        }
+                        Err(err) => {
+                            eprintln!(
+                                "the signature of signal_callback function is not correct: {:?}",
+                                err
+                            );
+                            return Err(());
+                        }
+                    }
+                }
+                _ => {
+                    eprintln!("signal_callback export is not a function");
+                    return Err(());
+                }
+            }
+        } else {
+            eprintln!("signal_callback export not found");
             return Err(());
         }
     }

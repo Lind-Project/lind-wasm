@@ -30,7 +30,7 @@ mod send_sync_ptr;
 mod store_box;
 mod sys;
 mod table;
-mod traphandlers;
+pub mod traphandlers;
 mod vmcontext;
 
 mod threads;

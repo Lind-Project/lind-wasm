@@ -59,6 +59,8 @@ wasmtime-lind-common = { path = "crates/lind-common" }
 wasmtime-lind-utils = { path = "crates/lind-utils" }
 wasmtime-wasi-http = { workspace = true, optional = true }
 rawposix = { workspace = true }
+fdtables = { workspace = true }
+sysdefs = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true, features = ['std'] }
 target-lexicon = { workspace = true }
@@ -152,6 +154,8 @@ members = [
   "fuzz",
   "winch/codegen",
   "crates/rawposix",
+  "crates/fdtables",
+  "crates/sysdefs",
 ]
 exclude = [
   'docs/rust_wasi_markdown_parser',
@@ -217,6 +221,8 @@ wasmtime-jit-icache-coherence = { path = "crates/jit-icache-coherence", version 
 wasmtime-wit-bindgen = { path = "crates/wit-bindgen", version = "=23.0.0" }
 test-programs-artifacts = { path = 'crates/test-programs/artifacts' }
 rawposix = { path = "crates/rawposix" }
+fdtables = { path = "crates/fdtables" }
+sysdefs = { path = "crates/sysdefs" }
 
 cranelift-wasm = { path = "cranelift/wasm", version = "0.110.0" }
 cranelift-codegen = { path = "cranelift/codegen", version = "0.110.0", default-features = false, features = ["std", "unwind", "trace-log"] }

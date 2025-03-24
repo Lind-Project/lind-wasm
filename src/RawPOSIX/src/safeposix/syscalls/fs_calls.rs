@@ -1,23 +1,20 @@
 #![allow(dead_code)]
 
-use std::fs;
-
-// Add constants imports
-use crate::constants::{
-    DEFAULT_GID, DEFAULT_UID, LIND_ROOT, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, O_CREAT, O_RDONLY,
-    O_RDWR, O_TRUNC, O_WRONLY, PROT_READ, PROT_WRITE, SEEK_CUR, SEEK_END, SEEK_SET, SEM_VALUE_MAX,
-    SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO, S_IRWXG,
-    S_IRWXO, S_IRWXU,
+// Import constants
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::fs_const::{
+    LIND_ROOT, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY,
+    PROT_READ, PROT_WRITE, SEEK_CUR, SEEK_END, SEEK_SET, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST,
+    SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO, S_IRWXG, S_IRWXO, S_IRWXU,
 };
+use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
+// Import data structure
+use sysdefs::data::fs_struct::{FSData, IovecStruct, PipeArray, ShmidsStruct, StatData};
+// Import fdtables
+use fdtables;
 
 use crate::interface;
-use crate::interface::get_errno;
-use crate::interface::handle_errno;
-use crate::interface::FSData;
-use crate::interface::ShmidsStruct;
-use crate::interface::StatData;
-use crate::safeposix::cage::Errno::EINVAL;
-use crate::safeposix::cage::*;
+use crate::safeposix::cage::{Cage, *};
 use crate::safeposix::filesystem::convpath;
 use crate::safeposix::filesystem::normpath;
 use crate::safeposix::shm::*;
@@ -27,12 +24,8 @@ use std::ffi::CStr;
 use std::ffi::CString;
 use std::io::stdout;
 use std::io::{self, Write};
-use std::mem;
 use std::os::unix::io::RawFd;
-use std::ptr;
-
-use crate::fdtables;
-use crate::safeposix::cage::Cage;
+use std::{fs, mem, ptr};
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
@@ -666,12 +659,7 @@ impl Cage {
 
     //------------------------------------WRITEV SYSCALL------------------------------------
 
-    pub fn writev_syscall(
-        &self,
-        virtual_fd: i32,
-        iovec: *const interface::IovecStruct,
-        iovcnt: i32,
-    ) -> i32 {
+    pub fn writev_syscall(&self, virtual_fd: i32, iovec: *const IovecStruct, iovcnt: i32) -> i32 {
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {
             return syscall_error(Errno::EBADF, "write", "Bad File Descriptor");
@@ -1048,6 +1036,23 @@ impl Cage {
         if ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "munmap");
+        }
+        ret
+    }
+
+    //------------------------------------MPROTECT SYSCALL------------------------------------
+    /*
+    *   mprotect() changes protection for memory pages
+    *   Returns 0 on success, -1 on failure
+    *   Manual page: https://man7.org/linux/man-pages/man2/mprotect.2.html
+    */
+    pub fn mprotect_syscall(&self, addr: *mut u8, len: usize, prot: i32) -> i32 {
+        let ret = unsafe {
+            libc::mprotect(addr as *mut c_void, len, prot)
+        };
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "mprotect");
         }
         ret
     }
