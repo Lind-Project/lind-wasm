@@ -1067,7 +1067,7 @@ pub fn lind_syscall_api(
             let futex_op = arg2 as u32;
             let val = arg3 as u32;
             let timeout = match futex_op as i32 {
-                libc::FUTEX_WAIT => translate_vmmap_addr(&cage, arg4).unwrap() as usize,
+                FUTEX_WAIT => translate_vmmap_addr(&cage, arg4).unwrap() as usize,
                 _ => arg4 as usize,
             };
             let uaddr2 = translate_vmmap_addr(&cage, arg1).unwrap();

@@ -301,15 +301,15 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   TLS_DEFINE_INIT_TP (tp, pd);
 
   /*
-  thread stack allocation map:
+  thread stack allocation map (from high to low memory addresses):
         ----------- <--- pd->stackblock
         |         |
-        |         |
-        |         |
-        | pthread |
-        |  stack  |
-        |         |
-        |         |
+        |         | ^
+        |         | |
+        | pthread | |
+        |  stack  | | user stack grow direction
+        |         | |
+        |         | |
         |         |
         ----------- <--- tls_base_addr / real_stack_bottom
         | tls_base|
@@ -327,10 +327,17 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   size_t tls_size = __builtin_wasm_tls_size();
   // stack bottom = stack top + stack size
   unsigned char *stack_bottom = (void *)pd->stackblock + pd->stackblock_size;
+  // calculate the offset for each field based on the above diagram
+
+  // Reserve space for the pthread struct just below the stack
   unsigned char *pthread_addr = stack_bottom - TLS_TCB_SIZE;
+  // Allocate space for TLS data below pthread struct
   unsigned char *TLS_addr = pthread_addr - tls_size;
+  // Allocate space for clone_args below TLS data
   struct clone_args *args = (struct clone_args *)(TLS_addr - sizeof(struct clone_args));
+  // Reserve 8 bytes below clone_args for the TLS base pointer
   uintptr_t* tls_base_addr = (uintptr_t*)((unsigned char *)args - 8);
+  // The actual bottom of the usable stack (with all metadata laid out)
   unsigned char *real_stack_bottom = (unsigned char *)tls_base_addr;
 
   // set up clone args
