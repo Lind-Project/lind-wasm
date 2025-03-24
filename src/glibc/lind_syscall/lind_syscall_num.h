@@ -1,0 +1,123 @@
+/*
+ * Lind syscall number definitions
+ *
+ * This file contains syscall number constants used by Lind WASM to map
+ * between glibc function calls and the corresponding system calls.
+ *
+ * These syscall numbers also align with the Linux syscall table.
+ * Reference: https://github.com/torvalds/linux/blob/master/arch/x86/entry/syscalls/syscall_64.tbl
+ */
+
+#ifndef _LIND_SYSCALL_NUM_H
+#define _LIND_SYSCALL_NUM_H
+
+#define ACCESS_SYSCALL 2
+#define UNLINKAT_SYSCALL 3
+#define UNLINK_SYSCALL 4
+#define LINK_SYSCALL 5
+#define RENAME_SYSCALL 6
+
+#define XSTAT_SYSCALL 9
+#define OPEN_SYSCALL 10
+#define CLOSE_SYSCALL 11
+#define READ_SYSCALL 12
+#define WRITE_SYSCALL 13
+#define LSEEK_SYSCALL 14
+#define IOCTL_SYSCALL 15
+#define TRUNCATE_SYSCALL 16
+#define FXSTAT_SYSCALL 17
+#define FTRUNCATE_SYSCALL 18
+#define FSTATFS_SYSCALL 19
+#define MMAP_SYSCALL 21
+#define MUNMAP_SYSCALL 22
+#define GETDENTS_SYSCALL 23
+#define DUP_SYSCALL 24
+#define DUP2_SYSCALL 25
+#define STATFS_SYSCALL 26
+#define FCNTL_SYSCALL 28
+
+#define GETPPID_SYSCALL 29
+#define EXIT_SYSCALL 30
+#define GETPID_SYSCALL 31
+
+#define BIND_SYSCALL 33
+#define SEND_SYSCALL 34
+#define SENDTO_SYSCALL 35
+#define RECV_SYSCALL 36
+#define RECVFROM_SYSCALL 37
+#define CONNECT_SYSCALL 38
+#define LISTEN_SYSCALL 39
+#define ACCEPT_SYSCALL 40
+
+#define GETSOCKOPT_SYSCALL 43
+#define SETSOCKOPT_SYSCALL 44
+#define SHUTDOWN_SYSCALL 45
+#define SELECT_SYSCALL 46
+#define GETCWD_SYSCALL 47
+#define POLL_SYSCALL 48
+#define SOCKETPAIR_SYSCALL 49
+#define GETUID_SYSCALL 50
+#define GETEUID_SYSCALL 51
+#define GETGID_SYSCALL 52
+#define GETEGID_SYSCALL 53
+#define FLOCK_SYSCALL 54
+#define EPOLL_CREATE_SYSCALL 56
+#define EPOLL_CTL_SYSCALL 57
+#define EPOLL_WAIT_SYSCALL 58
+
+#define SHMGET_SYSCALL 62
+#define SHMAT_SYSCALL 63
+#define SHMDT_SYSCALL 64
+#define SHMCTL_SYSCALL 65
+
+#define PIPE_SYSCALL 66
+#define PIPE2_SYSCALL 67
+#define FORK_SYSCALL 68
+#define EXEC_SYSCALL 69
+
+#define MUTEX_CREATE_SYSCALL 70
+#define COND_CREATE_SYSCALL 75
+#define COND_TIMEDWAIT_SYSCALL 80
+
+#define SEM_TIMEDWAIT_SYSCALL 94
+#define FUTEX_SYSCALL 98
+
+#define GETHOSTNAME_SYSCALL 125
+#define PREAD_SYSCALL 126
+#define PWRITE_SYSCALL 127
+#define CHDIR_SYSCALL 130
+#define MKDIR_SYSCALL 131
+#define RMDIR_SYSCALL 132
+#define CHMOD_SYSCALL 133
+#define FCHMOD_SYSCALL 134
+
+#define SOCKET_SYSCALL 136
+
+#define GETSOCKNAME_SYSCALL 144
+#define GETPEERNAME_SYSCALL 145
+
+#define SIGACTION_SYSCALL 147
+#define KILL_SYSCALL 148
+#define SIGPROCMASK_SYSCALL 149
+#define SETITIMER_SYSCALL 150
+
+#define FCHDIR_SYSCALL 161
+#define FSYNC_SYSCALL 162
+#define FDATASYNC_SYSCALL 163
+#define SYNC_FILE_RANGE 164
+
+#define READLINK_SYSCALL 165
+#define READLINKAT_SYSCALL 166
+
+#define WRITEV_SYSCALL 170
+
+#define CLONE_SYSCALL 171
+#define WAIT_SYSCALL 172
+#define WAITPID_SYSCALL 173
+#define BRK_SYSCALL 175
+#define SBRK_SYSCALL 176
+
+#define NANOSLEEP_TIME64_SYSCALL 181
+#define CLOCK_GETTIME_SYSCALL 191
+
+#endif /* _LIND_SYSCALL_NUM_H */
