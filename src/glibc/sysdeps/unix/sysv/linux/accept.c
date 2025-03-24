@@ -19,12 +19,13 @@
 #include <sysdep-cancel.h>
 #include <socketcall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __libc_accept (int fd, struct sockaddr * addr, socklen_t *len)
 {
   // Dennis Edit
-  return MAKE_SYSCALL(40, "syscall|accept", (uint64_t) fd, (uint64_t)(uintptr_t) addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(ACCEPT_SYSCALL, "syscall|accept", (uint64_t) fd, (uint64_t)(uintptr_t) addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__libc_accept, accept)
 libc_hidden_def (accept)
