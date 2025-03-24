@@ -5,22 +5,6 @@ rawposix_base="$script_dir/src/RawPOSIX"
 
 CC="${CLANG:=/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
 
-# compile_test_cmd_fork="$CC --target=wasm32-unknown-wasi \
-# --sysroot $glibc_base/sysroot \
-# -Wl, --export="__stack_pointer",--export=__stack_low \
-# [input] -g -O0 -o [output] && \
-# $script_dir/tools/binaryen/bin/wasm-opt --epoch-injection --asyncify -O2 --debuginfo [output] -o [output]"
-
-# compile_test_cmd_noshared="$CC --target=wasm32-unknown-wasi \
-# --sysroot $glibc_base/sysroot \
-# -Wl,--export="__stack_pointer",--export=__stack_low \
-# [input] -g -O0 -o [output]"
-
-# compile_test_cmd="$CC -pthread --target=wasm32-unknown-wasi \
-# --sysroot $glibc_base/sysroot \
-#  -Wl,--import-memory,--export-memory,--max-memory=67108864,--export=__stack_low \
-#  [input] -g -O0 -o [output]"
-
 precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output]"
 
 compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi \
