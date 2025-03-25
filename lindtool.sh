@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Load configuration
 source "$(dirname "$0")/lind_config.sh"
 
@@ -173,10 +175,6 @@ if [ "${!#}" = "-p" ]; then
 fi
 
 case $1 in
-    export)
-        echo -e "${GREEN}$export_cmd${RESET}"
-        echo "please manually run the export command"
-        ;;
     compile_test|cptest)
         if [ -z "$2" ]; then
             echo -e "${RED}error: source file name not provided${RESET}"
@@ -257,12 +255,6 @@ case $1 in
             eval "$compile_wasmtime_cmd"
         fi
         ;;
-    compile_rustposix|cpposix)
-        echo -e "${GREEN}$compile_rustposix_cmd${RESET}"
-        if [ "$pmode" -eq 0 ]; then
-            eval "$compile_rustposix_cmd"
-        fi
-        ;;
     compile_rawposix|cpraw)
         echo -e "${GREEN}$compile_rawposix_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
@@ -277,64 +269,20 @@ case $1 in
 
         compile_src $2 $3
         ;;
-    make_all)
+    make_all|make_glibc)
         unset LD_LIBRARY_PATH
         echo -e "${GREEN}$make_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
             eval "$make_cmd"
         fi
         ;;
-    make)
-        result=$(lindmake "$glibc_base" "$pmode")
-        if [ -z "$result" ]; then
-            echo -e "${GREEN}No changes detected.${RESET}"
-            exit 0
-        fi
-        echo $result
-
-        # Set IFS to semicolon and read the string into an array
-        IFS=';' read -r -a array <<< "$result"
-
-        compiled=()
-
-        # Print each element of the array
-        for line in "${array[@]}"; do
-            # Split the string into two variables
-            if [[ "$line" =~ ^([^[:space:]]+)([[:space:]]+)(.+)$ ]]; then
-                src_file=${BASH_REMATCH[1]}
-                compiled+=($src_file)
-                compile_src $src_file ${BASH_REMATCH[3]}
-
-                if [ $? -ne 0 ]; then
-                    echo -e "${RED}Compilation Failed.${RESET}"
-                    exit 1
-                fi
-            else
-                compile_src $line
-
-                if [ $? -ne 0 ]; then
-                    echo -e "${RED}Compilation Failed.${RESET}"
-                    exit 1
-                fi
-            fi
-        done
-
-        echo ""
-        for file in "${compiled[@]}"; do
-            echo -e "${GREEN}Compiled $file successfully.${RESET}"
-        done
-
-        ;;
     help)
         echo "avaliable commands are:"
-        echo "1. export"
-        echo "2. compile_test"
-        echo "3. run"
-        echo "4. compile_wasmtime"
-        echo "5. compile_rustposix"
-        echo "6. compile_src"
-        echo "7. make_all"
-        echo "8. make"
+        echo "1. compile_test"
+        echo "2. run"
+        echo "3. compile_wasmtime"
+        echo "4. compile_src"
+        echo "5. make_all"
         ;;
     *)
         echo "Unknown command identifier."
