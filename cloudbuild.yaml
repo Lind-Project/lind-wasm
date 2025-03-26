@@ -47,9 +47,9 @@ steps:
       - |
         gsutil cp /workspace/results.json gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json && 
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json &&
-        gsutil cp gs://my-bucket/testRuns /workspace/testRuns &&
+        gsutil cp gs://test_result_json_bucket/testRuns /workspace/testRuns &&
         echo "$BRANCH_NAME,$COMMIT_SHA,$BUILD_ID,$(date '+%Y-%m-%d %H:%M:%S')" >> /workspace/testRuns && 
-        gsutil cp /workspace/testRuns gs://my-bucket/testRuns
+        gsutil cp /workspace/testRuns gs://test_result_json_bucket/testRuns
 
 options:
   logging: CLOUD_LOGGING_ONLY
