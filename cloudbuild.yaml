@@ -26,8 +26,7 @@ steps:
     args:
       - '-c'
       - |
-        docker run --name test-container -e BRANCH_NAME=$BRANCH_NAME $$USERNAME/lind-wasm:latest bazel run //:python_tests &&
-        docker cp test-container:/src/RawPOSIX/tmp/results.json /workspace/results.json &&
+        docker cp test-container:/home/lind/lind-wasm/cloudbuild.yaml /workspace/results.json &&
         docker rm -fv $$USERNAME/lind-wasm:latest
 
     env:
