@@ -63,7 +63,7 @@ steps:
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
       - 'BUILD_ID=$BUILD_ID'
-      - 'PR_NUMBER=$_PR_NUMBER'
+      - '_PR_NUMBER=$_PR_NUMBER'
       - 'REPO_FULL_NAME=$REPO_FULL_NAME'
     args:
       - '-c'
@@ -71,7 +71,7 @@ steps:
         curl -X POST -H "Authorization: token $$GITHUB_TOKEN" \
           -H "Content-Type: application/json" \
           -d '{"body": "Test Report\nHTML: https://storage.googleapis.com/test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html\n JSON: https://storage.googleapis.com/test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json"}' \
-          https://api.github.com/repos/$REPO_FULL_NAME/issues/$PR_NUMBER/comments
+          https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments
 
 options:
   logging: CLOUD_LOGGING_ONLY
