@@ -68,7 +68,7 @@ steps:
     args:
       - '-c'
       - |
-        curl -X POST -H "Authorization: token $$GITHUB_TOKEN" \
+        curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
           -H "Content-Type: application/json" \
           -d '{"body": "Test Report\nHTML: https://storage.googleapis.com/test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html\n JSON: https://storage.googleapis.com/test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json"}' \
           https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments
