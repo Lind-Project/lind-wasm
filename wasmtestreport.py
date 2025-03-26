@@ -629,7 +629,7 @@ def main():
     timeout_sec = args.timeout
     output_file = str(Path(args.output).with_suffix('.json'))
     output_html_file = str(Path(args.report).with_suffix('.html'))
-    should_generate_html = args.generate_html
+    should_generate_html = True
     pre_test_only = args.pre_test_only
     clean_testfiles = args.clean_testfiles
 
