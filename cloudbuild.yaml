@@ -41,7 +41,7 @@ steps:
       - 'USERNAME'
 
   # Push test result to bucket
-  - name: 'gcr.io/cloud-builders/docker'
+  - name: 'gcr.io/cloud-builders/gsutil'
     entrypoint: 'bash'
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
