@@ -1,33 +1,63 @@
- steps:
- # Authenticate with Docker
- - name: 'gcr.io/cloud-builders/docker'
-   entrypoint: 'bash'
-   args: ['-c', 'docker login --username=$$USERNAME --password=$$PASSWORD']
-   secretEnv: ['USERNAME', 'PASSWORD']
- # Build the Docker image from .devcontainer folder
- - name: 'gcr.io/cloud-builders/docker'
-   entrypoint: 'bash'
-   args: [
-     '-c',
-     'docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer'
-   ]
-   env:
-    - 'BRANCH_NAME=$BRANCH_NAME'
-   secretEnv: ['USERNAME'] 
-# # Run the container and execute the bazel test run command
- - name: 'gcr.io/cloud-builders/docker'
-   entrypoint: 'bash'
-   args: ['-c', 'docker run -e BRANCH_NAME=$BRANCH_NAME --rm $$USERNAME/lind-wasm:latest bazel run //:python_tests']   
-   env:
-    - 'BRANCH_NAME=$BRANCH_NAME'
-   secretEnv: ['USERNAME']   
+steps:
+  # Authenticate with Docker
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker login --username=$$USERNAME --password=$$PASSWORD'
+    secretEnv:
+      - 'USERNAME'
+      - 'PASSWORD'
 
- options:
-  logging: CLOUD_LOGGING_ONLY  
+  # Build the Docker image from .devcontainer folder
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer'
+    env:
+      - 'BRANCH_NAME=$BRANCH_NAME'
+    secretEnv:
+      - 'USERNAME'
+
+  # Run the container and execute the bazel test run command
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker run --name test-container -e BRANCH_NAME=$BRANCH_NAME $$USERNAME/lind-wasm:latest bazel run //:python_tests &&
+        docker cp test-container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
+        docker rm -fv $$USERNAME/lind-wasm:latest
+
+    env:
+      - 'BRANCH_NAME=$BRANCH_NAME'
+    secretEnv:
+      - 'USERNAME'
+
+  # Push test result to bucket
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    env:
+      - 'BRANCH_NAME=$BRANCH_NAME'
+      - 'BUILD_ID=$BUILD_ID'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+    args:
+      - '-c'
+      - |
+        gsutil cp /workspace/results.json gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json && 
+        gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json &&
+        gsutil cp gs://test_result_json_bucket/testRuns /workspace/testRuns &&
+        echo "$BRANCH_NAME,$COMMIT_SHA,$BUILD_ID,$(date '+%Y-%m-%d %H:%M:%S')" >> /workspace/testRuns && 
+        gsutil cp /workspace/testRuns gs://test_result_json_bucket/testRuns
+
+options:
+  logging: CLOUD_LOGGING_ONLY
   machineType: 'E2_HIGHCPU_8'
- availableSecrets:
-   secretManager:
-   - versionName: projects/1049119266483/secrets/docker-password/versions/1
-     env: 'PASSWORD'
-   - versionName: projects/1049119266483/secrets/docker-username/versions/1
-     env: 'USERNAME'
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/1049119266483/secrets/docker-password/versions/1
+      env: 'PASSWORD'
+    - versionName: projects/1049119266483/secrets/docker-username/versions/1
+      env: 'USERNAME'
