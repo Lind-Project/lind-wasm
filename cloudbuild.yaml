@@ -26,9 +26,14 @@ steps:
     args:
       - '-c'
       - |
-        docker run -e BRANCH_NAME=$BRANCH_NAME $$USERNAME/lind-wasm:latest bazel run //:python_tests &&
-        docker cp $$USERNAME/lind-wasm:latest:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
-        docker rm -fv $$USERNAME/lind-wasm:latest
+        docker run --name lind_test_container \
+          -e BRANCH_NAME=$BRANCH_NAME \
+          $$USERNAME/lind-wasm:latest \
+          bazel run //:python_tests &&
+
+        docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
+
+        docker rm -fv lind_test_container
 
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
