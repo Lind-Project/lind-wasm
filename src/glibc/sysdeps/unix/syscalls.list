@@ -88,6 +88,7 @@ truncate	-	truncate	i:si	__truncate	truncate
 umask		-	umask		Ei:i	__umask		umask
 uname		-	uname		i:p	__uname		uname
 unlink		-	unlink		i:s	__unlink	unlink
+unlinkat	-	unlinkat	i:sii	unlinkat	unlinkat
 utimes		-	utimes		i:sp	__utimes	utimes
 vhangup		-	vhangup		i:i	vhangup
 write		-	write		Ci:ibU	__libc_write	__write write
