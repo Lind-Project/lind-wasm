@@ -133,7 +133,7 @@ unsafe impl InstanceAllocatorImpl for OnDemandInstanceAllocator {
         table_plan: &TablePlan,
         _table_index: DefinedTableIndex,
     ) -> Result<(TableAllocationIndex, Table)> {
-        println!("allocate_table 2");
+        println!("allocate_table 2: {:?}", table_plan);
         let allocation_index = TableAllocationIndex::default();
         let table = Table::new_dynamic(
             table_plan,

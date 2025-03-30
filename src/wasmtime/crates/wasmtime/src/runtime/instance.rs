@@ -234,8 +234,22 @@ impl Instance {
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
         // in wasmtime, one page is 65536 bytes, so we need to convert to pagesize in rawposix
-        let minimal_pages = (plan.memory.minimum * 0x10) * 2;
-        println!("minimal pages: {}", minimal_pages);
+        // let minimal_pages = (plan.memory.minimum * 0x10) * 2;
+        // println!("minimal pages: {}", minimal_pages);
+        let dylink_meminfo = module.dylink_meminfo().as_ref().unwrap();
+        println!("library memory size: {}, align: {}", dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
+
+        fn round_size(base: u32, align: u32) -> u32 {
+            if base > 0 {
+                (base + align - 1) / align * align
+            } else {
+                base
+            }
+        }
+        let rounded_size = round_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
+        println!("round to {}", rounded_size);
+        let rounded_size = round_size(rounded_size, 4096);
+        println!("round to {}", rounded_size);
 
         // store.as_context_mut()
 
@@ -244,7 +258,7 @@ impl Instance {
             MMAP_SYSCALL as u32,
             0,
             4096000, // the first memory region starts from 0
-            minimal_pages << PAGESHIFT, // size of first memory region
+            rounded_size as u64, // size of first memory region
             (PROT_READ | PROT_WRITE) as u64,
             (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
             // we need to pass -1 here, but since lind_syscall_api only accepts u64
@@ -295,18 +309,18 @@ impl Instance {
 
         println!("reloc done");
 
-        unsafe {
-            let ptr = (base + addr as u64 + 26727) as *const u8;
-            for i in 0..100 {
-                let byte = std::ptr::read(ptr.add(i as usize));
-                if byte.is_ascii_alphanumeric() {
-                    print!("{} ", char::from(byte));
-                } else {
-                    print!("{} ", byte);
-                }
-            }
-            println!();
-        }
+        // unsafe {
+        //     let ptr = (base + addr as u64 + 26727) as *const u8;
+        //     for i in 0..100 {
+        //         let byte = std::ptr::read(ptr.add(i as usize));
+        //         if byte.is_ascii_alphanumeric() {
+        //             print!("{} ", char::from(byte));
+        //         } else {
+        //             print!("{} ", byte);
+        //         }
+        //     }
+        //     println!();
+        // }
         // unsafe {
         //     *memory_base = (addr - 1312);
         // }
@@ -773,6 +787,16 @@ impl Instance {
         let instance = store.instance(data.id);
         let (export_name_index, _, &entity) = instance.module().exports.get_full(name)?;
         self._get_export(store, entity, export_name_index)
+    }
+
+    pub fn get_defined_tables(&self, mut store: impl AsContextMut) {
+        let store = store.as_context_mut().0;
+        let data = &store[self.0];
+        let id = data.id.clone();
+        let instance = store.instance_mut(id);
+        for (index, table) in instance.all_tables() {
+            println!("table: {:?}", table);
+        }
     }
 
     pub fn get_stack_pointer(&self, mut store: impl AsContextMut) -> Result<u32, ()> {

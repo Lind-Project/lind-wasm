@@ -842,46 +842,49 @@ impl<T> Linker<T> {
             }
             ModuleKind::Reactor => {
                 println!("reactor");
-                self.func_wrap(
-                    "tmp",
-                    "debug",
-                    move |mut caller: Caller<'_, T>, val: i32| -> i32 {
-                        println!("debug: {}", val);
-                        val
-                    },
-                )?;
-                self.func_wrap(
-                    "env",
-                    "log_execution",
-                    move |mut caller: Caller<'_, T>, val: i32| {
-                        println!("log_execution: {}", val);
-                    },
-                )?;
+                // self.func_wrap(
+                //     "tmp",
+                //     "debug",
+                //     move |mut caller: Caller<'_, T>, val: i32| -> i32 {
+                //         println!("debug: {}", val);
+                //         val
+                //     },
+                // )?;
+                // self.func_wrap(
+                //     "env",
+                //     "log_execution",
+                //     move |mut caller: Caller<'_, T>, val: i32| {
+                //         println!("log_execution: {}", val);
+                //     },
+                // )?;
+
+                self.allow_shadowing(true);
 
                 self.func_wrap(
-                    "env",
+                    module_name,
                     "__printf_buffer_flush_dprintf",
                     move |mut caller: Caller<'_, T>, val: i32| {
                         unreachable!();
                     },
                 )?;
-                // self.func_wrap(
-                //     "env",
-                //     "__pthread_unwind",
-                //     move |mut caller: Caller<'_, T>, val: i32| {
-                //         unreachable!();
-                //     },
-                // )?;
+                self.func_wrap(
+                    module_name,
+                    "__pthread_unwind",
+                    move |mut caller: Caller<'_, T>, val: i32| {
+                        unreachable!();
+                    },
+                )?;
 
                 let dylink_info = module.dylink_meminfo();
                 // let dylink_info = dylink_info.unwrap();
 
                 let stack_pointer = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Var), Val::I32(192864)).unwrap();
                 let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
-                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(130)).unwrap();
-                self.define(&mut store, "env", "__stack_pointer", stack_pointer);
-                self.define(&mut store, "env", "__memory_base", memory_base);
-                self.define(&mut store, "env", "__table_base", table_base);
+                // let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(130)).unwrap();
+                self.define(&mut store, module_name, "__stack_pointer", stack_pointer);
+                self.define(&mut store, module_name, "__memory_base", memory_base);
+
+                // self.define(&mut store, "env", "__table_base", table_base);
                 let handler = memory_base.get_handler(&mut store) as *mut u32;
                 let instance = self.instantiate_lib(&mut store, &module, handler)?;
 
@@ -900,7 +903,102 @@ impl<T> Linker<T> {
                     }
                 }
 
-                self.instance(store, module_name, instance)
+                let ret = self.instance(store, "env", instance);
+
+                // self.allow_shadowing(false);
+
+                ret
+            }
+        }
+    }
+
+    /// link a library
+    pub fn library(
+        &mut self,
+        mut store: impl AsContextMut<Data = T>,
+        module_name: &str,
+        module: &Module,
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
+        // NB: this is intended to function the same as `Linker::module_async`,
+        // they should be kept in sync.
+
+        // This assert isn't strictly necessary since it'll bottom out in the
+        // `HostFunc::to_func` method anyway. This is placed earlier for this
+        // function though to prevent the functions created here from delaying
+        // the panic until they're called.
+        assert!(
+            Engine::same(&self.engine, store.as_context().engine()),
+            "different engines for this linker and the store provided"
+        );
+        match ModuleKind::categorize(module)? {
+            ModuleKind::Command => {
+                unreachable!();
+            }
+            ModuleKind::Reactor => {
+                println!("reactor");
+                // self.func_wrap(
+                //     "tmp",
+                //     "debug",
+                //     move |mut caller: Caller<'_, T>, val: i32| -> i32 {
+                //         println!("debug: {}", val);
+                //         val
+                //     },
+                // )?;
+                // self.func_wrap(
+                //     "env",
+                //     "log_execution",
+                //     move |mut caller: Caller<'_, T>, val: i32| {
+                //         println!("log_execution: {}", val);
+                //     },
+                // )?;
+
+                // self.func_wrap(
+                //     module_name,
+                //     "__printf_buffer_flush_dprintf",
+                //     move |mut caller: Caller<'_, T>, val: i32| {
+                //         unreachable!();
+                //     },
+                // )?;
+                // self.func_wrap(
+                //     module_name,
+                //     "__pthread_unwind",
+                //     move |mut caller: Caller<'_, T>, val: i32| {
+                //         unreachable!();
+                //     },
+                // )?;
+
+                // let dylink_info = module.dylink_meminfo();
+                // let dylink_info = dylink_info.unwrap();
+
+                // let stack_pointer = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Var), Val::I32(192864)).unwrap();
+                // let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
+                // // let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(130)).unwrap();
+                // self.define(&mut store, module_name, "__stack_pointer", stack_pointer);
+                // self.define(&mut store, module_name, "__memory_base", memory_base);
+                // // self.define(&mut store, "env", "__table_base", table_base);
+                // let handler = memory_base.get_handler(&mut store) as *mut u32;
+                // let instance = self.instantiate_lib(&mut store, &module, handler)?;
+                let instance = self.instantiate(&mut store, &module)?;
+
+                // let got_base = instance.get_export(&mut store, "GOT_memory_base").unwrap();
+                // let got_base_global = got_base.into_global().unwrap();
+                // got_base_global.set(store.as_context_mut(), Val::I32(4096000));
+
+                // let mem = instance.get_memory(&mut store, "memory").unwrap();
+                // println!("lib memory: {:?}", mem.data(&mut store));
+
+                if let Some(export) = instance.get_export(&mut store, "_initialize") {
+                    if let Extern::Func(func) = export {
+                        func.typed::<(), ()>(&store)
+                            .and_then(|f| f.call(&mut store, ()).map_err(Into::into))
+                            .context("calling the Reactor initialization function")?;
+                    }
+                }
+
+                self.instance(store, "env", instance)
             }
         }
     }

@@ -17,7 +17,7 @@ use core::mem::{self, MaybeUninit};
 use core::num::NonZeroUsize;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
-use wasmtime_environ::VMSharedTypeIndex;
+use wasmtime_environ::{TableIndex, VMSharedTypeIndex};
 
 /// A reference to the abstract `nofunc` heap value.
 ///
@@ -2050,7 +2050,7 @@ for_each_function_signature!(impl_wasm_ty_list);
 /// recommended to use this type.
 pub struct Caller<'a, T> {
     pub(crate) store: StoreContextMut<'a, T>,
-    caller: &'a crate::runtime::vm::Instance,
+    caller: &'a mut crate::runtime::vm::Instance,
 }
 
 impl<T> Caller<'_, T> {
@@ -2069,7 +2069,7 @@ impl<T> Caller<'_, T> {
 
             let ret = f(Caller {
                 store,
-                caller: &instance,
+                caller: instance,
             });
 
             // Safe to recreate a mutable borrow of the store because `ret`
@@ -2292,6 +2292,67 @@ impl<T> Caller<'_, T> {
     /// [`Store::fuel_async_yield_interval`](crate::Store::fuel_async_yield_interval)
     pub fn fuel_async_yield_interval(&mut self, interval: Option<u64>) -> Result<()> {
         self.store.fuel_async_yield_interval(interval)
+    }
+
+    // pub fn table_grow(&mut self, table_index: TableIndex, delta: u32, init_value: TableElement) {
+    pub fn table_grow(&mut self) {
+        // let table = self.caller.imported_table(TableIndex::from_u32(0));
+
+        let double_type = FuncType::new(
+            self.store.engine(),
+            [ValType::I32].iter().cloned(),
+            [ValType::I32].iter().cloned(),
+        );
+        let double = Func::new(&mut self.store, double_type, |_, params, results| {
+            let mut value = params[0].unwrap_i32();
+            value *= 2;
+            results[0] = value.into();
+            Ok(())
+        });
+        let init = Ref::Func(Some(double));
+
+        let ty = TableType::new(RefType::FUNCREF, 0, None);
+        let init = init.into_table_element(self.store.0, ty.element()).unwrap();
+
+        // -----------------------------
+        let new_module = Module::new(
+            self.store.engine(),
+            r#"
+                (module
+                    (func $double (param $x i32) (result i32)
+                        local.get $x
+                        i32.const 4
+                        i32.mul
+                    )
+
+                    (export "double" (func $double))
+                )
+            "#,
+        ).unwrap();
+        let new_instance = Instance::new(&mut self.store, &new_module, &[]).unwrap();
+        let lib_func = new_instance.get_func(&mut self.store, "double").unwrap();
+        let lib_init = Ref::Func(Some(lib_func));
+
+        let lib_ty = TableType::new(RefType::FUNCREF, 0, None);
+        let lib_init = lib_init.into_table_element(self.store.0, ty.element()).unwrap();
+        // -----------------------------
+
+        let res = self.caller.table_grow(TableIndex::from_u32(0), 1, lib_init).unwrap();
+        println!("res: {:?}", res);
+        
+        // let instance = self.caller
+        //     .host_state()
+        //     .downcast_ref::<Instance>().unwrap();
+        // instance.get_defined_tables(self.store.as_context_mut());
+        // TableElement::FuncRef(())
+        // self.caller.table_grow(table_index, delta, init_value)
+    }
+    pub fn grow_table_lib(&mut self, init_value: Ref) -> u32 {
+        let lib_ty = TableType::new(RefType::FUNCREF, 0, None);
+        let lib_init = init_value.into_table_element(self.store.0, lib_ty.element()).unwrap();
+        let res = self.caller.table_grow(TableIndex::from_u32(0), 1, lib_init).unwrap();
+
+        res.unwrap()
     }
 }
 
@@ -2646,6 +2707,9 @@ impl FuncKind {
 }
 
 use self::rooted::*;
+
+use super::vm::TableElement;
+use super::{RefType, TableType};
 
 /// An inner module is used here to force unsafe construction of
 /// `RootedHostFunc` instead of accidentally safely allowing access to its

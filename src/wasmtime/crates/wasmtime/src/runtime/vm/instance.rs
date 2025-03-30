@@ -164,6 +164,7 @@ impl Instance {
         tables: PrimaryMap<DefinedTableIndex, (TableAllocationIndex, Table)>,
         memory_plans: &PrimaryMap<MemoryIndex, MemoryPlan>,
     ) -> InstanceHandle {
+        println!("vm instance new");
         // The allocation must be *at least* the size required of `Instance`.
         let layout = Self::alloc_layout(req.runtime_info.offsets());
         let ptr = alloc::alloc::alloc(layout);
@@ -280,7 +281,7 @@ impl Instance {
     }
 
     /// Return the index `VMTableImport`.
-    fn imported_table(&self, index: TableIndex) -> &VMTableImport {
+    pub fn imported_table(&self, index: TableIndex) -> &VMTableImport {
         unsafe { &*self.vmctx_plus_offset(self.offsets().vmctx_vmtable_import(index)) }
     }
 

@@ -2,10 +2,11 @@
 
 use anyhow::Result;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
+use wasmtime_environ::TableIndex;
 use wasmtime_lind_multi_process::{get_memory_base, LindHost, clone_constants::CloneArgStruct};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use wasmtime::Caller;
+use wasmtime::{AsContextMut, Caller};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
 // then the syscall would be dispatched into rawposix, or other crates under wasmtime, depending on the syscall, to perform its job
@@ -158,6 +159,31 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
             ctx.lind_longjmp(&mut caller, jmp_buf as u32, retval)
         },
     )?;
+
+    linker.func_wrap(
+        "debug",
+        "malloc_error",
+        move |mut caller: Caller<'_, T>, str: i32| -> i32 {
+            println!("-------------------");
+            let base = get_memory_base(&caller);
+            println!("malloc error: {}", rawposix::interface::get_cstr(base + str as u64).unwrap());
+            0
+        },
+    )?;
+
+    // linker.func_wrap(
+    //     "lind",
+    //     "test_dylink",
+    //     move |mut caller: Caller<'_, T>| -> i32 {
+    //         println!("-------------------");
+    //         println!("inside test_dylink");
+    //         // let new_elem = Table
+    //         // caller.table_grow(TableIndex::from_u32(0), 1, init_value)
+    //         caller.table_grow();
+
+    //         256
+    //     },
+    // )?;
 
     Ok(())
 }

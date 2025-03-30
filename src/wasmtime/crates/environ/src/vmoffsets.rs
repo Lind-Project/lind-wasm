@@ -369,7 +369,7 @@ impl<P: PtrSize> VMOffsets<P> {
             .count()
             .try_into()
             .unwrap();
-        VMOffsets::from(VMOffsetsFields {
+        let tmp = VMOffsets::from(VMOffsetsFields {
             ptr,
             num_imported_functions: cast_to_u32(module.num_imported_funcs),
             num_imported_tables: cast_to_u32(module.num_imported_tables),
@@ -383,7 +383,55 @@ impl<P: PtrSize> VMOffsets<P> {
             num_defined_globals: cast_to_u32(module.globals.len() - module.num_imported_globals),
             num_escaped_funcs: cast_to_u32(module.num_escaped_funcs),
             num_call_indirect_caches: cast_to_u32(module.num_call_indirect_caches),
-        })
+        });
+        // println!("VMOffsets: {:?}", tmp);
+        // println!(
+        //     "VMOffsets {{
+        //     num_imported_functions: {},
+        //     num_imported_tables: {},
+        //     num_imported_memories: {},
+        //     num_imported_globals: {},
+        //     num_defined_tables: {},
+        //     num_defined_memories: {},
+        //     num_owned_memories: {},
+        //     num_defined_globals: {},
+        //     num_escaped_funcs: {},
+        //     num_call_indirect_caches: {},
+        //     imported_functions offset: {},
+        //     imported_tables offset: {},
+        //     imported_memories offset: {},
+        //     imported_globals offset: {},
+        //     defined_tables offset: {},
+        //     defined_memories offset: {},
+        //     owned_memories offset: {},
+        //     defined_globals offset: {},
+        //     defined_func_refs offset: {},
+        //     call_indirect_caches offset: {},
+        //     total size: {}
+        // }}",
+        //     tmp.num_imported_functions,
+        //     tmp.num_imported_tables,
+        //     tmp.num_imported_memories,
+        //     tmp.num_imported_globals,
+        //     tmp.num_defined_tables,
+        //     tmp.num_defined_memories,
+        //     tmp.num_owned_memories,
+        //     tmp.num_defined_globals,
+        //     tmp.num_escaped_funcs,
+        //     tmp.num_call_indirect_caches,
+        //     tmp.imported_functions,
+        //     tmp.imported_tables,
+        //     tmp.imported_memories,
+        //     tmp.imported_globals,
+        //     tmp.defined_tables,
+        //     tmp.defined_memories,
+        //     tmp.owned_memories,
+        //     tmp.defined_globals,
+        //     tmp.defined_func_refs,
+        //     tmp.call_indirect_caches,
+        //     tmp.size
+        // );
+        tmp
     }
 
     /// Returns the size, in bytes, of the target

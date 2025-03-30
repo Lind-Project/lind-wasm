@@ -2256,7 +2256,7 @@ impl StoreOpaque {
         let mut fault = None;
         for instance in self.instances.iter() {
             if let Some(f) = instance.handle.wasm_fault(addr) {
-                assert!(fault.is_none());
+                // assert!(fault.is_none());
                 fault = Some(f);
             }
         }
