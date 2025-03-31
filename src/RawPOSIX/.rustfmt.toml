@@ -1,5 +1,0 @@
-ignore = [
-    "src/safeposix/syscalls/net_constants.rs",
-    "src/safeposix/syscalls/sys_constants.rs",
-    "src/safeposix/syscalls/fs_constants.rs",
-]
