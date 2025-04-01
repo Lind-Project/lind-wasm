@@ -58,18 +58,16 @@ steps:
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
+    secretEnv:
+      - 'GITHUB_TOKEN'
+    env:
+      - 'BRANCH_NAME=$BRANCH_NAME'
+      - 'BUILD_ID=$BUILD_ID'
+      - '_PR_NUMBER=$_PR_NUMBER'
+      - 'REPO_FULL_NAME=$REPO_FULL_NAME'
     args:
       - '-c'
-      - |
-          set -e  # Exit on error
-
-          # Get the Google Cloud authentication token
-          TOKEN="$(gcloud auth print-access-token)"
-          if [[ -z "$TOKEN" ]]; then
-            echo "Failed to get GCP access token"
-            exit 1
-          fi
-
+      - |          
           # Set body for comment
           COMMENT_BODY=$(printf '{
             "body": "**Test Report**\\n\\n
@@ -78,7 +76,7 @@ steps:
           }' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")
 
           # Send comment to GitHub PR
-          curl -X POST -H "Authorization: Bearer $TOKEN" \
+          curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
               -H "Content-Type: application/json" \
               -d "$COMMENT_BODY" \
@@ -96,4 +94,5 @@ availableSecrets:
       env: 'PASSWORD'
     - versionName: projects/1049119266483/secrets/docker-username/versions/1
       env: 'USERNAME'
-    
+    - versionName: projects/1049119266483/secrets/github-token/versions/1
+      env: 'GITHUB_TOKEN'
