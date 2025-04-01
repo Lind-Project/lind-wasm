@@ -4,7 +4,6 @@ pub mod fs_tests {
 
     use super::super::*;
     use fdtables::{
-        dashmaparrayglobal::FDTABLE,
         translate_virtual_fd,
     };
     use sysdefs::{
