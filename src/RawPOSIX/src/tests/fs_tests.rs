@@ -3,9 +3,7 @@
 pub mod fs_tests {
 
     use super::super::*;
-    use fdtables::{
-        translate_virtual_fd,
-    };
+    use fdtables::{translate_virtual_fd};
     use sysdefs::{
         constants::{
             err_const::get_errno,
