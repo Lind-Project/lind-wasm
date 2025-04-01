@@ -58,20 +58,34 @@ steps:
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
-    secretEnv:
-      - 'GITHUB_TOKEN'
-    env:
-      - 'BRANCH_NAME=$BRANCH_NAME'
-      - 'BUILD_ID=$BUILD_ID'
-      - '_PR_NUMBER=$_PR_NUMBER'
-      - 'REPO_FULL_NAME=$REPO_FULL_NAME'
     args:
       - '-c'
       - |
-        curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
-          -H "Content-Type: application/json" \
-          -d '{"body": "Test Report\nHTML: https://storage.googleapis.com/test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html\n JSON: https://storage.googleapis.com/test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json"}' \
-          https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments
+        set -e  # Exit on error
+
+        BRANCH_NAME="${BRANCH_NAME}"
+        BUILD_ID="${BUILD_ID}"
+        PR_NUMBER="${_PR_NUMBER}"
+        REPO_FULL_NAME="${REPO_FULL_NAME}"
+
+        ACCESS_TOKEN=$(gcloud auth print-access-token)
+        if [[ -z "$ACCESS_TOKEN" ]]; then
+          echo "Failed to get GCP access token"
+          exit 1
+        fi
+
+        COMMENT_BODY="{
+          \"body\": \"**Test Report**\\n\\n
+          **[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html)**\\n
+          **[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json)**\"
+        }"
+
+        curl -X POST -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            -d "$COMMENT_BODY" \
+            "https://api.github.com/repos/$REPO_FULL_NAME/issues/$PR_NUMBER/comments"
+
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -83,5 +97,4 @@ availableSecrets:
       env: 'PASSWORD'
     - versionName: projects/1049119266483/secrets/docker-username/versions/1
       env: 'USERNAME'
-    - versionName: projects/1049119266483/secrets/github-token/versions/1
-      env: 'GITHUB_TOKEN'
+    
