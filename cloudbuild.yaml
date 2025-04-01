@@ -61,30 +61,29 @@ steps:
     args:
       - '-c'
       - |
-        set -e  # Exit on error
+          set -e  # Exit on error
 
-        BRANCH_NAME="${BRANCH_NAME}"
-        BUILD_ID="${BUILD_ID}"
-        PR_NUMBER="${_PR_NUMBER}"
-        REPO_FULL_NAME="${REPO_FULL_NAME}"
+          # Get the Google Cloud authentication token
+          TOKEN="$(gcloud auth print-access-token)"
+          if [[ -z "$TOKEN" ]]; then
+            echo "Failed to get GCP access token"
+            exit 1
+          fi
 
-        TOKEN=$(gcloud auth print-access-token)
-        if [[ -z "$TOKEN" ]]; then
-          echo "Failed to get GCP access token"
-          exit 1
-        fi
+          # Set body for comment
+          COMMENT_BODY=$(printf '{
+            "body": "**Test Report**\\n\\n
+            **[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n
+            **[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**"
+          }' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")
 
-        COMMENT_BODY=$(printf '{
-          "body": "**Test Report**\\n\\n
-          **[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n
-          **[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**"
-        }' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")
+          # Send comment to GitHub PR
+          curl -X POST -H "Authorization: Bearer ${TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Content-Type: application/json" \
+              -d "${COMMENT_BODY}" \
+              "https://api.github.com/repos/${REPO_FULL_NAME}/issues/${_PR_NUMBER}/comments"
 
-        curl -X POST -H "Authorization: Bearer $TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Content-Type: application/json" \
-            -d "$COMMENT_BODY" \
-            "https://api.github.com/repos/$REPO_FULL_NAME/issues/$PR_NUMBER/comments"
 
 
 options:
