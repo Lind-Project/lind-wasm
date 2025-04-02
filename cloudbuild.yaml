@@ -57,6 +57,8 @@ steps:
   
   - name: 'python:3.11-slim'
     entrypoint: bash
+    secretEnv:
+      - "GITHUB_APP_PRIVATE_KEY"
     args:
       - '-c'
       - |

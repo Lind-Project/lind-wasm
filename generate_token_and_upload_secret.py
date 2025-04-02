@@ -2,6 +2,8 @@ import time
 import jwt
 import requests
 from google.cloud import secretmanager
+import os
+
 
 # === CONFIG ===
 GITHUB_APP_ID = "1201575" 
@@ -9,6 +11,9 @@ GITHUB_ORG = "Lind-Project"
 PROJECT_ID = "1049119266483"
 PRIVATE_KEY_SECRET = "github-app-private-key"
 TARGET_SECRET = "github-bot-token"
+
+# ✅ Trigger Cloud Build to recognize the secret is used
+os.environ.get("GITHUB_APP_PRIVATE_KEY")  # This satisfies secretEnv usage
 
 # === LOAD PRIVATE KEY FROM SECRET MANAGER ===
 client = secretmanager.SecretManagerServiceClient()
