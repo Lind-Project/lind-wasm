@@ -72,12 +72,8 @@ steps:
           curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
               -H "Content-Type: application/json" \
-             -d "$(printf '{
-              "body": "**Test Report**\\n\\n
-              **[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n
-              **[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**"
-            }' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")" \
-              "https://api.github.com/repos/${REPO_FULL_NAME}/issues/${_PR_NUMBER}/comments"
+             -d "$(printf '{"body":"**Test Report**\\n\\n**[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n**[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**"}' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")" \
+          "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
 
 
 
@@ -91,5 +87,5 @@ availableSecrets:
       env: 'PASSWORD'
     - versionName: projects/1049119266483/secrets/docker-username/versions/1
       env: 'USERNAME'
-    - versionName: projects/1049119266483/secrets/github-token/versions/1
+    - versionName: projects/1049119266483/secrets/github-bot-token/versions/1
       env: 'GITHUB_TOKEN'
