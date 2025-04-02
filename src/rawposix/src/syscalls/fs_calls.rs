@@ -333,10 +333,10 @@ pub fn mmap_syscall(
     off_cageid: u64,
 ) -> i32 {
     // TODO: Check will perform in the below logic??
-    println!(
-        "[mmap_syscall] selfcageid: {:?}, FD Cageid: {:?}",
-        cageid, vfd_cageid
-    );
+    // println!(
+    //     "[mmap_syscall] selfcageid: {:?}, FD Cageid: {:?}",
+    //     cageid, vfd_cageid
+    // );
     let mut addr = addr_arg as *mut u8;
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
@@ -501,7 +501,7 @@ pub fn mmap_inner(
     virtual_fd: i32,
     off: i64,
 ) -> usize {
-    println!("[mmap_inner] cageid: {:?}, vfd: {:?}", cageid, virtual_fd);
+    // println!("[mmap_inner] cageid: {:?}, vfd: {:?}", cageid, virtual_fd);
     if virtual_fd != -1 {
         match fdtables::translate_virtual_fd(cageid, virtual_fd as u64) {
             Ok(kernel_fd) => {
@@ -768,7 +768,7 @@ pub fn sbrk_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    println!("[sbrk_syscall]");
+    // println!("[sbrk_syscall]");
     let brk = sc_convert_sysarg_to_i32(sbrk_arg, sbrk_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
@@ -915,5 +915,54 @@ pub fn clock_gettime_syscall(
         return handle_errno(errno, "clock_gettime");
     }
 
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/futex.2.html
+///
+/// The Linux `futex()` syscall provides a mechanism for fast user-space locking. It allows a process or thread
+/// to wait for or wake another process or thread on a shared memory location without invoking heavy kernel-side
+/// synchronization primitives unless contention arises. This implementation wraps the futex syscall, allowing
+/// direct invocation with the relevant arguments passed from the current cage context.
+///
+/// Input:
+///     - cageid: current cageid
+///     - uaddr_arg: Pointer to the futex word in user memory
+///     - futex_op_arg: Operation code indicating futex command type
+///     - val_arg: Value expected at uaddr or the number of threads to wake
+///     - val2_arg: Timeout or other auxiliary parameter depending on operation
+///     - uaddr2_arg: Second address used for requeueing operations
+///     - val3_arg: Additional value for some futex operations
+///
+/// Return:
+///     - On success: 0 or number of woken threads depending on futex operation
+///     - On failure: A negative errno value indicating the syscall error
+pub fn futex_syscall(
+    cageid: u64,
+    uaddr_arg: u64,
+    uaddr_cageid: u64,
+    futex_op_arg: u64,
+    futex_op_cageid: u64,
+    val_arg: u64,
+    val_cageid: u64,
+    val2_arg: u64,
+    val2_cageid: u64,
+    uaddr2_arg: u64,
+    uaddr2_cageid: u64,
+    val3_arg: u64,
+    val3_cageid: u64,
+) -> i32{
+    let uaddr = sc_convert_uaddr_to_host(uaddr_arg, uaddr_cageid, cageid);
+    let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
+    let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
+    let val2 = sc_convert_sysarg_to_u32(val2_arg, val2_cageid, cageid);
+    let uaddr2 = sc_convert_sysarg_to_u32(uaddr2_arg, uaddr2_cageid, cageid);
+    let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
+
+    let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3)  as i32 };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "futex");
+    }
     ret
 }

@@ -85,6 +85,24 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     }
 }
 
+pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64) -> *mut u8 {
+    let cage = get_cage(addr_arg_cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, addr_arg).unwrap() as *mut u8;
+    return addr;
+}
+
+pub fn sc_convert_buf_to_host(buf_arg: u64, buf_arg_cageid: u64, cageid: u64) -> *const u8 {
+    let cage = get_cage(buf_arg_cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, buf_arg).unwrap() as *mut u8;
+    return addr;
+}
+
+pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64{
+    let cage = get_cage(uaddr_arg_cageid).unwrap();
+    let uaddr = translate_vmmap_addr(&cage, uaddr_arg).unwrap();
+    return uaddr;
+}
+
 pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Error> {
     std::ffi::CStr::from_ptr(cstr as *const _).to_str() //returns a result to be unwrapped later
 }
