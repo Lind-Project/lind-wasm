@@ -53,8 +53,15 @@ steps:
         gsutil cp /workspace/results.json gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json && 
         gsutil cp /workspace/report.html gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html && 
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json &&
-        gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html
-        
+        gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html        
+  
+  - name: 'python:3.11-slim'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        pip install PyJWT google-cloud-secret-manager requests
+        python generate_token_and_upload_secret.py
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
@@ -89,3 +96,5 @@ availableSecrets:
       env: 'USERNAME'
     - versionName: projects/1049119266483/secrets/github-bot-token/versions/1
       env: 'GITHUB_TOKEN'
+    - versionName: projects/1049119266483/secrets/github-app-private-key/versions/1
+      env: 'GITHUB_APP_PRIVATE_KEY'
