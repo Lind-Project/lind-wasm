@@ -3,13 +3,21 @@
 pub mod fs_tests {
 
     use super::super::*;
-
-    use fdtables::{translate_virtual_fd, FDTABLE};
-    use sysdefs::constants::err_const::get_errno;
-    use sysdefs::constants::fs_const::{SHMMAX, S_IRWXA, PAGESIZE};
-    use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
-    use sysdefs::data::fs_struct::{FSData, ShmidsStruct, StatData};
-
+    use fdtables::{translate_virtual_fd};
+    use sysdefs::{
+        constants::{
+            err_const::get_errno,
+            fs_const::{PAGESIZE, SHMMAX, S_IRWXA},
+            sys_const::{DEFAULT_GID, DEFAULT_UID},
+            Errno,
+        },
+        data::{
+            fs_struct::{
+                ClippedDirent, FSData, PipeArray, ShmidsStruct, SockPair, StatData, CLIPPED_DIRENT_SIZE,
+            },
+            net_struct::{GenSockaddr, SockaddrV4},
+        },
+    };
     use crate::interface;
     use crate::safeposix::syscalls::fs_calls::*;
     use crate::safeposix::{cage::*, dispatcher::*, filesystem};
@@ -181,50 +189,20 @@ pub mod fs_tests {
         //write should work
         let mut fd = cage.open_syscall("/broken_close_file", O_CREAT | O_EXCL | O_RDWR, S_IRWXA);
         assert_eq!(cage.write_syscall(fd, str2cbuf("Hello There!"), 12), 12);
-        println!("fd1: {}", fd);
-        for entry in FDTABLE.iter() {
-            let (key, fd_array) = entry.pair();
-            println!("Cage ID: {}", key);
-            for fd_entry in fd_array.iter().flatten() {
-                // Flatten removes None elements
-                println!("{}", fd_entry.underfd); // Using Display trait
-            }
-        }
-        println!("");
 
         assert_eq!(cage.close_syscall(fd), 0);
-
-        println!("fd1: {}", fd);
-        for entry in FDTABLE.iter() {
-            let (key, fd_array) = entry.pair();
-            println!("Cage ID: {}", key);
-            for fd_entry in fd_array.iter().flatten() {
-                // Flatten removes None elements
-                println!("{}", fd_entry.underfd); // Using Display trait
-            }
-        }
 
         //close the file and then open it again... and then close it again
         fd = cage.open_syscall("/broken_close_file", O_RDWR, S_IRWXA);
 
         assert_eq!(cage.close_syscall(fd), 0);
 
-        println!("\nfd2: {}", fd);
-        for entry in FDTABLE.iter() {
-            let (key, fd_array) = entry.pair();
-            println!("Cage ID: {}", key);
-            for fd_entry in fd_array.iter().flatten() {
-                // Flatten removes None elements
-                println!("{}", fd_entry.underfd); // Using Display trait
-            }
-        }
-
         //let's try some things with connect
         //we are going to open a socket with a UDP specification...
         let sockfd = cage.socket_syscall(libc::AF_INET, libc::SOCK_STREAM, 0);
 
         //bind should not be interesting
-        let mut sockad = interface::GenSockaddr::V4(interface::SockaddrV4::default());
+        let mut sockad = GenSockaddr::V4(SockaddrV4::default());
         sockad.set_family(libc::AF_INET as u16);
         assert_eq!(cage.bind_syscall(sockfd, &sockad), 0);
         fd = cage.open_syscall("/broken_close_file", O_RDWR, S_IRWXA);
@@ -2708,7 +2686,7 @@ pub mod fs_tests {
         );
 
         unsafe {
-            let first_dirent = baseptr as *mut interface::ClippedDirent;
+            let first_dirent = baseptr as *mut ClippedDirent;
 
             // Copy packed fields into local variables to avoid byte alignment issues.
             // This is a byte alignment issue
@@ -2732,7 +2710,7 @@ pub mod fs_tests {
             // Handle the directory name safely, avoiding direct access to packed fields.
             // We calculate the offset for the name within the packed structure and use it to safely
             // retrieve the directory name. This ensures we handle the packed fields correctly.
-            let nameoffset = baseptr.wrapping_offset(interface::CLIPPED_DIRENT_SIZE as isize);
+            let nameoffset = baseptr.wrapping_offset(CLIPPED_DIRENT_SIZE as isize);
             let returnedname = RustCStr::from_ptr(nameoffset as *const _);
             let name_matched: bool = (returnedname
                 == RustCStr::from_bytes_with_nul(b".\0").unwrap())
@@ -2741,7 +2719,7 @@ pub mod fs_tests {
 
             // Access the second directory entry and copy its packed fields into local variables.
             // This avoids alignment issues by not directly accessing packed memory.
-            let second_dirent = baseptr.wrapping_offset(24) as *mut interface::ClippedDirent;
+            let second_dirent = baseptr.wrapping_offset(24) as *mut ClippedDirent;
             let second_d_off_value = (*second_dirent).d_off;
 
             // Ensure the second directory entry's offset is properly aligned and valid.
@@ -2838,7 +2816,7 @@ pub mod fs_tests {
     fn ut_lind_fs_getdents_bufsize_too_small() {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
-        let bufsize = interface::CLIPPED_DIRENT_SIZE - 1; // Buffer size smaller than CLIPPED_DIRENT_SIZE
+        let bufsize = CLIPPED_DIRENT_SIZE - 1; // Buffer size smaller than CLIPPED_DIRENT_SIZE
         let mut vec = vec![0u8; bufsize as usize];
         let baseptr: *mut u8 = &mut vec[0];
 
@@ -3779,7 +3757,7 @@ pub mod fs_tests {
         // This test mainly tests the case for reading data from a pair of Sockets.
         // In this case, we create a socket pair of two sockets, and send data through
         // one socket, and try to read it from the other one using `read_syscall()`.
-        let mut socketpair = interface::SockPair::default();
+        let mut socketpair = SockPair::default();
 
         // Verify if the socketpair is formed successfully.
         assert_eq!(
@@ -4006,7 +3984,7 @@ pub mod fs_tests {
 
         // Test for invalid sockets
         // Try reading the data from the socket and check for error.
-        let mut socketpair = interface::SockPair::default();
+        let mut socketpair = SockPair::default();
         assert_eq!(
             Cage::socketpair_syscall(
                 &cage.clone(),
@@ -4194,7 +4172,7 @@ pub mod fs_tests {
         // This test mainly tests the case for writing data to a pair of Sockets.
         // In this case, we create a socket pair of two sockets, and send data through
         // one socket, and try to read it from the other one.
-        let mut socketpair = interface::SockPair::default();
+        let mut socketpair = SockPair::default();
 
         // Verify if the socketpair is formed successfully.
         assert_eq!(
@@ -4341,7 +4319,7 @@ pub mod fs_tests {
 
         // Test for invalid sockets
         // Try writing the data to the socket and check for error.
-        let mut socketpair = interface::SockPair::default();
+        let mut socketpair = SockPair::default();
         assert_eq!(
             Cage::socketpair_syscall(
                 &cage.clone(),
@@ -4692,7 +4670,7 @@ pub mod fs_tests {
         let cage = interface::cagetable_getref(1);
 
         // Create a socket pair.
-        let mut socketpair = interface::SockPair::default();
+        let mut socketpair = SockPair::default();
         assert_eq!(
             Cage::socketpair_syscall(
                 &cage.clone(),
@@ -4830,7 +4808,7 @@ pub mod fs_tests {
     //     let socketfd = cage.socket_syscall(AF_UNIX, SOCK_STREAM, 0);
     //     assert!(socketfd > 0);
     //     let sockaddr = interface::new_sockaddr_unix(AF_UNIX as u16, socketfile_path.as_bytes());
-    //     let socket = interface::GenSockaddr::Unix(sockaddr);
+    //     let socket = GenSockaddr::Unix(sockaddr);
     //     assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
 
     //     // stat_syscall test here
@@ -4895,7 +4873,7 @@ pub mod fs_tests {
     //     assert!(socketfd > 0);
 
     //     let sockaddr = interface::new_sockaddr_unix(libc::AF_UNIX as u16, socketfile_path.as_bytes());
-    //     let socket = interface::GenSockaddr::Unix(sockaddr);
+    //     let socket = GenSockaddr::Unix(sockaddr);
     //     assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
 
     //     // Errno::EOPNOTSUPP : -95
@@ -4969,7 +4947,7 @@ pub mod fs_tests {
     //     assert!(socketfd > 0);
 
     //     let sockaddr = interface::new_sockaddr_unix(libc::AF_UNIX as u16, socketfile_path.as_bytes());
-    //     let socket = interface::GenSockaddr::Unix(sockaddr);
+    //     let socket = GenSockaddr::Unix(sockaddr);
     //     assert_eq!(cage.bind_syscall(socketfd, &socket), 0);
 
     //     // Errno::EBADF : -9

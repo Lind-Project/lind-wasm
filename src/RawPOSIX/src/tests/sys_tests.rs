@@ -166,11 +166,18 @@ pub mod sys_tests {
         let pid = cage.waitpid_syscall(0, &mut status, libc::WNOHANG);
         assert_eq!(pid, 0);
 
+        // Store the cage IDs we want to exit
+        let cage3_id = 3;
+        let cage4_id = 4;
+
         // test for waitpid when the cage exits in the middle of waiting
         let thread1 = interface::helper_thread(move || {
             interface::sleep(interface::RustDuration::from_millis(100));
-            child_cage4.exit_syscall(4);
-            child_cage3.exit_syscall(3);
+            // Instead of moving cages, we'll get new references inside the thread
+            let thread_cage4 = interface::cagetable_getref(cage4_id);
+            let thread_cage3 = interface::cagetable_getref(cage3_id);
+            thread_cage4.exit_syscall(4);
+            thread_cage3.exit_syscall(3);
         });
 
         let pid = cage.waitpid_syscall(0, &mut status, 0);
