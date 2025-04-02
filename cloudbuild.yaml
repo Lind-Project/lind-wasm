@@ -9,15 +9,7 @@ steps:
       - 'USERNAME'
       - 'PASSWORD'
 
-  - name: 'python:3.11-slim'
-    entrypoint: bash
-    secretEnv:
-      - "GITHUB_APP_PRIVATE_KEY"
-    args:
-      - '-c'
-      - |
-        pip install "PyJWT[crypto]" google-cloud-secret-manager requests
-        python generate_token_and_upload_secret.py
+  
 
   # Build the Docker image from .devcontainer folder
   - name: 'gcr.io/cloud-builders/docker'
@@ -65,7 +57,15 @@ steps:
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json &&
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html        
   
-  
+  - name: 'python:3.11-slim'
+    entrypoint: bash
+    secretEnv:
+      - "GITHUB_APP_PRIVATE_KEY"
+    args:
+      - '-c'
+      - |
+        pip install "PyJWT[crypto]" google-cloud-secret-manager requests
+        python generate_token_and_upload_secret.py
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
