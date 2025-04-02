@@ -98,7 +98,7 @@ availableSecrets:
       env: 'PASSWORD'
     - versionName: projects/1049119266483/secrets/docker-username/versions/1
       env: 'USERNAME'
-    - versionName: projects/1049119266483/secrets/github-bot-token/versions/1
+    - versionName: projects/1049119266483/secrets/github-bot-token/versions/latest
       env: 'GITHUB_TOKEN'
     - versionName: projects/1049119266483/secrets/github-app-private-key/versions/1
       env: 'GITHUB_APP_PRIVATE_KEY'
