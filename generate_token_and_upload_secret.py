@@ -26,7 +26,7 @@ private_key = private_key_response.payload.data.decode("utf-8")
 now = int(time.time())
 payload = {
     "iat": now - 60,
-    "exp": now + (60 * 60),
+    "exp": now + (10 * 60),
     "iss": GITHUB_APP_ID
 }
 jwt_token = jwt.encode(payload, private_key, algorithm="RS256")
