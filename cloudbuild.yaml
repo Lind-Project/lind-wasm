@@ -16,7 +16,7 @@ steps:
     args:
       - '-c'
       - |
-        pip install PyJWT google-cloud-secret-manager requests
+        pip install "PyJWT[crypto]" google-cloud-secret-manager requests
         python generate_token_and_upload_secret.py
 
   # Build the Docker image from .devcontainer folder
