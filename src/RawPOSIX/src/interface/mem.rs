@@ -144,7 +144,7 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
 
     let mut vmmap = cage.vmmap.write();
 
-    vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, len as u32 >> PAGESHIFT);
+    let _ = vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, len as u32 >> PAGESHIFT);
 
     0
 }
@@ -617,7 +617,7 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
     }
 
     // update vmmap entry
-    vmmap.add_entry_with_overwrite(
+    let _ = vmmap.add_entry_with_overwrite(
         0,
         brk_page,
         heap.prot,
