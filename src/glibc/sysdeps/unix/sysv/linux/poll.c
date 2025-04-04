@@ -18,15 +18,15 @@
 
 #include <errno.h>
 #include <sys/poll.h>
-
 #include <sysdep-cancel.h>
 #include <sys/syscall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __poll (struct pollfd *fds, nfds_t nfds, int timeout)
 {
-   return MAKE_SYSCALL(48, "syscall|poll", (uint64_t) fds, (uint64_t) nfds, (uint64_t) timeout, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(POLL_SYSCALL, "syscall|poll", (uint64_t) fds, (uint64_t) nfds, (uint64_t) timeout, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__poll)
 weak_alias (__poll, poll)

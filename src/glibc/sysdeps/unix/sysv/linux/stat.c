@@ -20,13 +20,12 @@
 #include <fcntl.h>
 #include <kernel_stat.h>
 #include <syscall-template.h>
-
+#include <lind_syscall_num.h>
 #if !XSTAT_IS_XSTAT64
 int
 __stat (const char *fd, struct stat *buf)
 {
- return MAKE_SYSCALL(9, "syscall|xstat", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED); 
+ return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-
 weak_alias (__stat, stat)
 #endif
