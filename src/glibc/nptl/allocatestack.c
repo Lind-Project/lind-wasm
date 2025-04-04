@@ -231,9 +231,9 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
     size = attr->stacksize;
   else
     {
-      // lll_lock (__default_pthread_attr_lock, LLL_PRIVATE);
+      lll_lock (__default_pthread_attr_lock, LLL_PRIVATE);
       size = __default_pthread_attr.internal.stacksize;
-      // lll_unlock (__default_pthread_attr_lock, LLL_PRIVATE);
+      lll_unlock (__default_pthread_attr_lock, LLL_PRIVATE);
     }
   /* Get memory for the stack.  */
   if (__glibc_unlikely (attr->flags & ATTR_FLAG_STACKADDR))
@@ -346,6 +346,7 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
       if (guardsize < attr->guardsize || size + guardsize < guardsize)
 	/* Arithmetic overflow.  */
 	return EINVAL;
+  
       size += guardsize;
       if (__builtin_expect (size < ((guardsize + tls_static_size_for_stack
 				     + MINIMAL_REST_STACK + pagesize_m1)
@@ -430,18 +431,20 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 	  /* Don't allow setxid until cloned.  */
 	  pd->setxid_futex = -1;
 
-    // BUG: TLS related stuff is not working in lind-wasm currently
-	  /* Allocate the DTV for this thread.  */
-	  // if (_dl_allocate_tls (TLS_TPADJ (pd)) == NULL)
-	  //   {
-	  //     /* Something went wrong.  */
-	  //     assert (errno == ENOMEM);
+    // lind-wasm: glibc's original TLS initialization depends on ELF header
+    // which is clearly not possible in wasm
+#ifdef lind_unmodified_glibc_source
+	  if (_dl_allocate_tls (TLS_TPADJ (pd)) == NULL)
+	    {
+	      /* Something went wrong.  */
+	      assert (errno == ENOMEM);
 
-	  //     /* Free the stack memory we just allocated.  */
-	  //     (void) __munmap (mem, size);
+	      /* Free the stack memory we just allocated.  */
+	      (void) __munmap (mem, size);
 
-	  //     return errno;
-	  //   }
+	      return errno;
+	    }
+#endif
 
 
 	  /* Prepare to modify global data.  */
