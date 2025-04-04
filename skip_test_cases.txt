@@ -1,0 +1,2 @@
+process_tests/deterministic/signal-fork.c
+file_tests/deterministic/fstat.c
