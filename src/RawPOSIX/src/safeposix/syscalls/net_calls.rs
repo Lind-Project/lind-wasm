@@ -26,6 +26,9 @@ use std::io::{Read, Write};
 use std::mem::size_of;
 use std::sync::Arc;
 use std::{os::fd::RawFd, ptr};
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration};
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
@@ -532,18 +535,22 @@ impl Cage {
         mut errorfds: Option<&mut fd_set>,
         rposix_timeout: Option<RustDuration>,
     ) -> i32 {
-        let mut timeout;
-        if rposix_timeout.is_none() {
-            timeout = libc::timeval {
-                tv_sec: 0,
-                tv_usec: 0,
-            };
-        } else {
-            timeout = libc::timeval {
-                tv_sec: rposix_timeout.unwrap().as_secs() as i64,
-                tv_usec: rposix_timeout.unwrap().subsec_micros() as i64,
-            };
+        // Check for pending signals before select
+        if interface::lind_check_no_pending_signal(self.cageid) {
+            return syscall_error(Errno::EINTR, "select", "Interrupted by signal");
         }
+
+        let mut timeout = if let Some(t) = rposix_timeout {
+            libc::timeval {
+                tv_sec: t.as_secs() as i64,
+                tv_usec: t.subsec_micros() as i64,
+            }
+        } else {
+            libc::timeval {
+                tv_sec: 0,
+                tv_usec: 100_000,
+            }
+        };
 
         let orfds = readfds.as_mut().map(|fds| &mut **fds);
         let owfds = writefds.as_mut().map(|fds| &mut **fds);
@@ -594,6 +601,11 @@ impl Cage {
                 &mut timeout as *mut timeval,
             )
         };
+
+        // Check for pending signals after select
+        if interface::lind_check_no_pending_signal(self.cageid) {
+            return syscall_error(Errno::EINTR, "select", "Interrupted by signal");
+        }
 
         if ret < 0 {
             let errno = get_errno();
