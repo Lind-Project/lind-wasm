@@ -26,6 +26,8 @@ steps:
     args:
       - '-c'
       - |
+        docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer &&
+        
         docker run --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
           $$USERNAME/lind-wasm:latest \
