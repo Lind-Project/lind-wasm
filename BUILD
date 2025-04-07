@@ -3,7 +3,7 @@ genrule(
     tags = ["no-cache"],
     srcs = [
         "src/glibc",
-        "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+        "clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04",
     ],
     outs = ["check.log"],  # Output file
     cmd = """
@@ -12,7 +12,7 @@ genrule(
         export GLIBC_BASE=$$PWD/src/glibc
         export WORKSPACE=$$PWD
         
-        export CLANG=$$PWD/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04
+        export CLANG=$$PWD/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04
         export CC=$$CLANG/bin/clang
         
         echo $$GLIBC_BASE >> $@
@@ -122,7 +122,7 @@ sh_test(
     # (e.g., input configuration files), list them in data:
     data = [
         "tests",
-         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+         "clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04",
     ],
 )
 
@@ -162,5 +162,5 @@ filegroup(
 # FileGroup for clang files
 filegroup(
     name = "clang_files",
-    srcs = glob(["clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/**/*"])
+    srcs = glob(["clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/**/*"])
 )
