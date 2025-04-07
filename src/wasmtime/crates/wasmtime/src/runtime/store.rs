@@ -338,6 +338,9 @@ pub struct StoreOpaque {
     stack_top: u64,
     // stack bottom
     stack_base: u64,
+    /// library instances
+    // library_instance: Vec<crate::runtime::Instance>,
+    library_symbols: Vec<HashMap<String, usize>>,
     
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
@@ -543,6 +546,7 @@ impl<T> Store<T> {
                     rewinding: false,
                     retval: 0
                 },
+                library_symbols: vec![],
                 #[cfg(feature = "component-model")]
                 num_component_instances: 0,
                 signal_handler: None,
@@ -656,6 +660,7 @@ impl<T> Store<T> {
                 rewinding: false,
                 retval: 0
             },
+            library_symbols: vec![],
             #[cfg(feature = "component-model")]
             num_component_instances: 0,
             signal_handler: None,
@@ -1370,6 +1375,16 @@ impl<'a, T> StoreContextMut<'a, T> {
         } else {
             None
         }
+    }
+
+    /// push new library instance
+    pub fn push_library_symbols(&mut self, symbols: &HashMap<String, usize>) -> Result<usize> {
+        self.0.library_symbols.push(symbols.clone());
+        Ok(self.0.library_symbols.len())
+    }
+
+    pub fn get_library_symbols(&mut self, index: usize) -> Option<&HashMap<String, usize>> {
+        self.0.library_symbols.get(index)
     }
 
     /// get stack top

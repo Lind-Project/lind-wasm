@@ -15,6 +15,7 @@ use wasmtime_environ::EntityType;
 use wasmtime_lind_multi_process::{LindCtx, LindHost};
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
@@ -248,14 +249,37 @@ impl RunCommand {
         if let CliLinker::Core(linker) = &mut linker {
             let run_cmd = self.clone();
             let cloned_linker = linker.clone();
-            let closure = move |mut caller: wasmtime::Caller<'_, Host>| -> i32 {
-                run_cmd.load_library_module(&mut caller, cloned_linker.clone(), "dlopen_lib.wasm")
+            let dlopen = move |mut caller: wasmtime::Caller<'_, Host>, lib: i32| -> i32 {
+                let handle = caller.as_context().0.instance(wasmtime::InstanceId::from_index(1));
+                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
+                let base = defined_memory.base as u64;
+                // let base = get_memory_base(&caller);
+                let path = rawposix::interface::get_cstr(base + lib as u64).unwrap();
+
+                run_cmd.load_library_module(&mut caller, cloned_linker.clone(), path)
+            };
+
+            let dlsym = move |mut caller: wasmtime::Caller<'_, Host>, handle: i32, sym: i32| -> i32 {
+                let instance_handle = caller.as_context().0.instance(wasmtime::InstanceId::from_index(1));
+                let defined_memory = instance_handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
+                let base = defined_memory.base as u64;
+                let symbol = rawposix::interface::get_cstr(base + sym as u64).unwrap();
+                let lib_symbol = caller.get_library_symbols((handle - 1) as usize).unwrap();
+                let func_index = lib_symbol.get(&String::from(symbol)).unwrap();
+                println!("dlsym! func_index: {}", func_index);
+                *func_index as i32
             };
             
             linker.func_wrap(
                 "lind",
-                "test_dylink",
-                closure,
+                "dlopen",
+                dlopen,
+            ).unwrap();
+
+            linker.func_wrap(
+                "lind",
+                "dlsym",
+                dlsym,
             ).unwrap();
         }
 
@@ -800,20 +824,57 @@ impl RunCommand {
 
         // main_linker.define(store, "env", "__indirect_function_table", table);
         // main_linker.define(store, "env", "__table_base", table_base);
-
         let lib_instance = main_linker.instantiate(&mut *main_module, &lib_module).unwrap();
-        let lib_func = lib_instance.get_func(&mut *main_module, "lib_func").unwrap();
-        let lib_init = wasmtime::Ref::Func(Some(lib_func));
+
+        let mut lib_funcs = vec![];
+        for export in lib_instance.exports(main_module.as_context_mut()) {
+            match export.name() {
+                "__wasm_apply_data_relocs" => {},
+                name => {
+                    let lib_extern = export.clone().into_extern();
+                    match lib_extern {
+                        wasmtime::Extern::Func(func) => {
+                            let func_init = wasmtime::Ref::Func(Some(func));
+                            lib_funcs.push((String::from(name), func_init));
+                            // let res = main_module.grow_table_lib(func_init);
+                            // println!("add new library function: {:?}", res);
+                        },
+                        wasmtime::Extern::Global(global) => {
+                            todo!();
+                        },
+                        _ => {
+                            // table/memory should not be handled here
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut symbol_mapping = HashMap::<String, usize>::new();
+
+        while let Some((name, func_init)) = lib_funcs.pop() {
+            let res = main_module.grow_table_lib(func_init);
+            symbol_mapping.insert(name, res as usize);
+            println!("add new library function: {:?}", res);
+        }
+
+        let handle = main_module.push_library_symbols(&symbol_mapping).unwrap();
+
+        // main_module.push_library_symbols(&lib_instance);
+        // let lib_func = lib_instance.get_func(&mut *main_module, "lib_func").unwrap();
+        // let lib_init = wasmtime::Ref::Func(Some(lib_func));
         // let lib_ty = TableType::new(RefType::FUNCREF, 0, None);
         // let lib_init = lib_init.into_table_element(store.0, lib_ty.element()).unwrap();
 
         // main_module.table_grow();
         // let res = main_module.grow_table_lib(lib_init);
-        let res = main_module.grow_table_lib(lib_init);
+        // let res = main_module.grow_table_lib(lib_init);
 
-        println!("res: {:?}", res);
+        // println!("res: {:?}", res);
 
-        res as i32
+        // res as i32
+        handle as i32
     }
 
     fn invoke_func(&self, store: &mut Store<Host>, func: Func) -> Result<Vec<Val>> {

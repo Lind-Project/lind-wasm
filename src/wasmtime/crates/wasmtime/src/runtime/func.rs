@@ -17,6 +17,7 @@ use core::mem::{self, MaybeUninit};
 use core::num::NonZeroUsize;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
+use std::collections::HashMap;
 use wasmtime_environ::{TableIndex, VMSharedTypeIndex};
 
 /// A reference to the abstract `nofunc` heap value.
@@ -2128,6 +2129,14 @@ impl<T> Caller<'_, T> {
             .host_state()
             .downcast_ref::<Instance>().ok_or(()).unwrap()
             .get_stack_pointer(&mut self.store)
+    }
+
+    pub fn push_library_symbols(&mut self, symbols: &HashMap<String, usize>) -> Result<usize> {
+        self.store.push_library_symbols(symbols)
+    }
+
+    pub fn get_library_symbols(&mut self, index: usize) -> Option<&HashMap<String, usize>> {
+        self.store.get_library_symbols(index)
     }
 
     pub fn get_asyncify_start_unwind(&mut self) -> Result<TypedFunc<i32, ()>, ()> {
