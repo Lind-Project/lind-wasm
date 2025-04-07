@@ -9,16 +9,16 @@ steps:
       - 'USERNAME'
       - 'PASSWORD'
 
-  # # Build the Docker image from .devcontainer folder
-  # - name: 'gcr.io/cloud-builders/docker'
-  #   entrypoint: 'bash'
-  #   args:
-  #     - '-c'
-  #     - 'docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer'
-  #   env:
-  #     - 'BRANCH_NAME=$BRANCH_NAME'
-  #   secretEnv:
-  #     - 'USERNAME'
+  # Build the Docker image from .devcontainer folder
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer'
+    env:
+      - 'BRANCH_NAME=$BRANCH_NAME'
+    secretEnv:
+      - 'USERNAME'
 
   # Run the container and execute the bazel test run command
   - name: 'gcr.io/cloud-builders/docker'
@@ -26,8 +26,6 @@ steps:
     args:
       - '-c'
       - |
-        docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer &&
-        
         docker run --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
           $$USERNAME/lind-wasm:latest \
@@ -35,11 +33,6 @@ steps:
 
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html &&
-
-        docker run --name lind_test_container \
-          -e BRANCH_NAME=$BRANCH_NAME \
-          $$USERNAME/lind-wasm:latest \
-          wasmtestreport.py --clean-results &&
 
         docker rm -fv lind_test_container
 
