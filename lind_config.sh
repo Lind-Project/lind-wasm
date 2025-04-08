@@ -86,7 +86,7 @@ compile_pthread_create="$CC --target=wasm32-unkown-wasi \
  -I.. \
  -I../libio \
  -I. -nostdinc \
- -isystem $CLANG/lib/clang/16/include \
+ -isystem $CLANG/lib/clang/18/include \
  -isystem /usr/i686-linux-gnu/include \
  -D_LIBC_REENTRANT \
  -include $glibc_base/build/libc-modules.h \

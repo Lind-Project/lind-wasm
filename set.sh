@@ -18,7 +18,7 @@ tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
 cd /home/lind-wasm/glibc
 git switch main
 cd /home
-mv /home/lind-wasm/glibc/wasi /home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/lib
+mv /home/lind-wasm/glibc/wasi /home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/18/lib
 
 #Configure(config.sh)
 cd /home/lind-wasm/glibc

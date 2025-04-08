@@ -153,7 +153,7 @@ make_all:
 			-I../sysdeps/ieee754/ldbl-96/include -I../sysdeps/ieee754/ldbl-96 \
 			-I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754/flt-32 \
 			-I../sysdeps/ieee754 -I../sysdeps/generic -I.. -I../libio -I. \
-			-nostdinc -isystem $(CLANG)/lib/clang/16/include \
+			-nostdinc -isystem $(CLANG)/lib/clang/18/include \
 			-isystem /usr/i686-linux-gnu/include -D_LIBC_REENTRANT \
 			-include $(GLIBC_BASE)/build/libc-modules.h -DMODULE_NAME=libc \
 			-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc \
