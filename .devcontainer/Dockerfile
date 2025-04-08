@@ -1,5 +1,5 @@
 # Use an official Ubuntu as a parent image
-FROM ubuntu:latest
+FROM ubuntu:22.04
 ARG DEV_MODE
 ENV DEV_MODE=${DEV_MODE:-false}
 
@@ -7,11 +7,12 @@ ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-main}
 
 # Install all the required dependencies
-RUN apt-get update && \
+RUN apt-get update && \    
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
-    bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash
+    bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash 
 
-
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb 
 
 RUN apt install apt-transport-https curl gnupg -y && \
     curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \
