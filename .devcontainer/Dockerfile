@@ -51,7 +51,7 @@ WORKDIR /home/lind
 # Clone the Lind-wasm repository
 RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
 # Install clang-16 for compiling the code
-RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4.tar.xz && \
+RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
     tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4.tar.xz && \
     mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4 lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4; fi
 WORKDIR /home/lind/lind-wasm
