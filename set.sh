@@ -13,12 +13,12 @@ apt install -y libxml2
 apt install -y python3
 
 #Install clang-16
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4.tar.xz
-tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4.tar.xz
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
 cd /home/lind-wasm/glibc
 git switch main
 cd /home
-mv /home/lind-wasm/glibc/wasi /home/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4/lib/clang/18/lib
+mv /home/lind-wasm/glibc/wasi /home/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/lib
 
 #Configure(config.sh)
 cd /home/lind-wasm/glibc
@@ -29,7 +29,7 @@ mkdir -p $BUILDDIR
 cd $BUILDDIR
 ../configure --disable-werror --disable-hidden-plt --with-headers=/usr/i686-linux-gnu/include --prefix=/home/lind-wasm/glibc/target --host=i686-linux-gnu --build=i686-linux-gnu\
     CFLAGS=" -O2 -g" \
-    CC="/home/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4/bin/clang-18 --target=wasm32-unknown-wasi -v -Wno-int-conversion"
+    CC="/home/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/clang-18 --target=wasm32-unknown-wasi -v -Wno-int-conversion"
 ' > config.sh
 unset LD_LIBRARY_PATH
 chmod +x config.sh
@@ -79,7 +79,7 @@ fi
 mkdir -p "$sysroot_dir/include/wasm32-wasi" "$sysroot_dir/lib/wasm32-wasi"
 
 # Pack all found .o files into a single .a archive
-/home/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4/bin/llvm-ar rcs "$output_archive" $object_files
+/home/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/llvm-ar rcs "$output_archive" $object_files
 
 # Check if llvm-ar succeeded
 if [ $? -eq 0 ]; then

@@ -5,7 +5,7 @@ RUSTPOSIX_BASE := /home/lind-wasm/src/safeposix-rust
 RAWPOSIX_BASE := /home/lind-wasm/src/RawPOSIX
 
 # Compiler settings
-CLANG ?= /home/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4
+CLANG ?= /home/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04
 CC := $(CLANG)/bin/clang
 
 # Color definitions

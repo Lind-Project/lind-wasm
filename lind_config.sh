@@ -3,7 +3,7 @@ glibc_base="$script_dir/src/glibc"
 wasmtime_base="$script_dir/src/wasmtime"
 rawposix_base="$script_dir/src/RawPOSIX"
 
-CC="${CLANG:=/home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4}/bin/clang"
+CC="${CLANG:=/home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04}/bin/clang"
 
 precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output]"
 

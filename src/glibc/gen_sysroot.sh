@@ -34,7 +34,7 @@ fi
 mkdir -p "$sysroot_dir/include/wasm32-wasi" "$sysroot_dir/lib/wasm32-wasi"
 
 # Pack all found .o files into a single .a archive
-${CLANG:=/home/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4}/bin/llvm-ar rcs "$output_archive" $object_files
+${CLANG:=/home/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04}/bin/llvm-ar rcs "$output_archive" $object_files
 "$CLANG/bin/llvm-ar" crs "sysroot/lib/wasm32-wasi/libpthread.a"
 
 # Check if llvm-ar succeeded
