@@ -24,7 +24,7 @@ TIMEOUT=$DEFAULT_TIMEOUT
 glibc_base="$LIND_WASM_BASE/src/glibc"
 wasmtime_base="$LIND_WASM_BASE/src/wasmtime"
 
-CC="${CLANG:=$LIND_WASM_BASE/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
+CC="${CLANG:=$LIND_WASM_BASE/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4}/bin/clang"
 
 compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
 precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output]"

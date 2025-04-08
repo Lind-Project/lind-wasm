@@ -1,10 +1,10 @@
 # Define environment variables with default values
-CLANG_PATH ?= /home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang
+CLANG_PATH ?= /home/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4/bin/clang
 LIBC_INCLUDE_PATH ?= /home/lind-wasm/src/glibc/build
-CLANG_INCLUDE_PATH ?= /home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/18/include
+CLANG_INCLUDE_PATH ?= /home/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4/lib/clang/18/include
 
 # Compiler options
-COMMON_FLAGS := --target=wasm32-unkown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline \
+COMMON_FLAGS := --target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline \
     -matomics -mbulk-memory -O2 -g -Wall -Wwrite-strings -Wundef -fmerge-all-constants \
     -ftrapping-math -fno-stack-protector -fno-common -Wp,-U_FORTIFY_SOURCE -Wstrict-prototypes \
     -Wold-style-definition -fmath-errno -fPIE -ftls-model=local-exec -nostdinc -isystem $(CLANG_INCLUDE_PATH) \
