@@ -23,9 +23,9 @@ RUN go install github.com/bazelbuild/buildtools/buildifier@latest
 
 ARG USERNAME=lind
 
-RUN usermod --login ${USERNAME} --move-home --home /home/${USERNAME} ubuntu && \
-    groupmod --new-name ${USERNAME} ubuntu
-RUN echo "lind ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN groupadd --gid 1000 $USERNAME && \
+    useradd --uid 1000 --gid $USERNAME --create-home --shell /bin/bash $USERNAME && \
+    echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 USER lind
 
