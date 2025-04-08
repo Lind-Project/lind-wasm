@@ -43,7 +43,7 @@ RUN go install github.com/bazelbuild/buildtools/buildifier@latest
 # Ensure the Rust environment is available in future RUN instructions
 ENV PATH="/home/lind/.cargo/bin:/home/lind/go/bin:${PATH}"
 
-ENV CLANG="/home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4"
+ENV CLANG="/home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
 
 ### non-DEV_MODE Commmands begin here
 
@@ -52,11 +52,11 @@ WORKDIR /home/lind
 RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
 # Install clang-16 for compiling the code
 RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
-    tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4.tar.xz && \
-    mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4 lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4; fi
+    tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
+    mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04; fi
 WORKDIR /home/lind/lind-wasm
 # Move wasi directory
-RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4/lib/clang/18/lib; fi
+RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/lib; fi
 # Build Lind-wasm
 #RUN chmod +x lindtool.sh
 RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
