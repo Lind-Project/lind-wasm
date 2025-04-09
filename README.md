@@ -28,6 +28,6 @@ Further examples can be found [here](https://lind-project.github.io/lind-wasm-do
 
 ## Documentation
 
-Check out our [docs]([lind-project.github.io/lind-wasm-docs/](https://lind-project.github.io/lind-wasm-docs/))! 
+Check out our [docs](https://lind-project.github.io/lind-wasm-docs/)! 
 
 
