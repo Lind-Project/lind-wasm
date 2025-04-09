@@ -9,8 +9,6 @@ steps:
       - 'USERNAME'
       - 'PASSWORD'
 
-  
-
   # Build the Docker image from .devcontainer folder
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
@@ -35,6 +33,7 @@ steps:
 
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html &&
+
         docker rm -fv lind_test_container
 
     env:
