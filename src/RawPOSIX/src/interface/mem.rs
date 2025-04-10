@@ -259,6 +259,9 @@ pub fn shmat_handler(
         if add_result.is_err() {
             return syscall_error(Errno::ENOMEM, "shmat", "failed to add vmmap entry") as u32;
         }
+    } else {
+        // If the syscall failed, propagate the error.
+        return result as u32;
     }
 
     useraddr as u32
