@@ -197,35 +197,42 @@ pub fn shmat_handler(
     // Round up the length to a multiple of the page size.
     let rounded_length = round_up_page(len as u64);
 
-    // Determine the user address.
-    // If addr==0, then we need to allocate space from the vmmap.
+    // Initialize the user address from the provided address pointer.
+    // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
     let mut useraddr = addr as u32;
     let mut vmmap = cage.vmmap.write();
     let result;
     if useraddr == 0 {
+        // Allocate a suitable space in the virtual memory map for the shared memory segment
+        // based on the rounded length of the segment.
         result = vmmap.find_map_space((rounded_length >> PAGESHIFT) as u32, 1);
     } else {
-        // use address user provided as hint to find address
-        result =
-            vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+        // Use the user-specified address as a hint to find an appropriate memory address
+        // for the shared memory segment.
+        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
     }
     if result.is_none() {
+        // If no suitable memory space is found, return an error indicating insufficient memory.
         return syscall_error(Errno::ENOMEM, "shmat", "no memory") as u32;
     }
     let space = result.unwrap();
+    // Update the user address to the start of the allocated memory space.
     useraddr = (space.start() << PAGESHIFT) as u32;
 
     // Convert the user address into a system address.
+    // Read the virtual memory map to access the user address space.
     let vmmap = cage.vmmap.read();
+    // Convert the user address to the corresponding system address for the shared memory segment.
     let sysaddr = vmmap.user_to_sys(useraddr);
+    // Release the lock on the virtual memory map as we no longer need it.
     drop(vmmap);
 
-    // Call the raw shmat syscall.
+    // Call the raw shmat syscall to attach the shared memory segment.
     let result = cage.shmat_syscall(shmid, sysaddr as *mut u8, shmflag);
 
     // If the syscall succeeded, update the vmmap entry.
     if result as i32 >= 0 {
-        // The syscall should return the same fixed address.
+        // Ensure the syscall attached the segment at the expected address.
         if result as u32 != useraddr {
             panic!("shmat did not attach at the expected address");
         }
