@@ -243,7 +243,7 @@ pub fn shmat_handler(
         // Add a new vmmap entry for the shared memory segment.
         // Since shared memory is not file-backed, there are no extra mapping flags
         // or file offset parameters to consider; thus, we pass 0 for both.
-        let _ = vmmap.add_entry_with_overwrite(
+        let add_result = vmmap.add_entry_with_overwrite(
             useraddr >> PAGESHIFT,
             (rounded_length >> PAGESHIFT) as u32,
             prot,
@@ -254,6 +254,11 @@ pub fn shmat_handler(
             len as i64,
             cageid,
         );
+
+        // Check if adding the entry was successful.
+        if add_result.is_err() {
+            return syscall_error(Errno::ENOMEM, "shmat", "failed to add vmmap entry") as u32;
+        }
     }
 
     useraddr as u32
@@ -449,7 +454,7 @@ pub fn mmap_handler(
             };
 
             // update vmmap entry
-            let _ = vmmap.add_entry_with_overwrite(
+            let add_result = vmmap.add_entry_with_overwrite(
                 useraddr >> PAGESHIFT,
                 (rounded_length >> PAGESHIFT) as u32,
                 prot,
@@ -460,6 +465,11 @@ pub fn mmap_handler(
                 len as i64,
                 cageid,
             );
+    
+            // Check if adding the entry was successful.
+            if add_result.is_err() {
+                return syscall_error(Errno::ENOMEM, "mmap", "failed to add vmmap entry") as u32;
+            }
         }
     }
 
