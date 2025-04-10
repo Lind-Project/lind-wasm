@@ -123,6 +123,10 @@ impl ShmSegment {
             }
         };
     }
+
+    pub fn get_shm_length(&self) -> usize {
+        self.size
+    }
 }
 
 pub struct ShmMetadata {
@@ -139,9 +143,18 @@ impl ShmMetadata {
             shmtable: interface::RustHashMap::new(),
         }
     }
+    pub fn get_shm_length(&self, shmid: i32) -> Option<usize> {
+        self.shmtable.get(&shmid).map(|segment| segment.get_shm_length())
+    }
+    
 
     pub fn new_keyid(&self) -> i32 {
         self.nextid
             .fetch_add(1, interface::RustAtomicOrdering::Relaxed)
     }
+}
+
+pub fn get_shm_length(shmid: i32) -> Option<usize> {
+    let metadata: &ShmMetadata = &**SHM_METADATA;
+    metadata.get_shm_length(shmid)
 }

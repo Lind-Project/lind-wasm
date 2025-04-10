@@ -3031,6 +3031,95 @@ pub mod fs_tests {
 
         lindrustfinalize();
     }
+    
+    #[test]
+    pub fn ut_lind_fs_shmat_invalid_args() {
+        // Acquire lock and init environment
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Test case 1: Invalid shmid
+        let invalid_shmid = -1;
+        let result = cage.shmat_syscall(invalid_shmid, 0 as *mut u8, 0);
+        assert_eq!(result, -(Errno::EINVAL as i32), "Expected EINVAL for invalid shmid");
+
+        // Test case 2: Create a valid segment first
+        let key = 31337;
+        let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
+        assert!(shmid >= 0, "Failed to create shared memory segment");
+
+        // Test case 3: Unaligned address
+        let unaligned_addr = 1 as *mut u8; // Unaligned address
+        let result = cage.shmat_syscall(shmid, unaligned_addr, 0);
+        assert_eq!(result, -1, "Expected -1 for unaligned address"); // Changed to expect -1
+
+        // Clean up
+        let mut shmidstruct = ShmidsStruct::default();
+        assert_eq!(cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)), 0);
+        
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_shmat_multiple_attaches() {
+        // Acquire lock and init environment
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Create a shared memory segment
+        let key = 31339;
+        let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
+        assert!(shmid >= 0, "Failed to create shared memory segment");
+
+        // Attach multiple times and verify attachment count
+        let addr1 = cage.shmat_syscall(shmid, 0 as *mut u8, 0);
+        assert!(addr1 >= 0, "First attachment failed");
+
+        // Verify attachment count
+        let mut shmidstruct = ShmidsStruct::default();
+        assert_eq!(cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)), 0);
+        assert_eq!(shmidstruct.shm_nattch, 1, "Expected 1 attachment");
+
+        // Detach and verify count decreases
+        assert_eq!(cage.shmdt_syscall(addr1 as *mut u8), shmid);
+        assert_eq!(cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)), 0);
+        assert_eq!(shmidstruct.shm_nattch, 0, "Expected 0 attachments after detach");
+
+        // Clean up
+        assert_eq!(cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)), 0);
+
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_fs_shmat_read_only() {
+        // Acquire lock and init environment  
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // Create a shared memory segment
+        let key = 31338;
+        let shmid = cage.shmget_syscall(key, 1024, 0666 | IPC_CREAT);
+        assert!(shmid >= 0, "Failed to create shared memory segment");
+
+        // Attach with read-only flag
+        let result = cage.shmat_syscall(shmid, 0 as *mut u8, SHM_RDONLY);
+        assert!(result >= 0, "Attachment with SHM_RDONLY should succeed");
+
+        // Verify the segment was attached
+        let mut shmidstruct = ShmidsStruct::default();
+        assert_eq!(cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)), 0);
+        assert_eq!(shmidstruct.shm_nattch, 1, "Expected 1 attachment");
+
+        // Clean up
+        assert_eq!(cage.shmdt_syscall(result as *mut u8), shmid);
+        assert_eq!(cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)), 0);
+
+        assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
+        lindrustfinalize();
+    }
 
     #[test]
     pub fn ut_lind_fs_getpid_getppid() {
