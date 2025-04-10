@@ -1465,8 +1465,7 @@ impl Cage {
                         occupied.remove_entry();
                         metadata.shmkeyidtable.remove(&key);
                     }
-
-                    return shmid; //NaCl relies on this non-posix behavior of returning the shmid on success
+                    return shmid;
                 }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");
