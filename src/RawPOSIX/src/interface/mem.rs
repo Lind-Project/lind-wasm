@@ -302,7 +302,7 @@ pub fn shmdt_handler(cageid: u64, addr: *mut u8) -> i32 {
     // Get a reference to the inner ShmMetadata
     let length = match get_shm_length(shmid) {
         Some(l) => l,
-        None => return syscall_error(Errno::EINVAL, "shmat", "invalid shmid") as i32,
+        None => return syscall_error(Errno::EINVAL, "shmdt", "invalid shmid") as i32,
     };
     // Remove the mapping from the vmmap.
     // This call removes the range starting at the page-aligned user address,
