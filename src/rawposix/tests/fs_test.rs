@@ -119,9 +119,18 @@ fn test_open() {
         cageid,
         0o644 as u64,
         cageid,
-        0, 0, 0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
     );
-    assert!(fd >= 0, "open_syscall should return a valid file descriptor, got: {}", fd);
+    assert!(
+        fd >= 0,
+        "open_syscall should return a valid file descriptor, got: {}",
+        fd
+    );
 
     // Verify that the file was created.
     let metadata = fs::metadata("/tmp/test_open_syscall_file");
@@ -149,13 +158,27 @@ fn test_mkdir() {
         cageid,
         0o755 as u64,
         cageid,
-        0, 0, 0, 0, 0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
     );
-    assert_eq!(res, 0, "mkdir_syscall should succeed and return 0, got: {}", res);
+    assert_eq!(
+        res, 0,
+        "mkdir_syscall should succeed and return 0, got: {}",
+        res
+    );
 
     // Verify that the directory was created.
     let metadata = fs::metadata("/tmp/test_mkdir_syscall_dir");
-    assert!(metadata.is_ok(), "Directory should exist after mkdir_syscall");
+    assert!(
+        metadata.is_ok(),
+        "Directory should exist after mkdir_syscall"
+    );
 
     // Clean up: remove the created test directory.
     let _ = fs::remove_dir("/tmp/test_mkdir_syscall_dir");
