@@ -2,12 +2,27 @@ use parking_lot::RwLock;
 use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
 use typemap::type_conv::get_pipearray;
+use typemap::fs_conv::*;
 
 /// Helper function for close_syscall
-///
-/// This function will perform kernel close when necessary
+/// 
+/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't
+/// be closed in Lind-WASM execution, which preventing issues where other threads might reassign these
+/// fds, causing unintended behavior or errors. 
+/// 
+/// This function is registered in `fdtables` when creating the cage
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
-    let _ret = unsafe { libc::close(fdentry.underfd as i32) };
+    let kernel_fd = fdentry.underfd as i32;
+
+    if kernel_fd == STDIN_FILENO || kernel_fd == STDOUT_FILENO || kernel_fd == STDERR_FILENO {
+        return;
+    }
+
+    let ret = unsafe { libc::close(fdentry.underfd as i32) };
+    if ret < 0 {
+        let errno = get_errno();
+        panic!("kernel_close failed with errno: {:?}", errno);
+    }
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/open.2.html
@@ -17,7 +32,7 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 /// after getting the kernel fd. `fdtables` currently only manage when a fd should be closed after open, so
 /// then we need to set `O_CLOEXEC` flags according to input.
 ///
-/// Input:
+/// ## Arguments:
 ///     This call will only have one cageid indicates current cage, and three regular arguments same with Linux
 ///     - cageid: current cage
 ///     - path_arg: This argument points to a pathname naming the file. User's perspective.
@@ -25,6 +40,9 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 ///                 the open file description. The flags are combined together using a bitwise-inclusive-OR and the
 ///                 result is passed as an argument to the function. We need to check if `O_CLOEXEC` has been set.
 ///     - mode_arg: This represents the permission of the newly created file. Directly passing to kernel.
+/// 
+/// ## Returns:
+/// same with man page
 pub fn open_syscall(
     cageid: u64,
     path_arg: u64,
@@ -54,7 +72,6 @@ pub fn open_syscall(
         return syscall_error(Errno::EFAULT, "open_syscall", "Invalide Cage ID");
     }
 
-    println!("[open_syscall] path: {:?}", path);
     // Get the kernel fd first
     let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
 
@@ -84,7 +101,7 @@ pub fn open_syscall(
 /// Since we implement a file descriptor management subsystem (called `fdtables`), we first translate the virtual file
 /// descriptor into the corresponding kernel file descriptor before invoking the kernel's `libc::read()` function.
 ///
-/// Input:
+/// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
 ///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment.
@@ -147,7 +164,7 @@ pub fn read_syscall(
 /// subsystem (called `fdtables`) to handle virtual file descriptors. This syscall removes the virtual file
 /// descriptor from the subsystem, and if necessary, closes the underlying kernel file descriptor.
 ///
-/// Input:
+/// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
 ///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
@@ -193,12 +210,12 @@ pub fn close_syscall(
 /// RawPOSIX doesn't have any other operations, so all operations will be handled by host. RawPOSIX does error handling
 /// for this syscall.
 ///
-/// Input:
+/// ## Arguments:
 ///     - cageid: current cageid
 ///     - path_arg: This argument points to a pathname naming the file. User's perspective.
 ///     - mode_arg: This represents the permission of the newly created file. Directly passing to kernel.
 ///
-/// Return:
+/// ## Returns:
 ///     - return zero on success.  On error, -1 is returned and errno is set to indicate the error.
 pub fn mkdir_syscall(
     cageid: u64,

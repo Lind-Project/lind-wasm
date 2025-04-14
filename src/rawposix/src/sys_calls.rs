@@ -17,7 +17,7 @@ use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errn
 use sysdefs::constants::fs_const::*;
 use sysdefs::constants::{EXIT_SUCCESS, VERBOSE};
 use typemap::syscall_conv::*;
-use typemap::syscall_conv::*;
+use typemap::fs_conv::*;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
 ///
