@@ -2356,12 +2356,20 @@ impl<T> Caller<'_, T> {
         // TableElement::FuncRef(())
         // self.caller.table_grow(table_index, delta, init_value)
     }
-    pub fn grow_table_lib(&mut self, init_value: Ref) -> u32 {
+    pub fn grow_table_lib(&mut self, delta: u32, init_value: Ref) -> u32 {
         let lib_ty = TableType::new(RefType::FUNCREF, 0, None);
         let lib_init = init_value.into_table_element(self.store.0, lib_ty.element()).unwrap();
-        let res = self.caller.table_grow(TableIndex::from_u32(0), 1, lib_init).unwrap();
+        let res = self.caller.table_grow(TableIndex::from_u32(0), delta, lib_init).unwrap();
 
         res.unwrap()
+    }
+
+    pub fn get_table_size(&mut self) -> u32 {
+        let table_pointer = self.caller.get_table(TableIndex::from_u32(0));
+        unsafe {
+            let table = &*table_pointer;
+            table.size()
+        }
     }
 }
 

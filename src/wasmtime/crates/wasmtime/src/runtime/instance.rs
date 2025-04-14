@@ -257,10 +257,10 @@ impl Instance {
             1,
             MMAP_SYSCALL as u32,
             0,
-            4096000, // the first memory region starts from 0
+            0, // the first memory region starts from 0
             rounded_size as u64, // size of first memory region
             (PROT_READ | PROT_WRITE) as u64,
-            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
+            (MAP_PRIVATE | MAP_ANONYMOUS) as u64,
             // we need to pass -1 here, but since lind_syscall_api only accepts u64
             // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
             (0 - 1) as u64,

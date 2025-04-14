@@ -224,6 +224,7 @@ impl RunCommand {
                     let dylink_info = module.dylink_meminfo();
                     let dylink_info = dylink_info.as_ref().unwrap();
                     let table_start = table.size(&mut store) as i32;
+                    println!("table_start: {}, grow: {}", table_start, dylink_info.table_size);
                     table.grow(&mut store, dylink_info.table_size, wasmtime::Ref::Func(None));
                     let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_start)).unwrap();
                     linker.define(&mut store, name, "__indirect_function_table", table);
@@ -804,7 +805,7 @@ impl RunCommand {
     fn load_library_module(
         &self,
         main_module: &mut wasmtime::Caller<Host>,
-        main_linker: Linker<Host>,
+        mut main_linker: Linker<Host>,
         library_name: &str,
     ) -> i32 {
         println!("-------------------");
@@ -821,10 +822,26 @@ impl RunCommand {
             RunTarget::Core(module) => module,
             _ => { unreachable!() }
         };
+        let dylink_info = lib_module.dylink_meminfo().as_ref().unwrap();
+        println!("dylink.0 table size: {}, align: {}", dylink_info.table_size, dylink_info.table_alignment);
+
+        // table.grow(&mut *host_store, dylink_info.table_size, wasmtime::Ref::Func(None));
 
         // main_linker.define(store, "env", "__indirect_function_table", table);
         // main_linker.define(store, "env", "__table_base", table_base);
-        let lib_instance = main_linker.instantiate(&mut *main_module, &lib_module).unwrap();
+        // let lib_instance = main_linker.instantiate(&mut *main_module, &lib_module).unwrap();
+
+        let memory_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
+        
+        let table_size = main_module.get_table_size();
+        println!("table size: {}", table_size);
+        main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None));
+        main_linker.define(&mut *main_module, "env", "__memory_base", memory_base);
+        let table_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_size as i32)).unwrap();
+        main_linker.define(&mut *main_module, "env", "__table_base", table_base);
+
+        let handler = memory_base.get_handler(&mut *main_module) as *mut u32;
+        let lib_instance = main_linker.instantiate_lib(&mut *main_module, &lib_module, handler).unwrap();
 
         let mut lib_funcs = vec![];
         for export in lib_instance.exports(main_module.as_context_mut()) {
@@ -840,7 +857,8 @@ impl RunCommand {
                             // println!("add new library function: {:?}", res);
                         },
                         wasmtime::Extern::Global(global) => {
-                            todo!();
+                            // main_linker.define(&mut *main_module, "GOT.mem", "__table_base", table_base);
+                            // todo!();
                         },
                         _ => {
                             // table/memory should not be handled here
@@ -854,9 +872,9 @@ impl RunCommand {
         let mut symbol_mapping = HashMap::<String, usize>::new();
 
         while let Some((name, func_init)) = lib_funcs.pop() {
-            let res = main_module.grow_table_lib(func_init);
-            symbol_mapping.insert(name, res as usize);
-            println!("add new library function: {:?}", res);
+            let res = main_module.grow_table_lib(1, func_init);
+            symbol_mapping.insert(name.clone(), res as usize);
+            println!("add new library function ({:?}): {:?}", name.clone(), res);
         }
 
         let handle = main_module.push_library_symbols(&symbol_mapping).unwrap();
