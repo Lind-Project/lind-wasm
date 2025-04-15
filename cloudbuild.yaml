@@ -61,7 +61,7 @@ steps:
       - |
         docker run --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
-          $USERNAME/lind-wasm:latest \
+          $$USERNAME/lind-wasm:latest \
           bazel run //:python_tests &&
 
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
