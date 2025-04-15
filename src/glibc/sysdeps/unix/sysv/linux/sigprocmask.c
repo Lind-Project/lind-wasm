@@ -16,22 +16,27 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <signal.h>
-#include <pthreadP.h>
+#include <pthreadP.h>     /* SIGCANCEL, SIGSETXID */
 #include <syscall-template.h>
-#include <lind_syscall_num.h> //NEW INCLUDE
+#include <lind_syscall_num.h> 
 
 int
 __sigprocmask (int how, const sigset_t *set, sigset_t *oset)
 {
   unsigned long long rawposix_set, rawposix_oset;
+
   if (set)
     rawposix_set = set->__val[0];
+
   int retval = MAKE_SYSCALL (
       SYSCALL_SIGPROCMASK, "syscall|sigprocmask", (uint64_t) how,
       (uint64_t) (set ? &rawposix_set : NULL),
       (uint64_t) (oset ? &rawposix_oset : NULL), NOTUSED, NOTUSED, NOTUSED);
+
   if (oset)
     oset->__val[0] = (unsigned long int) rawposix_oset;
+
   return retval;
 }
 libc_hidden_def (__sigprocmask) weak_alias (__sigprocmask, sigprocmask)
+weak_alias (__sigprocmask, sigprocmask)
