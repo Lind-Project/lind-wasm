@@ -17,10 +17,7 @@ steps:
     args:
       - '-c'
       - |
-        # docker build --build-arg BRANCH_NAME=$$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer 2>&1 | tee /workspace/docker_build.log
-        # below line is for debugging, REMOVE.
-        docker build --build-arg BRANCH_NAME=$$BRANCH_NAME --build-arg DEV_MODE=true -t $$USERNAME/lind-wasm:latest ./.devcontainer 2>&1 | tee /workspace/docker_build.log 
-
+        docker build --build-arg BRANCH_NAME=$$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer 2>&1 | tee /workspace/docker_build.log
         echo $$? > /workspace/docker_build_exit_code
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
@@ -82,6 +79,7 @@ steps:
       - |
         docker run --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
+          -w /home/lind/lind-wasm \
           $$USERNAME/lind-wasm:latest \
           bazel run //:python_tests &&
 
