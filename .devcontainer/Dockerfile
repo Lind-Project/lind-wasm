@@ -10,9 +10,6 @@ ENV BRANCH_NAME=${BRANCH_NAME:-main}
 RUN apt-get update && \
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
     bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash
-
-
-
 RUN apt install apt-transport-https curl gnupg -y && \
     curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \
     mv bazel-archive-keyring.gpg /usr/share/keyrings && \
@@ -20,15 +17,12 @@ RUN apt install apt-transport-https curl gnupg -y && \
 
 RUN apt update && apt install -y bazel
 RUN go install github.com/bazelbuild/buildtools/buildifier@latest
-
 ARG USERNAME=lind
 
 RUN usermod --login ${USERNAME} --move-home --home /home/${USERNAME} ubuntu && \
     groupmod --new-name ${USERNAME} ubuntu
 RUN echo "lind ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
 USER lind
-
 WORKDIR /home/lind
 
 # Install Rust
@@ -38,10 +32,8 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     rustup default nightly
 
 RUN go install github.com/bazelbuild/buildtools/buildifier@latest
-    
 # Ensure the Rust environment is available in future RUN instructions
 ENV PATH="/home/lind/.cargo/bin:/home/lind/go/bin:${PATH}"
-
 ENV CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 
 ### non-DEV_MODE Commmands begin here

@@ -21,13 +21,13 @@
 #include <unistd.h>
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Change the protections of FILE to MODE.  */
 int
 __chmod (const char *file, mode_t mode)
 {
-   return MAKE_SYSCALL(133, "syscall|chmod", (uint64_t) file, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(CHMOD_SYSCALL, "syscall|chmod", (uint64_t) file, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-
 libc_hidden_def (__chmod)
 weak_alias (__chmod, chmod)
