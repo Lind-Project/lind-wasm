@@ -15,6 +15,7 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
+
 #include <unistd.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -22,22 +23,27 @@
 #include <errno.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+
 #ifndef __OFF_T_MATCHES_OFF64_T
+
 /* Test for overflows of structures where we ask the kernel to fill them
    in with standard 64-bit syscalls but return them through APIs that
    only expose the low 32 bits of some fields.  */
+
 static inline off_t lseek_overflow (loff_t res)
 {
   off_t retval = (off_t) res;
   if (retval == res)
     return retval;
+
   __set_errno (EOVERFLOW);
   return (off_t) -1;
 }
+
 off_t
 __lseek (int fd, off_t offset, int whence)
 {
-        return MAKE_SYSCALL(LSEEK_SYSCALL, "syscall|lseek", (uint64_t) fd, (uint64_t) offset, (uint64_t) whence, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(LSEEK_SYSCALL, "syscall|lseek", (uint64_t) fd, (uint64_t) offset, (uint64_t) whence, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__lseek)
 weak_alias (__lseek, lseek)
