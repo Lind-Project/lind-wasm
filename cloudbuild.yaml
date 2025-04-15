@@ -25,11 +25,12 @@ steps:
       - 'USERNAME'
 
   # If Docker build failed, handle that failure here and produce log
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
-    id: 'handle-failure'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    id: 'handle-docker-build-failure'
     entrypoint: 'bash'
     secretEnv:
       - 'GITHUB_APP_PRIVATE_KEY'
+      - 'GITHUB_TOKEN'
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
       - 'BUILD_ID=$BUILD_ID'
@@ -38,18 +39,21 @@ steps:
     args:
       - '-c'
       - |
-        #EXIT_CODE=$$(cat /workspace/docker_build_exit_code)
-        EXIT_CODE=1 # Simulate failure for testing
-        if [ "$$EXIT_CODE" -ne 0 ]; then
-          gsutil cp /workspace/docker_build.log gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
-          gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+          apt-get update && apt-get install -y python3 python3-pip python3-venv
+
+          python3 -m venv /tmp/venv
+          . /tmp/venv/bin/activate
 
           pip install "PyJWT[crypto]" google-cloud-secret-manager requests
           python generate_token_and_upload_secret.py
+
+          gsutil cp /workspace/docker_build.log gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+          gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+
           GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
 
           FAIL_MSG=$$(head -n 20 /workspace/docker_build.log | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-          COMMENT_JSON=$$(printf '{"body":"❌ **Docker Build Failed**\\n\\n[View Full Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)\\n\\n```\n%s\n```"}' "$$BRANCH_NAME" "$$BUILD_ID" "$$FAIL_MSG")
+          COMMENT_JSON=$$(printf '{"body":"**Build Failed**\\n\\n[View Full Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)\\n\\n```\n%s\n```"}' "$$BRANCH_NAME" "$$BUILD_ID" "$$FAIL_MSG")
 
           curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
@@ -57,8 +61,7 @@ steps:
               -d "$$COMMENT_JSON" \
               "https://api.github.com/repos/$$REPO_FULL_NAME/issues/$$PR_NUMBER/comments"
 
-          exit $$EXIT_CODE
-        fi
+
 
 
   # Run the container and execute the bazel test run command
