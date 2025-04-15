@@ -9,16 +9,48 @@ steps:
       - 'USERNAME'
       - 'PASSWORD'
 
-  # Build the Docker image from .devcontainer folder
+  # Docker build with failure detection and GitHub PR comment
   - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-build'
     entrypoint: 'bash'
-    args:
-      - '-c'
-      - 'docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer'
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
+      - 'BUILD_ID=$BUILD_ID'
+      - '_PR_NUMBER=$_PR_NUMBER'
+      - 'REPO_FULL_NAME=$REPO_FULL_NAME'
     secretEnv:
       - 'USERNAME'
+      - 'GITHUB_APP_PRIVATE_KEY'
+    args:
+      - '-c'
+      - |
+        LOGFILE=/workspace/docker_build.log
+        docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $USERNAME/lind-wasm:latest ./.devcontainer > $LOGFILE 2>&1
+        BUILD_STATUS=$?
+
+        BUILD_STATUS=1  # FOR DEBUGGING ONLY — force failure path
+
+        if [ $BUILD_STATUS -ne 0 ]; then
+          echo "Docker build failed. Preparing to upload log and comment."
+
+          gsutil cp $LOGFILE gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/docker_build.log
+          gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/docker_build.log
+
+          pip install "PyJWT[crypto]" google-cloud-secret-manager requests --quiet
+          python generate_token_and_upload_secret.py
+          GITHUB_TOKEN=$(gcloud secrets versions access latest --secret=github-bot-token)
+
+          FAIL_MSG=$(head -n 20 $LOGFILE | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          COMMENT_JSON=$(printf '{"body":"**Build Failed**\\n\\n[View Full Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)\\n\\n```%s```"}' "$BRANCH_NAME" "$BUILD_ID" "$FAIL_MSG")
+
+          curl -X POST -H "Authorization: Bearer $GITHUB_TOKEN" \
+               -H "Accept: application/vnd.github.v3+json" \
+               -H "Content-Type: application/json" \
+               -d "$COMMENT_JSON" \
+               "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
+
+          exit $BUILD_STATUS
+        fi
 
   # Run the container and execute the bazel test run command
   - name: 'gcr.io/cloud-builders/docker'
@@ -28,14 +60,13 @@ steps:
       - |
         docker run --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
-          $$USERNAME/lind-wasm:latest \
+          $USERNAME/lind-wasm:latest \
           bazel run //:python_tests &&
 
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html &&
 
         docker rm -fv lind_test_container
-
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
     secretEnv:
@@ -55,8 +86,10 @@ steps:
         gsutil cp /workspace/report.html gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html && 
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json &&
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html        
-  
+
+  # Refresh GitHub token again before final PR comment
   - name: 'python:3.11-slim'
+    id: 'refresh-github-token-before-comment'
     entrypoint: bash
     secretEnv:
       - "GITHUB_APP_PRIVATE_KEY"
@@ -66,6 +99,7 @@ steps:
         pip install "PyJWT[crypto]" google-cloud-secret-manager requests
         python generate_token_and_upload_secret.py
 
+  # Final GitHub PR comment with refreshed token
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     secretEnv:
@@ -74,18 +108,15 @@ steps:
       - 'BRANCH_NAME=$BRANCH_NAME'
       - 'BUILD_ID=$BUILD_ID'
       - '_PR_NUMBER=$_PR_NUMBER'
-      - 'REPO_FULL_NAME=$REPO_FULL_NAME'      
+      - 'REPO_FULL_NAME=$REPO_FULL_NAME'
     args:
       - '-c'
       - | 
-          # Send comment to GitHub PR
           curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
               -H "Content-Type: application/json" \
              -d "$(printf '{"body":"**Test Report**\\n\\n**[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n**[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**"}' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")" \
           "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
-
-
 
 options:
   logging: CLOUD_LOGGING_ONLY
