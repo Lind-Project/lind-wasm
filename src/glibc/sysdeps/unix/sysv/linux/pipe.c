@@ -12,18 +12,20 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
+
 #include <unistd.h>
 #include <sysdep.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+
 /* Create a one-way communication channel (__pipe).
    If successful, two file descriptors are stored in PIPEDES;
    bytes written on PIPEDES[1] can be read from PIPEDES[0].
    Returns 0 if successful, -1 if not.  */
 int
-__pipe (int pipedes[2])
+__pipe (int __pipedes[2])
 {
-   return MAKE_SYSCALL(PIPE_SYSCALL, "syscall|pipe", (uint64_t) pipedes, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(PIPE_SYSCALL, "syscall|pipe", (uint64_t) __pipedes, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__pipe)
 weak_alias (__pipe, pipe)
