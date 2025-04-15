@@ -58,7 +58,7 @@ steps:
           curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
           -H "Accept: application/vnd.github.v3+json" \
           -H "Content-Type: application/json" \
-          -d "$$(printf '{"body":"**Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)\\n\\n```\n%s\n```"}' \
+          -d "$$(printf '{"body":"**Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)\\n\\n```\\n%s\\n```"}' \
                 "$$BRANCH_NAME" \
                 "$$BUILD_ID" \
                 "$$(head -n 20 /workspace/docker_build.log | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')" \
