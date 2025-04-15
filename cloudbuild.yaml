@@ -9,48 +9,56 @@ steps:
       - 'USERNAME'
       - 'PASSWORD'
 
-  # Docker build with failure detection and GitHub PR comment
+  # Docker build with failure allowed
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'docker-build'
+    id: 'docker-image-build'
+    allowFailure: true
     entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker build --build-arg BRANCH_NAME=$$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer 2>&1 | tee /workspace/docker_build.log
+        echo $$? > /workspace/docker_build_exit_code
+    env:
+      - 'BRANCH_NAME=$BRANCH_NAME'
+    secretEnv:
+      - 'USERNAME'
+
+  # If Docker build failed, handle that failure here and produce log
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
+    id: 'handle-failure'
+    entrypoint: 'bash'
+    secretEnv:
+      - 'GITHUB_APP_PRIVATE_KEY'
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
       - 'BUILD_ID=$BUILD_ID'
       - '_PR_NUMBER=$_PR_NUMBER'
       - 'REPO_FULL_NAME=$REPO_FULL_NAME'
-    secretEnv:
-      - 'USERNAME'
-      - 'GITHUB_APP_PRIVATE_KEY'
     args:
       - '-c'
       - |
-          LOGFILE=/workspace/docker_build.log
-          docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer 2>&1 | tee $$LOGFILE
-          BUILD_STATUS=$$?
+        #EXIT_CODE=$$(cat /workspace/docker_build_exit_code)
+        EXIT_CODE=1 # Simulate failure for testing
+        if [ "$$EXIT_CODE" -ne 0 ]; then
+          gsutil cp /workspace/docker_build.log gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+          gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
 
-          BUILD_STATUS=1  # FOR DEBUGGING ONLY — force failure path
+          pip install "PyJWT[crypto]" google-cloud-secret-manager requests
+          python generate_token_and_upload_secret.py
+          GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
 
-          if [ $$BUILD_STATUS -ne 0 ]; then
-            echo "Docker build failed. Preparing to upload log and comment."
+          FAIL_MSG=$$(head -n 20 /workspace/docker_build.log | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          COMMENT_JSON=$$(printf '{"body":"❌ **Docker Build Failed**\\n\\n[View Full Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)\\n\\n```\n%s\n```"}' "$$BRANCH_NAME" "$$BUILD_ID" "$$FAIL_MSG")
 
-            gsutil cp $$LOGFILE gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
-            gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+          curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Content-Type: application/json" \
+              -d "$$COMMENT_JSON" \
+              "https://api.github.com/repos/$$REPO_FULL_NAME/issues/$$PR_NUMBER/comments"
 
-            pip install "PyJWT[crypto]" google-cloud-secret-manager requests --quiet
-            python generate_token_and_upload_secret.py
-            GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
-
-            FAIL_MSG=$$(head -n 20 $$LOGFILE | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-            COMMENT_JSON=$$(printf '{"body":"**Build Failed**\\n\\n[View Full Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)\\n\\n```%s```"}' "$$BRANCH_NAME" "$$BUILD_ID" "$$FAIL_MSG")
-
-            curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github.v3+json" \
-                -H "Content-Type: application/json" \
-                -d "$$COMMENT_JSON" \
-                "https://api.github.com/repos/$$REPO_FULL_NAME/issues/$$PR_NUMBER/comments"
-
-            exit $$BUILD_STATUS
-          fi
+          exit $$EXIT_CODE
+        fi
 
 
   # Run the container and execute the bazel test run command
