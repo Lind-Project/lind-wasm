@@ -63,7 +63,8 @@ steps:
                 "$$BUILD_ID" \
                 "$$(head -n 20 /workspace/docker_build.log | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')" \
             )" \
-          "https://api.github.com/repos/$$REPO_FULL_NAME/issues/$$PR_NUMBER/comments"
+          "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
+           
 
 
   # Run the container and execute the bazel test run command
