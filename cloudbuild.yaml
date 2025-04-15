@@ -17,7 +17,10 @@ steps:
     args:
       - '-c'
       - |
-        docker build --build-arg BRANCH_NAME=$$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer 2>&1 | tee /workspace/docker_build.log
+        # docker build --build-arg BRANCH_NAME=$$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer 2>&1 | tee /workspace/docker_build.log
+        # below line is for debugging, REMOVE.
+        docker build --build-arg BRANCH_NAME=$$BRANCH_NAME --build-arg DEV_MODE=true -t $$USERNAME/lind-wasm:latest ./.devcontainer 2>&1 | tee /workspace/docker_build.log 
+
         echo $$? > /workspace/docker_build_exit_code
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
@@ -52,16 +55,15 @@ steps:
 
           GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
 
-          FAIL_MSG=$$(head -n 20 /workspace/docker_build.log | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
-          COMMENT_JSON=$$(printf '{"body":"**Build Failed**\\n\\n[View Full Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)\\n\\n```\n%s\n```"}' "$$BRANCH_NAME" "$$BUILD_ID" "$$FAIL_MSG")
-
           curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              -H "Content-Type: application/json" \
-              -d "$$COMMENT_JSON" \
-              "https://api.github.com/repos/$$REPO_FULL_NAME/issues/$$PR_NUMBER/comments"
-
-
+          -H "Accept: application/vnd.github.v3+json" \
+          -H "Content-Type: application/json" \
+          -d "$$(printf '{"body":"**Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)\\n\\n```\n%s\n```"}' \
+                "$$BRANCH_NAME" \
+                "$$BUILD_ID" \
+                "$$(head -n 20 /workspace/docker_build.log | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')" \
+            )" \
+          "https://api.github.com/repos/$$REPO_FULL_NAME/issues/$$PR_NUMBER/comments"
 
 
   # Run the container and execute the bazel test run command
