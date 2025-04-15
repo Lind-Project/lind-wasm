@@ -25,7 +25,7 @@ steps:
       - '-c'
       - |
         LOGFILE=/workspace/docker_build.log
-        docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $USERNAME/lind-wasm:latest ./.devcontainer > $LOGFILE 2>&1
+        docker build --build-arg BRANCH_NAME=$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer > $LOGFILE 2>&1
         BUILD_STATUS=$?
 
         BUILD_STATUS=1  # FOR DEBUGGING ONLY — force failure path
