@@ -15,9 +15,14 @@ steps:
     args:
       - -c
       - |
-        git fetch origin $BRANCH_NAME && \
-        git diff --name-only origin/main...origin/$BRANCH_NAME | grep '^src/glibc/' && \
-        echo "GLIBC_CHANGED=true" >> /workspace/env.txt || echo "GLIBC_CHANGED=false" >> /workspace/env.txt
+        git fetch origin $BRANCH_NAME
+        echo "All changed files:"
+        git diff --name-only origin/main...origin/$BRANCH_NAME
+        if git diff --name-only origin/main...origin/$BRANCH_NAME | grep -q '^src/glibc/'; then
+          echo "GLIBC_CHANGED=true" >> /workspace/env.txt
+        else
+          echo "GLIBC_CHANGED=false" >> /workspace/env.txt
+        fi
   
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
