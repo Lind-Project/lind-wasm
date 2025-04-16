@@ -42,10 +42,10 @@ steps:
       - '-c'
       - |
         docker build \
-        --build-arg BRANCH_NAME=$BRANCH_NAME \
+        --build-arg BRANCH_NAME=$$BRANCH_NAME \
         --build-arg GLIBC_CHANGED=$(grep "GLIBC_CHANGED" /workspace/env.txt | cut -d= -f2) \
         --build-arg GLIBC_IN_GCS=$(grep "GLIBC_IN_GCS" /workspace/env.txt | cut -d= -f2) \
-        -t $USERNAME/lind-wasm:latest ./.devcontainer | tee /workspace/docker_build.log
+        -t $$USERNAME/lind-wasm:latest ./.devcontainer | tee /workspace/docker_build.log
         echo $$? > /workspace/docker_build_exit_code
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
