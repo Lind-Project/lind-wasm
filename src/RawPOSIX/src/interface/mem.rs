@@ -294,16 +294,13 @@ pub fn shmdt_handler(cageid: u64, addr: *mut u8) -> i32 {
     let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
     drop(vmmap);
 
-    let shmid = cage.shmdt_syscall(sysaddr as *mut u8);
-    if shmid < 0 {
-        return shmid;
+    // Call shmdt_syscall which returns:
+    // - positive value: the length of the detached segment on success
+    // - negative value: the errno code on failure
+    let length = cage.shmdt_syscall(sysaddr as *mut u8);
+    if length < 0 {
+        return length;
     }
-
-    // Get a reference to the inner ShmMetadata
-    let length = match get_shm_length(shmid) {
-        Some(l) => l,
-        None => return syscall_error(Errno::EINVAL, "shmdt", "invalid shmid") as i32,
-    };
 
     // Remove the mapping from the vmmap.
     // This call removes the range starting at the page-aligned user address,
