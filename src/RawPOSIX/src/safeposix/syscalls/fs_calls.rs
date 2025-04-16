@@ -789,12 +789,12 @@ impl Cage {
     /// - `-1` on failure, with `errno` set appropriately.
     pub fn dup_syscall(&self, virtual_fd: i32) -> i32 {
         if virtual_fd < 0 {
-            return syscall_error(Errno::EBADFD, "dup", "Bad File Descriptor");
+            return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
         }
         // Get underlying kernel fd
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {
-            return syscall_error(Errno::EBADFD, "dup", "Bad File Descriptor");
+            return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
         }
         let vfd = wrappedvfd.unwrap();
         // Request another virtual fd to refer to same underlying kernel fd as `virtual_fd`
@@ -932,7 +932,7 @@ impl Cage {
                     arg as u64,
                 ) {
                     Ok(new_vfd) => return new_vfd as i32,
-                    Err(_) => return syscall_error(Errno::EBADFD, "fcntl", "Bad File Descriptor"),
+                    Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
                 }
             }
             // As for `F_DUPFD`, but additionally set the close-on-exec flag
@@ -954,7 +954,7 @@ impl Cage {
                     arg as u64,
                 ) {
                     Ok(new_vfd) => return new_vfd as i32,
-                    Err(_) => return syscall_error(Errno::EBADFD, "fcntl", "Bad File Descriptor"),
+                    Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
                 }
             }
             // Return (as the function result) the file descriptor flags.
@@ -983,7 +983,7 @@ impl Cage {
                 let cloexec_flag: bool = arg != 0;
                 match fdtables::set_cloexec(self.cageid, virtual_fd as u64, cloexec_flag) {
                     Ok(_) => return 0,
-                    Err(_e) => return syscall_error(Errno::EBADFD, "fcntl", "Bad File Descriptor"),
+                    Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
                 }
             }
             // Return (as the function result) the process ID or process
@@ -1685,15 +1685,15 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 /// (4) file descriptor specific extra information.
 ///
 /// On error:
-/// Return error num EBADFD(Bad File Descriptor)
+/// Return error num EBADF(Bad File Descriptor)
 pub fn _fcntl_helper(cageid: u64, virtual_fd: i32) -> Result<fdtables::FDTableEntry, Errno> {
     if virtual_fd < 0 {
-        return Err(Errno::EBADFD);
+        return Err(Errno::EBADF);
     }
     // Get underlying kernel fd
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd as u64);
     if wrappedvfd.is_err() {
-        return Err(Errno::EBADFD);
+        return Err(Errno::EBADF);
     }
     Ok(wrappedvfd.unwrap())
 }
