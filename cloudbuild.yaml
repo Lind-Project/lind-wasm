@@ -15,7 +15,7 @@ steps:
     args:
       - -c
       - |
-        git checkout $BRANCH_NAME
+        git checkout origin/$BRANCH_NAME
         echo "All changed files:"
         git diff --name-only origin/main
         if git diff --name-only origin/main | grep -q '^src/glibc/'; then
