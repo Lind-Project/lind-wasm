@@ -42,9 +42,10 @@ int main(int argc, char **argv) {
             exit(EXIT_FAILURE);
         }
 
+        int ret = fcntl(fd, F_GETFD);
         // Check if the file descriptor is invalid after closing
-        if (fcntl(fd, F_GETFD) != -1 || errno != EBADF) {
-            fprintf(stderr, "File descriptor %d was not properly closed\n", fd);
+        if (ret != -1 || errno != EBADF) {
+            fprintf(stderr, "File descriptor %d was not properly closed with return value %d\n", fd, ret);
             exit(EXIT_FAILURE);
         }
     }

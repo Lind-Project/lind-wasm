@@ -775,75 +775,79 @@ impl Cage {
     }
 
     //------------------------------------DUP & DUP2 SYSCALLS------------------------------------
-    /*
-     *   dup() / dup2() will return a file descriptor
-     *   Mapping a new virtual fd and kernel fd that libc::dup returned
-     *   Then return virtual fd
-     */
-    pub fn dup_syscall(&self, virtual_fd: i32, _start_desc: Option<i32>) -> i32 {
+    /// Unix / Linux Reference: https://man7.org/linux/man-pages/man2/dup.2.html
+    ///
+    /// Since the two file descriptors refer to the same open file description, they share file offset
+    /// and file status flags. Then, in RawPOSIX, we mapped duplicated file descriptor to same underlying
+    /// kernel fd.
+    ///
+    /// ## Arguments:
+    /// - `virtual_fd`: virtual file descriptor
+    ///
+    /// ## Return type:
+    /// - `0` on success.
+    /// - `-1` on failure, with `errno` set appropriately.
+    pub fn dup_syscall(&self, virtual_fd: i32) -> i32 {
         if virtual_fd < 0 {
-            return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
+            return syscall_error(Errno::EBADFD, "dup", "Bad File Descriptor");
         }
+        // Get underlying kernel fd
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {
-            return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
+            return syscall_error(Errno::EBADFD, "dup", "Bad File Descriptor");
         }
         let vfd = wrappedvfd.unwrap();
-        let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
+        // Request another virtual fd to refer to same underlying kernel fd as `virtual_fd`
+        // from input
         let ret_virtualfd =
-            fdtables::get_unused_virtual_fd(self.cageid, vfd.fdkind, ret_kernelfd as u64, false, 0)
+            fdtables::get_unused_virtual_fd(self.cageid, vfd.fdkind, vfd.underfd, false, 0)
                 .unwrap();
         return ret_virtualfd as i32;
     }
 
-    /*
-     */
+    /// dup2() performs the same task as dup(), so we utilize dup() here and mapping underlying kernel
+    /// fd with specific `new_virutalfd`
+    ///
+    /// ## Arguments:
+    /// - `old_virtualfd`: original virtual file descriptor
+    /// - `new_virtualfd`: specified new virtual file descriptor
+    ///
+    /// ## Return type:
+    /// - `0` on success.
+    /// - `-1` on failure, with `errno` set appropriately.
     pub fn dup2_syscall(&self, old_virtualfd: i32, new_virtualfd: i32) -> i32 {
+        // Validate both virtual fds
         if old_virtualfd < 0 || new_virtualfd < 0 {
             return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
+        } else if old_virtualfd == new_virtualfd {
+            // Does nothing
+            return new_virtualfd;
         }
 
+        // If the file descriptor newfd was previously open, it is closed before being reused; the
+        // close is performed silently (i.e., any errors during the close are not reported by dup2()).
+        // This step is handled inside `fdtables`
         match fdtables::translate_virtual_fd(self.cageid, old_virtualfd as u64) {
             Ok(old_vfd) => {
-                let new_kernelfd = unsafe { libc::dup(old_vfd.underfd as i32) };
-                // Map new kernel fd with provided kernel fd
-                let _ret_kernelfd = unsafe { libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
+                // Request another virtual fd to refer to same underlying kernel fd as `virtual_fd`
+                // from input.
+                // The two file descriptors do not share file descriptor flags (the
+                // close-on-exec flag).  The close-on-exec flag (FD_CLOEXEC; see fcntl_syscall())
+                // for the duplicate descriptor is off
                 let _ = fdtables::get_specific_virtual_fd(
                     self.cageid,
                     new_virtualfd as u64,
                     old_vfd.fdkind,
-                    new_kernelfd as u64,
+                    old_vfd.underfd,
                     false,
                     old_vfd.perfdinfo,
                 )
                 .unwrap();
+
                 return new_virtualfd;
             }
             Err(_e) => {
                 return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
-            }
-        }
-    }
-
-    //------------------------------------CLOSE SYSCALL------------------------------------
-    /*
-     *   Get the kernel fd with provided virtual fd first
-     *   close() will return 0 when sucess, -1 when fail
-     */
-    pub fn close_syscall(&self, virtual_fd: i32) -> i32 {
-        if virtual_fd > 1024 || virtual_fd < 0 {
-            return syscall_error(Errno::EBADF, "close", "Bad File Descriptor");
-        }
-
-        match fdtables::close_virtualfd(self.cageid, virtual_fd as u64) {
-            Ok(()) => {
-                return 0;
-            }
-            Err(e) => {
-                if e == Errno::EBADFD as u64 {
-                    return syscall_error(Errno::EBADF, "close", "bad file descriptor");
-                }
-                return -1;
             }
         }
     }
@@ -909,7 +913,7 @@ impl Cage {
                     arg as u64,
                 ) {
                     Ok(new_vfd) => return new_vfd as i32,
-                    Err(_) => return syscall_error(Errno::EBADFD, "fcntl", "Bad File Descriptor"),
+                    Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
                 }
             }
             // As for `F_DUPFD`, but additionally set the close-on-exec flag
@@ -931,7 +935,7 @@ impl Cage {
                     arg as u64,
                 ) {
                     Ok(new_vfd) => return new_vfd as i32,
-                    Err(_) => return syscall_error(Errno::EBADFD, "fcntl", "Bad File Descriptor"),
+                    Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
                 }
             }
             // Return (as the function result) the file descriptor flags.
@@ -960,7 +964,7 @@ impl Cage {
                 let cloexec_flag: bool = arg != 0;
                 match fdtables::set_cloexec(self.cageid, virtual_fd as u64, cloexec_flag) {
                     Ok(_) => return 0,
-                    Err(_e) => return syscall_error(Errno::EBADFD, "fcntl", "Bad File Descriptor"),
+                    Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
                 }
             }
             // Return (as the function result) the process ID or process
@@ -1677,15 +1681,15 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 /// (4) file descriptor specific extra information.
 ///
 /// On error:
-/// Return error num EBADFD(Bad File Descriptor)
+/// Return error num EBADF(Bad File Descriptor)
 pub fn _fcntl_helper(cageid: u64, virtual_fd: i32) -> Result<fdtables::FDTableEntry, Errno> {
     if virtual_fd < 0 {
-        return Err(Errno::EBADFD);
+        return Err(Errno::EBADF);
     }
     // Get underlying kernel fd
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd as u64);
     if wrappedvfd.is_err() {
-        return Err(Errno::EBADFD);
+        return Err(Errno::EBADF);
     }
     Ok(wrappedvfd.unwrap())
 }
