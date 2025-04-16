@@ -15,8 +15,8 @@ steps:
     args:
       - -c
       - |
-        git fetch origin main
-        git fetch origin $BRANCH_NAME
+        git fetch origin main --unshallow || true
+        git fetch origin $BRANCH_NAME --unshallow || true
 
         echo "All changed files:"
         git diff --name-only origin/main...origin/$BRANCH_NAME
