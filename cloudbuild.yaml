@@ -15,9 +15,12 @@ steps:
     args:
       - -c
       - |
+        git fetch origin main
         git fetch origin $BRANCH_NAME
+
         echo "All changed files:"
         git diff --name-only origin/main...origin/$BRANCH_NAME
+
         if git diff --name-only origin/main...origin/$BRANCH_NAME | grep -q '^src/glibc/'; then
           echo "GLIBC_CHANGED=true" >> /workspace/env.txt
         else
