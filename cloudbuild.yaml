@@ -15,6 +15,7 @@ steps:
     args:
       - -c
       - |
+        git clone https://github.com/Lind-Project/lind-wasm.git
         git checkout origin/$BRANCH_NAME
         echo "All changed files:"
         git diff --name-only origin/main
