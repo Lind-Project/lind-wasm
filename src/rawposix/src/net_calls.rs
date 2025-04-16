@@ -68,12 +68,12 @@ pub fn socket_syscall(
 /// socket (AF_UNIX), the path is modified to include the sandbox root path (`LIND_ROOT`) to ensure the
 /// socket file resides within the correct namespace.
 ///
-/// Input:
+/// ## Arguments:
 ///     - cageid: current cageid
 ///     - fd_arg: virtual file descriptor for the socket to be connected
 ///     - addr_arg: pointer to a `sockaddr_un` structure containing the target address
 ///
-/// Return:
+/// ## Returns:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
 pub fn connect_syscall(
@@ -121,12 +121,12 @@ pub fn connect_syscall(
 /// socket (AF_UNIX), the path is rewritten to include a sandbox root (`LIND_ROOT`) to enforce proper
 /// isolation within the namespace.
 ///
-/// Input:
+/// ## Arguments:
 ///     - cageid: current cageid
 ///     - fd_arg: virtual file descriptor to be bound
 ///     - addr_arg: pointer to a `sockaddr_un` structure containing the local address
 ///
-/// Return:
+/// ## Returns:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
 pub fn bind_syscall(
@@ -171,12 +171,12 @@ pub fn bind_syscall(
 /// incoming connection requests. This implementation converts the virtual file descriptor and backlog
 /// value from the calling cage to their kernel-visible equivalents, and invokes the system `listen()` call.
 ///
-/// Input:
+/// ## Arguments:
 ///     - cageid: current cageid
 ///     - fd_arg: virtual file descriptor referring to the socket
 ///     - backlog_arg: maximum number of pending connections in the socket’s listen queue
 ///
-/// Return:
+/// ## Returns:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
 pub fn listen_syscall(
@@ -223,13 +223,13 @@ pub fn listen_syscall(
 /// and if provided, transform the sockaddr pointer for use inside the kernel. The returned host file
 /// descriptor is then assigned a new virtual file descriptor.
 ///
-/// Input:
+/// ## Arguments:
 ///     - cageid: current cageid
 ///     - fd_arg: virtual file descriptor referring to the listening socket
 ///     - addr_arg: optional pointer to a buffer that will receive the address of the connecting entity
 ///     - len_arg: not used in this implementation
 ///
-/// Return:
+/// ## Returns:
 ///     - On success: new virtual file descriptor associated with the accepted socket
 ///     - On failure: a negative errno value indicating the syscall error
 pub fn accept_syscall(
@@ -279,7 +279,7 @@ pub fn accept_syscall(
 /// This implementation translates the virtual file descriptor and user-provided option values into host-space values
 /// before applying the `setsockopt` syscall on the host kernel.
 ///
-/// Input:
+/// ## Arguments:
 ///     - cageid: current cageid
 ///     - fd_arg: virtual file descriptor representing the socket
 ///     - level_arg: specifies the protocol level at which the option resides (e.g., SOL_SOCKET)
@@ -287,7 +287,7 @@ pub fn accept_syscall(
 ///     - optval_arg: pointer to the option value
 ///     - optlen_arg: size of the option value
 ///
-/// Return:
+/// ## Returns:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
 pub fn setsockopt_syscall(
@@ -331,14 +331,14 @@ pub fn setsockopt_syscall(
 /// This implementation extracts the virtual file descriptor and buffer from the current cage,
 /// then forwards the request to the host kernel with the provided flags.
 ///
-/// Input:
+/// ## Arguments:
 ///     - cageid: current cageid
 ///     - fd_arg: virtual file descriptor indicating the socket to send data on
 ///     - buf_arg: pointer to the message buffer in user memory
 ///     - buflen_arg: length of the message to be sent
 ///     - flags_arg: bitmask of flags influencing message transmission behavior
 ///
-/// Return:
+/// ## Returns:
 ///     - On success: number of bytes sent
 ///     - On failure: a negative errno value indicating the syscall error
 pub fn send_syscall(
@@ -381,14 +381,14 @@ pub fn send_syscall(
 /// This implementation retrieves the virtual file descriptor and target buffer from the current cage,
 /// and performs the message receive operation using the specified flags.
 ///
-/// Input:
+/// ## Arguments:
 ///     - cageid: current cageid
 ///     - fd_arg: virtual file descriptor from which to receive data
 ///     - buf_arg: pointer to the buffer in user memory to store received data
 ///     - buflen_arg: size of the buffer to receive data into
 ///     - flags_arg: flags controlling message reception behavior
 ///
-/// Return:
+/// ## Returns:
 ///     - On success: number of bytes received
 ///     - On failure: a negative errno value indicating the syscall error
 pub fn recv_syscall(
