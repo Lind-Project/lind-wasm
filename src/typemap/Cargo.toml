@@ -1,0 +1,15 @@
+[package]
+name = "typemap"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2"
+fdtables = { path = "../fdtables" }
+cage = { path = "../cage" }
+sysdefs = { path = "../sysdefs" }
+
+[features]
+default = ["fast"]
+fast = []
+secure = []
