@@ -9,6 +9,30 @@ steps:
       - 'USERNAME'
       - 'PASSWORD'
 
+  - name: 'alpine/git'
+    id: check-glibc-change
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        git fetch origin $BRANCH_NAME && \
+        git diff --name-only origin/main...origin/$BRANCH_NAME | grep '^src/glibc/' && \
+        echo "GLIBC_CHANGED=true" >> /workspace/env.txt || echo "GLIBC_CHANGED=false" >> /workspace/env.txt
+  
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: fetch_glibc_build
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        if gsutil -q stat gs://test_result_json_bucket/glibc/glibc_build.tar.gz; then
+          gsutil cp gs://test_result_json_bucket/glibc/glibc_build.tar.gz /workspace/
+          echo "GLIBC_IN_GCS=true" >> /workspace/env.txt
+        else
+          echo "GLIBC_IN_GCS=false" >> /workspace/env.txt
+        fi
+
   # Docker build with failure allowed
   - name: 'gcr.io/cloud-builders/docker'
     id: 'docker-image-build'
@@ -17,7 +41,11 @@ steps:
     args:
       - '-c'
       - |
-        docker build --build-arg BRANCH_NAME=$$BRANCH_NAME -t $$USERNAME/lind-wasm:latest ./.devcontainer 2>&1 | tee /workspace/docker_build.log
+        docker build \
+        --build-arg BRANCH_NAME=$BRANCH_NAME \
+        --build-arg GLIBC_CHANGED=$(grep "GLIBC_CHANGED" /workspace/env.txt | cut -d= -f2) \
+        --build-arg GLIBC_IN_GCS=$(grep "GLIBC_IN_GCS" /workspace/env.txt | cut -d= -f2) \
+        -t $USERNAME/lind-wasm:latest ./.devcontainer | tee /workspace/docker_build.log
         echo $$? > /workspace/docker_build_exit_code
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
@@ -69,7 +97,17 @@ steps:
             )" \
           "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
            
-
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: push_glibc_build
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        if [ "$(grep "GLIBC_CHANGED" /workspace/env.txt | cut -d= -f2)" = "true" ] \
+           || [ "$(grep "GLIBC_IN_GCS" /workspace/env.txt | cut -d= -f2)" = "false" ]; then
+          echo "Uploading new glibc build to GCS"
+          gsutil cp /workspace/glibc_build.tar.gz gs://my-glibc-bucket/latest/glibc_build.tar.gz
+        fi
 
   # Run the container and execute the bazel test run command
   - name: 'gcr.io/cloud-builders/docker'

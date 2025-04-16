@@ -6,6 +6,9 @@ ENV DEV_MODE=${DEV_MODE:-false}
 ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-main}
 
+ARG GLIBC_CHANGED
+ARG GLIBC_IN_GCS
+
 # Install all the required dependencies
 RUN apt-get -qq update && \
     apt-get install -y -qq build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
@@ -58,7 +61,21 @@ WORKDIR /home/lind/lind-wasm
 RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/lib; fi
 # Build Lind-wasm
 #RUN chmod +x lindtool.sh
-RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
+# RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
+RUN if [ "$DEV_MODE" != "true" ]; then \
+      if [ "$GLIBC_CHANGED" = "true" ] || [ "$GLIBC_IN_GCS" = "false" ]; then \
+        echo "------------------------" &&\
+        echo "Building glibc" && \
+        echo "------------------------" &&\
+        bazel build //:make_all && \
+        tar czf /workspace/glibc_build.tar.gz /home/lind/lind-wasm/src/glibc/build; \
+      else \
+        echo "------------------------" &&\
+        echo "Using cached glibc from GCS" && \
+        echo "------------------------" &&\
+        tar xzf /workspace/glibc_build.tar.gz -C /home/lind/lind-wasm/src/glibc; \
+      fi; \
+    fi
 RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_wasmtime; fi
 
 ### non-DEV_MODE Commmands end here
