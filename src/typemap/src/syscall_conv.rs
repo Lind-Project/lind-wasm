@@ -264,3 +264,56 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     let buf = translate_vmmap_addr(&cage, buf_arg).unwrap() as *const u8;
     buf
 }
+
+/// This function translates a memory address from the WASM environment (user space)
+ /// to the corresponding host system address (kernel space). It is typically used when
+ /// the guest application passes a pointer argument to a syscall, and we need to dereference
+ /// it in the kernel context.
+ /// 
+ /// Input:
+ ///     - addr_arg: the raw 64-bit address from the user
+ ///     - addr_arg_cageid: the cage ID where the address belongs to
+ ///     - cageid: the current running cage's ID (used for checking context)
+ /// 
+ /// Output:
+ ///     - Returns a mutable pointer to host memory corresponding to the given address
+ ///       from the guest. The pointer can be used for direct read/write operations.
+ pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64) -> *mut u8 {
+    let cage = get_cage(addr_arg_cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, addr_arg).unwrap() as *mut u8;
+    return addr;
+}
+
+/// This function translates a buffer pointer from the WASM environment to a host pointer. 
+/// It is typically used when a syscall needs to read a buffer (e.g., in `read`, `write`, etc).
+///
+/// Input:
+///     - buf_arg: the raw address of the buffer in WASM space
+///     - buf_arg_cageid: the cage ID of the buffer address
+///     - cageid: current running cage ID
+///
+/// Output:
+///     - Returns a constant (read-only) host pointer to the translated buffer.
+///       Suitable for syscalls that only read from the buffer.
+pub fn sc_convert_buf_to_host(buf_arg: u64, buf_arg_cageid: u64, cageid: u64) -> *const u8 {
+    let cage = get_cage(buf_arg_cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, buf_arg).unwrap() as *mut u8;
+    return addr;
+}
+
+/// This function translates 64 bits uadd from the WASM context
+/// into the corresponding host address value. Unlike the previous two functions, it returns
+/// the translated address as a raw `u64` rather than a pointer.
+///
+/// Input:
+///     - uaddr_arg: the original 64-bit address from the WASM space
+///     - uaddr_arg_cageid: the cage ID that owns the address
+///     - cageid: the currently executing cage ID
+///
+/// Output:
+///     - Returns the translated 64-bit address in host space as a u64.
+pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64{
+    let cage = get_cage(uaddr_arg_cageid).unwrap();
+    let uaddr = translate_vmmap_addr(&cage, uaddr_arg).unwrap();
+    return uaddr;
+}
