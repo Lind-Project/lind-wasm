@@ -106,7 +106,6 @@ steps:
       - |
         docker run --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
-          -w /home/lind/lind-wasm \
           $$USERNAME/lind-wasm:latest \
           bazel run //:python_tests &&
 
