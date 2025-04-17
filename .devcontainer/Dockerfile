@@ -71,11 +71,12 @@ RUN if [ "$DEV_MODE" != "true" ]; then \
         echo "Making tarball" && \
         tar -czvf /workspace/glibc_build.tar.gz /home/lind/lind-wasm/src/glibc/build; \
       else \
+        echo "------------------------"&&\
+        echo "Using cached glibc" && \
         echo "------------------------" &&\
-        echo "Using cached glibc from GCS" && \
-        echo "------------------------" &&\
-        tar xzf /workspace/glibc_build.tar.gz -C /home/lind/lind-wasm/src/glibc; \
-      fi; \
+        tar xzf /workspace/glibc_build.tar.gz -C /home/lind/lind-wasm/src/glibc build; &&\
+        /home/lind/lind-wasm/src/glibc/gen_sysroot.sh &&\
+      fi \
     fi
 RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_wasmtime; fi
 
