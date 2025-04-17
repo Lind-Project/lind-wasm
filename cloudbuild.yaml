@@ -110,27 +110,34 @@ steps:
     args:
       - '-c'
       - |
+        set -e
+
         docker run -d --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
           $$USERNAME/lind-wasm:latest
-        
+
+        CONTAINER_ID=$(docker ps -qf "name=lind_test_container")
+        echo "Running in container: $$CONTAINER_ID"
+
         if [ "$$GLIBC_TAR_CACHE" = "true" ]; then
           echo "Copying cached glibc"
           tar xzf /workspace/glibc_build.tar.gz -C /workspace
-          docker cp /workspace/build lind_test_container:/src/glibc
+          docker cp /workspace/build "$$CONTAINER_ID":/src/glibc
         else
           echo "Copying current glibc build"
-          docker cp lind_test_container:/home/lind/lind-wasm/src/glibc/build /workspace/build
+          docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/src/glibc/build /workspace/build
         fi
 
-        docker exec lind_test_container bazel run //:python_tests
-        
-        docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
-        docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html &&
+        echo "Running tests"
+        docker exec "$$CONTAINER_ID" bazel run //:python_tests
 
-        docker rm -fv lind_test_container
+        echo "Copying test results"
+        docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json
+        docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html
+        docker rm -fv "$$CONTAINER_ID"
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
+      - 'GLIBC_TAR_CACHE=$GLIBC_TAR_CACHE'
     secretEnv:
       - 'USERNAME'
 
