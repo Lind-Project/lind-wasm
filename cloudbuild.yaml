@@ -71,7 +71,8 @@ steps:
       - '-c'
       - |
           touch /workspace/docker_build_exit_code
-          EXIT_CODE=$$(cat /workspace/docker_build_exit_code)
+          EXIT_CODE=$$(cat /workspace/docker_build_exit_code 2>/dev/null || echo 1)
+          echo "Docker build exited with code: $$EXIT_CODE"
 
           apt-get update && apt-get install -y python3 python3-pip python3-venv
 
@@ -82,7 +83,7 @@ steps:
           python generate_token_and_upload_secret.py
 
           GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
-          if [ -n "$$EXIT_CODE" ]; then
+          if [ "$$EXIT_CODE" -eq 0 ]; then
             curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Content-Type: application/json" \
@@ -111,7 +112,10 @@ steps:
           -e BRANCH_NAME=$BRANCH_NAME \
           $$USERNAME/lind-wasm:latest \
           bazel run //:python_tests &&
-
+        if [ "$$GLIBC_TAR_CACHE" != "true" ]; then
+          echo "Copying current glibc build"
+          docker cp lind_test_container:/home/lind/lind-wasm/src/glibc/build /workspace/glibcbuild
+        fi
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html &&
 
@@ -137,7 +141,9 @@ steps:
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html  
         source /workspace/env.txt
         if [ "$$GLIBC_TAR_CACHE" != "true" ]; then
-          tar czf /workspace/glibc_build.tar.gz -C src/glibc build
+          echo "creating tar ball"
+          tar czf /workspace/glibc_build.tar.gz -C /workspace/glibcbuild
+          echo "pushing tar to gcs"
           gsutil cp /workspace/glibc_build.tar.gz gs://test_result_json_bucket/glibc/$$LAST_COMMIT/glibc_build.tar.gz 
         fi      
 

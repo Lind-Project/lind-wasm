@@ -65,8 +65,6 @@ RUN if [ "$DEV_MODE" != "true" ]; then \
         echo "Building glibc" && \
         echo "------------------------" && \
         bazel build //:make_all && \
-        echo "Making tarball" && \
-        tar -czvf /workspace/glibc_build.tar.gz /home/lind/lind-wasm/src/glibc/build; \
       else \
         echo "------------------------" && \
         echo "Using cached glibc" &&  \
