@@ -27,6 +27,8 @@ steps:
           else
             echo "GLIBC_TAR_CACHE=false" >> /workspace/env.txt
           fi
+        else
+          echo "GLIBC_TAR_CACHE=false" >> /workspace/env.txt
         fi
 
   # Docker build with failure allowed
@@ -37,23 +39,22 @@ steps:
     args:
       - '-c'
       - |
-        apt-get update && apt-get install -y git && apt-get install -y tar
         cd .devcontainer
         git clone --branch $$BRANCH_NAME --single-branch https://github.com/Lind-Project/lind-wasm.git
 
         source /workspace/env.txt
         if [ "$$GLIBC_TAR_CACHE" = "true" ]; then
-          tar -xzf /workspace/glibc_build.tar.gz -C lind-wasm/src/glibc
+          tar xzf /workspace/glibc_build.tar.gz -C lind-wasm/src/glibc
           lind-wasm/src/glibc/gen_sysroot.sh
         fi
 
         docker build \
         --build-arg GLIBC_TAR_CACHE=$$GLIBC_TAR_CACHE \
         -t $$USERNAME/lind-wasm:latest . | tee /workspace/docker_build.log
-        if [ "$$GLIBC_TAR_CACHE" != "true" ]; then
-          tar -czf /workspace/glibc_build.tar.gz -C lind-wasm/src/glibc build
-        fi
         echo $$? > /workspace/docker_build_exit_code
+        if [ "$$GLIBC_TAR_CACHE" != "true" ]; then
+          tar czf /workspace/glibc_build.tar.gz -C lind-wasm/src/glibc build
+        fi
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
     secretEnv:
@@ -145,7 +146,7 @@ steps:
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html &&
         source /workspace/env.txt
         if [ "$$GLIBC_TAR_CACHE" != "true" ]; then
-          tar -czf /workspace/glibc_build.tar.gz -C src/glibc build
+          tar czf /workspace/glibc_build.tar.gz -C src/glibc build
           gsutil cp /workspace/glibc_build.tar.gz gs://test_result_json_bucket/glibc/$COMMIT_SHA/glibc_build.tar.gz 
         fi
 
