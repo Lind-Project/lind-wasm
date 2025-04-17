@@ -1458,7 +1458,9 @@ impl Cage {
             match metadata.shmtable.entry(shmid) {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
-                    // Get the length before unmapping
+                    // Retrieve the length before shmdt_syscall since the segment will be cleaned up after
+                    // the syscall completes, making the length field unavailable. We need this length
+                    // value later to remove the correct number of pages from vmmap.
                     let length = segment.size as i32;
 
                     segment.unmap_shm(shmaddr, self.cageid);

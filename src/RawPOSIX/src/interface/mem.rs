@@ -294,9 +294,7 @@ pub fn shmdt_handler(cageid: u64, addr: *mut u8) -> i32 {
     let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
     drop(vmmap);
 
-    // Call shmdt_syscall which returns:
-    // - positive value: the length of the detached segment on success
-    // - negative value: the errno code on failure
+    // Call shmdt_syscall which returns length of the detached segment
     let length = cage.shmdt_syscall(sysaddr as *mut u8);
     if length < 0 {
         return length;
