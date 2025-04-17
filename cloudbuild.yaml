@@ -65,9 +65,8 @@ steps:
     secretEnv:
       - 'USERNAME'
 
-  # If Docker build failed, handle that failure here and produce log
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
-    id: 'handle-docker-build-failure'
+    id: 'Handle Build Status'
     entrypoint: 'bash'
     secretEnv:
       - 'GITHUB_APP_PRIVATE_KEY'
@@ -77,16 +76,11 @@ steps:
       - 'BUILD_ID=$BUILD_ID'
       - '_PR_NUMBER=$_PR_NUMBER'
       - 'REPO_FULL_NAME=$REPO_FULL_NAME'
+      - 'COMMIT_SHA=$COMMIT_SHA'
     args:
       - '-c'
       - |
-
           EXIT_CODE=$$(cat /workspace/docker_build_exit_code || echo 0)
-
-          if [ "$$EXIT_CODE" -eq 0 ]; then
-            echo "Docker build succeeded — skipping failure handler."
-            exit 0
-          fi
 
           apt-get update && apt-get install -y python3 python3-pip python3-venv
 
@@ -96,20 +90,27 @@ steps:
           pip install "PyJWT[crypto]" google-cloud-secret-manager requests
           python generate_token_and_upload_secret.py
 
-          gsutil cp /workspace/docker_build.log gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
-          gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
-
           GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
-
-          curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
-          -H "Accept: application/vnd.github.v3+json" \
-          -H "Content-Type: application/json" \
-          -d "$$(printf '{"body":"**Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)"}' \
-                "$$BRANCH_NAME" \
-                "$$BUILD_ID" \
-            )" \
-          "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
-
+          if [ "$$EXIT_CODE" -eq 0 ]; then
+            source /workspace/env.txt
+            curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            -d "$$(printf '{"body":"**Commit %s: Build Success**"} "$$COMMIT_SHA"')" \
+            "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
+          else
+            gsutil cp /workspace/docker_build.log gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+            gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+            curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            -d "$$(printf '{"body":"**Commit %s: Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)"}' \
+                  "$$COMMIT_SHA" \
+                  "$$BRANCH_NAME" \
+                  "$$BUILD_ID" \
+              )" \
+            "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
+          fi
   # Run the container and execute the bazel test run command
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
