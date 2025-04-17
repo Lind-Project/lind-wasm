@@ -64,7 +64,7 @@ RUN if [ "$DEV_MODE" != "true" ]; then \
         echo "------------------------" && \
         echo "Building glibc" && \
         echo "------------------------" && \
-        bazel build //:make_all && \
+        bazel build //:make_all; \
       else \
         echo "------------------------" && \
         echo "Using cached glibc" &&  \
