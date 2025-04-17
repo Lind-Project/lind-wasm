@@ -112,7 +112,7 @@ steps:
       - |
         docker run -d --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
-          $USERNAME/lind-wasm:latest
+          $$USERNAME/lind-wasm:latest
         
         if [ "$$GLIBC_TAR_CACHE" = "true" ]; then
           echo "Copying cached glibc"
