@@ -1,12 +1,6 @@
-genrule(
-    name = "make_all",
-    tags = ["no-cache"],
-    srcs = [
-        "src/glibc",
-        "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
-    ],
-    outs = ["check.log"],  # Output file
-    cmd = """
+#!/bin/bash
+
+make_glibc() {
         echo "test" > $@
         
         export GLIBC_BASE=$$PWD/src/glibc
@@ -90,21 +84,9 @@ genrule(
         $$CC --target=wasm32-wasi-threads -matomics \
             -o $$GLIBC_BASE/build/csu/set_stack_pointer.o \
             -c $$GLIBC_BASE/csu/wasm32/set_stack_pointer.s
-        
-        ./gen_sysroot.sh
-    """,
-)
+}
 
-
-genrule(
-    name = "make_wasmtime",
-    tags = ["no-cache"],
-    srcs = [
-        "src/wasmtime",
-        "src/RawPOSIX"
-    ],
-    outs = ["check_wasm.log"],  # Output file
-    cmd = """
+make_wasmtime() {
         echo "test" > $@
         
         export WASMTIME_BASE=$$PWD/src/wasmtime
@@ -112,55 +94,13 @@ genrule(
 
         cd $$WASMTIME_BASE
         cargo build
-    """,
-)
+}
 
-sh_test(
-    name = "my_bash_test",
-    srcs = ["wasmtest.sh"],
-    # If your script needs data files or depends on other files
-    # (e.g., input configuration files), list them in data:
-    data = [
-        "tests",
-         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
-    ],
-)
-
-# This build rule is to run the series of tests defined in 
-# wasmtestreport.py
-py_binary(
-    name = "python_tests",
-    srcs = ["wasmtestreport.py"],
-    main = "wasmtestreport.py",    
-    # This ensures the tests have access to the folders required.
-    # The logs from the previous steps are included to ensure 
-    # the rules that create them are run.  This is a requirement
-    # to use a genrule as a dependency.
-    data = [
-        "tests",         
-         "lindtool.sh",
-        #  "check.log",
-        #  "check_wasm.log",
-         ":rawposix_files",
-         ":wasmtime_files",
-         ":clang_files",
-    ],   
-)
-
-# FileGroup for src/RawPOSIX files
-filegroup(
-    name = "rawposix_files",
-    srcs = glob(["src/RawPOSIX/**"]),
-)
-
-# FileGroup for src/wasmtime files
-filegroup(
-    name = "wasmtime_files",
-    srcs = glob(["src/wasmtime/**"]),
-)
-
-# FileGroup for clang files
-filegroup(
-    name = "clang_files",
-    srcs = glob(["clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/**/*"])
-)
+case "$1" in
+    make_glibc)
+        make_glibc
+        ;;
+    make_wasmtime)
+        make_wasmtime
+        ;;
+esac

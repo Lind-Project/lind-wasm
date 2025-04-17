@@ -1,6 +1,7 @@
 steps:
   # Authenticate with Docker
   - name: 'gcr.io/cloud-builders/docker'
+    id: 'Authenticate with Docker'
     entrypoint: 'bash'
     args:
       - '-c'
@@ -9,52 +10,53 @@ steps:
       - 'USERNAME'
       - 'PASSWORD'
 
-  - name: 'alpine/git'
-    id: check-glibc-change
-    entrypoint: sh
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Check glibc Changes'
+    entrypoint: bash
     args:
-      - -c
+      - '-c'
       - |
         git clone https://github.com/Lind-Project/lind-wasm.git
         cd lind-wasm
         git checkout -b $BRANCH_NAME origin/$BRANCH_NAME
         echo "All changed files:"
         git diff --name-only origin/main
-        if git diff --name-only origin/main | grep -q '^src/glibc/'; then
-          echo "GLIBC_CHANGED=true" >> /workspace/env.txt
-        else
-          echo "GLIBC_CHANGED=false" >> /workspace/env.txt
-        fi
-    env:
-      - 'BRANCH_NAME=$BRANCH_NAME'
-  
+        LAST_COMMIT=$(git log -n 1 --pretty=format:"%H" -- src/glibc/)
 
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: fetch_glibc_build
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        if gsutil -q stat gs://test_result_json_bucket/glibc/glibc_build.tar.gz; then
-          gsutil cp gs://test_result_json_bucket/glibc/glibc_build.tar.gz /workspace/
-          echo "GLIBC_IN_GCS=true" >> /workspace/env.txt
-        else
-          echo "GLIBC_IN_GCS=false" >> /workspace/env.txt
+        if [ -z "$LAST_COMMIT" ]; then
+          echo "LAST_COMMIT=$LAST_COMMIT" >> /workspace/env.txt
+          if gsutil -q stat gs://test_result_json_bucket/glibc/$LAST_COMMIT/glibc_build.tar.gz; then
+            gsutil cp gs://test_result_json_bucket/glibc/$LAST_COMMIT/glibc_build.tar.gz /workspace
+            echo "GLIBC_TAR_CACHE=true" >> /workspace/env.txt
+          else
+            echo "GLIBC_TAR_CACHE=false" >> /workspace/env.txt
+          fi
         fi
 
   # Docker build with failure allowed
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'docker-image-build'
+    id: 'Build Docker Image'
     allowFailure: true
     entrypoint: 'bash'
     args:
       - '-c'
       - |
+        apt-get update && apt-get install -y git && apt-get install -y tar
+        cd .devcontainer
+        git clone --branch $$BRANCH_NAME --single-branch https://github.com/Lind-Project/lind-wasm.git
+        cd lind-wasm
+        source /workspace/env.txt
+        if [ "$GLIBC_TAR_CACHE" = "true" ]; then
+          tar -xzf /workspace/glibc_build.tar.gz -C /src/glibc
+          src/glibc/gen_sysroot.sh
+        fi
+
         docker build \
-        --build-arg BRANCH_NAME=$$BRANCH_NAME \
-        --build-arg GLIBC_CHANGED=$(grep "GLIBC_CHANGED" /workspace/env.txt | cut -d= -f2) \
-        --build-arg GLIBC_IN_GCS=$(grep "GLIBC_IN_GCS" /workspace/env.txt | cut -d= -f2) \
-        -t $$USERNAME/lind-wasm:latest ./.devcontainer | tee /workspace/docker_build.log
+        --build-arg GLIBC_TAR_CACHE=$GLIBC_TAR_CACHE \
+        -t $$USERNAME/lind-wasm:latest . | tee /workspace/docker_build.log
+        if [ "$GLIBC_TAR_CACHE" != "true" ]; then
+          tar -czf /workspace/glibc_build.tar.gz -C src/glibc build
+        fi
         echo $$? > /workspace/docker_build_exit_code
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
@@ -63,7 +65,7 @@ steps:
 
   # If Docker build failed, handle that failure here and produce log
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
-    id: 'handle-docker-build-failure'
+    id: 'Handle Build Status'
     entrypoint: 'bash'
     secretEnv:
       - 'GITHUB_APP_PRIVATE_KEY'
@@ -73,16 +75,11 @@ steps:
       - 'BUILD_ID=$BUILD_ID'
       - '_PR_NUMBER=$_PR_NUMBER'
       - 'REPO_FULL_NAME=$REPO_FULL_NAME'
+      - 'COMMIT_SHA=$COMMIT_SHA'
     args:
       - '-c'
       - |
-
           EXIT_CODE=$$(cat /workspace/docker_build_exit_code || echo 0)
-
-          if [ "$$EXIT_CODE" -eq 0 ]; then
-            echo "Docker build succeeded — skipping failure handler."
-            exit 0
-          fi
 
           apt-get update && apt-get install -y python3 python3-pip python3-venv
 
@@ -90,36 +87,33 @@ steps:
           . /tmp/venv/bin/activate
 
           pip install "PyJWT[crypto]" google-cloud-secret-manager requests
-          python generate_token_and_upload_secret.py
-
-          gsutil cp /workspace/docker_build.log gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
-          gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+          python tests/generate_token_and_upload_secret.py
 
           GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
-
-          curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
-          -H "Accept: application/vnd.github.v3+json" \
-          -H "Content-Type: application/json" \
-          -d "$$(printf '{"body":"**Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)"}' \
-                "$$BRANCH_NAME" \
-                "$$BUILD_ID" \
-            )" \
-          "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
-           
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: push_glibc_build
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        if [ "$(grep "GLIBC_CHANGED" /workspace/env.txt | cut -d= -f2)" = "true" ] \
-           || [ "$(grep "GLIBC_IN_GCS" /workspace/env.txt | cut -d= -f2)" = "false" ]; then
-          echo "Uploading new glibc build to GCS"
-          gsutil cp /workspace/glibc_build.tar.gz gs://test_result_json_bucket/glibc/glibc_build.tar.gz
-        fi
+          if [ "$$EXIT_CODE" -eq 0 ]; then
+            source /workspace/env.txt
+            curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            -d "$$(printf '{"body":"**Commit %s: Build Success**"} "$COMMIT_SHA:0:7"')" \
+            "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
+          else
+            gsutil cp /workspace/docker_build.log gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+            gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
+            curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            -d "$$(printf '{"body":"**Commit %s: Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)"}' \
+                  "$$COMMIT_SHA:0:7" \
+                  "$$BRANCH_NAME" \
+                  "$$BUILD_ID" \
+              )" \
+            "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
+          fi
 
   # Run the container and execute the bazel test run command
   - name: 'gcr.io/cloud-builders/docker'
+    id: 'Run Tests'
     entrypoint: 'bash'
     args:
       - '-c'
@@ -128,7 +122,7 @@ steps:
           -e BRANCH_NAME=$BRANCH_NAME \
           -w /home/lind/lind-wasm \
           $$USERNAME/lind-wasm:latest \
-          bazel run //:python_tests &&
+          tests/wasmtestreport.py &&
 
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html &&
@@ -138,12 +132,10 @@ steps:
       - 'BRANCH_NAME=$BRANCH_NAME'
     secretEnv:
       - 'USERNAME'
-    volumes:
-      - name: env
-        path: /workspace
 
   # Push test result to bucket
   - name: 'gcr.io/cloud-builders/gsutil'
+    id: 'Upload To GCS'
     entrypoint: 'bash'
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
@@ -155,11 +147,17 @@ steps:
         gsutil cp /workspace/results.json gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json && 
         gsutil cp /workspace/report.html gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html && 
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json &&
-        gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html        
+        gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html &&
+        source /workspace/env.txt
+        if [ "$GLIBC_TAR_CACHE" != "true" ]; then
+          tar -czf /workspace/glibc_build.tar.gz -C src/glibc build
+          gsutil cp /workspace/glibc_build.tar.gz gs://test_result_json_bucket/glibc/$COMMIT_SHA/glibc_build.tar.gz 
+        fi
+
 
   # Refresh GitHub token again before final PR comment
   - name: 'python:3.11-slim'
-    id: 'refresh-github-token-before-comment'
+    id: 'Refresh Github Token'
     entrypoint: bash
     secretEnv:
       - "GITHUB_APP_PRIVATE_KEY"
@@ -167,10 +165,11 @@ steps:
       - '-c'
       - |
         pip install "PyJWT[crypto]" google-cloud-secret-manager requests
-        python generate_token_and_upload_secret.py
+        python tests/generate_token_and_upload_secret.py
 
   # Final GitHub PR comment with refreshed token
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Post Test Reults'
     entrypoint: 'bash'
     secretEnv:
       - 'GITHUB_TOKEN'
@@ -185,16 +184,12 @@ steps:
           curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
               -H "Content-Type: application/json" \
-             -d "$(printf '{"body":"**Test Report**\\n\\n**[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n**[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**"}' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")" \
+              -d "$(printf '{"body":"**Test Report**\\n\\n**[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n**[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**"}' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")" \
           "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
 
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: 'E2_HIGHCPU_8'
-
-volumes:
-    - name: env
-      path: /workspace
 
 availableSecrets:
   secretManager:
