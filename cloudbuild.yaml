@@ -137,7 +137,6 @@ steps:
         docker rm -fv "$$CONTAINER_ID"
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
-      - 'GLIBC_TAR_CACHE=$GLIBC_TAR_CACHE'
     secretEnv:
       - 'USERNAME'
 
