@@ -40,18 +40,18 @@ steps:
         apt-get update && apt-get install -y git && apt-get install -y tar
         cd .devcontainer
         git clone --branch $$BRANCH_NAME --single-branch https://github.com/Lind-Project/lind-wasm.git
-        cd lind-wasm
+
         source /workspace/env.txt
         if [ "$$GLIBC_TAR_CACHE" = "true" ]; then
-          tar -xzf /workspace/glibc_build.tar.gz -C /src/glibc
-          src/glibc/gen_sysroot.sh
+          tar -xzf /workspace/glibc_build.tar.gz -C lind-wasm/src/glibc
+          lind-wasm/src/glibc/gen_sysroot.sh
         fi
 
         docker build \
         --build-arg GLIBC_TAR_CACHE=$$GLIBC_TAR_CACHE \
         -t $$USERNAME/lind-wasm:latest . | tee /workspace/docker_build.log
         if [ "$$GLIBC_TAR_CACHE" != "true" ]; then
-          tar -czf /workspace/glibc_build.tar.gz -C src/glibc build
+          tar -czf /workspace/glibc_build.tar.gz -C lind-wasm/src/glibc build
         fi
         echo $$? > /workspace/docker_build_exit_code
     env:
