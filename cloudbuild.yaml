@@ -32,20 +32,6 @@ steps:
         else
           echo "GLIBC_TAR_CACHE=false" >> /workspace/env.txt
         fi
-  
-
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    id: fetch_glibc_build
-    entrypoint: bash
-    args:
-      - '-c'
-      - |
-        if gsutil -q stat gs://test_result_json_bucket/glibc/glibc_build.tar.gz; then
-          gsutil cp gs://test_result_json_bucket/glibc/glibc_build.tar.gz /workspace/
-          echo "GLIBC_IN_GCS=true" >> /workspace/env.txt
-        else
-          echo "GLIBC_IN_GCS=false" >> /workspace/env.txt
-        fi
 
   # Docker build with failure allowed
   - name: 'gcr.io/cloud-builders/docker'
@@ -55,10 +41,11 @@ steps:
     args:
       - '-c'
       - |
+        source /workspace/env.txt
         docker build \
         --build-arg BRANCH_NAME=$$BRANCH_NAME \
-        --build-arg GLIBC_CHANGED=$(grep "GLIBC_CHANGED" /workspace/env.txt | cut -d= -f2) \
-        --build-arg GLIBC_IN_GCS=$(grep "GLIBC_IN_GCS" /workspace/env.txt | cut -d= -f2) \
+        --build-arg GLIBC_CHANGED=$$GLIBC_CHANGED\
+        --build-arg GLIBC_TAR_CACHE=$$GLIBC_TAR_CACHE \
         -t $$USERNAME/lind-wasm:latest ./.devcontainer | tee /workspace/docker_build.log
         echo $$? > /workspace/docker_build_exit_code
     env:
@@ -93,11 +80,10 @@ steps:
 
           GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
           if [ "$$EXIT_CODE" -eq 0 ]; then
-            source /workspace/env.txt
             curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Content-Type: application/json" \
-            -d "$$(printf '{"body":"**Commit %s: Build Success**"} "$$COMMIT_SHA"')" \
+            -d "$$(printf '{"body":"**Commit %s: Build Success**"}' "$COMMIT_SHA")" \
             "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
           else
             gsutil cp /workspace/docker_build.log gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
@@ -105,7 +91,7 @@ steps:
             curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Content-Type: application/json" \
-            -d "$$(printf '{"body":"**Commit %s: Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)"}' \
+            -d "$(printf '{"body":"**Commit %s: Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)"}' \
                   "$$COMMIT_SHA" \
                   "$$BRANCH_NAME" \
                   "$$BUILD_ID" \
