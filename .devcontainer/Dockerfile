@@ -61,18 +61,18 @@ RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-16.0.
 # RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
 RUN if [ "$DEV_MODE" != "true" ]; then \
       if [ "$GLIBC_TAR_CACHE" = "false" ]; then \
-        echo "------------------------" &&\
+        echo "------------------------" && \
         echo "Building glibc" && \
-        echo "------------------------" &&\
+        echo "------------------------" && \
         bazel build //:make_all && \
         echo "Making tarball" && \
         tar -czvf /workspace/glibc_build.tar.gz /home/lind/lind-wasm/src/glibc/build; \
       else \
-        echo "------------------------"&&\
-        echo "Using cached glibc" && \
-        echo "------------------------" &&\
-        tar xzf /workspace/glibc_build.tar.gz -C /home/lind/lind-wasm/src/glibc build; &&\
-        /home/lind/lind-wasm/src/glibc/gen_sysroot.sh &&\
+        echo "------------------------"&& \
+        echo "Using cached glibc" &&  \
+        echo "------------------------" && \
+        tar xzf /workspace/glibc_build.tar.gz -C /home/lind/lind-wasm/src/glibc build; && \
+        /home/lind/lind-wasm/src/glibc/gen_sysroot.sh \
       fi \
     fi
 RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_wasmtime; fi

@@ -17,7 +17,7 @@ steps:
       - |
         cd /workspace   
         git fetch origin "$BRANCH_NAME"
-        LAST_COMMIT=$(git log -n 1 --pretty=format:%H origin/"$BRANCH_NAME" -- src/lib)
+        LAST_COMMIT=$(git log -n 1 --pretty=format:%H origin/"$BRANCH_NAME" -- src/glibc)
         echo "last commit with glibc change: $$LAST_COMMIT"
         if [ -n "$$LAST_COMMIT" ]; then
           echo "LAST_COMMIT=$$LAST_COMMIT" >> /workspace/env.txt
@@ -67,7 +67,8 @@ steps:
     args:
       - '-c'
       - |
-          EXIT_CODE=$$(cat /workspace/docker_build_exit_code || echo 0)
+          touch /workspace/docker_build_exit_code
+          EXIT_CODE=$$(cat /workspace/docker_build_exit_code)
 
           apt-get update && apt-get install -y python3 python3-pip python3-venv
 
@@ -78,7 +79,7 @@ steps:
           python generate_token_and_upload_secret.py
 
           GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
-          if [ "$$EXIT_CODE" -eq 0 ]; then
+          if [ -n "$$EXIT_CODE" ]; then
             curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Content-Type: application/json" \
