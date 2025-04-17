@@ -595,9 +595,9 @@ impl Cage {
         let ret = unsafe {
             libc::select(
                 realnewnfds as i32,
-                &mut real_readfds as *mut _,
-                &mut real_writefds as *mut _,
-                &mut real_errorfds as *mut _,
+                readfds.is_some().then_some(&mut real_readfds as *mut _).unwrap_or(ptr::null_mut()),
+                writefds.is_some().then_some(&mut real_writefds as *mut _).unwrap_or(ptr::null_mut()),
+                errorfds.is_some().then_some(&mut real_errorfds as *mut _).unwrap_or(ptr::null_mut()),
                 &mut timeout as *mut timeval,
             )
         };
