@@ -114,7 +114,7 @@ steps:
 
         docker run -d --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
-          $$USERNAME/lind-wasm:latest
+          $$USERNAME/lind-wasm:latest /bin/bash -c "teil -f /dev/null"
 
         CONTAINER_ID=$(docker ps -qf "name=lind_test_container")
         echo "Running in container: $$CONTAINER_ID"
@@ -135,6 +135,7 @@ steps:
         docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json
         docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html
         docker rm -fv "$$CONTAINER_ID"
+        
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
     secretEnv:
