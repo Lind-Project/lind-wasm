@@ -19,7 +19,7 @@ steps:
         git fetch origin "$BRANCH_NAME"
         LAST_COMMIT=$(git log -n 1 --pretty=format:%H origin/"$BRANCH_NAME" -- src/lib)
         echo "last commit with glibc change: $$LAST_COMMIT"
-        if [ -z "$$LAST_COMMIT" ]; then
+        if [ -n "$$LAST_COMMIT" ]; then
           echo "LAST_COMMIT=$$LAST_COMMIT" >> /workspace/env.txt
           if gsutil -q stat gs://test_result_json_bucket/glibc/$$LAST_COMMIT/glibc_build.tar.gz; then
             echo "glibc cache found for $$LAST_COMMIT"
@@ -31,6 +31,7 @@ steps:
           fi
         else
           echo "GLIBC_TAR_CACHE=false" >> /workspace/env.txt
+        fi
   
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
