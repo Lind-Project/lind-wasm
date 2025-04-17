@@ -16,13 +16,9 @@ steps:
     args:
       - '-c'
       - |
-        git clone https://github.com/Lind-Project/lind-wasm.git
-        cd lind-wasm
-        git checkout -b $BRANCH_NAME origin/$BRANCH_NAME
-        echo "All changed files:"
-        git diff --name-only origin/main
-        LAST_COMMIT=$(git log -n 1 --pretty=format:"%H" -- src/glibc/)
-
+        cd /workspace   
+        git fetch --deepen=100 origin "$BRANCH_NAME"
+        LAST_COMMIT=$(git log -n 1 --pretty=format:%H -- src/glibc/)
         if [ -z "$$LAST_COMMIT" ]; then
           echo "LAST_COMMIT=$$LAST_COMMIT" >> /workspace/env.txt
           if gsutil -q stat gs://test_result_json_bucket/glibc/$$LAST_COMMIT/glibc_build.tar.gz; then
@@ -95,7 +91,7 @@ steps:
             curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Content-Type: application/json" \
-            -d "$$(printf '{"body":"**Commit %s: Build Success**"} "$$COMMIT_SHA:0:7"')" \
+            -d "$$(printf '{"body":"**Commit %s: Build Success**"} "$$COMMIT_SHA"')" \
             "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
           else
             gsutil cp /workspace/docker_build.log gs://test_result_json_bucket/$$BRANCH_NAME/$$BUILD_ID/docker_build.log
@@ -104,7 +100,7 @@ steps:
             -H "Accept: application/vnd.github.v3+json" \
             -H "Content-Type: application/json" \
             -d "$$(printf '{"body":"**Commit %s: Build Failed**\\n\\n[View Log](https://storage.googleapis.com/test_result_json_bucket/%s/%s/docker_build.log)"}' \
-                  "$$COMMIT_SHA:0:7" \
+                  "$$COMMIT_SHA" \
                   "$$BRANCH_NAME" \
                   "$$BUILD_ID" \
               )" \
@@ -118,11 +114,10 @@ steps:
     args:
       - '-c'
       - |
-        docker run --name lind_test_container \
+        docker run $$USERNAME/lind-wasm:latest --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
           -w /home/lind/lind-wasm \
-          $$USERNAME/lind-wasm:latest \
-          tests/wasmtestreport.py &&
+          ./tests/wasmtestreport.py &&
 
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json &&
         docker cp lind_test_container:/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html &&
