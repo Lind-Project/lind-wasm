@@ -69,7 +69,6 @@ RUN if [ "$DEV_MODE" != "true" ]; then \
         echo "------------------------" && \
         echo "Using cached glibc" &&  \
         echo "------------------------" && \
-        tar xzf /workspace/glibc_build.tar.gz -C /home/lind/lind-wasm/src/glibc build && \
         /home/lind/lind-wasm/src/glibc/gen_sysroot.sh; \
       fi; \
     fi
