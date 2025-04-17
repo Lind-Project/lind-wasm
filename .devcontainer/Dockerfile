@@ -66,12 +66,12 @@ RUN if [ "$DEV_MODE" != "true" ]; then \
         echo "------------------------" && \
         bazel build //:make_all && \
         echo "Making tarball" && \
-        tar -czvf /workspace/glibc_build.tar.gz /home/lind/lind-wasm/src/glibc/build; \
+        tar -czvf /workspace/glibc_build.tar.gz /home/lind/lind-wasm/src/glibc/build \
       else \
         echo "------------------------"&& \
         echo "Using cached glibc" &&  \
         echo "------------------------" && \
-        tar xzf /workspace/glibc_build.tar.gz -C /home/lind/lind-wasm/src/glibc build; && \
+        tar xzf /workspace/glibc_build.tar.gz -C /home/lind/lind-wasm/src/glibc build && \
         /home/lind/lind-wasm/src/glibc/gen_sysroot.sh \
       fi \
     fi
