@@ -114,7 +114,7 @@ steps:
 
         docker run -d --name lind_test_container \
           -e BRANCH_NAME=$BRANCH_NAME \
-          $$USERNAME/lind-wasm:latest /bin/bash -c "teil -f /dev/null"
+          $$USERNAME/lind-wasm:latest /bin/bash -c "tail -f /dev/null"
 
         CONTAINER_ID=$(docker ps -qf "name=lind_test_container")
         echo "Running in container: $$CONTAINER_ID"
