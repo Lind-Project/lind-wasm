@@ -268,6 +268,8 @@ pub fn pipe_syscall(
     cageid: u64,
     pipefd_arg: u64,
     pipefd_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
