@@ -740,21 +740,15 @@ pub fn lind_syscall_api(
 
         SHMAT_SYSCALL => {
             let shmid = arg1 as i32;
-            let cage = interface::cagetable_getref(cageid);
-            // Convert virtual address to physical address
-            let shmaddr = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
+            let addr = arg2 as *mut u8;
             let shmflg = arg3 as i32;
-            // Perform shmat operation through cage implementation
-            cage.shmat_syscall(shmid, shmaddr, shmflg)
+            interface::shmat_handler(cageid, addr, 0, shmflg, shmid) as i32
         }
+                
 
         SHMDT_SYSCALL => {
-            let cage = interface::cagetable_getref(cageid);
-            // Convert virtual address to physical address
-            let shmaddr = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
-
-            // Perform shmdt operation through cage implementation
-            cage.shmdt_syscall(shmaddr)
+            let addr = arg1 as *mut u8;
+            interface::shmdt_handler(cageid, addr)
         }
 
         PWRITE_SYSCALL => {

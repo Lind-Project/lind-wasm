@@ -1440,7 +1440,13 @@ impl Cage {
     }
 
     //------------------SHMDT SYSCALL------------------
-
+    /*
+     * Detaches the shared memory segment located at the address specified by shmaddr.
+     * 
+     * Return value:
+     * - On success: returns the length of the detached segment
+     * - On error: returns a negative errno value
+     */
     pub fn shmdt_syscall(&self, shmaddr: *mut u8) -> i32 {
         let metadata = &SHM_METADATA;
         let mut rm = false;
@@ -1452,6 +1458,10 @@ impl Cage {
             match metadata.shmtable.entry(shmid) {
                 interface::RustHashEntry::Occupied(mut occupied) => {
                     let segment = occupied.get_mut();
+                    // Retrieve the length before shmdt_syscall since the segment will be cleaned up after
+                    // the syscall completes, making the length field unavailable. We need this length
+                    // value later to remove the correct number of pages from vmmap.
+                    let length = segment.size as i32;
 
                     segment.unmap_shm(shmaddr, self.cageid);
 
@@ -1465,8 +1475,7 @@ impl Cage {
                         occupied.remove_entry();
                         metadata.shmkeyidtable.remove(&key);
                     }
-
-                    return shmid; //NaCl relies on this non-posix behavior of returning the shmid on success
+                    return length;
                 }
                 interface::RustHashEntry::Vacant(_) => {
                     panic!("Inode not created for some reason");
