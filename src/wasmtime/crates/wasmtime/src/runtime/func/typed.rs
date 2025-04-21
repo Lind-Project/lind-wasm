@@ -1,7 +1,7 @@
 use super::invoke_wasm_and_catch_traps;
-use crate::{prelude::*, OnCalledAction};
 use crate::runtime::vm::{VMFuncRef, VMOpaqueContext};
 use crate::store::{AutoAssertNoGc, StoreOpaque};
+use crate::{prelude::*, OnCalledAction};
 use crate::{
     AsContext, AsContextMut, Engine, Func, FuncType, HeapType, NoFunc, RefType, StoreContextMut,
     ValRaw, ValType,

@@ -10,16 +10,18 @@ use crate::common::{Profile, RunCommon, RunTarget};
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
-use wasmtime_lind_multi_process::{LindCtx, LindHost};
-use wasmtime_lind_common::LindCommonCtx;
-use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
-use wasmtime::{AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType};
+use wasmtime::{
+    AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType,
+};
+use wasmtime_lind_common::LindCommonCtx;
+use wasmtime_lind_multi_process::{LindCtx, LindHost};
+use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
@@ -133,12 +135,14 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
-        self.populate_with_wasi(&mut linker,
-                                &mut store,
-                                &main,
-                                lind_manager.clone(),
-                                None,
-                                None)?;
+        self.populate_with_wasi(
+            &mut linker,
+            &mut store,
+            &main,
+            lind_manager.clone(),
+            None,
+            None,
+        )?;
 
         store.data_mut().limits = self.run.store_limits();
         store.limiter(|t| &mut t.limits);
@@ -219,18 +223,8 @@ impl RunCommand {
                 if rawposix::interface::lind_thread_exit(1, 1) {
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
-                    lind_syscall_api(
-                        1,
-                        EXIT_SYSCALL as u32,
-                        0,
-                        code as u64,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                    );
-                
+                    lind_syscall_api(1, EXIT_SYSCALL as u32, 0, code as u64, 0, 0, 0, 0, 0);
+
                     // main cage exits
                     lind_manager.decrement();
                 }
@@ -239,7 +233,7 @@ impl RunCommand {
                 lind_manager.wait();
                 // after all cage exits, finalize the lind
                 rawposix::safeposix::dispatcher::lindrustfinalize();
-            },
+            }
             Err(e) => {
                 // Exit the process if Wasmtime understands the error;
                 // otherwise, fall back on Rust's default error printing/return
@@ -276,7 +270,12 @@ impl RunCommand {
 
     // similar to `execute`` function above, except that this function is used by exec_syscall to execute a wasm module given the path
     // the only big difference from `execute` function above is that pid and next_cageid are passed as argument instead of hard-coded
-    fn execute_with_lind(mut self, lind_manager: Arc<LindCageManager>, pid: i32, next_cageid: Arc<AtomicU64>) -> Result<Vec<Val>> {
+    fn execute_with_lind(
+        mut self,
+        lind_manager: Arc<LindCageManager>,
+        pid: i32,
+        next_cageid: Arc<AtomicU64>,
+    ) -> Result<Vec<Val>> {
         let mut config = self.run.common.config(None, None)?;
 
         if self.run.common.wasm.timeout.is_some() {
@@ -328,7 +327,14 @@ impl RunCommand {
 
         let host = Host::default();
         let mut store = Store::new(&engine, host);
-        self.populate_with_wasi(&mut linker, &mut store, &main, lind_manager.clone(), Some(pid), Some(next_cageid))?;
+        self.populate_with_wasi(
+            &mut linker,
+            &mut store,
+            &main,
+            lind_manager.clone(),
+            Some(pid),
+            Some(next_cageid),
+        )?;
 
         store.data_mut().limits = self.run.store_limits();
         store.limiter(|t| &mut t.limits);
@@ -560,10 +566,16 @@ impl RunCommand {
         let result = match linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
-                let instance = linker.instantiate_with_lind(&mut *store, &module, InstantiateType::InstantiateFirst(pid)).context(format!(
-                    "failed to instantiate {:?}",
-                    self.module_and_args[0]
-                ))?;
+                let instance = linker
+                    .instantiate_with_lind(
+                        &mut *store,
+                        &module,
+                        InstantiateType::InstantiateFirst(pid),
+                    )
+                    .context(format!(
+                        "failed to instantiate {:?}",
+                        self.module_and_args[0]
+                    ))?;
 
                 // If `_initialize` is present, meaning a reactor, then invoke
                 // the function.
@@ -598,7 +610,7 @@ impl RunCommand {
 
                 // retrieve the handler (underlying pointer) for the epoch global
                 let pointer = lind_epoch.get_handler(&mut *store);
-                
+
                 // initialize the signal for the main thread of the cage
                 rawposix::interface::lind_signal_init(pid, pointer as *mut u64, 1, true);
 
@@ -728,7 +740,7 @@ impl RunCommand {
         module: &RunTarget,
         lind_manager: Arc<LindCageManager>,
         pid: Option<i32>,
-        next_cageid: Option<Arc<AtomicU64>>
+        next_cageid: Option<Arc<AtomicU64>>,
     ) -> Result<()> {
         let mut cli = self.run.common.wasi.cli;
 
@@ -868,7 +880,8 @@ impl RunCommand {
                     next_cageid.clone().unwrap(),
                 )?);
             } else {
-                store.data_mut().lind_common_ctx = Some(LindCommonCtx::new(shared_next_cageid.clone())?);
+                store.data_mut().lind_common_ctx =
+                    Some(LindCommonCtx::new(shared_next_cageid.clone())?);
             }
         }
 
@@ -889,12 +902,8 @@ impl RunCommand {
                     self.clone(),
                     pid,
                     next_cageid.clone().unwrap(),
-                    |host| {
-                        host.lind_fork_ctx.as_mut().unwrap()
-                    },
-                    |host| {
-                        host.fork()
-                    },
+                    |host| host.lind_fork_ctx.as_mut().unwrap(),
+                    |host| host.fork(),
                     |run_command, path, args, pid, next_cageid, lind_manager, envs| {
                         // entry point of exec call. Fork self and replace the argument, environment variables and
                         // execution path and starts execution
@@ -906,8 +915,12 @@ impl RunCommand {
                         for arg in args.iter().skip(1) {
                             new_run_command.module_and_args.push(OsString::from(arg));
                         }
-                        new_run_command.execute_with_lind(lind_manager.clone(), pid, next_cageid.clone())
-                    }
+                        new_run_command.execute_with_lind(
+                            lind_manager.clone(),
+                            pid,
+                            next_cageid.clone(),
+                        )
+                    },
                 )?);
             // if pid is not set, then this function is called by the first wasm instance
             } else {
@@ -917,12 +930,8 @@ impl RunCommand {
                     lind_manager,
                     self.clone(),
                     shared_next_cageid.clone(),
-                    |host| {
-                        host.lind_fork_ctx.as_mut().unwrap()
-                    },
-                    |host| {
-                        host.fork()
-                    },
+                    |host| host.lind_fork_ctx.as_mut().unwrap(),
+                    |host| host.fork(),
                     |run_command, path, args, pid, next_cageid, lind_manager, envs| {
                         let mut new_run_command = run_command.clone();
                         new_run_command.module_and_args = vec![OsString::from(path)];
@@ -932,8 +941,12 @@ impl RunCommand {
                         for arg in args.iter().skip(1) {
                             new_run_command.module_and_args.push(OsString::from(arg));
                         }
-                        new_run_command.execute_with_lind(lind_manager.clone(), pid, next_cageid.clone())
-                    }
+                        new_run_command.execute_with_lind(
+                            lind_manager.clone(),
+                            pid,
+                            next_cageid.clone(),
+                        )
+                    },
                 )?);
             }
         }
@@ -1075,18 +1088,18 @@ impl Host {
         // related interface here
         let forked_preview1_ctx = match &self.preview1_ctx {
             Some(ctx) => Some(ctx.fork()),
-            None => None
+            None => None,
         };
 
         // and we also want to fork the lind-common context and lind-multi-process context
         let forked_lind_fork_ctx = match &self.lind_fork_ctx {
             Some(ctx) => Some(ctx.fork()),
-            None => None
+            None => None,
         };
 
         let forked_lind_common_ctx = match &self.lind_common_ctx {
             Some(ctx) => Some(ctx.fork()),
-            None => None
+            None => None,
         };
 
         // besides preview1_ctx, lind_common_ctx and forked_lind_fork_ctx, we do not

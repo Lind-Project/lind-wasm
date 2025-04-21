@@ -2,12 +2,12 @@
 use crate::interface;
 use crate::interface::errnos::{syscall_error, Errno};
 
-use std::ffi::CStr;
-use std::str::Utf8Error;
-use std::io::{Read, Write};
-use std::io;
-use std::ptr::null;
 use libc::*;
+use std::ffi::CStr;
+use std::io;
+use std::io::{Read, Write};
+use std::ptr::null;
+use std::str::Utf8Error;
 
 const SIZEOF_SOCKADDR: u32 = 16;
 
@@ -179,12 +179,12 @@ pub struct ClippedDirent {
 pub const CLIPPED_DIRENT_SIZE: u32 = size_of::<interface::ClippedDirent>() as u32;
 
 /*
-This file provides essential functions for handling and validating `u64` inputs, 
-converting them to various system-specific data types needed in system calls. 
+This file provides essential functions for handling and validating `u64` inputs,
+converting them to various system-specific data types needed in system calls.
 It includes utilities for transforming raw pointers to typed structures, such as integer,
-buffer, and string pointers, as well as complex structures like polling, signal handling, 
-timing, and socket-related types. Each function ensures safe and correct usage by performing 
-null checks, boundary validations, and type casting, returning either a valid reference 
+buffer, and string pointers, as well as complex structures like polling, signal handling,
+timing, and socket-related types. Each function ensures safe and correct usage by performing
+null checks, boundary validations, and type casting, returning either a valid reference
 or an error if data is invalid. This design promotes secure, reliable access to memory and
  resources in a low-level systems environment.
 */
@@ -266,7 +266,6 @@ pub fn get_mutcbuf_null(generic_argument: u64) -> Result<Option<*mut u8>, i32> {
     }
     return Ok(None);
 }
-
 
 pub fn get_fdset(generic_argument: u64) -> Result<Option<&'static mut fd_set>, i32> {
     let data = generic_argument as *mut libc::fd_set;
@@ -370,9 +369,7 @@ pub fn get_shmidstruct<'a>(generic_argument: u64) -> Result<&'a mut ShmidsStruct
 pub fn get_ioctlptrunion<'a>(generic_argument: u64) -> Result<&'a mut u8, i32> {
     let pointer = generic_argument as *mut u8;
     if !pointer.is_null() {
-        return Ok(unsafe {
-            &mut *pointer
-        });
+        return Ok(unsafe { &mut *pointer });
     }
     return Err(syscall_error(
         Errno::EFAULT,
@@ -412,7 +409,7 @@ pub fn get_sockpair<'a>(generic_argument: u64) -> Result<&'a mut SockPair, i32> 
 pub fn get_constsockaddr<'a>(generic_argument: u64) -> Result<&'a SockaddrDummy, i32> {
     let pointer = generic_argument as *const SockaddrDummy;
     if !pointer.is_null() {
-        return Ok(unsafe { & *pointer });
+        return Ok(unsafe { &*pointer });
     }
     return Err(syscall_error(
         Errno::EFAULT,
@@ -480,7 +477,10 @@ pub fn get_sockaddr(generic_argument: u64, addrlen: u32) -> Result<interface::Ge
     ));
 }
 
-pub fn set_gensockaddr(generic_argument: u64, generic_argument1: u64) -> Result<interface::GenSockaddr, i32> {
+pub fn set_gensockaddr(
+    generic_argument: u64,
+    generic_argument1: u64,
+) -> Result<interface::GenSockaddr, i32> {
     let received = generic_argument as *mut SockaddrDummy;
     let received_addrlen = (generic_argument1 as *mut u32) as u32;
     let tmpsock = unsafe { &*received };
@@ -530,7 +530,11 @@ pub fn set_gensockaddr(generic_argument: u64, generic_argument1: u64) -> Result<
     }
 }
 
-pub fn copy_out_sockaddr(generic_argument: u64, generic_argument1: u64, gensock: interface::GenSockaddr) {
+pub fn copy_out_sockaddr(
+    generic_argument: u64,
+    generic_argument1: u64,
+    gensock: interface::GenSockaddr,
+) {
     let copyoutaddr = (generic_argument as *mut SockaddrDummy) as *mut u8;
     let addrlen = generic_argument1 as *mut u32;
     assert!(!copyoutaddr.is_null());
@@ -556,9 +560,9 @@ pub fn copy_out_sockaddr(generic_argument: u64, generic_argument1: u64, gensock:
 
         interface::GenSockaddr::V4(ref mut v4a) => {
             let v4len = size_of::<interface::SockaddrV4>() as u32;
-            
+
             let fullcopylen = interface::rust_min(initaddrlen, v4len);
-          
+
             unsafe {
                 std::ptr::copy(
                     (v4a) as *mut interface::SockaddrV4 as *mut u8,
@@ -657,7 +661,7 @@ pub fn get_socklen_t_ptr(generic_argument: u64) -> Result<u32, i32> {
 
 //arg checked for nullity beforehand
 pub fn get_int_from_intptr(generic_argument: u64) -> i32 {
-    return unsafe { *(generic_argument as *mut i32)};
+    return unsafe { *(generic_argument as *mut i32) };
 }
 
 pub fn copy_out_intptr(generic_argument: u64, intval: i32) {
@@ -683,7 +687,7 @@ pub fn get_timerval<'a>(generic_argument: u64) -> Result<&'a mut timeval, i32> {
     let pointer = generic_argument as *mut timeval;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
-    } 
+    }
     return Err(syscall_error(
         Errno::EFAULT,
         "dispatcher",
@@ -736,9 +740,7 @@ pub fn duration_fromtimespec(generic_argument: u64) -> Result<interface::RustDur
 pub fn get_timespec<'a>(generic_argument: u64) -> Result<&'a timespec, i32> {
     let pointer = generic_argument as *mut timespec;
     if !pointer.is_null() {
-        return Ok( unsafe {
-            &*pointer
-        });
+        return Ok(unsafe { &*pointer });
     }
     return Err(syscall_error(
         Errno::EFAULT,
@@ -769,7 +771,9 @@ pub fn arg_nullity(generic_argument: u64) -> bool {
     (generic_argument as *const u8).is_null()
 }
 
-pub fn get_sigactionstruct<'a>(generic_argument: u64) -> Result<Option<&'a mut SigactionStruct>, i32> {
+pub fn get_sigactionstruct<'a>(
+    generic_argument: u64,
+) -> Result<Option<&'a mut SigactionStruct>, i32> {
     let pointer = generic_argument as *mut SigactionStruct;
 
     if !pointer.is_null() {
@@ -779,7 +783,9 @@ pub fn get_sigactionstruct<'a>(generic_argument: u64) -> Result<Option<&'a mut S
     }
 }
 
-pub fn get_constsigactionstruct<'a>(generic_argument: u64) -> Result<Option<&'a SigactionStruct>, i32> {
+pub fn get_constsigactionstruct<'a>(
+    generic_argument: u64,
+) -> Result<Option<&'a SigactionStruct>, i32> {
     let pointer = generic_argument as *const SigactionStruct;
 
     if !pointer.is_null() {
