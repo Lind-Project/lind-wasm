@@ -944,7 +944,7 @@ impl Cage {
                     Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
                 };
                 // Get lowest-numbered available file descriptor greater than or equal to `arg`
-                // and set the `O_CLOEXEC` flag
+                // and set the `O_CLOEXEC` flag. This matches the POSIX system call behavior
                 match fdtables::get_unused_virtual_fd_from_startfd(
                     self.cageid,
                     vfd.fdkind,
