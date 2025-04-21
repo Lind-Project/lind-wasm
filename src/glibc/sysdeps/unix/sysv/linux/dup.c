@@ -16,21 +16,19 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-   #include <fcntl.h>
-   #include <unistd.h>
-   #include <sysdep.h>
-   #include <syscall-template.h>
-   #include <lind_syscall_num.h>
-   
-   /* Duplicate FD to FD2, closing the old FD2 and making FD2 be
-      open the same file as FD is.  Return FD2 or -1.  */
-   int
-   __dup (int fd)
-   {
-      return MAKE_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
-   }
-   
-   int dup (int fd) {
-      return MAKE_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
-   }
-   
+#include <fcntl.h>
+#include <unistd.h>
+#include <sysdep.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+
+/* Duplicate FD to FD2, closing the old FD2 and making FD2 be
+   open the same file as FD is.  Return FD2 or -1.  */
+int
+__dup (int fd)
+{
+   return MAKE_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+}
+int dup (int fd) {
+   return MAKE_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+}
