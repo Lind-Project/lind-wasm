@@ -28,7 +28,7 @@ use std::sync::Arc;
 use std::{os::fd::RawFd, ptr};
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration};
+use std::time::{Duration, Instant};
 
 const FDKIND_KERNEL: u32 = 0;
 const FDKIND_IMPIPE: u32 = 1;
@@ -373,6 +373,26 @@ impl Cage {
         }
         let vfd = wrappedvfd.unwrap();
 
+        // Check for pending signals before recv
+        if interface::lind_check_no_pending_signal(self.cageid) {
+            return syscall_error(Errno::EINTR, "recv", "Interrupted by signal");
+        }
+
+        // Set a short timeout to allow for signal checking
+        let timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: 100_000, // 100ms
+        };
+        unsafe {
+            libc::setsockopt(
+                vfd.underfd as i32,
+                libc::SOL_SOCKET,
+                libc::SO_RCVTIMEO,
+                &timeout as *const _ as *const c_void,
+                std::mem::size_of::<libc::timeval>() as u32,
+            );
+        }
+
         let ret = unsafe { libc::recv(vfd.underfd as i32, buf as *mut c_void, len, flags) as i32 };
         if ret < 0 {
             let errno = get_errno();
@@ -571,10 +591,10 @@ impl Cage {
             .unwrap();
 
         // ------ libc select() ------
-        // In select, each fd_set is allowed to contain empty values, as it’s possible for the user to input a mixture of pure
+        // In select, each fd_set is allowed to contain empty values, as it's possible for the user to input a mixture of pure
         // virtual_fds and those with underlying real file descriptors. This means we need to check each fd_set separately to
         // handle both types of descriptors properly. The goal here is to ensure that each fd_set (read, write, error) is correctly
-        // initialized. To handle cases where selectbittables does not contain an entry at the expected index or where it doesn’t
+        // initialized. To handle cases where selectbittables does not contain an entry at the expected index or where it doesn't
         // include a FDKIND_KERNEL entry, the code assigns a default value with an initialized fd_set and an nfd of 0.
         let (readnfd, mut real_readfds) = selectbittables
             .get(0)
