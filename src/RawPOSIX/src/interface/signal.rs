@@ -107,7 +107,6 @@ pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
 
 // send specified signal to the cage, return value indicates whether the cage exists
 pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
-    println!("send signal {} to cage {}", signo, cageid);
     if let Some(cage) = cagetable_getref_opt(cageid) {
         if signo > 0 {
             let mut pending_signals = cage.pending_signals.write();

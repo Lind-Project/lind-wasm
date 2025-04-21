@@ -31,11 +31,6 @@ void
 __libc_assert_fail (const char *assertion, const char *file, unsigned int line,
                     const char *function)
 {
-//   char linebuf[INT_BUFSIZE_BOUND (unsigned int)];
-//   array_end (linebuf)[-1] = '\0';
-//   char *linestr = _itoa_word (line, array_end (linebuf) - 1, 10, 0);
-//   printf ("Fatal glibc error: %s:%s (%s): assertion failed: %s\n",
-//                   file, linestr, function, assertion);
    __imported__libc_assert_fail(assertion, file, line, function);
    abort();
 }

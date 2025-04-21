@@ -598,8 +598,7 @@ impl RunCommand {
 
                 // retrieve the handler (underlying pointer) for the epoch global
                 let pointer = lind_epoch.get_handler(&mut *store);
-                // let pointer = 0;
-
+                
                 // initialize the signal for the main thread of the cage
                 rawposix::interface::lind_signal_init(pid, pointer as *mut u64, 1, true);
 

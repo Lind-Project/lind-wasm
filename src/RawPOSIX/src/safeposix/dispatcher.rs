@@ -216,15 +216,6 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             // Convert user buffer address to system address
             let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *const u8;
-            // unsafe {
-            //     if *buf.add(count - 1) == 0 {
-            //         if let Ok(str) = interface::get_cstr(buf as u64) {
-            //             println!("write syscall: {}", str);
-            //         }
-            //     }
-            // }
-            // println!("write syscall: {}", interface::get_cstr(buf as u64).unwrap());
-            // println!("write syscall: fd={}", fd);
             // Perform write operation through cage abstraction
             cage.write_syscall(fd, buf, count)
         }
@@ -788,7 +779,6 @@ pub fn lind_syscall_api(
             let shmid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
             // Convert virtual address to physical address
-            // let shmaddr = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
             let shmaddr = arg2 as *mut u8;
             let shmflg = arg3 as i32;
             // Perform shmat operation through cage implementation
@@ -798,7 +788,6 @@ pub fn lind_syscall_api(
         SHMDT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
             // Convert virtual address to physical address
-            // let shmaddr = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
             let shmaddr = arg1 as *mut u8;
             
             // Perform shmdt operation through cage implementation

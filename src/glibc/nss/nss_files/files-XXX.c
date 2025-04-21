@@ -69,8 +69,7 @@
 static enum nss_status
 internal_setent (FILE **stream)
 {
-  enum nss_status status = NSS_STATUS_SUCCESS;
-  printf("internal_setent: status: %d, *stream: %d\n", status, *stream);
+  enum nss_status status = NSS_STATUS_SUCCESS;  
 
   if (*stream == NULL)
     {
@@ -78,14 +77,12 @@ internal_setent (FILE **stream)
 
       if (*stream == NULL)
       {
-        printf("internal_setent: null stream\n");
 	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
 }
     }
   else
     rewind (*stream);
 
-    printf("internal_setent return: status: %d\n", status);
   return status;
 }
 

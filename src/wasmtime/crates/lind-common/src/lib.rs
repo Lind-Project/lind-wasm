@@ -42,7 +42,6 @@ impl LindCommonCtx {
         match call_number as i32 {
             // clone syscall
             171 => {
-                // println!("clone syscall");
                 let clone_args = unsafe { &mut *((arg1 + start_address) as *mut CloneArgStruct) };
                 clone_args.child_tid += start_address;
                 wasmtime_lind_multi_process::clone_syscall(caller, clone_args)
@@ -196,19 +195,6 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
         },
     )?;
 
-    // linker.func_wrap(
-    //     "debug",
-    //     "debug",
-    //     move |mut caller: Caller<'_, T>, val: i32| -> i32 {
-    //         let mem_base = get_memory_base(&caller);
-    //         unsafe {
-    //             println!("inside debug: val: {}, addr: {}", val, *((33883296 + mem_base) as *mut u32));
-    //         }
-
-    //         return val;
-    //     },
-    // )?;
-
     linker.func_wrap(
         "debug",
         "debug-print-1",
@@ -233,14 +219,6 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
             return 0;
         },
     )?;
-
-    // linker.func_wrap(
-    //     "debug",
-    //     "debug",
-    //     move |mut caller: Caller<'_, T>, val: i32| {
-    //         println!("debug val: {}", val);
-    //     },
-    // )?;
 
     Ok(())
 }

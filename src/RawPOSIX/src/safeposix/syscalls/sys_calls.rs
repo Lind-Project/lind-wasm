@@ -185,26 +185,7 @@ impl Cage {
     */
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
         // Empty fd with flag should_cloexec 
-        // let table = FDTABLE.get(&self.cageid).unwrap();
-        // for (index, entry) in table.iter().enumerate() {
-        //     if entry.is_some() {
-        //         let fd = entry.unwrap();
-        //         println!("{}: {}", index, fd.underfd);
-        //     }
-        // }
-        // drop(table);
         fdtables::empty_fds_for_exec(self.cageid);
-        // let table = FDTABLE.get(&self.cageid).unwrap();
-        // for (index, entry) in table.iter().enumerate() {
-        //     if entry.is_some() {
-        //         let fd = entry.unwrap();
-        //         println!("{}: {}", index, fd.underfd);
-        //     }
-        // }
-        // Add the new one to fdtable
-        // let _ = fdtables::copy_fdtable_for_cage(self.cageid, child_cageid);
-        // Delete the original one
-        // let _newfdtable = fdtables::remove_cage_from_fdtable(self.cageid);
 
         interface::cagetable_remove(self.cageid);
 
@@ -250,25 +231,9 @@ impl Cage {
     }
 
     pub fn exit_syscall(&self, status: i32) -> i32 {
-        // println!("cage {} exit", self.cageid);
         //flush anything left in stdout
         interface::flush_stdout();
         self.unmap_shm_mappings();
-
-        // let table = FDTABLE.get(&self.cageid).unwrap();
-        // for (index, entry) in table.iter().enumerate() {
-        //     if entry.is_some() {
-        //         let fd = entry.unwrap();
-        //         println!("{}: {}", index, fd.underfd);
-        //         // if fd.underfd == 13 && self.cageid == 2 {
-        //         //     kernel_close(fd, 0);
-        //         // }
-        //     }
-        // }
-        // if self.cageid == 2 {
-        //     // self.close_syscall(1);
-        // }
-        // drop(table);
 
         let _ = fdtables::remove_cage_from_fdtable(self.cageid);
 
@@ -296,12 +261,10 @@ impl Cage {
         if !interface::RUSTPOSIX_TESTSUITE.load(interface::RustAtomicOrdering::Relaxed) {
             // if the cage has parent (i.e. it is not the "root" cage)
             if self.cageid != self.parent {
-                // println!("send SIGCHLD");
                 lind_send_signal(self.parent, SIGCHLD);
             }
         }
 
-        // println!("cage {} exit done", self.cageid);
         //fdtable will be dropped at end of dispatcher scope because of Arc
         status
     }
@@ -315,7 +278,6 @@ impl Cage {
     *   zombie list and retrieve the first entry from it (first in, first out).
     */
     pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
-        println!("waitpid wait for {}", cageid);
         let mut zombies = self.zombies.write();
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
 
@@ -492,7 +454,6 @@ impl Cage {
     }
 
     pub fn kill_syscall(&self, cage_id: i32, sig: i32) -> i32 {
-        println!("kill cage {} on signal {}", cage_id, sig);
         if (cage_id < 0) || (cage_id >= interface::MAXCAGEID) {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid cage id.");
         }

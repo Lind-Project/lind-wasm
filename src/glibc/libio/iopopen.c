@@ -190,7 +190,6 @@ _IO_new_proc_open (FILE *fp, const char *command, const char *mode)
 
   err = __posix_spawn_file_actions_adddup2 (&fa, pipe_fds[child_end],
 					    child_pipe_fd);
-  printf("__posix_spawn_file_actions_adddup2 err: %d\n", err);
   if (err != 0)
     goto spawn_failure;
 

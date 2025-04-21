@@ -21,10 +21,6 @@
    for each floating-point type.  */
 #if __USE_WRAPPER_TEMPLATE
 
-// # include <errno.h>
-// # include <fenv.h>
-// # include <math.h>
-// # include <math_private.h>
 #include <math.h>
 #include <math_private.h>
 #include <math-underflow.h>
@@ -33,11 +29,6 @@
 FLOAT
 M_DECL_FUNC (__exp2) (FLOAT x)
 {
-  // FLOAT z = M_SUF (__ieee754_exp2) (x);
-  // if (__glibc_unlikely (!isfinite (z) || z == 0) && isfinite (x))
-  //   /* Overflow or underflow.  */
-  //   __set_errno (ERANGE);
-  // return z;
 
   if (__glibc_likely (isless (x, (FLOAT) M_MAX_EXP)))
     {

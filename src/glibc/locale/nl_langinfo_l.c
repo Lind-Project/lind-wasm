@@ -29,41 +29,6 @@
 char *
 __nl_langinfo_l (nl_item item, locale_t l)
 {
-//   int category = _NL_ITEM_CATEGORY (item);
-//   unsigned int index = _NL_ITEM_INDEX (item);
-//   const struct __locale_data *data;
-
-//   if (category < 0 || category == LC_ALL || category >= __LC_LAST)
-//     /* Bogus category: bogus item.  */
-//     return (char *) "";
-
-//   /* Special case value for NL_LOCALE_NAME (category).
-//      This is not a real item index in the string table.  */
-//   if (index == _NL_ITEM_INDEX (_NL_LOCALE_NAME (category)))
-//     return (char *) l->__names[category];
-
-// #if defined NL_CURRENT_INDIRECT
-//   /* Make direct reference to every _nl_current_CATEGORY symbol,
-//      since we know only at runtime which categories are used.  */
-//   switch (category)
-//     {
-// # define DEFINE_CATEGORY(category, category_name, items, a) \
-//       case category: data = *_nl_current_##category; break;
-// # include "categories.def"
-// # undef DEFINE_CATEGORY
-//     default:                   /* Should be impossible.  */
-//       abort();
-//     }
-// #else
-//   data = l->__locales[category];
-// #endif
-
-//   if (index >= data->nstrings)
-//     /* Bogus index for this category: bogus item.  */
-//     return (char *) "";
-
-//   /* Return the string for the specified item.  */
-//   return (char *) data->values[index].string;
     return (char *) "ANSI_X3.4-1968";
 }
 libc_hidden_def (__nl_langinfo_l)

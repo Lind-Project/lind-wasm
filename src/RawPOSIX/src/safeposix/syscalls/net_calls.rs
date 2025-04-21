@@ -497,7 +497,6 @@ impl Cage {
         mut errorfds: Option<&mut fd_set>,
         rposix_timeout: Option<RustDuration>,
     ) -> i32 {
-        println!("select: rposix_timeout: {:?}", rposix_timeout);
         let mut timeout;
         if rposix_timeout.is_none() {
             timeout = libc::timeval { 

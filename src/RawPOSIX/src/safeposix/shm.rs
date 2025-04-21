@@ -90,7 +90,6 @@ impl ShmSegment {
                 vacant.insert(1);
             }
         };
-        // println!("shmaddr: {:?}, size: {:?}", shmaddr, self.size);
         let rounded_length = interface::round_up_page(self.size as u64);
 
         let mut useraddr = shmaddr as u32;
@@ -112,19 +111,12 @@ impl ShmSegment {
 
         let space = result.unwrap();
         useraddr = (space.start() << PAGESHIFT) as u32;
-        // println!("useraddr: {:?}, len: {}, prot: {}", useraddr as *mut u8, rounded_length, prot);
 
         let sysaddr = vmmap.user_to_sys(useraddr);
-        // println!("sysaddr: {:?}", sysaddr as *mut u8);
 
         let result = cage.mmap_syscall(sysaddr as *mut u8, rounded_length as usize, prot, (MAP_SHARED as i32) | (MAP_FIXED as i32) | (MAP_ANONYMOUS as i32), -1, 0);
-        // println!("result raw: {}({:?})", result as i64, result as *mut u8);
-        // unsafe {
-        //     *(result as *mut u64) = 10;
-        // }
 
         let result = vmmap.sys_to_user(result);
-        // println!("result: {:?}", result as *mut u8);
 
         let _ = vmmap.add_entry_with_overwrite(useraddr >> PAGESHIFT,
             (rounded_length >> PAGESHIFT) as u32,

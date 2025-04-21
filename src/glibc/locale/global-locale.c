@@ -28,9 +28,6 @@ extern struct __locale_data _nl_C_##category; /*weak_extern (_nl_C_##category)*/
 extern const char _nl_C_LC_CTYPE_class[] attribute_hidden;
 extern const char _nl_C_LC_CTYPE_toupper[] attribute_hidden;
 extern const char _nl_C_LC_CTYPE_tolower[] attribute_hidden;
-// weak_extern (_nl_C_LC_CTYPE_class)
-// weak_extern (_nl_C_LC_CTYPE_toupper)
-// weak_extern (_nl_C_LC_CTYPE_tolower)
 
 /* Here we define the locale object maintained by setlocale.
    The references in the initializer are weak, so the parts of

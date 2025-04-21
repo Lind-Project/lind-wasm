@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "syscall-template.h": "c",
+        "sysdep-cancel.h": "c"
+    }
+}

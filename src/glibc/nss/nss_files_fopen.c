@@ -41,7 +41,6 @@ __nss_files_fopen (const char *path)
       __set_errno (ESPIPE);
       return NULL;
     }
-    printf("__nss_files_fopen fp=%d\n", fp);
 
   return fp;
 }

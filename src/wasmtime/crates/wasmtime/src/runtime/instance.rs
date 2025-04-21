@@ -267,7 +267,6 @@ impl Instance {
             },
             // InstantiateChild: this is the child wasm instance forked by parent
             InstantiateType::InstantiateChild { parent_pid, child_pid } => {
-                // println!("InstantiateChild");
                 // if this is a child, we do not need to specifically set up the first memory region
                 // since this should be taken care of when we fork the entire memory region from parent
                 // therefore in this case, we only need to:
@@ -277,11 +276,8 @@ impl Instance {
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let child_address = defined_memory.base as usize;
             
-                // println!("InstantiateChild init_vmmap_helper");
                 rawposix::interface::init_vmmap_helper(child_pid, child_address, None);
-                // println!("InstantiateChild fork_vmmap_helper");
                 rawposix::interface::fork_vmmap_helper(parent_pid as u64, child_pid);
-                // println!("InstantiateChild done");
             }
         }
 

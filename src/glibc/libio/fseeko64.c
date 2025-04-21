@@ -38,7 +38,6 @@ __fseeko64 (FILE *fp, off64_t offset, int whence)
   CHECK_FILE (fp, -1);
   _IO_acquire_lock (fp);
   result = _IO_fseek (fp, offset, whence);
-  printf("__fseeko64 result: %d\n", result);
   _IO_release_lock (fp);
   return result;
 }

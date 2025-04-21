@@ -273,7 +273,6 @@ INTERNAL (REENTRANT_NAME) (ADD_PARAMS, LOOKUP_TYPE *resbuf, char *buffer,
 
       status = DL_CALL_FCT (fct.l, (ADD_VARIABLES, resbuf, buffer, buflen,
 				    &errno H_ERRNO_VAR EXTRA_VARIABLES));
-        printf("DL_CALL_FCT: status=%d, NSS_STATUS_SUCCESS=%d\n", status, NSS_STATUS_SUCCESS);
       /* The status is NSS_STATUS_TRYAGAIN and errno is ERANGE the
 	 provided buffer is too small.  In this case we should give
 	 the user the possibility to enlarge the buffer and we should
@@ -350,7 +349,6 @@ INTERNAL (REENTRANT_NAME) (ADD_PARAMS, LOOKUP_TYPE *resbuf, char *buffer,
 #ifdef HANDLE_DIGITS_DOTS
 done:
 #endif
-printf("1. status=%d\n", status);
   *result = status == NSS_STATUS_SUCCESS ? resbuf : NULL;
 #ifdef NEED_H_ERRNO
   if (status == NSS_STATUS_UNAVAIL && !any_service && errno != ENOENT)
@@ -373,7 +371,6 @@ printf("1. status=%d\n", status);
 #endif /* NEED__RES */
 
   int res;
-  printf("status=%d\n", status);
   if (status == NSS_STATUS_SUCCESS || status == NSS_STATUS_NOTFOUND)
     res = 0;
   /* Don't pass back ERANGE if this is not for a too-small buffer.  */

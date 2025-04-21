@@ -497,7 +497,6 @@ impl VmmapOps for Vmmap {
         // Calculate page range
         let new_region_end_page = page_num + npages;
         let new_region_start_page = page_num;
-        // println!("page_num={}, npages={}, new_region_start_page={}, new_region_end_page={}", page_num, npages, new_region_start_page, new_region_end_page);
 
         // Create new entry if not removing
         let new_entry = VmmapEntry {

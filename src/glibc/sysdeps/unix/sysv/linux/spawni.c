@@ -147,8 +147,7 @@ __spawni_child (void *arguments)
       == POSIX_SPAWN_SETSCHEDPARAM)
     {
       if (__sched_setparam (0, &attr->__sp) == -1)
-      {
-        // printf("__sched_setparam fail");
+      {        
         fflush(stdout);
         goto fail;
       }
@@ -157,7 +156,6 @@ __spawni_child (void *arguments)
     {
       if (__sched_setscheduler (0, attr->__policy, &attr->__sp) == -1)
       {
-        // printf("__sched_setscheduler fail");
         fflush(stdout);
         goto fail;
       }
@@ -167,7 +165,6 @@ __spawni_child (void *arguments)
   if ((attr->__flags & POSIX_SPAWN_SETSID) != 0
       && __setsid () < 0)
       {
-        // printf("setsid fail");
         fflush(stdout);
         goto fail;
       }
@@ -176,7 +173,6 @@ __spawni_child (void *arguments)
   if ((attr->__flags & POSIX_SPAWN_SETPGROUP) != 0
       && __setpgid (0, attr->__pgrp) != 0)
       {
-        // printf("setsid fail");
         fflush(stdout);
         goto fail;
       }
@@ -186,7 +182,6 @@ __spawni_child (void *arguments)
       && (local_seteuid (__getuid ()) != 0
 	  || local_setegid (__getgid ()) != 0))
     {
-      // printf("__getgid fail");
       goto fail;
     }
 
@@ -216,7 +211,6 @@ __spawni_child (void *arguments)
 		  if (action->action.close_action.fd < 0
 		      || action->action.close_action.fd >= fdlimit.rlim_cur)
         {
-          // printf("signal error fail");
           goto fail;
         }
 		}
@@ -239,7 +233,6 @@ __spawni_child (void *arguments)
 
 		if (ret == -1)
     {
-      // printf("__open_nocancel fail");
 		  goto fail;
     }
 
@@ -251,13 +244,11 @@ __spawni_child (void *arguments)
 		    if (__dup2 (new_fd, action->action.open_action.fd)
 			!= action->action.open_action.fd)
           {
-            // printf("dup2 fail");
             goto fail;
           }
 
 		    if (__close_nocancel (new_fd) != 0)
           {
-            // printf("__close_nocancel fail");
             goto fail;
           }
 		  }
@@ -274,12 +265,10 @@ __spawni_child (void *arguments)
 		  int flags = __fcntl (fd, F_GETFD, 0);
 		  if (flags == -1)
         {
-          // printf("__fcntl 1 fail");
           goto fail;
         }
 		  if (__fcntl (fd, F_SETFD, flags & ~FD_CLOEXEC) == -1)
         {
-          // printf("__fcntl 2 fail");
           goto fail;
         }
 		}
@@ -287,7 +276,6 @@ __spawni_child (void *arguments)
 			       action->action.dup2_action.newfd)
 		       != action->action.dup2_action.newfd)
            {
-            //  printf("__dup2 2 fail");
              goto fail;
            }
 	      break;
@@ -295,7 +283,6 @@ __spawni_child (void *arguments)
 	    case spawn_do_chdir:
 	      if (__chdir (action->action.chdir_action.path) != 0)
         {
-          // printf("__chdir 1 fail");
           goto fail;
         }
 	      break;
@@ -303,7 +290,6 @@ __spawni_child (void *arguments)
 	    case spawn_do_fchdir:
 	      if (__fchdir (action->action.fchdir_action.fd) != 0)
         {
-          // printf("__chdir 2 fail");
           goto fail;
         }
 	      break;
@@ -340,9 +326,6 @@ __spawni_child (void *arguments)
   else
     internal_sigprocmask (SIG_SETMASK, &args->oldmask, NULL);
 
-    // int tmp = args->argv;
-    printf("", 1);
-    // printf("");
   args->exec (args->file, args->argv, args->envp);
 
   /* This is compatibility function required to enable posix_spawn run
@@ -432,8 +415,7 @@ __spawnix (int *pid, const char *file,
   args.exec = exec;
   args.fa = file_actions;
   args.attr = attrp ? attrp : &(const posix_spawnattr_t) { 0 };
-  args.argv = argv;
-  printf("args.argv=%d\n", args.argv);
+  args.argv = argv;  
   args.argc = argc;
   args.envp = envp;
   args.pidfd = 0;
