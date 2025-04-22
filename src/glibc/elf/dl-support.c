@@ -172,7 +172,8 @@ fpu_control_t _dl_fpu_control = _FPU_DEFAULT;
 
 /* Prevailing state of the stack.  Generally this includes PF_X, indicating it's
  * executable but this isn't true for all platforms.  */
-ElfW(Word) _dl_stack_flags = DEFAULT_STACK_PERMS;
+// lind-wasm: forcely remove PF_X since lind does not support PROT_EXEC mapping
+ElfW(Word) _dl_stack_flags = (PF_R|PF_W);
 
 #if PTHREAD_IN_LIBC
 list_t _dl_stack_used;
