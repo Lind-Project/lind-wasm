@@ -139,8 +139,8 @@ py_binary(
     data = [
         "tests",         
          "lindtool.sh",
-         "check.log",
-         "check_wasm.log",
+        #  "check.log",
+        #  "check_wasm.log",
          ":rawposix_files",
          ":wasmtime_files",
          ":clang_files",
