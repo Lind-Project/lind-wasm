@@ -432,20 +432,8 @@ allocate_stack (const struct pthread_attr *attr, struct pthread **pdp,
 	  pd->setxid_futex = -1;
 
     // lind-wasm: glibc's original TLS initialization depends on ELF header
-    // which is clearly not possible in wasm
-#ifdef lind_unmodified_glibc_source
-	  if (_dl_allocate_tls (TLS_TPADJ (pd)) == NULL)
-	    {
-	      /* Something went wrong.  */
-	      assert (errno == ENOMEM);
-
-	      /* Free the stack memory we just allocated.  */
-	      (void) __munmap (mem, size);
-
-	      return errno;
-	    }
-#endif
-
+    // but wasm file does not have any ELF header for them to parse
+    // original code removed here due to this reason
 
 	  /* Prepare to modify global data.  */
 	  lll_lock (GL (dl_stack_cache_lock), LLL_PRIVATE);
