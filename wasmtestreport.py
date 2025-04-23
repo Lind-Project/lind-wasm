@@ -18,6 +18,7 @@ import subprocess
 from pathlib import Path
 import argparse
 import shutil
+import time
 
 DEFAULT_TIMEOUT = 5 # in seconds
 
@@ -31,6 +32,7 @@ RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will 
 LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
 LIND_FS_ROOT = os.environ.get("LIND_FS_ROOT", "/home/lind/lind-wasm/src/RawPOSIX/tmp")
 
+LINDTOOL_PATH = os.path.join(LIND_WASM_BASE, "lindtool.sh")
 TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
 TESTFILES_SRC = Path(f"{LIND_WASM_BASE}/tests/testfiles")
 TESTFILES_DST = Path(f"{LIND_FS_ROOT}/testfiles")
@@ -70,15 +72,15 @@ error_types = {
 def get_empty_result():
     result = {
         "total_test_cases": 0,
-        "number_of_success": 0,
+        "success_count": 0,
         "success": [],
-        "number_of_failures": 0,
+        "failure_count": 0,
         "failures": [],
         "test_cases": {}
     }
     
     for err in error_types.keys():
-        result[f"number_of_{err}"] = 0
+        result[f"{err}_count"] = 0
         result[err] = []
     
     return result
@@ -110,21 +112,21 @@ def add_test_result(result, file_path, status, error_type, output):
     }
 
     if status.lower() == "success":
-        result["number_of_success"] += 1
+        result["success_count"] += 1
         result["success"].append(file_path)
         print("SUCCESS")
     else:
-        result["number_of_failures"] += 1
+        result["failure_count"] += 1
         result["failures"].append(file_path)
         
         error_message = error_types.get(error_type, "Undefined Failure")
 
         print(f"FAILURE: {error_message}")
         if error_type in error_types:
-            result[f"number_of_{error_type}"] += 1
+            result[f"{error_type}_count"] += 1
             result[error_type].append(file_path)
         else:
-            result["number_of_Unknown_Failure"] += 1
+            result["Unknown_Failure_count"] += 1
             result["Unknown_Failure"].append(file_path)
 
 
@@ -149,10 +151,10 @@ def add_test_result(result, file_path, status, error_type, output):
 def compile_c_to_wasm(source_file):
     source_file = Path(source_file).resolve()
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_WASM_BASE, "lindtool.sh"), "compile_test", testcase]
+    compile_cmd = [LINDTOOL_PATH, "compile_test", testcase]
     if DEBUG_MODE:
         print("Running command:", compile_cmd)
-        if os.path.isfile(os.path.join(LIND_WASM_BASE, "lindtool.sh")):
+        if os.path.isfile(LINDTOOL_PATH):
             print("File exists and is a regular file!")
         else:
             print("File not found or it's a directory!")
@@ -193,10 +195,10 @@ def compile_c_to_wasm(source_file):
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     testcase = str(wasm_file.with_suffix(''))
-    run_cmd = [os.path.join(LIND_WASM_BASE, "lindtool.sh"), "run", testcase]
+    run_cmd = [LINDTOOL_PATH, "run", testcase]
     if DEBUG_MODE:
         print("Running command:", run_cmd)
-        if os.path.isfile(os.path.join(LIND_WASM_BASE, "lindtool.sh")):
+        if os.path.isfile(LINDTOOL_PATH):
             print("File exists and is a regular file!")
         else:
             print("File not found or it's a directory!")
@@ -244,29 +246,103 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 # TODO: Currently for non deterministic cases, we are only compiling and running the test case, success means the compiled test case ran, need to add more specific tests
 # 
 def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
+    expected_output_file = source_file.parent / EXPECTED_DIRECTORY / f"{source_file.stem}.output"
+    native_output = source_file.parent / f"{source_file.stem}.o"
+    native_compile_cmd = f"gcc {source_file} -o {native_output}" 
     source_file = Path(source_file).resolve()
+
+    original_cwd = os.getcwd()
+    if expected_output_file.is_file():
+        try:
+            with open(expected_output_file, 'r') as f:
+                print(f"Expected output found at {expected_output_file}")
+                native_run_output = f.read()
+        except Exception as e:
+            add_test_result(result, str(source_file), "Failure", "Failure_reading_expected_file",
+                            f"Exception: {e}")
+            return
+    else:
+        print(f"No expected output found at {expected_output_file}")
+        #trying native compile
+        os.chdir(LIND_FS_ROOT)
+        try:
+            proc_compile = subprocess.run(native_compile_cmd, shell=True, capture_output=True, text=True)
+
+            if proc_compile.returncode != 0:
+                add_test_result(result, str(source_file), "Failure", "Failure_native_compiling",
+                                proc_compile.stdout + proc_compile.stderr)
+                os.chdir(original_cwd)
+                return
+            
+        except Exception as e:
+            add_test_result(result, str(source_file), "Failure", "Failure_native_compiling", f"Exception: {e}")
+            os.chdir(original_cwd)
+            return
+
+        #trying native run
+        try:
+            print(f"running native")
+            proc_run = subprocess.run(str(native_output), shell=True, capture_output=True, text=True)
+
+            if proc_run.returncode != 0:
+                add_test_result(result, str(source_file), "Failure", "Failure_native_running",
+                                proc_run.stdout + proc_run.stderr)
+                os.chdir(LIND_FS_ROOT)
+                return
+            native_run_output = proc_run.stdout
+
+        except Exception as e:
+            add_test_result(result, str(source_file), "Failure", "Failure_native_running", f"Exception: {e}")
+            os.chdir(LIND_FS_ROOT)
+            return
+
+        os.chdir(original_cwd)
+
 
     wasm_file, compile_err = compile_c_to_wasm(source_file)
     if wasm_file is None:
         add_test_result(result, str(source_file), "Failure", "Lind_wasm_compiling", compile_err)
         return
-
     try:
-        retcode, output = run_compiled_wasm(wasm_file, timeout_sec)
+
+        retcode, wasm_run_output = run_compiled_wasm(wasm_file, timeout_sec)
+
         if retcode == "timeout":
-            add_test_result(result, str(source_file), "Failure", "Lind_wasm_Timeout", output)
+            add_test_result(result, str(source_file), "Failure", "Lind_wasm_timeout", wasm_run_output)
         elif retcode == "unknown_error":
-            add_test_result(result, str(source_file), "Failure", "Lind_wasm_runtime", output)
+            add_test_result(result, str(source_file), "Failure", "Lind_wasm_runtime", wasm_run_output)
         else:
             if retcode == 0:
-                add_test_result(result, str(source_file), "Success", None, output)
-            elif retcode == 134 or retcode == 139:
-                add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", output)
+                python_file = f"{source_file.stem}.py"
+                if python_file.is_file():
+                    print(f"python file found at {source_file.stem}.py")
+                    expected_content = native_run_output.strip()
+                    wasm_content = wasm_run_output.strip()
+
+                    compare_results_cmd = f"{source_file.stem}.py {wasm_content} {expected_content}"
+                    proc = subprocess.run(compare_results_cmd, capture_output=True, text=True, timeout=timeout_sec)
+                    
+                    full_output = proc.stdout + proc.stderr
+
+                    lines = full_output.splitlines()
+                    filtered_lines = lines[1:]
+                    filtered_output_compare = "\n".join(filtered_lines)
+
+                    if proc.returncode == 0:
+                        print(f"python run success")
+                        add_test_result(result, str(source_file), "Success", None, wasm_run_output)
+                    else:
+                        print(f"python run failed")
+                        add_test_result(result, str(source_file), "Failure", "Output_mismatch", filtered_output_compare)
+                else:
+                    print(f"python file not found: {source_file.stem}.py")
+                    add_test_result(result, str(source_file), "Success", None, wasm_run_output)
+            elif retcode == 139 or retcode == 134:
+                add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", wasm_run_output)
             else:
-                add_test_result(result, str(source_file), "Failure", "Unknown_Failure", output)
-    finally:
-        if wasm_file and wasm_file.exists():
-            wasm_file.unlink()
+                add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
+    except:
+        add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
 
 # ----------------------------------------------------------------------
 # Function: test_single_file_deterministic
@@ -444,10 +520,10 @@ def generate_html_report(report):
         html_content.append('<table class="summary-table">')
         html_content.append('<tr><th>Metric</th><th>Count</th></tr>')
         html_content.append(f'<tr><td>Total Test Cases</td><td>{test_result.get("total_test_cases", 0)}</td></tr>')
-        html_content.append(f'<tr><td>Number of Successes</td><td>{test_result.get("number_of_success", 0)}</td></tr>')
-        html_content.append(f'<tr><td>Number of Failures</td><td>{test_result.get("number_of_failures", 0)}</td></tr>')
+        html_content.append(f'<tr><td>Successes</td><td>{test_result.get("success_count", 0)}</td></tr>')
+        html_content.append(f'<tr><td>Failures</td><td>{test_result.get("failure_count", 0)}</td></tr>')
         for error_type in error_types:
-            html_content.append(f'<tr><td>Number of {error_types[error_type]}</td><td>{test_result.get(f"number_of_{error_types[error_type]}", 0)}</td></tr>')
+            html_content.append(f'<tr><td>{error_types[error_type]}</td><td>{test_result.get(f"{error_type}_count", 0)}</td></tr>')
         html_content.append('</table>')
 
     for test_type, test_result in report.items():
@@ -480,7 +556,7 @@ def generate_html_report(report):
         if test_cases:
             html_content.append(f'<h3>{test_type}:</h3>')
             html_content.append('<table>')
-            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Output</th></tr>')
+            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Time Taken</th><th>Output</th></tr>')
             for test, result in test_cases.items():
                 if result['status'].lower() == "success":
                     bg_color = "lightgreen"
@@ -491,6 +567,7 @@ def generate_html_report(report):
                 html_content.append(
                     f'<tr style="background-color: {bg_color};"><td>{test}</td>'
                     f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
+                    f'<td>{result["timeTaken"]:.2f}</td>'
                     f'<td><pre>{result["output"]}</pre></td></tr>'
                 )
             html_content.append('</table>')
@@ -692,9 +769,15 @@ def main():
 
         # checks the name of immediate parent folder to see if a test is deterministic or non deterministic.
         if parent_name == DETERMINISTIC_PARENT_NAME:
+            start_time = time.time()
             test_single_file_deterministic(source_file, results["deterministic"], timeout_sec)
+            end_time = time.time()
+            results["deterministic"]["test_cases"][str(Path(source_file).resolve())]["timeTaken"] = end_time - start_time
         elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
+            start_time = time.time()
             test_single_file_non_deterministic(source_file, results["non_deterministic"], timeout_sec)
+            end_time = time.time()
+            results["non_deterministic"]["test_cases"][str(Path(source_file).resolve())]["timeTaken"] = end_time - start_time
 
         wasm_file = source_file.with_suffix(".wasm")
         cwasm_file = source_file.with_suffix(".cwasm")
@@ -721,4 +804,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
