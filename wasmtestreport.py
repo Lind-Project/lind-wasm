@@ -459,7 +459,7 @@ def generate_html_report(report):
         if failures:
             html_content.append("<h3>Failures:</h3>")
             html_content.append("<ul>")
-            for test in failures:
+            for test in sorted(failures):
                 html_content.append(f"<li>{test}</li>")
             html_content.append("</ul>")
 
@@ -481,7 +481,8 @@ def generate_html_report(report):
             html_content.append(f'<h3>{test_type}:</h3>')
             html_content.append('<table>')
             html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Output</th></tr>')
-            for test, result in test_cases.items():
+            for test in sorted(test_cases):
+                result = test_cases[test]
                 if result['status'].lower() == "success":
                     bg_color = "lightgreen"
                 elif result['status'].lower() == "timeout":
@@ -698,7 +699,7 @@ def main():
     shutil.rmtree(TESTFILES_DST) # removes the test files from the lind fs root
 
     with open(output_file, "w") as fp:
-        json.dump(results, fp, indent=4)
+        json.dump(results, fp, indent=4, sort_keys=True)
 
     if should_generate_html:
         report_html = generate_html_report(results)
