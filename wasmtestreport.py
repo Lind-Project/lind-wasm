@@ -12,6 +12,8 @@
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
 #   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
+#!/usr/bin/env python3
+
 import json
 import os
 import subprocess
@@ -19,15 +21,16 @@ from pathlib import Path
 import argparse
 import shutil
 import time
+from contextlib import contextmanager
 
-DEFAULT_TIMEOUT = 5 # in seconds
-
+DEFAULT_TIMEOUT = 5  # seconds
 DEBUG_MODE = False
 
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
-SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will not run
-RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will run
+
+SKIP_FOLDERS: list[str] = []
+RUN_FOLDERS: list[str] = []
 
 LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
 LIND_FS_ROOT = os.environ.get("LIND_FS_ROOT", "/home/lind/lind-wasm/src/RawPOSIX/tmp")
@@ -41,7 +44,6 @@ NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 
-
 error_types = {
     "Failure_native_compiling": "Compilation Failure Native",
     "Failure_native_running": "Runtime Failure Native",
@@ -52,8 +54,26 @@ error_types = {
     "Lind_wasm_Segmentation_Fault": "Lind Wasm Segmentation Failure",
     "Lind_wasm_Timeout": "Timeout During Lind Wasm run",
     "Unknown_Failure": "Unknown Failure",
-    "Output_mismatch": "GCC and Wasm Output mismatch"
-    }
+    "Output_mismatch": "GCC and Wasm Output mismatch",
+}
+
+# ----------------------------------------------------------------------
+# Function: timer
+#
+# Purpose:
+#  Measure elapsed wall‑clock time for any code block.
+#
+# Variables:
+#   Output: Yields a simple namespace with an ``elapsed`` attribute (float seconds).
+# ----------------------------------------------------------------------
+@contextmanager
+def timer():
+    start = time.perf_counter()
+    result = type("Timer", (), {})()  # anonymous object
+    try:
+        yield result
+    finally:
+        result.elapsed = time.perf_counter() - start
 
 # ----------------------------------------------------------------------
 # Function: get_empty_result
@@ -76,13 +96,11 @@ def get_empty_result():
         "success": [],
         "failure_count": 0,
         "failures": [],
-        "test_cases": {}
+        "test_cases": {},
     }
-    
-    for err in error_types.keys():
+    for err in error_types:
         result[f"{err}_count"] = 0
         result[err] = []
-    
     return result
 
 
@@ -105,11 +123,14 @@ def get_empty_result():
 # ----------------------------------------------------------------------
 def add_test_result(result, file_path, status, error_type, output):
     result["total_test_cases"] += 1
-    result["test_cases"][file_path] = {
-        "status": status,
-        "error_type": error_type,
-        "output": output
-    }
+    result["test_cases"].setdefault(file_path, {})
+    result["test_cases"][file_path].update(
+        {
+            "status": status,
+            "error_type": error_type,
+            "output": output,
+        }
+    )
 
     if status.lower() == "success":
         result["success_count"] += 1
@@ -118,17 +139,53 @@ def add_test_result(result, file_path, status, error_type, output):
     else:
         result["failure_count"] += 1
         result["failures"].append(file_path)
-        
-        error_message = error_types.get(error_type, "Undefined Failure")
+        err_key = error_type if error_type in error_types else "Unknown_Failure"
+        result[f"{err_key}_count"] += 1
+        result[err_key].append(file_path)
+        print(f"FAILURE: {error_types.get(err_key, 'Undefined Failure')}")
 
-        print(f"FAILURE: {error_message}")
-        if error_type in error_types:
-            result[f"{error_type}_count"] += 1
-            result[error_type].append(file_path)
-        else:
-            result["Unknown_Failure_count"] += 1
-            result["Unknown_Failure"].append(file_path)
+# ----------------------------------------------------------------------
+# Function: native_compile
+#
+# Purpose:
+#   Compiles a C source file with GCC and measures compile time.
+#
+# Variables:
+# - Input: source_file (Path) – path to the .c file
+# - Output: tuple (return_code, stdout+stderr, elapsed_time(float))
+# ----------------------------------------------------------------------
 
+def native_compile(source_file):
+    cmd = ["gcc", str(source_file), "-o", str(source_file.with_suffix(".o"))]
+    if DEBUG_MODE:
+        print("Native compile cmd:", cmd)
+    with timer() as t:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+    return proc.returncode, proc.stdout + proc.stderr, t.elapsed
+
+# ----------------------------------------------------------------------
+# Function: native_run
+#
+# Purpose:
+#   Executes the native binary produced by ``native_compile``.
+#
+# Variables:
+# - Input:
+#     exec_path (Path) – path to the native binary (.o)
+#     timeout  (int)  – seconds before killing
+# - Output: tuple(return_code | "timeout", stdout+stderr, elapsed_time(float))
+# ----------------------------------------------------------------------
+
+def native_run(exec_path, timeout):
+    cmd = [str(exec_path)]
+    if DEBUG_MODE:
+        print("Native run cmd:", cmd)
+    try:
+        with timer() as t:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return proc.returncode, proc.stdout + proc.stderr, t.elapsed
+    except subprocess.TimeoutExpired:
+        return "timeout", "Timed out", timeout
 
 # ----------------------------------------------------------------------
 # Function: compile_c_to_wasm
@@ -148,27 +205,20 @@ def add_test_result(result, file_path, status, error_type, output):
 # Note:
 #   Dependancy on the script "./lindtool.sh compile_test".
 # ----------------------------------------------------------------------
-def compile_c_to_wasm(source_file):
-    source_file = Path(source_file).resolve()
-    testcase = str(source_file.with_suffix(''))
-    compile_cmd = [LINDTOOL_PATH, "compile_test", testcase]
+
+def wasm_compile(source_file):
+    testcase = str(source_file.with_suffix(""))
+    cmd = [LINDTOOL_PATH, "compile_test", testcase]
     if DEBUG_MODE:
-        print("Running command:", compile_cmd)
-        if os.path.isfile(LINDTOOL_PATH):
-            print("File exists and is a regular file!")
-        else:
-            print("File not found or it's a directory!")
-
-
+        print("WASM compile cmd:", cmd)
     try:
-        result = subprocess.run(compile_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            return (None, result.stdout + "\n" + result.stderr)
-        else:
-            wasm_file = Path(testcase + ".wasm")
-            return (wasm_file, "")
+        with timer() as t:
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            return None, proc.stdout + proc.stderr, t.elapsed
+        return Path(testcase + ".wasm"), "", t.elapsed
     except Exception as e:
-        return (None, f"Exception during compilation: {str(e)}")
+        return None, f"Exception during compilation: {e}", 0.0
 
 # ----------------------------------------------------------------------
 # Function: run_compiled_wasm
@@ -193,32 +243,122 @@ def compile_c_to_wasm(source_file):
 #   Since the script outputs the command being run, we ignore 
 #   the first line in stdout by the script which is the command itself
 # ----------------------------------------------------------------------
-def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
-    testcase = str(wasm_file.with_suffix(''))
-    run_cmd = [LINDTOOL_PATH, "run", testcase]
+
+def wasm_run(wasm_file, timeout):
+    testcase = str(wasm_file.with_suffix(""))
+    cmd = [LINDTOOL_PATH, "run", testcase]
     if DEBUG_MODE:
-        print("Running command:", run_cmd)
-        if os.path.isfile(LINDTOOL_PATH):
-            print("File exists and is a regular file!")
-        else:
-            print("File not found or it's a directory!")
-
-
+        print("WASM run cmd:", cmd)
     try:
-        proc = subprocess.run(run_cmd, capture_output=True, text=True, timeout=timeout_sec)
-        full_output = proc.stdout + proc.stderr
-        
-        #removing the first line in output as it is the command being run by the bash script
-        lines = full_output.splitlines()
-        filtered_lines = lines[1:]
-        filtered_output = "\n".join(filtered_lines)
-
-        return (proc.returncode, filtered_output)
-
-    except subprocess.TimeoutExpired as e:
-        return ("timeout", f"Timed Out (timeout: {timeout_sec}s)")
+        with timer() as t:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        # drop first line (command echo)
+        output_lines = (proc.stdout + proc.stderr).splitlines()[1:]
+        return proc.returncode, "\n".join(output_lines), t.elapsed
+    except subprocess.TimeoutExpired:
+        return "timeout", f"Timed out", timeout
     except Exception as e:
-        return ("unknown_error", f"Exception during wasm run: {str(e)}")
+        return "unknown_error", f"Exception: {e}", 0.0
+
+# ----------------------------------------------------------------------
+# Function: record_timings
+#
+# Purpose:
+#   Adds individual timing metrics into ``results['test_cases'][test]`` dict.
+# ----------------------------------------------------------------------
+
+def record_timings(results_section, test_key, **times):
+    results_section["test_cases"].setdefault(test_key, {})
+    results_section["test_cases"][test_key].update(times)
+
+# ----------------------------------------------------------------------
+# Function: test_single_file_deterministic
+#
+# Purpose:
+#   Compiles and runs a single test, 
+#   First compiles and runs using native, then wasm
+#   Finally compares the wasm output to the native native output to ensure they match.
+#   Logs results (success/failure/timeouts/seg faults)
+#
+# Variables:
+# - Input:
+#   source_file : The .c file path.
+#   result : The shared results dictionary.
+#   timeout_sec : Timeout for the run in seconds.
+# - Output:
+#   Updates 'result' dictionary.
+#
+# Exceptions:
+#   Recorded into 'result'.
+#
+# Note:
+#   Cleans up generated files (wasm/cwasm/native output).
+# ----------------------------------------------------------------------
+def test_single_file_deterministic(source_file, result, timeout_sec = DEFAULT_TIMEOUT):
+    source_file = source_file.resolve()
+    native_out_path = source_file.with_suffix(".o")
+
+    # Native compile & run (or read expected)
+    expected_output_file = source_file.parent / EXPECTED_DIRECTORY / f"{source_file.stem}.output"
+    if expected_output_file.is_file():
+        with open(expected_output_file) as f:
+            native_output = f.read()
+        native_compile_t = native_run_t = 0.0
+    else:
+        # Compile
+        rc, out, native_compile_t = native_compile(source_file)
+        if rc != 0:
+            add_test_result(result, str(source_file), "Failure", "Failure_native_compiling", out)
+            record_timings(result, str(source_file), native_compile_time=native_compile_t)
+            return
+        # Run
+        rc, out, native_run_t = native_run(native_out_path, timeout_sec)
+        if rc in (134, 139):
+            add_test_result(result, str(source_file), "Failure", "Native_Segmentation_Fault", out)
+            record_timings(result, str(source_file), native_compile_time=native_compile_t, native_run_time=native_run_t)
+            return
+        if rc == "timeout":
+            add_test_result(result, str(source_file), "Failure", "Native_Timeout", out)
+            record_timings(result, str(source_file), native_compile_time=native_compile_t, native_run_time=native_run_t)
+            return
+        if rc != 0:
+            add_test_result(result, str(source_file), "Failure", "Failure_native_running", out)
+            record_timings(result, str(source_file), native_compile_time=native_compile_t, native_run_time=native_run_t)
+            return
+        native_output = out
+
+    # WASM compile
+    wasm_file, compile_err, wasm_compile_t = wasm_compile(source_file)
+    record_timings(result, str(source_file), native_compile_time=native_compile_t, native_run_time=native_run_t, wasm_compile_time=wasm_compile_t)
+    if wasm_file is None:
+        add_test_result(result, str(source_file), "Failure", "Lind_wasm_compiling", compile_err)
+        return
+
+    # WASM run
+    rc, wasm_output, wasm_run_t = wasm_run(wasm_file, timeout_sec)
+    record_timings(result, str(source_file), wasm_run_time=wasm_run_t)
+
+    if rc == "timeout":
+        add_test_result(result, str(source_file), "Failure", "Lind_wasm_Timeout", wasm_output)
+        return
+    if rc == "unknown_error":
+        add_test_result(result, str(source_file), "Failure", "Lind_wasm_runtime", wasm_output)
+        return
+    if rc in (134, 139):
+        add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", wasm_output)
+        return
+    if rc != 0:
+        add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_output)
+        return
+
+    # Compare outputs
+    if wasm_output.strip() == native_output.strip():
+        add_test_result(result, str(source_file), "Success", None, wasm_output)
+    else:
+        mismatch_info = (
+            "=== Native Output ===\n" + native_output + "\n\n=== WASM Output ===\n" + wasm_output
+        )
+        add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info)
 
 # ----------------------------------------------------------------------
 # Function: test_single_file_non_deterministic
@@ -245,216 +385,81 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 # ----------------------------------------------------------------------
 # TODO: Currently for non deterministic cases, we are only compiling and running the test case, success means the compiled test case ran, need to add more specific tests
 # 
+
 def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
+    source_file = source_file.resolve()
+    native_out_path = source_file.with_suffix(".o")
+
+    # ---------- native / expected ----------
     expected_output_file = source_file.parent / EXPECTED_DIRECTORY / f"{source_file.stem}.output"
-    native_output = source_file.parent / f"{source_file.stem}.o"
-    native_compile_cmd = f"gcc {source_file} -o {native_output}" 
-    source_file = Path(source_file).resolve()
-
-    original_cwd = os.getcwd()
     if expected_output_file.is_file():
-        try:
-            with open(expected_output_file, 'r') as f:
-                print(f"Expected output found at {expected_output_file}")
-                native_run_output = f.read()
-        except Exception as e:
-            add_test_result(result, str(source_file), "Failure", "Failure_reading_expected_file",
-                            f"Exception: {e}")
-            return
+        with open(expected_output_file) as f:
+            native_output = f.read()
+        native_compile_t = native_run_t = 0.0
     else:
-        print(f"No expected output found at {expected_output_file}")
-        #trying native compile
-        os.chdir(LIND_FS_ROOT)
-        try:
-            proc_compile = subprocess.run(native_compile_cmd, shell=True, capture_output=True, text=True)
-
-            if proc_compile.returncode != 0:
-                add_test_result(result, str(source_file), "Failure", "Failure_native_compiling",
-                                proc_compile.stdout + proc_compile.stderr)
-                os.chdir(original_cwd)
-                return
-            
-        except Exception as e:
-            add_test_result(result, str(source_file), "Failure", "Failure_native_compiling", f"Exception: {e}")
-            os.chdir(original_cwd)
+        print(f"Expected output not found; Compiling native")
+        rc, out, native_compile_t = native_compile(source_file)
+        if rc != 0:
+            add_test_result(result, str(source_file), "Failure", "Failure_native_compiling", out)
+            record_timings(result, str(source_file), native_compile_time=native_compile_t)
             return
-
-        #trying native run
-        try:
-            print(f"running native")
-            proc_run = subprocess.run(str(native_output), shell=True, capture_output=True, text=True)
-
-            if proc_run.returncode != 0:
-                add_test_result(result, str(source_file), "Failure", "Failure_native_running",
-                                proc_run.stdout + proc_run.stderr)
-                os.chdir(LIND_FS_ROOT)
-                return
-            native_run_output = proc_run.stdout
-
-        except Exception as e:
-            add_test_result(result, str(source_file), "Failure", "Failure_native_running", f"Exception: {e}")
-            os.chdir(LIND_FS_ROOT)
+        rc, out, native_run_t = native_run(native_out_path, timeout_sec)
+        if rc in (134, 139):
+            add_test_result(result, str(source_file), "Failure", "Native_Segmentation_Fault", out)
+            record_timings(result, str(source_file), native_compile_time=native_compile_t, native_run_time=native_run_t)
             return
+        if rc == "timeout":
+            add_test_result(result, str(source_file), "Failure", "Native_Timeout", out)
+            record_timings(result, str(source_file), native_compile_time=native_compile_t, native_run_time=native_run_t)
+            return
+        if rc != 0:
+            add_test_result(result, str(source_file), "Failure", "Failure_native_running", out)
+            record_timings(result, str(source_file), native_compile_time=native_compile_t, native_run_time=native_run_t)
+            return
+        native_output = out
 
-        os.chdir(original_cwd)
-
-
-    wasm_file, compile_err = compile_c_to_wasm(source_file)
+    # ---------- wasm compile ----------
+    wasm_file, compile_err, wasm_compile_t = wasm_compile(source_file)
+    record_timings(result, str(source_file),native_compile_time=native_compile_t,native_run_time=native_run_t,wasm_compile_time=wasm_compile_t)
     if wasm_file is None:
         add_test_result(result, str(source_file), "Failure", "Lind_wasm_compiling", compile_err)
         return
-    try:
 
-        retcode, wasm_run_output = run_compiled_wasm(wasm_file, timeout_sec)
-
-        if retcode == "timeout":
-            add_test_result(result, str(source_file), "Failure", "Lind_wasm_timeout", wasm_run_output)
-        elif retcode == "unknown_error":
-            add_test_result(result, str(source_file), "Failure", "Lind_wasm_runtime", wasm_run_output)
-        else:
-            if retcode == 0:
-                python_file = f"{source_file.stem}.py"
-                if python_file.is_file():
-                    print(f"python file found at {source_file.stem}.py")
-                    expected_content = native_run_output.strip()
-                    wasm_content = wasm_run_output.strip()
-
-                    compare_results_cmd = f"{source_file.stem}.py {wasm_content} {expected_content}"
-                    proc = subprocess.run(compare_results_cmd, capture_output=True, text=True, timeout=timeout_sec)
-                    
-                    full_output = proc.stdout + proc.stderr
-
-                    lines = full_output.splitlines()
-                    filtered_lines = lines[1:]
-                    filtered_output_compare = "\n".join(filtered_lines)
-
-                    if proc.returncode == 0:
-                        print(f"python run success")
-                        add_test_result(result, str(source_file), "Success", None, wasm_run_output)
-                    else:
-                        print(f"python run failed")
-                        add_test_result(result, str(source_file), "Failure", "Output_mismatch", filtered_output_compare)
-                else:
-                    print(f"python file not found: {source_file.stem}.py")
-                    add_test_result(result, str(source_file), "Success", None, wasm_run_output)
-            elif retcode == 139 or retcode == 134:
-                add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", wasm_run_output)
-            else:
-                add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
-    except:
-        add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
-
-# ----------------------------------------------------------------------
-# Function: test_single_file_deterministic
-#
-# Purpose:
-#   Compiles and runs a single test, 
-#   First compiles and runs using native, then wasm
-#   Finally compares the wasm output to the native native output to ensure they match.
-#   Logs results (success/failure/timeouts/seg faults)
-#
-# Variables:
-# - Input:
-#   source_file : The .c file path.
-#   result : The shared results dictionary.
-#   timeout_sec : Timeout for the run in seconds.
-# - Output:
-#   Updates 'result' dictionary.
-#
-# Exceptions:
-#   Recorded into 'result'.
-#
-# Note:
-#   Cleans up generated files (wasm/cwasm/native output).
-# ----------------------------------------------------------------------
-def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    source_file = Path(source_file).resolve()
-    expected_output_file = source_file.parent / EXPECTED_DIRECTORY / f"{source_file.stem}.output"
-
-    native_output = source_file.parent / f"{source_file.stem}.o"
-    native_compile_cmd = f"gcc {source_file} -o {native_output}"
-    original_cwd = os.getcwd()
-
-    if expected_output_file.is_file():
-        try:
-            with open(expected_output_file, 'r') as f:
-                print(f"Expected output found at {expected_output_file}")
-                native_run_output = f.read()
-        except Exception as e:
-            add_test_result(result, str(source_file), "Failure", "Failure_reading_expected_file",
-                            f"Exception: {e}")
-            return
-    else:
-        print(f"No expected output found at {expected_output_file}")
-        #trying native compile
-        os.chdir(LIND_FS_ROOT)
-        try:
-            proc_compile = subprocess.run(native_compile_cmd, shell=True, capture_output=True, text=True)
-            if proc_compile.returncode != 0:
-                add_test_result(result, str(source_file), "Failure", "Failure_native_compiling",
-                                proc_compile.stdout + proc_compile.stderr)
-                os.chdir(original_cwd)
-                return
-        except Exception as e:
-            add_test_result(result, str(source_file), "Failure", "Failure_native_compiling", f"Exception: {e}")
-            os.chdir(original_cwd)
-            return
-
-        #trying native run
-        try:
-            proc_run = subprocess.run(str(native_output), shell=True, capture_output=True, text=True)
-            if proc_run.returncode != 0:
-                add_test_result(result, str(source_file), "Failure", "Failure_native_running",
-                                proc_run.stdout + proc_run.stderr)
-                os.chdir(LIND_FS_ROOT)
-                return
-            native_run_output = proc_run.stdout
-        except Exception as e:
-            add_test_result(result, str(source_file), "Failure", "Failure_native_running", f"Exception: {e}")
-            os.chdir(LIND_FS_ROOT)
-            return
-
-        os.chdir(original_cwd)
-    
-    #wasm compile
-    wasm_file, compile_err = compile_c_to_wasm(source_file)
-    if wasm_file is None:
-        add_test_result(result, str(source_file), "Failure", "Lind_wasm_compiling", compile_err)
-        os.chdir(original_cwd)
+    # ---------- wasm run ----------
+    rc, wasm_output, wasm_run_t = wasm_run(wasm_file, timeout_sec)
+    record_timings(result, str(source_file), wasm_run_time=wasm_run_t)
+    if rc == "timeout":
+        add_test_result(result, str(source_file), "Failure", "Lind_wasm_Timeout", wasm_output)
+        return
+    if rc == "unknown_error":
+        add_test_result(result, str(source_file), "Failure", "Lind_wasm_runtime", wasm_output)
+        return
+    if rc in (134, 139):
+        add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", wasm_output)
+        return
+    if rc != 0:
+        add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_output)
         return
 
-    #wasm run
-    try:
-        retcode, wasm_run_output = run_compiled_wasm(wasm_file, timeout_sec)
-        if retcode == "timeout":
-            add_test_result(result, str(source_file), "Failure", "Lind_wasm_timeout", wasm_run_output)
-        elif retcode == "unknown_error":
-            add_test_result(result, str(source_file), "Failure", "Lind_wasm_runtime", wasm_run_output)
-        else:
-            if retcode == 0:
-                expected_content = native_run_output.strip()
-                wasm_content = wasm_run_output.strip()
-
-                #verifying against expected output from native
-                if wasm_content == expected_content:
-                    add_test_result(result, str(source_file), "Success", None, wasm_run_output)
-                else:
-                    mismatch_info = (
-                        "=== native Output ===\n"
-                        f"{expected_content}\n\n"
-                        "=== WASM Output ===\n"
-                        f"{wasm_content}\n"
-                    )
-                    add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info)
-            elif retcode == 139 or retcode == 134:
-                add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", wasm_run_output)
+    # ---------- compare ----------
+    compare_script = source_file.with_suffix(".py")
+    if compare_script.is_file():
+        try:
+            proc = subprocess.run([str(compare_script), wasm_output.strip(), native_output.strip()],
+                                  capture_output=True, text=True, timeout=timeout_sec)
+            filtered = "\n".join((proc.stdout + proc.stderr).splitlines()[1:])
+            compare_outputs = (
+                "=== Native Output ===\n" + native_output + "\n\n=== WASM Output ===\n" + wasm_output
+            )
+            if proc.returncode == 0:
+                add_test_result(result, str(source_file), "Success", None, compare_outputs)
             else:
-                add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
-    except:
-        add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
-    
-    os.chdir(original_cwd)
-
+                compare_outputs += "\n" + filtered
+                add_test_result(result, str(source_file), "Failure", "Output_mismatch", compare_outputs)
+        except Exception as e:
+            add_test_result(result, str(source_file), "Failure", "Compare_script_failure", f"Exception: {e}")
+    else:
+        add_test_result(result, str(source_file), "Success", None, wasm_output)
 
 # ----------------------------------------------------------------------
 # Function: pre_test
@@ -471,14 +476,16 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
 #   None
 # ----------------------------------------------------------------------
 def pre_test():
-    os.makedirs(TESTFILES_DST, exist_ok=True) 
-
+    os.makedirs(TESTFILES_DST, exist_ok=True)
     shutil.copytree(TESTFILES_SRC, TESTFILES_DST, dirs_exist_ok=True)
-
-    readlinkfile_path = TESTFILES_DST / "readlinkfile.txt"
-    symlink_path = TESTFILES_DST / "readlinkfile"
-    open(readlinkfile_path, 'a').close()
-    os.symlink(readlinkfile_path, symlink_path)
+    readlink_txt = TESTFILES_DST / "readlinkfile.txt"
+    readlink_link = TESTFILES_DST / "readlinkfile"
+    open(readlink_txt, "a").close()
+    try:
+        readlink_link.unlink()
+    except FileNotFoundError:
+        pass
+    os.symlink(readlink_txt, readlink_link)
 
 # ----------------------------------------------------------------------
 # Function: generate_html_report
@@ -494,90 +501,50 @@ def pre_test():
 #
 # ----------------------------------------------------------------------
 def generate_html_report(report):
-    html_content = []
+    html = []
+    html.append(
+        """<!DOCTYPE html><html><head><meta charset='UTF-8'>
+        <style>
+            table,th,td{border:1px solid black;border-collapse:collapse;}
+        </style></head><body><h1>Test Report</h1>"""
+    )
 
-    html_header = """<!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-    </head>
-    <style>
-        table, th, td {
-        border: 1px solid black;
-        border-collapse: collapse;
-        }
-    </style>
-    <body>
-    <h1>Test Report</h1>
-    """
+    for category, res in report.items():
+        html.append(f"<h2>{category}</h2>")
+        # Summary table
+        html.append("<table><tr><th>Metric</th><th>Count</th></tr>")
+        html.append(f"<tr><td>Total</td><td>{res['total_test_cases']}</td></tr>")
+        html.append(f"<tr><td>Successes</td><td>{res['success_count']}</td></tr>")
+        html.append(f"<tr><td>Failures</td><td>{res['failure_count']}</td></tr>")
+        for err in error_types:
+            html.append(f"<tr><td>{error_types[err]}</td><td>{res[f'{err}_count']}</td></tr>")
+        html.append("</table><br>")
 
-    html_content.append(html_header)
-
-    for test_type, test_result in report.items():
-        html_content.append(f'<div class="child-section">')
-        html_content.append(f'<h2>{test_type}</h2>')
-
-        html_content.append('<table class="summary-table">')
-        html_content.append('<tr><th>Metric</th><th>Count</th></tr>')
-        html_content.append(f'<tr><td>Total Test Cases</td><td>{test_result.get("total_test_cases", 0)}</td></tr>')
-        html_content.append(f'<tr><td>Successes</td><td>{test_result.get("success_count", 0)}</td></tr>')
-        html_content.append(f'<tr><td>Failures</td><td>{test_result.get("failure_count", 0)}</td></tr>')
-        for error_type in error_types:
-            html_content.append(f'<tr><td>{error_types[error_type]}</td><td>{test_result.get(f"{error_type}_count", 0)}</td></tr>')
-        html_content.append('</table>')
-
-    for test_type, test_result in report.items():
-        html_content.append(f'<div class="child-section">')
-        html_content.append(f'<h2>{test_type}</h2>')
-        html_content.append('<div class="test-lists">')
-
-        failures = test_result.get("failure", [])
-        if failures:
-            html_content.append("<h3>Failures:</h3>")
-            html_content.append("<ul>")
-            for test in failures:
-                html_content.append(f"<li>{test}</li>")
-            html_content.append("</ul>")
-
-        for error_type in error_types:
-            section = test_result.get(error_types[error_type],[])
-            if section:
-                html_content.append(f"<h3>{error_type}:</h3>")
-                html_content.append("<ul>")
-                for test in section:
-                    html_content.append(f"<li>{test}</li>")
-                html_content.append("</ul>")
-
-        html_content.append("</div>")
-        html_content.append("</div>") 
-
-    for test_type, test_result in report.items():
-        test_cases = test_result.get("test_cases", {})
-        if test_cases:
-            html_content.append(f'<h3>{test_type}:</h3>')
-            html_content.append('<table>')
-            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Time Taken</th><th>Output</th></tr>')
-            for test, result in test_cases.items():
-                if result['status'].lower() == "success":
-                    bg_color = "lightgreen"
-                elif result['status'].lower() == "timeout":
-                    bg_color = "orange"
-                else:
-                    bg_color = "red"
-                html_content.append(
-                    f'<tr style="background-color: {bg_color};"><td>{test}</td>'
-                    f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
-                    f'<td>{result["timeTaken"]:.2f}</td>'
-                    f'<td><pre>{result["output"]}</pre></td></tr>'
-                )
-            html_content.append('</table>')
-
-    html_content.append("</body>\n</html>")
-    html_content.append("\n")
-    html_content = "\n".join(html_content)
-    return html_content
-
-
+        # Detailed per‑test table
+        test_cases = res.get("test_cases", {})
+        if not test_cases:
+            continue
+        html.append(
+            "<table><tr><th>Test</th><th>Status</th><th>Error</th>"
+            "<th>Nat&nbsp;Comp&nbsp;(s)</th><th>Nat&nbsp;Run&nbsp;(s)</th>"
+            "<th>WASM&nbsp;Comp&nbsp;(s)</th><th>WASM&nbsp;Run&nbsp;(s)</th>"
+            "<th>Output/Msg</th></tr>"
+        )
+        for test, info in test_cases.items():
+            status = info.get("status", "")
+            color = "lightgreen" if status.lower() == "success" else "red"
+            html.append(
+                f"<tr style='background:{color};'><td>{test}</td>"
+                f"<td>{status}</td><td>{info.get('error_type','')}</td>"
+                f"<td>{info.get('native_compile_time',0):.2f}</td>"
+                f"<td>{info.get('native_run_time',0):.2f}</td>"
+                f"<td>{info.get('wasm_compile_time',0):.2f}</td>"
+                f"<td>{info.get('wasm_run_time',0):.2f}</td>"
+                f"<td><pre>{(info.get('output') or '')[:500]}</pre></td></tr>"
+            )
+        html.append("</table><br>")
+    html.append("</body></html>")
+    return "\n".join(html)
 # ----------------------------------------------------------------------
 # Function: is_file_in_folder
 #
@@ -592,14 +559,13 @@ def generate_html_report(report):
 #   Returns True if the file resides in (or is the same as) any folder
 #   in 'folder_list'; otherwise, returns False.
 # ----------------------------------------------------------------------
-def is_file_in_folder(file_path, folder_list):
+def is_file_in_folder(file_path: Path, folder_list):
     resolved_file = file_path.resolve()
     for folder in folder_list:
-        folder = TEST_FILE_BASE / f"{folder}"
-        resolved_folder = folder.resolve()
+        resolved_folder = (TEST_FILE_BASE / folder).resolve()
         if resolved_file == resolved_folder:
             return True
-        if resolved_file.is_relative_to(resolved_folder):
+        if resolved_folder in resolved_file.parents:
             return True
     return False
 
@@ -622,35 +588,20 @@ def is_file_in_folder(file_path, folder_list):
 #   in one of them; 
 #   Otherwise False;
 # ----------------------------------------------------------------------
+
 def should_run_file(file_path, run_folders, skip_folders, skip_test_cases):
     if file_path in skip_test_cases:
-        print(f"skipping {file_path}")
         return False
-
     if skip_folders and is_file_in_folder(file_path, skip_folders):
         return False
+    return not run_folders or is_file_in_folder(file_path, run_folders)
 
-    if not run_folders or is_file_in_folder(file_path, run_folders):
-        return True
+# Flag parser (use short names as shown in help text) --------------------------------
 
-    return False
-
-# ----------------------------------------------------------------------
-# Function: check_timeout
-#
-# Purpose:
-#   Determines if the given timeout is a positive integer
-# Variables:
-# - Input:
-#   value: The value to be checked
-# - Output:
-#   Returns the value if it is a positive integer
-#   Otherwise raise ArgumentTypeError
-# ----------------------------------------------------------------------
 def check_timeout(value):
     ivalue = int(value)
     if ivalue <= 0:
-        raise argparse.ArgumentTypeError("Timeout should be an integer greater than 0")
+        raise argparse.ArgumentTypeError("Timeout must be >0")
     return ivalue
 
 # ----------------------------------------------------------------------
@@ -665,144 +616,96 @@ def check_timeout(value):
 # - Output:
 #   Returns a dictionary with the parsed arguments
 # ----------------------------------------------------------------------
+
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Specify folders to skip or run.")
-    parser.add_argument("--skip", nargs="*", default=SKIP_FOLDERS, help="List of folders to be skipped")
-    parser.add_argument("--run", nargs="*", default=RUN_FOLDERS, help="List of folders to be run")
-    parser.add_argument("--timeout", type=check_timeout, default=DEFAULT_TIMEOUT, help="Timeout in seconds")
-    parser.add_argument("--output", default=JSON_OUTPUT, help="Name of the output file")
-    parser.add_argument("--report", default=HTML_OUTPUT, help="Name of the report HTML file")
-    parser.add_argument("--generate-html", action="store_true", help="Flag to generate HTML file")
-    parser.add_argument("--pre-test-only", action="store_true", help="Flag to run only the copying of required testfiles")
-    parser.add_argument("--clean-testfiles", action="store_true", help="Flag to remove the testfiles")
-    parser.add_argument("--clean-results", action="store_true", help="Flag to clean up result files")
+    p = argparse.ArgumentParser()
+    p.add_argument("--skip", nargs="*", default=SKIP_FOLDERS)
+    p.add_argument("--run", nargs="*", default=RUN_FOLDERS)
+    p.add_argument("--timeout", type=check_timeout, default=DEFAULT_TIMEOUT)
+    p.add_argument("--output", default=JSON_OUTPUT)
+    p.add_argument("--report", default=HTML_OUTPUT)
+    p.add_argument("--generate-html", action="store_true")
+    p.add_argument("--pre-test-only", action="store_true")
+    p.add_argument("--clean-testfiles", action="store_true")
+    p.add_argument("--clean-results", action="store_true")
+    return p.parse_args()
 
-    args = parser.parse_args()
-    return args
-
-def compare_test_results(file1, file2):
-    with open(file1, 'r') as f1, open(file2, 'r') as f2:
-        main_report = json.load(f1)
-        curr_report = json.load(f2)
-    
-    new_failures = []
-    status = True
-    
-    for test_type in main_report:
-        prev_failures = set(main_report[test_type].get("failure", []))
-        curr_failures = set(curr_report[test_type].get("failure", []))
-
-        new_fails = curr_failures - prev_failures
-        if new_fails:
-            status = False
-            new_failures.extend(new_fails)
-    
-    return (status, new_failures)
+# Main ------------------------------------------------------------------------------
 
 def main():
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
-    skip_folders = args.skip
-    run_folders = args.run
-    timeout_sec = args.timeout
-    output_file = str(Path(args.output).with_suffix('.json'))
-    output_html_file = str(Path(args.report).with_suffix('.html'))
-    should_generate_html = True
-    pre_test_only = args.pre_test_only
-    clean_testfiles = args.clean_testfiles
-    clean_results = args.clean_results
 
-    if clean_results:
-        if os.path.isfile(output_file):
-            os.remove(output_file)
-        if os.path.isfile(output_html_file):
-            os.remove(output_html_file)
-        print(Path(LIND_FS_ROOT))
-        for file in Path(LIND_FS_ROOT).iterdir():
-            file.unlink()
+    out_json = str(Path(args.output).with_suffix(".json"))
+    out_html = str(Path(args.report).with_suffix(".html"))
+
+    if args.clean_results:
+        for f in (out_json, out_html):
+            try:
+                os.remove(f)
+            except FileNotFoundError:
+                pass
+        try:
+            shutil.rmtree(TESTFILES_DST)
+        except FileNotFoundError:
+            pass
         return
 
     results = {
         "deterministic": get_empty_result(),
-        "non_deterministic": get_empty_result()
+        "non_deterministic": get_empty_result(),
     }
 
     try:
         shutil.rmtree(TESTFILES_DST)
-        print(f"Testfiles at {LIND_FS_ROOT} deleted")
-    except FileNotFoundError as e:
-        print(f"Testfiles not present at {LIND_FS_ROOT}")
-    
-    if clean_testfiles:
+    except FileNotFoundError:
+        pass
+
+    if args.clean_testfiles:
         return
 
     pre_test()
-    if pre_test_only:
-        print(f"Testfiles copied to {LIND_FS_ROOT}")
+    if args.pre_test_only:
+        print("Testfiles copied; pre‑test step only.")
         return
 
-    skip_folders_paths = [Path(sf) for sf in skip_folders]
-    run_folders_paths = [Path(rf) for rf in run_folders]
-    
-    skip_test_cases = set()
+    all_tests = list(TEST_FILE_BASE.rglob("*.c"))
+    skip_cases = set()
     try:
-        with open(SKIP_TESTS_FILE, "r") as f:
-            skip_test_cases = {TEST_FILE_BASE / line.strip() for line in f if line.strip()}
+        with open(SKIP_TESTS_FILE) as f:
+            skip_cases = {TEST_FILE_BASE / line.strip() for line in f if line.strip()}
     except FileNotFoundError:
-        print(f"{SKIP_TESTS_FILE} not found")
+        pass
 
-
-    test_cases = list(TEST_FILE_BASE.rglob("*.c")) # Gets all c files in the TEST_FILE_BASE path at all depths
-    tests_to_run = []
-    for test_case in test_cases:
-        if should_run_file(test_case, run_folders_paths, skip_folders_paths, skip_test_cases):
-            tests_to_run.append(test_case)
-
-    if not tests_to_run:
-        print("No tests found")
+    run_list = [tc for tc in all_tests if should_run_file(tc, args.run, args.skip, skip_cases)]
+    if not run_list:
+        print("No tests to run.")
         return
 
-    total_count = len(tests_to_run)
-    for i, source_file in enumerate(tests_to_run):
-        print(f"[{i+1}/{total_count}] {source_file}")
-        parent_name = source_file.parent.name
+    for idx, test in enumerate(run_list, 1):
+        print(f"[{idx}/{len(run_list)}] {test.relative_to(TEST_FILE_BASE)}")
+        parent = test.parent.name
+        if parent == DETERMINISTIC_PARENT_NAME:
+            test_single_file_deterministic(test, results["deterministic"], args.timeout)
+        else:
+            test_single_file_non_deterministic(test, results["non_deterministic"], args.timeout)
+        # clean artifacts
+        for suf in (".wasm", ".cwasm", ".o"):
+            try:
+                test.with_suffix(suf).unlink()
+            except FileNotFoundError:
+                pass
 
-        # checks the name of immediate parent folder to see if a test is deterministic or non deterministic.
-        if parent_name == DETERMINISTIC_PARENT_NAME:
-            start_time = time.time()
-            test_single_file_deterministic(source_file, results["deterministic"], timeout_sec)
-            end_time = time.time()
-            results["deterministic"]["test_cases"][str(Path(source_file).resolve())]["timeTaken"] = end_time - start_time
-        elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
-            start_time = time.time()
-            test_single_file_non_deterministic(source_file, results["non_deterministic"], timeout_sec)
-            end_time = time.time()
-            results["non_deterministic"]["test_cases"][str(Path(source_file).resolve())]["timeTaken"] = end_time - start_time
+    shutil.rmtree(TESTFILES_DST, ignore_errors=True)
 
-        wasm_file = source_file.with_suffix(".wasm")
-        cwasm_file = source_file.with_suffix(".cwasm")
-        native_file = source_file.with_suffix(".o")
-        if wasm_file and wasm_file.exists():
-            wasm_file.unlink()
-        if cwasm_file and cwasm_file.exists():
-            cwasm_file.unlink()
-        if native_file and native_file.exists():
-            native_file.unlink()
-    
-    shutil.rmtree(TESTFILES_DST) # removes the test files from the lind fs root
-
-    with open(output_file, "w") as fp:
+    with open(out_json, "w") as fp:
         json.dump(results, fp, indent=4)
+    print(f"Saved results to {out_json}")
 
-    if should_generate_html:
-        report_html = generate_html_report(results)
-        with open(output_html_file, "w", encoding="utf-8") as out:
-            out.write(report_html)
-        print(f"'{output_html_file}' generated.")
-
-    print(f"'{os.path.abspath(output_file)}' generated.")
+    html = generate_html_report(results)
+    with open(out_html, "w", encoding="utf-8") as fp:
+        fp.write(html)
+    print(f"Saved HTML report to {out_html}")
 
 if __name__ == "__main__":
     main()
-
-
