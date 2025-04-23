@@ -1133,11 +1133,11 @@ pub mod fs_tests {
         assert_eq!(cbuf2str(&temp_buffer), "12");
 
         //duplicate the file descriptor
-        let fd2 = cage.dup_syscall(fd, None);
+        let fd2 = cage.dup_syscall(fd);
         assert!(fd != fd2);
 
         //essentially a no-op, but duplicate again -- they should be diff &fd's
-        let fd3 = cage.dup_syscall(fd, None);
+        let fd3 = cage.dup_syscall(fd);
         assert!(fd != fd2 && fd != fd3);
 
         //We don't need all three, though:
@@ -1186,7 +1186,7 @@ pub mod fs_tests {
         assert_eq!(cage.close_syscall(fd), 0);
 
         // Attempt to duplicate the invalid file descriptor
-        let new_fd = cage.dup_syscall(fd, None);
+        let new_fd = cage.dup_syscall(fd);
         assert_eq!(new_fd, -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
@@ -1207,7 +1207,7 @@ pub mod fs_tests {
         // Attempt to duplicate a file descriptor, which should fail
         let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
         assert_eq!(fd, -(Errno::EMFILE as i32));
-        let new_fd = cage.dup_syscall(fd, None);
+        let new_fd = cage.dup_syscall(fd);
         assert_eq!(new_fd, -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
