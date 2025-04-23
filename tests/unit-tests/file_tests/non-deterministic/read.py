@@ -1,4 +1,4 @@
-#!/bin/python2
+#!/usr/bin/env python3
 # Checks if read.c runs the same natively as it does within Lind
 import sys
 lindoutput = sys.argv[1].split('\n')
@@ -19,5 +19,5 @@ for line in lindoutput:
             over = True
 
 if not over:
-    print "Never read all of the necessary output"
+    print("Never read all of the necessary output")
     exit(-1)

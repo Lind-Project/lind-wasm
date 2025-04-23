@@ -1,4 +1,4 @@
-#!/bin/python2
+#!/usr/bin/env python3
 # Checks if pipe.c runs the same natively as it does within Lind
 import sys
 import string
@@ -8,13 +8,13 @@ host_result = sys.argv[2].split('\n')
 
 # Deterministic line comparison
 if len(lind_result) != len(host_result):
-    print "Mismatched number of lines!"
+    print("Mismatched number of lines!")
     exit(-1)
 
 resultLen = len(lind_result)
 for line in range(0,resultLen):
     if lind_result[line].rstrip(string.digits + '[, ]') != host_result[line].rstrip(string.digits + '[, ]'):
-        print "Lines do not match!"
+        print("Lines do not match!")
         exit(-1)
 
 # Nondeterministic digit check
@@ -23,12 +23,12 @@ host_line0 = host_result[0].split(',')
 
 if not (lind_line0[0][-1].isdigit() and lind_line0[1][1].isdigit() \
     and host_line0[0][-1].isdigit() and host_line0[1][1].isdigit()):
-    print "Nondeterministic lines of an unrecognized format!"
+    print("Nondeterministic lines of an unrecognized format!")
     exit(-1)
 
 # Verify # of bytes that write and read return
 lines = [lind_result[1].split(), host_result[1].split(), lind_result[2].split(), host_result[2].split()]
 for line in lines:
     if not (line[-1] == '3'):
-        print "Incorrect number of bytes written!"
+        print("Incorrect number of bytes written!")
         exit(-1)

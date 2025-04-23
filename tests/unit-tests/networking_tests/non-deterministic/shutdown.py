@@ -1,4 +1,4 @@
-#!/bin/python2
+#!/usr/bin/env python3
 # Checks if any failure occurs
 import sys
 
@@ -12,9 +12,9 @@ host_numbers = [int(line.split(':')[1]) for line in host_result.split('\n') if '
 host_numbers.sort()
 
 if lind_numbers != host_numbers:
-    print "Numbers don't match"
+    print("Numbers don't match")
     exit(-1)
 
 if "fail" in lind_result or "fail" in host_result:
-    print "Certain failure occured"
+    print("Certain failure occured")
     exit(-1)

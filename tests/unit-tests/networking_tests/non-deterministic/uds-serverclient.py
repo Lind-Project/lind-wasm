@@ -1,4 +1,4 @@
-#!/bin/python2
+#!/usr/bin/env python3
 # Check if uds-serverclient.c runs correctly in native as it does within Lind
 
 import re
@@ -15,10 +15,10 @@ native_result_split = native_results.split('\n')
 
 # Check if the number of lines are the same
 if len(lind_result_split) != len(native_result_split):
-    print "Mismatched number of lines!"
+    print("Mismatched number of lines!")
     exit(-1)
 
 # Check if same number of each line is contained in both lists
 if Counter(lind_result_split) != Counter(native_result_split):
-    print "Mismatched lines!\nLind: " + lind_result_split + "\nNative: " + native_result_split
+    print("Mismatched lines!\nLind: ") + lind_result_split + "\nNative: " + native_result_split
     exit(-1)

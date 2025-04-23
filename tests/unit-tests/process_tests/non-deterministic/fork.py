@@ -1,4 +1,4 @@
-#!/bin/python2
+#!/usr/bin/env python3
 # Checks if fork.c runs the same natively as it does within Lind
 import sys
 
@@ -21,17 +21,17 @@ for line in lind_result:
         for i in range(len(host_line)):
             if host_line[i].isdigit():
                 if not lind_line[i].isdigit():
-                    print "Nondeterministic part of unrecognized format"
+                    print("Nondeterministic part of unrecognized format")
                     exit(-1)
             else:
                 if host_line[i] != lind_line[i]:
-                    print "Mismatched deterministic parts?!"
+                    print("Mismatched deterministic parts?!")
                     exit(-1)
         del host[key]
     elif key.isdigit():
-        print "Extra lines in Lind output"
+        print("Extra lines in Lind output")
         exit(-1)
 
 if len(host) != 0:
-    print "Lines missing in Lind output"
+    print("Lines missing in Lind output")
     exit(-1)
