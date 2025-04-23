@@ -12,10 +12,10 @@ sysdep_headers += sys/elf.h sys/perm.h sys/reg.h sys/vm86.h sys/debugreg.h sys/i
 endif
 
 ifeq ($(subdir),nptl)
-CFLAGS-elision-lock.c += -mrtm
-CFLAGS-elision-unlock.c += -mrtm
-CFLAGS-elision-timed.c += -mrtm
-CFLAGS-elision-trylock.c += -mrtm
+CFLAGS-elision-lock.c += 
+CFLAGS-elision-unlock.c += 
+CFLAGS-elision-timed.c += 
+CFLAGS-elision-trylock.c += 
 endif
 
 ifeq ($(subdir),setjmp)
