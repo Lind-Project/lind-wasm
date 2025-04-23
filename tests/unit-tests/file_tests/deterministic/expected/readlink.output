@@ -1,0 +1,12 @@
+Test Case 1 failed: No such file or directory
+Test Case 3 failed: No such file or directory
+
+=== Test Case 1: Valid symbolic link ===
+
+=== Test Case 2: Path is not a symbolic link ===
+Expected failure: No such file or directory
+
+=== Test Case 3: Symbolic link with buffer too small ===
+
+=== Test Case 4: Non-existent path ===
+Expected failure: No such file or directory

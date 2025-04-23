@@ -1,0 +1,9 @@
+SERVER: New socket bound and listen
+SERVER: NEW CONNECTION
+Hello from client
+Message Received
+CLIENT: Hello message sent
+CLIENT: sending followup
+CLIENT: Closed connection
+Did you get my message?
+Closed connection on descriptor 12

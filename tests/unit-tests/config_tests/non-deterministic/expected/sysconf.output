@@ -1,0 +1,2 @@
+calling sysconf(sysconf())
+page size: 4096

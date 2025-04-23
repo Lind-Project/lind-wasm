@@ -1,0 +1,4 @@
+Initial program break: 0x555555559000
+New program break after allocation: 0x55555557b000
+Content in allocated memory: Hello, sbrk memory!
+Program break after deallocation: 0x55555557ac00

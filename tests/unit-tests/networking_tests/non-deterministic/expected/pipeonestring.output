@@ -1,0 +1,4 @@
+about to write to pipe in parent
+I'm parent with pid: 3146
+I'm child with pid: 0
+Hey Nick!

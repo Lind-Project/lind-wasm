@@ -1,0 +1,11 @@
+Waiting on select()...
+Hello message sent
+  Listening socket is readable
+  New incoming connection - 11
+Waiting on select()...
+  Descriptor 11 is readable
+  17 bytes received
+Hello from client
+  Connection closed
+Waiting on select()...
+  select() timed out.  End program.

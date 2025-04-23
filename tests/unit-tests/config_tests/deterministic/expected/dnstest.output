@@ -1,0 +1,4 @@
+is sockfd valid? yes
+37 is the length sent
+53 is the length recieved
+the dns lookup yields the ip address: 35.172.89.115

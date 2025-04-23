@@ -1,0 +1,8 @@
+Client 1 -- Hello message 1 sent ret: 18
+server -- Hello from client1
+client 1 -- Hello from server
+server -- Hello message 1 sent
+client 2 -- Hello message 2 sent ret: 18
+server -- Hello from client2
+server -- Hello message 2 sent
+client 2 -- Hello from server

@@ -1,0 +1,2 @@
+fstat on fd1 returns 0, should succeed
+fstat on fd2 returns 0, should fail

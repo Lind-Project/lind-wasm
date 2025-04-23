@@ -1,0 +1,6 @@
+
+duped fd: 9
+attempting to write to dup() fd
+
+write to dup() fd succeeded
+write to old fd succeeded

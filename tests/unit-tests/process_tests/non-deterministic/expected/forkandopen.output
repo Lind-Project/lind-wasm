@@ -1,0 +1,4 @@
+Parent: Testing open in parent: pid 2949!
+Parent: Pid 2949 opened fd 9
+Child: Testing open in child: pid 0!
+Child: Pid 0 opened fd 9
