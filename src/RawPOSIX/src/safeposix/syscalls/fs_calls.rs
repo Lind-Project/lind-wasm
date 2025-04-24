@@ -1636,8 +1636,8 @@ impl Cage {
         uaddr: u64,
         futex_op: u32,
         val: u32,
-        val2: u32,
-        uaddr2: u32,
+        val2: usize,
+        uaddr2: u64,
         val3: u32,
     ) -> i32 {
         let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };

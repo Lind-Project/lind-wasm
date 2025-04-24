@@ -769,8 +769,12 @@ pub fn check_and_convert_addr_ext(
 /// * `arg` - Virtual memory address to translate
 ///
 /// # Returns
-/// * `Ok(u64)` - Translated physical memory address
+/// * `Ok(u64)` - Translated physical memory address. NULL if user address is NULL.
 pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
+    // do not convert NULL pointer
+    if arg == 0 {
+        return Ok(0);
+    }
     // Get read lock on virtual memory map
     let vmmap = cage.vmmap.read();
     Ok(vmmap.base_address.unwrap() as u64 + arg)
