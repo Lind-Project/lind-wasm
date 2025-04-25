@@ -170,10 +170,7 @@ genrule(
     export GIT_DIR=$$PWD/.git
     export GIT_WORK_TREE=$$PWD
 
-    echo "=== GIT STATUS ==="
-    git status || echo "git status failed"
-    echo "=== GIT REMOTE SHOW ==="
-    git remote -v || echo "git remote failed"
+    
 
     set +e
     ./clippy_delta_bin --output-file $(location tests/ci-tests/clippy/clippy_out.json)
