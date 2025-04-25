@@ -50,51 +50,21 @@ mod colors {
     }
 }
 
-/// Runs Clippy on all crates that contain `.rs` files changed since the last shared commit
-/// with `origin/main`.
-///
-/// # Behavior
-/// 1. Uses `git` via subprocess to find the merge base between HEAD and `origin/main`.
-/// 2. Diffs the two commits to find all changed `.rs` files.
-/// 3. Walks up from each file to locate the nearest `Cargo.toml`.
-/// 4. Uses `cargo_metadata` to find canonical crate names.
-/// 5. Deduplicates affected crates and runs `cargo clippy` on each one.
-///
-/// If multiple files change within the same crate, that crate is only checked once.
-///
-/// # Errors
-/// Returns an error if:
-/// - Git commands fail or produce invalid output
-/// - Metadata cannot be extracted from `cargo metadata`
-/// - Any `cargo clippy` command fails
-///
-/// # Panics
-/// This function does not intentionally panic.
-///
-/// # Examples
-/// ```sh
-/// cargo run --manifest-path tests/ci-tests/clippy/Cargo.toml
-/// ```
+mod output;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Step 1: Get the merge base between HEAD and origin/main
-    let merge_base = Command::new("git")
-        .args(["merge-base", "HEAD", "origin/main"])
-        .output()?;
+    let merge_base = String::from_utf8(
+        Command::new("git")
+            .args(["merge-base", "HEAD", "origin/main"])
+            .output()?
+            .stdout,
+    )?
+    .trim()
+    .to_string();
 
-    if !merge_base.status.success() {
-        return Err("Failed to get merge base from git.".into());
-    }
-
-    let merge_base_sha = String::from_utf8(merge_base.stdout)?.trim().to_string();
-
-    // Step 2: Get list of changed Rust files since the merge base
     let diff_output = Command::new("git")
-        .args(["diff", "--name-only", &format!("{merge_base_sha}...HEAD")])
+        .args(["diff", "--name-only", &format!("{merge_base}...HEAD")])
         .output()?;
-
-    if !diff_output.status.success() {
-        return Err("Failed to get diff from git.".into());
-    }
 
     let changed_rs_files: Vec<PathBuf> = String::from_utf8(diff_output.stdout)?
         .lines()
@@ -112,87 +82,75 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  {}", f.display());
     }
 
-    // Step 3: Walk up to find Cargo.toml for each changed file
-    let mut crate_dirs = HashSet::new();
+    let mut manifest_paths = HashSet::new();
+
     for file in &changed_rs_files {
-        let mut current = file.parent();
-        while let Some(dir) = current {
-            if dir.join("Cargo.toml").exists() {
-                crate_dirs.insert(dir.to_path_buf());
-                break;
-            }
-            current = dir.parent();
+        if let Some(cargo_toml) = find_nearest_manifest(file) {
+            manifest_paths.insert(cargo_toml);
         }
     }
 
-    if crate_dirs.is_empty() {
-        println!("{}", colors::red("No crates found for changed files."));
+    if manifest_paths.is_empty() {
+        println!("{}", colors::red("No Cargo.toml files found for changed files."));
         return Ok(());
     }
 
-    // Step 4: Use cargo_metadata to resolve canonical crate names
-    let metadata = cargo_metadata::MetadataCommand::new()
-    .manifest_path("tests/ci-tests/clippy/Cargo.toml")
-    .exec()?;
-    let mut affected_crates = HashSet::new();
+    let mut results = Vec::new();
+    let mut any_failed = false;
 
-    for crate_dir in crate_dirs {
-        for package in &metadata.packages {
-            let manifest_path = Path::new(&package.manifest_path);
-            if manifest_path.starts_with(&crate_dir) {
-                affected_crates.insert(package.name.clone());
-            }
-        }
-    }
+    for manifest_path in &manifest_paths {
+        println!("Running Clippy for manifest at `{}`...", manifest_path.display());
 
-    if affected_crates.is_empty() {
-        println!("{}", colors::red("No crate names matched changed files."));
-        println!("{}", colors::green("Running Clippy for current package instead."));
-    
-        let status = Command::new("cargo")
+        let output = Command::new("cargo")
             .args([
                 "clippy",
                 "--manifest-path",
-                "tests/ci-tests/clippy/Cargo.toml",
+                &manifest_path.to_string_lossy(),
                 "--all-targets",
                 "--all-features",
                 "--",
                 "-D",
                 "warnings",
             ])
-            .status()?;
-    
-        if !status.success() {
-            eprintln!("{}", colors::red("Clippy failed on fallback run."));
-            std::process::exit(1);
-        }
-    
-        println!("{}", colors::green("Fallback Clippy run passed successfully."));
-        return Ok(());
-    }
+            .output()?;
 
-    // Step 5: Run Clippy for each affected crate
-    for krate in &affected_crates {
-        println!("Running Clippy for crate `{krate}`...");
-        let status = Command::new("cargo")
-            .args([
-                "clippy",
-                "-p",
-                krate,
-                "--all-targets",
-                "--all-features",
-                "--",
-                "-D",
-                "warnings",
-            ])
-            .status()?;
-
-        if !status.success() {
-            eprintln!("{}", colors::red(&format!("Clippy failed on crate `{krate}`.")));
-            std::process::exit(1);
+        if output.status.success() {
+            results.push(output::RunResult {
+                manifest_path: manifest_path.display().to_string(),
+                status: "success".to_string(),
+                error_body: None,
+            });
+            eprintln!("{}", colors::green(&format!("Clippy passed for manifest at `{}`.", manifest_path.display())));
+        } else {
+            any_failed = true;
+            results.push(output::RunResult {
+                manifest_path: manifest_path.display().to_string(),
+                status: "failure".to_string(),
+                error_body: Some(String::from_utf8_lossy(&output.stderr).to_string()),
+            });
+            eprintln!("{}", colors::red(&format!("Clippy failed for manifest at `{}`.", manifest_path.display())));
         }
     }
 
-    println!("{}", colors::green("All Clippy checks passed successfully."));
+    output::write_results(&results)?;
+
+    if any_failed {
+        std::process::exit(1);
+    }
+
+    println!("{}", colors::green("All Clippy checks passed."));
     Ok(())
+}
+
+/// Walk upward from a file to find the nearest Cargo.toml.
+fn find_nearest_manifest(start: &Path) -> Option<PathBuf> {
+    let mut current = start.parent();
+    while let Some(dir) = current {
+        let candidate = dir.join("Cargo.toml");
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        current = dir.parent();
+    }
+    None
 }
