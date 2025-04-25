@@ -149,6 +149,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if affected_crates.is_empty() {
         println!("{}", colors::red("No crate names matched changed files."));
+        println!("{}", colors::green("Running Clippy for current package instead."));
+    
+        let status = Command::new("cargo")
+            .args([
+                "clippy",
+                "--manifest-path",
+                "tests/ci-tests/clippy/Cargo.toml",
+                "--all-targets",
+                "--all-features",
+                "--",
+                "-D",
+                "warnings",
+            ])
+            .status()?;
+    
+        if !status.success() {
+            eprintln!("{}", colors::red("Clippy failed on fallback run."));
+            std::process::exit(1);
+        }
+    
+        println!("{}", colors::green("Fallback Clippy run passed successfully."));
         return Ok(());
     }
 
