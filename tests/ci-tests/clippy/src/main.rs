@@ -60,22 +60,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output_file = args.iter()
         .position(|arg| arg == "--output-file")
         .and_then(|pos| args.get(pos + 1))
-        .map(|s| s.clone())
+        .cloned()
         .unwrap_or_else(|| "tests/ci-tests/clippy/clippy_out.json".to_string());
 
 
+    let merge_base = String::from_utf8(
+        Command::new("git")
+            .args(["merge-base", "origin/main", "HEAD"])
+            .output()?
+            .stdout,
+    )?.trim().to_string();
+    
     let diff_output = Command::new("git")
-    .args(["diff", "--name-only", "HEAD^..HEAD", "--","*.rs"])
-    .output()?;
+        .args(["diff", "--name-only", &format!("{merge_base}..HEAD"), "--", "*.rs"])
+        .output()?;
     
     let changed_rs_files: Vec<PathBuf> = String::from_utf8(diff_output.stdout)?
-        .lines()        
+        .lines()
         .map(PathBuf::from)
         .collect();
     
-
     if changed_rs_files.is_empty() {
-        println!("{}", colors::green("No changed Rust files found in HEAD commit."));
+        println!("{}", colors::green("No changed Rust files found since branch diverged from origin/main."));
         output::write_results(&[], &output_file)?;
         return Ok(());
     }
