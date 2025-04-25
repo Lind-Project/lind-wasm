@@ -175,7 +175,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 5: Run Clippy for each affected crate
     for krate in &affected_crates {
-        println!("Running Clippy for crate `{}`...", krate);
+        println!("Running Clippy for crate `{krate}`...");
         let status = Command::new("cargo")
             .args([
                 "clippy",
@@ -190,7 +190,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .status()?;
 
         if !status.success() {
-            eprintln!("{}", colors::red(&format!("Clippy failed on crate `{}`.", krate)));
+            eprintln!("{}", colors::red(&format!("Clippy failed on crate `{krate}`.")));
             std::process::exit(1);
         }
     }
