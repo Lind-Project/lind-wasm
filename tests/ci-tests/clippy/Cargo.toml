@@ -1,0 +1,9 @@
+[package]
+name = "clippy_delta"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+git2 = "0.18"
+cargo_metadata = "0.18"
+atty = "0.2"
