@@ -160,25 +160,49 @@ rust_binary(
 genrule(
     name = "run_clippy_manifest_scan",
     srcs = [
-        ":clippy_delta",
-        ":git_files",
+        ":clippy_delta",        
     ],
     outs = ["tests/ci-tests/clippy/clippy_out.json"],
     cmd = """
-        cp $(location :clippy_delta) clippy_delta_bin
-        chmod +x clippy_delta_bin
-        ./clippy_delta_bin --output-file $(location tests/ci-tests/clippy/clippy_out.json)
+    cp $(location :clippy_delta) clippy_delta_bin
+    chmod +x clippy_delta_bin
+
+    export GIT_DIR=$$PWD/.git
+    export GIT_WORK_TREE=$$PWD
+
+    echo "=== GIT STATUS ==="
+    git status || echo "git status failed"
+    echo "=== GIT REMOTE SHOW ==="
+    git remote -v || echo "git remote failed"
+
+    set +e
+    ./clippy_delta_bin --output-file $(location tests/ci-tests/clippy/clippy_out.json)
+    status=$$
+    set -e
+
+    echo ""
+    echo "==================================================="
+    if [ $$status -ne 0 ]; then
+        echo "Clippy checks failed. Full results written to:"
+    else
+        echo "Clippy checks passed. Full results written to:"
+    fi
+    echo "  bazel-bin/tests/ci-tests/clippy/clippy_out.json"
+    echo "==================================================="
+    
+    exit $$status
     """,
     executable = True,
-    tags = ["no-cache"],
+    tags = ["no-cache", "no-sandbox"],
 )
 
+
 #FileGroup for .git files
-filegroup(
-    name = "git_files",
-    srcs = glob([".git/**/*"]),
-    visibility = ["//visibility:private"],
-)
+# filegroup(
+#     name = "git_files",
+#     srcs = glob([".git/**/*"]),
+#     visibility = ["//visibility:private"],
+# )
 
 
 # FileGroup for src/RawPOSIX files
