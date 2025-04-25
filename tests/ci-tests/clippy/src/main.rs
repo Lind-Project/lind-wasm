@@ -10,8 +10,6 @@
 //! - Each file is traced upward to the nearest `Cargo.toml`.
 //! - The list of affected crates is deduplicated to ensure Clippy only runs once per crate.
 //!
-//! Even if multiple Rust files are changed within the same crate, that crate is only linted once.
-//!
 //! # Usage
 //! ```sh
 //! cargo run --manifest-path tests/ci-tests/clippy/Cargo.toml
