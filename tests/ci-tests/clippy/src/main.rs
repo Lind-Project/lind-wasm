@@ -74,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if changed_rs_files.is_empty() {
         println!("{}", colors::green("No changed Rust files found since origin/main."));
+        output::write_results(&[])?;
         return Ok(());
     }
 
@@ -92,6 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if manifest_paths.is_empty() {
         println!("{}", colors::red("No Cargo.toml files found for changed files."));
+        output::write_results(&[])?;
         return Ok(());
     }
 
