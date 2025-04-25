@@ -34,15 +34,13 @@ pub struct RunResult {
 /// ```
 /// output::write_results(&results)?;
 /// ```
-pub fn write_results(results: &[RunResult]) -> Result<(), Box<dyn std::error::Error>> {
-    let output_path = Path::new("tests/ci-tests/clippy/clippy_out.json");
-
+pub fn write_results(results: &[RunResult], output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let output_path = Path::new(output_path);
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-
     let file = File::create(output_path)?;
     serde_json::to_writer_pretty(file, &serde_json::json!({ "results": results }))?;
-
     Ok(())
 }
+

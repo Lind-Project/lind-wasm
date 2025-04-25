@@ -19,6 +19,7 @@ use std::{
     collections::HashSet,
     path::{Path, PathBuf},
     process::Command,
+    env,
 };
 
 /// Simple ANSI escape codes and color logic for output.
@@ -53,6 +54,16 @@ mod colors {
 mod output;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+    let args: Vec<String> = env::args().collect();
+
+    let output_file = args.iter()
+        .position(|arg| arg == "--output-file")
+        .and_then(|pos| args.get(pos + 1))
+        .map(|s| s.clone())
+        .unwrap_or_else(|| "tests/ci-tests/clippy/clippy_out.json".to_string());
+
+
     let merge_base = String::from_utf8(
         Command::new("git")
             .args(["merge-base", "HEAD", "origin/main"])
@@ -74,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if changed_rs_files.is_empty() {
         println!("{}", colors::green("No changed Rust files found since origin/main."));
-        output::write_results(&[])?;
+        output::write_results(&[], &output_file)?;
         return Ok(());
     }
 
@@ -93,7 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if manifest_paths.is_empty() {
         println!("{}", colors::red("No Cargo.toml files found for changed files."));
-        output::write_results(&[])?;
+        output::write_results(&[], &output_file)?;
         return Ok(());
     }
 
@@ -134,7 +145,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    output::write_results(&results)?;
+    output::write_results(&results, &output_file)?;
 
     if any_failed {
         std::process::exit(1);
