@@ -7,3 +7,5 @@ edition = "2021"
 git2 = "0.18"
 cargo_metadata = "0.18"
 atty = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
