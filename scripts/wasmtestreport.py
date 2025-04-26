@@ -28,8 +28,8 @@ HTML_OUTPUT = "report.html"
 SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will not run
 RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will run
 
-LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/Users/a6/lind/Testing/lind-wasm")
-LIND_FS_ROOT = os.environ.get("LIND_FS_ROOT", "/Users/a6/lind/Testing/lind-wasm/src/RawPOSIX/tmp")
+LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
+LIND_FS_ROOT = os.environ.get("LIND_FS_ROOT", "/home/lind/lind-wasm/src/RawPOSIX/tmp")
 
 TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
 TESTFILES_SRC = Path(f"{LIND_WASM_BASE}/tests/testfiles")
@@ -371,7 +371,6 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
                     )
                     add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info)
             elif retcode == 139 or retcode == 134:
-                print('gere')
                 add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", wasm_run_output)
             else:
                 add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
