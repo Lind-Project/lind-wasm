@@ -150,7 +150,8 @@ steps:
         fi
 
         echo "Running tests"
-        docker exec "$$CONTAINER_ID" /bin/bash -c "bazel run //:python_tests && bazel build //:run_clippy_manifest_scan"
+        docker exec "$$CONTAINER_ID" /bin/bash -c "bazel build //:run_clippy_manifest_scan"
+        docker exec "$$CONTAINER_ID" /bin/bash -c "bazel run //:python_tests"
 
         
         echo "Copying test results"
