@@ -12,12 +12,19 @@ enum SignalDefaultHandler {
 }
 
 // handle all the epoch callback
-pub fn signal_handler<
-    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-    U: Clone + Send + 'static + std::marker::Sync,
->(
-    caller: &mut Caller<'_, T>,
-) -> i32 {
+// this is where the wasm instance is directed when epoch is triggered
+// this function could possibly be on the callstack of the Asyncify operation
+// therefore this function needs to be compatible with Asyncify as well
+// If it is not in Asyncify state, then we do the following to handle the epoch callback
+// 1. check if epoch is triggered due to `killed` action, if it is, perform a suicide
+// 2. otherwise, retrieve the signal one by one and its handler
+// 3. if it is a default handler, we looked up the table and execute the default handler
+//    a. in case of termination, we signal all other threads in the cage to `killed` state and perform a suicide
+//    b. in case of ignore, we simply ignore this signal and do not do anything
+//    c. in case of stop/continue, this is currently also ignored but would possibly be a TODO to implement in the future
+// 4. otherwise if it is a custom handler, just call into glibc's signal handler directly
+pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
+        (caller: &mut Caller<'_, T>) -> i32 {
     // retrieve glibc's signal callback function, see line #87 in glibc/sysdeps/unix/sysv/linux/i386/libc_sigaction.c for more detail
     let signal_func = caller.get_signal_callback().unwrap();
 
@@ -141,6 +148,7 @@ pub fn thread_suicide() -> ! {
 }
 
 // maps each signal to its default handler
+// see https://man7.org/linux/man-pages/man7/signal.7.html for more information
 fn signal_default_handler_dispatcher(signo: i32) -> SignalDefaultHandler {
     match signo {
         rawposix::constants::SIGHUP => SignalDefaultHandler::Terminate,

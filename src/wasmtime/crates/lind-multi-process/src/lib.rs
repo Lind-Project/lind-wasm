@@ -21,6 +21,9 @@ use wasmtime_environ::MemoryIndex;
 pub mod clone_constants;
 pub mod signal;
 
+pub const CAGE_START_ID: i32 = 1; // cage id starts from 1
+pub const THREAD_START_ID: i32 = 1; // thread id starts from 1
+
 const ASYNCIFY_START_UNWIND: &str = "asyncify_start_unwind";
 const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
@@ -131,22 +134,10 @@ impl<
         let exec_host = Arc::new(exec);
 
         // cage id starts from 1
-        let pid = 1;
-        let tid = 1;
-        let next_threadid = Arc::new(AtomicU32::new(1)); // cageid starts from 1
-        Ok(Self {
-            linker,
-            module: module.clone(),
-            pid,
-            tid,
-            next_cageid,
-            next_threadid,
-            lind_manager: lind_manager.clone(),
-            run_command,
-            get_cx,
-            fork_host,
-            exec_host,
-        })
+        let pid = CAGE_START_ID;
+        let tid = THREAD_START_ID;
+        let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
+        Ok(Self { linker, module: module.clone(), pid, tid, next_cageid, next_threadid, lind_manager: lind_manager.clone(), run_command, get_cx, fork_host, exec_host })
     }
 
     // create a new LindContext with provided pid (cageid). This function is used by exec_syscall to create a new lindContext
@@ -186,8 +177,8 @@ impl<
         let fork_host = Arc::new(fork_host);
         let exec_host = Arc::new(exec);
 
-        let next_threadid = Arc::new(AtomicU32::new(1)); // thread id starts from 1
-        let tid = 1;
+        let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32));
+        let tid = THREAD_START_ID;
 
         Ok(Self {
             linker,
@@ -373,6 +364,7 @@ impl<
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         let signal_asyncify_data = store.get_signal_asyncify_data();
+        let syscall_asyncify_data = store.get_syscall_asyncify_data();
         let is_parent_thread = store.is_thread();
         store.set_on_called(Box::new(move |mut store| {
             // unwind finished and we need to stop the unwind
@@ -407,16 +399,36 @@ impl<
                         store.set_is_thread(true);
                     }
 
-                    // instantiate the module
-                    let instance = instance_pre
-                        .instantiate_with_lind(
-                            &mut store,
-                            InstantiateType::InstantiateChild {
-                                parent_pid: parent_pid as u64,
-                                child_pid: child_cageid,
-                            },
-                        )
-                        .unwrap();
+                // instantiate the module
+                let instance = instance_pre.instantiate_with_lind(&mut store,
+                    InstantiateType::InstantiateChild {
+                        parent_pid: parent_pid as u64, child_pid: child_cageid
+                    }).unwrap();
+                
+                println!("child instantiate");
+
+                // let tls_base = instance.get_global(&mut store, "__tls_base").unwrap();
+                // let tls_base_val = tls_base.get(&mut store);
+                // println!("tls base: {:?}", tls_base_val);
+                let tls_base = instance
+                    .get_export(&mut store, "__tls_base")
+                    .and_then(|export| export.into_global());
+                if tls_base.is_some() {
+                    let tls_base = tls_base.unwrap();
+                    tls_base.set(&mut store, Val::I32(1024));
+                }
+                // retrieve the epoch global
+                let lind_epoch = instance
+                    .get_export(&mut store, "epoch")
+                    .and_then(|export| export.into_global())
+                    .expect("Failed to find shared_global");
+                // retrieve the handler (underlying pointer) for the epoch global
+                let pointer = lind_epoch.get_handler(&mut store);
+                // initialize the signal for the main thread of forked cage
+                rawposix::interface::lind_signal_init(child_cageid,
+                                        pointer,
+                                             THREAD_START_ID,
+                                        true /* this is the main thread */);
 
                     // retrieve the epoch global
                     let lind_epoch = instance
@@ -484,34 +496,45 @@ impl<
                             return 0;
                         }
 
-                        // get the exit code of the module
-                        let exit_code = results
-                            .get(0)
-                            .expect("_start function does not have a return value");
-                        match exit_code {
-                            Val::I32(val) => {
-                                // exit the thread
-                                if rawposix::interface::lind_thread_exit(child_cageid, 1) {
-                                    // we clean the cage only if this is the last thread in the cage
-                                    // exit the cage with the exit code
-                                    lind_syscall_api(
-                                        child_cageid,
-                                        EXIT_SYSCALL as u32,
-                                        0,
-                                        *val as u64,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                    );
+                    store.as_context_mut().set_stack_top(parent_stack_low);
+                    store.as_context_mut().set_stack_base(parent_stack_high);
+                    store.as_context_mut().set_signal_asyncify_data(signal_asyncify_data);
+                    store.as_context_mut().set_syscall_asyncify_data(syscall_asyncify_data);
 
-                                    // the cage just exited, decrement the cage counter
-                                    lind_manager.decrement();
-                                }
-                            }
-                            _ => {
-                                eprintln!("unexpected _start function return type!");
+                    // println!("child ready to start");
+
+                    let invoke_res = child_start_func
+                        .call(&mut store, &values, &mut results);
+
+                    // print errors if any when running the child process
+                    if let Err(err) = invoke_res {
+                        let e = wasi_common::maybe_exit_on_error(err);
+                        eprintln!("Error: {:?}", e);
+                        return 0;
+                    }
+
+                    // get the exit code of the module
+                    let exit_code = results.get(0).expect("_start function does not have a return value");
+                    match exit_code {
+                        Val::I32(val) => {
+                            // exit the main thread
+                            if rawposix::interface::lind_thread_exit(child_cageid, THREAD_START_ID as u64) {
+                                // we clean the cage only if this is the last thread in the cage
+                                // exit the cage with the exit code
+                                lind_syscall_api(
+                                    child_cageid,
+                                    EXIT_SYSCALL as u32,
+                                    0,
+                                    *val as u64,
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                    0,
+                                );
+
+                                // the cage just exited, decrement the cage counter
+                                lind_manager.decrement();
                             }
                         }
                     }
@@ -686,20 +709,25 @@ impl<
                         .unwrap();
                     let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
 
-                    // retrieve the epoch global
-                    let lind_epoch = instance
-                        .get_export(&mut store, "epoch")
-                        .and_then(|export| export.into_global())
-                        .expect("Failed to find shared_global");
-                    // retrieve the handler (underlying pointer) for the epoch global
-                    let pointer = lind_epoch.get_handler(&mut store);
-                    // initialize the signal for the thread of the cage
-                    rawposix::interface::lind_signal_init(
-                        child_cageid as u64,
-                        pointer,
-                        next_tid as i32,
-                        false,
-                    );
+                let tls_base = instance
+                    .get_export(&mut store, "__tls_base")
+                    .and_then(|export| export.into_global());
+                if tls_base.is_some() {
+                    let tls_base = tls_base.unwrap();
+                    tls_base.set(&mut store, Val::I32(1024));
+                }
+                // retrieve the epoch global
+                let lind_epoch = instance
+                    .get_export(&mut store, "epoch")
+                    .and_then(|export| export.into_global())
+                    .expect("Failed to find shared_global");
+                // retrieve the handler (underlying pointer) for the epoch global
+                let pointer = lind_epoch.get_handler(&mut store);
+                // initialize the signal for the thread of the cage
+                rawposix::interface::lind_signal_init(child_cageid as u64,
+                                        pointer,
+                                             next_tid as i32,
+                                        false /* this is not the main thread */);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;

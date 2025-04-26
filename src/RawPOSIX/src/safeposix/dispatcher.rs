@@ -3,6 +3,7 @@
 // retreive cage table
 
 const ACCESS_SYSCALL: i32 = 2;
+const UNLINKAT_SYSCALL: i32 = 3;
 const UNLINK_SYSCALL: i32 = 4;
 const LINK_SYSCALL: i32 = 5;
 const RENAME_SYSCALL: i32 = 6;
@@ -66,24 +67,10 @@ const FORK_SYSCALL: i32 = 68;
 const EXEC_SYSCALL: i32 = 69;
 
 const MUTEX_CREATE_SYSCALL: i32 = 70;
-const MUTEX_DESTROY_SYSCALL: i32 = 71;
-const MUTEX_LOCK_SYSCALL: i32 = 72;
-const MUTEX_TRYLOCK_SYSCALL: i32 = 73;
-const MUTEX_UNLOCK_SYSCALL: i32 = 74;
 const COND_CREATE_SYSCALL: i32 = 75;
-const COND_DESTROY_SYSCALL: i32 = 76;
-const COND_WAIT_SYSCALL: i32 = 77;
-const COND_BROADCAST_SYSCALL: i32 = 78;
-const COND_SIGNAL_SYSCALL: i32 = 79;
 const COND_TIMEDWAIT_SYSCALL: i32 = 80;
 
-const SEM_INIT_SYSCALL: i32 = 91;
-const SEM_WAIT_SYSCALL: i32 = 92;
-const SEM_TRYWAIT_SYSCALL: i32 = 93;
 const SEM_TIMEDWAIT_SYSCALL: i32 = 94;
-const SEM_POST_SYSCALL: i32 = 95;
-const SEM_DESTROY_SYSCALL: i32 = 96;
-const SEM_GETVALUE_SYSCALL: i32 = 97;
 const FUTEX_SYSCALL: i32 = 98;
 
 const GETHOSTNAME_SYSCALL: i32 = 125;
@@ -120,6 +107,7 @@ const WAIT_SYSCALL: i32 = 172;
 const WAITPID_SYSCALL: i32 = 173;
 const BRK_SYSCALL: i32 = 175;
 const SBRK_SYSCALL: i32 = 176;
+const MPROTECT_SYSCALL: i32 = 177;
 
 const NANOSLEEP_TIME64_SYSCALL: i32 = 181;
 const CLOCK_GETTIME_SYSCALL: i32 = 191;
@@ -191,7 +179,10 @@ pub fn lind_syscall_api(
     let start_address = vmmap.base_address.unwrap() as u64;
     drop(vmmap);
     drop(cage);
-    if call_number as i32 != WRITE_SYSCALL && cageid != 0 {
+    if call_number as i32 != WRITE_SYSCALL
+        && call_number as i32 != CLOCK_GETTIME_SYSCALL
+        && cageid != 0
+    {
         match call_name {
             0 => {
                 println!(
@@ -230,6 +221,7 @@ pub fn lind_syscall_api(
         WRITEV_SYSCALL => {
             let fd = arg1 as i32;
             let iovcnt = arg3 as i32;
+            // println!("iovcnt: {}", iovcnt);
             // Validate count first
             if iovcnt <= 0 {
                 return syscall_error(Errno::EINVAL, "writev", "invalid iovec count");
@@ -238,6 +230,15 @@ pub fn lind_syscall_api(
             // Convert iovec array address
             let iov_base =
                 translate_vmmap_addr(&cage, arg2).unwrap() as *const interface::IovecStruct;
+            // println!("rawposix iovec size: {}", std::mem::size_of::<libc::iovec>());
+            for i in 0..iovcnt {
+                let cur_iov_base = unsafe { iov_base.add(i as usize) } as *mut libc::iovec;
+                let old_base = unsafe { (*cur_iov_base).iov_base } as u64;
+                let len = unsafe { (*cur_iov_base).iov_len };
+                let new_base = translate_vmmap_addr(&cage, old_base as u64).unwrap();
+                // println!("old base: {}, new_base: {}, len: {}", old_base as u64, new_base, len);
+                unsafe { (*cur_iov_base).iov_base = new_base as *mut libc::c_void }
+            }
             // The actual write operation is delegated to the cage implementation
             cage.writev_syscall(fd, iov_base, iovcnt)
         }
@@ -404,17 +405,41 @@ pub fn lind_syscall_api(
             // Get reference to the cage for memory operations
             let cage = interface::cagetable_getref(cageid);
             // Convert readfds buffer address
-            let readfds_addr = translate_vmmap_addr(&cage, arg2).unwrap();
-            let readfds = interface::get_fdset(readfds_addr).unwrap();
+            let readfds = {
+                if arg2 == 0 {
+                    None
+                } else {
+                    let readfds_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+                    interface::get_fdset(readfds_addr).unwrap()
+                }
+            };
             // Convert writefds buffer address
-            let writefds_addr = translate_vmmap_addr(&cage, arg3).unwrap();
-            let writefds = interface::get_fdset(writefds_addr).unwrap();
+            let writefds = {
+                if arg3 == 0 {
+                    None
+                } else {
+                    let writefds_addr = translate_vmmap_addr(&cage, arg3).unwrap();
+                    interface::get_fdset(writefds_addr).unwrap()
+                }
+            };
             // Convert errorfds buffer address
-            let errorfds_addr = translate_vmmap_addr(&cage, arg4).unwrap();
-            let errorfds = interface::get_fdset(errorfds_addr).unwrap();
+            let errorfds = {
+                if arg4 == 0 {
+                    None
+                } else {
+                    let errorfds_addr = translate_vmmap_addr(&cage, arg4).unwrap();
+                    interface::get_fdset(errorfds_addr).unwrap()
+                }
+            };
             // Convert timeout buffer address
-            let timeout_addr = translate_vmmap_addr(&cage, arg5).unwrap();
-            let rposix_timeout = interface::duration_fromtimeval(timeout_addr).unwrap();
+            let rposix_timeout = {
+                if arg5 == 0 {
+                    None
+                } else {
+                    let timeout_addr = translate_vmmap_addr(&cage, arg5).unwrap();
+                    interface::duration_fromtimeval(timeout_addr).unwrap()
+                }
+            };
             // Delegate to the cage's select implementation
             // This will:
             // 1. Monitor the specified file descriptors for activity
@@ -563,6 +588,17 @@ pub fn lind_syscall_api(
             // Perform fstat operation through cage implementation
             // File descriptor validation and actual operation handled by cage layer
             cage.fstat_syscall(fd, buf)
+        }
+
+        UNLINKAT_SYSCALL => {
+            let fd = arg1 as i32;
+
+            let cage = interface::cagetable_getref(cageid);
+            let addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            let pathname = interface::types::get_cstr(addr).unwrap();
+
+            let flags = arg3 as i32;
+            cage.unlinkat_syscall(fd, pathname, flags)
         }
 
         UNLINK_SYSCALL => {
@@ -771,107 +807,6 @@ pub fn lind_syscall_api(
             cage.shmdt_syscall(shmaddr)
         }
 
-        MUTEX_DESTROY_SYSCALL => {
-            let mutex_handle = arg1 as i32;
-
-            // Perform mutex destroy operation through cage implementation
-            interface::cagetable_getref(cageid).mutex_destroy_syscall(mutex_handle)
-        }
-
-        MUTEX_LOCK_SYSCALL => {
-            let mutex_handle = arg1 as i32;
-
-            // Perform mutex lock operation through cage implementation
-            interface::cagetable_getref(cageid).mutex_lock_syscall(mutex_handle)
-        }
-
-        MUTEX_TRYLOCK_SYSCALL => {
-            let mutex_handle = arg1 as i32;
-
-            // Perform mutex trylock operation through cage implementation
-            interface::cagetable_getref(cageid).mutex_trylock_syscall(mutex_handle)
-        }
-
-        MUTEX_UNLOCK_SYSCALL => {
-            let mutex_handle = arg1 as i32;
-
-            // Perform mutex unlock operation through cage implementation
-            interface::cagetable_getref(cageid).mutex_unlock_syscall(mutex_handle)
-        }
-
-        COND_DESTROY_SYSCALL => {
-            let cv_handle = arg1 as i32;
-
-            // Perform condition variable destroy operation through cage implementation
-            interface::cagetable_getref(cageid).cond_destroy_syscall(cv_handle)
-        }
-
-        COND_WAIT_SYSCALL => {
-            let cv_handle = arg1 as i32;
-            let mutex_handle = arg2 as i32;
-
-            // Perform condition variable wait operation through cage implementation
-            interface::cagetable_getref(cageid).cond_wait_syscall(cv_handle, mutex_handle)
-        }
-
-        COND_BROADCAST_SYSCALL => {
-            let cv_handle = arg1 as i32;
-
-            // Perform condition variable broadcast operation through cage implementation
-            interface::cagetable_getref(cageid).cond_broadcast_syscall(cv_handle)
-        }
-
-        COND_SIGNAL_SYSCALL => {
-            let cv_handle = arg1 as i32;
-
-            // Perform condition variable signal operation through cage implementation
-            interface::cagetable_getref(cageid).cond_signal_syscall(cv_handle)
-        }
-
-        SEM_INIT_SYSCALL => {
-            let sem_handle = arg1 as u32;
-            let pshared = arg2 as i32;
-            let value = arg3 as u32;
-
-            // Perform semaphore initialization operation through cage implementation
-            interface::cagetable_getref(cageid).sem_init_syscall(sem_handle, pshared, value)
-        }
-
-        SEM_WAIT_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            // Perform semaphore wait operation through cage implementation
-            interface::cagetable_getref(cageid).sem_wait_syscall(sem_handle)
-        }
-
-        SEM_TRYWAIT_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            // Perform semaphore try wait operation through cage implementation
-            interface::cagetable_getref(cageid).sem_trywait_syscall(sem_handle)
-        }
-
-        SEM_POST_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            // Perform semaphore post operation through cage implementation
-            interface::cagetable_getref(cageid).sem_post_syscall(sem_handle)
-        }
-
-        SEM_DESTROY_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            // Perform semaphore destroy operation through cage implementation
-            interface::cagetable_getref(cageid).sem_destroy_syscall(sem_handle)
-        }
-
-        SEM_GETVALUE_SYSCALL => {
-            let sem_handle = arg1 as u32;
-
-            // Perform semaphore get value operation through cage implementation
-            interface::cagetable_getref(cageid).sem_getvalue_syscall(sem_handle)
-        }
-
         PWRITE_SYSCALL => {
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
@@ -964,10 +899,6 @@ pub fn lind_syscall_api(
             let backlog = arg2 as i32;
             interface::cagetable_getref(cageid).listen_syscall(virtual_fd, backlog)
         }
-
-        MUTEX_CREATE_SYSCALL => interface::cagetable_getref(cageid).mutex_create_syscall(),
-
-        COND_CREATE_SYSCALL => interface::cagetable_getref(cageid).cond_create_syscall(),
 
         GETHOSTNAME_SYSCALL => {
             let len = arg2 as usize;
@@ -1329,7 +1260,10 @@ pub fn lind_syscall_api(
         _ => -1, // Return -1 for unknown syscalls
     };
 
-    if call_number as i32 != WRITE_SYSCALL && cageid != 0 {
+    if call_number as i32 != WRITE_SYSCALL
+        && call_number as i32 != CLOCK_GETTIME_SYSCALL
+        && cageid != 0
+    {
         match call_name {
             0 => {
                 if ret < 0 {
@@ -1387,9 +1321,6 @@ pub fn lindrustinit(verbosity: isize) {
         getegid: interface::RustAtomicI32::new(-1),
         geteuid: interface::RustAtomicI32::new(-1),
         rev_shm: interface::Mutex::new(vec![]),
-        mutex_table: interface::RustLock::new(vec![]),
-        cv_table: interface::RustLock::new(vec![]),
-        sem_table: interface::RustHashMap::new(),
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),
@@ -1462,9 +1393,6 @@ pub fn lindrustinit(verbosity: isize) {
         getegid: interface::RustAtomicI32::new(-1),
         geteuid: interface::RustAtomicI32::new(-1),
         rev_shm: interface::Mutex::new(vec![]),
-        mutex_table: interface::RustLock::new(vec![]),
-        cv_table: interface::RustLock::new(vec![]),
-        sem_table: interface::RustHashMap::new(),
         thread_table: interface::RustHashMap::new(),
         signalhandler: interface::RustHashMap::new(),
         sigset: interface::RustAtomicU64::new(0),

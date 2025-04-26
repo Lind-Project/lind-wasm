@@ -311,229 +311,43 @@ pub struct AdvisoryLock {
     advisory_condvar: Condvar,
 }
 
-pub struct RawMutex {
-    inner: libc::pthread_mutex_t,
-}
+pub fn timeout_setup(rposix_timeout: Option<Duration>) -> (Duration, libc::timeval) {
+    let end_time = match rposix_timeout {
+        Some(duration) => duration,
+        None => Duration::MAX,
+    };
 
-impl RawMutex {
-    pub fn create() -> Result<Self, i32> {
-        let libcret;
-        let mut retval = Self {
-            inner: unsafe { std::mem::zeroed() },
+    let mut timeout;
+    if end_time > Duration::from_millis(100) {
+        timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: 1000000, // 100ms
         };
-        unsafe {
-            libcret = libc::pthread_mutex_init(
-                (&mut retval.inner) as *mut libc::pthread_mutex_t,
-                std::ptr::null(),
-            );
-        }
-        if libcret < 0 {
-            Err(libcret)
-        } else {
-            Ok(retval)
-        }
-    }
-
-    pub fn lock(&self) -> i32 {
-        unsafe {
-            libc::pthread_mutex_lock(
-                (&self.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t,
-            )
-        }
-    }
-
-    pub fn trylock(&self) -> i32 {
-        unsafe {
-            libc::pthread_mutex_trylock(
-                (&self.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t,
-            )
-        }
-    }
-
-    pub fn unlock(&self) -> i32 {
-        unsafe {
-            libc::pthread_mutex_unlock(
-                (&self.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t,
-            )
-        }
-    }
-}
-
-impl std::fmt::Debug for RawMutex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("<mutex>")
-    }
-}
-
-impl Drop for RawMutex {
-    fn drop(&mut self) {
-        unsafe {
-            libc::pthread_mutex_destroy((&mut self.inner) as *mut libc::pthread_mutex_t);
-        }
-    }
-}
-
-pub struct RawCondvar {
-    inner: libc::pthread_cond_t,
-}
-
-impl RawCondvar {
-    pub fn create() -> Result<Self, i32> {
-        let libcret;
-        let mut retval = Self {
-            inner: unsafe { std::mem::zeroed() },
+    } else {
+        timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: end_time.subsec_micros() as i64,
         };
-        unsafe {
-            libcret = libc::pthread_cond_init(
-                (&mut retval.inner) as *mut libc::pthread_cond_t,
-                std::ptr::null(),
-            );
-        }
-        if libcret < 0 {
-            Err(libcret)
+    }
+
+    (end_time, timeout)
+}
+
+pub fn timeout_setup_ms(timeout_ms: i32) -> (Duration, i32) {
+    let end_time = {
+        if timeout_ms >= 0 {
+            Duration::from_millis(timeout_ms as u64)
         } else {
-            Ok(retval)
+            Duration::MAX
         }
+    };
+
+    let mut timeout;
+    if end_time > Duration::from_millis(100) {
+        timeout = 100;
+    } else {
+        timeout = timeout_ms;
     }
 
-    pub fn signal(&self) -> i32 {
-        unsafe {
-            libc::pthread_cond_signal(
-                (&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t,
-            )
-        }
-    }
-
-    pub fn broadcast(&self) -> i32 {
-        unsafe {
-            libc::pthread_cond_broadcast(
-                (&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t,
-            )
-        }
-    }
-
-    pub fn wait(&self, mutex: &RawMutex) -> i32 {
-        unsafe {
-            libc::pthread_cond_wait(
-                (&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t,
-                (&mutex.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t,
-            )
-        }
-    }
-
-    pub fn timedwait(&self, mutex: &RawMutex, abs_duration: Duration) -> i32 {
-        let abstime = libc::timespec {
-            tv_sec: abs_duration.as_secs() as i64,
-            tv_nsec: (abs_duration.as_nanos() % 1000000000) as i64,
-        };
-        unsafe {
-            libc::pthread_cond_timedwait(
-                (&self.inner) as *const libc::pthread_cond_t as *mut libc::pthread_cond_t,
-                (&mutex.inner) as *const libc::pthread_mutex_t as *mut libc::pthread_mutex_t,
-                (&abstime) as *const libc::timespec,
-            )
-        }
-    }
-}
-
-impl Drop for RawCondvar {
-    fn drop(&mut self) {
-        unsafe {
-            libc::pthread_cond_destroy((&mut self.inner) as *mut libc::pthread_cond_t);
-        }
-    }
-}
-
-impl std::fmt::Debug for RawCondvar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("<condvar>")
-    }
-}
-
-/*
-* RustSemaphore is the rust version of sem_t
-*/
-#[derive(Debug)]
-pub struct RustSemaphore {
-    pub value: Mutex<u32>,
-    pub is_shared: RustAtomicBool,
-}
-
-// Semaphore implementation
-// we busy wait on lock if value is 0, otherwise we decrease the value
-// unlock will increase value up to SEM_VALUE_MAX
-impl RustSemaphore {
-    pub fn new(value_handle: u32, is_shared: bool) -> Self {
-        Self {
-            value: Mutex::new(value_handle),
-            is_shared: RustAtomicBool::new(is_shared),
-        }
-    }
-
-    pub fn lock(&self) {
-        loop {
-            // acquire the mutex lock
-            let mut value = self.value.lock();
-            if *value == 0 {
-                // wait for semaphore to be unlocked by another process/thread
-                interface::lind_yield();
-            } else {
-                // decrement the value
-                *value = if *value > 0 { *value - 1 } else { 0 };
-                break;
-            }
-        }
-    }
-
-    pub fn unlock(&self) -> bool {
-        // acquire the mutex lock
-        let mut value = self.value.lock();
-        // check if the maximum allowable value for a semaphore has been reached
-        if *value < SEM_VALUE_MAX {
-            // increment the value
-            *value = *value + 1;
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    pub fn get_value(&self) -> i32 {
-        // returns the value of the semaphore
-        *self.value.lock() as i32
-    }
-
-    pub fn trylock(&self) -> bool {
-        // acquire the mutex lock
-        let mut value = self.value.lock();
-        if *value == 0 {
-            // semaphore is locked by another process/thread
-            return false;
-        } else {
-            // decrement the value
-            *value = if *value > 0 { *value - 1 } else { 0 };
-            return true;
-        }
-    }
-
-    pub fn timedlock(&self, timeout: Duration) -> bool {
-        // start the timer to check for timeout
-        let start_time = interface::starttimer();
-        loop {
-            // acquire the mutex lock
-            let mut value = self.value.lock();
-            if *value == 0 {
-                // check if we have timed out
-                let elapsed_time = interface::readtimer(start_time);
-                if elapsed_time > timeout {
-                    return false;
-                }
-                // if not timed out wait for semaphore to be unlocked by another process/thread
-                interface::lind_yield();
-            } else {
-                *value = if *value > 0 { *value - 1 } else { 0 };
-                return true;
-            }
-        }
-    }
+    (end_time, timeout)
 }
