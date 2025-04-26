@@ -1,7 +1,7 @@
-//  DashMap<u64,[Option<FDTableEntry>;FD_PER_PROCESSS_MAX]>  Space is ~24KB 
+//  DashMap<u64,vec![Option<FDTableEntry>;FD_PER_PROCESSS_MAX]>  Space is ~30KB 
 //  per cage w/ 1024 fds?!?
-//      Static DashMap.  Let's see if having the FDTableEntries be a static
-//      array is any faster...
+//      Static DashMap.  Let's see if having the FDTableEntries be a Vector
+//      is any faster...
 
 use crate::threei;
 
@@ -20,7 +20,7 @@ pub use super::commonconstants::*;
 
 // algorithm name.  Need not be listed.  Used in benchmarking output
 #[doc(hidden)]
-pub const ALGONAME: &str = "DashMapArrayGlobal";
+pub const ALGONAME: &str = "DashMapVecGlobal";
 
 // It's fairly easy to check the fd count on a per-process basis (I just check
 // when I would add a new fd).
@@ -43,13 +43,13 @@ pub const ALGONAME: &str = "DashMapArrayGlobal";
 lazy_static! {
 
     #[derive(Debug)]
-    static ref FDTABLE: DashMap<u64, [Option<FDTableEntry>;FD_PER_PROCESS_MAX as usize]> = {
+    pub static ref FDTABLE: DashMap<u64, Vec<Option<FDTableEntry>>> = {
         let m = DashMap::new();
         // Insert a cage so that I have something to fork / test later, if need
         // be. Otherwise, I'm not sure how I get this started. I think this
         // should be invalid from a 3i standpoint, etc. Could this mask an
         // error in the future?
-        // m.insert(threei::TESTING_CAGEID,[Option::None;FD_PER_PROCESS_MAX as usize]);
+        // m.insert(threei::TESTING_CAGEID,vec!(Option::None;FD_PER_PROCESS_MAX as usize));
         m
     };
 }
@@ -73,7 +73,7 @@ pub fn init_empty_cage(cageid: u64) {
 
     assert!(!FDTABLE.contains_key(&cageid),"Known cageid in fdtable access");
 
-    FDTABLE.insert(cageid,[Option::None;FD_PER_PROCESS_MAX as usize]);
+    FDTABLE.insert(cageid,vec!(Option::None;FD_PER_PROCESS_MAX as usize));
 }
 
 #[doc = include_str!("../docs/translate_virtual_fd.md")]
@@ -83,7 +83,6 @@ pub fn translate_virtual_fd(cageid: u64, virtualfd: u64) -> Result<FDTableEntry,
     // always have a table for each cage because each new cage is added at fork
     // time
     assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
-
     // Below condition checks if the virtualfd is out of bounds and if yes it throws an error
     // Note that this assumes that all virtualfd numbers returned < FD_PER_PROCESS_MAX 
     if virtualfd >= FD_PER_PROCESS_MAX {
@@ -274,8 +273,7 @@ pub fn copy_fdtable_for_cage(srccageid: u64, newcageid: u64) -> Result<(), three
     assert!(!FDTABLE.contains_key(&newcageid),"Known cageid in fdtable access");
 
     // Insert a copy and ensure it didn't exist...
-    // I've checked this should be a copy, not a ref to the same thing.  
-    let hmcopy = *FDTABLE.get(&srccageid).unwrap();
+    let hmcopy = FDTABLE.get(&srccageid).unwrap().clone();
 
     // Increment copied items
     for entry in FDTABLE.get(&srccageid).unwrap().iter() {
@@ -396,8 +394,8 @@ pub fn close_virtualfd(cageid:u64, virtfd:u64) -> Result<(),threei::RetVal> {
 
     assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
 
-    // derefing this so I don't hold a lock and deadlock close handlers
-    let mut myfdrow = *FDTABLE.get_mut(&cageid).unwrap();
+    // cloning this so I don't hold a lock and deadlock close handlers
+    let mut myfdrow = FDTABLE.get_mut(&cageid).unwrap().clone();
 
 
     if myfdrow[virtfd as usize].is_some() {
@@ -406,9 +404,8 @@ pub fn close_virtualfd(cageid:u64, virtfd:u64) -> Result<(),threei::RetVal> {
         // Zero out this entry before calling the close handler...
         myfdrow[virtfd as usize] = None;
 
-        // Re-insert the modified myfdrow since I've been modifying a copy
         FDTABLE.insert(cageid, myfdrow.clone());
-        
+
         // always _decrement last as it may call the user handler...
         _decrement_fdcount(entry.unwrap());
         return Ok(());
@@ -561,7 +558,7 @@ pub fn get_bitmask_for_select(cageid:u64, nfds:u64, bits:Option<fd_set>, fdkinds
     // dashmaps are lockless, but usually I would grab a lock on the fdtable
     // here...  
     let binding = FDTABLE.get(&cageid).unwrap();
-    let myfdrow = *binding.value();
+    let myfdrow = binding.value().clone();
 
     // Clippy is somehow missing how the virtualfd is being used throughout
     // here.  It's not just a range value
@@ -648,7 +645,7 @@ pub fn prepare_bitmasks_for_select(cageid:u64, nfds:u64, rbits:Option<fd_set>, w
 // need for your return from a select call and the number of unique flags
 // set...
 
-// I given them the hashmap, so don't need flexibility in what they return...
+// I've given them the hashmap, so don't need flexibility in what they return...
 #[allow(clippy::implicit_hasher)]
 #[must_use] // must use the return value if you call it.
 #[doc = include_str!("../docs/get_one_virtual_bitmask_from_select_result.md")]
@@ -706,7 +703,7 @@ pub fn convert_virtualfds_for_poll(cageid:u64, virtualfds:HashSet<u64>) -> (Hash
 
     assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
 
-    let thefdrow = *FDTABLE.get(&cageid).unwrap();
+    let thefdrow = FDTABLE.get(&cageid).unwrap().clone();
     let mut mappingtable:HashMap<(u32,u64),u64> = HashMap::new();
     let mut rethashmap:HashMap<u32,HashSet<(u64,FDTableEntry)>> = HashMap::new();
 
@@ -1030,7 +1027,7 @@ pub fn get_virtual_epoll_wait_data(cageid:u64, epfd:u64) -> Result<HashMap<u32,H
 // This is only used in tests, thus is hidden...
 pub fn refresh() {
     FDTABLE.clear();
-    FDTABLE.insert(threei::TESTING_CAGEID,[Option::None;FD_PER_PROCESS_MAX as usize]);
+    FDTABLE.insert(threei::TESTING_CAGEID,vec![Option::None;FD_PER_PROCESS_MAX as usize]);
     let mut closehandlers = CLOSEHANDLERTABLE.lock().unwrap_or_else(|e| {
         CLOSEHANDLERTABLE.clear_poison();
         e.into_inner()
