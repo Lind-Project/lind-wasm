@@ -83,17 +83,8 @@ genrule(
 
         $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
             $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
-            -o $$GLIBC_BASE/build/lind_syscall.o \
-            -c pthread_create.c -MD -MP -MF $$GLIBC_BASE/build/nptl/pthread_create.o.dt \
-            -MT $$GLIBC_BASE/build/nptl/pthread_create.o
-
-        $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
-            $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
-            -c lind_syscall.c -o lind_syscall.o
-        
-        $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \ 
-            $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES -o $$GLIBC_BASE/build/lind_syscall/lind_syscall.o \
-            -c lind_syscall/lind_syscall.c 
+            -o $$GLIBC_BASE/build/lind_syscall/lind_syscall.o \
+            -c $$GLIBC_BASE/lind_syscall/lind_syscall.c
         
         # Compile assembly files
         cd ../ && \
