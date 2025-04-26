@@ -321,7 +321,7 @@ pub fn timeout_setup(rposix_timeout: Option<Duration>) -> (Duration, libc::timev
     if end_time > Duration::from_millis(100) {
         timeout = libc::timeval { 
             tv_sec: 0, 
-            tv_usec: 100000, // 100ms
+            tv_usec: 1000000, // 100ms
         };
     } else {
         timeout = libc::timeval { 

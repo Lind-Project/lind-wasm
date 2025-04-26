@@ -60,6 +60,7 @@ impl LindCommonCtx {
                 if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
                     let retval = caller.as_context_mut().get_current_syscall_rewind_data().unwrap();
                     wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                    // println!("rewind returns {}", retval);
                     return retval;
                 }
 
@@ -74,14 +75,18 @@ impl LindCommonCtx {
                     arg5,
                     arg6,
                 );
+                // println!("lind_syscall_api returns {}", retval);
 
                 // assumption: lind_syscall_api will not switch asyncify state, which holds true for now
-                caller.as_context_mut().append_syscall_asyncify_data(retval);
 
-                if retval == rawposix::interface::Errno::EINTR as i32 {
+                if -retval == rawposix::interface::Errno::EINTR as i32 {
+                    caller.as_context_mut().append_syscall_asyncify_data(retval);
+                    // println!("ready for signal handler");
                     wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                    // println!("signal handler returns");
 
                     if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
+                        // println!("unwind in syscall");
                         return 0;
                     } else {
                         caller.as_context_mut().pop_syscall_asyncify_data();
@@ -155,6 +160,7 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
 
             let retval = ctx.lind_syscall(call_number, call_name, &mut caller, arg1, arg2, arg3, arg4, arg5, arg6);
 
+            // println!("lind-syscall returns: {} for syscall {}", retval, call_number);
             // TODO: add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
 
@@ -192,16 +198,6 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
         "epoch_callback",
         move |mut caller: Caller<'_, T>| {
             wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
-        },
-    )?;
-    
-    linker.func_wrap(
-        "debug",
-        "malloc_printerr",
-        move |mut caller: Caller<'_, T>, msg: i32| {
-            let mem_base = get_memory_base(&caller);
-            let msg = rawposix::interface::get_cstr(mem_base + msg as u64).unwrap();
-            println!("malloc_printerr: {}", msg);
         },
     )?;
 
@@ -265,13 +261,42 @@ pub fn add_to_linker<T: LindHost<T, U> + Clone + Send + 'static + std::marker::S
         },
     )?;
 
-    // linker.func_wrap(
-    //     "debug",
-    //     "debug",
-    //     move |mut caller: Caller<'_, T>, val: i32| {
-    //         println!("debug val: {}", val);
-    //     },
-    // )?;
+    linker.func_wrap(
+        "debug",
+        "debug-print-3",
+        move |mut caller: Caller<'_, T>, str1: i32, str2: i32, val: i32| -> i32 {
+            // let mem_base = get_memory_base(&caller);
+            // let str1_ptr = mem_base + str1 as u64;
+            // let str2_ptr = mem_base + str2 as u64;
+            // println!("parse_and_validate_value: name: {}, value: {}, type: {}", rawposix::interface::get_cstr(str1_ptr).unwrap(), rawposix::interface::get_cstr(str2_ptr).unwrap(), val);
+
+            return 0;
+        },
+    )?;
+
+    linker.func_wrap(
+        "debug",
+        "debug-num",
+        move |mut caller: Caller<'_, T>, val: i32| -> i32 {
+            println!("debug val: {}", val);
+            val
+        },
+    )?;
+
+    linker.func_wrap(
+        "debug",
+        "debug-str",
+        move |mut caller: Caller<'_, T>, str: i32| -> i32 {
+            if str == 0 {
+                println!("debug str: NULL");
+                return 0;
+            }
+            let mem_base = get_memory_base(&caller);
+            let str_ptr = mem_base + str as u64;
+            println!("debug str: {}", rawposix::interface::get_cstr(str_ptr).unwrap());
+            0
+        },
+    )?;
 
     Ok(())
 }

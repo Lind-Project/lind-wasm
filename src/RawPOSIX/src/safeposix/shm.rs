@@ -77,6 +77,7 @@ impl ShmSegment {
     // increase in cage references within attached_cages map
     pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: u64) -> i32 {
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
+        // println!("fobjfdno: {}", fobjfdno);
         self.shminfo.shm_nattch += 1;
         self.shminfo.shm_atime = interface::timestamp() as isize;
 
@@ -115,7 +116,11 @@ impl ShmSegment {
         let sysaddr = vmmap.user_to_sys(useraddr);
         // println!("sysaddr: {:?}", sysaddr as *mut u8);
 
-        let result = cage.mmap_syscall(sysaddr as *mut u8, rounded_length as usize, prot, (MAP_SHARED as i32) | (MAP_FIXED as i32) | (MAP_ANONYMOUS as i32), -1, 0);
+        // let result = cage.mmap_syscall(sysaddr as *mut u8, rounded_length as usize, prot, (MAP_SHARED as i32) | (MAP_FIXED as i32) | (MAP_ANONYMOUS as i32), fobjfdno, 0);
+        let result = unsafe { libc::mmap(sysaddr as *mut c_void, rounded_length as usize, prot, (MAP_SHARED as i32) | (MAP_FIXED as i32), fobjfdno, 0) as usize };
+        if (result as i64) < 0 {
+            panic!("map_shm");
+        }
         // println!("result raw: {}({:?})", result as i64, result as *mut u8);
         // unsafe {
         //     *(result as *mut u64) = 10;
@@ -129,7 +134,7 @@ impl ShmSegment {
             prot,
             PROT_READ | PROT_WRITE,
             (MAP_SHARED as i32) | (MAP_FIXED as i32),
-            MemoryBackingType::SharedMemory(0),
+            MemoryBackingType::SharedMemory(fobjfdno as u64),
             0,
             0,
             cageid);

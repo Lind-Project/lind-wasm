@@ -107,6 +107,7 @@ const WAIT_SYSCALL: i32 = 172;
 const WAITPID_SYSCALL: i32 = 173;
 const BRK_SYSCALL: i32 = 175;
 const SBRK_SYSCALL: i32 = 176;
+const MPROTECT_SYSCALL: i32 = 177;
 
 const NANOSLEEP_TIME64_SYSCALL : i32 = 181;
 const CLOCK_GETTIME_SYSCALL : i32 = 191;
@@ -179,7 +180,7 @@ pub fn lind_syscall_api(
     let start_address = vmmap.base_address.unwrap() as u64;
     drop(vmmap);
     drop(cage);
-    if call_number as i32 != WRITE_SYSCALL && cageid != 0 {
+    if call_number as i32 != WRITE_SYSCALL && call_number as i32 != CLOCK_GETTIME_SYSCALL && cageid != 0 {
         match call_name {
             0 => {
                 println!("\x1b[90mcage {} calls UNNAMED ({})\x1b[0m", cageid, call_number);
@@ -219,6 +220,7 @@ pub fn lind_syscall_api(
         WRITEV_SYSCALL => {
             let fd = arg1 as i32;
             let iovcnt = arg3 as i32;
+            // println!("iovcnt: {}", iovcnt);
             // Validate count first
             if iovcnt <= 0 {
                 return syscall_error(
@@ -230,6 +232,15 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             // Convert iovec array address
             let iov_base = translate_vmmap_addr(&cage, arg2).unwrap() as *const interface::IovecStruct;
+            // println!("rawposix iovec size: {}", std::mem::size_of::<libc::iovec>());
+            for i in 0..iovcnt {
+                let cur_iov_base = unsafe { iov_base.add(i as usize) } as *mut libc::iovec;
+                let old_base = unsafe { (*cur_iov_base).iov_base } as u64;
+                let len = unsafe { (*cur_iov_base).iov_len };
+                let new_base = translate_vmmap_addr(&cage, old_base as u64).unwrap();
+                // println!("old base: {}, new_base: {}, len: {}", old_base as u64, new_base, len);
+                unsafe { (*cur_iov_base).iov_base = new_base as *mut libc::c_void }
+            }
             // The actual write operation is delegated to the cage implementation
             cage.writev_syscall(fd, iov_base, iovcnt)
         }
@@ -408,17 +419,41 @@ pub fn lind_syscall_api(
             // Get reference to the cage for memory operations
             let cage = interface::cagetable_getref(cageid);
             // Convert readfds buffer address
-            let readfds_addr = translate_vmmap_addr(&cage, arg2).unwrap();
-            let readfds = interface::get_fdset(readfds_addr).unwrap();
+            let readfds = {
+                if arg2 == 0 {
+                    None
+                } else {
+                    let readfds_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+                    interface::get_fdset(readfds_addr).unwrap()
+                }
+            };
             // Convert writefds buffer address 
-            let writefds_addr = translate_vmmap_addr(&cage, arg3).unwrap();
-            let writefds = interface::get_fdset(writefds_addr).unwrap();
+            let writefds = {
+                if arg3 == 0 {
+                    None
+                } else {
+                    let writefds_addr = translate_vmmap_addr(&cage, arg3).unwrap();
+                    interface::get_fdset(writefds_addr).unwrap()
+                }
+            };
             // Convert errorfds buffer address
-            let errorfds_addr = translate_vmmap_addr(&cage, arg4).unwrap();
-            let errorfds = interface::get_fdset(errorfds_addr).unwrap();
+            let errorfds = {
+                if arg4 == 0 {
+                    None
+                } else {
+                    let errorfds_addr = translate_vmmap_addr(&cage, arg4).unwrap();
+                    interface::get_fdset(errorfds_addr).unwrap()
+                }
+            };
             // Convert timeout buffer address
-            let timeout_addr = translate_vmmap_addr(&cage, arg5).unwrap();
-            let rposix_timeout = interface::duration_fromtimeval(timeout_addr).unwrap();
+            let rposix_timeout = {
+                if arg5 == 0 {
+                    None
+                } else {
+                    let timeout_addr = translate_vmmap_addr(&cage, arg5).unwrap();
+                    interface::duration_fromtimeval(timeout_addr).unwrap()
+                }
+            };
             // Delegate to the cage's select implementation
             // This will:
             // 1. Monitor the specified file descriptors for activity
@@ -1228,7 +1263,7 @@ pub fn lind_syscall_api(
         _ => -1, // Return -1 for unknown syscalls
     };
 
-    if call_number as i32 != WRITE_SYSCALL && cageid != 0 {
+    if call_number as i32 != WRITE_SYSCALL && call_number as i32 != CLOCK_GETTIME_SYSCALL && cageid != 0 {
         match call_name {
             0 => {
                 if ret < 0 {

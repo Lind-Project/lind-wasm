@@ -46,9 +46,5 @@ int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned
         errno = -ret;
         return -1;
     }
-    else
-    {
-        errno = 0;
-    }
     return ret;
 }

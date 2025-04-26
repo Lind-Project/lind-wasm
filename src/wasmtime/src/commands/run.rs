@@ -590,11 +590,25 @@ impl RunCommand {
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
 
+
+                // let tls_base = instance.get_global(&mut *store, "__tls_base").unwrap();
+                // let tls_base_val = tls_base.get(&mut *store);
+                // println!("tls base: {:?}", tls_base_val);
+
                 // retrieve the epoch global
                 let lind_epoch = instance
                     .get_export(&mut *store, "epoch")
                     .and_then(|export| export.into_global())
                     .expect("Failed to find epoch global export!");
+
+                // retrieve the epoch global
+                let tls_base = instance
+                    .get_export(&mut *store, "__tls_base")
+                    .and_then(|export| export.into_global());
+                if tls_base.is_some() {
+                    let tls_base = tls_base.unwrap();
+                    tls_base.set(&mut *store, Val::I32(1024));
+                }
 
                 // retrieve the handler (underlying pointer) for the epoch global
                 let pointer = lind_epoch.get_handler(&mut *store);

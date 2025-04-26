@@ -256,7 +256,7 @@ impl Cage {
     *   stat() will return 0 when success and -1 when fail 
     */
     pub fn stat_syscall(&self, path: &str, rposix_statbuf: &mut StatData) -> i32 {
-        println!("xstat path: {}", path);
+        // println!("xstat path: {}", path);
         let relpath = normpath(convpath(path), self);
         let relative_path = relpath.to_str().unwrap();
         let full_path = format!("{}{}", LIND_ROOT, relative_path);
@@ -284,7 +284,7 @@ impl Cage {
         rposix_statbuf.st_rdev = libc_statbuf.st_rdev as u64;
         rposix_statbuf.st_size = libc_statbuf.st_size as usize;
         rposix_statbuf.st_uid = libc_statbuf.st_uid;
-        println!("st_mode={}", rposix_statbuf.st_mode);
+        // println!("st_mode={}", rposix_statbuf.st_mode);
 
         libcret
     }
@@ -1302,7 +1302,7 @@ impl Cage {
 
         pipefd.readfd = fdtables::get_unused_virtual_fd(self.cageid, FDKIND_KERNEL, kernel_fds[0] as u64, should_cloexec, 0).unwrap() as i32;
         pipefd.writefd = fdtables::get_unused_virtual_fd(self.cageid, FDKIND_KERNEL, kernel_fds[1] as u64, should_cloexec, 0).unwrap() as i32;
-        // println!("pipe: {:?}, kernel fds: {:?}", pipefd, kernel_fds);
+        println!("pipe: {:?}, kernel fds: {:?}", pipefd, kernel_fds);
         return ret;
     }
 
@@ -1398,6 +1398,7 @@ impl Cage {
     //------------------SHMGET SYSCALL------------------
 
     pub fn shmget_syscall(&self, key: i32, mut size: usize, shmflg: i32) -> i32 {
+        // println!("shmget: {}", key);
         if key == IPC_PRIVATE {
             return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
         }
@@ -1465,7 +1466,14 @@ impl Cage {
                 prot = PROT_READ | PROT_WRITE;
             }
 
-            segment.map_shm(shmaddr, prot, self.cageid)
+            let result = segment.map_shm(shmaddr, prot, self.cageid);
+
+            let mut rev_shm = self.rev_shm.lock();
+            rev_shm.push((result as u32, shmid));
+            drop(rev_shm);
+
+            // println!("shmat returns: {}", result);
+            result
         } else {
             syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value")
         }
@@ -1506,6 +1514,7 @@ impl Cage {
                 }
             };
         } else {
+            println!("shmdt: EINVAL");
             return syscall_error(
                 Errno::EINVAL,
                 "shmdt",

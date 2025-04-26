@@ -343,7 +343,18 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                         parent_pid: parent_pid as u64, child_pid: child_cageid
                     }).unwrap();
                 
-                // println!("child instantiate");
+                println!("child instantiate");
+
+                // let tls_base = instance.get_global(&mut store, "__tls_base").unwrap();
+                // let tls_base_val = tls_base.get(&mut store);
+                // println!("tls base: {:?}", tls_base_val);
+                let tls_base = instance
+                    .get_export(&mut store, "__tls_base")
+                    .and_then(|export| export.into_global());
+                if tls_base.is_some() {
+                    let tls_base = tls_base.unwrap();
+                    tls_base.set(&mut store, Val::I32(1024));
+                }
                 // retrieve the epoch global
                 let lind_epoch = instance
                     .get_export(&mut store, "epoch")
@@ -596,6 +607,13 @@ impl<T: Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + 
                     .unwrap();
                 let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
 
+                let tls_base = instance
+                    .get_export(&mut store, "__tls_base")
+                    .and_then(|export| export.into_global());
+                if tls_base.is_some() {
+                    let tls_base = tls_base.unwrap();
+                    tls_base.set(&mut store, Val::I32(1024));
+                }
                 // retrieve the epoch global
                 let lind_epoch = instance
                     .get_export(&mut store, "epoch")

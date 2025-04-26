@@ -8,7 +8,11 @@ const EPOCH_KILLED: u64 = 0xdead;
 pub fn signal_epoch_trigger(cageid: u64) {
     let cage = cagetable_getref(cageid);
     let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
-    let epoch_handler = cage.epoch_handler.get(&main_threadid).expect("main threadid does not exist");
+    let epoch_handler = cage.epoch_handler.get(&main_threadid);
+    if epoch_handler.is_none() {
+        return;
+    }
+    let epoch_handler = epoch_handler.unwrap();
     let guard = epoch_handler.write();
     let epoch = *guard;
     // SAFETY: the pointer is locked with write access so no one is able to modify it concurrently
@@ -229,20 +233,21 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
     let cage = cagetable_getref(cageid);
     let main_threadid = cage.main_threadid.load(RustAtomicOrdering::SeqCst);
 
-    // remove the epoch handler of the thread
-    cage.epoch_handler.remove(&(thread_id as i32)).expect("thread id does not exist!");
+    let mut last_thread = false;
 
     if thread_id == main_threadid {
         // if main thread exits, we should find a new main thread
         // unless this is the last thread in the cage
-        if let Some(entry) = cage.epoch_handler.iter().next() {
+        if let Some(entry) = cage.epoch_handler.iter().find(|entry| *entry.key() as u64 != thread_id) {
             let id = *entry.key() as u64;
             cage.main_threadid.store(id, RustAtomicOrdering::SeqCst);
         } else {
             // we just exited the last thread in the cage
-            return true;
+            last_thread = true;
         }
     }
+    // remove the epoch handler of the thread
+    cage.epoch_handler.remove(&(thread_id as i32)).expect("thread id does not exist!");
 
-    false
+    last_thread
 }

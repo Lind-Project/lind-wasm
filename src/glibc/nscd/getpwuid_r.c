@@ -31,7 +31,7 @@
 // #include <nss/getXXbyYY_r.c>
 
 int
-getpwuid_r (uid_t uid, struct passwd *resbuf, char *buffer,
+__getpwuid_r (uid_t uid, struct passwd *resbuf, char *buffer,
    size_t buflen, struct passwd **result)
 {
    if(uid != 1000) return -1;
@@ -48,3 +48,5 @@ getpwuid_r (uid_t uid, struct passwd *resbuf, char *buffer,
 
    return 0;
 }
+
+weak_alias (__getpwuid_r, getpwuid_r)
