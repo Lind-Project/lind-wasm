@@ -2,7 +2,9 @@
 
 // System related system calls
 use crate::constants::{
-    DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX
+    DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK,
+    SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX,
+    SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX,
 };
 
 use crate::interface::{self, convert_signal_mask, lind_send_signal, signal_check_trigger};
@@ -14,8 +16,8 @@ use crate::fdtables::{self, FDTABLE};
 
 use libc::*;
 
-use std::io::Write;
 use std::io;
+use std::io::Write;
 
 use std::sync::Arc as RustRfc;
 
@@ -48,7 +50,7 @@ impl Cage {
     }
 
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
-        // Modify the fdtable manually 
+        // Modify the fdtable manually
         fdtables::copy_fdtable_for_cage(self.cageid, child_cageid).unwrap();
 
         let parent_vmmap = self.vmmap.read();
@@ -87,8 +89,8 @@ impl Cage {
         };
 
         // increment child counter for parent
-        self.child_num.fetch_add(1, interface::RustAtomicOrdering::SeqCst);
-
+        self.child_num
+            .fetch_add(1, interface::RustAtomicOrdering::SeqCst);
 
         let shmtable = &SHM_METADATA.shmtable;
         //update fields for shared mappings in cage
@@ -107,10 +109,10 @@ impl Cage {
     }
 
     /*
-    *   exec() will only return if error happens 
-    */
+     *   exec() will only return if error happens
+     */
     pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        // Empty fd with flag should_cloexec 
+        // Empty fd with flag should_cloexec
         // let table = FDTABLE.get(&self.cageid).unwrap();
         // for (index, entry) in table.iter().enumerate() {
         //     if entry.is_some() {
@@ -156,9 +158,7 @@ impl Cage {
             sigset: interface::RustAtomicU64::new(
                 self.sigset.load(interface::RustAtomicOrdering::Relaxed),
             ),
-            pending_signals: interface::RustLock::new(
-                self.pending_signals.read().clone(),
-            ),
+            pending_signals: interface::RustLock::new(self.pending_signals.read().clone()),
             epoch_handler: interface::RustHashMap::new(),
             main_threadid: interface::RustAtomicU64::new(0),
             interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
@@ -204,11 +204,16 @@ impl Cage {
             // if parent hasn't exited yet
             if let Some(parent) = parent_cage {
                 // decrement parent's child counter
-                parent.child_num.fetch_sub(1, interface::RustAtomicOrdering::SeqCst);
+                parent
+                    .child_num
+                    .fetch_sub(1, interface::RustAtomicOrdering::SeqCst);
 
                 // push the exit status to parent's zombie list
                 let mut zombie_vec = parent.zombies.write();
-                zombie_vec.push(Zombie { cageid: self.cageid, exit_code: status });
+                zombie_vec.push(Zombie {
+                    cageid: self.cageid,
+                    exit_code: status,
+                });
             } else {
                 // if parent already exited
                 // BUG: we currently do not handle the situation where a parent has exited already
@@ -229,14 +234,13 @@ impl Cage {
         status
     }
 
-
     //------------------------------------WAITPID SYSCALL------------------------------------
     /*
-    *   waitpid() will return the cageid of waited cage, or 0 when WNOHANG is set and there is no cage already exited
-    *   waitpid_syscall utilizes the zombie list stored in cage struct. When a cage exited, a zombie entry will be inserted
-    *   into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
-    *   zombie list and retrieve the first entry from it (first in, first out).
-    */
+     *   waitpid() will return the cageid of waited cage, or 0 when WNOHANG is set and there is no cage already exited
+     *   waitpid_syscall utilizes the zombie list stored in cage struct. When a cage exited, a zombie entry will be inserted
+     *   into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
+     *   zombie list and retrieve the first entry from it (first in, first out).
+     */
     pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
         println!("waitpid wait for {}", cageid);
         let mut zombies = self.zombies.write();
@@ -244,7 +248,11 @@ impl Cage {
 
         // if there is no pending zombies to wait, and there is no active child, return ECHILD
         if zombies.len() == 0 && child_num == 0 {
-            return syscall_error(Errno::ECHILD, "waitpid", "no existing unwaited-for child processes");
+            return syscall_error(
+                Errno::ECHILD,
+                "waitpid",
+                "no existing unwaited-for child processes",
+            );
         }
 
         let mut zombie_opt: Option<Zombie> = None;
@@ -283,7 +291,10 @@ impl Cage {
         // if cageid is specified, then we need to look up the zombie list for the id
         else {
             // first let's check if the cageid is in the zombie list
-            if let Some(index) = zombies.iter().position(|zombie| zombie.cageid == cageid as u64) {
+            if let Some(index) = zombies
+                .iter()
+                .position(|zombie| zombie.cageid == cageid as u64)
+            {
                 // find the cage in zombie list, remove it from the list and break
                 zombie_opt = Some(zombies.remove(index));
             } else {
@@ -296,7 +307,11 @@ impl Cage {
                 if let Some(child_cage) = child {
                     // make sure the child's parent is correct
                     if child_cage.parent != self.cageid {
-                        return syscall_error(Errno::ECHILD, "waitpid", "waited cage is not the child of the cage");
+                        return syscall_error(
+                            Errno::ECHILD,
+                            "waitpid",
+                            "waited cage is not the child of the cage",
+                        );
                     }
                 } else {
                     // cage does not exist
@@ -317,7 +332,10 @@ impl Cage {
                     zombies = self.zombies.write();
 
                     // let's check if the zombie list contains the cage
-                    if let Some(index) = zombies.iter().position(|zombie| zombie.cageid == cageid as u64) {
+                    if let Some(index) = zombies
+                        .iter()
+                        .position(|zombie| zombie.cageid == cageid as u64)
+                    {
                         // find the cage in zombie list, remove it from the list and break
                         zombie_opt = Some(zombies.remove(index));
                         break;
@@ -349,9 +367,9 @@ impl Cage {
     }
 
     /*
-    * if its negative 1
-    * return -1, but also set the values in the cage struct to the DEFAULTs for future calls
-    */
+     * if its negative 1
+     * return -1, but also set the values in the cage struct to the DEFAULTs for future calls
+     */
     pub fn getgid_syscall(&self) -> i32 {
         if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getgid
@@ -465,11 +483,15 @@ impl Cage {
                 SIG_UNBLOCK => {
                     // Unblock signals in set
                     let newset = curr_sigset & !*some_set;
-                    self.sigset.store(newset, interface::RustAtomicOrdering::Relaxed);
+                    self.sigset
+                        .store(newset, interface::RustAtomicOrdering::Relaxed);
                     // check if any of the unblocked signals are in the pending signal list
                     // and trigger the epoch if it has
                     let pending_signals = self.pending_signals.read();
-                    if pending_signals.iter().any(|signo| (*some_set & convert_signal_mask(*signo)) != 0) {
+                    if pending_signals
+                        .iter()
+                        .any(|signo| (*some_set & convert_signal_mask(*signo)) != 0)
+                    {
                         interface::signal_epoch_trigger(self.cageid);
                     }
                     0
@@ -484,11 +506,15 @@ impl Cage {
                     let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
                     // check if any of the unblocked signals are in the pending signal list
                     // and trigger the epoch if it has
-                    if pending_signals.iter().any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0) {
+                    if pending_signals
+                        .iter()
+                        .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
+                    {
                         interface::signal_epoch_trigger(self.cageid);
                     }
                     // Set sigset to set
-                    self.sigset.store(*some_set, interface::RustAtomicOrdering::Relaxed);
+                    self.sigset
+                        .store(*some_set, interface::RustAtomicOrdering::Relaxed);
                     0
                 }
                 _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),

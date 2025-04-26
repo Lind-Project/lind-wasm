@@ -31,10 +31,10 @@ pub use serde_cbor::{
     from_slice as serde_deserialize_from_bytes, ser::to_vec_packed as serde_serialize_to_bytes,
 };
 
+use crate::constants::SEM_VALUE_MAX;
 use crate::interface;
 use crate::interface::errnos::VERBOSE;
 use crate::interface::types::SigsetType;
-use crate::constants::SEM_VALUE_MAX;
 use std::sync::LazyLock;
 use std::time::Duration;
 
@@ -319,13 +319,13 @@ pub fn timeout_setup(rposix_timeout: Option<Duration>) -> (Duration, libc::timev
 
     let mut timeout;
     if end_time > Duration::from_millis(100) {
-        timeout = libc::timeval { 
-            tv_sec: 0, 
+        timeout = libc::timeval {
+            tv_sec: 0,
             tv_usec: 1000000, // 100ms
         };
     } else {
-        timeout = libc::timeval { 
-            tv_sec: 0, 
+        timeout = libc::timeval {
+            tv_sec: 0,
             tv_usec: end_time.subsec_micros() as i64,
         };
     }

@@ -2,7 +2,8 @@
 #![allow(dead_code)]
 
 use crate::constants::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE, SHM_DEST, SHM_RDONLY
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE,
+    SHM_DEST, SHM_RDONLY,
 };
 
 use crate::interface::{self, syscall_error, Errno};
@@ -101,7 +102,11 @@ impl ShmSegment {
             result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
         } else {
             // use address user provided as hint to find address
-            result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, useraddr as u32);
+            result = vmmap.find_map_space_with_hint(
+                rounded_length as u32 >> PAGESHIFT,
+                1,
+                useraddr as u32,
+            );
         }
 
         // did not find desired memory region
@@ -117,7 +122,16 @@ impl ShmSegment {
         // println!("sysaddr: {:?}", sysaddr as *mut u8);
 
         // let result = cage.mmap_syscall(sysaddr as *mut u8, rounded_length as usize, prot, (MAP_SHARED as i32) | (MAP_FIXED as i32) | (MAP_ANONYMOUS as i32), fobjfdno, 0);
-        let result = unsafe { libc::mmap(sysaddr as *mut c_void, rounded_length as usize, prot, (MAP_SHARED as i32) | (MAP_FIXED as i32), fobjfdno, 0) as usize };
+        let result = unsafe {
+            libc::mmap(
+                sysaddr as *mut c_void,
+                rounded_length as usize,
+                prot,
+                (MAP_SHARED as i32) | (MAP_FIXED as i32),
+                fobjfdno,
+                0,
+            ) as usize
+        };
         if (result as i64) < 0 {
             panic!("map_shm");
         }
@@ -129,7 +143,8 @@ impl ShmSegment {
         let result = vmmap.sys_to_user(result);
         // println!("result: {:?}", result as *mut u8);
 
-        let _ = vmmap.add_entry_with_overwrite(useraddr >> PAGESHIFT,
+        let _ = vmmap.add_entry_with_overwrite(
+            useraddr >> PAGESHIFT,
             (rounded_length >> PAGESHIFT) as u32,
             prot,
             PROT_READ | PROT_WRITE,
@@ -137,7 +152,8 @@ impl ShmSegment {
             MemoryBackingType::SharedMemory(fobjfdno as u64),
             0,
             0,
-            cageid);
+            cageid,
+        );
 
         return result as i32;
     }

@@ -1,18 +1,19 @@
 use crate::constants::{
-    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE
+    MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_EXEC, PROT_NONE,
+    PROT_READ, PROT_WRITE,
 };
-use std::io;
-use nodit::NoditMap;
-use nodit::{interval::ie, Interval};
 use crate::fdtables;
 use crate::safeposix::cage::syscall_error;
 use crate::safeposix::cage::Errno;
+use nodit::NoditMap;
+use nodit::{interval::ie, Interval};
+use std::io;
 
 const DEFAULT_VMMAP_SIZE: u32 = 1 << (32 - PAGESHIFT);
 
 /// Used to identify whether the vmmap entry is backed anonymously,
 /// by an fd, or by a shared memory segment
-/// 
+///
 /// This enum represents different types of memory backing:
 /// - None: Used as a placeholder when no backing type is available
 /// - Anonymous: Memory not backed by any file (e.g. heap allocations)
@@ -27,23 +28,21 @@ pub enum MemoryBackingType {
     FileDescriptor(u64), // stores file descriptor addr
 }
 
-
-/// An entry in the virtual memory map that contains fields such as page number, number of pages, 
+/// An entry in the virtual memory map that contains fields such as page number, number of pages,
 /// permissions, file offset, file size, shared memory ID, and backing fields to distinguish memory types.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct VmmapEntry {
-    pub page_num: u32,     // Base virtual address shifted right by NACL_PAGESHIFT
-    pub npages: u32,       // Number of pages in this mapping
-    pub prot: i32,         // Current memory protection flags (read/write/execute)
-    pub maxprot: i32,      // Maximum allowed protection flags
-    pub flags: i32,        // Memory mapping flags (shared/private/fixed/anonymous)
-    pub removed: bool,     // Flag indicating if entry has been marked for removal
-    pub file_offset: i64,  // Offset into the backing file/device
-    pub file_size: i64,    // Size of the backing store
-    pub cage_id: u64,      // Identifier for the security cage
+    pub page_num: u32,    // Base virtual address shifted right by NACL_PAGESHIFT
+    pub npages: u32,      // Number of pages in this mapping
+    pub prot: i32,        // Current memory protection flags (read/write/execute)
+    pub maxprot: i32,     // Maximum allowed protection flags
+    pub flags: i32,       // Memory mapping flags (shared/private/fixed/anonymous)
+    pub removed: bool,    // Flag indicating if entry has been marked for removal
+    pub file_offset: i64, // Offset into the backing file/device
+    pub file_size: i64,   // Size of the backing store
+    pub cage_id: u64,     // Identifier for the security cage
     pub backing: MemoryBackingType, // Type of memory backing for this region
 }
-
 
 // Implement methods for VmmapEntry
 // Constructor to create a new VmmapEntry
@@ -108,16 +107,14 @@ impl VmmapEntry {
 
         // Get file stats using fstat
         let mut libc_statbuf: libc::stat = unsafe { std::mem::zeroed() };
-        let libcret = unsafe {
-            libc::fstat(vfd.underfd as i32, &mut libc_statbuf)
-        };
+        let libcret = unsafe { libc::fstat(vfd.underfd as i32, &mut libc_statbuf) };
 
         // Return the file mode which contains protection flags
         libc_statbuf.st_mode as i32
     }
 }
 
-/// VmmapOps trait provides an interface that can be shared by different virtual memory management implementations, 
+/// VmmapOps trait provides an interface that can be shared by different virtual memory management implementations,
 /// allowing different Vmmap versions to share the same interface.
 ///
 /// This trait defines the core operations that any virtual memory map implementation must support:
@@ -128,7 +125,6 @@ impl VmmapEntry {
 /// - Iterating over memory regions
 #[allow(dead_code)]
 pub trait VmmapOps {
-
     // Method to update a memory map entry
     fn update(
         &mut self,
@@ -196,7 +192,6 @@ pub trait VmmapOps {
         page_num: u32,
     ) -> impl DoubleEndedIterator<Item = (&Interval<u32>, &mut VmmapEntry)>;
 
-
     // Method to get the first entry in the memory map
     fn first_entry(&self) -> Option<(&Interval<u32>, &VmmapEntry)>;
 
@@ -243,12 +238,12 @@ pub trait VmmapOps {
 pub struct Vmmap {
     pub entries: NoditMap<u32, Interval<u32>, VmmapEntry>, // Keyed by `page_num`
     pub cached_entry: Option<VmmapEntry>,                  // TODO: is this still needed?
-                                                           // Use Option for safety
-    pub base_address: Option<usize>,                       // wasm base address. None means uninitialized yet
+    // Use Option for safety
+    pub base_address: Option<usize>, // wasm base address. None means uninitialized yet
 
-    pub start_address: u32,                                // start address of valid vmmap address range
-    pub end_address: u32,                                  // end address of valid vmmap address range
-    pub program_break: u32,                                // program break (i.e. heap bottom) of the memory
+    pub start_address: u32, // start address of valid vmmap address range
+    pub end_address: u32,   // end address of valid vmmap address range
+    pub program_break: u32, // program break (i.e. heap bottom) of the memory
 }
 
 #[allow(dead_code)]
@@ -330,7 +325,7 @@ impl Vmmap {
     }
 
     // Visits each entry in the vmmap, applying a visitor function to each entry
-    // 
+    //
     // The visitor function should be used to:
     // - Validate memory map consistency
     // - Gather statistics about memory usage
@@ -338,9 +333,8 @@ impl Vmmap {
     // - Support debugging and auditing features
     fn visit() {}
 
-
     // Prints detailed debug information about the vmmap's current state
-    // 
+    //
     // Should output information including:
     // - Page ranges and sizes for each mapping
     // - Protection flags (current and maximum)
@@ -353,7 +347,7 @@ impl Vmmap {
 
 impl VmmapOps for Vmmap {
     /// Adds a new entry to the virtual memory map
-    /// 
+    ///
     /// This function inserts a new VmmapEntry into the memory map data structure.
     /// The entry is inserted with strict bounds checking to ensure memory safety.
     ///
@@ -361,7 +355,7 @@ impl VmmapOps for Vmmap {
     /// - vmmap_entry_ref: The VmmapEntry to add containing page numbers, permissions, etc.
     ///
     /// The interval is created from:
-    /// - Start: vmmap_entry_ref.page_num 
+    /// - Start: vmmap_entry_ref.page_num
     /// - End: vmmap_entry_ref.page_num + vmmap_entry_ref.npages (inclusive)
     fn add_entry(&mut self, vmmap_entry_ref: VmmapEntry) {
         // Create interval from page range and insert entry with strict bounds checking
@@ -422,7 +416,7 @@ impl VmmapOps for Vmmap {
     }
 
     /// Removes a memory mapping from the specified page range
-    /// 
+    ///
     /// This function will not return any errors pertaining to the page number not mapping
     /// to any existing pages, as the remove operation is done on a best efforts basis:
     /// 1. First an insert overwrite operation with the below page range is performed, causing
@@ -835,10 +829,7 @@ impl VmmapOps for Vmmap {
 
         let desired_space = npages + 1; // TODO: check if this is correct
 
-        for gap in self
-            .entries
-            .gaps_trimmed(ie(start, end))
-        {
+        for gap in self.entries.gaps_trimmed(ie(start, end)) {
             if gap.end() - gap.start() >= desired_space {
                 return Some(gap);
             }
@@ -894,17 +885,12 @@ impl VmmapOps for Vmmap {
         let start = self.start_address;
         let end = self.end_address;
 
-        let rounded_num_pages =
-            self.round_page_num_up_to_map_multiple(num_pages, pages_per_map);
+        let rounded_num_pages = self.round_page_num_up_to_map_multiple(num_pages, pages_per_map);
 
-        for gap in self
-            .entries
-            .gaps_trimmed(ie(start, end))
-        {
+        for gap in self.entries.gaps_trimmed(ie(start, end)) {
             let aligned_start_page =
                 self.trunc_page_num_down_to_map_multiple(gap.start(), pages_per_map);
-            let aligned_end_page =
-                self.round_page_num_up_to_map_multiple(gap.end(), pages_per_map);
+            let aligned_end_page = self.round_page_num_up_to_map_multiple(gap.end(), pages_per_map);
 
             let gap_size = aligned_end_page - aligned_start_page;
             if gap_size >= rounded_num_pages {
@@ -942,14 +928,12 @@ impl VmmapOps for Vmmap {
         let start = hint;
         let end = self.end_address;
 
-        let rounded_num_pages =
-            self.round_page_num_up_to_map_multiple(num_pages, pages_per_map);
+        let rounded_num_pages = self.round_page_num_up_to_map_multiple(num_pages, pages_per_map);
 
         for gap in self.entries.gaps_trimmed(ie(start, end)) {
             let aligned_start_page =
                 self.trunc_page_num_down_to_map_multiple(gap.start(), pages_per_map);
-            let aligned_end_page =
-                self.round_page_num_up_to_map_multiple(gap.end(), pages_per_map);
+            let aligned_end_page = self.round_page_num_up_to_map_multiple(gap.end(), pages_per_map);
 
             let gap_size = aligned_end_page - aligned_start_page;
             if gap_size >= rounded_num_pages {
