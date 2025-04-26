@@ -150,7 +150,7 @@ steps:
         fi
 
         echo "Running tests"
-        docker exec "$$CONTAINER_ID" bazel run //:python_tests && bazel build --experimental_ui_max_stdouterr_bytes=16777216 //:run_clippy_manifest_scan
+        docker exec "$$CONTAINER_ID" /bin/bash -c "bazel run //:python_tests && bazel build //:run_clippy_manifest_scan"
 
         
         echo "Copying test results"
