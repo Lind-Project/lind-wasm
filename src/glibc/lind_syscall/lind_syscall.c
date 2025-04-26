@@ -30,9 +30,11 @@ int __imported_wasi_snapshot_preview1_lind_syscall(unsigned int callnumber, unsi
 // arg1-arg6: actual argument of the syscall, note that all the pointers passed here is 32-bit virtual wasm address
 //            and should be handled appropriately. This might be changed later and the address translation might be
 //            handled here instead
-int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6)
+int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6, int raw)
 {
     int ret = __imported_wasi_snapshot_preview1_lind_syscall(callnumber, callname, arg1, arg2, arg3, arg4, arg5, arg6);
+    // if raw is set, we do not do any further process to errno handling and directly return the result
+    if(raw != 0) return ret;
     // handle the errno
     // in rawposix, we use -errno as the return value to indicate the error
     // but this may cause some issues for mmap syscall, because mmap syscall

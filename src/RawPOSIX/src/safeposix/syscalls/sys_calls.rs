@@ -1,24 +1,25 @@
 #![allow(dead_code)]
 
 // System related system calls
-use crate::constants::{
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::fs_const::{SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY};
+use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK,
-    SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, SIGCHLD, SIGNAL_MAX, SIG_BLOCK, SIG_MAX,
-    SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX,
+    SIGNAL_MAX, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX,
 };
+// Import data structure
+use sysdefs::data::{fs_struct, net_struct};
+// Import fdtables
+use fdtables;
 
 use crate::interface::{self, convert_signal_mask, lind_send_signal, signal_check_trigger};
 use crate::safeposix::cage;
 use crate::safeposix::cage::*;
 use crate::safeposix::shm::*;
 
-use crate::fdtables::{self, FDTABLE};
-
 use libc::*;
-
 use std::io;
 use std::io::Write;
-
 use std::sync::Arc as RustRfc;
 
 use super::kernel_close;
@@ -81,7 +82,7 @@ impl Cage {
             ),
             pending_signals: interface::RustLock::new(vec![]),
             epoch_handler: interface::RustHashMap::new(),
-            main_threadid: interface::RustAtomicU64::new(0),
+            main_threadid: interface::RustLock::new(0),
             interval_timer: interface::IntervalTimer::new(child_cageid),
             vmmap: interface::RustLock::new(new_vmmap), // clone the vmmap for the child
             zombies: interface::RustLock::new(vec![]),
@@ -109,47 +110,45 @@ impl Cage {
     }
 
     /*
-     *   exec() will only return if error happens
+     *  Here is the Linux man page for execve: https://man7.org/linux/man-pages/man2/execve.2.html
+     *
+     *  exec() only returns if an error occurs.
+     *
+     *  Unlike the `exec` syscalls in the Linux manual, the `exec` syscall here does not take any arguments,
+     *  such as an argument list or environment variables. This is because, in Rawposix, `exec` functions
+     *  solely as a "cage-level exec," focusing only on updating the `cage` struct with necessary changes.
+     *
+     *  In short, this syscall in Rawposix part is responsible for managing cage resources.
+     *  Execution and memory management are handled within the Wasmtime codebase, which eventually calls
+     *  this function to perform only a specific part of the `exec` operation.
+     *
+     *  Here, we retain the same cage and only replace the necessary components since `cageid`, `cwd`, `zombies`,
+     *  and other elements remain unchanged. Only `cancelstatus`, `rev_shm`, `thread_table`, and `vmmap` need to be replaced.
      */
-    pub fn exec_syscall(&self, child_cageid: u64) -> i32 {
-        // Empty fd with flag should_cloexec
+    pub fn exec_syscall(&self) -> i32 {
         fdtables::empty_fds_for_exec(self.cageid);
 
-        interface::cagetable_remove(self.cageid);
+        self.cancelstatus
+            .store(false, interface::RustAtomicOrdering::Relaxed);
+        self.rev_shm.lock().clear();
+        self.thread_table.clear();
+        let mut vmmap = self.vmmap.write();
+        vmmap.clear(); //this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
 
-        self.unmap_shm_mappings();
+        // perform signal related clean up
 
-        let zombies = self.zombies.read();
-        let cloned_zombies = zombies.clone();
-        let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
-        drop(zombies);
+        // all the signal handler becomes default after exec
+        // pending signals should be perserved though
+        self.signalhandler.clear();
+        // the sigset will be reset after exec
+        self.sigset.store(0, interface::RustAtomicOrdering::Relaxed);
+        // we also clean up epoch handler and main thread id
+        // since they will be re-established from wasmtime
+        self.epoch_handler.clear();
+        let mut threadid_guard = self.main_threadid.write();
+        *threadid_guard = 0;
+        drop(threadid_guard);
 
-        let newcage = Cage {
-            cageid: child_cageid,
-            cwd: interface::RustLock::new(self.cwd.read().clone()),
-            parent: self.parent,
-            cancelstatus: interface::RustAtomicBool::new(false),
-            getgid: interface::RustAtomicI32::new(-1),
-            getuid: interface::RustAtomicI32::new(-1),
-            getegid: interface::RustAtomicI32::new(-1),
-            geteuid: interface::RustAtomicI32::new(-1),
-            rev_shm: interface::Mutex::new(vec![]),
-            thread_table: interface::RustHashMap::new(),
-            signalhandler: interface::RustHashMap::new(),
-            sigset: interface::RustAtomicU64::new(
-                self.sigset.load(interface::RustAtomicOrdering::Relaxed),
-            ),
-            pending_signals: interface::RustLock::new(self.pending_signals.read().clone()),
-            epoch_handler: interface::RustHashMap::new(),
-            main_threadid: interface::RustAtomicU64::new(0),
-            interval_timer: self.interval_timer.clone_with_new_cageid(child_cageid),
-            vmmap: interface::RustLock::new(Vmmap::new()), // memory is cleared after exec
-            zombies: interface::RustLock::new(cloned_zombies), // when a process exec-ed, its child relationship should be perserved
-            child_num: interface::RustAtomicU64::new(child_num),
-        };
-        //wasteful clone of fdtable, but mutability constraints exist
-
-        interface::cagetable_insert(child_cageid, newcage);
         0
     }
 
@@ -369,8 +368,8 @@ impl Cage {
     pub fn sigaction_syscall(
         &self,
         sig: i32,
-        act: Option<&interface::SigactionStruct>,
-        oact: Option<&mut interface::SigactionStruct>,
+        act: Option<&fs_struct::SigactionStruct>,
+        oact: Option<&mut fs_struct::SigactionStruct>,
     ) -> i32 {
         if let Some(some_oact) = oact {
             let old_sigactionstruct = self.signalhandler.get(&sig);
@@ -378,7 +377,7 @@ impl Cage {
             if let Some(entry) = old_sigactionstruct {
                 some_oact.clone_from(entry.value());
             } else {
-                some_oact.clone_from(&interface::SigactionStruct::default()); // leave handler field as NULL
+                some_oact.clone_from(&fs_struct::SigactionStruct::default()); // leave handler field as NULL
             }
         }
 
@@ -403,7 +402,7 @@ impl Cage {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid cage id.");
         }
 
-        if (sig < 0) || (sig >= SIG_MAX) {
+        if (sig < 0) || (sig >= 32) {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid signal number");
         }
         let mut real_cage_id = cage_id as u64;
@@ -421,8 +420,8 @@ impl Cage {
     pub fn sigprocmask_syscall(
         &self,
         how: i32,
-        set: Option<&interface::SigsetType>,
-        oldset: Option<&mut interface::SigsetType>,
+        set: Option<&fs_struct::SigsetType>,
+        oldset: Option<&mut fs_struct::SigsetType>,
     ) -> i32 {
         let mut res = 0;
 
@@ -487,8 +486,8 @@ impl Cage {
     pub fn setitimer_syscall(
         &self,
         which: i32,
-        new_value: Option<&interface::ITimerVal>,
-        old_value: Option<&mut interface::ITimerVal>,
+        new_value: Option<&fs_struct::ITimerVal>,
+        old_value: Option<&mut fs_struct::ITimerVal>,
     ) -> i32 {
         match which {
             ITIMER_REAL => {
@@ -519,7 +518,7 @@ impl Cage {
         0
     }
 
-    pub fn getrlimit(&self, res_type: u64, rlimit: &mut interface::Rlimit) -> i32 {
+    pub fn getrlimit(&self, res_type: u64, rlimit: &mut fs_struct::Rlimit) -> i32 {
         match res_type {
             RLIMIT_NOFILE => {
                 rlimit.rlim_cur = NOFILE_CUR;

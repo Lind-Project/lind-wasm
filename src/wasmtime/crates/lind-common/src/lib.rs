@@ -94,7 +94,7 @@ impl LindCommonCtx {
 
                 // assumption: lind_syscall_api will not switch asyncify state, which holds true for now
 
-                if -retval == rawposix::interface::Errno::EINTR as i32 {
+                if -retval == sysdefs::constants::Errno::EINTR as i32 {
                     caller.as_context_mut().append_syscall_asyncify_data(retval);
                     // println!("ready for signal handler");
                     wasmtime_lind_multi_process::signal::signal_handler(&mut caller);

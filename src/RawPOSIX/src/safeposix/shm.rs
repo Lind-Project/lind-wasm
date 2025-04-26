@@ -1,23 +1,23 @@
 // Filesystem metadata struct
 #![allow(dead_code)]
 
-use crate::constants::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PAGESHIFT, PROT_NONE, PROT_READ, PROT_WRITE,
-    SHM_DEST, SHM_RDONLY,
+use sysdefs::constants::fs_const::{
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHM_DEST,
+    SHM_RDONLY,
 };
+use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
+use sysdefs::constants::{PAGESHIFT, syscall_error};
 
-use crate::interface::{self, syscall_error, Errno};
-use crate::safeposix::cage::{MemoryBackingType, VmmapOps};
+use super::cage::{Cage, MemoryBackingType, VmmapOps};
+use crate::interface;
 
 use libc::*;
-
-use super::cage::Cage;
 
 pub static SHM_METADATA: interface::RustLazyGlobal<interface::RustRfc<ShmMetadata>> =
     interface::RustLazyGlobal::new(|| interface::RustRfc::new(ShmMetadata::init_shm_metadata()));
 
 pub struct ShmSegment {
-    pub shminfo: interface::ShmidsStruct,
+    pub shminfo: ShmidsStruct,
     pub key: i32,
     pub size: usize,
     pub filebacking: interface::ShmFile,
@@ -41,7 +41,7 @@ impl ShmSegment {
         let filebacking = interface::new_shm_backing(key, size).unwrap();
 
         let time = interface::timestamp() as isize; //We do a real timestamp now
-        let permstruct = interface::IpcPermStruct {
+        let permstruct = IpcPermStruct {
             __key: key,
             uid: uid,
             gid: gid,
@@ -54,7 +54,7 @@ impl ShmSegment {
             __unused1: 0,
             __unused2: 0,
         };
-        let shminfo = interface::ShmidsStruct {
+        let shminfo = ShmidsStruct {
             shm_perm: permstruct,
             shm_segsz: size as u32,
             shm_atime: 0,
@@ -110,7 +110,7 @@ impl ShmSegment {
 
         // did not find desired memory region
         if result.is_none() {
-            return syscall_error(Errno::ENOMEM, "shm", "no memory") as i32;
+            return syscall_error(sysdefs::constants::Errno::ENOMEM, "shm", "no memory") as i32;
         }
 
         let space = result.unwrap();
@@ -182,6 +182,10 @@ impl ShmSegment {
             }
         };
     }
+
+    pub fn get_shm_length(&self) -> usize {
+        self.size
+    }
 }
 
 pub struct ShmMetadata {
@@ -198,9 +202,18 @@ impl ShmMetadata {
             shmtable: interface::RustHashMap::new(),
         }
     }
+    pub fn get_shm_length(&self, shmid: i32) -> Option<usize> {
+        self.shmtable.get(&shmid).map(|segment| segment.get_shm_length())
+    }
+    
 
     pub fn new_keyid(&self) -> i32 {
         self.nextid
             .fetch_add(1, interface::RustAtomicOrdering::Relaxed)
     }
+}
+
+pub fn get_shm_length(shmid: i32) -> Option<usize> {
+    let metadata: &ShmMetadata = &**SHM_METADATA;
+    metadata.get_shm_length(shmid)
 }

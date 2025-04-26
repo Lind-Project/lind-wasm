@@ -1,8 +1,6 @@
 // Filesystem metadata struct
 #![allow(dead_code)]
 
-// use super::syscalls::fs_constants::*;
-// use super::syscalls::sys_constants::*;
 use crate::interface;
 
 use super::cage::Cage;

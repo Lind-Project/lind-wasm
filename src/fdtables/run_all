@@ -1,0 +1,52 @@
+#!/bin/bash
+
+
+redirectoutput=0
+
+if [ $0 != "./run_all" ];
+then
+	echo "Must run as ./run_all   Do not run from a different directory"
+	exit 1
+fi
+
+# adapted from https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --help|-help)
+      echo "Unknown option $1"
+      echo "Usage: $0 [-o] command [args...]"
+      exit 1
+      ;;
+    -o)
+      redirectoutput=1
+      shift
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+
+# save the old impl
+mv src/current_impl backup_current_impl
+
+for file in impl_macros/*
+do 
+	echo
+	echo " *** Switching to implementation: $file *** "
+	echo
+	if [[ $redirectoutput -ne 0 ]];
+	then
+		cp $file src/current_impl 
+		outfile=target/`basename $file`.out
+		echo "Running $* > $outfile"
+		$* > $outfile
+	else
+		cp $file src/current_impl 
+		$*
+	fi
+done
+
+# restore current_impl
+mv backup_current_impl src/current_impl

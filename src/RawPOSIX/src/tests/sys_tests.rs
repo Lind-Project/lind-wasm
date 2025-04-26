@@ -4,6 +4,8 @@
 #[allow(unused_parens)]
 #[cfg(test)]
 pub mod sys_tests {
+    use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS};
+
     use super::super::*;
     use crate::constants::{DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS};
     use crate::interface;
@@ -127,7 +129,7 @@ pub mod sys_tests {
         let _thelock = setup::lock_and_init();
         let cage1 = interface::cagetable_getref(1);
         // Exec a new child
-        assert_eq!(cage1.exec_syscall(2), 0);
+        assert_eq!(cage1.exec_syscall(), 0);
         // Assert that the fork was correct
         let child_cage = interface::cagetable_getref(2);
         assert_eq!(child_cage.getuid_syscall(), -1);
@@ -165,11 +167,18 @@ pub mod sys_tests {
         let pid = cage.waitpid_syscall(0, &mut status, libc::WNOHANG);
         assert_eq!(pid, 0);
 
+        // Store the cage IDs we want to exit
+        let cage3_id = 3;
+        let cage4_id = 4;
+
         // test for waitpid when the cage exits in the middle of waiting
         let thread1 = interface::helper_thread(move || {
             interface::sleep(interface::RustDuration::from_millis(100));
-            child_cage4.exit_syscall(4);
-            child_cage3.exit_syscall(3);
+            // Instead of moving cages, we'll get new references inside the thread
+            let thread_cage4 = interface::cagetable_getref(cage4_id);
+            let thread_cage3 = interface::cagetable_getref(cage3_id);
+            thread_cage4.exit_syscall(4);
+            thread_cage3.exit_syscall(3);
         });
 
         let pid = cage.waitpid_syscall(0, &mut status, 0);

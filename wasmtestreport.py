@@ -21,6 +21,8 @@ import shutil
 
 DEFAULT_TIMEOUT = 5 # in seconds
 
+DEBUG_MODE = False
+
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
 SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will not run
@@ -147,7 +149,14 @@ def add_test_result(result, file_path, status, error_type, output):
 def compile_c_to_wasm(source_file):
     source_file = Path(source_file).resolve()
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = ["./lindtool.sh", "compile_test", testcase]
+    compile_cmd = [os.path.join(LIND_WASM_BASE, "lindtool.sh"), "compile_test", testcase]
+    if DEBUG_MODE:
+        print("Running command:", compile_cmd)
+        if os.path.isfile(os.path.join(LIND_WASM_BASE, "lindtool.sh")):
+            print("File exists and is a regular file!")
+        else:
+            print("File not found or it's a directory!")
+
 
     try:
         result = subprocess.run(compile_cmd, capture_output=True, text=True)
@@ -184,7 +193,14 @@ def compile_c_to_wasm(source_file):
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     testcase = str(wasm_file.with_suffix(''))
-    run_cmd = ["./lindtool.sh", "run", testcase]
+    run_cmd = [os.path.join(LIND_WASM_BASE, "lindtool.sh"), "run", testcase]
+    if DEBUG_MODE:
+        print("Running command:", run_cmd)
+        if os.path.isfile(os.path.join(LIND_WASM_BASE, "lindtool.sh")):
+            print("File exists and is a regular file!")
+        else:
+            print("File not found or it's a directory!")
+
 
     try:
         proc = subprocess.run(run_cmd, capture_output=True, text=True, timeout=timeout_sec)
@@ -582,6 +598,7 @@ def parse_arguments():
     parser.add_argument("--generate-html", action="store_true", help="Flag to generate HTML file")
     parser.add_argument("--pre-test-only", action="store_true", help="Flag to run only the copying of required testfiles")
     parser.add_argument("--clean-testfiles", action="store_true", help="Flag to remove the testfiles")
+    parser.add_argument("--clean-results", action="store_true", help="Flag to clean up result files")
 
     args = parser.parse_args()
     return args
@@ -606,21 +623,32 @@ def compare_test_results(file1, file2):
     return (status, new_failures)
 
 def main():
+    os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
     run_folders = args.run
     timeout_sec = args.timeout
     output_file = str(Path(args.output).with_suffix('.json'))
     output_html_file = str(Path(args.report).with_suffix('.html'))
-    should_generate_html = args.generate_html
+    should_generate_html = True
     pre_test_only = args.pre_test_only
     clean_testfiles = args.clean_testfiles
+    clean_results = args.clean_results
+
+    if clean_results:
+        if os.path.isfile(output_file):
+            os.remove(output_file)
+        if os.path.isfile(output_html_file):
+            os.remove(output_html_file)
+        print(Path(LIND_FS_ROOT))
+        for file in Path(LIND_FS_ROOT).iterdir():
+            file.unlink()
+        return
 
     results = {
         "deterministic": get_empty_result(),
         "non_deterministic": get_empty_result()
     }
-
 
     try:
         shutil.rmtree(TESTFILES_DST)
@@ -689,7 +717,7 @@ def main():
             out.write(report_html)
         print(f"'{output_html_file}' generated.")
 
-    print(f"'{output_file}' generated.")
+    print(f"'{os.path.abspath(output_file)}' generated.")
 
 if __name__ == "__main__":
     main()

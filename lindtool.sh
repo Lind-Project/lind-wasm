@@ -1,36 +1,98 @@
 #!/bin/bash
 
-glibc_base="$PWD/src/glibc"
-wasmtime_base="$PWD/src/wasmtime"
-rustposix_base="$PWD/src/safeposix-rust"
-rawposix_base="$PWD/src/RawPOSIX"
+# Load configuration
+source "$(dirname "$0")/lind_config.sh"
 
-CC="${CLANG:=/home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
+# ----------------------------------------------------------------------
+# Function: verify_environment
+#
+# Purpose:
+#   Verifies the presence of essential directories, compiler, header files, 
+#   and required binaries for the project. It checks if the directories 
+#   exist, if the specified compiler is available and executable, and if 
+#   essential files like `stdlib.h` and required binaries (such as `wasmtime`, 
+#   `cargo`, `gdb`, and `wasm-opt`) are found. The results of each check 
+#   are printed to the terminal, and a final summary is provided.
+#
+# Variables:
+# - Directories: 
+#     - glibc_base: Path to the glibc directory.
+#     - wasmtime_base: Path to the wasmtime directory.
+#     - rustposix_base: Path to the rustposix directory.
+#     - rawposix_base: Path to the rawposix directory.
+#   - Compiler: 
+#     - CC: The path to the clang compiler executable (default from the CLANG environment variable).
+#   - Header file:
+#     - stdlib.h: Path to the required `stdlib.h` header file within glibc.
+#   - Binaries: 
+#     - List of required binaries (`wasmtime`, `cargo`, `gdb`, `wasm-opt`).
+#
+# Output:
+#   - Prints the results of each verification step to the terminal, indicating 
+#     whether the checked item is found or missing. 
+#
+# Return Value:
+#   - This function does not return any values but prints the results directly 
+#     to the terminal.
+# Exceptions:
+#   - The function does not handle any exceptions or errors explicitly. 
+# ----------------------------------------------------------------------
 
-export_cmd="export LD_LIBRARY_PATH=$wasmtime_base/crates/rustposix:\$LD_LIBRARY_PATH"
+verify_environment() {
+    echo "========================================"
+    echo " Verifying Environment Setup"
+    echo "========================================"
 
-compile_test_cmd_fork="$CC --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
-compile_test_cmd_noshared="$CC --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output]"
-compile_test_cmd="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export=__stack_low [input] -g -O0 -o [output]"
-precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output]"
+    local missing=0  # Counter for missing dependencies
 
-compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi --sysroot $glibc_base/sysroot -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low [input] -g -O0 -o [output] && wasm-opt --asyncify --debuginfo [output] -o [output]"
+    # Check directories
+    for dir in "$glibc_base" "$wasmtime_base" "$rustposix_base" "$rawposix_base"; do
+        if [ -d "$dir" ]; then
+            echo -e "${GREEN}✔ Directory exists:${RESET} $dir"
+        else
+            echo -e "${RED}✘ Directory missing:${RESET} $dir"
+            missing=$((missing + 1))
+        fi
+    done
 
-run_cmd="$wasmtime_base/target/debug/wasmtime run --wasi threads=y --wasi preview2=n [target]"
-run_cmd_precompile="$wasmtime_base/target/debug/wasmtime run --allow-precompiled --wasi threads=y --wasi preview2=n [target]"
-run_cmd_debug="gdb --args $wasmtime_base/target/debug/wasmtime run -D debug-info -O opt-level=0 --wasi threads=y --wasi preview2=n [target]"
+    # Check compiler
+    if [ -x "$CC" ]; then
+        echo -e "${GREEN}✔ Compiler found:${RESET} $CC"
+    else
+        echo -e "${RED}✘ Compiler missing or not executable:${RESET} $CC"
+        missing=$((missing + 1))
+    fi
 
-compile_wasmtime_cmd="cd $wasmtime_base && cargo build"
-compile_rustposix_cmd="cd $rustposix_base && cargo build && cp $rustposix_base/target/debug/librustposix.so $wasmtime_base/crates/rustposix"
-compile_rawposix_cmd="cd $rawposix_base && cargo build && cp $rawposix_base/target/debug/librustposix.so $wasmtime_base/crates/rustposix"
+    # Check required header file (stdlib.h)
+    stdlib_path="$glibc_base/sysroot/usr/include/stdlib.h"
+    if [ -f "$stdlib_path" ]; then
+        echo -e "${GREEN}✔ Found stdlib.h:${RESET} $stdlib_path"
+    else
+        echo -e "${RED}✘ Missing stdlib.h:${RESET} Expected at $stdlib_path"
+        missing=$((missing + 1))
+    fi
 
-compile_pthread_create="$CC --target=wasm32-unkown-wasi -v -Wno-int-conversion pthread_create.c -c -std=gnu11 -fgnu89-inline  -matomics -mbulk-memory -O0 -g -Wall -Wwrite-strings -Wundef -fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common -Wp,-U_FORTIFY_SOURCE -Wstrict-prototypes -Wold-style-definition -fmath-errno    -fPIE     -ftls-model=local-exec     -I../include -I$glibc_base/build/nptl  -I$glibc_base/build  -I../sysdeps/lind  -I../lind_syscall  -I../sysdeps/unix/sysv/linux/i386/i686  -I../sysdeps/unix/sysv/linux/i386  -I../sysdeps/unix/sysv/linux/x86/include -I../sysdeps/unix/sysv/linux/x86  -I../sysdeps/x86/nptl  -I../sysdeps/i386/nptl  -I../sysdeps/unix/sysv/linux/include -I../sysdeps/unix/sysv/linux  -I../sysdeps/nptl  -I../sysdeps/pthread  -I../sysdeps/gnu  -I../sysdeps/unix/inet  -I../sysdeps/unix/sysv  -I../sysdeps/unix/i386  -I../sysdeps/unix  -I../sysdeps/posix  -I../sysdeps/i386/fpu  -I../sysdeps/x86/fpu  -I../sysdeps/i386  -I../sysdeps/x86/include -I../sysdeps/x86  -I../sysdeps/wordsize-32  -I../sysdeps/ieee754/float128  -I../sysdeps/ieee754/ldbl-96/include -I../sysdeps/ieee754/ldbl-96  -I../sysdeps/ieee754/dbl-64  -I../sysdeps/ieee754/flt-32  -I../sysdeps/ieee754  -I../sysdeps/generic  -I.. -I../libio -I. -nostdinc -isystem $CLANG/lib/clang/16/include -isystem /usr/i686-linux-gnu/include -D_LIBC_REENTRANT -include $glibc_base/build/libc-modules.h -DMODULE_NAME=libc -include ../include/libc-symbols.h  -DPIC     -DTOP_NAMESPACE=glibc -o $glibc_base/build/nptl/pthread_create.o -MD -MP -MF $glibc_base/build/nptl/pthread_create.o.dt -MT $glibc_base/build/nptl/pthread_create.o"
-compile_wasi_thread_start="$CC --target=wasm32-wasi-threads -matomics -o $glibc_base/build/csu/wasi_thread_start.o -c $glibc_base/csu/wasm32/wasi_thread_start.s"
-make_cmd="cd $glibc_base && rm -rf build && ./wasm-config.sh && cd build && make -j8 --keep-going 2>&1 THREAD_MODEL=posix | tee check.log && cd ../nptl && $compile_pthread_create && cd ../ && $compile_wasi_thread_start && ./gen_sysroot.sh"
+    # Check required binaries
+    for bin in "$wasmtime_base/target/debug/wasmtime" "cargo" "gdb" "wasm-opt"; do
+        if command -v "$bin" >/dev/null 2>&1 || [ -x "$bin" ]; then
+            echo -e "${GREEN}✔ Found executable:${RESET} $bin"
+        else
+            echo -e "${RED}✘ Missing executable:${RESET} $bin"
+            missing=$((missing + 1))
+        fi
+    done
 
-RED='\033[31m'
-GREEN='\033[32m'
-RESET='\033[0m'
+    # Final summary
+    echo "========================================"
+    if [ "$missing" -eq 0 ]; then
+        echo -e "${GREEN}All checks passed!${RESET}"
+    else
+        echo -e "${RED}$missing issue(s) found.${RESET} Please resolve them."
+    fi
+}
+
+# verification of environment here
+#verify_environment
 
 split_path() {
     local full_path="$1"
@@ -113,10 +175,6 @@ if [ "${!#}" = "-p" ]; then
 fi
 
 case $1 in
-    export)
-        echo -e "${GREEN}$export_cmd${RESET}"
-        echo "please manually run the export command"
-        ;;
     compile_test|cptest)
         if [ -z "$2" ]; then
             echo -e "${RED}error: source file name not provided${RESET}"
@@ -197,12 +255,6 @@ case $1 in
             eval "$compile_wasmtime_cmd"
         fi
         ;;
-    compile_rustposix|cpposix)
-        echo -e "${GREEN}$compile_rustposix_cmd${RESET}"
-        if [ "$pmode" -eq 0 ]; then
-            eval "$compile_rustposix_cmd"
-        fi
-        ;;
     compile_rawposix|cpraw)
         echo -e "${GREEN}$compile_rawposix_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
@@ -217,64 +269,20 @@ case $1 in
 
         compile_src $2 $3
         ;;
-    make_all)
+    make_all|make_glibc)
         unset LD_LIBRARY_PATH
         echo -e "${GREEN}$make_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
             eval "$make_cmd"
         fi
         ;;
-    make)
-        result=$(lindmake "$glibc_base" "$pmode")
-        if [ -z "$result" ]; then
-            echo -e "${GREEN}No changes detected.${RESET}"
-            exit 0
-        fi
-        echo $result
-
-        # Set IFS to semicolon and read the string into an array
-        IFS=';' read -r -a array <<< "$result"
-
-        compiled=()
-
-        # Print each element of the array
-        for line in "${array[@]}"; do
-            # Split the string into two variables
-            if [[ "$line" =~ ^([^[:space:]]+)([[:space:]]+)(.+)$ ]]; then
-                src_file=${BASH_REMATCH[1]}
-                compiled+=($src_file)
-                compile_src $src_file ${BASH_REMATCH[3]}
-
-                if [ $? -ne 0 ]; then
-                    echo -e "${RED}Compilation Failed.${RESET}"
-                    exit 1
-                fi
-            else
-                compile_src $line
-
-                if [ $? -ne 0 ]; then
-                    echo -e "${RED}Compilation Failed.${RESET}"
-                    exit 1
-                fi
-            fi
-        done
-
-        echo ""
-        for file in "${compiled[@]}"; do
-            echo -e "${GREEN}Compiled $file successfully.${RESET}"
-        done
-
-        ;;
     help)
         echo "avaliable commands are:"
-        echo "1. export"
-        echo "2. compile_test"
-        echo "3. run"
-        echo "4. compile_wasmtime"
-        echo "5. compile_rustposix"
-        echo "6. compile_src"
-        echo "7. make_all"
-        echo "8. make"
+        echo "1. compile_test"
+        echo "2. run"
+        echo "3. compile_wasmtime"
+        echo "4. compile_src"
+        echo "5. make_all"
         ;;
     *)
         echo "Unknown command identifier."

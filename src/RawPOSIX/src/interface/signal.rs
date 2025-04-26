@@ -1,16 +1,17 @@
-use crate::{
-    constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL},
-    interface::{cagetable_getref, cagetable_getref_opt, RustAtomicOrdering},
-};
+use crate::interface::{cagetable_getref, cagetable_getref_opt, RustAtomicOrdering};
+use sysdefs::constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL};
 
 const EPOCH_NORMAL: u64 = 0;
 const EPOCH_SIGNAL: u64 = 0xc0ffee;
 const EPOCH_KILLED: u64 = 0xdead;
 
 // switch the epoch of the main thread of the cage to "signal" state
+// thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn signal_epoch_trigger(cageid: u64) {
     let cage = cagetable_getref(cageid);
-    let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
+
+    let threadid_guard = cage.main_threadid.read();
+    let main_threadid = *threadid_guard;
     let epoch_handler = cage
         .epoch_handler
         .get(&main_threadid)
@@ -28,9 +29,12 @@ pub fn signal_epoch_trigger(cageid: u64) {
 }
 
 // switch the epoch of all threads of the cage to "killed" state
+// thread safety: this function will only be invoked by main thread of the cage
 pub fn epoch_kill_all(cageid: u64) {
     let cage = cagetable_getref(cageid);
-    let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
+
+    let threadid_guard = cage.main_threadid.read();
+    let main_threadid = *threadid_guard;
     // we iterate through the epoch handler of each thread in the cage
     for entry in cage.epoch_handler.iter() {
         if entry.key() == &main_threadid {
@@ -48,9 +52,25 @@ pub fn epoch_kill_all(cageid: u64) {
     }
 }
 
+// get the current epoch state of the thread
+// thread safety: this function will only be invoked by main thread of the cage
+fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
+    let cage = cagetable_getref(cageid);
+    let epoch_handler = cage
+        .epoch_handler
+        .get(&(thread_id as i32))
+        .expect("threadid does not exist");
+    let guard = epoch_handler.read();
+    let epoch = *guard;
+    // SAFETY: see comment at `signal_epoch_trigger`
+    unsafe { *epoch }
+}
+
 // check the specified thread with specified cage is in "killed" state
+// thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
     let cage = cagetable_getref(cageid);
+    // this method should not be invoked if the thread is already killed (i.e. thread is removed from epoch_handler)
     let epoch_handler = cage.epoch_handler.get(&(thread_id as i32)).unwrap();
     let guard = epoch_handler.write();
     let epoch = *guard;
@@ -60,9 +80,12 @@ pub fn thread_check_killed(cageid: u64, thread_id: u64) -> bool {
 
 // reset the epoch of the main thread of the cage to "normal" state
 // usually invoked when all the pending signals are handled for the cage
+// thread safety: this function will only be invoked by main thread of the cage
 pub fn signal_epoch_reset(cageid: u64) {
     let cage = cagetable_getref(cageid);
-    let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
+
+    let threadid_guard = cage.main_threadid.read();
+    let main_threadid = *threadid_guard;
     let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
     let guard = epoch_handler.write();
     let epoch = *guard;
@@ -74,9 +97,12 @@ pub fn signal_epoch_reset(cageid: u64) {
 
 // manually check if the epoch is not in "normal" state
 // useful if we want to do our own epoch check in host
+// thread safety: this function will only be invoked by main thread of the cage
 pub fn signal_check_trigger(cageid: u64) -> bool {
     let cage = cagetable_getref(cageid);
-    let main_threadid = cage.main_threadid.load(RustAtomicOrdering::Relaxed) as i32;
+
+    let threadid_guard = cage.main_threadid.read();
+    let main_threadid = *threadid_guard;
 
     let epoch_handler = cage.epoch_handler.get(&main_threadid).unwrap();
     let guard = epoch_handler.write();
@@ -86,6 +112,8 @@ pub fn signal_check_trigger(cageid: u64) -> bool {
 }
 
 // check if the signal of the cage is in blocked state
+// thread safety: this function will only be invoked by main thread of the cage
+//                but should still work fine if accessed by multiple threads
 pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
     let cage = cagetable_getref(cageid);
     let sigset = cage.sigset.load(RustAtomicOrdering::Relaxed);
@@ -96,6 +124,7 @@ pub fn signal_check_block(cageid: u64, signo: i32) -> bool {
 
 // retrieve the signal handler for the specified signal of the cage
 // if the signal handler does not exist, then return SIG_DFL
+// thread safety: this function will only be invoked by main thread of the cage
 pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
     let cage = cagetable_getref(cageid);
     let handler = match cage.signalhandler.get(&signo) {
@@ -108,6 +137,7 @@ pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
 }
 
 // send specified signal to the cage, return value indicates whether the cage exists
+// thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
     if let Some(cage) = cagetable_getref_opt(cageid) {
         if signo > 0 {
@@ -139,6 +169,7 @@ pub fn convert_signal_mask(signo: i32) -> u64 {
 // returns an optional tuple where the first element is the signal number
 // the second element is the signal handler
 // and the third element is the signal mask restore callback function
+// thread safety: this function will only be invoked by main thread of the cage
 pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)> {
     let cage = cagetable_getref(cageid);
     let mut pending_signals = cage.pending_signals.write();
@@ -198,6 +229,7 @@ pub fn lind_get_first_signal(cageid: u64) -> Option<(i32, u32, Box<dyn Fn(u64)>)
 
 // check if there is any pending unblocked signals
 // return true if no pending unblocked signals are found
+// thread safety: this function will only be invoked by main thread of the cage
 pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
     let cage = cagetable_getref(cageid);
     let mut pending_signals = cage.pending_signals.write();
@@ -214,13 +246,14 @@ pub fn lind_check_no_pending_signal(cageid: u64) -> bool {
 }
 
 // initialize the signal for a new thread
+// thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_mainthread: bool) {
     let cage = cagetable_getref(cageid);
 
     // if this is specified as the main thread, then replace the main_threadid field in cage
     if is_mainthread {
-        cage.main_threadid
-            .store(threadid as u64, RustAtomicOrdering::SeqCst);
+        let mut threadid_guard = cage.main_threadid.write();
+        *threadid_guard = threadid;
     }
     let epoch_handler = super::RustLock::new(epoch_handler);
     cage.epoch_handler.insert(threadid, epoch_handler);
@@ -230,7 +263,9 @@ pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_
 // return true if this is the last thread in the cage, otherwise return false
 pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
     let cage = cagetable_getref(cageid);
-    let main_threadid = cage.main_threadid.load(RustAtomicOrdering::SeqCst);
+    // lock the main threadid until all the related fields including epoch_handler finishes its updating
+    let mut threadid_guard = cage.main_threadid.write();
+    let main_threadid = *threadid_guard as u64;
 
     let mut last_thread = false;
 
@@ -242,8 +277,18 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
             .iter()
             .find(|entry| *entry.key() as u64 != thread_id)
         {
-            let id = *entry.key() as u64;
-            cage.main_threadid.store(id, RustAtomicOrdering::SeqCst);
+            let id = *entry.key();
+            *threadid_guard = id;
+
+            // we also need to migrate the epoch state to the new thread
+            let state = get_epoch_state(cageid, thread_id);
+            let new_thread_epoch_handler = entry.value().write();
+            let new_thread_epoch = *new_thread_epoch_handler;
+            // TODO: we should also make sure the new thread is not in EPOCH_KILLED state.
+            // Will be integrated with process exiting fix
+            unsafe {
+                *new_thread_epoch = state;
+            };
         } else {
             // we just exited the last thread in the cage
             last_thread = true;
@@ -255,4 +300,19 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
         .expect("thread id does not exist!");
 
     last_thread
+}
+
+// trigger the epoch if pending signal list is not empty
+// This function is invoked only by a newly exec-ed cage
+// immediately after it completes its initialization.
+// Its purpose is to handle the scenario where Linux resets
+// the signal mask but preserves pending signals after exec.
+// As a result, the new process may receive signals that were
+// pending in the previous process right after it starts.
+pub fn signal_may_trigger(cageid: u64) {
+    let cage = cagetable_getref(cageid);
+    let pending_signals = cage.pending_signals.read();
+    if !pending_signals.is_empty() {
+        signal_epoch_trigger(cageid);
+    }
 }
