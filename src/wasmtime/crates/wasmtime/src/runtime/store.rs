@@ -338,7 +338,7 @@ pub struct StoreOpaque {
     host_globals: Vec<StoreBox<VMHostGlobalContext>>,
 
     asyncify_state: AsyncifyState,
-    // signal asyncify data, holds the sequence of the parameters for signal handler 
+    // signal asyncify data, holds the sequence of the parameters for signal handler
     signal_asyncify_data: Vec<SignalAsyncifyData>,
     signal_asyncify_counter: u64,
     // syscall asyncify data, holds the sequence of syscall return value
@@ -1449,7 +1449,11 @@ impl<'a, T> StoreContextMut<'a, T> {
 
     // get the current syscall retval information
     pub fn get_current_syscall_rewind_data(&mut self) -> Option<i32> {
-        let data = self.0.syscall_asyncify_data.get(self.0.syscall_asyncify_counter as usize).cloned();
+        let data = self
+            .0
+            .syscall_asyncify_data
+            .get(self.0.syscall_asyncify_counter as usize)
+            .cloned();
         let length = self.0.syscall_asyncify_data.len();
         if self.0.syscall_asyncify_counter == (length - 1) as u64 {
             self.0.syscall_asyncify_counter = 0;

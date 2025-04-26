@@ -23,8 +23,12 @@ enum SignalDefaultHandler {
 //    b. in case of ignore, we simply ignore this signal and do not do anything
 //    c. in case of stop/continue, this is currently also ignored but would possibly be a TODO to implement in the future
 // 4. otherwise if it is a custom handler, just call into glibc's signal handler directly
-pub fn signal_handler<T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync, U: Clone + Send + 'static + std::marker::Sync>
-        (caller: &mut Caller<'_, T>) -> i32 {
+pub fn signal_handler<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+) -> i32 {
     // retrieve glibc's signal callback function, see line #87 in glibc/sysdeps/unix/sysv/linux/i386/libc_sigaction.c for more detail
     let signal_func = caller.get_signal_callback().unwrap();
 
