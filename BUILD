@@ -170,8 +170,13 @@ genrule(
     export GIT_DIR=$$PWD/.git
     export GIT_WORK_TREE=$$PWD
 
-    echo "Fetching origin/main..."
-    git fetch --unshallow || echo "Warning: git fetch failed"
+    echo "Fetching full git history if shallow..."
+    if git rev-parse --is-shallow-repository | grep true; then
+      git fetch --unshallow || echo "Warning: unshallow failed (maybe already full repo)"
+    fi
+
+    echo "Fetching origin/main branch specifically..."
+    git fetch origin main || echo "Warning: fetching origin/main failed"
 
     set +e
     ./clippy_delta_bin --output-file $(location tests/ci-tests/clippy/clippy_out.json)
@@ -193,6 +198,7 @@ genrule(
     executable = True,
     tags = ["no-cache", "no-sandbox"],
 )
+
 
 
 
