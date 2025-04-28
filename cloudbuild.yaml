@@ -225,7 +225,7 @@ steps:
           curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
               -H "Content-Type: application/json" \
-             -d "$(printf '{"body":"**Test Report**\\n\\n**[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n**[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**\\n**[View Clippy Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/clippy.json)**"}' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")" \
+             -d "$(printf '{"body":"**Test Report**\\n\\n**[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n**[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**\\n**[View Clippy Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/clippy_out.json)**"}' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")" \
           "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
 
 # Cloud Build machine and logging options
