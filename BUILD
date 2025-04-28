@@ -174,7 +174,7 @@ genrule(
 
     set +e
     ./clippy_delta_bin --output-file $(location tests/ci-tests/clippy/clippy_out.json)
-    status=$?
+    status=$$?
     set -e
 
     echo ""
