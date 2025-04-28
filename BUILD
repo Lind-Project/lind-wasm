@@ -170,7 +170,8 @@ genrule(
     export GIT_DIR=$$PWD/.git
     export GIT_WORK_TREE=$$PWD
 
-    
+    echo "Fetching origin/main..."
+    git fetch origin main || echo "Warning: git fetch failed"
 
     set +e
     ./clippy_delta_bin --output-file $(location tests/ci-tests/clippy/clippy_out.json)
@@ -192,6 +193,7 @@ genrule(
     executable = True,
     tags = ["no-cache", "no-sandbox"],
 )
+
 
 
 #FileGroup for .git files
