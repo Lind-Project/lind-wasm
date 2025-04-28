@@ -171,7 +171,7 @@ genrule(
     export GIT_WORK_TREE=$$PWD
 
     echo "Fetching origin/main..."
-    git fetch origin main || echo "Warning: git fetch failed"
+    git fetch --unshallow || echo "Warning: git fetch failed"
 
     set +e
     ./clippy_delta_bin --output-file $(location tests/ci-tests/clippy/clippy_out.json)
