@@ -7,6 +7,7 @@ ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-main}
 
 ARG GLIBC_TAR_CACHE
+ENV GLIBC_TAR_CACHE=${GLIBC_TAR_CACHE:-false}
 
 # Install all the required dependencies
 RUN apt-get -qq update && \
