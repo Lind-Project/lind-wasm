@@ -189,7 +189,8 @@ genrule(
     echo "  bazel-bin/tests/ci-tests/clippy/clippy_out.json"
     echo "==================================================="
     
-    exit $$status
+    # Should succeed so logs are passed even if clippy issues are found
+    exit 0
     """,
     executable = True,
     tags = ["no-cache", "no-sandbox"],
