@@ -24,10 +24,10 @@ Now let try to print `Hello world!`
 ./lindtool.sh run tests/unit-tests/file_tests/deterministic/printf
 ```
 
-Further examples can be found [here](https://lind-project.github.io/lind-wasm-docs/use/examples/)
+Further examples can be found [here](https://lind-project.github.io/lind-wasm/use/examples/)
 
 ## Documentation
 
-Check out our [docs](https://lind-project.github.io/lind-wasm-docs/)! 
+Check out our [docs](https://lind-project.github.io/lind-wasm/)!
 
 

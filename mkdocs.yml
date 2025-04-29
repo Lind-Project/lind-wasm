@@ -1,5 +1,5 @@
 site_name: Lind-Wasm Docs
-site_url: https://lind-project.github.io/lind-wasm-docs/
+site_url: https://lind-project.github.io/lind-wasm/
 theme:
   material
 
