@@ -170,11 +170,9 @@ genrule(
     export GIT_DIR=$$PWD/.git
     export GIT_WORK_TREE=$$PWD
 
-    echo "Checking for shallow clone..."
-    git rev-parse --is-shallow-repository | grep -q true && git fetch --unshallow || echo "Repo is already full clone"
-
-    echo "Fetching origin/main..."
-    git fetch origin main || echo "Warning: git fetch main failed"
+    echo "Fetching origin/main without removing remotes..."
+    git remote get-url origin || git remote add origin https://github.com/Lind-Project/lind-wasm.git
+    git fetch origin main:refs/remotes/origin/main || echo "Warning: could not fetch origin/main"    
 
     set +e
     ./clippy_delta_bin --output-file $(location tests/ci-tests/clippy/clippy_out.json)
