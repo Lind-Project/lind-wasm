@@ -6,6 +6,7 @@
 int
 __GI___uname (struct utsname *name)
 {
+  // lind-wasm: copied from posix/uname.c
   int save;
 
   if (name == NULL)

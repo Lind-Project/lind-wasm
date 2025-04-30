@@ -16,7 +16,6 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <pwd.h>
-#include <stdlib.h>
 
 
 #define LOOKUP_TYPE	struct passwd
@@ -26,6 +25,8 @@
 #define ADD_VARIABLES	uid
 #define BUFLEN		NSS_BUFLEN_PASSWD
 
+// TODO: normal getpwuid routine is not working correctly for some reason
+// currently hardcoded the value but we should fix this in the future
 // #include <nss/getXXbyYY_r.c>
 
 int

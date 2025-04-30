@@ -20,7 +20,6 @@
 #include <sys/stat.h>
 #include <sysdep.h>
 #include <syscall-template.h>
-#include <string.h>
 
 /* Create a directory named PATH with protections MODE.  */
 int

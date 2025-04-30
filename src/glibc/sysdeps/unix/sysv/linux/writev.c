@@ -24,6 +24,7 @@
 ssize_t
 __writev (int fd, const struct iovec *iov, int iovcnt)
 {
+  // clean up padding field of each iovec
   for(size_t i = 0; i < iovcnt; ++i)
   {
     struct iovec *cur = iov + i;

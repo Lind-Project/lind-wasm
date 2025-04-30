@@ -19,7 +19,6 @@
 #include <atomic.h>
 #include <errno.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include "nsswitch.h"
 #include "sysdep.h"
 #ifdef USE_NSCD
@@ -273,6 +272,7 @@ INTERNAL (REENTRANT_NAME) (ADD_PARAMS, LOOKUP_TYPE *resbuf, char *buffer,
 
       status = DL_CALL_FCT (fct.l, (ADD_VARIABLES, resbuf, buffer, buflen,
 				    &errno H_ERRNO_VAR EXTRA_VARIABLES));
+
       /* The status is NSS_STATUS_TRYAGAIN and errno is ERANGE the
 	 provided buffer is too small.  In this case we should give
 	 the user the possibility to enlarge the buffer and we should

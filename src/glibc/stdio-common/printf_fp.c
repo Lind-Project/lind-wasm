@@ -1102,6 +1102,8 @@ __printf_fp_l_buffer (struct __printf_buffer *buf, locale_t loc,
   if (info->extra)
     {
       tmp.thousands_sep = _nl_lookup (loc, LC_MONETARY, MON_THOUSANDS_SEP);
+	  // TODO: locale is not fully working correctly
+	  // hardcoded the float-point character for now
     //   tmp.decimal = _nl_lookup (loc, LC_MONETARY, MON_DECIMAL_POINT);
 	  tmp.decimal = ".";
       if (tmp.decimal[0] == '\0')
@@ -1110,6 +1112,8 @@ __printf_fp_l_buffer (struct __printf_buffer *buf, locale_t loc,
   else
     {
       tmp.thousands_sep = _nl_lookup (loc, LC_NUMERIC, THOUSANDS_SEP);
+	  // TODO: locale is not fully working correctly
+	  // hardcoded the float-point character for now
     //   tmp.decimal = _nl_lookup (loc, LC_NUMERIC, DECIMAL_POINT);
 	  tmp.decimal = ".";
     }

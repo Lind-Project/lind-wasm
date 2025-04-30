@@ -33,9 +33,7 @@ int
 __select64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 	    struct __timeval64 *timeout)
 {
-		int retval = MAKE_SYSCALL(46, "syscall|select", (uint64_t) nfds, (uint64_t) readfds, (uint64_t) writefds, (uint64_t) exceptfds, (uint64_t) timeout, NOTUSED);
-    // *((int*)1073741824) = 10;
-    return retval;
+		return MAKE_SYSCALL(46, "syscall|select", (uint64_t) nfds, (uint64_t) readfds, (uint64_t) writefds, (uint64_t) exceptfds, (uint64_t) timeout, NOTUSED);
 // Lind-Wasm: Original glibc code removed for compatibility
 // to find original source code refer to (2.39.9000) at (/home/lind-wasm/glibc/sysdeps/unix/sysv/linux/select.c):(35-138)
 

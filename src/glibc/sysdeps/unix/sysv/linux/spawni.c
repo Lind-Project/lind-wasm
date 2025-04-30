@@ -27,7 +27,6 @@
 #include <sysdep.h>
 #include <sys/resource.h>
 #include <clone_internal.h>
-#include <stdio.h>
 
 /* The Linux implementation of posix_spawn{p} uses the clone syscall directly
    with CLONE_VM and CLONE_VFORK flags and an allocated stack.  The new stack
@@ -147,43 +146,29 @@ __spawni_child (void *arguments)
       == POSIX_SPAWN_SETSCHEDPARAM)
     {
       if (__sched_setparam (0, &attr->__sp) == -1)
-      {        
-        fflush(stdout);
         goto fail;
-      }
     }
   else if ((attr->__flags & POSIX_SPAWN_SETSCHEDULER) != 0)
     {
       if (__sched_setscheduler (0, attr->__policy, &attr->__sp) == -1)
-      {
-        fflush(stdout);
         goto fail;
-      }
     }
 #endif
 
   if ((attr->__flags & POSIX_SPAWN_SETSID) != 0
       && __setsid () < 0)
-      {
-        fflush(stdout);
         goto fail;
-      }
 
   /* Set the process group ID.  */
   if ((attr->__flags & POSIX_SPAWN_SETPGROUP) != 0
       && __setpgid (0, attr->__pgrp) != 0)
-      {
-        fflush(stdout);
         goto fail;
-      }
 
   /* Set the effective user and group IDs.  */
   if ((attr->__flags & POSIX_SPAWN_RESETIDS) != 0
       && (local_seteuid (__getuid ()) != 0
 	  || local_setegid (__getgid ()) != 0))
-    {
       goto fail;
-    }
 
   /* Execute the file actions.  */
   if (file_actions != 0)
@@ -210,9 +195,7 @@ __spawni_child (void *arguments)
 		  /* Signal errors only for file descriptors out of range.  */
 		  if (action->action.close_action.fd < 0
 		      || action->action.close_action.fd >= fdlimit.rlim_cur)
-        {
           goto fail;
-        }
 		}
 	      break;
 
@@ -232,9 +215,7 @@ __spawni_child (void *arguments)
 					   action->action.open_action.mode);
 
 		if (ret == -1)
-    {
 		  goto fail;
-    }
 
 		int new_fd = ret;
 
@@ -243,14 +224,10 @@ __spawni_child (void *arguments)
 		  {
 		    if (__dup2 (new_fd, action->action.open_action.fd)
 			!= action->action.open_action.fd)
-          {
             goto fail;
-          }
 
 		    if (__close_nocancel (new_fd) != 0)
-          {
             goto fail;
-          }
 		  }
 	      }
 	      break;
@@ -264,34 +241,24 @@ __spawni_child (void *arguments)
 		  int fd = action->action.dup2_action.newfd;
 		  int flags = __fcntl (fd, F_GETFD, 0);
 		  if (flags == -1)
-        {
           goto fail;
-        }
 		  if (__fcntl (fd, F_SETFD, flags & ~FD_CLOEXEC) == -1)
-        {
           goto fail;
-        }
 		}
 	      else if (__dup2 (action->action.dup2_action.fd,
 			       action->action.dup2_action.newfd)
 		       != action->action.dup2_action.newfd)
-           {
              goto fail;
-           }
 	      break;
 
 	    case spawn_do_chdir:
 	      if (__chdir (action->action.chdir_action.path) != 0)
-        {
           goto fail;
-        }
 	      break;
 
 	    case spawn_do_fchdir:
 	      if (__fchdir (action->action.fchdir_action.fd) != 0)
-        {
           goto fail;
-        }
 	      break;
 
 	    case spawn_do_closefrom:
@@ -299,9 +266,7 @@ __spawni_child (void *arguments)
 		int lowfd = action->action.closefrom_action.from;
 	        int r = INLINE_SYSCALL_CALL (close_range, lowfd, ~0U, 0);
 		if (r != 0 && !__closefrom_fallback (lowfd, false))
-    {
       goto fail;
-    }
 	      } break;
 
 	    case spawn_do_tcsetpgrp:
@@ -311,9 +276,7 @@ __spawni_child (void *arguments)
 			       && attr->__pgrp != 0
 			     ? attr->__pgrp : __getpgid (0);
 		if (__tcsetpgrp (action->action.setpgrp_action.fd, pgrp) != 0)
-    {
       goto fail;
-    }
 	      }
 	    }
 	}
@@ -334,7 +297,6 @@ __spawni_child (void *arguments)
   maybe_script_execute (args);
 
 fail:
-
   /* errno should have an appropriate non-zero value; otherwise,
      there's a bug in glibc or the kernel.  For lack of an error code
      (EINTERNALBUG) describing that, use ECHILD.  Another option would

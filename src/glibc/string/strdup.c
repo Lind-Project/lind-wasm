@@ -34,20 +34,16 @@ char *memcpy ();
 # define __strdup strdup
 #endif
 
-#include <stdio.h>
-
 /* Duplicate S, returning an identical malloc'd string.  */
 char *
 __strdup (const char *s)
 {
   size_t len = strlen (s) + 1;
-  // printf("strdup, len: %d\n", len);
   void *new = malloc (len);
 
   if (new == NULL)
     return NULL;
 
-  // printf("strdup, memcpy: new: %d, s: %d, len: %d\n", new, s, len);
   return (char *) memcpy (new, s, len);
 }
 #ifdef libc_hidden_def

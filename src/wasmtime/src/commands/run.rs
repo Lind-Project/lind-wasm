@@ -611,10 +611,6 @@ impl RunCommand {
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
 
-                // let tls_base = instance.get_global(&mut *store, "__tls_base").unwrap();
-                // let tls_base_val = tls_base.get(&mut *store);
-                // println!("tls base: {:?}", tls_base_val);
-
                 // retrieve the epoch global
                 let lind_epoch = instance
                     .get_export(&mut *store, "epoch")

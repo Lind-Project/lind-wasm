@@ -40,7 +40,7 @@
 #include <sys/stat.h>
 
 #include "record-status.h"
-#include "../localeinfo.h"
+#include "localeinfo.h"
 #include "charmap-dir.h"
 #include "../locarchive.h"
 #include <programs/xmalloc.h>
@@ -178,63 +178,63 @@ static char *quote_string (const char *input);
 static void setlocale_diagnostics (void);
 
 
-int
-main (int argc, char *argv[])
-{
-  int remaining;
+// int
+// main (int argc, char *argv[])
+// {
+//   int remaining;
 
-  /* Set initial values for global variables.  */
-  show_category_name = 0;
-  show_keyword_name = 0;
+//   /* Set initial values for global variables.  */
+//   show_category_name = 0;
+//   show_keyword_name = 0;
 
-  /* Set locale.  Do not set LC_ALL because the other categories must
-     not be affected (according to POSIX.2).  */
-  try_setlocale (LC_CTYPE, "LC_CTYPE");
-  try_setlocale (LC_MESSAGES, "LC_MESSAGES");
+//   /* Set locale.  Do not set LC_ALL because the other categories must
+//      not be affected (according to POSIX.2).  */
+//   try_setlocale (LC_CTYPE, "LC_CTYPE");
+//   try_setlocale (LC_MESSAGES, "LC_MESSAGES");
 
-  /* Initialize the message catalog.  */
-  textdomain (PACKAGE);
+//   /* Initialize the message catalog.  */
+//   textdomain (PACKAGE);
 
-  /* Parse and process arguments.  */
-  argp_parse (&argp, argc, argv, 0, &remaining, NULL);
+//   /* Parse and process arguments.  */
+//   argp_parse (&argp, argc, argv, 0, &remaining, NULL);
 
-  /* `-a' requests the names of all available locales.  */
-  if (do_all != 0)
-    {
-      setlocale_diagnostics ();
-      try_setlocale (LC_COLLATE, "LC_COLLATE");
-      write_locales ();
-      exit (EXIT_SUCCESS);
-    }
+//   /* `-a' requests the names of all available locales.  */
+//   if (do_all != 0)
+//     {
+//       setlocale_diagnostics ();
+//       try_setlocale (LC_COLLATE, "LC_COLLATE");
+//       write_locales ();
+//       exit (EXIT_SUCCESS);
+//     }
 
-  /* `m' requests the names of all available charmaps.  The names can be
-     used for the -f argument to localedef(1).  */
-  if (do_charmaps != 0)
-    {
-      setlocale_diagnostics ();
-      write_charmaps ();
-      exit (EXIT_SUCCESS);
-    }
+//   /* `m' requests the names of all available charmaps.  The names can be
+//      used for the -f argument to localedef(1).  */
+//   if (do_charmaps != 0)
+//     {
+//       setlocale_diagnostics ();
+//       write_charmaps ();
+//       exit (EXIT_SUCCESS);
+//     }
 
-  /* Specific information about the current locale are requested.
-     Change to this locale now.  */
-  try_setlocale (LC_ALL, "LC_ALL");
-  setlocale_diagnostics ();
+//   /* Specific information about the current locale are requested.
+//      Change to this locale now.  */
+//   try_setlocale (LC_ALL, "LC_ALL");
+//   setlocale_diagnostics ();
 
-  /* If no real argument is given we have to print the contents of the
-     current locale definition variables.  These are LANG and the LC_*.  */
-  if (remaining == argc && show_keyword_name == 0 && show_category_name == 0)
-    {
-      show_locale_vars ();
-      exit (EXIT_SUCCESS);
-    }
+//   /* If no real argument is given we have to print the contents of the
+//      current locale definition variables.  These are LANG and the LC_*.  */
+//   if (remaining == argc && show_keyword_name == 0 && show_category_name == 0)
+//     {
+//       show_locale_vars ();
+//       exit (EXIT_SUCCESS);
+//     }
 
-  /* Process all given names.  */
-  while (remaining <  argc)
-    show_info (argv[remaining++]);
+//   /* Process all given names.  */
+//   while (remaining <  argc)
+//     show_info (argv[remaining++]);
 
-  exit (EXIT_SUCCESS);
-}
+//   exit (EXIT_SUCCESS);
+// }
 
 
 /* Handle program arguments.  */

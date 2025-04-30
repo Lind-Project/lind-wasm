@@ -15,7 +15,6 @@
    along with this program; if not, see <https://www.gnu.org/licenses/>.  */
 
 #include <pwd.h>
-#include <stdlib.h>
 
 
 #define LOOKUP_TYPE	struct passwd
@@ -28,6 +27,8 @@
 /* We are nscd, so we don't want to be talking to ourselves.  */
 #undef	USE_NSCD
 
+// TODO: normal getpwuid routine is not working correctly for some reason
+// currently hardcoded the value but we should fix this in the future
 // #include <nss/getXXbyYY_r.c>
 
 int

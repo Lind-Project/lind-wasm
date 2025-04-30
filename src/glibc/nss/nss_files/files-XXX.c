@@ -69,16 +69,14 @@
 static enum nss_status
 internal_setent (FILE **stream)
 {
-  enum nss_status status = NSS_STATUS_SUCCESS;  
+  enum nss_status status = NSS_STATUS_SUCCESS;
 
   if (*stream == NULL)
     {
       *stream = __nss_files_fopen (DATAFILE);
 
       if (*stream == NULL)
-      {
 	status = errno == EAGAIN ? NSS_STATUS_TRYAGAIN : NSS_STATUS_UNAVAIL;
-}
     }
   else
     rewind (*stream);

@@ -5766,16 +5766,28 @@ libc_hidden_def (__libc_mallopt)
 
 extern char **__libc_argv attribute_hidden;
 
+#ifdef WASM_DEBUG_MALLOC_ERR
+// TODO: malloc_printerr is currently unable to print messages to the console correctly.
+// This is a temporary workaround to ensure that error messages are printed.
 void __imported__malloc_printerr(const char *str) __attribute__((
   __import_module__("debug"),
   __import_name__("malloc_printerr")
 ));
+#endif
 
 static void
 malloc_printerr (const char *str)
 {
+#ifdef WASM_DEBUG_MALLOC_ERR
   __imported__malloc_printerr(str);
   __builtin_unreachable ();
+#else
+#if IS_IN (libc)
+  __libc_message ("%s\n", str);
+#else
+  __libc_fatal (str);
+#endif
+#endif
 }
 
 #if IS_IN (libc)

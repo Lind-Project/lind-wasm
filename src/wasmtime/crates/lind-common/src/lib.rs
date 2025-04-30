@@ -69,13 +69,17 @@ impl LindCommonCtx {
             30 => wasmtime_lind_multi_process::exit_syscall(caller, arg1 as i32),
             // other syscalls goes into rawposix
             _ => {
+                // if we are reaching here at rewind state, that means fork is called within
+                // syscall interrupted signals. We should restore the return value of syscall
                 if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
+                    // retrieve the return value of last syscall
                     let retval = caller
                         .as_context_mut()
                         .get_current_syscall_rewind_data()
                         .unwrap();
+                    // let signal handler finish rest of the rewinding process
                     wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
-                    // println!("rewind returns {}", retval);
+                    // return the return value of last syscall
                     return retval;
                 }
 
@@ -90,20 +94,22 @@ impl LindCommonCtx {
                     arg5,
                     arg6,
                 );
-                // println!("lind_syscall_api returns {}", retval);
 
-                // assumption: lind_syscall_api will not switch asyncify state, which holds true for now
-
+                // Assumption: lind_syscall_api will not switch asyncify state, which holds true for now
+                
+                // if the syscall is interrupted by signal
                 if -retval == sysdefs::constants::Errno::EINTR as i32 {
+                    // store the return value of the syscall
                     caller.as_context_mut().append_syscall_asyncify_data(retval);
-                    // println!("ready for signal handler");
+                    // run the signal handler
                     wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
-                    // println!("signal handler returns");
 
+                    // if fork is invoked within signal handler and switched asyncify state to unwind
                     if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
-                        // println!("unwind in syscall");
+                        // return immediately
                         return 0;
                     } else {
+                        // otherwise, pop the retval of the syscall
                         caller.as_context_mut().pop_syscall_asyncify_data();
                     }
                 }
@@ -210,10 +216,6 @@ pub fn add_to_linker<
                 arg6,
             );
 
-            // println!("lind-syscall returns: {} for syscall {}", retval, call_number);
-            // TODO: add a signal check here as Linux also has a signal check when transition from kernel to userspace
-            // However, Asyncify management in this function should be carefully rethinking if adding signal check here
-
             retval
         },
     )?;
@@ -251,6 +253,7 @@ pub fn add_to_linker<
         },
     )?;
 
+    // a temporary solution to have libc_assert_fail correctly working
     linker.func_wrap(
         "debug",
         "libc_assert_fail",
@@ -259,97 +262,21 @@ pub fn add_to_linker<
             let assertion = rawposix::interface::get_cstr(mem_base + assertion as u64).unwrap();
             let file = rawposix::interface::get_cstr(mem_base + file as u64).unwrap();
             let function = rawposix::interface::get_cstr(mem_base + function as u64).unwrap();
-            println!(
+            eprintln!(
                 "Fatal glibc error: {}:{} ({}): assertion failed: {}\n",
                 assertion, file, line, function
             );
         },
     )?;
 
+    // a temporary solution to have malloc_printerr correctly working
     linker.func_wrap(
         "debug",
         "malloc_printerr",
         move |mut caller: Caller<'_, T>, msg: i32| {
             let mem_base = get_memory_base(&caller);
             let msg = rawposix::interface::get_cstr(mem_base + msg as u64).unwrap();
-            println!("malloc_printerr: {}", msg);
-        },
-    )?;
-
-    linker.func_wrap(
-        "debug",
-        "debug-print-1",
-        move |mut caller: Caller<'_, T>, str1: i32, str2: i32| -> i32 {
-            let mem_base = get_memory_base(&caller);
-            let str1_ptr = mem_base + str1 as u64;
-            let str2_ptr = mem_base + str2 as u64;
-            println!(
-                "copy dir from {} to {}",
-                rawposix::interface::get_cstr(str1_ptr).unwrap(),
-                rawposix::interface::get_cstr(str2_ptr).unwrap()
-            );
-
-            return 0;
-        },
-    )?;
-
-    linker.func_wrap(
-        "debug",
-        "debug-print-2",
-        move |mut caller: Caller<'_, T>, str1: i32, val1: i32, val2: i32, val3: i32| -> i32 {
-            let mem_base = get_memory_base(&caller);
-            let str1_ptr = mem_base + str1 as u64;
-            println!(
-                "process file: {}, st_mode: {}, isreg: {}, val3: {}",
-                rawposix::interface::get_cstr(str1_ptr).unwrap(),
-                val1,
-                val2,
-                val3
-            );
-
-            return 0;
-        },
-    )?;
-
-    linker.func_wrap(
-        "debug",
-        "debug-print-3",
-        move |mut caller: Caller<'_, T>, str1: i32, str2: i32, val: i32| -> i32 {
-            // let mem_base = get_memory_base(&caller);
-            // let str1_ptr = mem_base + str1 as u64;
-            // let str2_ptr = mem_base + str2 as u64;
-            // println!("parse_and_validate_value: name: {}, value: {}, type: {}", rawposix::interface::get_cstr(str1_ptr).unwrap(), rawposix::interface::get_cstr(str2_ptr).unwrap(), val);
-
-            return 0;
-        },
-    )?;
-
-    linker.func_wrap(
-        "debug",
-        "debug-num",
-        move |mut caller: Caller<'_, T>, val: i32| -> i32 {
-            let host = caller.data().clone();
-            let ctx = get_cx(&host);
-            println!("cage {} debug val: {}", ctx.pid, val);
-            val
-        },
-    )?;
-
-    linker.func_wrap(
-        "debug",
-        "debug-str",
-        move |mut caller: Caller<'_, T>, str: i32| -> i32 {
-            if str == 0 {
-                println!("debug str: NULL");
-                return 0;
-            }
-            let mem_base = get_memory_base(&caller);
-            let str_ptr = mem_base + str as u64;
-            println!(
-                "debug str: {}",
-                rawposix::interface::get_cstr(str_ptr).unwrap()
-            );
-            0
+            eprintln!("malloc_printerr: {}", msg);
         },
     )?;
 
