@@ -99,6 +99,9 @@ compile_set_stack_pointer="$CC --target=wasm32-wasi-threads -matomics \
     -c $glibc_base/csu/wasm32/set_stack_pointer.s"
 
 # Making glibc, renamed "make_cmd" and added compiling lind_syscall 
+# Calls the Makefile, which will call the individual make files,
+# Compiles pthread_create and lind_syscall separately,
+# calls the gen_sysroot.sh script
 make_glibc_cmd='
   cd "$glibc_base" && \
   rm -rf build && \
