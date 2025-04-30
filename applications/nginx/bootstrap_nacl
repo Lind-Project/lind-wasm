@@ -1,0 +1,21 @@
+#!/bin/bash
+
+if [[ "$*" =~ (^|[[:blank:]])(-h|--help)([[:blank:]]|$) ]]; then
+    ./auto/configure --help
+    exit 1
+fi
+
+export CC=x86_64-nacl-gcc
+export CXX=x86_64-nacl-g++
+export LD=x86_64-nacl-ld
+export CFLAGS='-g -DNGX_HAVE_MAP_ANON=1 -O3'
+export CXXFLAGS='-g -fno-pie -O3'
+export LDFLAGS='-g -fno-pie -O3'
+export PATH="/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
+
+./auto/configure \
+	--with-compat \
+	--without-http_rewrite_module \
+	--without-http_gzip_module
+
+make
