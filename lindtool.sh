@@ -269,20 +269,31 @@ case $1 in
 
         compile_src $2 $3
         ;;
-    make_all|make_glibc)
+    make_glibc)
         unset LD_LIBRARY_PATH
         echo -e "${GREEN}$make_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
-            eval "$make_cmd"
+            eval "$make_glibc_cmd"
         fi
         ;;
+    make_all)
+        unset LD_LIBRARY_PATH
+        echo -e "${GREEN}$make_cmd${RESET}"
+        if [ "$pmode" -eq 0 ]; then
+            eval "$make_glibc_cmd"
+            eval "$compile_wasmtime_cmd"
+            eval "$compile_rawposix_cmd"
+        fi
+        ;;
+    
     help)
         echo "avaliable commands are:"
         echo "1. compile_test"
         echo "2. run"
         echo "3. compile_wasmtime"
         echo "4. compile_src"
-        echo "5. make_all"
+        echo "5. make_glibc"
+        echo "6. make_all"
         ;;
     *)
         echo "Unknown command identifier."
