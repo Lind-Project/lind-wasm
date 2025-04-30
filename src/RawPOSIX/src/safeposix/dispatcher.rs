@@ -226,7 +226,6 @@ pub fn lind_syscall_api(
         WRITEV_SYSCALL => {
             let fd = arg1 as i32;
             let iovcnt = arg3 as i32;
-            // println!("iovcnt: {}", iovcnt);
             // Validate count first
             if iovcnt <= 0 {
                 return syscall_error(Errno::EINVAL, "writev", "invalid iovec count");
@@ -235,13 +234,12 @@ pub fn lind_syscall_api(
             // Convert iovec array address
             let iov_base =
                 translate_vmmap_addr(&cage, arg2).unwrap() as *const IovecStruct;
-            // println!("rawposix iovec size: {}", std::mem::size_of::<libc::iovec>());
+            // iterate through each iovec pointer and manually do the address conversion
             for i in 0..iovcnt {
                 let cur_iov_base = unsafe { iov_base.add(i as usize) } as *mut libc::iovec;
                 let old_base = unsafe { (*cur_iov_base).iov_base } as u64;
                 let len = unsafe { (*cur_iov_base).iov_len };
                 let new_base = translate_vmmap_addr(&cage, old_base as u64).unwrap();
-                // println!("old base: {}, new_base: {}, len: {}", old_base as u64, new_base, len);
                 unsafe { (*cur_iov_base).iov_base = new_base as *mut libc::c_void }
             }
             // The actual write operation is delegated to the cage implementation
@@ -417,6 +415,7 @@ pub fn lind_syscall_api(
             // Get reference to the cage for memory operations
             let cage = interface::cagetable_getref(cageid);
             // Convert readfds buffer address
+            // notice that these fd_set struct could possibly be NULL
             let readfds = {
                 if arg2 == 0 {
                     None
@@ -1147,6 +1146,7 @@ pub fn lind_syscall_api(
         WAIT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
+            // status could possibly be NULL
             let status = {
                 if arg1 == 0 {
                     None
@@ -1162,6 +1162,7 @@ pub fn lind_syscall_api(
             let pid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
+            // status could possibly be NULL
             let status = {
                 if arg2 == 0 {
                     None

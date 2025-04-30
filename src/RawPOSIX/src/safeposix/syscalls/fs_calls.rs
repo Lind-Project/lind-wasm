@@ -238,7 +238,6 @@ impl Cage {
      *   stat() will return 0 when success and -1 when fail
      */
     pub fn stat_syscall(&self, path: &str, rposix_statbuf: &mut StatData) -> i32 {
-        // println!("stat on: {:?}", path);
         let relpath = normpath(convpath(path), self);
         let relative_path = relpath.to_str().unwrap();
         let full_path = format!("{}{}", LIND_ROOT, relative_path);
@@ -1483,7 +1482,6 @@ impl Cage {
     //------------------SHMGET SYSCALL------------------
 
     pub fn shmget_syscall(&self, key: i32, mut size: usize, shmflg: i32) -> i32 {
-        // println!("shmget: {}", key);
         if key == IPC_PRIVATE {
             return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
         }
@@ -1509,8 +1507,6 @@ impl Cage {
                         "tried to use a key that did not exist, and IPC_CREAT was not specified",
                     );
                 }
-
-                size = interface::round_up_page(size as u64) as usize;
 
                 if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
                     return syscall_error(
@@ -1549,15 +1545,11 @@ impl Cage {
             } else {
                 prot = PROT_READ | PROT_WRITE;
             }
-
-            let result = segment.map_shm(shmaddr, prot, self.cageid);
-
             let mut rev_shm = self.rev_shm.lock();
-            rev_shm.push((result as u32, shmid));
+            rev_shm.push((shmaddr as u32, shmid));
             drop(rev_shm);
 
-            // println!("shmat returns: {}", result);
-            result
+            segment.map_shm(shmaddr, prot, self.cageid)
         } else {
             syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value")
         }
@@ -1606,7 +1598,6 @@ impl Cage {
                 }
             };
         } else {
-            println!("shmdt: EINVAL");
             return syscall_error(
                 Errno::EINVAL,
                 "shmdt",
