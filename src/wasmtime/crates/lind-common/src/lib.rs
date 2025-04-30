@@ -328,7 +328,9 @@ pub fn add_to_linker<
         "debug",
         "debug-num",
         move |mut caller: Caller<'_, T>, val: i32| -> i32 {
-            println!("debug val: {}", val);
+            let host = caller.data().clone();
+            let ctx = get_cx(&host);
+            println!("cage {} debug val: {}", ctx.pid, val);
             val
         },
     )?;

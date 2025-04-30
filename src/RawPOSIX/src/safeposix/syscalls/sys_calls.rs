@@ -203,7 +203,7 @@ impl Cage {
      *   into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
      *   zombie list and retrieve the first entry from it (first in, first out).
      */
-    pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
+    pub fn waitpid_syscall(&self, cageid: i32, status: Option<&mut i32>, options: i32) -> i32 {
         let mut zombies = self.zombies.write();
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
 
@@ -310,13 +310,13 @@ impl Cage {
         // reach here means we already found the desired exited child
         let zombie = zombie_opt.unwrap();
         // update the status
-        *status = zombie.exit_code;
+        let _ = status.map(|st| *st = zombie.exit_code);
 
         // return child's cageid
         zombie.cageid as i32
     }
 
-    pub fn wait_syscall(&self, status: &mut i32) -> i32 {
+    pub fn wait_syscall(&self, status: Option<&mut i32>) -> i32 {
         self.waitpid_syscall(0, status, 0)
     }
 

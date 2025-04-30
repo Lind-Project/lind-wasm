@@ -460,6 +460,11 @@ impl<
 
                     barrier_clone.wait();
 
+                    let stack_pointer_setter = instance
+                        .get_typed_func::<i32, ()>(&mut store, "set_stack_pointer")
+                        .unwrap();
+                    let _ = stack_pointer_setter.call(&mut store, stack_pointer as i32);
+
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
 

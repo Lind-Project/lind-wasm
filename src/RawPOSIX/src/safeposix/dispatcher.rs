@@ -179,32 +179,32 @@ pub fn lind_syscall_api(
 ) -> i32 {
     let call_number = call_number as i32;
 
-    let cage = interface::cagetable_getref(cageid);
-    let vmmap = cage.vmmap.read();
-    let start_address = vmmap.base_address.unwrap() as u64;
-    drop(vmmap);
-    drop(cage);
-    if call_number as i32 != WRITE_SYSCALL
-        && call_number as i32 != CLOCK_GETTIME_SYSCALL
-        && cageid != 0
-    {
-        match call_name {
-            0 => {
-                println!(
-                    "\x1b[90mcage {} calls UNNAMED ({})\x1b[0m",
-                    cageid, call_number
-                );
-            }
-            _ => {
-                println!(
-                    "\x1b[90mcage {} calls {} ({})\x1b[0m",
-                    cageid,
-                    interface::types::get_cstr(start_address + call_name).unwrap(),
-                    call_number
-                );
-            }
-        }
-    }
+    // let cage = interface::cagetable_getref(cageid);
+    // let vmmap = cage.vmmap.read();
+    // let start_address = vmmap.base_address.unwrap() as u64;
+    // drop(vmmap);
+    // drop(cage);
+    // if call_number as i32 != WRITE_SYSCALL
+    //     && call_number as i32 != CLOCK_GETTIME_SYSCALL
+    //     && cageid != 0
+    // {
+    //     match call_name {
+    //         0 => {
+    //             println!(
+    //                 "\x1b[90mcage {} calls UNNAMED ({})\x1b[0m",
+    //                 cageid, call_number
+    //             );
+    //         }
+    //         _ => {
+    //             println!(
+    //                 "\x1b[90mcage {} calls {} ({})\x1b[0m",
+    //                 cageid,
+    //                 interface::types::get_cstr(start_address + call_name).unwrap(),
+    //                 call_number
+    //             );
+    //         }
+    //     }
+    // }
 
     let ret = match call_number {
         WRITE_SYSCALL => {
@@ -1147,8 +1147,14 @@ pub fn lind_syscall_api(
         WAIT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
-            let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
-            let status = interface::get_i32_ref(status_addr).unwrap();
+            let status = {
+                if arg1 == 0 {
+                    None
+                } else {
+                    let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
+                    Some(interface::get_i32_ref(status_addr).unwrap())
+                }
+            };
             cage.wait_syscall(status)
         }
 
@@ -1156,8 +1162,14 @@ pub fn lind_syscall_api(
             let pid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
-            let status_addr = translate_vmmap_addr(&cage, arg2).unwrap();
-            let status = interface::get_i32_ref(status_addr).unwrap();
+            let status = {
+                if arg2 == 0 {
+                    None
+                } else {
+                    let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
+                    Some(interface::get_i32_ref(status_addr).unwrap())
+                }
+            };
             let options = arg3 as i32;
 
             cage.waitpid_syscall(pid, status, options)
@@ -1263,45 +1275,45 @@ pub fn lind_syscall_api(
         _ => -1, // Return -1 for unknown syscalls
     };
 
-    if call_number as i32 != WRITE_SYSCALL
-        && call_number as i32 != CLOCK_GETTIME_SYSCALL
-        && cageid != 0
-    {
-        match call_name {
-            0 => {
-                if ret < 0 {
-                    println!(
-                        "\x1b[31mcage {} calls UNNAMED ({}) returns {}\x1b[0m",
-                        cageid, call_number, ret
-                    );
-                } else {
-                    println!(
-                        "\x1b[90mcage {} calls UNNAMED ({}) returns {}\x1b[0m",
-                        cageid, call_number, ret
-                    );
-                }
-            }
-            _ => {
-                if ret < 0 {
-                    println!(
-                        "\x1b[31mcage {} calls {} ({}) returns {}\x1b[0m",
-                        cageid,
-                        interface::types::get_cstr(start_address + call_name).unwrap(),
-                        call_number,
-                        ret
-                    );
-                } else {
-                    println!(
-                        "\x1b[90mcage {} calls {} ({}) returns {}\x1b[0m",
-                        cageid,
-                        interface::types::get_cstr(start_address + call_name).unwrap(),
-                        call_number,
-                        ret
-                    );
-                }
-            }
-        }
-    }
+    // if call_number as i32 != WRITE_SYSCALL
+    //     && call_number as i32 != CLOCK_GETTIME_SYSCALL
+    //     && cageid != 0
+    // {
+    //     match call_name {
+    //         0 => {
+    //             if ret < 0 {
+    //                 println!(
+    //                     "\x1b[31mcage {} calls UNNAMED ({}) returns {}\x1b[0m",
+    //                     cageid, call_number, ret
+    //                 );
+    //             } else {
+    //                 println!(
+    //                     "\x1b[90mcage {} calls UNNAMED ({}) returns {}\x1b[0m",
+    //                     cageid, call_number, ret
+    //                 );
+    //             }
+    //         }
+    //         _ => {
+    //             if ret < 0 {
+    //                 println!(
+    //                     "\x1b[31mcage {} calls {} ({}) returns {}\x1b[0m",
+    //                     cageid,
+    //                     interface::types::get_cstr(start_address + call_name).unwrap(),
+    //                     call_number,
+    //                     ret
+    //                 );
+    //             } else {
+    //                 println!(
+    //                     "\x1b[90mcage {} calls {} ({}) returns {}\x1b[0m",
+    //                     cageid,
+    //                     interface::types::get_cstr(start_address + call_name).unwrap(),
+    //                     call_number,
+    //                     ret
+    //                 );
+    //             }
+    //         }
+    //     }
+    // }
 
     ret
 }

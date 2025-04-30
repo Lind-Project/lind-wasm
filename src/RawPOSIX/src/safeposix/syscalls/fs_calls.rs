@@ -238,7 +238,7 @@ impl Cage {
      *   stat() will return 0 when success and -1 when fail
      */
     pub fn stat_syscall(&self, path: &str, rposix_statbuf: &mut StatData) -> i32 {
-        println!("stat on: {:?}", path);
+        // println!("stat on: {:?}", path);
         let relpath = normpath(convpath(path), self);
         let relative_path = relpath.to_str().unwrap();
         let full_path = format!("{}{}", LIND_ROOT, relative_path);
