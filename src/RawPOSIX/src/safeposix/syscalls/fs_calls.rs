@@ -843,6 +843,7 @@ impl Cage {
                     old_vfd.perfdinfo,
                 )
                 .unwrap();
+
                 return new_virtualfd;
             }
             Err(_e) => {
@@ -1365,22 +1366,6 @@ impl Cage {
         )
         .unwrap() as i32;
 
-        pipefd.readfd = fdtables::get_unused_virtual_fd(
-            self.cageid,
-            FDKIND_KERNEL,
-            kernel_fds[0] as u64,
-            should_cloexec,
-            0,
-        )
-        .unwrap() as i32;
-        pipefd.writefd = fdtables::get_unused_virtual_fd(
-            self.cageid,
-            FDKIND_KERNEL,
-            kernel_fds[1] as u64,
-            should_cloexec,
-            0,
-        )
-        .unwrap() as i32;
         return ret;
     }
 
@@ -1398,6 +1383,7 @@ impl Cage {
             return syscall_error(Errno::EBADF, "getdents", "Bad File Descriptor");
         }
         let vfd = wrappedvfd.unwrap();
+        // calling getdents64 instead of getdents since glibc expects result from getdents64
         let ret = unsafe {
             libc::syscall(
                 libc::SYS_getdents64 as c_long,
@@ -1481,7 +1467,7 @@ impl Cage {
 
     //------------------SHMGET SYSCALL------------------
 
-    pub fn shmget_syscall(&self, key: i32, mut size: usize, shmflg: i32) -> i32 {
+    pub fn shmget_syscall(&self, key: i32, size: usize, shmflg: i32) -> i32 {
         if key == IPC_PRIVATE {
             return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
         }

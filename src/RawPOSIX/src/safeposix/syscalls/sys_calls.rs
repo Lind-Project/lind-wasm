@@ -22,8 +22,6 @@ use std::io;
 use std::io::Write;
 use std::sync::Arc as RustRfc;
 
-use super::kernel_close;
-
 impl Cage {
     fn unmap_shm_mappings(&self) {
         //unmap shm mappings on exit or exec
@@ -281,7 +279,6 @@ impl Cage {
 
                 // now we have verified that the cage exists and is the child of the cage
                 loop {
-                    // println!("zombie: {:?}", zombies);
                     // the cage is not in the zombie list
                     // we need to wait for the cage to actually exit
 
@@ -405,10 +402,15 @@ impl Cage {
         if (sig < 0) || (sig >= 32) {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid signal number");
         }
-        let mut real_cage_id = cage_id as u64;
-        if cage_id == 0 {
-            real_cage_id = self.cageid;
-        }
+
+        // if cage id is 0, send signal to itself
+        let real_cage_id = {
+            if cage_id == 0 {
+                self.cageid
+            } else {
+                cage_id as u64
+            }
+        };
 
         if !lind_send_signal(real_cage_id as u64, sig) {
             return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
