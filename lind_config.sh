@@ -4,7 +4,9 @@ wasmtime_base="$script_dir/src/wasmtime"
 rawposix_base="$script_dir/src/RawPOSIX"
 
 CC="${CLANG:=/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
-CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O0 -g"
+
+# Compilation flags
+CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g"
 WARNINGS="-Wall -Wwrite-strings -Wundef -Wstrict-prototypes -Wold-style-definition"
 EXTRA_FLAGS="-fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common"
 EXTRA_FLAGS+=" -Wp,-U_FORTIFY_SOURCE -fmath-errno -fPIE -ftls-model=local-exec"
@@ -82,6 +84,7 @@ compile_pthread_create="$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -c pthread_create.c -MD -MP -MF $glibc_base/build/nptl/pthread_create.o.dt \
     -MT $glibc_base/build/nptl/pthread_create.o"
 
+# Compiles lind syscall 
 compile_lind_syscall="$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $glibc_base/build/lind_syscall.o \
@@ -95,6 +98,7 @@ compile_set_stack_pointer="$CC --target=wasm32-wasi-threads -matomics \
     -o $glibc_base/build/csu/set_stack_pointer.o \
     -c $glibc_base/csu/wasm32/set_stack_pointer.s"
 
+# Making glibc, renamed "make_cmd" and added compiling lind_syscall 
 make_glibc_cmd='
   cd "$glibc_base" && \
   rm -rf build && \

@@ -270,6 +270,7 @@ case $1 in
         compile_src $2 $3
         ;;
     make_glibc)
+        # Makes glibc only
         unset LD_LIBRARY_PATH
         echo -e "${GREEN}$make_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
@@ -277,6 +278,7 @@ case $1 in
         fi
         ;;
     make_all)
+         # Makes glibc, compiles wasmtime, compiles rawposix
         unset LD_LIBRARY_PATH
         echo -e "${GREEN}$make_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
