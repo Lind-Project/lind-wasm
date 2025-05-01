@@ -243,7 +243,7 @@ pub fn lind_syscall_api(
             let addr = arg1 as *mut u8;
             let len = arg2 as usize;
             let prot = arg3 as i32;
-            
+
             interface::mprotect_handler(cageid, addr, len, prot)
         }
 
@@ -737,7 +737,6 @@ pub fn lind_syscall_api(
             let shmflg = arg3 as i32;
             interface::shmat_handler(cageid, addr, 0, shmflg, shmid) as i32
         }
-                
 
         SHMDT_SYSCALL => {
             let addr = arg1 as *mut u8;
@@ -1084,6 +1083,7 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
             let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
+            // Handle NULL explicitly to avoid panic when resolving status pointer from invalid address in `get_i32_ref`
             let status = if status_addr == 0 {
                 &mut 0
             } else {
@@ -1097,6 +1097,7 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
             let status_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+            // Handle NULL explicitly to avoid panic when resolving status pointer from invalid address in `get_i32_ref`
             let status = if status_addr == 0 {
                 &mut 0
             } else {
