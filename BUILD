@@ -28,7 +28,7 @@ genrule(
         cd ../nptl
         
         # Define common flags
-        CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O0 -g"
+        CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g"
         WARNINGS="-Wall -Wwrite-strings -Wundef -Wstrict-prototypes -Wold-style-definition"
         EXTRA_FLAGS="-fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common"
         EXTRA_FLAGS+=" -Wp,-U_FORTIFY_SOURCE -fmath-errno -fPIE -ftls-model=local-exec"
@@ -80,6 +80,11 @@ genrule(
             -o $$GLIBC_BASE/build/nptl/pthread_create.o \
             -c pthread_create.c -MD -MP -MF $$GLIBC_BASE/build/nptl/pthread_create.o.dt \
             -MT $$GLIBC_BASE/build/nptl/pthread_create.o
+        
+        $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
+            $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
+            -o $$GLIBC_BASE/build/lind_syscall.o \
+            -c $$GLIBC_BASE/lind_syscall/lind_syscall.c
         
         # Compile assembly files
         cd ../ && \
