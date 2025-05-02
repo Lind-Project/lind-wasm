@@ -7,11 +7,12 @@ ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-main}
 
 ARG GLIBC_TAR_CACHE
+ENV GLIBC_TAR_CACHE=${GLIBC_TAR_CACHE:-false}
 
 # Install all the required dependencies
 RUN apt-get -qq update && \
     apt-get install -y -qq build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
-    bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash
+    bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash openssl libssl-dev
 
 RUN apt install -qq apt-transport-https curl gnupg -y && \
     curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \

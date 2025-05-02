@@ -4,3 +4,34 @@
 #
 # For more details, please check https://github.com/bazelbuild/bazel/issues/18958
 ###############################################################################
+
+bazel_dep(name = "rules_rust", version = "0.60.0")
+bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "rules_python", version = "0.40.0")
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.spec(
+    features = ["derive"],
+    package = "serde",
+    version = "1.0",
+)
+crate.spec(
+    package = "atty",
+    version = "0.2",
+)
+crate.spec(
+    package = "serde_json",
+    version = "1.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "macros",
+        "net",
+        "rt-multi-thread",
+    ],
+    package = "tokio",
+    version = "1.38",
+)
+crate.from_specs()
+use_repo(crate, "crates")
