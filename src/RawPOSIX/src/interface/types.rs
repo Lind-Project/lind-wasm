@@ -215,8 +215,22 @@ pub fn get_ioctlptrunion<'a>(generic_argument: u64) -> Result<&'a mut u8, i32> {
     ));
 }
 
+/// Returns a mutable reference to an `i32` value at the given memory address
+///
+/// ## Arguments
+/// generic_argument: A `u64` memory address that has already been translated to host
+///
+/// ## Return
+/// A mutable reference to the resolved `i32` value, or `0` when address is `NULL`
 pub fn get_i32_ref<'a>(generic_argument: u64) -> Result<&'a mut i32, i32> {
-    unsafe { Ok(&mut *((generic_argument) as *mut i32)) }
+    // Handle NULL explicitly to avoid panic when resolving status pointer from invalid address
+    let pointer = if generic_argument == 0 {
+        &mut 0
+    } else {
+        unsafe { &mut *((generic_argument) as *mut i32) }
+    };
+
+    return Ok(pointer);
 }
 
 pub fn get_pipearray<'a>(generic_argument: u64) -> Result<&'a mut PipeArray, i32> {
