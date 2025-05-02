@@ -14,6 +14,9 @@ use std::ptr::null;
 use std::str::Utf8Error;
 
 const SIZEOF_SOCKADDR: u32 = 16;
+/// Create a constant with static lifetime to avoid dangling pointer problem caused in `get_i32_ref`.
+/// This is only used when the address passed to `get_i32_ref` is NULL (0) to ensure no aliasing mutable access occurs.
+static mut ZERO: i32 = 0;
 
 /*
 This file provides essential functions for handling and validating `u64` inputs,
@@ -225,7 +228,8 @@ pub fn get_ioctlptrunion<'a>(generic_argument: u64) -> Result<&'a mut u8, i32> {
 pub fn get_i32_ref<'a>(generic_argument: u64) -> Result<&'a mut i32, i32> {
     // Handle NULL explicitly to avoid panic when resolving status pointer from invalid address
     let pointer = if generic_argument == 0 {
-        &mut 0
+        // This function is called by dispatcher, so return a reference to a static to avoid creating a dangling pointer.
+        unsafe { &mut ZERO }
     } else {
         unsafe { &mut *((generic_argument) as *mut i32) }
     };
