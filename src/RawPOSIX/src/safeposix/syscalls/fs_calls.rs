@@ -377,7 +377,7 @@ impl Cage {
      *   - the number of bytes read is returned, success
      *   - -1, fail
      */
-    pub fn read_syscall(&self, virtual_fd: i32, readbuf: *mut u8, count: usize) -> i32 {
+    pub fn read_syscall(&self, virtual_fd: i32, readbuf: *mut u8, count: usize, timeout_ms: Option<i32>) -> i32 {
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {
             return syscall_error(Errno::EBADF, "read", "Bad File Descriptor");
@@ -385,12 +385,29 @@ impl Cage {
 
         let vfd = wrappedvfd.unwrap();
         //kernel fd
-        let ret = unsafe { libc::read(vfd.underfd as i32, readbuf as *mut c_void, count) as i32 };
-        if ret < 0 {
+        // let ret = unsafe { libc::read(vfd.underfd as i32, readbuf as *mut c_void, count) as i32 };
+        let start_time = interface::starttimer();
+        let (duration, timeout) = interface::timeout_setup_ms(timeout_ms.unwrap_or(-1));
+        let mut ret;
+        loop {
+            ret = unsafe { libc::read(vfd.underfd as i32, readbuf as *mut c_void, count) as i32 };
+            if ret >= 0 {
+                break;
+            }
             let errno = get_errno();
-            return handle_errno(errno, "read");
+            // return handle_errno(errno, "read");
+            if errno != libc::EINTR && errno != libc::EAGAIN {
+                return handle_errno(errno, "read");
+            }
+            if interface::readtimer(start_time) > duration {
+                return syscall_error(Errno::ETIMEDOUT, "read", "Operation timed out");
+            }
+            if interface::signal_check_trigger(self.cageid) {
+                return syscall_error(Errno::EINTR, "read", "interrupted");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(timeout as u64));
         }
-        return ret;
+        ret
     }
 
     //------------------------------------PREAD SYSCALL------------------------------------
@@ -614,19 +631,39 @@ impl Cage {
      *   - the number of bytes writen is returned, success
      *   - -1, fail
      */
-    pub fn write_syscall(&self, virtual_fd: i32, buf: *const u8, count: usize) -> i32 {
+    pub fn write_syscall(&self, virtual_fd: i32, buf: *const u8, count: usize, timeout_ms: Option<i32>) -> i32 {
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {
             return syscall_error(Errno::EBADF, "write", "Bad File Descriptor");
         }
 
         let vfd = wrappedvfd.unwrap();
-        let ret = unsafe { libc::write(vfd.underfd as i32, buf as *const c_void, count) as i32 };
-        if ret < 0 {
+        // let ret = unsafe { libc::write(vfd.underfd as i32, buf as *const c_void, count) as i32 };
+        let start_time = interface::starttimer();
+        let (duration, timeout) = interface::timeout_setup_ms(timeout_ms.unwrap_or(-1));
+        let mut ret;
+        loop {
+            ret = unsafe { libc::write(vfd.underfd as i32, buf as *const c_void, count) as i32 };
+            if ret >= 0 {
+                break;
+            }
             let errno = get_errno();
+            // return handle_errno(errno, "write");
+
+            if errno != libc::EINTR && errno != libc::EAGAIN {
             return handle_errno(errno, "write");
+            return handle_errno(errno, "write");
+                return handle_errno(errno, "write");
+            }
+            if interface::readtimer(start_time) > duration {
+                return syscall_error(Errno::ETIMEDOUT, "write", "Operation timed out");
+            }
+            if interface::signal_check_trigger(self.cageid) {
+                return syscall_error(Errno::EINTR, "write", "interrupted");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(timeout as u64));
         }
-        return ret;
+        ret
     }
 
     //------------------------------------PWRITE SYSCALL------------------------------------
@@ -1529,11 +1566,33 @@ impl Cage {
         val2: u32,
         uaddr2: u32,
         val3: u32,
+        timeout_ms: Option<i32>,
     ) -> i32 {
-        let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
-        if ret < 0 {
+        // let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
+        // if ret < 0 {
+        let start_time = interface::starttimer();
+        let (duration, timeout) = interface::timeout_setup_ms(timeout_ms.unwrap_or(-1));
+        let mut ret;
+        loop {
+            ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
+            if ret >= 0 {
+                break;
+            }
             let errno = get_errno();
-            return handle_errno(errno, "fcntl");
+            // return handle_errno(errno, "fcntl");
+            // If not a retryable error, return immediately
+            if errno != libc::EINTR && errno != libc::EAGAIN {
+                return handle_errno(errno, "futex");
+            }
+            // Check for timeout
+            if interface::readtimer(start_time) > duration {
+                return syscall_error(Errno::ETIMEDOUT, "futex", "Operation timed out");
+            }
+            // Check for signals
+            if interface::signal_check_trigger(self.cageid) {
+                return syscall_error(Errno::EINTR, "futex", "interrupted");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(timeout as u64));
         }
         ret
     }
