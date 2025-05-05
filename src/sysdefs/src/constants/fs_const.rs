@@ -22,11 +22,6 @@ pub const STDERR_FILENO: i32 = 2; // File descriptor for standard error
 // Source: include/dirent.h
 pub const DT_UNKNOWN: u8 = 0;
 
-pub const STARTINGFD: i32 = 0; // Starting file descriptor number
-pub const MAXFD: i32 = 1024; // Maximum number of file descriptors
-pub const STARTINGPIPE: i32 = 0; // Starting pipe descriptor number
-pub const MAXPIPE: i32 = 1024; // Maximum number of pipes
-
 // ===== File Access Permission Flags =====
 pub const F_OK: u32 = 0; // Test for existence
 pub const X_OK: u32 = 1; // Test for execute permission
