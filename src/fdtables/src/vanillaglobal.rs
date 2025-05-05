@@ -422,6 +422,13 @@ pub fn return_fdtable_copy(cageid: u64) -> HashMap<u64, FDTableEntry> {
 // remaining.
 #[doc = include_str!("../docs/close_virtualfd.md")]
 pub fn close_virtualfd(cageid:u64, virtfd:u64) -> Result<(),threei::RetVal> {
+
+    // Below condition checks if the virtualfd is out of bounds and if yes it throws an error
+    // Note that this assumes that all virtualfd numbers returned < FD_PER_PROCESS_MAX 
+    if virtualfd >= FD_PER_PROCESS_MAX {
+        return Err(threei::Errno::EBADFD as u64);
+    }
+    
     let mut fdtable = GLOBALFDTABLE.lock().unwrap();
 
     if !fdtable.contains_key(&cageid) {

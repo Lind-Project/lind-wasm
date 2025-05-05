@@ -5,7 +5,7 @@ use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errn
 use sysdefs::constants::fs_const::{
     LIND_ROOT, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY,
     PROT_READ, PROT_WRITE, SEEK_CUR, SEEK_END, SEEK_SET, SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST,
-    SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO, S_IRWXG, S_IRWXO, S_IRWXU, MAXFD,
+    SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO, S_IRWXG, S_IRWXO, S_IRWXU,
 };
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
 // Import data structure
@@ -841,11 +841,6 @@ impl Cage {
     /// ## Returns:
     ///     Return 0 when success; -1 along with errno when fail.
     pub fn close_syscall(&self, virtual_fd: i32) -> i32 {
-
-        if virtual_fd < 0 || virtual_fd > MAXFD {
-            return syscall_error(Errno::EBADF, "close", "Bad File Descriptor");
-        }
-
         match fdtables::close_virtualfd(self.cageid, virtual_fd as u64) {
             Ok(()) => 0,
             Err(e) => {
