@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <pwd.h>
-
+#include <stdlib.h>
 
 #define LOOKUP_TYPE	struct passwd
 #define FUNCTION_NAME	getpwuid
