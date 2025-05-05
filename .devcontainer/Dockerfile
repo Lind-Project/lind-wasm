@@ -14,12 +14,12 @@ RUN apt-get update && \
 RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
     apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb 
 
-RUN apt install apt-transport-https curl gnupg -y && \
+RUN apt install -qq apt-transport-https curl gnupg -y && \
     curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \
     mv bazel-archive-keyring.gpg /usr/share/keyrings && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/bazel-archive-keyring.gpg] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list
 
-RUN apt update && apt install -y bazel
+RUN apt update -qq && apt install -y -qq bazel
 RUN go install github.com/bazelbuild/buildtools/buildifier@latest
 
 ARG USERNAME=lind
@@ -33,7 +33,7 @@ USER lind
 WORKDIR /home/lind
 
 # Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+RUN curl --silent --show-error --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     . "$HOME/.cargo/env" && \
     rustup install nightly && \
     rustup default nightly
@@ -61,7 +61,20 @@ RUN apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
 RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/lib; fi
 # Build Lind-wasm
 #RUN chmod +x lindtool.sh
-RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
+# RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
+RUN if [ "$DEV_MODE" != "true" ]; then \
+      if [ "$GLIBC_TAR_CACHE" = "false" ]; then \
+        echo "------------------------" && \
+        echo "Building glibc" && \
+        echo "------------------------" && \
+        bazel build //:make_all; \
+      else \
+        echo "------------------------" && \
+        echo "Using cached glibc" &&  \
+        echo "------------------------" && \
+        /home/lind/lind-wasm/src/glibc/gen_sysroot.sh; \
+      fi; \
+    fi
 RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_wasmtime; fi
 
 ### non-DEV_MODE Commmands end here

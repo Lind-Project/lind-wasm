@@ -51,3 +51,4 @@ cp -r "$include_source_dir"/* "$sysroot_dir/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$crt1_source_path" "$sysroot_dir/lib/wasm32-wasi/"
+

@@ -110,7 +110,6 @@ genrule(
     """,
 )
 
-
 genrule(
     name = "make_wasmtime",
     tags = ["no-cache"],
@@ -147,20 +146,82 @@ py_binary(
     name = "python_tests",
     srcs = ["wasmtestreport.py"],
     main = "wasmtestreport.py",    
-    # This ensures the tests have access to the folders required.
-    # The logs from the previous steps are included to ensure 
-    # the rules that create them are run.  This is a requirement
-    # to use a genrule as a dependency.
+    # This ensures the tests have access to the folders required.    
     data = [
         "tests",         
          "lindtool.sh",
-         "check.log",
-         "check_wasm.log",
          ":rawposix_files",
          ":wasmtime_files",
          ":clang_files",
     ],   
 )
+
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+# This build rule is to compile the clippy_delta binary
+rust_binary(
+    name = "clippy_delta",
+    srcs = [
+        "tests/ci-tests/clippy/src/main.rs",
+        "tests/ci-tests/clippy/src/output.rs",
+    ],
+    edition = "2021",
+    deps = [
+        "@crates//:serde",
+        "@crates//:serde_json",
+        "@crates//:atty",
+    ],
+)
+
+genrule(
+    name = "run_clippy_manifest_scan",
+    srcs = [
+        ":clippy_delta",        
+    ],
+    outs = ["tests/ci-tests/clippy/clippy_out.json"],
+    cmd = """
+    cp $(location :clippy_delta) clippy_delta_bin
+    chmod +x clippy_delta_bin
+
+    export GIT_DIR=$$PWD/.git
+    export GIT_WORK_TREE=$$PWD
+
+    echo "Fetching origin/main without removing remotes..."
+    git remote get-url origin || git remote add origin https://github.com/Lind-Project/lind-wasm.git
+    git fetch origin main:refs/remotes/origin/main || echo "Warning: could not fetch origin/main"    
+
+    set +e
+    ./clippy_delta_bin --output-file $(location tests/ci-tests/clippy/clippy_out.json)
+    status=$$?
+    set -e
+
+    echo ""
+    echo "==================================================="
+    if [ $$status -ne 0 ]; then
+        echo "Clippy checks failed. Full results written to:"
+    else
+        echo "Clippy checks passed. Full results written to:"
+    fi
+    echo "  bazel-bin/tests/ci-tests/clippy/clippy_out.json"
+    echo "==================================================="
+    
+    # Should succeed so logs are passed even if clippy issues are found
+    exit 0
+    """,
+    executable = True,
+    tags = ["no-cache", "no-sandbox"],
+)
+
+
+
+
+
+#FileGroup for .git files
+# filegroup(
+#     name = "git_files",
+#     srcs = glob([".git/**/*"]),
+#     visibility = ["//visibility:private"],
+# )
+
 
 # FileGroup for src/RawPOSIX files
 filegroup(

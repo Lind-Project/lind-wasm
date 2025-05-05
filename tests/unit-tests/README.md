@@ -1,4 +1,4 @@
-For Compile, see [https://lind-project.github.io/lind-wasm-docs/wasmCompile/](https://lind-project.github.io/lind-wasm-docs/wasmCompile/)
+For Compile, see [https://lind-project.github.io/lind-wasm/use/compile-programs/](https://lind-project.github.io/lind-wasm/use/compile-programs/)
 
 Now let try to print `hello world!` by printf
 
