@@ -14,9 +14,6 @@ RUN apt-get update && \
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
     bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash 
 
-RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
-    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb 
-
 RUN apt install -qq apt-transport-https curl gnupg -y && \
     curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \
     mv bazel-archive-keyring.gpg /usr/share/keyrings && \
@@ -59,6 +56,11 @@ RUN if [ "$DEV_MODE" != "true" ]; then wget -q https://github.com/llvm/llvm-proj
     mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04; fi
 WORKDIR /home/lind/lind-wasm
 
+#Install libtinfo5 as root
+USER root
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb 
+USER lind
 # Move wasi directory
 RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/lib; fi
 # Build Lind-wasm
