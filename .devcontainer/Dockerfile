@@ -6,6 +6,9 @@ ENV DEV_MODE=${DEV_MODE:-false}
 ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-149-migrate-clang-version}
 
+ARG GLIBC_TAR_CACHE
+ENV GLIBC_TAR_CACHE=${GLIBC_TAR_CACHE:-false}
+
 # Install all the required dependencies
 RUN apt-get update && \    
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
@@ -51,7 +54,7 @@ WORKDIR /home/lind
 # Clone the Lind-wasm repository
 RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
 # Install clang-16 for compiling the code
-RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
+RUN if [ "$DEV_MODE" != "true" ]; then wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
     tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
     mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04; fi
 WORKDIR /home/lind/lind-wasm
