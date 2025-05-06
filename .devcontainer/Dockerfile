@@ -3,6 +3,9 @@ FROM ubuntu:latest
 ARG DEV_MODE
 ENV DEV_MODE=${DEV_MODE:-false}
 
+ARG REPO_URL
+ENV REPO_URL=${REPO_URL:-https://github.com/Lind-Project/lind-wasm.git}
+
 ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-main}
 
@@ -49,8 +52,11 @@ ENV CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 ### non-DEV_MODE Commmands begin here
 
 WORKDIR /home/lind
-# Clone the Lind-wasm repository
-RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
+# Clone the Lind-wasm repository, echo location of clone for log
+RUN if [ "$DEV_MODE" != "true" ]; then \
+      echo "Cloning from $REPO_URL @ $BRANCH_NAME" && \
+      git clone --branch "$BRANCH_NAME" --single-branch "$REPO_URL" lind-wasm; \
+    fi
 # Install clang-16 for compiling the code
 RUN if [ "$DEV_MODE" != "true" ]; then wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
     tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \

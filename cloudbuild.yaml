@@ -9,7 +9,7 @@ steps:
       - 'docker login --username=$$USERNAME --password=$$PASSWORD'
     secretEnv:
       - 'USERNAME'
-      - 'PASSWORD'
+      - 'PASSWORD'  
 
   # Step 2: Check if there were changes in `src/glibc` in the current branch.
   # If not, attempt to find and download a cached `glibc_build.tar.gz` from GCS.
@@ -40,6 +40,16 @@ steps:
           echo "GLIBC_TAR_CACHE=false" >> /workspace/env.txt
         fi
 
+  - name: 'gcr.io/cloud-builders/git'
+    id: 'Detect Repo URL'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+          cd /workspace
+          git config --get remote.origin.url > /workspace/repo_url.txt
+
+
   # Step 3: Build the Docker image from the .devcontainer directory.
   # - Loads variables from /workspace/env.txt set in Step 2.  
   # - Output is logged to /workspace/docker_build.log.
@@ -53,15 +63,18 @@ steps:
       - '-c'
       - |
           source /workspace/env.txt
+          REPO_URL=$(cat /workspace/repo_url.txt)
           (
             docker build \
               --build-arg BRANCH_NAME=$$BRANCH_NAME \
+              --build-arg REPO_URL=$$REPO_URL \
               --build-arg GLIBC_TAR_CACHE=$$GLIBC_TAR_CACHE \
               -t $$USERNAME/lind-wasm:latest ./.devcontainer
             echo $$? > /workspace/docker_build_exit_code
           ) | tee /workspace/docker_build.log
     env:
       - 'BRANCH_NAME=$BRANCH_NAME'
+      - ''
     secretEnv:
       - 'USERNAME'
 
