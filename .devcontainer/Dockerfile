@@ -6,20 +6,20 @@ ENV DEV_MODE=${DEV_MODE:-false}
 ARG BRANCH_NAME
 ENV BRANCH_NAME=${BRANCH_NAME:-149-migrate-clang-version}
 
+ARG GLIBC_TAR_CACHE
+ENV GLIBC_TAR_CACHE=${GLIBC_TAR_CACHE:-false}
+
 # Install all the required dependencies
 RUN apt-get update && \    
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
     bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash 
 
-RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
-    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb 
-
-RUN apt install apt-transport-https curl gnupg -y && \
+RUN apt install -qq apt-transport-https curl gnupg -y && \
     curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \
     mv bazel-archive-keyring.gpg /usr/share/keyrings && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/bazel-archive-keyring.gpg] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list
 
-RUN apt update && apt install -y bazel
+RUN apt update -qq && apt install -y -qq bazel
 RUN go install github.com/bazelbuild/buildtools/buildifier@latest
 
 ARG USERNAME=lind
@@ -33,7 +33,7 @@ USER lind
 WORKDIR /home/lind
 
 # Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+RUN curl --silent --show-error --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     . "$HOME/.cargo/env" && \
     rustup install nightly && \
     rustup default nightly
@@ -51,17 +51,34 @@ WORKDIR /home/lind
 # Clone the Lind-wasm repository
 RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
 # Install clang-16 for compiling the code
-RUN if [ "$DEV_MODE" != "true" ]; then wget https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
+RUN if [ "$DEV_MODE" != "true" ]; then wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
     tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
     mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04; fi
 WORKDIR /home/lind/lind-wasm
-RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
-RUN apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+
+#Install libtinfo5 as root
+USER root
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb 
+USER lind
 # Move wasi directory
 RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/lib; fi
 # Build Lind-wasm
 #RUN chmod +x lindtool.sh
-RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
+# RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
+RUN if [ "$DEV_MODE" != "true" ]; then \
+      if [ "$GLIBC_TAR_CACHE" = "false" ]; then \
+        echo "------------------------" && \
+        echo "Building glibc" && \
+        echo "------------------------" && \
+        bazel build //:make_all; \
+      else \
+        echo "------------------------" && \
+        echo "Using cached glibc" &&  \
+        echo "------------------------" && \
+        /home/lind/lind-wasm/src/glibc/gen_sysroot.sh; \
+      fi; \
+    fi
 RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_wasmtime; fi
 
 ### non-DEV_MODE Commmands end here

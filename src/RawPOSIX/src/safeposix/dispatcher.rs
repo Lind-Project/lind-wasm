@@ -498,16 +498,9 @@ pub fn lind_syscall_api(
         DUP_SYSCALL => {
             let fd = arg1 as i32;
 
-            // Convert second argument to Option<i32> if it's within valid range
-            let fd2: Option<i32> = if arg1 <= i32::MAX as u64 {
-                Some(arg1 as i32)
-            } else {
-                None
-            };
-
             // Perform dup operation through cage implementation
             // File descriptor validation handled by cage layer
-            interface::cagetable_getref(cageid).dup_syscall(fd, fd2)
+            interface::cagetable_getref(cageid).dup_syscall(fd)
         }
 
         DUP2_SYSCALL => {
@@ -740,21 +733,15 @@ pub fn lind_syscall_api(
 
         SHMAT_SYSCALL => {
             let shmid = arg1 as i32;
-            let cage = interface::cagetable_getref(cageid);
-            // Convert virtual address to physical address
-            let shmaddr = translate_vmmap_addr(&cage, arg2).unwrap() as *mut u8;
+            let addr = arg2 as *mut u8;
             let shmflg = arg3 as i32;
-            // Perform shmat operation through cage implementation
-            cage.shmat_syscall(shmid, shmaddr, shmflg)
+            interface::shmat_handler(cageid, addr, 0, shmflg, shmid) as i32
         }
+                
 
         SHMDT_SYSCALL => {
-            let cage = interface::cagetable_getref(cageid);
-            // Convert virtual address to physical address
-            let shmaddr = translate_vmmap_addr(&cage, arg1).unwrap() as *mut u8;
-
-            // Perform shmdt operation through cage implementation
-            cage.shmdt_syscall(shmaddr)
+            let addr = arg1 as *mut u8;
+            interface::shmdt_handler(cageid, addr)
         }
 
         PWRITE_SYSCALL => {
@@ -1066,8 +1053,11 @@ pub fn lind_syscall_api(
             // Convert remaining arguments
             let futex_op = arg2 as u32;
             let val = arg3 as u32;
-            let timeout = arg4 as u32;
-            let uaddr2 = arg5 as u32;
+            let timeout = match futex_op as i32 {
+                FUTEX_WAIT => translate_vmmap_addr(&cage, arg4).unwrap() as usize,
+                _ => arg4 as usize,
+            };
+            let uaddr2 = translate_vmmap_addr(&cage, arg1).unwrap();
             let val3 = arg6 as u32;
             cage.futex_syscall(uaddr, futex_op, val, timeout, uaddr2, val3)
         }

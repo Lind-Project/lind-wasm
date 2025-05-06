@@ -599,6 +599,7 @@ def parse_arguments():
     parser.add_argument("--generate-html", action="store_true", help="Flag to generate HTML file")
     parser.add_argument("--pre-test-only", action="store_true", help="Flag to run only the copying of required testfiles")
     parser.add_argument("--clean-testfiles", action="store_true", help="Flag to remove the testfiles")
+    parser.add_argument("--clean-results", action="store_true", help="Flag to clean up result files")
 
     args = parser.parse_args()
     return args
@@ -633,12 +634,22 @@ def main():
     should_generate_html = True
     pre_test_only = args.pre_test_only
     clean_testfiles = args.clean_testfiles
+    clean_results = args.clean_results
+
+    if clean_results:
+        if os.path.isfile(output_file):
+            os.remove(output_file)
+        if os.path.isfile(output_html_file):
+            os.remove(output_html_file)
+        print(Path(LIND_FS_ROOT))
+        for file in Path(LIND_FS_ROOT).iterdir():
+            file.unlink()
+        return
 
     results = {
         "deterministic": get_empty_result(),
         "non_deterministic": get_empty_result()
     }
-
 
     try:
         shutil.rmtree(TESTFILES_DST)
