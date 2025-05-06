@@ -394,6 +394,12 @@ lazy_static! {
 #[doc = include_str!("../docs/close_virtualfd.md")]
 pub fn close_virtualfd(cageid:u64, virtfd:u64) -> Result<(),threei::RetVal> {
 
+    // Below condition checks if the virtualfd is out of bounds and if yes it throws an error
+    // Note that this assumes that all virtualfd numbers returned < FD_PER_PROCESS_MAX 
+    if virtfd >= FD_PER_PROCESS_MAX {
+        return Err(threei::Errno::EBADFD as u64);
+    }
+
     assert!(FDTABLE.contains_key(&cageid),"Unknown cageid in fdtable access");
 
     // derefing this so I don't hold a lock and deadlock close handlers
