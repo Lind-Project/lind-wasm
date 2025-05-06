@@ -3,7 +3,7 @@ genrule(
     tags = ["no-cache"],
     srcs = [
         "src/glibc",
-        "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+        "clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04",
     ],
     outs = ["check.log"],  # Output file
     cmd = """
@@ -12,7 +12,7 @@ genrule(
         export GLIBC_BASE=$$PWD/src/glibc
         export WORKSPACE=$$PWD
         
-        export CLANG=$$PWD/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04
+        export CLANG=$$PWD/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04
         export CC=$$CLANG/bin/clang
         
         echo $$GLIBC_BASE >> $@
@@ -28,7 +28,7 @@ genrule(
         cd ../nptl
         
         # Define common flags
-        CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g"
+        CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g -fPIC"
         WARNINGS="-Wall -Wwrite-strings -Wundef -Wstrict-prototypes -Wold-style-definition"
         EXTRA_FLAGS="-fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common"
         EXTRA_FLAGS+=" -Wp,-U_FORTIFY_SOURCE -fmath-errno -fPIE -ftls-model=local-exec"
@@ -71,7 +71,7 @@ genrule(
             -I../libio
             -I.
         "
-        SYS_INCLUDE="-nostdinc -isystem $$CLANG/lib/clang/16/include -isystem /usr/i686-linux-gnu/include"
+        SYS_INCLUDE="-nostdinc -isystem $$CLANG/lib/clang/18/include -isystem /usr/i686-linux-gnu/include"
         DEFINES="-D_LIBC_REENTRANT -include $$GLIBC_BASE/build/libc-modules.h -DMODULE_NAME=libc"
         EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
         
@@ -81,10 +81,21 @@ genrule(
             -c pthread_create.c -MD -MP -MF $$GLIBC_BASE/build/nptl/pthread_create.o.dt \
             -MT $$GLIBC_BASE/build/nptl/pthread_create.o
         
+       # Compile elision-lock.c using the same flags/env
         $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
             $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
-            -o $$GLIBC_BASE/build/lind_syscall.o \
-            -c $$GLIBC_BASE/lind_syscall/lind_syscall.c
+            -o $$GLIBC_BASE/build/nptl/elision-lock.o \
+            -c ../sysdeps/unix/sysv/linux/x86/elision-lock.c \
+            -MD -MP -MF $$GLIBC_BASE/build/nptl/elision-lock.o.dt \
+            -MT $$GLIBC_BASE/build/nptl/elision-lock.o
+
+        # Compile elision-unlock.c using the same flags/env
+        $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
+            $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
+            -o $$GLIBC_BASE/build/nptl/elision-unlock.o \
+            -c ../sysdeps/unix/sysv/linux/x86/elision-unlock.c \
+            -MD -MP -MF $$GLIBC_BASE/build/nptl/elision-unlock.o.dt \
+            -MT $$GLIBC_BASE/build/nptl/elision-unlock.o
         
         # Compile assembly files
         cd ../ && \
@@ -95,7 +106,6 @@ genrule(
         $$CC --target=wasm32-wasi-threads -matomics \
             -o $$GLIBC_BASE/build/csu/set_stack_pointer.o \
             -c $$GLIBC_BASE/csu/wasm32/set_stack_pointer.s
-        
         ./gen_sysroot.sh
     """,
 )
@@ -126,7 +136,7 @@ sh_test(
     # (e.g., input configuration files), list them in data:
     data = [
         "tests",
-         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
+         "clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04",
     ],
 )
 
@@ -228,5 +238,5 @@ filegroup(
 # FileGroup for clang files
 filegroup(
     name = "clang_files",
-    srcs = glob(["clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/**/*"])
+    srcs = glob(["clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/**/*"])
 )

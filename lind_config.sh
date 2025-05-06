@@ -3,7 +3,7 @@ glibc_base="$script_dir/src/glibc"
 wasmtime_base="$script_dir/src/wasmtime"
 rawposix_base="$script_dir/src/RawPOSIX"
 
-CC="${CLANG:=/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
+CC="${CLANG:=/home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04}/bin/clang"
 
 # Compilation flags
 CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g"
@@ -78,17 +78,72 @@ run_cmd_debug="gdb --args $wasmtime_base/target/debug/wasmtime run \
 compile_wasmtime_cmd="cd $wasmtime_base && cargo build"
 compile_rawposix_cmd="cd $rawposix_base && cargo build"
 
-compile_pthread_create="$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
-    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $glibc_base/build/nptl/pthread_create.o \
-    -c pthread_create.c -MD -MP -MF $glibc_base/build/nptl/pthread_create.o.dt \
-    -MT $glibc_base/build/nptl/pthread_create.o"
-
-# Compiles lind syscall 
-compile_lind_syscall="$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
-    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $glibc_base/build/lind_syscall.o \
-    -c $glibc_base/lind_syscall/lind_syscall.c"
+compile_pthread_create="$CC --target=wasm32-unknown-wasi \
+-v -Wno-int-conversion pthread_create.c \
+-c -std=gnu11 \
+-fgnu89-inline \
+ -matomics \
+ -mbulk-memory \
+ -O0 -g -Wall \
+ -Wwrite-strings \
+ -Wundef \
+ -fmerge-all-constants \
+-ftrapping-math \
+ -fno-stack-protector  \
+ -fno-common \
+ -Wp,-U_FORTIFY_SOURCE \
+ -Wstrict-prototypes \
+ -Wold-style-definition \
+ -fmath-errno \
+ -fPIE \
+ -ftls-model=local-exec \
+ -I../include -I$glibc_base/build/nptl \
+ -I$glibc_base/build \
+ -I../sysdeps/lind  \
+ -I../lind_syscall  \
+ -I../sysdeps/unix/sysv/linux/i386/i686  \
+ -I../sysdeps/unix/sysv/linux/i386  \
+ -I../sysdeps/unix/sysv/linux/x86/include \
+ -I../sysdeps/unix/sysv/linux/x86  \
+ -I../sysdeps/x86/nptl  \
+ -I../sysdeps/i386/nptl  \
+ -I../sysdeps/unix/sysv/linux/include \
+ -I../sysdeps/unix/sysv/linux  \
+ -I../sysdeps/nptl  \
+ -I../sysdeps/pthread  \
+ -I../sysdeps/gnu  \
+ -I../sysdeps/unix/inet  \
+ -I../sysdeps/unix/sysv  \
+ -I../sysdeps/unix/i386  \
+ -I../sysdeps/unix  \
+ -I../sysdeps/posix  \
+ -I../sysdeps/i386/fpu  \
+ -I../sysdeps/x86/fpu  \
+ -I../sysdeps/i386  \
+ -I../sysdeps/x86/include \
+ -I../sysdeps/x86  \
+ -I../sysdeps/wordsize-32  \
+ -I../sysdeps/ieee754/float128  \
+ -I../sysdeps/ieee754/ldbl-96/include \
+ -I../sysdeps/ieee754/ldbl-96  \
+ -I../sysdeps/ieee754/dbl-64  \
+ -I../sysdeps/ieee754/flt-32  \
+ -I../sysdeps/ieee754  \
+ -I../sysdeps/generic  \
+ -I.. \
+ -I../libio \
+ -I. -nostdinc \
+ -isystem $CLANG/lib/clang/18/include \
+ -isystem /usr/i686-linux-gnu/include \
+ -D_LIBC_REENTRANT \
+ -include $glibc_base/build/libc-modules.h \
+ -DMODULE_NAME=libc \
+ -include ../include/libc-symbols.h  \
+ -DPIC     \
+ -DTOP_NAMESPACE=glibc \
+ -o $glibc_base/build/nptl/pthread_create.o \
+ -MD -MP -MF $glibc_base/build/nptl/pthread_create.o.dt \
+ -MT $glibc_base/build/nptl/pthread_create.o"
 
 compile_wasi_thread_start="$CC --target=wasm32-wasi-threads \
     -matomics -o $glibc_base/build/csu/wasi_thread_start.o \
