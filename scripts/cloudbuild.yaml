@@ -40,6 +40,11 @@ steps:
           echo "GLIBC_TAR_CACHE=false" >> /workspace/env.txt
         fi
 
+  # Step 3: Detect the Git remote URL from the checked-out source.
+  # - Reads the remote.origin.url from the local .git config.
+  # - Writes the value to /workspace/repo_url.txt for later use in Docker build.
+  # - This supports building from forked repositories by preserving the correct source origin.
+
   - name: 'gcr.io/cloud-builders/git'
     id: 'Detect Repo URL'
     entrypoint: 'bash'
@@ -50,7 +55,7 @@ steps:
           git config --get remote.origin.url > /workspace/repo_url.txt
 
 
-  # Step 3: Build the Docker image from the .devcontainer directory.
+  # Step 4: Build the Docker image from the .devcontainer directory.
   # - Loads variables from /workspace/env.txt set in Step 2.  
   # - Output is logged to /workspace/docker_build.log.
   # - Exit code of the docker build is saved to /workspace/docker_build_exit_code.
@@ -77,7 +82,7 @@ steps:
     secretEnv:
       - 'USERNAME'
 
-  # Step 4: Handle the result of the Docker build.
+  # Step 5: Handle the result of the Docker build.
   # - Reads the docker build exit code (default to 1 if not present).
   # - Installs Python dependencies and runs `generate_token_and_upload_secret.py`.
   # - Sends a GitHub comment via API (success or failure) using a fresh token from Secret Manager.
@@ -131,7 +136,7 @@ steps:
             # Ensure the build fails here if the docker build fails in the step above
             exit 1
           fi
-  # Step 5: Run the built container and execute the Bazel test suite inside it.
+  # Step 6: Run the built container and execute the Bazel test suite inside it.
   # - Starts the container detached.
   # - If a glibc cache was found, injects it into the container.
   # - Otherwise, copies the build directory out for archiving.
@@ -177,7 +182,7 @@ steps:
     secretEnv:
       - 'USERNAME'
 
-  # Step 6: Push test artifacts to GCS.
+  # Step 7: Push test artifacts to GCS.
   # - Uploads results.json and report.html to public GCS URLs.
   # - If glibc build was not cached earlier, creates and uploads new glibc_build.tar.gz
   - name: 'gcr.io/cloud-builders/gsutil'
@@ -204,7 +209,7 @@ steps:
           gsutil cp /workspace/glibc_build.tar.gz gs://test_result_json_bucket/glibc/$$LAST_COMMIT/glibc_build.tar.gz 
         fi      
 
-  # Step 7: Refresh GitHub token again (safety precaution).
+  # Step 8: Refresh GitHub token again (safety precaution).
   # This is used to ensure the next comment has valid credentials.
   # Uses Python + `generate_token_and_upload_secret.py` to acquire a short-lived token.
   - name: 'python:3.11-slim'
@@ -218,7 +223,7 @@ steps:
         pip install "PyJWT[crypto]" google-cloud-secret-manager requests
         python scripts/generate_token_and_upload_secret.py
 
-  # Step 8: Final GitHub PR comment with links to the HTML and JSON test reports.
+  # Step 9: Final GitHub PR comment with links to the HTML and JSON test reports.
   # Uses the refreshed `GITHUB_TOKEN` to authenticate with GitHub.
   # Posts a rich markdown comment with clickable links.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
