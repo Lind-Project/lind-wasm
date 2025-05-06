@@ -73,8 +73,7 @@ steps:
             echo $$? > /workspace/docker_build_exit_code
           ) | tee /workspace/docker_build.log
     env:
-      - 'BRANCH_NAME=$BRANCH_NAME'
-      - ''
+      - 'BRANCH_NAME=$BRANCH_NAME'      
     secretEnv:
       - 'USERNAME'
 
