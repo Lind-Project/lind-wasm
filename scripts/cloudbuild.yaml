@@ -53,6 +53,8 @@ steps:
       - |
           cd /workspace
           git config --get remote.origin.url > /workspace/repo_url.txt
+          echo "Detected REPO_URL:"
+          cat /workspace/repo_url.txt
 
 
   # Step 4: Build the Docker image from the .devcontainer directory.
@@ -68,6 +70,8 @@ steps:
       - '-c'
       - |
           source /workspace/env.txt
+          echo "Reading REPO_URL from /workspace/repo_url.txt:"
+          cat /workspace/repo_url.txt
           REPO_URL=$(cat /workspace/repo_url.txt)
           (
             docker build \
