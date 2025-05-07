@@ -7,7 +7,7 @@ src_dir="$GLIBC_BASE/build"
 # Define paths for copying additional resources
 include_source_dir="$GLIBC_BASE/target/include"
 crt1_source_path="$GLIBC_BASE/lind_syscall/crt1.o"
-lind_syscall_path="$GLIBC_BASE/build/lind_syscall/lind_syscall.o" # Path to the lind_syscall.o file
+lind_syscall_path="$GLIBC_BASE/build/lind_syscall.o" # Path to the lind_syscall.o file
 
 # TARGET_TRIPLE = wasm32-wasi
 TARGET_TRIPLE=wasm32-wasi-threads

@@ -83,7 +83,7 @@ genrule(
         
         $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
             $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
-            -o $$GLIBC_BASE/build/lind_syscall/lind_syscall.o \
+            -o $$GLIBC_BASE/build/lind_syscall.o \
             -c $$GLIBC_BASE/lind_syscall/lind_syscall.c
         
         # Compile assembly files
