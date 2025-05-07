@@ -401,8 +401,7 @@ __spawnix (int *pid, const char *file,
       .flags = (set_cgroup ? CLONE_INTO_CGROUP : 0)
 	       | (use_pidfd ? CLONE_PIDFD : 0)
 	       | CLONE_CLEAR_SIGHAND
-	      //  | CLONE_VM
-	       | CLONE_VFORK,
+	       | CLONE_VFORK, // lind-wasm: removed CLONE_VM flag
       .exit_signal = SIGCHLD,
       .stack = (uintptr_t) stack,
       .stack_size = stack_size,
