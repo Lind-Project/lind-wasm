@@ -166,6 +166,11 @@ impl RunCommand {
             let ty = TableType::new(RefType::FUNCREF, main_module_table_size, None);
             table = Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap();
             linker.define(&mut store, "env", "__indirect_function_table", table);
+
+            let stack_low = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(126832)).unwrap();
+            let stack_high = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(192368)).unwrap();
+            linker.define(&mut store, "GOT.mem", "__stack_low", stack_low);
+            linker.define(&mut store, "GOT.mem", "__stack_high", stack_high);
             // for (module_name, item_name, item) in linker.iter(&mut store) {
             //     println!("{} {}: {:?}", module_name, item_name, item);
             // }
@@ -224,6 +229,29 @@ impl RunCommand {
                     let dylink_info = module.dylink_meminfo();
                     let dylink_info = dylink_info.as_ref().unwrap();
                     let table_start = table.size(&mut store) as i32;
+                    
+                    for (name, val) in module.raw_exports() {
+                        match name.as_str() {
+                            "__wasm_apply_data_relocs" => { continue; }
+                            _ => {}
+                        }
+
+                        // match val {
+                        //     wasmtime_environ::EntityIndex::Global(global_index) => {
+                        //         let value = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(110384 + 40960000)).unwrap();
+                        //         linker.define(&mut store, "GOT.mem", name, value);
+                        //         println!("export {}, type: global({:?})", name, global_index);
+                        //     },
+                        //     wasmtime_environ::EntityIndex::Function(func_index) => {
+                        //         let value = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(func_index.as_u32() as i32)).unwrap();
+                        //         linker.define(&mut store, "GOT.func", name, value);
+                        //         println!("export {}, type: function({:?})", name, func_index);
+                        //     },
+                        //     wasmtime_environ::EntityIndex::Table(table_index) => {},
+                        //     wasmtime_environ::EntityIndex::Memory(memory_index) => {},
+                        // }
+                    }
+
                     println!("table_start: {}, grow: {}", table_start, dylink_info.table_size);
                     table.grow(&mut store, dylink_info.table_size, wasmtime::Ref::Func(None));
                     let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_start)).unwrap();
@@ -282,6 +310,15 @@ impl RunCommand {
                 "dlsym",
                 dlsym,
             ).unwrap();
+
+            let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
+            let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
+
+            let tmp = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(233)).unwrap();
+            linker.define(&mut store, "env", "__memory_base", memory_base);
+            linker.define(&mut store, "env", "__table_base", table_base);
+
+            // linker.define(&mut store, "GOT.mem", "global_var", tmp);
         }
 
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
@@ -758,8 +795,10 @@ impl RunCommand {
                         .or_else(|| instance.get_func(&mut *store, "_start"))
                 };
 
-                let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
-                let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
+                // let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
+                let stack_low = 126832;
+                // let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
+                let stack_pointer = 192368;
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
 

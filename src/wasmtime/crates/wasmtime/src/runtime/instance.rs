@@ -257,10 +257,11 @@ impl Instance {
             1,
             MMAP_SYSCALL as u32,
             0,
-            0, // the first memory region starts from 0
+            // 0, // the first memory region starts from 0
+            40960000,
             rounded_size as u64, // size of first memory region
             (PROT_READ | PROT_WRITE) as u64,
-            (MAP_PRIVATE | MAP_ANONYMOUS) as u64,
+            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
             // we need to pass -1 here, but since lind_syscall_api only accepts u64
             // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
             (0 - 1) as u64,
@@ -358,6 +359,7 @@ impl Instance {
         println!("plan: {:?}", plan);
         // in wasmtime, one page is 65536 bytes, so we need to convert to pagesize in rawposix
         let minimal_pages = plan.memory.minimum * 0x10;
+        let minimal_pages = 48;
 
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
@@ -371,6 +373,7 @@ impl Instance {
                 let handle = store.0.instance(InstanceId::from_index(1));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let memory_base = defined_memory.base as usize;
+                println!("instance new memory base: {:?}, page: {:?}", memory_base, minimal_pages);
                 // rawposix::interface::init_vmmap_helper(pid, memory_base, Some(minimal_pages as u32));
                 rawposix::interface::init_vmmap_program_break(pid, minimal_pages as u32);
 

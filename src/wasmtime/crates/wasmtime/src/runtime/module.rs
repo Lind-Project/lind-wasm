@@ -757,6 +757,17 @@ impl Module {
         })
     }
 
+    pub fn raw_exports<'module>(
+        &'module self,
+    ) -> impl ExactSizeIterator<Item = (&String, &EntityIndex)> + 'module {
+        let module = self.compiled_module().module();
+        let types = self.types();
+        let engine = self.engine();
+        module.exports.iter().map(move |(name, entity_index)| {
+            (name, entity_index)
+        })
+    }
+
     /// Looks up an export in this [`Module`] by name.
     ///
     /// This function will return the type of an export with the given name.

@@ -661,14 +661,41 @@ impl<T> Linker<T> {
         let exports = instance
             .exports(&mut store)
             .map(|e| {
+                // println!("instance export name: {}", e.name());
+                let mut name = module_name;
+                let global = e.clone().into_global();
+                if global.is_some() {
+                    let global = global.unwrap();
+                    println!("classified as GOT.mem: {:?}", global);
+                    name = "GOT.mem";
+                }
+
                 (
-                    self.import_key(module_name, Some(e.name())),
+                    self.import_key(name, Some(e.name())),
                     e.into_extern(),
                 )
             })
             .collect::<Vec<_>>();
         for (key, export) in exports {
-            self.insert(key, Definition::new(store.0, export))?;
+            let global = export.clone().into_global();
+            if let Some(_) = global {
+                let global = export.into_global().unwrap();
+                let pointer = global.get_handler(&mut store);
+                unsafe {
+                    let original = *(pointer as *mut i32);
+                    *(pointer as *mut i32) = original + 40960000;
+                }
+                // let val = global.get(&mut store);
+                // let global_raw = val.i32().unwrap();
+                // global.set(&mut store, Val::I32(global_raw + 40960000));
+                let modified_export = Extern::Global(global);
+                println!("import from modified export: {:?}", modified_export);
+                self.insert(key, Definition::new(store.0, modified_export))?;
+            }
+            else {
+                println!("import from export: {:?}", export);
+                self.insert(key, Definition::new(store.0, export))?;
+            }
         }
         Ok(self)
     }
@@ -903,7 +930,29 @@ impl<T> Linker<T> {
                     }
                 }
 
+                // let mut globals = vec![];
+                // for export in instance.exports(&mut store) {
+                //     let export = export.clone();
+                //     println!("linker.module, export: {:?}", export.name());
+                //     match export.name() {
+                //         "__wasm_apply_data_relocs" => {},
+                //         _ => {
+                //             let global = export.clone().into_global();
+                //             if let Some(global) = global {
+                //                 globals.push(export.clone().name());
+                //             }
+                //         }
+                //     }
+                // }
+                
+                // for (name) in globals {
+                //     println!("name: {}", name);
+                //     // global.set_mutability(&mut store, true);
+                //     // self.define(&mut store, "GOT.mem", name, global);
+                // }
+
                 let ret = self.instance(store, "env", instance);
+
 
                 // self.allow_shadowing(false);
 

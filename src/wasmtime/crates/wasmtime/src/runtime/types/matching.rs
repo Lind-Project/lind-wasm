@@ -179,13 +179,13 @@ fn global_ty(expected: &Global, actual: &Global) -> Result<()> {
     } else {
         match_ty(expected.wasm_ty, actual.wasm_ty, "global")?;
     }
-    match_bool(
-        expected.mutability,
-        actual.mutability,
-        "global",
-        "mutable",
-        "immutable",
-    )?;
+    // match_bool(
+    //     expected.mutability,
+    //     actual.mutability,
+    //     "global",
+    //     "mutable",
+    //     "immutable",
+    // )?;
     Ok(())
 }
 

@@ -214,6 +214,13 @@ impl Global {
         Ok(())
     }
 
+    pub fn set_mutability(&self, mut store: impl AsContextMut, mutability: bool) -> Result<()> {
+        let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
+        let mut ty = &mut store[self.0].global;
+        ty.mutability = mutability;
+        
+        Ok(())
+    }
 
     pub fn get_handler(&self, mut store: impl AsContextMut) -> u64 {
         let mut store = AutoAssertNoGc::new(store.as_context_mut().0);
