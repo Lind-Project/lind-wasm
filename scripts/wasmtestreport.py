@@ -708,7 +708,8 @@ def main():
             native_file.unlink()
     
     shutil.rmtree(TESTFILES_DST) # removes the test files from the lind fs root
-
+    
+    os.chdir(LIND_WASM_BASE)
     with open(output_file, "w") as fp:
         json.dump(results, fp, indent=4)
 
@@ -716,7 +717,7 @@ def main():
         report_html = generate_html_report(results)
         with open(output_html_file, "w", encoding="utf-8") as out:
             out.write(report_html)
-        print(f"'{output_html_file}' generated.")
+        print(f"'{os.path.abspath(output_html_file)}' generated.")
 
     print(f"'{os.path.abspath(output_file)}' generated.")
 
