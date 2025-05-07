@@ -119,16 +119,6 @@ genrule(
     """,
 )
 
-sh_test(
-    name = "my_bash_test",
-    srcs = ["wasmtest.sh"],
-    # If your script needs data files or depends on other files
-    # (e.g., input configuration files), list them in data:
-    data = [
-        "tests",
-         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
-    ],
-)
 
 # This build rule is to run the series of tests defined in 
 # wasmtestreport.py
