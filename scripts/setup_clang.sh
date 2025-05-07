@@ -25,11 +25,12 @@
 #!/bin/bash
 
 # Define variables
-CLANG_DIR="clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
-CLANG_TAR="clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+HOME_DIR="/home/lind/lind-wasm"
+CLANG_DIR="$HOME_DIR/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
+CLANG_TAR="$HOME_DIR/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
 CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/$CLANG_TAR"
-LIND_WASM_DIR="."
-WASI_SRC="./src/glibc/wasi"
+LIND_WASM_DIR="$HOME_DIR"
+WASI_SRC="$HOME_DIR/src/glibc/wasi"
 WASI_DEST="$CLANG_DIR/lib/clang/16/lib"
 
 # Check if Clang already exists

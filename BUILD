@@ -1,6 +1,6 @@
 genrule(
-    name = "make_all",
-    tags = ["no-cache"],
+    name = "make_glibc",
+    tags = ["no-cache", "no-sandbox"],
     srcs = [
         "src/glibc",
         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
@@ -83,7 +83,7 @@ genrule(
         
         $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
             $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
-            -o $$GLIBC_BASE/build/lind_syscall.o \
+            -o $$GLIBC_BASE/build/lind_syscall/lind_syscall.o \
             -c $$GLIBC_BASE/lind_syscall/lind_syscall.c
         
         # Compile assembly files
@@ -102,7 +102,7 @@ genrule(
 
 genrule(
     name = "make_wasmtime",
-    tags = ["no-cache"],
+    tags = ["no-cache", "no-sandbox"],
     srcs = [
         "src/wasmtime",
         "src/RawPOSIX"
@@ -118,7 +118,6 @@ genrule(
         cargo build
     """,
 )
-
 
 # This build rule is to run the series of tests defined in 
 # wasmtestreport.py
