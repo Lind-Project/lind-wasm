@@ -142,12 +142,12 @@ genrule(
 # wasmtestreport.py
 py_binary(
     name = "python_tests",
-    srcs = ["wasmtestreport.py"],
-    main = "wasmtestreport.py",    
+    srcs = ["scripts/wasmtestreport.py"],
+    main = "scripts/wasmtestreport.py",     
     # This ensures the tests have access to the folders required.    
     data = [
         "tests",         
-         "lindtool.sh",
+         "scripts/lindtool.sh",
          ":rawposix_files",
          ":wasmtime_files",
          ":clang_files",
