@@ -119,6 +119,25 @@ genrule(
     """,
 )
 
+genrule(
+    name = "make_rawposix",
+    tags = ["no-cache", "no-sandbox"],
+    srcs = [
+        "src/wasmtime",
+        "src/RawPOSIX"
+    ],
+    outs = ["check_rawposix.log"],  # Output file
+    cmd = """
+        echo "test" > $@
+        
+        export RAWPOSIX_BASE=$$PWD/src/RawPOSIX
+        export WORKSPACE=$$PWD
+
+        cd $$RAWPOSIX_BASE
+        cargo build
+    """,
+)
+
 # This build rule is to run the series of tests defined in 
 # wasmtestreport.py
 py_binary(
