@@ -29,7 +29,7 @@ const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
 
-const LIND_FS_ROOT: &str = "/home/lind-wasm/src/RawPOSIX/tmp";
+const LIND_FS_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
 
 const UNWIND_METADATA_SIZE: u64 = 16;
 
