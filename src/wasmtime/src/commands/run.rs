@@ -617,15 +617,6 @@ impl RunCommand {
                     .and_then(|export| export.into_global())
                     .expect("Failed to find epoch global export!");
 
-                // retrieve the epoch global
-                let tls_base = instance
-                    .get_export(&mut *store, "__tls_base")
-                    .and_then(|export| export.into_global());
-                if tls_base.is_some() {
-                    let tls_base = tls_base.unwrap();
-                    tls_base.set(&mut *store, Val::I32(1024));
-                }
-
                 // retrieve the handler (underlying pointer) for the epoch global
                 let pointer = lind_epoch.get_handler(&mut *store);
 
