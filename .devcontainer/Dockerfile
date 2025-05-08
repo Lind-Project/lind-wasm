@@ -46,11 +46,14 @@ ENV PATH="/home/lind/.cargo/bin:/home/lind/go/bin:${PATH}"
 
 ENV CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 
-### non-DEV_MODE Commmands begin here
+RUN mkdir lind-wasm
+COPY --chown=lind:lind . /home/lind/lind-wasm
 
-WORKDIR /home/lind
 # Clone the Lind-wasm repository
-RUN if [ "$DEV_MODE" != "true" ]; then git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git; fi
+RUN if [ "$dev_mode" = "false" ]; then \
+        rm -rf /home/lind/lind-wasm && \
+        git clone --branch "$BRANCH_NAME" --single-branch https://github.com/Lind-Project/lind-wasm.git ; \
+    fi
 # Install clang-16 for compiling the code
 RUN if [ "$DEV_MODE" != "true" ]; then wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
     tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
