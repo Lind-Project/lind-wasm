@@ -252,13 +252,13 @@ case $1 in
     compile_wasmtime|cpwasm)
         echo -e "${GREEN}$compile_wasmtime_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
-            eval "$compile_wasmtime_cmd"
+            bazel build //:make_wasmtime
         fi
         ;;
     compile_rawposix|cpraw)
         echo -e "${GREEN}$compile_rawposix_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
-            eval "$compile_rawposix_cmd"
+            bazel build //:make_rawposix
         fi
         ;;
     compile_src|cpsrc)
@@ -274,7 +274,7 @@ case $1 in
         unset LD_LIBRARY_PATH
         echo -e "${GREEN}$make_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
-            eval "$make_glibc_cmd"
+            bazel build //:make_glibc
         fi
         ;;
     make_all)
@@ -282,9 +282,7 @@ case $1 in
         unset LD_LIBRARY_PATH
         echo -e "${GREEN}$make_cmd${RESET}"
         if [ "$pmode" -eq 0 ]; then
-            eval "$make_glibc_cmd"
-            eval "$compile_wasmtime_cmd"
-            eval "$compile_rawposix_cmd"
+            bazel build //:make_glibc //:make_rawposix //:make_wasmtime
         fi
         ;;
     

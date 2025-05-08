@@ -1,19 +1,20 @@
 #!/bin/bash
 
+GLIBC_BASE="/home/lind/lind-wasm/src/glibc"
 # Define the source directory for object files (change ./build to your desired path)
-src_dir="./build"
+src_dir="$GLIBC_BASE/build"
 
 # Define paths for copying additional resources
-include_source_dir="$PWD/target/include"
-crt1_source_path="$PWD/lind_syscall/crt1.o"
-lind_syscall_path="$PWD/lind_syscall/lind_syscall.o" # Path to the lind_syscall.o file
+include_source_dir="$GLIBC_BASE/target/include"
+crt1_source_path="$GLIBC_BASE/lind_syscall/crt1.o"
+lind_syscall_path="$GLIBC_BASE/build/lind_syscall.o" # Path to the lind_syscall.o file
 
 # TARGET_TRIPLE = wasm32-wasi
 TARGET_TRIPLE=wasm32-wasi-threads
 
 # Define the output archive and sysroot directory
-output_archive="sysroot/lib/wasm32-wasi/libc.a"
-sysroot_dir="sysroot"
+output_archive="$GLIBC_BASE/sysroot/lib/wasm32-wasi/libc.a"
+sysroot_dir="$GLIBC_BASE/sysroot"
 
 # First, remove the existing sysroot directory to start cleanly
 rm -rf "$sysroot_dir"
@@ -35,7 +36,7 @@ mkdir -p "$sysroot_dir/include/wasm32-wasi" "$sysroot_dir/lib/wasm32-wasi"
 
 # Pack all found .o files into a single .a archive
 ${CLANG:=/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/llvm-ar rcs "$output_archive" $object_files
-"$CLANG/bin/llvm-ar" crs "sysroot/lib/wasm32-wasi/libpthread.a"
+"$CLANG/bin/llvm-ar" crs "$GLIBC_BASE/sysroot/lib/wasm32-wasi/libpthread.a"
 
 # Check if llvm-ar succeeded
 if [ $? -eq 0 ]; then

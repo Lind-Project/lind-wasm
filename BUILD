@@ -1,6 +1,6 @@
 genrule(
-    name = "make_all",
-    tags = ["no-cache"],
+    name = "make_glibc",
+    tags = ["no-cache", "no-sandbox"],
     srcs = [
         "src/glibc",
         "clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04",
@@ -102,7 +102,7 @@ genrule(
 
 genrule(
     name = "make_wasmtime",
-    tags = ["no-cache"],
+    tags = ["no-cache", "no-sandbox"],
     srcs = [
         "src/wasmtime",
         "src/RawPOSIX"
@@ -119,17 +119,35 @@ genrule(
     """,
 )
 
+genrule(
+    name = "make_rawposix",
+    tags = ["no-cache", "no-sandbox"],
+    srcs = [
+        "src/wasmtime",
+        "src/RawPOSIX"
+    ],
+    outs = ["check_rawposix.log"],  # Output file
+    cmd = """
+        echo "test" > $@
+        
+        export RAWPOSIX_BASE=$$PWD/src/RawPOSIX
+        export WORKSPACE=$$PWD
+
+        cd $$RAWPOSIX_BASE
+        cargo build
+    """,
+)
 
 # This build rule is to run the series of tests defined in 
 # wasmtestreport.py
 py_binary(
     name = "python_tests",
-    srcs = ["wasmtestreport.py"],
-    main = "wasmtestreport.py",    
+    srcs = ["scripts/wasmtestreport.py"],
+    main = "scripts/wasmtestreport.py",     
     # This ensures the tests have access to the folders required.    
     data = [
         "tests",         
-         "lindtool.sh",
+         "scripts/lindtool.sh",
          ":rawposix_files",
          ":wasmtime_files",
          ":clang_files",
