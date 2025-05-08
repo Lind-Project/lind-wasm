@@ -16,12 +16,17 @@ If running locally,
 
 ## Testing Workflow
 
+Docker
 1. Install Docker
 2. Clone the repo using `git clone https://github.com/Lind-Project/lind-wasm.git`
 3. Change Directory to repo `cd lind-wasm`
 3. Build Docker Image `DOCKER_BUILDKIT=1 docker build -t <image_name> -f .devcontainer/Dockerfile --build-arg DEV_MODE=true --platform=linux/amd64 .`
 4. Run the image `docker run -it <image_name> /bin/bash`
-5. Run the test suite `scripts/wasmtestreport.py` (This will run the whole test suite, `scripts/wasmtestreport.py --help` will provide the available arguments and flags)
+5. Build glibc, wasmtime and rawposix `bazel build //:make_glibc //:make_rawposix //:make_wasmtime`
+6. Run the test suite `bazel run //:python_tests` (This will run the whole test suite, `scripts/wasmtestreport.py --help` will provide the available arguments and flags)
+Note: Pass the test suite arguments using `bazel run //:python_tests -- <wasmtestreport arguments>` eg: `bazel run //:python_tests -- --timeout 10`
+
+
 
 ## What test suite does
 1. **Test Case Collection:** Scans `unit-tests` folder for `.c` files.
