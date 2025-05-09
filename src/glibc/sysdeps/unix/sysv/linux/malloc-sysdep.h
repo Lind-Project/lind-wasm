@@ -56,4 +56,5 @@ check_may_shrink_heap (void)
   return may_shrink_heap;
 }
 
-#define HAVE_MREMAP 1
+// lind-wasm: we do not have mremap syscall, so let's disable it
+#define HAVE_MREMAP 0

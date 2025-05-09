@@ -23,7 +23,9 @@
 bool
 __spawn_valid_fd (int fd)
 {
-  long maxfd = __sysconf (_SC_OPEN_MAX);
+  // TODO: maxfd is hardcoded to be the limit in rawposix
+  // but ideally we should retrieve this value from somewhere
+  long maxfd = 1024;
   return __glibc_likely (fd >= 0)
     && (__glibc_unlikely (maxfd < 0) /* No limit set.  */
 	|| __glibc_likely (fd < maxfd));

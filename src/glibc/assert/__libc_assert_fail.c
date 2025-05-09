@@ -20,14 +20,30 @@
 #include <array_length.h>
 #include <intprops.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+#ifdef WASM_DEBUG_LIBC_FATAL
+// TODO: For some reason, glibc's libc_assert_fail is not printing the error message when a fatal error is triggered.
+// As a temporary workaround, we manually forward the message to Wasmtime and let Wasmtime handle the printing.
+// Ideally, we should fix the issue and restore proper handling via glibc's native libc_assert_fail in the future.
+void __imported__libc_assert_fail(const char *assertion, const char *file, unsigned int line, const char *function) __attribute__((
+   __import_module__("debug"),
+   __import_name__("libc_assert_fail")
+));
+#endif
 
 void
 __libc_assert_fail (const char *assertion, const char *file, unsigned int line,
                     const char *function)
 {
-  char linebuf[INT_BUFSIZE_BOUND (unsigned int)];
-  array_end (linebuf)[-1] = '\0';
-  char *linestr = _itoa_word (line, array_end (linebuf) - 1, 10, 0);
-  __libc_message ("Fatal glibc error: %s:%s (%s): assertion failed: %s\n",
-                  file, linestr, function, assertion);
+#ifdef WASM_DEBUG_LIBC_FATAL
+   __imported__libc_assert_fail(assertion, file, line, function);
+   abort();
+#else
+   char linebuf[INT_BUFSIZE_BOUND (unsigned int)];
+   array_end (linebuf)[-1] = '\0';
+   char *linestr = _itoa_word (line, array_end (linebuf) - 1, 10, 0);
+   __libc_message ("Fatal glibc error: %s:%s (%s): assertion failed: %s\n",
+                   file, linestr, function, assertion);
+#endif
 }

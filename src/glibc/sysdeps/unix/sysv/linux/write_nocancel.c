@@ -19,10 +19,11 @@
 #include <unistd.h>
 #include <sysdep-cancel.h>
 #include <not-cancel.h>
+#include <syscall-template.h>
 
 ssize_t
 __write_nocancel (int fd, const void *buf, size_t nbytes)
 {
-  return INLINE_SYSCALL_CALL (write, fd, buf, nbytes);
+  return MAKE_SYSCALL(13, "syscall|write", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
 }
 hidden_def (__write_nocancel)

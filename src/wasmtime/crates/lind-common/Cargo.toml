@@ -16,3 +16,4 @@ wasmtime = { workspace = true, features = ['threads'] }
 wasmtime-environ = { workspace = true }
 rawposix = { path = "../rawposix" }
 wasmtime-lind-multi-process = { path = "../lind-multi-process" }
+sysdefs = { path = "../sysdefs" }
