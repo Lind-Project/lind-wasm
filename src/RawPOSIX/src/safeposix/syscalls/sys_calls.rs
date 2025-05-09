@@ -201,7 +201,11 @@ impl Cage {
      *   into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
      *   zombie list and retrieve the first entry from it (first in, first out).
      */
-    pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
+    pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32, timeout_ms: Option<i32>) -> i32 {
+        // --- Begin: timeout/signal interruption additions ---
+        let start_time = interface::starttimer();
+        let (duration, timeout) = interface::timeout_setup_ms(timeout_ms.unwrap_or(-1));
+        // --- End: timeout/signal interruption additions ---
         let mut zombies = self.zombies.write();
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
 
@@ -231,7 +235,16 @@ impl Cage {
                     // drop the zombies list before sleep to avoid deadlock
                     drop(zombies);
                     // TODO: replace busy waiting with more efficient mechanism
-                    interface::lind_yield();
+                    // interface::lind_yield();
+                    // Check for timeout
+                    if interface::readtimer(start_time) > duration {
+                        return syscall_error(Errno::ETIMEDOUT, "waitpid", "Operation timed out");
+                    }
+                    // Check for signals
+                    if interface::signal_check_trigger(self.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted");
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(timeout as u64));
                     // after sleep, get the write access of zombies list back
                     zombies = self.zombies.write();
                     continue;
@@ -281,7 +294,16 @@ impl Cage {
                     // drop the zombies list before sleep to avoid deadlock
                     drop(zombies);
                     // TODO: replace busy waiting with more efficient mechanism
-                    interface::lind_yield();
+                    // interface::lind_yield();
+                    // Check for timeout
+                    if interface::readtimer(start_time) > duration {
+                        return syscall_error(Errno::ETIMEDOUT, "waitpid", "Operation timed out");
+                    }
+                    // Check for signals
+                    if interface::signal_check_trigger(self.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted");
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(timeout as u64));
                     // after sleep, get the write access of zombies list back
                     zombies = self.zombies.write();
 
@@ -309,8 +331,8 @@ impl Cage {
         zombie.cageid as i32
     }
 
-    pub fn wait_syscall(&self, status: &mut i32) -> i32 {
-        self.waitpid_syscall(0, status, 0)
+    pub fn wait_syscall(&self, status: &mut i32, timeout_ms: Option<i32>) -> i32 {
+        self.waitpid_syscall(0, status, 0, timeout_ms)
     }
 
     pub fn getpid_syscall(&self) -> i32 {
