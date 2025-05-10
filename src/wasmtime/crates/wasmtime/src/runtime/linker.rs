@@ -887,28 +887,26 @@ impl<T> Linker<T> {
 
                 self.allow_shadowing(true);
 
-                self.func_wrap(
-                    module_name,
-                    "__printf_buffer_flush_dprintf",
-                    move |mut caller: Caller<'_, T>, val: i32| {
-                        unreachable!();
-                    },
-                )?;
-                self.func_wrap(
-                    module_name,
-                    "__pthread_unwind",
-                    move |mut caller: Caller<'_, T>, val: i32| {
-                        unreachable!();
-                    },
-                )?;
+                // self.func_wrap(
+                //     module_name,
+                //     "__printf_buffer_flush_dprintf",
+                //     move |mut caller: Caller<'_, T>, val: i32| {
+                //         unreachable!();
+                //     },
+                // )?;
+                // self.func_wrap(
+                //     module_name,
+                //     "__pthread_unwind",
+                //     move |mut caller: Caller<'_, T>, val: i32| {
+                //         unreachable!();
+                //     },
+                // )?;
 
                 let dylink_info = module.dylink_meminfo();
                 // let dylink_info = dylink_info.unwrap();
 
-                let stack_pointer = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Var), Val::I32(192864)).unwrap();
                 let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
                 // let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(130)).unwrap();
-                self.define(&mut store, module_name, "__stack_pointer", stack_pointer);
                 self.define(&mut store, module_name, "__memory_base", memory_base);
 
                 // self.define(&mut store, "env", "__table_base", table_base);

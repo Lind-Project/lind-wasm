@@ -148,6 +148,7 @@ impl RunCommand {
         if let CliLinker::Core(linker) = &mut linker {
             println!("define a table");
             let mut main_module_table_size = None;
+            let memory_size;
             match &main {
                 RunTarget::Core(module) => {
                     for import in module.imports() {
@@ -155,6 +156,13 @@ impl RunCommand {
                             main_module_table_size = Some(table.minimum());
                         }
                     }
+
+                    let dylink_info = module.dylink_meminfo();
+                    let dylink_info = dylink_info.as_ref().unwrap();
+
+                    let size = dylink_info.memory_size;
+                    let align = dylink_info.memory_alignment;
+                    memory_size = (size + align) & !align;
                 }
                 #[cfg(feature = "component-model")]
                 RunTarget::Component(_) => {
@@ -167,28 +175,35 @@ impl RunCommand {
             table = Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap();
             linker.define(&mut store, "env", "__indirect_function_table", table);
 
-            let stack_low = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(126832)).unwrap();
-            let stack_high = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(192368)).unwrap();
+            println!("main module memory size: {}", memory_size);
+            let stack_low_num = memory_size as i32 + 1024; // reserve first 1024 bytes for guard page
+            let stack_high_num = stack_low_num + 65536; // stack size
+            let stack_low = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_low_num)).unwrap();
+            let stack_high = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
             linker.define(&mut store, "GOT.mem", "__stack_low", stack_low);
             linker.define(&mut store, "GOT.mem", "__stack_high", stack_high);
+
+
+            let stack_pointer = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
+            linker.define(&mut store, "env", "__stack_pointer", stack_pointer);
             // for (module_name, item_name, item) in linker.iter(&mut store) {
             //     println!("{} {}: {:?}", module_name, item_name, item);
             // }
 
-            // linker.func_wrap(
-            //     "env",
-            //     "__printf_buffer_flush_dprintf",
-            //     move |mut caller: wasmtime::Caller<'_, T>, val: i32| {
-            //         unreachable!();
-            //     },
-            // )?;
-            // linker.func_wrap(
-            //     "env",
-            //     "__pthread_unwind",
-            //     move |mut caller: wasmtime::Caller<'_, T>, val: i32| {
-            //         unreachable!();
-            //     },
-            // )?;
+            linker.func_wrap(
+                "env",
+                "__printf_buffer_flush_dprintf",
+                move |mut caller: wasmtime::Caller<'_, Host>, val: i32| {
+                    unreachable!();
+                },
+            )?;
+            linker.func_wrap(
+                "env",
+                "__pthread_unwind",
+                move |mut caller: wasmtime::Caller<'_, Host>, val: i32| {
+                    unreachable!();
+                },
+            )?;
 
         } else {
             panic!("not core")
