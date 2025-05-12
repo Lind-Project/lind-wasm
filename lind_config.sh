@@ -145,6 +145,11 @@ compile_pthread_create="$CC --target=wasm32-unknown-wasi \
  -MD -MP -MF $glibc_base/build/nptl/pthread_create.o.dt \
  -MT $glibc_base/build/nptl/pthread_create.o"
 
+compile_lind_syscall="$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $glibc_base/lind_syscall/lind_syscall.o \
+    -c $glibc_base/lind_syscall/lind_syscall.c"
+
 compile_wasi_thread_start="$CC --target=wasm32-wasi-threads \
     -matomics -o $glibc_base/build/csu/wasi_thread_start.o \
     -c $glibc_base/csu/wasm32/wasi_thread_start.s"
