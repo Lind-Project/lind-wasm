@@ -30,7 +30,7 @@
 
 off64_t
 _IO_seekoff_unlocked (FILE *fp, off64_t offset, int dir, int mode)
-{
+{  
   if (dir != _IO_seek_cur && dir != _IO_seek_set && dir != _IO_seek_end)
     {
       __set_errno (EINVAL);

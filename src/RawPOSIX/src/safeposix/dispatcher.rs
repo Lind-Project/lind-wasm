@@ -205,7 +205,16 @@ pub fn lind_syscall_api(
             }
             let cage = interface::cagetable_getref(cageid);
             // Convert iovec array address
-            let iov_base = translate_vmmap_addr(&cage, arg2).unwrap() as *const IovecStruct;
+            let iov_base =
+                translate_vmmap_addr(&cage, arg2).unwrap() as *const IovecStruct;
+            // iterate through each iovec pointer and manually do the address conversion
+            for i in 0..iovcnt {
+                let cur_iov_base = unsafe { iov_base.add(i as usize) } as *mut libc::iovec;
+                let old_base = unsafe { (*cur_iov_base).iov_base } as u64;
+                let len = unsafe { (*cur_iov_base).iov_len };
+                let new_base = translate_vmmap_addr(&cage, old_base as u64).unwrap();
+                unsafe { (*cur_iov_base).iov_base = new_base as *mut libc::c_void }
+            }
             // The actual write operation is delegated to the cage implementation
             cage.writev_syscall(fd, iov_base, iovcnt)
         }
@@ -235,6 +244,7 @@ pub fn lind_syscall_api(
             if len == 0 {
                 return syscall_error(Errno::EINVAL, "mmap", "length cannot be zero");
             }
+
             interface::mmap_handler(cageid, addr, len, prot, flags, fd, off) as i32
         }
 
@@ -378,17 +388,42 @@ pub fn lind_syscall_api(
             // Get reference to the cage for memory operations
             let cage = interface::cagetable_getref(cageid);
             // Convert readfds buffer address
-            let readfds_addr = translate_vmmap_addr(&cage, arg2).unwrap();
-            let readfds = interface::get_fdset(readfds_addr).unwrap();
+            // notice that these fd_set struct could possibly be NULL
+            let readfds = {
+                if arg2 == 0 {
+                    None
+                } else {
+                    let readfds_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+                    interface::get_fdset(readfds_addr).unwrap()
+                }
+            };
             // Convert writefds buffer address
-            let writefds_addr = translate_vmmap_addr(&cage, arg3).unwrap();
-            let writefds = interface::get_fdset(writefds_addr).unwrap();
+            let writefds = {
+                if arg3 == 0 {
+                    None
+                } else {
+                    let writefds_addr = translate_vmmap_addr(&cage, arg3).unwrap();
+                    interface::get_fdset(writefds_addr).unwrap()
+                }
+            };
             // Convert errorfds buffer address
-            let errorfds_addr = translate_vmmap_addr(&cage, arg4).unwrap();
-            let errorfds = interface::get_fdset(errorfds_addr).unwrap();
+            let errorfds = {
+                if arg4 == 0 {
+                    None
+                } else {
+                    let errorfds_addr = translate_vmmap_addr(&cage, arg4).unwrap();
+                    interface::get_fdset(errorfds_addr).unwrap()
+                }
+            };
             // Convert timeout buffer address
-            let timeout_addr = translate_vmmap_addr(&cage, arg5).unwrap();
-            let rposix_timeout = interface::duration_fromtimeval(timeout_addr).unwrap();
+            let rposix_timeout = {
+                if arg5 == 0 {
+                    None
+                } else {
+                    let timeout_addr = translate_vmmap_addr(&cage, arg5).unwrap();
+                    interface::duration_fromtimeval(timeout_addr).unwrap()
+                }
+            };
             // Delegate to the cage's select implementation
             // This will:
             // 1. Monitor the specified file descriptors for activity
@@ -1015,7 +1050,8 @@ pub fn lind_syscall_api(
             // Convert user space buffer address to physical address
             let optval_ptr = translate_vmmap_addr(&cage, arg4).unwrap() as *mut i32;
             let optval = unsafe { &mut *optval_ptr };
-            cage.getsockopt_syscall(virtual_fd, level, optname, optval)
+            let optlen = arg5 as u32;
+            cage.getsockopt_syscall(virtual_fd, level, optname, optval, optlen)
         }
 
         SOCKETPAIR_SYSCALL => {
@@ -1083,8 +1119,15 @@ pub fn lind_syscall_api(
         WAIT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
-            let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
-            let status = interface::get_i32_ref(status_addr).unwrap();
+            // status could possibly be NULL
+            let status = {
+                if arg1 == 0 {
+                    None
+                } else {
+                    let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
+                    Some(interface::get_i32_ref(status_addr).unwrap())
+                }
+            };
             cage.wait_syscall(status)
         }
 
@@ -1092,8 +1135,15 @@ pub fn lind_syscall_api(
             let pid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
-            let status_addr = translate_vmmap_addr(&cage, arg2).unwrap();
-            let status = interface::get_i32_ref(status_addr).unwrap();
+            // status could possibly be NULL
+            let status = {
+                if arg2 == 0 {
+                    None
+                } else {
+                    let status_addr = translate_vmmap_addr(&cage, arg2).unwrap() as u64;
+                    Some(interface::get_i32_ref(status_addr).unwrap())
+                }
+            };
             let options = arg3 as i32;
 
             cage.waitpid_syscall(pid, status, options)

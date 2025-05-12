@@ -89,7 +89,7 @@ weak_alias (__opendir, opendir)
 
 DIR *
 __alloc_dir (int fd, bool close_fd, int flags,
-	     const struct __stat64_t64 *statp)
+	     const struct stat *statp)
 {
   /* We have to set the close-on-exit flag if the user provided the
      file descriptor.  */
