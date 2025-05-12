@@ -5,7 +5,7 @@ RUSTPOSIX_BASE := /home/lind-wasm/src/safeposix-rust
 RAWPOSIX_BASE := /home/lind-wasm/src/RawPOSIX
 
 # Compiler settings
-CLANG ?= /home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04
+CLANG ?= /home/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04
 CC := $(CLANG)/bin/clang
 
 # Color definitions
@@ -134,7 +134,7 @@ make_all:
 		unset LD_LIBRARY_PATH && \
 		cd $(GLIBC_BASE) && rm -rf build && ./wasm-config.sh && \
 		cd build && make -j8 --keep-going THREAD_MODEL=posix 2>&1 | tee check.log && \
-		cd ../nptl && $(CC) --target=wasm32-unkown-wasi -v -Wno-int-conversion \
+		cd ../nptl && $(CC) --target=wasm32-unknown-wasi -v -Wno-int-conversion \
 			pthread_create.c -c -std=gnu11 -fgnu89-inline -matomics -mbulk-memory \
 			-O0 -g -Wall -Wwrite-strings -Wundef -fmerge-all-constants \
 			-ftrapping-math -fno-stack-protector -fno-common -Wp,-U_FORTIFY_SOURCE \
@@ -153,7 +153,7 @@ make_all:
 			-I../sysdeps/ieee754/ldbl-96/include -I../sysdeps/ieee754/ldbl-96 \
 			-I../sysdeps/ieee754/dbl-64 -I../sysdeps/ieee754/flt-32 \
 			-I../sysdeps/ieee754 -I../sysdeps/generic -I.. -I../libio -I. \
-			-nostdinc -isystem $(CLANG)/lib/clang/16/include \
+			-nostdinc -isystem $(CLANG)/lib/clang/18/include \
 			-isystem /usr/i686-linux-gnu/include -D_LIBC_REENTRANT \
 			-include $(GLIBC_BASE)/build/libc-modules.h -DMODULE_NAME=libc \
 			-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc \
