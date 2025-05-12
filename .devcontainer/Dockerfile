@@ -10,9 +10,16 @@ ARG GLIBC_TAR_CACHE
 ENV GLIBC_TAR_CACHE=${GLIBC_TAR_CACHE:-false}
 
 # Install all the required dependencies
+<<<<<<< HEAD
 RUN apt-get update && \    
     apt-get install -y build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
     bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash 
+=======
+RUN apt-get -qq update && \
+    apt-get install -y -qq build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
+    bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash openssl libssl-dev \
+    sudo
+>>>>>>> main
 
 RUN apt install -qq apt-transport-https curl gnupg -y && \
     curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg && \
