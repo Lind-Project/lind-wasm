@@ -1,15 +1,22 @@
 # How to Add Documentation
 
-This doc is using the `material` for `mkdocs`, which turns markdown files into an online doc website.
+Built with *mkdocs* and *material*, and hosted on *GitHub pages*:
+[lind-project.github.io/lind-wasm](https://lind-project.github.io/lind-wasm).
 
-**You should have `mkdocs` installed on your terminal first.**
+You can improve the docs by editing the files below. See [`mkdocs`](https://www.mkdocs.org/)
+and [`material`](https://squidfunk.github.io/mkdocs-material/) user guides for
+details. And don't forget to try out your changes locally!
 
-**Do not edit on `gh-pages` branch, this is updated by github action automatically.**
+## Important files
+- [`.github/workflows/docs.yml`](https://github.com/Lind-Project/lind-wasm/blob/main/.github/workflows/docs.yml): Auto-deploys on push to `main` (e.g. on PR merge)
+- [`mkdocs.yml`](https://github.com/Lind-Project/lind-wasm/blob/main/mkdocs.yml): Site config (e.g. navigation and plugins)
+- [`docs/`](https://github.com/Lind-Project/lind-wasm/tree/main/docs): Site sources
 
-To add a new seperate page of documentation, you need to
+## Build site locally
+```bash
+# Install requirements (hint: use a virtual environment)
+pip install mkdocs-material
 
-1. add a new `.md` markdown file to the `docs/` directory
-2. in the `mkdocs.yml` file's `nav:` section, add a the new page's path
-3. **IMPORTANT**: test if the changes works as expected by running `mkdocs serve` in the root directory of this repo, only push the changes after checking it works
-
-NOTE: a github action of compiling these markdown files has already been setup. Once the changes of `.md` files are pushed, the static website branch will be automatically updated shortly.
+# Run dev server and check output!
+mkdocs serve
+```
