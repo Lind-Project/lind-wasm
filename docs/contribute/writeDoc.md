@@ -7,6 +7,7 @@ You can improve the docs by editing the files below. See [`mkdocs`](https://www.
 and [`material`](https://squidfunk.github.io/mkdocs-material/) user guides for
 details. And don't forget to try out your changes locally!
 
+
 ## Important files
 - [`.github/workflows/docs.yml`](https://github.com/Lind-Project/lind-wasm/blob/main/.github/workflows/docs.yml): Auto-deploys on push to `main` (e.g. on PR merge)
 - [`mkdocs.yml`](https://github.com/Lind-Project/lind-wasm/blob/main/mkdocs.yml): Site config (e.g. navigation and plugins)
@@ -20,3 +21,8 @@ pip install mkdocs-material
 # Run dev server and check output!
 mkdocs serve
 ```
+
+!!! note
+
+    Please also document your implementation source code following the used
+    programming language's standards.

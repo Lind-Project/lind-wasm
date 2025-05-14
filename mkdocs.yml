@@ -34,3 +34,6 @@ nav:
 
 extra_css:
   - stylesheets/img.css
+
+markdown_extensions:
+  - admonition
