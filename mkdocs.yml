@@ -1,7 +1,11 @@
 site_name: Lind-Wasm Docs
 site_url: https://lind-project.github.io/lind-wasm/
+repo_url: https://github.com/Lind-Project/lind-wasm/
+edit_uri: edit/main/docs/
 theme:
-  material
+  name: material
+  features:
+    - content.action.edit
 
 nav:
   - Home: index.md
@@ -34,3 +38,6 @@ nav:
 
 extra_css:
   - stylesheets/img.css
+
+markdown_extensions:
+  - admonition
