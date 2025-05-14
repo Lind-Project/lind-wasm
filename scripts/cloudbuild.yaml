@@ -95,7 +95,7 @@ steps:
           . /tmp/venv/bin/activate
 
           pip install "PyJWT[crypto]" google-cloud-secret-manager requests
-          python generate_token_and_upload_secret.py
+          python scripts/generate_token_and_upload_secret.py
 
           GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
           if [ "$$EXIT_CODE" -eq 0 ]; then
@@ -139,7 +139,7 @@ steps:
 
         CONTAINER_ID=$(docker ps -qf "name=lind_test_container")
         echo "Running in container: $$CONTAINER_ID"
-
+        source /workspace/env.txt
         if [ "$$GLIBC_TAR_CACHE" = "true" ]; then
           echo "Copying cached glibc"
           tar xzf /workspace/glibc_build.tar.gz -C /workspace
@@ -155,8 +155,8 @@ steps:
 
         
         echo "Copying test results"
-        docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/src/RawPOSIX/tmp/results.json /workspace/results.json
-        docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/src/RawPOSIX/tmp/report.html /workspace/report.html
+        docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/results.json /workspace/results.json
+        docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/report.html /workspace/report.html
         docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/bazel-bin/tests/ci-tests/clippy/clippy_out.json /workspace/clippy_out.json
         docker rm -fv "$$CONTAINER_ID"
         
@@ -204,7 +204,7 @@ steps:
       - '-c'
       - |
         pip install "PyJWT[crypto]" google-cloud-secret-manager requests
-        python generate_token_and_upload_secret.py
+        python scripts/generate_token_and_upload_secret.py
 
   # Step 8: Final GitHub PR comment with links to the HTML and JSON test reports.
   # Uses the refreshed `GITHUB_TOKEN` to authenticate with GitHub.
