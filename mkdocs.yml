@@ -29,7 +29,7 @@ nav:
     - contribute/README.md
     - Rust style guide: contribute/styleguide.md
     - Unit tests: contribute/unit-tests.md
-    - Adding to the docs: contribute/writeDoc.md
+    - Adding to the docs: contribute/add-docs.md
     - Security policy: contribute/security.md
   - Community:
     - community/README.md
