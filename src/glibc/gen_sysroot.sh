@@ -44,13 +44,14 @@ fi
 mkdir -p "$sysroot_dir/include/wasm32-wasi" "$sysroot_dir/lib/wasm32-wasi"
 
 # Pack all found .o files into a single .a archive
-/home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/llvm-ar rcs "$output_archive" $object_files
+echo "/home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/llvm-ar crs "$output_archive" $object_files"
+/home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/llvm-ar crs "$output_archive" $object_files
 /home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin/llvm-ar crs "sysroot/lib/wasm32-wasi/libpthread.a"
 
 # Check if llvm-ar succeeded
 if [ $? -eq 0 ]; then
   echo "Successfully created $output_archive with the following .o files:"
-  echo "$object_files"
+  #echo "$object_files"
 else
   echo "Failed to create the archive."
   exit 1
