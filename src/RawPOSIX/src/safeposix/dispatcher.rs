@@ -191,7 +191,10 @@ pub fn lind_syscall_api(
             // Get cage reference for memory operations
             let cage = interface::cagetable_getref(cageid);
             // Convert user buffer address to system address
-            let buf = translate_vmmap_addr(&cage, arg2).unwrap() as *const u8;
+            let buf = match translate_vmmap_addr(&cage, arg2) {
+                Some(addr) => addr as *const u8,
+                None => return syscall_error(Errno::EINVAL, "write", "buffer address is NULL"),
+            };
             // Perform write operation through cage abstraction
             cage.write_syscall(fd, buf, count)
         }
