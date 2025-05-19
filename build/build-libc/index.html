@@ -1,0 +1,1451 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://lind-project.github.io/lind-wasm/build/build-libc/">
+      
+      
+        <link rel="prev" href="../../internal/multiprocess-support/">
+      
+      
+        <link rel="next" href="../build-wasmtime/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
+    
+    
+      
+        <title>Building libc - Lind-Wasm Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.342714a4.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/img.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#building-glibc-to-wasm" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Lind-Wasm Docs" class="md-header__button md-logo" aria-label="Lind-Wasm Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Lind-Wasm Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Building libc
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Lind-Project/lind-wasm/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Lind-Wasm Docs" class="md-nav__button md-logo" aria-label="Lind-Wasm Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Lind-Wasm Docs
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Lind-Project/lind-wasm/" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Internal Documentation
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Internal Documentation
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/libc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    libc
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/wasmtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Wasmtime
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/rawposix/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    RawPOSIX
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../internal/multiprocess-support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Multi-Processing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Build System
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Build System
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Building libc
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Building libc
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-ways-to-install-complier" class="md-nav__link">
+    <span class="md-ellipsis">
+      Two ways to install complier
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Two ways to install complier">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#install-clang-16recommended-way" class="md-nav__link">
+    <span class="md-ellipsis">
+      Install clang-16(recommended way)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compile-wasi-sdknot-available-now" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compile wasi-sdk(not available now)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compiling-to-object-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compiling to object files
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing-glibc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installing glibc
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generating-wasm-sysroot" class="md-nav__link">
+    <span class="md-ellipsis">
+      Generating WASM sysroot
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-wasmtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Building wasmtime
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-rawposix/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Building RawPOSIX
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../bazel/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Bazel
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Usage
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Usage
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../use/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../use/compile-programs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Compile Programs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../use/debug-programs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Debug Programs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../use/run-programs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Run Programs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../use/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Examples
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Contributing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/styleguide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Rust style guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/unit-tests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Unit tests
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/add-docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Adding to the docs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Security policy
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Community
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Community
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Community
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/team/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Team
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../community/conduct/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Code of conduct
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-ways-to-install-complier" class="md-nav__link">
+    <span class="md-ellipsis">
+      Two ways to install complier
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Two ways to install complier">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#install-clang-16recommended-way" class="md-nav__link">
+    <span class="md-ellipsis">
+      Install clang-16(recommended way)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compile-wasi-sdknot-available-now" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compile wasi-sdk(not available now)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configure" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compiling-to-object-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compiling to object files
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing-glibc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installing glibc
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#generating-wasm-sysroot" class="md-nav__link">
+    <span class="md-ellipsis">
+      Generating WASM sysroot
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/Lind-Project/lind-wasm/edit/main/docs/build/build-libc.md" title="Edit this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="building-glibc-to-wasm">Building glibc to WASM</h1>
+<p>I'd recommend reading this doc in its entirety before trying to compile.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<p>You need to have an access to the server, ask somebody to help you. Then you pull an image to docker and run it</p>
+<pre><code>docker pull ubuntu:22.04
+docker run -it ubuntu
+</code></pre>
+<p>Update apt and apt-get </p>
+<pre><code>cd home
+apt-get update
+apt update
+</code></pre>
+<p>we should install some apt essential</p>
+<pre><code>apt install build-essential
+apt install git
+apt install wget
+apt install gcc-i686-linux-gnu g++-i686-linux-gnu
+apt install nano
+apt install bison
+apt install gawk
+apt install vim
+apt install libxml2
+apt install python3 (2.America 105.New York)
+</code></pre>
+<p>We need glibc from lind-wasm, if you did it already then ignore it
+<a href="https://github.com/Lind-Project/lind-wasm.git">https://github.com/Lind-Project/lind-wasm.git</a></p>
+<p>We need WASM compatible <code>clang</code> and <code>ar</code>, which can be built locally from <code>wasi-sdk</code>
+<a href="https://github.com/WebAssembly/wasi-sdk">https://github.com/WebAssembly/wasi-sdk</a></p>
+<p>Also strongly recommend to install <code>wasm-objdump</code> from the <code>wabt</code> toolkit
+<a href="https://github.com/WebAssembly/wabt">https://github.com/WebAssembly/wabt</a></p>
+<p>If you want to download files from github to server use <code>git clone</code> and <code>recurse-submodules</code>deal with repositories that contain submodules</p>
+<pre><code>git clone --recurse-submodules
+</code></pre>
+<p>If any error said "permission denied" then just add "sudo" at the front of the command line.</p>
+<p>If you want to edit file through terminal, try to search vim and study how to use it.</p>
+<h2 id="two-ways-to-install-complier">Two ways to install complier</h2>
+<ol>
+<li>Download <code>clang-16</code> and add some file(I recommend using this way, and I will use clang-16 as example for explanation)</li>
+<li>Git clone wasi-sdk and use the <code>clang-18</code> in wasi-sdk, you need to compile wasi-sdk before using it</li>
+</ol>
+<h3 id="install-clang-16recommended-way">Install clang-16(recommended way)</h3>
+<p>Download <code>clang-16</code> from this link</p>
+<pre><code>wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+</code></pre>
+<p>Unzip clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz</p>
+<pre><code>tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+</code></pre>
+<p>Switch branch of glibc(cd to lind-wasm/glibc). Find out which branch you are on currently and switch to branch "main" </p>
+<pre><code>cd /home/lind-wasm/glibc
+git branch -a
+git switch main 
+</code></pre>
+<p>We move <code>libclang_rt.builtins-wasm32.a</code> from <code>/home/lind-wasm/glibc/wasi</code> to <code>/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/lib/</code> using</p>
+<pre><code>cd /home
+mv /home/lind-wasm/glibc/wasi /home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/lib
+</code></pre>
+<h3 id="compile-wasi-sdknot-available-now">Compile wasi-sdk(not available now)</h3>
+<p>I assume you already git clone wasi-sdk, now you need to cd to wasi-sdk and run these code</p>
+<pre><code>cmake -G Ninja -B build/toolchain -S . -DWASI_SDK_BUILD_TOOLCHAIN=ON -DCMAKE_INSTALL_PREFIX=build/install
+
+cmake --build build/toolchain --target install
+
+cmake -G Ninja -B build/sysroot -S . \
+    -DCMAKE_INSTALL_PREFIX=build/install \
+    -DCMAKE_TOOLCHAIN_FILE=build/install/share/cmake/wasi-sdk.cmake \
+    -DCMAKE_C_COMPILER_WORKS=ON \
+    -DCMAKE_CXX_COMPILER_WORKS=ON
+cmake --build build/sysroot --target install
+</code></pre>
+<h2 id="configure">Configure</h2>
+<p>We create a .sh file and write a config script in the file. We use <code>nano</code> to create file in the glibc root directory(glibc is in the lind-wasm directory) and you can change <code>anyname</code> into the filename you want</p>
+<pre><code>cd /home/lind-wasm/glibc
+nano anyname.sh
+</code></pre>
+<p>then we write the script like this</p>
+<pre><code>#!/bin/bash
+set -e
+BUILDDIR=build
+mkdir -p $BUILDDIR
+cd $BUILDDIR
+../configure --disable-werror --disable-hidden-plt --with-headers=/usr/i686-linux-gnu/include --prefix=/home/lind-wasm/glibc/target --host=i686-linux-gnu --build=i686-linux-gnu\
+    CFLAGS=&quot; -O2 -g&quot; \
+    CC=&quot;/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang-16 --target=wasm32-unkown-wasi -v -Wno-int-conversion&quot;
+</code></pre>
+<p>You should replace <code>CC</code> to the path to your <code>clang</code>, this path should work but if not change this part <code>/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang-16</code> into your own path. If you define <code>BUILDDIR=build</code>, then the compiled WASM object files will appear under <code>glibc/build</code>.
+Be aware that you should make sure this build directory is empty before running config script, so you need to <code>rm -rf build</code> to remove all the things inside build directory before recompiling it.</p>
+<p>A crutial job of the configure script is deciding which sysdeps directories to use according to the <code>host</code> and <code>build</code> string.
+We already changed the configure script in glibc root directory, and the lind add-on directories are already baked to be included.</p>
+<p>The configure flags we need:</p>
+<ul>
+<li><code>disable-werror</code>: we have countless warnings, so we ignore them for now</li>
+<li><code>disable-hidden-plt</code>: PLT bypassing optimization is causing ~50k errors, simply disable it for now</li>
+<li><code>with-headers</code>: glibc requires Linux kernel headers to be installed before config and compile, so set this flag to a built-in sysroot of 32bit, this doesn't seem to raise an issue for our WASM built</li>
+<li><code>prefix=</code>: this is the path of the generated sysroot when you use <code>make install</code>. But note that, the glibc's <code>make install</code> will NOT work at all for WASM, because WASM sysroot has differen structure convention, also requires an <code>llvm-ar</code> arhive. More details, see my script <code>gen_sysroot.sh</code>. However, we can still use <code>make install</code> just to generate the <code>.h</code> files of the sysroot</li>
+<li><code>host</code> &amp; <code>target</code>: we start off from the sysdeps direcotries of i686, so fixing these options</li>
+</ul>
+<p>The compiler flags we need:</p>
+<ul>
+<li><code>-O2 -g</code>: nah the glibc won't allow you to compile with <code>O0</code>, so we bear with this <code>O2</code> optimization during debugging. But sometimes you can change to <code>O1</code>.</li>
+<li><code>-Wno-int-conversion</code>: we disable int conversion warnings, cuz all 32bit types as WASM function arguments, are eventually i32 anyway</li>
+<li><code>--target=wasm32-unkown-wasi</code>: this tells the compiler we want to compile to WASM</li>
+</ul>
+<p>Now the last step is to run the .sh file</p>
+<pre><code>sudo chmod +x anyname.sh 
+./anyname.sh
+</code></pre>
+<p>After config succeed, you will see these in the <code>build</code> directory,</p>
+<pre><code>Makefile  bits  config.h  config.log  config.make  config.status
+</code></pre>
+<h2 id="compiling-to-object-files">Compiling to object files</h2>
+<p>In the build directory, usually we use <code>make --keep-going -j4</code>. The first flag is to continue compiling after errors, we need this cuz there are too many errors now (mainly due to assembly about threading). The <code>-j</code> is important to speed it up, but also makes the compilation log interleaved. The compilation log is <strong>VERY IMPORTANT</strong>, which tells why a given c file failed to be compiled. So sometimes we don't want the <code>-j</code>. Also, we can copy the actual compiler command in the compile log. For such commands, if we want to compile a single C file, only the source file path need to be further specified. We can use this to test compiling a specific file.</p>
+<pre><code>cd build
+make --keep-going -j4
+</code></pre>
+<h2 id="installing-glibc">Installing glibc</h2>
+<p>We need to install the glibc we complied to the prefix in the .sh file. For example, mine will install into <code>target</code>. This is the install command line we need to use</p>
+<pre><code>make install --keep-going
+</code></pre>
+<h2 id="generating-wasm-sysroot">Generating WASM sysroot</h2>
+<p>Back to glibc</p>
+<pre><code>cd ..
+</code></pre>
+<p>This is an example for <code>gen_sysroot.sh</code></p>
+<pre><code>#!/bin/bash
+
+# Define the source directory for object files (change ./build to your desired path)
+src_dir=&quot;./build&quot;
+
+# Define paths for copying additional resources
+include_source_dir=&quot;/home/lind-wasm/glibc/target/include&quot;
+crt1_source_path=&quot;/home/lind-wasm/glibc/lind_syscall/crt1.o&quot;
+lind_syscall_path=&quot;/home/lind-wasm/glibc/lind_syscall/lind_syscall.o&quot; # Path to the lind_syscall.o file
+
+# Define the output archive and sysroot directory
+output_archive=&quot;sysroot/lib/wasm32-wasi/libc.a&quot;
+sysroot_dir=&quot;sysroot&quot;
+
+# First, remove the existing sysroot directory to start cleanly
+rm -rf &quot;$sysroot_dir&quot;
+
+# Find all .o files recursively in the source directory, ignoring stamp.o
+object_files=$(find &quot;$src_dir&quot; -type f -name &quot;*.o&quot; ! \( -name &quot;stamp.o&quot; -o -name &quot;argp-pvh.o&quot; -o -name &quot;repertoire.o&quot; \))
+
+# Add the lind_syscall.o file to the list of object files
+object_files=&quot;$object_files $lind_syscall_path&quot;
+
+# Check if object files were found
+if [ -z &quot;$object_files&quot; ]; then
+  echo &quot;No suitable .o files found in '$src_dir'.&quot;
+  exit 1
+fi
+
+# Create the sysroot directory structure
+mkdir -p &quot;$sysroot_dir/include/wasm32-wasi&quot; &quot;$sysroot_dir/lib/wasm32-wasi&quot;
+
+# Pack all found .o files into a single .a archive
+/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/llvm-ar rcs &quot;$output_archive&quot; $object_files
+
+# Check if llvm-ar succeeded
+if [ $? -eq 0 ]; then
+  echo &quot;Successfully created $output_archive with the following .o files:&quot;
+  echo &quot;$object_files&quot;
+else
+  echo &quot;Failed to create the archive.&quot;
+  exit 1
+fi
+
+# Copy all files from the external include directory to the new sysroot include directory
+cp -r &quot;$include_source_dir&quot;/* &quot;$sysroot_dir/include/wasm32-wasi/&quot;
+
+# Copy the crt1.o file into the new sysroot lib directory
+cp &quot;$crt1_source_path&quot; &quot;$sysroot_dir/lib/wasm32-wasi/&quot;
+</code></pre>
+<p>Here are some macros we need to twist:</p>
+<ul>
+<li><code>src_dir</code>: the glibc <code>build</code> directory that contains all the WASM object files</li>
+<li><code>include_source_dir</code>: the path to your pre-built headers</li>
+<li><code>crt1_source_path</code>: path to your pre-built crt1.o</li>
+<li><code>lind_syscall_path</code>: you also need to pre-compile <code>lind_syscall.o</code>, just like <code>crt1.o</code>, and the source file is under glibc/lind_syscall</li>
+<li><code>sysroot_dir</code>: path to generate the sysroot at</li>
+<li><code>output_archive</code>: the path to the generate the libc.a, should be align with <code>sysroot_dir</code></li>
+</ul>
+<p>Note that the header files should be pre-generated using <code>make install</code>. The crt1.o should be pre-compiled from this simple C file (see the WASM compile doc as well). The main job of this script is to change <code>include_source_dir</code>(path to target file), <code>crt1_source_path</code>(path to crt1.o), <code>lind_syscall_path</code>(path to lind_syscall.o), and <code>Pack all found .o files into a single .a archive</code>(path to llvm-ar) into your own path. crt1.o and lind_syscall.o are in <code>lind_syscall</code> directory in glibc.</p>
+<p>After modifying all the path talked on the above, try to run <code>gen_sysroot.sh</code> and see if it works</p>
+<pre><code>chmod +x gen_sysroot.sh
+./gen_sysroot.sh
+</code></pre>
+<p>This procedure is specified in the <code>gen_sysroot.sh</code> script in our glibc repo. It's main job is to generate a WASM sysroot structre like</p>
+<pre><code>sysroot/
+- include/
+  - wasm32-wasi/
+    - stdio.h
+    - ...other headers
+- lib/
+  - wasm32-wasi/
+    - crt1.o
+    - libc.a
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.action.edit"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      
+    
+  </body>
+</html>
