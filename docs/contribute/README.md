@@ -13,6 +13,6 @@ Detailed guidelines about writing code, tests, documentation, and more are below
 
 * [Rust Style Guide](styleguide.md)
 * [Unit Tests](unit-tests.md)
-* [Adding to the docs](writeDoc.md)
+* [Adding to the docs](add-docs.md)
 * [Security Policy](security.md)
 * [Code of Conduct](../community/conduct.md)
