@@ -31,6 +31,7 @@ RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will 
 LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
 LIND_FS_ROOT = os.environ.get("LIND_FS_ROOT", "/home/lind/lind-wasm/src/RawPOSIX/tmp")
 
+LIND_TOOL_PATH = Path(f"{LIND_WASM_BASE}/scripts")
 TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
 TESTFILES_SRC = Path(f"{LIND_WASM_BASE}/tests/testfiles")
 TESTFILES_DST = Path(f"{LIND_FS_ROOT}/testfiles")
@@ -149,10 +150,10 @@ def add_test_result(result, file_path, status, error_type, output):
 def compile_c_to_wasm(source_file):
     source_file = Path(source_file).resolve()
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_WASM_BASE, "lindtool.sh"), "compile_test", testcase]
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lindtool.sh"), "compile_test", testcase]
     if DEBUG_MODE:
         print("Running command:", compile_cmd)
-        if os.path.isfile(os.path.join(LIND_WASM_BASE, "lindtool.sh")):
+        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lindtool.sh")):
             print("File exists and is a regular file!")
         else:
             print("File not found or it's a directory!")
@@ -193,10 +194,10 @@ def compile_c_to_wasm(source_file):
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     testcase = str(wasm_file.with_suffix(''))
-    run_cmd = [os.path.join(LIND_WASM_BASE, "lindtool.sh"), "run", testcase]
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lindtool.sh"), "run", testcase]
     if DEBUG_MODE:
         print("Running command:", run_cmd)
-        if os.path.isfile(os.path.join(LIND_WASM_BASE, "lindtool.sh")):
+        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lindtool.sh")):
             print("File exists and is a regular file!")
         else:
             print("File not found or it's a directory!")
@@ -708,7 +709,8 @@ def main():
             native_file.unlink()
     
     shutil.rmtree(TESTFILES_DST) # removes the test files from the lind fs root
-
+    
+    os.chdir(LIND_WASM_BASE)
     with open(output_file, "w") as fp:
         json.dump(results, fp, indent=4, sort_keys=True)
 
@@ -716,7 +718,7 @@ def main():
         report_html = generate_html_report(results)
         with open(output_html_file, "w", encoding="utf-8") as out:
             out.write(report_html)
-        print(f"'{output_html_file}' generated.")
+        print(f"'{os.path.abspath(output_html_file)}' generated.")
 
     print(f"'{os.path.abspath(output_file)}' generated.")
 
