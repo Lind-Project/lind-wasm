@@ -1,0 +1,75 @@
+steps:
+  # Step 1: Clone the source branch of the PR using git clone
+  # Clones the branch from the repository into the /workspace directory.
+  - name: 'ubuntu'
+    id: 'Clone Source Branch'
+    args:
+      - 'bash'
+      - '-c'
+      - |
+        git clone --single-branch --branch $BRANCH_NAME https://github.com/$REPO_OWNER/$REPO_NAME /workspace/lind-wasm
+
+  # Step 2: Change directory, build and run tests, and save output
+  # Builds RawPOSIX with `cargo build`, and then runs the tests with `cargo test` and saves the output to a text file results_RawPOSIX.txt.
+  - name: 'rustlang/rust:latest'
+    id: 'Build and Run Cargo Test'
+    args:
+      - 'bash'
+      - '-c'
+      - |
+        cd /workspace/lind-wasm/src/RawPOSIX && 
+        cargo build && 
+        cargo test > /workspace/results_RawPOSIX.txt
+
+  # Step 3: Upload the test results to Google Cloud Storage (GCS)
+  # Uploads the 'results_RawPOSIX.txt' file from the Cloud Build workspace to the GCS bucket. 
+  - name: 'gcr.io/cloud-builders/gsutil'
+    id: 'Push Test Results to Bucket'
+    entrypoint: 'bash'
+    env:
+      - 'BRANCH_NAME=$BRANCH_NAME'
+      - 'BUILD_ID=$BUILD_ID'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+    args:
+      - '-c'
+      - |
+        gsutil cp /workspace/results_RawPOSIX.txt gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results_RawPOSIX.txt &&         
+        gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results_RawPOSIX.txt
+
+  # Step 4: Handle the result of the Docker build.
+  # - Installs Python dependencies and runs `generate_token_and_upload_secret.py`.
+  # - Sends a GitHub comment via API and link to test results using a fresh token from Secret Manager.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    id: 'Comment on PR'
+    entrypoint: 'bash'
+    secretEnv:
+      - 'GITHUB_APP_PRIVATE_KEY'
+      - 'GITHUB_TOKEN'
+    env:
+      - 'BRANCH_NAME=$BRANCH_NAME'
+      - 'BUILD_ID=$BUILD_ID'
+      - '_PR_NUMBER=$_PR_NUMBER'
+      - 'REPO_FULL_NAME=$REPO_FULL_NAME'
+      - 'COMMIT_SHA=$COMMIT_SHA'
+    args:
+      - '-c'
+      - |
+          apt-get update && apt-get install -y python3 python3-pip python3-venv
+
+          python3 -m venv /tmp/venv
+          . /tmp/venv/bin/activate
+
+          pip install "PyJWT[crypto]" google-cloud-secret-manager requests
+          python scripts/generate_token_and_upload_secret.py
+
+          GITHUB_TOKEN=$$(gcloud secrets versions access latest --secret=github-bot-token)
+            curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            -d $$(printf '{"body":"**Commit %s: RawPOSIX Build Success**\\n\\n[View Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results_RawPOSIX.txt)"}' \
+                  "$$COMMIT_SHA" \
+                  "$$BRANCH_NAME" \
+                  "$$BUILD_ID" \
+              )" \
+            "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
+
