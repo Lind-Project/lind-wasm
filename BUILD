@@ -80,6 +80,11 @@ genrule(
             -o $$GLIBC_BASE/build/nptl/pthread_create.o \
             -c pthread_create.c -MD -MP -MF $$GLIBC_BASE/build/nptl/pthread_create.o.dt \
             -MT $$GLIBC_BASE/build/nptl/pthread_create.o
+
+        $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
+            $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
+            -o $$GLIBC_BASE/build/lind_syscall.o \
+            -c $$GLIBC_BASE/lind_syscall/lind_syscall.c
         
        # Compile elision-lock.c using the same flags/env
         $$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
