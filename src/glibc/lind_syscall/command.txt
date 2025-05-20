@@ -1,4 +1,4 @@
-/home/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang-16 \
+/home/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.0.4/bin/clang-18 \
 --target=wasm32-unknown-wasi \
 -c \
 -g \
