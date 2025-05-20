@@ -9,7 +9,7 @@ steps:
       - 'docker login --username=$$USERNAME --password=$$PASSWORD'
     secretEnv:
       - 'USERNAME'
-      - 'PASSWORD'  
+      - 'PASSWORD'
 
   # Step 2: Check if there were changes in `src/glibc` in the current branch.
   # If not, attempt to find and download a cached `glibc_build.tar.gz` from GCS.
@@ -82,7 +82,7 @@ steps:
             echo $$? > /workspace/docker_build_exit_code
           ) | tee /workspace/docker_build.log
     env:
-      - 'BRANCH_NAME=$BRANCH_NAME'      
+      - 'BRANCH_NAME=$BRANCH_NAME'
     secretEnv:
       - 'USERNAME'
 
