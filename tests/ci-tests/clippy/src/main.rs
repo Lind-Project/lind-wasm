@@ -14,12 +14,12 @@
 //! ```sh
 //! cargo run --manifest-path tests/ci-tests/clippy/Cargo.toml
 //! ```
-
+use rayon::prelude::*;
 use std::{
     collections::HashSet,
+    env,
     path::{Path, PathBuf},
     process::Command,
-    env,
 };
 
 /// Simple ANSI escape codes and color logic for output.
@@ -54,7 +54,6 @@ mod colors {
 mod output;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     let args: Vec<String> = env::args().collect();
 
     let output_file = args.iter()
@@ -63,84 +62,68 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .cloned()
         .unwrap_or_else(|| "tests/ci-tests/clippy/clippy_out.json".to_string());
 
-
-    let merge_base = String::from_utf8(
-        Command::new("git")
-            .args(["merge-base", "origin/main", "HEAD"])
-            .output()?
-            .stdout,
-    )?.trim().to_string();
-    
-    let diff_output = Command::new("git")
-        .args(["diff", "--name-only", &format!("{merge_base}..HEAD"), "--", "*.rs"])
-        .output()?;
-    
-    let changed_rs_files: Vec<PathBuf> = String::from_utf8(diff_output.stdout)?
-        .lines()
-        .map(PathBuf::from)
-        .collect();
-    
-    if changed_rs_files.is_empty() {
-        println!("{}", colors::green("No changed Rust files found since branch diverged from origin/main."));
-        output::write_results(&[], &output_file)?;
-        return Ok(());
-    }
-
-    println!("Changed Rust files:");
-    for f in &changed_rs_files {
-        println!("  {}", f.display());
-    }
-
-    let mut manifest_paths = HashSet::new();
-
-    for file in &changed_rs_files {
-        if let Some(cargo_toml) = find_nearest_manifest(file) {
-            manifest_paths.insert(cargo_toml);
-        }
-    }
+    let manifest_paths: HashSet<PathBuf> = find_all_manifests(Path::new("."))?;
 
     if manifest_paths.is_empty() {
-        println!("{}", colors::red("No Cargo.toml files found for changed files."));
+        println!("{}", colors::red("No Cargo.toml files found in workspace."));
         output::write_results(&[], &output_file)?;
         return Ok(());
     }
 
-    let mut results = Vec::new();
-    let mut any_failed = false;
-
-    for manifest_path in &manifest_paths {
-        println!("Running Clippy for manifest at `{}`...", manifest_path.display());
-
-        let output = Command::new("cargo")
-            .args([
-                "clippy",
-                "--manifest-path",
-                &manifest_path.to_string_lossy(),
-                "--all-targets",
-                "--all-features",
-                "--",
-                "-D",
-                "warnings",
-            ])
-            .output()?;
-
-        if output.status.success() {
-            results.push(output::RunResult {
-                manifest_path: manifest_path.display().to_string(),
-                status: "success".to_string(),
-                error_body: None,
-            });
-            eprintln!("{}", colors::green(&format!("Clippy passed for manifest at `{}`.", manifest_path.display())));
-        } else {
-            any_failed = true;
-            results.push(output::RunResult {
-                manifest_path: manifest_path.display().to_string(),
-                status: "failure".to_string(),
-                error_body: Some(String::from_utf8_lossy(&output.stderr).to_string()),
-            });
-            eprintln!("{}", colors::red(&format!("Clippy failed for manifest at `{}`.", manifest_path.display())));
-        }
+    println!("Found the following crate manifests:");
+    for path in &manifest_paths {
+        println!("  {}", path.display());
     }
+
+    // Parallelize the Clippy runs using rayon
+    let results: Vec<_> = manifest_paths
+        .par_iter()
+        .map(|manifest_path| {
+            println!("Running Clippy for manifest at `{}`...", manifest_path.display());
+
+            let output = Command::new("cargo")
+                .args([
+                    "clippy",
+                    "--manifest-path",
+                    &manifest_path.to_string_lossy(),
+                    "--all-targets",
+                    "--all-features",
+                    "--",
+                    "-D",
+                    "warnings",
+                ])
+                .output();
+
+            match output {
+                Ok(out) if out.status.success() => {
+                    eprintln!("{}", colors::green(&format!("Clippy passed for `{}`.", manifest_path.display())));
+                    output::RunResult {
+                        manifest_path: manifest_path.display().to_string(),
+                        status: "success".to_string(),
+                        error_body: None,
+                    }
+                }
+                Ok(out) => {
+                    eprintln!("{}", colors::red(&format!("Clippy failed for `{}`.", manifest_path.display())));
+                    output::RunResult {
+                        manifest_path: manifest_path.display().to_string(),
+                        status: "failure".to_string(),
+                        error_body: Some(String::from_utf8_lossy(&out.stderr).to_string()),
+                    }
+                }
+                Err(e) => {
+                    eprintln!("{}", colors::red(&format!("Error running Clippy for `{}`: {e}", manifest_path.display())));
+                    output::RunResult {
+                        manifest_path: manifest_path.display().to_string(),
+                        status: "error".to_string(),
+                        error_body: Some(e.to_string()),
+                    }
+                }
+            }
+        })
+        .collect();
+
+    let any_failed = results.iter().any(|r| r.status != "success");
 
     output::write_results(&results, &output_file)?;
 
@@ -152,15 +135,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Walk upward from a file to find the nearest Cargo.toml.
-fn find_nearest_manifest(start: &Path) -> Option<PathBuf> {
-    let mut current = start.parent();
-    while let Some(dir) = current {
-        let candidate = dir.join("Cargo.toml");
-        if candidate.exists() {
-            return Some(candidate);
+/// Walks the directory tree to find all Cargo.toml files.
+fn find_all_manifests(start_dir: &Path) -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
+    let mut manifests = HashSet::new();
+    let mut dirs = vec![start_dir.to_path_buf()];
+
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(&dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.file_name().map_or(false, |f| f == "Cargo.toml") {
+                manifests.insert(path);
+            }
         }
-        current = dir.parent();
     }
-    None
+
+    Ok(manifests)
 }
+

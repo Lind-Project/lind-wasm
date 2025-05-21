@@ -167,6 +167,8 @@ rust_binary(
         "@crates//:serde",
         "@crates//:serde_json",
         "@crates//:atty",
+        "@crates//:rayon",
+        "@crates//:html-escape",
     ],
 )
 

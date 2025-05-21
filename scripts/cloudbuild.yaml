@@ -158,6 +158,7 @@ steps:
         docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/results.json /workspace/results.json
         docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/report.html /workspace/report.html
         docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/bazel-bin/tests/ci-tests/clippy/clippy_out.json /workspace/clippy_out.json
+        docker cp "$$CONTAINER_ID":/home/lind/lind-wasm/bazel-bin/tests/ci-tests/clippy/clippy_out.html /workspace/clippy_out.html
         docker rm -fv "$$CONTAINER_ID"
         
     env:
@@ -180,7 +181,8 @@ steps:
       - |
         gsutil cp /workspace/results.json gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json && 
         gsutil cp /workspace/report.html gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html && 
-        gsutil cp /workspace/clippy_out.json gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/clippy_out.json &&        
+        gsutil cp /workspace/clippy_out.json gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/clippy_out.json &&
+        gsutil cp /workspace/clippy_out.json gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/clippy_out.html &&
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/results.json &&
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/report.html &&
         gsutil acl ch -u allUsers:R gs://test_result_json_bucket/$BRANCH_NAME/$BUILD_ID/clippy_out.json
@@ -225,7 +227,7 @@ steps:
           curl -X POST -H "Authorization: Bearer $$GITHUB_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
               -H "Content-Type: application/json" \
-             -d "$(printf '{"body":"**Test Report**\\n\\n**[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n**[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**\\n**[View Clippy Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/clippy_out.json)**"}' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")" \
+             -d "$(printf '{"body":"**Test Report**\\n\\n**[View HTML Report](https://storage.googleapis.com/test_result_json_bucket/%s/%s/report.html)**\\n**[View JSON Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/results.json)**\\n**[View Clippy Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/clippy_out.json)**\\n**[View Clippy HTML Results](https://storage.googleapis.com/test_result_json_bucket/%s/%s/clippy_out.json)**"}' "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID" "$BRANCH_NAME" "$BUILD_ID")" \
           "https://api.github.com/repos/$REPO_FULL_NAME/issues/$_PR_NUMBER/comments"
 
 # Cloud Build machine and logging options
