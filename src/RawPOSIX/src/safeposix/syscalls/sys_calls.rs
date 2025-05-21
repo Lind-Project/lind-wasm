@@ -202,11 +202,6 @@ impl Cage {
      *   zombie list and retrieve the first entry from it (first in, first out).
      */
     pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
-        // 0) Check for pending signals and interrupt if any
-        if interface::signal_check_trigger(self.cageid) {
-            return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
-        }
-
         let mut zombies = self.zombies.write();
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
 
