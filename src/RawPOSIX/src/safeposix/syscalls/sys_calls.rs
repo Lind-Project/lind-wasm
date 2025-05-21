@@ -202,6 +202,11 @@ impl Cage {
      *   zombie list and retrieve the first entry from it (first in, first out).
      */
     pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
+        // 0) Check for pending signals and interrupt if any
+        if interface::signal_check_trigger(self.cageid) {
+            return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+        }
+
         let mut zombies = self.zombies.write();
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
 
@@ -221,6 +226,11 @@ impl Cage {
         // but we do not have the concept of process group in lind, so let's just treat it as cageid == 0
         if cageid <= 0 {
             loop {
+                // Check for pending signals at the start of each iteration
+                if interface::signal_check_trigger(self.cageid) {
+                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                }
+
                 if zombies.len() == 0 && (options & libc::WNOHANG > 0) {
                     // if there is no pending zombies and WNOHANG is set
                     // return immediately
@@ -276,7 +286,7 @@ impl Cage {
                 // now we have verified that the cage exists and is the child of the cage
                 loop {
                     // Check for pending signals at the start of each iteration
-                    if let Err(e) = interface::signal_check_trigger(self) {
+                    if interface::signal_check_trigger(self.cageid) {
                         return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
                     }
 
