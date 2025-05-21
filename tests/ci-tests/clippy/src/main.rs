@@ -1,14 +1,14 @@
 //! Clippy Delta Checker
 //!
-//! This tool detects which Rust files have changed since the last common commit with `origin/main`,
-//! identifies which crates those files belong to, and runs `cargo clippy` on each affected crate.
+//! This tool detects all Rust crates in the current workspace
+//! and runs `cargo clippy` on each manifest in parallel.
 //!
-//! Intended to be used in CI or pre-push workflows to avoid running Clippy on the entire workspace.
+//! Intended for CI or pre-push workflows to enforce lint hygiene across multiple crates.
 //!
 //! # Behavior
-//! - All changed `.rs` files are collected via shell `git diff`.
-//! - Each file is traced upward to the nearest `Cargo.toml`.
-//! - The list of affected crates is deduplicated to ensure Clippy only runs once per crate.
+//! - Finds all `Cargo.toml` files recursively from the root.
+//! - Runs `cargo clippy` in parallel (Rayon) for each crate.
+//! - Writes a JSON and HTML report to the specified output path.
 //!
 //! # Usage
 //! ```sh
@@ -55,13 +55,13 @@ mod output;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-
+    // Determine the output path for the JSON/HTML report
     let output_file = args.iter()
         .position(|arg| arg == "--output-file")
         .and_then(|pos| args.get(pos + 1))
         .cloned()
         .unwrap_or_else(|| "tests/ci-tests/clippy/clippy_out.json".to_string());
-
+    // Find all crate manifests in the workspace
     let manifest_paths: HashSet<PathBuf> = find_all_manifests(Path::new("."))?;
 
     if manifest_paths.is_empty() {
@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  {}", path.display());
     }
 
-    // Parallelize the Clippy runs using rayon
+    // Run Clippy on each manifest in parallel
     let results: Vec<_> = manifest_paths
         .par_iter()
         .map(|manifest_path| {
@@ -135,7 +135,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Walks the directory tree to find all Cargo.toml files.
+/// Recursively walks the directory tree to find all Cargo.toml files.
+///
+/// # Arguments
+/// * `start_dir` - Path to begin the directory search.
+///
+/// # Returns
+/// A `HashSet` of manifest paths (one for each discovered crate).
 fn find_all_manifests(start_dir: &Path) -> Result<HashSet<PathBuf>, Box<dyn std::error::Error>> {
     let mut manifests = HashSet::new();
     let mut dirs = vec![start_dir.to_path_buf()];
