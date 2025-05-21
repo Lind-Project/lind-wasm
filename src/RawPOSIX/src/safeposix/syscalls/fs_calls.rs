@@ -1651,12 +1651,26 @@ impl Cage {
         uaddr2: u64,
         val3: u32,
     ) -> i32 {
-        let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
-        if ret < 0 {
-            let errno = get_errno();
-            return handle_errno(errno, "fcntl");
+        loop {
+            // Interrupt early if a signal is pending
+            if interface::signal_check_trigger(self.cageid) {
+                return syscall_error(Errno::EINTR, "futex", "interrupted by signal");
+            }
+
+            // Perform the real futex syscall
+            let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
+            if ret < 0 {
+                let e = get_errno();
+                // Real EINTR? Propagate it
+                if e == libc::EINTR {
+                    return syscall_error(Errno::EINTR, "futex", "interrupted by signal");
+                }
+                // Other errors
+                return handle_errno(e, "futex");
+            }
+            // Success
+            return ret;
         }
-        ret
     }
 
     //We directly call nanosleep syscall(SYS_clock_nanosleep) from the libc
