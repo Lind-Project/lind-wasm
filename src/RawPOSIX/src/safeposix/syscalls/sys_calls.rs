@@ -275,6 +275,11 @@ impl Cage {
 
                 // now we have verified that the cage exists and is the child of the cage
                 loop {
+                    // Check for pending signals at the start of each iteration
+                    if let Err(e) = interface::signal_check_trigger(self) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                    }
+
                     // the cage is not in the zombie list
                     // we need to wait for the cage to actually exit
 
