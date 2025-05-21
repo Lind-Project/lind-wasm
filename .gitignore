@@ -5,3 +5,4 @@ src/glibc/build/
 bazel-*
 MODULE.bazel.lock
 src/RawPOSIX/tmp/
+tests/ci-tests/clippy/target/*
