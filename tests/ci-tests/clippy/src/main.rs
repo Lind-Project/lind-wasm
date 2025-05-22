@@ -153,7 +153,7 @@ fn find_all_manifests(start_dir: &Path) -> Result<HashSet<PathBuf>, Box<dyn std:
 
             if path.is_dir() {
                 dirs.push(path);
-            } else if path.file_name().map_or(false, |f| f == "Cargo.toml") {
+            } else if path.file_name().is_some_and(|f| f == "Cargo.toml") {
                 manifests.insert(path);
             }
         }
