@@ -6,3 +6,4 @@ bazel-*
 MODULE.bazel.lock
 src/RawPOSIX/tmp/
 tests/ci-tests/clippy/target/*
+clippy_report.html
