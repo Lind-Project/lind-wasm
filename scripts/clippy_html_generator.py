@@ -52,7 +52,7 @@ def render_html(issues, output_path):
             th { background: #eee; }
             .warning { background-color: #fff8dc; }
             .error { background-color: #ffe0e0; }
-            pre.code { background-color: #f7f7f7; margin: 0; padding: 0.25em; font-family: monospace; }
+            pre.code { margin: 0; padding: 0.25em; font-family: monospace; }
         </style>
     </head>
     <body>
