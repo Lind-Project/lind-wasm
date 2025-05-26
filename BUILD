@@ -212,6 +212,38 @@ genrule(
 )
 
 
+genrule(
+    name = "clippy_all_crates",
+    srcs = [
+        ":rawposix_files",
+        ":wasmtime_files",
+        ":fdtables_files",
+        ":sysdefs_files",
+    ],
+    outs = ["clippy_all.log"],
+    cmd = """
+        run_clippy() {
+            echo "==== $$1 ===="
+            cd "$$1"
+            cargo clippy --all-targets --all-features -- -D warnings || echo "[clippy failed in $$1]"
+            cd - > /dev/null
+        }
+
+        {
+            echo "Running Clippy on all key crates..."
+            run_clippy src/RawPOSIX
+            run_clippy src/fdtables
+            run_clippy src/sysdefs
+            run_clippy src/wasmtime
+            echo "Clippy run complete."
+        } | tee "$@"
+
+        exit 0
+    """,
+    tags = ["no-cache", "no-sandbox"],
+)
+
+
 
 
 
@@ -239,4 +271,16 @@ filegroup(
 filegroup(
     name = "clang_files",
     srcs = glob(["clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/**/*"])
+)
+
+# FileGroup for fdtables files
+filegroup(
+    name = "fdtables_files",
+    srcs = glob(["src/fdtables/**"]),
+)
+
+# FileGroup for sysdefs files
+filegroup(
+    name = "sysdefs_files",
+    srcs = glob(["src/sysdefs/**"]),
 )
