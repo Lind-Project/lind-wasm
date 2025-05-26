@@ -23,11 +23,19 @@ def filter_messages(messages, allowed_dirs):
             continue
 
         for span in spans:
+            try:
+                with open(span.get("file_name"), "r") as f:
+                    lines = f.readlines()
+                    code_line = lines[span.get("line_start") - 1].strip()
+            except Exception:
+                code_line = "(Could not read source line)"
+
             filtered.append({
                 "file": span.get("file_name"),
                 "line": span.get("line_start"),
                 "level": msg["message"].get("level"),
                 "message": msg["message"].get("message"),
+                "code": code_line,
             })
     return filtered
 
@@ -49,18 +57,20 @@ def render_html(issues, output_path):
             th { background: #eee; }
             .warning { background-color: #fff8dc; }
             .error { background-color: #ffe0e0; }
+            pre.code { background-color: #f7f7f7; margin: 0; padding: 0.25em; font-family: monospace; }
         </style>
     </head>
     <body>
         <h1>Clippy Lint Report</h1>
         <p><strong>Total Issues:</strong> {{ issues|length }}</p>
         <table>
-            <tr><th>File</th><th>Line</th><th>Level</th><th>Message</th></tr>
+            <tr><th>File</th><th>Line</th><th>Level</th><th>Code</th><th>Message</th></tr>
             {% for issue in issues %}
             <tr class="{{ issue.level }}">
                 <td>{{ issue.file }}</td>
                 <td>{{ issue.line }}</td>
                 <td>{{ issue.level }}</td>
+                <td><pre class="code">{{ issue.code }}</pre></td>
                 <td><pre>{{ issue.message }}</pre></td>
             </tr>
             {% endfor %}
