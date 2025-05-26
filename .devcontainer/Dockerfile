@@ -12,7 +12,7 @@ ENV GLIBC_TAR_CACHE=${GLIBC_TAR_CACHE:-false}
 # Install all the required dependencies
 RUN apt-get -qq update && \
     apt-get install -y -qq build-essential git wget gcc-i686-linux-gnu g++-i686-linux-gnu \
-    bison gawk vim libxml2 python3 curl gcc g++ binaryen unzip zip golang bash openssl libssl-dev \
+    bison gawk vim libxml2 python3 python3-pip python3-jinja2 curl gcc g++ binaryen unzip zip golang bash openssl libssl-dev \
     sudo
 
 RUN apt install -qq apt-transport-https curl gnupg -y && \
