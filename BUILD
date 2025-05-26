@@ -220,24 +220,27 @@ genrule(
         ":fdtables_files",
         ":sysdefs_files",
     ],
-    outs = ["clippy_all.log"],
+    outs = ["clippy_all.json"],
     cmd = """
+        OUT="$@"
+        echo "[" > "$$OUT"
+
         run_clippy() {
-            echo "==== $$1 ===="
             cd "$$1"
-            cargo clippy --all-targets --all-features -- -D warnings || echo "[clippy failed in $$1]"
+            cargo clippy --all-targets --all-features --message-format=json -- -D warnings || true
             cd - > /dev/null
         }
 
-        {
-            echo "Running Clippy on all key crates..."
-            run_clippy src/RawPOSIX
-            run_clippy src/fdtables
-            run_clippy src/sysdefs
-            run_clippy src/wasmtime
-            echo "Clippy run complete."
-        } | tee "$@"
+        CRATES="src/RawPOSIX src/fdtables src/sysdefs src/wasmtime"
+        FIRST=1
 
+        for crate in $$CRATES; do
+            if [ "$$FIRST" -eq 0 ]; then echo "," >> "$$OUT"; fi
+            run_clippy "$$crate" | sed '$$!s/$$/,/' >> "$$OUT"
+            FIRST=0
+        done
+
+        echo "]" >> "$$OUT"
         exit 0
     """,
     tags = ["no-cache", "no-sandbox"],
