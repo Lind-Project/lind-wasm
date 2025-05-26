@@ -23,12 +23,7 @@ def filter_messages(messages, allowed_dirs):
             continue
 
         for span in spans:
-            try:
-                with open(span.get("file_name"), "r") as f:
-                    lines = f.readlines()
-                    code_line = lines[span.get("line_start") - 1].strip()
-            except Exception:
-                code_line = "(Could not read source line)"
+            code_line = span.get("text", [{}])[0].get("text", "(No source line in span)")
 
             filtered.append({
                 "file": span.get("file_name"),
