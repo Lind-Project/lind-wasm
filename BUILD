@@ -220,10 +220,12 @@ genrule(
         ":fdtables_files",
         ":sysdefs_files",
     ],
-    outs = ["clippy_all.json"],
+    outs = ["clippy_all.json","clippy_report.html"],
     cmd = """
-        OUT="$@"
-        echo "[" > "$$OUT"
+        JSON_OUT="$(location clippy_all.json)"
+        HTML_OUT="$(location clippy_report.html)"
+
+        echo "[" > "$$JSON_OUT"
 
         run_clippy() {
             cd "$$1"
@@ -235,12 +237,15 @@ genrule(
         FIRST=1
 
         for crate in $$CRATES; do
-            if [ "$$FIRST" -eq 0 ]; then echo "," >> "$$OUT"; fi
-            run_clippy "$$crate" | sed '$$!s/$$/,/' >> "$$OUT"
+            if [ "$$FIRST" -eq 0 ]; then echo "," >> "$$JSON_OUT"; fi
+            run_clippy "$$crate" | sed '$$!s/$$/,/' >> "$$JSON_OUT"
             FIRST=0
         done
 
-        echo "]" >> "$$OUT"
+        echo "]" >> "$$JSON_OUT"
+
+        python3 /home/lind/lind-wasm/scripts/clippy_html_generator.py "$$JSON_OUT"
+        cp ./clippy_report.html "$$HTML_OUT"
         exit 0
     """,
     tags = ["no-cache", "no-sandbox"],
