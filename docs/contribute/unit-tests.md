@@ -29,25 +29,25 @@ bazel build //:make_glibc //:make_wasmtime
 ```
 bazel run //:python_tests
 ```
-(This will run the whole test suite, `scripts/wasmtestreport.py --help` will provide the available arguments and flags)
-Note: Pass the test suite arguments using `bazel run //:python_tests -- <wasmtestreport arguments>`(the arguments can be found using scripts/wasmtestreport.py --help) eg: `bazel run //:python_tests -- --timeout 10`
+(This will run the whole test suite.  Use `scripts/wasmtestreport.py --help` to list available arguments and flags)
+Note: Pass test suite arguments using `bazel run //:python_tests -- <wasmtestreport arguments>`. For example: `bazel run //:python_tests -- --timeout 10`
 
 
 
 ## What test suite does
 1. **Test Case Collection:** Scans `unit-tests` folder for `.c` files.
 2. **Filtering:** Applies include/exclude filters (`--run`, `--skip`, and `skip_test_cases.txt`).
-3. **Checking for expected outputs:** Test suite looks for expected output from native run (the output of running the test case after compiling using gcc), if its not found, we will compile using gcc and run it to get the native output
-3. **Comparing Outputs:** For deterministic test cases, the outputs are directly compared and is success if they are equal. For non-deterministic test cases, the outputs are parsed and compared using a python script.
-4. **Result Recording:** All test outcomes stored with status, error type, and full output.
-5. **Reporting:** JSON and HTML test report generated
+3. **Checking for expected outputs:** Test suite looks for expected output from native run (the output of running the test case after compiling using gcc), if it's not found, we will compile using gcc and run it to get the native output
+4. **Comparing Outputs:** For deterministic test cases, the outputs are directly compared and considered a success if they match. For non-deterministic test cases, the outputs are parsed and compared using a python script.
+5. **Result Recording:** All test outcomes stored with status, error type, and full output.
+6. **Reporting:** JSON and HTML test reports are generated
 
 
 ## Output Files
 - **JSON Report:** Detailed test summary in JSON format, saved at `lind-wasm/results.json`
 - **HTML Report:** Human-readable visualization of test outcomes, saved at `lind-wasm/report.html`
 
-The output will show the total number of test cases, count for success, failure and count for each of the following error types
+The output will show the total number of test cases, along with counts for successes, failures, and each of the following error types:
 
 - "Failure_native_compiling": Failed during GCC compiling
 - "Failure_native_running": Failed while running GCC compiled binary
@@ -60,9 +60,9 @@ The output will show the total number of test cases, count for success, failure 
 - "Output_mismatch": Mismatch in GCC and Wasm outputs
 - "Unknown_Failure": Unknown Failure
 
-Report will also have a report on individual test cases with the status(success/failure), error_type(if failure), time taken(for compiling and running) and output generated.
+The report also includes individual test case results, showing status (success/failure), error type (if any), time taken (for compiling and running), and output generated.
 
-The outputs are split into deterministic and non-deterministic based on how they the lind-wasm outputs are compared to the native gcc output. 
+The outputs are split into deterministic and non-deterministic based on how the lind-wasm outputs are compared to the native gcc output. 
 
 
 ## Directory Structure
@@ -72,11 +72,11 @@ The outputs are split into deterministic and non-deterministic based on how they
 - `testfiles/`: Extra files needed by tests, copied into Lind FS.
 
 ## How to add test cases
-To add test cases, a file with .c extension containing c code can be added the appropriate folder in the tests/unit-tests folder, during the test suite run, the test case will be picked up and ran. If the outputs of the file can be directly compared, ie contents of gcc run == contents of lind-wasm run, that would be enough
+To add test cases, a file with .c extension containing c code can be added to the appropriate folder in the tests/unit-tests folder.  During the test suite run, the test case will be picked up and run. If the outputs of the file can be directly compared, i.e. contents of gcc run == contents of lind-wasm run, that would be enough
 
-If there are changes in the outputs of the native run and lind-wasm run and the outputs needs to be parsed and compared with custom functions, the comparator python script can be added at the same folder as the test case and the python script should be written in such a way that it should be success (exit 0) if everything passes as required or error out if its a failure case.
+If there are changes in the outputs of the native run and lind-wasm run and the outputs need to be parsed and compared with custom functions, the comparator python script can be added at the same folder as the test case and the python script should return success (exit 0) if all conditions are met, or error if the test fails.
 
-Any failure in compiling or running using gcc or lind-wasm is considered a failure. Additonally if there is a script for comparing outputs, the failure of that script is also considered a failure. Mismatch in native(gcc) and wasm outputs are also considered a failure.
+Any failure in compiling or running using gcc or lind-wasm is considered a failure. Additionally, if there is a script for comparing outputs, the failure of that script is also considered a failure. Mismatch in native(gcc) and wasm outputs are also considered a failure.
 
 
 ## Example Combined Usage
