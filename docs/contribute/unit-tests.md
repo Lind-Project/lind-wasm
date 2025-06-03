@@ -3,18 +3,6 @@ This document is a practical guide to setting up and using the Lind testing infr
 
 Since Lind is currently limited to the AMD64 architecture, Docker is used to provide a consistent and controlled testing environment across different host systems. You can install [Docker from its website](https://docs.docker.com/engine/install/).
 
-## Dependencies
-If running on docker, the only dependency user has to install will be docker and the other dependencies will be installed while running the docker file
-- Docker (https://docs.docker.com/engine/install/)
-
-- Environment variables:
-  If user has created environment variables with the same name in the docker, it might change the behaviour of the test suite. 
-  - `LIND_WASM_BASE`: Root path of the Lind WASM project(Default: /home/lind/lind-wasm/).
-  - `LIND_FS_ROOT`: Path to the filesystem root used during tests(Default: /home/lind/lind-wasm/src/RawPOSIX).
-  Can be set using export <env_variable_name> = <value> (in bash)
-- Scripts:
-  - `scripts/lindtool.sh`(File included in the repo)
-
 ## Testing Workflow
 
 1. Install Docker
