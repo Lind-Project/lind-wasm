@@ -5,12 +5,11 @@ Since Lind is currently limited to the AMD64 architecture, Docker is used to pro
 
 ## Testing Workflow
 
-1. Install Docker
-2. Clone the repo using 
+1. Clone the repo using 
 ```
 git clone https://github.com/Lind-Project/lind-wasm.git
 ```
-3. Change Directory to repo 
+2. Change Directory to repo 
 ```
 cd lind-wasm
 ```
@@ -22,9 +21,9 @@ docker build -t testing_image -f .devcontainer/Dockerfile --build-arg DEV_MODE=t
 ```
 docker run -it testing_image /bin/bash
 ```
-5. Build glibc, wasmtime and rawposix 
+5. Build toolchain (glibcand wasmtime)
 ```
-bazel build //:make_glibc //:make_rawposix //:make_wasmtime
+bazel build //:make_glibc //:make_wasmtime
 ```
 6. Run the test suite 
 ```
