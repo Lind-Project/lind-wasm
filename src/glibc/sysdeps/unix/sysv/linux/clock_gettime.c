@@ -24,6 +24,7 @@
 #include <sysdep-vdso.h>
 #include <shlib-compat.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Get current value of CLOCK and store it in TP.  */
 
@@ -33,7 +34,8 @@
 int
 __clock_gettime64 (clockid_t clock_id, struct __timespec64 *tp)
 {
-  return MAKE_SYSCALL(191, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  // return MAKE_SYSCALL(191, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 #if __TIMESIZE != 64
@@ -42,7 +44,8 @@ libc_hidden_def (__clock_gettime64)
 int
 __clock_gettime (clockid_t clock_id, struct timespec *tp)
 {
-  return MAKE_SYSCALL(191, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  // return MAKE_SYSCALL(191, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 #endif
