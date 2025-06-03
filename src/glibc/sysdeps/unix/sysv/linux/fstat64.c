@@ -25,6 +25,7 @@
 #include <internal-stat.h>
 #include <errno.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __fstat64_time64 (int fd, struct __stat64_t64 *buf)
@@ -83,7 +84,8 @@ __fstat64 (int fd, struct stat64 *buf)
       return -1;
     }
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-	return MAKE_SYSCALL(17, "syscall|fstat", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	// return MAKE_SYSCALL(17, "syscall|fstat", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_SYSCALL(FSTATFS_SYSCALL, "syscall|fstat", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 #endif
 

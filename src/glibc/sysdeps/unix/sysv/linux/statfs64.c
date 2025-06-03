@@ -24,12 +24,14 @@
 #undef __statfs
 #undef statfs
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Return information about the filesystem on which FILE resides.  */
 int
 __statfs64 (const char *file, struct statfs64 *buf)
 {
-  return MAKE_SYSCALL(26, "syscall|statfs", (uint64_t) file, (uint64_t) buf , NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  // return MAKE_SYSCALL(26, "syscall|statfs", (uint64_t) file, (uint64_t) buf , NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(STATFS_SYSCALL, "syscall|statfs", (uint64_t) file, (uint64_t) buf , NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__statfs64, statfs64)
 
