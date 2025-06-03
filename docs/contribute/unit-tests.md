@@ -37,7 +37,7 @@ Note: Pass the test suite arguments using `bazel run //:python_tests -- <wasmtes
 ## What test suite does
 1. **Test Case Collection:** Scans `unit-tests` folder for `.c` files.
 2. **Filtering:** Applies include/exclude filters (`--run`, `--skip`, and `skip_test_cases.txt`).
-3. **Checking for expected outputs** Test suite looks for expected output from native tun(the output of running the test case after compiling using gcc), if its not found, we will compile using gcc and run it to get the native output
+3. **Checking for expected outputs:** Test suite looks for expected output from native tun(the output of running the test case after compiling using gcc), if its not found, we will compile using gcc and run it to get the native output
 3. **Compatring Outputs:** For deterministic test cases, the outputs are directly compared and is success if they are equal. For non-deterministic test cases, the outputs are parsed and compared using a python script.
 4. **Result Recording:** All test outcomes stored with status, error type, and full output.
 5. **Reporting:** JSON and HTML test report generated
