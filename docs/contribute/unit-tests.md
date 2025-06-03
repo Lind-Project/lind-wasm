@@ -9,7 +9,7 @@ Since Lind is currently limited to the AMD64 architecture, Docker is used to pro
 ```
 git clone https://github.com/Lind-Project/lind-wasm.git
 ```
-2. Change Directory to repo 
+2. Change directory to repo 
 ```
 cd lind-wasm
 ```
@@ -21,7 +21,7 @@ docker build -t testing_image -f .devcontainer/Dockerfile --build-arg DEV_MODE=t
 ```
 docker run -it testing_image /bin/bash
 ```
-5. Build toolchain (glibcand wasmtime)
+5. Build toolchain (glibc and wasmtime)
 ```
 bazel build //:make_glibc //:make_wasmtime
 ```
@@ -37,8 +37,8 @@ Note: Pass the test suite arguments using `bazel run //:python_tests -- <wasmtes
 ## What test suite does
 1. **Test Case Collection:** Scans `unit-tests` folder for `.c` files.
 2. **Filtering:** Applies include/exclude filters (`--run`, `--skip`, and `skip_test_cases.txt`).
-3. **Checking for expected outputs:** Test suite looks for expected output from native tun(the output of running the test case after compiling using gcc), if its not found, we will compile using gcc and run it to get the native output
-3. **Compatring Outputs:** For deterministic test cases, the outputs are directly compared and is success if they are equal. For non-deterministic test cases, the outputs are parsed and compared using a python script.
+3. **Checking for expected outputs:** Test suite looks for expected output from native run (the output of running the test case after compiling using gcc), if its not found, we will compile using gcc and run it to get the native output
+3. **Comparing Outputs:** For deterministic test cases, the outputs are directly compared and is success if they are equal. For non-deterministic test cases, the outputs are parsed and compared using a python script.
 4. **Result Recording:** All test outcomes stored with status, error type, and full output.
 5. **Reporting:** JSON and HTML test report generated
 
@@ -72,17 +72,17 @@ The outputs are split into deterministic and non-deterministic based on how they
 - `testfiles/`: Extra files needed by tests, copied into Lind FS.
 
 ## How to add test cases
-To add test cases, a file with .c extension containing c code can be added the approriate folder in the tests/unit-tests folder, during the test suite run, the test case will be picked up and ran. If the outputs of the file can be directly compared, ie contents of gcc run == contents of lind-wasm run, that would be enough
+To add test cases, a file with .c extension containing c code can be added the appropriate folder in the tests/unit-tests folder, during the test suite run, the test case will be picked up and ran. If the outputs of the file can be directly compared, ie contents of gcc run == contents of lind-wasm run, that would be enough
 
 If there are changes in the outputs of the native run and lind-wasm run and the outputs needs to be parsed and compared with custom functions, the comparator python script can be added at the same folder as the test case and the python script should be written in such a way that it should be success (exit 0) if everything passes as required or error out if its a failure case.
 
-Any failure in compiling or running using gcc or lind-wasm is considered a failure. Additonaly if there is a script for comparing outputs, the failure of that script is also considered a failure. Mismatch in native(gcc) and wasm outputs are also considered a failure.
+Any failure in compiling or running using gcc or lind-wasm is considered a failure. Additonally if there is a script for comparing outputs, the failure of that script is also considered a failure. Mismatch in native(gcc) and wasm outputs are also considered a failure.
 
 
 ## Example Combined Usage
 
 ```
-scrips/wasmtestreport.py --generate-html --skip config_tests file_tests --timeout 10 --output results_json --report test_report
+scripts/wasmtestreport.py --generate-html --skip config_tests file_tests --timeout 10 --output results_json --report test_report
 ```
 
 This will:
