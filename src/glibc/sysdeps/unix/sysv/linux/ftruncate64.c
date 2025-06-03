@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <sysdep.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 #ifndef __NR_ftruncate64
 # define __NR_ftruncate64 __NR_ftruncate
@@ -27,7 +28,8 @@
 int
 __ftruncate64 (int fd, off64_t length)
 {
-   return MAKE_SYSCALL(18, "syscall|ftruncate", (uint64_t) fd, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   // return MAKE_SYSCALL(18, "syscall|ftruncate", (uint64_t) fd, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(FTRUNCATE_SYSCALL, "syscall|ftruncate", (uint64_t) fd, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__ftruncate64, ftruncate64)
 
