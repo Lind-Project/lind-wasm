@@ -1,7 +1,7 @@
 # Running unit tests
 This document is a practical guide to setting up and using the Lind testing infrastructure. It outlines the steps needed to run the test suite, execute unit tests, and understand the results produced by the test suite, and how to contribute new tests to the framework.
 
-Since Lind is currently limited to the AMD64 architecture, Docker is used to provide a consistent and controlled testing environment across different host systems.
+Since Lind is currently limited to the AMD64 architecture, Docker is used to provide a consistent and controlled testing environment across different host systems. You can install [Docker from its website](https://docs.docker.com/engine/install/).
 
 ## Dependencies
 If running on docker, the only dependency user has to install will be docker and the other dependencies will be installed while running the docker file
@@ -17,7 +17,6 @@ If running on docker, the only dependency user has to install will be docker and
 
 ## Testing Workflow
 
-Docker
 1. Install Docker
 2. Clone the repo using 
 ```
