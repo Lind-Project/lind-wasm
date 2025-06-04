@@ -81,8 +81,7 @@ successes, failures, and each of the following error types:
 - "Unknown_Failure": Unknown Failure
 
 The report also includes individual test case results, showing status
-(success/failure), error type (if any), time taken (for compiling and running),
-and output generated.
+(success/failure), error type (if any), and output generated.
 
 The outputs are split into deterministic and non-deterministic based on how the
 lind-wasm outputs are compared to the native gcc output. 
@@ -109,7 +108,12 @@ failure.
 ## Example Combined Usage
 
 ```
-scripts/wasmtestreport.py --generate-html --skip config_tests file_tests --timeout 10 --output results_json --report test_report
+bazel run //:python_tests -- \
+  --generate-html \
+  --skip config_tests file_tests \
+  --timeout 10 \
+  --output results_json \
+  --report test_report  
 ```
 
 This will:
