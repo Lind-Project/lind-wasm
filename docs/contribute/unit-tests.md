@@ -101,16 +101,9 @@ suite run, the test case will be picked up and run. If the outputs of the file
 can be directly compared, i.e. contents of gcc run == contents of lind-wasm
 run, that would be enough
 
-If there are changes in the outputs of the native run and lind-wasm run and the
-outputs need to be parsed and compared with custom functions, the comparator
-python script can be added at the same folder as the test case and the python
-script should return success (exit 0) if all conditions are met, or error if
-the test fails.
-
 Any failure in compiling or running using gcc or lind-wasm is considered a
-failure. Additionally, if there is a script for comparing outputs, the failure
-of that script is also considered a failure. Mismatch in native(gcc) and wasm
-outputs are also considered a failure.
+failure. Mismatch in native(gcc) and wasm outputs are also considered a 
+failure.
 
 
 ## Example Combined Usage
