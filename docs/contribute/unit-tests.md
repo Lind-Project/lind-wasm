@@ -38,8 +38,13 @@ bazel run //:python_tests
 (This will run the whole test suite.  Use `scripts/wasmtestreport.py --help` to
 list available arguments and flags)
 Note: Pass test suite arguments using
-`bazel run //:python_tests -- <wasmtestreport arguments>`.
-For example: `bazel run //:python_tests -- --timeout 10`
+```
+bazel run //:python_tests -- <wasmtestreport arguments>
+```
+For example: 
+```
+bazel run //:python_tests -- --timeout 10
+```
 
 
 
