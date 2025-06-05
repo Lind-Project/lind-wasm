@@ -6,11 +6,11 @@ The toolchain to build and run lind programs consists of the following component
   and lind programs
 - A custom [*glibc*](../internal/libc.md) used as sysroot to build
   lind programs
-- A custom `wasm-opt` binary to enable [multi-processing](../internal/multiprocess-support.md)
+- A custom [`wasm-opt`](../internal/multiprocess-support.md) binary to enable multi-processing
   in lind programs
-- A custom *WebAssembly* runtime ([`wasmtime`](../internal/wasmtime.md)) based
-  on [*RawPOSIX*](../internal/rawposix.md) to run lind programs
-- Rust Cargo to build `wasmtime`
+- A custom *WebAssembly* runtime ([`wasmtime`](../internal/wasmtime.md)) with
+  [*RawPOSIX*](../internal/rawposix.md) to run lind programs
+- *Cargo* to build `wasmtime`
 
 This document gives an overview of how the toolchain is built. The build process
 is automated with *Docker*, *Bazel* and custom shell scripts. Please refer to
