@@ -25,7 +25,6 @@ ssize_t
 __libc_sendto (int fd, const void *buf, size_t len, int flags,
 	       const struct sockaddr * addr, socklen_t addrlen)
 {
-	// return MAKE_SYSCALL(35, "syscall|sendto", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, (uint64_t) addr, (uint64_t) addrlen);
 	return MAKE_SYSCALL(SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, (uint64_t) addr, (uint64_t) addrlen);
 }
 weak_alias (__libc_sendto, sendto)

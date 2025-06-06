@@ -24,7 +24,6 @@
 ssize_t
 __libc_send (int fd, const void *buf, size_t len, int flags)
 {
-   // return MAKE_SYSCALL(34, "syscall|send", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED);
    return MAKE_SYSCALL(SEND_SYSCALL, "syscall|send", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED);
 }
 weak_alias (__libc_send, send)

@@ -34,7 +34,6 @@ int
 __select64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 	    struct __timeval64 *timeout)
 {
-		// return MAKE_SYSCALL(46, "syscall|select", (uint64_t) nfds, (uint64_t) readfds, (uint64_t) writefds, (uint64_t) exceptfds, (uint64_t) timeout, NOTUSED);
 		return MAKE_SYSCALL(SELECT_SYSCALL, "syscall|select", (uint64_t) nfds, (uint64_t) readfds, (uint64_t) writefds, (uint64_t) exceptfds, (uint64_t) timeout, NOTUSED);
 
 // Lind-Wasm: Original glibc code removed for compatibility
