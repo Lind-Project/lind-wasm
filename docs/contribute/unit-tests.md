@@ -106,7 +106,7 @@ can be directly compared, i.e. contents of gcc run == contents of lind-wasm
 run, that would be enough
 
 Any failure in compiling or running using gcc or lind-wasm is considered a
-failure. Mismatch in native(gcc) and wasm outputs are also considered a 
+failure. Mismatch in native (gcc) and wasm outputs are also considered a 
 failure.
 
 
