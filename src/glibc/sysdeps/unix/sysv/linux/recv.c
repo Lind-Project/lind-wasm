@@ -24,7 +24,6 @@
 ssize_t
 __libc_recv (int fd, void *buf, size_t len, int flags)
 {
-   // return MAKE_SYSCALL(36, "syscall|recv", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED);
    return MAKE_SYSCALL(RECV_SYSCALL, "syscall|recv", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED);
 }
 weak_alias (__libc_recv, recv)

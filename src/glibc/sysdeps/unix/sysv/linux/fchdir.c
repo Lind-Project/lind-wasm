@@ -5,7 +5,6 @@
 int
 __fchdir (int __fd)
 {
-  // return MAKE_SYSCALL(161, "syscall|fchdir", (uint64_t) __fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
   return MAKE_SYSCALL(FCHDIR_SYSCALL, "syscall|fchdir", (uint64_t) __fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 

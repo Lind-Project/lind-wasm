@@ -24,7 +24,6 @@
 ssize_t
 __libc_pread64 (int fd, void *buf, size_t count, off64_t offset)
 {
-  // return MAKE_SYSCALL(126, "syscall|pread", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
   return MAKE_SYSCALL(PREAD_SYSCALL, "syscall|pread", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
 }
 

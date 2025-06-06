@@ -27,7 +27,6 @@ int
 epoll_ctl (int __epfd, int __op, int __fd,
 		      struct epoll_event *__event)
 {
-   // return MAKE_SYSCALL(57, "syscall|epoll_ctl", (uint64_t) __epfd, (uint64_t) __op, (uint64_t) __fd, (uint64_t) __event, NOTUSED, NOTUSED);
    return MAKE_SYSCALL(EPOLL_CTL_SYSCALL, "syscall|epoll_ctl", (uint64_t) __epfd, (uint64_t) __op, (uint64_t) __fd, (uint64_t) __event, NOTUSED, NOTUSED);
 }
 libc_hidden_def (epoll_ctl)

@@ -26,7 +26,6 @@
 int
 __unlinkat (int dirfd, const char *name, int flags)
 {
-   // return MAKE_SYSCALL(3, "syscall|unlinkat", (uint64_t) dirfd, (uint64_t) name, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
    return MAKE_SYSCALL(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t) dirfd, (uint64_t) name, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
 }
 
