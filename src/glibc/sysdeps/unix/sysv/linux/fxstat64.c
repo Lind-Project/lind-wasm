@@ -35,7 +35,6 @@
 int
 ___fxstat64 (int vers, int fd, struct stat64 *buf)
 {
-  // return MAKE_SYSCALL(17, "syscall|fxstat", (uint64_t) vers, (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
   return MAKE_SYSCALL(FSTATFS_SYSCALL, "syscall|fxstat", (uint64_t) vers, (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
 }
 

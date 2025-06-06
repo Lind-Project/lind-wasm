@@ -28,7 +28,6 @@
 int
 __truncate64 (const char *path, off64_t length)
 {
-   // return MAKE_SYSCALL(16, "syscall|truncate", (uint64_t) path, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
    return MAKE_SYSCALL(TRUNCATE_SYSCALL, "syscall|truncate", (uint64_t) path, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__truncate64, truncate64)

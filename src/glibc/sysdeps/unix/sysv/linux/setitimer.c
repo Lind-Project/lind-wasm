@@ -29,7 +29,6 @@ __setitimer64 (__itimer_which_t which,
                const struct __itimerval64 *restrict new_value,
                struct __itimerval64 *restrict old_value)
 {
-  // return MAKE_SYSCALL(150, "syscall|setitimer", (uint64_t) which, (uint64_t) new_value, (uint64_t) old_value, NOTUSED, NOTUSED, NOTUSED);
   return MAKE_SYSCALL(SETITIMER_SYSCALL, "syscall|setitimer", (uint64_t) which, (uint64_t) new_value, (uint64_t) old_value, NOTUSED, NOTUSED, NOTUSED);
 }
 

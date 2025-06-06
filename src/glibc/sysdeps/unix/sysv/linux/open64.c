@@ -41,7 +41,6 @@ __libc_open64 (const char *file, int oflag, ...)
     }
 
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-  // return MAKE_SYSCALL(10, "syscall|open", (uint64_t) file, (uint64_t) oflag | O_LARGEFILE, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
   return MAKE_SYSCALL(OPEN_SYSCALL, "syscall|open", (uint64_t) file, (uint64_t) oflag | O_LARGEFILE, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
 }
 

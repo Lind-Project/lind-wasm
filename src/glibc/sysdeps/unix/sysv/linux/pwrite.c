@@ -26,7 +26,6 @@
 ssize_t
 __libc_pwrite (int fd, const void *buf, size_t count, off_t offset)
 {
-   // return MAKE_SYSCALL(127, "syscall|pwrite", (uint64_t) fd, (uint64_t) buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
    return MAKE_SYSCALL(PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd, (uint64_t) buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
 }
 

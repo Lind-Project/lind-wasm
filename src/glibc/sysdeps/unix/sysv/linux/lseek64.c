@@ -28,7 +28,6 @@
 off64_t
 __lseek64 (int fd, off64_t offset, int whence)
 {
-// return MAKE_SYSCALL(14, "syscall|lseek", (uint64_t) fd, (uint64_t) offset, (uint64_t) whence, NOTUSED, NOTUSED, NOTUSED);
    return MAKE_SYSCALL(LSEEK_SYSCALL, "syscall|lseek", (uint64_t) fd, (uint64_t) offset, (uint64_t) whence, NOTUSED, NOTUSED, NOTUSED);
 }
 

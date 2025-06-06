@@ -49,7 +49,6 @@
 char *
 __getcwd (char *buf, size_t size)
 {
-	// return MAKE_SYSCALL(47, "syscall|getcwd", (uint64_t) buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 	return MAKE_SYSCALL(GETCWD_SYSCALL, "syscall|getcwd", (uint64_t) buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__getcwd)

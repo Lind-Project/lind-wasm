@@ -28,6 +28,5 @@
 void *
 shmat (int shmid, const void *shmaddr, int shmflg)
 {
-	// return MAKE_SYSCALL(63, "syscall|shmat", (uint64_t) shmid, (uint64_t) shmaddr, (uint64_t) shmflg, NOTUSED, NOTUSED, NOTUSED);
    return MAKE_SYSCALL(SHMAT_SYSCALL, "syscall|shmat", (uint64_t) shmid, (uint64_t) shmaddr, (uint64_t) shmflg, NOTUSED, NOTUSED, NOTUSED);
 }

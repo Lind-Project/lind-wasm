@@ -34,7 +34,6 @@
 int
 __xstat (int vers, const char *name, struct stat *buf)
 {
-	// return MAKE_SYSCALL(9, "syscall|xstat", (uint64_t) vers, (uint64_t) name, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
 	return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers, (uint64_t) name, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
 }
 

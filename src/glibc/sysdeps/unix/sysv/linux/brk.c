@@ -41,7 +41,6 @@ weak_alias (__curbrk, ___brk_addr)
 int
 __brk (void *addr)
 {
-	// return MAKE_SYSCALL(175, "syscall|brk", (uint64_t) addr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 	return MAKE_SYSCALL(BRK_SYSCALL, "syscall|brk", (uint64_t) addr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__brk, brk)

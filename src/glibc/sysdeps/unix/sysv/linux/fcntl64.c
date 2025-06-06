@@ -50,10 +50,8 @@ __libc_fcntl64 (int fd, int cmd, ...)
   cmd = FCNTL_ADJUST_CMD (cmd);
 
   if (cmd == F_SETLKW || cmd == F_SETLKW64 || cmd == F_OFD_SETLKW)
-    // return MAKE_SYSCALL(28, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
     return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
 
-  // return MAKE_SYSCALL(28, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
   return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__libc_fcntl64)
