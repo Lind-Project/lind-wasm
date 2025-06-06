@@ -41,3 +41,5 @@ extra_css:
 
 markdown_extensions:
   - admonition
+  - sane_lists
+  - pymdownx.superfences
