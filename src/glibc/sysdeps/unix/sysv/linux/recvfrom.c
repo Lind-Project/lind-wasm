@@ -19,12 +19,13 @@
 #include <sysdep-cancel.h>
 #include <socketcall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 ssize_t
 __libc_recvfrom (int fd, void *buf, size_t len, int flags,
 		 struct sockaddr *__restrict addr, socklen_t *addrlen)
 {
-	return MAKE_SYSCALL(37, "syscall|recvfrom", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, (uint64_t) addr, (uint64_t) addrlen);
+	return MAKE_SYSCALL(RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, (uint64_t) addr, (uint64_t) addrlen);
 }
 weak_alias (__libc_recvfrom, recvfrom)
 weak_alias (__libc_recvfrom, __recvfrom)
