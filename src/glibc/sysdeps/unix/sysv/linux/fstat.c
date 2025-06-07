@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+
 #if !XSTAT_IS_XSTAT64
 int
 __fstat (int fd, struct stat *buf)
@@ -31,7 +32,9 @@ __fstat (int fd, struct stat *buf)
       __set_errno (EBADF);
       return -1;
     }
+
   return MAKE_SYSCALL(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
+
 weak_alias (__fstat, fstat)
 #endif

@@ -21,7 +21,9 @@
 #include <not-cancel.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+
 /* Close the file descriptor FD.  */
+
 // Edit: Dennis
 int
 __close (int fd)
