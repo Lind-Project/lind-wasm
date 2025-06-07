@@ -22,6 +22,7 @@
 #include <internal-ioctl.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+
 int
 __ioctl (int fd, unsigned long int request, ...)
 {
@@ -29,10 +30,12 @@ __ioctl (int fd, unsigned long int request, ...)
   va_start (args, request);
   void *arg = va_arg (args, void *);
   va_end (args);
+  
         return MAKE_SYSCALL(IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd, (uint64_t) request, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__ioctl)
 weak_alias (__ioctl, ioctl)
+
 #if __TIMESIZE != 64
 strong_alias (__ioctl, __ioctl_time64)
 #endif
