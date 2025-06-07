@@ -30,7 +30,7 @@ __ioctl (int fd, unsigned long int request, ...)
   va_start (args, request);
   void *arg = va_arg (args, void *);
   va_end (args);
-  
+
         return MAKE_SYSCALL(IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd, (uint64_t) request, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__ioctl)
