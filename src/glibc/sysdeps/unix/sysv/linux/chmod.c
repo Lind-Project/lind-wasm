@@ -29,5 +29,6 @@ __chmod (const char *file, mode_t mode)
 {
    return MAKE_SYSCALL(CHMOD_SYSCALL, "syscall|chmod", (uint64_t) file, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
+
 libc_hidden_def (__chmod)
 weak_alias (__chmod, chmod)
