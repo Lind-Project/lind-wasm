@@ -770,12 +770,12 @@ pub fn check_and_convert_addr_ext(
 ///
 /// # Returns
 /// * `Ok(u64)` - Translated physical memory address. NULL if user address is NULL.
-pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
-    // do not convert NULL pointer
+pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Option<u64> {
+    // Return None for NULL pointer
     if arg == 0 {
-        return Ok(0);
+        return None;
     }
     // Get read lock on virtual memory map
     let vmmap = cage.vmmap.read();
-    Ok(vmmap.base_address.unwrap() as u64 + arg)
+    Some(vmmap.base_address.unwrap() as u64 + arg)
 }
