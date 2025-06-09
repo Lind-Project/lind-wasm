@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use rawposix::safeposix::dispatcher::lind_syscall_api;
+use threei::threei::{copy_data_between_cages, make_syscall, register_handler};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use wasmtime::Caller;
@@ -68,17 +68,25 @@ impl LindCommonCtx {
             // exit syscall
             30 => wasmtime_lind_multi_process::exit_syscall(caller, arg1 as i32),
             // other syscalls goes into rawposix
-            _ => lind_syscall_api(
-                self.pid as u64,
-                call_number,
-                call_name,
-                arg1,
-                arg2,
-                arg3,
-                arg4,
-                arg5,
-                arg6,
-            ),
+            _ => {
+                make_syscall(
+                    self.pid as u64,
+                    call_number as u64,
+                    self.pid as u64, // Set target_cageid same with self_cageid by defualt 
+                    arg1, 
+                    self.pid as u64,
+                    arg2,
+                    self.pid as u64,
+                    arg3, 
+                    self.pid as u64,
+                    arg4,
+                    self.pid as u64,
+                    arg5,
+                    self.pid as u64,
+                    arg6,
+                    self.pid as u64,
+                )
+            }
         }
     }
 
@@ -183,6 +191,33 @@ pub fn add_to_linker<
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
 
             retval
+        },
+    )?;
+
+    // attach register_handler to wasmtime
+    linker.func_wrap(
+        "lind",
+        "register-syscall",
+        move |targetcage: u64, targetcallnum: u64, handlefunc_index_in_this_grate: u64, this_grate_id: u64| -> i32 {
+            register_handler(0, targetcage, targetcallnum, 0, handlefunc_index_in_this_grate, this_grate_id, 0, 0, 0, 0, 0, 0, 0, 0)
+        },
+    )?;
+
+    // attach copy_data_between_cages to wasmtime
+    linker.func_wrap(
+        "lind",
+        "cp-data-syscall",
+        move |thiscage: u64, targetcage: u64, srcaddr: u64, srccage: u64, destaddr: u64, destcage: u64, len: u64, copytype: u64| -> i32 {
+            copy_data_between_cages(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, 0, copytype, 0, 0, 0, 0, 0) as i32
+        },
+    )?;
+
+    // attach copy_handler_table_to_cage to wasmtime
+    linker.func_wrap(
+        "lind", 
+        "copy_handler_table_to_cage", 
+        move |thiscage: u64, targetcage: u64| -> i32 {
+            copy_handler_table_to_cage(0, thiscage, targetcage, 0 ,0, 0, 0, 0, 0, 0, 0, 0, 0, 0) as i32
         },
     )?;
 

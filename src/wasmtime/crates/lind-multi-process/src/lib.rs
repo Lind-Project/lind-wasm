@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::{anyhow, Result};
-use rawposix::safeposix::dispatcher::lind_syscall_api;
+use threei::threei::make_syscall;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -352,11 +352,17 @@ impl<
         let parent_pid = self.pid;
 
         // calling fork in rawposix to fork the cage
-        lind_syscall_api(
+        make_syscall(
+            self.pid as u64, 
+            FORK_SYSCALL, // syscall num for fork 
+            self.pid as u64, 
+            child_cageid, 
             self.pid as u64,
-            FORK_SYSCALL as u32, // fork syscall
             0,
-            child_cageid,
+            0,
+            0,
+            0,
+            0,
             0,
             0,
             0,
@@ -505,11 +511,17 @@ impl<
                                 ) {
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
-                                    lind_syscall_api(
+                                    make_syscall(
+                                        child_cageid, // self cage
+                                        EXIT_SYSCALL, // syscall num
+                                        child_cageid, // target cage
+                                        *val as u64, // 1st arg: status
                                         child_cageid,
-                                        EXIT_SYSCALL as u32,
                                         0,
-                                        *val as u64,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
                                         0,
                                         0,
                                         0,
@@ -769,11 +781,17 @@ impl<
                             ) {
                                 // we clean the cage only if this is the last thread in the cage
                                 // exit the cage with the exit code
-                                lind_syscall_api(
-                                    child_cageid as u64,
-                                    EXIT_SYSCALL as u32,
+                                make_syscall(
+                                    child_cageid, // self cage
+                                    EXIT_SYSCALL, // syscall num
+                                    child_cageid, // target cage
+                                    *val as u64, // 1st arg: status
+                                    child_cageid,
                                     0,
-                                    *val as u64,
+                                    0,
+                                    0,
+                                    0,
+                                    0,
                                     0,
                                     0,
                                     0,
@@ -968,10 +986,10 @@ impl<
 
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
-            // lind_exec(cloned_pid as u64, cloned_pid as u64);
-            lind_syscall_api(
-                cloned_pid as u64,
-                EXEC_SYSCALL as u32, // exec syscall
+            make_syscall(
+                cloned_pid as u64, 
+                EXEC_SYSCALL, // syscall num for exec 
+                cloned_pid as u64, 
                 0,
                 0,
                 0,
@@ -979,6 +997,11 @@ impl<
                 0,
                 0,
                 0,
+                0,
+                0,
+                0,
+                0,
+                0, 
             );
 
             let ret = exec_call(
