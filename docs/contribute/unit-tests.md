@@ -54,22 +54,17 @@ bazel run //:python_tests -- --timeout 10
 
 2. **Filtering:** Applies include/exclude filters (`--run`, `--skip`, and
    `skip_test_cases.txt`).
-3. **Checking for expected outputs:** Test suite looks for expected output from
-   native run (the output of running the test case after compiling using gcc).
-   If it's not found, we will compile using gcc and run it to get the native
-   output.
-4. **Comparing Outputs:** For deterministic test cases, the outputs are directly
-   compared and considered a success if they match. For non-deterministic test
-   cases, the outputs are parsed and compared using a Python script.
-5. **Result Recording:** All test outcomes are stored with status, error type,
-   and full output.
-6. **Reporting:** JSON and HTML test reports are generated.
+3. **Test Execution:** Compiles and executes each test case twice, with native
+   gcc and with lind-wasm, and records the output. *(note: gcc is skipped for
+   tests with expected output fixture, and for tests with non-deterministic output)*
+4. **Comparing Outputs:**  Marks test as successful, if outputs match
+   *(note: non-deterministic tests always succeed, if compilation and execution
+   succeeds)*
+5. **Reporting:** Test results are written to a JSON- and  an HTML-formatted
+   report in the current working directory. The reports include a summary of the
+   full test run, and status, error type, and output of each test case.
 
-
-
-## Output Files
-- **JSON Report:** Detailed test summary in JSON format, saved at `lind-wasm/results.json`
-- **HTML Report:** Human-readable visualization of test outcomes, saved at `lind-wasm/report.html`
+## Error Types
 
 The output will show the total number of test cases, along with counts for
 successes, failures, and each of the following error types:
@@ -84,9 +79,6 @@ successes, failures, and each of the following error types:
 - "Lind_wasm_Timeout": Timed out During Lind Wasm run
 - "Output_mismatch": Mismatch in GCC and Wasm outputs
 - "Unknown_Failure": Unknown Failure
-
-The report also includes individual test case results, showing status
-(success/failure), error type (if any), and output generated.
 
 The outputs are split into deterministic and non-deterministic based on how the
 lind-wasm outputs are compared to the native gcc output. 
