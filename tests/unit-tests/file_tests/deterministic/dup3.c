@@ -1,59 +1,37 @@
 #define _GNU_SOURCE
 #include <fcntl.h>
-#include <stdio.h>
 #include <unistd.h>
-#include <stdlib.h>
-#include <sys/wait.h> 
+#include <stdio.h>
+#include <assert.h>
+#include <errno.h>
 
 int main() {
-    // Open a file with read/write permissions, create if it doesn’t exist, and truncate if it does.
-    int fd = open("testfile.txt", O_RDWR | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0) {
-        perror("open");
-        return 1;
-    }
+    // open file for writing
+    int fd1 = open("dup3_test.txt", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+    assert(fd1 >= 0);
 
-    // Use `dup3` to duplicate the file descriptor `fd` to `fd + 1` and set the O_CLOEXEC flag.
-    // O_CLOEXEC ensures that the duplicated file descriptor is automatically closed on exec().
-    int newfd = dup3(fd, fd + 1, O_CLOEXEC);
-    if (newfd < 0) {
-        perror("dup3");
-        return 1;
-    }
+    // duplicate fd1 to fd2 with O_CLOEXEC
+    int fd2 = dup3(fd1, fd1 + 1, O_CLOEXEC);
+    assert(fd2 > fd1);
 
-    printf("Before exec: oldfd=%d, newfd=%d (should be open)\n", fd, newfd);
+    // check FD_CLOEXEC flag
+    int flags = fcntl(fd2, F_GETFD);
+    assert(flags & FD_CLOEXEC);
 
-    // Fork a new process
-    pid_t pid = fork();
-    if (pid == 0) { 
-        // **Child Process: Execute a new program**
-        printf("[CHILD] Running exec...\n");
+    // write to both descriptors
+    write(fd1, "A", 1);
+    write(fd2, "B", 1);
 
-        // `exec()` replaces the current process with `/bin/cat /dev/null`, keeping the process running.
-        char *args[] = {"/bin/cat", "/dev/null", NULL};
-        execv(args[0], args);
+    // check file content is "AB"
+    close(fd1);
+    close(fd2);
+    FILE *f = fopen("dup3_test.txt", "r");
+    char buf[4] = {0};
+    fread(buf, 1, 3, f);
+    fclose(f);
+    assert(buf[0] == 'A' && buf[1] == 'B');
 
-        // If exec fails, this code executes (which should not happen if exec is successful).
-        perror("[CHILD] execv failed");
-        exit(1);
-    }
-
-    // Parent Process: Wait for the child to finish
-    wait(NULL);
-
-    //Test if O_CLOEXEC works
-    printf("[PARENT] Testing write after exec...\n");
-    if (write(newfd, "Test O_CLOEXEC\n", 15) < 0) {
-        perror("[PARENT] write to newfd failed (expected if O_CLOEXEC works)");
-    } else {
-        printf("[PARENT] write to newfd succeeded (O_CLOEXEC NOT working!)\n");
-    }
-
-    printf("[PARENT] Test completed.\n");
-
-    // Close the original and duplicated file descriptors
-    close(fd);
-    close(newfd);
+    printf("dup3 basic test passed.\n");
     return 0;
 }
 
