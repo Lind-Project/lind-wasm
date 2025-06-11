@@ -1,29 +1,27 @@
 // Filesystem metadata struct
 #![allow(dead_code)]
 
-use crate::constants::{
-    PROT_NONE, PROT_READ, PROT_WRITE,
-    MAP_SHARED, MAP_PRIVATE, MAP_FIXED, MAP_ANONYMOUS,
-    SHM_RDONLY, SHM_DEST,
+use sysdefs::constants::fs_const::{
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHM_DEST,
+    SHM_RDONLY,
 };
+use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
 
+use super::cage::Cage;
 use crate::interface;
 
 use libc::*;
-
-use super::cage::Cage;
 
 pub static SHM_METADATA: interface::RustLazyGlobal<interface::RustRfc<ShmMetadata>> =
     interface::RustLazyGlobal::new(|| interface::RustRfc::new(ShmMetadata::init_shm_metadata()));
 
 pub struct ShmSegment {
-    pub shminfo: interface::ShmidsStruct,
+    pub shminfo: ShmidsStruct,
     pub key: i32,
     pub size: usize,
     pub filebacking: interface::ShmFile,
     pub rmid: bool,
     pub attached_cages: interface::RustHashMap<u64, i32>, // attached cages, number of references in cage
-    pub semaphor_offsets: interface::RustHashSet<u32>,
 }
 
 pub fn new_shm_segment(
@@ -42,7 +40,7 @@ impl ShmSegment {
         let filebacking = interface::new_shm_backing(key, size).unwrap();
 
         let time = interface::timestamp() as isize; //We do a real timestamp now
-        let permstruct = interface::IpcPermStruct {
+        let permstruct = IpcPermStruct {
             __key: key,
             uid: uid,
             gid: gid,
@@ -55,7 +53,7 @@ impl ShmSegment {
             __unused1: 0,
             __unused2: 0,
         };
-        let shminfo = interface::ShmidsStruct {
+        let shminfo = ShmidsStruct {
             shm_perm: permstruct,
             shm_segsz: size as u32,
             shm_atime: 0,
@@ -73,7 +71,6 @@ impl ShmSegment {
             filebacking: filebacking,
             rmid: false,
             attached_cages: interface::RustHashMap::new(),
-            semaphor_offsets: interface::RustHashSet::new(),
         }
     }
     // mmap shared segment into cage, and increase attachments
@@ -126,6 +123,10 @@ impl ShmSegment {
             }
         };
     }
+
+    pub fn get_shm_length(&self) -> usize {
+        self.size
+    }
 }
 
 pub struct ShmMetadata {
@@ -142,9 +143,18 @@ impl ShmMetadata {
             shmtable: interface::RustHashMap::new(),
         }
     }
+    pub fn get_shm_length(&self, shmid: i32) -> Option<usize> {
+        self.shmtable.get(&shmid).map(|segment| segment.get_shm_length())
+    }
+    
 
     pub fn new_keyid(&self) -> i32 {
         self.nextid
             .fetch_add(1, interface::RustAtomicOrdering::Relaxed)
     }
+}
+
+pub fn get_shm_length(shmid: i32) -> Option<usize> {
+    let metadata: &ShmMetadata = &**SHM_METADATA;
+    metadata.get_shm_length(shmid)
 }

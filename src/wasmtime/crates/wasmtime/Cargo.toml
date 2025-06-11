@@ -59,6 +59,7 @@ smallvec = { workspace = true, optional = true }
 hashbrown = { workspace = true }
 libm = "0.2.7"
 bitflags = { workspace = true }
+sysdefs = { path = "../sysdefs" }
 rawposix = { path = "../rawposix" }
 wasmtime-lind-utils = { path = "../lind-utils" }
 

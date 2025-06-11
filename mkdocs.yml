@@ -1,0 +1,45 @@
+site_name: Lind-Wasm Docs
+site_url: https://lind-project.github.io/lind-wasm/
+repo_url: https://github.com/Lind-Project/lind-wasm/
+edit_uri: edit/main/docs/
+theme:
+  name: material
+  features:
+    - content.action.edit
+
+nav:
+  - Home: index.md
+  - Internal Documentation:
+    - libc: internal/libc.md
+    - Wasmtime: internal/wasmtime.md
+    - RawPOSIX: internal/rawposix.md
+    - Multi-Processing: internal/multiprocess-support.md
+  - Build System:
+    - Building libc: build/build-libc.md
+    - Building wasmtime: build/build-wasmtime.md
+    - Building RawPOSIX: build/build-rawposix.md
+    - Bazel: build/bazel.md
+  - Usage:
+    - Getting Started: use/getting-started.md
+    - Compile Programs: use/compile-programs.md
+    - Debug Programs: use/debug-programs.md
+    - Run Programs: use/run-programs.md
+    - Examples: use/examples.md
+  - Contributing:
+    - contribute/README.md
+    - Rust style guide: contribute/styleguide.md
+    - Unit tests: contribute/unit-tests.md
+    - Adding to the docs: contribute/add-docs.md
+    - Security policy: contribute/security.md
+  - Community:
+    - community/README.md
+    - Team: community/team.md
+    - Code of conduct: community/conduct.md
+
+extra_css:
+  - stylesheets/img.css
+
+markdown_extensions:
+  - admonition
+  - sane_lists
+  - pymdownx.superfences

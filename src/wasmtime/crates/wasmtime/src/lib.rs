@@ -403,3 +403,4 @@ pub mod _internal {
     // Exported just for the CLI.
     pub use crate::runtime::vm::MmapVec;
 }
+pub use crate::runtime::vm::traphandlers::{raise_trap, TrapReason};

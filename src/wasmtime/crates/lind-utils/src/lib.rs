@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Barrier, Condvar, Mutex};
+use std::sync::{Condvar, Mutex};
 
 pub mod lind_syscall_numbers;
 
