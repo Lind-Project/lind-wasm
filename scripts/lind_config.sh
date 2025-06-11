@@ -4,7 +4,7 @@ export HOME_DIR="$(dirname $script_dir)"
 export GLIBC_BASE="$HOME_DIR/src/glibc"
 export WASMTIME_BASE="$HOME_DIR/src/wasmtime"
 export RAWPOSIX_BASE="$HOME_DIR/src/RawPOSIX"
-export CLANG="$HOME_DIR/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
+export CLANG="$HOME_DIR/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
 export CC="$CLANG/bin/clang"
 
 # Compilation flags
@@ -86,7 +86,6 @@ compile_pthread_create="$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -c pthread_create.c -MD -MP -MF $GLIBC_BASE/build/nptl/pthread_create.o.dt \
     -MT $GLIBC_BASE/build/nptl/pthread_create.o"
 
-# Compiles lind syscall 
 compile_lind_syscall="$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $GLIBC_BASE/build/lind_syscall.o \
