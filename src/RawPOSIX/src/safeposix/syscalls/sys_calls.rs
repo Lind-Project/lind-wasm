@@ -221,11 +221,6 @@ impl Cage {
         // but we do not have the concept of process group in lind, so let's just treat it as cageid == 0
         if cageid <= 0 {
             loop {
-                // Check for pending signals at the start of each iteration
-                if interface::signal_check_trigger(self.cageid) {
-                    return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
-                }
-
                 if zombies.len() == 0 && (options & libc::WNOHANG > 0) {
                     // if there is no pending zombies and WNOHANG is set
                     // return immediately
@@ -237,6 +232,10 @@ impl Cage {
                     drop(zombies);
                     // TODO: replace busy waiting with more efficient mechanism
                     interface::lind_yield();
+                    // Check for pending signals after yielding (only if WNOHANG is not set)
+                    if (options & libc::WNOHANG == 0) && interface::signal_check_trigger(self.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                    }
                     // after sleep, get the write access of zombies list back
                     zombies = self.zombies.write();
                     continue;
@@ -280,11 +279,6 @@ impl Cage {
 
                 // now we have verified that the cage exists and is the child of the cage
                 loop {
-                    // Check for pending signals at the start of each iteration
-                    if interface::signal_check_trigger(self.cageid) {
-                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
-                    }
-
                     // the cage is not in the zombie list
                     // we need to wait for the cage to actually exit
 
@@ -292,6 +286,10 @@ impl Cage {
                     drop(zombies);
                     // TODO: replace busy waiting with more efficient mechanism
                     interface::lind_yield();
+                    // Check for pending signals after yielding (only if WNOHANG is not set)
+                    if (options & libc::WNOHANG == 0) && interface::signal_check_trigger(self.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                    }
                     // after sleep, get the write access of zombies list back
                     zombies = self.zombies.write();
 
