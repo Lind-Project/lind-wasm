@@ -144,9 +144,10 @@ impl ShmMetadata {
         }
     }
     pub fn get_shm_length(&self, shmid: i32) -> Option<usize> {
-        self.shmtable.get(&shmid).map(|segment| segment.get_shm_length())
+        self.shmtable
+            .get(&shmid)
+            .map(|segment| segment.get_shm_length())
     }
-    
 
     pub fn new_keyid(&self) -> i32 {
         self.nextid
