@@ -3,6 +3,8 @@ name: End-to-end testing
 on:
   push:
 
+permissions: {}
+
 jobs:
   docker:
     runs-on: ubuntu-latest
