@@ -845,21 +845,16 @@ impl Cage {
     /// ## Returns:
     ///     Return 0 when success; -1 along with errno when fail.
     pub fn close_syscall(&self, virtual_fd: i32) -> i32 {
-        match fdtables::close_virtualfd(self.cageid, virtual_fd as u64) {Add commentMore actions
-            Ok(()) => {
-                return 0;
-            }
+        match fdtables::close_virtualfd(self.cageid, virtual_fd as u64) {
             Ok(()) => 0,
             Err(e) => {
                 if e == Errno::EBADFD as u64 {
-                    return syscall_error(Errno::EBADF, "close", "bad file descriptor");
                     syscall_error(Errno::EBADF, "close", "Bad File Descriptor")
                 } else if e == Errno::EINTR as u64 {
                     syscall_error(Errno::EINTR, "close", "Interrupted system call")
                 } else {
                     syscall_error(Errno::EIO, "close", "I/O error")
                 }
-                return -1;
             }
         }
     }
