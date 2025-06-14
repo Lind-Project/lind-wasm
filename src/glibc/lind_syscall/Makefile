@@ -1,7 +1,7 @@
 # Define environment variables with default values
-CLANG_PATH ?= /home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang
-LIBC_INCLUDE_PATH ?= /home/lind-wasm/src/glibc/build
-CLANG_INCLUDE_PATH ?= /home/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/include
+CLANG_PATH ?= /home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang
+LIBC_INCLUDE_PATH ?= /home/lind/lind-wasm/src/glibc/build
+CLANG_INCLUDE_PATH ?= /home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/include
 
 # Compiler options
 COMMON_FLAGS := --target=wasm32-unkown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline \
