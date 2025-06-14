@@ -830,14 +830,34 @@ impl Cage {
      *   Get the kernel fd with provided virtual fd first
      *   close() will return 0 when sucess, -1 when fail
      */
+    /// Reference to Linux: https://man7.org/linux/man-pages/man2/close.2.htmlAdd commentMore actions
+    ///
+    /// Linux `close()` syscall closes a file descriptor. In our implementation, we use a file descriptor management
+    /// subsystem (called `fdtables`) to handle virtual file descriptors. This syscall removes the virtual file
+    /// descriptor from the subsystem, and if necessary, closes the underlying kernel file descriptor.
+    ///
+    /// ## Arguments:
+    ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+    ///     - cageid: current cage identifier.
+    ///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
+    ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
+    /// 
+    /// ## Returns:
+    ///     Return 0 when success; -1 along with errno when fail.
     pub fn close_syscall(&self, virtual_fd: i32) -> i32 {
-        match fdtables::close_virtualfd(self.cageid, virtual_fd as u64) {
+        match fdtables::close_virtualfd(self.cageid, virtual_fd as u64) {Add commentMore actions
             Ok(()) => {
                 return 0;
             }
+            Ok(()) => 0,
             Err(e) => {
                 if e == Errno::EBADFD as u64 {
                     return syscall_error(Errno::EBADF, "close", "bad file descriptor");
+                    syscall_error(Errno::EBADF, "close", "Bad File Descriptor")
+                } else if e == Errno::EINTR as u64 {
+                    syscall_error(Errno::EINTR, "close", "Interrupted system call")
+                } else {
+                    syscall_error(Errno::EIO, "close", "I/O error")
                 }
                 return -1;
             }
