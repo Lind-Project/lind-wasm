@@ -81,5 +81,5 @@ RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release
 ###################
 # Run TESTS
 ###################
-COPY --chown=lind:lind --parents scripts tests tools .
+COPY --chown=lind:lind --parents scripts tests tools skip_test_cases.txt .
 RUN ./scripts/wasmtestreport.py
