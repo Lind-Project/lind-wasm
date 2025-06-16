@@ -76,7 +76,7 @@ RUN ./src/glibc/gen_sysroot.sh
 # Build WASMTIME
 ###################
 COPY --chown=lind:lind --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs .
-RUN cargo build --manifest-path src/wasmtime/Cargo.toml
+RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release
 
 ###################
 # Run TESTS
