@@ -2,9 +2,9 @@
 
 set -x
 
-# Define absolute paths expected by lindtool.sh and wasmtestreport.sh
-GLIBC="/home/lind/lind-wasm/src/glibc"
-CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
+# TODO: Avoid absolute paths
+GLIBC="/src/glibc"
+CLANG="/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 BUILD="$GLIBC/build"
 CC="$CLANG/bin/clang"
 SYSROOT="$GLIBC/sysroot"

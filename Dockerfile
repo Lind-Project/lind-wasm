@@ -2,9 +2,8 @@
 # (use non-stable syntax for convenient --parents option in COPY command)
 
 # Download clang
-# NOTE: chmod is required to extract as user below
 FROM scratch AS clang
-ADD --chmod=644 https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz /clang.tar.xz
+ADD https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz /clang.tar.xz
 
 FROM ubuntu:latest
 
@@ -39,17 +38,6 @@ RUN apt-get update && \
         wget \
         zip
 
-#####################
-# USER SETUP
-#####################
-# TODO: do not require user and abspaths (in build/test scripts)
-RUN usermod --login lind --move-home --home /home/lind ubuntu && \
-    groupmod --new-name lind ubuntu
-RUN echo "lind ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-USER lind
-RUN mkdir /home/lind/lind-wasm
-WORKDIR /home/lind/lind-wasm
-
 
 ###################
 # USER DEPENDENCIES
@@ -59,7 +47,7 @@ WORKDIR /home/lind/lind-wasm
 # TODO: Beware of RUN layer caching: cache not invalidated by remote change
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain nightly-2025-06-01
-ENV PATH="/home/lind/.cargo/bin:${PATH}"
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Extract Clang
 # see best practices for downloading and extracting large files
@@ -69,17 +57,17 @@ RUN --mount=from=clang,target=/clang tar xf /clang/clang.tar.xz
 ###################
 # Build GLIBC
 ###################
-COPY --chown=lind:lind src/glibc src/glibc
+COPY src/glibc src/glibc
 RUN ./src/glibc/gen_sysroot.sh
 
 ###################
 # Build WASMTIME
 ###################
-COPY --chown=lind:lind --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs .
+COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs .
 RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release
 
-###################
-# Run TESTS
-###################
-COPY --chown=lind:lind --parents scripts tests tools skip_test_cases.txt .
-RUN ./scripts/wasmtestreport.py
+# ###################
+# # Run TESTS
+# ###################
+COPY --parents scripts tests tools skip_test_cases.txt .
+RUN LIND_WASM_BASE=/  LIND_FS_ROOT=/src/RawPOSIX/tmp ./scripts/wasmtestreport.py
