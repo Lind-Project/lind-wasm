@@ -13,4 +13,4 @@ guide and [docs on our website](https://lind-project.github.io/lind-wasm/)
 to learn more about Lind!
 
 
-
+Debug ci
