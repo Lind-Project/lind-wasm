@@ -2,7 +2,7 @@
 
 ## 1. Binary Rewriting
 
-As we do not have a way to interrupt a running WebAssembly thread without directly using kernel functions like `pthread_kill`, our approach inserts signal checks into the Wasm binary. These checks allow the binary to spontaneously callback to the host when the host indicates there are pending signals via an epoch mechanism. The inserted signal checks detect changes in the epoch value, which is managed by Wasmtime’s existing epoch insertion infrastructure at the Cranelift IR level.
+As we do not have a way to interrupt a running WebAssembly thread without directly using kernel functions like `pthread_kill`, our approach inserts signal checks into the Wasm binary. These checks allow the binary to spontaneously callback to the host when the host indicates there are pending signals via an [epoch mechanism](https://docs.wasmtime.dev/examples-interrupting-wasm.html). The inserted signal checks detect changes in the epoch value, which is managed by Wasmtime’s existing epoch insertion infrastructure at the Cranelift IR level.
 
 However, this approach is incompatible with Asyncify, the tool we use to support multi-processing, as Asyncify operates at the Wasm level. To have both epoch-based signal handling and Asyncify-based multi-processing work together, we had two options:
 
