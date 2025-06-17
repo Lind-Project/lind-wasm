@@ -77,7 +77,7 @@ cd $BUILD
   CFLAGS=" -matomics -mbulk-memory -O2 -g" \
   CC="$CC --target=wasm32-unkown-wasi -v -Wno-int-conversion"
 
-make -j8 --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
+make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
 
 # Build extra
 cd ../nptl
