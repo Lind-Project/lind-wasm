@@ -24,8 +24,8 @@ jobs:
 
       - name: Switch to Rust nightly
         run: |
-          rustup update nightly
-          rustup default nightly
+          # Pin to last working nightly version (see #242)
+          rustup default nightly-2025-06-08
           rustup component add clippy
 
       - name: Clippy
