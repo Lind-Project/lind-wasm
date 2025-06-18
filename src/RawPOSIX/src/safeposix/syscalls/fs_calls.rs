@@ -852,6 +852,43 @@ impl Cage {
         }
     }
 
+    /// dup3() duplicates `old_virtualfd` to `new_virtualfd`, similar to dup2(),
+    /// but requires the two descriptors to differ and allows setting FD_CLOEXEC via `flags`.
+    /// It first calls `dup2_syscall` to copy the file descriptor, then sets the close-on-exec flag if requested.
+
+    /// ## Arguments:
+    /// - `old_virtualfd`: source virtual file descriptor
+    /// - `new_virtualfd`: target virtual file descriptor
+    /// - `flags`: must be 0 or O_CLOEXEC
+    ///
+    /// ## Return:
+    /// - `new_virtualfd` on success
+    /// - `-1` on error, with errno set (EBADF or EINVAL)
+    pub fn dup3_syscall(&self, old_virtualfd: i32, new_virtualfd: i32, flags: i32) -> i32 {
+        if old_virtualfd < 0 || new_virtualfd < 0 {
+            return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
+        }
+    
+        if old_virtualfd == new_virtualfd {
+            return syscall_error(Errno::EINVAL, "dup3", "oldfd and newfd must be different");
+        }
+    
+        if flags != 0 && flags != O_CLOEXEC {
+            return syscall_error(Errno::EINVAL, "dup3", "Invalid flags");
+        }
+    
+        let ret = self.dup2_syscall(old_virtualfd, new_virtualfd);
+        if ret < 0 {
+            return ret;
+        }
+    
+        if flags == O_CLOEXEC {
+            let _ = fdtables::set_cloexec(self.cageid, new_virtualfd as u64, true);
+        }
+    
+        return new_virtualfd;
+    }
+
     //------------------------------------CLOSE SYSCALL------------------------------------
     /// Reference to Linux: https://man7.org/linux/man-pages/man2/close.2.html
     ///
