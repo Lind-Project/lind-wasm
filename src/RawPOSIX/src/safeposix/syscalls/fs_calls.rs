@@ -854,7 +854,8 @@ impl Cage {
 
     /// dup3() duplicates `old_virtualfd` to `new_virtualfd`, similar to dup2(),
     /// but requires the two descriptors to differ and allows setting FD_CLOEXEC via `flags`.
-    ///
+    /// It first calls `dup2_syscall` to copy the file descriptor, then sets the close-on-exec flag if requested.
+
     /// ## Arguments:
     /// - `old_virtualfd`: source virtual file descriptor
     /// - `new_virtualfd`: target virtual file descriptor
