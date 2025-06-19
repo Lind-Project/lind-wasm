@@ -54,7 +54,7 @@ SYS_INCLUDE="-nostdinc -isystem $CLANG/lib/clang/16/include -isystem /usr/i686-l
 DEFINES="-D_LIBC_REENTRANT -include $GLIBC_BASE/build/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
-precompile_wasm="$WASMTIME_BASE/target/debug/wasmtime compile [input] -o [output]"
+precompile_wasm="$WASMTIME_BASE/target/release/wasmtime compile [input] -o [output]"
 
 compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi \
 --sysroot $GLIBC_BASE/sysroot \
@@ -62,16 +62,16 @@ compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi \
 [input] -g -O0 -o [output] && \
  $HOME_DIR/tools/binaryen/bin/wasm-opt --epoch-injection --asyncify -O2 --debuginfo [output] -o [output]"
 
-run_cmd="$WASMTIME_BASE/target/debug/wasmtime run --wasi \
+run_cmd="$WASMTIME_BASE/target/release/wasmtime run --wasi \
 threads=y \
 --wasi preview2=n [target]"
 
-run_cmd_precompile="$WASMTIME_BASE/target/debug/wasmtime run \
+run_cmd_precompile="$WASMTIME_BASE/target/release/wasmtime run \
 --allow-precompiled \
 --wasi threads=y \
 --wasi preview2=n [target]"
 
-run_cmd_debug="gdb --args $WASMTIME_BASE/target/debug/wasmtime run \
+run_cmd_debug="gdb --args $WASMTIME_BASE/target/release/wasmtime run \
 -D debug-info \
 -O opt-level=0 \
 --wasi threads=y \

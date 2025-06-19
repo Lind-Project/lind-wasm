@@ -1,0 +1,67 @@
+# syntax=docker/dockerfile:1.7-labs
+# (use non-stable syntax for convenient --parents option in COPY command)
+
+# Download clang
+FROM scratch AS clang
+ADD https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz /clang.tar.xz
+
+FROM ubuntu:latest
+
+#####################
+# DEPENDENCIES
+#####################
+# Install misc build dependencies
+# TODO: only install required hard requirements, see best practices
+# https://docs.docker.com/build/building/best-practices/#apt-get
+RUN apt-get update && \
+    apt-get install -y -qq \
+        apt-transport-https \
+        bash \
+        binaryen \
+        bison \
+        build-essential \
+        curl \
+        g++ \
+        g++-i686-linux-gnu \
+        gawk \
+        gcc \
+        gcc-i686-linux-gnu \
+        git \
+        gnupg \
+        golang \
+        libssl-dev \
+        libxml2 \
+        openssl \
+        python3 \
+        sudo \
+        unzip \
+        vim \
+        wget \
+        zip
+
+# Install known-to-work rust nightly version (see #242)
+# NOTE: cache not invalidated by remote change
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain nightly-2025-06-01
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install clang (extract downloaded binary using mount as per best practices)
+RUN --mount=from=clang,target=/clang tar xf /clang/clang.tar.xz
+
+###################
+# Build GLIBC
+###################
+COPY src/glibc src/glibc
+RUN ./src/glibc/gen_sysroot.sh
+
+###################
+# Build WASMTIME
+###################
+COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs .
+RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release
+
+###################
+# Run TESTS
+###################
+COPY --parents scripts tests tools skip_test_cases.txt .
+RUN LIND_WASM_BASE=/  LIND_FS_ROOT=/src/RawPOSIX/tmp ./scripts/wasmtestreport.py
