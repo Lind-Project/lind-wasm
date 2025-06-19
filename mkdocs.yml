@@ -22,6 +22,7 @@ nav:
     - Bazel: build/bazel.md
   - Usage:
     - Getting Started: use/getting-started.md
+    - Lind Toolchain: use/toolchain.md
     - Compile Programs: use/compile-programs.md
     - Debug Programs: use/debug-programs.md
     - Run Programs: use/run-programs.md
