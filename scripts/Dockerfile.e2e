@@ -51,8 +51,8 @@ RUN --mount=from=clang,target=/clang tar xf /clang/clang.tar.xz
 ###################
 # Build GLIBC
 ###################
-COPY src/glibc src/glibc
-RUN ./src/glibc/gen_sysroot.sh
+COPY --parents scripts/make_glibc_and_sysroot.sh src/glibc .
+RUN ./scripts/make_glibc_and_sysroot.sh
 
 ###################
 # Build WASMTIME
