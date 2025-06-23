@@ -1,6 +1,6 @@
 #!/bin/bash
 
-GLIBC_BASE="/home/lind/lind-wasm/src/glibc"
+GLIBC_BASE="/home/alice/lind-wasm/src/glibc"
 # Define the source directory for object files (change ./build to your desired path)
 src_dir="$GLIBC_BASE/build"
 
@@ -35,7 +35,7 @@ fi
 mkdir -p "$sysroot_dir/include/wasm32-wasi" "$sysroot_dir/lib/wasm32-wasi"
 
 # Pack all found .o files into a single .a archive
-${CLANG:=/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/llvm-ar rcs "$output_archive" $object_files
+${CLANG:=/home/alice/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/llvm-ar rcs "$output_archive" $object_files
 "$CLANG/bin/llvm-ar" crs "$GLIBC_BASE/sysroot/lib/wasm32-wasi/libpthread.a"
 
 # Check if llvm-ar succeeded
