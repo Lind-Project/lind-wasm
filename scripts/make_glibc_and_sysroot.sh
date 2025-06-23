@@ -1,8 +1,20 @@
 #!/bin/bash
-
+#
+# This script merges several existing scripts in order to setup clang for
+# cross-compiling lind programs. Reasons to not use the existing scripts
+# include side-stepping bazel (for a leaner build), issues with hard-coded
+# absolute paths and aggregation of related build routines for better layer
+# caching in its usage context Docker (see scripts/Dockerfile.e2e).
+#
+# TODO: de-duplicate with existing tools and build scripts
+# - .devcontainer/Dockerfile (cp src/glibc/wasi)
+# - BUILD (make_glibc)
+# - src/glibc/wasm-config.sh
+# - src/glibc/gen_sysroot.sh
+#
 set -x
 
-# TODO: Avoid absolute paths
+# TODO: Fix absolute paths (consider using $PWD, if necessary)
 GLIBC="/src/glibc"
 CLANG="/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
 BUILD="$GLIBC/build"
