@@ -58,7 +58,11 @@ RUN ./scripts/make_glibc_and_sysroot.sh
 # Build WASMTIME
 ###################
 COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs .
-RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release
+# Build wasmtime with `--release` flag for faster tests with workaround for
+# hard-coded paths in tests tools (lind_config.sh).
+# TODO: install wasmtime binary on PATH and remove hardcoded paths in tools
+RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release && \
+    (cd src/wasmtime/target && ln -sf ../release/wasmtime debug)
 
 ###################
 # Run TESTS
