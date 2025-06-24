@@ -517,8 +517,7 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let fd2 = arg2 as i32;
             let flags = arg3 as i32;
-            interface::cagetable_getref(cageid)
-                .dup3_syscall(fd, fd2, flags)
+            interface::cagetable_getref(cageid).dup3_syscall(fd, fd2, flags)
         }
 
         FCHMOD_SYSCALL => {
