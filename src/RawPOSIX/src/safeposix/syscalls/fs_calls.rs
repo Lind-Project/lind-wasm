@@ -868,24 +868,24 @@ impl Cage {
         if old_virtualfd < 0 || new_virtualfd < 0 {
             return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
         }
-    
+
         if old_virtualfd == new_virtualfd {
             return syscall_error(Errno::EINVAL, "dup3", "oldfd and newfd must be different");
         }
-    
+
         if flags != 0 && flags != O_CLOEXEC {
             return syscall_error(Errno::EINVAL, "dup3", "Invalid flags");
         }
-    
+
         let ret = self.dup2_syscall(old_virtualfd, new_virtualfd);
         if ret < 0 {
             return ret;
         }
-    
+
         if flags == O_CLOEXEC {
             let _ = fdtables::set_cloexec(self.cageid, new_virtualfd as u64, true);
         }
-    
+
         return new_virtualfd;
     }
 
