@@ -68,4 +68,5 @@ RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release && \
 # Run TESTS
 ###################
 COPY --parents scripts tests tools skip_test_cases.txt .
-RUN LIND_WASM_BASE=/  LIND_FS_ROOT=/src/RawPOSIX/tmp ./scripts/wasmtestreport.py
+RUN LIND_WASM_BASE=/  LIND_FS_ROOT=/src/RawPOSIX/tmp ./scripts/wasmtestreport.py && \
+    cat results.json
