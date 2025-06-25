@@ -69,5 +69,8 @@ RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release && \
 # Run TESTS
 ###################
 COPY --parents scripts tests tools skip_test_cases.txt .
+# Run tests, print results and exit with 1, if failures are reported, and 0 otherwise
+# TODO: return meaningful exit code from wasmtestreport.py to avoid brittle grep hack
 RUN LIND_WASM_BASE=/  LIND_FS_ROOT=/src/RawPOSIX/tmp ./scripts/wasmtestreport.py && \
-    cat results.json
+    cat results.json && \
+    ! grep '"number_of_failures": [^0]' results.json
