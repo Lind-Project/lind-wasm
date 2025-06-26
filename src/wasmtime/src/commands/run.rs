@@ -9,7 +9,6 @@ use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
-use rawposix::safeposix::dispatcher::lind_syscall_api;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
@@ -26,6 +25,9 @@ use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
 
+use threei::threei::{make_syscall, threei_wasm_func};
+use wasmtime::vm::InstanceHandle;
+
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::WasiNnCtx;
 
@@ -41,6 +43,43 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
         bail!("must contain exactly one equals character ('=')");
     }
     Ok((parts[0].into(), parts[1].into()))
+}
+
+/// `VM_TABLE` stores the runtime context (`InstanceHandle`) of each running Wasm instance, 
+/// indexed by the instance's ID (`pid`).
+/// 
+/// This is used in 3i to support cross-instance closure calls, allowing syscalls from one 
+/// cage to invoke functions in another cage. For example, when a syscall from cage A is 
+/// routed to a function in grate B, we need to look up grate B’s runtime context in order 
+/// to call the closure inside it.
+/// 
+/// The runtime context includes a pointer to the instance’s `VMContext`, which is required
+/// by Wasmtime to correctly re-enter the target instance with the right execution state.
+/// 
+/// - `insert_ctx(pid, ctx)` is called during instance initialization to register its context.
+/// - `get_ctx(pid)` retrieves the context by `pid`, and uses `unsafe { ctx.clone() }`
+///   to manually clone the handle for invocation.
+static VM_TABLE: Lazy<RwLock<Vec<Option<InstanceHandle>>>> = Lazy::new(|| {
+    RwLock::new(Vec::new())
+});
+
+fn insert_ctx(pid: usize, ctx: InstanceHandle) {
+    let mut table = VM_TABLE.write().unwrap();
+    if pid >= table.len() {
+        table.resize(pid + 1, None);
+    }
+    table[pid] = Some(ctx);
+}
+
+fn get_ctx(pid: usize) -> InstanceHandle {
+    let table = VM_TABLE.read().unwrap();
+    let ctx = table[pid].as_ref().unwrap();
+    // SAFETY: `InstanceHandle` cloning is `unsafe` because it may lead to VMContext aliasing
+    // if not properly managed. Here, we assume the cloned context is only used temporarily
+    // and not stored beyond the scope of the call.
+    unsafe {
+        ctx.clone()
+    }
 }
 
 /// Runs a WebAssembly module
@@ -232,7 +271,23 @@ impl RunCommand {
                 ) {
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
-                    lind_syscall_api(1, EXIT_SYSCALL as u32, 0, code as u64, 0, 0, 0, 0, 0);
+                    make_syscall(
+                        1,
+                        EXIT_SYSCALL,
+                        1,
+                        code as u64, // Exit type
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    );
 
                     // main cage exits
                     lind_manager.decrement();
@@ -575,16 +630,10 @@ impl RunCommand {
         let result = match linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
-                let instance = linker
-                    .instantiate_with_lind(
-                        &mut *store,
-                        &module,
-                        InstantiateType::InstantiateFirst(pid),
-                    )
-                    .context(format!(
-                        "failed to instantiate {:?}",
-                        self.module_and_args[0]
-                    ))?;
+                let (instance, grate_instanceid) = linker.instantiate_with_lind(&mut *store, &module, InstantiateType::InstantiateFirst(pid)).context(format!(
+                    "failed to instantiate {:?}",
+                    self.module_and_args[0]
+                ))?;
 
                 // If `_initialize` is present, meaning a reactor, then invoke
                 // the function.
@@ -630,6 +679,74 @@ impl RunCommand {
 
                 // see comments at signal_may_trigger for more details
                 rawposix::interface::signal_may_trigger(pid);
+
+                // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s 
+                // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across 
+                // instance boundaries particularly difficult. To overcome this, the design employs low-level context 
+                // capture by extracting and storing vmctx pointers from Wasmtime’s internal StoreOpaque and InstanceHandler 
+                // structures. These pointers are stored in a global registry, enabling safe, cross-thread access 
+                // without violating Rust’s safety guarantees. The closure registered with ThreeI is dynamically 
+                // name-resolving: it receives a raw C string pointer to a syscall name, normalizes it (e.g., 
+                // by stripping prefixes and appending _grate), and uses Wasmtime’s reflective export API to locate 
+                // and type-check the corresponding Wasm function. This allows ThreeI to directly invoke per-syscall 
+                // exports without needing an internal dispatcher within the Wasm module. To complete the bridge 
+                // between host and guest, the system uses Caller::with() to re-enter the Wasmtime runtime context 
+                // from the host side.
+                // 1. get StoreOpaque
+                let grate_storeopaque = store.inner_mut();
+                // 2. get InstanceHandler
+                let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
+                // 3. store InstanceHandler to global table, because we need the ptr to have Send+Sync, we need to 
+                // store the wrapper of vmctx ptr
+                let current_pid = pid;
+                unsafe {
+                    insert_ctx(current_pid as usize, grate_instancehandler.clone());
+                }
+                
+                let res = threei_wasm_func(current_pid, Box::new(move |call_ptr: u64, cageid: u64, arg1: u64, arg1cageid: u64, arg2: u64, arg2cageid: u64, arg3: u64, arg3cageid: u64, arg4: u64, arg4cageid: u64, arg5: u64, arg5cageid: u64, arg6: u64, arg6cageid: u64| -> i32 {
+                    let syscall_name = unsafe {
+                        let c_str = CStr::from_ptr(call_ptr as *const i8); 
+                        let rust_str = c_str.to_str().expect("[wasmtime|run] Invalid UTF-8 in call name field"); 
+                        let trimmed = rust_str.strip_prefix("syscall|").unwrap_or(rust_str);
+                        let modified_str = format!("{}_grate", trimmed);
+                        modified_str
+                    };
+
+                    let grate_handler = get_ctx(current_pid as usize);
+                    let ctx = grate_handler.vmctx();
+                    unsafe {
+                        Caller::with(ctx, |mut caller: Caller<'_, Host>| {
+
+                            let Caller { mut store, caller: instance } = caller;
+                            
+                            let grate_entry_func = instance.host_state()
+                                    .downcast_ref::<Instance>().unwrap()
+                                    .get_export(&mut store, &syscall_name).and_then(|f| f.into_func())
+                                                    .ok_or_else(|| anyhow!("failed to find function export `{}`", syscall_name)).unwrap();
+                            
+                            let grate_entry_point = match grate_entry_func.typed::<(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64), i32>(&mut store) {
+                                Ok(typed_func) => typed_func,
+                                Err(_e) => {
+                                    return -1; 
+                                }
+                            };
+                            
+                            let result = match grate_entry_point.call(&mut store, (index, cageid, arg1, arg1cageid, arg2, arg2cageid, arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6, arg6cageid)) {
+                                Ok(value) => value,
+                                Err(e) => {
+                                    eprintln!("Error calling pass_fptr_to_wt: {:?}", e);
+                                    return -1; 
+                                }
+                            };
+                            result
+                        })
+                    }
+                    
+                    
+                }));
+                if res < 0 {
+                    panic!("[wasmtime|instance] error on passing instance_pre to 3i");
+                }
 
                 match func {
                     Some(func) => self.invoke_func(store, func),
