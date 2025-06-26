@@ -11,7 +11,6 @@ use sysdefs::constants::threei_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE, MAP_ANONYMOUS, MAP_PRIVATE}; // Used in `copy_data_between_cages`
 use typemap::syscall_conv::sc_convert_uaddr_to_host;
 
-// Develop purpose only
 const EXIT_SYSCALL: u64 = 60; // exit syscall number
 const MMAP_SYSCALL: u64 = 9; // mmap syscall number
 
@@ -30,7 +29,7 @@ const MMAP_SYSCALL: u64 = 9; // mmap syscall number
 /// 
 /// ## Returns:
 /// Always returns 0. Panics if grateid is out of bounds.
-pub fn threei_test_func(grateid: u64, mut callback: Box<dyn FnMut(
+pub fn threei_wasm_func(grateid: u64, mut callback: Box<dyn FnMut(
     u64, u64, u64, u64, u64,
     u64, u64, u64, u64, u64,
     u64, u64, u64, u64
@@ -45,7 +44,7 @@ pub fn threei_test_func(grateid: u64, mut callback: Box<dyn FnMut(
             if index < vec.len() {
                 vec[index] = Some(callback);
             } else {
-                panic!("[3i|threei_test_func] Index out of bounds: {}", index);
+                panic!("[3i|threei_wasm_func] Index out of bounds: {}", index);
             }
         }
     }
@@ -53,6 +52,22 @@ pub fn threei_test_func(grateid: u64, mut callback: Box<dyn FnMut(
     0
 }
 
+/// Each entry in the `Vec` corresponds to a specific grate, and the index is used as its identifier 
+/// (`grate_id`). The position must be stable even if some grates are removed, so we use `Option` to 
+/// allow for "holes" in the vector.
+/// 
+/// - The outer `Option` represents whether the entire registry has been initialized.
+/// - The inner `Vec<Option<Box<dyn FnMut(...)>>>` holds optional callback closures per grate.
+/// - The inner `Option` allows a specific grate slot to be empty (e.g., after removal).
+///
+/// Each callback is a boxed closure that handles intercepted syscalls (registered at `threei_wasm_func`). 
+/// These callbacks are created dynamically and passed from the Wasmtime runtime.
+/// Example layout:
+///     GLOBAL_GRATE = Some(vec![
+///         Some(Box::new(grate0_handler)),  // grate_id = 0
+///         None,                            // grate_id = 1 (removed or not initialized)
+///         Some(Box::new(grate2_handler)),  // grate_id = 2
+///     ])
 static mut GLOBAL_GRATE: Option<Vec<Option<Box<dyn FnMut(
     u64, u64, u64, u64, u64,
     u64, u64, u64, u64, u64,
@@ -73,6 +88,7 @@ static mut GLOBAL_GRATE: Option<Vec<Option<Box<dyn FnMut(
 /// ## Returns:
 /// None
 fn _init_global_grate() {
+    // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
     unsafe {
         if GLOBAL_GRATE.is_none() {
             GLOBAL_GRATE = Some(Vec::new()); 
@@ -102,6 +118,7 @@ fn _init_global_grate() {
 /// ## Returns:
 /// None
 fn _rm_from_global_grate(grateid: u64) {
+    // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
     unsafe {
         if let Some(ref mut global_grate) = GLOBAL_GRATE {
             if grateid < global_grate.len() as u64 {
@@ -139,6 +156,7 @@ fn _call_grate_func(
     // manually extract the string content from the address 
     let call_ptr = sc_convert_buf(call_name, self_cageid, self_cageid);
 
+    // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
     unsafe {
         let vec = GLOBAL_GRATE.as_mut()?;
         let func = vec.get_mut(grateid as usize)?.as_mut()?;
@@ -280,7 +298,7 @@ pub fn register_handler(
     _arg6cage: u64,
 ) -> i32 {
     // Make sure that both the cage that registers the handler and the cage being registered are valid (not in exited state)
-    if EXITING_TABLE.contains(&targetcage) && EXITING_TABLE.contains(&handlefunccage) {
+    if EXITING_TABLE.contains(&targetcage) || EXITING_TABLE.contains(&handlefunccage) {
         return threei_const::ELINDESRCH as i32;
     }
 
