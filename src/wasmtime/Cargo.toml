@@ -59,6 +59,7 @@ wasmtime-lind-common = { path = "crates/lind-common" }
 wasmtime-lind-utils = { path = "crates/lind-utils" }
 wasmtime-wasi-http = { workspace = true, optional = true }
 rawposix = { workspace = true }
+threei = { workspace = true }
 fdtables = { workspace = true }
 sysdefs = { workspace = true }
 clap = { workspace = true }
@@ -153,6 +154,7 @@ members = [
   "examples/min-platform/embedding",
   "fuzz",
   "winch/codegen",
+  "crates/threei",
   "crates/rawposix",
   "crates/fdtables",
   "crates/sysdefs",
@@ -220,6 +222,7 @@ wasmtime-fuzzing = { path = "crates/fuzzing" }
 wasmtime-jit-icache-coherence = { path = "crates/jit-icache-coherence", version = "=23.0.0" }
 wasmtime-wit-bindgen = { path = "crates/wit-bindgen", version = "=23.0.0" }
 test-programs-artifacts = { path = 'crates/test-programs/artifacts' }
+threei = { path = "crates/threei" }
 rawposix = { path = "crates/rawposix" }
 fdtables = { path = "crates/fdtables" }
 sysdefs = { path = "crates/sysdefs" }
