@@ -25,7 +25,7 @@ use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
 
-use threei::threei::{make_syscall, threei_test_func};
+use threei::threei::{make_syscall, threei_wasm_func};
 use wasmtime::vm::InstanceHandle;
 
 #[cfg(feature = "wasi-nn")]
@@ -45,6 +45,20 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
     Ok((parts[0].into(), parts[1].into()))
 }
 
+/// `VM_TABLE` stores the runtime context (`InstanceHandle`) of each running Wasm instance, 
+/// indexed by the instance's ID (`pid`).
+/// 
+/// This is used in 3i to support cross-instance closure calls, allowing syscalls from one 
+/// cage to invoke functions in another cage. For example, when a syscall from cage A is 
+/// routed to a function in grate B, we need to look up grate B’s runtime context in order 
+/// to call the closure inside it.
+/// 
+/// The runtime context includes a pointer to the instance’s `VMContext`, which is required
+/// by Wasmtime to correctly re-enter the target instance with the right execution state.
+/// 
+/// - `insert_ctx(pid, ctx)` is called during instance initialization to register its context.
+/// - `get_ctx(pid)` retrieves the context by `pid`, and uses `unsafe { ctx.clone() }`
+///   to manually clone the handle for invocation.
 static VM_TABLE: Lazy<RwLock<Vec<Option<InstanceHandle>>>> = Lazy::new(|| {
     RwLock::new(Vec::new())
 });
@@ -60,6 +74,9 @@ fn insert_ctx(pid: usize, ctx: InstanceHandle) {
 fn get_ctx(pid: usize) -> InstanceHandle {
     let table = VM_TABLE.read().unwrap();
     let ctx = table[pid].as_ref().unwrap();
+    // SAFETY: `InstanceHandle` cloning is `unsafe` because it may lead to VMContext aliasing
+    // if not properly managed. Here, we assume the cloned context is only used temporarily
+    // and not stored beyond the scope of the call.
     unsafe {
         ctx.clone()
     }
@@ -686,7 +703,7 @@ impl RunCommand {
                     insert_ctx(current_pid as usize, grate_instancehandler.clone());
                 }
                 
-                let res = threei_test_func(current_pid, Box::new(move |call_ptr: u64, cageid: u64, arg1: u64, arg1cageid: u64, arg2: u64, arg2cageid: u64, arg3: u64, arg3cageid: u64, arg4: u64, arg4cageid: u64, arg5: u64, arg5cageid: u64, arg6: u64, arg6cageid: u64| -> i32 {
+                let res = threei_wasm_func(current_pid, Box::new(move |call_ptr: u64, cageid: u64, arg1: u64, arg1cageid: u64, arg2: u64, arg2cageid: u64, arg3: u64, arg3cageid: u64, arg4: u64, arg4cageid: u64, arg5: u64, arg5cageid: u64, arg6: u64, arg6cageid: u64| -> i32 {
                     let syscall_name = unsafe {
                         let c_str = CStr::from_ptr(call_ptr as *const i8); 
                         let rust_str = c_str.to_str().expect("[wasmtime|run] Invalid UTF-8 in call name field"); 
