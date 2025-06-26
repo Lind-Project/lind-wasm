@@ -6,9 +6,9 @@ use typemap::fs_conv::*;
 
 /// Helper function for close_syscall
 /// 
-/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't
-/// be closed in Lind-WASM execution, which preventing issues where other threads might reassign these
-/// fds, causing unintended behavior or errors. 
+/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard IO stream fds 
+/// shouldn't be closed in Lind-WASM execution, which preventing issues where other threads might 
+/// reassign these ds, causing unintended behavior or errors. 
 /// 
 /// This function is registered in `fdtables` when creating the cage
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
