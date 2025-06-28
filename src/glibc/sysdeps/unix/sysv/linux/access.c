@@ -20,11 +20,11 @@
 #include <unistd.h>
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
-
+#include <lind_syscall_num.h>
 int
 __access (const char *file, int type)
 {
-   return MAKE_SYSCALL(2, "syscall|access", (uint64_t) file, (uint64_t) type, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(ACCESS_SYSCALL, "syscall|access", (uint64_t) file, (uint64_t) type, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__access)
 weak_alias (__access, access)

@@ -18,6 +18,7 @@
 #include <signal.h>
 #include <pthreadP.h>              /* SIGCANCEL, SIGSETXID */
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Get and/or change the set of blocked signals.  */
 int
@@ -28,7 +29,7 @@ __sigprocmask (int how, const sigset_t *set, sigset_t *oset)
    // check for NULL pointer
    if (set)
       rawposix_set = set->__val[0];
-   int retval = MAKE_SYSCALL(149, "syscall|sigprocmask", (uint64_t) how, (uint64_t) (set ? &rawposix_set : NULL), (uint64_t) (oset ? &rawposix_oset : NULL), NOTUSED, NOTUSED, NOTUSED);
+   int retval = MAKE_SYSCALL (SIGPROCMASK_SYSCALL, "syscall|sigprocmask", (uint64_t) how,(uint64_t) (set ? &rawposix_set : NULL),(uint64_t) (oset ? &rawposix_oset : NULL), NOTUSED, NOTUSED, NOTUSED);
    // check for NULL pointer
    if (oset)
       oset->__val[0] = (unsigned long int) rawposix_oset;
