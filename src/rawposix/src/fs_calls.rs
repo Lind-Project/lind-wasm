@@ -6,7 +6,7 @@ use typemap::fs_conv::*;
 
 /// Helper function for close_syscall
 /// 
-/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't
+/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard I/O stream fds shouldn't
 /// be closed in Lind-WASM execution, which preventing issues where other threads might reassign these
 /// fds, causing unintended behavior or errors. 
 /// 
