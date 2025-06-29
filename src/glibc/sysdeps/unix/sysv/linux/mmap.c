@@ -22,6 +22,7 @@
 #include <sysdep.h>
 #include <stdint.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 # include <mmap_internal.h>
@@ -52,7 +53,7 @@
 void *
 __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
 {
-  return MAKE_SYSCALL(21, "syscall|mmap", (uint64_t)(uintptr_t) addr, (uint64_t) len, (uint64_t) prot, (uint64_t) flags, (uint64_t) fd, (uint64_t) offset);
+  return MAKE_SYSCALL(MMAP_SYSCALL, "syscall|mmap", (uint64_t)(uintptr_t) addr, (uint64_t) len, (uint64_t) prot, (uint64_t) flags, (uint64_t) fd, (uint64_t) offset);
 }
 weak_alias (__mmap, mmap)
 libc_hidden_def (__mmap)
