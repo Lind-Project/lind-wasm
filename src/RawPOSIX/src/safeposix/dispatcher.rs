@@ -25,6 +25,7 @@ const GETDENTS_SYSCALL: i32 = 23;
 const DUP_SYSCALL: i32 = 24;
 const DUP2_SYSCALL: i32 = 25;
 const STATFS_SYSCALL: i32 = 26;
+const DUP3_SYSCALL: i32 = 27;
 const FCNTL_SYSCALL: i32 = 28;
 
 const GETPPID_SYSCALL: i32 = 29;
@@ -243,7 +244,7 @@ pub fn lind_syscall_api(
             let addr = arg1 as *mut u8;
             let len = arg2 as usize;
             let prot = arg3 as i32;
-            
+
             interface::mprotect_handler(cageid, addr, len, prot)
         }
 
@@ -512,6 +513,13 @@ pub fn lind_syscall_api(
             interface::cagetable_getref(cageid).dup2_syscall(fd, fd2)
         }
 
+        DUP3_SYSCALL => {
+            let fd = arg1 as i32;
+            let fd2 = arg2 as i32;
+            let flags = arg3 as i32;
+            interface::cagetable_getref(cageid).dup3_syscall(fd, fd2, flags)
+        }
+
         FCHMOD_SYSCALL => {
             let fd = arg1 as i32;
             let mode = arg2 as u32;
@@ -737,7 +745,6 @@ pub fn lind_syscall_api(
             let shmflg = arg3 as i32;
             interface::shmat_handler(cageid, addr, 0, shmflg, shmid) as i32
         }
-                
 
         SHMDT_SYSCALL => {
             let addr = arg1 as *mut u8;
