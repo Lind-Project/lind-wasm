@@ -337,7 +337,7 @@ impl Instance {
         store: &mut StoreOpaque,
         module: &Module,
         imports: Imports<'_>,
-    ) -> Result<(Instance, Option<FuncIndex>)> {
+    ) -> Result<(Instance, Option<FuncIndex>, InstanceId)> {
         if !Engine::same(store.engine(), module.engine()) {
             bail!("cross-`Engine` instantiation is not currently supported");
         }
@@ -432,7 +432,7 @@ impl Instance {
                 .contains(WasmFeatures::BULK_MEMORY),
         )?;
 
-        Ok((instance, compiled_module.module().start_func))
+        Ok((instance, compiled_module.module().start_func, id))
     }
 
     pub(crate) fn from_wasmtime(handle: InstanceData, store: &mut StoreOpaque) -> Instance {
