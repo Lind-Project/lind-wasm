@@ -27,7 +27,7 @@
 # Define variables
 HOME_DIR="/home/lind/lind-wasm"
 CLANG_DIR="$HOME_DIR/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
-CLANG_TAR="$HOME_DIR/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
+CLANG_TAR="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz"
 CLANG_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/$CLANG_TAR"
 LIND_WASM_DIR="$HOME_DIR"
 WASI_SRC="$HOME_DIR/src/glibc/wasi"
