@@ -1,5 +1,5 @@
 # Use an official Ubuntu as a parent image
-FROM ubuntu:latest
+FROM ubuntu:22.04
 ARG DEV_MODE
 ENV DEV_MODE=${DEV_MODE:-false}
 
@@ -7,7 +7,7 @@ ARG REPO_URL
 ENV REPO_URL=${REPO_URL:-https://github.com/Lind-Project/lind-wasm.git}
 
 ARG BRANCH_NAME
-ENV BRANCH_NAME=${BRANCH_NAME:-main}
+ENV BRANCH_NAME=${BRANCH_NAME:-149-migrate-clang-version}
 
 ARG GLIBC_TAR_CACHE
 ENV GLIBC_TAR_CACHE=${GLIBC_TAR_CACHE:-false}
@@ -28,9 +28,9 @@ RUN go install github.com/bazelbuild/buildtools/buildifier@latest
 
 ARG USERNAME=lind
 
-RUN usermod --login ${USERNAME} --move-home --home /home/${USERNAME} ubuntu && \
-    groupmod --new-name ${USERNAME} ubuntu
-RUN echo "lind ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN groupadd --gid 1000 $USERNAME && \
+    useradd --uid 1000 --gid $USERNAME --create-home --shell /bin/bash $USERNAME && \
+    echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 USER lind
 
@@ -47,7 +47,7 @@ RUN go install github.com/bazelbuild/buildtools/buildifier@latest
 # Ensure the Rust environment is available in future RUN instructions
 ENV PATH="/home/lind/.cargo/bin:/home/lind/go/bin:${PATH}"
 
-ENV CLANG="/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
+ENV CLANG="/home/lind/lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
 
 ### non-DEV_MODE Commmands begin here
 
@@ -58,12 +58,18 @@ RUN if [ "$DEV_MODE" != "true" ]; then \
       git clone --branch "$BRANCH_NAME" --single-branch "$REPO_URL" lind-wasm; \
     fi
 # Install clang-16 for compiling the code
-RUN if [ "$DEV_MODE" != "true" ]; then wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
-    tar -xf clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz && \
-    mv clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04; fi
+RUN if [ "$DEV_MODE" != "true" ]; then wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
+    tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz && \
+    mv clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04 lind-wasm/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04; fi
 WORKDIR /home/lind/lind-wasm
+
+#Install libtinfo5 as root
+USER root
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb 
+USER lind
 # Move wasi directory
-RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/lib/clang/16/lib; fi
+RUN if [ "$DEV_MODE" != "true" ]; then cp -r ./src/glibc/wasi ./clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/lib/clang/18/lib; fi
 # Build Lind-wasm
 #RUN chmod +x lindtool.sh
 # RUN if [ "$DEV_MODE" != "true" ]; then bazel build //:make_all; fi
