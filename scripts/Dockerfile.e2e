@@ -1,76 +1,79 @@
 # syntax=docker/dockerfile:1.7-labs
-# (use non-stable syntax for convenient --parents option in COPY command)
+# NOTE: use non-stable syntax for convenient --parents option in COPY command
 
-# Download clang
-FROM scratch AS clang
-ADD https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz /clang.tar.xz
+# Dockerfile for lind-wasm end-to-end testing
+#
+# - Install build dependencies
+# - Build wasmtime, glibc and sysroot for clang cross-compilation
+# - Run tests using wasmtestreport.py
+#
+# Usage:
+#   docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e .
+#
+# Caveat:
+#   This Dockerfile is meant for end-to-end testing via `docker build`.
+#   It employs several optimizations for targeted cache invalidation
+#   and minimal cache size:
+#   - scoped COPYs
+#   - independent build stages
+#   - minimal number of layers
+#   - minimal layer sizes
+#   As part of this not all build artifacts are copied into the final image,
+#   and thus not available on `docker run`.
+#   TLDR: The resulting docker image is not meant for distribution.
 
-FROM ubuntu:latest
-
-#####################
-# DEPENDENCIES
-#####################
-# Install misc build dependencies
-# TODO: only install required hard requirements, see best practices
-# https://docs.docker.com/build/building/best-practices/#apt-get
+# Install build dependencies
+# NOTE: We install dependencies for multiple stages at once, to save RUN time
+# and cache layers. Details:
+# - glibc dependencies as per src/glibc/INSTALL
+# - gcc skipped in favor of clang
+# - libc6-dev-i386-cross required for wasi cross-compilation with clang
+# - build-essential, ca-certificates, curl, libxml2 needed by rust and clang
+FROM ubuntu:latest AS base
 RUN apt-get update && \
-    apt-get install -y -qq \
-        apt-transport-https \
-        bash \
-        binaryen \
+    apt-get install -y --no-install-recommends -qq \
+        binutils \
         bison \
         build-essential \
+        ca-certificates \
         curl \
-        g++ \
-        g++-i686-linux-gnu \
         gawk \
-        gcc \
-        gcc-i686-linux-gnu \
-        git \
-        gnupg \
-        golang \
-        libssl-dev \
+        libc6-dev-i386-cross \
         libxml2 \
-        openssl \
+        make \
         python3 \
-        sudo \
-        unzip \
-        vim \
-        wget \
-        zip
+        sed \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install known-to-work rust nightly version (see #242)
-# NOTE: cache not invalidated by remote change
+# Install rust and build wasmtime
+FROM base as build-wasmtime
+# NOTE: pinning known-to-work nightly-2025-06-01 (see #242)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain nightly-2025-06-01
 ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Install clang (extract downloaded binary using mount as per best practices)
-RUN --mount=from=clang,target=/clang tar xf /clang/clang.tar.xz
-
-###################
-# Build GLIBC
-###################
-COPY --parents scripts/make_glibc_and_sysroot.sh src/glibc .
-RUN ./scripts/make_glibc_and_sysroot.sh
-
-###################
-# Build WASMTIME
-###################
 COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs .
-# Build wasmtime with `--release` flag for faster tests with workaround for
-# hard-coded paths in tests tools (lind_config.sh).
-# TODO: install wasmtime binary on PATH and remove hardcoded paths in tools
+# Build wasmtime with `--release` flag for faster tests
+# NOTE: `ln` workaround required for hard-coded paths in test tools (lind_config.sh)
 RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release && \
     (cd src/wasmtime/target && mkdir -p debug && ln -sf ../release/wasmtime debug)
 
+# Install clang, build glibc and generate sysroot
+FROM base AS build-glibc
+# NOTE: We `curl | tar` in spite of Docker best practices to save cache layers
+RUN curl -sL https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.4/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04.tar.xz | \
+       tar -xvJ
+COPY --parents scripts/make_glibc_and_sysroot.sh src/glibc .
+RUN ./scripts/make_glibc_and_sysroot.sh
 
-###################
-# Run TESTS
-###################
+# Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
+FROM base AS test
 COPY --parents scripts tests tools skip_test_cases.txt .
-# Run tests, print results and exit with 1, if failures are reported, and 0 otherwise
-# TODO: return meaningful exit code from wasmtestreport.py to avoid brittle grep hack
-RUN LIND_WASM_BASE=/  LIND_FS_ROOT=/src/RawPOSIX/tmp ./scripts/wasmtestreport.py && \
+# NOTE: Build artifacts from prior stages are only mounted, to save COPY time
+# and cache layers. This means they are not preserved in the resulting image.
+# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
+RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmtime/target \
+    --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
+    --mount=from=build-glibc,source=clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04,destination=clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 \
+    LIND_WASM_BASE=/  LIND_FS_ROOT=/src/RawPOSIX/tmp ./scripts/wasmtestreport.py && \
     cat results.json && \
     ! grep '"number_of_failures": [^0]' results.json
