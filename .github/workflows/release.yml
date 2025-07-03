@@ -1,0 +1,37 @@
+name: Test and release on Docker Hub
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          username: securesystemslab
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@18ce135bb5112fa8ce4ed6c17ab05699d7f3a5e0 # v3.11.0
+
+      # Build 'test' stage (default) to run tests
+      - name: Test
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          platforms: linux/amd64
+          cache-from: type=gha
+          file: scripts/Dockerfile.e2e
+
+      # Build 'release' stage and push to Dockerhub
+      - name: Release and push
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          target: release
+          push: true
+          platforms: linux/amd64
+          cache-from: type=gha
+          file: scripts/Dockerfile.e2e
