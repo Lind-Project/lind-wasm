@@ -11,3 +11,4 @@ quick_cache = "0.6.9"
 fdtables = { path = "../fdtables" }
 once_cell = "1.18" 
 parking_lot = "0.12"
+dashmap = { version = "5.1", features=["serde"] }
