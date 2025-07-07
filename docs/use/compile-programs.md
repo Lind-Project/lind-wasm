@@ -3,7 +3,7 @@
 
 Let's start with a simple example, `malloc-test.c`, which demonstrates dynamic memory allocation using `malloc` in C. We will compile this C program to a WebAssembly module using Clang with the WASI target.
 
-### Example C Program: `malloc-test.c`
+### Example C Program: `$HOME/lind-wasm/malloc-test.c` 
 
 ```c
 #include <unistd.h>
@@ -36,11 +36,14 @@ int main() {
 Use the following command to compile the `malloc-test.c` program to WebAssembly:
 
 ```sh
-../../clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang-16 --target=wasm32-unknown-wasi --sysroot /home/dennis/Documents/Just-One-Turtle/wasi-libc/sysroot malloc-test.c -g -O0 -o malloc-test.wasm
+clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang-16 \
+--target=wasm32-unknown-wasi --sysroot=$HOME/lind-wasm/src/glibc/sysroot \
+-I $HOME/lind-wasm/src/glibc/sysroot/include/wasm32-wasi malloc-test.c -g -O0 \
+-o malloc-test.wasm
 ```
 
 - `--target=wasm32-unknown-wasi`: Specifies the target to be WebAssembly with WASI.
-- `--sysroot /home/dennis/Documents/Just-One-Turtle/wasi-libc/sysroot`: Points to the WASI sysroot directory.
+- `--sysroot $HOME/lind-wasm/src/glibc/sysroot`: Points to the WASI sysroot directory.
 - `-g`: Includes debugging information.
 - `-O0`: Disables optimizations for easier debugging.
 
