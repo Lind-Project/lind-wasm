@@ -905,6 +905,8 @@ impl Cage {
     /// ## Returns:
     ///     Return 0 when success; -1 along with errno when fail.
     pub fn close_syscall(&self, virtual_fd: i32) -> i32 {
+        // We only check for negative fd's here since fdtables uses u64.
+        // Upper-bound checks are handled by the close_virtualfd function.
         if virtual_fd < 0 {
             return syscall_error(Errno::EBADF, "close", "Bad File Descriptor");
         }
