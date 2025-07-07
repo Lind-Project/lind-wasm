@@ -27,7 +27,7 @@
 # - gcc skipped in favor of clang
 # - libc6-dev-i386-cross required for wasi cross-compilation with clang
 # - build-essential, ca-certificates, curl, libxml2 needed by rust and clang
-FROM ubuntu:latest AS base
+FROM ubuntu:22.04 AS base
 RUN apt-get update && \
     apt-get install -y --no-install-recommends -qq \
         binutils \
