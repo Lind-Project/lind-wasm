@@ -22,7 +22,6 @@ use wasmparser::WasmFeatures;
 use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, PrimaryMap, TableIndex, TypeTrace,
 };
-use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 
 use super::Val;
 
@@ -217,7 +216,7 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
     ) -> Result<Instance> {
-        let (instance, start) = Instance::new_raw(store.0, module, imports)?;
+        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;
@@ -255,7 +254,8 @@ impl Instance {
 
                 make_syscall(
                     pid, // self cageid
-                    MMAP_SYSCALL, // syscall num
+                    (MMAP_SYSCALL) as u64, // syscall num
+                    0, // mmap will not be a grate call, so name does not matter, because syscall name will only be effective in grate closure
                     pid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     pid,

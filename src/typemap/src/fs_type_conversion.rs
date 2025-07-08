@@ -10,6 +10,9 @@ use std::path::Component;
 use std::path::PathBuf;
 pub use std::{mem, ptr};
 pub use sysdefs::constants::fs_const;
+use cage::get_cage;
+use cage::translate_vmmap_addr;
+use crate::syscall_type_conversion::get_cstr;
 
 /// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
 /// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation

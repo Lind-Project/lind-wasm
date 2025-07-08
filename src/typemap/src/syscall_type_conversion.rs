@@ -3,8 +3,8 @@
 //! This file defines conversion helpers for basic primitive types (e.g., `i32`, `u32`, `i64`).
 //! These functions are used during syscall argument decoding and type-safe interpretation
 //! within the RawPOSIX syscall layer (`src/syscalls/`).
-use crate::fs_conv::*;
-use crate::type_conv::*;
+use crate::fs_type_conversion::*;
+use crate::network_type_conversion::*;
 use cage::get_cage;
 use cage::memory::mem_helper::*;
 use fdtables;
@@ -111,6 +111,23 @@ pub fn sc_convert_sysarg_to_i32(arg: u64, arg_cageid: u64, cageid: u64) -> i32 {
     return get_i32(arg, arg_cageid, cageid);
 }
 
+/// This function translates 64 bits uadd from the WASM context
+/// into the corresponding host address value. Unlike the previous two functions, it returns
+/// the translated address as a raw `u64` rather than a pointer.
+///
+/// Input:
+///     - uaddr_arg: the original 64-bit address from the WASM space
+///     - uaddr_arg_cageid: the cage ID that owns the address
+///     - cageid: the currently executing cage ID
+///
+/// Output:
+///     - Returns the translated 64-bit address in host space as a u64.
+pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64{
+    let cage = get_cage(uaddr_arg_cageid).unwrap();
+    let uaddr = translate_vmmap_addr(&cage, uaddr_arg).unwrap();
+    return uaddr;
+}
+
 /// `sc_convert_sysarg_to_u32` is the type conversion function used to convert the
 /// argument's type from u64 to u32. When in `secure` mode, extra checks will be
 /// performed through `get_u32()` function. (for example validating if all upper-bit
@@ -137,6 +154,19 @@ pub fn get_u32(arg: u64, arg_cageid: u64, cageid: u64) -> u32 {
     }
 
     panic!("Invalide argument");
+}
+
+pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, arg_cageid: u64, cageid: u64) -> &'a mut i32 {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(arg_cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    return unsafe { &mut *((addr) as *mut i32) };
 }
 
 /// ## Arguments:

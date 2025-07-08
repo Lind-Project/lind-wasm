@@ -1,8 +1,17 @@
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
-use typemap::type_conv::get_pipearray;
-use typemap::fs_conv::*;
+use typemap::network_type_conversion::get_pipearray;
+use typemap::fs_type_conversion::*;
+use sysdefs::constants::err_const::{syscall_error, Errno, handle_errno, get_errno};
+use sysdefs::constants::fs_const::{PAGESIZE, PAGESHIFT, MAP_FIXED, MAP_ANONYMOUS, MAP_PRIVATE};
+use sysdefs::constants::sys_const::{DEFAULT_GID};
+use fdtables::commonconstants::MAXFD;
+use fdtables::dashmaparrayglobal::get_unused_virtual_fd_from_startfd;
+use typemap::syscall_type_conversion::{sc_unusedarg, sc_convert_sysarg_to_i32_ref};
+use typemap::{sc_convert_sysarg_to_i32, sc_convert_sysarg_to_usize, sc_convert_sysarg_to_i64, sc_convert_sysarg_to_u32, sc_convert_buf};
+use cage::{get_cage, VmmapOps, round_up_page, HEAP_ENTRY_INDEX, MemoryBackingType};
+
 
 /// Helper function for close_syscall
 /// 
@@ -261,6 +270,199 @@ pub fn mkdir_syscall(
         return handle_errno(errno, "mkdir");
     }
     ret
+}
+
+//------------------------------------FCNTL SYSCALL------------------------------------
+/// This function will be different in new code base (when splitting out type conversion function)
+/// since the conversion from u64 -> i32 in negative number will be different. These lines are repeated
+/// in 5 out of 6 fcntl_syscall cases, so wrapped these loc into helper functions to make code cleaner.
+///
+/// ## Arguments
+/// cageid: cage ID associate with virtual file descriptor
+/// virtual_fd: virtual file descriptor
+///
+/// ## Return Type
+/// On success:
+/// Return corresponding FDTableEntry that contains
+/// (1) underlying kernel fd.
+/// (2) file descriptor kind.
+/// (3) O_CLOEXEC flag.
+/// (4) file descriptor specific extra information.
+///
+/// On error:
+/// Return error num EBADF(Bad File Descriptor)
+pub fn _fcntl_helper(cageid: u64, virtual_fd: u64) -> Result<fdtables::FDTableEntry, Errno> {
+    if virtual_fd > MAXFD as u64 {
+        return Err(Errno::EBADF);
+    }
+    // Get underlying kernel fd
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd);
+    if wrappedvfd.is_err() {
+        return Err(Errno::EBADF);
+    }
+    Ok(wrappedvfd.unwrap())
+}
+
+/// Reference: https://man7.org/linux/man-pages/man2/fcntl.2.html
+///
+/// Due to the design of `fdtables` library, different virtual fds created by `dup`/`dup2` are
+/// actually refer to the same underlying kernel fd. Therefore, in `fcntl_syscall` we need to
+/// handle the cases of `F_DUPFD`, `F_DUPFD_CLOEXEC`, `F_GETFD`, and `F_SETFD` separately.
+///
+/// Among these, `F_DUPFD` and `F_DUPFD_CLOEXEC` cannot directly use the `dup_syscall` because,
+/// in `fcntl`, the duplicated fd is assigned to the lowest available number starting from `arg`,
+/// whereas the `dup_syscall` does not have this restriction and instead assigns the lowest
+/// available fd number globally.
+///
+/// Additionally, `F_DUPFD_CLOEXEC` and `F_SETFD` require updating the fd flag information
+/// (`O_CLOEXEC`) in fdtables after modifying the underlying kernel fd.
+///
+/// For all other command operations, after translating the virtual fd to the corresponding
+/// kernel fd, they are redirected to the kernel `fcntl` syscall.
+///
+/// ## Arguments
+/// virtual_fd: virtual file descriptor
+/// cmd: The operation
+/// arg: an optional third argument.  Whether or not this argument is required is determined by op.  
+///
+/// ## Return Type
+/// The return value is related to the operation determined by `cmd` argument.
+///
+/// For a successful call, the return value depends on the operation:
+/// `F_DUPFD`: The new file descriptor.
+/// `F_GETFD`: Value of file descriptor flags.
+/// `F_GETFL`: Value of file status flags.
+/// `F_GETLEASE`: Type of lease held on file descriptor.
+/// `F_GETOWN`: Value of file descriptor owner.
+/// `F_GETSIG`: Value of signal sent when read or write becomes possible, or zero for traditional SIGIO behavior.
+/// `F_GETPIPE_SZ`, `F_SETPIPE_SZ`: The pipe capacity.
+/// `F_GET_SEALS`: A bit mask identifying the seals that have been set for the inode referred to by fd.
+/// All other commands: Zero.
+/// On error, -1 is returned
+///
+/// TODO: `F_GETOWN`, `F_SETOWN`, `F_GETOWN_EX`, `F_SETOWN_EX`, `F_GETSIG`, and `F_SETSIG` are used to manage I/O availability signals.
+pub fn fcntl_syscall(
+    cageid: u64,
+    virtual_fd: u64,
+    vfd_cageid: u64,
+    cmd_arg: u64,
+    cmd_cageid: u64,
+    arg_arg: u64,
+    arg_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
+    let arg = sc_convert_sysarg_to_i32(arg_arg, arg_cageid, cageid);
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "fcntl_syscall", "Invalide Cage ID");
+    }
+
+    match (cmd, arg) {
+        // Duplicate the file descriptor `virtual_fd` using the lowest-numbered
+        // available file descriptor greater than or equal to `arg`. The operation here
+        // is quite similar to `dup_syscall`, for specific operation explanation, see
+        // comments on `dup_syscall`.
+        (F_DUPFD, arg) => {
+            // Get fdtable entry
+            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+                Ok(entry) => entry,
+                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
+            };
+            // Get lowest-numbered available file descriptor greater than or equal to `arg`
+            match fdtables::get_unused_virtual_fd_from_startfd(
+                cageid,
+                vfd.fdkind,
+                vfd.underfd,
+                false,
+                0,
+                arg as u64,
+            ) {
+                Ok(new_vfd) => return new_vfd as i32,
+                Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+            }
+        }
+        // As for `F_DUPFD`, but additionally set the close-on-exec flag
+        // for the duplicate file descriptor.
+        (F_DUPFD_CLOEXEC, arg) => {
+            // Get fdtable entry
+            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+                Ok(entry) => entry,
+                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
+            };
+            // Get lowest-numbered available file descriptor greater than or equal to `arg`
+            // and set the `O_CLOEXEC` flag
+            match fdtables::get_unused_virtual_fd_from_startfd(
+                cageid,
+                vfd.fdkind,
+                vfd.underfd,
+                true,
+                0,
+                arg as u64,
+            ) {
+                Ok(new_vfd) => return new_vfd as i32,
+                Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+            }
+        }
+        // Return (as the function result) the file descriptor flags.
+        (F_GETFD, ..) => {
+            // Get fdtable entry
+            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+                Ok(entry) => entry,
+                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
+            };
+            return vfd.should_cloexec as i32;
+        }
+        // Set the file descriptor flags to the value specified by arg.
+        (F_SETFD, arg) => {
+            // Get fdtable entry
+            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+                Ok(entry) => entry,
+                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
+            };
+            // Set underlying kernel fd flag
+            let ret = unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) };
+            if ret < 0 {
+                let errno = get_errno();
+                return handle_errno(errno, "fcntl");
+            }
+            // Set virtual fd flag
+            let cloexec_flag: bool = arg != 0;
+            match fdtables::set_cloexec(cageid, virtual_fd as u64, cloexec_flag) {
+                Ok(_) => return 0,
+                Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+            }
+        }
+        // Return (as the function result) the process ID or process
+        // group ID currently receiving SIGIO and SIGURG signals for
+        // events on file descriptor fd.
+        (F_GETOWN, ..) => DEFAULT_GID as i32,
+        // Set the process ID or process group ID that will receive
+        // SIGIO and SIGURG signals for events on the file descriptor
+        // fd.
+        (F_SETOWN, arg) if arg >= 0 => 0,
+        _ => {
+            // Get fdtable entry
+            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+                Ok(entry) => entry,
+                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
+            };
+            let ret = unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) };
+            if ret < 0 {
+                let errno = get_errno();
+                return handle_errno(errno, "fcntl");
+            }
+            ret
+        }
+    }
 }
 
 /// Handles the `mmap_syscall`, interacting with the `vmmap` structure.

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use threei::threei::{copy_data_between_cages, make_syscall, register_handler};
+use threei::threei::{copy_data_between_cages, make_syscall, register_handler, copy_handler_table_to_cage};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use wasmtime::Caller;
@@ -72,6 +72,7 @@ impl LindCommonCtx {
                 make_syscall(
                     self.pid as u64,
                     call_number as u64,
+                    call_name as u64,
                     self.pid as u64, // Set target_cageid same with self_cageid by defualt 
                     arg1, 
                     self.pid as u64,

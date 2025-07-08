@@ -1,7 +1,7 @@
 //! System syscalls implementation
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
-use crate::syscalls::fs_calls::kernel_close;
+use crate::fs_calls::kernel_close;
 use cage::memory::mem_helper::*;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::{add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie};
@@ -14,10 +14,12 @@ use std::sync::atomic::Ordering::*;
 use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::fs_const::*;
+use sysdefs::constants::fs_const::{STDERR_FILENO, STDOUT_FILENO, STDIN_FILENO, *};
 use sysdefs::constants::{EXIT_SUCCESS, VERBOSE};
-use typemap::syscall_conv::*;
-use typemap::fs_conv::*;
+use typemap::syscall_type_conversion::*;
+use typemap::fs_type_conversion::*;
+use dashmap::DashMap;
+
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
 ///
@@ -67,9 +69,13 @@ pub fn fork_syscall(
         uid: AtomicI32::new(selfcage.uid.load(Relaxed)),
         egid: AtomicI32::new(selfcage.egid.load(Relaxed)),
         euid: AtomicI32::new(selfcage.euid.load(Relaxed)),
-        main_threadid: AtomicU64::new(0),
+        main_threadid: RwLock::new(0),
+        epoch_handler: DashMap::new(),
+        pending_signals: RwLock::new(vec![]),
+        signalhandler: selfcage.signalhandler.clone(),
+        sigset: AtomicU64::new(0),
         zombies: RwLock::new(vec![]),
-        child_num: AtomicU64::new(0),
+        child_num:  AtomicU64::new(0),
         vmmap: RwLock::new(new_vmmap),
     };
 
@@ -400,7 +406,11 @@ pub fn lindrustinit(verbosity: isize) {
         uid: AtomicI32::new(-1),
         egid: AtomicI32::new(-1),
         euid: AtomicI32::new(-1),
-        main_threadid: AtomicU64::new(0),
+        main_threadid: RwLock::new(0),
+        epoch_handler: DashMap::new(),
+        pending_signals: RwLock::new(vec![]),
+        signalhandler: DashMap::new(),
+        sigset: AtomicU64::new(0),
         zombies: RwLock::new(vec![]),
         child_num: AtomicU64::new(0),
         vmmap: RwLock::new(Vmmap::new()),
@@ -467,7 +477,11 @@ pub fn lindrustinit(verbosity: isize) {
         uid: AtomicI32::new(-1),
         egid: AtomicI32::new(-1),
         euid: AtomicI32::new(-1),
-        main_threadid: AtomicU64::new(0),
+        main_threadid: RwLock::new(0),
+        epoch_handler: DashMap::new(),
+        signalhandler: DashMap::new(),
+        pending_signals: RwLock::new(vec![]),
+        sigset: AtomicU64::new(0),
         zombies: RwLock::new(vec![]),
         child_num: AtomicU64::new(0),
         vmmap: RwLock::new(Vmmap::new()),

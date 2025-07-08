@@ -62,6 +62,7 @@ rawposix = { workspace = true }
 threei = { workspace = true }
 fdtables = { workspace = true }
 sysdefs = { workspace = true }
+cage = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true, features = ['std'] }
 target-lexicon = { workspace = true }
@@ -75,6 +76,7 @@ wasmparser = { workspace = true }
 tracing = { workspace = true }
 log = { workspace = true }
 humantime = { workspace = true }
+parking_lot = { workspace = true }
 
 async-trait = { workspace = true }
 bytes = { workspace = true }
@@ -226,6 +228,7 @@ threei = { path = "crates/threei" }
 rawposix = { path = "crates/rawposix" }
 fdtables = { path = "crates/fdtables" }
 sysdefs = { path = "crates/sysdefs" }
+cage = { path = "crates/cage" }
 
 cranelift-wasm = { path = "cranelift/wasm", version = "0.110.0" }
 cranelift-codegen = { path = "cranelift/codegen", version = "0.110.0", default-features = false, features = ["std", "unwind", "trace-log"] }
@@ -340,6 +343,7 @@ criterion = { version = "0.5.0", default-features = false, features = ["html_rep
 rustc-hash = "1.1.0"
 libtest-mimic = "0.7.0"
 semver = { version = "1.0.17", default-features = false }
+parking_lot = "0.12"
 
 # =============================================================================
 #

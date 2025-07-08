@@ -9,7 +9,7 @@ use std::ptr;
 use cage::memory::mem_helper::check_addr;
 use sysdefs::constants::threei_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE, MAP_ANONYMOUS, MAP_PRIVATE}; // Used in `copy_data_between_cages`
-use typemap::syscall_conv::sc_convert_uaddr_to_host;
+use typemap::syscall_type_conversion::{sc_convert_uaddr_to_host, sc_convert_buf};
 
 const EXIT_SYSCALL: u64 = 60; // exit syscall number
 const MMAP_SYSCALL: u64 = 9; // mmap syscall number
@@ -51,6 +51,40 @@ pub fn threei_wasm_func(grateid: u64, mut callback: Box<dyn FnMut(
 
     0
 }
+
+/// HANDLERTABLE:
+/// <self_cageid, <callnum, (addr, dest_cageid)>
+/// 1. callnum is the call that have access to execute syscall in addr -- acheive per syscall filter
+/// 2. callnum is mapped to addr (callnum=addr) -- achieve per cage filter
+///
+/// 
+/// ** Attempt1: Send+Sync + mutex
+/// Use Send to send it to another thread.
+/// Use Sync to share between threads (T is Sync if and only if &T is Send).
+/// NOT WORK! because wasmtime has entries doesnt support send+sync (*const u8 usage)
+/// 
+/// ** Attempt2: rc<refcell<>> 
+/// NOT WORK! lifetime 
+/// 
+/// ** Attempt3: store directly as Vec
+/// NOT WORK! required to be static. all lifetime in vec needs to be same 
+/// 
+/// TODO: do we need lock here...? we should allow multiple access to same logic at same time??
+pub type Raw_CallFunc = fn(
+    target_cageid: u64,
+    arg1: u64,
+    arg2: u64,
+    arg3: u64,
+    arg4: u64,
+    arg5: u64,
+    arg6: u64,
+    arg1_cageid: u64,
+    arg2_cageid: u64,
+    arg3_cageid: u64,
+    arg4_cageid: u64,
+    arg5_cageid: u64,
+    arg6_cageid: u64,
+) -> i32;
 
 /// Each entry in the `Vec` corresponds to a specific grate, and the index is used as its identifier 
 /// (`grate_id`). The position must be stable even if some grates are removed, so we use `Option` to 
@@ -600,7 +634,7 @@ pub fn harsh_cage_exit(
     _arg6:u64, _arg6cage:u64, 
 ) -> u64 {
     // Call underlying exit syscall to perform cleanup
-    make_syscall(targetcage, EXIT_SYSCALL, targetcage, exittype, targetcage, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    make_syscall(targetcage, EXIT_SYSCALL, EXIT_SYSCALL, targetcage, exittype, targetcage, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     // Remove cage's own handler table if it exists
     let mut handler_table = HANDLERTABLE.lock().unwrap();
@@ -714,6 +748,7 @@ pub fn copy_data_between_cages(
         make_syscall(destcage,
             MMAP_SYSCALL,
             destcage,
+            MMAP_SYSCALL,
             0, // let sys pick addr 
             destcage,
             len as u64,

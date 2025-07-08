@@ -1,11 +1,11 @@
-use rawposix::syscalls::fs_calls::{
+use rawposix::fs_calls::{
     mkdir_syscall, open_syscall, close_syscall, read_syscall,
 };
-pub use rawposix::syscalls::fs_calls::mmap_syscall;
-use super::threei::RawCallFunc;
+pub use rawposix::fs_calls::mmap_syscall;
+use super::threei::Raw_CallFunc;
 
 /// According to the Linux standard
-pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
+pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (0, read_syscall),
     (2, open_syscall),
     (3, close_syscall),

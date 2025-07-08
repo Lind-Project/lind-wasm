@@ -20,6 +20,8 @@ pub const FDT_INVALID_FD: u32 = 0xff00_0001;
 /// Use to indicate this is an EPOLLFD (an internal kind of fd)
 pub const FDT_KINDEPOLL: u32 = 0xff00_0002;
 
+pub const MAXFD: i32 = 1024; // Maximum number of file descriptors
+
 // These are the values we look up with at the end...
 #[doc = include_str!("../docs/fdtableentry.md")]
 #[derive(Clone, Copy, Hash, Debug, PartialEq, Eq)]

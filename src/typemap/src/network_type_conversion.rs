@@ -4,8 +4,9 @@
 //! them to various system-specific data types needed in system calls.  It includes utilities
 //! for transforming raw pointers to typed structures, such as complex structures like polling,
 //! signal handling, timing, and socket-related types.
-use crate::syscall_conv::validate_cageid;
+use crate::syscall_type_conversion::validate_cageid;
 use sysdefs::data::fs_struct::PipeArray;
+use sysdefs::constants::err_const::{syscall_error, Errno};
 
 /// Convert a raw argument pointer into a mutable reference to a `PipeArray`
 ///

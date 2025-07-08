@@ -13,10 +13,10 @@ pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicI32, AtomicU64};
 pub use std::sync::Arc;
 use sysdefs::constants::err_const::VERBOSE;
-use sysdefs::constants::fs_const::*;
+use sysdefs::constants::fs_const::{MAX_CAGEID, *};
+use sysdefs::constants::sys_const::{EXIT_SUCCESS};
 use sysdefs::data::fs_struct::SigactionStruct;
 use dashmap::DashMap;
-pub use std::sync::Arc as RustRfc;
 
 
 #[derive(Debug, Clone, Copy)]
@@ -48,7 +48,7 @@ pub struct Cage {
     pub sigset: AtomicU64,
     // pending_signals are signals that are pending to be handled
     pub pending_signals: RwLock<Vec<i32>>,
-     // epoch_handler is a hash map where key is the thread id of the cage, and the value is the epoch
+    // epoch_handler is a hash map where key is the thread id of the cage, and the value is the epoch
     // address of the wasm thread. The epoch is a u64 value that guest thread is frequently checking for
     // and just to host once the value is changed
     pub epoch_handler: DashMap<i32, RwLock<*mut u64>>,
@@ -88,10 +88,10 @@ pub struct Cage {
 //     vec.resize_with(MAX_CAGEID, || None);
 //     RwLock::new(vec)
 // });
-pub static mut CAGE_MAP: Vec<Option<RustRfc<Cage>>> = Vec::new();
+pub static mut CAGE_MAP: Vec<Option<Arc<Cage>>> = Vec::new();
 
 pub fn check_cageid(cageid: u64) {
-    if cageid >= MAXCAGEID as u64 {
+    if cageid >= MAX_CAGEID as u64 {
         panic!("Cage ID is outside of valid range");
     }
 }
@@ -108,7 +108,7 @@ pub fn check_cageid(cageid: u64) {
 
 pub fn add_cage(cageid: u64, cage: Cage) {
     check_cageid(cageid);
-    let _insertret = unsafe { CAGE_MAP[cageid as usize].insert(RustRfc::new(cage)) };
+    let _insertret = unsafe { CAGE_MAP[cageid as usize].insert(Arc::new(cage)) };
 }
 
 /// Delete the cage from `CAGE_MAP` by `cageid` as index
@@ -136,12 +136,7 @@ pub fn remove_cage(cageid: u64) {
 //     }
 // }
 
-pub fn cagetable_getref(cageid: u64) -> RustRfc<Cage> {
-    check_cageid(cageid);
-    unsafe { CAGE_MAP[cageid as usize].as_ref().unwrap().clone() }
-}
-
-pub fn cagetable_getref_opt(cageid: u64) -> Option<RustRfc<Cage>> {
+pub fn get_cage(cageid: u64) -> Option<Arc<Cage>> {
     check_cageid(cageid);
     unsafe {
         match CAGE_MAP[cageid as usize].as_ref() {
@@ -150,6 +145,21 @@ pub fn cagetable_getref_opt(cageid: u64) -> Option<RustRfc<Cage>> {
         }
     }
 }
+
+// pub fn cagetable_getref(cageid: u64) -> Arc<Cage> {
+//     check_cageid(cageid);
+//     unsafe { CAGE_MAP[cageid as usize].as_ref().unwrap().clone() }
+// }
+
+// pub fn cagetable_getref_opt(cageid: u64) -> Option<Arc<Cage>> {
+//     check_cageid(cageid);
+//     unsafe {
+//         match CAGE_MAP[cageid as usize].as_ref() {
+//             Some(cage) => Some(cage.clone()),
+//             None => None,
+//         }
+//     }
+// }
 
 // Clear `CAGE_MAP` and exit all existing cages
 //
@@ -171,18 +181,17 @@ pub fn cagetable_getref_opt(cageid: u64) -> Option<RustRfc<Cage>> {
 //     exitvec
 // }
 
-pub fn cagetable_clear() {
+pub fn cagetable_clear() -> Vec<usize> {
     let mut exitvec = Vec::new();
     unsafe {
-        for cage in CAGE_MAP.iter_mut() {
+        for (cageid, cage) in CAGE_MAP.iter_mut().enumerate() {
             let cageopt = cage.take();
             if cageopt.is_some() {
-                exitvec.push(cageopt.unwrap());
+                // exitvec.push(cageopt.unwrap());
+                exitvec.push(cageid)
             }
         }
     }
 
-    for cage in exitvec {
-        cage.exit_syscall(EXIT_SUCCESS);
-    }
+    exitvec
 }

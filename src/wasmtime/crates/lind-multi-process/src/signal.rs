@@ -2,6 +2,7 @@ use sysdefs::constants::{SIG_DFL, SIG_IGN};
 use wasmtime::{raise_trap, AsContext, AsContextMut, AsyncifyState, Caller, Trap};
 
 use crate::LindHost;
+use cage::signal::{thread_check_killed, lind_get_first_signal, lind_check_no_pending_signal, signal_epoch_reset, epoch_kill_all, lind_signal_init, lind_thread_exit};
 
 // default signal handler actions
 enum SignalDefaultHandler {
@@ -49,7 +50,7 @@ pub fn signal_handler<
     let cageid = ctx.pid as u64;
 
     // first let's check if the epoch state is in "killed" state
-    if rawposix::interface::thread_check_killed(cageid, ctx.tid as u64) {
+    if thread_check_killed(cageid, ctx.tid as u64) {
         // if we are already killed, then perform a suicide
         thread_suicide();
     }
@@ -59,14 +60,14 @@ pub fn signal_handler<
 
     // we loop to retrieve pending signals one by one untill there isn't any unblocked pending signals
     loop {
-        let signal = rawposix::interface::lind_get_first_signal(cageid);
+        let signal = lind_get_first_signal(cageid);
         if signal.is_none() {
             break;
         }
 
         // if this is the last pending (unblocked) signal in list, we should reset epoch
-        if rawposix::interface::lind_check_no_pending_signal(cageid) {
-            rawposix::interface::signal_epoch_reset(cageid);
+        if lind_check_no_pending_signal(cageid) {
+            signal_epoch_reset(cageid);
         }
 
         let (signo, signal_handler, restorer) = signal.unwrap();
@@ -77,7 +78,7 @@ pub fn signal_handler<
                 SignalDefaultHandler::Terminate => {
                     // if we are supposed to be terminated, switch the epoch state of all other threads
                     // to "killed" state and perform a suicide
-                    rawposix::interface::epoch_kill_all(cageid);
+                    epoch_kill_all(cageid);
                     thread_suicide();
                 }
                 SignalDefaultHandler::Ignore => {
@@ -113,7 +114,7 @@ pub fn signal_handler<
                 let e = wasi_common::maybe_exit_on_error(err);
                 eprintln!("Error: {:?}", e);
                 // if we encountered any error when executing the signal handler, we should terminate the cage
-                rawposix::interface::epoch_kill_all(cageid);
+                epoch_kill_all(cageid);
                 thread_suicide();
             }
 

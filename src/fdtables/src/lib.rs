@@ -118,7 +118,7 @@ include!("current_impl");
 // This includes general constants and definitions for things that are
 // needed everywhere, like FDTableEntry.  I use the * import here to flatten
 // the namespace so folks importing this have the symbols directly imported.
-mod commonconstants;
+pub mod commonconstants;
 pub use commonconstants::*;
 
 // This is used everywhere...  Should I re-export more of these symbols?

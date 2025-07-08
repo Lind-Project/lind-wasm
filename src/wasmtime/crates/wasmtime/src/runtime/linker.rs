@@ -18,6 +18,7 @@ use log::warn;
 
 use super::store::StoreInner;
 use super::InstantiateType;
+use super::InstanceId;
 
 /// Structure used to link wasm modules/instances together.
 ///

@@ -1,2 +1,2 @@
-mod dashmaparrayglobal;
+pub mod dashmaparrayglobal;
 pub use crate::dashmaparrayglobal::*;

@@ -2055,7 +2055,7 @@ pub struct Caller<'a, T> {
 }
 
 impl<T> Caller<'_, T> {
-    unsafe fn with<F, R>(caller: *mut VMContext, f: F) -> R
+    pub unsafe fn with<F, R>(caller: *mut VMContext, f: F) -> R
     where
         // The closure must be valid for any `Caller` it is given; it doesn't
         // get to choose the `Caller`'s lifetime.
