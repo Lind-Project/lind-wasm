@@ -1,26 +1,24 @@
 # syntax=docker/dockerfile:1.7-labs
 # NOTE: use non-stable syntax for convenient --parents option in COPY command
 
-# Dockerfile for lind-wasm end-to-end testing
+# Multi-stage Dockerfile for lind-wasm end-to-end testing and image creation
 #
-# - Install build dependencies
-# - Build wasmtime, glibc and sysroot for clang cross-compilation
-# - Run tests using wasmtestreport.py
+# - Installs build dependencies
+# - Builds wasmtime, glibc and sysroot for clang cross-compilation
+# - A. Runs end-to-end tests (default)
+# - B. Creates Docker image with lind-wasm toolchain
 #
-# Usage:
-#   docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e .
+# NOTE: The 'test' stage (A) runs end-to-end tests on `docker build`, and is
+# optimized for Docker build time and caching. It is not meant for `docker
+# run`. Use the 'release' stage (B) to create an image that includes the full
+# lind-wasm toolchain, e.g. to run demos, tests, experiments, etc.
 #
-# Caveat:
-#   This Dockerfile is meant for end-to-end testing via `docker build`.
-#   It employs several optimizations for targeted cache invalidation
-#   and minimal cache size:
-#   - scoped COPYs
-#   - independent build stages
-#   - minimal number of layers
-#   - minimal layer sizes
-#   As part of this not all build artifacts are copied into the final image,
-#   and thus not available on `docker run`.
-#   TLDR: The resulting docker image is not meant for distribution.
+# Usage A (test):
+#     docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e .
+#
+# Usage B (create and run image):
+#     docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e --target release .
+#     docker run --platform=linux/amd64 -it release /bin/bash
 
 # Install build dependencies
 # NOTE: We install dependencies for multiple stages at once, to save RUN time
@@ -29,7 +27,7 @@
 # - gcc skipped in favor of clang
 # - libc6-dev-i386-cross required for wasi cross-compilation with clang
 # - build-essential, ca-certificates, curl, libxml2 needed by rust and clang
-FROM ubuntu:latest AS base
+FROM ubuntu:22.04 AS base
 RUN apt-get update && \
     apt-get install -y --no-install-recommends -qq \
         binutils \
@@ -64,6 +62,14 @@ RUN curl -sL https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0
        tar -xvJ
 COPY --parents scripts/make_glibc_and_sysroot.sh src/glibc .
 RUN ./scripts/make_glibc_and_sysroot.sh
+
+# Build Docker image that includes the full lind-wasm toolchain
+# NOTE: Lind-wasm source code is not included
+FROM base AS release
+COPY --from=build-wasmtime --parents  src/wasmtime/target .
+COPY --from=build-glibc --parents \
+    clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 src/glibc/sysroot .
+COPY --parents scripts tests tools skip_test_cases.txt .
 
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
 FROM base AS test
