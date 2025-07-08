@@ -26,7 +26,9 @@ jobs:
           cache-from: type=gha
           file: scripts/Dockerfile.e2e
 
-      # Create release tag: securesystemslab/lind-wasm:<short commit id>
+      # Configure Docker release tags:
+      # - securesystemslab/lind-wasm:sha-<short commit id>
+      # - securesystemslab/lind-wasm:latest
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804 # v5.7.0
@@ -35,6 +37,8 @@ jobs:
             securesystemslab/lind-wasm
           tags: |
             type=sha
+          flavor: |
+            latest=true
 
       # Build 'release' stage and push to Dockerhub
       - name: Release and push
