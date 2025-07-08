@@ -736,17 +736,17 @@ impl RunCommand {
                                     .get_export(&mut store, &syscall_name).and_then(|f| f.into_func())
                                                     .ok_or_else(|| anyhow!("failed to find function export `{}`", syscall_name)).unwrap();
                             
-                            let grate_entry_point = match grate_entry_func.typed::<(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64), i32>(&mut store) {
+                           let grate_entry_point = match grate_entry_func.typed::<(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64), i32>(&mut store) {
                                 Ok(typed_func) => typed_func,
-                                Err(_e) => {
+                                Err(e) => {
+                                    eprintln!("[wasmtime|run] Failed to find function '{}': {:?}", syscall_name, e);
                                     return -1; 
                                 }
                             };
-                            
-                            let result = match grate_entry_point.call(&mut store, (index, cageid, arg1, arg1cageid, arg2, arg2cageid, arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6, arg6cageid)) {
+                            let result = match grate_entry_point.call(&mut store, (cageid, arg1, arg1cageid, arg2, arg2cageid, arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6, arg6cageid)) {
                                 Ok(value) => value,
                                 Err(e) => {
-                                    eprintln!("Error calling pass_fptr_to_wt: {:?}", e);
+                                    eprintln!("Error calling {}: {:?}", syscall_name, e);
                                     return -1; 
                                 }
                             };
