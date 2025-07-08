@@ -35,10 +35,13 @@ EOF
 **3. Compile and run**
 
 The use `lindtool.sh` to compile and run your program in the Lind Sandbox.
+Run cpwasm command first to compile the environment before compiling the
+example program. 
 
 ```bash
-./lindtool.sh compile_test hello
-./lindtool.sh run hello
+./scripts/lindtool.sh cpwasm
+./scripts/lindtool.sh compile_test hello
+./scripts/lindtool.sh run hello
 ```
 
 *Here is what happens under the hood:*

@@ -1,19 +1,21 @@
 ## Run wasmtime
+Note: You should first follow the instructions in 
+[Getting started]
+(https://lind-project.github.io/lind-wasm/use/getting-started/)
+ and be inside the container before this example. 
+
 Run the `.wasm` file, modify the wasmtime path to your own
 
+Here is an example to run the `printf.c` with wasmtime
+
 ```
-/home/lind-wasm/wasmtime/target/debug/wasmtime add.wasm
+cd $HOME/lind-wasm
+./scripts/lindtool.sh cpwasm
+./scripts/lindtool.sh cptest tests/unit-tests/file_tests/deterministic/printf
+./scripts/lindtool.sh run tests/unit-tests/file_tests/deterministic/printf
 ```
 
 For printf.wasm, you should get `Hello World!`.
-
-
-Now let try to print `hello world!` by printf
-
-```
-./lindtool.sh cptest PATH_TO_TEST
-./lindtool.sh run PATH_TO_TEST
-```
 
 ## Running the WebAssembly Module with Wasmtime
 

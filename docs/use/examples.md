@@ -19,8 +19,8 @@ gcc hello.c -o hello
 
 Then under lind, where it should produce the same output:
 ```
-./lindtool.sh cptest hello
-./lindtool.sh run hello
+./scripts/lindtool.sh cptest hello
+./scripts/lindtool.sh run hello
 ```
 <!-- A sample output is shown below:
 <a href="../../images/hello_screenshot1.png" target="_blank">
