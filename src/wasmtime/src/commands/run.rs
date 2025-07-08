@@ -20,9 +20,9 @@ use wasmtime::{
 };
 pub use once_cell::sync::Lazy;
 
-// use wasmtime::runtime::instance::Instance;
 use wasmtime::Instance;
-use parking_lot::RwLock;
+// use parking_lot::RwLock;
+use std::sync::RwLock;
 
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
@@ -32,7 +32,7 @@ use wasmtime_wasi::WasiView;
 use wasmtime_lind_utils::LindCageManager;
 
 use threei::threei::{make_syscall, threei_wasm_func};
-use wasmtime::InstanceHandle;
+use wasmtime::runtime::vm::instance::InstanceHandle;
 use rawposix::sys_calls::{lindrustinit, lindrustfinalize};
 use wasmtime::Caller;
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};

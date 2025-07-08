@@ -22,7 +22,7 @@ mod const_expr;
 mod export;
 mod gc;
 mod imports;
-mod instance;
+pub mod instance;
 mod memory;
 mod mmap;
 mod mmap_vec;

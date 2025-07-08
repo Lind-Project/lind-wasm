@@ -251,11 +251,13 @@ impl Instance {
                 let memory_base = defined_memory.base as usize;
 
                 cage::memory::mem_helper::init_vmmap_helper(pid, memory_base, Some(minimal_pages as u32));
-
+                
+                let syscall_name: &'static str = "mmap_syscall";
+                let syscall_name_ptr = syscall_name.as_ptr() as u64;
                 make_syscall(
                     pid, // self cageid
                     (MMAP_SYSCALL) as u64, // syscall num
-                    0, // mmap will not be a grate call, so name does not matter, because syscall name will only be effective in grate closure
+                    syscall_name_ptr, // since wasmtime operates with lower level memory, it always interacts with underlying os
                     pid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     pid,

@@ -96,6 +96,15 @@ pub fn check_cageid(cageid: u64) {
     }
 }
 
+pub fn cagetable_init() {
+    unsafe {
+        for _cage in 0..MAX_CAGEID {
+            CAGE_MAP.push(None);
+        }
+    }
+}
+
+
 /// Add a cage to `CAGE_MAP` and map `cageid` to its index
 // pub fn add_cage(cageid: u64, cage: Cage) {
 //     let mut list = CAGE_MAP.write();
@@ -186,12 +195,14 @@ pub fn cagetable_clear() -> Vec<usize> {
     unsafe {
         for (cageid, cage) in CAGE_MAP.iter_mut().enumerate() {
             let cageopt = cage.take();
-            if cageopt.is_some() {
+            if !cageopt.is_none() {
                 // exitvec.push(cageopt.unwrap());
                 exitvec.push(cageid)
             }
         }
     }
+
+    println!("exitvec: {:?}", exitvec);
 
     exitvec
 }

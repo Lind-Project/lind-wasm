@@ -4,7 +4,7 @@
 use crate::fs_calls::kernel_close;
 use cage::memory::mem_helper::*;
 use cage::memory::vmmap::{VmmapOps, *};
-use cage::{add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie};
+use cage::{cagetable_init, add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie};
 use fdtables;
 use libc::sched_yield;
 use parking_lot::RwLock;
@@ -117,25 +117,27 @@ pub fn exit_syscall(
         return syscall_error(Errno::EFAULT, "exit", "Invalide Arguments");
     }
 
-    let _ = fdtables::remove_cage_from_fdtable(status_cageid);
-
+    let _ = fdtables::remove_cage_from_fdtable(cageid);
+    println!("cage id, {}", cageid);
     // Get the self cage
-    let selfcage = get_cage(status_cageid).unwrap();
-    if selfcage.parent != cageid {
-        let parent_cage = get_cage(selfcage.parent);
-        if let Some(parent) = parent_cage {
-            parent.child_num.fetch_sub(1, SeqCst);
-            let mut zombie_vec = parent.zombies.write();
-            zombie_vec.push(Zombie {
-                cageid: status_cageid,
-                exit_code: status,
-            });
-        } else {
-            // if parent already exited
-            // BUG: we currently do not handle the situation where a parent has exited already
+    //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
+    if let Some(selfcage) = get_cage(cageid) {
+        if selfcage.parent != cageid {
+            let parent_cage = get_cage(selfcage.parent);
+            if let Some(parent) = parent_cage {
+                parent.child_num.fetch_sub(1, SeqCst);
+                let mut zombie_vec = parent.zombies.write();
+                zombie_vec.push(Zombie {
+                    cageid: cageid,
+                    exit_code: status,
+                });
+            } else {
+                // if parent already exited
+                // BUG: we currently do not handle the situation where a parent has exited already
+            }
         }
     }
-
+    
     status
 }
 
@@ -395,6 +397,7 @@ pub fn getppid_syscall(
 /// detailed error messages will be printed if set
 pub fn lindrustinit(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
+    cagetable_init();
 
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
 

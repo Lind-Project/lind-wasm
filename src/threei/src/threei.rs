@@ -634,7 +634,9 @@ pub fn harsh_cage_exit(
     _arg6:u64, _arg6cage:u64, 
 ) -> u64 {
     // Call underlying exit syscall to perform cleanup
-    make_syscall(targetcage, EXIT_SYSCALL, EXIT_SYSCALL, targetcage, exittype, targetcage, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    let syscall_name: &'static str = "exit_syscall";
+    let syscall_name_ptr = syscall_name.as_ptr() as u64;
+    make_syscall(targetcage, EXIT_SYSCALL, syscall_name_ptr, targetcage, exittype, targetcage, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     // Remove cage's own handler table if it exists
     let mut handler_table = HANDLERTABLE.lock().unwrap();
@@ -744,11 +746,13 @@ pub fn copy_data_between_cages(
 ) -> u64 {
     // Check if destaddr has been set
     let destaddr = if destaddr == 0 {
+        let syscall_name: &'static str = "mmap_syscall";
+        let syscall_name_ptr = syscall_name.as_ptr() as u64;
         // Map the memory region for the destination address, if user doesn't allocate the memory
         make_syscall(destcage,
             MMAP_SYSCALL,
+            syscall_name_ptr,
             destcage,
-            MMAP_SYSCALL,
             0, // let sys pick addr 
             destcage,
             len as u64,

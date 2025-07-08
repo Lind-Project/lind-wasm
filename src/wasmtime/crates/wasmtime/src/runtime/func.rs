@@ -2050,8 +2050,8 @@ for_each_function_signature!(impl_wasm_ty_list);
 /// Host functions which want access to [`Store`](crate::Store)-level state are
 /// recommended to use this type.
 pub struct Caller<'a, T> {
-    pub(crate) store: StoreContextMut<'a, T>,
-    caller: &'a crate::runtime::vm::Instance,
+    pub store: StoreContextMut<'a, T>,
+    pub caller: &'a crate::runtime::vm::Instance,
 }
 
 impl<T> Caller<'_, T> {

@@ -351,12 +351,13 @@ impl<
         }
         let child_cageid = child_cageid.unwrap();
         let parent_pid = self.pid;
-
+        let syscall_name: &'static str = "fork_syscall";
+        let syscall_name_ptr = syscall_name.as_ptr() as u64;
         // calling fork in rawposix to fork the cage
         make_syscall(
             self.pid as u64, 
             (FORK_SYSCALL) as u64, // syscall num for fork 
-            (FORK_SYSCALL) as u64,
+            syscall_name_ptr,
             self.pid as u64, 
             child_cageid, 
             self.pid as u64,
@@ -511,12 +512,14 @@ impl<
                                     child_cageid,
                                     THREAD_START_ID as u64,
                                 ) {
+                                    let syscall_name: &'static str = "exit_syscall";
+                                    let syscall_name_ptr = syscall_name.as_ptr() as u64;
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
                                     make_syscall(
                                         child_cageid, // self cage
                                         (EXIT_SYSCALL) as u64, // syscall num
-                                        (EXIT_SYSCALL) as u64,
+                                        syscall_name_ptr,
                                         child_cageid, // target cage
                                         *val as u64, // 1st arg: status
                                         child_cageid,
@@ -782,12 +785,14 @@ impl<
                                 child_cageid as u64,
                                 next_tid as u64,
                             ) {
+                                let syscall_name: &'static str = "exit_syscall";
+                                let syscall_name_ptr = syscall_name.as_ptr() as u64;
                                 // we clean the cage only if this is the last thread in the cage
                                 // exit the cage with the exit code
                                 make_syscall(
                                     (child_cageid) as u64, // self cage
                                     (EXIT_SYSCALL) as u64, // syscall num
-                                    (EXIT_SYSCALL) as u64,
+                                    syscall_name_ptr,
                                     (child_cageid) as u64, // target cage
                                     *val as u64, // 1st arg: status
                                     (child_cageid) as u64,
@@ -988,12 +993,14 @@ impl<
             // for exec, we do not need to do rewind after unwinding is done
             store.set_asyncify_state(AsyncifyState::Normal);
 
+            let syscall_name: &'static str = "exec_syscall";
+            let syscall_name_ptr = syscall_name.as_ptr() as u64;
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
             make_syscall(
                 cloned_pid as u64, 
                 (EXEC_SYSCALL) as u64, // syscall num for exec 
-                (EXEC_SYSCALL) as u64,
+                syscall_name_ptr,
                 cloned_pid as u64, 
                 0,
                 0,
