@@ -70,8 +70,6 @@ SYS_INCLUDE="-nostdinc -isystem $CLANG/lib/clang/16/include -isystem /usr/i686-l
 DEFINES="-D_LIBC_REENTRANT -include $BUILD/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
-# Copy clang wasi libs
-cp -r $GLIBC/wasi $CLANG/lib/clang/16/lib
 
 # Build glibc
 rm -rf $BUILD
