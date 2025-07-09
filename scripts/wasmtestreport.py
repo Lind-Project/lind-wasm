@@ -133,7 +133,7 @@ def add_test_result(result, file_path, status, error_type, output):
 # Function: compile_c_to_wasm
 #
 # Purpose:
-#   Given a path to a .c file, calls the lindtool script to compile it into wasm.
+#   Given a path to a .c file, calls `lind_compile` to compile it into wasm.
 #
 # Variables:
 # - Input: source_file - path to the .c file.
@@ -145,15 +145,15 @@ def add_test_result(result, file_path, status, error_type, output):
 #   Catches and returns exceptions as error strings
 #
 # Note:
-#   Dependancy on the script "./lindtool.sh compile_test".
+#   Dependancy on the script `lind_compile`.
 # ----------------------------------------------------------------------
 def compile_c_to_wasm(source_file):
     source_file = Path(source_file).resolve()
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lindtool.sh"), "compile_test", testcase]
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
     if DEBUG_MODE:
         print("Running command:", compile_cmd)
-        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lindtool.sh")):
+        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
             print("File exists and is a regular file!")
         else:
             print("File not found or it's a directory!")
@@ -164,7 +164,7 @@ def compile_c_to_wasm(source_file):
         if result.returncode != 0:
             return (None, result.stdout + "\n" + result.stderr)
         else:
-            wasm_file = Path(testcase + ".wasm")
+            wasm_file = Path(testcase + ".cwasm")
             return (wasm_file, "")
     except Exception as e:
         return (None, f"Exception during compilation: {str(e)}")
@@ -188,16 +188,15 @@ def compile_c_to_wasm(source_file):
 #   Catches TimeoutExpired and other Exceptions.
 #
 # Note:
-#   Dependancy on the script "./lindtool.sh run"
+#   Dependancy on the script "lind_run"
 #   Since the script outputs the command being run, we ignore 
 #   the first line in stdout by the script which is the command itself
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
-    testcase = str(wasm_file.with_suffix(''))
-    run_cmd = [os.path.join(LIND_TOOL_PATH, "lindtool.sh"), "run", testcase]
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file]
     if DEBUG_MODE:
         print("Running command:", run_cmd)
-        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lindtool.sh")):
+        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
             print("File exists and is a regular file!")
         else:
             print("File not found or it's a directory!")
@@ -212,7 +211,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
         filtered_lines = lines[1:]
         filtered_output = "\n".join(filtered_lines)
 
-        return (proc.returncode, filtered_output)
+        return (proc.returncode, full_output)
 
     except subprocess.TimeoutExpired as e:
         return ("timeout", f"Timed Out (timeout: {timeout_sec}s)")

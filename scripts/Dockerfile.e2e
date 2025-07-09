@@ -61,9 +61,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 ENV PATH="/root/.cargo/bin:${PATH}"
 COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs .
 # Build wasmtime with `--release` flag for faster tests
-# NOTE: `ln` workaround required for hard-coded paths in test tools (lind_config.sh)
-RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release && \
-    (cd src/wasmtime/target && mkdir -p debug && ln -sf ../release/wasmtime debug)
+RUN cargo build --manifest-path src/wasmtime/Cargo.toml --release
 
 
 # Build glibc and generate sysroot
