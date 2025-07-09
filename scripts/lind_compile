@@ -1,0 +1,33 @@
+#!/bin/bash
+set -ue
+
+# Cross-compile passed .c file to .wasm and .cwasm files
+#
+# Important notes:
+# - call from source code repository root directory
+# - expects `clang` on $PATH
+# - expects `wasm-opt` at its included location
+# - expects `wasmtime` its release build location
+#
+# Usage:
+#
+#   ./scripts/lind_compile /path/to/lind-program.c
+
+# Expects exactly one arg, ending with '.c'
+if [[ "$#" -ne 1 || "${1: -2}" != ".c" ]]; then
+    echo "usage: $0 </path/to/*.c file>"
+    exit 1
+fi
+
+path_c="$1"
+path_wasm="${1%.c}.wasm"
+path_cwasm="${1%.c}.cwasm"
+
+clang --sysroot=${PWD}/src/glibc/sysroot \
+    -pthread --target=wasm32-unknown-wasi \
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
+    "$path_c" -g -O0 -o "$path_wasm"
+
+tools/binaryen/bin/wasm-opt --epoch-injection --asyncify -O2 --debuginfo "$path_wasm" -o "$path_wasm"
+
+src/wasmtime/target/release/wasmtime compile "$path_wasm" -o "$path_cwasm"
