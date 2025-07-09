@@ -1092,7 +1092,13 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
             let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
-            let status = interface::get_i32_ref(status_addr).unwrap();
+            // let status = interface::get_i32_ref(status_addr).unwrap();
+            static mut ZERO_PLACEHOLDER: i32 = 0;
+            let status = if arg1 == 0 {
+                unsafe { &mut ZERO_PLACEHOLDER }
+            } else {
+                interface::get_i32_ref(status_addr).unwrap()
+            };
             cage.wait_syscall(status)
         }
 
