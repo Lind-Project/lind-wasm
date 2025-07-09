@@ -59,12 +59,14 @@ FROM base as build-wasmtime
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain nightly-2025-06-01
 ENV PATH="/root/.cargo/bin:${PATH}"
+# NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
 COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs Makefile .
 RUN make wasmtime
 
 
 # Build glibc and generate sysroot
 FROM base AS build-glibc
+# NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
 COPY --parents scripts/make_glibc_and_sysroot.sh src/glibc Makefile .
 RUN make sysroot
 
