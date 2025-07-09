@@ -1067,17 +1067,25 @@ impl Cage {
      *   a nonnegative value on success.
      */
     pub fn ioctl_syscall(&self, virtual_fd: i32, request: u64, ptrunion: *mut u8) -> i32 {
-        let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
-        if wrappedvfd.is_err() {
-            return syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor");
-        }
-        let vfd = wrappedvfd.unwrap();
-        let ret = unsafe { libc::ioctl(vfd.underfd as i32, request, ptrunion as *mut c_void) };
-        if ret < 0 {
-            let errno = get_errno();
-            return handle_errno(errno, "ioctl");
-        }
-        return ret;
+        return 0;
+    //     let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
+    //     if wrappedvfd.is_err() {
+    //         return syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor");
+    //     }
+    //     let vfd = wrappedvfd.unwrap();
+    //     #[cfg(not(target_env = "unix"))]
+    //     let req = request as u64;
+    //     #[cfg(target_env = "unix")]
+    //     let req = request as i32;
+
+    //     let ret = unsafe {
+    //         libc::ioctl(vfd.underfd as libc::c_int, req, ptrunion as *mut libc::c_void)
+    //     };
+    //     if ret < 0 {
+    //         let errno = get_errno();
+    //         return handle_errno(errno, "ioctl");
+    //     }
+    //     return ret;
     }
 
     //------------------------------------CHMOD SYSCALL------------------------------------

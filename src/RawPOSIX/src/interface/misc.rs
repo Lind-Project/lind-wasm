@@ -150,7 +150,7 @@ pub fn lind_threadexit() {
 }
 
 pub fn lind_threadkill(thread_id: u64, sig: i32) -> i32 {
-    unsafe { pthread_kill(thread_id, sig) as i32 }
+    unsafe { pthread_kill(thread_id as libc::pthread_t, sig) as i32 }
 }
 
 pub fn get_pthreadid() -> u64 {

@@ -153,6 +153,115 @@ impl RunCommon {
         Ok(())
     }
 
+    // pub fn load_module(&self, engine: &Engine, path: &Path) -> Result<RunTarget> {
+    //     let path = match path.to_str() {
+    //         #[cfg(unix)]
+    //         Some("-") => "/dev/stdin".as_ref(),
+    //         _ => path,
+    //     };
+
+    //     // First attempt to load the module as an mmap. If this succeeds then
+    //     // detection can be done with the contents of the mmap and if a
+    //     // precompiled module is detected then `deserialize_file` can be used
+    //     // which is a slightly more optimal version than `deserialize` since we
+    //     // can leave most of the bytes on disk until they're referenced.
+    //     //
+    //     // If the mmap fails, for example if stdin is a pipe, then fall back to
+    //     // `std::fs::read` to load the contents. At that point precompiled
+    //     // modules must go through the `deserialize` functions.
+    //     //
+    //     // Note that this has the unfortunate side effect for precompiled
+    //     // modules on disk that they're opened once to detect what they are and
+    //     // then again internally in Wasmtime as part of the `deserialize_file`
+    //     // API. Currently there's no way to pass the `MmapVec` here through to
+    //     // Wasmtime itself (that'd require making `MmapVec` a public type, both
+    //     // which isn't ready to happen at this time). It's hoped though that
+    //     // opening a file twice isn't too bad in the grand scheme of things with
+    //     // respect to the CLI.
+    //     match wasmtime::_internal::MmapVec::from_file(path) {
+    //         Ok(map) => self.load_module_contents(
+    //             engine,
+    //             path,
+    //             &map,
+    //             || unsafe { Module::deserialize_file(engine, path) },
+    //             #[cfg(feature = "component-model")]
+    //             || unsafe { Component::deserialize_file(engine, path) },
+    //         ),
+    //         Err(_) => {
+    //             let bytes = std::fs::read(path)
+    //                 .with_context(|| format!("failed to read file: {}", path.display()))?;
+    //             self.load_module_contents(
+    //                 engine,
+    //                 path,
+    //                 &bytes,
+    //                 || unsafe { Module::deserialize(engine, &bytes) },
+    //                 #[cfg(feature = "component-model")]
+    //                 || unsafe { Component::deserialize(engine, &bytes) },
+    //             )
+    //         }
+    //     }
+    // }
+
+    // pub fn load_module_contents(
+    //     &self,
+    //     engine: &Engine,
+    //     path: &Path,
+    //     bytes: &[u8],
+    //     deserialize_module: impl FnOnce() -> Result<Module>,
+    //     #[cfg(feature = "component-model")] deserialize_component: impl FnOnce() -> Result<Component>,
+    // ) -> Result<RunTarget> {
+    //     Ok(match engine.detect_precompiled(bytes) {
+    //         Some(Precompiled::Module) => {
+    //             self.ensure_allow_precompiled()?;
+    //             RunTarget::Core(deserialize_module()?)
+    //         }
+    //         #[cfg(feature = "component-model")]
+    //         Some(Precompiled::Component) => {
+    //             self.ensure_allow_precompiled()?;
+    //             self.ensure_allow_components()?;
+    //             RunTarget::Component(deserialize_component()?)
+    //         }
+    //         #[cfg(not(feature = "component-model"))]
+    //         Some(Precompiled::Component) => {
+    //             bail!("support for components was not enabled at compile time");
+    //         }
+    //         #[cfg(any(feature = "cranelift", feature = "winch"))]
+    //         None => {
+    //             // Parse the text format here specifically to add the `path` to
+    //             // the error message if there's a syntax error.
+    //             #[cfg(feature = "wat")]
+    //             let bytes = wat::parse_bytes(bytes).map_err(|mut e| {
+    //                 e.set_path(path);
+    //                 e
+    //             })?;
+    //             if wasmparser::Parser::is_component(&bytes) {
+    //                 #[cfg(feature = "component-model")]
+    //                 {
+    //                     self.ensure_allow_components()?;
+    //                     let component = wasmtime::CodeBuilder::new(engine)
+    //                         .wasm(&bytes, Some(path))?
+    //                         .compile_component()?;
+    //                     RunTarget::Component(component)
+    //                 }
+    //                 #[cfg(not(feature = "component-model"))]
+    //                 {
+    //                     bail!("support for components was not enabled at compile time");
+    //                 }
+    //             } else {
+    //                 let module = wasmtime::CodeBuilder::new(engine)
+    //                     .wasm(&bytes, Some(path))?
+    //                     .compile_module()?;
+    //                 RunTarget::Core(module)
+    //             }
+    //         }
+    //         #[cfg(not(any(feature = "cranelift", feature = "winch")))]
+    //         None => {
+    //             let _ = path;
+    //             bail!("support for compiling modules was disabled at compile time");
+    //         }
+    //     })
+    // }
+    
     pub fn load_module(&self, engine: &Engine, path: &Path) -> Result<RunTarget> {
         let path = match path.to_str() {
             #[cfg(unix)]
