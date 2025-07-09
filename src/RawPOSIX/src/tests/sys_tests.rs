@@ -204,14 +204,21 @@ pub mod sys_tests {
         // Should return immediately without hanging (key requirement of PR #228)
         let mut status = 0;
         let pid = cage.waitpid_syscall(-1, &mut status, libc::WNOHANG);
-        
+
         // Should return 0 (no children) or negative error, not hang
-        assert!(pid <= 0, "waitpid should return 0 or error for no children, got: {}", pid);
-        
+        assert!(
+            pid <= 0,
+            "waitpid should return 0 or error for no children, got: {}",
+            pid
+        );
+
         // Test: waitpid on specific non-existent PID with WNOHANG
         let pid = cage.waitpid_syscall(999, &mut status, libc::WNOHANG);
-        assert!(pid < 0, "waitpid should return error for non-existent child");
-        
+        assert!(
+            pid < 0,
+            "waitpid should return error for non-existent child"
+        );
+
         lindrustfinalize();
     }
 }
