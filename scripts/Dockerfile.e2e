@@ -60,7 +60,6 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain nightly-2025-06-01
 ENV PATH="/root/.cargo/bin:${PATH}"
 COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs Makefile .
-# Build wasmtime with `--release` flag for faster tests
 RUN make wasmtime
 
 
