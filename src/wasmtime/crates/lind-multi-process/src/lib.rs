@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Context};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
@@ -15,6 +15,9 @@ use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId,
     InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Trap, Val,
 };
+
+use std::fs::File;
+use std::io::Read;
 
 use wasmtime_environ::MemoryIndex;
 
@@ -839,6 +842,8 @@ impl<
         argv: i64,
         envs: Option<i64>,
     ) -> Result<i32> {
+        println!("execve called with path: {}, argv: {}, envs: {:?}", path, argv, envs);
+
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -912,6 +917,8 @@ impl<
             return Ok(-2);
         }
 
+        println!("execve path: {:?}", real_path_str);
+
         // parse the environment variables
         if let Some(envs_addr) = envs {
             let env_ptr = ((address as i64) + envs_addr) as *const *const u8;
@@ -967,7 +974,12 @@ impl<
         let store = caller.as_context_mut().0;
 
         // let cloned_run_command = self.run_command.clone();
-        let cloned_webasm = self.webasm.clone();
+        // let cloned_webasm = self.webasm.clone();
+        let mut exec_file = File::open(&real_path_str)
+            .expect("Failed to open exec file");
+        let mut exec_webasm = Vec::new();
+        exec_file.read_to_end(&mut exec_webasm).context("Failed to read exec file")?;
+
         let cloned_config = self.config.clone();
         let cloned_next_cageid = self.next_cageid.clone();
         let cloned_lind_manager = self.lind_manager.clone();
@@ -999,7 +1011,8 @@ impl<
 
             let ret = exec_call(
                 // &cloned_run_command,
-                &cloned_webasm,
+                // &cloned_webasm,
+                &exec_webasm,
                 &cloned_config,
                 &real_path_str,
                 &args,
