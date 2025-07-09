@@ -11,14 +11,20 @@
 # NOTE: The 'test' stage (A) runs end-to-end tests on `docker build`, and is
 # optimized for Docker build time and caching. It is not meant for `docker
 # run`. Use the 'release' stage (B) to create an image that includes the full
-# lind-wasm toolchain, e.g. to run demos, tests, experiments, etc.
+# lind-wasm toolchain, e.g. to run demos, tests, experiments, etc. For
+# development you may want to build just the base image (C) and mount the full
+# source tree.
 #
 # Usage A (test):
 #     docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e .
 #
 # Usage B (create and run image):
-#     docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e --target release .
+#     docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e -t release --target release .
 #     docker run --platform=linux/amd64 -it release /bin/bash
+#
+# Usage C (create base image and mount source):
+#     docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e -t dev --target base .
+#     docker run --platform=linux/amd64 -v $(PWD):/lind -w /lind -it dev /bin/bash
 
 # Install build dependencies
 # NOTE: We install dependencies for multiple stages at once, to save RUN time
@@ -52,13 +58,15 @@ RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CL
 COPY src/glibc/wasi /${CLANG}/lib/clang/16/lib/wasi
 ENV PATH="/${CLANG}/bin:${PATH}"
 
-
-# Install rust and build wasmtime
-FROM base as build-wasmtime
+# Install rust
 # NOTE: pinning known-to-work nightly-2025-06-01 (see #242)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain nightly-2025-06-01
 ENV PATH="/root/.cargo/bin:${PATH}"
+
+
+# Build wasmtime
+FROM base as build-wasmtime
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
 COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs Makefile .
 RUN make wasmtime
