@@ -21,30 +21,26 @@ cd lind-wasm
 ```
 3. Build Docker Image 
 ```
-docker build -t testing_image -f .devcontainer/Dockerfile --build-arg DEV_MODE=true --platform=linux/amd64 .
+docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e -t dev --target base .
 ```
 4. Run the image 
-```
-docker run -it testing_image /bin/bash
+```bash
+# Note: The `-v` option mounts your repo into the container. This means, you can
+# live-edit the files in the container using your host editor. And files created
+# or edited in the container, e.g. when running `make`, persist on the host.
+
+docker run --platform=linux/amd64 -v $(PWD):/lind -w /lind -it dev /bin/bash
 ```
 5. Build toolchain (glibc and wasmtime)
 ```
-bazel build //:make_glibc //:make_wasmtime
+# this may take a while ...
+make wasmtime sysroot
 ```
 6. Run the test suite 
 ```
-bazel run //:python_tests
+./scripts/wasmtestreport.py
 ```
-(This will run the whole test suite.  Use `scripts/wasmtestreport.py --help` to
-list available arguments and flags)
-Note: Pass test suite arguments using
-```
-bazel run //:python_tests -- <wasmtestreport arguments>
-```
-For example: 
-```
-bazel run //:python_tests -- --timeout 10
-```
+Run `scripts/wasmtestreport.py --help` to list available usage options.
 
 
 
@@ -98,14 +94,14 @@ can be directly compared, i.e. contents of gcc run == contents of lind-wasm
 run, that would be enough
 
 Any failure in compiling or running using gcc or lind-wasm is considered a
-failure. Mismatch in native (gcc) and wasm outputs are also considered a 
+failure. Mismatch in native (gcc) and wasm outputs are also considered a
 failure.
 
 
 ## Example Combined Usage
 
 ```
-bazel run //:python_tests -- \
+./scripts/wasmtestreport.py \
   --generate-html \
   --skip config_tests file_tests \
   --timeout 10 \
