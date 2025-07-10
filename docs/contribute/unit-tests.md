@@ -24,8 +24,11 @@ cd lind-wasm
 docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e -t dev --target base .
 ```
 4. Run the image 
-```
-# NOTE: this mounts the source code repo into the container
+```bash
+# Note: The `-v` option mounts your repo into the container. This means, you can
+# live-edit the files in the container using your host editor. And files created
+# or edited in the container, e.g. when running `make`, persist on the host.
+
 docker run --platform=linux/amd64 -v $(PWD):/lind -w /lind -it dev /bin/bash
 ```
 5. Build toolchain (glibc and wasmtime)
