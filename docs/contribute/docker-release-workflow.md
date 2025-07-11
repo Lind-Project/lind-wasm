@@ -1,9 +1,7 @@
-# Docker Hub Release Workflow (`release.yml`)
+# Docker Hub Release Workflow
 
-> **File location:** `.github/workflows/release.yml`  
-> **Introduced in:** PR [#271](https://github.com/Lind-Project/lind-wasm/pull/271)
 
-The workflow [`release.yml`](https://github.com/Lind-Project/lind-wasm/blob/main/.github/workflows/release.yml) builds the **lind-wasm** Docker image from the *release* stage of `Dockerfile.e2e` and pushes it to Docker Hub as **`securesystemslab/lind-wasm`**.  
+The workflow builds the **lind-wasm** Docker image from the *release* stage of `Dockerfile.e2e` and pushes it to Docker Hub as **`securesystemslab/lind-wasm`**.  
 It is **manual-only** (`workflow_dispatch`), so contributors must trigger it on demand.
 
 ---
@@ -52,15 +50,5 @@ For details, check GitHub’s **[Manually running a workflow](https://docs.githu
 3. **Login** to Docker Hub with `DOCKERHUB_PASSWORD`.  
 4. **Tag & push**:  
    * `securesystemslab/lind-wasm:<GIT_SHA>` – every build  
-   * `securesystemslab/lind-wasm:latest` – only when the source branch is `main`
+   * `securesystemslab/lind-wasm:latest` – every build
 
----
-
-## 5. Optional enhancements
-
-* **Scheduled builds:** add a `schedule:` block in `release.yml`, e.g.  
-  ```yaml
-  on:
-    workflow_dispatch:
-    schedule:
-      - cron: "0 3 * * 1"   # every Monday 03:00 UTC
