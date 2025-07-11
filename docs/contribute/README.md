@@ -8,11 +8,5 @@ requests to these repositories.
 
 To report a security issue, please refer to the [Security Policy](security.md)!
 
-
-Detailed guidelines about writing code, tests, documentation, and more are below:
-
-* [Rust Style Guide](styleguide.md)
-* [Unit Tests](unit-tests.md)
-* [Adding to the docs](add-docs.md)
-* [Security Policy](security.md)
-* [Code of Conduct](../community/conduct.md)
+Continue reading the pages in this section for detailed guidelines about
+writing code, tests, documentation, and more.
