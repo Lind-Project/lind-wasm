@@ -21,6 +21,8 @@ pub const STDIN_FILENO: i32 = 0; // File descriptor for standard input
 pub const STDOUT_FILENO: i32 = 1; // File descriptor for standard output
 pub const STDERR_FILENO: i32 = 2; // File descriptor for standard error
 
+pub const MAXFD: i32 = 1024; // Maximum number of file descriptors
+
 // ===== Directory Entry Constant =====
 // Source: include/dirent.h
 pub const DT_UNKNOWN: u8 = 0;

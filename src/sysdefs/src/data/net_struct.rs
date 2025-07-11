@@ -4,6 +4,7 @@ use std::str::from_utf8;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 extern crate libc;
+use libc::*;
 
 static mut UD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -238,4 +239,12 @@ pub struct PollStruct {
 pub struct SockaddrDummy {
     pub sa_family: u16,
     pub _sa_data: [u16; 14],
+}
+
+// create a sockaddr_un struct
+pub fn create_sockaddr_un() -> sockaddr_un{
+    sockaddr_un {
+        sun_family: 0,            
+        sun_path: [0; 108],     
+    }
 }

@@ -100,7 +100,6 @@ pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
 
 // set the wasm linear memory base address to vmmap
 pub fn init_vmmap_helper(cageid: u64, base_address: usize, program_break: Option<u32>) {
-    println!("Cageid: {}", cageid);
     let cage = get_cage(cageid).unwrap();
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);

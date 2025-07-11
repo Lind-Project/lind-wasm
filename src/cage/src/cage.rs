@@ -192,6 +192,7 @@ pub fn get_cage(cageid: u64) -> Option<Arc<Cage>> {
 
 pub fn cagetable_clear() -> Vec<usize> {
     let mut exitvec = Vec::new();
+    
     unsafe {
         for (cageid, cage) in CAGE_MAP.iter_mut().enumerate() {
             let cageopt = cage.take();
@@ -201,8 +202,6 @@ pub fn cagetable_clear() -> Vec<usize> {
             }
         }
     }
-
-    println!("exitvec: {:?}", exitvec);
 
     exitvec
 }
