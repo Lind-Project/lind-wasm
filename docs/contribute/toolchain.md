@@ -63,4 +63,4 @@ and can be used as is.
 
 ## Next steps
 
-Automate the [build and run programs](../contribute/unit-tests.md) with `Docker` and `make`.
+Automate the [build and run programs](unit-tests.md) with `Docker` and `make`.

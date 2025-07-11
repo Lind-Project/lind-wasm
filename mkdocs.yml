@@ -17,12 +17,12 @@ nav:
     - Signals: internal/signals.md
   - Usage:
     - Getting Started: use/getting-started.md
-    - Lind Toolchain: use/toolchain.md
-    - Debug Programs: use/debug-programs.md
   - Contributing:
     - contribute/README.md
     - Rust style guide: contribute/styleguide.md
+    - Lind toolchain: contribute/toolchain.md
     - Unit tests: contribute/unit-tests.md
+    - Debug programs: contribute/debug-programs.md
     - Adding to the docs: contribute/add-docs.md
     - Security policy: contribute/security.md
   - Community:
