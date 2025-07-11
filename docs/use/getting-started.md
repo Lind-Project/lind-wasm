@@ -12,7 +12,7 @@ Run the following commands in your terminal to download and shell into an enviro
 that comes with the Lind Sandbox. *You'll need [Docker installed](https://docs.docker.com/engine/install/).*
 
 ```
-docker pull securesystemslab/lind-wasm  # this might take a while ...
+docker pull --platform=linux/amd64 securesystemslab/lind-wasm  # this might take a while ...
 docker run --platform=linux/amd64 -it securesystemslab/lind-wasm /bin/bash
 ```
 
