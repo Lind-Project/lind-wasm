@@ -9,14 +9,13 @@ theme:
 
 nav:
   - Home: index.md
+  - Getting Started: getting-started.md
   - Internal Documentation:
     - libc: internal/libc.md
     - Wasmtime: internal/wasmtime.md
     - RawPOSIX: internal/rawposix.md
     - Multi-Processing: internal/multiprocess-support.md
     - Signals: internal/signals.md
-  - Usage:
-    - Getting Started: use/getting-started.md
   - Contributing:
     - contribute/README.md
     - Rust style guide: contribute/styleguide.md

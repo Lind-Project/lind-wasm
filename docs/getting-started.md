@@ -1,7 +1,7 @@
 # Getting Started
 
-1. Make sure to read the [Basics](../index.md) first.
-2. If you want to start contributing, check out the [Contributor Instructions](../contribute/README.md).
+1. Make sure to read the [Basics](index.md) first.
+2. If you want to start contributing, check out the [Contributor Instructions](contribute/README.md).
 3. Continue reading to run a *__Hello World__* program in the Lind Sandbox.
 
 ## Hello World!
@@ -51,5 +51,5 @@ and the *lind-posix* microvisor.
 ## What's next!
 
 The Lind documentation is currently under heavy construction. Please [submit an
-issue](../contribute/README.md), if something doesn't seem right or is missing.
+issue](contribute/README.md), if something doesn't seem right or is missing.
 More detailed usage guides will follow soon!
