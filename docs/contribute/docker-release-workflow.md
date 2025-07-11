@@ -3,7 +3,7 @@
 > **File location:** `.github/workflows/release.yml`  
 > **Introduced in:** PR [#271](https://github.com/Lind-Project/lind-wasm/pull/271)
 
-The workflow builds the **lind-wasm** Docker image from the *release* stage of `Dockerfile.e2e` and pushes it to Docker Hub as **`securesystemslab/lind-wasm`**.  
+The workflow [`release.yml`](https://github.com/Lind-Project/lind-wasm/blob/main/.github/workflows/release.yml) builds the **lind-wasm** Docker image from the *release* stage of `Dockerfile.e2e` and pushes it to Docker Hub as **`securesystemslab/lind-wasm`**.  
 It is **manual-only** (`workflow_dispatch`), so contributors must trigger it on demand.
 
 ---
