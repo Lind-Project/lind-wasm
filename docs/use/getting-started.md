@@ -12,8 +12,8 @@ Run the following commands in your terminal to download and shell into an enviro
 that comes with the Lind Sandbox. *You'll need [Docker installed](https://docs.docker.com/engine/install/).*
 
 ```
-docker pull securesystemslab/lind-wasm  # this might take a while ...
-docker run -it securesystemslab/lind-wasm /bin/bash
+docker pull --platform=linux/amd64 securesystemslab/lind-wasm  # this might take a while ...
+docker run --platform=linux/amd64 -it securesystemslab/lind-wasm /bin/bash
 ```
 
 **2. Write a program**
@@ -34,21 +34,18 @@ EOF
 
 **3. Compile and run**
 
-The use `lindtool.sh` to compile and run your program in the Lind Sandbox.
-Run cpwasm command first to compile the environment before compiling the
-example program. 
+Use lind scripts to compile and run your program in the Lind Sandbox.
 
 ```bash
-./scripts/lindtool.sh cpwasm
-./scripts/lindtool.sh compile_test hello
-./scripts/lindtool.sh run hello
+./scripts/lind_compile hello.c
+./scripts/lind_run hello.cwasm
 ```
 
 *Here is what happens under the hood:*
 
-1.  `compile_test` compiles `hello.c` into a WebAssembly (WASM)
+1.  `lind_compile` compiles `hello.c` into a WebAssembly (WASM)
 binary using headers etc. from *lind-glibc*.
-2. The `run` command runs the compiled wasm using *lind-wasm* runtime
+1. `lind_run` runs the compiled wasm using *lind-wasm* runtime
 and the *lind-posix* microvisor.
 
 ## What's next!
