@@ -1307,7 +1307,8 @@ pub fn clock_gettime_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
-    let tp = sc_convert_sysarg_to_usize(tp_arg, tp_cageid, cageid);
+    // let tp = sc_convert_sysarg_to_usize(tp_arg, tp_cageid, cageid);
+    let tp = sc_convert_addr_to_host(tp_arg, tp_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
