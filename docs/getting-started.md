@@ -16,6 +16,35 @@ docker pull --platform=linux/amd64 securesystemslab/lind-wasm  # this might take
 docker run --platform=linux/amd64 -it securesystemslab/lind-wasm /bin/bash
 ```
 
+If you would rather use an environment with the source code and tooling, there is a 
+development image available as well.  
+(Note: If you intend to use perf, you will need to install the appropriate `linux-tools-xxx` for your kernel)
+
+```
+docker pull --platform=linux/amd64 securesystemslab/lind-wasm-dev # this might take a while ...
+docker run --platform=linux/amd64 -it --privileged --ipc=host --init --cap-add=SYS_PTRACE securesystemslab/lind-wasm-dev /bin/bash
+```
+
+If you need to, you could build the image yourself and vary any of the tags below with the
+appropriate values for your branch or packages.
+
+```
+docker build \
+  --platform=linux/amd64 \
+  --build-arg USERNAME=lind \
+  --build-arg BRANCH_NAME=main \
+  --build-arg LLVM_VERSION=llvmorg-16.0.4 \
+  --build-arg CLANG_PACKAGE=clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 \
+  -f ./scripts/Dockerfile.dev \
+  -t lind-dev .
+```
+The build process can be quite long, depending on system resources on the build machine.  
+You can then run it with:
+
+```
+docker run --platform=linux/amd64 -it --privileged --ipc=host --init --cap-add=SYS_PTRACE lind-dev /bin/bash
+```
+
 **2. Write a program**
 
 In the same terminal, use e.g. `vi` to write a `hello.c` program to be executed
