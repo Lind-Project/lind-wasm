@@ -18,6 +18,7 @@ nav:
     - Signals: internal/signals.md
   - Contributing:
     - contribute/README.md
+    - Development setup: contribute/dev-container.md
     - Rust style guide: contribute/styleguide.md
     - Lind toolchain: contribute/toolchain.md
     - Unit tests: contribute/unit-tests.md
