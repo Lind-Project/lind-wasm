@@ -65,8 +65,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 # --- Clone the repo as user ---
 RUN git clone --branch "${BRANCH_NAME}" --single-branch https://github.com/Lind-Project/lind-wasm.git
 
-# --- Switch to repo dir ---
+# --- Enable discovery of all branches, then fetch them ---
 WORKDIR /home/${USERNAME}/lind-wasm
+RUN git remote set-branches origin '*' && git fetch origin
 
 # --- Switch back to root for installing Clang binaries and symlinking ---
 USER root
