@@ -16,6 +16,8 @@ docker pull --platform=linux/amd64 securesystemslab/lind-wasm  # this might take
 docker run --platform=linux/amd64 -it securesystemslab/lind-wasm /bin/bash
 ```
 
+There is a development environment with tooling and source code available, instructions to be found [here](contribute/dev-container.md)
+
 **2. Write a program**
 
 In the same terminal, use e.g. `vi` to write a `hello.c` program to be executed
