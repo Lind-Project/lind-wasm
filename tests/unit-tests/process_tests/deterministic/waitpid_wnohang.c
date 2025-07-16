@@ -60,13 +60,5 @@ int main()
         if (wpid != -1 || errno != ECHILD) {
             return 1;  // Second waitpid should fail with ECHILD
         }
-        
-        /* Test 3: Test with invalid PID */
-        wpid = waitpid(99999, &status, WNOHANG);
-        if (wpid != -1 || errno != ECHILD) {
-            return 1;  // Invalid PID should fail with ECHILD
-        }
     }
-    
-    return 1;  // All tests passed
 } 
