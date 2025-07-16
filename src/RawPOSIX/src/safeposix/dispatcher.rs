@@ -407,41 +407,40 @@ pub fn lind_syscall_api(
         }
 
         SELECT_SYSCALL => {
-            // Get the number of file descriptors to check (highest fd + 1)
             let nfds = arg1 as i32;
-            // Get reference to the cage for memory operations
             let cage = interface::cagetable_getref(cageid);
-            // Convert readfds buffer address
-            let readfds_addr = match translate_vmmap_addr(&cage, arg2) {
-                Some(addr) => addr,
-                None => return syscall_error(Errno::EINVAL, "select", "readfds is NULL"),
+
+            // Optional readfds
+            let mut readfds_raw = match translate_vmmap_addr(&cage, arg2) {
+                Some(addr) => Some(interface::get_fdset(addr).unwrap()),
+                None => None,
             };
-            let readfds = interface::get_fdset(readfds_addr).unwrap();
-            // Convert writefds buffer address
-            let writefds_addr = match translate_vmmap_addr(&cage, arg3) {
-                Some(addr) => addr,
-                None => return syscall_error(Errno::EINVAL, "select", "writefds is NULL"),
+            let readfds = readfds_raw.unwrap();
+
+            // Optional writefds
+            let mut writefds_raw = match translate_vmmap_addr(&cage, arg3) {
+                Some(addr) => Some(interface::get_fdset(addr).unwrap()),
+                None => None,
             };
-            let writefds = interface::get_fdset(writefds_addr).unwrap();
-            // Convert errorfds buffer address
-            let errorfds_addr = match translate_vmmap_addr(&cage, arg4) {
-                Some(addr) => addr,
-                None => return syscall_error(Errno::EINVAL, "select", "errorfds is NULL"),
+            let writefds = writefds_raw.unwrap();
+
+            // Optional errorfds
+            let mut errorfds_raw = match translate_vmmap_addr(&cage, arg4) {
+                Some(addr) => Some(interface::get_fdset(addr).unwrap()),
+                None => None,
             };
-            let errorfds = interface::get_fdset(errorfds_addr).unwrap();
-            // Convert timeout buffer address
-            let timeout_addr = match translate_vmmap_addr(&cage, arg5) {
-                Some(addr) => addr,
-                None => return syscall_error(Errno::EINVAL, "select", "timeout is NULL"),
+            let errorfds = errorfds_raw.unwrap();
+
+            // Optional timeout
+            let rposix_timeout_raw = match translate_vmmap_addr(&cage, arg5) {
+                Some(addr) => Some(interface::duration_fromtimeval(addr).unwrap()),
+                None => None,
             };
-            let rposix_timeout = interface::duration_fromtimeval(timeout_addr).unwrap();
-            // Delegate to the cage's select implementation
-            // This will:
-            // 1. Monitor the specified file descriptors for activity
-            // 2. Modify the fd_sets to indicate which descriptors are ready
-            // 3. Return the number of ready descriptors or an error code
+            let rposix_timeout = rposix_timeout_raw.unwrap();
+
             cage.select_syscall(nfds, readfds, writefds, errorfds, rposix_timeout)
         }
+
 
         RENAME_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
@@ -1202,7 +1201,7 @@ pub fn lind_syscall_api(
                 Some(addr) => addr,
                 None => return syscall_error(Errno::EFAULT, "poll", "invalid pollfd address"),
             };
-            let pollfds = interface::get_pollstruct_slice(addr, nfds as usize).unwrap();
+            let pollfds = interface::get_pollstruct_slice(poll_addr, nfds as usize).unwrap();
             let timeout = arg3 as i32;
             cage.poll_syscall(pollfds, nfds, timeout)
         }
@@ -1306,7 +1305,7 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             let which = arg1 as i32;
 
-            let itimeval = {
+            let itimeval_raw = {
                 if arg2 == 0 {
                     None
                 } else {
@@ -1327,7 +1326,9 @@ pub fn lind_syscall_api(
                 }
             };
 
-            let old_itimeval = {
+            let itimeval = itimeval_raw.unwrap();
+
+            let old_itimeval_raw = {
                 if arg3 == 0 {
                     None
                 } else {
@@ -1347,6 +1348,7 @@ pub fn lind_syscall_api(
                     }
                 }
             };
+            let old_itimeval = old_itimeval_raw.unwrap();
 
             cage.setitimer_syscall(which, itimeval, old_itimeval)
         }
