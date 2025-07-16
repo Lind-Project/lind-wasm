@@ -16,15 +16,6 @@ docker pull --platform=linux/amd64 securesystemslab/lind-wasm  # this might take
 docker run --platform=linux/amd64 -it securesystemslab/lind-wasm /bin/bash
 ```
 
-If you would rather use an environment with the source code and tooling, there is a 
-development image available as well.  
-(Note: If you intend to use perf, you will need to install the appropriate `linux-tools-xxx` for your kernel)
-
-```
-docker pull --platform=linux/amd64 securesystemslab/lind-wasm-dev # this might take a while ...
-docker run --platform=linux/amd64 -it --privileged --ipc=host --init --cap-add=SYS_PTRACE securesystemslab/lind-wasm-dev /bin/bash
-```
-
 There is a development environment with tooling and source code available, instructions to be found [here](contribute/dev-container.md)
 
 **2. Write a program**
