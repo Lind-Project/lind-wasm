@@ -387,6 +387,8 @@ default = [
   "clap/default",
 ]
 
+disable_signals = []
+
 # ========================================
 # Off-by-default features
 #
