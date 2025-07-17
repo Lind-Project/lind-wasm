@@ -126,7 +126,18 @@ $CC --target=wasm32-wasi-threads -matomics \
 rm -rf "$SYSROOT"
 
 # Find all .o files recursively in the source directory, ignoring stamp.o
-object_files=$(find "$BUILD" -type f -name "*.o" ! \( -name "stamp.o" -o -name "argp-pvh.o" -o -name "repertoire.o" -o -name "static-stubs.o" \))
+object_files=$(find "$BUILD" -type f -name "*.o" ! \( \
+  -name "stamp.o" -o \
+  -name "argp-pvh.o" -o \
+  -name "repertoire.o" -o \
+  -name "static-stubs.o" \
+  -name "zic.o" -o \
+  -name "xmalloc.o" -o \
+  -name "list.o" -o \
+  -name "ldconfig.o" -o \
+  -name "sln.o" \
+\))
+
 
 # Check if object files were found
 if [ -z "$object_files" ]; then
