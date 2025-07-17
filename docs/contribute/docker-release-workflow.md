@@ -11,7 +11,7 @@ It is **manual-only** (`workflow_dispatch`), so contributors must trigger it on 
 | Requirement | Purpose |
 |-------------|---------|
 | Write rights on this repo | lets you add secrets & trigger the workflow |
-| Docker Hub access-token (or password) for `securesystemslab` | used to authenticate the image push |
+| Docker Hub access-token (or password) for `securesystemslab` | used by GitHub Actions to authenticate the Docker Hub image push |
 
 
 > **Use a token, not your password:**  
