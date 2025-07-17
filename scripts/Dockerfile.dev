@@ -54,6 +54,10 @@ RUN groupadd --gid 1000 ${USERNAME} && \
     useradd --uid 1000 --gid ${USERNAME} --create-home --shell /bin/bash ${USERNAME} && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
+# --- Install libtinfo5 as root ---
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+
 # --- Switch to user ASAP ---
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
