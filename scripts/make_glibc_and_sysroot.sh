@@ -95,6 +95,22 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -o $BUILD/lind_syscall.o \
     -c $GLIBC/lind_syscall/lind_syscall.c
 
+# Compile elision-lock.c
+$$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
+    $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
+    -o $$GLIBC_BASE/build/nptl/elision-lock.o \
+    -c ../sysdeps/unix/sysv/linux/x86/elision-lock.c \
+    -MD -MP -MF $$GLIBC_BASE/build/nptl/elision-lock.o.dt \
+    -MT $$GLIBC_BASE/build/nptl/elision-lock.o
+
+# Compile elision-unlock.c
+$$CC $$CFLAGS $$WARNINGS $$EXTRA_FLAGS \
+    $$INCLUDE_PATHS $$SYS_INCLUDE $$DEFINES $$EXTRA_DEFINES \
+    -o $$GLIBC_BASE/build/nptl/elision-unlock.o \
+    -c ../sysdeps/unix/sysv/linux/x86/elision-unlock.c \
+    -MD -MP -MF $$GLIBC_BASE/build/nptl/elision-unlock.o.dt \
+    -MT $$GLIBC_BASE/build/nptl/elision-unlock.o
+
 # Compile assembly files
 cd ../
 $CC --target=wasm32-wasi-threads -matomics \
