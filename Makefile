@@ -3,6 +3,10 @@
 all:
 	@echo "Run targets individually!"
 
+.PHONY: build
+build: sysroot wasmtime
+	@echo "Build complete"
+
 .PHONY: sysroot
 sysroot:
 	./scripts/make_glibc_and_sysroot.sh
@@ -40,3 +44,20 @@ format:
 .PHONY: docs-serve
 docs-serve:
 	mkdocs serve
+
+.PHONY: clean
+clean:
+	@echo "▶ Removing glibc artefacts"
+	$(RM) -r src/glibc/build src/glibc/sysroot src/glibc/target
+
+	@echo "▶ cargo clean (wasmtime)"
+	cargo clean --manifest-path src/wasmtime/Cargo.toml
+
+	@echo "▶ Deleting test outputs"
+	$(RM) -f results.json report.html
+	$(RM) -r src/RawPOSIX/tmp/testfiles || true
+
+	@echo "▶ Purging compiled test artefacts"
+	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete
+
+	@echo "Clean done."
