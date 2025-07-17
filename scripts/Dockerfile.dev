@@ -15,8 +15,8 @@ FROM ubuntu:22.04
 # --- Build arguments ---
 ARG USERNAME=lind
 ARG BRANCH_NAME=main
-ARG LLVM_VERSION="llvmorg-16.0.4"
-ARG CLANG_PACKAGE="clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
+ARG LLVM_VERSION="llvmorg-18.1.8"
+ARG CLANG_PACKAGE="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
 
 # --- System setup ---
 ENV DEBIAN_FRONTEND=noninteractive
