@@ -35,10 +35,7 @@ lint:
 .PHONY: format
 format:
 	cargo fmt --all --manifest-path src/wasmtime/Cargo.toml
-
-.PHONY: docs-publish
-docs-publish:
-	mkdocs gh-deploy --force 
+ 
 
 .PHONY: docs-serve
 docs-serve:
