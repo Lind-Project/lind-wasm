@@ -46,17 +46,14 @@ docs-serve:
 
 .PHONY: clean
 clean:
-	@echo "Removing glibc artifacts"
+	@echo "glibc artifacts"
 	$(RM) -r src/glibc/build src/glibc/sysroot src/glibc/target
-
 	@echo "cargo clean (wasmtime)"
 	cargo clean --manifest-path src/wasmtime/Cargo.toml
 
-	@echo "Deleting test outputs"
+.PHONY: distclean
+distclean: clean
+	@echo "removing test outputs & temp files"
 	$(RM) -f results.json report.html
 	$(RM) -r src/RawPOSIX/tmp/testfiles || true
-
-	@echo "Purging compiled test artifacts"
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete
-
-	@echo "Clean done."
