@@ -89,11 +89,7 @@ impl Cage {
      *   mknod() will return 0 when success and -1 when fail
      */
     pub fn mknod_syscall(&self, path: &str, mode: u32, dev: u64) -> i32 {
-        // Convert data type from &str into *const i8
-        let relpath = normpath(convpath(path), self);
-        let relative_path = relpath.to_str().unwrap();
-        let full_path = format!("{}{}", LIND_ROOT, relative_path);
-        let c_path = CString::new(full_path).unwrap();
+        let c_path = self.to_cstring_path(path);
         let ret = unsafe { libc::mknod(c_path.as_ptr(), mode, dev) };
         if ret < 0 {
             let errno = get_errno();
@@ -107,17 +103,8 @@ impl Cage {
      *   link() will return 0 when success and -1 when fail
      */
     pub fn link_syscall(&self, oldpath: &str, newpath: &str) -> i32 {
-        // Convert data type from &str into *const i8
-        let rel_oldpath = normpath(convpath(oldpath), self);
-        let relative_oldpath = rel_oldpath.to_str().unwrap();
-        let full_oldpath = format!("{}{}", LIND_ROOT, relative_oldpath);
-        let old_cpath = CString::new(full_oldpath).unwrap();
-
-        let rel_newpath = normpath(convpath(newpath), self);
-        let relative_newpath = rel_newpath.to_str().unwrap();
-        let full_newpath = format!("{}{}", LIND_ROOT, relative_newpath);
-        let new_cpath = CString::new(full_newpath).unwrap();
-
+        let old_cpath = self.to_cstring_path(oldpath);
+        let new_cpath = self.to_cstring_path(newpath);
         let ret = unsafe { libc::link(old_cpath.as_ptr(), new_cpath.as_ptr()) };
         if ret < 0 {
             let errno = get_errno();
@@ -153,42 +140,29 @@ impl Cage {
      *   ## Return Value:
      *   - `0` on success.
      *   - `-1` on failure, with `errno` set appropriately.
-     */
+     //------------------------------------UNLINKAT SYSCALL------------------------------------
+/*
+ *  `unlinkat` removes a file or directory relative to a directory file descriptor.
+ */
     pub fn unlinkat_syscall(&self, dirfd: i32, pathname: &str, flags: i32) -> i32 {
-        let mut c_path;
-        // Determine the appropriate kernel file descriptor and pathname conversion based on dirfd.
-        let kernel_fd = if dirfd == libc::AT_FDCWD {
-            // Case 1: When AT_FDCWD is used.
-            // Convert the provided pathname from the RawPOSIX working directory (which is different from the host's)
-            // into a host-absolute path by prepending LIND_ROOT.
-            let relpath = normpath(convpath(pathname), self);
-            let relative_path = relpath.to_str().unwrap();
-            let full_path = format!("{}{}", LIND_ROOT, relative_path);
-            c_path = CString::new(full_path).unwrap();
-            libc::AT_FDCWD
+        let (kernel_fd, c_path) = if dirfd == libc::AT_FDCWD {
+            (libc::AT_FDCWD, self.to_cstring_path(pathname))
         } else {
-            // Case 2: When a specific directory fd is provided.
-            // Translate the virtual file descriptor to the corresponding kernel file descriptor.
             let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, dirfd as u64);
             if wrappedvfd.is_err() {
                 return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
             }
             let vfd = wrappedvfd.unwrap();
-            // For this case, we pass the provided pathname directly.
-            c_path = CString::new(pathname).unwrap();
-            vfd.underfd as i32
+            (vfd.underfd as i32, CString::new(pathname).unwrap())
         };
-
-        // Call the underlying libc::unlinkat() function with the fd and pathname.
         let ret = unsafe { libc::unlinkat(kernel_fd, c_path.as_ptr(), flags) };
-
-        // If the call failed, retrieve and handle the errno
         if ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "unlinkat");
         }
         ret
     }
+      
 
     //------------------------------------UNLINK SYSCALL------------------------------------
     /*
@@ -210,23 +184,17 @@ impl Cage {
         ret
     }
 
-    //------------------------------------CREAT SYSCALL------------------------------------
+        //------------------------------------CREAT SYSCALL------------------------------------
     /*
      *   creat() will return fd when success and -1 when fail
      */
     pub fn creat_syscall(&self, path: &str, mode: u32) -> i32 {
-        // let c_path = CString::new(path).expect("CString::new failed");
-        let relpath = normpath(convpath(path), self);
-        let relative_path = relpath.to_str().unwrap();
-        let full_path = format!("{}{}", LIND_ROOT, relative_path);
-        let c_path = CString::new(full_path).unwrap();
-
+        let c_path = self.to_cstring_path(path);
         let kernel_fd = unsafe { libc::creat(c_path.as_ptr(), mode) };
         if kernel_fd < 0 {
             let errno = get_errno();
             return handle_errno(errno, "creat");
         }
-
         let virtual_fd =
             fdtables::get_unused_virtual_fd(self.cageid, FDKIND_KERNEL, kernel_fd as u64, false, 0)
                 .unwrap();
