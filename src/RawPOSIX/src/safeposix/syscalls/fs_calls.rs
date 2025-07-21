@@ -64,6 +64,14 @@ impl Cage {
             Err(_) => return syscall_error(Errno::EMFILE, "open", "Too many files opened"),
         }
     }
+    // Helper function for path conversion
+    fn to_cstring_path(&self, path: &str) -> CString {
+        let relpath = normpath(convpath(path), self);
+        let relative_path = relpath.to_str().unwrap();
+        let full_path = format!("{}{}", LIND_ROOT, relative_path);
+        CString::new(full_path).unwrap()
+    }
+
 
     //------------------MKDIR SYSCALL------------------
     /*
