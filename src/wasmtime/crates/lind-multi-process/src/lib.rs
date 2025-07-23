@@ -423,7 +423,6 @@ impl<
                         )
                         .unwrap();
 
-
                     cfg_if! {
                         // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
                         // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
