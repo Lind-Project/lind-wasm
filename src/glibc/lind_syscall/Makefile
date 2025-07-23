@@ -22,13 +22,19 @@ INCLUDE_PATHS := -I../include -I$(LIBC_INCLUDE_PATH)/nptl -I$(LIBC_INCLUDE_PATH)
     -I../sysdeps/ieee754/flt-32 -I../sysdeps/ieee754 -I../sysdeps/generic -I.. -I../libio -I.
 
 # Targets
-all: crt1.o lind_syscall.o
+all: crt1.o lind_syscall.o register_handler.o cp_data_between_cages.o
 
 crt1.o: crt1/crt1.c
 	$(CLANG_PATH) $(COMMON_FLAGS) $(INCLUDE_PATHS) crt1/crt1.c -c -o crt1.o
 
 lind_syscall.o: lind_syscall.c
 	$(CLANG_PATH) $(COMMON_FLAGS) $(INCLUDE_PATHS) lind_syscall.c -c -o lind_syscall.o
+
+register_handler.o: register_handler.c
+	$(CLANG_PATH) $(COMMON_FLAGS) $(INCLUDE_PATHS) register_handler.c -c -o register_handler.o 
+
+cp_data_between_cages.o: cp_data_between_cages.c
+    $(CLANG_PATH) $(COMMON_FLAGS) $(INCLUDE_PATHS) cp_data_between_cages.c -c -o cp_data_between_cages.o
 
 clean:
 	rm -f crt1.o lind_syscall.o
