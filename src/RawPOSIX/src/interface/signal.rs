@@ -55,7 +55,7 @@ pub fn epoch_kill_all(cageid: u64) {
 // get the current epoch state of the thread
 // thread safety: this function will only be invoked by main thread of the cage
 fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
-        #[cfg(feature = "disable_signals")]
+    #[cfg(feature = "disable_signals")]
     {
         return 1; // if were disabling signals this function is unescessary so we avoid a potential null ptr dereference
     }
