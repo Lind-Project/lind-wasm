@@ -57,7 +57,7 @@ pub fn epoch_kill_all(cageid: u64) {
 fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
         #[cfg(feature = "disable_signals")]
     {
-        return 1;
+        return 1; // if were disabling signals this function is unescessary so we avoid a potential null ptr dereference
     }
 
     #[cfg(not(feature = "disable_signals"))]
