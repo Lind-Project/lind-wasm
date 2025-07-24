@@ -55,15 +55,24 @@ pub fn epoch_kill_all(cageid: u64) {
 // get the current epoch state of the thread
 // thread safety: this function will only be invoked by main thread of the cage
 fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
-    let cage = cagetable_getref(cageid);
-    let epoch_handler = cage
-        .epoch_handler
-        .get(&(thread_id as i32))
-        .expect("threadid does not exist");
-    let guard = epoch_handler.read();
-    let epoch = *guard;
-    // SAFETY: see comment at `signal_epoch_trigger`
-    unsafe { *epoch }
+        #[cfg(feature = "disable_signals")]
+    {
+        return 1;
+    }
+
+    #[cfg(not(feature = "disable_signals"))]
+    {
+        let cage = cagetable_getref(cageid);
+        let epoch_handler = cage
+            .epoch_handler
+            .get(&(thread_id as i32))
+            .expect("threadid does not exist");
+        let guard = epoch_handler.read();
+        let epoch = *guard;
+        // SAFETY: see comment at `signal_epoch_trigger`
+        unsafe { *epoch }
+    }
+
 }
 
 // check the specified thread with specified cage is in "killed" state

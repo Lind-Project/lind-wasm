@@ -58,7 +58,7 @@ wasmtime-lind-multi-process = { path = "crates/lind-multi-process", optional = f
 wasmtime-lind-common = { path = "crates/lind-common" }
 wasmtime-lind-utils = { path = "crates/lind-utils" }
 wasmtime-wasi-http = { workspace = true, optional = true }
-rawposix = { workspace = true }
+rawposix = { workspace = true, optional = false, features = ["disable_signals"]}
 fdtables = { workspace = true }
 sysdefs = { workspace = true }
 clap = { workspace = true }
@@ -387,7 +387,7 @@ default = [
   "clap/default",
 ]
 
-disable_signals = ["wasmtime-lind-multi-process/disable_signals"]
+disable_signals = ["wasmtime-lind-multi-process/disable_signals", "rawposix/disable_signals"]
 
 # ========================================
 # Off-by-default features
