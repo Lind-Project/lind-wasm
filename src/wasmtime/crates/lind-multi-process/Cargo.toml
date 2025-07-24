@@ -18,3 +18,7 @@ wasmtime-environ = { workspace = true }
 wasmtime-lind-utils = { path = "../lind-utils" }
 rawposix = { path = "../rawposix" }
 sysdefs = { path = "../sysdefs" }
+cfg-if = { workspace = true }
+
+[features]
+disable_signals = []
