@@ -50,12 +50,12 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install clang
-ARG LLVM="llvmorg-16.0.4"
-ARG CLANG="clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
+ARG LLVM="llvmorg-18.1.8"
+ARG CLANG="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
 # NOTE: We `curl | tar` in spite of Docker best practices to save cache layers
 RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz | \
        tar -xvJ
-COPY src/glibc/wasi /${CLANG}/lib/clang/16/lib/wasi
+COPY src/glibc/wasi /${CLANG}/lib/clang/18/lib/wasi
 ENV PATH="/${CLANG}/bin:${PATH}"
 
 # Install rust
