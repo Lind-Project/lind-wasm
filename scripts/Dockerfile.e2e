@@ -47,6 +47,7 @@ RUN apt-get update && \
         make \
         python3 \
         sed \
+        wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Install clang
