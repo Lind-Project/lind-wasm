@@ -58,6 +58,11 @@ RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CL
 COPY src/glibc/wasi /${CLANG}/lib/clang/18/lib/wasi
 ENV PATH="/${CLANG}/bin:${PATH}"
 
+# --- Install libtinfo5 ---
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+
+
 # Install rust
 # NOTE: pinning known-to-work nightly-2025-06-01 (see #242)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
