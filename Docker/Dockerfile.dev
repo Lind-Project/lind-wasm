@@ -82,7 +82,7 @@ RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM_VERSI
 
 # --- Patch glibc wasi includes into clang dir and fix permissions ---
 RUN cp -r /home/${USERNAME}/lind-wasm/src/glibc/wasi \
-         /home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}/lib/clang/16/lib && \
+         /home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}/lib/clang/18/lib && \
     chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/
 
 # --- Back to user for everything else ---
