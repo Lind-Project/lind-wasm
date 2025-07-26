@@ -1,33 +1,133 @@
 #!/bin/bash
 set -ue
 
-# Cross-compile passed .c file to .wasm and .cwasm files
+# Cross-compile passed .c or .rs file to .wasm and .cwasm files
 #
 # Important notes:
 # - call from source code repository root directory
-# - expects `clang` on $PATH
+# - expects `clang` on $PATH for C files
+# - expects `rustc` and `cargo` on $PATH for Rust files
 # - expects `wasm-opt` at its included location
 # - expects `wasmtime` its release build location
 #
 # Usage:
 #
 #   ./scripts/lind_compile /path/to/lind-program.c
+#   ./scripts/lind_compile /path/to/lind-program.rs
 
-# Expects exactly one arg, ending with '.c'
-if [[ "$#" -ne 1 || "${1: -2}" != ".c" ]]; then
-    echo "usage: $0 </path/to/*.c file>"
+# Expects exactly one arg, ending with '.c' or '.rs'
+if [[ "$#" -ne 1 ]]; then
+    echo "usage: $0 </path/to/*.c or *.rs file>"
     exit 1
 fi
 
-path_c="$1"
-path_wasm="${1%.c}.wasm"
-path_cwasm="${1%.c}.cwasm"
+# Check file extension
+if [[ "${1: -2}" == ".c" ]]; then
+    file_type="c"
+elif [[ "${1: -3}" == ".rs" ]]; then
+    file_type="rs"
+else
+    echo "usage: $0 </path/to/*.c or *.rs file>"
+    exit 1
+fi
 
-clang --sysroot=${PWD}/src/glibc/sysroot \
-    -pthread --target=wasm32-unknown-wasi \
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
-    "$path_c" -g -O0 -o "$path_wasm"
+path_source="$1"
+path_wasm="${1%.*}.wasm"
+path_cwasm="${1%.*}.cwasm"
 
-tools/binaryen/bin/wasm-opt --epoch-injection --asyncify -O2 --debuginfo "$path_wasm" -o "$path_wasm"
+if [[ "$file_type" == "c" ]]; then
+    # C file compilation
+    /home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/clang --sysroot=${PWD}/src/glibc/sysroot \
+        -pthread --target=wasm32-unknown-wasi \
+        -Wl,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
+        "$path_source" -g -O0 -o "$path_wasm"
+elif [[ "$file_type" == "rs" ]]; then
+    # Rust file compilation
+    # Create a temporary Cargo.toml for single-file compilation
+    temp_dir=$(mktemp -d)
+    source_dir=$(dirname "$path_source")
+    source_name=$(basename "$path_source" .rs)
+    
+    # Copy the source file to temp directory
+    cp "$path_source" "$temp_dir/main.rs"
+    
+    # Create Cargo.toml with proper configuration
+    cat > "$temp_dir/Cargo.toml" << EOF
+[package]
+name = "$source_name"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "$source_name"
+path = "main.rs"
+
+[dependencies]
+# Standard library features are available without explicit dependencies
+# Add external crates here if needed:
+# tokio = { version = "1", features = ["rt", "time", "macros"] }
+# wasm-bindgen = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+EOF
+
+    # Create .cargo/config.toml for proper WASM target configuration
+    mkdir -p "$temp_dir/.cargo"
+    cat > "$temp_dir/.cargo/config.toml" << EOF
+[build]
+target = "wasm32-wasip1-threads"
+
+[target.wasm32-wasip1-threads]
+linker = "/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04/bin/wasm-ld"
+rustflags = [
+  "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
+  "-C", "link-args=--export-memory",
+  "-C", "link-args=--import-memory",
+  "-C", "link-args=--max-memory=67108864",
+  "-C", "link-args=--export=__stack_pointer",
+  "-C", "link-args=--export=__stack_low"
+]
+EOF
+
+    # Compile with cargo
+    cd "$temp_dir"
+    echo "Compiling in temp directory: $temp_dir"
+    cargo build --release --target wasm32-wasip1-threads
+    
+    # Check what files were generated
+    echo "Checking for generated files..."
+    ls -la target/wasm32-wasip1-threads/release/ || echo "Release directory not found"
+    
+    # Copy the generated wasm file
+    if [[ -f "target/wasm32-wasip1-threads/release/$source_name.wasm" ]]; then
+        # Return to original directory before copying
+        cd - > /dev/null
+        # Ensure the target directory exists
+        mkdir -p "$(dirname "$path_wasm")"
+        cp "$temp_dir/target/wasm32-wasip1-threads/release/$source_name.wasm" "$path_wasm"
+        echo "Successfully copied WASM file to: $path_wasm"
+    else
+        echo "Failed to compile Rust file to WASM"
+        echo "Expected file: target/wasm32-wasip1-threads/release/$source_name.wasm"
+        cd - > /dev/null
+        rm -rf "$temp_dir"
+        exit 1
+    fi
+    
+    # Clean up temp directory
+    rm -rf "$temp_dir"
+fi
+
+# Use different wasm-opt flags for Rust vs C files
+if [[ "$file_type" == "rs" ]]; then
+    /home/lind/lind-wasm/tools/binaryen/bin/wasm-opt --epoch-injection --asyncify -O2 --debuginfo --enable-threads --enable-bulk-memory "$path_wasm" -o "$path_wasm"
+else
+    /home/lind/lind-wasm/tools/binaryen/bin/wasm-opt --epoch-injection --asyncify -O2 --debuginfo "$path_wasm" -o "$path_wasm"
+fi
 
 src/wasmtime/target/release/wasmtime compile "$path_wasm" -o "$path_cwasm"

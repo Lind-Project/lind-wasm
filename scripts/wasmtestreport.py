@@ -147,7 +147,7 @@ def add_test_result(result, file_path, status, error_type, output):
 # Note:
 #   Dependancy on the script `lind_compile`.
 # ----------------------------------------------------------------------
-def compile_c_to_wasm(source_file):
+def compile_to_wasm(source_file):
     source_file = Path(source_file).resolve()
     testcase = str(source_file.with_suffix(''))
     compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
@@ -246,7 +246,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
     source_file = Path(source_file).resolve()
 
-    wasm_file, compile_err = compile_c_to_wasm(source_file)
+    wasm_file, compile_err = compile_to_wasm(source_file)
     if wasm_file is None:
         add_test_result(result, str(source_file), "Failure", "Lind_wasm_compiling", compile_err)
         return
@@ -295,21 +295,56 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
     source_file = Path(source_file).resolve()
     expected_output_file = source_file.parent / EXPECTED_DIRECTORY / f"{source_file.stem}.output"
 
-    native_output = source_file.parent / f"{source_file.stem}.o"
-    native_compile_cmd = f"gcc {source_file} -o {native_output}"
+    # Determine compilation command based on file extension
+    if source_file.suffix == '.rs':
+        native_output = source_file.parent / f"{source_file.stem}"
+        # For Rust, we need to create a temporary Cargo.toml for native compilation
+        temp_dir = source_file.parent / "temp_rust_build"
+        temp_dir.mkdir(exist_ok=True)
+        source_name = source_file.stem
+        
+        # Create Cargo.toml for native compilation
+        cargo_toml = temp_dir / "Cargo.toml"
+        with open(cargo_toml, 'w') as f:
+            f.write(f"""[package]
+name = "{source_name}"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "{source_name}"
+path = "../{source_file.name}"
+
+[dependencies]
+# Standard library features are available without explicit dependencies
+# Add external crates here if needed:
+# tokio = {{ version = "1", features = ["rt", "time", "macros"] }}
+# wasm-bindgen = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+""")
+        
+        # For native compilation, use default native target (no .cargo/config.toml needed)
+        native_compile_cmd = f"cd {temp_dir} && cargo build --release"
+        native_output = temp_dir / "target/release" / source_name
+    else:
+        native_output = source_file.parent / f"{source_file.stem}.o"
+        native_compile_cmd = f"gcc {source_file} -o {native_output}"
     original_cwd = os.getcwd()
 
-    if expected_output_file.is_file():
-        try:
-            with open(expected_output_file, 'r') as f:
-                print(f"Expected output found at {expected_output_file}")
-                native_run_output = f.read()
-        except Exception as e:
-            add_test_result(result, str(source_file), "Failure", "Failure_reading_expected_file",
-                            f"Exception: {e}")
-            return
-    else:
-        print(f"No expected output found at {expected_output_file}")
+    # For Rust tests, we always run native compilation to get expected output
+    # For C tests, we check for expected output file first, then fall back to native compilation
+    if source_file.suffix == '.rs' or not expected_output_file.is_file():
+        if source_file.suffix == '.rs':
+            print(f"Running native Rust compilation for {source_file}")
+        else:
+            print(f"No expected output found at {expected_output_file}, running native compilation")
+        
         #trying native compile
         os.chdir(LIND_FS_ROOT)
         try:
@@ -330,18 +365,28 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
             if proc_run.returncode != 0:
                 add_test_result(result, str(source_file), "Failure", "Failure_native_running",
                                 proc_run.stdout + proc_run.stderr)
-                os.chdir(LIND_FS_ROOT)
+                os.chdir(original_cwd)
                 return
             native_run_output = proc_run.stdout
         except Exception as e:
             add_test_result(result, str(source_file), "Failure", "Failure_native_running", f"Exception: {e}")
-            os.chdir(LIND_FS_ROOT)
+            os.chdir(original_cwd)
             return
 
         os.chdir(original_cwd)
+    else:
+        # Use pre-existing expected output file for C tests
+        try:
+            with open(expected_output_file, 'r') as f:
+                print(f"Expected output found at {expected_output_file}")
+                native_run_output = f.read()
+        except Exception as e:
+            add_test_result(result, str(source_file), "Failure", "Failure_reading_expected_file",
+                            f"Exception: {e}")
+            return
     
     #wasm compile
-    wasm_file, compile_err = compile_c_to_wasm(source_file)
+    wasm_file, compile_err = compile_to_wasm(source_file)
     if wasm_file is None:
         add_test_result(result, str(source_file), "Failure", "Lind_wasm_compiling", compile_err)
         os.chdir(original_cwd)
@@ -675,7 +720,7 @@ def main():
         print(f"{SKIP_TESTS_FILE} not found")
 
 
-    test_cases = list(TEST_FILE_BASE.rglob("*.c")) # Gets all c files in the TEST_FILE_BASE path at all depths
+    test_cases = list(TEST_FILE_BASE.rglob("*.c")) + list(TEST_FILE_BASE.rglob("*.rs")) # Gets all c and rs files in the TEST_FILE_BASE path at all depths
     tests_to_run = []
     for test_case in test_cases:
         if should_run_file(test_case, run_folders_paths, skip_folders_paths, skip_test_cases):
@@ -698,13 +743,21 @@ def main():
 
         wasm_file = source_file.with_suffix(".wasm")
         cwasm_file = source_file.with_suffix(".cwasm")
-        native_file = source_file.with_suffix(".o")
+        if source_file.suffix == '.rs':
+            native_file = source_file.parent / "temp_rust_build" / "target" / "release" / source_file.stem
+            temp_dir = source_file.parent / "temp_rust_build"
+        else:
+            native_file = source_file.with_suffix(".o")
+            temp_dir = None
+            
         if wasm_file and wasm_file.exists():
             wasm_file.unlink()
         if cwasm_file and cwasm_file.exists():
             cwasm_file.unlink()
         if native_file and native_file.exists():
             native_file.unlink()
+        if temp_dir and temp_dir.exists():
+            shutil.rmtree(temp_dir)
     
     shutil.rmtree(TESTFILES_DST) # removes the test files from the lind fs root
     

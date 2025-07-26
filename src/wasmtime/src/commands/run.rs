@@ -221,7 +221,7 @@ impl RunCommand {
         match result {
             Ok(res) => {
                 let mut code = 0;
-                let retval = res.get(0).unwrap();
+                let retval = res.get(0).unwrap_or(&Val::I32(1));
                 if let Val::I32(res) = retval {
                     code = *res;
                 }
@@ -606,10 +606,18 @@ impl RunCommand {
                         .or_else(|| instance.get_func(&mut *store, "_start"))
                 };
 
-                let stack_low = instance.get_stack_low(store.as_context_mut()).unwrap();
-                let stack_pointer = instance.get_stack_pointer(store.as_context_mut()).unwrap();
-                store.as_context_mut().set_stack_base(stack_pointer as u64);
-                store.as_context_mut().set_stack_top(stack_low as u64);
+                // Try to get stack information, but don't fail if not available
+                if let (Ok(stack_low), Ok(stack_pointer)) = (
+                    instance.get_stack_low(store.as_context_mut()),
+                    instance.get_stack_pointer(store.as_context_mut())
+                ) {
+                    store.as_context_mut().set_stack_base(stack_pointer as u64);
+                    store.as_context_mut().set_stack_top(stack_low as u64);
+                } else {
+                    // If stack globals are not available, use default values or skip
+                    // This is common for WASM modules that don't export these globals
+                    eprintln!("Warning: Stack globals not found in WASM module, using default stack configuration");
+                }
 
                 // retrieve the epoch global
                 let lind_epoch = instance
