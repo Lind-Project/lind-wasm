@@ -28,7 +28,10 @@ steps:
       - '-c'
       - |
         source /workspace/commit.env
-        docker build -f scripts/Dockerfile.dev -t docker.io/$DOCKER_USERNAME/lind-wasm-dev:latest -t docker.io/$DOCKER_USERNAME/lind-wasm-dev:sha-$SHORT_SHA .
+        USERNAME=$(cat /secrets/docker-username)
+        docker build -f scripts/Dockerfile.dev \
+          -t docker.io/$USERNAME/lind-wasm-dev:latest \
+          -t docker.io/$USERNAME/lind-wasm-dev:sha-$SHORT_SHA .
 
   - name: 'gcr.io/cloud-builders/docker'
     id: Push Image
@@ -37,8 +40,9 @@ steps:
       - '-c'
       - |
         source /workspace/commit.env
-        docker push docker.io/$DOCKER_USERNAME/lind-wasm-dev:latest
-        docker push docker.io/$DOCKER_USERNAME/lind-wasm-dev:sha-$SHORT_SHA
+        USERNAME=$(cat /secrets/docker-username)
+        docker push docker.io/$USERNAME/lind-wasm-dev:latest
+        docker push docker.io/$USERNAME/lind-wasm-dev:sha-$SHORT_SHA
 
 availableSecrets:
   secretManager:
