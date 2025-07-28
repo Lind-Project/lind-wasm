@@ -4,7 +4,7 @@
 use crate::fs_calls::kernel_close;
 use cage::memory::mem_helper::*;
 use cage::memory::vmmap::{VmmapOps, *};
-use cage::{cagetable_init, add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie};
+use cage::{cagetable_init, add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie, convert_signal_mask};
 use fdtables;
 use libc::sched_yield;
 use parking_lot::RwLock;
@@ -1042,4 +1042,91 @@ pub fn socket_syscall(
         }
 
         return fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, false, 0).unwrap() as i32;
+}
+
+pub fn sigprocmask_syscall(
+    cageid: u64,
+    how_arg: u64,
+    how_cageid: u64,
+    set_arg: u64,
+    set_cageid: u64,
+    oldset_arg: u64,
+    oldset_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
+    let set = sc_convert_sigset(set_arg, set_cageid, cageid);
+    let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "sigprocmask_syscall", "Invalide Cage ID");
+    }
+
+    let cage = get_cage(cageid).unwrap();
+
+    let mut res = 0;
+
+    if let Some(some_oldset) = oldset {
+        *some_oldset = cage.sigset.load(Relaxed);
+    }
+
+    if let Some(some_set) = set {
+        let curr_sigset = cage.sigset.load(Relaxed);
+        res = match how {
+            SIG_BLOCK => {
+                // Block signals in set
+                cage.sigset.store(
+                    curr_sigset | *some_set,
+                    Relaxed,
+                );
+                0
+            }
+            SIG_UNBLOCK => {
+                // Unblock signals in set
+                let newset = curr_sigset & !*some_set;
+                cage.sigset
+                    .store(newset, Relaxed);
+                // check if any of the unblocked signals are in the pending signal list
+                // and trigger the epoch if it has
+                let pending_signals = cage.pending_signals.read();
+                if pending_signals
+                    .iter()
+                    .any(|signo| (*some_set & convert_signal_mask(*signo)) != 0)
+                {
+                    cage::signal_epoch_trigger(cage.cageid);
+                }
+                0
+            }
+            SIG_SETMASK => {
+                let pending_signals = cage.pending_signals.read();
+                // find all signals switched from blocking to nonblocking
+                // 1. perform a xor operation to find signals that switched state
+                // all the signal masks changed from 0 to 1, or 1 to 0 are filtered in this step
+                // 2. perform an and operation to the old sigset, this further filtered masks and only
+                // left masks changed from 1 to 0
+                let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+                // check if any of the unblocked signals are in the pending signal list
+                // and trigger the epoch if it has
+                if pending_signals
+                    .iter()
+                    .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
+                {
+                    cage::signal_epoch_trigger(cage.cageid);
+                }
+                // Set sigset to set
+                cage.sigset
+                    .store(*some_set, Relaxed);
+                0
+            }
+            _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
+        }
+    }
+    res
 }

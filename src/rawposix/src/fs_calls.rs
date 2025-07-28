@@ -70,6 +70,7 @@ pub fn open_syscall(
 ) -> i32 {
     // Type conversion
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    println!("open_syscall: path = {:?}", path);
     // Note the cageid here isn't really relevant because the argument is pass-by-value.
     // But it could be checked to ensure it's not set to something unexpected.
     let oflag = sc_convert_sysarg_to_i32(oflag_arg, oflag_cageid, cageid);
@@ -571,6 +572,91 @@ pub fn dup2_syscall(
     }
 }
 
+pub fn lseek_syscall(
+    cageid: u64,
+    virtual_fd: u64,
+    vfd_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    whence_arg: u64,
+    whence_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "lseek", "Invalide Cage ID");
+    }
+
+    if virtual_fd < 0 {
+        return syscall_error(Errno::EBADF, "lseek", "Bad File Descriptor");
+    }
+
+    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    if kernel_fd == -1 {
+        return syscall_error(Errno::EFAULT, "lseek", "Invalid Cage ID");
+    } else if kernel_fd == -9 {
+        return syscall_error(Errno::EBADF, "lseek", "Bad File Descriptor");
+    }
+
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+    let whence = sc_convert_sysarg_to_i32(whence_arg, whence_cageid, cageid);
+
+    let ret = unsafe { libc::lseek(kernel_fd, offset, whence) };
+    
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "lseek");
+    }
+    
+    ret as i32
+}
+
+pub fn unlink_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "unlink", "Invalide Cage ID");
+    }
+
+    let ret = unsafe { libc::unlink(path.as_ptr()) };
+    
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "unlink");
+    }
+    
+    ret
+}
+
 /// Handles the `mmap_syscall`, interacting with the `vmmap` structure.
 ///
 /// This function processes the `mmap_syscall` by updating the `vmmap` entries and performing
@@ -1010,6 +1096,7 @@ pub fn brk_syscall(
 
     0
 }
+
 
 /// Handles the `sbrk_syscall`, interacting with the `vmmap` structure.
 ///

@@ -2,13 +2,13 @@ use rawposix::fs_calls::{
     brk_syscall, clock_gettime_syscall, close_syscall, dup2_syscall, fcntl_syscall,
     mkdir_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, dup_syscall, 
     pipe2_syscall, pipe_syscall, sbrk_syscall, write_syscall, futex_syscall, read_syscall,
-
+    lseek_syscall, unlink_syscall,
 };
 pub use rawposix::fs_calls::mmap_syscall;
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall,
     send_syscall, recv_syscall, bind_syscall, connect_syscall, listen_syscall, accept_syscall, 
-    setsockopt_syscall, socket_syscall
+    setsockopt_syscall, socket_syscall, sigprocmask_syscall,
 };
 use super::threei::Raw_CallFunc;
 
@@ -18,9 +18,12 @@ pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (1, write_syscall),
     (2, open_syscall),
     (3, close_syscall),
+    (8, lseek_syscall),
     (10, open_syscall),
     (11, close_syscall),
+    (12, brk_syscall),
     (13, write_syscall),
+    (14, sigprocmask_syscall),
     (21, mmap_syscall),
     (22, munmap_syscall),
     (24, dup_syscall),
@@ -41,11 +44,11 @@ pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (68, fork_syscall),
     (69, exec_syscall),
     (83, mkdir_syscall),
+    (87, unlink_syscall),
     (98, futex_syscall),
     (131, mkdir_syscall),
     (172, wait_syscall),
     (173, waitpid_syscall),
-    (175, brk_syscall),
     (136, socket_syscall),
     (176, sbrk_syscall),
     (181, nanosleep_time64_syscall),
