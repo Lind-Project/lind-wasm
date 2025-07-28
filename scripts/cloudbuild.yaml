@@ -33,8 +33,8 @@ steps:
         source /workspace/commit.env
         USERNAME=$(cat /secrets/docker-username)
         docker build -f scripts/Dockerfile.dev \
-          -t docker.io/$DOCKER_USERNAME/lind-wasm-dev:latest \
-          -t docker.io/$DOCKER_USERNAME/lind-wasm-dev:sha-$SHORT_SHA .
+          -t docker.io/$$DOCKER_USERNAME/lind-wasm-dev:latest \
+          -t docker.io/$$DOCKER_USERNAME/lind-wasm-dev:sha-$SHORT_SHA .
     secretEnv:
       - 'DOCKER_USERNAME'
       
@@ -46,8 +46,8 @@ steps:
       - '-c'
       - |
         source /workspace/commit.env        
-        docker push docker.io/$DOCKER_USERNAME/lind-wasm-dev:latest
-        docker push docker.io/$DOCKER_USERNAME/lind-wasm-dev:sha-$SHORT_SHA
+        docker push docker.io/$$DOCKER_USERNAME/lind-wasm-dev:latest
+        docker push docker.io/$$DOCKER_USERNAME/lind-wasm-dev:sha-$SHORT_SHA
     secretEnv:
       - 'DOCKER_USERNAME'
     
