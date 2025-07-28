@@ -17,9 +17,12 @@ steps:
     entrypoint: 'bash'
     args:
       - '-c'
-      - |-
-        cat /secrets/docker-password | docker login -u "$$(cat /secrets/docker-username)" --password-stdin
-    secretEnv: ['DOCKER_USERNAME', 'DOCKER_PASSWORD']
+      - |
+        docker login --username=$$DOCKER_USERNAME --password=$$DOCKER_PASSWORD
+    secretEnv:
+      - 'DOCKER_USERNAME'
+      - 'DOCKER_PASSWORD'
+
 
   - name: 'gcr.io/cloud-builders/docker'
     id: Build Image
