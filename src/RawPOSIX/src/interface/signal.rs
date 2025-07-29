@@ -72,7 +72,6 @@ fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
         // SAFETY: see comment at `signal_epoch_trigger`
         unsafe { *epoch }
     }
-
 }
 
 // check the specified thread with specified cage is in "killed" state
