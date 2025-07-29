@@ -1,50 +1,67 @@
-# Debugging with GDB
+# Debugging
 
-To debug the WebAssembly module, you can use GDB with Wasmtime. Ensure that you have compiled the module with the `-g` flag to include debugging information.
+## Debugging with GDB
 
-**NOTE**: currently this debugging tool does not support inspecting instructions. And operations like `layout split` and `si` might break the terminal. Using `layout src` is recommended.
+To debug a WebAssembly module using GDB, ensure that your module is compiled with debugging information (e.g., using the `-g` flag during compilation).
+
+> **Note:** Current limitations in GDB support for WebAssembly include lack of instruction-level inspection. Commands like `layout split` and `si` (step instruction) may break the terminal. It’s recommended to use `layout src` for source-level debugging.
+
+---
 
 ### Running GDB with Wasmtime
 
-Use the following command to run GDB with Wasmtime:
+Use the following command to start GDB with Wasmtime:
 
 ```sh
 gdb --args ../wasmtime/target/debug/wasmtime run -D debug-info -O opt-level=0 malloc-test.wasm
 ```
 
-- `gdb --args`: Passes the arguments to GDB.
-- `../wasmtime/target/debug/wasmtime run`: Specifies the Wasmtime executable.
-- `-D debug-info`: Enables debugging information.
-- `-O opt-level=0`: Sets the optimization level to 0 for debugging.
+**Explanation of arguments:**
+
+- `gdb --args`: Passes arguments to the program through GDB.
+- `../wasmtime/target/debug/wasmtime run`: Runs your WebAssembly module using the Wasmtime binary.
+- `-D debug-info`: Enables Wasmtime’s debug information support.
+- `-O opt-level=0`: Disables optimizations for easier debugging.
+
+---
 
 ### Example Debugging Session
 
-1. **Start GDB**:
+1. **Start GDB**  
+   Launch GDB with Wasmtime and your WebAssembly module:
    ```sh
    gdb --args ../wasmtime/target/debug/wasmtime run -D debug-info -O opt-level=0 malloc-test.wasm
    ```
 
-2. **Set Breakpoints**:
-   In the GDB prompt, set breakpoints as needed, for example:
+2. **Set Breakpoints**  
+   In the GDB prompt, set breakpoints as needed:
    ```sh
    (gdb) break main
    ```
 
-3. **Run the Program**:
-   Start the execution of the WebAssembly module:
+3. **Run the Program**  
+   Start execution:
    ```sh
    (gdb) run
    ```
 
-4. **Inspect and Debug**:
-   Use GDB commands to inspect variables, step through the code, and debug your program:
+4. **Inspect and Debug**  
+   Use GDB commands to step through and inspect your code:
    ```sh
    (gdb) next
    (gdb) print p
    (gdb) continue
    ```
 
-By following these steps, you can compile, run, and debug WebAssembly modules using Wasmtime and GDB. This provides a powerful environment for developing and debugging WebAssembly applications.
+---
 
-For more details, refer to the official [Wasmtime documentation](https://wasmtime.dev/) and the [GDB documentation](https://www.gnu.org/software/gdb/documentation/).
+### Additional Resources
 
+- [Wasmtime Documentation](https://wasmtime.dev/)
+- [GDB Manual](https://www.gnu.org/software/gdb/documentation/)
+
+---
+
+## Other Debugging Techniques
+
+Coming soon
