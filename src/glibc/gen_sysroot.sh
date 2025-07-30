@@ -53,5 +53,5 @@ cp -r "$include_source_dir"/* "$sysroot_dir/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$crt1_source_path" "$sysroot_dir/lib/wasm32-wasi/"
-cp "$PWD/src/glibc/lind_syscall/register_handler.h" "$sysroot_dir/include/wasm32-wasi/"
-cp "$PWD/src/glibc/lind_syscall/cp_data_between_cages.h" "$sysroot_dir/include/wasm32-wasi/"
+cp "$PWD/lind_syscall/register_handler.h" "$sysroot_dir/include/wasm32-wasi/"
+cp "$PWD/lind_syscall/cp_data_between_cages.h" "$sysroot_dir/include/wasm32-wasi/"
