@@ -25,6 +25,7 @@ nav:
     - Debug programs: contribute/debug-programs.md
     - Adding to the docs: contribute/add-docs.md
     - Security policy: contribute/security.md
+    - Docker Hub release workflow: contribute/docker-release-workflow.md
   - Community:
     - community/README.md
     - Team: community/team.md

@@ -32,6 +32,10 @@ pub const RLIMIT_NOFILE: u64 = 1; // Limit type for number of files
 pub const EXIT_SUCCESS: i32 = 0; // Successful termination
 pub const EXIT_FAILURE: i32 = 1; // Unsuccessful termination
 
+// ===== Waitpid Options =====
+// Source: include/uapi/linux/wait.h
+pub const WNOHANG: i32 = 1; // Don't block waiting
+
 // ===== Signal Constants =====
 // Source: include/uapi/asm-generic/signal.h
 // Reference: https://man7.org/linux/man-pages/man7/signal.7.html
