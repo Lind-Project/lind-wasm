@@ -101,7 +101,7 @@ compile_pthread_create="$CC --target=wasm32-unkown-wasi \
 compile_wasi_thread_start="$CC --target=wasm32-wasi-threads \
 -matomics -o $glibc_base/build/csu/wasi_thread_start.o \
 -c $glibc_base/csu/wasm32/wasi_thread_start.s"
-make_cmd="cd $glibc_base && rm -rf build && ./wasm-config.sh && \
+make_cmd="cd $glibc_base && ./wasm-config.sh && \
 cd build && \
 make -j8 --keep-going 2>&1 THREAD_MODEL=posix | \
 tee check.log && cd ../nptl && \
