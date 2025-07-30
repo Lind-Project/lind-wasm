@@ -21,8 +21,6 @@ import shutil
 
 DEFAULT_TIMEOUT = 5 # in seconds
 
-DEBUG_MODE = False
-
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
 SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will not run
@@ -160,7 +158,7 @@ def compile_c_to_wasm(source_file):
 
 
     try:
-        result = subprocess.run(compile_cmd, capture_output=True, text=True)
+        result = run_subprocess(compile_cmd, label="wasm compile")
         if result.returncode != 0:
             return (None, result.stdout + "\n" + result.stderr)
         else:
@@ -203,7 +201,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 
 
     try:
-        proc = subprocess.run(run_cmd, capture_output=True, text=True, timeout=timeout_sec)
+        proc = run_subprocess(run_cmd,label="wasm run",timeout=timeout_sec, cwd=None)
         full_output = proc.stdout + proc.stderr
         
         #removing the first line in output as it is the command being run by the bash script
@@ -260,7 +258,7 @@ def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_
         else:
             if retcode == 0:
                 add_test_result(result, str(source_file), "Success", None, output)
-            elif retcode == 134 or retcode == 139:
+            elif retcode in (134, 139):
                 add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", output)
             else:
                 add_test_result(result, str(source_file), "Failure", "Unknown_Failure", output)
@@ -296,7 +294,7 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
     expected_output_file = source_file.parent / EXPECTED_DIRECTORY / f"{source_file.stem}.output"
 
     native_output = source_file.parent / f"{source_file.stem}.o"
-    native_compile_cmd = f"gcc {source_file} -o {native_output}"
+    native_compile_cmd = ["gcc", str(source_file), "-o", str(native_output)]
     original_cwd = os.getcwd()
 
     if expected_output_file.is_file():
@@ -311,40 +309,32 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
     else:
         print(f"No expected output found at {expected_output_file}")
         #trying native compile
-        os.chdir(LIND_FS_ROOT)
         try:
-            proc_compile = subprocess.run(native_compile_cmd, shell=True, capture_output=True, text=True)
+            proc_compile = run_subprocess(native_compile_cmd, label="gcc compile", cwd=LIND_FS_ROOT, shell=False)
             if proc_compile.returncode != 0:
                 add_test_result(result, str(source_file), "Failure", "Failure_native_compiling",
                                 proc_compile.stdout + proc_compile.stderr)
-                os.chdir(original_cwd)
                 return
         except Exception as e:
             add_test_result(result, str(source_file), "Failure", "Failure_native_compiling", f"Exception: {e}")
-            os.chdir(original_cwd)
             return
 
         #trying native run
         try:
-            proc_run = subprocess.run(str(native_output), shell=True, capture_output=True, text=True)
+            proc_run = run_subprocess([str(native_output)], label="native run", cwd=LIND_FS_ROOT, shell=True)
             if proc_run.returncode != 0:
                 add_test_result(result, str(source_file), "Failure", "Failure_native_running",
                                 proc_run.stdout + proc_run.stderr)
-                os.chdir(LIND_FS_ROOT)
                 return
             native_run_output = proc_run.stdout
         except Exception as e:
             add_test_result(result, str(source_file), "Failure", "Failure_native_running", f"Exception: {e}")
-            os.chdir(LIND_FS_ROOT)
             return
-
-        os.chdir(original_cwd)
     
     #wasm compile
     wasm_file, compile_err = compile_c_to_wasm(source_file)
     if wasm_file is None:
         add_test_result(result, str(source_file), "Failure", "Lind_wasm_compiling", compile_err)
-        os.chdir(original_cwd)
         return
 
     #wasm run
@@ -370,15 +360,12 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
                         f"{wasm_content}\n"
                     )
                     add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info)
-            elif retcode == 139 or retcode == 134:
+            elif retcode in (134, 139):
                 add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", wasm_run_output)
             else:
                 add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
     except:
         add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
-    
-    os.chdir(original_cwd)
-
 
 # ----------------------------------------------------------------------
 # Function: pre_test
@@ -599,6 +586,8 @@ def parse_arguments():
     parser.add_argument("--pre-test-only", action="store_true", help="Flag to run only the copying of required testfiles")
     parser.add_argument("--clean-testfiles", action="store_true", help="Flag to remove the testfiles")
     parser.add_argument("--clean-results", action="store_true", help="Flag to clean up result files")
+    parser.add_argument("--testfiles", type=Path, nargs = "+", help="Run one or more specific test files")
+    parser.add_argument("--debug", action="store_true", help="Enable detailed stdout/stderr output for subprocesses")
 
     args = parser.parse_args()
     return args
@@ -622,6 +611,58 @@ def compare_test_results(file1, file2):
     
     return (status, new_failures)
 
+# ----------------------------------------------------------------------
+# Function: run_subprocess
+#
+# Purpose:
+#   Wrapper for subprocess.run with debug logging. 
+#   Improves visibility during unit test execution, and replaces unsafe os.chdir usage by allowing a cwd argument.
+#
+# Variables:
+# - Input:
+#   cmd     : Command to execute (e.g., ["gcc", "main.c"]).
+#   label   : Label used to tag debug log outputs.
+#   cwd     : Working directory for the command.
+#   shell   : Whether to run the command in a shell.
+#   timeout : Timeout for command execution.
+#
+# - Output:
+#   The result of subprocess.run()
+#
+# Raises:
+#   subprocess.TimeoutExpired - If the command exceeds the timeout.
+#   Exception - For all other unexpected execution errors.
+# ----------------------------------------------------------------------
+def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None):
+    """
+    Wrapper for subprocess.run with optional debug logging.
+    """
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            shell=shell,
+            timeout=timeout
+        )
+
+        if DEBUG_MODE:
+            print(f"\n>>> {label.upper()} CMD: {' '.join(map(str, cmd))}")
+            if proc.stdout.strip():
+                print(f"[{label} STDOUT]\n{proc.stdout.strip()}")
+            if proc.stderr.strip():
+                print(f"[{label} STDERR]\n{proc.stderr.strip()}")
+        return proc
+    except subprocess.TimeoutExpired as e:
+        if DEBUG_MODE:
+            print(f"[{label}] TIMEOUT after {timeout}s")
+        raise
+    except Exception as e:
+        if DEBUG_MODE:
+            print(f"[{label}] EXCEPTION: {str(e)}")
+        raise
+
 def main():
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
@@ -635,6 +676,10 @@ def main():
     clean_testfiles = args.clean_testfiles
     clean_results = args.clean_results
 
+    # Set DEBUG_MODE from the passed argument
+    global DEBUG_MODE
+    DEBUG_MODE = args.debug
+    
     if clean_results:
         if os.path.isfile(output_file):
             os.remove(output_file)
@@ -674,12 +719,15 @@ def main():
     except FileNotFoundError:
         print(f"{SKIP_TESTS_FILE} not found")
 
-
-    test_cases = list(TEST_FILE_BASE.rglob("*.c")) # Gets all c files in the TEST_FILE_BASE path at all depths
-    tests_to_run = []
-    for test_case in test_cases:
-        if should_run_file(test_case, run_folders_paths, skip_folders_paths, skip_test_cases):
-            tests_to_run.append(test_case)
+    # Override test cases in skip_test_cases by passing individual test cases as arguments
+    if args.testfiles: 
+        tests_to_run = [Path(f).resolve() for f in args.testfiles]
+    else:   
+        test_cases = list(TEST_FILE_BASE.rglob("*.c")) # Gets all c files in the TEST_FILE_BASE path at all depths
+        tests_to_run = []
+        for test_case in test_cases:
+            if should_run_file(test_case, run_folders_paths, skip_folders_paths, skip_test_cases):
+                tests_to_run.append(test_case)
 
     if not tests_to_run:
         print("No tests found")
