@@ -852,21 +852,75 @@ impl Cage {
         }
     }
 
+    /// dup3() duplicates `old_virtualfd` to `new_virtualfd`, similar to dup2(),
+    /// but requires the two descriptors to differ and allows setting FD_CLOEXEC via `flags`.
+    /// It first calls `dup2_syscall` to copy the file descriptor, then sets the close-on-exec flag if requested.
+
+    /// ## Arguments:
+    /// - `old_virtualfd`: source virtual file descriptor
+    /// - `new_virtualfd`: target virtual file descriptor
+    /// - `flags`: must be 0 or O_CLOEXEC
+    ///
+    /// ## Return:
+    /// - `new_virtualfd` on success
+    /// - `-1` on error, with errno set (EBADF or EINVAL)
+    pub fn dup3_syscall(&self, old_virtualfd: i32, new_virtualfd: i32, flags: i32) -> i32 {
+        if old_virtualfd < 0 || new_virtualfd < 0 {
+            return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
+        }
+
+        if old_virtualfd == new_virtualfd {
+            return syscall_error(Errno::EINVAL, "dup3", "oldfd and newfd must be different");
+        }
+
+        if flags != 0 && flags != O_CLOEXEC {
+            return syscall_error(Errno::EINVAL, "dup3", "Invalid flags");
+        }
+
+        let ret = self.dup2_syscall(old_virtualfd, new_virtualfd);
+        if ret < 0 {
+            return ret;
+        }
+
+        if flags == O_CLOEXEC {
+            let _ = fdtables::set_cloexec(self.cageid, new_virtualfd as u64, true);
+        }
+
+        return new_virtualfd;
+    }
+
     //------------------------------------CLOSE SYSCALL------------------------------------
-    /*
-     *   Get the kernel fd with provided virtual fd first
-     *   close() will return 0 when sucess, -1 when fail
-     */
+    /// Reference to Linux: https://man7.org/linux/man-pages/man2/close.2.html
+    ///
+    /// Linux `close()` syscall closes a file descriptor. In our implementation, we use a file descriptor management
+    /// subsystem (called `fdtables`) to handle virtual file descriptors. This syscall removes the virtual file
+    /// descriptor from the subsystem, and if necessary, closes the underlying kernel file descriptor.
+    ///
+    /// ## Arguments:
+    ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+    ///     - cageid: current cage identifier.
+    ///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
+    ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
+    ///
+    /// ## Returns:
+    ///     Return 0 when success; -1 along with errno when fail.
     pub fn close_syscall(&self, virtual_fd: i32) -> i32 {
+        // We only check for negative fd's here since fdtables uses u64.
+        // Upper-bound checks are handled by the close_virtualfd function.
+        if virtual_fd < 0 {
+            return syscall_error(Errno::EBADF, "close", "Bad File Descriptor");
+        }
+
         match fdtables::close_virtualfd(self.cageid, virtual_fd as u64) {
-            Ok(()) => {
-                return 0;
-            }
+            Ok(()) => 0,
             Err(e) => {
                 if e == Errno::EBADFD as u64 {
-                    return syscall_error(Errno::EBADF, "close", "bad file descriptor");
+                    syscall_error(Errno::EBADF, "close", "Bad File Descriptor")
+                } else if e == Errno::EINTR as u64 {
+                    syscall_error(Errno::EINTR, "close", "Interrupted system call")
+                } else {
+                    syscall_error(Errno::EIO, "close", "I/O error")
                 }
-                return -1;
             }
         }
     }
@@ -1143,14 +1197,12 @@ impl Cage {
 
     //------------------------------------MPROTECT SYSCALL------------------------------------
     /*
-    *   mprotect() changes protection for memory pages
-    *   Returns 0 on success, -1 on failure
-    *   Manual page: https://man7.org/linux/man-pages/man2/mprotect.2.html
-    */
+     *   mprotect() changes protection for memory pages
+     *   Returns 0 on success, -1 on failure
+     *   Manual page: https://man7.org/linux/man-pages/man2/mprotect.2.html
+     */
     pub fn mprotect_syscall(&self, addr: *mut u8, len: usize, prot: i32) -> i32 {
-        let ret = unsafe {
-            libc::mprotect(addr as *mut c_void, len, prot)
-        };
+        let ret = unsafe { libc::mprotect(addr as *mut c_void, len, prot) };
         if ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "mprotect");
@@ -1543,7 +1595,7 @@ impl Cage {
     //------------------SHMDT SYSCALL------------------
     /*
      * Detaches the shared memory segment located at the address specified by shmaddr.
-     * 
+     *
      * Return value:
      * - On success: returns the length of the detached segment
      * - On error: returns a negative errno value
@@ -1636,8 +1688,8 @@ impl Cage {
         uaddr: u64,
         futex_op: u32,
         val: u32,
-        val2: u32,
-        uaddr2: u32,
+        val2: usize,
+        uaddr2: u64,
         val3: u32,
     ) -> i32 {
         let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
@@ -1681,8 +1733,6 @@ impl Cage {
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     let kernel_fd = fdentry.underfd as i32;
 
-    // TODO:
-    // Need to update once we merge with vmmap-alice
     if kernel_fd == STDIN_FILENO || kernel_fd == STDOUT_FILENO || kernel_fd == STDERR_FILENO {
         return;
     }

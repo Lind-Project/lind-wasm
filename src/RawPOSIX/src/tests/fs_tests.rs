@@ -3,7 +3,10 @@
 pub mod fs_tests {
 
     use super::super::*;
-    use fdtables::{translate_virtual_fd};
+    use crate::interface;
+    use crate::safeposix::syscalls::fs_calls::*;
+    use crate::safeposix::{cage::*, dispatcher::*, filesystem};
+    use fdtables::translate_virtual_fd;
     use sysdefs::{
         constants::{
             err_const::get_errno,
@@ -13,14 +16,12 @@ pub mod fs_tests {
         },
         data::{
             fs_struct::{
-                ClippedDirent, FSData, PipeArray, ShmidsStruct, SockPair, StatData, CLIPPED_DIRENT_SIZE,
+                ClippedDirent, FSData, PipeArray, ShmidsStruct, SockPair, StatData,
+                CLIPPED_DIRENT_SIZE,
             },
             net_struct::{GenSockaddr, SockaddrV4},
         },
     };
-    use crate::interface;
-    use crate::safeposix::syscalls::fs_calls::*;
-    use crate::safeposix::{cage::*, dispatcher::*, filesystem};
 
     use libc::*;
     use libc::{c_void, O_DIRECTORY};
@@ -756,16 +757,15 @@ pub mod fs_tests {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
-
         // Create an anonymous memory mapping with read-only permissions
         // This simulates the C program's mmap() call to allocate a read-only page
         let readonlydata = cage.mmap_syscall(
-            std::ptr::null_mut(),      // Let kernel choose address
-            PAGESIZE as usize,         // Map one page
-            PROT_READ,                 // Initially read-only
-            (MAP_ANONYMOUS | MAP_PRIVATE) as i32,  // Private anonymous mapping
-            -1,                        // No file descriptor for anonymous mapping
-            0                         // Offset is ignored for anonymous mappings
+            std::ptr::null_mut(),                 // Let kernel choose address
+            PAGESIZE as usize,                    // Map one page
+            PROT_READ,                            // Initially read-only
+            (MAP_ANONYMOUS | MAP_PRIVATE) as i32, // Private anonymous mapping
+            -1,                                   // No file descriptor for anonymous mapping
+            0,                                    // Offset is ignored for anonymous mappings
         );
         assert!(readonlydata >= 0, "mmap should succeed");
 
@@ -774,7 +774,7 @@ pub mod fs_tests {
         let result = cage.mprotect_syscall(
             readonlydata as *mut u8,
             PAGESIZE as usize,
-            PROT_READ | PROT_WRITE    // Add write permission
+            PROT_READ | PROT_WRITE, // Add write permission
         );
         assert_eq!(result, 0, "mprotect should succeed");
 
@@ -786,9 +786,9 @@ pub mod fs_tests {
             let result = libc::memcpy(
                 readonlydata as *mut libc::c_void,
                 text.as_ptr() as *const libc::c_void,
-                text.len()
+                text.len(),
             );
-            
+
             // Verify that the write operation succeeded by comparing memory contents
             let written = std::slice::from_raw_parts(readonlydata as *const u8, text.len());
             assert_eq!(written, text, "Written data should match test string");
@@ -815,7 +815,11 @@ pub mod fs_tests {
         // Try to protect an unmapped address
         let unmapped_addr = 0x1000 as *mut u8; // Some arbitrary address
         let result = cage.mprotect_syscall(unmapped_addr, 4096, PROT_READ);
-        assert_eq!(result, -(Errno::ENOMEM as i32), "mprotect should fail with ENOMEM for unmapped address");
+        assert_eq!(
+            result,
+            -(Errno::ENOMEM as i32),
+            "mprotect should fail with ENOMEM for unmapped address"
+        );
 
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
@@ -825,7 +829,7 @@ pub mod fs_tests {
     pub fn ut_lind_fs_mprotect_split_region() {
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
-    
+
         // Map 4 pages with anonymous mapping
         let addr = cage.mmap_syscall(
             std::ptr::null_mut(),
@@ -833,22 +837,21 @@ pub mod fs_tests {
             PROT_READ | PROT_WRITE,
             (MAP_PRIVATE | MAP_ANONYMOUS) as i32,
             -1,
-            0
+            0,
         );
-        
+
         assert!(addr >= 0, "mmap failed with error: {}", addr);
-    
+
         // Change protection for middle two pages
         let middle_addr = (addr as usize + PAGESIZE as usize) as *mut u8;
-        let result = cage.mprotect_syscall(
-            middle_addr,
-            PAGESIZE as usize * 2,
-            PROT_READ
-        );
+        let result = cage.mprotect_syscall(middle_addr, PAGESIZE as usize * 2, PROT_READ);
         assert_eq!(result, 0, "mprotect failed");
-    
+
         // Clean up
-        assert_eq!(cage.munmap_syscall(addr as *mut u8, PAGESIZE as usize * 4), 0);
+        assert_eq!(
+            cage.munmap_syscall(addr as *mut u8, PAGESIZE as usize * 4),
+            0
+        );
     }
 
     #[test]
@@ -1133,11 +1136,11 @@ pub mod fs_tests {
         assert_eq!(cbuf2str(&temp_buffer), "12");
 
         //duplicate the file descriptor
-        let fd2 = cage.dup_syscall(fd, None);
+        let fd2 = cage.dup_syscall(fd);
         assert!(fd != fd2);
 
         //essentially a no-op, but duplicate again -- they should be diff &fd's
-        let fd3 = cage.dup_syscall(fd, None);
+        let fd3 = cage.dup_syscall(fd);
         assert!(fd != fd2 && fd != fd3);
 
         //We don't need all three, though:
@@ -1186,7 +1189,7 @@ pub mod fs_tests {
         assert_eq!(cage.close_syscall(fd), 0);
 
         // Attempt to duplicate the invalid file descriptor
-        let new_fd = cage.dup_syscall(fd, None);
+        let new_fd = cage.dup_syscall(fd);
         assert_eq!(new_fd, -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
@@ -1207,7 +1210,7 @@ pub mod fs_tests {
         // Attempt to duplicate a file descriptor, which should fail
         let fd = cage.open_syscall("/testfile", O_CREAT | O_WRONLY, S_IRWXA);
         assert_eq!(fd, -(Errno::EMFILE as i32));
-        let new_fd = cage.dup_syscall(fd, None);
+        let new_fd = cage.dup_syscall(fd);
         assert_eq!(new_fd, -(Errno::EBADF as i32));
 
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
@@ -3031,7 +3034,7 @@ pub mod fs_tests {
 
         lindrustfinalize();
     }
-    
+
     #[test]
     pub fn ut_lind_fs_shmat_invalid_args() {
         // Acquire lock and init environment
@@ -3041,7 +3044,11 @@ pub mod fs_tests {
         // Test case 1: Invalid shmid
         let invalid_shmid = -1;
         let result = cage.shmat_syscall(invalid_shmid, 0 as *mut u8, 0);
-        assert_eq!(result, -(Errno::EINVAL as i32), "Expected EINVAL for invalid shmid");
+        assert_eq!(
+            result,
+            -(Errno::EINVAL as i32),
+            "Expected EINVAL for invalid shmid"
+        );
 
         // Test case 2: Create a valid segment first
         let key = 31337;
@@ -3055,8 +3062,11 @@ pub mod fs_tests {
 
         // Clean up
         let mut shmidstruct = ShmidsStruct::default();
-        assert_eq!(cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)), 0);
-        
+        assert_eq!(
+            cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)),
+            0
+        );
+
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
     }
@@ -3078,16 +3088,28 @@ pub mod fs_tests {
 
         // Verify attachment count
         let mut shmidstruct = ShmidsStruct::default();
-        assert_eq!(cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)), 0);
+        assert_eq!(
+            cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)),
+            0
+        );
         assert_eq!(shmidstruct.shm_nattch, 1, "Expected 1 attachment");
 
         // Detach and verify count decreases
         assert_eq!(cage.shmdt_syscall(addr1 as *mut u8), shmid);
-        assert_eq!(cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)), 0);
-        assert_eq!(shmidstruct.shm_nattch, 0, "Expected 0 attachments after detach");
+        assert_eq!(
+            cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)),
+            0
+        );
+        assert_eq!(
+            shmidstruct.shm_nattch, 0,
+            "Expected 0 attachments after detach"
+        );
 
         // Clean up
-        assert_eq!(cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)), 0);
+        assert_eq!(
+            cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)),
+            0
+        );
 
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();
@@ -3095,7 +3117,7 @@ pub mod fs_tests {
 
     #[test]
     pub fn ut_lind_fs_shmat_read_only() {
-        // Acquire lock and init environment  
+        // Acquire lock and init environment
         let _thelock = setup::lock_and_init();
         let cage = interface::cagetable_getref(1);
 
@@ -3110,12 +3132,18 @@ pub mod fs_tests {
 
         // Verify the segment was attached
         let mut shmidstruct = ShmidsStruct::default();
-        assert_eq!(cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)), 0);
+        assert_eq!(
+            cage.shmctl_syscall(shmid, IPC_STAT, Some(&mut shmidstruct)),
+            0
+        );
         assert_eq!(shmidstruct.shm_nattch, 1, "Expected 1 attachment");
 
         // Clean up
         assert_eq!(cage.shmdt_syscall(result as *mut u8), shmid);
-        assert_eq!(cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)), 0);
+        assert_eq!(
+            cage.shmctl_syscall(shmid, IPC_RMID, Some(&mut shmidstruct)),
+            0
+        );
 
         assert_eq!(cage.exit_syscall(libc::EXIT_SUCCESS), libc::EXIT_SUCCESS);
         lindrustfinalize();

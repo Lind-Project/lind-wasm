@@ -35,7 +35,11 @@ RUN_FOLDERS: list[str] = []
 LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
 LIND_FS_ROOT = os.environ.get("LIND_FS_ROOT", "/home/lind/lind-wasm/src/RawPOSIX/tmp")
 
+<<<<<<< HEAD:wasmtestreport.py
 LINDTOOL_PATH = os.path.join(LIND_WASM_BASE, "lindtool.sh")
+=======
+LIND_TOOL_PATH = Path(f"{LIND_WASM_BASE}/scripts")
+>>>>>>> main:scripts/wasmtestreport.py
 TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
 TESTFILES_SRC = Path(f"{LIND_WASM_BASE}/tests/testfiles")
 TESTFILES_DST = Path(f"{LIND_FS_ROOT}/testfiles")
@@ -191,7 +195,7 @@ def native_run(exec_path, timeout):
 # Function: compile_c_to_wasm
 #
 # Purpose:
-#   Given a path to a .c file, calls the lindtool script to compile it into wasm.
+#   Given a path to a .c file, calls `lind_compile` to compile it into wasm.
 #
 # Variables:
 # - Input: source_file - path to the .c file.
@@ -203,8 +207,22 @@ def native_run(exec_path, timeout):
 #   Catches and returns exceptions as error strings
 #
 # Note:
-#   Dependancy on the script "./lindtool.sh compile_test".
+#   Dependancy on the script `lind_compile`.
 # ----------------------------------------------------------------------
+<<<<<<< HEAD:wasmtestreport.py
+=======
+def compile_c_to_wasm(source_file):
+    source_file = Path(source_file).resolve()
+    testcase = str(source_file.with_suffix(''))
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
+    if DEBUG_MODE:
+        print("Running command:", compile_cmd)
+        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
+            print("File exists and is a regular file!")
+        else:
+            print("File not found or it's a directory!")
+
+>>>>>>> main:scripts/wasmtestreport.py
 
 def wasm_compile(source_file):
     testcase = str(source_file.with_suffix(""))
@@ -212,11 +230,20 @@ def wasm_compile(source_file):
     if DEBUG_MODE:
         print("WASM compile cmd:", cmd)
     try:
+<<<<<<< HEAD:wasmtestreport.py
         with timer() as t:
             proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             return None, proc.stdout + proc.stderr, t.elapsed
         return Path(testcase + ".wasm"), "", t.elapsed
+=======
+        result = subprocess.run(compile_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            return (None, result.stdout + "\n" + result.stderr)
+        else:
+            wasm_file = Path(testcase + ".cwasm")
+            return (wasm_file, "")
+>>>>>>> main:scripts/wasmtestreport.py
     except Exception as e:
         return None, f"Exception during compilation: {e}", 0.0
 
@@ -239,10 +266,22 @@ def wasm_compile(source_file):
 #   Catches TimeoutExpired and other Exceptions.
 #
 # Note:
-#   Dependancy on the script "./lindtool.sh run"
+#   Dependancy on the script "lind_run"
 #   Since the script outputs the command being run, we ignore 
 #   the first line in stdout by the script which is the command itself
 # ----------------------------------------------------------------------
+<<<<<<< HEAD:wasmtestreport.py
+=======
+def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file]
+    if DEBUG_MODE:
+        print("Running command:", run_cmd)
+        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
+            print("File exists and is a regular file!")
+        else:
+            print("File not found or it's a directory!")
+
+>>>>>>> main:scripts/wasmtestreport.py
 
 def wasm_run(wasm_file, timeout):
     testcase = str(wasm_file.with_suffix(""))
@@ -250,6 +289,7 @@ def wasm_run(wasm_file, timeout):
     if DEBUG_MODE:
         print("WASM run cmd:", cmd)
     try:
+<<<<<<< HEAD:wasmtestreport.py
         with timer() as t:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         # drop first line (command echo)
@@ -257,6 +297,20 @@ def wasm_run(wasm_file, timeout):
         return proc.returncode, "\n".join(output_lines), t.elapsed
     except subprocess.TimeoutExpired:
         return "timeout", f"Timed out", timeout
+=======
+        proc = subprocess.run(run_cmd, capture_output=True, text=True, timeout=timeout_sec)
+        full_output = proc.stdout + proc.stderr
+        
+        #removing the first line in output as it is the command being run by the bash script
+        lines = full_output.splitlines()
+        filtered_lines = lines[1:]
+        filtered_output = "\n".join(filtered_lines)
+
+        return (proc.returncode, full_output)
+
+    except subprocess.TimeoutExpired as e:
+        return ("timeout", f"Timed Out (timeout: {timeout_sec}s)")
+>>>>>>> main:scripts/wasmtestreport.py
     except Exception as e:
         return "unknown_error", f"Exception: {e}", 0.0
 
@@ -698,14 +752,52 @@ def main():
 
     shutil.rmtree(TESTFILES_DST, ignore_errors=True)
 
+<<<<<<< HEAD:wasmtestreport.py
     with open(out_json, "w") as fp:
+=======
+    total_count = len(tests_to_run)
+    for i, source_file in enumerate(tests_to_run):
+        print(f"[{i+1}/{total_count}] {source_file}")
+        parent_name = source_file.parent.name
+
+        # checks the name of immediate parent folder to see if a test is deterministic or non deterministic.
+        if parent_name == DETERMINISTIC_PARENT_NAME:
+            test_single_file_deterministic(source_file, results["deterministic"], timeout_sec)
+        elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
+            test_single_file_non_deterministic(source_file, results["non_deterministic"], timeout_sec)
+
+        wasm_file = source_file.with_suffix(".wasm")
+        cwasm_file = source_file.with_suffix(".cwasm")
+        native_file = source_file.with_suffix(".o")
+        if wasm_file and wasm_file.exists():
+            wasm_file.unlink()
+        if cwasm_file and cwasm_file.exists():
+            cwasm_file.unlink()
+        if native_file and native_file.exists():
+            native_file.unlink()
+    
+    shutil.rmtree(TESTFILES_DST) # removes the test files from the lind fs root
+    
+    os.chdir(LIND_WASM_BASE)
+    with open(output_file, "w") as fp:
+>>>>>>> main:scripts/wasmtestreport.py
         json.dump(results, fp, indent=4)
     print(f"Saved results to {out_json}")
 
+<<<<<<< HEAD:wasmtestreport.py
     html = generate_html_report(results)
     with open(out_html, "w", encoding="utf-8") as fp:
         fp.write(html)
     print(f"Saved HTML report to {out_html}")
+=======
+    if should_generate_html:
+        report_html = generate_html_report(results)
+        with open(output_html_file, "w", encoding="utf-8") as out:
+            out.write(report_html)
+        print(f"'{os.path.abspath(output_html_file)}' generated.")
+
+    print(f"'{os.path.abspath(output_file)}' generated.")
+>>>>>>> main:scripts/wasmtestreport.py
 
 if __name__ == "__main__":
     main()
