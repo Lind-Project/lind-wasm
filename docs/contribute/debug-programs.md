@@ -2,7 +2,7 @@
 
 ## Debugging with GDB
 
-To debug a WebAssembly module using GDB, ensure that your module is compiled with debugging information (e.g., using the `-g` flag during compilation).
+To debug a WebAssembly module using GDB, ensure that your module is compiled with debugging information (e.g., using the -g flag during compilation). Additionally, Wasmtime itself must be compiled in debug mode (i.e., without the --release flag) to enable effective debugging of both the runtime and the module. This allows GDB to access symbol information from both your program and Wasmtime.
 
 > **Note:** Current limitations in GDB support for WebAssembly include lack of instruction-level inspection. Commands like `layout split` and `si` (step instruction) may break the terminal. It’s recommended to use `layout src` for source-level debugging.
 
