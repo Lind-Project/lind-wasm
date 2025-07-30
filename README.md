@@ -8,26 +8,9 @@ In Old Norse, Old High German and Old English a “lind” is a shield construct
 
 ## Getting started
 
-A quick-way to get started is using our container via DockerHub:
+Check out the [Getting started](https://lind-project.github.io/lind-wasm/getting-started/)
+guide and [docs on our website](https://lind-project.github.io/lind-wasm/)
+to learn more about Lind!
 
-```
-docker pull securesystemslab/lind-wasm
-docker run -it securesystemslab/lind-wasm /bin/bash
-```
-
-## Hello World!
-
-Now let try to print `Hello world!`
-
-```
-./lindtool.sh compile_test tests/unit-tests/file_tests/deterministic/printf
-./lindtool.sh run tests/unit-tests/file_tests/deterministic/printf
-```
-
-Further examples can be found [here](https://lind-project.github.io/lind-wasm-docs/use/examples/)
-
-## Documentation
-
-Check out our [docs]([lind-project.github.io/lind-wasm-docs/](https://lind-project.github.io/lind-wasm-docs/))! 
 
 
