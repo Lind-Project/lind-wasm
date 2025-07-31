@@ -95,6 +95,16 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -o $BUILD/lind_syscall.o \
     -c $GLIBC/lind_syscall/lind_syscall.c
 
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/register_handler.o \
+    -c $GLIBC/lind_syscall/register_handler.c
+
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/cp_data_between_cages.o \
+    -c $GLIBC/lind_syscall/cp_data_between_cages.c
+
 # Compile assembly files
 cd ../
 $CC --target=wasm32-wasi-threads -matomics \
@@ -139,3 +149,5 @@ cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/register_handler.h" "$SYSROOT/include/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/cp_data_between_cages.h" "$SYSROOT/include/wasm32-wasi/"
