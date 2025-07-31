@@ -1690,7 +1690,9 @@ fn enter_wasm<T>(store: &mut StoreContextMut<'_, T>) -> Option<usize> {
     //
     // After we've got the stack limit then we store it into the `stack_limit`
     // variable.
-    let wasm_stack_limit = stack_pointer - store.engine().config().max_wasm_stack;
+    // let wasm_stack_limit = stack_pointer - store.engine().config().max_wasm_stack;
+    // Bypass stack overflow detection in miri for needs of grate
+    let wasm_stack_limit = store.engine().config().max_wasm_stack;
     let prev_stack = unsafe {
         mem::replace(
             &mut *store.0.runtime_limits().stack_limit.get(),
