@@ -1,0 +1,32 @@
+name: PR cache cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete caches scoped to this PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+            const pr    = context.payload.pull_request.number;
+
+            for (const ref of [`refs/pull/${pr}/merge`, `refs/pull/${pr}/head`]) {
+              try {
+                core.info(`Deleting caches for ${ref}`);
+                await github.request('DELETE /repos/{owner}/{repo}/actions/caches', {
+                  owner, repo, ref
+                });
+              } catch (e) {
+                core.warning(`No caches for ${ref} or deletion failed: ${e.message}`);
+              }
+            }
