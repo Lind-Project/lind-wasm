@@ -64,4 +64,21 @@ gdb --args ../wasmtime/target/debug/wasmtime run -D debug-info -O opt-level=0 ma
 
 ## Other Debugging Techniques
 
-Coming soon
+### Disabling Signals for Debugging
+
+The `signal-disable` feature added in this PR allows `lind-wasm` to run binaries without inserting Wasmtime epoch signals, which is useful for debugging purposes. When this feature is enabled, the signal handler is not set, and any unexpected signals (e.g., timeouts or faults) will cause the program to crash directly in RawPOSIX, making issues easier to trace.
+
+> ⚠️ **Warning:** This feature is intended for debugging only and should not be used in production environments.
+
+To use this feature, compile `lind-wasm` with the `signal-disable` feature enabled. Here’s how to do it:
+
+**Building with the Feature:**
+
+From the root of the repository, navigate to `src/wasmtime` and build with the `signal-disable` feature:
+
+```bash
+cd src/wasmtime
+
+# Build lind-wasm with the signal-disable feature
+cargo build --features signal-disable
+```
