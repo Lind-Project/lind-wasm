@@ -280,12 +280,12 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
 
             // we also need to migrate the epoch state to the new thread
             #[cfg(not(feature = "disable_signals"))]
-            let state = get_epoch_state(cageid, thread_id); 
+            let state = get_epoch_state(cageid, thread_id);
 
             #[cfg(feature = "disable_signals")]
             // If the disable_signals feature is enabled, checking the epoch state will yield a null pointer.
             // To avoid this, we bypass the call to get_epoch_state and set state to 1 directly.
-            let state = 1; 
+            let state = 1;
 
             let new_thread_epoch_handler = entry.value().write();
             let new_thread_epoch = *new_thread_epoch_handler;
