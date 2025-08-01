@@ -55,23 +55,15 @@ pub fn epoch_kill_all(cageid: u64) {
 // get the current epoch state of the thread
 // thread safety: this function will only be invoked by main thread of the cage
 fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
-    #[cfg(feature = "disable_signals")]
-    {
-        return 1; // if were disabling signals this function is unescessary so we avoid a potential null ptr dereference
-    }
-
-    #[cfg(not(feature = "disable_signals"))]
-    {
-        let cage = cagetable_getref(cageid);
-        let epoch_handler = cage
-            .epoch_handler
-            .get(&(thread_id as i32))
-            .expect("threadid does not exist");
-        let guard = epoch_handler.read();
-        let epoch = *guard;
-        // SAFETY: see comment at `signal_epoch_trigger`
-        unsafe { *epoch }
-    }
+    let cage = cagetable_getref(cageid);
+    let epoch_handler = cage
+        .epoch_handler
+        .get(&(thread_id as i32))
+        .expect("threadid does not exist");
+    let guard = epoch_handler.read();
+    let epoch = *guard;
+    // SAFETY: see comment at `signal_epoch_trigger`
+    unsafe { *epoch }
 }
 
 // check the specified thread with specified cage is in "killed" state
@@ -287,7 +279,14 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
             *threadid_guard = id;
 
             // we also need to migrate the epoch state to the new thread
-            let state = get_epoch_state(cageid, thread_id);
+            #[cfg(not(feature = "disable_signals"))]
+            let state = get_epoch_state(cageid, thread_id); 
+
+            #[cfg(feature = "disable_signals")]
+            // If the disable_signals feature is enabled, checking the epoch state will yield a null pointer.
+            // To avoid this, we bypass the call to get_epoch_state and set state to 1 directly.
+            let state = 1; 
+
             let new_thread_epoch_handler = entry.value().write();
             let new_thread_epoch = *new_thread_epoch_handler;
             // TODO: we should also make sure the new thread is not in EPOCH_KILLED state.
