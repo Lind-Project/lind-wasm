@@ -990,7 +990,7 @@ pub fn lind_syscall_api(
                             Ok(val) => val,
                             Err(_) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
                         },
-                        None => return syscall_error(Errno::EINVAL, "sigaction", "sigaction pointer is NULL"),
+                        None => None,
                     }
                 }
             };
@@ -1003,7 +1003,7 @@ pub fn lind_syscall_api(
                             Ok(val) => val,
                             Err(_) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
                         },
-                        None => return syscall_error(Errno::EINVAL, "sigaction", "old sigaction pointer is NULL"),
+                        None => None,
                     }
                 }
             };
@@ -1036,13 +1036,7 @@ pub fn lind_syscall_api(
                                 )
                             }
                         },
-                        None => {
-                            return syscall_error(
-                                Errno::EINVAL,
-                                "sigprocmask",
-                                "sigset pointer is NULL",
-                            )
-                        }
+                        None => None,
                     }
                 }
             };
@@ -1062,13 +1056,7 @@ pub fn lind_syscall_api(
                                 )
                             }
                         },
-                        None => {
-                            return syscall_error(
-                                Errno::EINVAL,
-                                "sigprocmask",
-                                "old sigset pointer is NULL",
-                            )
-                        }
+                        None => None,
                     }
                 }
             };
@@ -1328,15 +1316,12 @@ pub fn lind_syscall_api(
 
             let itimeval = itimeval_raw.unwrap();
 
-            let old_itimeval_raw = {
-                if arg3 == 0 {
-                    None
-                } else {
-                    let addr = match translate_vmmap_addr(&cage, arg3) {
-                        Some(a) => a,
-                        None => return syscall_error(Errno::EFAULT, "setitimer", "invalid old_itimeval address"),
-                    };
-                    match interface::get_itimerval(addr) {
+            // arg3 is optional
+            let old_itimeval = if arg3 == 0 {
+                None
+            } else {
+                match translate_vmmap_addr(&cage, arg3) {
+                    Some(addr) => match interface::get_itimerval(addr) {
                         Ok(itv) => Some(itv),
                         Err(_) => {
                             return syscall_error(
@@ -1345,12 +1330,12 @@ pub fn lind_syscall_api(
                                 "failed to get old itimerval struct",
                             )
                         }
-                    }
+                    },
+                    None => None,
                 }
             };
-            let old_itimeval = old_itimeval_raw.unwrap();
 
-            cage.setitimer_syscall(which, itimeval, old_itimeval)
+            cage.setitimer_syscall(which, itimeval, old_itimeval.unwrap())
         }
 
         READLINK_SYSCALL => {
