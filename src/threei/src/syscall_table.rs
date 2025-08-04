@@ -6,9 +6,7 @@ use rawposix::fs_calls::{
 };
 pub use rawposix::fs_calls::mmap_syscall;
 use rawposix::sys_calls::{
-    exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall,
-    send_syscall, recv_syscall, bind_syscall, connect_syscall, listen_syscall, accept_syscall, 
-    setsockopt_syscall, socket_syscall
+    exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall
 };
 use super::threei::Raw_CallFunc;
 
@@ -29,13 +27,6 @@ pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (30, exit_syscall),
     (31, getpid_syscall),
     (32, dup_syscall),
-    (33, bind_syscall),
-    (34, send_syscall),
-    (36, recv_syscall),
-    (38, connect_syscall),
-    (39, listen_syscall),
-    (40, accept_syscall),
-    (44, setsockopt_syscall),
     (66, pipe_syscall),
     (67, pipe2_syscall),
     (68, fork_syscall),
@@ -46,7 +37,6 @@ pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (172, wait_syscall),
     (173, waitpid_syscall),
     (175, brk_syscall),
-    (136, socket_syscall),
     (176, sbrk_syscall),
     (181, nanosleep_time64_syscall),
     (191, clock_gettime_syscall),
