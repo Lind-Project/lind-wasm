@@ -705,10 +705,6 @@ def main():
     clean_testfiles = args.clean_testfiles
     clean_results = args.clean_results
 
-    # Set DEBUG_MODE from the passed argument
-    # global DEBUG_MODE
-    # DEBUG_MODE = args.debug
-
     if args.debug:
         logger.setLevel(logging.DEBUG)
     else:
