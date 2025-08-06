@@ -15,6 +15,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Internal Documentation:
+    - internal/index.md
     - libc: internal/libc.md
     - Wasmtime: internal/wasmtime.md
     - RawPOSIX: internal/rawposix.md
