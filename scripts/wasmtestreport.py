@@ -18,6 +18,17 @@ import subprocess
 from pathlib import Path
 import argparse
 import shutil
+import logging
+
+# Configure logger
+logger = logging.getLogger("wasmtestreport")
+logger.setLevel(logging.DEBUG)  # default to DEBUG, we will be overriding with CLI args
+
+# Console handler
+ch = logging.StreamHandler()
+formatter = logging.Formatter("[%(levelname)s] %(message)s")
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 DEFAULT_TIMEOUT = 5 # in seconds
 
@@ -53,6 +64,19 @@ error_types = {
     }
 
 # ----------------------------------------------------------------------
+# Function: is_segmentation_fault
+#
+# Purpose:
+#   Checks if a given return code corresponds to a segmentation fault
+#
+# Variables:
+# - Input: The return code
+# - Output: Returns True if the return code is 139 or 134 which corresponds to a Segmentation fault
+# ----------------------------------------------------------------------
+def is_segmentation_fault(returncode):
+    return returncode in (134, 139)
+# ----------------------------------------------------------------------
+
 # Function: get_empty_result
 #
 # Purpose:
@@ -111,14 +135,14 @@ def add_test_result(result, file_path, status, error_type, output):
     if status.lower() == "success":
         result["number_of_success"] += 1
         result["success"].append(file_path)
-        print("SUCCESS")
+        logger.info("SUCCESS")
     else:
         result["number_of_failures"] += 1
         result["failures"].append(file_path)
         
         error_message = error_types.get(error_type, "Undefined Failure")
 
-        print(f"FAILURE: {error_message}")
+        logger.error(f"FAILURE: {error_message}")
         if error_type in error_types:
             result[f"number_of_{error_type}"] += 1
             result[error_type].append(file_path)
@@ -149,16 +173,16 @@ def compile_c_to_wasm(source_file):
     source_file = Path(source_file).resolve()
     testcase = str(source_file.with_suffix(''))
     compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
-    if DEBUG_MODE:
-        print("Running command:", compile_cmd)
-        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
-            print("File exists and is a regular file!")
-        else:
-            print("File not found or it's a directory!")
+    
+    logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
+    if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
+        logger.debug("File exists and is a regular file!")
+    else:
+        logger.debug("File not found or it's a directory!")
 
 
     try:
-        result = run_subprocess(compile_cmd, label="wasm compile")
+        result = run_subprocess(compile_cmd, label="wasm compile", shell = False)
         if result.returncode != 0:
             return (None, result.stdout + "\n" + result.stderr)
         else:
@@ -192,16 +216,16 @@ def compile_c_to_wasm(source_file):
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file]
-    if DEBUG_MODE:
-        print("Running command:", run_cmd)
-        if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
-            print("File exists and is a regular file!")
-        else:
-            print("File not found or it's a directory!")
+    
+    logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
+    if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
+        logger.debug("File exists and is a regular file!")
+    else:
+        logger.debug("File not found or it's a directory!")
 
 
     try:
-        proc = run_subprocess(run_cmd,label="wasm run",timeout=timeout_sec, cwd=None)
+        proc = run_subprocess(run_cmd,label="wasm run",timeout=timeout_sec, cwd=None, shell = False)
         full_output = proc.stdout + proc.stderr
         
         #removing the first line in output as it is the command being run by the bash script
@@ -258,7 +282,7 @@ def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_
         else:
             if retcode == 0:
                 add_test_result(result, str(source_file), "Success", None, output)
-            elif retcode in (134, 139):
+            elif is_segmentation_fault(retcode):
                 add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", output)
             else:
                 add_test_result(result, str(source_file), "Failure", "Unknown_Failure", output)
@@ -300,14 +324,14 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
     if expected_output_file.is_file():
         try:
             with open(expected_output_file, 'r') as f:
-                print(f"Expected output found at {expected_output_file}")
+                logger.info(f"Expected output found at {expected_output_file}")
                 native_run_output = f.read()
         except Exception as e:
             add_test_result(result, str(source_file), "Failure", "Failure_reading_expected_file",
                             f"Exception: {e}")
             return
     else:
-        print(f"No expected output found at {expected_output_file}")
+        logger.info(f"No expected output found at {expected_output_file}")
         #trying native compile
         try:
             proc_compile = run_subprocess(native_compile_cmd, label="gcc compile", cwd=LIND_FS_ROOT, shell=False)
@@ -321,7 +345,7 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
 
         #trying native run
         try:
-            proc_run = run_subprocess([str(native_output)], label="native run", cwd=LIND_FS_ROOT, shell=True)
+            proc_run = run_subprocess([str(native_output)], label="native run", cwd=LIND_FS_ROOT, shell=False)
             if proc_run.returncode != 0:
                 add_test_result(result, str(source_file), "Failure", "Failure_native_running",
                                 proc_run.stdout + proc_run.stderr)
@@ -360,7 +384,7 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
                         f"{wasm_content}\n"
                     )
                     add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info)
-            elif retcode in (134, 139):
+            elif is_segmentation_fault(retcode):
                 add_test_result(result, str(source_file), "Failure", "Lind_wasm_Segmentation_Fault", wasm_run_output)
             else:
                 add_test_result(result, str(source_file), "Failure", "Unknown_Failure", wasm_run_output)
@@ -534,7 +558,7 @@ def is_file_in_folder(file_path, folder_list):
 # ----------------------------------------------------------------------
 def should_run_file(file_path, run_folders, skip_folders, skip_test_cases):
     if file_path in skip_test_cases:
-        print(f"skipping {file_path}")
+        logger.info(f"Skipping {file_path}")
         return False
 
     if skip_folders and is_file_in_folder(file_path, skip_folders):
@@ -630,6 +654,7 @@ def compare_test_results(file1, file2):
 #   The result of subprocess.run()
 #
 # Raises:
+#   ValueError - When cmd type is inconsistent with the shell mode
 #   subprocess.TimeoutExpired - If the command exceeds the timeout.
 #   Exception - For all other unexpected execution errors.
 # ----------------------------------------------------------------------
@@ -637,6 +662,12 @@ def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None):
     """
     Wrapper for subprocess.run with optional debug logging.
     """
+    # Guardrails: check cmd type consistency with shell mode
+    if shell and not isinstance(cmd, str):
+        raise ValueError("When shell=True, 'cmd' must be a string.")
+    if not shell and not isinstance(cmd, (list, tuple)):
+        raise ValueError("When shell=False, 'cmd' must be a list or tuple of args.")
+
     try:
         proc = subprocess.run(
             cmd,
@@ -647,20 +678,18 @@ def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None):
             timeout=timeout
         )
 
-        if DEBUG_MODE:
-            print(f"\n>>> {label.upper()} CMD: {' '.join(map(str, cmd))}")
-            if proc.stdout.strip():
-                print(f"[{label} STDOUT]\n{proc.stdout.strip()}")
-            if proc.stderr.strip():
-                print(f"[{label} STDERR]\n{proc.stderr.strip()}")
+        
+        logger.debug(f">>> {label.upper()} CMD: {' '.join(map(str, cmd))}")
+        if proc.stdout.strip():
+            logger.debug(f"[{label} STDOUT]\n{proc.stdout.strip()}")
+        if proc.stderr.strip():
+            logger.debug(f"[{label} STDERR]\n{proc.stderr.strip()}")
         return proc
     except subprocess.TimeoutExpired as e:
-        if DEBUG_MODE:
-            print(f"[{label}] TIMEOUT after {timeout}s")
+        logger.error(f"[{label}] TIMEOUT after {timeout}s")
         raise
     except Exception as e:
-        if DEBUG_MODE:
-            print(f"[{label}] EXCEPTION: {str(e)}")
+        logger.error(f"[{label}] EXCEPTION: {str(e)}")
         raise
 
 def main():
@@ -677,15 +706,20 @@ def main():
     clean_results = args.clean_results
 
     # Set DEBUG_MODE from the passed argument
-    global DEBUG_MODE
-    DEBUG_MODE = args.debug
+    # global DEBUG_MODE
+    # DEBUG_MODE = args.debug
+
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
     
     if clean_results:
         if os.path.isfile(output_file):
             os.remove(output_file)
         if os.path.isfile(output_html_file):
             os.remove(output_html_file)
-        print(Path(LIND_FS_ROOT))
+        logger.debug(Path(LIND_FS_ROOT))
         for file in Path(LIND_FS_ROOT).iterdir():
             file.unlink()
         return
@@ -697,16 +731,16 @@ def main():
 
     try:
         shutil.rmtree(TESTFILES_DST)
-        print(f"Testfiles at {LIND_FS_ROOT} deleted")
+        logger.info(f"Testfiles at {LIND_FS_ROOT} deleted")
     except FileNotFoundError as e:
-        print(f"Testfiles not present at {LIND_FS_ROOT}")
+        logger.error(f"Testfiles not present at {LIND_FS_ROOT}")
     
     if clean_testfiles:
         return
 
     pre_test()
     if pre_test_only:
-        print(f"Testfiles copied to {LIND_FS_ROOT}")
+        logger.info(f"Testfiles copied to {LIND_FS_ROOT}")
         return
 
     skip_folders_paths = [Path(sf) for sf in skip_folders]
@@ -717,7 +751,7 @@ def main():
         with open(SKIP_TESTS_FILE, "r") as f:
             skip_test_cases = {TEST_FILE_BASE / line.strip() for line in f if line.strip()}
     except FileNotFoundError:
-        print(f"{SKIP_TESTS_FILE} not found")
+        logger.error(f"{SKIP_TESTS_FILE} not found")
 
     # Override test cases in skip_test_cases by passing individual test cases as arguments
     if args.testfiles: 
@@ -730,12 +764,12 @@ def main():
                 tests_to_run.append(test_case)
 
     if not tests_to_run:
-        print("No tests found")
+        logger.warning("No tests found")
         return
 
     total_count = len(tests_to_run)
     for i, source_file in enumerate(tests_to_run):
-        print(f"[{i+1}/{total_count}] {source_file}")
+        logger.info(f"[{i+1}/{total_count}] {source_file}")	
         parent_name = source_file.parent.name
 
         # checks the name of immediate parent folder to see if a test is deterministic or non deterministic.
@@ -764,9 +798,9 @@ def main():
         report_html = generate_html_report(results)
         with open(output_html_file, "w", encoding="utf-8") as out:
             out.write(report_html)
-        print(f"'{os.path.abspath(output_html_file)}' generated.")
+        logger.info(f"'{os.path.abspath(output_html_file)}' generated.")	
 
-    print(f"'{os.path.abspath(output_file)}' generated.")
+    logger.info(f"'{os.path.abspath(output_file)}' generated.")
 
 if __name__ == "__main__":
     main()
