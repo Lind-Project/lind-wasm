@@ -8,6 +8,10 @@ permissions:
   actions: write
   contents: read
 
+concurrency:
+  group: pr-cache-cleanup
+  cancel-in-progress: false
+
 jobs:
   purge:
     runs-on: ubuntu-latest
@@ -20,13 +24,24 @@ jobs:
             const repo  = context.repo.repo;
             const pr    = context.payload.pull_request.number;
 
-            for (const ref of [`refs/pull/${pr}/merge`, `refs/pull/${pr}/head`]) {
-              try {
-                core.info(`Deleting caches for ${ref}`);
-                await github.request('DELETE /repos/{owner}/{repo}/actions/caches', {
-                  owner, repo, ref
-                });
-              } catch (e) {
-                core.warning(`No caches for ${ref} or deletion failed: ${e.message}`);
+            const refs = [`refs/pull/${pr}/merge`, `refs/pull/${pr}/head`];
+
+            for (const ref of refs) {
+              const { data } = await github.request(
+                'GET /repos/{owner}/{repo}/actions/caches',
+                { owner, repo, ref, per_page: 100 }
+              );
+
+              if (data.total_count === 0) {
+                core.info(`No caches for ${ref}`);
+                continue;
+              }
+
+              for (const cache of data.actions_caches) {
+                core.info(`Deleting cache id ${cache.id} (key: ${cache.key})`);
+                await github.request(
+                  'DELETE /repos/{owner}/{repo}/actions/caches/{cache_id}',
+                  { owner, repo, cache_id: cache.id }
+                );
               }
             }
