@@ -16,7 +16,7 @@ SYSROOT="$GLIBC/sysroot"
 SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
 
 # Define common flags
-CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g"
+CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g -fPIC"
 WARNINGS="-Wall -Wwrite-strings -Wundef -Wstrict-prototypes -Wold-style-definition"
 EXTRA_FLAGS="-fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common"
 EXTRA_FLAGS+=" -Wp,-U_FORTIFY_SOURCE -fmath-errno -fPIE -ftls-model=local-exec"
@@ -59,7 +59,7 @@ INCLUDE_PATHS="
     -I../libio
     -I.
 "
-SYS_INCLUDE="-nostdinc -isystem $CLANG/lib/clang/16/include -isystem /usr/i686-linux-gnu/include"
+SYS_INCLUDE="-nostdinc -isystem $CLANG/lib/clang/18/include -isystem /usr/i686-linux-gnu/include"
 DEFINES="-D_LIBC_REENTRANT -include $BUILD/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
@@ -95,6 +95,22 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -o $BUILD/lind_syscall.o \
     -c $GLIBC/lind_syscall/lind_syscall.c
 
+# Compile elision-lock.c
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $GLIBC/build/nptl/elision-lock.o \
+    -c $GLIBC/sysdeps/unix/sysv/linux/x86/elision-lock.c \
+    -MD -MP -MF $GLIBC/build/nptl/elision-lock.o.dt \
+    -MT $GLIBC/build/nptl/elision-lock.o
+
+# Compile elision-unlock.c
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $GLIBC/build/nptl/elision-unlock.o \
+    -c $GLIBC/sysdeps/unix/sysv/linux/x86/elision-unlock.c \
+    -MD -MP -MF $GLIBC/build/nptl/elision-unlock.o.dt \
+    -MT $GLIBC/build/nptl/elision-unlock.o
+
 # Compile assembly files
 cd ../
 $CC --target=wasm32-wasi-threads -matomics \
@@ -110,7 +126,18 @@ $CC --target=wasm32-wasi-threads -matomics \
 rm -rf "$SYSROOT"
 
 # Find all .o files recursively in the source directory, ignoring stamp.o
-object_files=$(find "$BUILD" -type f -name "*.o" ! \( -name "stamp.o" -o -name "argp-pvh.o" -o -name "repertoire.o" -o -name "static-stubs.o" \))
+object_files=$(find "$BUILD" -type f -name "*.o" ! \( \
+  -name "stamp.o" -o \
+  -name "argp-pvh.o" -o \
+  -name "repertoire.o" -o \
+  -name "static-stubs.o" \
+  -name "zic.o" -o \
+  -name "xmalloc.o" -o \
+  -name "list.o" -o \
+  -name "ldconfig.o" -o \
+  -name "sln.o" \
+\))
+
 
 # Check if object files were found
 if [ -z "$object_files" ]; then
