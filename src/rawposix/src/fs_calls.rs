@@ -141,16 +141,25 @@ pub fn open_syscall(
     }
 }
 
-/// Implements shmget-like behavior: create or look up a SysV shared memory segment ID.
-/// Only the allocation of an ID and metadata tracking is handled here; attachment and
-/// control operations are implemented elsewhere.
+/// SHMGET: Create or look up a SysV shared memory segment identifier.
 ///
-/// Semantics follow the main-reference:
-/// - If key == IPC_PRIVATE: return ENOENT (not implemented here).
-/// - If key exists and IPC_CREAT|IPC_EXCL are both set: EEXIST.
-/// - If key missing and IPC_CREAT not set: ENOENT.
-/// - Enforce SHMMIN <= size <= SHMMAX on create, else EINVAL.
-/// - On create, store mode = low 9 bits of shmflg.
+/// Behavior (mirrors SysV semantics used by main-reference):
+/// - Lookup by `key`. If the key already exists and both `IPC_CREAT | IPC_EXCL` are set, fail with EEXIST.
+/// - If the key does not exist and `IPC_CREAT` is not provided, fail with ENOENT.
+/// - `IPC_PRIVATE` (key == 0) is not supported in this implementation; returns ENOENT.
+/// - When creating a segment, enforce `SHMMIN <= size <= SHMMAX`. Otherwise return EINVAL.
+/// - On create, an internal `shmid` is allocated and tracked; permissions `mode` are taken from the low
+///   9 bits of `shmflg`. Basic metadata compatible with `ShmidsStruct` is initialized.
+///
+/// Arguments (as received by the dispatcher):
+/// - arg1: key (i32)
+/// - arg2: size (usize)
+/// - arg3: shmflg (i32)
+/// - arg4..arg6: unused; validated via `sc_unusedarg`.
+///
+/// Return:
+/// - On success: shmid (i32).
+/// - On failure: negative errno via `syscall_error`.
 pub fn shmget_syscall(
     cageid: u64,
     key_arg: u64,
@@ -252,9 +261,27 @@ pub fn shmget_syscall(
     shmid
 }
 
-/// SHMAT: attach a shared memory segment to the caller's address space.
-/// - Returns user-space address (positive) on success or negative errno on failure.
-/// - If SHM_RDONLY set: map read-only; else read-write.
+/// SHMAT: Attach a SysV shared memory segment into the caller's address space.
+///
+/// Behavior:
+/// - Validates `shmid` and that the segment is not marked for removal (RMID without attaches).
+/// - If `shmaddr` is non-zero it must be page-aligned; otherwise EINVAL is returned.
+/// - Chooses a user address: if `shmaddr == 0`, finds a free region using `vmmap`; otherwise uses
+///   the provided aligned address.
+/// - Performs an anonymous MAP_FIXED mapping at the chosen system address with protections derived
+///   from `shmflg` (RO for `SHM_RDONLY`, RW otherwise), then updates `vmmap` with a
+///   `MemoryBackingType::SharedMemory(shmid)` entry. Increments `shm_nattch` and records a reverse
+///   mapping `(addr, shmid)` per cage for later `shmdt`.
+///
+/// Arguments:
+/// - arg1: shmid (i32)
+/// - arg2: shmaddr (u8* in guest; treated as u32 address)
+/// - arg3: shmflg (i32)
+/// - arg4..arg6: unused; validated via `sc_unusedarg`.
+///
+/// Return:
+/// - On success: user-space attach address (i32, >= 0).
+/// - On failure: negative errno (EINVAL, ENOMEM, etc.).
 pub fn shmat_syscall(
     cageid: u64,
     shmid_arg: u64,
@@ -378,7 +405,22 @@ pub fn shmat_syscall(
     useraddr as i32
 }
 
-/// SHMDT: detach the shared memory at provided address. Returns shmid on success, negative errno on failure.
+/// SHMDT: Detach a SysV shared memory segment previously attached at `shmaddr`.
+///
+/// Behavior:
+/// - Uses the per-cage reverse map `(addr, shmid)` to find the attached segment by address. If no match,
+///   returns EINVAL.
+/// - Decrements `shm_nattch`. If the segment was previously marked for removal (via `IPC_RMID`) and the
+///   attachment count drops to zero, permanently removes the segment from the global tables.
+/// - Simulates unmap by setting the region to `PROT_NONE` via MAP_FIXED and removes the `vmmap` entry.
+///
+/// Arguments:
+/// - arg1: shmaddr (u8* in guest; treated as u32 address)
+/// - arg2..arg6: unused; validated via `sc_unusedarg`.
+///
+/// Return:
+/// - On success: returns the `shmid` of the detached segment (to match main-reference behavior).
+/// - On failure: negative errno (EINVAL).
 pub fn shmdt_syscall(
     cageid: u64,
     shmaddr_arg: u64,
@@ -460,7 +502,22 @@ pub fn shmdt_syscall(
     shmid
 }
 
-/// SHMCTL: IPC_STAT and IPC_RMID supported.
+/// SHMCTL: Control operations on SysV shared memory segments.
+///
+/// Supported commands:
+/// - `IPC_STAT`: populates the provided `ShmidsStruct` with metadata for `shmid`.
+/// - `IPC_RMID`: marks the segment for removal by setting `SHM_DEST`. If `shm_nattch == 0` at the time of
+///   the call, removes the segment immediately from the global tables. Otherwise, the segment is removed on
+///   the last `shmdt`.
+///
+/// Arguments:
+/// - arg1: shmid (i32)
+/// - arg2: cmd (i32)
+/// - arg3: buf (pointer to `ShmidsStruct`) for `IPC_STAT` (must be non-null).
+/// - arg4..arg6: unused; validated via `sc_unusedarg`.
+///
+/// Return:
+/// - 0 on success; negative errno on failure (EINVAL for bad `shmid`, null `buf`, or unsupported command).
 pub fn shmctl_syscall(
     cageid: u64,
     shmid_arg: u64,
