@@ -9,7 +9,10 @@ use libc::*;
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
+use std::collections::HashMap;
+use once_cell::sync::Lazy;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::data::fs_struct::ShmidsStruct;
 use sysdefs::constants::sys_const::DEFAULT_GID;
 use sysdefs::constants::fs_const;
 use sysdefs::constants::fs_const::{
@@ -18,6 +21,38 @@ use sysdefs::constants::fs_const::{
 };
 use typemap::syscall_type_conversion::*;
 use typemap::{get_pipearray, sc_convert_path_to_host, convert_fd_to_host};
+
+// --------------------- Shared Memory (SysV) minimal state for shmget ---------------------
+// This mirrors the semantics used in main-reference for shmget only. Other SHM syscalls
+// (shmat/shmdt/shmctl) are not implemented here.
+
+#[derive(Clone)]
+struct ShmSegmentMeta {
+    key: i32,
+    size: usize,
+    mode: u16,
+    creator_cageid: u64,
+    rmid: bool,
+    shminfo: ShmidsStruct,
+}
+
+#[derive(Default)]
+struct ShmGlobalState {
+    next_id: i32,
+    key_to_id: HashMap<i32, i32>,
+    id_to_seg: HashMap<i32, ShmSegmentMeta>,
+    // reverse mapping per cage: (base_user_addr, shmid)
+    cage_rev: HashMap<u64, Vec<(u32, i32)>>,
+}
+
+static SHM_STATE: Lazy<RwLock<ShmGlobalState>> = Lazy::new(|| {
+    RwLock::new(ShmGlobalState {
+        next_id: 1,
+        key_to_id: HashMap::new(),
+        id_to_seg: HashMap::new(),
+        cage_rev: HashMap::new(),
+    })
+});
 
 /// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't
 /// be closed in Lind-WASM execution, which preventing issues where other threads might reassign these
@@ -103,6 +138,386 @@ pub fn open_syscall(
     ) {
         Ok(virtual_fd) => virtual_fd as i32,
         Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
+    }
+}
+
+/// Implements shmget-like behavior: create or look up a SysV shared memory segment ID.
+/// Only the allocation of an ID and metadata tracking is handled here; attachment and
+/// control operations are implemented elsewhere.
+///
+/// Semantics follow the main-reference:
+/// - If key == IPC_PRIVATE: return ENOENT (not implemented here).
+/// - If key exists and IPC_CREAT|IPC_EXCL are both set: EEXIST.
+/// - If key missing and IPC_CREAT not set: ENOENT.
+/// - Enforce SHMMIN <= size <= SHMMAX on create, else EINVAL.
+/// - On create, store mode = low 9 bits of shmflg.
+pub fn shmget_syscall(
+    cageid: u64,
+    key_arg: u64,
+    key_cageid: u64,
+    size_arg: u64,
+    size_cageid: u64,
+    shmflg_arg: u64,
+    shmflg_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let key = sc_convert_sysarg_to_i32(key_arg, key_cageid, cageid);
+    let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
+    let shmflg = sc_convert_sysarg_to_i32(shmflg_arg, shmflg_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "shmget", "Invalid Cage ID");
+    }
+
+    // Constants
+    use sysdefs::constants::fs_const::{IPC_CREAT, IPC_EXCL, IPC_PRIVATE, SHMMAX, SHMMIN};
+
+    if key == IPC_PRIVATE {
+        return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
+    }
+
+    let mut state = SHM_STATE.write();
+
+    if let Some(&existing_id) = state.key_to_id.get(&key) {
+        // If both IPC_CREAT and IPC_EXCL are present, fail if key exists
+        if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
+            return syscall_error(
+                Errno::EEXIST,
+                "shmget",
+                "key already exists and IPC_CREAT and IPC_EXCL were used",
+            );
+        }
+        return existing_id;
+    }
+
+    // Creating new segment requires IPC_CREAT
+    if (shmflg & IPC_CREAT) == 0 {
+        return syscall_error(
+            Errno::ENOENT,
+            "shmget",
+            "tried to use a key that did not exist, and IPC_CREAT was not specified",
+        );
+    }
+
+    // Validate size within SHMMIN ..= SHMMAX
+    if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
+        return syscall_error(
+            Errno::EINVAL,
+            "shmget",
+            "Size is less than SHMMIN or more than SHMMAX",
+        );
+    }
+
+    // Allocate a new id and record metadata
+    let shmid = state.next_id;
+    state.next_id = state
+        .next_id
+        .checked_add(1)
+        .unwrap_or_else(|| 1); // wrap safely
+
+    let mode = (shmflg & 0x1FF) as u16; // lower 9 bits
+    let mut shminfo = ShmidsStruct::default();
+    shminfo.shm_perm.__key = key;
+    shminfo.shm_perm.uid = 0;
+    shminfo.shm_perm.gid = 0;
+    shminfo.shm_perm.cuid = 0;
+    shminfo.shm_perm.cgid = 0;
+    shminfo.shm_perm.mode = mode;
+    shminfo.shm_segsz = size as u32;
+    shminfo.shm_cpid = 0;
+    shminfo.shm_lpid = 0;
+    shminfo.shm_nattch = 0;
+
+    let meta = ShmSegmentMeta {
+        key,
+        size,
+        mode,
+        creator_cageid: cageid,
+        rmid: false,
+        shminfo,
+    };
+    state.key_to_id.insert(key, shmid);
+    state.id_to_seg.insert(shmid, meta);
+
+    shmid
+}
+
+/// SHMAT: attach a shared memory segment to the caller's address space.
+/// - Returns user-space address (positive) on success or negative errno on failure.
+/// - If SHM_RDONLY set: map read-only; else read-write.
+pub fn shmat_syscall(
+    cageid: u64,
+    shmid_arg: u64,
+    shmid_cageid: u64,
+    shmaddr_arg: u64,
+    shmaddr_cageid: u64,
+    shmflg_arg: u64,
+    shmflg_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
+    let shmaddr = shmaddr_arg as *mut u8;
+    let shmflg = sc_convert_sysarg_to_i32(shmflg_arg, shmflg_cageid, cageid);
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "shmat", "Invalid Cage ID");
+    }
+
+    use sysdefs::constants::fs_const::{SHM_RDONLY, MAP_SHARED};
+
+    let prot = if (shmflg & SHM_RDONLY) != 0 { PROT_READ } else { PROT_READ | PROT_WRITE };
+
+    // Lookup segment
+    let (size, rmid);
+    {
+        let state = SHM_STATE.read();
+        if let Some(seg) = state.id_to_seg.get(&shmid) {
+            size = seg.size;
+            rmid = seg.rmid;
+        } else {
+            return syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value");
+        }
+    }
+    if rmid {
+        return syscall_error(Errno::EINVAL, "shmat", "Segment marked for removal");
+    }
+
+    // Align and validate addr if provided (we allow hint or fixed behavior via user-specified aligned addr)
+    let addr_u32 = shmaddr as u32;
+    if addr_u32 != 0 {
+        let rounded = round_up_page(addr_u32 as u64);
+        if rounded != addr_u32 as u64 {
+            return syscall_error(Errno::EINVAL, "shmat", "unaligned address");
+        }
+    }
+
+    // Perform mapping using existing mmap handler semantics into user address space
+    // Choose address: if not provided, pass 0 and let mmap_syscall pick space, else use requested
+    let length_rounded = round_up_page(size as u64) as usize;
+    let flags = (MAP_SHARED | MAP_FIXED) as i32; // map at exact address once chosen
+
+    // Find or use addr via vmmap
+    let cage = get_cage(cageid).unwrap();
+    let useraddr = if addr_u32 == 0 {
+        // find free space
+        let mut vmmap = cage.vmmap.write();
+        let npages = (length_rounded as u32) >> PAGESHIFT;
+        let found = vmmap.find_map_space(npages, 1);
+        if found.is_none() {
+            return syscall_error(Errno::ENOMEM, "shmat", "no memory");
+        }
+        (found.unwrap().start() << PAGESHIFT) as u32
+    } else {
+        addr_u32
+    };
+
+    // Convert to system address and map anonymously (backed logically by shared segment)
+    let sysaddr = {
+        let vmmap = cage.vmmap.read();
+        vmmap.user_to_sys(useraddr)
+    };
+
+    let mapret = mmap_inner(
+        cageid,
+        sysaddr as *mut u8,
+        length_rounded,
+        prot,
+        flags | MAP_ANONYMOUS as i32,
+        -1,
+        0,
+    );
+    if mapret as i64 == -1 {
+        return syscall_error(Errno::EINVAL, "shmat", "mmap failed");
+    }
+
+    // Track in vmmap and reverse map for detach
+    {
+        let mut vmmap = cage.vmmap.write();
+        let backing = MemoryBackingType::SharedMemory(shmid as u64);
+        let _ = vmmap.add_entry_with_overwrite(
+            useraddr >> PAGESHIFT,
+            (length_rounded as u32) >> PAGESHIFT,
+            prot,
+            prot,
+            MAP_SHARED as i32 | MAP_FIXED as i32 | MAP_ANONYMOUS as i32,
+            backing,
+            0,
+            size as i64,
+            cageid,
+        );
+    }
+
+    // Update metadata: nattch++ and reverse map
+    {
+        let mut state = SHM_STATE.write();
+        if let Some(seg) = state.id_to_seg.get_mut(&shmid) {
+            seg.shminfo.shm_nattch = seg.shminfo.shm_nattch.saturating_add(1);
+        }
+        let rev = state.cage_rev.entry(cageid).or_insert_with(Vec::new);
+        rev.push((useraddr, shmid));
+    }
+
+    useraddr as i32
+}
+
+/// SHMDT: detach the shared memory at provided address. Returns shmid on success, negative errno on failure.
+pub fn shmdt_syscall(
+    cageid: u64,
+    shmaddr_arg: u64,
+    shmaddr_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let shmaddr = shmaddr_arg as *mut u8;
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "shmdt", "Invalid Cage ID");
+    }
+
+    let addr_u32 = shmaddr as u32;
+    // Lookup rev map to find shmid and size
+    let (shmid, size, rmid_after): (i32, usize, bool);
+    {
+        let mut state = SHM_STATE.write();
+        let entry = state.cage_rev.entry(cageid).or_insert_with(Vec::new);
+        if let Some(index) = entry.iter().position(|(a, _)| *a == addr_u32) {
+            shmid = entry[index].1;
+            entry.swap_remove(index);
+        } else {
+            return syscall_error(Errno::EINVAL, "shmdt", "No shared memory segment at shmaddr");
+        }
+        if let Some(seg) = state.id_to_seg.get_mut(&shmid) {
+            seg.shminfo.shm_nattch = seg.shminfo.shm_nattch.saturating_sub(1);
+            size = seg.size;
+            rmid_after = seg.rmid && seg.shminfo.shm_nattch == 0;
+        } else {
+            return syscall_error(Errno::EINVAL, "shmdt", "Invalid shmid");
+        }
+
+        if rmid_after {
+            // remove from tables
+            let key = state.id_to_seg.get(&shmid).unwrap().key;
+            state.id_to_seg.remove(&shmid);
+            state.key_to_id.remove(&key);
+        }
+    }
+
+    // Unmap by setting PROT_NONE, and remove vmmap entry
+    let cage = get_cage(cageid).unwrap();
+    let sysaddr = {
+        let vmmap = cage.vmmap.read();
+        vmmap.user_to_sys(addr_u32)
+    };
+    let length_rounded = round_up_page(size as u64) as usize;
+    let result = unsafe {
+        libc::mmap(
+            sysaddr as *mut libc::c_void,
+            length_rounded,
+            PROT_NONE,
+            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
+            -1,
+            0,
+        ) as usize
+    };
+    if result != sysaddr {
+        panic!("MAP_FIXED not fixed");
+    }
+    {
+        let mut vmmap = cage.vmmap.write();
+        let _ = vmmap.remove_entry(addr_u32 >> PAGESHIFT, (length_rounded as u32) >> PAGESHIFT);
+    }
+
+    shmid
+}
+
+/// SHMCTL: IPC_STAT and IPC_RMID supported.
+pub fn shmctl_syscall(
+    cageid: u64,
+    shmid_arg: u64,
+    shmid_cageid: u64,
+    cmd_arg: u64,
+    cmd_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
+    let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
+    let buf_ptr = sc_convert_buf(buf_arg, buf_cageid, cageid) as *mut ShmidsStruct;
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid)) {
+        return syscall_error(Errno::EFAULT, "shmctl", "Invalid Cage ID");
+    }
+
+    use sysdefs::constants::fs_const::{IPC_STAT, IPC_RMID, SHM_DEST};
+
+    let mut state = SHM_STATE.write();
+    let seg = match state.id_to_seg.get_mut(&shmid) {
+        Some(s) => s,
+        None => return syscall_error(Errno::EINVAL, "shmctl", "Invalid identifier"),
+    };
+
+    match cmd {
+        IPC_STAT => {
+            if buf_ptr.is_null() {
+                return syscall_error(Errno::EINVAL, "shmctl", "buf is null");
+            }
+            unsafe { *buf_ptr = seg.shminfo };
+            0
+        }
+        IPC_RMID => {
+            seg.rmid = true;
+            seg.shminfo.shm_perm.mode |= SHM_DEST as u16;
+            if seg.shminfo.shm_nattch == 0 {
+                let key = seg.key;
+                drop(seg);
+                state.id_to_seg.remove(&shmid);
+                state.key_to_id.remove(&key);
+            }
+            0
+        }
+        _ => syscall_error(
+            Errno::EINVAL,
+            "shmctl",
+            "Arguments provided do not match implemented parameters",
+        ),
     }
 }
 
