@@ -1,12 +1,19 @@
-use threei::cage::*;
-use threei::fdtables;
-use threei::rawposix::vmmap::*;
-use threei::threei::{threei::*, threeiconstant};
+use cage::*;
+use fdtables;
+use cage::memory::vmmap::*;
+use crate::fs_calls::{chdir_syscall, mkdir_syscall, open_syscall};
 
+use std::ffi::CString;
 use std::thread;
 use std::time::{Duration, Instant};
 use tracing::{info, instrument};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, AtomicU64};
+use parking_lot::RwLock;
+use std::path::PathBuf;
+use std::fs;
+use libc::{pipe, read, write, close, c_void};
 
 const FDKIND_KERNEL: u32 = 0;
 
@@ -184,4 +191,54 @@ fn test_mkdir() {
     let _ = fs::remove_dir("/tmp/test_mkdir_syscall_dir");
 
     testing_remove_all();
+}
+
+#[test]
+fn test_chdir() {
+    // Initialize a test cage
+    let cageid = 100;
+    simple_init_cage(cageid);
+
+    // Create a test directory first
+    let test_dir = "/tmp/test_chdir_dir";
+    let test_dir_cstring = CString::new(test_dir).unwrap();
+    let test_dir_ptr = test_dir_cstring.as_ptr() as u64;
+
+    // Create the directory
+    let mkdir_result = mkdir_syscall(
+        cageid,
+        test_dir_ptr,
+        cageid,
+        0o755, // mode
+        cageid,
+        0, 0, 0, 0, 0, 0, 0, 0,
+    );
+    assert_eq!(mkdir_result, 0, "Failed to create test directory");
+
+    // Test changing to the directory
+    let chdir_result = chdir_syscall(
+        cageid,
+        test_dir_ptr,
+        cageid,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    );
+    assert_eq!(chdir_result, 0, "Failed to change directory");
+
+    // Test changing to a non-existent directory
+    let nonexistent_dir = "/tmp/nonexistent_dir_for_test";
+    let nonexistent_dir_cstring = CString::new(nonexistent_dir).unwrap();
+    let nonexistent_dir_ptr = nonexistent_dir_cstring.as_ptr() as u64;
+
+    let chdir_error_result = chdir_syscall(
+        cageid,
+        nonexistent_dir_ptr,
+        cageid,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    );
+    assert!(chdir_error_result < 0, "Should fail when changing to non-existent directory");
+
+    // Clean up
+    unsafe {
+        libc::rmdir(test_dir_cstring.as_ptr());
+    }
 }
