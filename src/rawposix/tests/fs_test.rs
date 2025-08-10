@@ -1,6 +1,7 @@
-use cage::*;
-use fdtables;
-use cage::memory::vmmap::*;
+use threei::cage::*;
+use threei::fdtables;
+use threei::rawposix::vmmap::*;
+use threei::threei::{threei::*, threeiconstant};
 use crate::fs_calls::{chdir_syscall, mkdir_syscall, open_syscall};
 
 use std::ffi::CString;
