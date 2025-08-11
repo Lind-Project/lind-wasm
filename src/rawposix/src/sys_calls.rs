@@ -19,7 +19,7 @@ use sysdefs::constants::{EXIT_SUCCESS, VERBOSE};
 use typemap::syscall_type_conversion::*;
 use typemap::fs_type_conversion::*;
 use dashmap::DashMap;
-use typemap::{sc_convert_addr_to_host, sc_convert_sysarg_to_i32, sc_convert_sysarg_to_i32_ref, sc_unusedarg, sc_convert_buf_to_host, get_sockaddr, sc_convert_sysarg_to_u32};
+use typemap::{sc_convert_addr_to_host, sc_convert_sysarg_to_i32, sc_convert_sysarg_to_i32_ref, sc_unusedarg, sc_convert_buf_to_host, sc_convert_sysarg_to_u32};
 
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html

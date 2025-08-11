@@ -8,7 +8,7 @@
 
 // ===== Lind File System Root =====
 pub const PATH_MAX: usize = 4096;
-pub const LIND_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
+pub const LIND_ROOT: &str = "/home/lind/lind-wasm/src/rawposix/tmp";
 
 // ===== Lind specific
 pub const FDKIND_KERNEL: u32 = 0;
