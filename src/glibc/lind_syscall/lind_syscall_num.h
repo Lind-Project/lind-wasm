@@ -5,7 +5,7 @@
  * between glibc function calls and the corresponding system calls.
  *
  * These syscall numbers also align with the Linux syscall table.
- * Reference: https://github.com/torvalds/linux/blob/master/arch/x86/entry/syscalls/syscall_64.tbl
+ * Reference: https://filippo.io/linux-syscall-table/
  */
 
 #ifndef _LIND_SYSCALL_NUM_H

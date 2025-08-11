@@ -20,7 +20,7 @@
 #include <sysdep.h>
 #include <socketcall.h>
 #include <socket-constants-time64.h>
-#include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 static int
 setsockopt_syscall (int fd, int level, int optname, const void *optval,
