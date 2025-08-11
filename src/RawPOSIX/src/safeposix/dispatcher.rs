@@ -210,7 +210,9 @@ pub fn lind_syscall_api(
             // Convert iovec array address safely
             let iov_base = match translate_vmmap_addr(&cage, arg2) {
                 Some(addr) => addr as *const IovecStruct,
-                None => return syscall_error(Errno::EINVAL, "writev", "iovec base address is NULL"),
+                None => {
+                    return syscall_error(Errno::EINVAL, "writev", "iovec base address is NULL")
+                }
             };
             // The actual write operation is delegated to the cage implementation
             cage.writev_syscall(fd, iov_base, iovcnt)
@@ -249,7 +251,7 @@ pub fn lind_syscall_api(
             let addr = arg1 as *mut u8;
             let len = arg2 as usize;
             let prot = arg3 as i32;
-            
+
             interface::mprotect_handler(cageid, addr, len, prot)
         }
 
@@ -270,7 +272,7 @@ pub fn lind_syscall_api(
             let fd = arg1 as i32;
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
-                // Safely convert the user-space buffer address
+            // Safely convert the user-space buffer address
             let buf = match translate_vmmap_addr(&cage, arg2) {
                 Some(addr) => addr as *mut u8,
                 None => return syscall_error(Errno::EINVAL, "read", "buffer address is NULL"),
@@ -372,11 +374,19 @@ pub fn lind_syscall_api(
                 if rv >= 0 {
                     let addr2_addr = match translate_vmmap_addr(&cage, arg2) {
                         Some(a) => a,
-                        None => return syscall_error(Errno::EINVAL, "accept", "sockaddr pointer is NULL"),
+                        None => {
+                            return syscall_error(
+                                Errno::EINVAL,
+                                "accept",
+                                "sockaddr pointer is NULL",
+                            )
+                        }
                     };
                     let len_addr = match translate_vmmap_addr(&cage, arg3) {
                         Some(a) => a,
-                        None => return syscall_error(Errno::EINVAL, "accept", "length pointer is NULL"),
+                        None => {
+                            return syscall_error(Errno::EINVAL, "accept", "length pointer is NULL")
+                        }
                     };
                     interface::copy_out_sockaddr(addr2_addr as u64, len_addr as u64, addr);
                 }
@@ -440,7 +450,6 @@ pub fn lind_syscall_api(
 
             cage.select_syscall(nfds, readfds, writefds, errorfds, rposix_timeout)
         }
-
 
         RENAME_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
@@ -601,7 +610,9 @@ pub fn lind_syscall_api(
             // Convert stat buffer address
             let buf_addr = match translate_vmmap_addr(&cage, arg2) {
                 Some(addr) => addr,
-                None => return syscall_error(Errno::EINVAL, "fxstat", "stat buffer pointer is NULL"),
+                None => {
+                    return syscall_error(Errno::EINVAL, "fxstat", "stat buffer pointer is NULL")
+                }
             };
             let buf = interface::get_statdatastruct(buf_addr).unwrap();
             // Perform fstat operation through cage implementation
@@ -615,7 +626,9 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             let addr = match translate_vmmap_addr(&cage, arg2) {
                 Some(addr) => addr,
-                None => return syscall_error(Errno::EINVAL, "unlinkat", "pathname pointer is NULL"),
+                None => {
+                    return syscall_error(Errno::EINVAL, "unlinkat", "pathname pointer is NULL")
+                }
             };
             let pathname = interface::types::get_cstr(addr).unwrap();
 
@@ -814,11 +827,23 @@ pub fn lind_syscall_api(
                     // Copy address back to user memory
                     let addr_ptr = match translate_vmmap_addr(&cage, arg5) {
                         Some(ptr) => ptr,
-                        None => return syscall_error(Errno::EINVAL, "recvfrom", "address pointer is NULL"),
+                        None => {
+                            return syscall_error(
+                                Errno::EINVAL,
+                                "recvfrom",
+                                "address pointer is NULL",
+                            )
+                        }
                     };
                     let len_ptr = match translate_vmmap_addr(&cage, arg6) {
                         Some(ptr) => ptr,
-                        None => return syscall_error(Errno::EINVAL, "recvfrom", "length pointer is NULL"),
+                        None => {
+                            return syscall_error(
+                                Errno::EINVAL,
+                                "recvfrom",
+                                "length pointer is NULL",
+                            )
+                        }
                     };
                     interface::copy_out_sockaddr(addr_ptr, len_ptr, newsockaddr);
                 }
@@ -857,7 +882,6 @@ pub fn lind_syscall_api(
             let shmflg = arg3 as i32;
             interface::shmat_handler(cageid, addr, 0, shmflg, shmid) as i32
         }
-                
 
         SHMDT_SYSCALL => {
             let addr = arg1 as *mut u8;
@@ -931,7 +955,13 @@ pub fn lind_syscall_api(
             // Convert user space address to physical address
             let optval = match translate_vmmap_addr(&cage, arg4) {
                 Some(addr) => addr as *mut u8,
-                None => return syscall_error(Errno::EINVAL, "setsockopt", "option value address is NULL"),
+                None => {
+                    return syscall_error(
+                        Errno::EINVAL,
+                        "setsockopt",
+                        "option value address is NULL",
+                    )
+                }
             };
             // Perform setsockopt operation through cage implementation
             cage.setsockopt_syscall(virtual_fd, level, optname, optval, optlen)
@@ -972,7 +1002,9 @@ pub fn lind_syscall_api(
             // Convert user space buffer address to physical address
             let name = match translate_vmmap_addr(&cage, arg1) {
                 Some(addr) => addr as *mut u8,
-                None => return syscall_error(Errno::EINVAL, "gethostname", "buffer address is NULL"),
+                None => {
+                    return syscall_error(Errno::EINVAL, "gethostname", "buffer address is NULL")
+                }
             };
             // Perform gethostname operation through cage implementation
             cage.gethostname_syscall(name, len as isize)
@@ -988,7 +1020,13 @@ pub fn lind_syscall_api(
                     match translate_vmmap_addr(&cage, arg2) {
                         Some(addr) => match interface::get_constsigactionstruct(addr) {
                             Ok(val) => val,
-                            Err(_) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
+                            Err(_) => {
+                                return syscall_error(
+                                    Errno::EFAULT,
+                                    "sigaction",
+                                    "invalid sigaction struct format",
+                                )
+                            }
                         },
                         None => None,
                     }
@@ -1001,7 +1039,13 @@ pub fn lind_syscall_api(
                     match translate_vmmap_addr(&cage, arg3) {
                         Some(addr) => match interface::get_sigactionstruct(addr) {
                             Ok(val) => val,
-                            Err(_) => return syscall_error(Errno::EFAULT, "sigaction", "invalid sigaction struct format"),
+                            Err(_) => {
+                                return syscall_error(
+                                    Errno::EFAULT,
+                                    "sigaction",
+                                    "invalid sigaction struct format",
+                                )
+                            }
                         },
                         None => None,
                     }
@@ -1093,7 +1137,7 @@ pub fn lind_syscall_api(
                 Some(addr) => addr,
                 None => return syscall_error(Errno::EINVAL, "pipe", "pipe array pointer is NULL"),
             };
-        
+
             let pipe = match interface::get_pipearray(pipe_addr) {
                 Ok(val) => val,
                 Err(_) => return syscall_error(Errno::EFAULT, "pipe", "invalid pipe array format"),
@@ -1108,10 +1152,12 @@ pub fn lind_syscall_api(
                 Some(addr) => addr,
                 None => return syscall_error(Errno::EINVAL, "pipe2", "pipe array pointer is NULL"),
             };
-        
+
             let pipe = match interface::get_pipearray(pipe_addr) {
                 Ok(val) => val,
-                Err(_) => return syscall_error(Errno::EFAULT, "pipe2", "invalid pipe array format"),
+                Err(_) => {
+                    return syscall_error(Errno::EFAULT, "pipe2", "invalid pipe array format")
+                }
             };
             let flag = arg2 as i32;
             cage.pipe2_syscall(pipe, flag)
@@ -1123,12 +1169,16 @@ pub fn lind_syscall_api(
             // Convert user space buffer addresses to physical addresses
             let name_addr = match translate_vmmap_addr(&cage, arg2) {
                 Some(addr) => addr,
-                None => return syscall_error(Errno::EFAULT, "getsockname", "invalid address pointer"),
+                None => {
+                    return syscall_error(Errno::EFAULT, "getsockname", "invalid address pointer")
+                }
             };
-        
+
             let namelen_addr = match translate_vmmap_addr(&cage, arg3) {
                 Some(addr) => addr,
-                None => return syscall_error(Errno::EFAULT, "getsockname", "invalid length pointer"),
+                None => {
+                    return syscall_error(Errno::EFAULT, "getsockname", "invalid length pointer")
+                }
             };
             // Initialize default socket address structure
             let mut addr = net_struct::GenSockaddr::V4(net_struct::SockaddrV4::default());
@@ -1156,7 +1206,13 @@ pub fn lind_syscall_api(
             // Convert user space buffer address to physical address
             let optval_ptr = match translate_vmmap_addr(&cage, arg4) {
                 Some(addr) => addr as *mut i32,
-                None => return syscall_error(Errno::EFAULT, "getsockopt", "invalid option value pointer"),
+                None => {
+                    return syscall_error(
+                        Errno::EFAULT,
+                        "getsockopt",
+                        "invalid option value pointer",
+                    )
+                }
             };
             let optval = unsafe { &mut *optval_ptr };
             cage.getsockopt_syscall(virtual_fd, level, optname, optval)
@@ -1170,12 +1226,20 @@ pub fn lind_syscall_api(
             // Convert user space buffer address to physical address
             let sockvec_addr = match translate_vmmap_addr(&cage, arg4) {
                 Some(addr) => addr,
-                None => return syscall_error(Errno::EFAULT, "socketpair", "invalid socket pair address"),
+                None => {
+                    return syscall_error(
+                        Errno::EFAULT,
+                        "socketpair",
+                        "invalid socket pair address",
+                    )
+                }
             };
-        
+
             let virtual_socket_vector = match interface::get_sockpair(sockvec_addr as u64) {
                 Ok(pair) => pair,
-                Err(_) => return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair"),
+                Err(_) => {
+                    return syscall_error(Errno::EFAULT, "socketpair", "failed to get socket pair")
+                }
             };
             cage.socketpair_syscall(domain, _type, protocol, virtual_socket_vector)
         }
@@ -1184,7 +1248,7 @@ pub fn lind_syscall_api(
             let nfds = arg2 as u64;
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
-            
+
             let poll_addr = match translate_vmmap_addr(&cage, arg1) {
                 Some(addr) => addr,
                 None => return syscall_error(Errno::EFAULT, "poll", "invalid pollfd address"),
@@ -1210,7 +1274,9 @@ pub fn lind_syscall_api(
             let timeout = match arg2 as i32 {
                 FUTEX_WAIT => match translate_vmmap_addr(&cage, arg4) {
                     Some(addr) => addr as usize,
-                    None => return syscall_error(Errno::EFAULT, "futex", "invalid timeout address"),
+                    None => {
+                        return syscall_error(Errno::EFAULT, "futex", "invalid timeout address")
+                    }
                 },
                 _ => arg4 as usize,
             };
@@ -1221,7 +1287,7 @@ pub fn lind_syscall_api(
             let futex_op = arg2 as u32;
             let val = arg3 as u32;
             let val3 = arg6 as u32;
-        
+
             cage.futex_syscall(uaddr, futex_op, val, timeout, uaddr2, val3)
         }
 
@@ -1246,7 +1312,13 @@ pub fn lind_syscall_api(
             let cage = interface::cagetable_getref(cageid);
             let tp = match translate_vmmap_addr(&cage, arg2) {
                 Some(addr) => addr as usize,
-                None => return syscall_error(Errno::EFAULT, "clock_gettime", "invalid timespec address"),
+                None => {
+                    return syscall_error(
+                        Errno::EFAULT,
+                        "clock_gettime",
+                        "invalid timespec address",
+                    )
+                }
             };
 
             interface::cagetable_getref(cageid).clock_gettime_syscall(clockid, tp)
@@ -1299,7 +1371,13 @@ pub fn lind_syscall_api(
                 } else {
                     let addr = match translate_vmmap_addr(&cage, arg2) {
                         Some(a) => a,
-                        None => return syscall_error(Errno::EFAULT, "setitimer", "invalid itimeval address"),
+                        None => {
+                            return syscall_error(
+                                Errno::EFAULT,
+                                "setitimer",
+                                "invalid itimeval address",
+                            )
+                        }
                     };
                     match interface::get_constitimerval(addr) {
                         Ok(itv) => Some(itv),
@@ -1368,7 +1446,9 @@ pub fn lind_syscall_api(
 
             let buf = match translate_vmmap_addr(&cage, arg3) {
                 Some(b) => b as *mut u8,
-                None => return syscall_error(Errno::EFAULT, "readlinkat", "invalid buffer address"),
+                None => {
+                    return syscall_error(Errno::EFAULT, "readlinkat", "invalid buffer address")
+                }
             };
 
             let buflen = arg4 as usize;

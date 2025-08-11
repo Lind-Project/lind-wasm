@@ -6,10 +6,10 @@ use sysdefs::constants::fs_const::{
 
 use crate::interface::cagetable_getref;
 use crate::safeposix::cage::Cage;
+use crate::safeposix::shm::ShmMetadata;
+use crate::safeposix::shm::{get_shm_length, SHM_METADATA};
 use crate::safeposix::vmmap::{MemoryBackingType, Vmmap, VmmapOps};
 use std::result::Result;
-use crate::safeposix::shm::{SHM_METADATA,get_shm_length};
-use crate::safeposix::shm::ShmMetadata;
 use std::sync::Arc;
 use sysdefs::constants::SHM_RDONLY;
 
@@ -166,13 +166,7 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
 /// # Errors
 /// * `EINVAL` - If the provided address is not page-aligned
 /// * `ENOMEM` - If there is insufficient memory to complete the attachment
-pub fn shmat_handler(
-    cageid: u64,
-    addr: *mut u8,
-    mut prot: i32,
-    shmflag: i32,
-    shmid: i32,
-) -> u32 {
+pub fn shmat_handler(cageid: u64, addr: *mut u8, mut prot: i32, shmflag: i32, shmid: i32) -> u32 {
     // Get the cage reference.
     let cage = cagetable_getref(cageid);
 
@@ -187,7 +181,7 @@ pub fn shmat_handler(
         Some(l) => l,
         None => return syscall_error(Errno::EINVAL, "shmat", "invalid shmid") as u32,
     };
-    
+
     // Check that the provided address is page aligned.
     let rounded_addr = round_up_page(addr as u64);
     if rounded_addr != addr as u64 {
@@ -270,7 +264,7 @@ pub fn shmat_handler(
 /// Handler of the `shmdt_syscall`, interacting with the `vmmap` structure.
 ///
 /// This function processes the `shmdt_syscall` by updating the `vmmap` entries and managing
-/// the shared memory detachment operation. It performs address validation, converts user 
+/// the shared memory detachment operation. It performs address validation, converts user
 /// addresses to system addresses, and updates the virtual memory mappings accordingly.
 ///
 /// # Arguments
@@ -304,11 +298,13 @@ pub fn shmdt_handler(cageid: u64, addr: *mut u8) -> i32 {
     // This call removes the range starting at the page-aligned user address,
     // for the number of pages that cover the shared memory region.
     let mut vmmap = cage.vmmap.write();
-    vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, (length as u32) >> PAGESHIFT);
+    vmmap.remove_entry(
+        rounded_addr as u32 >> PAGESHIFT,
+        (length as u32) >> PAGESHIFT,
+    );
 
     0
 }
-
 
 /// Handles the `mmap_syscall`, interacting with the `vmmap` structure.
 ///
@@ -464,7 +460,7 @@ pub fn mmap_handler(
                 len as i64,
                 cageid,
             );
-    
+
             // Check if adding the entry was successful.
             if add_result.is_err() {
                 return syscall_error(Errno::ENOMEM, "mmap", "failed to add vmmap entry") as u32;
@@ -500,7 +496,11 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
     // TODO: Remove this panic when we support PROT_EXEC for real user code
     if prot & PROT_EXEC > 0 {
         // Log the attempt through syscall_error's verbose logging
-        let _ = syscall_error(Errno::EINVAL, "mprotect", "PROT_EXEC attempt detected - this will panic in development");
+        let _ = syscall_error(
+            Errno::EINVAL,
+            "mprotect",
+            "PROT_EXEC attempt detected - this will panic in development",
+        );
         // Panic during development for early detection of unsupported operations
         panic!("PROT_EXEC is not currently supported in WASM");
     }
@@ -520,7 +520,7 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
     let rounded_length = round_up_page(len as u64);
 
     let mut vmmap = cage.vmmap.write();
-    
+
     // Convert to page numbers for vmmap checking
     let start_page = (addr as u32) >> PAGESHIFT;
     let npages = (rounded_length >> PAGESHIFT) as u32;
@@ -532,7 +532,7 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
 
     // Get system address for the actual mprotect call
     let sysaddr = vmmap.user_to_sys(addr as u32);
-    
+
     drop(vmmap);
 
     // Perform mprotect through cage implementation
@@ -769,7 +769,7 @@ pub fn check_and_convert_addr_ext(
 /// * `arg` - Virtual memory address to translate
 ///
 /// # Returns
-/// * `Ok(u64)` - Translated physical memory address. NULL if user address is NULL.
+/// * `Option(u64)` - Translated physical memory address. NULL if user address is NULL.
 pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Option<u64> {
     // Return None for NULL pointer
     if arg == 0 {
