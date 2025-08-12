@@ -19,6 +19,7 @@ int main() {
         char *args[] = {"./hello-arg", "hello_from_parent", NULL};
         execv("./hello-arg", args);
         perror("execv failed");  // only runs if execv fails
+        exit(1);
     } else {
         // parent process
         wait(NULL);  // wait for child to finish
