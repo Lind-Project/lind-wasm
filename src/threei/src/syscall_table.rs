@@ -2,8 +2,8 @@ use rawposix::fs_calls::{
     brk_syscall, chdir_syscall, chmod_syscall, clock_gettime_syscall, close_syscall, dup2_syscall, fcntl_syscall,
     mkdir_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, dup_syscall, 
     pipe2_syscall, pipe_syscall, rmdir_syscall, sbrk_syscall, write_syscall, futex_syscall, read_syscall,
-    pread_syscall, pwrite_syscall, fstat_syscall, fstatfs_syscall,
-
+    pread_syscall, pwrite_syscall, fstat_syscall, fstatfs_syscall, fchmod_syscall, fchdir_syscall,
+    writev_syscall, ftruncate_syscall, getdents_syscall, lseek_syscall
 };
 pub use rawposix::fs_calls::mmap_syscall;
 use rawposix::sys_calls::{
