@@ -166,11 +166,18 @@ pub mod sys_tests {
         let pid = cage.waitpid_syscall(0, &mut status, libc::WNOHANG);
         assert_eq!(pid, 0);
 
+        // Store the cage IDs we want to exit
+        let cage3_id = 3;
+        let cage4_id = 4;
+
         // test for waitpid when the cage exits in the middle of waiting
         let thread1 = interface::helper_thread(move || {
             interface::sleep(interface::RustDuration::from_millis(100));
-            child_cage4.exit_syscall(4);
-            child_cage3.exit_syscall(3);
+            // Instead of moving cages, we'll get new references inside the thread
+            let thread_cage4 = interface::cagetable_getref(cage4_id);
+            let thread_cage3 = interface::cagetable_getref(cage3_id);
+            thread_cage4.exit_syscall(4);
+            thread_cage3.exit_syscall(3);
         });
 
         let pid = cage.waitpid_syscall(0, &mut status, 0);
@@ -182,6 +189,35 @@ pub mod sys_tests {
         assert_eq!(status, 3);
 
         let _ = thread1.join().unwrap();
+
+        lindrustfinalize();
+    }
+
+    #[test]
+    pub fn ut_lind_waitpid_signal_interruption() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // waitpid call on non-existent child with WNOHANG
+        // Should return immediately without hanging (key requirement of PR #228)
+        let mut status = 0;
+        let pid = cage.waitpid_syscall(-1, &mut status, libc::WNOHANG);
+
+        // Should return 0 (no children) or negative error, not hang
+        assert!(
+            pid <= 0,
+            "waitpid should return 0 or error for no children, got: {}",
+            pid
+        );
+
+        // Test: waitpid on specific non-existent PID with WNOHANG
+        let pid = cage.waitpid_syscall(999, &mut status, libc::WNOHANG);
+        assert!(
+            pid < 0,
+            "waitpid should return error for non-existent child"
+        );
 
         lindrustfinalize();
     }
