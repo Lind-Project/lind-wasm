@@ -6,7 +6,8 @@ on:
       - main
   pull_request:
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   lint:
@@ -40,3 +41,10 @@ jobs:
               -A warnings \
               -A clippy::not_unsafe_ptr_arg_deref \
               -A clippy::absurd_extreme_comparisons
+      - name: Install Zizmor via Cargo
+        run: cargo install zizmor
+
+      - name: Run Zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor -v .github/workflows #Running with -v to show all passes, will halt if any fail
