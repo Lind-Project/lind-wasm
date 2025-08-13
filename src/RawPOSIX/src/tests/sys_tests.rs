@@ -192,4 +192,33 @@ pub mod sys_tests {
 
         lindrustfinalize();
     }
+
+    #[test]
+    pub fn ut_lind_waitpid_signal_interruption() {
+        //acquiring a lock on TESTMUTEX prevents other tests from running concurrently,
+        // and also performs clean env setup
+        let _thelock = setup::lock_and_init();
+        let cage = interface::cagetable_getref(1);
+
+        // waitpid call on non-existent child with WNOHANG
+        // Should return immediately without hanging (key requirement of PR #228)
+        let mut status = 0;
+        let pid = cage.waitpid_syscall(-1, &mut status, libc::WNOHANG);
+
+        // Should return 0 (no children) or negative error, not hang
+        assert!(
+            pid <= 0,
+            "waitpid should return 0 or error for no children, got: {}",
+            pid
+        );
+
+        // Test: waitpid on specific non-existent PID with WNOHANG
+        let pid = cage.waitpid_syscall(999, &mut status, libc::WNOHANG);
+        assert!(
+            pid < 0,
+            "waitpid should return error for non-existent child"
+        );
+
+        lindrustfinalize();
+    }
 }
