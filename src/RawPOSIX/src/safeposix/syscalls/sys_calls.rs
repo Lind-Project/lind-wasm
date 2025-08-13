@@ -5,7 +5,7 @@ use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errn
 use sysdefs::constants::fs_const::{SEM_VALUE_MAX, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY};
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, ITIMER_REAL, NOFILE_CUR, NOFILE_MAX, RLIMIT_NOFILE, RLIMIT_STACK,
-    SIGNAL_MAX, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX,
+    SIGNAL_MAX, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, STACK_CUR, STACK_MAX, WNOHANG,
 };
 // Import data structure
 use sysdefs::data::{fs_struct, net_struct};
@@ -221,7 +221,7 @@ impl Cage {
         // but we do not have the concept of process group in lind, so let's just treat it as cageid == 0
         if cageid <= 0 {
             loop {
-                if zombies.len() == 0 && (options & libc::WNOHANG > 0) {
+                if zombies.len() == 0 && (options & WNOHANG > 0) {
                     // if there is no pending zombies and WNOHANG is set
                     // return immediately
                     return 0;
@@ -236,6 +236,10 @@ impl Cage {
                     }
                     // TODO: replace busy waiting with more efficient mechanism
                     interface::lind_yield();
+                    // Check for pending signals after yielding (only if WNOHANG is not set)
+                    if (options & WNOHANG == 0) && interface::signal_check_trigger(self.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                    }
                     // after sleep, get the write access of zombies list back
                     zombies = self.zombies.write();
                     continue;
@@ -286,6 +290,10 @@ impl Cage {
                     drop(zombies);
                     // TODO: replace busy waiting with more efficient mechanism
                     interface::lind_yield();
+                    // Check for pending signals after yielding (only if WNOHANG is not set)
+                    if (options & WNOHANG == 0) && interface::signal_check_trigger(self.cageid) {
+                        return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
+                    }
                     // after sleep, get the write access of zombies list back
                     zombies = self.zombies.write();
 
