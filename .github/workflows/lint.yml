@@ -1,0 +1,42 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions: {}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Format
+        run: cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
+
+      # Using rust nightly, invalidates cache every day
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+
+      - name: Switch to Rust nightly
+        run: |
+          # Pin to last working nightly version (see #242)
+          rustup default nightly-2025-06-08
+          rustup component add clippy
+
+      - name: Clippy
+        run: |
+          # Run clippy over wasmtime and its dependencies
+          # See `cargo clippy` and `cargo check` for available options
+          cargo clippy \
+              --manifest-path src/wasmtime/Cargo.toml \
+              --all-features \
+              --keep-going \
+              -- \
+              -A warnings \
+              -A clippy::not_unsafe_ptr_arg_deref \
+              -A clippy::absurd_extreme_comparisons

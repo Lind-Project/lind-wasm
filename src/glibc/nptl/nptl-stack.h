@@ -58,12 +58,10 @@ void __nptl_free_stacks (size_t limit) attribute_hidden;
 static inline size_t
 __nptl_tls_static_size_for_stack (void)
 {
-
-  int a = GLRO (dl_tls_static_size);
-  int b = GLRO (dl_tls_static_align);
-  int c = roundup(a, b);
-  return c;
-//   return roundup (GLRO (dl_tls_static_size), GLRO (dl_tls_static_align));
+   // lind-wasm: original glibc code uses ELF header to retrieve TLS related information
+   // but since we are wasm, we have our own method to retrieve TLS size
+   // original glibc code replaced due to this reason
+   return __builtin_wasm_tls_size();
 }
 
 #endif /* _NPTL_STACK_H */

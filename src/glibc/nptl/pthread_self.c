@@ -23,7 +23,7 @@ _Thread_local struct pthread __wasilibc_pthread_self;
 pthread_t
 __pthread_self (void)
 {
-  return (pthread_t) THREAD_SELF;
+  return (pthread_t) &__wasilibc_pthread_self;
 }
 libc_hidden_def (__pthread_self)
 weak_alias (__pthread_self, pthread_self)

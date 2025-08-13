@@ -6,8 +6,12 @@ use sysdefs::constants::fs_const::{
 
 use crate::interface::cagetable_getref;
 use crate::safeposix::cage::Cage;
+use crate::safeposix::shm::ShmMetadata;
+use crate::safeposix::shm::{get_shm_length, SHM_METADATA};
 use crate::safeposix::vmmap::{MemoryBackingType, Vmmap, VmmapOps};
 use std::result::Result;
+use std::sync::Arc;
+use sysdefs::constants::SHM_RDONLY;
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
@@ -140,7 +144,164 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
 
     let mut vmmap = cage.vmmap.write();
 
-    vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, len as u32 >> PAGESHIFT);
+    let _ = vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, len as u32 >> PAGESHIFT);
+
+    0
+}
+
+/// Handles the shmat syscall by mapping shared memory segments into the cage's address space.
+/// This function manages the attachment of shared memory segments by updating the cage's vmmap
+/// and handling the raw shmat syscall.
+///
+/// # Arguments
+/// * `cageid` - The cage ID that is performing the shmat operation
+/// * `addr` - The requested address to attach the shared memory segment (can be null)
+/// * `prot` - The memory protection flags for the mapping
+/// * `shmflag` - Flags controlling the shared memory attachment behavior
+/// * `shmid` - The ID of the shared memory segment to attach
+///
+/// # Returns
+/// * `u32` - The address where the shared memory segment was attached, or an error code
+///
+/// # Errors
+/// * `EINVAL` - If the provided address is not page-aligned
+/// * `ENOMEM` - If there is insufficient memory to complete the attachment
+pub fn shmat_handler(cageid: u64, addr: *mut u8, mut prot: i32, shmflag: i32, shmid: i32) -> u32 {
+    // Get the cage reference.
+    let cage = cagetable_getref(cageid);
+
+    // If SHM_RDONLY is set in shmflag, then use read-only protection,
+    // otherwise default to read–write.
+    prot = if shmflag & SHM_RDONLY != 0 {
+        PROT_READ
+    } else {
+        PROT_READ | PROT_WRITE
+    };
+    let len = match get_shm_length(shmid) {
+        Some(l) => l,
+        None => return syscall_error(Errno::EINVAL, "shmat", "invalid shmid") as u32,
+    };
+
+    // Check that the provided address is page aligned.
+    let rounded_addr = round_up_page(addr as u64);
+    if rounded_addr != addr as u64 {
+        return syscall_error(Errno::EINVAL, "shmat", "address is not aligned") as u32;
+    }
+
+    // Round up the length to a multiple of the page size.
+    let rounded_length = round_up_page(len as u64);
+
+    // Initialize the user address from the provided address pointer.
+    // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
+    let mut useraddr = addr as u32;
+    let mut vmmap = cage.vmmap.write();
+    let result;
+    if useraddr == 0 {
+        // Allocate a suitable space in the virtual memory map for the shared memory segment
+        // based on the rounded length of the segment.
+        result = vmmap.find_map_space((rounded_length >> PAGESHIFT) as u32, 1);
+    } else {
+        // Use the user-specified address as a hint to find an appropriate memory address
+        // for the shared memory segment.
+        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+    }
+    if result.is_none() {
+        // If no suitable memory space is found, return an error indicating insufficient memory.
+        return syscall_error(Errno::ENOMEM, "shmat", "no memory") as u32;
+    }
+    let space = result.unwrap();
+    // Update the user address to the start of the allocated memory space.
+    useraddr = (space.start() << PAGESHIFT) as u32;
+
+    // Convert the user address into a system address.
+    // Read the virtual memory map to access the user address space.
+    let vmmap = cage.vmmap.read();
+    // Convert the user address to the corresponding system address for the shared memory segment.
+    let sysaddr = vmmap.user_to_sys(useraddr);
+    // Release the lock on the virtual memory map as we no longer need it.
+    drop(vmmap);
+
+    // Call the raw shmat syscall to attach the shared memory segment.
+    let result = cage.shmat_syscall(shmid, sysaddr as *mut u8, shmflag);
+
+    // If the syscall succeeded, update the vmmap entry.
+    if result as i32 >= 0 {
+        // Ensure the syscall attached the segment at the expected address.
+        if result as u32 != useraddr {
+            panic!("shmat did not attach at the expected address");
+        }
+        let mut vmmap = cage.vmmap.write();
+        let backing = MemoryBackingType::SharedMemory(shmid as u64);
+        // Use the effective protection (prot) for both the current and maximum protection.
+        let maxprot = prot;
+        // Add a new vmmap entry for the shared memory segment.
+        // Since shared memory is not file-backed, there are no extra mapping flags
+        // or file offset parameters to consider; thus, we pass 0 for both.
+        let add_result = vmmap.add_entry_with_overwrite(
+            useraddr >> PAGESHIFT,
+            (rounded_length >> PAGESHIFT) as u32,
+            prot,
+            maxprot,
+            0, // No flags for shared memory mapping
+            backing,
+            0, // Offset is not applicable for shared memory
+            len as i64,
+            cageid,
+        );
+
+        // Check if adding the entry was successful.
+        if add_result.is_err() {
+            return syscall_error(Errno::ENOMEM, "shmat", "failed to add vmmap entry") as u32;
+        }
+    } else {
+        // If the syscall failed, propagate the error.
+        return result as u32;
+    }
+
+    useraddr as u32
+}
+
+/// Handler of the `shmdt_syscall`, interacting with the `vmmap` structure.
+///
+/// This function processes the `shmdt_syscall` by updating the `vmmap` entries and managing
+/// the shared memory detachment operation. It performs address validation, converts user
+/// addresses to system addresses, and updates the virtual memory mappings accordingly.
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that calls the `shmdt`
+/// * `addr` - Starting address of the shared memory region to detach
+///
+/// # Returns
+/// * `i32` - 0 for success and negative errno for failure
+pub fn shmdt_handler(cageid: u64, addr: *mut u8) -> i32 {
+    // Retrieve the cage reference.
+    let cage = cagetable_getref(cageid);
+
+    // Check that the provided address is aligned on a page boundary.
+    let rounded_addr = round_up_page(addr as u64) as usize;
+    if rounded_addr != addr as usize {
+        return syscall_error(Errno::EINVAL, "shmdt", "address is not aligned");
+    }
+
+    // Convert the user address into a system address using the vmmap.
+    let vmmap = cage.vmmap.read();
+    let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
+    drop(vmmap);
+
+    // Call shmdt_syscall which returns length of the detached segment
+    let length = cage.shmdt_syscall(sysaddr as *mut u8);
+    if length < 0 {
+        return length;
+    }
+
+    // Remove the mapping from the vmmap.
+    // This call removes the range starting at the page-aligned user address,
+    // for the number of pages that cover the shared memory region.
+    let mut vmmap = cage.vmmap.write();
+    vmmap.remove_entry(
+        rounded_addr as u32 >> PAGESHIFT,
+        (length as u32) >> PAGESHIFT,
+    );
 
     0
 }
@@ -288,7 +449,7 @@ pub fn mmap_handler(
             };
 
             // update vmmap entry
-            let _ = vmmap.add_entry_with_overwrite(
+            let add_result = vmmap.add_entry_with_overwrite(
                 useraddr >> PAGESHIFT,
                 (rounded_length >> PAGESHIFT) as u32,
                 prot,
@@ -299,6 +460,11 @@ pub fn mmap_handler(
                 len as i64,
                 cageid,
             );
+
+            // Check if adding the entry was successful.
+            if add_result.is_err() {
+                return syscall_error(Errno::ENOMEM, "mmap", "failed to add vmmap entry") as u32;
+            }
         }
     }
 
@@ -330,7 +496,11 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
     // TODO: Remove this panic when we support PROT_EXEC for real user code
     if prot & PROT_EXEC > 0 {
         // Log the attempt through syscall_error's verbose logging
-        let _ = syscall_error(Errno::EINVAL, "mprotect", "PROT_EXEC attempt detected - this will panic in development");
+        let _ = syscall_error(
+            Errno::EINVAL,
+            "mprotect",
+            "PROT_EXEC attempt detected - this will panic in development",
+        );
         // Panic during development for early detection of unsupported operations
         panic!("PROT_EXEC is not currently supported in WASM");
     }
@@ -350,7 +520,7 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
     let rounded_length = round_up_page(len as u64);
 
     let mut vmmap = cage.vmmap.write();
-    
+
     // Convert to page numbers for vmmap checking
     let start_page = (addr as u32) >> PAGESHIFT;
     let npages = (rounded_length >> PAGESHIFT) as u32;
@@ -362,7 +532,7 @@ pub fn mprotect_handler(cageid: u64, addr: *mut u8, len: usize, prot: i32) -> i3
 
     // Get system address for the actual mprotect call
     let sysaddr = vmmap.user_to_sys(addr as u32);
-    
+
     drop(vmmap);
 
     // Perform mprotect through cage implementation
@@ -463,7 +633,7 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
     }
 
     // update vmmap entry
-    vmmap.add_entry_with_overwrite(
+    let _ = vmmap.add_entry_with_overwrite(
         0,
         brk_page,
         heap.prot,
@@ -599,8 +769,12 @@ pub fn check_and_convert_addr_ext(
 /// * `arg` - Virtual memory address to translate
 ///
 /// # Returns
-/// * `Ok(u64)` - Translated physical memory address
+/// * `Ok(u64)` - Translated physical memory address. NULL if user address is NULL.
 pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
+    // do not convert NULL pointer
+    if arg == 0 {
+        return Ok(0);
+    }
     // Get read lock on virtual memory map
     let vmmap = cage.vmmap.read();
     Ok(vmmap.base_address.unwrap() as u64 + arg)

@@ -6,28 +6,43 @@ Lind is a single-process sandbox that provides an option to safely execute progr
 
 In Old Norse, Old High German and Old English a “lind” is a shield constructed with two layers of linden wood. Linden wood shields are lightweight, and do not split easily, an appropriate metaphor for a sandboxing system which employs two technologies.
 
+# lind-wasm
+
+`lind-wasm` is a WebAssembly-focused extension of the Lind project. It integrates multiple components—both in-house and third-party—to enable execution of POSIX-like applications in WebAssembly runtimes, such as Wasmtime.
+
+
 ## Getting started
 
-A quick-way to get started is using our container via DockerHub:
+Check out the [Getting started](https://lind-project.github.io/lind-wasm/getting-started/)
+guide and [docs on our website](https://lind-project.github.io/lind-wasm/)
+to learn more about Lind!
 
-```
-docker pull securesystemslab/lind-wasm
-docker run -it securesystemslab/lind-wasm /bin/bash
-```
 
-## Hello World!
 
-Now let try to print `Hello world!`
+## Repository Structure and Components
 
-```
-./lindtool.sh compile_test tests/unit-tests/file_tests/deterministic/printf
-./lindtool.sh run tests/unit-tests/file_tests/deterministic/printf
-```
+This monorepo combines various subprojects and dependencies that work together to support Lind's goals. Below is an overview of the major components:
 
-Further examples can be found [here](https://lind-project.github.io/lind-wasm-docs/use/examples/)
+### In-House Projects
 
-## Documentation
+| Component     | Location          | Description                                                                 |
+|---------------|-------------------|-----------------------------------------------------------------------------|
+| `fdtables`    | `src/fdtables`    | Provides file descriptor table management, used to emulate POSIX semantics |
+| `RawPOSIX`    | `src/RawPOSIX`    | Implementation of raw POSIX syscall wrappers used internally by Lind       |
+| `sysdefs`     | `src/sysdefs`     | Shared system call definitions and constants for cross-platform support    |
 
-Check out our [docs]([lind-project.github.io/lind-wasm-docs/](https://lind-project.github.io/lind-wasm-docs/))! 
+### Third-Party Projects (Source)
 
+| Project       | Location          | Description                                                                 |
+|---------------|-------------------|-----------------------------------------------------------------------------|
+| `glibc`       | `third_party/glibc` | Modified version of glibc to support WebAssembly and Lind interfaces       |
+| `wasmtime`    | `src/wasmtime`    | Embedded Wasmtime runtime for running and debugging Lind-Wasm modules      |
+
+### Third-Party Binaries
+
+| Tool          | Location           | Description                                                                |
+|---------------|--------------------|----------------------------------------------------------------------------|
+| `binaryen`    | `tools/binaryen`   | Provides `wasm-opt` and other utilities used for optimizing wasm binaries |
+
+---
 
