@@ -51,7 +51,41 @@ impl LindCommonCtx {
         arg6: u64,
     ) -> i32 {
         let start_address = get_memory_base(&caller);
-        match call_number as i32 {
+
+        let call_name_ptr = (call_name + start_address) as *const u8;
+        let mut len = 0;
+
+        unsafe {
+            while *call_name_ptr.add(len) != 0 {
+                len += 1;
+            }
+
+            let slice = std::slice::from_raw_parts(call_name_ptr, len);
+            let call_name_str = std::str::from_utf8_unchecked(slice);
+
+            if call_number == 2 {
+                let arg1_ptr = (arg1 + start_address) as *const u8;
+                let mut arg1_len = 0;
+                while *arg1_ptr.add(arg1_len) != 0 {
+                    arg1_len += 1;
+                }
+
+                let arg1_slice = std::slice::from_raw_parts(arg1_ptr, arg1_len);
+                let arg1_str = std::str::from_utf8_unchecked(arg1_slice);
+
+                println!(
+                    "pid={} call_number={} \x1b[32mcall_name=\"{}\"\x1b[0m args=[{:x}, {:x}, {:x}, {:x}, {:x}, {:x}] \x1b[35m[arg1_str=\"{}\"]\x1b[0m",
+                    self.pid, call_number, call_name_str, arg1, arg2, arg3, arg4, arg5, arg6, arg1_str
+                );
+            } else {
+                println!(
+                    "pid={} call_number={} \x1b[32mcall_name=\"{}\"\x1b[0m args=[{:x}, {:x}, {:x}, {:x}, {:x}, {:x}]",
+                    self.pid, call_number, call_name_str, arg1, arg2, arg3, arg4, arg5, arg6
+                );
+            }
+        }
+
+        let ret = match call_number as i32 {
             // clone syscall
             171 => {
                 let clone_args = unsafe { &mut *((arg1 + start_address) as *mut CloneArgStruct) };
@@ -88,7 +122,24 @@ impl LindCommonCtx {
                     self.pid as u64,
                 )
             }
+        };
+        let call_name_ptr = (call_name + start_address) as *const u8;
+        let mut len = 0;
+
+        unsafe {
+            while *call_name_ptr.add(len) != 0 {
+                len += 1;
+            }
+
+            let slice = std::slice::from_raw_parts(call_name_ptr, len);
+            let call_name_str = std::str::from_utf8_unchecked(slice);
+
+            println!(
+                "pid={} call_number={} \x1b[32mcall_name=\"{}\"\x1b[0m \x1b[31mret={}\x1b[0m",
+                self.pid, call_number, call_name_str, ret
+            );
         }
+        ret
     }
 
     // setjmp call. This function needs to be handled within wasmtime, but it is not an actual syscall so we use a different routine from lind_syscall
