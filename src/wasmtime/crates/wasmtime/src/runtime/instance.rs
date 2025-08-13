@@ -282,8 +282,8 @@ impl Instance {
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let child_address = defined_memory.base as usize;
 
-                rawposix::interface::init_vmmap_helper(child_pid, child_address, None);
-                rawposix::interface::fork_vmmap_helper(parent_pid as u64, child_pid);
+                rawposix::interface::init_vmmap(child_pid, child_address, None);
+                rawposix::interface::fork_vmmap(parent_pid as u64, child_pid);
             }
         }
 
