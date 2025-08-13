@@ -18,13 +18,13 @@
 #include <errno.h>
 #include <unistd.h>
 #include <syscall-template.h>
-
+#include <lind_syscall_num.h>
 
 /* Get the parent process ID of the calling process.  */
 int
 __getppid (void)
 {
-   return MAKE_SYSCALL(29, "syscall|getppid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(GETPPID_SYSCALL, "syscall|getppid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 stub_warning (getppid)
 
