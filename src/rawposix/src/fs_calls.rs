@@ -361,6 +361,11 @@ pub fn ftruncate_syscall(
 
     let length = sc_convert_sysarg_to_i64(length_arg, length_cageid, cageid);
 
+    // Validate that length is not negative
+    if length < 0 {
+        return syscall_error(Errno::EINVAL, "ftruncate", "length cannot be negative");
+    }
+
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -490,7 +495,12 @@ pub fn getdents_syscall(
     if ret < 0 {
         return handle_errno(get_errno(), "getdents");
     }
-    ret
+    // Check if the result is too large to fit in i32
+    if ret > i32::MAX as i64 {
+        i32::MAX
+    } 
+
+    ret as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/lseek.2.html
@@ -519,6 +529,11 @@ pub fn lseek_syscall(
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
     let whence = sc_convert_sysarg_to_i32(whence_arg, whence_cageid, cageid);
 
+    match whence {
+        libc::SEEK_SET | libc::SEEK_CUR | libc::SEEK_END => {},
+        _ => return syscall_error(Errno::EINVAL, "lseek", "invalid whence parameter"),
+    }
+
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -530,6 +545,8 @@ pub fn lseek_syscall(
     if ret < 0 {
         return handle_errno(get_errno(), "lseek");
     }
+
+    // Check if the result is too large to fit in i32
     if ret > i32::MAX as i64 {
         return syscall_error(Errno::EOVERFLOW, "lseek", "result too large");
     }
