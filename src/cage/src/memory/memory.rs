@@ -33,8 +33,9 @@ pub fn round_up_page(length: u64) -> u64 {
 /// Copies the memory regions from parent to child based on the provided `vmmap` memory layout.
 ///
 /// This function is designed to replicate the parent's memory space into the child immediately after
-/// a `fork_syscall` in Wasmtime. It assumes that the parent and child share the same `vmmap` structure,
-/// a valid assumption in this context.
+/// a `fork_syscall` in Wasmtime. At the time of fork, the child's `vmmap` is created as an exact copy
+/// of the parent's `vmmap`, ensuring both start with identical memory mappings. Subsequent changes
+/// to either `vmmap` do not affect the other.
 ///
 /// The copying behavior varies based on the type of memory region:
 /// 1. **PROT_NONE regions**:
@@ -46,9 +47,15 @@ pub fn round_up_page(length: u64) -> u64 {
 ///    - **TODO**: Investigate whether using `writev` could improve performance for this case.
 ///
 /// # Arguments
-/// * `parent_vmmap` - vmmap struct of parent
-/// * `child_vmmap` - vmmap struct of child
-pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
+/// * `parent_cageid` - cageid of parent
+/// * `child_cageid` - caegid of child
+pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
+    // first retrieve corresponding vmmaps and base addresses
+    let parent_cage = get_cage(parent_cageid).unwrap();
+    let child_cage = get_cage(child_cageid).unwrap();
+    let parent_vmmap = parent_cage.vmmap.read();
+    let child_vmmap = child_cage.vmmap.read();
+
     let parent_base = parent_vmmap.base_address.unwrap();
     let child_base = child_vmmap.base_address.unwrap();
 
@@ -72,7 +79,7 @@ pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
                     addr_len,
                     (MREMAP_MAYMOVE | MREMAP_FIXED) as i32,
                     child_st as *mut libc::c_void,
-                )
+                );
             };
         } else {
             unsafe {
@@ -92,35 +99,25 @@ pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
                 );
 
                 // revert child's memory region prot
-                libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot)
+                libc::mprotect(child_st as *mut libc::c_void, addr_len, entry.prot);
             };
         }
     }
+
+    // update program break for child
+    drop(child_vmmap);
+    let mut child_vmmap = child_cage.vmmap.write();
+    child_vmmap.set_program_break(parent_vmmap.program_break);
 }
 
 // set the wasm linear memory base address to vmmap
-pub fn init_vmmap_helper(cageid: u64, base_address: usize, program_break: Option<u32>) {
+pub fn init_vmmap(cageid: u64, base_address: usize, program_break: Option<u32>) {
     let cage = get_cage(cageid).unwrap();
     let mut vmmap = cage.vmmap.write();
     vmmap.set_base_address(base_address);
     if program_break.is_some() {
         vmmap.set_program_break(program_break.unwrap());
     }
-}
-
-// clone the cage memory. Invoked by wasmtime after cage is forked
-pub fn fork_vmmap_helper(parent_cageid: u64, child_cageid: u64) {
-    let parent_cage = get_cage(parent_cageid).unwrap();
-    let child_cage = get_cage(child_cageid).unwrap();
-    let parent_vmmap = parent_cage.vmmap.read();
-    let child_vmmap = child_cage.vmmap.read();
-
-    fork_vmmap(&parent_vmmap, &child_vmmap);
-
-    // update program break for child
-    drop(child_vmmap);
-    let mut child_vmmap = child_cage.vmmap.write();
-    child_vmmap.set_program_break(parent_vmmap.program_break);
 }
 
 /// Validates and converts a virtual memory address to a physical address with protection checks
@@ -190,7 +187,11 @@ pub fn check_addr(cageid: u64, arg: u64, length: usize, prot: i32) -> Result<boo
     Ok(true)
 }
 
-/// This function translates a virtual memory address to a physical address by adding the base address of the vmmap to the argument.
+/// This function translates a virtual memory address to a physical address by adding the base address
+/// of the `vmmap` to the given argument. This translation is needed because the system uses a
+/// virtualized address space within each cage, where guest-visible addresses are offsets from the
+/// base of the cage’s allocated memory region. Adding the base address produces the actual physical
+/// (host) address used for memory operations.
 ///
 /// # Arguments
 /// * `cage` - Reference to the memory cage containing the virtual memory map
@@ -198,6 +199,7 @@ pub fn check_addr(cageid: u64, arg: u64, length: usize, prot: i32) -> Result<boo
 ///
 /// # Returns
 /// * `Ok(u64)` - Translated physical memory address
+
 pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
     // Get read lock on virtual memory map
     let vmmap = cage.vmmap.read();
