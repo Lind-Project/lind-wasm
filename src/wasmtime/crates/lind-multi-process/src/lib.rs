@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use cfg_if::cfg_if;
+
 use anyhow::{anyhow, Result};
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
@@ -421,13 +423,24 @@ impl<
                         )
                         .unwrap();
 
-                    // retrieve the epoch global
-                    let lind_epoch = instance
-                        .get_export(&mut store, "epoch")
-                        .and_then(|export| export.into_global())
-                        .expect("Failed to find shared_global");
-                    // retrieve the handler (underlying pointer) for the epoch global
-                    let pointer = lind_epoch.get_handler(&mut store);
+                    cfg_if! {
+                        // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                        // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                        // This is intended for debugging only and should not be used in production.
+                        if #[cfg(feature = "disable_signals")] {
+                            let pointer: *mut u64 = &mut 0;
+                        } else {
+                            // retrieve the epoch global
+                            let lind_epoch = instance
+                                .get_export(&mut store, "epoch")
+                                .and_then(|export| export.into_global())
+                                .expect("Failed to find epoch global export!");
+
+                            // retrieve the handler (underlying pointer) for the epoch global
+                            let pointer = lind_epoch.get_handler(&mut store);
+                        }
+                    }
+
                     // initialize the signal for the main thread of forked cage
                     rawposix::interface::lind_signal_init(
                         child_cageid,
@@ -697,13 +710,24 @@ impl<
                         .unwrap();
                     let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
 
-                    // retrieve the epoch global
-                    let lind_epoch = instance
-                        .get_export(&mut store, "epoch")
-                        .and_then(|export| export.into_global())
-                        .expect("Failed to find shared_global");
-                    // retrieve the handler (underlying pointer) for the epoch global
-                    let pointer = lind_epoch.get_handler(&mut store);
+                    cfg_if! {
+                        // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                        // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                        // This is intended for debugging only and should not be used in production.
+                        if #[cfg(feature = "disable_signals")] {
+                            let pointer: *mut u64 = &mut 0;
+                        } else {
+                            // retrieve the epoch global
+                            let lind_epoch = instance
+                                .get_export(&mut store, "epoch")
+                                .and_then(|export| export.into_global())
+                                .expect("Failed to find epoch global export!");
+
+                            // retrieve the handler (underlying pointer) for the epoch global
+                            let pointer = lind_epoch.get_handler(&mut store);
+                        }
+                    }
+
                     // initialize the signal for the thread of the cage
                     rawposix::interface::lind_signal_init(
                         child_cageid as u64,
