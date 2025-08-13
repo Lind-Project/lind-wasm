@@ -7,3 +7,9 @@ __chdir (const char *__path)
 {
   return MAKE_SYSCALL(CHDIR_SYSCALL, "syscall|chdir", (uint64_t) __path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
+
+int
+chdir (const char *__path)
+{
+  return MAKE_SYSCALL(CHDIR_SYSCALL, "syscall|chdir", (uint64_t) __path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+}
