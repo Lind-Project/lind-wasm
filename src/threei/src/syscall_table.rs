@@ -2,9 +2,8 @@ use rawposix::fs_calls::{
     brk_syscall, clock_gettime_syscall, close_syscall, dup2_syscall, fcntl_syscall,
     mkdir_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, dup_syscall, 
     pipe2_syscall, pipe_syscall, sbrk_syscall, write_syscall, futex_syscall, read_syscall,
-
+    mmap_syscall, lseek_syscall, unlink_syscall
 };
-pub use rawposix::fs_calls::mmap_syscall;
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall
 };
@@ -16,24 +15,23 @@ use rawposix::net_calls::{socket_syscall,accept_syscall,bind_syscall,connect_sys
 
 use super::threei::Raw_CallFunc;
 
-/// According to the Linux standard
+/// According to the Linux version
 pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (0, read_syscall),
     (1, write_syscall),
     (2, open_syscall),
     (3, close_syscall),
     (7, poll_syscall),
+    (8, lseek_syscall),
+    (9, mmap_syscall),
     (10, open_syscall),
-    (11, close_syscall),
-    (13, write_syscall),
-    (21, mmap_syscall),
-    (22, munmap_syscall),
-    (24, dup_syscall),
-    (25, dup2_syscall),
-    (28, fcntl_syscall),
-    (30, exit_syscall),
-    (31, getpid_syscall),
+    (11, munmap_syscall),
+    (12, brk_syscall),
+    (22, pipe_syscall),
     (32, dup_syscall),
+    (33, dup2_syscall),
+    (35, nanosleep_time64_syscall),
+    (39, getpid_syscall),
     (41, socket_syscall),
     (42, connect_syscall),
     (43, accept_syscall),
@@ -47,11 +45,17 @@ pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (53, socketpair_syscall),
     (54, setsockopt_syscall),
     (55, getsockopt_syscall),
+    (57, fork_syscall),
+    (60, exit_syscall),
+    (61, wait_syscall),
+    (61, waitpid_syscall),
     (66, pipe_syscall),
     (67, pipe2_syscall),
     (68, fork_syscall),
     (69, exec_syscall),
+    (72, fcntl_syscall),
     (83, mkdir_syscall),
+    (87, unlink_syscall),
     (98, futex_syscall),
     (131, mkdir_syscall),
     (170, gethostname_syscall),
@@ -61,7 +65,11 @@ pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (176, sbrk_syscall),
     (181, nanosleep_time64_syscall),
     (191, clock_gettime_syscall),
+    (202, futex_syscall),
     (213, epoll_create_syscall),
+    (228, clock_gettime_syscall),
     (232, epoll_wait_syscall),
     (233, epoll_ctl_syscall),
+    (293, pipe2_syscall),
+    (1004, sbrk_syscall),
 ];

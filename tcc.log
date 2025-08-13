@@ -1,0 +1,1234 @@
+pid=1 call_number=228 [32mcall_name="syscall|clock_gettime"[0m args=[1, 3f670, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=228 [32mcall_name="syscall|clock_gettime"[0m [31mret=0[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[21000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=262144[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[1000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=397312[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3f57c, 3b, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+tcc version 0.9.28rc 2025-07-28 mob@de60286b* (i386 Linux)
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=59[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3f1c0, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/lib/i386-linux-gnu/crt1.o"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=3[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3f0cc, 22, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> /usr/lib/i386-linux-gnu/crt1.o
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=34[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f138, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f16c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f0d8, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f10c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 2f8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=760[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 40f90, 258, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=600[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 411e8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 274, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=628[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 412b0, 84, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=132[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41334, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 11c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=284[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41340, c0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=192[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41400, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 1dc, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=476[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41410, 6e, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=110[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 4147e, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 34, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 409f0, 1c, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=28[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 40a0c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 50, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=80[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 415c0, 20, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=32[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 415e0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 70, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=112[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 415f0, 45, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=69[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41635, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 24c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=588[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 416e0, 18, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=24[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 416f8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, b5, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=181[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41770, 4, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=4[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41774, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, bc, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=188[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 417e0, 4, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=4[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 417e4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, c0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=192[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41808, 58, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=88[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41860, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 264, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=612[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 40e80, 10, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=16[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 40e90, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 118, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=280[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 418f0, 4, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=4[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 418f4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 11c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=284[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[3, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3f1c0, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/lib/i386-linux-gnu/crti.o"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=3[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3f0cc, 22, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> /usr/lib/i386-linux-gnu/crti.o
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=34[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f138, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f16c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f0d8, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f10c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 1f0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=496[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 40f90, 258, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=600[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 411e8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 168, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=360[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 412b0, 86, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=134[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41336, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 98, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=152[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41f00, 60, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=96[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41f60, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, f8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=248[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41b70, 48, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=72[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41bb8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 3c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=60[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41635, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 3c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=60[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 418f4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 3c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=60[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41f8c, 1c, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=28[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41fa8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 58, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=88[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 409f0, 1f, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=31[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 40a0f, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 140, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=320[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 419e0, 18, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=24[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 419f8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 80, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=128[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 40ba0, 4, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=4[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 40ba4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 84, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=132[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41a60, 13, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=19[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41a73, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 158, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=344[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 407b0, 10, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=16[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 407c0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 97, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=151[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[3, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[406c1, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="hello.c"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=3[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3f52c, b, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> hello.c
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=11[0m
+pid=1 call_number=9 [32mcall_name="syscall|mmap"[0m args=[0, c1000, 3, 22, ffffffffffffffff, 0]
+pid=1 call_number=9 [32mcall_name="syscall|mmap"[0m [31mret=-794624[0m
+pid=1 call_number=9 [32mcall_name="syscall|mmap"[0m args=[0, c1000, 3, 22, ffffffffffffffff, 0]
+pid=1 call_number=9 [32mcall_name="syscall|mmap"[0m [31mret=-1589248[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 42694, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=84[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/stdio.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/stdio.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/stdio.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/stdio.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/stdio.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=4[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 18, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> /usr/include/stdio.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=24[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 4d334, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/libc-header-start.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/libc-header-start.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/libc-header-start.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/libc-header-start.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/libc-header-start.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 2a, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/bits/libc-header-start.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=42[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=4286[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=6[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 1d, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->   /usr/include/features.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=29[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/features-time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/features-time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/features-time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/features-time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/features-time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=7[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 25, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->    /usr/include/features-time64.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=37[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1409[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=8[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 24, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->     /usr/include/bits/wordsize.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=36[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 56434, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=442[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 56434, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[8, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=8[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 24, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->     /usr/include/bits/timesize.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=36[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 56434, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1109[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=9[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 25, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->      /usr/include/bits/wordsize.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=37[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[9, 58874, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=442[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[9, 58874, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[9, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 56434, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[8, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[7, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/stdc-predef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/stdc-predef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/stdc-predef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/stdc-predef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/stdc-predef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=7[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 21, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->    /usr/include/stdc-predef.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=33[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=2462[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[7, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1476[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/sys/cdefs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/sys/cdefs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/sys/cdefs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/sys/cdefs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/sys/cdefs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=7[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 1f, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->    /usr/include/sys/cdefs.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=31[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=8[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 24, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->     /usr/include/bits/wordsize.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=36[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 58424, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=442[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 58424, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[8, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=8[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 27, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->     /usr/include/bits/long-double.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=39[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 58424, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=970[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 58424, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[8, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=2024[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[7, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/gnu/stubs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/gnu/stubs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/gnu/stubs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/gnu/stubs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/gnu/stubs.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=7[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 1f, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->    /usr/include/gnu/stubs.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=31[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=384[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/gnu/stubs-32.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/gnu/stubs-32.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/gnu/stubs-32.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/gnu/stubs-32.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/gnu/stubs-32.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=8[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 23, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->     /usr/include/gnu/stubs-32.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=35[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 58424, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=449[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[8, 58424, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[8, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[7, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[6, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/stddef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/stddef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/stddef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/stddef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/stddef.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 1a, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/stddef.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=26[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1402[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/stdarg.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/stdarg.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/stdarg.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/stdarg.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/stdarg.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 1a, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/stdarg.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=26[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=2494[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 1e, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/bits/types.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=30[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=6[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 22, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->   /usr/include/bits/wordsize.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=34[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=442[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[6, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/timesize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=6[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 22, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->   /usr/include/bits/timesize.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=34[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1109[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/wordsize.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=7[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 23, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->    /usr/include/bits/wordsize.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=35[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=442[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 53ff4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[7, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[6, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/typesizes.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/typesizes.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/typesizes.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/typesizes.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/typesizes.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=6[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 23, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->   /usr/include/bits/typesizes.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=35[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=3737[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[6, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/time64.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=6[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 20, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->   /usr/include/bits/time64.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=32[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1340[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[6, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=614[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types/__fpos_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types/__fpos_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types/__fpos_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types/__fpos_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/types/__fpos_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 27, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/bits/types/__fpos_t.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=39[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=381[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types/__mbstate_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types/__mbstate_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types/__mbstate_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types/__mbstate_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/types/__mbstate_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=6[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 2b, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->   /usr/include/bits/types/__mbstate_t.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=43[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=564[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 51bb4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[6, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types/__fpos64_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types/__fpos64_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types/__fpos64_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types/__fpos64_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/types/__fpos64_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 29, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/bits/types/__fpos64_t.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=41[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=410[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types/__mbstate_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types/__mbstate_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types/__mbstate_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types/__mbstate_t.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types/__FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types/__FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types/__FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types/__FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/types/__FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 25, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/bits/types/__FILE.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=37[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=110[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types/FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types/FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types/FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types/FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/types/FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 23, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/bits/types/FILE.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=35[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=180[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types/struct_FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types/struct_FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types/struct_FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types/struct_FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/types/struct_FILE.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 2a, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/bits/types/struct_FILE.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=42[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=4104[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/types.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e840, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/stdarg.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e840, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/stdarg.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e840, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/stdarg.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e840, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/stdarg.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/stdio_lim.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/stdio_lim.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/stdio_lim.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/stdio_lim.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/stdio_lim.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 22, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/bits/stdio_lim.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=34[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1213[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 4f774, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 4d334, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/floatn.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/floatn.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/floatn.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/floatn.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/floatn.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=5[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 1f, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->  /usr/include/bits/floatn.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=31[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 58424, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=4373[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/floatn-common.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/floatn-common.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/floatn-common.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/floatn-common.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/floatn-common.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=6[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 27, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->   /usr/include/bits/floatn-common.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=39[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 5a864, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/features.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/bits/long-double.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=7[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e71c, 26, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+->    /usr/include/bits/long-double.h
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=38[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 5cca4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=970[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[7, 5cca4, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[7, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 5a864, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1573[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[6, 5a864, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[6, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[5, 58424, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 4d334, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=8192[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 4d334, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=6600[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/include/bits/floatn.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/i386-linux-gnu/bits/floatn.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/include/bits/floatn.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e800, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/include/i386-linux-gnu/bits/floatn.h"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 4d334, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[4, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 42694, 2000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[3, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=11 [32mcall_name="syscall|munmap"[0m args=[fff3e000, c1000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=11 [32mcall_name="syscall|munmap"[0m [31mret=0[0m
+pid=1 call_number=11 [32mcall_name="syscall|munmap"[0m args=[ffe7c000, c1000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=11 [32mcall_name="syscall|munmap"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3f0f0, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/libc.so"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3f0f0, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/lib/i386-linux-gnu/libc.so"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3f0f0, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/lib/libc.so"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=-2[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3f0f0, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/lib/i386-linux-gnu/libc.so"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=3[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3effc, 1f, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> /lib/i386-linux-gnu/libc.so
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=31[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f068, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f09c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 2, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=291[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 446c0, 124, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=291[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 447e3, 1, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3ebd0, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/i686-linux-gnu/lib/libc.so.6"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=4[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3eabc, 25, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> /usr/i686-linux-gnu/lib/libc.so.6
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=37[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3eb28, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3eb5c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3eac8, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3eafc, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 22aa90, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=2271888[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 47cf0, 9d8, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=2520[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 486c8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[21000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=401408[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 5554, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=21844[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 55f00, ce20, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52768[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 62d20, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 12374, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=74612[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 49560, 8968, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=35176[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 51ec8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 1acdc, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=109788[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 538a0, 19c4, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=6596[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 55264, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 1c6a0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=116384[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 55270, 684, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1668[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 558f4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 1cd24, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=118052[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 55cd0, 40, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=64[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 55d10, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 228dac, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=2264492[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 447f0, e8, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=232[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 448d8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[2f000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=536576[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[4, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3ebd0, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/i686-linux-gnu/lib/libc_nonshared.a"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=4[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3eabc, 2c, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> /usr/i686-linux-gnu/lib/libc_nonshared.a
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=44[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3eb28, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3eb5c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=8[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3eac0, 3c, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=60[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3eafc, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 442f0, cc, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=204[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 443bc, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[4, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3e790, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/i686-linux-gnu/lib/ld-linux.so.2"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=4[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3e67c, 29, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> /usr/i686-linux-gnu/lib/ld-linux.so.2
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=41[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3e6e8, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3e71c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3e688, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 3e6bc, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 36a68, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=223848[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 45d80, 3e8, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=1000[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 46168, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 460, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=1120[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 43760, 2a0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=672[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 43a00, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 700, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=1792[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 43d10, 2c3, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=707[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 43fd3, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 9c4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=2500[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 48e90, 54, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=84[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 48ee4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, a18, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=2584[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 48d50, 110, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=272[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 48e60, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[4, 35f2c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=220972[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 436a0, b8, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=184[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[4, 43758, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[4, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[3, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3f090, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/local/lib/tcc/libtcc1.a"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=3[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3ef9c, 20, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> /usr/local/lib/tcc/libtcc1.a
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=32[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f008, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f03c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=8[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3efa0, 3c, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=60[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3efdc, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 446c0, 12c, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=300[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 447ec, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[3, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[3f0f0, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="/usr/lib/i386-linux-gnu/crtn.o"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=3[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3effc, 22, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+-> /usr/lib/i386-linux-gnu/crtn.o
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=34[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f068, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f09c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=0[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f008, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 3f03c, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, a8, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=168[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 464c0, 168, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=360[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 46628, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 5a, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=90[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 45810, 4b, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=75[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 4585b, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 34, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41653, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 34, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 418f4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 34, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=52[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 48098, 1c, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=28[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 480b4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 50, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=80[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 4589f, 5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=5[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 458a4, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 55, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=85[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41a73, 5, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=5[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 41a78, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m args=[3, 5a, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=8 [32mcall_name="syscall|lseek"[0m [31mret=90[0m
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m args=[3, 0, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=0 [32mcall_name="syscall|read"[0m [31mret=0[0m
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m args=[3, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=3 [32mcall_name="syscall|close"[0m [31mret=0[0m
+pid=1 call_number=87 [32mcall_name="syscall|unlink"[0m args=[406e0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=87 [32mcall_name="syscall|unlink"[0m [31mret=0[0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m args=[406e0, 241, 1ff, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef] [35m[arg1_str="hello"][0m
+pid=1 call_number=2 [32mcall_name="syscall|open"[0m [31mret=3[0m
+pid=1 call_number=72 [32mcall_name="syscall|fcntl"[0m args=[3, 3, 0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=72 [32mcall_name="syscall|fcntl"[0m [31mret=32769[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[1, 3f45c, 9, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+<- hello
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=9[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f490, 34, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=52[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 491a0, 140, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=320[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 3f468, 28, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=40[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 44b50, 13, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=19[0m
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m args=[3, 49560, 589, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1 [32mcall_name="syscall|write"[0m [31mret=1417[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=729088[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[fffffffffffdd000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=729088[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=585728[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=585728[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[fffffffffffe7000, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=585728[0m
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m args=[0, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef, deadbeefdeadbeef]
+pid=1 call_number=1004 [32mcall_name="syscall|sbrk"[0m [31mret=483328[0m

@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Defined in brk.c.  */
 // This is the "virtual brk" exposed to the caller
@@ -43,7 +44,7 @@ extern void *__curbrk;
 void *
 __sbrk (intptr_t increment)
 {
-	return MAKE_SYSCALL(176, "syscall|sbrk", (uint64_t) increment, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_SYSCALL(SBRK_SYSCALL, "syscall|sbrk", (uint64_t) increment, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 // void *
