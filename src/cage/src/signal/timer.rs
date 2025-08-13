@@ -1,46 +1,22 @@
-// Timer functions for Rust interface.
+// Interval timer implementation for itimer and SIGALRM
 #![allow(dead_code)]
 
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
-pub use std::time::Duration as RustDuration;
-pub use std::time::Instant as RustInstant;
+pub use std::time::Duration
+pub use std::time::Instant;
 use std::time::SystemTime;
 
 use sysdefs::constants::SIGALRM;
 
-use super::lind_send_signal;
-
-pub fn timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-}
-
-// Create a new timer
-pub fn starttimer() -> RustInstant {
-    RustInstant::now()
-}
-
-// Return time since timer was started
-pub fn readtimer(now: RustInstant) -> RustDuration {
-    now.elapsed()
-}
-
-// Sleep function to sleep for specified duration
-pub fn sleep(dur: RustDuration) {
-    thread::sleep(dur);
-}
-
 #[derive(Debug)]
 struct _IntervalTimer {
     pub cageid: u64,
-    pub init_instant: RustInstant, // The instant this process is created
+    pub init_instant: Instant, // The instant this process is created
 
-    pub start_instant: RustInstant,
-    pub curr_duration: RustDuration,
-    pub next_duration: RustDuration,
+    pub start_instant: Instant,
+    pub curr_duration: Duration,
+    pub next_duration: Duration,
 
     pub is_ticking: bool,
 }
@@ -55,17 +31,17 @@ impl IntervalTimer {
         Self {
             _ac: Arc::new(Mutex::new(_IntervalTimer {
                 cageid: cageid,
-                init_instant: RustInstant::now(),
-                start_instant: RustInstant::now(),
-                curr_duration: RustDuration::ZERO,
-                next_duration: RustDuration::ZERO,
+                init_instant: Instant::now(),
+                start_instant: Instant::now(),
+                curr_duration: Duration::ZERO,
+                next_duration: Duration::ZERO,
                 is_ticking: false,
             })),
         }
     }
 
     // Similar to getitimer. Returns (current value, next value)
-    pub fn get_itimer(&self) -> (RustDuration, RustDuration) {
+    pub fn get_itimer(&self) -> (Duration, Duration) {
         let guard = self._ac.lock().unwrap();
 
         (guard.curr_duration, guard.next_duration)
@@ -74,13 +50,13 @@ impl IntervalTimer {
     fn _set_itimer(
         &self,
         guard: &mut MutexGuard<_IntervalTimer>,
-        curr_duration: RustDuration,
-        next_duration: RustDuration,
+        curr_duration: Duration,
+        next_duration: Duration,
     ) {
         if curr_duration.is_zero() {
             guard.is_ticking = false;
         } else {
-            guard.start_instant = RustInstant::now();
+            guard.start_instant = Instant::now();
             guard.curr_duration = curr_duration;
             guard.next_duration = next_duration;
 
@@ -97,7 +73,7 @@ impl IntervalTimer {
         }
     }
 
-    pub fn set_itimer(&self, curr_duration: RustDuration, next_duration: RustDuration) {
+    pub fn set_itimer(&self, curr_duration: Duration, next_duration: Duration) {
         let mut guard = self._ac.lock().unwrap();
         self._set_itimer(&mut guard, curr_duration, next_duration);
     }
@@ -112,7 +88,7 @@ impl IntervalTimer {
                         .curr_duration
                         .saturating_sub(guard.start_instant.elapsed());
 
-                    if remaining_seconds == RustDuration::ZERO {
+                    if remaining_seconds == Duration::ZERO {
                         // Sends a SIGALRM signal to the cage when the timer expires.
                         // This struct/method is used exclusively by the setitimer syscall,
                         // which is expected to send a SIGALRM signal upon expiration.
@@ -131,7 +107,7 @@ impl IntervalTimer {
                 }
             }
 
-            thread::sleep(RustDuration::from_millis(20)); // One jiffy
+            thread::sleep(Duration::from_millis(20)); // One jiffy
         }
     }
 

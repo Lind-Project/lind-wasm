@@ -35,6 +35,14 @@ pub fn new_shm_backing(key: i32, size: usize) -> std::io::Result<ShmFile> {
     ShmFile::new(key, size)
 }
 
+// timestamp function to fill shm data structures
+pub fn timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
 // Mimic shared memory in Linux by creating a file backing and truncating it to the segment size
 // We can then safely unlink the file while still holding a descriptor to that segment,
 // which we can use to map shared across cages.
@@ -82,7 +90,7 @@ impl ShmSegment {
     pub fn new(key: i32, size: usize, cageid: u32, uid: u32, gid: u32, mode: u16) -> ShmSegment {
         let filebacking = new_shm_backing(key, size).unwrap();
 
-        let time = interface::timestamp() as isize; //We do a real timestamp now
+        let time = timestamp() as isize; //We do a real timestamp now
         let permstruct = IpcPermStruct {
             __key: key,
             uid: uid,
@@ -121,7 +129,7 @@ impl ShmSegment {
     pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: u64) -> i32 {
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
         self.shminfo.shm_nattch += 1;
-        self.shminfo.shm_atime = interface::timestamp() as isize;
+        self.shminfo.shm_atime = timestamp() as isize;
 
         match self.attached_cages.entry(cageid) {
             interface::RustHashEntry::Occupied(mut occupied) => {
@@ -153,7 +161,7 @@ impl ShmSegment {
             0,
         );
         self.shminfo.shm_nattch -= 1;
-        self.shminfo.shm_dtime = interface::timestamp() as isize;
+        self.shminfo.shm_dtime = timestamp() as isize;
         match self.attached_cages.entry(cageid) {
             interface::RustHashEntry::Occupied(mut occupied) => {
                 *occupied.get_mut() -= 1;
@@ -201,4 +209,30 @@ impl ShmMetadata {
 pub fn get_shm_length(shmid: i32) -> Option<usize> {
     let metadata: &ShmMetadata = &**SHM_METADATA;
     metadata.get_shm_length(shmid)
+}
+
+pub fn unmap_shm_mappings(cageid: u64) {
+    let cage = get_cage(cageid);
+    //unmap shm mappings on exit or exec
+    for rev_mapping in cage.rev_shm.lock().iter() {
+        let shmid = rev_mapping.1;
+        let metadata = &SHM_METADATA;
+        match metadata.shmtable.entry(shmid) {
+            interface::RustHashEntry::Occupied(mut occupied) => {
+                let segment = occupied.get_mut();
+                segment.shminfo.shm_nattch -= 1;
+                segment.shminfo.shm_dtime = timestamp() as isize;
+                segment.attached_cages.remove(cageid);
+
+                if segment.rmid && segment.shminfo.shm_nattch == 0 {
+                    let key = segment.key;
+                    occupied.remove_entry();
+                    metadata.shmkeyidtable.remove(&key);
+                }
+            }
+            interface::RustHashEntry::Vacant(_) => {
+                panic!("Shm entry not created for some reason");
+            }
+        };
+    }
 }

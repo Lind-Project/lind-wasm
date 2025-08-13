@@ -20,34 +20,8 @@ use crate::safeposix::shm::*;
 use libc::*;
 use std::io;
 use std::io::Write;
-use std::sync::Arc as RustRfc;
 
 impl Cage {
-    fn unmap_shm_mappings(&self) {
-        //unmap shm mappings on exit or exec
-        for rev_mapping in self.rev_shm.lock().iter() {
-            let shmid = rev_mapping.1;
-            let metadata = &SHM_METADATA;
-            match metadata.shmtable.entry(shmid) {
-                interface::RustHashEntry::Occupied(mut occupied) => {
-                    let segment = occupied.get_mut();
-                    segment.shminfo.shm_nattch -= 1;
-                    segment.shminfo.shm_dtime = interface::timestamp() as isize;
-                    segment.attached_cages.remove(&self.cageid);
-
-                    if segment.rmid && segment.shminfo.shm_nattch == 0 {
-                        let key = segment.key;
-                        occupied.remove_entry();
-                        metadata.shmkeyidtable.remove(&key);
-                    }
-                }
-                interface::RustHashEntry::Vacant(_) => {
-                    panic!("Shm entry not created for some reason");
-                }
-            };
-        }
-    }
-
     pub fn fork_syscall(&self, child_cageid: u64) -> i32 {
         // Modify the fdtable manually
         fdtables::copy_fdtable_for_cage(self.cageid, child_cageid).unwrap();
@@ -153,7 +127,7 @@ impl Cage {
     pub fn exit_syscall(&self, status: i32) -> i32 {
         //flush anything left in stdout
         interface::flush_stdout();
-        self.unmap_shm_mappings();
+        unmap_shm_mappings(self.cageid);
 
         let _ = fdtables::remove_cage_from_fdtable(self.cageid);
 
