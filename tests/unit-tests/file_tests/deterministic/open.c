@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 int main() {
-    int fd = open("testfile.txt", O_RDONLY);  
+    int fd = open("testfiles/filetestfile.txt", O_RDONLY);  
 
     if (fd == -1) {
         perror("open failed");

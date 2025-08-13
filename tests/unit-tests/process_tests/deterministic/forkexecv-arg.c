@@ -10,14 +10,15 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <stdlib.h>
 
 int main() {
     pid_t pid = fork();
 
     if (pid == 0) {
         // child process: call execv with argument
-        char *args[] = {"./hello-arg", "hello_from_parent", NULL};
-        execv("./hello-arg", args);
+        char *args[] = {"hello-arg", "hello_from_parent", NULL};
+        execv("automated_tests/hello", args);
         perror("execv failed");  // only runs if execv fails
         exit(1);
     } else {
