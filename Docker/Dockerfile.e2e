@@ -16,14 +16,14 @@
 # source tree.
 #
 # Usage A (test):
-#     docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e .
+#     docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e .
 #
 # Usage B (create and run image):
-#     docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e -t release --target release .
+#     docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e -t release --target release .
 #     docker run --platform=linux/amd64 -it release /bin/bash
 #
 # Usage C (create base image and mount source):
-#     docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e -t dev --target base .
+#     docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e -t dev --target base .
 #     docker run --platform=linux/amd64 -v $(PWD):/lind -w /lind -it dev /bin/bash
 
 # Install build dependencies

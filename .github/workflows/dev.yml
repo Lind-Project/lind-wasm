@@ -39,5 +39,5 @@ jobs:
           push: true
           platforms: linux/amd64
           cache-from: type=gha
-          file: scripts/Dockerfile.dev
+          file: Docker/Dockerfile.dev
           tags: ${{ steps.meta.outputs.tags }}

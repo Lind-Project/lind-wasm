@@ -24,7 +24,7 @@ jobs:
         with:
           platforms: linux/amd64
           cache-from: type=gha
-          file: scripts/Dockerfile.e2e
+          file: Docker/Dockerfile.e2e
 
       # Configure Docker release tags:
       # - securesystemslab/lind-wasm:sha-<short commit id>
@@ -48,5 +48,5 @@ jobs:
           push: true
           platforms: linux/amd64
           cache-from: type=gha
-          file: scripts/Dockerfile.e2e
+          file: Docker/Dockerfile.e2e
           tags: ${{ steps.meta.outputs.tags }}
