@@ -5,10 +5,9 @@
 //! address translation and validation related to vmmap
 use crate::cage::{get_cage, Cage};
 use crate::memory::VmmapOps;
-use sysdefs::constants::err_const::{Errno};
+use sysdefs::constants::err_const::Errno;
 use sysdefs::constants::fs_const::{
-    MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE,
-    PAGESHIFT, PAGESIZE, PROT_READ, PROT_WRITE,
+    MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_READ, PROT_WRITE,
 };
 
 // heap is placed at the very top of the memory

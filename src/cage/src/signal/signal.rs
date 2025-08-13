@@ -1,9 +1,8 @@
-
-use crate::cage::{get_cage};
+use crate::cage::get_cage;
 use sysdefs::constants::{SA_NODEFER, SA_RESETHAND, SIG_DFL};
 
-pub use std::sync::atomic::Ordering;
 pub use parking_lot::RwLock;
+pub use std::sync::atomic::Ordering;
 
 const EPOCH_NORMAL: u64 = 0;
 const EPOCH_SIGNAL: u64 = 0xc0ffee;
