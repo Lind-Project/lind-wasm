@@ -4,12 +4,11 @@
 //! initializing vmmap, helper functions for handling vmmap during a fork syscall, and
 //! address translation and validation related to vmmap
 use crate::cage::{get_cage, Cage};
-use crate::memory::{MemoryBackingType, Vmmap, VmmapOps};
-use libc::c_void;
-use sysdefs::constants::err_const::{syscall_error, Errno};
+use crate::memory::VmmapOps;
+use sysdefs::constants::err_const::{Errno};
 use sysdefs::constants::fs_const::{
-    F_GETFL, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE,
-    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+    MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE,
+    PAGESHIFT, PAGESIZE, PROT_READ, PROT_WRITE,
 };
 
 // heap is placed at the very top of the memory
@@ -50,14 +49,11 @@ pub fn round_up_page(length: u64) -> u64 {
 /// * `parent_cageid` - cageid of parent
 /// * `child_cageid` - caegid of child
 pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
-    // first retrieve corresponding vmmaps and base addresses
+    // first retrieve corresponding vmmaps
     let parent_cage = get_cage(parent_cageid).unwrap();
     let child_cage = get_cage(child_cageid).unwrap();
     let parent_vmmap = parent_cage.vmmap.read();
     let child_vmmap = child_cage.vmmap.read();
-
-    let parent_base = parent_vmmap.base_address.unwrap();
-    let child_base = child_vmmap.base_address.unwrap();
 
     // iterate through each vmmap entry
     for (_interval, entry) in parent_vmmap.entries.iter() {
@@ -72,7 +68,7 @@ pub fn fork_vmmap(parent_cageid: u64, child_cageid: u64) {
             // for shared memory, we are using mremap to fork shared memory
             // See "man 2 mremap" for description of what MREMAP_MAYMOVE does with old_size=0
             // when old_address points to a shared mapping
-            let result = unsafe {
+            unsafe {
                 libc::mremap(
                     parent_st as *mut libc::c_void,
                     0,

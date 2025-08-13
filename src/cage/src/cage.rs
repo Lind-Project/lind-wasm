@@ -2,18 +2,14 @@
 //! definitions, a global variables that handles cage management, and cage initialization and
 //! finialization required by wasmtime
 use crate::memory::vmmap::*;
-use fdtables;
 pub use once_cell::sync::Lazy;
 /// Uses spinlocks first (for short waits) and parks threads when blocking to reduce kernel
 /// interaction and increases efficiency.
 pub use parking_lot::RwLock;
 pub use std::collections::HashMap;
-use std::ffi::CString;
 pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicI32, AtomicU64};
 pub use std::sync::Arc;
-use sysdefs::constants::err_const::VERBOSE;
-use sysdefs::constants::fs_const::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Zombie {
@@ -21,7 +17,9 @@ pub struct Zombie {
     pub exit_code: i32,
 }
 
-/// I only kept required fields for cage struct
+// default maximum cages
+pub const MAX_CAGEID: usize = 1024;
+
 #[derive(Debug)]
 pub struct Cage {
     // Identifying ID number for this cage
