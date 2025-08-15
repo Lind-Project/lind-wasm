@@ -1,24 +1,17 @@
 #!/bin/bash
 #
-# This script merges several existing scripts in order to setup clang for
-# cross-compiling lind programs. Reasons to not use the existing scripts
-# include side-stepping bazel (for a leaner build), issues with hard-coded
-# absolute paths and aggregation of related build routines for better layer
-# caching in its usage context Docker (see scripts/Dockerfile.e2e).
+# Build glibc and generate a sysroot for clang to cross-compile lind programs
 #
-# TODO: de-duplicate with existing tools and build scripts
-# - .devcontainer/Dockerfile (cp src/glibc/wasi)
-# - BUILD (make_glibc)
-# - src/glibc/wasm-config.sh
-# - src/glibc/gen_sysroot.sh
+# IMPORTANT NOTES:
+# - call from source code repository root directory
+# - expects `clang` and other llvm binaries on $PATH
+# - expects GLIBC source in $PWD/src/glibc
 #
 set -x
 
-# TODO: Fix absolute paths (consider using $PWD, if necessary)
-GLIBC="/src/glibc"
-CLANG="/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
+CC="clang"
+GLIBC="$PWD/src/glibc"
 BUILD="$GLIBC/build"
-CC="$CLANG/bin/clang"
 SYSROOT="$GLIBC/sysroot"
 SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
 
@@ -85,7 +78,7 @@ cd $BUILD
   --host=i686-linux-gnu \
   --build=i686-linux-gnu \
   CFLAGS=" -matomics -mbulk-memory -O2 -g" \
-  CC="$CC --target=wasm32-unknown-wasi -v -Wno-int-conversion"
+  CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion"
 
 make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
 
@@ -129,8 +122,8 @@ fi
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 
 # Pack all found .o files into a single .a archive
-"$CLANG/bin/llvm-ar" rcs "$SYSROOT_ARCHIVE" $object_files
-"$CLANG/bin/llvm-ar" crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
+llvm-ar rcs "$SYSROOT_ARCHIVE" $object_files
+llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
 
 # Check if llvm-ar succeeded
 if [ $? -eq 0 ]; then

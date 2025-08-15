@@ -5,6 +5,8 @@
     allow(irrefutable_let_patterns, unreachable_patterns)
 )]
 
+use cfg_if::cfg_if;
+
 use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
@@ -611,14 +613,23 @@ impl RunCommand {
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
 
-                // retrieve the epoch global
-                let lind_epoch = instance
-                    .get_export(&mut *store, "epoch")
-                    .and_then(|export| export.into_global())
-                    .expect("Failed to find epoch global export!");
+                cfg_if! {
+                    // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                    // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                    // This is intended for debugging only and should not be used in production.
+                    if #[cfg(feature = "disable_signals")] {
+                        let pointer = 0;
+                    } else {
+                        // retrieve the epoch global
+                        let lind_epoch = instance
+                            .get_export(&mut *store, "epoch")
+                            .and_then(|export| export.into_global())
+                            .expect("Failed to find epoch global export!");
 
-                // retrieve the handler (underlying pointer) for the epoch global
-                let pointer = lind_epoch.get_handler(&mut *store);
+                        // retrieve the handler (underlying pointer) for the epoch global
+                        let pointer = lind_epoch.get_handler(&mut *store);
+                    }
+                }
 
                 // initialize the signal for the main thread of the cage
                 rawposix::interface::lind_signal_init(
