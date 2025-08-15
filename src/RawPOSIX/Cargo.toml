@@ -38,6 +38,9 @@ criterion = { version = "0.3", features = ["html_reports"]}
 tempfile = "3.2.0"
 grcov="0.8.19" # code coverage
 
+[features]
+disable_signals = []
+
 [[bin]]
 name = "lind_fs_utils"
 path = "src/tools/fs_utils.rs"

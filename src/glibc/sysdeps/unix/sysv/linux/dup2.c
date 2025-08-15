@@ -20,11 +20,12 @@
 #include <unistd.h>
 #include <sysdep.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __dup2 (int fd, int fd2)
 {
-   return MAKE_SYSCALL(25, "syscall|dup2", (uint64_t) fd, (uint64_t) fd2, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(DUP2_SYSCALL, "syscall|dup2", (uint64_t) fd, (uint64_t) fd2, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__dup2)
 weak_alias (__dup2, dup2)
