@@ -3,11 +3,11 @@
 
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
-pub use std::time::Duration
+pub use std::time::Duration;
 pub use std::time::Instant;
-use std::time::SystemTime;
 
 use sysdefs::constants::SIGALRM;
+use super::lind_send_signal;
 
 #[derive(Debug)]
 struct _IntervalTimer {

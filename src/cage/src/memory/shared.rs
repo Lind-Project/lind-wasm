@@ -1,34 +1,41 @@
 // Filesystem metadata struct
 #![allow(dead_code)]
 
+use crate::cage::get_cage;
+
 use sysdefs::constants::fs_const::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHM_DEST,
-    SHM_RDONLY,
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE
 };
 use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
+pub use std::sync::{Arc, LazyLock};
+pub use parking_lot::Mutex;
+pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use std::time::SystemTime;
+use std::fs::{self, File, OpenOptions};
+use std::os::unix::io::AsRawFd;
+use std::ffi::c_void;
 
-use super::cage::Cage;
-use crate::interface;
-
-use libc::*;
-
-pub static SHM_METADATA: interface::RustLazyGlobal<interface::RustRfc<ShmMetadata>> =
-    interface::RustLazyGlobal::new(|| interface::RustRfc::new(ShmMetadata::init_shm_metadata()));
-
-pub struct ShmSegment {
-    pub shminfo: ShmidsStruct,
-    pub key: i32,
-    pub size: usize,
-    pub filebacking: interface::ShmFile,
-    pub rmid: bool,
-    pub attached_cages: interface::RustHashMap<u64, i32>, // attached cages, number of references in cage
-}
+pub use dashmap::{
+    mapref::entry::Entry, DashMap, DashSet
+};
 
 #[derive(Debug)]
 pub struct ShmFile {
     fobj: Arc<Mutex<File>>,
     key: i32,
     size: usize,
+}
+
+pub static SHM_METADATA: LazyLock<Arc<ShmMetadata>> =
+    LazyLock::new(|| Arc::new(ShmMetadata::init_shm_metadata()));
+
+pub struct ShmSegment {
+    pub shminfo: ShmidsStruct,
+    pub key: i32,
+    pub size: usize,
+    pub filebacking: ShmFile,
+    pub rmid: bool,
+    pub attached_cages: DashMap<u64, i32>, // attached cages, number of references in cage
 }
 
 pub fn new_shm_backing(key: i32, size: usize) -> std::io::Result<ShmFile> {
@@ -41,6 +48,22 @@ pub fn timestamp() -> u64 {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs()
+}
+
+
+/// Calls the system `mmap` via `libc` and returns the mapped address as a 32-bit integer.
+///
+/// In Lind-WASM, addresses are represented as 32-bit values within the linear memory of a
+/// Wasm module. The return value is truncated to 32 bits to match this representation.
+/// On error, returns `-1` (corresponding to `MAP_FAILED`).
+///
+/// # Safety
+/// This function uses raw pointers and directly invokes `libc::mmap`. The caller must ensure
+/// that all arguments are valid and that using the returned address as a 32-bit pointer is safe
+/// in the Lind-WASM context.
+pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
+    return ((unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, fildes, off) } as i64)
+        & 0xffffffff) as i32;
 }
 
 // Mimic shared memory in Linux by creating a file backing and truncating it to the segment size
@@ -121,7 +144,7 @@ impl ShmSegment {
             size: size,
             filebacking: filebacking,
             rmid: false,
-            attached_cages: interface::RustHashMap::new(),
+            attached_cages: DashMap::new(),
         }
     }
     // mmap shared segment into cage, and increase attachments
@@ -132,14 +155,14 @@ impl ShmSegment {
         self.shminfo.shm_atime = timestamp() as isize;
 
         match self.attached_cages.entry(cageid) {
-            interface::RustHashEntry::Occupied(mut occupied) => {
+            Entry::Occupied(mut occupied) => {
                 *occupied.get_mut() += 1;
             }
-            interface::RustHashEntry::Vacant(vacant) => {
+            Entry::Vacant(vacant) => {
                 vacant.insert(1);
             }
         };
-        interface::libc_mmap(
+        libc_mmap(
             shmaddr,
             self.size as usize,
             prot,
@@ -152,7 +175,7 @@ impl ShmSegment {
     // unmap shared segment, decrease attachments
     // decrease references within attached cages map
     pub fn unmap_shm(&mut self, shmaddr: *mut u8, cageid: u64) {
-        interface::libc_mmap(
+        libc_mmap(
             shmaddr,
             self.size as usize,
             PROT_NONE,
@@ -163,13 +186,13 @@ impl ShmSegment {
         self.shminfo.shm_nattch -= 1;
         self.shminfo.shm_dtime = timestamp() as isize;
         match self.attached_cages.entry(cageid) {
-            interface::RustHashEntry::Occupied(mut occupied) => {
+            Entry::Occupied(mut occupied) => {
                 *occupied.get_mut() -= 1;
                 if *occupied.get() == 0 {
                     occupied.remove_entry();
                 }
             }
-            interface::RustHashEntry::Vacant(_) => {
+            Entry::Vacant(_) => {
                 panic!("Cage not available in segment attached cages");
             }
         };
@@ -181,17 +204,17 @@ impl ShmSegment {
 }
 
 pub struct ShmMetadata {
-    pub nextid: interface::RustAtomicI32,
-    pub shmkeyidtable: interface::RustHashMap<i32, i32>,
-    pub shmtable: interface::RustHashMap<i32, ShmSegment>,
+    pub nextid: AtomicI32,
+    pub shmkeyidtable: DashMap<i32, i32>,
+    pub shmtable: DashMap<i32, ShmSegment>,
 }
 
 impl ShmMetadata {
     pub fn init_shm_metadata() -> ShmMetadata {
         ShmMetadata {
-            nextid: interface::RustAtomicI32::new(1),
-            shmkeyidtable: interface::RustHashMap::new(),
-            shmtable: interface::RustHashMap::new(),
+            nextid: AtomicI32::new(1),
+            shmkeyidtable: DashMap::new(),
+            shmtable: DashMap::new(),
         }
     }
     pub fn get_shm_length(&self, shmid: i32) -> Option<usize> {
@@ -202,7 +225,7 @@ impl ShmMetadata {
 
     pub fn new_keyid(&self) -> i32 {
         self.nextid
-            .fetch_add(1, interface::RustAtomicOrdering::Relaxed)
+            .fetch_add(1, Ordering::Relaxed)
     }
 }
 
@@ -212,17 +235,17 @@ pub fn get_shm_length(shmid: i32) -> Option<usize> {
 }
 
 pub fn unmap_shm_mappings(cageid: u64) {
-    let cage = get_cage(cageid);
+    let cage = get_cage(cageid).unwrap();
     //unmap shm mappings on exit or exec
     for rev_mapping in cage.rev_shm.lock().iter() {
         let shmid = rev_mapping.1;
         let metadata = &SHM_METADATA;
         match metadata.shmtable.entry(shmid) {
-            interface::RustHashEntry::Occupied(mut occupied) => {
+            Entry::Occupied(mut occupied) => {
                 let segment = occupied.get_mut();
                 segment.shminfo.shm_nattch -= 1;
                 segment.shminfo.shm_dtime = timestamp() as isize;
-                segment.attached_cages.remove(cageid);
+                segment.attached_cages.remove(&cageid);
 
                 if segment.rmid && segment.shminfo.shm_nattch == 0 {
                     let key = segment.key;
@@ -230,7 +253,7 @@ pub fn unmap_shm_mappings(cageid: u64) {
                     metadata.shmkeyidtable.remove(&key);
                 }
             }
-            interface::RustHashEntry::Vacant(_) => {
+            Entry::Vacant(_) => {
                 panic!("Shm entry not created for some reason");
             }
         };

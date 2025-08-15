@@ -6,7 +6,7 @@ use dashmap::DashMap;
 pub use once_cell::sync::Lazy;
 /// Uses spinlocks first (for short waits) and parks threads when blocking to reduce kernel
 /// interaction and increases efficiency.
-pub use parking_lot::RwLock;
+pub use parking_lot::{RwLock, Mutex};
 pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicI32, AtomicU64};
 pub use std::sync::Arc;
@@ -33,6 +33,9 @@ pub struct Cage {
     pub uid: AtomicI32,
     pub egid: AtomicI32,
     pub euid: AtomicI32,
+    // Reverse mapping for shared memory of addresses in cage to shmid, used for attaching and deattaching
+    // shared memory segments
+    pub rev_shm: Mutex<Vec<(u32, i32)>>,
     // signalhandler is a hash map where the key is a signal number, and the value is a SigactionStruct, which
     // defines how the cage should handle a specific signal. Interacts with sigaction_syscall() to register or
     // retrieve the handler for a specific signal.
@@ -77,12 +80,7 @@ pub struct Cage {
 ///     of overall performance impact.
 ///
 /// Pre-allocate MAX_CAGEID elements, all initialized to None.
-/// Lazy causes `CAGE_MAP` to be initialized when it is first accessed, rather than when the program starts.
-// pub static CAGE_MAP: Lazy<RwLock<Vec<Option<Arc<Cage>>>>> = Lazy::new(|| {
-//     let mut vec = Vec::with_capacity(MAX_CAGEID);
-//     vec.resize_with(MAX_CAGEID, || None);
-//     RwLock::new(vec)
-// });
+
 pub static mut CAGE_MAP: Vec<Option<Arc<Cage>>> = Vec::new();
 
 pub fn check_cageid(cageid: u64) {
