@@ -10,6 +10,12 @@ permissions: {}
 
 jobs:
   lint:
+    # If the workflow was triggered by anything other than a pull_request event 
+    # (e.g., push, workflow_dispatch, schedule, pull_request_target), 
+    # github.event_name != 'pull_request' is true.
+    # github.event.pull_request is only populated on pull_request events. 
+    # It is true when the PR is not a draft (i.e., “Ready for review”).
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
