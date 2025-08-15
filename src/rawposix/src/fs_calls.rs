@@ -173,7 +173,17 @@ pub fn read_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fchdir.2.html
-/// Change current working directory using an open directory file descriptor
+///
+/// Linux `fchdir()` syscall changes the current working directory of the calling process to the
+/// directory referred to by the open file descriptor `fd`. Since we implement a file descriptor
+/// management subsystem (called `fdtables`), we first translate the virtual file descriptor to the
+/// corresponding kernel file descriptor before invoking the kernel's `libc::fchdir()` function.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment referring to a directory
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn fchdir_syscall(
     cageid: u64,
     virtual_fd: u64,
@@ -210,7 +220,20 @@ pub fn fchdir_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/writev.2.html
-/// Scatter-gather write
+///
+/// Linux `writev()` syscall performs scatter-gather output by writing data from multiple buffers
+/// to a file descriptor in a single operation. Since we implement a file descriptor management
+/// subsystem (called `fdtables`), we first translate the virtual file descriptor to the corresponding
+/// kernel file descriptor, then translate the iovec array pointer from cage virtual memory to host
+/// memory before invoking the kernel's `libc::writev()` function.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - iov_arg: pointer to an array of iovec structures describing the buffers (user's perspective)
+///     - iovcnt_arg: number of iovec structures in the array
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn writev_syscall(
     cageid: u64,
     virtual_fd: u64,
@@ -264,7 +287,18 @@ pub fn writev_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fstat.2.html
-/// Get file status by file descriptor (FXSTAT compatibility)
+///
+/// Linux `fstat()` syscall retrieves information about the file referred to by the open file descriptor `fd`.
+/// Since we implement a file descriptor management subsystem (called `fdtables`), we first translate the virtual
+/// file descriptor to the corresponding kernel file descriptor, then call the kernel's `libc::fstat()` function.
+/// The returned stat structure is converted to our ABI-stable StatData format and copied to the user's buffer.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - stat_arg: pointer to a stat structure where the file information will be stored (user's perspective)
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn fstat_syscall(
     cageid: u64,
     virtual_fd: u64,
@@ -339,6 +373,18 @@ pub fn fstat_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/ftruncate.2.html
+///
+/// Linux `ftruncate()` syscall truncates the file referred to by the file descriptor `fd` to be at most
+/// `length` bytes in size. Since we implement a file descriptor management subsystem (called `fdtables`),
+/// we first translate the virtual file descriptor to the corresponding kernel file descriptor, then convert
+/// the length argument from u64 to i64 type before invoking the kernel's `libc::ftruncate()` function.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - length_arg: the desired length in bytes for the file truncation
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn ftruncate_syscall(
     cageid: u64,
     virtual_fd: u64,
@@ -381,6 +427,19 @@ pub fn ftruncate_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fstatfs.2.html
+///
+/// Linux `fstatfs()` syscall returns information about a mounted filesystem referred to by the open file
+/// descriptor `fd`. Since we implement a file descriptor management subsystem (called `fdtables`), we first
+/// translate the virtual file descriptor to the corresponding kernel file descriptor, then call the kernel's
+/// `libc::fstatfs()` function. The returned statfs structure is converted to our ABI-stable FSData format
+/// and copied to the user's buffer.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - statfs_arg: pointer to a statfs structure where the filesystem information will be stored (user's perspective)
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn fstatfs_syscall(
     cageid: u64,
     virtual_fd: u64,
@@ -454,6 +513,19 @@ pub fn fstatfs_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getdents64.2.html
+///
+/// Linux `getdents()` syscall reads several directory entries from the directory referred to by the open file
+/// descriptor `fd` into the buffer pointed to by `dirp`. Since we implement a file descriptor management
+/// subsystem (called `fdtables`), we first translate the virtual file descriptor to the corresponding kernel
+/// file descriptor, then call the kernel's `getdents64` syscall directly to retrieve directory entries.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment referring to a directory
+///     - dirp_arg: pointer to a buffer where the directory entries will be stored (user's perspective)
+///     - count_arg: size of the buffer pointed to by dirp
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn getdents_syscall(
     cageid: u64,
     virtual_fd: u64,
@@ -504,6 +576,20 @@ pub fn getdents_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/lseek.2.html
+///
+/// Linux `lseek()` syscall repositions the file offset of the open file description associated with the file
+/// descriptor `fd` to the argument `offset` according to the directive `whence`. Since we implement a file
+/// descriptor management subsystem (called `fdtables`), we first translate the virtual file descriptor to the
+/// corresponding kernel file descriptor, then convert the offset and whence parameters from cage memory before
+/// invoking the kernel's `libc::lseek()` function.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - offset_arg: the new offset according to the directive whence
+///     - whence_arg: how to interpret the offset (SEEK_SET, SEEK_CUR, or SEEK_END)
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn lseek_syscall(
     cageid: u64,
     virtual_fd: u64,
@@ -867,10 +953,20 @@ pub fn write_syscall(
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/pread.2.html
 ///
-/// Linux `pread()` reads up to `count` bytes from the file descriptor `fd` at the
-/// given `offset` without changing the file offset. We first translate the
-/// virtual file descriptor to the kernel fd, convert the buffer, size, and
-/// offset from cage memory, and then call the host's `libc::pread`.
+/// Linux `pread()` syscall reads up to `count` bytes from the file descriptor `fd` at the
+/// given `offset` without changing the file offset. Since we implement a file descriptor management
+/// subsystem (called `fdtables`), we first translate the virtual file descriptor to the corresponding
+/// kernel file descriptor, then convert the buffer and offset from cage memory before invoking the
+/// kernel's `libc::pread()` function.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective)
+///     - count_arg: the maximum number of bytes to read from the file descriptor
+///     - offset_arg: file offset at which the input/output operation takes place
+///     - arg5, arg6: additional arguments which are expected to be unused
 pub fn pread_syscall(
     cageid: u64,
     virtual_fd: u64,
@@ -919,10 +1015,20 @@ pub fn pread_syscall(
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/pwrite.2.html
 ///
-/// Linux `pwrite()` writes up to `count` bytes from `buf` to the file descriptor
-/// `fd` starting at `offset` without changing the file offset. We translate the
-/// virtual file descriptor to the kernel fd, convert the buffer, size, and
-/// offset from cage memory, and then call the host's `libc::pwrite`.
+/// Linux `pwrite()` syscall writes up to `count` bytes from the buffer pointed to by `buf` to the file
+/// associated with the open file descriptor, `fd`, starting at the given `offset` without changing the
+/// file offset. Since we implement a file descriptor management subsystem (called `fdtables`), we first
+/// translate the virtual file descriptor to the corresponding kernel file descriptor, then convert the
+/// buffer, count, and offset from cage memory before invoking the kernel's `libc::pwrite()` function.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - buf_arg: pointer to a buffer that stores the data to be written (user's perspective)
+///     - count_arg: the maximum number of bytes to write to the file descriptor
+///     - offset_arg: file offset at which the input/output operation takes place
+///     - arg5, arg6: additional arguments which are expected to be unused
 pub fn pwrite_syscall(
     cageid: u64,
     virtual_fd: u64,
@@ -1894,14 +2000,16 @@ pub fn nanosleep_time64_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/chdir.2.html
 ///
 /// Linux `chdir()` syscall changes the current working directory of the calling process to the directory
-/// specified by path. In our implementation, we need to convert the path from cage memory to host memory
-/// and then call the kernel's chdir function. We also need to update the cage's current working directory
-/// in the cage structure.
+/// specified by path. Since path seen by user is different from actual path on host, we need to convert
+/// the path first. RawPOSIX also updates the cage's current working directory in the cage structure after
+/// successfully changing the directory, ensuring cage isolation is maintained.
 ///
 /// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
 ///     - path_arg: pointer to a pathname naming the directory (user's perspective)
 ///     - path_cageid: cage identifier for the path argument
+///     - arg2, arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 ///
 /// Return:
 ///     - return zero on success. On error, -1 is returned and errno is set to indicate the error.
@@ -1953,13 +2061,16 @@ pub fn chdir_syscall(
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/rmdir.2.html
 ///
-/// Linux `rmdir()` syscall removes a directory, which must be empty. In our implementation, we need to
-/// convert the path from cage memory to host memory and then call the kernel's rmdir function.
+/// Linux `rmdir()` syscall removes a directory, which must be empty. Since path seen by user is different
+/// from actual path on host, we need to convert the path first. RawPOSIX doesn't have any other operations,
+/// so all operations will be handled by host. RawPOSIX does error handling for this syscall.
 ///
 /// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
 ///     - path_arg: pointer to a pathname naming the directory to be removed (user's perspective)
 ///     - path_cageid: cage identifier for the path argument
+///     - arg2, arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 ///
 /// Return:
 ///     - return zero on success. On error, -1 is returned and errno is set to indicate the error.
@@ -2005,16 +2116,18 @@ pub fn rmdir_syscall(
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/chmod.2.html
 ///
-/// Linux `chmod()` syscall changes the permissions of a file. In our implementation, we need to
-/// convert the path from cage memory to host memory and the mode from cage memory to host memory,
-/// then call the kernel's chmod function.
+/// Linux `chmod()` syscall changes the permissions of a file. Since path seen by user is different from
+/// actual path on host, we need to convert the path first. The mode argument specifies the permissions
+/// to be assigned to the file and is passed directly to the kernel after type conversion.
 ///
 /// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
 ///     - path_arg: pointer to a pathname naming the file (user's perspective)
 ///     - path_cageid: cage identifier for the path argument
 ///     - mode_arg: the new file permissions (user's perspective)
 ///     - mode_cageid: cage identifier for the mode argument
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 ///
 /// Return:
 ///     - return zero on success. On error, -1 is returned and errno is set to indicate the error.
@@ -2060,9 +2173,18 @@ pub fn chmod_syscall(
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fchmod.2.html
 ///
-/// Linux `fchmod()` changes the permissions of an open file referred to by
-/// file descriptor `fd`. In our implementation, we translate the virtual file
-/// descriptor to the host kernel fd, convert the `mode`, and invoke `libc::fchmod`.
+/// Linux `fchmod()` syscall changes the permissions of an open file referred to by file descriptor `fd`.
+/// Since we implement a file descriptor management subsystem (called `fdtables`), we first translate the
+/// virtual file descriptor to the corresponding kernel file descriptor, then convert the mode from cage
+/// memory before invoking the kernel's `libc::fchmod()` function.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - mode_arg: the new file permissions to be applied to the file
+///     - mode_cageid: cage identifier for the mode argument
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn fchmod_syscall(
     cageid: u64,
     virtual_fd: u64,
