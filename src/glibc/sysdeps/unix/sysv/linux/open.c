@@ -21,13 +21,10 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <syscall-template.h>
-
+#include <lind_syscall_num.h>
 #include <sysdep-cancel.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
-
-// Edit: Dennis
-
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
    a third argument is the file protection.  */
 int
@@ -43,7 +40,7 @@ __libc_open (const char *file, int oflag, ...)
       va_end (arg);
     }
 
-  return MAKE_SYSCALL(10, "syscall|open", (uint64_t) file, (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(OPEN_SYSCALL, "syscall|open", (uint64_t) file, (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
   // return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag, mode);
 }
 libc_hidden_def (__libc_open)
