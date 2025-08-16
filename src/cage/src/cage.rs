@@ -6,7 +6,7 @@ use dashmap::DashMap;
 pub use once_cell::sync::Lazy;
 /// Uses spinlocks first (for short waits) and parks threads when blocking to reduce kernel
 /// interaction and increases efficiency.
-pub use parking_lot::{RwLock, Mutex};
+pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicI32, AtomicU64};
 pub use std::sync::Arc;

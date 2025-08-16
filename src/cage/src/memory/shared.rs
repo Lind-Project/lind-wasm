@@ -3,21 +3,17 @@
 
 use crate::cage::get_cage;
 
-use sysdefs::constants::fs_const::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE
-};
-use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
-pub use std::sync::{Arc, LazyLock};
 pub use parking_lot::Mutex;
-pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
-use std::time::SystemTime;
+use std::ffi::c_void;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::io::AsRawFd;
-use std::ffi::c_void;
+pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+pub use std::sync::{Arc, LazyLock};
+use std::time::SystemTime;
+use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE};
+use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
 
-pub use dashmap::{
-    mapref::entry::Entry, DashMap, DashSet
-};
+pub use dashmap::{mapref::entry::Entry, DashMap, DashSet};
 
 #[derive(Debug)]
 pub struct ShmFile {
@@ -49,7 +45,6 @@ pub fn timestamp() -> u64 {
         .unwrap()
         .as_secs()
 }
-
 
 /// Calls the system `mmap` via `libc` and returns the mapped address as a 32-bit integer.
 ///
@@ -224,8 +219,7 @@ impl ShmMetadata {
     }
 
     pub fn new_keyid(&self) -> i32 {
-        self.nextid
-            .fetch_add(1, Ordering::Relaxed)
+        self.nextid.fetch_add(1, Ordering::Relaxed)
     }
 }
 

@@ -6,8 +6,8 @@ use std::thread;
 pub use std::time::Duration;
 pub use std::time::Instant;
 
-use sysdefs::constants::SIGALRM;
 use super::lind_send_signal;
+use sysdefs::constants::SIGALRM;
 
 #[derive(Debug)]
 struct _IntervalTimer {
