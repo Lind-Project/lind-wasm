@@ -532,19 +532,6 @@ impl Cage {
         mut errorfds: Option<&mut fd_set>,
         rposix_timeout: Option<RustDuration>,
     ) -> i32 {
-        let mut timeout;
-        if rposix_timeout.is_none() {
-            timeout = libc::timeval {
-                tv_sec: 0,
-                tv_usec: 0,
-            };
-        } else {
-            timeout = libc::timeval {
-                tv_sec: rposix_timeout.unwrap().as_secs() as i64,
-                tv_usec: rposix_timeout.unwrap().subsec_micros() as i64,
-            };
-        }
-
         let orfds = readfds.as_mut().map(|fds| &mut **fds);
         let owfds = writefds.as_mut().map(|fds| &mut **fds);
         let oefds = errorfds.as_mut().map(|fds| &mut **fds);
@@ -584,20 +571,41 @@ impl Cage {
 
         let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
 
-        // Ensured that null_mut is used if the Option is None for fd_set parameters.
-        let ret = unsafe {
-            libc::select(
-                realnewnfds as i32,
-                &mut real_readfds as *mut _,
-                &mut real_writefds as *mut _,
-                &mut real_errorfds as *mut _,
-                &mut timeout as *mut timeval,
-            )
-        };
+        let start_time = interface::starttimer();
+        let (duration, mut timeout) = interface::timeout_setup(rposix_timeout);
+        let mut ret;
+        loop {
+            let mut tmp_readfds = real_readfds.clone();
+            let mut tmp_writefds = real_writefds.clone();
+            let mut tmp_errorfds = real_errorfds.clone();
+            // Ensured that null_mut is used if the Option is None for fd_set parameters.
+            ret = unsafe {
+                libc::select(
+                    realnewnfds as i32,
+                    &mut tmp_readfds as *mut _,
+                    &mut tmp_writefds as *mut _,
+                    &mut tmp_errorfds as *mut _,
+                    &mut timeout as *mut timeval,
+                )
+            };
 
-        if ret < 0 {
-            let errno = get_errno();
-            return handle_errno(errno, "select");
+            if ret < 0 {
+                let errno = get_errno();
+                return handle_errno(errno, "select");
+            }
+
+            // check for timeout
+            if ret > 0 || interface::readtimer(start_time) > duration {
+                real_readfds = tmp_readfds;
+                real_writefds = tmp_writefds;
+                real_errorfds = tmp_errorfds;
+                break;
+            }
+
+            // check for signals
+            if signal_check_trigger(self.cageid) {
+                return syscall_error(Errno::EINTR, "select", "interrupted");
+            }
         }
 
         let mut unreal_read = HashSet::new();
@@ -887,24 +895,43 @@ impl Cage {
         for (fd_kind, fdtuple) in allhashmap {
             match fd_kind {
                 FDKIND_KERNEL => {
-                    for (virtfd, _entry) in fdtuple {
+                    for (virtfd, entry) in fdtuple {
                         if let Some(vpollstruct) =
                             virtual_fds.iter().find(|&ps| ps.fd == virtfd as i32)
                         {
                             // Convert PollStruct to libc::pollfd
-                            let libcpollstruct = self.convert_to_libc_pollfd(vpollstruct);
+                            let mut libcpollstruct = self.convert_to_libc_pollfd(vpollstruct);
+                            libcpollstruct.fd = entry.underfd as i32;
                             libc_pollfds.push(libcpollstruct);
                             libc_nfds = libc_nfds + 1;
                         }
                     }
                     if libc_nfds != 0 {
-                        let ret = unsafe {
-                            libc::poll(libc_pollfds.as_mut_ptr(), libc_nfds as u64, timeout)
-                        };
-                        if ret < 0 {
-                            let errno = get_errno();
-                            return handle_errno(errno, "poll");
+                        let start_time = interface::starttimer();
+                        let (duration, timeout) = interface::timeout_setup_ms(timeout);
+
+                        let mut ret;
+                        loop {
+                            ret = unsafe {
+                                libc::poll(libc_pollfds.as_mut_ptr(), libc_nfds as u64, timeout)
+                            };
+
+                            if ret < 0 {
+                                let errno = get_errno();
+                                return handle_errno(errno, "poll");
+                            }
+
+                            // check for timeout
+                            if ret > 0 || interface::readtimer(start_time) > duration {
+                                break;
+                            }
+
+                            // check for signal
+                            if signal_check_trigger(self.cageid) {
+                                return syscall_error(Errno::EINTR, "poll", "interrupted");
+                            }
                         }
+
                         // Convert back to PollStruct
                         for (i, libcpoll) in libc_pollfds.iter().enumerate() {
                             if let Some(rposix_poll) = virtual_fds.get_mut(i) {
