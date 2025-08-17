@@ -657,6 +657,7 @@ impl Cage {
         level: i32,
         optname: i32,
         optval: &mut i32,
+        optlen: u32,
     ) -> i32 {
         let wrappedvfd = fdtables::translate_virtual_fd(self.cageid, virtual_fd as u64);
         if wrappedvfd.is_err() {

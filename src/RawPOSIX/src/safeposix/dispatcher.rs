@@ -1022,7 +1022,8 @@ pub fn lind_syscall_api(
             // Convert user space buffer address to physical address
             let optval_ptr = translate_vmmap_addr(&cage, arg4).unwrap() as *mut i32;
             let optval = unsafe { &mut *optval_ptr };
-            cage.getsockopt_syscall(virtual_fd, level, optname, optval)
+            let optlen = arg5 as u32;
+            cage.getsockopt_syscall(virtual_fd, level, optname, optval, optlen)
         }
 
         SOCKETPAIR_SYSCALL => {
