@@ -201,7 +201,7 @@ impl Cage {
      *   into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
      *   zombie list and retrieve the first entry from it (first in, first out).
      */
-    pub fn waitpid_syscall(&self, cageid: i32, status: &mut i32, options: i32) -> i32 {
+    pub fn waitpid_syscall(&self, cageid: i32, status: Option<&mut i32>, options: i32) -> i32 {
         let mut zombies = self.zombies.write();
         let child_num = self.child_num.load(interface::RustAtomicOrdering::Relaxed);
 
@@ -311,13 +311,13 @@ impl Cage {
         // reach here means we already found the desired exited child
         let zombie = zombie_opt.unwrap();
         // update the status
-        *status = zombie.exit_code;
+        let _ = status.map(|st| *st = zombie.exit_code);
 
         // return child's cageid
         zombie.cageid as i32
     }
 
-    pub fn wait_syscall(&self, status: &mut i32) -> i32 {
+    pub fn wait_syscall(&self, status: Option<&mut i32>) -> i32 {
         self.waitpid_syscall(0, status, 0)
     }
 
@@ -336,7 +336,7 @@ impl Cage {
         if self.getgid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getgid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
-            return -1;
+            return DEFAULT_GID as i32;
         }
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
@@ -344,7 +344,7 @@ impl Cage {
         if self.getegid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getegid
                 .store(DEFAULT_GID as i32, interface::RustAtomicOrdering::Relaxed);
-            return -1;
+            return DEFAULT_GID as i32;
         }
         DEFAULT_GID as i32 //Lind is only run in one group so a default value is returned
     }
@@ -353,7 +353,7 @@ impl Cage {
         if self.getuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.getuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
-            return -1;
+            return DEFAULT_UID as i32;
         }
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
@@ -361,7 +361,7 @@ impl Cage {
         if self.geteuid.load(interface::RustAtomicOrdering::Relaxed) == -1 {
             self.geteuid
                 .store(DEFAULT_UID as i32, interface::RustAtomicOrdering::Relaxed);
-            return -1;
+            return DEFAULT_UID as i32;
         }
         DEFAULT_UID as i32 //Lind is only run as one user so a default value is returned
     }
@@ -406,6 +406,15 @@ impl Cage {
         if (sig < 0) || (sig >= 32) {
             return syscall_error(Errno::EINVAL, "sigkill", "Invalid signal number");
         }
+
+        // if cage id is 0, send signal to itself
+        let cage_id = {
+            if cage_id == 0 {
+                self.cageid
+            } else {
+                cage_id as u64
+            }
+        };
 
         if !lind_send_signal(cage_id as u64, sig) {
             return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");

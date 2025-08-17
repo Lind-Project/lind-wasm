@@ -1089,18 +1089,30 @@ pub fn lind_syscall_api(
 
         WAIT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
-            // Convert user space buffer address to physical address
-            let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
-            let status = interface::get_i32_ref(status_addr).unwrap();
+            // status could possibly be NULL
+            let status = {
+                if arg1 == 0 {
+                    None
+                } else {
+                    let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
+                    Some(interface::get_i32_ref(status_addr).unwrap())
+                }
+            };
             cage.wait_syscall(status)
         }
 
         WAITPID_SYSCALL => {
             let pid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
-            // Convert user space buffer address to physical address
-            let status_addr = translate_vmmap_addr(&cage, arg2).unwrap();
-            let status = interface::get_i32_ref(status_addr).unwrap();
+            // status could possibly be NULL
+            let status = {
+                if arg2 == 0 {
+                    None
+                } else {
+                    let status_addr = translate_vmmap_addr(&cage, arg2).unwrap() as u64;
+                    Some(interface::get_i32_ref(status_addr).unwrap())
+                }
+            };
             let options = arg3 as i32;
 
             cage.waitpid_syscall(pid, status, options)
