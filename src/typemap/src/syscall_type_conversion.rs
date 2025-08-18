@@ -88,6 +88,9 @@ pub fn get_i32(arg: u64, arg_cageid: u64, cageid: u64) -> i32 {
         panic!("Invalide Cage ID");
     }
 
+    // Check if the upper 32 bits are all 0,
+    // if so, we can safely convert it to u32
+    // Otherwise, we will panic
     if (arg & 0xFFFFFFFF_00000000) != 1 {
         return (arg & 0xFFFFFFFF) as i32;
     }
@@ -132,6 +135,9 @@ pub fn get_u32(arg: u64, arg_cageid: u64, cageid: u64) -> u32 {
         panic!("Invalide Cage ID");
     }
 
+    // Check if the upper 32 bits are all 0,
+    // if so, we can safely convert it to u32
+    // Otherwise, we will panic
     if (arg & 0xFFFFFFFF_00000000) != 1 {
         return (arg & 0xFFFFFFFF) as u32;
     }

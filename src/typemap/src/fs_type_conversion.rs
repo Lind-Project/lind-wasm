@@ -9,7 +9,7 @@ pub use std::ffi::{CStr, CString};
 use std::path::Component;
 use std::path::PathBuf;
 pub use std::{mem, ptr};
-pub use sysdefs::constants::fs_const;
+pub use sysdefs::constants::{fs_const, err_const};
 
 /// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
 /// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
@@ -109,13 +109,13 @@ pub fn convert_fd_to_host(virtual_fd: u64, arg_cageid: u64, cageid: u64) -> i32 
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            return -1;
+            return -EINVAL;
         }
     }
     // Find corresponding virtual fd instance from `fdtable` subsystem
     let wrappedvfd = fdtables::translate_virtual_fd(arg_cageid, virtual_fd);
     if wrappedvfd.is_err() {
-        return -9;
+        return -EBADF;
     }
     let vfd = wrappedvfd.unwrap();
     // Actual kernel fd mapped with provided virtual fd
