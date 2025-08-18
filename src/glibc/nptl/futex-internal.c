@@ -42,7 +42,7 @@ __futex_abstimed_wait_common32 (unsigned int* futex_word,
     }
 
     // replace with lind syscall
-    return MAKE_RAW_SYSCALL(FUTEX_SYSCALL"syscall|futex", (uint64_t) futex_word, (uint64_t) op, (uint64_t) expected, (uint64_t)pts32, 0, (uint64_t)0);
+    return MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", (uint64_t) futex_word, (uint64_t) op, (uint64_t) expected, (uint64_t)pts32, 0, (uint64_t)0);
 }
 #endif /* ! __ASSUME_TIME64_SYSCALLS */
 
