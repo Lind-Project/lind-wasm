@@ -657,6 +657,85 @@ pub fn sync_file_range_syscall(
     ret
 }
 
+//------------------------------------READLINKAT SYSCALL------------------------------------
+pub fn readlinkat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    buflen_arg: u64,
+    buflen_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "readlinkat", "Invalid Cage ID");
+    }
+
+    let libc_buflen = buflen + LIND_ROOT.len();
+    let mut libc_buf = vec![0u8; libc_buflen];
+    
+    let libcret = if virtual_fd == libc::AT_FDCWD {
+        // Case 1: AT_FDCWD - path is already converted by sc_convert_path_to_host
+        unsafe {
+            libc::readlink(
+                path.as_ptr(),
+                libc_buf.as_mut_ptr() as *mut c_char,
+                libc_buflen,
+            )
+        }
+    } else {
+        // Case 2: Specific directory fd
+        let kernel_fd = convert_fd_to_host(virtual_fd, dirfd_cageid, cageid);
+        if kernel_fd == -1 {
+            return syscall_error(Errno::EFAULT, "readlinkat", "Invalid Cage ID");
+        } else if kernel_fd == -9 {
+            return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
+        }
+
+        // path is already converted by sc_convert_path_to_host
+        unsafe {
+            libc::readlinkat(
+                kernel_fd,
+                path.as_ptr(),
+                libc_buf.as_mut_ptr() as *mut c_char,
+                libc_buflen,
+            )
+        }
+    };
+
+    if libcret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "readlinkat");
+    }
+
+    // Copy result to user buffer (simplified version)
+    let result_len = libcret.min(buflen as i32);
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            libc_buf.as_ptr(),
+            buf as *mut u8,
+            result_len as usize,
+        );
+    }
+
+    result_len
+}
+
 //------------------RENAME SYSCALL------------------
 /*
  *   rename() will return 0 when sucess, -1 when fail
