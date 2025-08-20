@@ -420,7 +420,21 @@ pub fn lseek_syscall(
 
 //------------------------------------LINK SYSCALL------------------------------------
 /*
- *   link() will return 0 when success and -1 when fail
+ *  `link` creates a hard link to an existing file.
+ *  Reference: https://man7.org/linux/man-pages/man2/link.2.html
+ *
+ *  ## Arguments:
+ *   - `oldpath`: Path to the existing file.
+ *   - `newpath`: Path where the hard link will be created.
+ *
+ *  ## Implementation Details:
+ *   - Both paths are converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The underlying libc::link() is called with both converted paths.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
  */
 pub fn link_syscall(
     cageid: u64,
@@ -461,7 +475,23 @@ pub fn link_syscall(
 
 //------------------------------------XSTAT SYSCALL------------------------------------
 /*
- *   xstat() will return 0 when success and -1 when fail
+ *  `xstat` retrieves file status information (versioned stat interface).
+ *  Reference: https://man7.org/linux/man-pages/man2/stat.2.html
+ *
+ *  ## Arguments:
+ *   - `vers`: Version parameter for stat structure compatibility.
+ *   - `pathname`: Path to the file to get status information for.
+ *   - `statbuf`: Buffer to store the file status information.
+ *
+ *  ## Implementation Details:
+ *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The statbuf buffer is converted from WASM address to host address using `sc_convert_addr_to_host`.
+ *   - The underlying libc::stat() is called and results are copied to the user buffer.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
  */
 pub fn xstat_syscall(
     cageid: u64,
@@ -510,8 +540,20 @@ pub fn xstat_syscall(
 
 //------------------------------------FSYNC SYSCALL------------------------------------
 /*
- *   Get the kernel fd with provided virtual fd first
- *   fsync() will return 0 when sucess, -1 when fail
+ *  `fsync` synchronizes a file's in-core state with storage device.
+ *  Reference: https://man7.org/linux/man-pages/man2/fsync.2.html
+ *
+ *  ## Arguments:
+ *   - `fd`: File descriptor to synchronize.
+ *
+ *  ## Implementation Details:
+ *   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+ *   - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
+ *   - The underlying libc::fsync() is called, which synchronizes both file data and metadata.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
  */
 pub fn fsync_syscall(
     cageid: u64,
@@ -559,8 +601,21 @@ pub fn fsync_syscall(
 
 //------------------------------------FDATASYNC SYSCALL------------------------------------
 /*
- *   Get the kernel fd with provided virtual fd first
- *   fdatasync() will return 0 when sucess, -1 when fail
+ *  `fdatasync` synchronizes a file's data to storage device (but not metadata).
+ *  Reference: https://man7.org/linux/man-pages/man2/fdatasync.2.html
+ *
+ *  ## Arguments:
+ *   - `fd`: File descriptor to synchronize.
+ *
+ *  ## Implementation Details:
+ *   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+ *   - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
+ *   - The underlying libc::fdatasync() is called, which synchronizes only file data (not metadata
+ *     like timestamps), making it potentially faster than fsync().
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
  */
 pub fn fdatasync_syscall(
     cageid: u64,
@@ -608,8 +663,24 @@ pub fn fdatasync_syscall(
 
 //------------------------------------SYNC_FILE_RANGE SYSCALL------------------------------------
 /*
- *   Get the kernel fd with provided virtual fd first
- *   sync_file_range() will return 0 when sucess, -1 when fail
+ *  `sync_file_range` synchronizes a specific range of bytes in a file to storage device.
+ *  Reference: https://man7.org/linux/man-pages/man2/sync_file_range.2.html
+ *
+ *  ## Arguments:
+ *   - `fd`: File descriptor to synchronize.
+ *   - `offset`: Starting byte offset for the range to sync.
+ *   - `nbytes`: Number of bytes to synchronize.
+ *   - `flags`: Flags controlling the synchronization behavior.
+ *
+ *  ## Implementation Details:
+ *   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+ *   - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
+ *   - The underlying libc::sync_file_range() is called with the specified byte range and flags.
+ *   - This is more efficient than fsync() for large files when only a specific range needs syncing.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
  */
 pub fn sync_file_range_syscall(
     cageid: u64,
@@ -658,6 +729,30 @@ pub fn sync_file_range_syscall(
 }
 
 //------------------------------------READLINKAT SYSCALL------------------------------------
+/*
+ *  `readlinkat` reads the value of a symbolic link relative to a directory file descriptor.
+ *  Reference: https://man7.org/linux/man-pages/man2/readlinkat.2.html
+ *
+ *  ## Arguments:
+ *   - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
+ *   - `pathname`: Path to the symbolic link (relative to dirfd).
+ *   - `buf`: Buffer to store the link target.
+ *   - `bufsiz`: Size of the buffer.
+ *
+ *  There are two cases:
+ *  Case 1: When `dirfd` is AT_FDCWD:
+ *    - The path is converted using `sc_convert_path_to_host` and libc::readlink() is called.
+ *    - This uses the current working directory as the base for relative paths.
+ *
+ *  Case 2: When `dirfd` is not AT_FDCWD:
+ *    - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+ *    - The path is converted using `sc_convert_path_to_host` and libc::readlinkat() is called.
+ *    - This reads the symlink relative to the specified directory.
+ *
+ *  ## Return Value:
+ *   - Number of bytes placed in `buf` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
 pub fn readlinkat_syscall(
     cageid: u64,
     dirfd_arg: u64,
@@ -738,7 +833,22 @@ pub fn readlinkat_syscall(
 
 //------------------RENAME SYSCALL------------------
 /*
- *   rename() will return 0 when sucess, -1 when fail
+ *  `rename` changes the name or location of a file.
+ *  Reference: https://man7.org/linux/man-pages/man2/rename.2.html
+ *
+ *  ## Arguments:
+ *   - `oldpath`: Current path of the file.
+ *   - `newpath`: New path for the file.
+ *
+ *  ## Implementation Details:
+ *   - Both paths are converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The underlying libc::rename() is called with both converted paths.
+ *   - This can move files across directories within the same filesystem.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
  */
 pub fn rename_syscall(
     cageid: u64,
@@ -779,7 +889,20 @@ pub fn rename_syscall(
 
 //------------------------------------UNLINK SYSCALL------------------------------------
 /*
- *   unlink() will return 0 when success and -1 when fail
+ *  `unlink` removes a file from the filesystem.
+ *  Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+ *
+ *  ## Arguments:
+ *   - `pathname`: Path to the file to be removed.
+ *
+ *  ## Implementation Details:
+ *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The underlying libc::unlink() is called with the converted path.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
  */
 pub fn unlink_syscall(
     cageid: u64,
@@ -1861,9 +1984,23 @@ pub fn nanosleep_time64_syscall(
 }
 
 //------------------------------------ACCESS SYSCALL------------------------------------
-/// 
-/// Tests file accessibility according to the real user ID and real group ID.
-/// Returns 0 if the file is accessible according to the specified mode, -1 otherwise.
+/*
+ *  `access` checks whether the calling process can access the file pathname.
+ *  Reference: https://man7.org/linux/man-pages/man2/access.2.html
+ *
+ *  ## Arguments:
+ *   - `pathname`: Path to the file to check accessibility.
+ *   - `mode`: Accessibility check mode (F_OK, R_OK, W_OK, X_OK or combinations).
+ *
+ *  ## Implementation Details:
+ *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The mode parameter is passed directly to the underlying libc::access() call.
+ *
+ *  ## Return Value:
+ *   - `0` on success (file is accessible in the requested mode).
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
 pub fn access_syscall(
     cageid: u64,
     path_arg: u64,
