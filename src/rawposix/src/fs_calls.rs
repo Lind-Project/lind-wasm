@@ -816,17 +816,24 @@ pub fn readlinkat_syscall(
         return handle_errno(errno, "readlinkat");
     }
 
-    // Copy result to user buffer (simplified version)
-    let result_len = libcret.min(buflen as i32);
+    // Convert the result from readlink to a Rust string
+    let libcbuf_str = unsafe { CStr::from_ptr(libc_buf.as_ptr() as *const c_char) }
+        .to_str()
+        .unwrap();
+
+    // Adjust the result to remove LIND_ROOT prefix if present
+    let new_root = format!("{}/", LIND_ROOT);
+    let final_result = libcbuf_str
+        .strip_prefix(&new_root)
+        .unwrap_or(libcbuf_str);
+
+    // Check the length and copy the appropriate amount of data to buf
+    let bytes_to_copy = std::cmp::min(buflen, final_result.len());
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            libc_buf.as_ptr(),
-            buf as *mut u8,
-            result_len as usize,
-        );
+        std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf as *mut u8, bytes_to_copy);
     }
 
-    result_len
+    bytes_to_copy as i32
 }
 
 //------------------RENAME SYSCALL------------------
