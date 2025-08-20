@@ -64,7 +64,7 @@ impl LindCommonCtx {
             let slice = std::slice::from_raw_parts(call_name_ptr, len);
             let call_name_str = std::str::from_utf8_unchecked(slice);
 
-            if call_number == 2 {
+            if call_number == 10 {
                 let arg1_ptr = (arg1 + start_address) as *const u8;
                 let mut arg1_len = 0;
                 while *arg1_ptr.add(arg1_len) != 0 {

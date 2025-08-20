@@ -12,6 +12,7 @@ use std::error::Error;
 use std::str::Utf8Error;
 use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::fs_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::data::fs_struct::SigsetType;
 
 /// This function provides two operations: first, it translates path pointer address from WASM environment
 /// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
@@ -220,7 +221,7 @@ pub fn sc_convert_sysarg_to_u32(arg: u64, arg_cageid: u64, cageid: u64) -> u32 {
     return arg as u32;
 
     #[cfg(feature = "secure")]
-    return get_u32(arg);
+    return get_u32(arg, arg_cageid, cageid);
 }
 
 /// `sc_convert_sysarg_to_isize` is the type conversion function used to convert the
@@ -326,9 +327,41 @@ pub fn sc_unusedarg(arg: u64, arg_cageid: u64) -> bool {
 ///     - buf: actual system address, which is the actual position that stores data
 pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     // Get cage reference to translate address
-    let cage = get_cage(arg_cageid).unwrap();
+    let cage = get_cage(cageid).unwrap();
     // Convert user buffer address to system address. We don't need to check permission here.
     // Permission check has been handled in 3i
     let buf = translate_vmmap_addr(&cage, buf_arg).unwrap() as *const u8;
     buf
+}
+
+pub fn get_constsigset<'a>(generic_argument: u64) -> Result<Option<&'static mut SigsetType>, i32> {
+    let pointer = generic_argument as *mut SigsetType;
+
+    if !pointer.is_null() {
+        Ok(Some(unsafe { &mut *pointer }))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn sc_convert_sigset(set_arg: u64, set_cageid: u64, cageid: u64) -> Option<&'static mut SigsetType> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(set_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    if set_arg == 0 {
+        return None; // If the argument is 0, return None
+    } else {
+        let cage = get_cage(set_cageid).unwrap();
+        match translate_vmmap_addr(&cage, set_arg) {
+            Ok(addr) => match get_constsigset(addr) {
+                Ok(val) => return val,
+                Err(_) => panic!("Failed to get SigsetType from address"),
+            }
+            Err(_) => panic!("Failed to get SigsetType from address"), // If translation fails, return None
+        }
+    }
 }

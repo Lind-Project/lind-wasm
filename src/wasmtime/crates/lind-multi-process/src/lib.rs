@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Context};
 use threei::threei::make_syscall;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
@@ -16,6 +16,9 @@ use wasmtime::{
     InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Trap, Val,
 };
 
+use std::fs::File;
+use std::io::Read;
+
 use wasmtime_environ::MemoryIndex;
 use cage::signal::{lind_signal_init, lind_thread_exit};
 
@@ -30,7 +33,7 @@ const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
 
-const LIND_FS_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
+const LIND_FS_ROOT: &str = "/home/alice/lind-wasm/src/RawPOSIX/tmp";
 
 const UNWIND_METADATA_SIZE: u64 = 16;
 
@@ -66,7 +69,10 @@ pub struct LindCtx<T, U> {
     lind_manager: Arc<LindCageManager>,
 
     // from run.rs, used for exec call
-    run_command: U,
+    // run_command: U,
+    // run_command: U,
+    webasm: Vec<u8>,
+    config: U,
 
     // get LindCtx from host
     get_cx: Arc<dyn Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static>,
@@ -77,6 +83,7 @@ pub struct LindCtx<T, U> {
     // exec the host
     exec_host: Arc<
         dyn Fn(
+                &Vec<u8>,
                 &U,
                 &str,
                 &Vec<String>,
@@ -110,11 +117,14 @@ impl<
         module: Module,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
-        run_command: U,
+        // run_command: U,
+        webasm: Vec<u8>,
+        config: U,
         next_cageid: Arc<AtomicU64>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
+                &Vec<u8>,
                 &U,
                 &str,
                 &Vec<String>,
@@ -146,7 +156,9 @@ impl<
             next_cageid,
             next_threadid,
             lind_manager: lind_manager.clone(),
-            run_command,
+            // run_command,
+            webasm,
+            config,
             get_cx,
             fork_host,
             exec_host,
@@ -168,12 +180,15 @@ impl<
         module: Module,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
-        run_command: U,
+        // run_command: U,
+        webasm: Vec<u8>,
+        config: U,
         pid: i32,
         next_cageid: Arc<AtomicU64>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
+                &Vec<u8>,
                 &U,
                 &str,
                 &Vec<String>,
@@ -201,7 +216,9 @@ impl<
             next_cageid,
             next_threadid,
             lind_manager: lind_manager.clone(),
-            run_command,
+            // run_command,
+            webasm,
+            config,
             get_cx,
             fork_host,
             exec_host,
@@ -979,7 +996,13 @@ impl<
 
         let store = caller.as_context_mut().0;
 
-        let cloned_run_command = self.run_command.clone();
+        // let cloned_run_command = self.run_command.clone();
+        let mut exec_file = File::open(&real_path_str)
+            .expect("Failed to open exec file");
+        let mut exec_webasm = Vec::new();
+        exec_file.read_to_end(&mut exec_webasm).context("Failed to read exec file")?;
+
+        let cloned_config = self.config.clone();
         let cloned_next_cageid = self.next_cageid.clone();
         let cloned_lind_manager = self.lind_manager.clone();
         let cloned_pid = self.pid;
@@ -1017,7 +1040,9 @@ impl<
             );
 
             let ret = exec_call(
-                &cloned_run_command,
+                // &cloned_run_command,
+                &exec_webasm,
+                &cloned_config,
                 &real_path_str,
                 &args,
                 cloned_pid,
@@ -1325,7 +1350,9 @@ impl<
             next_cageid: self.next_cageid.clone(),
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
-            run_command: self.run_command.clone(),
+            // run_command: self.run_command.clone(),
+            webasm: self.webasm.clone(),
+            config: self.config.clone(),
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
