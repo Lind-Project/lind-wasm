@@ -19,7 +19,6 @@ use sysdefs::constants::fs_const::{
 use std::ffi::CString;
 use typemap::syscall_type_conversion::*;
 use typemap::{get_pipearray, sc_convert_path_to_host, convert_fd_to_host};
-use typemap::fs_type_conversion::{convpath, normpath};
 
 
 /// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't
@@ -2046,19 +2045,13 @@ pub fn access_syscall(
  *   - `pathname`: Path of the file/directory to be removed.
  *   - `flags`: Can include `AT_REMOVEDIR` to indicate directory removal.
  *
- *  There are two cases:
- *  Case 1: When `dirfd` is AT_FDCWD:
- *    - RawPOSIX maintains its own notion of the current working directory.
- *    - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
- *      path by prepending the LIND_ROOT prefix.
- *    - After this conversion, the path is already absolute from the host's perspective, so `AT_FDCWD`
- *     doesn't actually rely on the host's working directory. This avoids mismatches between RawPOSIX
- *     and the host environment.
- *
- *  Case 2: When `dirfd` is not AT_FDCWD:
- *    - We translate the RawPOSIX virtual file descriptor to the corresponding kernel file descriptor.
- *    - In this case, we simply create a C string from the provided `pathname` (without further conversion)
- *      and let the underlying kernel call resolve the path relative to the directory represented by that fd.
+ *  ## Implementation Details:
+ *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - For the `dirfd` parameter, if it's `AT_FDCWD`, the path conversion uses the current working directory.
+ *   - If `dirfd` is not `AT_FDCWD`, the virtual file descriptor is converted using `convert_fd_to_host`
+ *     and `unlinkat` is called relative to that directory.
+ *   - The `flags` parameter can include `AT_REMOVEDIR` to remove directories instead of files.
  *
  *   ## Return Value:
  *   - `0` on success.
