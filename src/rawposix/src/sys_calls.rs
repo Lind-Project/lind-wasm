@@ -628,41 +628,6 @@ pub fn exec_syscall(
     0
 }
 
-pub fn sigprocmask_syscall(
-    cageid: u64,
-    how_arg: u64,
-    how_cageid: u64,
-    set_arg: u64,
-    set_cageid: u64,
-    oldset_arg: u64,
-    oldset_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
-    let set = sc_convert_sigset(set_arg, set_cageid, cageid);
-    let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
-    if !(sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "sigprocmask_syscall", "Invalide Cage ID");
-    }
-
-    let cage = get_cage(cageid).unwrap();
-
-    let ret = unsafe { libc::bind(fd, finalsockaddr, addrlen) };
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "bind");
-    }
-    ret
-}
-
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/connect.2.html
 ///
 /// The Linux `connect()` syscall connects a socket referred to by a file descriptor to the specified
