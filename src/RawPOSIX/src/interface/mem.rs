@@ -50,9 +50,6 @@ pub fn round_up_page(length: u64) -> u64 {
 /// * `parent_vmmap` - vmmap struct of parent
 /// * `child_vmmap` - vmmap struct of child
 pub fn fork_vmmap(parent_vmmap: &Vmmap, child_vmmap: &Vmmap) {
-    let parent_base = parent_vmmap.base_address.unwrap();
-    let child_base = child_vmmap.base_address.unwrap();
-
     // iterate through each vmmap entry
     for (_interval, entry) in parent_vmmap.entries.iter() {
         // translate page number to user address
@@ -633,6 +630,7 @@ pub fn brk_handler(cageid: u64, brk: u32) -> i32 {
     }
 
     // update vmmap entry
+    vmmap.remove_entry(0, old_brk_page);
     let _ = vmmap.add_entry_with_overwrite(
         0,
         brk_page,
