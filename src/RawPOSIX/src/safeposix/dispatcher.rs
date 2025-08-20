@@ -1,5 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+// RawPOSIX syscall dispatcher table
+// Source of truth for syscall numbers: Linux x86_64 syscall table
+//   https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
+// Keep these in sync with glibc's lind_syscall_num.h and Wasmtime's lind_syscall_numbers.rs
 // retreive cage table
 
 const ACCESS_SYSCALL: i32 = 21;

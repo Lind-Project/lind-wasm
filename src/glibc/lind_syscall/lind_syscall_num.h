@@ -4,8 +4,9 @@
  * This file contains syscall number constants used by Lind WASM to map
  * between glibc function calls and the corresponding system calls.
  *
- * These syscall numbers also align with the Linux syscall table.
- * Reference: https://filippo.io/linux-syscall-table/
+ * Source of truth: Linux x86_64 syscall table. Keep these values aligned with:
+ *   https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
+ * (Also see the historical summary: https://filippo.io/linux-syscall-table/)
  */
 
 #ifndef _LIND_SYSCALL_NUM_H
