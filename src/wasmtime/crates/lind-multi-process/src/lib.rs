@@ -376,6 +376,7 @@ impl<
         // set up unwind callback function
         let store = caller.as_context_mut().0;
         let signal_asyncify_data = store.get_signal_asyncify_data();
+        let syscall_asyncify_data = store.get_syscall_asyncify_data();
         let is_parent_thread = store.is_thread();
         store.set_on_called(Box::new(move |mut store| {
             // unwind finished and we need to stop the unwind
@@ -442,6 +443,11 @@ impl<
 
                     barrier_clone.wait();
 
+                    let stack_pointer_setter = instance
+                        .get_typed_func::<i32, ()>(&mut store, "set_stack_pointer")
+                        .unwrap();
+                    let _ = stack_pointer_setter.call(&mut store, stack_pointer as i32);
+
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
 
@@ -482,6 +488,9 @@ impl<
                         store
                             .as_context_mut()
                             .set_signal_asyncify_data(signal_asyncify_data);
+                        store
+                            .as_context_mut()
+                            .set_syscall_asyncify_data(syscall_asyncify_data);
 
                         let invoke_res = child_start_func.call(&mut store, &values, &mut results);
 
@@ -966,12 +975,9 @@ impl<
             // for exec, we do not need to do rewind after unwinding is done
             store.set_asyncify_state(AsyncifyState::Normal);
 
-            // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
-            // argument to change the process id. If we pass the same cageid, it would cause some error
-            // lind_exec(cloned_pid as u64, cloned_pid as u64);
             lind_syscall_api(
                 cloned_pid as u64,
-                EXEC_SYSCALL as u32, // exec syscall
+                EXEC_SYSCALL as u32,
                 0,
                 0,
                 0,

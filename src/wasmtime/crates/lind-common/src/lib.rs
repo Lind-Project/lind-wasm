@@ -4,7 +4,7 @@ use anyhow::Result;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use wasmtime::Caller;
+use wasmtime::{AsContext, AsContextMut, AsyncifyState, Caller};
 use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
@@ -42,7 +42,7 @@ impl LindCommonCtx {
         &self,
         call_number: u32,
         call_name: u64,
-        caller: &mut Caller<'_, T>,
+        mut caller: &mut Caller<'_, T>,
         arg1: u64,
         arg2: u64,
         arg3: u64,
@@ -68,17 +68,54 @@ impl LindCommonCtx {
             // exit syscall
             30 => wasmtime_lind_multi_process::exit_syscall(caller, arg1 as i32),
             // other syscalls goes into rawposix
-            _ => lind_syscall_api(
-                self.pid as u64,
-                call_number,
-                call_name,
-                arg1,
-                arg2,
-                arg3,
-                arg4,
-                arg5,
-                arg6,
-            ),
+            _ => {
+                // if we are reaching here at rewind state, that means fork is called within
+                // syscall interrupted signals. We should restore the return value of syscall
+                if let AsyncifyState::Rewind(_) = caller.as_context().get_asyncify_state() {
+                    // retrieve the return value of last syscall
+                    let retval = caller
+                        .as_context_mut()
+                        .get_current_syscall_rewind_data()
+                        .unwrap();
+                    // let signal handler finish rest of the rewinding process
+                    wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+                    // return the return value of last syscall
+                    return retval;
+                }
+
+                let retval = lind_syscall_api(
+                    self.pid as u64,
+                    call_number,
+                    call_name,
+                    arg1,
+                    arg2,
+                    arg3,
+                    arg4,
+                    arg5,
+                    arg6,
+                );
+
+                // Assumption: lind_syscall_api will not switch asyncify state, which holds true for now
+
+                // if the syscall is interrupted by signal
+                if -retval == sysdefs::constants::Errno::EINTR as i32 {
+                    // store the return value of the syscall
+                    caller.as_context_mut().append_syscall_asyncify_data(retval);
+                    // run the signal handler
+                    wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
+
+                    // if fork is invoked within signal handler and switched asyncify state to unwind
+                    if caller.as_context().get_asyncify_state() == AsyncifyState::Unwind {
+                        // return immediately
+                        return 0;
+                    } else {
+                        // otherwise, pop the retval of the syscall
+                        caller.as_context_mut().pop_syscall_asyncify_data();
+                    }
+                }
+
+                retval
+            }
         }
     }
 
@@ -178,9 +215,6 @@ pub fn add_to_linker<
                 arg5,
                 arg6,
             );
-
-            // TODO: add a signal check here as Linux also has a signal check when transition from kernel to userspace
-            // However, Asyncify management in this function should be carefully rethinking if adding signal check here
 
             retval
         },
