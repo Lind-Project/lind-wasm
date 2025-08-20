@@ -7,6 +7,7 @@ use cage::memory::vmmap::{VmmapOps, *};
 use fdtables;
 use libc::*;
 use parking_lot::RwLock;
+use std::ffi::CStr;
 use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
@@ -598,7 +599,7 @@ pub fn fsync_syscall(
         return syscall_error(Errno::EFAULT, "fsync", "Invalid Cage ID");
     }
 
-    let kernel_fd = convert_fd_to_host(virtual_fd, fd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
     if kernel_fd == -1 {
         return syscall_error(Errno::EFAULT, "fsync", "Invalid Cage ID");
     } else if kernel_fd == -9 {
@@ -660,7 +661,7 @@ pub fn fdatasync_syscall(
         return syscall_error(Errno::EFAULT, "fdatasync", "Invalid Cage ID");
     }
 
-    let kernel_fd = convert_fd_to_host(virtual_fd, fd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
     if kernel_fd == -1 {
         return syscall_error(Errno::EFAULT, "fdatasync", "Invalid Cage ID");
     } else if kernel_fd == -9 {
@@ -725,7 +726,7 @@ pub fn sync_file_range_syscall(
         return syscall_error(Errno::EFAULT, "sync_file_range", "Invalid Cage ID");
     }
 
-    let kernel_fd = convert_fd_to_host(virtual_fd, fd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
     if kernel_fd == -1 {
         return syscall_error(Errno::EFAULT, "sync_file_range", "Invalid Cage ID");
     } else if kernel_fd == -9 {
@@ -810,7 +811,7 @@ pub fn readlinkat_syscall(
         }
     } else {
         // Case 2: Specific directory fd
-        let kernel_fd = convert_fd_to_host(virtual_fd, dirfd_cageid, cageid);
+        let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
         if kernel_fd == -1 {
             return syscall_error(Errno::EFAULT, "readlinkat", "Invalid Cage ID");
         } else if kernel_fd == -9 {
