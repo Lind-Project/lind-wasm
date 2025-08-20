@@ -206,7 +206,16 @@ pub fn lind_syscall_api(
             }
             let cage = interface::cagetable_getref(cageid);
             // Convert iovec array address
-            let iov_base = translate_vmmap_addr(&cage, arg2).unwrap() as *const IovecStruct;
+            let iov_base =
+                translate_vmmap_addr(&cage, arg2).unwrap() as *const IovecStruct;
+            // iterate through each iovec pointer and manually do the address conversion
+            for i in 0..iovcnt {
+                let cur_iov_base = unsafe { iov_base.add(i as usize) } as *mut libc::iovec;
+                let old_base = unsafe { (*cur_iov_base).iov_base } as u64;
+                let len = unsafe { (*cur_iov_base).iov_len };
+                let new_base = translate_vmmap_addr(&cage, old_base as u64).unwrap();
+                unsafe { (*cur_iov_base).iov_base = new_base as *mut libc::c_void }
+            }
             // The actual write operation is delegated to the cage implementation
             cage.writev_syscall(fd, iov_base, iovcnt)
         }
