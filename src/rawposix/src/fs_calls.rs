@@ -16,7 +16,6 @@ use sysdefs::constants::fs_const::{
     F_GETFL, F_GETOWN, F_SETOWN, MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED,
     PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, MAXFD, LIND_ROOT
 };
-use std::ffi::CString;
 use typemap::syscall_type_conversion::*;
 use typemap::{get_pipearray, sc_convert_path_to_host, convert_fd_to_host};
 
