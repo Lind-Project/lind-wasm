@@ -64,7 +64,7 @@ const SHMCTL_SYSCALL: i32 = 31;
 
 const PIPE_SYSCALL: i32 = 22;
 const PIPE2_SYSCALL: i32 = 293;
-const FORK_SYSCALL: i32 = 56;
+const FORK_SYSCALL: i32 = 57;
 const EXEC_SYSCALL: i32 = 59;
 
 const MUTEX_CREATE_SYSCALL: i32 = 70;
