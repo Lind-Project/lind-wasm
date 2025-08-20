@@ -20,7 +20,7 @@ use crate::syscall_type_conversion::get_cstr;
 /// variable is not present, then this will expand to None, and will be set to default path.
 pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
     Some(path) => path,
-    None => "/home/alice/lind-wasm/src/RawPOSIX/tmp",
+    None => "/home/lind/lind-wasm/src/RawPOSIX/tmp",
 };
 
 /// Convert data type from `&str` to `PathBuf`
