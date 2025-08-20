@@ -32,8 +32,8 @@ __nl_langinfo_l (nl_item item, locale_t l)
   // Bug: locale related stuff is not working currently
   // this feature is not important so we might look into this later
   // if we want to support it in the future - Qianxi Chen
-  
-  return (char *) "";
+
+  return (char *) "ANSI_X3.4-1968";
   // Lind-Wasm: Original glibc code removed for compatibility
   // to find original source code refer to (2.39.9000) at (locale/nl_langinfo_l.c):(LINE 32-66)
 }
