@@ -16,6 +16,7 @@ use sysdefs::constants::fs_const::{
     F_GETFL, F_GETOWN, F_SETOWN, MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED,
     PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, MAXFD, LIND_ROOT
 };
+use sysdefs::data::fs_struct::StatData;
 use typemap::syscall_type_conversion::*;
 use typemap::{get_pipearray, sc_convert_path_to_host, convert_fd_to_host};
 
@@ -527,10 +528,26 @@ pub fn stat_syscall(
         return handle_errno(errno, "xstat");
     }
 
-    // Copy libc stat data to user buffer
+    // Convert libc stat to StatData and copy to user buffer
     let statbuf_addr = sc_convert_addr_to_host(statbuf_arg, statbuf_cageid, cageid);
+    let statdata = StatData {
+        st_dev: libc_statbuf.st_dev,
+        st_ino: libc_statbuf.st_ino as usize,
+        st_mode: libc_statbuf.st_mode,
+        st_nlink: libc_statbuf.st_nlink as u32,
+        st_uid: libc_statbuf.st_uid,
+        st_gid: libc_statbuf.st_gid,
+        st_rdev: libc_statbuf.st_rdev,
+        st_size: libc_statbuf.st_size as usize,
+        st_blksize: libc_statbuf.st_blksize as i32,
+        st_blocks: libc_statbuf.st_blocks as u32,
+        st_atim: (libc_statbuf.st_atime as u64, libc_statbuf.st_atime_nsec as u64),
+        st_mtim: (libc_statbuf.st_mtime as u64, libc_statbuf.st_mtime_nsec as u64),
+        st_ctim: (libc_statbuf.st_ctime as u64, libc_statbuf.st_ctime_nsec as u64),
+    };
+    
     unsafe {
-        std::ptr::copy_nonoverlapping(&libc_statbuf as *const stat, statbuf_addr as *mut stat, 1);
+        std::ptr::copy_nonoverlapping(&statdata as *const StatData, statbuf_addr as *mut StatData, 1);
     }
 
     libcret
