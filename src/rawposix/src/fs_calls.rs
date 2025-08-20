@@ -554,7 +554,7 @@ pub fn fsync_syscall(
         let errno = get_errno();
         return handle_errno(errno, "fsync");
     }
-    ret
+    return ret;
 }
 
 //------------------RENAME SYSCALL------------------
