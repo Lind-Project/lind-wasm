@@ -20,7 +20,6 @@ use std::ffi::CString;
 use typemap::syscall_type_conversion::*;
 use typemap::{get_pipearray, sc_convert_path_to_host, convert_fd_to_host};
 use typemap::fs_type_conversion::{convpath, normpath};
-use cage::translate_vmmap_addr;
 
 
 /// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't
@@ -1717,9 +1716,7 @@ pub fn unlinkat_syscall(
 ) -> i32 {
     // Type conversion
     let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
-    let cage = get_cage(pathname_cageid).unwrap();
-    let pathname_addr = translate_vmmap_addr(&cage, pathname_arg).unwrap();
-    let pathname = get_cstr(pathname_addr).unwrap();
+    let pathname = sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
     // Validate unused args
@@ -1730,16 +1727,10 @@ pub fn unlinkat_syscall(
         return syscall_error(Errno::EFAULT, "unlinkat", "Invalid Cage ID");
     }
 
-    let mut c_path;
-    // Determine the appropriate kernel file descriptor and pathname conversion based on dirfd.
+    // Determine the appropriate kernel file descriptor based on dirfd.
     let kernel_fd = if dirfd == libc::AT_FDCWD {
         // Case 1: When AT_FDCWD is used.
-        // Convert the provided pathname from the RawPOSIX working directory (which is different from the host's)
-        // into a host-absolute path by prepending LIND_ROOT.
-        let relpath = normpath(convpath(pathname), cageid);
-        let relative_path = relpath.to_str().unwrap();
-        let full_path = format!("{}{}", LIND_ROOT, relative_path);
-        c_path = CString::new(full_path).unwrap();
+        // pathname is already converted by sc_convert_path_to_host
         libc::AT_FDCWD
     } else {
         // Case 2: When a specific directory fd is provided.
@@ -1749,13 +1740,11 @@ pub fn unlinkat_syscall(
             return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
         }
         let vfd = wrappedvfd.unwrap();
-        // For this case, we pass the provided pathname directly.
-        c_path = CString::new(pathname).unwrap();
         vfd.underfd as i32
     };
 
     // Call the underlying libc::unlinkat() function with the fd and pathname.
-    let ret = unsafe { libc::unlinkat(kernel_fd, c_path.as_ptr(), flags) };
+    let ret = unsafe { libc::unlinkat(kernel_fd, pathname.as_ptr(), flags) };
 
     // If the call failed, retrieve and handle the errno
     if ret < 0 {
