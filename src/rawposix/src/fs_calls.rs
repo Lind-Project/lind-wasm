@@ -491,7 +491,7 @@ pub fn link_syscall(
  *   - `0` on success.
  *   - `-1` on failure, with `errno` set appropriately.
  */
-pub fn xstat_syscall(
+pub fn stat_syscall(
     cageid: u64,
     vers_arg: u64,
     vers_cageid: u64,
@@ -697,8 +697,8 @@ pub fn sync_file_range_syscall(
 ) -> i32 {
     // Type conversion
     let virtual_fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
-    let offset = sc_convert_sysarg_to_isize(offset_arg, offset_cageid, cageid);
-    let nbytes = sc_convert_sysarg_to_isize(nbytes_arg, nbytes_cageid, cageid);
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+    let nbytes = sc_convert_sysarg_to_i64(nbytes_arg, nbytes_cageid, cageid);
     let flags = sc_convert_sysarg_to_u32(flags_arg, flags_cageid, cageid);
 
     // Validate unused args
@@ -716,7 +716,7 @@ pub fn sync_file_range_syscall(
     }
 
     let ret = unsafe {
-        libc::sync_file_range(kernel_fd, offset as i64, nbytes as i64, flags)
+        libc::sync_file_range(kernel_fd, offset, nbytes, flags)
     };
 
     if ret < 0 {
