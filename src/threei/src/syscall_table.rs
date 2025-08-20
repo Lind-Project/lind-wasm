@@ -2,11 +2,11 @@ use rawposix::fs_calls::{
     brk_syscall, clock_gettime_syscall, close_syscall, dup2_syscall, fcntl_syscall,
     mkdir_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, dup_syscall, 
     pipe2_syscall, pipe_syscall, sbrk_syscall, write_syscall, futex_syscall, read_syscall,
-    mmap_syscall, lseek_syscall, unlink_syscall    lseek_syscall, unlink_syscall,
+    mmap_syscall, lseek_syscall, unlink_syscall,
 };
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall,
-    send_syscall, recv_syscall, bind_syscall, connect_syscall, listen_syscall, accept_syscall, 
+    connect_syscall, listen_syscall, accept_syscall, 
     setsockopt_syscall, socket_syscall, sigprocmask_syscall,
 };
 use super::threei::Raw_CallFunc;
