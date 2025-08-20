@@ -418,6 +418,51 @@ pub fn lseek_syscall(
     ret as i32
 }
 
+//------------------------------------LINK SYSCALL------------------------------------
+/*
+ *   link() will return 0 when success and -1 when fail
+ */
+pub fn link_syscall(
+    cageid: u64,
+    oldpath_arg: u64,
+    oldpath_cageid: u64,
+    newpath_arg: u64,
+    newpath_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let oldpath = sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid);
+    let newpath = sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "link", "Invalid Cage ID");
+    }
+
+    let ret = unsafe { libc::link(oldpath.as_ptr(), newpath.as_ptr()) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "link");
+    }
+    ret
+}
+
+//------------------------------------UNLINK SYSCALL------------------------------------
+/*
+ *   unlink() will return 0 when success and -1 when fail
+ */
 pub fn unlink_syscall(
     cageid: u64,
     path_arg: u64,
@@ -443,11 +488,11 @@ pub fn unlink_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "unlink", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "unlink", "Invalid Cage ID");
     }
 
     let ret = unsafe { libc::unlink(path.as_ptr()) };
-    
+
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "unlink");
@@ -1497,7 +1542,7 @@ pub fn nanosleep_time64_syscall(
     ret
 }
 
-/// ACCESS syscall implementation
+//------------------------------------ACCESS SYSCALL------------------------------------
 /// 
 /// Tests file accessibility according to the real user ID and real group ID.
 /// Returns 0 if the file is accessible according to the specified mode, -1 otherwise.
