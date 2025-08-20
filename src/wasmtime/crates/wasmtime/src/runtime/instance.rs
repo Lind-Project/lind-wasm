@@ -13,7 +13,7 @@ use crate::{
 use alloc::sync::Arc;
 use core::ptr::NonNull;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
-use sysdefs::constants::fs_const::{
+use sysdefs::constants::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
 use wasmparser::WasmFeatures;
