@@ -14,7 +14,7 @@ use sysdefs::constants::sys_const::DEFAULT_GID;
 use sysdefs::constants::fs_const;
 use sysdefs::constants::fs_const::{
     F_GETFL, F_GETOWN, F_SETOWN, MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED,
-    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, MAXFD, 
+    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, MAXFD
 };
 use typemap::syscall_type_conversion::*;
 use typemap::{get_pipearray, sc_convert_path_to_host, convert_fd_to_host};
@@ -1490,6 +1490,46 @@ pub fn nanosleep_time64_syscall(
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "nanosleep");
+    }
+    ret
+}
+
+/// ACCESS syscall implementation
+/// 
+/// Tests file accessibility according to the real user ID and real group ID.
+/// Returns 0 if the file is accessible according to the specified mode, -1 otherwise.
+pub fn access_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    amode_arg: u64,
+    amode_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    let amode = sc_convert_sysarg_to_i32(amode_arg, amode_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "access", "Invalid Cage ID");
+    }
+
+    let ret = unsafe { libc::access(path.as_ptr(), amode) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "access");
     }
     ret
 }
