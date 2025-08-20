@@ -22,6 +22,7 @@ use typemap::{get_pipearray, sc_convert_path_to_host, convert_fd_to_host};
 use typemap::fs_type_conversion::{convpath, normpath};
 use cage::translate_vmmap_addr;
 
+
 /// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't
 /// be closed in Lind-WASM execution, which preventing issues where other threads might reassign these
 /// fds, causing unintended behavior or errors.
@@ -457,6 +458,55 @@ pub fn link_syscall(
         return handle_errno(errno, "link");
     }
     ret
+}
+
+//------------------------------------XSTAT SYSCALL------------------------------------
+/*
+ *   xstat() will return 0 when success and -1 when fail
+ */
+pub fn xstat_syscall(
+    cageid: u64,
+    vers_arg: u64,
+    vers_cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    statbuf_arg: u64,
+    statbuf_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let _vers = sc_convert_sysarg_to_i32(vers_arg, vers_cageid, cageid);
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "xstat", "Invalid Cage ID");
+    }
+
+    // Declare statbuf by ourselves
+    let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
+    let libcret = unsafe { libc::stat(path.as_ptr(), &mut libc_statbuf) };
+
+    if libcret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "xstat");
+    }
+
+    // Copy libc stat data to user buffer
+    let statbuf_addr = sc_convert_addr_to_host(statbuf_arg, statbuf_cageid, cageid);
+    unsafe {
+        std::ptr::copy_nonoverlapping(&libc_statbuf as *const stat, statbuf_addr as *mut stat, 1);
+    }
+
+    libcret
 }
 
 //------------------RENAME SYSCALL------------------
