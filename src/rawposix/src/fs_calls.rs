@@ -508,6 +508,55 @@ pub fn xstat_syscall(
     libcret
 }
 
+//------------------------------------FSYNC SYSCALL------------------------------------
+/*
+ *   Get the kernel fd with provided virtual fd first
+ *   fsync() will return 0 when sucess, -1 when fail
+ */
+pub fn fsync_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let virtual_fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "fsync", "Invalid Cage ID");
+    }
+
+    let kernel_fd = convert_fd_to_host(virtual_fd, fd_cageid, cageid);
+    if kernel_fd == -1 {
+        return syscall_error(Errno::EFAULT, "fsync", "Invalid Cage ID");
+    } else if kernel_fd == -9 {
+        return syscall_error(Errno::EBADF, "fsync", "Bad File Descriptor");
+    }
+
+    let ret = unsafe { libc::fsync(kernel_fd) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "fsync");
+    }
+    ret
+}
+
 //------------------RENAME SYSCALL------------------
 /*
  *   rename() will return 0 when sucess, -1 when fail
