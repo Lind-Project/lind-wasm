@@ -606,6 +606,57 @@ pub fn fdatasync_syscall(
     return ret;
 }
 
+//------------------------------------SYNC_FILE_RANGE SYSCALL------------------------------------
+/*
+ *   Get the kernel fd with provided virtual fd first
+ *   sync_file_range() will return 0 when sucess, -1 when fail
+ */
+pub fn sync_file_range_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    nbytes_arg: u64,
+    nbytes_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let virtual_fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
+    let offset = sc_convert_sysarg_to_isize(offset_arg, offset_cageid, cageid);
+    let nbytes = sc_convert_sysarg_to_isize(nbytes_arg, nbytes_cageid, cageid);
+    let flags = sc_convert_sysarg_to_u32(flags_arg, flags_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "sync_file_range", "Invalid Cage ID");
+    }
+
+    let kernel_fd = convert_fd_to_host(virtual_fd, fd_cageid, cageid);
+    if kernel_fd == -1 {
+        return syscall_error(Errno::EFAULT, "sync_file_range", "Invalid Cage ID");
+    } else if kernel_fd == -9 {
+        return syscall_error(Errno::EBADF, "sync", "Bad File Descriptor");
+    }
+
+    let ret = unsafe {
+        libc::sync_file_range(kernel_fd, offset as i64, nbytes as i64, flags)
+    };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "sync_file_range");
+    }
+    ret
+}
+
 //------------------RENAME SYSCALL------------------
 /*
  *   rename() will return 0 when sucess, -1 when fail
