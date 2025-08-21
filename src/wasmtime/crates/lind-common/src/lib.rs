@@ -218,6 +218,33 @@ pub fn add_to_linker<
             wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
         },
     )?;
+    
+    // a temporary solution to have libc_assert_fail correctly working
+    linker.func_wrap(
+        "debug",
+        "libc_assert_fail",
+        move |mut caller: Caller<'_, T>, assertion: i32, file: i32, line: i32, function: i32| {
+            let mem_base = get_memory_base(&caller);
+            let assertion = rawposix::interface::get_cstr(mem_base + assertion as u64).unwrap();
+            let file = rawposix::interface::get_cstr(mem_base + file as u64).unwrap();
+            let function = rawposix::interface::get_cstr(mem_base + function as u64).unwrap();
+            eprintln!(
+                "Fatal glibc error: {}:{} ({}): assertion failed: {}\n",
+                assertion, file, line, function
+            );
+        },
+    )?;
+
+    // a temporary solution to have malloc_printerr correctly working
+    linker.func_wrap(
+        "debug",
+        "malloc_printerr",
+        move |mut caller: Caller<'_, T>, msg: i32| {
+            let mem_base = get_memory_base(&caller);
+            let msg = rawposix::interface::get_cstr(mem_base + msg as u64).unwrap();
+            eprintln!("malloc_printerr: {}", msg);
+        },
+    )?;
 
     Ok(())
 }
