@@ -54,8 +54,18 @@ RUN apt-get update && \
 ARG LLVM="llvmorg-18.1.8"
 ARG CLANG="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
 # NOTE: We `curl | tar` in spite of Docker best practices to save cache layers
-RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz | \
-       tar -xvJ
+# RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz | \
+#        tar -xvJ
+SHELL ["/bin/bash","-o","pipefail","-c"]
+
+RUN set -euo pipefail; \
+    tmp=/tmp/${CLANG}.tar.xz; \
+    url="https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz"; \
+    echo "Fetching $url"; \
+    curl -fL --retry 5 --retry-delay 3 -o "$tmp" "$url"; \
+    xz -t "$tmp"; \
+    tar -xJf "$tmp" -C /; \
+    rm -f "$tmp"
 COPY src/glibc/wasi /${CLANG}/lib/clang/18/lib/wasi
 ENV PATH="/${CLANG}/bin:${PATH}"
 
