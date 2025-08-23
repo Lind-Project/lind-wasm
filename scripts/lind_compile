@@ -25,7 +25,7 @@ path_cwasm="${1%.c}.cwasm"
 
 clang --sysroot=${PWD}/src/glibc/sysroot \
     -pthread --target=wasm32-unknown-wasi \
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="signal_callback",--export="__stack_pointer",--export=__stack_low \
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
     "$path_c" -g -O0 -o "$path_wasm"
 
 tools/binaryen/bin/wasm-opt --epoch-injection --asyncify -O2 --debuginfo "$path_wasm" -o "$path_wasm"
