@@ -19,6 +19,7 @@ from pathlib import Path
 import argparse
 import shutil
 import logging
+import tempfile
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -37,13 +38,15 @@ HTML_OUTPUT = "report.html"
 SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will not run
 RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will run
 
-LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
-LIND_FS_ROOT = os.environ.get("LIND_FS_ROOT", "/home/lind/lind-wasm/src/RawPOSIX/tmp")
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
+LIND_FS_ROOT = Path(os.environ.get("LIND_FS_ROOT", LIND_WASM_BASE / "src/RawPOSIX/tmp")).resolve()
 
-LIND_TOOL_PATH = Path(f"{LIND_WASM_BASE}/scripts")
-TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
-TESTFILES_SRC = Path(f"{LIND_WASM_BASE}/tests/testfiles")
-TESTFILES_DST = Path(f"{LIND_FS_ROOT}/testfiles")
+LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
+TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
+TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
+TESTFILES_DST = LIND_FS_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
 NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 EXPECTED_DIRECTORY = Path("./expected")
@@ -170,7 +173,7 @@ def add_test_result(result, file_path, status, error_type, output):
 #   Dependancy on the script `lind_compile`.
 # ----------------------------------------------------------------------
 def compile_c_to_wasm(source_file):
-    source_file = Path(source_file).resolve()
+    source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
     compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
     
@@ -266,7 +269,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 # TODO: Currently for non deterministic cases, we are only compiling and running the test case, success means the compiled test case ran, need to add more specific tests
 # 
 def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    source_file = Path(source_file).resolve()
+    source_file = Path(source_file)
 
     wasm_file, compile_err = compile_c_to_wasm(source_file)
     if wasm_file is None:
@@ -314,7 +317,7 @@ def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_
 #   Cleans up generated files (wasm/cwasm/native output).
 # ----------------------------------------------------------------------
 def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    source_file = Path(source_file).resolve()
+    source_file = Path(source_file)
     expected_output_file = source_file.parent / EXPECTED_DIRECTORY / f"{source_file.stem}.output"
 
     native_output = source_file.parent / f"{source_file.stem}.o"
@@ -406,10 +409,8 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
 #   None
 # ----------------------------------------------------------------------
 def pre_test():
-    os.makedirs(TESTFILES_DST, exist_ok=True) 
-
+    os.makedirs(TESTFILES_DST, exist_ok=True)
     shutil.copytree(TESTFILES_SRC, TESTFILES_DST, dirs_exist_ok=True)
-
     readlinkfile_path = TESTFILES_DST / "readlinkfile.txt"
     symlink_path = TESTFILES_DST / "readlinkfile"
     open(readlinkfile_path, 'a').close()
@@ -612,6 +613,8 @@ def parse_arguments():
     parser.add_argument("--clean-results", action="store_true", help="Flag to clean up result files")
     parser.add_argument("--testfiles", type=Path, nargs = "+", help="Run one or more specific test files")
     parser.add_argument("--debug", action="store_true", help="Enable detailed stdout/stderr output for subprocesses")
+    parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
+    parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
 
     args = parser.parse_args()
     return args
@@ -704,6 +707,8 @@ def main():
     pre_test_only = args.pre_test_only
     clean_testfiles = args.clean_testfiles
     clean_results = args.clean_results
+    artifacts_dir_arg = args.artifacts_dir
+    keep_artifacts = args.keep_artifacts
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
@@ -724,6 +729,16 @@ def main():
         "deterministic": get_empty_result(),
         "non_deterministic": get_empty_result()
     }
+
+    # Prepare artifacts root
+    created_temp_dir = False
+    if artifacts_dir_arg:
+        artifacts_root = artifacts_dir_arg.resolve()
+        artifacts_root.mkdir(parents=True, exist_ok=True)
+    else:
+        artifacts_root = Path(tempfile.mkdtemp(prefix="wasmtest_artifacts_"))
+        created_temp_dir = True
+    logger.debug(f"Artifacts root: {artifacts_root}")
 
     try:
         shutil.rmtree(TESTFILES_DST)
@@ -764,27 +779,47 @@ def main():
         return
 
     total_count = len(tests_to_run)
-    for i, source_file in enumerate(tests_to_run):
-        logger.info(f"[{i+1}/{total_count}] {source_file}")	
-        parent_name = source_file.parent.name
+    for i, original_source in enumerate(tests_to_run):
+        logger.info(f"[{i+1}/{total_count}] {original_source}")
 
-        # checks the name of immediate parent folder to see if a test is deterministic or non deterministic.
+        # Mirror test folder structure inside artifacts_root
+        try:
+            rel_path = original_source.relative_to(TEST_FILE_BASE)
+        except ValueError:
+            rel_path = Path(original_source.name)
+        dest_dir = artifacts_root / rel_path.parent
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_source = dest_dir / original_source.name
+        if not dest_source.exists():
+            try:
+                dest_source.symlink_to(original_source)
+            except OSError:
+                shutil.copy2(original_source, dest_source)
+
+        # Copy expected outputs directory if present
+        expected_dir_src = original_source.parent / EXPECTED_DIRECTORY
+        if expected_dir_src.is_dir():
+            expected_dir_dst = dest_dir / EXPECTED_DIRECTORY
+            if not expected_dir_dst.exists():
+                shutil.copytree(expected_dir_src, expected_dir_dst)
+
+        parent_name = original_source.parent.name
         if parent_name == DETERMINISTIC_PARENT_NAME:
-            test_single_file_deterministic(source_file, results["deterministic"], timeout_sec)
+            test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
         elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
-            test_single_file_non_deterministic(source_file, results["non_deterministic"], timeout_sec)
+            test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
 
-        wasm_file = source_file.with_suffix(".wasm")
-        cwasm_file = source_file.with_suffix(".cwasm")
-        native_file = source_file.with_suffix(".o")
-        if wasm_file and wasm_file.exists():
-            wasm_file.unlink()
-        if cwasm_file and cwasm_file.exists():
-            cwasm_file.unlink()
-        if native_file and native_file.exists():
-            native_file.unlink()
-    
-    shutil.rmtree(TESTFILES_DST) # removes the test files from the lind fs root
+    # Remove testfiles directory from lind fs root
+    try:
+        shutil.rmtree(TESTFILES_DST)
+    except FileNotFoundError:
+        pass
+
+    # Remove artifacts directory if it was temp and not requested to keep
+    if created_temp_dir and not keep_artifacts:
+        shutil.rmtree(artifacts_root, ignore_errors=True)
+    else:
+        logger.info(f"Artifacts retained at: {artifacts_root}")
     
     os.chdir(LIND_WASM_BASE)
     with open(output_file, "w") as fp:
@@ -797,6 +832,8 @@ def main():
         logger.info(f"'{os.path.abspath(output_html_file)}' generated.")	
 
     logger.info(f"'{os.path.abspath(output_file)}' generated.")
+    if keep_artifacts:
+        logger.info("Artifacts kept for troubleshooting.")
 
 if __name__ == "__main__":
     main()
