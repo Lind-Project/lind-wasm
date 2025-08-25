@@ -10,10 +10,6 @@ all: build
 sysroot:
 	./scripts/make_glibc_and_sysroot.sh
 
-.PHONY: sysroot-test
-sysroot-test:
-	READELF=true bash ./scripts/make_glibc_and_sysroot-test.sh
-
 .PHONY: wasmtime
 wasmtime:
 	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
