@@ -20,6 +20,7 @@
 #define _LOWLEVELLOCK_FUTEX_H   1
 
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 #ifndef __ASSEMBLER__
 # include <sysdep.h>
@@ -58,7 +59,7 @@
 
 # define lll_futex_syscall(nargs, futexp, op, ...)                      \
   ({                                                                    \
-    long int __ret = MAKE_RAW_SYSCALL##nargs (98, "syscall|futex", futexp, op, 	\
+    long int __ret = MAKE_RAW_SYSCALL##nargs (FUTEX_SYSCALL, "syscall|futex", futexp, op, 	\
 				       __VA_ARGS__);                    \
     (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (__ret))         	\
      ? -INTERNAL_SYSCALL_ERRNO (__ret) : 0);                     	\

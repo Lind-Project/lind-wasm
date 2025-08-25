@@ -26,6 +26,7 @@
 #include <statx_cp.h>
 #include <shlib-compat.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 #if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
 
@@ -34,7 +35,7 @@
 int
 ___xstat64 (int vers, const char *name, struct stat64 *buf)
 {
-   return MAKE_SYSCALL(9, "syscall|xstat", (uint64_t) vers, (uint64_t) name, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers, (uint64_t) name, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
 }
 
 #if XSTAT_IS_XSTAT64
