@@ -53,9 +53,9 @@ RUN apt-get update && \
 # Install clang
 ARG LLVM="llvmorg-18.1.8"
 ARG CLANG="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
-# NOTE: We `curl | tar` in spite of Docker best practices to save cache layers
-# RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz | \
-#        tar -xvJ
+
+# Add retries and robust protection to curl to prevent transient network issues
+# from causing Docker build failures.
 SHELL ["/bin/bash","-o","pipefail","-c"]
 
 RUN set -euo pipefail; \
