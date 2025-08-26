@@ -365,6 +365,10 @@ pub fn getpid_syscall(
     return cage.cageid as i32;
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man3/getppid.3p.html
+/// 
+/// ## Returns
+/// Get the parent cage ID
 pub fn getppid_syscall(
     cageid: u64,
     arg1: u64,
@@ -394,6 +398,532 @@ pub fn getppid_syscall(
     let cage = get_cage(cageid).unwrap();
 
     return cage.parent as i32;
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getgid.2.html
+///
+/// Retrieves the group id (gid) for the current cage. If the cage's group id is uninitialized (i.e. -1),
+/// then it updates it to a default group id defined in the constants and returns -1.
+pub fn getgid_syscall(
+    cageid: u64,
+    arg1: u64, 
+    arg1_cageid: u64,
+    arg2: u64, 
+    arg2_cageid: u64,
+    arg3: u64, 
+    arg3_cageid: u64,
+    arg4: u64, 
+    arg4_cageid: u64,
+    arg5: u64, 
+    arg5_cageid: u64,
+    arg6: u64, 
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate that unused arguments are indeed unused.
+    if !(sc_unusedarg(arg1, arg1_cageid)
+         && sc_unusedarg(arg2, arg2_cageid)
+         && sc_unusedarg(arg3, arg3_cageid)
+         && sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid)) {
+        return syscall_error(Errno::EFAULT, "getgid", "Invalid arguments");
+    }
+
+    // Get the current cage.
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => return syscall_error(Errno::ECHILD, "getgid", "Cage not found"),
+    };
+
+    // Read the group id stored in the cage.
+    let gid = cage.getgid.load(Relaxed);
+
+    // If the group id is uninitialized (-1), update it to the default and return -1.
+    if gid == -1 {
+        cage.getgid.store(DEFAULT_GID as i32, Relaxed);
+        return -1;
+    }
+
+    // Otherwise, return the default group id
+    DEFAULT_GID as i32
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getegid.2.html
+///
+/// Retrieves the effective group id (egid) for the current cage. If uninitialized (-1),
+/// updates it to a default value and returns -1.
+pub fn getegid_syscall(
+    cageid: u64,
+    arg1: u64, 
+    arg1_cageid: u64,
+    arg2: u64, 
+    arg2_cageid: u64,
+    arg3: u64, 
+    arg3_cageid: u64,
+    arg4: u64, 
+    arg4_cageid: u64,
+    arg5: u64, 
+    arg5_cageid: u64,
+    arg6: u64, 
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate that all extra arguments are unused.
+    if !(sc_unusedarg(arg1, arg1_cageid)
+         && sc_unusedarg(arg2, arg2_cageid)
+         && sc_unusedarg(arg3, arg3_cageid)
+         && sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "getegid", "Invalid arguments");
+    }
+
+    // Retrieve the current cage.
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => return syscall_error(Errno::ECHILD, "getegid", "Cage not found"),
+    };
+
+    // Read the effective group id (egid) from the cage.
+    let egid = cage.getegid.load(Relaxed);
+    if egid == -1 {
+        // If not set, update with the default and return -1.
+        cage.getegid.store(DEFAULT_GID as i32, Relaxed);
+        return -1;
+    }
+
+    // Otherwise, return the default effective group id.
+    DEFAULT_GID as i32
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getuid.2.html
+///
+/// Retrieves the user id (uid) for the current cage. If the cage’s uid is uninitialized (-1),
+/// it updates it to the default user id and returns -1.
+pub fn getuid_syscall(
+    cageid: u64,
+    arg1: u64, 
+    arg1_cageid: u64,
+    arg2: u64, 
+    arg2_cageid: u64,
+    arg3: u64, 
+    arg3_cageid: u64,
+    arg4: u64, 
+    arg4_cageid: u64,
+    arg5: u64, 
+    arg5_cageid: u64,
+    arg6: u64, 
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments.
+    if !(sc_unusedarg(arg1, arg1_cageid)
+         && sc_unusedarg(arg2, arg2_cageid)
+         && sc_unusedarg(arg3, arg3_cageid)
+         && sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid)) {
+        return syscall_error(Errno::EFAULT, "getuid", "Invalid arguments");
+    }
+
+    // Retrieve the cage.
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => return syscall_error(Errno::ECHILD, "getuid", "Cage not found"),
+    };
+
+    // Read the current uid from the cage.
+    let uid = cage.getuid.load(Relaxed);
+    if uid == -1 {
+        // If uid is uninitialized, set it to the default and return -1.
+        cage.getuid.store(DEFAULT_UID as i32, Relaxed);
+        return -1;
+    }
+
+    // Otherwise, return the stored uid (which is default in Lind's design).
+    DEFAULT_UID as i32
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/geteuid.2.html
+///
+/// Retrieves the effective user id (euid) for the current cage. If uninitialized (-1),
+/// it updates the euid to the default value and returns -1.
+pub fn geteuid_syscall(
+    cageid: u64,
+    arg1: u64, 
+    arg1_cageid: u64,
+    arg2: u64, 
+    arg2_cageid: u64,
+    arg3: u64, 
+    arg3_cageid: u64,
+    arg4: u64, 
+    arg4_cageid: u64,
+    arg5: u64, 
+    arg5_cageid: u64,
+    arg6: u64, 
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate that each extra argument is unused.
+    if !(sc_unusedarg(arg1, arg1_cageid)
+         && sc_unusedarg(arg2, arg2_cageid)
+         && sc_unusedarg(arg3, arg3_cageid)
+         && sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid)) {
+        return syscall_error(Errno::EFAULT, "geteuid", "Invalid arguments");
+    }
+
+    // Retrieve the current cage (process) object.
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => return syscall_error(Errno::ECHILD, "geteuid", "Cage not found"),
+    };
+
+    // Load the effective user ID.
+    let euid = cage.geteuid.load(Relaxed);
+    if euid == -1 {
+        // If uninitialized, update to the default and return -1.
+        cage.geteuid.store(DEFAULT_UID as i32, Relaxed);
+        return -1;
+    }
+
+    // Otherwise, return the default effective user ID.
+    DEFAULT_UID as i32
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/sigaction.2.html
+/// 
+/// Copy the existing signal handler state from the cage into the caller-provided memory 
+/// (oact). Install the new handler provided by the caller into the cage’s signal handler 
+/// table (act). Reserved arguments must remain unused, and SIGKILL/SIGSTOP cannot be 
+/// modified.
+/// 
+/// # Arguments
+/// * `cageid` - The ID of the cage invoking the syscall.
+/// * `sig_arg` - Signal number (as u64, later cast to i32).
+/// * `sig_arg_cageid` - Cage ID that owns the `sig_arg` (for validation).
+/// * `act_arg` - Pointer to the new `sigaction` struct, or 0 if none.
+/// * `act_arg_cageid` - Cage ID of the memory holding `act_arg`.
+/// * `oact_arg` - Pointer to store the old `sigaction` struct, or 0 if not needed.
+/// * `oact_arg_cageid` - Cage ID of the memory holding `oact_arg`.
+///
+/// # Returns
+/// * `0` on success.
+/// * Negative errno wrapped via `syscall_error` on failure.
+pub fn sigaction_syscall(
+    cageid: u64,
+    sig_arg: u64, 
+    sig_arg_cageid: u64,
+    act_arg: u64, 
+    act_arg_cageid: u64,
+    oact_arg: u64, 
+    oact_arg_cageid: u64,
+    arg4: u64, 
+    arg4_cageid: u64,
+    arg5: u64, 
+    arg5_cageid: u64,
+    arg6: u64, arg6_cageid: u64,
+) -> i32 {
+    let sig = sc_convert_sysarg_to_i32(sig_arg, sig_arg_cageid, cageid);
+    let act = sc_convert_SigactionStruct(act_arg, act_arg_cageid, cageid);
+    let oact = sc_convert_SigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
+    // Validate that the extra unused arguments are indeed unused.
+    if !(sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "sigaction", "Invalid extra arguments");
+    }
+
+    // Retrieve the cage.
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => return syscall_error(Errno::ECHILD, "sigaction", "Cage not found"),
+    };
+
+    // If oact (old action pointer) is provided, fill it with the current action.
+    if let Some(oact_ref) = oact {
+        if let Some(current_act) = cage.signalhandler.get(&sig) {
+            // Copy the current signal action into the provided memory.
+            oact_ref.clone_from(current_act);
+        } else {
+            // If there is no current action, use a default.
+            oact_ref.clone_from(&SigactionStruct::default());
+        }
+    }
+
+    // If a new action is provided in act, update the signal handler.
+    if let Some(new_act) = act {
+        // Disallow modification for SIGKILL and SIGSTOP.
+        if sig == SIGKILL || sig == SIGSTOP {
+            return syscall_error(Errno::EINVAL, "sigaction", "Cannot modify SIGKILL or SIGSTOP");
+        }
+        // Insert the new signal action into the cage’s signal handler table.
+        cage.signalhandler.insert(sig, new_act.clone());
+    }
+
+    0
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/kill.2.html
+/// 
+/// This function allows one cage (the caller) to send a signal to another cage
+/// (the target), similar to the `kill(2)` syscall in POSIX.
+/// 
+/// ## Arguments
+/// * `cageid` - The ID of the calling cage (not directly used to deliver the signal).
+/// * `target_cage_arg` / `target_cage_arg_cageid` - Encoded system arguments
+///   specifying the target cage ID to which the signal should be sent.
+/// * `sig_arg` / `sig_arg_cageid` - Encoded system arguments specifying the signal number.
+///
+/// ## Returns
+/// On success, returns `0`. If the target cage does not exist, returns `ESRCH`.
+/// 
+/// ## Errors
+/// * `EFAULT` – Reserved arguments were not unused.
+/// * `EINVAL` – Invalid target cage ID or signal number.
+/// * `ESRCH` – Target cage does not exist.
+pub fn kill_syscall(
+    cageid: u64,       
+    target_cage_arg: u64, 
+    target_cage_arg_cageid: u64,
+    sig_arg: u64, 
+    sig_arg_cageid: u64,
+    arg3: u64, 
+    arg3_cageid: u64,
+    arg4: u64, 
+    arg4_cageid: u64,
+    arg5: u64, 
+    arg5_cageid: u64,
+    arg6: u64, 
+    arg6_cageid: u64,
+) -> i32 {
+    // Convert target cage id and signal value.
+    let target_cage = sc_convert_sysarg_to_i32(target_cage_arg, target_cage_arg_cageid, cageid);
+    let sig = sc_convert_sysarg_to_i32(sig_arg, sig_arg_cageid, cageid);
+
+    // Validate the unused arguments.
+    if !(sc_unusedarg(arg3, arg3_cageid)
+         && sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid)) {
+        return syscall_error(Errno::EFAULT, "kill", "Invalid extra arguments");
+    }
+
+    // Validate the target cage id: it must not be negative and typically within a system-defined maximum.
+    if target_cage < 0 {
+        return syscall_error(Errno::EINVAL, "kill", "Invalid target cage id");
+    }
+
+    // Validate the signal number: for example, it should typically be in the range 1..32.
+    if sig <= 0 || sig >= 32 {
+        return syscall_error(Errno::EINVAL, "kill", "Invalid signal number");
+    }
+
+    // Optionally, you could verify that certain signals (e.g., SIGKILL, SIGSTOP)
+    // are handled with special semantics; however, in this implementation we assume they are valid.
+
+    // Attempt to send the signal using a helper function such as lind_send_signal.
+    // This helper returns a boolean indicating whether the operation was successful.
+    // The caller's cage id is not directly used to send the signal; instead, the target cage id is used.
+    if !lind_send_signal(target_cage as u64, sig) {
+        return syscall_error(Errno::ESRCH, "kill", "Target cage does not exist");
+    }
+
+    0
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/sigprocmask.2.html
+/// 
+/// This function allows a cage to examine or change its
+/// signal mask, i.e., the set of signals currently blocked from delivery.
+/// If `oldset` is provided, copies the current signal mask into it. If `set` is 
+/// provided, updates the mask according to `how`:
+///    - `SIG_BLOCK`: add signals from `set` to the mask.
+///    - `SIG_UNBLOCK`: remove signals from `set` from the mask; if any pending
+///       signals are now unblocked, trigger a signal epoch.
+///    - `SIG_SETMASK`: replace the mask with `set`; if any previously blocked
+///       pending signals are now unblocked, trigger a signal epoch.
+///
+/// ## Arguments
+/// * `cageid` – The ID of the calling cage.
+/// * `how_arg` / `how_cageid` – Encoded argument specifying how the mask is modified
+///   (`SIG_BLOCK`, `SIG_UNBLOCK`, or `SIG_SETMASK`).
+/// * `set_arg` / `set_cageid` – Optional pointer to a new signal set.
+///   - If provided, defines the signals to block, unblock, or set.
+///   - If null, the mask is not modified.
+/// * `oldset_arg` / `oldset_cageid` – Optional pointer where the previous mask
+///   should be stored.
+///
+/// ## Returns:
+/// Returns `0` on success, or an error code (`EINVAL`, `EFAULT`) on failure.
+/// 
+/// ## Errors
+/// * `EFAULT` – Reserved arguments were not unused.
+/// * `EINVAL` – Invalid value passed for `how`.
+pub fn sigprocmask_syscall(
+    cageid: u64,
+    how_arg: u64,
+    how_cageid: u64,
+    set_arg: u64,
+    set_cageid: u64,
+    oldset_arg: u64,
+    oldset_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
+    let set = sc_convert_sigset(set_arg, set_cageid, cageid);
+    let oldset = sc_convert_sigset(oldset_arg, oldset_cageid, cageid);
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "sigprocmask_syscall", "Invalide Cage ID");
+    }
+
+    let cage = get_cage(cageid).unwrap();
+
+    let mut res = 0;
+
+    if let Some(some_oldset) = oldset {
+        *some_oldset = cage.sigset.load(Relaxed);
+    }
+
+    if let Some(some_set) = set {
+        let curr_sigset = cage.sigset.load(Relaxed);
+        res = match how {
+            SIG_BLOCK => {
+                // Block signals in set
+                cage.sigset.store(
+                    curr_sigset | *some_set,
+                    Relaxed,
+                );
+                0
+            }
+            SIG_UNBLOCK => {
+                // Unblock signals in set
+                let newset = curr_sigset & !*some_set;
+                cage.sigset
+                    .store(newset, Relaxed);
+                // check if any of the unblocked signals are in the pending signal list
+                // and trigger the epoch if it has
+                let pending_signals = cage.pending_signals.read();
+                if pending_signals
+                    .iter()
+                    .any(|signo| (*some_set & convert_signal_mask(*signo)) != 0)
+                {
+                    cage::signal_epoch_trigger(cage.cageid);
+                }
+                0
+            }
+            SIG_SETMASK => {
+                let pending_signals = cage.pending_signals.read();
+                // find all signals switched from blocking to nonblocking
+                // 1. perform a xor operation to find signals that switched state
+                // all the signal masks changed from 0 to 1, or 1 to 0 are filtered in this step
+                // 2. perform an and operation to the old sigset, this further filtered masks and only
+                // left masks changed from 1 to 0
+                let unblocked_signals = (curr_sigset ^ *some_set) & curr_sigset;
+                // check if any of the unblocked signals are in the pending signal list
+                // and trigger the epoch if it has
+                if pending_signals
+                    .iter()
+                    .any(|signo| (unblocked_signals & convert_signal_mask(*signo)) != 0)
+                {
+                    cage::signal_epoch_trigger(cage.cageid);
+                }
+                // Set sigset to set
+                cage.sigset
+                    .store(*some_set, Relaxed);
+                0
+            }
+            _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
+        }
+    }
+    res
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man3/setitimer.3p.html
+/// 
+/// This syscall allows a cage to set or retrieve the value of an interval timer. 
+/// Currently only `ITIMER_REAL` is supported, which decrements in real (wall-clock) 
+/// time and delivers `SIGALRM` upon expiration.
+/// 
+/// For `ITIMER_REAL`:  
+///    - If `old_value` is provided, copies the current timer’s remaining time and interval
+///      into it.  
+///    - If `new_value` is provided, updates the interval timer with the new durations.  
+/// For `ITIMER_VIRTUAL` and `ITIMER_PROF`, no action is taken (not implemented).
+/// 
+/// ## Arguments
+/// * `cageid` – The ID of the calling cage.
+/// * `which_arg` / `which_arg_cageid` – Encoded argument specifying which timer to use
+///   (`ITIMER_REAL`, `ITIMER_VIRTUAL`, `ITIMER_PROF`). Only `ITIMER_REAL` is implemented.
+/// * `new_value_arg` / `new_value_arg_cageid` – Pointer to a new `itimerval` struct.
+///   If non-null, this specifies the new timer settings.
+/// * `old_value_arg` / `old_value_arg_cageid` – Pointer to an `itimerval` struct
+///   where the previous timer value should be stored. If non-null, the current
+///   timer is copied here before being changed.
+/// 
+/// ## Returns
+/// * `0` on success.
+/// * Negative errno (`EFAULT`, etc.) on failure.
+pub fn setitimer_syscall(
+    cageid: u64,
+    which_arg: u64, 
+    which_arg_cageid: u64,
+    new_value_arg: u64, 
+    new_value_arg_cageid: u64,
+    old_value_arg: u64, 
+    old_value_arg_cageid: u64,
+    arg4: u64, 
+    arg4_cageid: u64,
+    arg5: u64, 
+    arg5_cageid: u64,
+    arg6: u64, 
+    arg6_cageid: u64,
+) -> i32 {
+    let which = sc_convert_sysarg_to_i32(which_arg, which_arg_cageid, cageid);
+    let new_value = sc_convert_itimerval(new_value_arg, new_value_arg_cageid, cageid);
+    let old_value = sc_convert_itimerval_mut(old_value_arg, old_value_arg_cageid, cageid);
+    // Validate that extra arguments are indeed unused.
+    if !(sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid)) {
+        return syscall_error(Errno::EFAULT, "setitimer", "Invalid extra arguments");
+    }
+
+    match which {
+        ITIMER_REAL => {
+            if let Some(some_old_value) = old_value {
+                let (curr_duration, next_duration) = self.interval_timer.get_itimer();
+                some_old_value.it_value.tv_sec = curr_duration.as_secs() as i64;
+                some_old_value.it_value.tv_usec = curr_duration.subsec_millis() as i64;
+                some_old_value.it_interval.tv_sec = next_duration.as_secs() as i64;
+                some_old_value.it_interval.tv_usec = next_duration.subsec_millis() as i64;
+            }
+
+            if let Some(some_new_value) = new_value {
+                let curr_duration = interface::RustDuration::new(
+                    some_new_value.it_value.tv_sec as u64,
+                    some_new_value.it_value.tv_usec as u32,
+                );
+                let next_duration = interface::RustDuration::new(
+                    some_new_value.it_interval.tv_sec as u64,
+                    some_new_value.it_interval.tv_usec as u32,
+                );
+
+                self.interval_timer.set_itimer(curr_duration, next_duration);
+            }
+        }
+
+        _ => { /* ITIMER_VIRTUAL and ITIMER_PROF is not implemented*/ }
+    }
+    0
 }
 
 /// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
