@@ -1712,7 +1712,9 @@ impl Cage {
         req: Option<usize>,
         rem: Option<usize>,
     ) -> i32 {
-        let req_ptr = req.map(|addr| addr as *const libc::timespec).unwrap_or(std::ptr::null());
+        let req_ptr = req
+            .map(|addr| addr as *const libc::timespec)
+            .unwrap_or(std::ptr::null());
         let rem_ptr = match rem {
             Some(addr) => addr as *mut libc::timespec,
             None => std::ptr::null_mut(),
@@ -1724,7 +1726,7 @@ impl Cage {
         }
         ret
     }
-    
+
     pub fn clock_gettime_syscall(&self, clockid: u32, tp: usize) -> i32 {
         let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
         if ret < 0 {

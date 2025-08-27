@@ -1046,7 +1046,7 @@ pub fn lind_syscall_api(
                         }
                     },
                     None => None,
-                } 
+                }
             };
             let mut old_sigaction = {
                 match translate_vmmap_addr(&cage, arg3) {
@@ -1090,7 +1090,7 @@ pub fn lind_syscall_api(
                         }
                     },
                     None => None,
-                } 
+                }
             };
             // sigset struct, essentially an u64
             let mut old_sigset = {

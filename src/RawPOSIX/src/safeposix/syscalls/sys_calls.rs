@@ -320,7 +320,6 @@ impl Cage {
         zombie.cageid as i32
     }
 
-
     pub fn wait_syscall(&self, status: Option<&mut i32>) -> i32 {
         self.waitpid_syscall(0, status, 0)
     }
