@@ -1297,10 +1297,7 @@ pub fn lind_syscall_api(
             let flags = arg2 as i32;
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
-            let req = match translate_vmmap_addr(&cage, arg3) {
-                Some(addr) => addr as usize,
-                None => return syscall_error(Errno::EINVAL, "nanosleep", "invalid req address"),
-            };
+            let req = translate_vmmap_addr(&cage, arg3).map(|addr| addr as usize);
             let rem = translate_vmmap_addr(&cage, arg4).map(|addr| addr as usize);
             cage.nanosleep_time64_syscall(clockid, flags, req, rem)
         }
