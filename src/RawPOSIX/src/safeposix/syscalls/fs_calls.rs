@@ -1713,12 +1713,9 @@ impl Cage {
         rem: Option<usize>,
     ) -> i32 {
         let req_ptr = req.unwrap_or(0) as *const libc::timespec;
+        let rem_ptr = rem.unwrap_or(0) as *mut libc::timespec;
 
-        let rem_ptr = match rem {
-            Some(addr) => addr as *mut libc::timespec,
-            None => std::ptr::null_mut(),
-        };
-        let ret = unsafe { syscall(SYS_clock_nanosleep, clockid, flags, req, rem) as i32 };
+        let ret = unsafe { syscall(SYS_clock_nanosleep, clockid, flags, req_ptr, rem_ptr) as i32 };
         if ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "fcntl");
