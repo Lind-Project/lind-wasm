@@ -1712,9 +1712,8 @@ impl Cage {
         req: Option<usize>,
         rem: Option<usize>,
     ) -> i32 {
-        let req_ptr = req
-            .map(|addr| addr as *const libc::timespec)
-            .unwrap_or(std::ptr::null());
+        let req_ptr = req.unwrap_or(0) as *const libc::timespec;
+
         let rem_ptr = match rem {
             Some(addr) => addr as *mut libc::timespec,
             None => std::ptr::null_mut(),
