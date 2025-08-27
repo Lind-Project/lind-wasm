@@ -20,13 +20,13 @@
 #include <sys/stat.h>
 #include <sysdep.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Create a directory named PATH with protections MODE.  */
 int
 __mkdir (const char *path, mode_t mode)
 {
-   return MAKE_SYSCALL(131, "syscall|mkdir", (uint64_t) path, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(MKDIR_SYSCALL, "syscall|mkdir", (uint64_t) path, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-
 libc_hidden_def (__mkdir)
 weak_alias (__mkdir, mkdir)

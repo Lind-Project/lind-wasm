@@ -1,117 +1,121 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+// RawPOSIX syscall dispatcher table
+// Source of truth for syscall numbers: Linux x86_64 syscall table
+//   https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
+// Keep these in sync with glibc's lind_syscall_num.h and Wasmtime's lind_syscall_numbers.rs
 // retreive cage table
 
-const ACCESS_SYSCALL: i32 = 2;
-const UNLINKAT_SYSCALL: i32 = 3;
-const UNLINK_SYSCALL: i32 = 4;
-const LINK_SYSCALL: i32 = 5;
-const RENAME_SYSCALL: i32 = 6;
+const ACCESS_SYSCALL: i32 = 21;
+const UNLINKAT_SYSCALL: i32 = 263;
+const UNLINK_SYSCALL: i32 = 87;
+const LINK_SYSCALL: i32 = 86;
+const RENAME_SYSCALL: i32 = 82;
 
-const XSTAT_SYSCALL: i32 = 9;
-const OPEN_SYSCALL: i32 = 10;
-const CLOSE_SYSCALL: i32 = 11;
-const READ_SYSCALL: i32 = 12;
-const WRITE_SYSCALL: i32 = 13;
-const LSEEK_SYSCALL: i32 = 14;
-const IOCTL_SYSCALL: i32 = 15;
-const TRUNCATE_SYSCALL: i32 = 16;
-const FXSTAT_SYSCALL: i32 = 17;
-const FTRUNCATE_SYSCALL: i32 = 18;
-const FSTATFS_SYSCALL: i32 = 19;
-const MMAP_SYSCALL: i32 = 21;
-const MUNMAP_SYSCALL: i32 = 22;
-const GETDENTS_SYSCALL: i32 = 23;
-const DUP_SYSCALL: i32 = 24;
-const DUP2_SYSCALL: i32 = 25;
-const STATFS_SYSCALL: i32 = 26;
-const DUP3_SYSCALL: i32 = 27;
-const FCNTL_SYSCALL: i32 = 28;
+const XSTAT_SYSCALL: i32 = 4;
+const OPEN_SYSCALL: i32 = 2;
+const CLOSE_SYSCALL: i32 = 3;
+const READ_SYSCALL: i32 = 0;
+const WRITE_SYSCALL: i32 = 1;
+const LSEEK_SYSCALL: i32 = 8;
+const IOCTL_SYSCALL: i32 = 16;
+const TRUNCATE_SYSCALL: i32 = 76;
+const FXSTAT_SYSCALL: i32 = 5;
+const FTRUNCATE_SYSCALL: i32 = 77;
+const FSTATFS_SYSCALL: i32 = 138;
+const MMAP_SYSCALL: i32 = 9;
+const MUNMAP_SYSCALL: i32 = 11;
+const GETDENTS_SYSCALL: i32 = 78;
+const DUP_SYSCALL: i32 = 32;
+const DUP2_SYSCALL: i32 = 33;
+const STATFS_SYSCALL: i32 = 137;
+const DUP3_SYSCALL: i32 = 292;
+const FCNTL_SYSCALL: i32 = 72;
 
-const GETPPID_SYSCALL: i32 = 29;
-const EXIT_SYSCALL: i32 = 30;
-const GETPID_SYSCALL: i32 = 31;
+const GETPPID_SYSCALL: i32 = 110;
+const EXIT_SYSCALL: i32 = 60;
+const GETPID_SYSCALL: i32 = 39;
 
-const BIND_SYSCALL: i32 = 33;
-const SEND_SYSCALL: i32 = 34;
-const SENDTO_SYSCALL: i32 = 35;
-const RECV_SYSCALL: i32 = 36;
-const RECVFROM_SYSCALL: i32 = 37;
-const CONNECT_SYSCALL: i32 = 38;
-const LISTEN_SYSCALL: i32 = 39;
-const ACCEPT_SYSCALL: i32 = 40;
+const BIND_SYSCALL: i32 = 49;
+const SEND_SYSCALL: i32 = 46;
+const SENDTO_SYSCALL: i32 = 44;
+const RECV_SYSCALL: i32 = 47;
+const RECVFROM_SYSCALL: i32 = 45;
+const CONNECT_SYSCALL: i32 = 42;
+const LISTEN_SYSCALL: i32 = 50;
+const ACCEPT_SYSCALL: i32 = 43;
 
-const GETSOCKOPT_SYSCALL: i32 = 43;
-const SETSOCKOPT_SYSCALL: i32 = 44;
-const SHUTDOWN_SYSCALL: i32 = 45;
-const SELECT_SYSCALL: i32 = 46;
-const GETCWD_SYSCALL: i32 = 47;
-const POLL_SYSCALL: i32 = 48;
-const SOCKETPAIR_SYSCALL: i32 = 49;
-const GETUID_SYSCALL: i32 = 50;
-const GETEUID_SYSCALL: i32 = 51;
-const GETGID_SYSCALL: i32 = 52;
-const GETEGID_SYSCALL: i32 = 53;
-const FLOCK_SYSCALL: i32 = 54;
-const EPOLL_CREATE_SYSCALL: i32 = 56;
-const EPOLL_CTL_SYSCALL: i32 = 57;
-const EPOLL_WAIT_SYSCALL: i32 = 58;
+const GETSOCKOPT_SYSCALL: i32 = 55;
+const SETSOCKOPT_SYSCALL: i32 = 54;
+const SHUTDOWN_SYSCALL: i32 = 48;
+const SELECT_SYSCALL: i32 = 23;
+const GETCWD_SYSCALL: i32 = 79;
+const POLL_SYSCALL: i32 = 7;
+const SOCKETPAIR_SYSCALL: i32 = 53;
+const GETUID_SYSCALL: i32 = 102;
+const GETEUID_SYSCALL: i32 = 107;
+const GETGID_SYSCALL: i32 = 104;
+const GETEGID_SYSCALL: i32 = 108;
+const FLOCK_SYSCALL: i32 = 73;
+const EPOLL_CREATE_SYSCALL: i32 = 213;
+const EPOLL_CTL_SYSCALL: i32 = 233;
+const EPOLL_WAIT_SYSCALL: i32 = 232;
 
-const SHMGET_SYSCALL: i32 = 62;
-const SHMAT_SYSCALL: i32 = 63;
-const SHMDT_SYSCALL: i32 = 64;
-const SHMCTL_SYSCALL: i32 = 65;
+const SHMGET_SYSCALL: i32 = 29;
+const SHMAT_SYSCALL: i32 = 30;
+const SHMDT_SYSCALL: i32 = 67;
+const SHMCTL_SYSCALL: i32 = 31;
 
-const PIPE_SYSCALL: i32 = 66;
-const PIPE2_SYSCALL: i32 = 67;
-const FORK_SYSCALL: i32 = 68;
-const EXEC_SYSCALL: i32 = 69;
+const PIPE_SYSCALL: i32 = 22;
+const PIPE2_SYSCALL: i32 = 293;
+const FORK_SYSCALL: i32 = 57;
+const EXEC_SYSCALL: i32 = 59;
 
 const MUTEX_CREATE_SYSCALL: i32 = 70;
 const COND_CREATE_SYSCALL: i32 = 75;
 const COND_TIMEDWAIT_SYSCALL: i32 = 80;
 
 const SEM_TIMEDWAIT_SYSCALL: i32 = 94;
-const FUTEX_SYSCALL: i32 = 98;
+const FUTEX_SYSCALL: i32 = 202;
 
-const GETHOSTNAME_SYSCALL: i32 = 125;
-const PREAD_SYSCALL: i32 = 126;
-const PWRITE_SYSCALL: i32 = 127;
-const CHDIR_SYSCALL: i32 = 130;
-const MKDIR_SYSCALL: i32 = 131;
-const RMDIR_SYSCALL: i32 = 132;
-const CHMOD_SYSCALL: i32 = 133;
-const FCHMOD_SYSCALL: i32 = 134;
+const GETHOSTNAME_SYSCALL: i32 = 170;
+const PREAD_SYSCALL: i32 = 17;
+const PWRITE_SYSCALL: i32 = 18;
+const CHDIR_SYSCALL: i32 = 80;
+const MKDIR_SYSCALL: i32 = 83;
+const RMDIR_SYSCALL: i32 = 84;
+const CHMOD_SYSCALL: i32 = 90;
+const FCHMOD_SYSCALL: i32 = 91;
 
-const SOCKET_SYSCALL: i32 = 136;
+const SOCKET_SYSCALL: i32 = 41;
 
-const GETSOCKNAME_SYSCALL: i32 = 144;
-const GETPEERNAME_SYSCALL: i32 = 145;
+const GETSOCKNAME_SYSCALL: i32 = 51;
+const GETPEERNAME_SYSCALL: i32 = 52;
 
-const SIGACTION_SYSCALL: i32 = 147;
-const KILL_SYSCALL: i32 = 148;
-const SIGPROCMASK_SYSCALL: i32 = 149;
-const SETITIMER_SYSCALL: i32 = 150;
+const SIGACTION_SYSCALL: i32 = 13;
+const KILL_SYSCALL: i32 = 62;
+const SIGPROCMASK_SYSCALL: i32 = 14;
+const SETITIMER_SYSCALL: i32 = 38;
 
-const FCHDIR_SYSCALL: i32 = 161;
-const FSYNC_SYSCALL: i32 = 162;
-const FDATASYNC_SYSCALL: i32 = 163;
-const SYNC_FILE_RANGE: i32 = 164;
+const FCHDIR_SYSCALL: i32 = 81;
+const FSYNC_SYSCALL: i32 = 74;
+const FDATASYNC_SYSCALL: i32 = 75;
+const SYNC_FILE_RANGE: i32 = 277;
 
-const READLINK_SYSCALL: i32 = 165;
-const READLINKAT_SYSCALL: i32 = 166;
+const READLINK_SYSCALL: i32 = 89;
+const READLINKAT_SYSCALL: i32 = 267;
 
-const WRITEV_SYSCALL: i32 = 170;
+const WRITEV_SYSCALL: i32 = 20;
 
-const CLONE_SYSCALL: i32 = 171;
-const WAIT_SYSCALL: i32 = 172;
-const WAITPID_SYSCALL: i32 = 173;
-const BRK_SYSCALL: i32 = 175;
-const SBRK_SYSCALL: i32 = 176;
-const MPROTECT_SYSCALL: i32 = 177;
+const CLONE_SYSCALL: i32 = 56;
+const WAIT_SYSCALL: i32 = 61;
+const WAITPID_SYSCALL: i32 = 61;
+const BRK_SYSCALL: i32 = 12;
+const SBRK_SYSCALL: i32 = 1004;
+const MPROTECT_SYSCALL: i32 = 10;
 
-const NANOSLEEP_TIME64_SYSCALL: i32 = 181;
-const CLOCK_GETTIME_SYSCALL: i32 = 191;
+const NANOSLEEP_TIME64_SYSCALL: i32 = 35;
+const CLOCK_GETTIME_SYSCALL: i32 = 228;
 
 use super::cage::*;
 use super::syscalls::kernel_close;
