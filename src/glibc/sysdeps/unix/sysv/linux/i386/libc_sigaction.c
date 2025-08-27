@@ -19,6 +19,7 @@
 #include <signal.h>
 #include <ldsodefs.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 #define SA_RESTORER 0x04000000
 
@@ -110,7 +111,7 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
     rawposix_act.sa_mask = act->sa_mask.__val[0];
     rawposix_act.sa_flags = act->sa_flags;
   }
-  int retval = MAKE_SYSCALL(147, "syscall|sigaction", (uint64_t) sig, (uint64_t) (act ? &rawposix_act : NULL), (uint64_t) (oact ? &rawposix_oact : NULL), NOTUSED, NOTUSED, NOTUSED);
+  int retval = MAKE_SYSCALL(SIGACTION_SYSCALL, "syscall|sigaction", (uint64_t) sig, (uint64_t) (act ? &rawposix_act : NULL), (uint64_t) (oact ? &rawposix_oact : NULL), NOTUSED, NOTUSED, NOTUSED);
 
   // check for NULL pointer
   if (oact)
