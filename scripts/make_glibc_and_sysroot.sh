@@ -135,8 +135,10 @@ object_files=$(find "$BUILD" -type f -name '*.o' \
   ! -name 'stamp.o' \
   ! -name 'argp-pvh.o' \
   ! -name 'repertoire.o' \
-  ! -name 'static-stubs.o')
-
+  ! -name 'static-stubs.o'\
+  ! -name 'zic.o' \
+  ! -name 'ldconfig.o' \
+  ! -name 'sln.o')
 
 # Check if object files were found
 if [ -z "$object_files" ]; then
@@ -144,11 +146,18 @@ if [ -z "$object_files" ]; then
   exit 1
 fi
 
+
 # Create the sysroot directory structure
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 
-# Pack all found .o files into a single .a archive
-llvm-ar rcs "$SYSROOT_ARCHIVE" $object_files
+# Pack all found .o files into a single .a archive, filtering for no-mains.
+filtered_objects=$(
+  for o in $object_files; do
+    llvm-nm --defined-only -g "$o" 2>/dev/null | grep -qE '\bT[[:space:]]+main$' || printf '%s ' "$o"
+  done
+)
+llvm-ar rcs "$SYSROOT_ARCHIVE" $filtered_objects
+
 llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
 
 # Check if llvm-ar succeeded
