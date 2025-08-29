@@ -1,0 +1,9 @@
+/lib64/ld-linux-x86-64.so.2
+/usr/lib/x86_64-linux-gnu/crti.o
+/usr/lib/x86_64-linux-gnu/crt1.o
+/usr/lib/x86_64-linux-gnu/crtn.o
+/usr/lib/x86_64-linux-gnu/libc.so
+/usr/lib/x86_64-linux-gnu/libc_nonshared.a
+/usr/local/lib/tcc/libtcc1.a
+/lib/x864_64-linux-gnu/libc.so.6
+/nodeps.c
