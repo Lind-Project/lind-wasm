@@ -47,16 +47,29 @@ RUN apt-get update && \
         make \
         python3 \
         sed \
+        wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Install clang
-ARG LLVM="llvmorg-16.0.4"
-ARG CLANG="clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
-# NOTE: We `curl | tar` in spite of Docker best practices to save cache layers
-RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz | \
-       tar -xvJ
-COPY src/glibc/wasi /${CLANG}/lib/clang/16/lib/wasi
+ARG LLVM="llvmorg-18.1.8"
+ARG CLANG="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
+
+# Add retries and robust protection to curl to prevent transient network issues
+# from causing Docker build failures.
+SHELL ["/bin/bash","-o","pipefail","-c"]
+
+RUN set -euo pipefail; \
+    url="https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz"; \
+    echo "Fetching $url"; \
+    curl -fL --retry 5 --retry-delay 3 "$url" | tar -xJ
+
+COPY src/glibc/wasi /${CLANG}/lib/clang/18/lib/wasi
 ENV PATH="/${CLANG}/bin:${PATH}"
+
+# --- Install libtinfo5 ---
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+
 
 # Install rust
 # NOTE: pinning known-to-work nightly-2025-06-01 (see #242)
