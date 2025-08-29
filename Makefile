@@ -46,8 +46,9 @@ docs-serve:
 
 .PHONY: clean
 clean:
-	@echo "glibc artifacts"
-	$(RM) -r src/glibc/build src/glibc/sysroot src/glibc/target
+	@echo "cleaning glibc artifacts"
+	$(RM) -r src/glibc/sysroot
+	@find src/glibc -type f -name '*.o' -exec rm -f {} +
 	@echo "cargo clean (wasmtime)"
 	cargo clean --manifest-path src/wasmtime/Cargo.toml
 
