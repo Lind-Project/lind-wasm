@@ -81,7 +81,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Build wasmtime
 FROM base as build-wasmtime
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
-COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs Makefile .
+COPY --parents src/wasmtime src/rawposix src/fdtables src/sysdefs Makefile .
 RUN make wasmtime
 
 
