@@ -20,6 +20,7 @@ CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-i
 WARNINGS="-Wall -Wwrite-strings -Wundef -Wstrict-prototypes -Wold-style-definition"
 EXTRA_FLAGS="-fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common"
 EXTRA_FLAGS+=" -Wp,-U_FORTIFY_SOURCE -fmath-errno -fPIE -ftls-model=local-exec"
+EXTRA_FLAGS+=" -DLIB -DGNU_SOURCE -DDIAG"
 INCLUDE_PATHS="
     -I../include
     -I$BUILD/nptl
@@ -97,6 +98,11 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
 
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/imfs.o \
+    -c $GLIBC/lind_syscall/imfs.c
+
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $BUILD/register_handler.o \
     -c $GLIBC/lind_syscall/register_handler.c
 
@@ -149,5 +155,6 @@ cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/imfs.h" "$SYSROOT/lib/wasm-32-wasi/"
 cp "$GLIBC/lind_syscall/register_handler.h" "$SYSROOT/include/wasm32-wasi/"
 cp "$GLIBC/lind_syscall/cp_data_between_cages.h" "$SYSROOT/include/wasm32-wasi/"
