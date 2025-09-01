@@ -248,11 +248,7 @@ impl Instance {
                 let handle = store.0.instance(InstanceId::from_index(0));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let memory_base = defined_memory.base as usize;
-                cage::memory::init_vmmap(
-                    pid,
-                    memory_base,
-                    Some(minimal_pages as u32),
-                );
+                cage::memory::init_vmmap(pid, memory_base, Some(minimal_pages as u32));
 
                 lind_syscall_api(
                     pid,
