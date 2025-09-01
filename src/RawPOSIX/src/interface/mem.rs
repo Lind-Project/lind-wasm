@@ -779,4 +779,3 @@ pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
     let vmmap = cage.vmmap.read();
     Ok(vmmap.base_address.unwrap() as u64 + arg)
 }
-
