@@ -61,6 +61,7 @@ wasmtime-wasi-http = { workspace = true, optional = true }
 cage = { workspace = true, optional = false, features = ["disable_signals"] }
 fdtables = { workspace = true }
 sysdefs = { workspace = true }
+rawposix = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true, features = ['std'] }
 target-lexicon = { workspace = true }
