@@ -16,8 +16,8 @@ use wasmtime::{
     InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Trap, Val,
 };
 
-use wasmtime_environ::MemoryIndex;
 use cage::signal::{lind_signal_init, lind_thread_exit};
+use wasmtime_environ::MemoryIndex;
 
 pub mod clone_constants;
 pub mod signal;
@@ -355,11 +355,11 @@ impl<
         let syscall_name_ptr = syscall_name.as_ptr() as u64;
         // calling fork in rawposix to fork the cage
         make_syscall(
-            self.pid as u64, 
-            (FORK_SYSCALL) as u64, // syscall num for fork 
+            self.pid as u64,
+            (FORK_SYSCALL) as u64, // syscall num for fork
             syscall_name_ptr,
-            self.pid as u64, 
-            child_cageid, 
+            self.pid as u64,
+            child_cageid,
             self.pid as u64,
             0,
             0,
@@ -508,20 +508,17 @@ impl<
                         match exit_code {
                             Val::I32(val) => {
                                 // exit the main thread
-                                if lind_thread_exit(
-                                    child_cageid,
-                                    THREAD_START_ID as u64,
-                                ) {
+                                if lind_thread_exit(child_cageid, THREAD_START_ID as u64) {
                                     let syscall_name: &'static str = "exit_syscall";
                                     let syscall_name_ptr = syscall_name.as_ptr() as u64;
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
                                     make_syscall(
-                                        child_cageid, // self cage
+                                        child_cageid,          // self cage
                                         (EXIT_SYSCALL) as u64, // syscall num
                                         syscall_name_ptr,
                                         child_cageid, // target cage
-                                        *val as u64, // 1st arg: status
+                                        *val as u64,  // 1st arg: status
                                         child_cageid,
                                         0,
                                         0,
@@ -781,10 +778,7 @@ impl<
                     match exit_code {
                         Val::I32(val) => {
                             // exit the thread
-                            if lind_thread_exit(
-                                child_cageid as u64,
-                                next_tid as u64,
-                            ) {
+                            if lind_thread_exit(child_cageid as u64, next_tid as u64) {
                                 let syscall_name: &'static str = "exit_syscall";
                                 let syscall_name_ptr = syscall_name.as_ptr() as u64;
                                 // we clean the cage only if this is the last thread in the cage
@@ -794,7 +788,7 @@ impl<
                                     (EXIT_SYSCALL) as u64, // syscall num
                                     syscall_name_ptr,
                                     (child_cageid) as u64, // target cage
-                                    *val as u64, // 1st arg: status
+                                    *val as u64,           // 1st arg: status
                                     (child_cageid) as u64,
                                     0,
                                     0,
@@ -998,10 +992,10 @@ impl<
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
             make_syscall(
-                cloned_pid as u64, 
-                (EXEC_SYSCALL) as u64, // syscall num for exec 
+                cloned_pid as u64,
+                (EXEC_SYSCALL) as u64, // syscall num for exec
                 syscall_name_ptr,
-                cloned_pid as u64, 
+                cloned_pid as u64,
                 0,
                 0,
                 0,
@@ -1013,7 +1007,7 @@ impl<
                 0,
                 0,
                 0,
-                0, 
+                0,
             );
 
             let ret = exec_call(
@@ -1152,7 +1146,9 @@ impl<
             let hash =
                 store.store_unwind_data(unwind_data_start_sys as *const u8, rewind_total_size);
             unsafe {
-                *((cloned_address + jmp_buf as u64) as *mut u64) = hash;
+                //  *((cloned_address + jmp_buf as u64) as *mut u64) = hash;
+                // Placeholder, do not use -
+                *(((cloned_address + jmp_buf as u64) & !7) as *mut u64) = hash;
             }
 
             // mark the parent to rewind state
@@ -1223,7 +1219,10 @@ impl<
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
-            let hash = unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) };
+            // let hash = unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) };
+            // Place holder, do not use -
+            let hash = unsafe { *(((cloned_address + jmp_buf as u64) & !7) as *mut u64) };
+
             // retrieve the unwind data
             let data = store.retrieve_unwind_data(hash);
 
