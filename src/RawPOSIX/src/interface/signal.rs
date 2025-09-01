@@ -321,4 +321,3 @@ pub fn signal_may_trigger(cageid: u64) {
         signal_epoch_trigger(cageid);
     }
 }
-

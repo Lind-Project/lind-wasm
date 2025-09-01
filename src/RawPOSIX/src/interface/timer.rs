@@ -142,4 +142,3 @@ impl IntervalTimer {
         self.clone()
     }
 }
-
