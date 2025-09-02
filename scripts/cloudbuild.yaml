@@ -30,8 +30,7 @@ steps:
     args:
       - '-c'
       - |
-        source /workspace/commit.env
-        USERNAME=$(cat /secrets/docker-username)
+        source /workspace/commit.env        
         docker build -f Docker/Dockerfile.dev \
           -t docker.io/$$DOCKER_USERNAME/lind-wasm-dev:latest \
           -t docker.io/$$DOCKER_USERNAME/lind-wasm-dev:sha-$SHORT_SHA .
