@@ -1435,9 +1435,10 @@ impl Cage {
             return syscall_error(Errno::EBADF, "getdents", "Bad File Descriptor");
         }
         let vfd = wrappedvfd.unwrap();
+        // calling getdents64 instead of getdents since glibc expects result from getdents64
         let ret = unsafe {
             libc::syscall(
-                libc::SYS_getdents as c_long,
+                libc::SYS_getdents64 as c_long,
                 vfd.underfd as i32,
                 buf as *mut c_void,
                 nbytes,
