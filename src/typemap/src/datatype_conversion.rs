@@ -3,6 +3,9 @@
 //! This file defines conversion helpers for basic primitive types (e.g., `i32`, `u32`, `i64`).
 //! These functions are used during syscall argument decoding and type-safe interpretation
 //! within the RawPOSIX syscall layer (`src/syscalls/`).
+//! Function naming convention:
+//! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
+//! - All other functions are **internal helpers** (inner functions) used only inside this library.
 use crate::fs_conv::*;
 use crate::type_conv::*;
 use cage::get_cage;
@@ -46,24 +49,6 @@ pub fn get_cstr<'a>(arg: u64) -> Result<&'a str, i32> {
     }
 
     return Err(-1);
-}
-
-/// Validate whether two cage ids are in valid range. This is used for security mode in
-/// type conversion.
-///
-/// ## Arguments:
-/// cageid_1: first cage id
-/// cageid_2: second cage id
-///
-/// ## Returns:
-/// true: both of them are valid
-/// false: one of them or neither of them are valid
-pub fn validate_cageid(cageid_1: u64, cageid_2: u64) -> bool {
-    if cageid_1 > MAX_CAGEID as u64 || cageid_2 > MAX_CAGEID as u64 || cageid_1 < 0 || cageid_2 < 0
-    {
-        return false;
-    }
-    true
 }
 
 /// `sc_convert_sysarg_to_i32` is the type conversion function used to convert the

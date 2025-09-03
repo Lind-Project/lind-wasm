@@ -6,10 +6,9 @@ use cage;
 pub use libc::*;
 use std::env;
 pub use std::ffi::{CStr, CString};
-use std::path::Component;
-use std::path::PathBuf;
+pub use std::path::{Component, PathBuf};
 pub use std::{mem, ptr};
-pub use sysdefs::constants::{fs_const, err_const};
+pub use sysdefs::constants::{err_const, fs_const};
 
 /// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
 /// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
@@ -87,39 +86,6 @@ pub fn add_lind_root(cageid: u64, path: &str) -> CString {
     let full_path = format!("{}{}", LIND_ROOT, relative_path);
     let c_path = CString::new(full_path).unwrap();
     c_path
-}
-
-/// Translate a received virtual file descriptor (`virtual_fd`) to real kernel file descriptor.
-///
-/// This function is used to translate a per-cage virtual file descriptor into the actual
-/// kernel-level file descriptor managed by the `fdtables`.
-///
-/// Optionally, when the `secure` feature is enabled, this function will verify that the
-/// `arg_cageid` (the cage that owns the fd being translated) is allowed to interact with the
-/// caller's `cageid` (the requesting cage).
-///
-/// ## Arguments:
-/// virtual_fd: The virutal file descriptor
-/// arg_cageid: The cage that owns the virtual fd
-/// cageid: The cage ID of current caller (only used when `secure` mode is enabled)
-///
-/// ## Returns:
-/// underlying kernel file descriptor
-pub fn convert_fd_to_host(virtual_fd: u64, arg_cageid: u64, cageid: u64) -> i32 {
-    #[cfg(feature = "secure")]
-    {
-        if !validate_cageid(arg_cageid, cageid) {
-            return -EINVAL;
-        }
-    }
-    // Find corresponding virtual fd instance from `fdtable` subsystem
-    let wrappedvfd = fdtables::translate_virtual_fd(arg_cageid, virtual_fd);
-    if wrappedvfd.is_err() {
-        return -EBADF;
-    }
-    let vfd = wrappedvfd.unwrap();
-    // Actual kernel fd mapped with provided virtual fd
-    vfd.underfd as i32
 }
 
 /// Convert received path pointer into a normalized `CString` path in the host cage.
