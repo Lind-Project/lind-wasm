@@ -11,7 +11,6 @@ use crate::{
     StoreContext, StoreContextMut, Table, TypedFunc,
 };
 use alloc::sync::Arc;
-use cage::memory::{fork_vmmap, init_vmmap};
 use core::ptr::NonNull;
 use rawposix::safeposix::dispatcher::lind_syscall_api;
 use sysdefs::constants::fs_const::{
@@ -249,7 +248,11 @@ impl Instance {
                 let handle = store.0.instance(InstanceId::from_index(0));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let memory_base = defined_memory.base as usize;
-                cage::memory::init_vmmap(pid, memory_base, Some(minimal_pages as u32));
+                rawposix::interface::init_vmmap_helper(
+                    pid,
+                    memory_base,
+                    Some(minimal_pages as u32),
+                );
 
                 lind_syscall_api(
                     pid,
@@ -279,8 +282,8 @@ impl Instance {
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let child_address = defined_memory.base as usize;
 
-                cage::memory::init_vmmap(child_pid, child_address, None);
-                cage::memory::fork_vmmap(parent_pid as u64, child_pid);
+                rawposix::interface::init_vmmap_helper(child_pid, child_address, None);
+                rawposix::interface::fork_vmmap_helper(parent_pid as u64, child_pid);
             }
         }
 
