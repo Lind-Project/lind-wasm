@@ -4,11 +4,11 @@
 //! user's perspective to host's perspective
 use cage;
 pub use libc::*;
-use std::env;
+pub use std::env;
 pub use std::ffi::{CStr, CString};
 pub use std::path::{Component, PathBuf};
 pub use std::{mem, ptr};
-pub use sysdefs::constants::{err_const, fs_const};
+pub use sysdefs::constants::{fs_const, err_const};
 
 /// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
 /// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
