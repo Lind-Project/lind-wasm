@@ -7,6 +7,7 @@ use cage::memory::vmmap::{VmmapOps, *};
 use fdtables;
 use libc::*;
 use parking_lot::RwLock;
+use std::ffi::CStr;
 use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
@@ -14,10 +15,12 @@ use sysdefs::constants::sys_const::DEFAULT_GID;
 use sysdefs::constants::fs_const;
 use sysdefs::constants::fs_const::{
     F_GETFL, F_GETOWN, F_SETOWN, MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED,
-    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, MAXFD, 
+    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, MAXFD, LIND_ROOT
 };
+use sysdefs::data::fs_struct::StatData;
 use typemap::syscall_type_conversion::*;
 use typemap::{get_pipearray, sc_convert_path_to_host, convert_fd_to_host};
+
 
 /// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't
 /// be closed in Lind-WASM execution, which preventing issues where other threads might reassign these
@@ -415,6 +418,515 @@ pub fn lseek_syscall(
     ret as i32
 }
 
+//------------------------------------LINK SYSCALL------------------------------------
+/*
+ *  `link` creates a hard link to an existing file.
+ *  Reference: https://man7.org/linux/man-pages/man2/link.2.html
+ *
+ *  ## Arguments:
+ *   - `oldpath`: Path to the existing file.
+ *   - `newpath`: Path where the hard link will be created.
+ *
+ *  ## Implementation Details:
+ *   - Both paths are converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The underlying libc::link() is called with both converted paths.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+pub fn link_syscall(
+    cageid: u64,
+    oldpath_arg: u64,
+    oldpath_cageid: u64,
+    newpath_arg: u64,
+    newpath_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let oldpath = sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid);
+    let newpath = sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "link", "Invalid Cage ID");
+    }
+
+    let ret = unsafe { libc::link(oldpath.as_ptr(), newpath.as_ptr()) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "link");
+    }
+    ret
+}
+
+//------------------------------------XSTAT SYSCALL------------------------------------
+/*
+ *  `xstat` retrieves file status information (versioned stat interface).
+ *  Reference: https://man7.org/linux/man-pages/man2/stat.2.html
+ *
+ *  ## Arguments:
+ *   - `vers`: Version parameter for stat structure compatibility.
+ *   - `pathname`: Path to the file to get status information for.
+ *   - `statbuf`: Buffer to store the file status information.
+ *
+ *  ## Implementation Details:
+ *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The statbuf buffer is converted from WASM address to host address using `sc_convert_addr_to_host`.
+ *   - The underlying libc::stat() is called and results are copied to the user buffer.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+pub fn stat_syscall(
+    cageid: u64,
+    vers_arg: u64,
+    vers_cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    statbuf_arg: u64,
+    statbuf_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let _vers = sc_convert_sysarg_to_i32(vers_arg, vers_cageid, cageid);
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "xstat", "Invalid Cage ID");
+    }
+
+    // Declare statbuf by ourselves
+    let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
+    let libcret = unsafe { libc::stat(path.as_ptr(), &mut libc_statbuf) };
+
+    if libcret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "xstat");
+    }
+
+    // Convert libc stat to StatData and copy to user buffer
+    let statbuf_addr = sc_convert_addr_to_host(statbuf_arg, statbuf_cageid, cageid);
+    let statdata = StatData {
+        st_dev: libc_statbuf.st_dev,
+        st_ino: libc_statbuf.st_ino as usize,
+        st_mode: libc_statbuf.st_mode,
+        st_nlink: libc_statbuf.st_nlink as u32,
+        st_uid: libc_statbuf.st_uid,
+        st_gid: libc_statbuf.st_gid,
+        st_rdev: libc_statbuf.st_rdev,
+        st_size: libc_statbuf.st_size as usize,
+        st_blksize: libc_statbuf.st_blksize as i32,
+        st_blocks: libc_statbuf.st_blocks as u32,
+        st_atim: (libc_statbuf.st_atime as u64, libc_statbuf.st_atime_nsec as u64),
+        st_mtim: (libc_statbuf.st_mtime as u64, libc_statbuf.st_mtime_nsec as u64),
+        st_ctim: (libc_statbuf.st_ctime as u64, libc_statbuf.st_ctime_nsec as u64),
+    };
+    
+    unsafe {
+        std::ptr::copy_nonoverlapping(&statdata as *const StatData, statbuf_addr as *mut StatData, 1);
+    }
+
+    libcret
+}
+
+//------------------------------------FSYNC SYSCALL------------------------------------
+/*
+ *  `fsync` synchronizes a file's in-core state with storage device.
+ *  Reference: https://man7.org/linux/man-pages/man2/fsync.2.html
+ *
+ *  ## Arguments:
+ *   - `fd`: File descriptor to synchronize.
+ *
+ *  ## Implementation Details:
+ *   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+ *   - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
+ *   - The underlying libc::fsync() is called, which synchronizes both file data and metadata.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+pub fn fsync_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let virtual_fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "fsync", "Invalid Cage ID");
+    }
+
+    let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
+    if kernel_fd == -1 {
+        return syscall_error(Errno::EFAULT, "fsync", "Invalid Cage ID");
+    } else if kernel_fd == -9 {
+        return syscall_error(Errno::EBADF, "fsync", "Bad File Descriptor");
+    }
+
+    let ret = unsafe { libc::fsync(kernel_fd) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "fsync");
+    }
+    return ret;
+}
+
+//------------------------------------FDATASYNC SYSCALL------------------------------------
+/*
+ *  `fdatasync` synchronizes a file's data to storage device (but not metadata).
+ *  Reference: https://man7.org/linux/man-pages/man2/fdatasync.2.html
+ *
+ *  ## Arguments:
+ *   - `fd`: File descriptor to synchronize.
+ *
+ *  ## Implementation Details:
+ *   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+ *   - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
+ *   - The underlying libc::fdatasync() is called, which synchronizes only file data (not metadata
+ *     like timestamps), making it potentially faster than fsync().
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+pub fn fdatasync_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let virtual_fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "fdatasync", "Invalid Cage ID");
+    }
+
+    let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
+    if kernel_fd == -1 {
+        return syscall_error(Errno::EFAULT, "fdatasync", "Invalid Cage ID");
+    } else if kernel_fd == -9 {
+        return syscall_error(Errno::EBADF, "fdatasync", "Bad File Descriptor");
+    }
+
+    let ret = unsafe { libc::fdatasync(kernel_fd) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "fdatasync");
+    }
+    return ret;
+}
+
+//------------------------------------SYNC_FILE_RANGE SYSCALL------------------------------------
+/*
+ *  `sync_file_range` synchronizes a specific range of bytes in a file to storage device.
+ *  Reference: https://man7.org/linux/man-pages/man2/sync_file_range.2.html
+ *
+ *  ## Arguments:
+ *   - `fd`: File descriptor to synchronize.
+ *   - `offset`: Starting byte offset for the range to sync.
+ *   - `nbytes`: Number of bytes to synchronize.
+ *   - `flags`: Flags controlling the synchronization behavior.
+ *
+ *  ## Implementation Details:
+ *   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+ *   - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
+ *   - The underlying libc::sync_file_range() is called with the specified byte range and flags.
+ *   - This is more efficient than fsync() for large files when only a specific range needs syncing.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+pub fn sync_file_range_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    nbytes_arg: u64,
+    nbytes_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let virtual_fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+    let nbytes = sc_convert_sysarg_to_i64(nbytes_arg, nbytes_cageid, cageid);
+    let flags = sc_convert_sysarg_to_u32(flags_arg, flags_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "sync_file_range", "Invalid Cage ID");
+    }
+
+    let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
+    if kernel_fd == -1 {
+        return syscall_error(Errno::EFAULT, "sync_file_range", "Invalid Cage ID");
+    } else if kernel_fd == -9 {
+        return syscall_error(Errno::EBADF, "sync", "Bad File Descriptor");
+    }
+
+    let ret = unsafe {
+        libc::sync_file_range(kernel_fd, offset, nbytes, flags)
+    };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "sync_file_range");
+    }
+    ret
+}
+
+//------------------------------------READLINKAT SYSCALL------------------------------------
+/*
+ *  `readlinkat` reads the value of a symbolic link relative to a directory file descriptor.
+ *  Reference: https://man7.org/linux/man-pages/man2/readlinkat.2.html
+ *
+ *  ## Arguments:
+ *   - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
+ *   - `pathname`: Path to the symbolic link (relative to dirfd).
+ *   - `buf`: Buffer to store the link target.
+ *   - `bufsiz`: Size of the buffer.
+ *
+ *  There are two cases:
+ *  Case 1: When `dirfd` is AT_FDCWD:
+ *    - The path is converted using `sc_convert_path_to_host` and libc::readlink() is called.
+ *    - This uses the current working directory as the base for relative paths.
+ *
+ *  Case 2: When `dirfd` is not AT_FDCWD:
+ *    - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+ *    - The path is converted using `sc_convert_path_to_host` and libc::readlinkat() is called.
+ *    - This reads the symlink relative to the specified directory.
+ *
+ *  ## Return Value:
+ *   - Number of bytes placed in `buf` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+pub fn readlinkat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    buflen_arg: u64,
+    buflen_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "readlinkat", "Invalid Cage ID");
+    }
+
+    let libc_buflen = buflen + LIND_ROOT.len();
+    let mut libc_buf = vec![0u8; libc_buflen];
+    
+    let libcret = if virtual_fd == libc::AT_FDCWD {
+        // Case 1: AT_FDCWD - path is already converted by sc_convert_path_to_host
+        unsafe {
+            libc::readlink(
+                path.as_ptr(),
+                libc_buf.as_mut_ptr() as *mut c_char,
+                libc_buflen,
+            )
+        }
+    } else {
+        // Case 2: Specific directory fd
+        let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
+        if kernel_fd == -1 {
+            return syscall_error(Errno::EFAULT, "readlinkat", "Invalid Cage ID");
+        } else if kernel_fd == -9 {
+            return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
+        }
+
+        // path is already converted by sc_convert_path_to_host
+        unsafe {
+            libc::readlinkat(
+                kernel_fd,
+                path.as_ptr(),
+                libc_buf.as_mut_ptr() as *mut c_char,
+                libc_buflen,
+            )
+        }
+    };
+
+    if libcret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "readlinkat");
+    }
+
+    // Convert the result from readlink to a Rust string
+    let libcbuf_str = unsafe { CStr::from_ptr(libc_buf.as_ptr() as *const c_char) }
+        .to_str()
+        .unwrap();
+
+    // Adjust the result to remove LIND_ROOT prefix if present
+    let new_root = format!("{}/", LIND_ROOT);
+    let final_result = libcbuf_str
+        .strip_prefix(&new_root)
+        .unwrap_or(libcbuf_str);
+
+    // Check the length and copy the appropriate amount of data to buf
+    let bytes_to_copy = std::cmp::min(buflen, final_result.len());
+    unsafe {
+        std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf as *mut u8, bytes_to_copy);
+    }
+
+    bytes_to_copy as i32
+}
+
+//------------------RENAME SYSCALL------------------
+/*
+ *  `rename` changes the name or location of a file.
+ *  Reference: https://man7.org/linux/man-pages/man2/rename.2.html
+ *
+ *  ## Arguments:
+ *   - `oldpath`: Current path of the file.
+ *   - `newpath`: New path for the file.
+ *
+ *  ## Implementation Details:
+ *   - Both paths are converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The underlying libc::rename() is called with both converted paths.
+ *   - This can move files across directories within the same filesystem.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+pub fn rename_syscall(
+    cageid: u64,
+    oldpath_arg: u64,
+    oldpath_cageid: u64,
+    newpath_arg: u64,
+    newpath_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let oldpath = sc_convert_path_to_host(oldpath_arg, oldpath_cageid, cageid);
+    let newpath = sc_convert_path_to_host(newpath_arg, newpath_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "rename", "Invalid Cage ID");
+    }
+
+    let ret = unsafe { libc::rename(oldpath.as_ptr(), newpath.as_ptr()) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "rename");
+    }
+    ret
+}
+
+//------------------------------------UNLINK SYSCALL------------------------------------
+/*
+ *  `unlink` removes a file from the filesystem.
+ *  Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+ *
+ *  ## Arguments:
+ *   - `pathname`: Path to the file to be removed.
+ *
+ *  ## Implementation Details:
+ *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The underlying libc::unlink() is called with the converted path.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
 pub fn unlink_syscall(
     cageid: u64,
     path_arg: u64,
@@ -440,11 +952,11 @@ pub fn unlink_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "unlink", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "unlink", "Invalid Cage ID");
     }
 
     let ret = unsafe { libc::unlink(path.as_ptr()) };
-    
+
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "unlink");
@@ -1490,6 +2002,136 @@ pub fn nanosleep_time64_syscall(
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "nanosleep");
+    }
+    ret
+}
+
+//------------------------------------ACCESS SYSCALL------------------------------------
+/*
+ *  `access` checks whether the calling process can access the file pathname.
+ *  Reference: https://man7.org/linux/man-pages/man2/access.2.html
+ *
+ *  ## Arguments:
+ *   - `pathname`: Path to the file to check accessibility.
+ *   - `mode`: Accessibility check mode (F_OK, R_OK, W_OK, X_OK or combinations).
+ *
+ *  ## Implementation Details:
+ *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The mode parameter is passed directly to the underlying libc::access() call.
+ *
+ *  ## Return Value:
+ *   - `0` on success (file is accessible in the requested mode).
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+pub fn access_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    amode_arg: u64,
+    amode_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    let amode = sc_convert_sysarg_to_i32(amode_arg, amode_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "access", "Invalid Cage ID");
+    }
+
+    let ret = unsafe { libc::access(path.as_ptr(), amode) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "access");
+    }
+    ret
+}
+
+/*
+ *  `unlinkat` removes a file or directory relative to a directory file descriptor.
+ *  Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+ *
+ *  ## Arguments:
+ *   - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
+ *   - `pathname`: Path of the file/directory to be removed.
+ *   - `flags`: Can include `AT_REMOVEDIR` to indicate directory removal.
+ *
+ *  ## Implementation Details:
+ *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - For the `dirfd` parameter, if it's `AT_FDCWD`, the path conversion uses the current working directory.
+ *   - If `dirfd` is not `AT_FDCWD`, the virtual file descriptor is converted using `convert_fd_to_host`
+ *     and `unlinkat` is called relative to that directory.
+ *   - The `flags` parameter can include `AT_REMOVEDIR` to remove directories instead of files.
+ *
+ *   ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+pub fn unlinkat_syscall(
+    cageid: u64,
+    dirfd_arg: u64,
+    dirfd_cageid: u64,
+    pathname_arg: u64,
+    pathname_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
+    let pathname = sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "unlinkat", "Invalid Cage ID");
+    }
+
+    // Determine the appropriate kernel file descriptor based on dirfd.
+    let kernel_fd = if dirfd == libc::AT_FDCWD {
+        // Case 1: When AT_FDCWD is used.
+        // pathname is already converted by sc_convert_path_to_host
+        libc::AT_FDCWD
+    } else {
+        // Case 2: When a specific directory fd is provided.
+        // Translate the virtual file descriptor to the corresponding kernel file descriptor.
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, dirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
+        }
+        let vfd = wrappedvfd.unwrap();
+        vfd.underfd as i32
+    };
+
+    // Call the underlying libc::unlinkat() function with the fd and pathname.
+    let ret = unsafe { libc::unlinkat(kernel_fd, pathname.as_ptr(), flags) };
+
+    // If the call failed, retrieve and handle the errno
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "unlinkat");
     }
     ret
 }
