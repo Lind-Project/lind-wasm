@@ -19,11 +19,12 @@
 #include <sysdep-cancel.h>
 #include <socketcall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 ssize_t
 __libc_send (int fd, const void *buf, size_t len, int flags)
 {
-   return MAKE_SYSCALL(34, "syscall|send", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(SEND_SYSCALL, "syscall|send", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED);
 }
 weak_alias (__libc_send, send)
 weak_alias (__libc_send, __send)

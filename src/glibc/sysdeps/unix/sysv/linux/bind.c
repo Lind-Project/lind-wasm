@@ -18,11 +18,12 @@
 #include <sys/socket.h>
 #include <socketcall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __bind (int fd, const struct sockaddr * addr, socklen_t len)
 {
   // Dennis Edit
-  return MAKE_SYSCALL(33, "syscall|bind", (uint64_t) fd, (uint64_t)(uintptr_t) addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(BIND_SYSCALL, "syscall|bind", (uint64_t) fd, (uint64_t)(uintptr_t) addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__bind, bind)
