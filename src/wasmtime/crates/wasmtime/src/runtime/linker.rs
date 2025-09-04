@@ -17,7 +17,7 @@ use hashbrown::hash_map::{Entry, HashMap};
 use log::warn;
 
 use super::store::StoreInner;
-use super::InstantiateType;
+use super::{InstantiateType, InstanceId};
 
 /// Structure used to link wasm modules/instances together.
 ///

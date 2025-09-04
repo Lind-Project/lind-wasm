@@ -17,6 +17,7 @@ use wasmtime::{
 };
 
 use wasmtime_environ::MemoryIndex;
+use cage::signal::{lind_signal_init, lind_thread_exit};
 
 pub mod clone_constants;
 pub mod signal;
@@ -350,11 +351,13 @@ impl<
         }
         let child_cageid = child_cageid.unwrap();
         let parent_pid = self.pid;
-
         // calling fork in rawposix to fork the cage
+        // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+        // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
         make_syscall(
             self.pid as u64, 
-            FORK_SYSCALL, // syscall num for fork 
+            (FORK_SYSCALL) as u64, // syscall num for fork 
+            0,
             self.pid as u64, 
             child_cageid, 
             self.pid as u64,
@@ -417,7 +420,7 @@ impl<
                     }
 
                     // instantiate the module
-                    let instance = instance_pre
+                    let (instance, _) = instance_pre
                         .instantiate_with_lind(
                             &mut store,
                             InstantiateType::InstantiateChild {
@@ -435,7 +438,7 @@ impl<
                     // retrieve the handler (underlying pointer) for the epoch global
                     let pointer = lind_epoch.get_handler(&mut store);
                     // initialize the signal for the main thread of forked cage
-                    rawposix::interface::lind_signal_init(
+                    lind_signal_init(
                         child_cageid,
                         pointer,
                         THREAD_START_ID,
@@ -505,15 +508,18 @@ impl<
                         match exit_code {
                             Val::I32(val) => {
                                 // exit the main thread
-                                if rawposix::interface::lind_thread_exit(
+                                if lind_thread_exit(
                                     child_cageid,
                                     THREAD_START_ID as u64,
                                 ) {
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
+                                    // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                                    // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                                     make_syscall(
                                         child_cageid, // self cage
-                                        EXIT_SYSCALL, // syscall num
+                                        (EXIT_SYSCALL) as u64, // syscall num
+                                        0,
                                         child_cageid, // target cage
                                         *val as u64, // 1st arg: status
                                         child_cageid,
@@ -717,7 +723,7 @@ impl<
                     // retrieve the handler (underlying pointer) for the epoch global
                     let pointer = lind_epoch.get_handler(&mut store);
                     // initialize the signal for the thread of the cage
-                    rawposix::interface::lind_signal_init(
+                    lind_signal_init(
                         child_cageid as u64,
                         pointer,
                         next_tid as i32,
@@ -775,18 +781,21 @@ impl<
                     match exit_code {
                         Val::I32(val) => {
                             // exit the thread
-                            if rawposix::interface::lind_thread_exit(
+                            if lind_thread_exit(
                                 child_cageid as u64,
                                 next_tid as u64,
                             ) {
                                 // we clean the cage only if this is the last thread in the cage
                                 // exit the cage with the exit code
+                                // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                                // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                                 make_syscall(
-                                    child_cageid, // self cage
-                                    EXIT_SYSCALL, // syscall num
-                                    child_cageid, // target cage
+                                    (child_cageid) as u64, // self cage
+                                    (EXIT_SYSCALL) as u64, // syscall num
+                                    0,
+                                    (child_cageid) as u64, // target cage
                                     *val as u64, // 1st arg: status
-                                    child_cageid,
+                                    (child_cageid) as u64,
                                     0,
                                     0,
                                     0,
@@ -986,9 +995,12 @@ impl<
 
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
+            // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+            // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
             make_syscall(
                 cloned_pid as u64, 
-                EXEC_SYSCALL, // syscall num for exec 
+                (EXEC_SYSCALL) as u64, // syscall num for exec 
+                0,
                 cloned_pid as u64, 
                 0,
                 0,

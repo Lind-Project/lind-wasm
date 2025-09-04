@@ -1,11 +1,12 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use threei::threei::{copy_data_between_cages, make_syscall, register_handler};
+use threei::threei::{copy_data_between_cages, make_syscall, register_handler, copy_handler_table_to_cage};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use wasmtime::Caller;
 use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
+use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
 // then the syscall would be dispatched into rawposix, or other crates under wasmtime, depending on the syscall, to perform its job
@@ -53,25 +54,26 @@ impl LindCommonCtx {
         let start_address = get_memory_base(&caller);
         match call_number as i32 {
             // clone syscall
-            171 => {
+            CLONE_SYSCALL => {
                 let clone_args = unsafe { &mut *((arg1 + start_address) as *mut CloneArgStruct) };
                 clone_args.child_tid += start_address;
                 wasmtime_lind_multi_process::clone_syscall(caller, clone_args)
             }
             // exec syscall
-            69 => wasmtime_lind_multi_process::exec_syscall(
+            EXEC_SYSCALL => wasmtime_lind_multi_process::exec_syscall(
                 caller,
                 arg1 as i64,
                 arg2 as i64,
                 arg3 as i64,
             ),
             // exit syscall
-            30 => wasmtime_lind_multi_process::exit_syscall(caller, arg1 as i32),
+            EXIT_SYSCALL => wasmtime_lind_multi_process::exit_syscall(caller, arg1 as i32),
             // other syscalls goes into rawposix
             _ => {
                 make_syscall(
                     self.pid as u64,
                     call_number as u64,
+                    call_name as u64,
                     self.pid as u64, // Set target_cageid same with self_cageid by defualt 
                     arg1, 
                     self.pid as u64,

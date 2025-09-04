@@ -9,15 +9,20 @@ use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
-use std::ffi::OsString;
+use std::ffi::{OsString, CStr};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
 use wasmtime::{
-    AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType,
+    AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType
 };
+pub use once_cell::sync::Lazy;
+
+use wasmtime::Instance;
+use std::sync::RwLock;
+
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
@@ -26,7 +31,10 @@ use wasmtime_wasi::WasiView;
 use wasmtime_lind_utils::LindCageManager;
 
 use threei::threei::{make_syscall, threei_wasm_func};
-use wasmtime::vm::InstanceHandle;
+use wasmtime::runtime::vm::instance::InstanceHandle;
+use rawposix::sys_calls::{lindrustinit, lindrustfinalize};
+use wasmtime::Caller;
+use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
 
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::WasiNnCtx;
@@ -228,7 +236,7 @@ impl RunCommand {
         }
 
         // Initialize Lind here
-        rawposix::safeposix::dispatcher::lindrustinit(0);
+        lindrustinit(0);
         // new cage is created
         lind_manager.increment();
 
@@ -265,15 +273,18 @@ impl RunCommand {
                     code = *res;
                 }
                 // exit the thread
-                if rawposix::interface::lind_thread_exit(
+                if lind_thread_exit(
                     CAGE_START_ID as u64,
                     THREAD_START_ID as u64,
                 ) {
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
+                    // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                    // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                     make_syscall(
                         1,
-                        EXIT_SYSCALL,
+                        (EXIT_SYSCALL) as u64,
+                        0,
                         1,
                         code as u64, // Exit type
                         1,
@@ -296,7 +307,7 @@ impl RunCommand {
                 // we wait until all other cage exits
                 lind_manager.wait();
                 // after all cage exits, finalize the lind
-                rawposix::safeposix::dispatcher::lindrustfinalize();
+                lindrustfinalize();
             }
             Err(e) => {
                 // Exit the process if Wasmtime understands the error;
@@ -670,7 +681,7 @@ impl RunCommand {
                 let pointer = lind_epoch.get_handler(&mut *store);
 
                 // initialize the signal for the main thread of the cage
-                rawposix::interface::lind_signal_init(
+                lind_signal_init(
                     pid,
                     pointer as *mut u64,
                     THREAD_START_ID,
@@ -678,7 +689,7 @@ impl RunCommand {
                 );
 
                 // see comments at signal_may_trigger for more details
-                rawposix::interface::signal_may_trigger(pid);
+                signal_may_trigger(pid);
 
                 // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s 
                 // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across 
@@ -724,17 +735,17 @@ impl RunCommand {
                                     .get_export(&mut store, &syscall_name).and_then(|f| f.into_func())
                                                     .ok_or_else(|| anyhow!("failed to find function export `{}`", syscall_name)).unwrap();
                             
-                            let grate_entry_point = match grate_entry_func.typed::<(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64), i32>(&mut store) {
+                           let grate_entry_point = match grate_entry_func.typed::<(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64), i32>(&mut store) {
                                 Ok(typed_func) => typed_func,
-                                Err(_e) => {
+                                Err(e) => {
+                                    eprintln!("[wasmtime|run] Failed to find function '{}': {:?}", syscall_name, e);
                                     return -1; 
                                 }
                             };
-                            
-                            let result = match grate_entry_point.call(&mut store, (index, cageid, arg1, arg1cageid, arg2, arg2cageid, arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6, arg6cageid)) {
+                            let result = match grate_entry_point.call(&mut store, (cageid, arg1, arg1cageid, arg2, arg2cageid, arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6, arg6cageid)) {
                                 Ok(value) => value,
                                 Err(e) => {
-                                    eprintln!("Error calling pass_fptr_to_wt: {:?}", e);
+                                    eprintln!("Error calling {}: {:?}", syscall_name, e);
                                     return -1; 
                                 }
                             };

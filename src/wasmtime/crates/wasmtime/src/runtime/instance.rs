@@ -22,7 +22,6 @@ use wasmparser::WasmFeatures;
 use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, PrimaryMap, TableIndex, TypeTrace,
 };
-use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 
 use super::Val;
 
@@ -217,7 +216,7 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
     ) -> Result<Instance> {
-        let (instance, start) = Instance::new_raw(store.0, module, imports)?;
+        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;
@@ -252,10 +251,13 @@ impl Instance {
                 let memory_base = defined_memory.base as usize;
 
                 cage::memory::mem_helper::init_vmmap_helper(pid, memory_base, Some(minimal_pages as u32));
-
+                
+                // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                 make_syscall(
                     pid, // self cageid
-                    MMAP_SYSCALL, // syscall num
+                    (MMAP_SYSCALL) as u64, // syscall num
+                    0, // since wasmtime operates with lower level memory, it always interacts with underlying os
                     pid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     pid,
@@ -337,7 +339,7 @@ impl Instance {
         store: &mut StoreOpaque,
         module: &Module,
         imports: Imports<'_>,
-    ) -> Result<(Instance, Option<FuncIndex>)> {
+    ) -> Result<(Instance, Option<FuncIndex>, InstanceId)> {
         if !Engine::same(store.engine(), module.engine()) {
             bail!("cross-`Engine` instantiation is not currently supported");
         }
@@ -432,7 +434,7 @@ impl Instance {
                 .contains(WasmFeatures::BULK_MEMORY),
         )?;
 
-        Ok((instance, compiled_module.module().start_func))
+        Ok((instance, compiled_module.module().start_func, id))
     }
 
     pub(crate) fn from_wasmtime(handle: InstanceData, store: &mut StoreOpaque) -> Instance {
