@@ -172,6 +172,49 @@ pub fn get_unused_virtual_fd(
     Err(threei::Errno::EMFILE as u64)
 }
 
+/// This is used to request an unused fd from specific starting position. This is 
+/// similar to `get_unused_virtual_fd` except this function starts from a specific 
+/// starting position mentioned by `arg` arguments. This will be used for `fcntl`.
+#[doc = include_str!("../docs/get_unused_virtual_fd_from_startfd.md")]
+pub fn get_unused_virtual_fd_from_startfd(
+    cageid: u64,
+    fdkind: u32,
+    underfd: u64,
+    should_cloexec: bool,
+    perfdinfo: u64,
+    arg: u64,
+) -> Result<u64, threei::RetVal> {
+    let mut fdtable = GLOBALFDTABLE.lock().unwrap();
+
+    if !fdtable.contains_key(&cageid) {
+        panic!("Unknown cageid in fdtable access");
+    }
+    // Set up the entry so it has the right info...
+    // Note, a HashMap stores its data on the heap!  No need to box it...
+    // https://doc.rust-lang.org/book/ch08-03-hash-maps.html#creating-a-new-hash-map
+    let myentry = FDTableEntry {
+        realfd,
+        should_cloexec,
+        optionalinfo,
+    };
+
+    let myfdmap = fdtable.get_mut(&cageid).unwrap();
+
+    // Check the fds in order.
+    for fdcandidate in arg..FD_PER_PROCESS_MAX {
+        // Get the entry if it's Vacant and assign it to e (so I can fill
+        // it in).
+        if let std::collections::hash_map::Entry::Vacant(e) = myfdmap.entry(fdcandidate) {
+            e.insert(myentry);
+            _increment_realfd(realfd);
+            return Ok(fdcandidate);
+        }
+    }
+
+    // I must have checked all fds and failed to find one open.  Fail!
+    Err(threei::Errno::EMFILE as u64)
+}
+
 // This is used for things like dup2, which need a specific fd...
 // If the requested_virtualfd is used, I close it...
 #[doc = include_str!("../docs/get_specific_virtual_fd.md")]
@@ -422,6 +465,13 @@ pub fn return_fdtable_copy(cageid: u64) -> HashMap<u64, FDTableEntry> {
 // remaining.
 #[doc = include_str!("../docs/close_virtualfd.md")]
 pub fn close_virtualfd(cageid:u64, virtfd:u64) -> Result<(),threei::RetVal> {
+
+    // Below condition checks if the virtualfd is out of bounds and if yes it throws an error
+    // Note that this assumes that all virtualfd numbers returned < FD_PER_PROCESS_MAX 
+    if virtfd >= FD_PER_PROCESS_MAX {
+        return Err(threei::Errno::EBADFD as u64);
+    }
+    
     let mut fdtable = GLOBALFDTABLE.lock().unwrap();
 
     if !fdtable.contains_key(&cageid) {

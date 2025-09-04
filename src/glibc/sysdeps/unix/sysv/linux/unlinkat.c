@@ -20,12 +20,13 @@
 #include <fcntl.h>
 #include <sysdep.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Remove the link named NAME in the directory referred to by DIRFD, using FLAGS.  */
 int
 __unlinkat (int dirfd, const char *name, int flags)
 {
-   return MAKE_SYSCALL(3, "syscall|unlinkat", (uint64_t) dirfd, (uint64_t) name, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t) dirfd, (uint64_t) name, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
 }
 
 weak_alias (__unlinkat, unlinkat)
