@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <stdint.h> // For uint64_t definition
+#include "addr_translation.h"
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
 int __lind_make_syscall_trampoline(unsigned int callnumber, 
@@ -152,7 +153,16 @@ int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage
 // copytype: the type of copy, 0 for normal copy, 1 for string copy
 int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
 {
-    int ret = __imported_lind_3i_trampoline_cp_data(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, copytype);
+    int ret = __imported_lind_3i_trampoline_cp_data(
+		thiscage, 
+		targetcage,
+		TRANSLATE_UADDR_TO_HOST(srcaddr, srccage),
+		srccage,
+		TRANSLATE_UADDR_TO_HOST(destaddr, destcage),
+		destcage,
+		len,
+		copytype
+    );
     
     return ret;
 }
