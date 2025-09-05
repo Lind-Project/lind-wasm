@@ -3,10 +3,7 @@
 //! This file defines conversion helpers for basic primitive types (e.g., `i32`, `u32`, `i64`).
 //! These functions are used during syscall argument decoding and type-safe interpretation
 //! within the RawPOSIX syscall layer (`src/syscalls/`).
-use crate::fs_type_conversion::*;
-use crate::network_type_conversion::*;
-use cage::get_cage;
-use cage::memory::mem_helper::*;
+use cage::{get_cage, memory::memory::translate_vmmap_addr};
 use fdtables;
 use std::error::Error;
 use std::str::Utf8Error;
@@ -369,8 +366,8 @@ pub fn sc_convert_SigactionStruct<'a>(
 
     // Convert user buffer address to system address. We don't need to check permission here.
     let addr = match translate_vmmap_addr(&cage, act_arg) {
-        Some(a) => a,
-        None => return None,
+        Ok(a) => a,
+        Err(_) => return None,
     };
 
     let ptr = addr as *const SigactionStruct;
@@ -410,8 +407,8 @@ pub fn sc_convert_SigactionStruct_mut<'a>(
     };
     // Convert user buffer address to system address. We don't need to check permission here.
     let addr = match translate_vmmap_addr(&cage, act_arg) {
-        Some(a) => a,
-        None => return None,
+        Ok(a) => a,
+        Err(_) => return None,
     };
 
     let ptr = addr as *mut SigactionStruct;
@@ -442,9 +439,13 @@ pub fn sc_convert_sigset(set_arg: u64, set_cageid: u64, cageid: u64) -> Option<&
     } else {
         let cage = get_cage(set_cageid).unwrap();
         match translate_vmmap_addr(&cage, set_arg) {
-            Ok(addr) => match get_constsigset(addr) {
-                Ok(val) => return val,
-                Err(_) => panic!("Failed to get SigsetType from address"),
+            Ok(addr) => {
+                let ptr = addr as *mut SigsetType;
+                if !ptr.is_null() {
+                    unsafe { return Some(&mut *ptr); }
+                } else {
+                    panic!("Failed to get SigsetType from address");
+                }
             }
             Err(_) => panic!("Failed to get SigsetType from address"), // If translation fails, return None
         }
@@ -487,6 +488,24 @@ pub fn get_constitimerval<'a>(addr: u64) -> Result<Option<&'a ITimerVal>, i32> {
     Err(-1)
 }
 
+/// Converts a memory address to a constant `SigsetType` (u64).
+///
+/// # Arguments
+/// * `addr` – Raw memory address pointing to a SigsetType.
+///
+/// # Returns
+/// * `Ok(SigsetType)` if `addr` is valid and successfully converted.
+/// * `Err(-1)` if `addr` is null.
+pub fn get_constsigset(addr: u64) -> Result<SigsetType, i32> {
+    let ptr = addr as *const SigsetType;
+    if !ptr.is_null() {
+        unsafe {
+            return Ok(*ptr);
+        }
+    }
+    Err(-1)
+}
+
 /// Translate a user-provided argument into an immutable reference to an `ITimerVal`.
 ///
 /// This is a higher-level wrapper that first resolves the cage memory mapping,
@@ -498,7 +517,7 @@ pub fn get_constitimerval<'a>(addr: u64) -> Result<Option<&'a ITimerVal>, i32> {
 /// * `cageid` – The calling cage ID (used for optional validation).
 ///
 /// # Returns
-/// * `Some(&ITimerVal)` if `val_arg` is nonzero and translation succeeds.
+/// * `Some(ITimerVal)` if `val_arg` is nonzero and translation succeeds.
 /// * `None` if `val_arg == 0`.
 ///
 /// # Panics
@@ -508,22 +527,23 @@ pub fn sc_convert_itimerval(
     val_arg: u64,
     val_arg_cageid: u64,
     cageid: u64,
-) -> Option<&ITimerVal> {
+) -> Option<ITimerVal> {
     #[cfg(feature = "secure")]
     {
-        if !validate_cageid(set_cageid, cageid) {
+        if !validate_cageid(val_arg_cageid, cageid) {
             panic!("Invalide Cage ID");
         }
     }
 
-    let cage = get_cage(set_cageid).unwrap();
+    let cage = get_cage(val_arg_cageid).unwrap();
 
     if val_arg == 0 {
         None
     } else {
         match translate_vmmap_addr(&cage, val_arg) {
             Ok(addr) => match get_constitimerval(addr) {
-                Ok(itimeval) => itimeval,
+                Ok(Some(itimeval)) => Some(*itimeval),
+                Ok(None) => None,
                 Err(_) => panic!("Failed to get ITimerVal from address"),
             },
             Err(_) => panic!("Failed to get ITimerVal from address"),
@@ -552,22 +572,23 @@ pub fn sc_convert_itimerval_mut(
     val_arg: u64,
     val_arg_cageid: u64,
     cageid: u64,
-) ->  Option<&mut ITimerVal>{
+) -> Option<&'static mut ITimerVal> {
     #[cfg(feature = "secure")]
     {
-        if !validate_cageid(set_cageid, cageid) {
+        if !validate_cageid(val_arg_cageid, cageid) {
             panic!("Invalide Cage ID");
         }
     }
 
-    let cage = get_cage(set_cageid).unwrap();
+    let cage = get_cage(val_arg_cageid).unwrap();
 
     if val_arg == 0 {
         None
     } else {
         match translate_vmmap_addr(&cage, val_arg) {
             Ok(addr) => match get_itimerval(addr) {
-                Ok(itimeval) => itimeval,
+                Ok(Some(itimeval)) => Some(itimeval),
+                Ok(None) => None,
                 Err(_) => panic!("Failed to get ITimerVal from address"),
             },
             Err(_) => panic!("Failed to get ITimerVal from address"),

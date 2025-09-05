@@ -1,8 +1,8 @@
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
-use typemap::type_conv::get_pipearray;
-use typemap::fs_conv::*;
+// Updated imports - using path_conversion for filesystem operations
+use typemap::*;
 
 /// Helper function for close_syscall
 /// 

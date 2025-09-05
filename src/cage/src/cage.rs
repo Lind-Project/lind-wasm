@@ -11,8 +11,7 @@ pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicI32, AtomicU64};
 pub use std::sync::Arc;
 use sysdefs::data::fs_struct::SigactionStruct;
-
-pub const MAX_CAGEID: i32 = 1024;
+use sysdefs::constants::fs_const::MAX_CAGEID;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Zombie {
