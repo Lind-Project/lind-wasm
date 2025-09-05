@@ -12,9 +12,6 @@ pub const LIND_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
 
 // ===== Lind specific
 pub const FDKIND_KERNEL: u32 = 0;
-/// Maximum cage id determines how many processes can exist simultaneously in the RawPOSIX
-/// `Vec` in Rust is indexed using `usize` not `u64`
-pub const MAX_CAGEID: usize = 1024;
 
 // ===== Standard File Descriptors =====
 pub const STDIN_FILENO: i32 = 0; // File descriptor for standard input

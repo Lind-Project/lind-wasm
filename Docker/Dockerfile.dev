@@ -1,0 +1,98 @@
+# syntax=docker/dockerfile:1.7-labs
+# NOTE: Enable Docker Labs syntax for future convenience
+
+# Base image for development and debugging with perf and gdb support
+#
+# - Installs standard build tools and debugging utilities
+# - Assumes container is run with --privileged for perf to function
+#
+# Usage:
+#     docker build -f Dockerfile.dev -t devtest .
+#     docker run --privileged -it devtest /bin/bash
+
+FROM ubuntu:22.04
+
+# --- Build arguments ---
+ARG USERNAME=lind
+ARG BRANCH_NAME=main
+ARG LLVM_VERSION="llvmorg-18.1.8"
+ARG CLANG_PACKAGE="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
+
+# --- System setup ---
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install base tools
+RUN apt-get update && apt-get install -y --no-install-recommends -qq \
+    binutils \
+    bison \
+    build-essential \
+    ca-certificates \
+    curl \
+    gawk \
+    git \
+    gnupg \
+    libc6-dev-i386-cross \
+    libxml2 \
+    make \
+    python3 \
+    sed \
+    sudo \
+    unzip \
+    zip \
+    vim \
+    wget \
+    openssl \
+    libssl-dev \
+    golang \
+    gdb \
+    linux-tools-common \
+    linux-tools-generic \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Create user ---
+RUN groupadd --gid 1000 ${USERNAME} && \
+    useradd --uid 1000 --gid ${USERNAME} --create-home --shell /bin/bash ${USERNAME} && \
+    echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# --- Install libtinfo5 as root ---
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+
+# --- Switch to user ASAP ---
+USER ${USERNAME}
+WORKDIR /home/${USERNAME}
+
+# --- Install Rust as user ---
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain nightly-2025-06-01
+
+# --- Clone the repo as user ---
+RUN git clone --branch "${BRANCH_NAME}" --single-branch https://github.com/Lind-Project/lind-wasm.git
+
+# --- Enable discovery of all branches, then fetch them ---
+WORKDIR /home/${USERNAME}/lind-wasm
+RUN git remote set-branches origin '*' && git fetch origin
+
+# --- Switch back to root for installing Clang binaries and symlinking ---
+USER root
+
+RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM_VERSION}/${CLANG_PACKAGE}.tar.xz | \
+    tar -xJ -C /home/${USERNAME}/lind-wasm && \
+    ln -sf /home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}/bin/* /usr/local/bin/
+
+# --- Patch glibc wasi includes into clang dir and fix permissions ---
+RUN cp -r /home/${USERNAME}/lind-wasm/src/glibc/wasi \
+         /home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}/lib/clang/18/lib && \
+    chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/
+
+# --- Back to user for everything else ---
+USER ${USERNAME}
+
+# --- Fix PATH ---
+ENV PATH="/usr/local/bin:/home/${USERNAME}/.cargo/bin:/home/${USERNAME}/go/bin:$PATH"
+ENV CLANG="/home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}"
+
+# --- Prebuild ---
+RUN make sysroot && make wasmtime
+
+CMD ["/bin/bash"]
