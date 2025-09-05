@@ -4,7 +4,7 @@
 
 The In Memory File System (IMFS) provides a self-contained implementation of a POSIX-like FS backed by memory. It serves as a backbone that can later be integrated as a grate to sandbox any FS calls made by a cage. IMFS exposts POSIX-like APIs and maintains its own inode and file descriptor tables to provide an end-to-end FS interface.
 
-IMFS is independent of the Lind and can run natively on Linux, with the limitation that it only supports a single process. New features are usually developed and tested nateively before beign integrated and tested within Lind. 
+IMFS is independent of the Lind and can run natively on Linux, with the limitation that it only supports a single process. New features are usually developed and tested natively before being integrated and tested within Lind. 
 
 ### File System APIs
 
