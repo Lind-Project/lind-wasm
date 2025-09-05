@@ -19,10 +19,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sysdep.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __dup3 (int fd, int fd2, int flags)
 {
-  return 0;
+  return MAKE_SYSCALL(DUP3_SYSCALL, "syscall|dup3", (uint64_t) fd, (uint64_t) fd2, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
 }
-// weak_alias(__GI___dup3, __dup3)
+weak_alias (__dup3, dup3)

@@ -54,6 +54,8 @@ int32_t __wasi_thread_spawn(void* start_arg) {
     return __imported_wasi_thread_spawn((int32_t) start_arg);
 }
 
+void *__copy_tls(unsigned char *);
+
 /* Globally enabled events.  */
 extern td_thr_events_t __nptl_threads_events;
 libc_hidden_proto (__nptl_threads_events)
@@ -239,50 +241,8 @@ late_init (void)
    the user code (*PD->start_routine).  */
 
 
-static void __pthread_exit_2(void *result, struct pthread *self)
-{
-	// struct pthread *self = THREAD_SELF;
-	self->result = result;
-
-  MAKE_SYSCALL(98, "syscall|futex", (uint64_t) &self->tid, (uint64_t) FUTEX_WAKE, (uint64_t) 1, (uint64_t)0, 0, (uint64_t)0);
-
-	self->tid = 0;
-
-  // TODO: need to free this somewhere
-  // free(self->stackblock);
-}
-
-void wasi_thread_start(int tid, void *p);
-void *__dummy_reference = wasi_thread_start;
-
 void set_stack_pointer(int stack_addr);
 void *__dummy_reference2 = set_stack_pointer;
-
-struct start_args {
-    /*
-    * Note: the offset of the "stack" and "tls_base" members
-    * in this structure is hardcoded in wasi_thread_start.
-    */
-    char *stack;
-    void *tls_base;
-    void *(*start_func)(void *);
-    void *start_arg;
-    pthread_t *thread;
-};
-
-void __wasi_thread_start_C(int tid, void *p)
-{
-    struct start_args *args = p;
-
-    struct pthread *self = (struct pthread*) args->thread;
-    __wasilibc_pthread_self = *self;
-
-    atomic_store((atomic_int *) &(self->tid), tid);
-
-    MAKE_SYSCALL(98, "syscall|futex", (uint64_t) &self->tid, (uint64_t) FUTEX_WAKE, 1, 0, 0, 0);
-
-    __pthread_exit_2((args->start_func)(args->start_arg), self);
-}
 
 static int _Noreturn start_thread (void *arg);
 
@@ -340,16 +300,58 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
 
   TLS_DEFINE_INIT_TP (tp, pd);
 
-  unsigned char *stack = 0;
+  /*
+  thread stack allocation map (from high to low memory addresses):
+        ----------- <--- pd->stackblock
+        |         |
+        |         | ^
+        |         | |
+        | pthread | |
+        |  stack  | | user stack grow direction
+        |         | |
+        |         | |
+        |         |
+        ----------- <--- tls_base_addr / real_stack_bottom
+        | tls_base|
+        ----------- <--- clone_args
+        |  clone  |
+        |   args  |
+        ----------- <--- TLS_addr
+        |   TLS   |
+        |   data  |
+        ----------- <--- pthread_addr
+        | pthread |
+        |  struct |
+        ----------- <--- stack_bottom
+  */
+  size_t tls_size = __builtin_wasm_tls_size();
+  // stack bottom = stack top + stack size
+  unsigned char *stack_bottom = (void *)pd->stackblock + pd->stackblock_size;
+  // calculate the offset for each field based on the above diagram
 
-  struct clone_args *args = (void *)pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE;
+  // Reserve space for the pthread struct just below the stack
+  unsigned char *pthread_addr = stack_bottom - TLS_TCB_SIZE;
+  // Allocate space for TLS data below pthread struct
+  unsigned char *TLS_addr = pthread_addr - tls_size;
+  // Allocate space for clone_args below TLS data
+  struct clone_args *args = (struct clone_args *)(TLS_addr - sizeof(struct clone_args));
+  // Reserve 8 bytes below clone_args for the TLS base pointer
+  uintptr_t* tls_base_addr = (uintptr_t*)((unsigned char *)args - 8);
+  // The actual bottom of the usable stack (with all metadata laid out)
+  unsigned char *real_stack_bottom = (unsigned char *)tls_base_addr;
+
+  // set up clone args
   memset(args, 0, sizeof(struct clone_args));
   args->flags = clone_flags;
-  args->stack = stackaddr;
-  args->stack = stackaddr + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE;
-  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE;
+  args->stack = real_stack_bottom;
+  args->stack_size = stacksize - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
   args->child_tid = &pd->tid;
 
+  // initialize TLS data
+  void* tls_base = __copy_tls((void *)TLS_addr);
+  *tls_base_addr = (uintptr_t)tls_base;
+
+  // do the clone call
   int ret = __clone_internal(args, &start_thread, pd);
   if (__glibc_unlikely (ret == -1))
     return errno;
@@ -392,6 +394,16 @@ static int _Noreturn
 start_thread (void *arg)
 {
   struct pthread *pd = arg;
+
+  // retrieve the TLS data address
+  size_t tls_size = __builtin_wasm_tls_size();
+  uintptr_t* tls_base_addr = pd->stackblock + pd->stackblock_size - sizeof(struct clone_args) - TLS_TCB_SIZE - tls_size - 8;
+  void* tls_base = (void*)(*tls_base_addr);
+
+  // set __tls_base wasm global
+	__asm__("local.get %0\n"
+    "global.set __tls_base\n"
+    :: "r"(tls_base));
 
   /* We are either in (a) or (b), and in either case we either own PD already
      (2) or are about to own PD (1), and so our only restriction would be that

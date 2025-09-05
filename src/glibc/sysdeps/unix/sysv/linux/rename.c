@@ -21,10 +21,11 @@
 #include <sysdep.h>
 #include <errno.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Rename the file OLD to NEW.  */
 int
 rename (const char *old, const char *new)
 {
-   return MAKE_SYSCALL(6, "syscall|rename", (uint64_t) old, (uint64_t) new, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(RENAME_SYSCALL, "syscall|rename", (uint64_t) old, (uint64_t) new, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
