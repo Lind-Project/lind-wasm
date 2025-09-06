@@ -1,14 +1,14 @@
-## In Memory File System 
-
-### Overview 
+# In Memory File System 
+ 
+## Overview 
 
 The In Memory File System (IMFS) provides a self-contained implementation of a POSIX-like FS backed by memory. It serves as a backbone that can later be integrated as a grate to sandbox any FS calls made by a cage. IMFS exposts POSIX-like APIs and maintains its own inode and file descriptor tables to provide an end-to-end FS interface.
 
-IMFS is independent of the Lind and can run natively on Linux, with the limitation that it only supports a single process. New features are usually developed and tested natively before being integrated and tested within Lind. 
+IMFS is independent of Lind and can run natively on Linux, with the limitation that it only supports a single process. New features are usually developed and tested natively before being integrated and tested within Lind. 
 
-### File System APIs
+## File System APIs
 
-IMFS mirrors POSIX system calls with the the added `cageid` paramter. For example:
+IMFS mirrors POSIX system calls with an added `cageid` parameter. For example:
 
 ```
 open(const char* pathname, int flags, mode_t mode)
@@ -16,35 +16,84 @@ open(const char* pathname, int flags, mode_t mode)
 imfs_open(int cageid, const char* pathname, int flags, mode_t mode)
 ```
 
-The behaviour of these APIs closely matches those of Linux's system calls, including types, return values, and error codes. This ensure that IMFS can be a drop-in replacement for an actual filesystem. 
+The behaviours of these APIs closely match those of their corresponding Linux system calls. They follow the semantics described in man pages including types, return valies, and error codes. This allows IMFS to be a drop-in replacement for a conventional filesystem. 
 
-### Utility Functions. 
+As mentioned earlier, it is possible to run IMFS natively, and it requires the `cageid` parameter to be stubbed as an integer constant between `[0, 128)` 
+
+```
+#define CAGEID 0
+
+int fd = imfs_open(CAGEID, "/testfile.txt", O_RDONLY, 0); 
+imfs_close(CAGEID, fd);
+```
+## Utility Functions. 
 
 In addition to POSIX APIs, IMFS also provides helper functions for moving files in and out of memory. 
 
-```
-load_file(char *path); // Load a single file into IMFS at 'path', recursively creating any required folders. 
+- `load_file(char *path)` Load a single file into IMFS at `path`, recursively creating any required folders. 
 
-dump_file(char *path, char *actual_path); // Copies IMFS file at 'path' to the host filesystem at 'actual_path'
+- `dump_file(char *path, char *actual_path)` Copy IMFS file at `path` to the host filesystem at `actual_path`
 
-preloads(char *preload_files); // 'preload_files' is expected to be a ':' separated list of filenames that are each passed to load_file()
-```
+- `preloads(char *preload_files)` Copy files from host to IMFS, `preload_files` being a `:` separated list of filenames. 
 
-Typically, `preloads` or `load_file` is called at the start of a grate's lifecycle to stage the required files, and `dump_file` is called at the end to persist any results back to the host. 
+These utility functions are typically called at the beginning and the end of a grate's lifecycle. `load_file` and `preloads` are used to stage files into memory, and `dump_file` is used to persist results back to the host system.
 
-### Implementation
+## Implementation
 
-IMFS tracks files and directories through an array of `struct Node` which is equivalent to an inode (file, directory, symlink, or pipe). Node allocations are implemented through the use of a free list and a pointer that maintains the next free slot in the array. The data stored in a Node is specific to the node's type. A directory stores information about child nodes, and a symlink stores a pointer to the linked node. For a regular file, data is stored in `Chunks` that each contain 1024 bytes of data. These chunks are linked through a linked list, and the node stores the pointer to the head and the tail of this list. 
+### Inodes 
 
-Each cage has its own array of `struct FileDesc` objects that represent a file descriptor. The file descriptors returned and used by the FS functions are indices into this array. FD allocations start at descriptor 3, the implementation for standard descriptors (stdin, stdout, stderr) are left to the enclosing grate. FileDescs are allocated through `open` or `openat` calls. Upon allocation, the FileDesc stores a pointer to the Node that was opened, the read offset, and the open flags. 
+IMFS maintains an array of `Node` objects each of which serve as an inode to represent an FS object (file, directory, symlink, or pipe). Allocation of nodes is performed using a free-list mechanism along with a pointer that tracks the next available slot within the array. 
 
-### Testing 
+The structure of the node is specialized according to its type:
 
-Testing for POSIX-compliance is checked through using `pjdfstest` which is a standard test suite used for BSD and Linux file systems. The tests are run natively on Linux which required modifying `pjdfstest` to have a persistent test runner to maintain state. `pjdfstest` provides a comprehensive list of one-liner assertions that are helpful to discover edge-cases and violations of the POSIX standards. 
+- Directories contain references to child nodes.
+- Symlinks maintain a pointer to the target node. 
+- Regular files store data in fixed-sized `Chunk`s, each of which store 1024 bytes of data. These chunks are organized as a singly linked list. 
 
-### Future Work
+### File Descriptors
+
+Each cage is associated with its own array of `FileDesc` objects that represent a file descriptor. The file descriptors used by these FS calls return indices into this array. 
+
+File descriptor allocation begins at index 3. The management of standard descriptors (`stdin`, `stdout`, `stderr`) are delegated to the enclosing grate.
+
+Descriptors are allocated using `imfs_open` or `imfs_openat`. Each file descriptor object stores:
+
+- A pointer to the associated node. 
+- The current file offset. 
+- Open flags
+
+## Building
+
+### Native Build
+
+- `make lib` to build as a library
+- `make imfs` to build with the main function
+- `make debug` build with debug symbols
+
+### Lind Integration Build
+
+The following compile flags are required to compile IMFS for a Lind build:
+
+- `-DLIB` omit the main function
+- `-DDIAG` to enable diagnostic logging
+- `-D_GNU_SOURCE` needed to support `SEEK_HOLE` and `SEEK_DATA` operations in `imfs_lseek()`
+
+## Testing 
+
+POSIX compliance is validate through `pjdfstest`, a widely adopted test suite for file systems for both BSD and Linux file systems. The tests are executed natively on Linux, which required modifications to `pjdfstest` in order to support a persisten test runner capabla of maintaining FS state. 
+
+`pdjfstest` provides a comprehensive list of assertions each designed to verify a specific FS property. This approach allows for easier detection of edge-cases. 
+
+The test suite is invoked using:
+
+- `make test` run all tests
+- `make test-<feature>` run all tests in a particular feature
+
+## Future Work
 
 - Currently only a handful of the most common logical branches are supported for most syscalls. For example, not all flags are supported for `open`. 
 - Access control is not implemented, by default all nodes are created with mode `0777` allowing for any user or group to access them. 
 - `mmap` is yet to be implemented. 
 - Performance testing for reading and writing. 
+- Integrating FD table management with `fdtables` crate.
+
