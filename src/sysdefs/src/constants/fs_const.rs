@@ -13,6 +13,7 @@ pub const LIND_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
 // ===== Lind specific
 pub const FDKIND_KERNEL: u32 = 0;
 pub const MAX_CAGEID: i32 = 1024; // Maximum cage ID allowed
+pub const MAXFD: usize = 1024; // Maximum file descriptors per cage
 
 // ===== Standard File Descriptors =====
 pub const STDIN_FILENO: i32 = 0; // File descriptor for standard input
