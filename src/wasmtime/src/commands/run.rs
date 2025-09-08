@@ -33,7 +33,7 @@ use wasmtime_wasi::WasiView;
 use wasmtime_lind_utils::LindCageManager;
 
 use threei::threei::{make_syscall, threei_wasm_func};
-use wasmtime::runtime::vm::instance::InstanceHandle;
+use wasmtime::InstanceHandle;
 use rawposix::sys_calls::{lindrustinit, lindrustfinalize};
 use wasmtime::Caller;
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
