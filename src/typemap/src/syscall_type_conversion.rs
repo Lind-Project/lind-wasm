@@ -464,7 +464,7 @@ pub fn get_itimerval<'a>(addr: u64) -> Result<Option<&'a mut ITimerVal>, i32> {
     let ptr = addr as *mut ITimerVal;
     if !ptr.is_null() {
         unsafe {
-            return Ok(&*ptr);
+            return Ok(Some(&mut *ptr));
         }
     }
     Err(-1)
@@ -482,7 +482,7 @@ pub fn get_constitimerval<'a>(addr: u64) -> Result<Option<&'a ITimerVal>, i32> {
     let ptr = addr as *const ITimerVal;
     if !ptr.is_null() {
         unsafe {
-            return Ok(&*ptr);
+            return Ok(Some(&*ptr));
         }
     }
     Err(-1)
@@ -527,7 +527,7 @@ pub fn sc_convert_itimerval(
     val_arg: u64,
     val_arg_cageid: u64,
     cageid: u64,
-) -> Option<ITimerVal> {
+) -> Option<&'static ITimerVal> {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(val_arg_cageid, cageid) {
@@ -542,7 +542,7 @@ pub fn sc_convert_itimerval(
     } else {
         match translate_vmmap_addr(&cage, val_arg) {
             Ok(addr) => match get_constitimerval(addr) {
-                Ok(Some(itimeval)) => Some(*itimeval),
+                Ok(itimeval) => itimeval,
                 Ok(None) => None,
                 Err(_) => panic!("Failed to get ITimerVal from address"),
             },
@@ -587,7 +587,7 @@ pub fn sc_convert_itimerval_mut(
     } else {
         match translate_vmmap_addr(&cage, val_arg) {
             Ok(addr) => match get_itimerval(addr) {
-                Ok(Some(itimeval)) => Some(itimeval),
+                Ok(itimeval) => itimeval,
                 Ok(None) => None,
                 Err(_) => panic!("Failed to get ITimerVal from address"),
             },
