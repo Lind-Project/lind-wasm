@@ -1,8 +1,15 @@
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
+use libc::c_void;
 // Updated imports - using path_conversion for filesystem operations
-use typemap::*;
+use typemap::syscall_type_conversion::*;
+use typemap::path_conversion::*;
+use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
+use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, FDKIND_KERNEL};
+use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
+use typemap::cage_helpers::*;
+use fdtables;
 
 /// Helper function for close_syscall
 /// 
@@ -80,12 +87,12 @@ pub fn open_syscall(
     }
 
     // Check if `O_CLOEXEC` has been est
-    let should_cloexec = (oflag & fs_const::O_CLOEXEC) != 0;
+    let should_cloexec = (oflag & O_CLOEXEC) != 0;
 
     // Mapping a new virtual fd and set `O_CLOEXEC` flag
     match fdtables::get_unused_virtual_fd(
         cageid,
-        fs_const::FDKIND_KERNEL,
+        FDKIND_KERNEL,
         kernel_fd as u64,
         should_cloexec,
         0,
