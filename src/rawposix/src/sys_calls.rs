@@ -2,7 +2,6 @@
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
 use crate::fs_calls::kernel_close;
-use cage::memory::mem_helper::*;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::{cagetable_init, add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie};
 use fdtables;
@@ -17,7 +16,6 @@ use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errn
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDOUT_FILENO, STDIN_FILENO, *};
 use sysdefs::constants::{EXIT_SUCCESS, VERBOSE};
 use typemap::syscall_type_conversion::*;
-use typemap::fs_type_conversion::*;
 use dashmap::DashMap;
 use typemap::{sc_convert_addr_to_host, sc_convert_sysarg_to_i32, sc_convert_sysarg_to_i32_ref, sc_unusedarg, sc_convert_buf_to_host, get_sockaddr, sc_convert_sysarg_to_u32};
 
@@ -437,11 +435,11 @@ pub fn getgid_syscall(
     };
 
     // Read the group id stored in the cage.
-    let gid = cage.getgid.load(Relaxed);
+    let gid = cage.gid.load(Relaxed);
 
     // If the group id is uninitialized (-1), update it to the default and return -1.
     if gid == -1 {
-        cage.getgid.store(DEFAULT_GID as i32, Relaxed);
+        cage.gid.store(DEFAULT_GID as i32, Relaxed);
         return -1;
     }
 
@@ -486,10 +484,10 @@ pub fn getegid_syscall(
     };
 
     // Read the effective group id (egid) from the cage.
-    let egid = cage.getegid.load(Relaxed);
+    let egid = cage.egid.load(Relaxed);
     if egid == -1 {
         // If not set, update with the default and return -1.
-        cage.getegid.store(DEFAULT_GID as i32, Relaxed);
+        cage.egid.store(DEFAULT_GID as i32, Relaxed);
         return -1;
     }
 
@@ -533,10 +531,10 @@ pub fn getuid_syscall(
     };
 
     // Read the current uid from the cage.
-    let uid = cage.getuid.load(Relaxed);
+    let uid = cage.uid.load(Relaxed);
     if uid == -1 {
         // If uid is uninitialized, set it to the default and return -1.
-        cage.getuid.store(DEFAULT_UID as i32, Relaxed);
+        cage.uid.store(DEFAULT_UID as i32, Relaxed);
         return -1;
     }
 
@@ -580,10 +578,10 @@ pub fn geteuid_syscall(
     };
 
     // Load the effective user ID.
-    let euid = cage.geteuid.load(Relaxed);
+    let euid = cage.euid.load(Relaxed);
     if euid == -1 {
         // If uninitialized, update to the default and return -1.
-        cage.geteuid.store(DEFAULT_UID as i32, Relaxed);
+        cage.euid.store(DEFAULT_UID as i32, Relaxed);
         return -1;
     }
 
@@ -645,7 +643,7 @@ pub fn sigaction_syscall(
     if let Some(oact_ref) = oact {
         if let Some(current_act) = cage.signalhandler.get(&sig) {
             // Copy the current signal action into the provided memory.
-            oact_ref.clone_from(current_act);
+            oact_ref.clone_from(&current_act);
         } else {
             // If there is no current action, use a default.
             oact_ref.clone_from(&SigactionStruct::default());
