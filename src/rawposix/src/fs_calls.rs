@@ -213,6 +213,69 @@ pub fn close_syscall(
     }
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/write.2.html
+///
+/// Linux `write()` syscall attempts to write `count` bytes from the buffer pointed to by `buf` to the file associated
+/// with the open file descriptor, `fd`. RawPOSIX first converts virtual fd to kernel fd due to the `fdtable` subsystem, second
+/// translates the `buf_arg` pointer to actual system pointer
+///
+/// Input:
+///     - cageid: current cageid
+///     - virtual_fd: virtual file descriptor, needs to be translated kernel fd for future kernel operation
+///     - buf_arg: pointer points to a buffer that stores the data
+///     - count_arg: length of the buffer
+///
+/// Output:
+///     - Upon successful completion of this call, we return the number of bytes written. This number will never be greater
+///         than `count`. The value returned may be less than `count` if the write_syscall() was interrupted by a signal, or
+///         if the file is a pipe or FIFO or special file and has fewer than `count` bytes immediately available for writing.
+pub fn write_syscall(
+    cageid: u64,
+    virtual_fd: u64,
+    vfd_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    count_arg: u64,
+    count_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+
+    if kernel_fd == -1 {
+        return syscall_error(Errno::EFAULT, "write", "Invalid Cage ID");
+    } else if kernel_fd == -9 {
+        return syscall_error(Errno::EBADF, "write", "Bad File Descriptor");
+    }
+
+    let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
+    let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "write", "Invalide Cage ID");
+    }
+
+    // Early return
+    if count == 0 {
+        return 0;
+    }
+
+    let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "write");
+    }
+    return ret;
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/mkdir.2.html
 ///
 /// Linux `mkdir()` syscall creates a new directory named by the path name pointed to by a path as the input parameter
@@ -983,4 +1046,41 @@ pub fn fcntl_syscall(
             ret
         }
     }
+}
+
+pub fn clock_gettime_syscall(
+    cageid: u64,
+    clockid_arg: u64,
+    clockid_cageid: u64,
+    tp_arg: u64,
+    tp_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
+    // let tp = sc_convert_sysarg_to_usize(tp_arg, tp_cageid, cageid);
+    let tp = sc_convert_addr_to_host(tp_arg, tp_cageid, cageid);
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "clock_gettime", "Invalide Cage ID");
+    }
+
+    let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "clock_gettime");
+    }
+
+    ret
 }
