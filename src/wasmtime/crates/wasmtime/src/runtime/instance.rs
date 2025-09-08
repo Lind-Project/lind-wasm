@@ -16,7 +16,7 @@ use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
 use threei::threei::make_syscall;
-use ::cage::mem_helper;
+use cage::memory::{init_vmmap, fork_vmmap};
 use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
@@ -250,7 +250,7 @@ impl Instance {
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let memory_base = defined_memory.base as usize;
 
-                cage::memory::mem_helper::init_vmmap_helper(pid, memory_base, Some(minimal_pages as u32));
+                init_vmmap(pid, memory_base, Some(minimal_pages as u32));
                 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
@@ -286,8 +286,8 @@ impl Instance {
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let child_address = defined_memory.base as usize;
             
-                cage::memory::mem_helper::init_vmmap_helper(child_pid, child_address, None);
-                cage::memory::mem_helper::fork_vmmap_helper(parent_pid as u64, child_pid);
+                init_vmmap(child_pid, child_address, None);
+                fork_vmmap(parent_pid as u64, child_pid);
             }
         }
 
