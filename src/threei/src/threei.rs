@@ -1,6 +1,6 @@
 //! Threei (Three Interposition) module
 use crate::syscall_table::SYSCALL_TABLE;
-use cage::memory::mem_helper::check_addr;
+use cage::memory::check_addr;
 use core::panic;
 use dashmap::DashSet;
 use once_cell::sync::Lazy;
