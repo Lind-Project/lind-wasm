@@ -13,9 +13,10 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering::*;
 use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
-use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use std::time::Duration;
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDOUT_FILENO, STDIN_FILENO, FDKIND_KERNEL};
-use sysdefs::constants::sys_const::{EXIT_SUCCESS, VERBOSE, DEFAULT_UID, DEFAULT_GID, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK, ITIMER_REAL};
+use sysdefs::constants::sys_const::{EXIT_SUCCESS, DEFAULT_UID, DEFAULT_GID, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK, ITIMER_REAL};
 use sysdefs::data::fs_struct::{SigactionStruct, ITimerVal};
 use typemap::syscall_type_conversion::*;
 use dashmap::DashMap;
@@ -897,10 +898,13 @@ pub fn setitimer_syscall(
         return syscall_error(Errno::EFAULT, "setitimer", "Invalid extra arguments");
     }
 
+    // get the cage instance
+    let cage = get_cage(cageid).unwrap();
+
     match which {
         ITIMER_REAL => {
             if let Some(some_old_value) = old_value {
-                let (curr_duration, next_duration) = self.interval_timer.get_itimer();
+                let (curr_duration, next_duration) = cage.interval_timer.get_itimer();
                 some_old_value.it_value.tv_sec = curr_duration.as_secs() as i64;
                 some_old_value.it_value.tv_usec = curr_duration.subsec_millis() as i64;
                 some_old_value.it_interval.tv_sec = next_duration.as_secs() as i64;
@@ -908,16 +912,16 @@ pub fn setitimer_syscall(
             }
 
             if let Some(some_new_value) = new_value {
-                let curr_duration = interface::RustDuration::new(
+                let curr_duration = Duration::new(
                     some_new_value.it_value.tv_sec as u64,
                     some_new_value.it_value.tv_usec as u32,
                 );
-                let next_duration = interface::RustDuration::new(
+                let next_duration = Duration::new(
                     some_new_value.it_interval.tv_sec as u64,
                     some_new_value.it_interval.tv_usec as u32,
                 );
 
-                self.interval_timer.set_itimer(curr_duration, next_duration);
+                cage.interval_timer.set_itimer(curr_duration, next_duration);
             }
         }
 
