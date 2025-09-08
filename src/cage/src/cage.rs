@@ -11,6 +11,7 @@ pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicI32, AtomicU64};
 pub use std::sync::Arc;
 use sysdefs::data::fs_struct::SigactionStruct;
+use crate::timer::*;
 use sysdefs::constants::fs_const::MAX_CAGEID;
 
 #[derive(Debug, Clone, Copy)]
@@ -52,6 +53,13 @@ pub struct Cage {
     // The kernel thread id of the main thread of current cage, used because when we want to send signals,
     // we want to send to the main thread
     pub main_threadid: RwLock<i32>,
+    // The interval_timer can serve as a source for triggering signals and works together with signalhandler
+    // and sigset to manage and handle signals. The design of the interval_timer supports periodic triggering,
+    // simulating operations in Linux that need to run at regular intervals. It assists in implementing setitimer()
+    // in RawPOSIX, and by triggering lind_kill_from_id when the interval_timer expires
+    // (implemented in src/interface/timer.rs), it facilitates the implementation of signal handling in rawposix
+    // for the corresponding Cage.
+    pub interval_timer: IntervalTimer,
     // The zombies field in the Cage struct is used to manage information about child cages that have
     // exited, but whose exit status has not yet been retrieved by their parent using wait() / waitpid().
     // When a cage exits, shared memory segments are detached, file descriptors are removed from fdtable,

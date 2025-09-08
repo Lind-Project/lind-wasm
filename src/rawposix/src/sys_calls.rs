@@ -5,6 +5,7 @@ use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::{cagetable_init, add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie};
 use cage::signal::signal::{lind_send_signal, convert_signal_mask};
+use cage::timer::{IntervalTimer};
 use fdtables;
 use libc::sched_yield;
 use parking_lot::{RwLock, Mutex};
@@ -72,6 +73,7 @@ pub fn fork_syscall(
         euid: AtomicI32::new(selfcage.euid.load(Relaxed)),
         rev_shm: Mutex::new(Vec::new()),
         main_threadid: RwLock::new(0),
+        interval_timer: IntervalTimer::new(child_arg),
         epoch_handler: DashMap::new(),
         pending_signals: RwLock::new(vec![]),
         signalhandler: selfcage.signalhandler.clone(),
@@ -948,6 +950,7 @@ pub fn lindrustinit(verbosity: isize) {
         euid: AtomicI32::new(-1),
         rev_shm: Mutex::new(Vec::new()),
         main_threadid: RwLock::new(0),
+        interval_timer: IntervalTimer::new(0),
         epoch_handler: DashMap::new(),
         pending_signals: RwLock::new(vec![]),
         signalhandler: DashMap::new(),
@@ -1020,6 +1023,7 @@ pub fn lindrustinit(verbosity: isize) {
         euid: AtomicI32::new(-1),
         rev_shm: Mutex::new(Vec::new()),
         main_threadid: RwLock::new(0),
+        interval_timer: IntervalTimer::new(1),
         epoch_handler: DashMap::new(),
         signalhandler: DashMap::new(),
         pending_signals: RwLock::new(vec![]),
@@ -1134,33 +1138,23 @@ pub fn exec_syscall(
     // Copy necessary data from current cage
     let selfcage = get_cage(cageid).unwrap();
 
-    let zombies = selfcage.zombies.read();
-    let cloned_zombies = zombies.clone();
-    let child_num = selfcage.child_num.load(Relaxed);
-    drop(zombies);
+    selfcage.rev_shm.lock().clear();
+    
+    let mut vmmap = selfcage.vmmap.write();
+    vmmap.clear(); //this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
+    // perform signal related clean up
 
-    let newcage = Cage {
-        cageid: cageid,
-        cwd: RwLock::new(selfcage.cwd.read().clone()),
-        parent: selfcage.parent,
-        gid: AtomicI32::new(-1),
-        uid: AtomicI32::new(-1),
-        egid: AtomicI32::new(-1),
-        euid: AtomicI32::new(-1),
-        rev_shm: Mutex::new(Vec::new()),
-        main_threadid: RwLock::new(0),
-        epoch_handler: DashMap::new(),
-        signalhandler: selfcage.signalhandler.clone(),
-        pending_signals: RwLock::new(vec![]),
-        sigset: AtomicU64::new(0),
-        zombies: RwLock::new(cloned_zombies), // When a process exec-ed, its child relationship should be perserved
-        child_num: AtomicU64::new(child_num),
-        vmmap: RwLock::new(Vmmap::new()), // Memory is cleared after exec
-    };
+    // all the signal handler becomes default after exec
+    // pending signals should be perserved though
+    selfcage.signalhandler.clear();
+    // the sigset will be reset after exec
+    selfcage.sigset.store(0, Relaxed);
+    // we also clean up epoch handler and main thread id
+    // since they will be re-established from wasmtime
+    selfcage.epoch_handler.clear();
+    let mut threadid_guard = selfcage.main_threadid.write();
+    *threadid_guard = 0;
+    drop(threadid_guard);
 
-    // Remove the original cage
-    remove_cage(cageid);
-    // Insert the new cage with same cageid
-    add_cage(cageid, newcage);
     0
 }
