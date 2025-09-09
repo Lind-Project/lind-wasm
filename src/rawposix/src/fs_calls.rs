@@ -1,8 +1,16 @@
-use parking_lot::RwLock;
-use std::sync::atomic::{AtomicI32, AtomicU64};
-use std::sync::Arc;
-use typemap::type_conv::get_pipearray;
-use typemap::fs_conv::*;
+// use parking_lot::RwLock;
+// use std::sync::atomic::{AtomicI32, AtomicU64};
+// use std::sync::Arc;
+use libc::c_void;
+// Updated imports - using path_conversion for filesystem operations
+use typemap::syscall_type_conversion::*;
+use typemap::path_conversion::*;
+use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
+use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, FDKIND_KERNEL, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE, MAXFD};
+use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
+use typemap::cage_helpers::*;
+use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
+use fdtables;
 
 /// Helper function for close_syscall
 /// 
