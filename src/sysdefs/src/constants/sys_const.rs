@@ -32,6 +32,10 @@ pub const RLIMIT_NOFILE: u64 = 1; // Limit type for number of files
 pub const EXIT_SUCCESS: i32 = 0; // Successful termination
 pub const EXIT_FAILURE: i32 = 1; // Unsuccessful termination
 
+// ===== Waitpid Options =====
+// Source: include/uapi/linux/wait.h
+pub const WNOHANG: i32 = 1; // Don't block waiting
+
 // ===== Signal Constants =====
 // Source: include/uapi/asm-generic/signal.h
 // Reference: https://man7.org/linux/man-pages/man7/signal.7.html
@@ -110,3 +114,19 @@ pub const SIG_IGN: i32 = 1; // Ignore signal
 
 // Timer types
 pub const ITIMER_REAL: i32 = 0; // Real-time timer
+
+// Futex operation constants (from glibc/target/include/linux/futex.h)
+pub const FUTEX_WAIT: i32 = 0;
+pub const FUTEX_WAKE: i32 = 1;
+pub const FUTEX_FD: i32 = 2;
+pub const FUTEX_REQUEUE: i32 = 3;
+pub const FUTEX_CMP_REQUEUE: i32 = 4;
+pub const FUTEX_WAKE_OP: i32 = 5;
+pub const FUTEX_LOCK_PI: i32 = 6;
+pub const FUTEX_UNLOCK_PI: i32 = 7;
+pub const FUTEX_TRYLOCK_PI: i32 = 8;
+pub const FUTEX_WAIT_BITSET: i32 = 9;
+pub const FUTEX_WAKE_BITSET: i32 = 10;
+pub const FUTEX_WAIT_REQUEUE_PI: i32 = 11;
+pub const FUTEX_CMP_REQUEUE_PI: i32 = 12;
+pub const FUTEX_LOCK_PI2: i32 = 13;
