@@ -87,6 +87,16 @@ pub type RawCallFunc = fn(
 ///         None,                            // grate_id = 1 (removed or not initialized)
 ///         Some(Box::new(grate2_handler)),  // grate_id = 2
 ///     ])
+/// 
+/// TODO:
+/// Due to Rust lifetime constraints ('static bounds), we cannot hold a lock for the closure: the closure 
+/// captures a wasmtime runtime context which is non-`'static`. Adding a `Mutex`/`RwLock` of the closure 
+/// (or holding a guard across the closure) leads to borrow/lifetime violations and fails to compile. 
+/// Therefore, there is no lock for the closure table at the moment.
+/// 
+/// In our current multithreaded tests we haven’t observed concurrency issues. Two possible explanations are:
+/// (1) wasmtime might provide internal synchronization that effectively serializes/accesses the underlying state;
+/// (2) our concurrency tests might not yet stress the code paths that would reveal data races.
 static mut GLOBAL_GRATE: Option<
     Vec<
         Option<
@@ -128,36 +138,9 @@ static mut GLOBAL_GRATE: Option<
 fn _init_global_grate() {
     // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
     unsafe {
-        if GLOBAL_GRATE.is_none() {
-            GLOBAL_GRATE = Some(Vec::new());
-        }
-        // Preallocate 1024 entries in the global grate table
-        for _ in 0..lind_const::MAX_CAGEID {
-            let f: Option<
-                Box<
-                    dyn FnMut(
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                    ) -> i32,
-                >,
-            > = None;
-
-            if let Some(ref mut vec) = GLOBAL_GRATE {
-                vec.push(f);
-            }
-        }
+        let vec = GLOBAL_GRATE
+            .get_or_insert_with(|| Vec::with_capacity(lind_const::MAX_CAGEID as usize));
+        vec.resize_with(lind_const::MAX_CAGEID as usize, || None);
     }
 }
 
@@ -243,6 +226,17 @@ fn _call_grate_func(
 
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
+/// 
+/// Most of the time 3i needs global access rather than frequent single-key lookups. For example, 
+/// in `register_handler` 3i often needs to traverse the whole table to locate `(targetcage, targetcallnum)` 
+/// entries, and in operations like deregister 3i may need to remove all entries for a given cage.
+/// 
+/// From the discussions I've seen, the main advantage of `DashMap` comes from highly concurrent, per-key 
+/// frequent reads/writes, since it shards the map internally. In our case, where operations tend to be 
+/// whole-table scans or structural updates, the performance gain of DashMap would likely be small.
+/// 
+/// In other words, whether we use HashMap + global lock or DashMap may not make a big difference for 
+/// 3i’s workload. We could benchmark later to confirm, but performance bottlenecks here are probably elsewhere.
 ///
 /// <self_cageid, <callnum, (addr, dest_grateid)>
 /// Keys are the grate, the value is a HashMap with a key of the callnum
