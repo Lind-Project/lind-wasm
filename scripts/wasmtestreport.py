@@ -459,7 +459,7 @@ def generate_html_report(report):
         html_content.append(f'<tr><td>Number of Successes</td><td>{test_result.get("number_of_success", 0)}</td></tr>')
         html_content.append(f'<tr><td>Number of Failures</td><td>{test_result.get("number_of_failures", 0)}</td></tr>')
         for error_type in error_types:
-            html_content.append(f'<tr><td>Number of {error_types[error_type]}</td><td>{test_result.get(f"number_of_{error_types[error_type]}", 0)}</td></tr>')
+            html_content.append(f'<tr><td>Number of {error_types[error_type]}</td><td>{test_result.get(f"number_of_{error_type}", 0)}</td></tr>')
         html_content.append('</table>')
 
     for test_type, test_result in report.items():
