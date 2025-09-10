@@ -3,7 +3,7 @@
 // use std::sync::Arc;
 use libc::c_void;
 // Updated imports - using path_conversion for filesystem operations
-use typemap::syscall_type_conversion::*;
+use typemap::datatype_conversion::*;
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
 use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
@@ -366,7 +366,7 @@ pub fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let mut addr = addr_arg as *mut u8;
+    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -597,7 +597,7 @@ pub fn munmap_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let addr = addr_arg as *mut u8;
+    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)

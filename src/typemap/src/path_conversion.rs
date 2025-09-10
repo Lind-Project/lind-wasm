@@ -3,7 +3,7 @@
 //! This file provides APIs for converting between different argument types and translation between path from
 //! user's perspective to host's perspective
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
-use crate::syscall_type_conversion::get_cstr;
+use crate::datatype_conversion::get_cstr;
 pub use libc::*;
 pub use std::env;
 pub use std::ffi::{CStr, CString};

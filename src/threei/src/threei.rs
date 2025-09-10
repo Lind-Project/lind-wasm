@@ -9,7 +9,7 @@ use std::ptr;
 use std::sync::Mutex;
 use sysdefs::constants::{threei_const, lind_const};
 use sysdefs::constants::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
-use typemap::syscall_type_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
+use typemap::datatype_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
 
 pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
 const MMAP_SYSCALL: u64 = 9; // mmap syscall number
