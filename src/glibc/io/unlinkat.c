@@ -19,25 +19,13 @@
 #include <fcntl.h>
 #include <stddef.h>
 #include <unistd.h>
+#include <syscall-template.h>
 
 
 /* Remove the link named NAME.  */
 int
 unlinkat (int fd, const char *name, int flag)
 {
-  if (name == NULL || (flag & AT_REMOVEDIR) != 0)
-    {
-      __set_errno (EINVAL);
-      return -1;
-    }
-
-  if (fd < 0 && fd != AT_FDCWD)
-    {
-      __set_errno (EBADF);
-      return -1;
-    }
-
-  __set_errno (ENOSYS);
-  return -1;
+  return MAKE_SYSCALL(4, "syscall|unlink", (uint64_t) name, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 stub_warning (unlinkat)
