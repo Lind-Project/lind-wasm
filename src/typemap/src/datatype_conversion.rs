@@ -6,15 +6,13 @@
 //! Function naming convention:
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
-use crate::fs_conv::*;
-use crate::type_conv::*;
-use cage::get_cage;
-use cage::memory::mem_helper::*;
+use cage::{get_cage, memory::memory::translate_vmmap_addr};
 use fdtables;
 use std::error::Error;
 use std::str::Utf8Error;
 use sysdefs::constants::err_const::{syscall_error, Errno};
-use sysdefs::constants::fs_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::constants::lind_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal};
 
 /// This function provides two operations: first, it translates path pointer address from WASM environment
 /// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
@@ -236,6 +234,27 @@ pub fn sc_unusedarg(arg: u64, arg_cageid: u64) -> bool {
 
     #[cfg(feature = "secure")]
     return !(arg | arg_cageid);
+}
+
+/// Convert a raw `u64` argument into a mutable `*mut u8` pointer, with optional
+/// cage ID validation.
+/// 
+/// ## Arguments
+/// - `arg`: The raw 64-bit value to be interpreted as a pointer.
+/// - `arg_cageid`: Cage ID associated with the argument (source).
+/// - `cageid`: Cage ID of the calling context (expected).
+///
+/// ## Returns
+/// - A mutable pointer `*mut u8` corresponding to the given argument.
+pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+    
+    arg as *mut u8
 }
 
 /// This function translates the buffer pointer from user buffer address to system address, because we are

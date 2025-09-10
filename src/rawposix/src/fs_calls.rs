@@ -1,12 +1,9 @@
-// use parking_lot::RwLock;
-// use std::sync::atomic::{AtomicI32, AtomicU64};
-// use std::sync::Arc;
 use libc::c_void;
-// Updated imports - using path_conversion for filesystem operations
-use typemap::syscall_type_conversion::*;
+use typemap::datatype_conversion::*;
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
-use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, FDKIND_KERNEL, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE, MAXFD};
+use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
+use sysdefs::constants::lind_const::{FDKIND_KERNEL, MAXFD};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
 use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
@@ -302,7 +299,7 @@ pub fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let mut addr = addr_arg as *mut u8;
+    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -411,7 +408,21 @@ pub fn mmap_syscall(
                     MemoryBackingType::Anonymous
                 } else {
                     // if we are doing file-backed mapping, we need to set maxprot to the file permission
-                    let flags = fcntl_syscall(cageid, fildes as u64, vfd_cageid, F_GETFL as u64, flags_cageid, 0, 0, 0, 0, 0, 0, 0, 0);
+                    let flags = fcntl_syscall(
+                        cageid,
+                        fildes as u64,
+                        vfd_cageid,
+                        F_GETFL as u64,
+                        flags_cageid,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    );
                     if flags < 0 {
                         return syscall_error(Errno::EINVAL, "mmap", "invalid file descriptor")
                             as i32;
@@ -452,7 +463,6 @@ pub fn mmap_inner(
     virtual_fd: i32,
     off: i64,
 ) -> usize {
-    println!("[mmap_inner] cageid: {:?}, vfd: {:?}", cageid, virtual_fd);
     if virtual_fd != -1 {
         match fdtables::translate_virtual_fd(cageid, virtual_fd as u64) {
             Ok(kernel_fd) => {
@@ -520,7 +530,7 @@ pub fn munmap_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let addr = addr_arg as *mut u8;
+    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -719,7 +729,6 @@ pub fn sbrk_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    println!("[sbrk_syscall]");
     let brk = sc_convert_sysarg_to_i32(sbrk_arg, sbrk_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
