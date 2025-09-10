@@ -1691,7 +1691,13 @@ fn enter_wasm<T>(store: &mut StoreContextMut<'_, T>) -> Option<usize> {
     // After we've got the stack limit then we store it into the `stack_limit`
     // variable.
     // let wasm_stack_limit = stack_pointer - store.engine().config().max_wasm_stack;
+
     // Bypass stack overflow detection in miri for needs of grate
+    // wasmtime determines a fixed max_wasm_stack ahead of execution (during compilation/startup) 
+    // and uses that to set the stack overflow limit. The grate call mechanism, however, 
+    // injects new instructions after execution has already begun. This means the 
+    // additional frames may exceed the originally computed limit, and wasmtime’s 
+    // built-in check would incorrectly trigger a stack overflow.
     let wasm_stack_limit = store.engine().config().max_wasm_stack;
     let prev_stack = unsafe {
         mem::replace(
