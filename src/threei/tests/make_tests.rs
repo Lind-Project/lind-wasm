@@ -52,21 +52,18 @@ fn non_exit_syscall_falls_through_to_rawposix_path_when_not_interposed() {
 fn interposed_syscall_invokes_grate_and_returns_its_value() {
     clear_globals();
 
-    // Arrange: register (CAGE_A, SYSCALL_FOO) -> (handlefunc=7, grate=GRATE_G)
+    // register (CAGE_A, SYSCALL_FOO) -> (handlefunc=7, grate=GRATE_G)
     let rc = reg(CAGE_A, SYSCALL_FOO, 7, GRATE_G);
     assert_eq!(rc, 0);
 
     // Test-only: install a grate function (handlefunc=7 in GRATE_G) that returns 1234.
-    // e.g., via a test hook you provide: install_test_grate_func(GRATE_G, 7, |...| 1234);
-    // (Pseudocode—implement in your test infra)
-    // install_test_grate_func(GRATE_G, 7, 1234);
 
     // Act: call the interposed syscall from CAGE_A.
     let ret = make_syscall(
         CAGE_A,       // self_cageid
-        SYSCALL_FOO,  // syscall_num (interposed)
+        SYSCALL_FOO,  // syscall_num
         0,            // syscall name
-        CAGE_A,       // target cage (unused by interposed path)
+        CAGE_A,       // target cage 
         1, CAGE_A, 2, CAGE_A, 3, CAGE_A, 4, CAGE_A, 5, CAGE_A, 6, CAGE_A,
     );
 
