@@ -1,10 +1,16 @@
 //! Constants for threei 
 //! 
 /// todo: Need to replace by either linux number or purposed more appropriate error num
-/// Deregister/matchall should be large enough to avoid confusion
+/// Special value for deregistration.  
+/// When passed as `handlefunccage`, it removes all handler mappings for the given (targetcage, targetcallnum) pair.
 pub const THREEI_DEREGISTER: u64 = 500;
+/// (TODO: Intended to register a handler across all syscalls in the table for (targetcage, handlefunccage). ) 
 pub const THREEI_MATCHALL: u64 = 501;
+/// Generic error return code: API aborted.  
+/// See function-level comments for specific usage details.  
 pub const ELINDAPIABORTED: u64 = 0xFFFFFFFF;
+/// ELINDESRCH: if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
+/// See function-level comments for specific usage details.  
 pub const ELINDESRCH: u64 = 0xFFFFFFFF;
 
 /// This constant defines the maximum string length (`MAX_STRLEN`) used when copying strings
@@ -19,4 +25,4 @@ pub const ELINDESRCH: u64 = 0xFFFFFFFF;
 ///
 /// This constant is especially relevant when copytype == 1 (i.e., when performing a strncpy copy in
 /// `copy_data_between_cages`).
-const MAX_STRLEN: usize = 4096;
+pub const MAX_STRLEN: usize = 4096;

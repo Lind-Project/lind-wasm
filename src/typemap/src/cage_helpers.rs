@@ -4,6 +4,8 @@
 //! and virtual-to-kernel file descriptor translation in the context of
 //! cage isolation.
 use fdtables;
+use sysdefs::constants::lind_const::MAX_CAGEID;
+use sysdefs::constants::err_const::Errno;
 /// Validate whether two cage ids are in valid range. This is used for security mode in
 /// type conversion.
 ///
@@ -48,7 +50,7 @@ pub fn convert_fd_to_host(virtual_fd: u64, arg_cageid: u64, cageid: u64) -> i32 
     // Find corresponding virtual fd instance from `fdtable` subsystem
     let wrappedvfd = fdtables::translate_virtual_fd(arg_cageid, virtual_fd);
     if wrappedvfd.is_err() {
-        return -EBADF;
+        return -(Errno::EBADF as i32);
     }
     let vfd = wrappedvfd.unwrap();
     // Actual kernel fd mapped with provided virtual fd

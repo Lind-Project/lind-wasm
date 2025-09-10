@@ -7,11 +7,11 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::ptr;
 use std::sync::Mutex;
-use sysdefs::constants::threei_const;
+use sysdefs::constants::{threei_const, lind_const};
 use sysdefs::constants::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
 use typemap::syscall_type_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
 
-const EXIT_SYSCALL: u64 = 60; // exit syscall number
+pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
 const MMAP_SYSCALL: u64 = 9; // mmap syscall number
 
 /// Registers a closure into the `GLOBAL_GRATE` handler table for a specific grateid.
@@ -54,11 +54,8 @@ pub fn threei_wasm_func(
     0
 }
 
-/// HANDLERTABLE:
-/// <self_cageid, <callnum, (addr, dest_cageid)>
-/// 1. callnum is the call that have access to execute syscall in addr -- acheive per syscall filter
-/// 2. callnum is mapped to addr (callnum=addr) -- achieve per cage filter
-pub type Raw_CallFunc = fn(
+/// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
+pub type RawCallFunc = fn(
     target_cageid: u64,
     arg1: u64,
     arg2: u64,
@@ -135,7 +132,7 @@ fn _init_global_grate() {
             GLOBAL_GRATE = Some(Vec::new());
         }
         // Preallocate 1024 entries in the global grate table
-        for _ in 0..1024 {
+        for _ in 0..lind_const::MAX_CAGEID {
             let f: Option<
                 Box<
                     dyn FnMut(
@@ -247,14 +244,17 @@ fn _call_grate_func(
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
 ///
-/// <self_cageid, <callnum, (addr, dest_cageid)>
+/// <self_cageid, <callnum, (addr, dest_grateid)>
 /// Keys are the grate, the value is a HashMap with a key of the callnum
 /// and the values are a (target_call_index, grate) tuple for the actual handlers...
+type TargetCageMap = HashMap<u64, u64>; // Maps destfunc to dest_grateid
+type CallnumMap = HashMap<u64, TargetCageMap>; // Maps targetcallnum to TargetCageMap
+type CageHandlerTable = HashMap<u64, CallnumMap>; // Maps self_cageid to CallnumMap
 lazy_static::lazy_static! {
     #[derive(Debug)]
     // <self_cageid, <callnum, (target_call_index, dest_grateid)>
     // callnum is mapped to addr, not self
-    pub static ref HANDLERTABLE: Mutex<HashMap<u64, HashMap<u64, HashMap<u64, u64>>>> = Mutex::new(HashMap::new());
+    pub static ref HANDLERTABLE: Mutex<CageHandlerTable> = Mutex::new(HashMap::new());
 }
 
 /// Checks if a given cage has any registered syscall handlers in HANDLERTABLE.
@@ -317,7 +317,7 @@ fn _rm_grate_from_handler(grateid: u64) {
 /// that want to operate the corresponding syscall will be blocked (additional check).
 ///
 /// Only initialize once, and using dashset to support higher performance in high concurrency needs.
-static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
+pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 
 /// This function registers an interposition rule, mapping a syscall number from a source cage to
 /// a handler function in a destination grate or cage. Used for creating per-syscall routing rules
@@ -326,12 +326,12 @@ static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// For example:
 /// I want cage 7 to have system call 34 call into my cage's function foo
 ///
-/// ```
+/// Example:
 /// register_handler(
 ///     NOTUSED, 7,  34, NOTUSED,
 ///    foo, mycagenum,
 ///    ...)
-/// ```
+/// 
 ///
 /// If a conflicting mapping exists, the function panics to prevent accidental overwrite.
 ///
@@ -354,7 +354,7 @@ pub fn register_handler(
     targetcallnum: u64, // Syscall number or match-all indicator. Match-all: 1000.
     _arg1cage: u64,
     handlefunc: u64, // Function index to register (for grate, also called destination call) _or_ 0 for deregister
-    handlefunccage: u64, // Grate cage id _or_ Deregister flag or additional information
+    handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
     _arg3cage: u64,
     _arg4: u64,
@@ -371,21 +371,78 @@ pub fn register_handler(
 
     let mut handler_table = HANDLERTABLE.lock().unwrap();
 
-    if let Some(cage_entry) = handler_table.get(&targetcage) {
+    // If `handlefunccage == THREEI_DEREGISTER`, remove the entire callnum entry
+    // for the given (targetcage, targetcallnum).
+    // We assume one (targetcage, targetcallnum) could be mapped to multiple (handlefunc, handlefunccage)
+    // and each time calling will check the handlefunccage to determine the destination.
+    if handlefunccage == threei_const::THREEI_DEREGISTER {
+        let mut should_remove_cage = false;
+        if let Some(cage_entry) = handler_table.get_mut(&targetcage) {
+            cage_entry.remove(&targetcallnum);
+            should_remove_cage = cage_entry.is_empty();
+        }
+        // drop the borrow to cage_entry before mutating handler_table again
+        if should_remove_cage {
+            handler_table.remove(&targetcage);
+        }
+        return 0;
+    }
+
+    if let Some(cage_entry) = handler_table.get_mut(&targetcage) {
         // Check if targetcallnum exists
-        if let Some(callnum_entry) = cage_entry.get(&targetcallnum) {
-            // Check if handlefunc exists
+        if let Some(callnum_entry) = cage_entry.get_mut(&targetcallnum) {
+            // （targetcage, targetcallnum) exists
+            if handlefunc == 0 {
+                // If deregistering a single syscall, remove the entry if it exists
+                callnum_entry.retain(|_, dest_grateid| *dest_grateid != handlefunccage);
+                // cleanup empties
+                let empty_callnum = callnum_entry.is_empty();
+                if empty_callnum {
+                    // end borrow of callnum_entry by scoping
+                    // remove callnum, then possibly remove cage
+                    // (cannot hold &mut to value while mutating parent)
+                    cage_entry.remove(&targetcallnum);
+                    if cage_entry.is_empty() {
+                        handler_table.remove(&targetcage);
+                    }
+                }
+                return 0;
+            } 
+
             match callnum_entry.get(&handlefunc) {
                 Some(existing_dest_grateid) if *existing_dest_grateid == handlefunccage => {
-                    return 0
-                } // Do nothing
-                Some(_) => panic!("Already exists"), // Panic if a conflicting mapping exists
-                None => {}                           // If `handlefunc` not exists, insert
+                    // Already registered with same mapping, do nothing
+                    return 0;
+                } 
+                Some(_) => {
+                    return threei_const::ELINDAPIABORTED as i32; // Return error if a conflicting mapping exists
+                }
+                None => {
+                    // If `handlefunc` not exists, insert
+                    callnum_entry.insert(handlefunc, handlefunccage);
+                    return 0;
+                }
             }
+        } else {
+            // callnum does not exist yet under this cage
+            if handlefunc == 0 {
+                // nothing to delete
+                return 0;
+            }
+            let mut m = HashMap::new();
+            m.insert(handlefunc, handlefunccage);
+            cage_entry.insert(targetcallnum, m);
+            return 0;
         }
     }
 
+    // cage does not exist yet
     // Inserts a new mapping in HANDLERTABLE.
+    if handlefunc == 0 {
+        // nothing to delete
+        return 0;
+    }
+
     handler_table
         .entry(targetcage)
         .or_insert_with(HashMap::new)
@@ -409,8 +466,8 @@ pub fn register_handler(
 ///
 /// ## Returns:
 /// - 0 on success.
-/// - `ELINDESRCH` if either source or target cage is in the EXITING state, or if srccage has
-/// no existing handler table.
+/// - `ELINDESRCH` if either source or target cage is in the EXITING state.
+/// - `ELINDAPIABORTED` if srccage has no existing handler table.
 pub fn copy_handler_table_to_cage(
     _callnum: u64,
     targetcage: u64,
@@ -429,7 +486,7 @@ pub fn copy_handler_table_to_cage(
 ) -> u64 {
     // Verifies that neither srccage nor targetcage are in the EXITING state to avoid
     // copying from or to a cage that may be invalid.
-    if EXITING_TABLE.contains(&targetcage) && EXITING_TABLE.contains(&srccage) {
+    if EXITING_TABLE.contains(&targetcage) || EXITING_TABLE.contains(&srccage) {
         return threei_const::ELINDESRCH as u64;
     }
 
@@ -454,7 +511,7 @@ pub fn copy_handler_table_to_cage(
             "[3i|copy_handler_table_to_cage] srccage {} has no handler table",
             srccage
         );
-        threei_const::ELINDESRCH as u64 // treat missing src table as an error
+        threei_const::ELINDAPIABORTED as u64 // treat missing src table as an error
     }
 }
 
@@ -532,7 +589,7 @@ pub fn make_syscall(
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
     if _check_cage_handler_exist(self_cageid) {
-        if let Some((call_index, grateid)) = _get_handler(self_cageid, syscall_num) {
+        if let Some((_call_index, grateid)) = _get_handler(self_cageid, syscall_num) {
             // <targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id>
             // Theoretically, the complexity is O(1), shouldn't affect performance a lot
             if let Some(ret) = _call_grate_func(
@@ -556,6 +613,8 @@ pub fn make_syscall(
             } else {
                 // syscall has been registered to register_handler but grate's entry function
                 // doesn't provide
+                // Panic here because this indicates error happens in wasmtime side when attaching
+                // the module closure, which is a system-level error
                 panic!(
                     "[3i|make_syscall] grate call not found! grateid: {}",
                     grateid
@@ -730,6 +789,54 @@ pub fn harsh_cage_exit(
 }
 
 /***************************** copy_data_between_cages *****************************/
+///
+/// CopyType represents the type of copy operation supported by copy_data_between_cages.
+/// RawMemcpy: perform a raw memory copy of exactly `len` bytes.
+/// Strncpy:   perform a string copy that stops at the first null byte or `len` limit.
+#[repr(u64)]
+enum CopyType {
+    RawMemcpy = 0,
+    Strncpy   = 1,
+}
+
+/// Conversion implementation to map a numeric `u64` value into a `CopyType` enum.
+/// Returns `Ok(CopyType)` for known values (0 = `RawMemcpy`, 1 = `Strncpy`).
+/// Returns `Err(())` if the value does not match any supported variant.
+impl TryFrom<u64> for CopyType {
+    type Error = u64;
+    fn try_from(v: u64) -> Result<Self, u64> {
+        match v {
+            0 => Ok(CopyType::RawMemcpy),
+            1 => Ok(CopyType::Strncpy),
+            _ => Err(v),
+        }
+    }
+}
+
+/// Helper function to validate that the requested length does not exceed a maximum.
+/// Returns Ok(()) if the length is within bounds.
+/// Returns Err(error_code) if the length is greater than the allowed maximum.
+#[inline]
+fn _validate_len(len: u64, max: u64) -> Result<(), u64> {
+    if len > max { return Err(threei_const::ELINDAPIABORTED); }
+    Ok(())
+}
+
+/// Helper function to validate that a given memory range is valid in a cage.
+/// Calls check_addr with the given cage, start address, length, and protection flags.
+/// Returns Ok(()) if the range is valid and accessible.
+/// Logs an error and returns Err(error_code) if the range is invalid.
+#[inline]
+fn _validate_range(cage: u64, addr: u64, len: usize, prot: i32, what: &str) -> Result<(), u64> {
+    match check_addr(cage, addr, len, prot) {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            eprintln!("[3i|copy] range invalid: addr={:#x}, len={}", addr, len);
+            Err(threei_const::ELINDAPIABORTED)
+        }
+    }
+}
+
 /// A helper function that scans length for a null terminator in memory, mimicking
 /// strlen behavior in C.
 ///
@@ -802,12 +909,30 @@ pub fn copy_data_between_cages(
     _arg6: u64,
     _arg6cage: u64,
 ) -> u64 {
+    // Always check the source address first
+    // Reject requests where `len` exceeds the maximum allowed linear memory size
+    // (`MAX_LIND_SIZE`), since such a copy would exceed the Wasm 32-bit address space.
+    if let Err(code) = _validate_len(len, lind_const::MAX_LIND_SIZE) {
+        eprintln!("[3i|copy] length too large or zero: {}", len);
+        return code;
+    }
+    // Validate source first (readable)
+    if let Err(code) = _validate_range(srccage, srcaddr, len as usize, PROT_READ, "source") {
+        return code;
+    }
+
     // Check if destaddr has been set
+    // Because of the underlying vmmap design, all mappings are applied with MAP_FIXED semantics: the entire
+    // interval [destaddr, destaddr + len) will be remapped. This means:
+    //   - Any pages already occupied in that interval will be unmapped and replaced.
+    //   - Any pages not yet allocated will be freshly mapped.
+    // This behavior naturally covers the case where part of the requested range
+    // was already in use and part was free.
     let destaddr = if destaddr == 0 {
         // Map the memory region for the destination address, if user doesn't allocate the memory
         // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
         // We pass `0` here as a placeholder in the 3rd argument to avoid any unnecessary performance overhead.
-        make_syscall(
+        let mmret = make_syscall(
             destcage,
             MMAP_SYSCALL,
             0,
@@ -824,7 +949,14 @@ pub fn copy_data_between_cages(
             destcage,
             0,
             destcage,
-        ) as u64
+        ) as i64;
+
+        if mmret < 0 {
+            eprintln!("[3i|copy] mmap failed: {}", mmret);
+            return threei_const::ELINDAPIABORTED;
+        }
+
+        mmret as u64
     } else {
         destaddr
     };
@@ -832,29 +964,18 @@ pub fn copy_data_between_cages(
     let host_src_addr = sc_convert_uaddr_to_host(srcaddr, srccage, thiscage);
     let host_dest_addr = sc_convert_uaddr_to_host(destaddr, destcage, thiscage);
 
-    // Always check the source address first
-    // Threei needs to validate both middle point (`addr + len / 2`) and end point (`addr + len`) to ensure that
-    // the entire range is valid and this helps catch most cases where a large len might wrap into a different region.
-    // If len is very large (e.g., close to 2^64), then `addr + len` might wrap around due to integer overflow.
-    // This can cause the validation check to pass incorrectly (e.g., addr is valid, and `addr + len` is also valid, but
-    // they don't point to the same region).
-    match check_addr(srccage, srcaddr, (len / 2) as usize, PROT_READ) {
-        Ok(_) => {
-            // Check the end point
-            match check_addr(srccage, srcaddr, len as usize, PROT_READ) {
-                Ok(_) => {}
-                Err(_e) => {
-                    eprintln!(
-                        "[3i|copy_data_between_cages] Source middle address check failed: {}",
-                        srcaddr
-                    );
-                    return threei_const::ELINDAPIABORTED; // Error: Invalid source address
-                }
-            }
-        }
+    // Boundary checks to prevent overflow
+    if host_src_addr.checked_add(len).is_none() || host_dest_addr.checked_add(len).is_none() {
+        eprintln!("[3i|copy] address overflow: src={:#x} len={} dest={:#x}", srcaddr, len, destaddr);
+        return threei_const::ELINDAPIABORTED;
+    }
+    
+    // Check the end addr is still valid
+    match check_addr(srccage, srcaddr, len as usize, PROT_READ) {
+        Ok(_) => {}
         Err(_e) => {
             eprintln!(
-                "[3i|copy_data_between_cages] Source end address check failed: {}",
+                "[3i|copy_data_between_cages] Source start address check failed: {}",
                 srcaddr
             );
             return threei_const::ELINDAPIABORTED; // Error: Invalid source address
@@ -868,92 +989,49 @@ pub fn copy_data_between_cages(
     // Otherwise, grate should know the exact length of the content, for example the complex data structure etc.
     // In this case, it should use `memcpy` to copy the content.
     // So we have to check the address range and permissions accordingly before copying the data.
-    if copytype == 0 {
-        // check_addr(cageid: u64, arg: u64, length: usize, prot: i32)
-        match check_addr(
-            destcage,
-            destaddr,
-            (len / 2) as usize,
-            PROT_READ | PROT_WRITE,
-        ) {
-            Ok(_) => {}
-            Err(_e) => {
-                eprintln!(
-                    "[3i|copy_data_between_cages] Destination mid address check failed: {}",
-                    destaddr
-                );
-                return threei_const::ELINDAPIABORTED; // Error: Invalid destination address
+    match CopyType::try_from(copytype) {
+        Ok(CopyType::RawMemcpy) => {
+            // Validate destination fully (rw), exact len
+            if let Err(code) = _validate_range(destcage, destaddr, len as usize, PROT_READ | PROT_WRITE, "destination") {
+                return code;
             }
-        }
-        // Check the end point
-        match check_addr(destcage, destaddr, len as usize, PROT_READ | PROT_WRITE) {
-            Ok(_) => {}
-            Err(_e) => {
-                eprintln!(
-                    "[3i|copy_data_between_cages] Destination end address check failed: {}",
-                    destaddr
-                );
-                return threei_const::ELINDAPIABORTED; // Error: Invalid destination address
-            }
-        }
-        // memcpy
-        unsafe {
-            ptr::copy_nonoverlapping(
-                host_src_addr as *mut u8,
-                host_dest_addr as *mut u8,
-                len as usize,
-            );
-        }
-    } else if copytype == 1 {
-        // strncpy
-        // Find the null-terminated length in the source string
-        let maxlen = MAX_STRLEN; // upper bound to prevent runaway scan
-        let actual_len = match _strlen_in_cage(host_src_addr as *const u8, maxlen) {
-            Some(n) => n + 1, // +1 to include the '\0'
-            None => {
-                eprintln!(
-                    "[3i|copy_data_between_cages] Source string too long or not null-terminated"
-                );
-                return threei_const::ELINDAPIABORTED;
-            }
-        };
 
-        // Validate destination range
-        match check_addr(destcage, destaddr, actual_len / 2, PROT_READ | PROT_WRITE) {
-            Err(_e) => {
-                eprintln!(
-                    "[3i|copy_data_between_cages] Destination mid range invalid: {}",
-                    destaddr
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    host_src_addr as *const u8,
+                    host_dest_addr as *mut u8,
+                    len as usize,
                 );
-                return threei_const::ELINDAPIABORTED;
             }
-            _ => {}
         }
-        match check_addr(destcage, destaddr, actual_len, PROT_READ | PROT_WRITE) {
-            Err(_e) => {
-                eprintln!(
-                    "[3i|copy_data_between_cages] Destination end range invalid: {}",
-                    destaddr
-                );
-                return threei_const::ELINDAPIABORTED;
-            }
-            _ => {}
-        }
+        Ok(CopyType::Strncpy) => {
+            // Find actual C-string length (caps at MAX to avoid runaway)
+            let max_scan = lind_const::MAX_LIND_SIZE as usize;
+            let actual_len = match _strlen_in_cage(host_src_addr as *const u8, max_scan) {
+                Some(n) => n + 1, // include '\0'
+                None => {
+                    eprintln!("[3i|copy] source string too long or not null-terminated");
+                    return threei_const::ELINDAPIABORTED;
+                }
+            };
 
-        // Perform the copy
-        unsafe {
-            ptr::copy_nonoverlapping(
-                host_src_addr as *const u8,
-                host_dest_addr as *mut u8,
-                actual_len,
-            );
+            // Validate destination for actual length
+            if let Err(code) = _validate_range(destcage, destaddr, actual_len, PROT_READ | PROT_WRITE, "destination") {
+                return code;
+            }
+
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    host_src_addr as *const u8,
+                    host_dest_addr as *mut u8,
+                    actual_len,
+                );
+            }
         }
-    } else {
-        eprintln!(
-            "[3i|copy_data_between_cages] Invalid copy type: {}",
-            copytype
-        );
-        return threei_const::ELINDAPIABORTED; // Error: Invalid copy type
+        Err(other) => {
+            eprintln!("[3i|copy] invalid copy type: {}", other);
+            return threei_const::ELINDAPIABORTED;
+        }
     }
 
     destaddr
