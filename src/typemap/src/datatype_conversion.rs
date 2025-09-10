@@ -13,7 +13,7 @@ use fdtables;
 use std::error::Error;
 use std::str::Utf8Error;
 use sysdefs::constants::err_const::{syscall_error, Errno};
-use sysdefs::constants::fs_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::constants::lind_const::{MAX_CAGEID, PATH_MAX};
 
 /// This function provides two operations: first, it translates path pointer address from WASM environment
 /// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,

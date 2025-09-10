@@ -1,4 +1,4 @@
-use super::threei::Raw_CallFunc;
+use super::threei::RawCallFunc;
 // use rawposix::fs_calls::{
 //     brk_syscall, clock_gettime_syscall, close_syscall, dup2_syscall, dup_syscall, fcntl_syscall,
 //     futex_syscall, lseek_syscall, mkdir_syscall, mmap_syscall, munmap_syscall,
@@ -14,7 +14,7 @@ use rawposix::sys_calls::{
 };
 
 /// According to the Linux version
-pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
+pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (0, read_syscall),
     (1, write_syscall),
     (2, open_syscall),

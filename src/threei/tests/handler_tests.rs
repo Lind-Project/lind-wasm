@@ -2,8 +2,7 @@
 // Rust runs tests in parallel by default, which can cause cross-test interference. 
 // `serial_test` lets us mark those tests #[serial] so they run one at a time.
 use serial_test::serial;
-use common::*;
-use threei::{register_handler, copy_handler_table_to_cage, EXITING_TABLE, HANDLERTABLE};
+use threei::{EXITING_TABLE, HANDLERTABLE};
 use sysdefs::constants::threei_const;
 mod common;
 use common::*;
@@ -94,10 +93,6 @@ fn selective_deregister_with_handlefunc_zero_removes_only_matching_dest() {
 
     let cage = 7;
     let callnum = 34;
-    let cage2 = 8;
-    let callnum2 = 35;
-    let cage3 = 9;
-    let callnum3 = 36;
     // Two handlers pointing to different destinations
     // targetcage: u64, targetcallnum: u64, handlefunc: u64, handlefunccage: u64
     assert_eq!(reg(cage, callnum, 1, 90), 0);
