@@ -128,36 +128,9 @@ static mut GLOBAL_GRATE: Option<
 fn _init_global_grate() {
     // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
     unsafe {
-        if GLOBAL_GRATE.is_none() {
-            GLOBAL_GRATE = Some(Vec::new());
-        }
-        // Preallocate 1024 entries in the global grate table
-        for _ in 0..lind_const::MAX_CAGEID {
-            let f: Option<
-                Box<
-                    dyn FnMut(
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                        u64,
-                    ) -> i32,
-                >,
-            > = None;
-
-            if let Some(ref mut vec) = GLOBAL_GRATE {
-                vec.push(f);
-            }
-        }
+        let vec = GLOBAL_GRATE
+            .get_or_insert_with(|| Vec::with_capacity(lind_const::MAX_CAGEID as usize));
+        vec.resize_with(lind_const::MAX_CAGEID as usize, || None);
     }
 }
 

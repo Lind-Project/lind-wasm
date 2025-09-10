@@ -52,6 +52,8 @@ impl LindCommonCtx {
         arg6: u64,
     ) -> i32 {
         let start_address = get_memory_base(&caller);
+        // todo:
+        // replacing the execution path by calling to 3i first
         match call_number as i32 {
             // clone syscall
             CLONE_SYSCALL => {
