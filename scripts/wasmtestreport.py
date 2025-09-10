@@ -715,6 +715,13 @@ def main():
     else:
         logger.setLevel(logging.INFO)
     
+    # Prevent contradictory flags
+    if clean_results and keep_artifacts:
+        logger.error("Error: Cannot use --clean-results with --keep-artifacts")
+        logger.error("--clean-results exits before running any tests")
+        logger.error("--keep-artifacts only applies after tests have generated artifacts")
+        return
+    
     if clean_results:
         if os.path.isfile(output_file):
             os.remove(output_file)
@@ -734,106 +741,124 @@ def main():
     created_temp_dir = False
     if artifacts_dir_arg:
         artifacts_root = artifacts_dir_arg.resolve()
-        artifacts_root.mkdir(parents=True, exist_ok=True)
+        try:
+            artifacts_root.mkdir(parents=True, exist_ok=True)
+            # Test writability using tempfile
+            with tempfile.NamedTemporaryFile(dir=artifacts_root, delete=True):
+                pass  # Successfully created and auto-deleted
+        except (OSError, PermissionError) as e:
+            logger.error(f"Cannot write to artifacts directory {artifacts_root}: {e}")
+            return
     else:
-        artifacts_root = Path(tempfile.mkdtemp(prefix="wasmtest_artifacts_"))
-        created_temp_dir = True
+        try:
+            artifacts_root = Path(tempfile.mkdtemp(prefix="wasmtest_artifacts_"))
+            created_temp_dir = True
+        except OSError as e:
+            logger.error(f"Cannot create temporary artifacts directory: {e}")
+            return
     logger.debug(f"Artifacts root: {artifacts_root}")
 
     try:
-        shutil.rmtree(TESTFILES_DST)
-        logger.info(f"Testfiles at {LIND_FS_ROOT} deleted")
-    except FileNotFoundError as e:
-        logger.error(f"Testfiles not present at {LIND_FS_ROOT}")
-    
-    if clean_testfiles:
-        return
-
-    pre_test()
-    if pre_test_only:
-        logger.info(f"Testfiles copied to {LIND_FS_ROOT}")
-        return
-
-    skip_folders_paths = [Path(sf) for sf in skip_folders]
-    run_folders_paths = [Path(rf) for rf in run_folders]
-    
-    skip_test_cases = set()
-    try:
-        with open(SKIP_TESTS_FILE, "r") as f:
-            skip_test_cases = {TEST_FILE_BASE / line.strip() for line in f if line.strip()}
-    except FileNotFoundError:
-        logger.error(f"{SKIP_TESTS_FILE} not found")
-
-    # Override test cases in skip_test_cases by passing individual test cases as arguments
-    if args.testfiles: 
-        tests_to_run = [Path(f).resolve() for f in args.testfiles]
-    else:   
-        test_cases = list(TEST_FILE_BASE.rglob("*.c")) # Gets all c files in the TEST_FILE_BASE path at all depths
-        tests_to_run = []
-        for test_case in test_cases:
-            if should_run_file(test_case, run_folders_paths, skip_folders_paths, skip_test_cases):
-                tests_to_run.append(test_case)
-
-    if not tests_to_run:
-        logger.warning("No tests found")
-        return
-
-    total_count = len(tests_to_run)
-    for i, original_source in enumerate(tests_to_run):
-        logger.info(f"[{i+1}/{total_count}] {original_source}")
-
-        # Mirror test folder structure inside artifacts_root
+        # All the main execution logic goes here
         try:
-            rel_path = original_source.relative_to(TEST_FILE_BASE)
-        except ValueError:
-            rel_path = Path(original_source.name)
-        dest_dir = artifacts_root / rel_path.parent
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_source = dest_dir / original_source.name
-        if not dest_source.exists():
+            shutil.rmtree(TESTFILES_DST)
+            logger.info(f"Testfiles at {LIND_FS_ROOT} deleted")
+        except FileNotFoundError as e:
+            logger.error(f"Testfiles not present at {LIND_FS_ROOT}")
+        
+        if clean_testfiles:
+            return
+
+        pre_test()
+        if pre_test_only:
+            logger.info(f"Testfiles copied to {LIND_FS_ROOT}")
+            return
+
+        skip_folders_paths = [Path(sf) for sf in skip_folders]
+        run_folders_paths = [Path(rf) for rf in run_folders]
+        
+        skip_test_cases = set()
+        try:
+            with open(SKIP_TESTS_FILE, "r") as f:
+                skip_test_cases = {TEST_FILE_BASE / line.strip() for line in f if line.strip()}
+        except FileNotFoundError:
+            logger.error(f"{SKIP_TESTS_FILE} not found")
+
+        # Override test cases in skip_test_cases by passing individual test cases as arguments
+        if args.testfiles: 
+            tests_to_run = [Path(f).resolve() for f in args.testfiles]
+        else:   
+            test_cases = list(TEST_FILE_BASE.rglob("*.c")) # Gets all c files in the TEST_FILE_BASE path at all depths
+            tests_to_run = []
+            for test_case in test_cases:
+                if should_run_file(test_case, run_folders_paths, skip_folders_paths, skip_test_cases):
+                    tests_to_run.append(test_case)
+
+        if not tests_to_run:
+            logger.warning("No tests found")
+            return
+
+        total_count = len(tests_to_run)
+        for i, original_source in enumerate(tests_to_run):
+            logger.info(f"[{i+1}/{total_count}] {original_source}")
+
+            # Mirror test folder structure inside artifacts_root
             try:
-                dest_source.symlink_to(original_source)
-            except OSError:
-                shutil.copy2(original_source, dest_source)
+                rel_path = original_source.relative_to(TEST_FILE_BASE)
+            except ValueError:
+                rel_path = Path(original_source.name)
+            dest_dir = artifacts_root / rel_path.parent
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_source = dest_dir / original_source.name
+            if not dest_source.exists():
+                try:
+                    dest_source.symlink_to(original_source)
+                except OSError:
+                    shutil.copy2(original_source, dest_source)
 
-        # Copy expected outputs directory if present
-        expected_dir_src = original_source.parent / EXPECTED_DIRECTORY
-        if expected_dir_src.is_dir():
-            expected_dir_dst = dest_dir / EXPECTED_DIRECTORY
-            if not expected_dir_dst.exists():
-                shutil.copytree(expected_dir_src, expected_dir_dst)
+            # Copy expected outputs directory if present
+            expected_dir_src = original_source.parent / EXPECTED_DIRECTORY
+            if expected_dir_src.is_dir():
+                expected_dir_dst = dest_dir / EXPECTED_DIRECTORY
+                if not expected_dir_dst.exists():
+                    shutil.copytree(expected_dir_src, expected_dir_dst)
 
-        parent_name = original_source.parent.name
-        if parent_name == DETERMINISTIC_PARENT_NAME:
-            test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
-        elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
-            test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
+            parent_name = original_source.parent.name
+            if parent_name == DETERMINISTIC_PARENT_NAME:
+                test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
+            elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
+                test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
 
-    # Remove testfiles directory from lind fs root
-    try:
-        shutil.rmtree(TESTFILES_DST)
-    except FileNotFoundError:
-        pass
+        os.chdir(LIND_WASM_BASE)
+        with open(output_file, "w") as fp:
+            json.dump(results, fp, indent=4)
 
-    # Remove artifacts directory if it was temp and not requested to keep
-    if created_temp_dir and not keep_artifacts:
-        shutil.rmtree(artifacts_root, ignore_errors=True)
-    else:
-        logger.info(f"Artifacts retained at: {artifacts_root}")
-    
-    os.chdir(LIND_WASM_BASE)
-    with open(output_file, "w") as fp:
-        json.dump(results, fp, indent=4)
+        if should_generate_html:
+            report_html = generate_html_report(results)
+            with open(output_html_file, "w", encoding="utf-8") as out:
+                out.write(report_html)
+            logger.info(f"'{os.path.abspath(output_html_file)}' generated.")	
 
-    if should_generate_html:
-        report_html = generate_html_report(results)
-        with open(output_html_file, "w", encoding="utf-8") as out:
-            out.write(report_html)
-        logger.info(f"'{os.path.abspath(output_html_file)}' generated.")	
+        logger.info(f"'{os.path.abspath(output_file)}' generated.")
+        if keep_artifacts:
+            logger.info("Artifacts kept for troubleshooting.")
 
-    logger.info(f"'{os.path.abspath(output_file)}' generated.")
-    if keep_artifacts:
-        logger.info("Artifacts kept for troubleshooting.")
+    finally:
+        # ALWAYS clean up, regardless of success/failure/interruption
+        try:
+            shutil.rmtree(TESTFILES_DST)
+        except FileNotFoundError:
+            pass
+            
+        # Remove artifacts directory if it was temp and not requested to keep
+        if created_temp_dir and not keep_artifacts:
+            try:
+                shutil.rmtree(artifacts_root, ignore_errors=True)
+                logger.debug(f"Cleaned up temporary artifacts directory: {artifacts_root}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary artifacts directory {artifacts_root}: {e}")
+        else:
+            logger.info(f"Artifacts retained at: {artifacts_root}")
 
 if __name__ == "__main__":
     main()
