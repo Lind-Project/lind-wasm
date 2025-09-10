@@ -80,23 +80,7 @@ int lind_register_syscall (uint64_t targetcage,
     uint64_t this_grate_id)
 {
     int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id);
-    // handle the errno
-    // in rawposix, we use -errno as the return value to indicate the error
-    // but this may cause some issues for mmap syscall, because mmap syscall
-    // is returning an 32-bit address, which may overflow the int type (i32)
-    // luckily we can handle this easily because the return value of mmap is always
-    // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
-    // the errno and mmap result by simply checking if the return value is
-    // within the valid errno range
-    if(ret < 0 && ret > -256)
-    {
-        errno = -ret;
-        return -1;
-    }
-    else
-    {
-        errno = 0;
-    }
+    
     return ret;
 }
 
@@ -110,22 +94,6 @@ int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage
 int lind_cp_data(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
 {
     int ret = __imported_lind_3i_trampoline_cp_data(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, copytype);
-    // handle the errno
-    // in rawposix, we use -errno as the return value to indicate the error
-    // but this may cause some issues for mmap syscall, because mmap syscall
-    // is returning an 32-bit address, which may overflow the int type (i32)
-    // luckily we can handle this easily because the return value of mmap is always
-    // multiple of pages (typically 4096) even when overflow, therefore we can distinguish
-    // the errno and mmap result by simply checking if the return value is
-    // within the valid errno range
-    if(ret < 0 && ret > -256)
-    {
-        errno = -ret;
-        return -1;
-    }
-    else
-    {
-        errno = 0;
-    }
+    
     return ret;
 }
