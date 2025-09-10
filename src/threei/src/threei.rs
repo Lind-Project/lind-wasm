@@ -317,7 +317,7 @@ fn _rm_grate_from_handler(grateid: u64) {
 /// that want to operate the corresponding syscall will be blocked (additional check).
 ///
 /// Only initialize once, and using dashset to support higher performance in high concurrency needs.
-static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
+pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 
 /// This function registers an interposition rule, mapping a syscall number from a source cage to
 /// a handler function in a destination grate or cage. Used for creating per-syscall routing rules
@@ -326,12 +326,12 @@ static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// For example:
 /// I want cage 7 to have system call 34 call into my cage's function foo
 ///
-/// ```
+/// Example:
 /// register_handler(
 ///     NOTUSED, 7,  34, NOTUSED,
 ///    foo, mycagenum,
 ///    ...)
-/// ```
+/// 
 ///
 /// If a conflicting mapping exists, the function panics to prevent accidental overwrite.
 ///
@@ -354,7 +354,7 @@ pub fn register_handler(
     targetcallnum: u64, // Syscall number or match-all indicator. Match-all: 1000.
     _arg1cage: u64,
     handlefunc: u64, // Function index to register (for grate, also called destination call) _or_ 0 for deregister
-    handlefunccage: u64, // Grate cage id _or_ Deregister flag or additional information
+    handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
     _arg3cage: u64,
     _arg4: u64,
@@ -371,21 +371,81 @@ pub fn register_handler(
 
     let mut handler_table = HANDLERTABLE.lock().unwrap();
 
-    if let Some(cage_entry) = handler_table.get(&targetcage) {
+    // If `handlefunccage == THREEI_DEREGISTER`, remove the entire callnum entry
+    // for the given (targetcage, targetcallnum).
+    // We assume one (targetcage, targetcallnum) could be mapped to multiple (handlefunc, handlefunccage)
+    // and each time calling will check the handlefunccage to determine the destination.
+    if handlefunccage == threei_const::THREEI_DEREGISTER {
+        let mut should_remove_cage = false;
+        if let Some(cage_entry) = handler_table.get_mut(&targetcage) {
+            cage_entry.remove(&targetcallnum);
+            should_remove_cage = cage_entry.is_empty();
+        }
+        // drop the borrow to cage_entry before mutating handler_table again
+        if should_remove_cage {
+            handler_table.remove(&targetcage);
+        }
+        return 0;
+    }
+
+    if let Some(cage_entry) = handler_table.get_mut(&targetcage) {
         // Check if targetcallnum exists
-        if let Some(callnum_entry) = cage_entry.get(&targetcallnum) {
-            // Check if handlefunc exists
+        if let Some(callnum_entry) = cage_entry.get_mut(&targetcallnum) {
+            // （targetcage, targetcallnum) exists
+            if handlefunc == 0 {
+                // If deregistering a single syscall, remove the entry if it exists
+                callnum_entry.retain(|_, dest_grateid| *dest_grateid != handlefunccage);
+                // cleanup empties
+                let empty_callnum = callnum_entry.is_empty();
+                if empty_callnum {
+                    // end borrow of callnum_entry by scoping
+                    // remove callnum, then possibly remove cage
+                    // (cannot hold &mut to value while mutating parent)
+                    drop(callnum_entry);
+                    cage_entry.remove(&targetcallnum);
+                    if cage_entry.is_empty() {
+                        // drop cage_entry borrow before removing from parent
+                        drop(cage_entry);
+                        handler_table.remove(&targetcage);
+                    }
+                }
+                return 0;
+            } 
+
             match callnum_entry.get(&handlefunc) {
                 Some(existing_dest_grateid) if *existing_dest_grateid == handlefunccage => {
-                    return 0
-                } // Do nothing
-                Some(_) => panic!("Already exists"), // Panic if a conflicting mapping exists
-                None => {}                           // If `handlefunc` not exists, insert
+                    // Already registered with same mapping, do nothing
+                    return 0;
+                } 
+                Some(_) => {
+                    return threei_const::ELINDAPIABORTED as i32; // Return error if a conflicting mapping exists
+                }
+                None => {
+                    // If `handlefunc` not exists, insert
+                    callnum_entry.insert(handlefunc, handlefunccage);
+                    return 0;
+                }
             }
+        } else {
+            // callnum does not exist yet under this cage
+            if handlefunc == 0 {
+                // nothing to delete
+                return 0;
+            }
+            let mut m = HashMap::new();
+            m.insert(handlefunc, handlefunccage);
+            cage_entry.insert(targetcallnum, m);
+            return 0;
         }
     }
 
+    // cage does not exist yet
     // Inserts a new mapping in HANDLERTABLE.
+    if handlefunc == 0 {
+        // nothing to delete
+        return 0;
+    }
+
     handler_table
         .entry(targetcage)
         .or_insert_with(HashMap::new)
@@ -409,8 +469,8 @@ pub fn register_handler(
 ///
 /// ## Returns:
 /// - 0 on success.
-/// - `ELINDESRCH` if either source or target cage is in the EXITING state, or if srccage has
-/// no existing handler table.
+/// - `ELINDESRCH` if either source or target cage is in the EXITING state.
+/// - `ELINDAPIABORTED` if srccage has no existing handler table.
 pub fn copy_handler_table_to_cage(
     _callnum: u64,
     targetcage: u64,
@@ -429,7 +489,7 @@ pub fn copy_handler_table_to_cage(
 ) -> u64 {
     // Verifies that neither srccage nor targetcage are in the EXITING state to avoid
     // copying from or to a cage that may be invalid.
-    if EXITING_TABLE.contains(&targetcage) && EXITING_TABLE.contains(&srccage) {
+    if EXITING_TABLE.contains(&targetcage) || EXITING_TABLE.contains(&srccage) {
         return threei_const::ELINDESRCH as u64;
     }
 
@@ -454,7 +514,7 @@ pub fn copy_handler_table_to_cage(
             "[3i|copy_handler_table_to_cage] srccage {} has no handler table",
             srccage
         );
-        threei_const::ELINDESRCH as u64 // treat missing src table as an error
+        threei_const::ELINDAPIABORTED as u64 // treat missing src table as an error
     }
 }
 
@@ -524,7 +584,7 @@ pub fn make_syscall(
 ) -> i32 {
     // Return error if the target cage/grate is exiting. We need to add this check beforehead, because make_syscall will also
     // contain cases that can directly redirect a syscall when self_cageid == target_id, which will bypass the handlertable check
-    if EXITING_TABLE.contains(&target_cageid) && syscall_num != EXIT_SYSCALL {
+    if EXITING_TABLE.contains(&target_cageid) || syscall_num != EXIT_SYSCALL {
         return threei_const::ELINDESRCH as i32;
     }
 
@@ -556,6 +616,8 @@ pub fn make_syscall(
             } else {
                 // syscall has been registered to register_handler but grate's entry function
                 // doesn't provide
+                // Panic here because this indicates error happens in wasmtime side when attaching
+                // the module closure, which is a system-level error
                 panic!(
                     "[3i|make_syscall] grate call not found! grateid: {}",
                     grateid
@@ -730,20 +792,6 @@ pub fn harsh_cage_exit(
 }
 
 /***************************** copy_data_between_cages *****************************/
-/// This constant defines the maximum string length (`MAX_STRLEN`) used when copying strings
-/// across cages, particularly in cases where the string length is not explicitly provided by the caller.
-///
-/// In such scenarios — for example, when copying a char* path from a Wasm program, the source may not
-/// include the string length, so the system must scan for the null terminator manually. To prevent
-/// runaway scans or buffer overflows, we impose an upper bound.
-///
-/// The value 4096 is chosen to match the typical Linux PATH_MAX, which defines the maximum length of
-/// an absolute file path.
-///
-/// This constant is especially relevant when copytype == 1 (i.e., when performing a strncpy copy in
-/// `copy_data_between_cages`).
-const MAX_STRLEN: usize = 4096;
-
 /// A helper function that scans length for a null terminator in memory, mimicking
 /// strlen behavior in C.
 ///
@@ -921,7 +969,7 @@ pub fn copy_data_between_cages(
     } else if copytype == 1 {
         // strncpy
         // Find the null-terminated length in the source string
-        let maxlen = MAX_STRLEN; // upper bound to prevent runaway scan
+        let maxlen = threei_const::MAX_STRLEN; // upper bound to prevent runaway scan
         let actual_len = match _strlen_in_cage(host_src_addr as *const u8, maxlen) {
             Some(n) => n + 1, // +1 to include the '\0'
             None => {
