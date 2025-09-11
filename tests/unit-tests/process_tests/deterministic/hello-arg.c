@@ -8,7 +8,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     */
-
+    argv[0] = "hello-arg";
     printf("Received argument: %s\n", argv[0]);
     return 0;
 }
