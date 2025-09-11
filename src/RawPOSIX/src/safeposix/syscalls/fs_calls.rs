@@ -1688,10 +1688,13 @@ impl Cage {
         uaddr: u64,
         futex_op: u32,
         val: u32,
-        val2: usize,
+        timeout: Option<usize>, // <- updated type
         uaddr2: u64,
         val3: u32,
     ) -> i32 {
+        // Use timeout if Some, otherwise pass 0 (interpreted as NULL by futex syscall)
+        let val2 = timeout.unwrap_or(0);
+
         let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
         if ret < 0 {
             let errno = get_errno();
@@ -1706,10 +1709,13 @@ impl Cage {
         &self,
         clockid: u32,
         flags: i32,
-        req: usize,
-        rem: usize,
+        req: Option<usize>,
+        rem: Option<usize>,
     ) -> i32 {
-        let ret = unsafe { syscall(SYS_clock_nanosleep, clockid, flags, req, rem) as i32 };
+        let req_ptr = req.unwrap_or(0) as *const libc::timespec;
+        let rem_ptr = rem.unwrap_or(0) as *mut libc::timespec;
+
+        let ret = unsafe { syscall(SYS_clock_nanosleep, clockid, flags, req_ptr, rem_ptr) as i32 };
         if ret < 0 {
             let errno = get_errno();
             return handle_errno(errno, "fcntl");
