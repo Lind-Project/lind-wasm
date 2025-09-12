@@ -29,3 +29,38 @@ Note also, that 3i can be used for other inter-cage calls, like RPC.   This docu
 #### `trigger_harsh_cage_exit` and `harsh_cage_exit`  
 
 `trigger_harsh_cage_exit` is triggered by the caging or signaling infrastructure to indicate that a cage will (uncleanly) exit. After receiving notification, 3i will cleanup the 3i data structure (which is the system call table) and then 3i will go through the respective grates until reaching 3i's version of the call by triggering `harsh_cage_exit`. This call can be thought of as notifying the grates and microvisor of the harsh exit of a program whose memory state cannot be relied upon. This is unlike the `exit_syscall`, which is performed by a functioning program with intact memory as part of its termination.. 
+
+## Build and Testing
+
+This project currently supports two implementations of the handler table:
+- hashmap (default)
+Uses `Mutex<HashMap<..>>`.
+
+- dashmap (optional)
+Uses `DashMap<..>`.
+
+### How to build
+
+By default, the `hashmap` implementation is used:
+
+```sh
+cargo build
+```
+
+To enable the `dashmap` backend:
+
+```sh
+cargo build --features dashmap
+```
+
+### How to test
+
+Using default `hashmap`:
+```sh
+cargo test
+```
+
+Using `dashmap`:
+```sh
+cargo test --no-default-features --features dashmap
+```

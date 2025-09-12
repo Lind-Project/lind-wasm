@@ -1,10 +1,15 @@
 // ---------- Test helper functions ----------
-use threei::{HANDLERTABLE, EXITING_TABLE, register_handler, copy_handler_table_to_cage};
+use threei::{EXITING_TABLE, register_handler, copy_handler_table_to_cage};
+use threei::handler_table::HANDLERTABLE;
 /// Clear global tables so each test starts from a clean state.
 pub fn clear_globals() {
+    #[cfg(feature = "hashmap")]
     {
-        let mut tbl = HANDLERTABLE.lock().unwrap();
-        tbl.clear();
+        HANDLERTABLE.lock().unwrap().clear();
+    }
+    #[cfg(feature = "dashmap")]
+    {
+        HANDLERTABLE.clear();
     }
     // If EXITING_TABLE is a set-like structure:
     EXITING_TABLE.clear();
@@ -12,12 +17,27 @@ pub fn clear_globals() {
 
 /// Read current mapping for (cage, callnum) into a Vec<(handlefunc, dest)>
 pub fn mappings_for(cage: u64, callnum: u64) -> Vec<(u64, u64)> {
-    let tbl = HANDLERTABLE.lock().unwrap();
-    if let Some(cage_entry) = tbl.get(&cage) {
-        if let Some(callnum_entry) = cage_entry.get(&callnum) {
-            return callnum_entry.iter().map(|(k, v)| (*k, *v)).collect();
+    #[cfg(feature = "hashmap")]
+    {
+        let tbl = HANDLERTABLE.lock().unwrap();
+        if let Some(cage_entry) = tbl.get(&cage) {
+            if let Some(callnum_entry) = cage_entry.get(&callnum) {
+                return callnum_entry.iter().map(|(k, v)| (*k, *v)).collect();
+            }
         }
     }
+
+    #[cfg(feature = "dashmap")]
+    {
+        if let Some(cage_entry_ref) = HANDLERTABLE.get(&cage) {
+            let cage_entry = cage_entry_ref.value();
+            if let Some(callnum_entry_ref) = cage_entry.get(&callnum) {
+                let callnum_entry = callnum_entry_ref.value();
+                return callnum_entry.iter().map(|kv| (*kv.key(), *kv.value())).collect();
+            }
+        }
+    }
+    
     vec![]
 }
 
