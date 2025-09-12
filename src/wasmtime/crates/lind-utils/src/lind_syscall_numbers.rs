@@ -11,4 +11,8 @@ pub const EXEC_SYSCALL: i32 = 59;
 pub const EXIT_SYSCALL: i32 = 60;
 
 // Placeholder for unused syscall arguments
-pub const NOTUSED: u64 = 0;
+pub const NOTUSED_ARG: u64 = 0;
+// Placeholder for unused cage/grate IDs
+pub const NOTUSED_ID: u64 = 0;
+// Placeholder for unused syscall name
+pub const NOTUSED_NAME: u64 = 0;

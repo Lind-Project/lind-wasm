@@ -37,6 +37,19 @@ use std::sync::RwLock;
 ///   to manually clone the handle for invocation.
 /// - `remove_ctx(cageid)` removes the context when the instance is terminated. Returns `true`
 ///   if the context was found and removed, `false` otherwise.
+///
+/// ## Lifetime
+/// `InstanceHandle` directly holds a raw pointer to its `VMContext`. That `VMContext` is 
+/// allocated when the instance is created (e.g., via `Instance::new` / `Instance::new_with_handle`) 
+/// and remains valid only as long as the owning `Store` lives. In other words, an `InstanceHandle`’s 
+/// effective lifetime is bound to the lifetime of its `Store`.
+///
+/// In lind-wasm, the `Store` lives for the duration of `wasmtime_cli::run::{execute, execute_with_lind}`.
+/// To avoid leaving dangling references after the `Store` is dropped, we explicitly remove 
+/// and drop each module’s `InstanceHandle` on `exit_syscall` (See `lind-multi-processes` and `wasmtime-cli::run`). 
+/// While Wasmtime itself will reclaim all instances when the `Store` is dropped, this 
+/// cleanup ensures that no global tables or caches retain stale handles beyond the `Store`’s 
+/// lifetime, preventing illegal access to freed engine resources.
 pub static VM_TABLE: Lazy<RwLock<Vec<Option<InstanceHandle>>>> = Lazy::new(|| {
     RwLock::new(Vec::new())
 });
