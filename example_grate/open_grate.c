@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <register_handler.h>
-#include <cp_data_between_cages.h>
+#include <copy_data_between_cages.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -15,7 +15,7 @@ int open_grate(uint64_t cageid, uint64_t arg1, uint64_t arg1cage, uint64_t arg2,
 		exit(EXIT_FAILURE);
 	}
 
-	cp_data_between_cages(thiscage, arg1cage, arg1, arg1cage, (uint64_t)pathname, thiscage, 256, 1);
+	copy_data_between_cages(thiscage, arg1cage, arg1, arg1cage, (uint64_t)pathname, thiscage, 256, 1);
 	
 	printf("[Grate | open] open_grate called with pathname: %s, flags: %llu, mode: %llu\n", pathname, arg2, arg3);
 
@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
                 int cageid = getpid();
                 // Set the open (syscallnum=2) of this cage to call this grate function geteuid_grate (func index=0)
                 // Syntax of register_handler: <targetcage, targetcallnum, handlefunc_index_in_this_grate (non-zero), this_grate_id>
-                int ret = register_handler(cageid, 2, 9, grateid);
+                int ret = register_handler(cageid, 2, grateid, 9);
             }
 
             if ( execv(argv[i], &argv[i]) == -1) {
