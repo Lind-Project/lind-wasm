@@ -4,8 +4,9 @@ use cfg_if::cfg_if;
 
 use anyhow::{anyhow, Result};
 use threei::threei::make_syscall;
-use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
+use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL, NOTUSED};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
+use wasmtime_lind_3i_vmctx::{insert_ctx, get_ctx, remove_ctx, VM_TABLE};
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -357,22 +358,22 @@ impl<
         // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
         // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
         make_syscall(
-            self.pid as u64, 
+            self.pid as u64, // self cage id
             (FORK_SYSCALL) as u64, // syscall num for fork 
-            0,
-            self.pid as u64, 
-            child_cageid, 
-            self.pid as u64,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
+            NOTUSED, // syscall name
+            self.pid as u64, // target cage id, should be itself
+            child_cageid, // 1st arg
+            self.pid as u64, // 1st arg's cage id
+            NOTUSED,
+            NOTUSED,
+            NOTUSED,
+            NOTUSED,
+            NOTUSED,
+            NOTUSED,
+            NOTUSED,
+            NOTUSED,
+            NOTUSED,
+            NOTUSED,
         );
 
         // use the same engine for parent and child
@@ -525,6 +526,11 @@ impl<
                                     child_cageid,
                                     THREAD_START_ID as u64,
                                 ) {
+                                    // Clean up the context from the global table
+                                    if !remove_ctx(child_cageid as usize) {
+                                        eprintln!("[wasmtime|run] Warning: failed to remove context for cage {}", child_cageid);
+                                    }
+
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
                                     // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -532,20 +538,20 @@ impl<
                                     make_syscall(
                                         child_cageid, // self cage
                                         (EXIT_SYSCALL) as u64, // syscall num
-                                        0,
-                                        child_cageid, // target cage
+                                        NOTUSED, // syscall name
+                                        child_cageid, // target cage, should be itself
                                         *val as u64, // 1st arg: status
                                         child_cageid,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
+                                        NOTUSED,
+                                        NOTUSED,
+                                        NOTUSED,
+                                        NOTUSED,
+                                        NOTUSED,
+                                        NOTUSED,
+                                        NOTUSED,
+                                        NOTUSED,
+                                        NOTUSED,
+                                        NOTUSED,
                                     );
 
                                     // the cage just exited, decrement the cage counter
@@ -809,6 +815,11 @@ impl<
                                 child_cageid as u64,
                                 next_tid as u64,
                             ) {
+                                // Clean up the context from the global table
+                                if !remove_ctx(child_cageid as usize) {
+                                    eprintln!("[wasmtime|run] Warning: failed to remove context for cage {}", child_cageid);
+                                }
+
                                 // we clean the cage only if this is the last thread in the cage
                                 // exit the cage with the exit code
                                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -816,20 +827,20 @@ impl<
                                 make_syscall(
                                     (child_cageid) as u64, // self cage
                                     (EXIT_SYSCALL) as u64, // syscall num
-                                    0,
+                                    NOTUSED, // syscall name
                                     (child_cageid) as u64, // target cage
                                     *val as u64, // 1st arg: status
                                     (child_cageid) as u64,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
+                                    NOTUSED,
+                                    NOTUSED,
+                                    NOTUSED,
+                                    NOTUSED,
+                                    NOTUSED,
+                                    NOTUSED,
+                                    NOTUSED,
+                                    NOTUSED,
+                                    NOTUSED,
+                                    NOTUSED,
                                 );
 
                                 // the cage just exited, decrement the cage counter
@@ -1022,22 +1033,22 @@ impl<
             // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
             // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
             make_syscall(
-                cloned_pid as u64, 
+                cloned_pid as u64, // self cage id
                 (EXEC_SYSCALL) as u64, // syscall num for exec 
-                0,
-                cloned_pid as u64, 
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0, 
+                NOTUSED, // syscall name
+                cloned_pid as u64, // target cage id, should be itself
+                NOTUSED,
+                NOTUSED,
+                NOTUSED,
+                NOTUSED,
+                NOTUSED,
+                NOTUSED,
+                NOTUSED,
+                NOTUSED,
+                NOTUSED,
+                NOTUSED,
+                NOTUSED,
+                NOTUSED, 
             );
 
             let ret = exec_call(

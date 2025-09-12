@@ -9,3 +9,6 @@ pub const CLONE_SYSCALL: i32 = 56;
 pub const FORK_SYSCALL: i32 = 57;
 pub const EXEC_SYSCALL: i32 = 59;
 pub const EXIT_SYSCALL: i32 = 60;
+
+// Placeholder for unused syscall arguments
+pub const NOTUSED: u64 = 0;
