@@ -1,15 +1,21 @@
 //! Threei (Three Interposition) module
-use crate::syscall_table::SYSCALL_TABLE;
 use cage::memory::check_addr;
 use core::panic;
 use dashmap::DashSet;
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
 use std::ptr;
 use std::sync::Mutex;
-use sysdefs::constants::{threei_const, lind_const};
+use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
 use typemap::datatype_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
+
+use crate::handler_table::{
+    _check_cage_handler_exist, _get_handler, _rm_grate_from_handler,
+    register_handler_impl, copy_handler_table_to_cage_impl,
+    _rm_cage_from_handler
+};
+use crate::syscall_table::SYSCALL_TABLE;
+use crate::threei_const;
 
 pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
 const MMAP_SYSCALL: u64 = 9; // mmap syscall number
@@ -57,18 +63,12 @@ pub fn threei_wasm_func(
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
 pub type RawCallFunc = fn(
     target_cageid: u64,
-    arg1: u64,
-    arg2: u64,
-    arg3: u64,
-    arg4: u64,
-    arg5: u64,
-    arg6: u64,
-    arg1_cageid: u64,
-    arg2_cageid: u64,
-    arg3_cageid: u64,
-    arg4_cageid: u64,
-    arg5_cageid: u64,
-    arg6_cageid: u64,
+    arg1: u64, arg1_cageid: u64,
+    arg2: u64, arg2_cageid: u64,
+    arg3: u64, arg3_cageid: u64,
+    arg4: u64, arg4_cageid: u64,
+    arg5: u64, arg5_cageid: u64,
+    arg6: u64, arg6_cageid: u64,
 ) -> i32;
 
 /// Each entry in the `Vec` corresponds to a specific grate, and the index is used as its identifier
@@ -129,8 +129,8 @@ fn _init_global_grate() {
     // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
     unsafe {
         let vec = GLOBAL_GRATE
-            .get_or_insert_with(|| Vec::with_capacity(lind_const::MAX_CAGEID as usize));
-        vec.resize_with(lind_const::MAX_CAGEID as usize, || None);
+            .get_or_insert_with(|| Vec::with_capacity(lind_platform_const::MAX_CAGEID as usize));
+        vec.resize_with(lind_platform_const::MAX_CAGEID as usize, || None);
     }
 }
 
@@ -214,73 +214,6 @@ fn _call_grate_func(
     }
 }
 
-/// HANDLERTABLE:
-/// A nested hash map used to define fine-grained per-syscall interposition rules.
-///
-/// <self_cageid, <callnum, (addr, dest_grateid)>
-/// Keys are the grate, the value is a HashMap with a key of the callnum
-/// and the values are a (target_call_index, grate) tuple for the actual handlers...
-type TargetCageMap = HashMap<u64, u64>; // Maps destfunc to dest_grateid
-type CallnumMap = HashMap<u64, TargetCageMap>; // Maps targetcallnum to TargetCageMap
-type CageHandlerTable = HashMap<u64, CallnumMap>; // Maps self_cageid to CallnumMap
-lazy_static::lazy_static! {
-    #[derive(Debug)]
-    // <self_cageid, <callnum, (target_call_index, dest_grateid)>
-    // callnum is mapped to addr, not self
-    pub static ref HANDLERTABLE: Mutex<CageHandlerTable> = Mutex::new(HashMap::new());
-}
-
-/// Checks if a given cage has any registered syscall handlers in HANDLERTABLE.
-///
-/// ## Arguments:
-/// - cageid: The ID of the cage to check.
-///
-/// ## Returns:
-/// true if the cage has at least one handler registered.
-/// false otherwise.
-fn _check_cage_handler_exist(cageid: u64) -> bool {
-    let handler_table = HANDLERTABLE.lock().unwrap();
-    handler_table.contains_key(&cageid)
-}
-
-/// Looks up the destination grate and call index for a given syscall issued by a specific cage.
-///
-/// ## Arguments:
-/// - self_cageid: ID of the calling cage.
-/// - syscall_num: The syscall number issued by the cage.
-///
-/// ## Returns:
-/// `Some((call_index_in_grate, dest_grateid))` if a handler mapping exists.
-/// `None` if no mapping is found.
-fn _get_handler(self_cageid: u64, syscall_num: u64) -> Option<(u64, u64)> {
-    let handler_table = HANDLERTABLE.lock().unwrap();
-
-    handler_table
-        .get(&self_cageid) // Get the first HashMap<u64, HashMap<u64, u64>>
-        .and_then(|sub_table| sub_table.get(&syscall_num)) // Get the second HashMap<u64, u64>
-        .and_then(|map| map.iter().next()) // Extract the first (key, value) pair
-        .map(|(&call_index, &grateid)| (call_index, grateid)) // Convert to (u64, u64)
-}
-
-/// Removes **ALL** handler entries across all cages that point to a specific grateid.
-///
-/// Mutates the HANDLERTABLE by removing all handler mappings that route to this grate,
-/// cleaning up stale references after removal or teardown.
-///
-/// ## Arguments:
-/// - grateid: The ID of the grate to purge from the HANDLERTABLE.
-///
-/// ## Returns:
-/// None.
-fn _rm_grate_from_handler(grateid: u64) {
-    let mut table = HANDLERTABLE.lock().unwrap();
-    for (_, callmap) in table.iter_mut() {
-        for (_, target_map) in callmap.iter_mut() {
-            target_map.retain(|_, &mut dest_grateid| dest_grateid != grateid);
-        }
-    }
-}
-
 /// EXITING_TABLE:
 ///
 /// A grate/cage does not need to know the upper-level grate/cage information, but only needs
@@ -342,88 +275,13 @@ pub fn register_handler(
         return threei_const::ELINDESRCH as i32;
     }
 
-    let mut handler_table = HANDLERTABLE.lock().unwrap();
-
-    // If `handlefunccage == THREEI_DEREGISTER`, remove the entire callnum entry
-    // for the given (targetcage, targetcallnum).
-    // We assume one (targetcage, targetcallnum) could be mapped to multiple (handlefunc, handlefunccage)
-    // and each time calling will check the handlefunccage to determine the destination.
-    if handlefunccage == threei_const::THREEI_DEREGISTER {
-        let mut should_remove_cage = false;
-        if let Some(cage_entry) = handler_table.get_mut(&targetcage) {
-            cage_entry.remove(&targetcallnum);
-            should_remove_cage = cage_entry.is_empty();
-        }
-        // drop the borrow to cage_entry before mutating handler_table again
-        if should_remove_cage {
-            handler_table.remove(&targetcage);
-        }
-        return 0;
-    }
-
-    if let Some(cage_entry) = handler_table.get_mut(&targetcage) {
-        // Check if targetcallnum exists
-        if let Some(callnum_entry) = cage_entry.get_mut(&targetcallnum) {
-            // （targetcage, targetcallnum) exists
-            if handlefunc == 0 {
-                // If deregistering a single syscall, remove the entry if it exists
-                callnum_entry.retain(|_, dest_grateid| *dest_grateid != handlefunccage);
-                // cleanup empties
-                let empty_callnum = callnum_entry.is_empty();
-                if empty_callnum {
-                    // end borrow of callnum_entry by scoping
-                    // remove callnum, then possibly remove cage
-                    // (cannot hold &mut to value while mutating parent)
-                    cage_entry.remove(&targetcallnum);
-                    if cage_entry.is_empty() {
-                        handler_table.remove(&targetcage);
-                    }
-                }
-                return 0;
-            } 
-
-            match callnum_entry.get(&handlefunc) {
-                Some(existing_dest_grateid) if *existing_dest_grateid == handlefunccage => {
-                    // Already registered with same mapping, do nothing
-                    return 0;
-                } 
-                Some(_) => {
-                    return threei_const::ELINDAPIABORTED as i32; // Return error if a conflicting mapping exists
-                }
-                None => {
-                    // If `handlefunc` not exists, insert
-                    callnum_entry.insert(handlefunc, handlefunccage);
-                    return 0;
-                }
-            }
-        } else {
-            // callnum does not exist yet under this cage
-            if handlefunc == 0 {
-                // nothing to delete
-                return 0;
-            }
-            let mut m = HashMap::new();
-            m.insert(handlefunc, handlefunccage);
-            cage_entry.insert(targetcallnum, m);
-            return 0;
-        }
-    }
-
-    // cage does not exist yet
-    // Inserts a new mapping in HANDLERTABLE.
-    if handlefunc == 0 {
-        // nothing to delete
-        return 0;
-    }
-
-    handler_table
-        .entry(targetcage)
-        .or_insert_with(HashMap::new)
-        .entry(targetcallnum)
-        .or_insert_with(HashMap::new)
-        .insert(handlefunc, handlefunccage);
-
-    0
+    // Actual implementation is in handler_table module according to feature flag
+    register_handler_impl(
+        targetcage,
+        targetcallnum,
+        handlefunc,
+        handlefunccage,
+    )
 }
 
 /// This copies the handler table used by a cage to another cage.  
@@ -463,29 +321,8 @@ pub fn copy_handler_table_to_cage(
         return threei_const::ELINDESRCH as u64;
     }
 
-    let mut handler_table = HANDLERTABLE.lock().unwrap();
-
-    // If srccage has a handler table, clones its contents into targetcage.
-    // Does not overwrite any existing handlers in the target.
-    if let Some(src_entry) = handler_table.get(&srccage).cloned() {
-        let target_entry = handler_table.entry(targetcage).or_insert_with(HashMap::new);
-        for (callnum, callnum_map) in src_entry {
-            let target_callnum_map = target_entry.entry(callnum).or_insert_with(HashMap::new);
-            for (handlefunc, handlefunccage) in callnum_map {
-                // If not already present, insert
-                target_callnum_map
-                    .entry(handlefunc)
-                    .or_insert(handlefunccage);
-            }
-        }
-        0
-    } else {
-        eprintln!(
-            "[3i|copy_handler_table_to_cage] srccage {} has no handler table",
-            srccage
-        );
-        threei_const::ELINDAPIABORTED as u64 // treat missing src table as an error
-    }
+    // Actual implementation is in handler_table module according to feature flag
+    copy_handler_table_to_cage_impl(srccage, targetcage) 
 }
 
 /// actually performs a call.  Not interposable
@@ -742,18 +579,10 @@ pub fn harsh_cage_exit(
         0,
     );
 
-    // Remove cage's own handler table if it exists
-    let mut handler_table = HANDLERTABLE.lock().unwrap();
-    handler_table.remove(&targetcage);
+    // Actual implementation is in handler_table module according to feature flag
+    _rm_cage_from_handler(targetcage);
 
-    // Cleans up the HANDLERTABLE:
-    // Deletes the targetcage's own syscall handlers.
-    // Removes any other cages' entries that route to the targetcage.
-    for (_self_cageid, callmap) in handler_table.iter_mut() {
-        for (_callnum, target_map) in callmap.iter_mut() {
-            target_map.retain(|_call_index, &mut dest_grateid| dest_grateid != targetcage);
-        }
-    }
+    _rm_grate_from_handler(targetcage);
 
     // Remove from EXITING_TABLE if present (cleanup complete)
     EXITING_TABLE.remove(&targetcage);
@@ -885,7 +714,7 @@ pub fn copy_data_between_cages(
     // Always check the source address first
     // Reject requests where `len` exceeds the maximum allowed linear memory size
     // (`MAX_LIND_SIZE`), since such a copy would exceed the Wasm 32-bit address space.
-    if let Err(code) = _validate_len(len, lind_const::MAX_LIND_SIZE) {
+    if let Err(code) = _validate_len(len, lind_platform_const::MAX_LINEAR_MEMORY_SIZE) {
         eprintln!("[3i|copy] length too large or zero: {}", len);
         return code;
     }
@@ -979,7 +808,7 @@ pub fn copy_data_between_cages(
         }
         Ok(CopyType::Strncpy) => {
             // Find actual C-string length (caps at MAX to avoid runaway)
-            let max_scan = lind_const::MAX_LIND_SIZE as usize;
+            let max_scan = lind_platform_const::MAX_LINEAR_MEMORY_SIZE as usize;
             let actual_len = match _strlen_in_cage(host_src_addr as *const u8, max_scan) {
                 Some(n) => n + 1, // include '\0'
                 None => {

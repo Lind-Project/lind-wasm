@@ -2,8 +2,9 @@
 // Rust runs tests in parallel by default, which can cause cross-test interference. 
 // `serial_test` lets us mark those tests #[serial] so they run one at a time.
 use serial_test::serial;
-use threei::{EXITING_TABLE, HANDLERTABLE};
-use sysdefs::constants::threei_const;
+use threei::EXITING_TABLE;
+use threei::handler_table::HANDLERTABLE;
+use threei::threei_const;
 mod common;
 use common::*;
 // ---------- [Register_handler] ----------
@@ -150,16 +151,27 @@ fn cleanup_cage_removed_when_last_callnum_removed() {
     // remove call_a entirely
     assert_eq!(reg(cage, call_a, 0, threei_const::THREEI_DEREGISTER), 0);
     // cage still present because call_b remains
+    #[cfg(feature = "hashmap")]
     {
         let tbl = HANDLERTABLE.lock().unwrap();
         assert!(tbl.get(&cage).is_some());
     }
+    #[cfg(feature = "dashmap")]
+    {
+        assert!(HANDLERTABLE.get(&cage).is_some());
+    }
 
     // remove call_b entirely -> cage should be cleaned up (optional cleanup branch)
     assert_eq!(reg(cage, call_b, 0, threei_const::THREEI_DEREGISTER), 0);
+
+    #[cfg(feature = "hashmap")]
     {
         let tbl = HANDLERTABLE.lock().unwrap();
         assert!(tbl.get(&cage).is_none());
+    }
+    #[cfg(feature = "dashmap")]
+    {
+        assert!(HANDLERTABLE.get(&cage).is_none());
     }
 }
 
@@ -176,7 +188,7 @@ fn deregister_not_found_is_ok() {
     assert_eq!(rc, 0);
 }
 
-// ---------- [Copy_handlers] ----------
+// // ---------- [Copy_handlers] ----------
 
 #[test]
 #[serial]
@@ -245,6 +257,7 @@ fn copy_does_not_overwrite_existing_handlers() {
 
 #[test]
 #[serial]
+// This test adds multiple callnums with different destinations
 fn copy_merges_multiple_callnums() {
     clear_globals();
 
@@ -283,8 +296,15 @@ fn copy_returns_error_if_src_missing_table() {
     assert_eq!(rc, threei_const::ELINDAPIABORTED as u64);
 
     // Ensure dst stays empty.
-    let tbl = HANDLERTABLE.lock().unwrap();
-    assert!(tbl.get(&dst).is_none());
+    #[cfg(feature = "hashmap")]
+    {
+        let tbl = HANDLERTABLE.lock().unwrap();
+        assert!(tbl.get(&dst).is_none());
+    }
+    #[cfg(feature = "dashmap")]
+    {
+        assert!(HANDLERTABLE.get(&dst).is_none());
+    }
 }
 
 #[test]

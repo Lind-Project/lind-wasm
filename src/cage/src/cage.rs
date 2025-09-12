@@ -12,7 +12,7 @@ pub use std::sync::atomic::{AtomicI32, AtomicU64};
 pub use std::sync::Arc;
 use sysdefs::data::fs_struct::SigactionStruct;
 use crate::timer::*;
-use sysdefs::constants::lind_const::MAX_CAGEID;
+use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Zombie {

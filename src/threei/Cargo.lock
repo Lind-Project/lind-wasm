@@ -41,7 +41,7 @@ dependencies = [
 name = "cage"
 version = "0.1.0"
 dependencies = [
- "dashmap",
+ "dashmap 5.5.3",
  "fdtables",
  "libc",
  "nodit",
@@ -58,6 +58,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fd1289c04a9ea8cb22300a459a72a385d7c73d3259e2ed7dcb2af674838cfa9"
 
 [[package]]
+name = "crossbeam-utils"
+version = "0.8.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
+
+[[package]]
 name = "dashmap"
 version = "5.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -69,6 +75,20 @@ dependencies = [
  "once_cell",
  "parking_lot_core",
  "serde",
+]
+
+[[package]]
+name = "dashmap"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
 ]
 
 [[package]]
@@ -87,7 +107,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 name = "fdtables"
 version = "0.1.0"
 dependencies = [
- "dashmap",
+ "dashmap 5.5.3",
  "lazy_static",
  "libc",
 ]
@@ -341,7 +361,7 @@ name = "rawposix"
 version = "0.1.0"
 dependencies = [
  "cage",
- "dashmap",
+ "dashmap 5.5.3",
  "fdtables",
  "lazy_static",
  "libc",
@@ -493,7 +513,7 @@ name = "threei"
 version = "0.1.0"
 dependencies = [
  "cage",
- "dashmap",
+ "dashmap 6.1.0",
  "lazy_static",
  "libc",
  "once_cell",
