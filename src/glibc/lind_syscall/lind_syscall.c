@@ -68,18 +68,22 @@ int __imported_lind_3i_trampoline_register_syscall(uint64_t targetcage,
 ));
 
 
-// Part of Macro MAKE_SYSCALL, take in the number of the syscall and the name of the syscall and 6 argument.
-// callnumber: is the syscall number used in rawposix/rustposix
-// callname: a legacy argument, will be changed after 3i has integrated
-// arg1-arg6: actual argument of the syscall, note that all the pointers passed here is 32-bit virtual wasm address
-//            and should be handled appropriately. This might be changed later and the address translation might be
-//            handled here instead
+// Shim between the user-facing 3i API (e.g., register_handler) and the
+// Wasmtime trampoline import (__imported_lind_3i_trampoline_register_syscall).
+// The `lind_` prefix marks this as a Lind-Wasm–specific runtime shim rather 
+// than a generic/app symbol.
+//
+// 3i function call to register or deregister a syscall handler in a target cage
+// targetcage: the cage id where the syscall will be registered
+// targetcallnum: the syscall number to be registered in the target cage
+// this_grate_id: the grate id of the syscall jump ends
+// register_flag: deregister(0) or register(non-0)
 int lind_register_syscall (uint64_t targetcage, 
-    uint64_t targetcallnum, 
-    uint64_t handlefunc_index_in_this_grate, 
-    uint64_t this_grate_id)
+    uint64_t targetcallnum,
+    uint64_t this_grate_id,
+    uint64_t register_flag)
 {
-    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id);
+    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, register_flag, this_grate_id);
     
     return ret;
 }
@@ -91,6 +95,20 @@ int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage
     __import_name__("cp-data-syscall")
 ));
 
+// Shim between the user-facing 3i API (e.g., register_handler) and the
+// Wasmtime trampoline import (__imported_lind_3i_trampoline_register_syscall).
+// The `lind_` prefix marks this as a Lind-Wasm–specific runtime shim rather 
+// than a generic/app symbol.
+//
+// 3i function call to copy data between cages
+// thiscage: the cage id of the caller cage
+// targetcage: the cage id of the target cage
+// srcaddr: the source address to copy from
+// srccage: the cage id of the source address
+// destaddr: the destination address to copy to
+// destcage: the cage id of the destination address
+// len: the length of data to copy
+// copytype: the type of copy, 0 for normal copy, 1 for string copy
 int lind_cp_data(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
 {
     int ret = __imported_lind_3i_trampoline_cp_data(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, copytype);
