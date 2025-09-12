@@ -13,9 +13,10 @@ use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_ba
 // Wasmtime, these calls are routed to their dedicated logic, while other
 // syscalls are passed directly to 3i’s `make_syscall`.
 //
-// `NOTUSED` is a placeholder argument for functions that require
-// a fixed number of parameters but do not utilize all of them.
-use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL, NOTUSED};
+// `NOTUSED_ID` / `NOTUSED_ARG` / `NOTUSED_NAME` is a placeholder argument 
+// for functions that require a fixed number of parameters but do not utilize 
+// all of them.
+use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, NOTUSED_ID, NOTUSED_ARG, NOTUSED_NAME};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
 // then the syscall would be dispatched into rawposix, or other crates under wasmtime, depending on the syscall, to perform its job
@@ -226,7 +227,7 @@ pub fn add_to_linker<
         "lind",
         "register-syscall",
         move |targetcage: u64, targetcallnum: u64, handlefunc_index_in_this_grate: u64, this_grate_id: u64| -> i32 {
-            register_handler(NOTUSED, targetcage, targetcallnum, 0, handlefunc_index_in_this_grate, this_grate_id, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED)
+            register_handler(NOTUSED_ARG, targetcage, targetcallnum, NOTUSED_ID, handlefunc_index_in_this_grate, this_grate_id, NOTUSED_ARG, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID)
         },
     )?;
 
@@ -235,7 +236,7 @@ pub fn add_to_linker<
         "lind",
         "cp-data-syscall",
         move |thiscage: u64, targetcage: u64, srcaddr: u64, srccage: u64, destaddr: u64, destcage: u64, len: u64, copytype: u64| -> i32 {
-            copy_data_between_cages(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, NOTUSED, copytype, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED) as i32
+            copy_data_between_cages(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, NOTUSED_ID, copytype, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID) as i32
         },
     )?;
 
@@ -244,7 +245,7 @@ pub fn add_to_linker<
         "lind", 
         "copy_handler_table_to_cage", 
         move |thiscage: u64, targetcage: u64| -> i32 {
-            copy_handler_table_to_cage(NOTUSED, thiscage, targetcage, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED) as i32
+            copy_handler_table_to_cage(NOTUSED_ARG, thiscage, targetcage, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID, NOTUSED_ARG, NOTUSED_ID) as i32
         },
     )?;
 
