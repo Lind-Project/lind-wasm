@@ -6,15 +6,14 @@
 //! Function naming convention:
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
-use crate::fs_conv::*;
-use crate::type_conv::*;
+use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
-use cage::memory::mem_helper::*;
+use cage::memory::memory::translate_vmmap_addr;
 use fdtables;
 use std::error::Error;
 use std::str::Utf8Error;
 use sysdefs::constants::err_const::{syscall_error, Errno};
-use sysdefs::constants::fs_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::constants::lind_const::{MAX_CAGEID, PATH_MAX};
 
 /// This function provides two operations: first, it translates path pointer address from WASM environment
 /// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
