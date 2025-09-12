@@ -54,6 +54,7 @@ wasi-common = { workspace = true, default-features = true, features = ["exit"], 
 wasmtime-wasi = { workspace = true, default-features = true, optional = true }
 wasmtime-wasi-nn = { workspace = true, optional = true }
 wasmtime-wasi-threads = { workspace = true, optional = true }
+wasmtime-lind-3i-vmctx = { path = "crates/lind-3i-vmctx" }
 wasmtime-lind-multi-process = { path = "crates/lind-multi-process", optional = false, features = ["disable_signals"]}
 wasmtime-lind-common = { path = "crates/lind-common" }
 wasmtime-lind-utils = { path = "crates/lind-utils" }
@@ -160,7 +161,8 @@ members = [
   "crates/fdtables",
   "crates/sysdefs",
   "crates/typemap",
-  "crates/cage",
+  "crates/cage", 
+  "crates/lind-3i-vmctx",
 ]
 exclude = [
   'docs/rust_wasi_markdown_parser',
@@ -207,6 +209,7 @@ wasmtime-wasi = { path = "crates/wasi", version = "23.0.0", default-features = f
 wasmtime-wasi-http = { path = "crates/wasi-http", version = "=23.0.0", default-features = false }
 wasmtime-wasi-nn = { path = "crates/wasi-nn", version = "23.0.0" }
 wasmtime-wasi-threads = { path = "crates/wasi-threads", version = "23.0.0" }
+wasmtime-lind-3i-vmctx = { path = "crates/lind-3i-vmctx", version = "23.0.0" }
 wasmtime-lind-multi-process = { path = "crates/lind-multi-process", version = "23.0.0" }
 wasmtime-lind-common = { path = "crates/lind-common", version = "23.0.0" }
 wasmtime-lind-utils = { path = "crates/lind-utils", version = "23.0.0" }

@@ -23,17 +23,16 @@ use wasmtime::{
 pub use once_cell::sync::Lazy;
 
 use wasmtime::Instance;
-use std::sync::RwLock;
 
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
-use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
+use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, NOTUSED};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
+use wasmtime_lind_3i_vmctx::{insert_ctx, get_ctx, remove_ctx};
 
 use threei::threei::{make_syscall, threei_wasm_func};
-use wasmtime::InstanceHandle;
 use rawposix::sys_calls::{lindrustinit, lindrustfinalize};
 use wasmtime::Caller;
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
@@ -53,43 +52,6 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
         bail!("must contain exactly one equals character ('=')");
     }
     Ok((parts[0].into(), parts[1].into()))
-}
-
-/// `VM_TABLE` stores the runtime context (`InstanceHandle`) of each running Wasm instance, 
-/// indexed by the instance's ID (`pid`).
-/// 
-/// This is used in 3i to support cross-instance closure calls, allowing syscalls from one 
-/// cage to invoke functions in another cage. For example, when a syscall from cage A is 
-/// routed to a function in grate B, we need to look up grate B’s runtime context in order 
-/// to call the closure inside it.
-/// 
-/// The runtime context includes a pointer to the instance’s `VMContext`, which is required
-/// by Wasmtime to correctly re-enter the target instance with the right execution state.
-/// 
-/// - `insert_ctx(pid, ctx)` is called during instance initialization to register its context.
-/// - `get_ctx(pid)` retrieves the context by `pid`, and uses `unsafe { ctx.clone() }`
-///   to manually clone the handle for invocation.
-static VM_TABLE: Lazy<RwLock<Vec<Option<InstanceHandle>>>> = Lazy::new(|| {
-    RwLock::new(Vec::new())
-});
-
-fn insert_ctx(pid: usize, ctx: InstanceHandle) {
-    let mut table = VM_TABLE.write().unwrap();
-    if pid >= table.len() {
-        table.resize(pid + 1, None);
-    }
-    table[pid] = Some(ctx);
-}
-
-fn get_ctx(pid: usize) -> InstanceHandle {
-    let table = VM_TABLE.read().unwrap();
-    let ctx = table[pid].as_ref().unwrap();
-    // SAFETY: `InstanceHandle` cloning is `unsafe` because it may lead to VMContext aliasing
-    // if not properly managed. Here, we assume the cloned context is only used temporarily
-    // and not stored beyond the scope of the call.
-    unsafe {
-        ctx.clone()
-    }
 }
 
 /// Runs a WebAssembly module
@@ -279,27 +241,32 @@ impl RunCommand {
                     CAGE_START_ID as u64,
                     THREAD_START_ID as u64,
                 ) {
+                    // Clean up the context from the global table
+                    if !remove_ctx(1 as usize) {
+                        eprintln!("[wasmtime|run] Warning: failed to remove context for cage {}", CAGE_START_ID);
+                    }
+
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
                     // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                     // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                     make_syscall(
-                        1,
-                        (EXIT_SYSCALL) as u64,
-                        0,
-                        1,
+                        1, // self cage id
+                        (EXIT_SYSCALL) as u64, // syscall num
+                        NOTUSED, // syscall name 
+                        1, // target cage id, should be itself
                         code as u64, // Exit type
-                        1,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
+                        1, // self cage id
+                        NOTUSED,
+                        NOTUSED,
+                        NOTUSED,
+                        NOTUSED,
+                        NOTUSED,
+                        NOTUSED,
+                        NOTUSED,
+                        NOTUSED,
+                        NOTUSED,
+                        NOTUSED,
                     );
 
                     // main cage exits
