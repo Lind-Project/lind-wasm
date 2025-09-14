@@ -91,14 +91,14 @@ pub fn open_syscall(
     let should_cloexec = (oflag & fs_const::O_CLOEXEC) != 0;
 
     // Mapping a new virtual fd and set `O_CLOEXEC` flag
-    match fdtables::get_unused_virtual_fd(
+    match fdtables::get_unused_vfd_arg(
         cageid,
         fs_const::FDKIND_KERNEL,
         kernel_fd as u64,
         should_cloexec,
         0,
     ) {
-        Ok(virtual_fd) => virtual_fd as i32,
+        Ok(vfd_arg) => vfd_arg as i32,
         Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
     }
 }
@@ -112,12 +112,12 @@ pub fn open_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment.
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective).
 ///     - count_arg: the maximum number of bytes to read from the file descriptor.
 pub fn read_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -131,7 +131,7 @@ pub fn read_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -1 {
         return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
     } else if kernel_fd == -9 {
@@ -175,11 +175,11 @@ pub fn read_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment to be closed.
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
 pub fn close_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64, 
     arg2: u64,
     arg2_cageid: u64,
@@ -199,7 +199,7 @@ pub fn close_syscall(
         return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
     }
 
-    match fdtables::close_virtualfd(cageid, virtual_fd) {
+    match fdtables::close_virtualfd(cageid, vfd_arg) {
         Ok(()) => 0,
         Err(e) => {
             if e == Errno::EBADFD as u64 {
