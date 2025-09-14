@@ -26,7 +26,7 @@ use wasmtime::Instance;
 
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
-use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, NOTUSED_ARG, NOTUSED_ID, NOTUSED_NAME};
+use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
@@ -253,20 +253,20 @@ impl RunCommand {
                     make_syscall(
                         1, // self cage id
                         (EXIT_SYSCALL) as u64, // syscall num
-                        NOTUSED_NAME, // syscall name 
+                        UNUSED_NAME, // syscall name 
                         1, // target cage id, should be itself
                         code as u64, // Exit type
                         1, // self cage id
-                        NOTUSED_ARG,
-                        NOTUSED_ID,
-                        NOTUSED_ARG,
-                        NOTUSED_ID,
-                        NOTUSED_ARG,
-                        NOTUSED_ID,
-                        NOTUSED_ARG,
-                        NOTUSED_ID,
-                        NOTUSED_ARG,
-                        NOTUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
                     );
 
                     // main cage exits
