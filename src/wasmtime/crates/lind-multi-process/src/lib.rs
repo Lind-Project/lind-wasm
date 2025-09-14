@@ -4,7 +4,7 @@ use cfg_if::cfg_if;
 
 use anyhow::{anyhow, Result};
 use threei::threei::make_syscall;
-use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL, NOTUSED_ARG, NOTUSED_ID, NOTUSED_NAME};
+use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 use wasmtime_lind_3i_vmctx::{insert_ctx, get_ctx, remove_ctx, VM_TABLE};
 
@@ -360,20 +360,20 @@ impl<
         make_syscall(
             self.pid as u64, // self cage id
             (FORK_SYSCALL) as u64, // syscall num for fork 
-            NOTUSED_NAME, // syscall name
+            UNUSED_NAME, // syscall name
             self.pid as u64, // target cage id, should be itself
             child_cageid, // 1st arg
             self.pid as u64, // 1st arg's cage id
-            NOTUSED_ARG,
-            NOTUSED_ID,
-            NOTUSED_ARG,
-            NOTUSED_ID,
-            NOTUSED_ARG,
-            NOTUSED_ID,
-            NOTUSED_ARG,
-            NOTUSED_ID,
-            NOTUSED_ARG,
-            NOTUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
         );
 
         // use the same engine for parent and child
@@ -538,20 +538,20 @@ impl<
                                     make_syscall(
                                         child_cageid, // self cage
                                         (EXIT_SYSCALL) as u64, // syscall num
-                                        NOTUSED_NAME, // syscall name
+                                        UNUSED_NAME, // syscall name
                                         child_cageid, // target cage, should be itself
                                         *val as u64, // 1st arg: status
                                         child_cageid, // 1st arg's cage id
-                                        NOTUSED_ARG,
-                                        NOTUSED_ID,
-                                        NOTUSED_ARG,
-                                        NOTUSED_ID,
-                                        NOTUSED_ARG,
-                                        NOTUSED_ID,
-                                        NOTUSED_ARG,
-                                        NOTUSED_ID,
-                                        NOTUSED_ARG,
-                                        NOTUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
                                     );
 
                                     // the cage just exited, decrement the cage counter
@@ -827,20 +827,20 @@ impl<
                                 make_syscall(
                                     (child_cageid) as u64, // self cage
                                     (EXIT_SYSCALL) as u64, // syscall num
-                                    NOTUSED_NAME, // syscall name
+                                    UNUSED_NAME, // syscall name
                                     (child_cageid) as u64, // target cage
                                     *val as u64, // 1st arg: status
                                     (child_cageid) as u64, // 1st arg's cage id
-                                    NOTUSED_ID,
-                                    NOTUSED_ARG,
-                                    NOTUSED_ID,
-                                    NOTUSED_ARG,
-                                    NOTUSED_ID,
-                                    NOTUSED_ARG,
-                                    NOTUSED_ID,
-                                    NOTUSED_ARG,
-                                    NOTUSED_ID,
-                                    NOTUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
                                 );
 
                                 // the cage just exited, decrement the cage counter
@@ -1035,20 +1035,20 @@ impl<
             make_syscall(
                 cloned_pid as u64, // self cage id
                 (EXEC_SYSCALL) as u64, // syscall num for exec 
-                NOTUSED_NAME, // syscall name
+                UNUSED_NAME, // syscall name
                 cloned_pid as u64, // target cage id, should be itself
-                NOTUSED_ARG,
-                NOTUSED_ID,
-                NOTUSED_ARG,
-                NOTUSED_ID,
-                NOTUSED_ARG,
-                NOTUSED_ID,
-                NOTUSED_ARG,
-                NOTUSED_ID,
-                NOTUSED_ARG,
-                NOTUSED_ID,
-                NOTUSED_ARG,
-                NOTUSED_ID, 
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID, 
             );
 
             let ret = exec_call(
