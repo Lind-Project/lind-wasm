@@ -958,13 +958,8 @@ pub fn fcntl_syscall(
                 Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
             }
         }
-        // Return (as the function result) the process ID or process
-        // group ID currently receiving SIGIO and SIGURG signals for
-        // events on file descriptor fd.
+        // F_GETOWN and F_SETOWN commands are not implemented yet
         (F_GETOWN, ..) => DEFAULT_GID as i32,
-        // Set the process ID or process group ID that will receive
-        // SIGIO and SIGURG signals for events on the file descriptor
-        // fd.
         (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
             // Get fdtable entry
