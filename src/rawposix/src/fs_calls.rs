@@ -958,7 +958,7 @@ pub fn fcntl_syscall(
                 Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
             }
         }
-        // F_GETOWN and F_SETOWN commands are not implemented yet
+        // todo: F_GETOWN and F_SETOWN commands are not implemented yet
         (F_GETOWN, ..) => DEFAULT_GID as i32,
         (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
