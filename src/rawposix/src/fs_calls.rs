@@ -497,7 +497,8 @@ pub fn mmap_inner(
         let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
         // Check if mmap failed and return the appropriate error if so
         if ret == -1 {
-            return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags") as usize;
+            let errno = get_errno();
+            return handle_errno(errno, "mmap") as usize;
         }
 
         ret as usize
