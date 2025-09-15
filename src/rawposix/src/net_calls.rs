@@ -1,20 +1,12 @@
-use typemap::datatype_conversion.rs;
+use typemap::datatype_conversion;
 use fdtables;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use libc::*;
 use typemap::CStr;
 use std::io::Write;
 use std::ptr;
-use std::collections::{HashMap, HashSet};
 use sysdefs::*;
 use lazy_static::lazy_static;
-use parking_lot::Mutex;
-
-lazy_static! {
-    // A hashmap used to store epoll mapping relationships
-    // <virtual_epfd <kernel_fd, virtual_fd>>
-    static ref REAL_EPOLL_MAP: Mutex<HashMap<u64, HashMap<i32, u64>>> = Mutex::new(HashMap::new());
-}
 
 const FDKIND_KERNEL: u32 = 0;
 
