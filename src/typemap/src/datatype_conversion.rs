@@ -6,8 +6,6 @@
 //! Function naming convention:
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
-use crate::fs_conv::*;
-use crate::type_conv::*;
 pub use libc::*;
 pub use std::time::Duration;
 use cage::get_cage;
@@ -326,83 +324,8 @@ pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
     (arg as *const u8).is_null()
 }
 
-/// Converts a user-space pointer into a mutable slice of `PollStruct`.
-pub fn sc_convert_pollstruct_slice<'a>(
-    arg: u64,
-    arg_cageid: u64, 
-    cageid: u64,
-    nfds: usize
-) -> Result<&'a mut [PollStruct], i32> {
-    #[cfg(feature = "secure")]
-    {
-        if !validate_cageid(arg_cageid, cageid) {
-            return -1;
-        }
-    }
-
-    let pollstructptr = arg as *mut PollStruct;
-    if !pollstructptr.is_null() {
-        return Ok(unsafe { std::slice::from_raw_parts_mut(pollstructptr, nfds) });
-    }
-    return Err(syscall_error(
-        Errno::EFAULT,
-        "dispatcher",
-        "input data not valid",
-    ));
-}
-
-/// Converts a user-space pointer into a mutable reference to `EpollEvent`.
-pub fn sc_convert_epollevent<'a>(arg: u64, arg_cageid: u64, cageid: u64) -> Result<&'a mut EpollEvent, i32> {
-    #[cfg(feature = "secure")]
-    {
-        if !validate_cageid(arg_cageid, cageid) {
-            return -1;
-        }
-    }
-
-    let cage = get_cage(arg_cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let epolleventptr = addr as *mut EpollEvent;
-    if !epolleventptr.is_null() {
-        return Ok(unsafe { &mut *epolleventptr });
-    }
-    return Err(syscall_error(
-        Errno::EFAULT,
-        "dispatcher",
-        "input data not valid",
-    ));
-}
-
-/// Converts a user-space pointer into a mutable slice of `EpollEvent`.
-pub fn sc_convert_epollevent_slice<'a>(
-    arg: u64,
-    arg_cageid: u64, 
-    cageid: u64,
-    nfds: i32,
-) -> Result<&'a mut [EpollEvent], i32> {
-    #[cfg(feature = "secure")]
-    {
-        if !validate_cageid(arg_cageid, cageid) {
-            return -1;
-        }
-    }
-    let cage = get_cage(arg_cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let epolleventptr = addr as *mut EpollEvent;
-
-    if !epolleventptr.is_null() {
-        return Ok(unsafe { std::slice::from_raw_parts_mut(epolleventptr, nfds as usize) });
-    }
-
-    return Err(syscall_error(
-        Errno::EFAULT,
-        "dispatcher",
-        "input data not valid",
-    ));
-}
-
 /// Converts a user-space pointer into a mutable reference to `SockPair`.
-pub fn sc_convert_sockpair<'a>(arg: u64, arg_cageid: u64, cageid: u64,) -> Result<&'a mut SockPair, i32> {
+pub fn sc_convert_sockpair<'a>(arg: u64, arg_cageid: u64, cageid: u64) -> Result<&'a mut SockPair, i32> {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
@@ -429,46 +352,8 @@ pub fn fill(bufptr: *mut u8, count: usize, values: &Vec<u8>) -> i32 {
     count as i32
 }
 
-/// Converts a user-space pointer into an optional mutable reference to `fd_set`.
-pub fn sc_convert_fdset(arg: u64, arg_cageid: u64, cageid: u64) -> Result<Option<&'static mut fd_set>, i32> {
-    #[cfg(feature = "secure")]
-    {
-        if !validate_cageid(arg_cageid, cageid) {
-            return -1;
-        }
-    }
-
-    let data = arg as *mut libc::fd_set;
-    if !data.is_null() {
-        let internal_fds = unsafe { &mut *(data as *mut fd_set) };
-        return Ok(Some(internal_fds));
-    }
-    return Ok(None);
-}
-
-/// Converts a user-space `timeval` pointer into an optional `Duration`.
-pub fn sc_convert_duration_fromtimeval(arg: u64, arg_cageid: u64, cageid: u64) -> Result<Option<Duration>, i32> {
-    #[cfg(feature = "secure")]
-    {
-        if !validate_cageid(arg_cageid, cageid) {
-            return -1;
-        }
-    }
-
-    let pointer = arg as *mut timeval;
-    if !pointer.is_null() {
-        let times = unsafe { &mut *pointer };
-        return Ok(Some(Duration::new(
-            times.tv_sec as u64,
-            times.tv_usec as u32 * 1000,
-        )));
-    } else {
-        return Ok(None);
-    }
-}
-
 /// Converts a user-space socket address into a host-compatible `sockaddr` used for syscalls.
-pub fn sc_convert_host_sockaddr(arg: *mut u8, arg_cageid: u64, cageid: u64) -> (*mut sockaddr, u32) {
+pub fn sc_convert_host_sockaddr(arg: u64, arg_cageid: u64, cageid: u64) -> (*mut sockaddr, u32) {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
@@ -517,7 +402,7 @@ pub fn sc_convert_copy_out_sockaddr(
     addr_arg1: u64,   
     family: u16,
 ) {
-    let copyoutaddr = addr_arg as *mut u8;
+    let copyoutaddr = addr_arg as *mut u8; // libc
     let addrlen = addr_arg1 as *mut u32;
 
     assert!(!copyoutaddr.is_null());
@@ -527,7 +412,7 @@ pub fn sc_convert_copy_out_sockaddr(
 
     let (src_ptr, actual_len): (*const u8, u32) = match family as i32 {
         AF_INET => {
-            let v4 = SockAddr::new_ipv4();
+            let v4 = SockAddr::new_ipv4(); // self define
             (
                 &v4 as *const _ as *const u8,
                 size_of::<sockaddr_in>() as u32,
@@ -557,14 +442,3 @@ pub fn sc_convert_copy_out_sockaddr(
     }
 }
 
-pub fn get_pipearray<'a>(generic_argument: u64) -> Result<&'a mut PipeArray, i32> {
-    let pointer = generic_argument as *mut PipeArray;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(syscall_error(
-        Errno::EFAULT,
-        "dispatcher",
-        "input data not valid",
-    ));
-}
