@@ -560,7 +560,6 @@ pub fn munmap_syscall(
 
     // we are replacing munmap with mmap because we do not want to really deallocate the memory region
     // we just want to set the prot of the memory region back to PROT_NONE
-    // Directly call libc::mmap to improve performance
     let result = unsafe {
         libc::mmap(
             sysaddr as *mut c_void,
