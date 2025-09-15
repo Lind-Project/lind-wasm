@@ -776,7 +776,7 @@ pub fn sbrk_syscall(
     // drop the vmmap so that brk_handler will not deadlock
     drop(vmmap);
 
-    if brk_syscall(
+    let brk_result = brk_syscall(
         cageid,
         ((heap.npages as i32 + brk_page) << PAGESHIFT) as u64,
         sbrk_cageid,
@@ -790,9 +790,11 @@ pub fn sbrk_syscall(
         0,
         0,
         0,
-    ) < 0
-    {
-        return syscall_error(Errno::ENOMEM, "sbrk", "no memory") as i32;
+    );
+    
+    if brk_result < 0 {
+        // Propagate the actual error from brk_syscall instead of assuming ENOMEM
+        return brk_result;
     }
 
     // sbrk syscall should return previous brk address before increment
