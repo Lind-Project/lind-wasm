@@ -16,6 +16,24 @@ use std::str::Utf8Error;
 use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::fs_const::{MAX_CAGEID, PATH_MAX};
 
+/// Validate whether two cage ids are in valid range. This is used for security mode in
+/// type conversion.
+///
+/// ## Arguments:
+/// cageid_1: first cage id
+/// cageid_2: second cage id
+///
+/// ## Returns:
+/// true: both of them are valid
+/// false: one of them or neither of them are valid
+pub fn validate_cageid(cageid_1: u64, cageid_2: u64) -> bool {
+    if cageid_1 > MAX_CAGEID as u64 || cageid_2 > MAX_CAGEID as u64 || cageid_1 < 0 || cageid_2 < 0
+    {
+        return false;
+    }
+    true
+}
+
 /// This function provides two operations: first, it translates path pointer address from WASM environment
 /// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
 /// which is adding `LIND_ROOT` before the path arguments. Considering actual syscall implementation
