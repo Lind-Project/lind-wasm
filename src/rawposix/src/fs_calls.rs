@@ -310,12 +310,15 @@ pub fn mmap_syscall(
 
     let mut maxprot = PROT_READ | PROT_WRITE;
 
-    // only these four flags are allowed
+    // Validate flags - only these four flags are supported
+    // Note: We explicitly validate rather than silently strip unsupported flags to:
+    // 1. Prevent security issues (e.g., MAP_FIXED_NOREPLACE being ignored)
+    // 2. Maintain program correctness (e.g., MAP_SHARED_VALIDATE expects validation)
+    // 3. Make debugging easier by failing fast rather than having mysterious behavior later
     let allowed_flags =
         MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32;
-    if flags & !allowed_flags > 0 {
-        // truncate flag to remove flags that are not allowed
-        flags &= allowed_flags;
+    if flags & !allowed_flags != 0 {
+        return syscall_error(Errno::EINVAL, "mmap", "Unsupported mmap flags");
     }
 
     if prot & PROT_EXEC > 0 {
