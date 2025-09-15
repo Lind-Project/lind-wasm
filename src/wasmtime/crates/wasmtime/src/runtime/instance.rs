@@ -240,6 +240,15 @@ impl Instance {
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
         // memory init in wasmtime and do our own initialization here
+        //
+        // The type of memory initialization depends on the kind of wasm module being instantiated.
+        // In the first case (`InstantiateType::InstantiateFirst(pid)`), we are creating the very 
+        // first cage’s linear memory. After initialization, no additional steps are needed.
+        // 
+        // In the case of `InstantiateType::InstantiateChild { parent_pid, child_pid }`, which 
+        // corresponds to a module created via fork. In this case, after the child’s memory is 
+        // initialized, we must also copy the parent’s memory state (`fork_vmmap`) into the child t
+        // o have correct fork semantics.
         match instantiate_type {
             // InstantiateFirst: this is the first wasm instance
             InstantiateType::InstantiateFirst(pid) => {

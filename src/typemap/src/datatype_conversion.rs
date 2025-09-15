@@ -299,7 +299,7 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
 /// Output:
 ///     - Returns the translated 64-bit address in host space as a u64.
 pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64 {
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(uaddr_arg_cageid).unwrap();
     let uaddr = translate_vmmap_addr(&cage, uaddr_arg).unwrap();
     return uaddr;
 }
