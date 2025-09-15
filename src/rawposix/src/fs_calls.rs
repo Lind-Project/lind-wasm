@@ -574,8 +574,15 @@ pub fn munmap_syscall(
             0,
         ) as usize
     };
+    // Check for different failure modes with specific error messages
+    if result as isize == -1 {
+        let errno = get_errno();
+        panic!("munmap: mmap failed during memory protection reset with errno: {:?}", errno);
+    }
+    
     if result != sysaddr {
-        panic!("MAP_FIXED not fixed");
+        panic!("munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}", 
+               result as *const c_void, sysaddr as *const c_void);
     }
 
     let mut vmmap = cage.vmmap.write();
