@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use threei::threei::{copy_data_between_cages, make_syscall, register_handler, copy_handler_table_to_cage};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use wasmtime::Caller;
@@ -16,7 +17,7 @@ use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_ba
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument 
 // for functions that require a fixed number of parameters but do not utilize 
 // all of them.
-use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, UNUSED_ID, UNUSED_ARG, UNUSED_NAME};
+use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
 // then the syscall would be dispatched into rawposix, or other crates under wasmtime, depending on the syscall, to perform its job

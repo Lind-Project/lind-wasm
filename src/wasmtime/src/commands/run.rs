@@ -26,7 +26,7 @@ use wasmtime::Instance;
 
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
-use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
@@ -36,6 +36,7 @@ use threei::threei::{make_syscall, threei_wasm_func};
 use rawposix::sys_calls::{lindrustinit, lindrustfinalize};
 use wasmtime::Caller;
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::WasiNnCtx;

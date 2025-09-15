@@ -18,3 +18,4 @@ rawposix = { path = "../rawposix" }
 threei = { path = "../threei" }
 wasmtime-lind-multi-process = { path = "../lind-multi-process" }
 wasmtime-lind-utils = { path = "../lind-utils" }
+sysdefs = { path = "../sysdefs" }
