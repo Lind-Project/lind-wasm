@@ -32,3 +32,9 @@ pub const MAXFD: usize = 1024; // Maximum file descriptors per cage
 /// **This limit may be adjusted in the future if lind-wasm adopts 64-bit memories 
 /// or other memory models.**
 pub const MAX_LINEAR_MEMORY_SIZE: u64 = 0xFFFF_FFFF;
+/// Placeholder for unused syscall argument
+pub const UNUSED_ARG: u64   = 0xDEADBEEF_DEADBEEF;
+/// Placeholder for unused cage/grate ID
+pub const UNUSED_ID: u64    = 0xCAFEBABE_CAFEBABE;
+/// Placeholder for unused syscall name
+pub const UNUSED_NAME: u64  = 0xFEEDFACE_FEEDFACE;
