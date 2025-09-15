@@ -88,21 +88,6 @@ impl SockAddr {
 }
 
 #[repr(C)]
-pub struct PollStruct {
-    pub fd: i32,
-    pub events: i16,
-    pub revents: i16,
-}
-
-#[derive(Debug)]
-#[repr(C)]
-pub struct EpollEvent {
-    pub events: u32,
-    pub fd: i32, //in native this is a union which could be one of a number of things
-                 //however, we only support EPOLL_CTL subcommands which take the fd
-}
-
-#[repr(C)]
 pub struct SockPair {
     pub sock1: i32,
     pub sock2: i32,
