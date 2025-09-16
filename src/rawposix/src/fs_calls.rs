@@ -3,7 +3,7 @@ use typemap::datatype_conversion::*;
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
 use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
-use sysdefs::constants::lind_const::{FDKIND_KERNEL, MAXFD};
+use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
 use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
@@ -74,29 +74,29 @@ pub fn open_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "open_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "open", "Invalide Cage ID");
     }
 
     // Get the kernel fd first
     let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
 
     if kernel_fd < 0 {
-        return handle_errno(get_errno(), "open_syscall");
+        return handle_errno(get_errno(), "open");
     }
 
     // Check if `O_CLOEXEC` has been est
-    let should_cloexec = (oflag & fs_const::O_CLOEXEC) != 0;
+    let should_cloexec = (oflag & O_CLOEXEC) != 0;
 
     // Mapping a new virtual fd and set `O_CLOEXEC` flag
     match fdtables::get_unused_virtual_fd(
         cageid,
-        fs_const::FDKIND_KERNEL,
+        FDKIND_KERNEL,
         kernel_fd as u64,
         should_cloexec,
         0,
     ) {
         Ok(virtual_fd) => virtual_fd as i32,
-        Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
+        Err(_) => syscall_error(Errno::EMFILE, "open", "Too many files opened"),
     }
 }
 
@@ -109,12 +109,12 @@ pub fn open_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment.
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective).
 ///     - count_arg: the maximum number of bytes to read from the file descriptor.
 pub fn read_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -128,7 +128,7 @@ pub fn read_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -1 {
         return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
     } else if kernel_fd == -9 {
@@ -172,11 +172,11 @@ pub fn read_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment to be closed.
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
 pub fn close_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64, 
     arg2: u64,
     arg2_cageid: u64,
@@ -189,14 +189,15 @@ pub fn close_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    if !(sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg2, arg2_cageid)
+         && sc_unusedarg(arg3, arg3_cageid)
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
     }
 
-    match fdtables::close_virtualfd(cageid, virtual_fd) {
+    match fdtables::close_virtualfd(cageid, vfd_arg) {
         Ok(()) => 0,
         Err(e) => {
             if e == Errno::EBADFD as u64 {
@@ -250,7 +251,7 @@ pub fn mkdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "mkdir_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "mkdir", "Invalide Cage ID");
     }
 
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
