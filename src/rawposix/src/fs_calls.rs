@@ -377,12 +377,15 @@ pub fn mmap_syscall(
 
     let mut maxprot = PROT_READ | PROT_WRITE;
 
-    // only these four flags are allowed
+    // Validate flags - only these four flags are supported
+    // Note: We explicitly validate rather than silently strip unsupported flags to:
+    // 1. Prevent security issues (e.g., MAP_FIXED_NOREPLACE being ignored)
+    // 2. Maintain program correctness (e.g., MAP_SHARED_VALIDATE expects validation)
+    // 3. Make debugging easier by failing fast rather than having mysterious behavior later
     let allowed_flags =
         MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32;
-    if flags & !allowed_flags > 0 {
-        // truncate flag to remove flags that are not allowed
-        flags &= allowed_flags;
+    if flags & !allowed_flags != 0 {
+        return syscall_error(Errno::EINVAL, "mmap", "Unsupported mmap flags");
     }
 
     if prot & PROT_EXEC > 0 {
@@ -561,7 +564,8 @@ pub fn mmap_inner(
         let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
         // Check if mmap failed and return the appropriate error if so
         if ret == -1 {
-            return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags") as usize;
+            let errno = get_errno();
+            return handle_errno(errno, "mmap") as usize;
         }
 
         ret as usize
@@ -627,7 +631,6 @@ pub fn munmap_syscall(
 
     // we are replacing munmap with mmap because we do not want to really deallocate the memory region
     // we just want to set the prot of the memory region back to PROT_NONE
-    // Directly call libc::mmap to improve performance
     let result = unsafe {
         libc::mmap(
             sysaddr as *mut c_void,
@@ -638,8 +641,15 @@ pub fn munmap_syscall(
             0,
         ) as usize
     };
+    // Check for different failure modes with specific error messages
+    if result as isize == -1 {
+        let errno = get_errno();
+        panic!("munmap: mmap failed during memory protection reset with errno: {:?}", errno);
+    }
+    
     if result != sysaddr {
-        panic!("MAP_FIXED not fixed");
+        panic!("munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}", 
+               result as *const c_void, sysaddr as *const c_void);
     }
 
     let mut vmmap = cage.vmmap.write();
