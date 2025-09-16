@@ -1,0 +1,59 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+  
+steps:
+  - name: 'gcr.io/cloud-builders/git'
+    id: Get Short SHA
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        SHORT_SHA=$(git rev-parse --short HEAD)
+        echo "SHORT_SHA=$SHORT_SHA" >> /workspace/commit.env
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Docker Login
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker login --username=$$DOCKER_USERNAME --password=$$DOCKER_PASSWORD
+    secretEnv:
+      - 'DOCKER_USERNAME'
+      - 'DOCKER_PASSWORD'
+
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Build Image
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        source /workspace/commit.env        
+        docker build -f Docker/Dockerfile.dev \
+          -t docker.io/$$DOCKER_USERNAME/lind-wasm-dev:latest \
+          -t docker.io/$$DOCKER_USERNAME/lind-wasm-dev:sha-$SHORT_SHA .
+    secretEnv:
+      - 'DOCKER_USERNAME'
+      
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: Push Image
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        source /workspace/commit.env        
+        docker push docker.io/$$DOCKER_USERNAME/lind-wasm-dev:latest
+        docker push docker.io/$$DOCKER_USERNAME/lind-wasm-dev:sha-$SHORT_SHA
+    secretEnv:
+      - 'DOCKER_USERNAME'
+    
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/x-micron-451502-m7/secrets/docker-username/versions/latest
+      env: 'DOCKER_USERNAME'
+    - versionName: projects/x-micron-451502-m7/secrets/docker-password/versions/latest
+      env: 'DOCKER_PASSWORD'

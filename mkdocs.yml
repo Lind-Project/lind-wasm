@@ -38,3 +38,48 @@ markdown_extensions:
   - admonition
   - sane_lists
   - pymdownx.superfences
+site_name: Lind-Wasm Docs
+site_url: https://lind-project.github.io/lind-wasm/
+repo_url: https://github.com/Lind-Project/lind-wasm/
+edit_uri: edit/main/docs/
+theme:
+  name: material
+  features:
+    - content.action.edit
+
+plugins:
+  - search
+  - section-index
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Internal Documentation:
+    - internal/index.md
+    - libc: internal/libc.md
+    - Wasmtime: internal/wasmtime.md
+    - RawPOSIX: internal/rawposix.md
+    - Multi-Processing: internal/multiprocess-support.md
+    - Signals: internal/signals.md
+  - Contributing:
+    - contribute/index.md
+    - Development setup: contribute/dev-container.md
+    - Rust style guide: contribute/styleguide.md
+    - Lind toolchain: contribute/toolchain.md
+    - Unit tests: contribute/unit-tests.md
+    - Debug programs: contribute/debug-programs.md
+    - Adding to the docs: contribute/add-docs.md
+    - Security policy: contribute/security.md
+    - Docker Hub release workflow: contribute/docker-release-workflow.md
+  - Community:
+    - community/index.md
+    - Team: community/team.md
+    - Code of conduct: community/conduct.md
+
+extra_css:
+  - stylesheets/img.css
+
+markdown_extensions:
+  - admonition
+  - sane_lists
+  - pymdownx.superfences

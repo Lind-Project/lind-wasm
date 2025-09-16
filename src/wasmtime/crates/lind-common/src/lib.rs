@@ -2,11 +2,22 @@
 
 use anyhow::Result;
 use threei::threei::{copy_data_between_cages, make_syscall, register_handler, copy_handler_table_to_cage};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use wasmtime::Caller;
 use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
-use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
+// These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
+// inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
+// involve operations like setting up stack memory that must be performed
+// at the Wasmtime layer. Therefore, in the unified syscall entry point of
+// Wasmtime, these calls are routed to their dedicated logic, while other
+// syscalls are passed directly to 3i’s `make_syscall`.
+//
+// `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument 
+// for functions that require a fixed number of parameters but do not utilize 
+// all of them.
+use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
 // then the syscall would be dispatched into rawposix, or other crates under wasmtime, depending on the syscall, to perform its job
@@ -52,41 +63,9 @@ impl LindCommonCtx {
         arg6: u64,
     ) -> i32 {
         let start_address = get_memory_base(&caller);
-
-        let call_name_ptr = (call_name + start_address) as *const u8;
-        let mut len = 0;
-
-        unsafe {
-            while *call_name_ptr.add(len) != 0 {
-                len += 1;
-            }
-
-            let slice = std::slice::from_raw_parts(call_name_ptr, len);
-            let call_name_str = std::str::from_utf8_unchecked(slice);
-
-            if call_number == 2 {
-                let arg1_ptr = (arg1 + start_address) as *const u8;
-                let mut arg1_len = 0;
-                while *arg1_ptr.add(arg1_len) != 0 {
-                    arg1_len += 1;
-                }
-
-                let arg1_slice = std::slice::from_raw_parts(arg1_ptr, arg1_len);
-                let arg1_str = std::str::from_utf8_unchecked(arg1_slice);
-
-                println!(
-                    "pid={} call_number={} \x1b[32mcall_name=\"{}\"\x1b[0m args=[{:x}, {:x}, {:x}, {:x}, {:x}, {:x}] \x1b[35m[arg1_str=\"{}\"]\x1b[0m",
-                    self.pid, call_number, call_name_str, arg1, arg2, arg3, arg4, arg5, arg6, arg1_str
-                );
-            } else {
-                println!(
-                    "pid={} call_number={} \x1b[32mcall_name=\"{}\"\x1b[0m args=[{:x}, {:x}, {:x}, {:x}, {:x}, {:x}]",
-                    self.pid, call_number, call_name_str, arg1, arg2, arg3, arg4, arg5, arg6
-                );
-            }
-        }
-
-        let ret = match call_number as i32 {
+        // todo:
+        // replacing the execution path by calling to 3i first
+        match call_number as i32 {
             // clone syscall
             CLONE_SYSCALL => {
                 let clone_args = unsafe { &mut *((arg1 + start_address) as *mut CloneArgStruct) };
@@ -266,7 +245,7 @@ pub fn add_to_linker<
         "lind",
         "register-syscall",
         move |targetcage: u64, targetcallnum: u64, handlefunc_index_in_this_grate: u64, this_grate_id: u64| -> i32 {
-            register_handler(0, targetcage, targetcallnum, 0, handlefunc_index_in_this_grate, this_grate_id, 0, 0, 0, 0, 0, 0, 0, 0)
+            register_handler(UNUSED_ARG, targetcage, targetcallnum, UNUSED_ID, handlefunc_index_in_this_grate, this_grate_id, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID)
         },
     )?;
 
@@ -275,7 +254,7 @@ pub fn add_to_linker<
         "lind",
         "cp-data-syscall",
         move |thiscage: u64, targetcage: u64, srcaddr: u64, srccage: u64, destaddr: u64, destcage: u64, len: u64, copytype: u64| -> i32 {
-            copy_data_between_cages(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, 0, copytype, 0, 0, 0, 0, 0) as i32
+            copy_data_between_cages(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, UNUSED_ID, copytype, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID) as i32
         },
     )?;
 
@@ -284,7 +263,7 @@ pub fn add_to_linker<
         "lind", 
         "copy_handler_table_to_cage", 
         move |thiscage: u64, targetcage: u64| -> i32 {
-            copy_handler_table_to_cage(0, thiscage, targetcage, 0 ,0, 0, 0, 0, 0, 0, 0, 0, 0, 0) as i32
+            copy_handler_table_to_cage(UNUSED_ARG, thiscage, targetcage, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID) as i32
         },
     )?;
 

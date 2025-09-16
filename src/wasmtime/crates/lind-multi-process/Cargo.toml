@@ -16,7 +16,12 @@ wasi-common = { workspace = true, features = ["exit"]}
 wasmtime = { workspace = true, features = ['threads'] }
 wasmtime-environ = { workspace = true }
 wasmtime-lind-utils = { path = "../lind-utils" }
+wasmtime-lind-3i-vmctx = { path = "../lind-3i-vmctx" }
 rawposix = { path = "../rawposix" }
 sysdefs = { path = "../sysdefs" }
 threei = { path = "../threei" }
 cage = { path = "../cage" }
+cfg-if = { workspace = true }
+
+[features]
+disable_signals = []

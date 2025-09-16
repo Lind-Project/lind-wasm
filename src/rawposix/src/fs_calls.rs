@@ -1,27 +1,21 @@
-//! File System Syscall Implementation
-//!
-//! This file provides all system related syscall implementation in RawPOSIX
-use cage::get_cage;
-use cage::memory::mem_helper::*;
-use cage::memory::vmmap::{VmmapOps, *};
+use libc::c_void;
+use typemap::datatype_conversion::*;
+use typemap::path_conversion::*;
+use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
+use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
+use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD};
+use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
+use typemap::cage_helpers::*;
+use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
 use fdtables;
-use libc::*;
-use parking_lot::RwLock;
-use std::sync::atomic::{AtomicI32, AtomicU64};
-use std::sync::Arc;
-use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::sys_const::DEFAULT_GID;
-use sysdefs::constants::fs_const;
-use sysdefs::constants::fs_const::{
-    F_GETFL, F_GETOWN, F_SETOWN, MAP_ANONYMOUS, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, MAP_SHARED,
-    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, MAXFD, 
-};
-use typemap::syscall_type_conversion::*;
-use typemap::{get_pipearray, sc_convert_path_to_host, convert_fd_to_host};
 
-/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard fds shouldn't
-/// be closed in Lind-WASM execution, which preventing issues where other threads might reassign these
-/// fds, causing unintended behavior or errors.
+/// Helper function for close_syscall
+/// 
+/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard IO stream fds 
+/// shouldn't be closed in Lind-WASM execution, which preventing issues where other threads might 
+/// reassign these ds, causing unintended behavior or errors. 
+/// 
+/// This function is registered in `fdtables` when creating the cage
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     let kernel_fd = fdentry.underfd as i32;
     
@@ -79,7 +73,7 @@ pub fn open_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "open_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "open", "Invalide Cage ID");
     }
 
     
@@ -87,22 +81,22 @@ pub fn open_syscall(
     let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
 
     if kernel_fd < 0 {
-        return handle_errno(get_errno(), "open_syscall");
+        return handle_errno(get_errno(), "open");
     }
 
     // Check if `O_CLOEXEC` has been est
-    let should_cloexec = (oflag & fs_const::O_CLOEXEC) != 0;
+    let should_cloexec = (oflag & O_CLOEXEC) != 0;
 
     // Mapping a new virtual fd and set `O_CLOEXEC` flag
     match fdtables::get_unused_virtual_fd(
         cageid,
-        fs_const::FDKIND_KERNEL,
+        FDKIND_KERNEL,
         kernel_fd as u64,
         should_cloexec,
         0,
     ) {
         Ok(virtual_fd) => virtual_fd as i32,
-        Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
+        Err(_) => syscall_error(Errno::EMFILE, "open", "Too many files opened"),
     }
 }
 
@@ -115,12 +109,12 @@ pub fn open_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment.
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective).
 ///     - count_arg: the maximum number of bytes to read from the file descriptor.
 pub fn read_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -134,7 +128,7 @@ pub fn read_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -1 {
         return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
     } else if kernel_fd == -9 {
@@ -179,12 +173,12 @@ pub fn read_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment to be closed.
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
 pub fn close_syscall(
     cageid: u64,
-    virtual_fd: u64,
-    vfd_cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64, 
     arg2: u64,
     arg2_cageid: u64,
     arg3: u64,
@@ -197,20 +191,14 @@ pub fn close_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
+         && sc_unusedarg(arg3, arg3_cageid)
+         && sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
     }
 
-    // Since `virtual_fd` is unsigned value, so we don't need to compare negative case here
-    if virtual_fd > MAXFD as u64 {
-        return syscall_error(Errno::EBADF, "close", "Bad File Descriptor");
-    }
-
-    match fdtables::close_virtualfd(cageid, virtual_fd) {
+    match fdtables::close_virtualfd(cageid, vfd_arg) {
         Ok(()) => 0,
         Err(e) => {
             if e == Errno::EBADF as u64 {
@@ -493,7 +481,7 @@ pub fn mkdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "mkdir_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "mkdir", "Invalide Cage ID");
     }
 
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
@@ -693,7 +681,7 @@ pub fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let mut addr = addr_arg as *mut u8;
+    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
@@ -704,12 +692,15 @@ pub fn mmap_syscall(
 
     let mut maxprot = PROT_READ | PROT_WRITE;
 
-    // only these four flags are allowed
+    // Validate flags - only these four flags are supported
+    // Note: We explicitly validate rather than silently strip unsupported flags to:
+    // 1. Prevent security issues (e.g., MAP_FIXED_NOREPLACE being ignored)
+    // 2. Maintain program correctness (e.g., MAP_SHARED_VALIDATE expects validation)
+    // 3. Make debugging easier by failing fast rather than having mysterious behavior later
     let allowed_flags =
         MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32;
-    if flags & !allowed_flags > 0 {
-        // truncate flag to remove flags that are not allowed
-        flags &= allowed_flags;
+    if flags & !allowed_flags != 0 {
+        return syscall_error(Errno::EINVAL, "mmap", "Unsupported mmap flags");
     }
 
     if prot & PROT_EXEC > 0 {
@@ -888,7 +879,8 @@ pub fn mmap_inner(
         let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
         // Check if mmap failed and return the appropriate error if so
         if ret == -1 {
-            return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags") as usize;
+            let errno = get_errno();
+            return handle_errno(errno, "mmap") as usize;
         }
 
         ret as usize
@@ -924,7 +916,7 @@ pub fn munmap_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let addr = addr_arg as *mut u8;
+    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -954,7 +946,6 @@ pub fn munmap_syscall(
 
     // we are replacing munmap with mmap because we do not want to really deallocate the memory region
     // we just want to set the prot of the memory region back to PROT_NONE
-    // Directly call libc::mmap to improve performance
     let result = unsafe {
         libc::mmap(
             sysaddr as *mut c_void,
@@ -965,8 +956,15 @@ pub fn munmap_syscall(
             0,
         ) as usize
     };
+    // Check for different failure modes with specific error messages
+    if result as isize == -1 {
+        let errno = get_errno();
+        panic!("munmap: mmap failed during memory protection reset with errno: {:?}", errno);
+    }
+    
     if result != sysaddr {
-        panic!("MAP_FIXED not fixed");
+        panic!("munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}", 
+               result as *const c_void, sysaddr as *const c_void);
     }
 
     let mut vmmap = cage.vmmap.write();
@@ -1352,13 +1350,8 @@ pub fn fcntl_syscall(
                 Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
             }
         }
-        // Return (as the function result) the process ID or process
-        // group ID currently receiving SIGIO and SIGURG signals for
-        // events on file descriptor fd.
+        // todo: F_GETOWN and F_SETOWN commands are not implemented yet
         (F_GETOWN, ..) => DEFAULT_GID as i32,
-        // Set the process ID or process group ID that will receive
-        // SIGIO and SIGURG signals for events on the file descriptor
-        // fd.
         (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
             // Get fdtable entry
@@ -1374,122 +1367,4 @@ pub fn fcntl_syscall(
             ret
         }
     }
-}
-
-pub fn clock_gettime_syscall(
-    cageid: u64,
-    clockid_arg: u64,
-    clockid_cageid: u64,
-    tp_arg: u64,
-    tp_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
-    // let tp = sc_convert_sysarg_to_usize(tp_arg, tp_cageid, cageid);
-    let tp = sc_convert_addr_to_host(tp_arg, tp_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "clock_gettime", "Invalide Cage ID");
-    }
-
-    let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
-
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "clock_gettime");
-    }
-
-    ret
-}
-
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/futex.2.html
-///
-/// The Linux `futex()` syscall provides a mechanism for fast user-space locking. It allows a process or thread
-/// to wait for or wake another process or thread on a shared memory location without invoking heavy kernel-side
-/// synchronization primitives unless contention arises. This implementation wraps the futex syscall, allowing
-/// direct invocation with the relevant arguments passed from the current cage context.
-///
-/// Input:
-///     - cageid: current cageid
-///     - uaddr_arg: pointer to the futex word in user memory
-///     - futex_op_arg: operation code indicating futex command type
-///     - val_arg: value expected at uaddr or the number of threads to wake
-///     - val2_arg: timeout or other auxiliary parameter depending on operation
-///     - uaddr2_arg: second address used for requeueing operations
-///     - val3_arg: additional value for some futex operations
-///
-/// Return:
-///     - On success: 0 or number of woken threads depending on futex operation
-///     - On failure: a negative errno value indicating the syscall error
-pub fn futex_syscall(
-    cageid: u64,
-    uaddr_arg: u64,
-    uaddr_cageid: u64,
-    futex_op_arg: u64,
-    futex_op_cageid: u64,
-    val_arg: u64,
-    val_cageid: u64,
-    val2_arg: u64,
-    val2_cageid: u64,
-    uaddr2_arg: u64,
-    uaddr2_cageid: u64,
-    val3_arg: u64,
-    val3_cageid: u64,
-) -> i32{
-    let uaddr = sc_convert_uaddr_to_host(uaddr_arg, uaddr_cageid, cageid);
-    let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
-    let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
-    let val2 = sc_convert_sysarg_to_u32(val2_arg, val2_cageid, cageid);
-    let uaddr2 = sc_convert_sysarg_to_u32(uaddr2_arg, uaddr2_cageid, cageid);
-    let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
-
-    let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3)  as i32 };
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "futex");
-    }
-    ret
-}
-
-pub fn nanosleep_time64_syscall(
-    cageid: u64,
-    clockid_arg: u64,
-    clockid_cageid: u64,
-    flags_arg: u64,
-    flags_cageid: u64,
-    req_arg: u64,
-    req_cageid: u64,
-    rem_arg: u64,
-    rem_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    // Type conversion
-    let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
-    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-    let req = sc_convert_buf(req_arg, req_cageid, cageid);
-    let rem = sc_convert_buf(rem_arg, rem_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "nanosleep", "Invalide Cage ID");
-    }
-    let ret = unsafe { syscall(SYS_clock_nanosleep, clockid, flags, req, rem) as i32 };
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "nanosleep");
-    }
-    ret
 }

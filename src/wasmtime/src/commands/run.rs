@@ -5,6 +5,8 @@
     allow(irrefutable_let_patterns, unreachable_patterns)
 )]
 
+use cfg_if::cfg_if;
+
 use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
@@ -21,21 +23,20 @@ use wasmtime::{
 pub use once_cell::sync::Lazy;
 
 use wasmtime::Instance;
-// use parking_lot::RwLock;
-use std::sync::RwLock;
 
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
-use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
+use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
+use wasmtime_lind_3i_vmctx::{insert_ctx, get_ctx, remove_ctx};
 
 use threei::threei::{make_syscall, threei_wasm_func};
-use wasmtime::runtime::vm::instance::InstanceHandle;
 use rawposix::sys_calls::{lindrustinit, lindrustfinalize};
 use wasmtime::Caller;
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::WasiNnCtx;
@@ -52,43 +53,6 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
         bail!("must contain exactly one equals character ('=')");
     }
     Ok((parts[0].into(), parts[1].into()))
-}
-
-/// `VM_TABLE` stores the runtime context (`InstanceHandle`) of each running Wasm instance, 
-/// indexed by the instance's ID (`pid`).
-/// 
-/// This is used in 3i to support cross-instance closure calls, allowing syscalls from one 
-/// cage to invoke functions in another cage. For example, when a syscall from cage A is 
-/// routed to a function in grate B, we need to look up grate B’s runtime context in order 
-/// to call the closure inside it.
-/// 
-/// The runtime context includes a pointer to the instance’s `VMContext`, which is required
-/// by Wasmtime to correctly re-enter the target instance with the right execution state.
-/// 
-/// - `insert_ctx(pid, ctx)` is called during instance initialization to register its context.
-/// - `get_ctx(pid)` retrieves the context by `pid`, and uses `unsafe { ctx.clone() }`
-///   to manually clone the handle for invocation.
-static VM_TABLE: Lazy<RwLock<Vec<Option<InstanceHandle>>>> = Lazy::new(|| {
-    RwLock::new(Vec::new())
-});
-
-fn insert_ctx(pid: usize, ctx: InstanceHandle) {
-    let mut table = VM_TABLE.write().unwrap();
-    if pid >= table.len() {
-        table.resize(pid + 1, None);
-    }
-    table[pid] = Some(ctx);
-}
-
-fn get_ctx(pid: usize) -> InstanceHandle {
-    let table = VM_TABLE.read().unwrap();
-    let ctx = table[pid].as_ref().unwrap();
-    // SAFETY: `InstanceHandle` cloning is `unsafe` because it may lead to VMContext aliasing
-    // if not properly managed. Here, we assume the cloned context is only used temporarily
-    // and not stored beyond the scope of the call.
-    unsafe {
-        ctx.clone()
-    }
 }
 
 /// Runs a WebAssembly module
@@ -278,27 +242,32 @@ impl RunCommand {
                     CAGE_START_ID as u64,
                     THREAD_START_ID as u64,
                 ) {
-                    let syscall_name: &'static str = "exit_syscall";
-                    let syscall_name_ptr = syscall_name.as_ptr() as u64;
+                    // Clean up the context from the global table
+                    if !remove_ctx(1 as usize) {
+                        eprintln!("[wasmtime|run] Warning: failed to remove context for cage {}", CAGE_START_ID);
+                    }
+
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
+                    // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                    // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                     make_syscall(
-                        1,
-                        (EXIT_SYSCALL) as u64,
-                        syscall_name_ptr,
-                        1,
+                        1, // self cage id
+                        (EXIT_SYSCALL) as u64, // syscall num
+                        UNUSED_NAME, // syscall name 
+                        1, // target cage id, should be itself
                         code as u64, // Exit type
-                        1,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
+                        1, // self cage id
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
                     );
 
                     // main cage exits
@@ -672,14 +641,23 @@ impl RunCommand {
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
 
-                // retrieve the epoch global
-                let lind_epoch = instance
-                    .get_export(&mut *store, "epoch")
-                    .and_then(|export| export.into_global())
-                    .expect("Failed to find epoch global export!");
+                cfg_if! {
+                    // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                    // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                    // This is intended for debugging only and should not be used in production.
+                    if #[cfg(feature = "disable_signals")] {
+                        let pointer = 0;
+                    } else {
+                        // retrieve the epoch global
+                        let lind_epoch = instance
+                            .get_export(&mut *store, "epoch")
+                            .and_then(|export| export.into_global())
+                            .expect("Failed to find epoch global export!");
 
-                // retrieve the handler (underlying pointer) for the epoch global
-                let pointer = lind_epoch.get_handler(&mut *store);
+                        // retrieve the handler (underlying pointer) for the epoch global
+                        let pointer = lind_epoch.get_handler(&mut *store);
+                    }
+                }
 
                 // initialize the signal for the main thread of the cage
                 lind_signal_init(

@@ -15,6 +15,7 @@ rand = "0.8"
 wasmtime = { workspace = true, features = ['threads'] }
 wasmtime-environ = { workspace = true }
 rawposix = { path = "../rawposix" }
-wasmtime-lind-multi-process = { path = "../lind-multi-process" }
 threei = { path = "../threei" }
+wasmtime-lind-multi-process = { path = "../lind-multi-process" }
 wasmtime-lind-utils = { path = "../lind-utils" }
+sysdefs = { path = "../sysdefs" }

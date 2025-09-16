@@ -16,7 +16,7 @@ use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
 use threei::threei::make_syscall;
-use ::cage::mem_helper;
+use cage::memory::{init_vmmap, fork_vmmap};
 use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
@@ -240,6 +240,15 @@ impl Instance {
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
         // memory init in wasmtime and do our own initialization here
+        //
+        // The type of memory initialization depends on the kind of wasm module being instantiated.
+        // In the first case (`InstantiateType::InstantiateFirst(pid)`), we are creating the very 
+        // first cage’s linear memory. After initialization, no additional steps are needed.
+        // 
+        // In the case of `InstantiateType::InstantiateChild { parent_pid, child_pid }`, which 
+        // corresponds to a module created via fork. In this case, after the child’s memory is 
+        // initialized, we must also copy the parent’s memory state (`fork_vmmap`) into the child t
+        // o have correct fork semantics.
         match instantiate_type {
             // InstantiateFirst: this is the first wasm instance
             InstantiateType::InstantiateFirst(pid) => {
@@ -250,14 +259,14 @@ impl Instance {
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let memory_base = defined_memory.base as usize;
 
-                cage::memory::mem_helper::init_vmmap_helper(pid, memory_base, Some(minimal_pages as u32));
+                init_vmmap(pid, memory_base, Some(minimal_pages as u32));
                 
-                let syscall_name: &'static str = "mmap_syscall";
-                let syscall_name_ptr = syscall_name.as_ptr() as u64;
+                // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                 make_syscall(
                     pid, // self cageid
                     (MMAP_SYSCALL) as u64, // syscall num
-                    syscall_name_ptr, // since wasmtime operates with lower level memory, it always interacts with underlying os
+                    0, // since wasmtime operates with lower level memory, it always interacts with underlying os
                     pid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     pid,
@@ -286,8 +295,8 @@ impl Instance {
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let child_address = defined_memory.base as usize;
             
-                cage::memory::mem_helper::init_vmmap_helper(child_pid, child_address, None);
-                cage::memory::mem_helper::fork_vmmap_helper(parent_pid as u64, child_pid);
+                init_vmmap(child_pid, child_address, None);
+                fork_vmmap(parent_pid as u64, child_pid);
             }
         }
 

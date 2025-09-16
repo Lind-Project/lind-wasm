@@ -62,9 +62,8 @@ bitflags = { workspace = true }
 sysdefs = { path = "../sysdefs" }
 rawposix = { path = "../rawposix" }
 wasmtime-lind-utils = { path = "../lind-utils" }
-cage = { path = "../cage" }
+cage.workspace = true
 threei = { path = "../threei" }
-
 
 [target.'cfg(target_os = "windows")'.dependencies.windows-sys]
 workspace = true

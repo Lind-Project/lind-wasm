@@ -50,7 +50,7 @@ pub fn signal_handler<
     let cageid = ctx.pid as u64;
 
     // first let's check if the epoch state is in "killed" state
-    if thread_check_killed(cageid, ctx.tid as u64) {
+    if cage::signal::thread_check_killed(cageid, ctx.tid as u64) {
         // if we are already killed, then perform a suicide
         thread_suicide();
     }
@@ -60,14 +60,14 @@ pub fn signal_handler<
 
     // we loop to retrieve pending signals one by one untill there isn't any unblocked pending signals
     loop {
-        let signal = lind_get_first_signal(cageid);
+        let signal = cage::signal::lind_get_first_signal(cageid);
         if signal.is_none() {
             break;
         }
 
         // if this is the last pending (unblocked) signal in list, we should reset epoch
-        if lind_check_no_pending_signal(cageid) {
-            signal_epoch_reset(cageid);
+        if cage::signal::lind_check_no_pending_signal(cageid) {
+            cage::signal::signal_epoch_reset(cageid);
         }
 
         let (signo, signal_handler, restorer) = signal.unwrap();
@@ -78,7 +78,7 @@ pub fn signal_handler<
                 SignalDefaultHandler::Terminate => {
                     // if we are supposed to be terminated, switch the epoch state of all other threads
                     // to "killed" state and perform a suicide
-                    epoch_kill_all(cageid);
+                    cage::signal::epoch_kill_all(cageid);
                     thread_suicide();
                 }
                 SignalDefaultHandler::Ignore => {
@@ -114,7 +114,7 @@ pub fn signal_handler<
                 let e = wasi_common::maybe_exit_on_error(err);
                 eprintln!("Error: {:?}", e);
                 // if we encountered any error when executing the signal handler, we should terminate the cage
-                epoch_kill_all(cageid);
+                cage::signal::epoch_kill_all(cageid);
                 thread_suicide();
             }
 

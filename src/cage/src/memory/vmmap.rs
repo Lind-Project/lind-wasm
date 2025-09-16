@@ -14,6 +14,11 @@ use std::io;
 use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::fs_const::{PAGESHIFT, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE};
 
+/// Default number of virtual memory pages in a `vmmap`.
+/// Calculated as 2^(32 - PAGESHIFT), which represents the total pages
+/// addressable in a 32-bit virtual address space given the page size.
+/// For example, with a 4 KB page size (PAGESHIFT = 12), this equals 1 MB of pages,
+/// covering the full 4 GB virtual address space.
 const DEFAULT_VMMAP_SIZE: u32 = 1 << (32 - PAGESHIFT);
 
 /// Used to identify whether the vmmap entry is backed anonymously,
