@@ -1,8 +1,9 @@
 use libc::c_void;
-use typemap::syscall_type_conversion::*;
+use typemap::datatype_conversion::*;
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
-use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, FDKIND_KERNEL, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE, MAXFD};
+use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
+use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
 use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
@@ -73,29 +74,29 @@ pub fn open_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "open_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "open", "Invalide Cage ID");
     }
 
     // Get the kernel fd first
     let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
 
     if kernel_fd < 0 {
-        return handle_errno(get_errno(), "open_syscall");
+        return handle_errno(get_errno(), "open");
     }
 
     // Check if `O_CLOEXEC` has been est
-    let should_cloexec = (oflag & fs_const::O_CLOEXEC) != 0;
+    let should_cloexec = (oflag & O_CLOEXEC) != 0;
 
     // Mapping a new virtual fd and set `O_CLOEXEC` flag
-    match fdtables::get_unused_vfd_arg(
+    match fdtables::get_unused_virtual_fd(
         cageid,
-        fs_const::FDKIND_KERNEL,
+        FDKIND_KERNEL,
         kernel_fd as u64,
         should_cloexec,
         0,
     ) {
-        Ok(vfd_arg) => vfd_arg as i32,
-        Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
+        Ok(virtual_fd) => virtual_fd as i32,
+        Err(_) => syscall_error(Errno::EMFILE, "open", "Too many files opened"),
     }
 }
 
@@ -188,7 +189,8 @@ pub fn close_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    if !(sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg2, arg2_cageid)
+         && sc_unusedarg(arg3, arg3_cageid)
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
@@ -249,7 +251,7 @@ pub fn mkdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "mkdir_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "mkdir", "Invalide Cage ID");
     }
 
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
