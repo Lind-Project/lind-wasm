@@ -6,15 +6,56 @@
 //! Function naming convention:
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
-use crate::fs_conv::*;
-use crate::type_conv::*;
-use cage::get_cage;
-use cage::memory::mem_helper::*;
+use cage::{get_cage, memory::memory::translate_vmmap_addr};
 use fdtables;
 use std::error::Error;
 use std::str::Utf8Error;
 use sysdefs::constants::err_const::{syscall_error, Errno};
-use sysdefs::constants::fs_const::{MAX_CAGEID, PATH_MAX};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME, MAX_CAGEID, PATH_MAX};
+
+/// `sc_unusedarg()` is the security check function used to validate all unused args. This
+/// will return true in default mode, and check if `arg` with `arg_cageid` are all null in
+/// `secure` mode.
+///
+/// ## Arguments:
+/// arg: argument value
+/// arg_cageid: argument's cageid
+///
+/// ## Returns:
+/// Always true in default mode.
+/// In secure mode:
+/// Return true if all null, false otherwise.
+#[inline]
+fn is_unused(val: u64, placeholder: u64) -> bool {
+    val == 0 || val == placeholder
+}
+
+pub fn sc_unusedarg(arg: u64, arg_cageid: u64) -> bool {
+    #[cfg(feature = "fast")]
+    return true;
+
+    #[cfg(feature = "secure")]
+    return is_unused(arg, UNUSED_ARG) && is_unused(arg_cageid, UNUSED_ID);
+}
+
+/// Validate whether two cage ids are in valid range. This is used for security mode in
+/// type conversion.
+///
+/// ## Arguments:
+/// cageid_1: first cage id
+/// cageid_2: second cage id
+///
+/// ## Returns:
+/// true: both of them are valid
+/// false: one of them or neither of them are valid
+pub fn validate_cageid(cageid_1: u64, cageid_2: u64) -> bool {
+    if is_unused(cageid_1, UNUSED_ID) || is_unused(cageid_2, UNUSED_ID) || cageid_1 < 0 || cageid_2 < 0
+    {
+        return false;
+    }
+    true
+}
+
 
 /// This function provides two operations: first, it translates path pointer address from WASM environment
 /// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
@@ -216,26 +257,6 @@ pub fn sc_convert_sysarg_to_i64(arg: u64, arg_cageid: u64, cageid: u64) -> i64 {
     if !validate_cageid(arg_cageid, cageid) {
         panic!("Invalide Cage ID");
     }
-}
-
-/// `sc_unusedarg()` is the security check function used to validate all unused args. This
-/// will return true in default mode, and check if `arg` with `arg_cageid` are all null in
-/// `secure` mode.
-///
-/// ## Arguments:
-/// arg: argument value
-/// arg_cageid: argument's cageid
-///
-/// ## Returns:
-/// Always true in default mode.
-/// In secure mode:
-/// Return true if all null, false otherwise.
-pub fn sc_unusedarg(arg: u64, arg_cageid: u64) -> bool {
-    #[cfg(feature = "fast")]
-    return true;
-
-    #[cfg(feature = "secure")]
-    return !(arg | arg_cageid);
 }
 
 /// This function translates the buffer pointer from user buffer address to system address, because we are
