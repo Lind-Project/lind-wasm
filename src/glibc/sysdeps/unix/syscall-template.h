@@ -68,3 +68,19 @@ lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(NO
              (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), RAW_SYSCALL)
 
 #define MAKE_RAW_SYSCALL MAKE_RAW_SYSCALL6
+
+#define REGISTER_HANDLER_SYSCALL(targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id) \
+    lind_register_syscall((uint64_t) targetcage, \
+        (uint64_t) targetcallnum, \
+        (uint64_t) this_grate_id, \
+        (uint64_t) register_flag)
+
+#define CP_DATA_SYSCALL(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, copytype) \
+    lind_cp_data((uint64_t) thiscage, \
+        (uint64_t) targetcage, \
+        (uint64_t) srcaddr, \
+        (uint64_t) srccage, \
+        (uint64_t) destaddr, \
+        (uint64_t) destcage, \
+        (uint64_t) len, \
+        (uint64_t) copytype)
