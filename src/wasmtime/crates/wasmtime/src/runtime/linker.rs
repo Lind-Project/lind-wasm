@@ -17,7 +17,7 @@ use hashbrown::hash_map::{Entry, HashMap};
 use log::warn;
 
 use super::store::StoreInner;
-use super::{InstantiateType, InstanceId};
+use super::InstantiateType;
 
 /// Structure used to link wasm modules/instances together.
 ///
@@ -1133,7 +1133,7 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module: &Module,
         instantiate_type: InstantiateType,
-    ) -> Result<(Instance, InstanceId)> {
+    ) -> Result<Instance> {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
             .instantiate_with_lind(store, instantiate_type)
     }

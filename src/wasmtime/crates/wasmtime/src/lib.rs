@@ -404,4 +404,3 @@ pub mod _internal {
     pub use crate::runtime::vm::MmapVec;
 }
 pub use crate::runtime::vm::traphandlers::{raise_trap, TrapReason};
-pub use crate::runtime::vm::InstanceHandle;

@@ -1687,15 +1687,10 @@ fn enter_wasm<T>(store: &mut StoreContextMut<'_, T>) -> Option<usize> {
     // to it). In any case it's expected to be at most a few hundred bytes
     // of slop one way or another. When wasm is typically given a MB or so
     // (a million bytes) the slop shouldn't matter too much.
-
-    // Bypass stack overflow detection in miri for needs of grate.
-    // The reason is that wasmtime determines a fixed max_wasm_stack ahead of 
-    // execution (during compilation/startup) and uses that to set the stack 
-    // overflow limit. The grate call mechanism, however, injects new instructions 
-    // after execution has already begun. This means the additional frames may 
-    // exceed the originally computed limit, and wasmtime’s 
-    // built-in check would incorrectly trigger a stack overflow.
-    let wasm_stack_limit = store.engine().config().max_wasm_stack;
+    //
+    // After we've got the stack limit then we store it into the `stack_limit`
+    // variable.
+    let wasm_stack_limit = stack_pointer - store.engine().config().max_wasm_stack;
     let prev_stack = unsafe {
         mem::replace(
             &mut *store.0.runtime_limits().stack_limit.get(),
@@ -2055,12 +2050,12 @@ for_each_function_signature!(impl_wasm_ty_list);
 /// Host functions which want access to [`Store`](crate::Store)-level state are
 /// recommended to use this type.
 pub struct Caller<'a, T> {
-    pub store: StoreContextMut<'a, T>,
-    pub caller: &'a crate::runtime::vm::Instance,
+    pub(crate) store: StoreContextMut<'a, T>,
+    caller: &'a crate::runtime::vm::Instance,
 }
 
 impl<T> Caller<'_, T> {
-    pub unsafe fn with<F, R>(caller: *mut VMContext, f: F) -> R
+    unsafe fn with<F, R>(caller: *mut VMContext, f: F) -> R
     where
         // The closure must be valid for any `Caller` it is given; it doesn't
         // get to choose the `Caller`'s lifetime.
