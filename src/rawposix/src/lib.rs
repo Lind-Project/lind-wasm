@@ -5,3 +5,6 @@
 
 pub mod fs_calls;
 pub mod sys_calls;
+
+// Re-export key syscalls for testing and integration
+pub use fs_calls::{poll_syscall, select_syscall, open_syscall, read_syscall, close_syscall, mkdir_syscall};

@@ -1,17 +1,15 @@
-// use parking_lot::RwLock;
-// use std::sync::atomic::{AtomicI32, AtomicU64};
-// use std::sync::Arc;
 use libc::c_void;
-// Updated imports - using path_conversion for filesystem operations
 use typemap::datatype_conversion::*;
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
-use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD};
+use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, FDKIND_KERNEL, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE, MAXFD};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
 use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
 use fdtables;
+use std::collections::{HashMap, HashSet};
+use libc::{pollfd, fd_set, timeval};
+use std::time::Instant;
 
 /// Helper function for close_syscall
 /// 
@@ -89,17 +87,17 @@ pub fn open_syscall(
     }
 
     // Check if `O_CLOEXEC` has been est
-    let should_cloexec = (oflag & O_CLOEXEC) != 0;
+    let should_cloexec = (oflag & fs_const::O_CLOEXEC) != 0;
 
     // Mapping a new virtual fd and set `O_CLOEXEC` flag
-    match fdtables::get_unused_virtual_fd(
+    match fdtables::get_unused_vfd_arg(
         cageid,
-        FDKIND_KERNEL,
+        fs_const::FDKIND_KERNEL,
         kernel_fd as u64,
         should_cloexec,
         0,
     ) {
-        Ok(virtual_fd) => virtual_fd as i32,
+        Ok(vfd_arg) => vfd_arg as i32,
         Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
     }
 }
@@ -113,12 +111,12 @@ pub fn open_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment.
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective).
 ///     - count_arg: the maximum number of bytes to read from the file descriptor.
 pub fn read_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -132,7 +130,7 @@ pub fn read_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -1 {
         return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
     } else if kernel_fd == -9 {
@@ -176,11 +174,11 @@ pub fn read_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment to be closed.
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
 pub fn close_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64, 
     arg2: u64,
     arg2_cageid: u64,
@@ -200,7 +198,7 @@ pub fn close_syscall(
         return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
     }
 
-    match fdtables::close_virtualfd(cageid, virtual_fd) {
+    match fdtables::close_virtualfd(cageid, vfd_arg) {
         Ok(()) => 0,
         Err(e) => {
             if e == Errno::EBADFD as u64 {
@@ -212,69 +210,6 @@ pub fn close_syscall(
             }
         }
     }
-}
-
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/write.2.html
-///
-/// Linux `write()` syscall attempts to write `count` bytes from the buffer pointed to by `buf` to the file associated
-/// with the open file descriptor, `fd`. RawPOSIX first converts virtual fd to kernel fd due to the `fdtable` subsystem, second
-/// translates the `buf_arg` pointer to actual system pointer
-///
-/// Input:
-///     - cageid: current cageid
-///     - virtual_fd: virtual file descriptor, needs to be translated kernel fd for future kernel operation
-///     - buf_arg: pointer points to a buffer that stores the data
-///     - count_arg: length of the buffer
-///
-/// Output:
-///     - Upon successful completion of this call, we return the number of bytes written. This number will never be greater
-///         than `count`. The value returned may be less than `count` if the write_syscall() was interrupted by a signal, or
-///         if the file is a pipe or FIFO or special file and has fewer than `count` bytes immediately available for writing.
-pub fn write_syscall(
-    cageid: u64,
-    virtual_fd: u64,
-    vfd_cageid: u64,
-    buf_arg: u64,
-    buf_cageid: u64,
-    count_arg: u64,
-    count_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
-
-    if kernel_fd == -1 {
-        return syscall_error(Errno::EFAULT, "write", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
-        return syscall_error(Errno::EBADF, "write", "Bad File Descriptor");
-    }
-
-    let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
-    let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "write", "Invalide Cage ID");
-    }
-
-    // Early return
-    if count == 0 {
-        return 0;
-    }
-
-    let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
-
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "write");
-    }
-    return ret;
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/mkdir.2.html
@@ -329,271 +264,31 @@ pub fn mkdir_syscall(
     ret
 }
 
-/// Handles the `mmap_syscall`, interacting with the `vmmap` structure.
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
 ///
-/// This function processes the `mmap_syscall` by updating the `vmmap` entries and performing
-/// the necessary mmap operations. The handling logic is as follows:
-/// 1. Restrict allowed flags to `MAP_FIXED`, `MAP_SHARED`, `MAP_PRIVATE`, and `MAP_ANONYMOUS`.
-/// 2. Disallow `PROT_EXEC`; return `EINVAL` if the `prot` argument includes `PROT_EXEC`.
-/// 3. If `MAP_FIXED` is not specified, query the `vmmap` structure to locate an available memory region.
-///    Otherwise, use the address provided by the user.
-/// 4. Invoke the actual `mmap` syscall with the `MAP_FIXED` flag to configure the memory region's protections.
-/// 5. Update the corresponding `vmmap` entry.
+/// Linux `poll()` syscall waits for one of a set of file descriptors to become ready to perform I/O.
+/// Since we implement a file descriptor management subsystem (called `fdtables`), we convert virtual
+/// file descriptors to kernel file descriptors, perform atomic polling across all fdkinds, then convert results back.
 ///
-/// # Arguments
-/// * `cageid` - Identifier of the cage that initiated the `mmap` syscall.
-/// * `addr` - Starting address of the memory region to mmap.
-/// * `len` - Length of the memory region to mmap.
-/// * `prot` - Memory protection flags (e.g., `PROT_READ`, `PROT_WRITE`).
-/// * `flags` - Mapping flags (e.g., `MAP_SHARED`, `MAP_ANONYMOUS`).
-/// * `fildes` - File descriptor associated with the mapping, if applicable.
-/// * `off` - Offset within the file, if applicable.
+/// ## Arguments:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier.
+///     - fds_arg: pointer to array of pollfd structures (user's perspective).
+///     - nfds_arg: number of items in the fds array.
+///     - timeout_arg: timeout in milliseconds (-1 = infinite, 0 = non-blocking).
 ///
-/// # Returns
-/// * `u32` - Result of the `mmap` operation. See "man mmap" for details
-pub fn mmap_syscall(
+/// ## Returns:
+///     - positive value: number of file descriptors ready for I/O
+///     - 0: timeout occurred with no file descriptors ready
+///     - negative value: error occurred (errno set)
+pub fn poll_syscall(
     cageid: u64,
-    addr_arg: u64,
-    addr_cageid: u64,
-    len_arg: u64,
-    len_cageid: u64,
-    prot_arg: u64,
-    prot_cageid: u64,
-    flags_arg: u64,
-    flags_cageid: u64,
-    virtual_fd_arg: u64,
-    vfd_cageid: u64,
-    off_arg: u64,
-    off_cageid: u64,
-) -> i32 {
-    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
-    let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
-    let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
-    let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-    let mut fildes = convert_fd_to_host(virtual_fd_arg, vfd_cageid, cageid);
-    let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
-
-    let cage = get_cage(cageid).unwrap();
-
-    let mut maxprot = PROT_READ | PROT_WRITE;
-
-    // Validate flags - only these four flags are supported
-    // Note: We explicitly validate rather than silently strip unsupported flags to:
-    // 1. Prevent security issues (e.g., MAP_FIXED_NOREPLACE being ignored)
-    // 2. Maintain program correctness (e.g., MAP_SHARED_VALIDATE expects validation)
-    // 3. Make debugging easier by failing fast rather than having mysterious behavior later
-    let allowed_flags =
-        MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32;
-    if flags & !allowed_flags != 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "Unsupported mmap flags");
-    }
-
-    if prot & PROT_EXEC > 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "PROT_EXEC is not allowed");
-    }
-
-    // check if the provided address is multiple of pages
-    let rounded_addr = round_up_page(addr as u64);
-    if rounded_addr != addr as u64 {
-        return syscall_error(Errno::EINVAL, "mmap", "address it not aligned");
-    }
-
-    // offset should be non-negative and multiple of pages
-    if off < 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "offset cannot be negative");
-    }
-    let rounded_off = round_up_page(off as u64);
-    if rounded_off != off as u64 {
-        return syscall_error(Errno::EINVAL, "mmap", "offset it not aligned");
-    }
-
-    // round up length to be multiple of pages
-    let rounded_length = round_up_page(len as u64);
-
-    let mut useraddr = addr as u32;
-    // if MAP_FIXED is not set, then we need to find an address for the user
-    if flags & MAP_FIXED as i32 == 0 {
-        let mut vmmap = cage.vmmap.write();
-        let result;
-
-        // pick an address of appropriate size, anywhere
-        if useraddr == 0 {
-            result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
-        } else {
-            // use address user provided as hint to find address
-            result =
-                vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
-        }
-
-        // did not find desired memory region
-        if result.is_none() {
-            return syscall_error(Errno::ENOMEM, "mmap", "no memory");
-        }
-
-        let space = result.unwrap();
-        useraddr = (space.start() << PAGESHIFT) as u32;
-    }
-
-    flags |= MAP_FIXED as i32;
-
-    // either MAP_PRIVATE or MAP_SHARED should be set, but not both
-    if (flags & MAP_PRIVATE as i32 == 0) == (flags & MAP_SHARED as i32 == 0) {
-        return syscall_error(Errno::EINVAL, "mmap", "invalid flags");
-    }
-
-    let vmmap = cage.vmmap.read();
-
-    let sysaddr = vmmap.user_to_sys(useraddr);
-
-    drop(vmmap);
-
-    if rounded_length > 0 {
-        if flags & MAP_ANONYMOUS as i32 > 0 {
-            fildes = -1;
-        }
-
-        let result = mmap_inner(
-            cageid,
-            sysaddr as *mut u8,
-            rounded_length as usize,
-            prot,
-            flags,
-            fildes,
-            off,
-        );
-
-        let vmmap = cage.vmmap.read();
-        let result = vmmap.sys_to_user(result);
-        drop(vmmap);
-
-        // if mmap addr is positive, that would mean the mapping is successful and we need to update the vmmap entry
-        if result >= 0 {
-            if result != useraddr {
-                panic!("MAP_FIXED not fixed");
-            }
-
-            let mut vmmap = cage.vmmap.write();
-            let backing = {
-                if flags as u32 & MAP_ANONYMOUS > 0 {
-                    MemoryBackingType::Anonymous
-                } else {
-                    // if we are doing file-backed mapping, we need to set maxprot to the file permission
-                    let flags = fcntl_syscall(
-                        cageid,
-                        fildes as u64,
-                        vfd_cageid,
-                        F_GETFL as u64,
-                        flags_cageid,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                    );
-                    if flags < 0 {
-                        return syscall_error(Errno::EINVAL, "mmap", "invalid file descriptor")
-                            as i32;
-                    }
-                    maxprot &= flags;
-                    MemoryBackingType::FileDescriptor(fildes as u64)
-                }
-            };
-
-            // update vmmap entry
-            let _ = vmmap.add_entry_with_overwrite(
-                useraddr >> PAGESHIFT,
-                (rounded_length >> PAGESHIFT) as u32,
-                prot,
-                maxprot,
-                flags,
-                backing,
-                off,
-                len as i64,
-                cageid,
-            );
-        }
-    }
-
-    useraddr as i32
-}
-
-/// Helper function for `mmap` / `munmap`
-///
-/// This function calls underlying libc::mmap and serves as helper functions for memory related (vmmap related)
-/// syscalls. This function provides fd translation between virtual to kernel and error handling.
-pub fn mmap_inner(
-    cageid: u64,
-    addr: *mut u8,
-    len: usize,
-    prot: i32,
-    flags: i32,
-    virtual_fd: i32,
-    off: i64,
-) -> usize {
-    if virtual_fd != -1 {
-        match fdtables::translate_virtual_fd(cageid, virtual_fd as u64) {
-            Ok(kernel_fd) => {
-                let ret = unsafe {
-                    libc::mmap(
-                        addr as *mut c_void,
-                        len,
-                        prot,
-                        flags,
-                        kernel_fd.underfd as i32,
-                        off,
-                    ) as i64
-                };
-
-                // Check if mmap failed and return the appropriate error if so
-                if ret == -1 {
-                    return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags")
-                        as usize;
-                }
-
-                ret as usize
-            }
-            Err(_e) => {
-                return syscall_error(Errno::EBADF, "mmap", "Bad File Descriptor") as usize;
-            }
-        }
-    } else {
-        // Handle mmap with fd = -1 (anonymous memory mapping or special case)
-        let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
-        // Check if mmap failed and return the appropriate error if so
-        if ret == -1 {
-            let errno = get_errno();
-            return handle_errno(errno, "mmap") as usize;
-        }
-
-        ret as usize
-    }
-}
-
-/// Handler of the `munmap_syscall`, interacting with the `vmmap` structure.
-///
-/// This function processes the `munmap_syscall` by updating the `vmmap` entries and managing
-/// the unmap operation. Instead of invoking the actual `munmap` syscall, the unmap operation
-/// is simulated by setting the specified region to `PROT_NONE`. The memory remains valid but
-/// becomes inaccessible due to the `PROT_NONE` setting.
-///
-/// # Arguments
-/// * `cageid` - Identifier of the cage that calls the `munmap`
-/// * `addr` - Starting address of the region to unmap
-/// * `length` - Length of the region to unmap
-///
-/// # Returns
-/// * `i32` - 0 for success and -1 for failure
-pub fn munmap_syscall(
-    cageid: u64,
-    addr_arg: u64,
-    addr_cageid: u64,
-    len_arg: u64,
-    len_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
+    fds_arg: u64,
+    fds_cageid: u64,
+    nfds_arg: u64,
+    nfds_cageid: u64,
+    timeout_arg: u64,
+    timeout_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -601,497 +296,483 @@ pub fn munmap_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
-    let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "munmap", "Invalide Cage ID");
-    }
-
-    if len == 0 {
-        return syscall_error(Errno::EINVAL, "munmap", "length cannot be zero");
-    }
-    let cage = get_cage(addr_cageid).unwrap();
-
-    // check if the provided address is multiple of pages
-    let rounded_addr = round_up_page(addr as u64) as usize;
-    if rounded_addr != addr as usize {
-        return syscall_error(Errno::EINVAL, "munmap", "address it not aligned");
-    }
-
-    let vmmap = cage.vmmap.read();
-    let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
-    drop(vmmap);
-
-    let rounded_length = round_up_page(len as u64) as usize;
-
-    // we are replacing munmap with mmap because we do not want to really deallocate the memory region
-    // we just want to set the prot of the memory region back to PROT_NONE
-    let result = unsafe {
-        libc::mmap(
-            sysaddr as *mut c_void,
-            rounded_length,
-            PROT_NONE,
-            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
-            -1,
-            0,
-        ) as usize
-    };
-    // Check for different failure modes with specific error messages
-    if result as isize == -1 {
-        let errno = get_errno();
-        panic!("munmap: mmap failed during memory protection reset with errno: {:?}", errno);
-    }
-    
-    if result != sysaddr {
-        panic!("munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}", 
-               result as *const c_void, sysaddr as *const c_void);
-    }
-
-    let mut vmmap = cage.vmmap.write();
-
-    vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, len as u32 >> PAGESHIFT);
-
-    0
-}
-
-/// Handles the `brk_syscall`, interacting with the `vmmap` structure.
-///
-/// This function processes the `brk_syscall` by updating the `vmmap` entries and performing
-/// the necessary operations to adjust the program break. Specifically, it updates the program
-/// break by modifying the end of the heap entry (the first entry in `vmmap`) and invokes `mmap`
-/// to adjust the memory protection as needed.
-///
-/// # Arguments
-/// * `cageid` - Identifier of the cage that initiated the `brk` syscall.
-/// * `brk` - The new program break address.
-///
-/// # Returns
-/// * `u32` - Returns `0` on success or `-1` on failure.
-///
-pub fn brk_syscall(
-    cageid: u64,
-    brk_arg: u64,
-    brk_cageid: u64,
-    arg2: u64,
-    arg2_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    let brk = sc_convert_sysarg_to_i32(brk_arg, brk_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "brk", "Invalide Cage ID");
-    }
-
-    let cage = get_cage(cageid).unwrap();
-
-    let mut vmmap = cage.vmmap.write();
-    let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
-
-    assert!(heap.npages == vmmap.program_break);
-
-    let old_brk_page = heap.npages;
-    // round up the break to multiple of pages
-    let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
-
-    // if we are incrementing program break, we need to check if we have enough space
-    if brk_page > old_brk_page {
-        if vmmap.check_existing_mapping(old_brk_page, brk_page - old_brk_page, 0) {
-            return syscall_error(Errno::ENOMEM, "brk", "no memory");
-        }
-    }
-
-    // update vmmap entry
-    vmmap.add_entry_with_overwrite(
-        0,
-        brk_page,
-        heap.prot,
-        heap.maxprot,
-        heap.flags,
-        heap.backing,
-        heap.file_offset,
-        heap.file_size,
-        heap.cage_id,
-    );
-
-    let old_heap_end_usr = (old_brk_page * PAGESIZE) as u32;
-    let old_heap_end_sys = vmmap.user_to_sys(old_heap_end_usr) as *mut u8;
-
-    let new_heap_end_usr = (brk_page * PAGESIZE) as u32;
-    let new_heap_end_sys = vmmap.user_to_sys(new_heap_end_usr) as *mut u8;
-
-    vmmap.set_program_break(brk_page);
-
-    drop(vmmap);
-
-    // if new brk is larger than old brk
-    // we need to mmap the new region
-    if brk_page > old_brk_page {
-        let ret = mmap_inner(
-            brk_cageid,
-            old_heap_end_sys,
-            ((brk_page - old_brk_page) * PAGESIZE) as usize,
-            heap.prot,
-            (heap.flags as u32 | MAP_FIXED) as i32,
-            -1,
-            0,
-        );
-
-        if ret < 0 {
-            panic!("brk mmap failed");
-        }
-    }
-    // if we are shrinking the brk
-    // we need to do something similar to munmap
-    // to unmap the extra memory
-    else if brk_page < old_brk_page {
-        let ret = mmap_inner(
-            brk_cageid,
-            new_heap_end_sys,
-            ((old_brk_page - brk_page) * PAGESIZE) as usize,
-            PROT_NONE,
-            (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as i32,
-            -1,
-            0,
-        );
-
-        if ret < 0 {
-            panic!("brk mmap failed");
-        }
-    }
-
-    0
-}
-
-/// Handles the `sbrk_syscall`, interacting with the `vmmap` structure.
-///
-/// This function processes the `sbrk_syscall` by updating the `vmmap` entries and managing
-/// the program break. It calculates the target program break after applying the specified
-/// increment and delegates further processing to the `brk_handler`.
-///
-/// # Arguments
-/// * `cageid` - Identifier of the cage that initiated the `sbrk` syscall.
-/// * `brk` - Increment to adjust the program break, which can be negative.
-///
-/// # Returns
-/// * `u32` - Result of the `sbrk` operation. Refer to `man sbrk` for details.
-pub fn sbrk_syscall(
-    cageid: u64,
-    sbrk_arg: u64,
-    sbrk_cageid: u64,
-    arg2: u64,
-    arg2_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    let brk = sc_convert_sysarg_to_i32(sbrk_arg, sbrk_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "sbrk_syscall", "Invalide Cage ID");
-    }
-
-    let cage = get_cage(sbrk_cageid).unwrap();
-
-    // get the heap entry
-    let mut vmmap = cage.vmmap.read();
-    let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
-
-    // program break should always be the same as the heap entry end
-    assert!(heap.npages == vmmap.program_break);
-
-    // pass 0 to sbrk will just return the current brk
-    if brk == 0 {
-        return (PAGESIZE * heap.npages) as i32;
-    }
-
-    // round up the break to multiple of pages
-    // brk increment could possibly be negative
-    let brk_page;
-    if brk < 0 {
-        brk_page = -((round_up_page(-brk as u64) >> PAGESHIFT) as i32);
-    } else {
-        brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as i32;
-    }
-
-    // drop the vmmap so that brk_handler will not deadlock
-    drop(vmmap);
-
-    if brk_syscall(
-        cageid,
-        ((heap.npages as i32 + brk_page) << PAGESHIFT) as u64,
-        sbrk_cageid,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-    ) < 0
-    {
-        return syscall_error(Errno::ENOMEM, "sbrk", "no memory") as i32;
-    }
-
-    // sbrk syscall should return previous brk address before increment
-    (PAGESIZE * heap.npages) as i32
-}
-
-//------------------------------------FCNTL SYSCALL------------------------------------
-/// This function will be different in new code base (when splitting out type conversion function)
-/// since the conversion from u64 -> i32 in negative number will be different. These lines are repeated
-/// in 5 out of 6 fcntl_syscall cases, so wrapped these loc into helper functions to make code cleaner.
-///
-/// ## Arguments
-/// cageid: cage ID associate with virtual file descriptor
-/// virtual_fd: virtual file descriptor
-///
-/// ## Return Type
-/// On success:
-/// Return corresponding FDTableEntry that contains
-/// (1) underlying kernel fd.
-/// (2) file descriptor kind.
-/// (3) O_CLOEXEC flag.
-/// (4) file descriptor specific extra information.
-///
-/// On error:
-/// Return error num EBADF(Bad File Descriptor)
-pub fn _fcntl_helper(cageid: u64, virtual_fd: u64) -> Result<fdtables::FDTableEntry, Errno> {
-    if virtual_fd > MAXFD as u64 {
-        return Err(Errno::EBADF);
-    }
-    // Get underlying kernel fd
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd);
-    if wrappedvfd.is_err() {
-        return Err(Errno::EBADF);
-    }
-    Ok(wrappedvfd.unwrap())
-}
-
-/// Reference: https://man7.org/linux/man-pages/man2/fcntl.2.html
-///
-/// Due to the design of `fdtables` library, different virtual fds created by `dup`/`dup2` are
-/// actually refer to the same underlying kernel fd. Therefore, in `fcntl_syscall` we need to
-/// handle the cases of `F_DUPFD`, `F_DUPFD_CLOEXEC`, `F_GETFD`, and `F_SETFD` separately.
-///
-/// Among these, `F_DUPFD` and `F_DUPFD_CLOEXEC` cannot directly use the `dup_syscall` because,
-/// in `fcntl`, the duplicated fd is assigned to the lowest available number starting from `arg`,
-/// whereas the `dup_syscall` does not have this restriction and instead assigns the lowest
-/// available fd number globally.
-///
-/// Additionally, `F_DUPFD_CLOEXEC` and `F_SETFD` require updating the fd flag information
-/// (`O_CLOEXEC`) in fdtables after modifying the underlying kernel fd.
-///
-/// For all other command operations, after translating the virtual fd to the corresponding
-/// kernel fd, they are redirected to the kernel `fcntl` syscall.
-///
-/// ## Arguments
-/// virtual_fd: virtual file descriptor
-/// cmd: The operation
-/// arg: an optional third argument.  Whether or not this argument is required is determined by op.  
-///
-/// ## Return Type
-/// The return value is related to the operation determined by `cmd` argument.
-///
-/// For a successful call, the return value depends on the operation:
-/// `F_DUPFD`: The new file descriptor.
-/// `F_GETFD`: Value of file descriptor flags.
-/// `F_GETFL`: Value of file status flags.
-/// `F_GETLEASE`: Type of lease held on file descriptor.
-/// `F_GETOWN`: Value of file descriptor owner.
-/// `F_GETSIG`: Value of signal sent when read or write becomes possible, or zero for traditional SIGIO behavior.
-/// `F_GETPIPE_SZ`, `F_SETPIPE_SZ`: The pipe capacity.
-/// `F_GET_SEALS`: A bit mask identifying the seals that have been set for the inode referred to by fd.
-/// All other commands: Zero.
-/// On error, -1 is returned
-///
-/// TODO: `F_GETOWN`, `F_SETOWN`, `F_GETOWN_EX`, `F_SETOWN_EX`, `F_GETSIG`, and `F_SETSIG` are used to manage I/O availability signals.
-pub fn fcntl_syscall(
-    cageid: u64,
-    virtual_fd: u64,
-    vfd_cageid: u64,
-    cmd_arg: u64,
-    cmd_cageid: u64,
-    arg_arg: u64,
-    arg_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
-    let arg = sc_convert_sysarg_to_i32(arg_arg, arg_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    // Validate unused arguments
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "fcntl_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "poll_syscall", "Invalid Cage ID");
     }
 
-    match (cmd, arg) {
-        // Duplicate the file descriptor `virtual_fd` using the lowest-numbered
-        // available file descriptor greater than or equal to `arg`. The operation here
-        // is quite similar to `dup_syscall`, for specific operation explanation, see
-        // comments on `dup_syscall`.
-        (F_DUPFD, arg) => {
-            // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
-                Ok(entry) => entry,
-                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
-            };
-            // Get lowest-numbered available file descriptor greater than or equal to `arg`
-            match fdtables::get_unused_virtual_fd_from_startfd(
-                cageid,
-                vfd.fdkind,
-                vfd.underfd,
-                false,
-                0,
-                arg as u64,
-            ) {
-                Ok(new_vfd) => return new_vfd as i32,
-                Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
+    // Convert arguments
+    let nfds = sc_convert_sysarg_to_usize(nfds_arg, nfds_cageid, cageid);
+    let original_timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
+
+    // Basic bounds checking
+    if nfds > 65536 {
+        return syscall_error(Errno::EINVAL, "poll_syscall", "Too many file descriptors");
+    }
+
+    if fds_arg == 0 {
+        return syscall_error(Errno::EFAULT, "poll_syscall", "pollfd array is null");
+    }
+
+    // Convert pollfd array from user space
+    let fds_ptr = sc_convert_buf(fds_arg, fds_cageid, cageid) as *mut pollfd;
+    if fds_ptr.is_null() {
+        return syscall_error(Errno::EFAULT, "poll_syscall", "pollfd array is null");
+    }
+
+    // Create safe slice for pollfd array
+    let fds_slice = unsafe { std::slice::from_raw_parts_mut(fds_ptr, nfds) };
+
+    // Build index maps for O(1) lookups - avoid O(N²) performance
+    let mut vfd_to_index: HashMap<i32, usize> = HashMap::new();
+    let mut vfd_to_events: HashMap<i32, i16> = HashMap::new();
+    
+    // Clear all revents initially and build lookup maps
+    for i in 0..nfds {
+        fds_slice[i].revents = 0;
+        
+        // Build index mapping for O(1) result updates later
+        vfd_to_index.insert(fds_slice[i].fd, i);
+        vfd_to_events.insert(fds_slice[i].fd, fds_slice[i].events);
+    }
+
+    // Extract virtual fds from pollfd array and handle invalid fds immediately
+    let mut virtual_fds = HashSet::new();
+    let mut invalid_fds = Vec::new();
+    
+    for i in 0..nfds {
+        if fds_slice[i].fd >= 0 {
+            let vfd = fds_slice[i].fd as u64;
+            // Check if this virtual fd exists in fdtables
+            match fdtables::translate_virtual_fd(cageid, vfd) {
+                Ok(_) => {
+                    virtual_fds.insert(vfd);
+                }
+                Err(_) => {
+                    // Invalid fd - mark for POLLNVAL
+                    invalid_fds.push(i);
+                }
             }
-        }
-        // As for `F_DUPFD`, but additionally set the close-on-exec flag
-        // for the duplicate file descriptor.
-        (F_DUPFD_CLOEXEC, arg) => {
-            // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
-                Ok(entry) => entry,
-                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
-            };
-            // Get lowest-numbered available file descriptor greater than or equal to `arg`
-            // and set the `O_CLOEXEC` flag
-            match fdtables::get_unused_virtual_fd_from_startfd(
-                cageid,
-                vfd.fdkind,
-                vfd.underfd,
-                true,
-                0,
-                arg as u64,
-            ) {
-                Ok(new_vfd) => return new_vfd as i32,
-                Err(_) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
-            }
-        }
-        // Return (as the function result) the file descriptor flags.
-        (F_GETFD, ..) => {
-            // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
-                Ok(entry) => entry,
-                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
-            };
-            return vfd.should_cloexec as i32;
-        }
-        // Set the file descriptor flags to the value specified by arg.
-        (F_SETFD, arg) => {
-            // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
-                Ok(entry) => entry,
-                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
-            };
-            // Set underlying kernel fd flag
-            let ret = unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) };
-            if ret < 0 {
-                let errno = get_errno();
-                return handle_errno(errno, "fcntl");
-            }
-            // Set virtual fd flag
-            let cloexec_flag: bool = arg != 0;
-            match fdtables::set_cloexec(cageid, virtual_fd as u64, cloexec_flag) {
-                Ok(_) => return 0,
-                Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
-            }
-        }
-        // Return (as the function result) the process ID or process
-        // group ID currently receiving SIGIO and SIGURG signals for
-        // events on file descriptor fd.
-        (F_GETOWN, ..) => DEFAULT_GID as i32,
-        // Set the process ID or process group ID that will receive
-        // SIGIO and SIGURG signals for events on the file descriptor
-        // fd.
-        (F_SETOWN, arg) if arg >= 0 => 0,
-        _ => {
-            // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
-                Ok(entry) => entry,
-                Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
-            };
-            let ret = unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) };
-            if ret < 0 {
-                let errno = get_errno();
-                return handle_errno(errno, "fcntl");
-            }
-            ret
         }
     }
+
+    // Handle invalid fds immediately
+    let mut total_ready = 0i32;
+    for &index in &invalid_fds {
+        fds_slice[index].revents = libc::POLLNVAL as i16;
+        total_ready += 1;
+    }
+
+    // If no valid fds to process, return immediately
+    if virtual_fds.is_empty() {
+        return total_ready;
+    }
+
+    // Convert virtual fds to kernel fds by fdkind using fdtables API
+    let (poll_data_by_fdkind, mapping_table) = fdtables::convert_virtualfds_for_poll(cageid, virtual_fds);
+
+    // Separate kernel-backed FDs from virtual FDs for atomic handling
+    let mut all_kernel_pollfds: Vec<pollfd> = Vec::new();
+    let mut kernel_to_vfd_mapping: HashMap<usize, u64> = HashMap::new();
+    let mut virtual_fd_handlers: HashMap<u32, HashSet<(u64, fdtables::FDTableEntry)>> = HashMap::new();
+
+    for (fdkind, fd_set) in poll_data_by_fdkind {
+        if fdkind == FDKIND_KERNEL {
+            // Collect all kernel FDs for atomic polling
+            for (vfd, fdentry) in fd_set {
+                // Use O(1) lookup to find original events for this virtual fd
+                let events = *vfd_to_events.get(&(vfd as i32)).unwrap_or(&0);
+
+                let kernel_index = all_kernel_pollfds.len();
+                kernel_to_vfd_mapping.insert(kernel_index, vfd);
+                
+                all_kernel_pollfds.push(pollfd {
+                    fd: fdentry.underfd as i32,
+                    events,
+                    revents: 0,
+                });
+            }
+        } else {
+            // Store virtual FDs for separate handling
+            virtual_fd_handlers.insert(fdkind, fd_set);
+        }
+    }
+
+    // Track time for consistent timeout behavior across operations
+    let start_time = if original_timeout > 0 { Some(Instant::now()) } else { None };
+
+    // Atomic poll operation for all kernel-backed FDs
+    if !all_kernel_pollfds.is_empty() {
+        let ret = unsafe {
+            libc::poll(
+                all_kernel_pollfds.as_mut_ptr(),
+                all_kernel_pollfds.len() as libc::nfds_t,
+                original_timeout,
+            )
+        };
+
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "poll_syscall");
+        }
+
+        // Convert kernel results back to virtual fds
+        for (kernel_index, kernel_pollfd) in all_kernel_pollfds.iter().enumerate() {
+            if kernel_pollfd.revents != 0 {
+                if let Some(&virtual_fd) = kernel_to_vfd_mapping.get(&kernel_index) {
+                    // Use O(1) lookup to update original user array
+                    if let Some(&array_index) = vfd_to_index.get(&(virtual_fd as i32)) {
+                        fds_slice[array_index].revents = kernel_pollfd.revents;
+                        total_ready += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Handle virtual FDs (non-kernel) with remaining timeout
+    for (fdkind, fd_set) in virtual_fd_handlers {
+        // Calculate remaining timeout
+        let remaining_timeout = if let Some(start) = start_time {
+            let elapsed_ms = start.elapsed().as_millis() as i32;
+            if original_timeout < 0 {
+                original_timeout // Infinite timeout remains infinite
+            } else {
+                std::cmp::max(0, original_timeout - elapsed_ms)
+            }
+        } else {
+            original_timeout
+        };
+
+        // For now, we only handle FDKIND_KERNEL. Other fdkinds would need
+        // specialized implementations based on their type (e.g., in-memory pipes, 
+        // virtual sockets, etc.). This is where future extensions would go.
+        match fdkind {
+            // Future: Handle other fdkinds here
+            // FDKIND_PIPE => handle_virtual_pipe_poll(fd_set, remaining_timeout),
+            // FDKIND_SOCKET => handle_virtual_socket_poll(fd_set, remaining_timeout),
+            _ => {
+                // For unhandled fdkinds, mark as ready for now to avoid blocking indefinitely
+                // This preserves existing behavior while being explicit about the limitation
+                for (vfd, _fdentry) in fd_set {
+                    // Use O(1) lookup to update result
+                    if let Some(&array_index) = vfd_to_index.get(&(vfd as i32)) {
+                        // Set POLLERR to indicate this fdkind is not yet implemented
+                        fds_slice[array_index].revents = libc::POLLERR as i16;
+                        total_ready += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    total_ready
 }
 
-pub fn clock_gettime_syscall(
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/select.2.html
+///
+/// Linux `select()` syscall monitors multiple file descriptors, waiting until one or more become ready 
+/// for I/O operation. Since we implement a file descriptor management subsystem (called `fdtables`), we 
+/// convert virtual file descriptors to kernel file descriptors, perform atomic operations across all fdkinds, 
+/// then convert results back.
+///
+/// ## Arguments:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier.
+///     - nfds_arg: highest-numbered file descriptor in any of the three sets, plus 1.
+///     - readfds_arg: pointer to fd_set for monitoring read readiness (user's perspective).
+///     - writefds_arg: pointer to fd_set for monitoring write readiness (user's perspective).
+///     - exceptfds_arg: pointer to fd_set for monitoring exceptional conditions (user's perspective).
+///     - timeout_arg: pointer to timeval structure specifying timeout (user's perspective).
+///
+/// ## Returns:
+///     - positive value: number of file descriptors ready for I/O
+///     - 0: timeout occurred with no file descriptors ready  
+///     - negative value: error occurred (errno set)
+pub fn select_syscall(
     cageid: u64,
-    clockid_arg: u64,
-    clockid_cageid: u64,
-    tp_arg: u64,
-    tp_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
+    nfds_arg: u64,
+    nfds_cageid: u64,
+    readfds_arg: u64,
+    readfds_cageid: u64,
+    writefds_arg: u64,
+    writefds_cageid: u64,
+    exceptfds_arg: u64,
+    exceptfds_cageid: u64,
+    timeout_arg: u64,
+    timeout_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
-    // let tp = sc_convert_sysarg_to_usize(tp_arg, tp_cageid, cageid);
-    let tp = sc_convert_addr_to_host(tp_arg, tp_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "clock_gettime", "Invalide Cage ID");
+    // Validate unused arguments
+    if !sc_unusedarg(arg6, arg6_cageid) {
+        return syscall_error(Errno::EFAULT, "select_syscall", "Invalid Cage ID");
     }
 
-    let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
+    // Convert arguments
+    let nfds = sc_convert_sysarg_to_i32(nfds_arg, nfds_cageid, cageid);
 
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "clock_gettime");
+    // Basic bounds checking
+    if nfds < 0 || nfds > 1024 {
+        return syscall_error(Errno::EINVAL, "select_syscall", "Invalid nfds value");
     }
 
-    ret
+    // Convert fd_set pointers (they can be null)
+    let readfds_ptr = if readfds_arg == 0 { 
+        std::ptr::null_mut() 
+    } else { 
+        sc_convert_buf(readfds_arg, readfds_cageid, cageid) as *mut fd_set 
+    };
+    
+    let writefds_ptr = if writefds_arg == 0 { 
+        std::ptr::null_mut() 
+    } else { 
+        sc_convert_buf(writefds_arg, writefds_cageid, cageid) as *mut fd_set 
+    };
+    
+    let exceptfds_ptr = if exceptfds_arg == 0 { 
+        std::ptr::null_mut() 
+    } else { 
+        sc_convert_buf(exceptfds_arg, exceptfds_cageid, cageid) as *mut fd_set 
+    };
+
+    let timeout_ptr = if timeout_arg == 0 { 
+        std::ptr::null_mut() 
+    } else { 
+        sc_convert_buf(timeout_arg, timeout_cageid, cageid) as *mut timeval 
+    };
+
+    // Convert fd_set pointers to Options for fdtables API
+    let readfds_opt = if readfds_ptr.is_null() { 
+        None 
+    } else { 
+        Some(unsafe { *readfds_ptr }) 
+    };
+    
+    let writefds_opt = if writefds_ptr.is_null() { 
+        None 
+    } else { 
+        Some(unsafe { *writefds_ptr }) 
+    };
+    
+    let exceptfds_opt = if exceptfds_ptr.is_null() { 
+        None 
+    } else { 
+        Some(unsafe { *exceptfds_ptr }) 
+    };
+
+    // Store original timeout for time tracking
+    let original_timeout = if timeout_ptr.is_null() {
+        None
+    } else {
+        Some(unsafe { *timeout_ptr })
+    };
+
+    // Define which fdkinds to handle with kernel select (focusing on FDKIND_KERNEL)
+    let handled_fdkinds = HashSet::from([FDKIND_KERNEL]);
+
+    // Prepare bitmasks for select using fdtables API
+    let (bitmask_tables, unhandled_tables, mapping_table) = match fdtables::prepare_bitmasks_for_select(
+        cageid, 
+        nfds as u64, 
+        readfds_opt, 
+        writefds_opt, 
+        exceptfds_opt, 
+        &handled_fdkinds
+    ) {
+        Ok(result) => result,
+        Err(e) => {
+            // Handle invalid file descriptors by clearing all sets and returning error
+            if !readfds_ptr.is_null() { 
+                unsafe { libc::FD_ZERO(&mut *readfds_ptr); } 
+            }
+            if !writefds_ptr.is_null() { 
+                unsafe { libc::FD_ZERO(&mut *writefds_ptr); } 
+            }
+            if !exceptfds_ptr.is_null() { 
+                unsafe { libc::FD_ZERO(&mut *exceptfds_ptr); } 
+            }
+            return syscall_error(Errno::EBADF, "select_syscall", "Invalid file descriptor");
+        }
+    };
+
+    // Track time for consistent timeout behavior across operations
+    let start_time = if original_timeout.is_some() { Some(Instant::now()) } else { None };
+
+    let mut total_ready = 0i32;
+    let mut result_read_fds: Option<fd_set> = None;
+    let mut result_write_fds: Option<fd_set> = None;
+    let mut result_except_fds: Option<fd_set> = None;
+
+    // Collect all kernel operations for atomic execution
+    let mut kernel_ops: Vec<(u32, i32, fd_set, Option<fd_set>, Option<fd_set>)> = Vec::new();
+    let mut virtual_fd_handlers: HashMap<u32, (Option<fd_set>, Option<fd_set>, Option<fd_set>)> = HashMap::new();
+
+    for (fdkind, (nfds_kernel, kernel_readfds)) in bitmask_tables[0].iter() {
+        let kernel_writefds = bitmask_tables[1].get(fdkind).map(|(_, fds)| *fds);
+        let kernel_exceptfds = bitmask_tables[2].get(fdkind).map(|(_, fds)| *fds);
+        
+        if *fdkind == FDKIND_KERNEL {
+            // Collect kernel operations for atomic execution
+            kernel_ops.push((*fdkind, *nfds_kernel as i32, *kernel_readfds, kernel_writefds, kernel_exceptfds));
+        } else {
+            // Store virtual FD operations for separate handling
+            virtual_fd_handlers.insert(*fdkind, (Some(*kernel_readfds), kernel_writefds, kernel_exceptfds));
+        }
+    }
+
+    // Execute atomic kernel select operations
+    for (fdkind, nfds_kernel, mut kernel_readfds, kernel_writefds, kernel_exceptfds) in kernel_ops {
+        // Calculate remaining timeout
+        let current_timeout_ptr = if let (Some(start), Some(orig_timeout)) = (start_time, original_timeout) {
+            let elapsed = start.elapsed();
+            let elapsed_secs = elapsed.as_secs() as i64;
+            let elapsed_usecs = elapsed.subsec_micros() as i64;
+            
+            let remaining_secs = orig_timeout.tv_sec - elapsed_secs;
+            let remaining_usecs = orig_timeout.tv_usec - elapsed_usecs;
+            
+            if remaining_secs < 0 || (remaining_secs == 0 && remaining_usecs <= 0) {
+                // Timeout already elapsed, use zero timeout
+                let mut zero_timeout = timeval { tv_sec: 0, tv_usec: 0 };
+                &mut zero_timeout as *mut timeval
+            } else {
+                // Adjust for any negative microseconds
+                let (adj_secs, adj_usecs) = if remaining_usecs < 0 {
+                    (remaining_secs - 1, remaining_usecs + 1_000_000)
+                } else {
+                    (remaining_secs, remaining_usecs)
+                };
+                
+                let mut adjusted_timeout = timeval { tv_sec: adj_secs, tv_usec: adj_usecs };
+                &mut adjusted_timeout as *mut timeval
+            }
+        } else {
+            timeout_ptr
+        };
+
+        // Call kernel select for this fdkind
+        let ret = unsafe {
+            libc::select(
+                nfds_kernel,
+                &mut kernel_readfds as *mut fd_set,
+                kernel_writefds.as_ref().map_or(std::ptr::null_mut(), |fds| fds as *const fd_set as *mut fd_set),
+                kernel_exceptfds.as_ref().map_or(std::ptr::null_mut(), |fds| fds as *const fd_set as *mut fd_set),
+                current_timeout_ptr,
+            )
+        };
+
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "select_syscall");
+        }
+
+        if ret > 0 {
+            // Convert results back to virtual fd_sets and accumulate results
+            
+            // Handle read fds
+            if !readfds_ptr.is_null() {
+                let (read_count, virt_readfds) = fdtables::get_one_virtual_bitmask_from_select_result(
+                    fdkind, 
+                    nfds as u64, 
+                    Some(kernel_readfds), 
+                    unhandled_tables[0].get(&fdkind).cloned().unwrap_or_default(), 
+                    result_read_fds.or(readfds_opt), 
+                    &mapping_table
+                );
+                
+                if read_count > 0 {
+                    result_read_fds = virt_readfds;
+                    total_ready += read_count as i32;
+                }
+            }
+
+            // Handle write fds  
+            if !writefds_ptr.is_null() && kernel_writefds.is_some() {
+                let (write_count, virt_writefds) = fdtables::get_one_virtual_bitmask_from_select_result(
+                    fdkind, 
+                    nfds as u64, 
+                    kernel_writefds, 
+                    unhandled_tables[1].get(&fdkind).cloned().unwrap_or_default(), 
+                    result_write_fds.or(writefds_opt), 
+                    &mapping_table
+                );
+                
+                if write_count > 0 {
+                    result_write_fds = virt_writefds;
+                    total_ready += write_count as i32;
+                }
+            }
+
+            // Handle except fds
+            if !exceptfds_ptr.is_null() && kernel_exceptfds.is_some() {
+                let (except_count, virt_exceptfds) = fdtables::get_one_virtual_bitmask_from_select_result(
+                    fdkind, 
+                    nfds as u64, 
+                    kernel_exceptfds, 
+                    unhandled_tables[2].get(&fdkind).cloned().unwrap_or_default(), 
+                    result_except_fds.or(exceptfds_opt), 
+                    &mapping_table
+                );
+                
+                if except_count > 0 {
+                    result_except_fds = virt_exceptfds;
+                    total_ready += except_count as i32;
+                }
+            }
+        }
+    }
+
+    // Handle virtual FDs (non-kernel) - for future fdkind implementations
+    for (fdkind, (_read_set, _write_set, _except_set)) in virtual_fd_handlers {
+        // Calculate remaining timeout (similar to above)
+        // For now, we only handle FDKIND_KERNEL. Other fdkinds would need
+        // specialized implementations here.
+        match fdkind {
+            // Future: Handle other fdkinds here
+            // FDKIND_PIPE => handle_virtual_pipe_select(...),
+            // FDKIND_SOCKET => handle_virtual_socket_select(...),
+            _ => {
+                // For unhandled fdkinds, we don't mark them as ready
+                // This avoids false positives but may cause blocking if only
+                // virtual FDs are being monitored
+            }
+        }
+    }
+
+    // Update user's fd_sets with the final results
+    if !readfds_ptr.is_null() {
+        unsafe { 
+            *readfds_ptr = result_read_fds.unwrap_or_else(|| {
+                let mut empty_set = std::mem::zeroed();
+                libc::FD_ZERO(&mut empty_set);
+                empty_set
+            });
+        }
+    }
+    
+    if !writefds_ptr.is_null() {
+        unsafe { 
+            *writefds_ptr = result_write_fds.unwrap_or_else(|| {
+                let mut empty_set = std::mem::zeroed();
+                libc::FD_ZERO(&mut empty_set);
+                empty_set
+            });
+        }
+    }
+    
+    if !exceptfds_ptr.is_null() {
+        unsafe { 
+            *exceptfds_ptr = result_except_fds.unwrap_or_else(|| {
+                let mut empty_set = std::mem::zeroed();
+                libc::FD_ZERO(&mut empty_set);
+                empty_set
+            });
+        }
+    }
+
+    total_ready
 }
