@@ -19,7 +19,7 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     env:
-      REPORT_PATH_IN_IMAGE: /workspace/report.html
+      REPORT_PATH_IN_IMAGE: /report.html
       REPORT_LOCAL_DIR: test-reports
       REPORT_LOCAL_FILE: wasm-e2e-report.html
       
