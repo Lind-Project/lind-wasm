@@ -1,5 +1,36 @@
 #!/usr/bin/env bash
+
 # scripts/clippy_report_html.sh
+#
+# -----------------------------------------------------------------------------
+# Clippy → HTML Report Generator
+#
+# USAGE (from project root):
+#   ./scripts/clippy_report_generator.sh [--manifest-path <path>] [--out <file>]
+#
+# DEFAULTS (resolved relative to the script’s directory):
+#   --manifest-path  $SCRIPT_DIR/../src/wasmtime/Cargo.toml
+#   --out            $SCRIPT_DIR/../clippy_report.html
+#
+# EXAMPLES:
+#   # 1) Standard run from repo root, uses defaults:
+#   ./scripts/clippy_report_generator.sh
+#
+#   # 2) Point at a different Cargo.toml:
+#   ./scripts/clippy_report_generator.sh --manifest-path ./crates/foo/Cargo.toml
+#
+#   # 3) Write the report someplace else:
+#   ./scripts/clippy_report_generator.sh --out ./target/clippy_report.html
+#
+# REQUIREMENTS:
+#   - cargo + clippy component installed
+#   - jq, sed, grep (POSIX-ish environment)
+#
+# EXIT CODE:
+#   Mirrors clippy’s status (0 on success, non-zero on clippy failure).
+# -----------------------------------------------------------------------------
+
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
