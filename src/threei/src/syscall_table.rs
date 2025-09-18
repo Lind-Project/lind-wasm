@@ -10,7 +10,8 @@ use rawposix::fs_calls::{
     brk_syscall, sbrk_syscall, fcntl_syscall, write_syscall, clock_gettime_syscall,
     fstat_syscall, stat_syscall, lseek_syscall, pread_syscall, pwrite_syscall, writev_syscall,
     ftruncate_syscall, getdents_syscall, chdir_syscall, fchdir_syscall, rmdir_syscall,
-    chmod_syscall, fchmod_syscall, fstatfs_syscall,
+    chmod_syscall, fchmod_syscall, fstatfs_syscall, getcwd_syscall, truncate_syscall, dup_syscall,
+    dup2_syscall, futex_syscall,
 };
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall,
@@ -31,6 +32,8 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (17, pread_syscall),
     (18, pwrite_syscall),
     (20, writev_syscall),
+    (32, dup_syscall),
+    (41, dup2_syscall),
     (39, getpid_syscall),
     (57, fork_syscall),
     (59, exec_syscall),
@@ -38,8 +41,10 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (61, wait_syscall),
     (61, waitpid_syscall),
     (72, fcntl_syscall),
+    (76, truncate_syscall),
     (77, ftruncate_syscall),
     (78, getdents_syscall),
+    (79, getcwd_syscall),
     (80, chdir_syscall),
     (81, fchdir_syscall),
     (83, mkdir_syscall),
@@ -47,6 +52,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (90, chmod_syscall),
     (91, fchmod_syscall),
     (138, fstatfs_syscall),
+    (202, futex_syscall),
     (228, clock_gettime_syscall),
     (1004, sbrk_syscall),
 ];

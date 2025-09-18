@@ -217,6 +217,56 @@ pub fn close_syscall(
     }
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/futex.2.html
+///
+/// The Linux `futex()` syscall provides a mechanism for fast user-space locking. It allows a process or thread
+/// to wait for or wake another process or thread on a shared memory location without invoking heavy kernel-side
+/// synchronization primitives unless contention arises. This implementation wraps the futex syscall, allowing
+/// direct invocation with the relevant arguments passed from the current cage context.
+///
+/// Input:
+///     - cageid: current cageid
+///     - uaddr_arg: pointer to the futex word in user memory
+///     - futex_op_arg: operation code indicating futex command type
+///     - val_arg: value expected at uaddr or the number of threads to wake
+///     - val2_arg: timeout or other auxiliary parameter depending on operation
+///     - uaddr2_arg: second address used for requeueing operations
+///     - val3_arg: additional value for some futex operations
+///
+/// Return:
+///     - On success: 0 or number of woken threads depending on futex operation
+///     - On failure: a negative errno value indicating the syscall error
+pub fn futex_syscall(
+    cageid: u64,
+    uaddr_arg: u64,
+    uaddr_cageid: u64,
+    futex_op_arg: u64,
+    futex_op_cageid: u64,
+    val_arg: u64,
+    val_cageid: u64,
+    val2_arg: u64,
+    val2_cageid: u64,
+    uaddr2_arg: u64,
+    uaddr2_cageid: u64,
+    val3_arg: u64,
+    val3_cageid: u64,
+) -> i32{
+    let uaddr = sc_convert_uaddr_to_host(uaddr_arg, uaddr_cageid, cageid);
+    let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
+    let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
+    let val2 = sc_convert_sysarg_to_u32(val2_arg, val2_cageid, cageid);
+    let uaddr2 = sc_convert_sysarg_to_u32(uaddr2_arg, uaddr2_cageid, cageid);
+    let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
+
+    let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3)  as i32 };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "futex");
+    }
+    ret
+}
+
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/write.2.html
 ///
 /// Linux `write()` syscall attempts to write `count` bytes from the buffer pointed to by `buf` to the file associated
@@ -1100,6 +1150,95 @@ pub fn clock_gettime_syscall(
 }
 
 
+pub fn dup_syscall(
+    cageid: u64,
+    virtual_fd: u64,
+    vfd_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "dup", "Invalide Cage ID");
+    }
+
+    if virtual_fd < 0 {
+        return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
+    }
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd as u64);
+    if wrappedvfd.is_err() {
+        return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
+    }
+    let vfd = wrappedvfd.unwrap();
+    let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
+    let ret_virtualfd =
+        fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
+    return ret_virtualfd as i32;
+}
+
+pub fn dup2_syscall(
+    cageid: u64,
+    old_virtualfd: u64,
+    old_vfd_cageid: u64,
+    new_virtualfd: u64,
+    new_vfd_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "dup2", "Invalide Cage ID");
+    }
+
+    if old_virtualfd < 0 || new_virtualfd < 0 {
+        return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
+    }
+
+    match fdtables::translate_virtual_fd(cageid, old_virtualfd) {
+        Ok(old_vfd) => {
+            let new_kernelfd = unsafe { libc::dup(old_vfd.underfd as i32) };
+            // Map new kernel fd with provided kernel fd
+            let _ret_kernelfd = unsafe { libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
+            let _ = fdtables::get_specific_virtual_fd(
+                cageid,
+                new_virtualfd,
+                old_vfd.fdkind,
+                new_kernelfd as u64,
+                false,
+                old_vfd.perfdinfo,
+            )
+            .unwrap();
+            return new_virtualfd as i32;
+        }
+        Err(_e) => {
+            return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
+        }
+    }
+}
+
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fchdir.2.html
 ///
 /// Linux `fchdir()` syscall changes the current working directory of the calling process to the
@@ -1147,6 +1286,20 @@ pub fn fchdir_syscall(
     if ret < 0 {
         return handle_errno(get_errno(), "fchdir");
     }
+
+    // Update the cage's current working directory
+    // We need to get the current working directory from the kernel to update the cage
+    let mut cwd_buf = [0u8; 1024];
+    let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut i8, cwd_buf.len()) };
+    if !cwd_ptr.is_null() {
+        if let Some(cage) = get_cage(cageid) {
+            let mut cwd = cage.cwd.write();
+            *cwd = Arc::new(PathBuf::from(
+                unsafe { std::ffi::CStr::from_ptr(cwd_ptr) }.to_string_lossy().as_ref()
+            ));
+        }
+    }
+
     ret
 }
 
@@ -2005,4 +2158,116 @@ pub fn fchmod_syscall(
         return handle_errno(errno, "fchmod");
     }
     ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getcwd.2.html
+///
+/// Linux `getcwd()` syscall returns an absolute pathname that is the current working directory of the calling process.
+/// The pathname is returned as a null-terminated string in the buffer pointed to by `buf`. Since path seen by user
+/// is different from actual path on host, we need to convert the buffer pointer from cage memory to host memory
+/// before invoking the kernel's `libc::getcwd()` function.
+///
+/// Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - buf_arg: pointer to a buffer where the current working directory path will be stored (user's perspective)
+///     - size_arg: the size of the buffer in bytes
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// Return:
+///     - On success, returns a pointer to the buffer containing the current working directory path
+///     - On error, returns NULL and errno is set to indicate the error
+pub fn getcwd_syscall(
+    cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    size_arg: u64,
+    size_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
+    if buf.is_null() {
+        return syscall_error(Errno::EFAULT, "getcwd", "Buffer is null");
+    }
+
+    let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
+    if size == 0 {
+        return syscall_error(Errno::EINVAL, "getcwd", "Size cannot be zero");
+    }
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "getcwd", "Invalid Cage ID");
+    }
+
+    let ret = unsafe { libc::getcwd(buf as *mut i8, size) };
+    if ret.is_null() {
+        let errno = get_errno();
+        return handle_errno(errno, "getcwd");
+    }
+
+    // getcwd returns the buffer pointer on success, but we need to return the buffer address
+    // in the user's perspective (cage memory address)
+    buf_arg as i32
+}
+
+/// Truncate a file to a specified length
+/// 
+/// # Arguments
+///     - cageid: current cage identifier
+///     - path_arg: pointer to the pathname of the file to truncate
+///     - path_cageid: cage identifier for the path argument
+///     - length_arg: the new length to truncate the file to
+///     - length_cageid: cage identifier for the length argument
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+pub fn truncate_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    length_arg: u64,
+    length_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments
+    if !(sc_unusedarg(arg3, arg3_cageid)
+         && sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid)) {
+        return syscall_error(Errno::EFAULT, "truncate", "Invalid Cage ID");
+    }
+
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    if path.is_empty() {
+        return syscall_error(Errno::EFAULT, "truncate", "Invalid path");
+    }
+    
+    let length = sc_convert_sysarg_to_i64(length_arg, length_cageid, cageid);
+
+    // Call libc truncate
+    let ret = unsafe { libc::truncate(path.as_ptr() as *const i8, length) };
+    
+    if ret == -1 {
+        let errno = get_errno();
+        return handle_errno(errno, "truncate");
+    }
+
+    0
 }
