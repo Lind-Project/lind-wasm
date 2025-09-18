@@ -1303,6 +1303,88 @@ pub fn fstat_syscall(
     0
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/stat.2.html
+///
+/// Linux `stat()` syscall returns information about a file, using the file path instead of a file descriptor.
+/// This is similar to fstat but takes a pathname instead of a file descriptor.
+///
+/// ## Arguments:
+///     - cageid: current cage
+///     - path_arg: pointer to the pathname string (user's perspective)
+///     - stat_arg: pointer to a stat structure where the file information will be stored (user's perspective)
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+pub fn stat_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    stat_arg: u64,
+    stat_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Convert path from guest memory to host string
+    let path_str = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    if path_str.is_empty() {
+        return syscall_error(Errno::EFAULT, "stat", "Invalid path");
+    }
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "stat", "Invalid Cage ID");
+    }
+
+    // 1) Call host stat into a local host variable
+    let mut host_stat: libc::stat = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::stat(path_str.as_ptr(), &mut host_stat as *mut libc::stat) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "stat");
+    }
+
+    // 2) Convert to ABI-stable StatData and copy into guest buffer
+    let translated: StatData = StatData {
+        st_dev: host_stat.st_dev as u64,
+        st_ino: host_stat.st_ino as usize,
+        st_mode: host_stat.st_mode as u32,
+        st_nlink: host_stat.st_nlink as u32,
+        st_uid: host_stat.st_uid as u32,
+        st_gid: host_stat.st_gid as u32,
+        st_rdev: host_stat.st_rdev as u64,
+        st_size: host_stat.st_size as usize,
+        st_blksize: host_stat.st_blksize as i32,
+        st_blocks: host_stat.st_blocks as u32,
+        // The StatData comment notes we don't currently populate time bits
+        st_atim: (0, 0),
+        st_mtim: (0, 0),
+        st_ctim: (0, 0),
+    };
+
+    // Validate guest buffer range and writability
+    let needed_size = std::mem::size_of::<StatData>();
+    if check_addr(stat_cageid, stat_arg, needed_size, PROT_WRITE).is_err() {
+        return syscall_error(Errno::EFAULT, "stat", "stat buffer not writable or too small");
+    }
+
+    let dest_ptr = sc_convert_addr_to_host(stat_arg, stat_cageid, cageid) as *mut u8;
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            &translated as *const StatData as *const u8,
+            dest_ptr,
+            needed_size,
+        );
+    }
+
+    0
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/ftruncate.2.html
 ///
 /// Linux `ftruncate()` syscall truncates the file referred to by the file descriptor `fd` to be at most
