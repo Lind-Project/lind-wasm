@@ -27,4 +27,27 @@
 /* We are nscd, so we don't want to be talking to ourselves.  */
 #undef	USE_NSCD
 
-#include <nss/getXXbyYY_r.c>
+// TODO: normal getpwuid routine is not working correctly for some reason
+// currently hardcoded the value but we should fix this in the future
+// #include <nss/getXXbyYY_r.c>
+
+int
+__getpwuid_r (uid_t uid, struct passwd *resbuf, char *buffer,
+   size_t buflen, struct passwd **result)
+{
+   if(uid != 1000) return -1;
+
+   resbuf->pw_name = "lind";
+   resbuf->pw_passwd = "";
+   resbuf->pw_uid = 1000;
+   resbuf->pw_gid = 1000;
+   resbuf->pw_gecos = "lind";
+   resbuf->pw_dir = "/home";
+   resbuf->pw_shell = "/bin/sh";
+
+   result = &resbuf;
+
+   return 0;
+}
+
+weak_alias (__getpwuid_r, getpwuid_r)
