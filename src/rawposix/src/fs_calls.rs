@@ -1,4 +1,8 @@
+// use parking_lot::RwLock;
+// use std::sync::atomic::{AtomicI32, AtomicU64};
+// use std::sync::Arc;
 use libc::c_void;
+// Updated imports - using path_conversion for filesystem operations
 use typemap::datatype_conversion::*;
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
@@ -74,14 +78,14 @@ pub fn open_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "open", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "open_syscall", "Invalide Cage ID");
     }
 
     // Get the kernel fd first
     let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
 
     if kernel_fd < 0 {
-        return handle_errno(get_errno(), "open");
+        return handle_errno(get_errno(), "open_syscall");
     }
 
     // Check if `O_CLOEXEC` has been est
@@ -96,7 +100,7 @@ pub fn open_syscall(
         0,
     ) {
         Ok(virtual_fd) => virtual_fd as i32,
-        Err(_) => syscall_error(Errno::EMFILE, "open", "Too many files opened"),
+        Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
     }
 }
 
@@ -109,12 +113,12 @@ pub fn open_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment.
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment.
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective).
 ///     - count_arg: the maximum number of bytes to read from the file descriptor.
 pub fn read_syscall(
     cageid: u64,
-    vfd_arg: u64,
+    virtual_fd: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -128,7 +132,7 @@ pub fn read_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
-    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
     if kernel_fd == -1 {
         return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
     } else if kernel_fd == -9 {
@@ -172,11 +176,11 @@ pub fn read_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment to be closed.
+///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
 pub fn close_syscall(
     cageid: u64,
-    vfd_arg: u64,
+    virtual_fd: u64,
     vfd_cageid: u64, 
     arg2: u64,
     arg2_cageid: u64,
@@ -189,15 +193,14 @@ pub fn close_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    if !(sc_unusedarg(arg2, arg2_cageid)
-         && sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg3, arg3_cageid)
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
     }
 
-    match fdtables::close_virtualfd(cageid, vfd_arg) {
+    match fdtables::close_virtualfd(cageid, virtual_fd) {
         Ok(()) => 0,
         Err(e) => {
             if e == Errno::EBADFD as u64 {
@@ -209,6 +212,69 @@ pub fn close_syscall(
             }
         }
     }
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/write.2.html
+///
+/// Linux `write()` syscall attempts to write `count` bytes from the buffer pointed to by `buf` to the file associated
+/// with the open file descriptor, `fd`. RawPOSIX first converts virtual fd to kernel fd due to the `fdtable` subsystem, second
+/// translates the `buf_arg` pointer to actual system pointer
+///
+/// Input:
+///     - cageid: current cageid
+///     - virtual_fd: virtual file descriptor, needs to be translated kernel fd for future kernel operation
+///     - buf_arg: pointer points to a buffer that stores the data
+///     - count_arg: length of the buffer
+///
+/// Output:
+///     - Upon successful completion of this call, we return the number of bytes written. This number will never be greater
+///         than `count`. The value returned may be less than `count` if the write_syscall() was interrupted by a signal, or
+///         if the file is a pipe or FIFO or special file and has fewer than `count` bytes immediately available for writing.
+pub fn write_syscall(
+    cageid: u64,
+    virtual_fd: u64,
+    vfd_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    count_arg: u64,
+    count_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+
+    if kernel_fd == -1 {
+        return syscall_error(Errno::EFAULT, "write", "Invalid Cage ID");
+    } else if kernel_fd == -9 {
+        return syscall_error(Errno::EBADF, "write", "Bad File Descriptor");
+    }
+
+    let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
+    let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "write", "Invalide Cage ID");
+    }
+
+    // Early return
+    if count == 0 {
+        return 0;
+    }
+
+    let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "write");
+    }
+    return ret;
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/mkdir.2.html
@@ -251,7 +317,7 @@ pub fn mkdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "mkdir", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "mkdir_syscall", "Invalide Cage ID");
     }
 
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
@@ -969,8 +1035,13 @@ pub fn fcntl_syscall(
                 Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
             }
         }
-        // todo: F_GETOWN and F_SETOWN commands are not implemented yet
+        // Return (as the function result) the process ID or process
+        // group ID currently receiving SIGIO and SIGURG signals for
+        // events on file descriptor fd.
         (F_GETOWN, ..) => DEFAULT_GID as i32,
+        // Set the process ID or process group ID that will receive
+        // SIGIO and SIGURG signals for events on the file descriptor
+        // fd.
         (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
             // Get fdtable entry
@@ -986,4 +1057,41 @@ pub fn fcntl_syscall(
             ret
         }
     }
+}
+
+pub fn clock_gettime_syscall(
+    cageid: u64,
+    clockid_arg: u64,
+    clockid_cageid: u64,
+    tp_arg: u64,
+    tp_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
+    // let tp = sc_convert_sysarg_to_usize(tp_arg, tp_cageid, cageid);
+    let tp = sc_convert_addr_to_host(tp_arg, tp_cageid, cageid);
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "clock_gettime", "Invalide Cage ID");
+    }
+
+    let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "clock_gettime");
+    }
+
+    ret
 }
