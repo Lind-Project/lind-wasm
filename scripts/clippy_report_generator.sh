@@ -2,8 +2,11 @@
 # scripts/clippy_report_html.sh
 set -euo pipefail
 
-MANIFEST_PATH="src/wasmtime/Cargo.toml"
-OUT_HTML="clippy_report.html"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANIFEST_PATH="$SCRIPT_DIR/../src/wasmtime/Cargo.toml"
+echo "Manifest path: $MANIFEST_PATH"
+OUT_HTML="$SCRIPT_DIR/../clippy_report.html"
+echo "Output HTML: $OUT_HTML"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
