@@ -18,6 +18,11 @@ jobs:
     # It is true when the PR is not a draft (i.e., “Ready for review”).
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    env:
+      REPORT_PATH_IN_IMAGE: /workspace/report.html
+      REPORT_LOCAL_DIR: test-reports
+      REPORT_LOCAL_FILE: wasm-e2e-report.html
+      
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
@@ -28,3 +33,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           file: Docker/Dockerfile.e2e
+          load: true
+          tags: e2e:latest
+      - name: Extract HTML report from built image
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPORT_LOCAL_DIR"
+          cid="$(docker create e2e:latest)"
+          trap 'docker rm -f "$cid" > /dev/null 2>&1 || true' EXIT
+          docker cp "$cid":"$REPORT_PATH_IN_IMAGE" "$REPORT_LOCAL_DIR/$REPORT_LOCAL_FILE"
+          ls -l "${REPORT_LOCAL_DIR}/${REPORT_LOCAL_FILE}"
+      - name: Upload HTML report artifact to report
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-e2e-report
+          path: ${{ env.REPORT_LOCAL_DIR }}/${{ env.REPORT_LOCAL_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+
+      
