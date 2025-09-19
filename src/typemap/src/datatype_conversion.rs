@@ -3,6 +3,9 @@
 //! This file defines conversion helpers for basic primitive types (e.g., `i32`, `u32`, `i64`).
 //! These functions are used during syscall argument decoding and type-safe interpretation
 //! within the RawPOSIX syscall layer (`src/syscalls/`).
+//! Function naming convention:
+//! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
+//! - All other functions are **internal helpers** (inner functions) used only inside this library.
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
 use fdtables;
 use std::error::Error;
@@ -112,6 +115,9 @@ pub fn get_i32(arg: u64, arg_cageid: u64, cageid: u64) -> i32 {
         panic!("Invalide Cage ID");
     }
 
+    // Check if the upper 32 bits are all 0,
+    // if so, we can safely convert it to u32
+    // Otherwise, we will panic
     if (arg & 0xFFFFFFFF_00000000) != 1 {
         return (arg & 0xFFFFFFFF) as i32;
     }
@@ -156,6 +162,9 @@ pub fn get_u32(arg: u64, arg_cageid: u64, cageid: u64) -> u32 {
         panic!("Invalide Cage ID");
     }
 
+    // Check if the upper 32 bits are all 0,
+    // if so, we can safely convert it to u32
+    // Otherwise, we will panic
     if (arg & 0xFFFFFFFF_00000000) != 1 {
         return (arg & 0xFFFFFFFF) as u32;
     }
@@ -264,6 +273,16 @@ pub fn sc_convert_sysarg_to_i64(arg: u64, arg_cageid: u64, cageid: u64) -> i64 {
     }
 }
 
+/// Convert a raw `u64` argument into a mutable `*mut u8` pointer, with optional
+/// cage ID validation.
+/// 
+/// ## Arguments
+/// - `arg`: The raw 64-bit value to be interpreted as a pointer.
+/// - `arg_cageid`: Cage ID associated with the argument (source).
+/// - `cageid`: Cage ID of the calling context (expected).
+///
+/// ## Returns
+/// - A mutable pointer `*mut u8` corresponding to the given argument.
 pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
     #[cfg(feature = "secure")]
     {
