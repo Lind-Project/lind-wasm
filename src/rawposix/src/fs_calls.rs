@@ -7,7 +7,7 @@ use typemap::datatype_conversion::*;
 use sysdefs::data::fs_struct::{StatData, FSData};
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
-use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
+use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE, SEEK_SET, SEEK_CUR, SEEK_END};
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
@@ -1701,7 +1701,7 @@ pub fn lseek_syscall(
     let whence = sc_convert_sysarg_to_i32(whence_arg, whence_cageid, cageid);
 
     match whence {
-        libc::SEEK_SET | libc::SEEK_CUR | libc::SEEK_END => {},
+        SEEK_SET | SEEK_CUR | SEEK_END => {},
         _ => return syscall_error(Errno::EINVAL, "lseek", "invalid whence parameter"),
     }
 
