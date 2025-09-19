@@ -100,7 +100,7 @@ pub fn open_syscall(
         should_cloexec,
         0,
     ) {
-        Ok(virtual_fd) => virtual_fd as i32,
+        Ok(vfd) => vfd as i32,
         Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
     }
 }
@@ -114,12 +114,12 @@ pub fn open_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment.
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective).
 ///     - count_arg: the maximum number of bytes to read from the file descriptor.
 pub fn read_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -133,7 +133,7 @@ pub fn read_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "read", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -177,11 +177,11 @@ pub fn read_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment to be closed.
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
 pub fn close_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64, 
     arg2: u64,
     arg2_cageid: u64,
@@ -201,7 +201,7 @@ pub fn close_syscall(
         return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
     }
 
-    match fdtables::close_virtualfd(cageid, virtual_fd) {
+    match fdtables::close_virtualfd(cageid, vfd_arg) {
         Ok(()) => 0,
         Err(e) => {
             if e == Errno::EBADFD as u64 {
@@ -273,7 +273,7 @@ pub fn futex_syscall(
 ///
 /// Input:
 ///     - cageid: current cageid
-///     - virtual_fd: virtual file descriptor, needs to be translated kernel fd for future kernel operation
+///     - vfd_arg: virtual file descriptor, needs to be translated kernel fd for future kernel operation
 ///     - buf_arg: pointer points to a buffer that stores the data
 ///     - count_arg: length of the buffer
 ///
@@ -283,7 +283,7 @@ pub fn futex_syscall(
 ///         if the file is a pipe or FIFO or special file and has fewer than `count` bytes immediately available for writing.
 pub fn write_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -296,7 +296,7 @@ pub fn write_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
 
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "write", "Invalid Cage ID");
@@ -412,7 +412,7 @@ pub fn mmap_syscall(
     prot_cageid: u64,
     flags_arg: u64,
     flags_cageid: u64,
-    virtual_fd_arg: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     off_arg: u64,
     off_cageid: u64,
@@ -421,7 +421,7 @@ pub fn mmap_syscall(
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-    let mut fildes = convert_fd_to_host(virtual_fd_arg, vfd_cageid, cageid);
+    let mut fildes = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
     let cage = get_cage(cageid).unwrap();
@@ -581,11 +581,11 @@ pub fn mmap_inner(
     len: usize,
     prot: i32,
     flags: i32,
-    virtual_fd: i32,
+    vfd_arg: i32,
     off: i64,
 ) -> usize {
-    if virtual_fd != -1 {
-        match fdtables::translate_virtual_fd(cageid, virtual_fd as u64) {
+    if vfd_arg != -1 {
+        match fdtables::translate_virtual_fd(cageid, vfd_arg as u64) {
             Ok(kernel_fd) => {
                 let ret = unsafe {
                     libc::mmap(
@@ -924,7 +924,7 @@ pub fn sbrk_syscall(
 ///
 /// ## Arguments
 /// cageid: cage ID associate with virtual file descriptor
-/// virtual_fd: virtual file descriptor
+/// vfd_arg: virtual file descriptor
 ///
 /// ## Return Type
 /// On success:
@@ -936,12 +936,12 @@ pub fn sbrk_syscall(
 ///
 /// On error:
 /// Return error num EBADF(Bad File Descriptor)
-pub fn _fcntl_helper(cageid: u64, virtual_fd: u64) -> Result<fdtables::FDTableEntry, Errno> {
-    if virtual_fd > MAXFD as u64 {
+pub fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry, Errno> {
+    if vfd_arg > MAXFD as u64 {
         return Err(Errno::EBADF);
     }
     // Get underlying kernel fd
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd);
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
     if wrappedvfd.is_err() {
         return Err(Errno::EBADF);
     }
@@ -966,7 +966,7 @@ pub fn _fcntl_helper(cageid: u64, virtual_fd: u64) -> Result<fdtables::FDTableEn
 /// kernel fd, they are redirected to the kernel `fcntl` syscall.
 ///
 /// ## Arguments
-/// virtual_fd: virtual file descriptor
+/// vfd_arg: virtual file descriptor
 /// cmd: The operation
 /// arg: an optional third argument.  Whether or not this argument is required is determined by op.  
 ///
@@ -988,7 +988,7 @@ pub fn _fcntl_helper(cageid: u64, virtual_fd: u64) -> Result<fdtables::FDTableEn
 /// TODO: `F_GETOWN`, `F_SETOWN`, `F_GETOWN_EX`, `F_SETOWN_EX`, `F_GETSIG`, and `F_SETSIG` are used to manage I/O availability signals.
 pub fn fcntl_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     cmd_arg: u64,
     cmd_cageid: u64,
@@ -1012,13 +1012,13 @@ pub fn fcntl_syscall(
     }
 
     match (cmd, arg) {
-        // Duplicate the file descriptor `virtual_fd` using the lowest-numbered
+        // Duplicate the file descriptor `vfd_arg` using the lowest-numbered
         // available file descriptor greater than or equal to `arg`. The operation here
         // is quite similar to `dup_syscall`, for specific operation explanation, see
         // comments on `dup_syscall`.
         (F_DUPFD, arg) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1039,7 +1039,7 @@ pub fn fcntl_syscall(
         // for the duplicate file descriptor.
         (F_DUPFD_CLOEXEC, arg) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1060,7 +1060,7 @@ pub fn fcntl_syscall(
         // Return (as the function result) the file descriptor flags.
         (F_GETFD, ..) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1069,7 +1069,7 @@ pub fn fcntl_syscall(
         // Set the file descriptor flags to the value specified by arg.
         (F_SETFD, arg) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1081,7 +1081,7 @@ pub fn fcntl_syscall(
             }
             // Set virtual fd flag
             let cloexec_flag: bool = arg != 0;
-            match fdtables::set_cloexec(cageid, virtual_fd as u64, cloexec_flag) {
+            match fdtables::set_cloexec(cageid, vfd_arg as u64, cloexec_flag) {
                 Ok(_) => return 0,
                 Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
             }
@@ -1091,7 +1091,7 @@ pub fn fcntl_syscall(
         (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1145,7 +1145,7 @@ pub fn clock_gettime_syscall(
 
 pub fn dup_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     arg2: u64,
     arg2_cageid: u64,
@@ -1167,22 +1167,22 @@ pub fn dup_syscall(
         return syscall_error(Errno::EFAULT, "dup", "Invalid Cage ID");
     }
 
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd as u64);
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg as u64);
     if wrappedvfd.is_err() {
         return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
     }
     let vfd = wrappedvfd.unwrap();
     let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
-    let ret_virtualfd =
+    let ret_vfd =
         fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
-    return ret_virtualfd as i32;
+    return ret_vfd as i32;
 }
 
 pub fn dup2_syscall(
     cageid: u64,
-    old_virtualfd: u64,
+    old_vfd_arg: u64,
     old_vfd_cageid: u64,
-    new_virtualfd: u64,
+    new_vfd_arg: u64,
     new_vfd_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
@@ -1202,21 +1202,21 @@ pub fn dup2_syscall(
         return syscall_error(Errno::EFAULT, "dup2", "Invalid Cage ID");
     }
 
-    match fdtables::translate_virtual_fd(cageid, old_virtualfd) {
+    match fdtables::translate_virtual_fd(cageid, old_vfd_arg) {
         Ok(old_vfd) => {
             let new_kernelfd = unsafe { libc::dup(old_vfd.underfd as i32) };
             // Map new kernel fd with provided kernel fd
             let _ret_kernelfd = unsafe { libc::dup2(old_vfd.underfd as i32, new_kernelfd) };
             let _ = fdtables::get_specific_virtual_fd(
                 cageid,
-                new_virtualfd,
+                new_vfd_arg,
                 old_vfd.fdkind,
                 new_kernelfd as u64,
                 false,
                 old_vfd.perfdinfo,
             )
             .unwrap();
-            return new_virtualfd as i32;
+            return new_vfd_arg as i32;
         }
         Err(_e) => {
             return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
@@ -1235,11 +1235,11 @@ pub fn dup2_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment referring to a directory
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment referring to a directory
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn fchdir_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     arg2: u64,
     arg2_cageid: u64,
@@ -1252,7 +1252,7 @@ pub fn fchdir_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "fchdir", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -1300,13 +1300,13 @@ pub fn fchdir_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - iov_arg: pointer to an array of iovec structures describing the buffers (user's perspective)
 ///     - iovcnt_arg: number of iovec structures in the array
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn writev_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     iov_arg: u64,
     iov_cageid: u64,
@@ -1319,7 +1319,7 @@ pub fn writev_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "writev", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -1366,12 +1366,12 @@ pub fn writev_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - stat_arg: pointer to a stat structure where the file information will be stored (user's perspective)
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn fstat_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     stat_arg: u64,
     stat_cageid: u64,
@@ -1384,7 +1384,13 @@ pub fn fstat_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    // Convert stat_arg to StatData pointer at the very beginning
+    let stat_ptr = stat_arg as *mut StatData;
+    if stat_ptr.is_null() {
+        return syscall_error(Errno::EFAULT, "fstat", "Invalid stat buffer pointer");
+    }
+    
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "fstat", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -1412,8 +1418,7 @@ pub fn fstat_syscall(
         return syscall_error(Errno::EFAULT, "fstat", "stat buffer not writable or too small");
     }
 
-    // 3) Convert stat_arg to StatData pointer and populate directly
-    let stat_ptr = sc_convert_addr_to_host(stat_arg, stat_cageid, cageid) as *mut StatData;
+    // 3) Populate StatData directly
     unsafe {
         sc_populate_statdata_from_libc_stat(stat_ptr, &host_stat);
     }
@@ -1431,12 +1436,12 @@ pub fn fstat_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - length_arg: the desired length in bytes for the file truncation
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn ftruncate_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     length_arg: u64,
     length_cageid: u64,
@@ -1449,7 +1454,7 @@ pub fn ftruncate_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "ftruncate", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -1489,12 +1494,12 @@ pub fn ftruncate_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - statfs_arg: pointer to a statfs structure where the filesystem information will be stored (user's perspective)
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn fstatfs_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     statfs_arg: u64,
     statfs_cageid: u64,
@@ -1507,7 +1512,13 @@ pub fn fstatfs_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    // Convert statfs_arg to FSData pointer at the very beginning
+    let fsdata_ptr = statfs_arg as *mut FSData;
+    if fsdata_ptr.is_null() {
+        return syscall_error(Errno::EFAULT, "fstatfs", "Invalid statfs buffer pointer");
+    }
+    
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "fstatfs", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -1535,8 +1546,7 @@ pub fn fstatfs_syscall(
         return syscall_error(Errno::EFAULT, "fstatfs", "statfs buffer not writable or too small");
     }
 
-    // 3) Convert statfs_arg to FSData pointer and populate directly
-    let fsdata_ptr = sc_convert_addr_to_host(statfs_arg, statfs_cageid, cageid) as *mut FSData;
+    // 3) Populate FSData directly
     unsafe {
         sc_populate_fsdata_from_libc_statfs(fsdata_ptr, &host_statfs);
     }
@@ -1554,13 +1564,13 @@ pub fn fstatfs_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment referring to a directory
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment referring to a directory
 ///     - dirp_arg: pointer to a buffer where the directory entries will be stored (user's perspective)
 ///     - count_arg: size of the buffer pointed to by dirp
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn getdents_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     dirp_arg: u64,
     dirp_cageid: u64,
@@ -1573,7 +1583,7 @@ pub fn getdents_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "getdents", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -1618,13 +1628,13 @@ pub fn getdents_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - offset_arg: the new offset according to the directive whence
 ///     - whence_arg: how to interpret the offset (SEEK_SET, SEEK_CUR, or SEEK_END)
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn lseek_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     offset_arg: u64,
     offset_cageid: u64,
@@ -1637,7 +1647,7 @@ pub fn lseek_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "lseek", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -1683,14 +1693,14 @@ pub fn lseek_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective)
 ///     - count_arg: the maximum number of bytes to read from the file descriptor
 ///     - offset_arg: file offset at which the input/output operation takes place
 ///     - arg5, arg6: additional arguments which are expected to be unused
 pub fn pread_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -1703,7 +1713,7 @@ pub fn pread_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "pread", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -1745,14 +1755,14 @@ pub fn pread_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - buf_arg: pointer to a buffer that stores the data to be written (user's perspective)
 ///     - count_arg: the maximum number of bytes to write to the file descriptor
 ///     - offset_arg: file offset at which the input/output operation takes place
 ///     - arg5, arg6: additional arguments which are expected to be unused
 pub fn pwrite_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -1765,7 +1775,7 @@ pub fn pwrite_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "pwrite", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
@@ -1976,13 +1986,13 @@ pub fn chmod_syscall(
 /// Input:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - mode_arg: the new file permissions to be applied to the file
 ///     - mode_cageid: cage identifier for the mode argument
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 pub fn fchmod_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     mode_arg: u64,
     mode_cageid: u64,
@@ -1995,7 +2005,7 @@ pub fn fchmod_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EINVAL, "fchmod", "Invalid Cage ID");
     } else if kernel_fd == -(Errno::EBADF as i32) {
