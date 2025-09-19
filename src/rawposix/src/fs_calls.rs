@@ -81,7 +81,7 @@ pub fn open_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "open_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "open_syscall", "Invalid Cage ID");
     }
 
     // Get the kernel fd first
@@ -313,7 +313,7 @@ pub fn write_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "write", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "write", "Invalid Cage ID");
     }
 
     // Early return
@@ -370,7 +370,7 @@ pub fn mkdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "mkdir_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "mkdir_syscall", "Invalid Cage ID");
     }
 
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
@@ -662,7 +662,7 @@ pub fn munmap_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "munmap", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "munmap", "Invalid Cage ID");
     }
 
     if len == 0 {
@@ -749,7 +749,7 @@ pub fn brk_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "brk", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "brk", "Invalid Cage ID");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -867,7 +867,7 @@ pub fn sbrk_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "sbrk_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "sbrk_syscall", "Invalid Cage ID");
     }
 
     let cage = get_cage(sbrk_cageid).unwrap();
@@ -1010,7 +1010,7 @@ pub fn fcntl_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "fcntl_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "fcntl_syscall", "Invalid Cage ID");
     }
 
     match (cmd, arg) {
@@ -1136,7 +1136,7 @@ pub fn clock_gettime_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "clock_gettime", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "clock_gettime", "Invalid Cage ID");
     }
 
     let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
@@ -1171,7 +1171,7 @@ pub fn dup_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "dup", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "dup", "Invalid Cage ID");
     }
 
     if virtual_fd < 0 {
@@ -1209,7 +1209,7 @@ pub fn dup2_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "dup2", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "dup2", "Invalid Cage ID");
     }
 
     if old_virtualfd < 0 || new_virtualfd < 0 {
