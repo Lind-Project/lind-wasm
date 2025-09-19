@@ -52,7 +52,7 @@ pub fn fork_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "fork", "Invalide Arguments");
+        return syscall_error(Errno::EFAULT, "fork", "Invalid Arguments");
     }
 
     // Modify the fdtable manually
@@ -119,7 +119,7 @@ pub fn exit_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "exit", "Invalide Arguments");
+        return syscall_error(Errno::EFAULT, "exit", "Invalid Arguments");
     }
 
     let _ = fdtables::remove_cage_from_fdtable(cageid);
@@ -318,7 +318,7 @@ pub fn wait_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "waitpid", "Invalid Arguments");
+        return syscall_error(Errno::EFAULT, "wait", "Invalid Arguments");
     }
     // left type conversion done inside waitpid_syscall
     waitpid_syscall(
@@ -361,7 +361,7 @@ pub fn getpid_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "exec", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "getpid", "Invalid Cage ID");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -396,7 +396,7 @@ pub fn getppid_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "exec", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "getppid", "Invalid Cage ID");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -786,7 +786,7 @@ pub fn sigprocmask_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "sigprocmask_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "sigprocmask_syscall", "Invalid Cage ID");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -1130,7 +1130,7 @@ pub fn exec_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "exec", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "exec", "Invalid Cage ID");
     }
 
     // Empty fd with flag should_cloexec
