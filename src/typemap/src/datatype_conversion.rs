@@ -320,6 +320,7 @@ pub unsafe fn sc_populate_statdata_from_libc_stat(stat_ptr: *mut StatData, libc_
     (*stat_ptr).st_size = libc_stat.st_size as usize;
     (*stat_ptr).st_uid = libc_stat.st_uid;
     // The StatData comment notes we don't currently populate time bits
+    // See: ../../sysdefs/src/data/fs_struct.rs#L46
     (*stat_ptr).st_atim = (0, 0);
     (*stat_ptr).st_mtim = (0, 0);
     (*stat_ptr).st_ctim = (0, 0);
