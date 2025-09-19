@@ -3,7 +3,7 @@
 // use std::sync::Arc;
 use libc::c_void;
 // Updated imports - using path_conversion for filesystem operations
-use typemap::datatype_conversion::*;
+use typemap::datatype_conversion::{sc_populate_statdata_from_libc_stat, sc_populate_fsdata_from_libc_statfs, *};
 use sysdefs::data::fs_struct::{StatData, FSData};
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
@@ -15,6 +15,7 @@ use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOp
 use fdtables;
 use std::path::PathBuf;
 use std::sync::Arc;
+
 
 /// Helper function for close_syscall
 /// 
@@ -136,9 +137,9 @@ pub fn read_syscall(
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
     let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
-    if kernel_fd == -1 {
-        return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
+    if kernel_fd == -(Errno::EINVAL as i32) {
+        return syscall_error(Errno::EINVAL, "read", "Invalid Cage ID");
+    } else if kernel_fd == -(Errno::EBADF as i32) {
         return syscall_error(Errno::EBADF, "read", "Bad File Descriptor");
     }
 
@@ -300,9 +301,9 @@ pub fn write_syscall(
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
 
-    if kernel_fd == -1 {
-        return syscall_error(Errno::EFAULT, "write", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
+    if kernel_fd == -(Errno::EINVAL as i32) {
+        return syscall_error(Errno::EINVAL, "write", "Invalid Cage ID");
+    } else if kernel_fd == -(Errno::EBADF as i32) {
         return syscall_error(Errno::EBADF, "write", "Bad File Descriptor");
     }
 
@@ -1387,9 +1388,9 @@ pub fn fstat_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
-    if kernel_fd == -1 {
-        return syscall_error(Errno::EFAULT, "fstat", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
+    if kernel_fd == -(Errno::EINVAL as i32) {
+        return syscall_error(Errno::EINVAL, "fstat", "Invalid Cage ID");
+    } else if kernel_fd == -(Errno::EBADF as i32) {
         return syscall_error(Errno::EBADF, "fstat", "Bad File Descriptor");
     }
 
@@ -1408,37 +1409,16 @@ pub fn fstat_syscall(
         return handle_errno(get_errno(), "fstat");
     }
 
-    // 2) Convert to ABI-stable StatData and copy into guest buffer
-    let translated: StatData = StatData {
-        st_dev: host_stat.st_dev as u64,
-        st_ino: host_stat.st_ino as usize,
-        st_mode: host_stat.st_mode as u32,
-        st_nlink: host_stat.st_nlink as u32,
-        st_uid: host_stat.st_uid as u32,
-        st_gid: host_stat.st_gid as u32,
-        st_rdev: host_stat.st_rdev as u64,
-        st_size: host_stat.st_size as usize,
-        st_blksize: host_stat.st_blksize as i32,
-        st_blocks: host_stat.st_blocks as u32,
-        // The StatData comment notes we don't currently populate time bits
-        st_atim: (0, 0),
-        st_mtim: (0, 0),
-        st_ctim: (0, 0),
-    };
-
-    // Validate guest buffer range and writability
+    // 2) Validate guest buffer range and writability
     let needed_size = std::mem::size_of::<StatData>();
     if check_addr(stat_cageid, stat_arg, needed_size, PROT_WRITE).is_err() {
         return syscall_error(Errno::EFAULT, "fstat", "stat buffer not writable or too small");
     }
 
-    let dest_ptr = sc_convert_addr_to_host(stat_arg, stat_cageid, cageid) as *mut u8;
+    // 3) Convert stat_arg to StatData pointer and populate directly
+    let stat_ptr = sc_convert_addr_to_host(stat_arg, stat_cageid, cageid) as *mut StatData;
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            &translated as *const StatData as *const u8,
-            dest_ptr,
-            needed_size,
-        );
+        sc_populate_statdata_from_libc_stat(stat_ptr, &host_stat);
     }
 
     0
@@ -1531,9 +1511,9 @@ pub fn fstatfs_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
-    if kernel_fd == -1 {
-        return syscall_error(Errno::EFAULT, "fstatfs", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
+    if kernel_fd == -(Errno::EINVAL as i32) {
+        return syscall_error(Errno::EINVAL, "fstatfs", "Invalid Cage ID");
+    } else if kernel_fd == -(Errno::EBADF as i32) {
         return syscall_error(Errno::EBADF, "fstatfs", "Bad File Descriptor");
     }
 
@@ -1552,39 +1532,16 @@ pub fn fstatfs_syscall(
         return handle_errno(get_errno(), "fstatfs");
     }
 
-    // 2) Convert to ABI-stable FSData
-    let translated: FSData = {
-        // Safely pack fsid_t (two i32s) into u64
-        let fsid_packed: u64 = unsafe { std::mem::transmute::<libc::fsid_t, u64>(host_statfs.f_fsid) };
-        FSData {
-            f_type: host_statfs.f_type as u64,
-            f_bsize: host_statfs.f_bsize as u64,
-            f_blocks: host_statfs.f_blocks as u64,
-            f_bfree: host_statfs.f_bfree as u64,
-            f_bavail: host_statfs.f_bavail as u64,
-            f_files: host_statfs.f_files as u64,
-            // Linux exposes f_ffree; map it to our ABI's f_ffiles field
-            f_ffiles: host_statfs.f_ffree as u64,
-            f_fsid: fsid_packed,
-            f_namelen: host_statfs.f_namelen as u64,
-            f_frsize: host_statfs.f_frsize as u64,
-            f_spare: [0u8; 32],
-        }
-    };
-
-    // 3) Validate guest buffer range and writability, then copy
+    // 2) Validate guest buffer range and writability
     let needed_size = std::mem::size_of::<FSData>();
     if check_addr(statfs_cageid, statfs_arg, needed_size, PROT_WRITE).is_err() {
         return syscall_error(Errno::EFAULT, "fstatfs", "statfs buffer not writable or too small");
     }
 
-    let dest_ptr = sc_convert_addr_to_host(statfs_arg, statfs_cageid, cageid) as *mut u8;
+    // 3) Convert statfs_arg to FSData pointer and populate directly
+    let fsdata_ptr = sc_convert_addr_to_host(statfs_arg, statfs_cageid, cageid) as *mut FSData;
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            &translated as *const FSData as *const u8,
-            dest_ptr,
-            needed_size,
-        );
+        sc_populate_fsdata_from_libc_statfs(fsdata_ptr, &host_statfs);
     }
 
     0

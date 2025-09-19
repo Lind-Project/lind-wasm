@@ -11,7 +11,7 @@ use fdtables;
 use std::error::Error;
 use std::str::Utf8Error;
 use sysdefs::constants::err_const::{syscall_error, Errno};
-use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal};
+use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal, StatData, FSData};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME, MAX_CAGEID, PATH_MAX};
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
@@ -296,4 +296,59 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     // Permission check has been handled in 3i
     let buf = translate_vmmap_addr(&cage, buf_arg).unwrap() as *const u8;
     buf
+}
+
+/// Helper function to populate StatData from libc::stat
+/// Directly populates the user's StatData buffer field by field
+///
+/// ## Arguments:
+///     - stat_ptr: pointer to StatData structure in user memory
+///     - libc_stat: reference to libc::stat structure from kernel
+///
+/// ## Safety:
+///     - stat_ptr must be a valid pointer to a StatData structure
+///     - The caller must ensure the memory is writable and properly aligned
+pub unsafe fn sc_populate_statdata_from_libc_stat(stat_ptr: *mut StatData, libc_stat: &libc::stat) {
+    (*stat_ptr).st_blksize = libc_stat.st_blksize as i32;
+    (*stat_ptr).st_blocks = libc_stat.st_blocks as u32;
+    (*stat_ptr).st_dev = libc_stat.st_dev as u64;
+    (*stat_ptr).st_gid = libc_stat.st_gid;
+    (*stat_ptr).st_ino = libc_stat.st_ino as usize;
+    (*stat_ptr).st_mode = libc_stat.st_mode as u32;
+    (*stat_ptr).st_nlink = libc_stat.st_nlink as u32;
+    (*stat_ptr).st_rdev = libc_stat.st_rdev as u64;
+    (*stat_ptr).st_size = libc_stat.st_size as usize;
+    (*stat_ptr).st_uid = libc_stat.st_uid;
+    // The StatData comment notes we don't currently populate time bits
+    (*stat_ptr).st_atim = (0, 0);
+    (*stat_ptr).st_mtim = (0, 0);
+    (*stat_ptr).st_ctim = (0, 0);
+}
+
+/// Helper function to populate FSData from libc::statfs
+/// Directly populates the user's FSData buffer field by field
+///
+/// ## Arguments:
+///     - fsdata_ptr: pointer to FSData structure in user memory
+///     - libc_statfs: reference to libc::statfs structure from kernel
+///
+/// ## Safety:
+///     - fsdata_ptr must be a valid pointer to a FSData structure
+///     - The caller must ensure the memory is writable and properly aligned
+pub unsafe fn sc_populate_fsdata_from_libc_statfs(fsdata_ptr: *mut FSData, libc_statfs: &libc::statfs) {
+    // Safely pack fsid_t (two i32s) into u64
+    let fsid_packed: u64 = std::mem::transmute::<libc::fsid_t, u64>(libc_statfs.f_fsid);
+    
+    (*fsdata_ptr).f_type = libc_statfs.f_type as u64;
+    (*fsdata_ptr).f_bsize = libc_statfs.f_bsize as u64;
+    (*fsdata_ptr).f_blocks = libc_statfs.f_blocks as u64;
+    (*fsdata_ptr).f_bfree = libc_statfs.f_bfree as u64;
+    (*fsdata_ptr).f_bavail = libc_statfs.f_bavail as u64;
+    (*fsdata_ptr).f_files = libc_statfs.f_files as u64;
+    // Linux exposes f_ffree; map it to our ABI's f_ffiles field
+    (*fsdata_ptr).f_ffiles = libc_statfs.f_ffree as u64;
+    (*fsdata_ptr).f_fsid = fsid_packed;
+    (*fsdata_ptr).f_namelen = libc_statfs.f_namelen as u64;
+    (*fsdata_ptr).f_frsize = libc_statfs.f_frsize as u64;
+    (*fsdata_ptr).f_spare = [0u8; 32];
 }
