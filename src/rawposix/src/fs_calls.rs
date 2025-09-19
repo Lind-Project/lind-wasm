@@ -1169,9 +1169,6 @@ pub fn dup_syscall(
         return syscall_error(Errno::EFAULT, "dup", "Invalid Cage ID");
     }
 
-    if virtual_fd < 0 {
-        return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
-    }
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd as u64);
     if wrappedvfd.is_err() {
         return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
@@ -1205,10 +1202,6 @@ pub fn dup2_syscall(
         && sc_unusedarg(arg6, arg6_cageid))
     {
         return syscall_error(Errno::EFAULT, "dup2", "Invalid Cage ID");
-    }
-
-    if old_virtualfd < 0 || new_virtualfd < 0 {
-        return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
     }
 
     match fdtables::translate_virtual_fd(cageid, old_virtualfd) {
