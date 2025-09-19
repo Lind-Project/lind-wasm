@@ -5,7 +5,7 @@ use sysdefs::data::fs_struct::{StatData, FSData};
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
 use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE, SEEK_SET, SEEK_CUR, SEEK_END};
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD};
+use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, PATH_MAX};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
 use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, check_addr};
@@ -1275,7 +1275,7 @@ pub fn fchdir_syscall(
 
     // Update the cage's current working directory
     // We need to get the current working directory from the kernel to update the cage
-    let mut cwd_buf = [0u8; 1024];
+    let mut cwd_buf = [0u8; PATH_MAX];
     let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut i8, cwd_buf.len()) };
     if !cwd_ptr.is_null() {
         if let Some(cage) = get_cage(cageid) {
