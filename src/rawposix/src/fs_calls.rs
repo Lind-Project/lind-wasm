@@ -1092,9 +1092,6 @@ pub fn fcntl_syscall(
         // group ID currently receiving SIGIO and SIGURG signals for
         // events on file descriptor fd.
         (F_GETOWN, ..) => DEFAULT_GID as i32,
-        // Set the process ID or process group ID that will receive
-        // SIGIO and SIGURG signals for events on the file descriptor
-        // fd.
         (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
             // Get fdtable entry

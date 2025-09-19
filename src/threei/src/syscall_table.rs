@@ -1,10 +1,4 @@
 use super::threei::RawCallFunc;
-// use rawposix::fs_calls::{
-//     brk_syscall, clock_gettime_syscall, close_syscall, dup2_syscall, dup_syscall, fcntl_syscall,
-//     futex_syscall, lseek_syscall, mkdir_syscall, mmap_syscall, munmap_syscall,
-//     nanosleep_time64_syscall, open_syscall, pipe2_syscall, pipe_syscall, read_syscall,
-//     sbrk_syscall, unlink_syscall, write_syscall,
-// };
 use rawposix::fs_calls::{
     close_syscall, mkdir_syscall, open_syscall, read_syscall, mmap_syscall, munmap_syscall,
     brk_syscall, sbrk_syscall, fcntl_syscall, write_syscall, clock_gettime_syscall,
