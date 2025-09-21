@@ -111,7 +111,10 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
         }
     }
     let cage = get_cage(path_arg_cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, path_arg).unwrap();
+    let addr = match translate_vmmap_addr(&cage, path_arg) {
+        Some(a) => a,
+        None => panic!("NULL pointer passed to sc_convert_path_to_host"),
+    };
     let path = match get_cstr(addr) {
         Ok(path) => path,
         Err(e) => panic!("{:?}", e),
