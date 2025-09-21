@@ -264,6 +264,35 @@ pub fn mkdir_syscall(
     ret
 }
 
+/// Helper function to batch process virtual FDs by fdkind for efficiency
+/// Returns a vector of (virtual_fd, revents) tuples
+fn handle_virtual_fds_batch(
+    virtual_fd_handlers: HashMap<u32, HashSet<(u64, fdtables::FDTableEntry)>>,
+    timeout: i32,
+) -> Vec<(u64, i16)> {
+    let mut results = Vec::new();
+    
+    for (fdkind, fd_set) in virtual_fd_handlers {
+        // Batch process all FDs of the same fdkind together
+        let fdkind_results = match fdkind {
+            // Future: Handle specific fdkinds here with specialized implementations
+            // FDKIND_PIPE => handle_virtual_pipe_poll_batch(fd_set, timeout),
+            // FDKIND_SOCKET => handle_virtual_socket_poll_batch(fd_set, timeout),
+            _ => {
+                // For unhandled fdkinds, batch mark as ready to avoid blocking indefinitely
+                // This preserves existing behavior while being explicit about the limitation
+                fd_set.iter()
+                    .map(|(vfd, _fdentry)| (*vfd, libc::POLLERR as i16))
+                    .collect::<Vec<_>>()
+            }
+        };
+        
+        results.extend(fdkind_results);
+    }
+    
+    results
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
 ///
 /// Linux `poll()` syscall waits for one of a set of file descriptors to become ready to perform I/O.
@@ -339,45 +368,28 @@ pub fn poll_syscall(
         vfd_to_events.insert(fds_slice[i].fd, fds_slice[i].events);
     }
 
-    // Extract virtual fds from pollfd array and handle invalid fds immediately
+    // Extract virtual fds from pollfd array - let fdtables handle invalid FDs
     let mut virtual_fds = HashSet::new();
-    let mut invalid_fds = Vec::new();
     
     for i in 0..nfds {
         if fds_slice[i].fd >= 0 {
-            let vfd = fds_slice[i].fd as u64;
-            // Check if this virtual fd exists in fdtables
-            match fdtables::translate_virtual_fd(cageid, vfd) {
-                Ok(_) => {
-                    virtual_fds.insert(vfd);
-                }
-                Err(_) => {
-                    // Invalid fd - mark for POLLNVAL
-                    invalid_fds.push(i);
-                }
-            }
+            virtual_fds.insert(fds_slice[i].fd as u64);
         }
     }
 
-    // Handle invalid fds immediately
-    let mut total_ready = 0i32;
-    for &index in &invalid_fds {
-        fds_slice[index].revents = libc::POLLNVAL as i16;
-        total_ready += 1;
-    }
-
-    // If no valid fds to process, return immediately
+    // If no FDs to process, return immediately
     if virtual_fds.is_empty() {
-        return total_ready;
+        return 0;
     }
 
     // Convert virtual fds to kernel fds by fdkind using fdtables API
-    let (poll_data_by_fdkind, mapping_table) = fdtables::convert_virtualfds_for_poll(cageid, virtual_fds);
+    let (poll_data_by_fdkind, fdtables_mapping_table) = fdtables::convert_virtualfds_for_poll(cageid, virtual_fds);
 
-    // Separate kernel-backed FDs from virtual FDs for atomic handling
+    // Separate kernel-backed FDs from virtual FDs and handle invalid FDs
     let mut all_kernel_pollfds: Vec<pollfd> = Vec::new();
     let mut kernel_to_vfd_mapping: HashMap<usize, u64> = HashMap::new();
     let mut virtual_fd_handlers: HashMap<u32, HashSet<(u64, fdtables::FDTableEntry)>> = HashMap::new();
+    let mut total_ready = 0i32;
 
     for (fdkind, fd_set) in poll_data_by_fdkind {
         if fdkind == FDKIND_KERNEL {
@@ -394,6 +406,14 @@ pub fn poll_syscall(
                     events,
                     revents: 0,
                 });
+            }
+        } else if fdkind == fdtables::FDT_INVALID_FD {
+            // Handle invalid FDs immediately - fdtables has already identified them
+            for (vfd, _fdentry) in fd_set {
+                if let Some(&array_index) = vfd_to_index.get(&(vfd as i32)) {
+                    fds_slice[array_index].revents = libc::POLLNVAL as i16;
+                    total_ready += 1;
+                }
             }
         } else {
             // Store virtual FDs for separate handling
@@ -419,23 +439,30 @@ pub fn poll_syscall(
             return handle_errno(errno, "poll_syscall");
         }
 
-        // Convert kernel results back to virtual fds
+        // Convert kernel results back to virtual fds using fdtables helper
         for (kernel_index, kernel_pollfd) in all_kernel_pollfds.iter().enumerate() {
             if kernel_pollfd.revents != 0 {
                 if let Some(&virtual_fd) = kernel_to_vfd_mapping.get(&kernel_index) {
-                    // Use O(1) lookup to update original user array
-                    if let Some(&array_index) = vfd_to_index.get(&(virtual_fd as i32)) {
-                        fds_slice[array_index].revents = kernel_pollfd.revents;
-                        total_ready += 1;
+                    // Use fdtables helper to convert kernel fd back to virtual fd
+                    if let Some(converted_vfd) = fdtables::convert_poll_result_back_to_virtual(
+                        FDKIND_KERNEL, 
+                        kernel_pollfd.fd as u64, 
+                        &fdtables_mapping_table
+                    ) {
+                        // Use O(1) lookup to update original user array
+                        if let Some(&array_index) = vfd_to_index.get(&(converted_vfd as i32)) {
+                            fds_slice[array_index].revents = kernel_pollfd.revents;
+                            total_ready += 1;
+                        }
                     }
                 }
             }
         }
     }
 
-    // Handle virtual FDs (non-kernel) with remaining timeout
-    for (fdkind, fd_set) in virtual_fd_handlers {
-        // Calculate remaining timeout
+    // Handle virtual FDs (non-kernel) with batch processing and remaining timeout
+    if !virtual_fd_handlers.is_empty() {
+        // Calculate remaining timeout once for all virtual FDs
         let remaining_timeout = if let Some(start) = start_time {
             let elapsed_ms = start.elapsed().as_millis() as i32;
             if original_timeout < 0 {
@@ -447,23 +474,15 @@ pub fn poll_syscall(
             original_timeout
         };
 
-        // For now, we only handle FDKIND_KERNEL. Other fdkinds would need
-        // specialized implementations based on their type (e.g., in-memory pipes, 
-        // virtual sockets, etc.). This is where future extensions would go.
-        match fdkind {
-            // Future: Handle other fdkinds here
-            // FDKIND_PIPE => handle_virtual_pipe_poll(fd_set, remaining_timeout),
-            // FDKIND_SOCKET => handle_virtual_socket_poll(fd_set, remaining_timeout),
-            _ => {
-                // For unhandled fdkinds, mark as ready for now to avoid blocking indefinitely
-                // This preserves existing behavior while being explicit about the limitation
-                for (vfd, _fdentry) in fd_set {
-                    // Use O(1) lookup to update result
-                    if let Some(&array_index) = vfd_to_index.get(&(vfd as i32)) {
-                        // Set POLLERR to indicate this fdkind is not yet implemented
-                        fds_slice[array_index].revents = libc::POLLERR as i16;
-                        total_ready += 1;
-                    }
+        // Batch process virtual FDs by fdkind for efficiency
+        let virtual_fd_results = handle_virtual_fds_batch(virtual_fd_handlers, remaining_timeout);
+        
+        // Apply batch results to user array
+        for (vfd, revents) in virtual_fd_results {
+            if let Some(&array_index) = vfd_to_index.get(&(vfd as i32)) {
+                fds_slice[array_index].revents = revents;
+                if revents != 0 {
+                    total_ready += 1;
                 }
             }
         }
