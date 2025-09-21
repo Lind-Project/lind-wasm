@@ -34,7 +34,7 @@ fn panic_unusedarg_validation(syscall_name: &str, failed_args: &str) -> ! {
 /// This function is registered in `fdtables` when creating the cage
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     let kernel_fd = fdentry.underfd as i32;
-
+    
     if kernel_fd == STDIN_FILENO || kernel_fd == STDOUT_FILENO || kernel_fd == STDERR_FILENO {
         return;
     }
@@ -92,7 +92,7 @@ pub fn open_syscall(
     {
         return syscall_error(Errno::EFAULT, "open", "Invalide Cage ID");
     }
-
+    
     // Get the kernel fd first
     let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
 
@@ -145,12 +145,10 @@ pub fn read_syscall(
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    // convert_fd_to_host returns negative errno values on error:
-    // -1 = -EINVAL (cage ID validation failed)
-    // -9 = -EBADF (virtual fd not found in fdtables or invalid)
-    if kernel_fd == -1 {
+    // convert_fd_to_host returns negative errno values on error
+    if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
+    } else if kernel_fd == -(Errno::EBADF as i32) {
         return syscall_error(Errno::EBADF, "read", "Bad File Descriptor");
     }
 
@@ -163,7 +161,7 @@ pub fn read_syscall(
     let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
 
     if !(sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
     }
@@ -196,7 +194,7 @@ pub fn read_syscall(
 pub fn close_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64, 
+    vfd_cageid: u64,
     arg2: u64,
     arg2_cageid: u64,
     arg3: u64,
@@ -209,9 +207,9 @@ pub fn close_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     if !(sc_unusedarg(arg2, arg2_cageid)
-         && sc_unusedarg(arg3, arg3_cageid)
-         && sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
     }
@@ -1190,12 +1188,10 @@ pub fn fcntl_syscall(
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
-    // convert_fd_to_host returns negative errno values on error:
-    // -1 = -EINVAL (cage ID validation failed)
-    // -9 = -EBADF (virtual fd not found in fdtables or invalid)
-    if kernel_fd == -1 {
+    // convert_fd_to_host returns negative errno values on error
+    if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EFAULT, "fsync", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
+    } else if kernel_fd == -(Errno::EBADF as i32) {
         return syscall_error(Errno::EBADF, "fsync", "Bad File Descriptor");
     }
 
@@ -1255,12 +1251,10 @@ pub fn fcntl_syscall(
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
-    // convert_fd_to_host returns negative errno values on error:
-    // -1 = -EINVAL (cage ID validation failed)
-    // -9 = -EBADF (virtual fd not found in fdtables or invalid)
-    if kernel_fd == -1 {
+    // convert_fd_to_host returns negative errno values on error
+    if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EFAULT, "fdatasync", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
+    } else if kernel_fd == -(Errno::EBADF as i32) {
         return syscall_error(Errno::EBADF, "fdatasync", "Bad File Descriptor");
     }
 
@@ -1323,12 +1317,10 @@ pub fn fcntl_syscall(
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
-    // convert_fd_to_host returns negative errno values on error:
-    // -1 = -EINVAL (cage ID validation failed)
-    // -9 = -EBADF (virtual fd not found in fdtables or invalid)
-    if kernel_fd == -1 {
+    // convert_fd_to_host returns negative errno values on error
+    if kernel_fd == -(Errno::EINVAL as i32) {
         return syscall_error(Errno::EFAULT, "sync_file_range", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
+    } else if kernel_fd == -(Errno::EBADF as i32) {
         return syscall_error(Errno::EBADF, "sync_file_range", "Bad File Descriptor");
     }
 
@@ -1412,12 +1404,10 @@ pub fn fcntl_syscall(
     } else {
         // Case 2: Specific directory fd
         let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
-        // convert_fd_to_host returns negative errno values on error:
-        // -1 = -EINVAL (cage ID validation failed)
-        // -9 = -EBADF (virtual fd not found in fdtables or invalid)
-        if kernel_fd == -1 {
+        // convert_fd_to_host returns negative errno values on error
+        if kernel_fd == -(Errno::EINVAL as i32) {
             return syscall_error(Errno::EFAULT, "readlinkat", "Invalid Cage ID");
-        } else if kernel_fd == -9 {
+        } else if kernel_fd == -(Errno::EBADF as i32) {
             return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
         }
 
@@ -1586,7 +1576,7 @@ pub fn unlink_syscall(
  *   - `0` on success (file is accessible in the requested mode).
  *   - `-1` on failure, with `errno` set appropriately.
  */
- pub fn access_syscall(
+pub fn access_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -1681,12 +1671,10 @@ pub fn unlinkat_syscall(
     } else {
         // Case 2: Specific directory fd
         let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
-        // convert_fd_to_host returns negative errno values on error:
-        // -1 = -EINVAL (cage ID validation failed)
-        // -9 = -EBADF (virtual fd not found in fdtables or invalid)
-        if kernel_fd == -1 {
+        // convert_fd_to_host returns negative errno values on error
+        if kernel_fd == -(Errno::EINVAL as i32) {
             return syscall_error(Errno::EFAULT, "unlinkat", "Invalid Cage ID");
-        } else if kernel_fd == -9 {
+        } else if kernel_fd == -(Errno::EBADF as i32) {
             return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
         }
 
