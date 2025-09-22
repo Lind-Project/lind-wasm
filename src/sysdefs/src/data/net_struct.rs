@@ -64,9 +64,11 @@ impl SockAddr {
 
         unsafe {
             let addr = addr as *const sockaddr;
+            // read family
             let family = (*addr).sa_family;
             out.sun_family = family;
 
+            // copy depending on different type
             let copy_len = match family as i32 {
                 AF_UNIX => size_of::<sockaddr_un>() - size_of::<sa_family_t>(),
                 AF_INET => size_of::<sockaddr_in>() - size_of::<sa_family_t>(),
@@ -74,8 +76,10 @@ impl SockAddr {
                 _ => 0,
             };
 
+            // Clamp to our internal buffer (108 bytes). This prevents overflow.
             let safe_len = std::cmp::min(copy_len, 108);
 
+            // Copy raw bytes
             ptr::copy_nonoverlapping(
                 (addr as *const u8).add(size_of::<sa_family_t>()),
                 out.sun_path.as_mut_ptr() as *mut u8,
