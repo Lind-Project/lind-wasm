@@ -994,8 +994,19 @@ pub fn fcntl_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
 ///
 /// Linux `poll()` syscall waits for one of a set of file descriptors to become ready to perform I/O.
-/// Since we implement a file descriptor management subsystem (called `fdtables`), we convert virtual
-/// file descriptors to kernel file descriptors, perform atomic polling across all fdkinds, then convert results back.
+/// 
+/// ## Implementation Approach:
+/// 
+/// 1. **Early Validation**: Check `nfds` limits and null pointers before expensive operations
+/// 2. **FD Classification**: Use `fdtables::convert_virtualfds_for_poll()` to separate kernel-backed FDs from invalid ones
+/// 3. **Batch Processing**: 
+///    - Invalid FDs → mark as `POLLNVAL` immediately
+///    - Kernel FDs → collect into array for single `libc::poll()` call
+///    - Virtual FDs → ignored (we only handle FDs with underlying kernel FDs)
+/// 4. **Result Conversion**: Convert kernel poll results back to virtual FDs using fdtables mapping
+/// 5. **Update User Array**: Use O(1) lookups to update original user array with results
+/// 
+/// This maintains POSIX poll semantics while handling Lind's FD virtualization efficiently.
 ///
 /// ## Arguments:
 ///     - cageid: current cage identifier.
