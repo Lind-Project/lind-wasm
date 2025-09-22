@@ -132,8 +132,8 @@ pub fn sendto_syscall(
 ///     - buf_arg: pointer to the buffer in user space to store received data
 ///     - buflen_arg: size of the buffer
 ///     - flag_arg: Flags controlling message reception behavior
-///     - nullity1_arg: pointer to the source address structure or null
-///     - nullity2_arg: pointer to the source address length or null
+///     - nullity1_arg(src_addr): pointer to the source address structure or null
+///     - nullity2_arg(addrlen): pointer to the source address length or null
 ///
 /// Returns:
 ///     - On success: number of bytes received
@@ -158,9 +158,11 @@ pub fn recvfrom_syscall(
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
 
+    // true means user passed NULL for that pointer
     let nullity1 = sc_convert_arg_nullity(nullity1_arg, nullity1_cageid, cageid);
     let nullity2 = sc_convert_arg_nullity(nullity2_arg,nullity2_cageid, cageid);
 
+    // Case 1: both NULL → caller doesn’t want peer address
     if nullity1 && nullity2 {
         let (finalsockaddr, mut addrlen) = sc_convert_host_sockaddr(ptr::null_mut(), nullity1_cageid, cageid);
         let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, finalsockaddr, &mut addrlen as *mut u32) as i32 };
@@ -170,7 +172,7 @@ pub fn recvfrom_syscall(
             return handle_errno(errno, "recvfrom");
         }
     }
-
+    // Case 2: both non-NULL → caller wants src_addr + addrlen filled
     else if !(nullity1 || nullity2) {
         let mut newsockaddr = SockAddr::new_ipv4();
         let ptr = &mut newsockaddr as *mut SockAddr as *mut u8;
@@ -182,6 +184,7 @@ pub fn recvfrom_syscall(
             return handle_errno(errno, "recvfrom");
         }
 
+        // Copy peer address back to user’s src_addr / addrlen
         if ret >= 0 {
             sc_convert_copy_out_sockaddr(
                 sc_convert_uaddr_to_host(nullity1_arg, nullity1_cageid, cageid),
@@ -234,7 +237,7 @@ pub fn gethostname_syscall(
         return syscall_error(Errno::EFAULT, "gethostname_syscall", "Invalide Cage ID");
     }
 
-    let ret = unsafe { libc::gethostname(name as *mut i8, len) };
+    let ret = unsafe { libc::gethostname(name, len) };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "gethostname");
@@ -357,71 +360,11 @@ pub fn getpeername_syscall(
         let err_msg = unsafe {
             CStr::from_ptr(err_str).to_string_lossy().into_owned()
         };
-        println!("[getpeername] Error message: {:?}", err_msg);
-        
         let errno = get_errno();
-        println!("[getpeername] Errno: {:?}", errno);
         io::stdout().flush().unwrap();
         return handle_errno(errno, "getpeername");
     }
 
-    ret
-}
-
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
-///
-/// The Linux `poll()` syscall waits for events on multiple file descriptors.
-/// This implementation converts a slice of user-space poll structures from the current cage,
-/// invokes the host kernel's `poll()` call, and copies the result back to user space.
-///
-/// Parameters:
-///     - cageid: identifier of the current cage
-///     - addr_arg: pointer to the array of `PollStruct` in user space
-///     - nfds_arg: number of file descriptors in the array
-///     - timeout_arg: timeout in milliseconds, or -1 to block indefinitely
-///
-/// Returns:
-///     - On success: number of file descriptors with events
-///     - On failure: negative errno indicating the error
-pub fn poll_syscall(
-    cageid: u64,
-    addr_arg: u64,
-    addr_cageid: u64,
-    nfds_arg: u64,
-    nfds_cageid: u64,
-    timeout_arg: u64,
-    timeout_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    let addr = sc_convert_uaddr_to_host(addr_arg, addr_cageid, cageid);
-    let nfds = sc_convert_sysarg_to_usize(nfds_arg,nfds_cageid, cageid);
-    let pollfds = sc_convert_pollstruct_slice(addr, addr_cageid, cageid, nfds).unwrap();
-    let timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
-
-    if !(sc_unusedarg(arg4, arg4_cageid)
-    && sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "poll_syscall", "Invalide Cage ID");
-    }
-
-    let mut real_fd = virtual_to_real_poll(cageid, pollfds);
-    let ret = unsafe { libc::poll(real_fd.as_mut_ptr(), nfds as u64, timeout) };
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "poll");
-    }
-    for (i, libcpoll) in real_fd.iter().enumerate() {
-        if let Some(rposix_poll) = pollfds.get_mut(i) {
-                rposix_poll.revents = libcpoll.revents;
-        }
-    }
-        
     ret
 }
 
@@ -437,7 +380,7 @@ pub fn poll_syscall(
 ///     - type_arg: communication semantics (e.g., SOCK_STREAM)
 ///     - protocol_arg: protocol to be used
 ///     - virtual_socket_vector_arg: pointer to a `SockPair` structure in user space to receive the result
-///
+///nullity1/2
 /// Returns:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
@@ -457,7 +400,7 @@ pub fn socketpair_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let domain = sc_convert_sysarg_to_i32(domain_arg, domain_cageid, cageid);
-    let type_ = sc_convert_sysarg_to_i32(type_arg, type_cageid, cageid);
+    let type = sc_convert_sysarg_to_i32(type_arg, type_cageid, cageid);
     let protocol = sc_convert_sysarg_to_i32(protocol_arg, protocol_cageid, cageid);
     let virtual_socket_vector = sc_convert_sockpair(virtual_socket_vector_arg, virtual_socket_vector_cageid, cageid).unwrap();
     
@@ -469,7 +412,7 @@ pub fn socketpair_syscall(
 
     let mut kernel_socket_vector: [i32; 2] = [0, 0];
 
-    let ret = unsafe { libc::socketpair(domain, type_, protocol, kernel_socket_vector.as_mut_ptr()) };
+    let ret = unsafe { libc::socketpair(domain, type, protocol, kernel_socket_vector.as_mut_ptr()) };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "sockpair");
@@ -482,23 +425,4 @@ pub fn socketpair_syscall(
     virtual_socket_vector.sock1 = vsv_1 as i32;
     virtual_socket_vector.sock2 = vsv_2 as i32;
     return 0;
-}
-
-pub fn virtual_to_real_poll(cageid: u64, virtual_poll: &mut [PollStruct]) -> Vec<pollfd> {
-
-    let mut real_fds = Vec::with_capacity(virtual_poll.len());
-
-    for vfd in &mut *virtual_poll {
-
-        let rfd = fdtables::translate_virtual_fd(cageid, vfd.fd as u64).unwrap();
-        let real_fd = rfd.underfd;
-        let kernel_poll = pollfd {
-            fd: real_fd as i32,
-            events: vfd.events,
-            revents: vfd.revents,
-        };
-        real_fds.push(kernel_poll);
-    }
-
-    real_fds
 }
