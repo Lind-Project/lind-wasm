@@ -21,9 +21,6 @@ use crate::threei_const;
 pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
 const MMAP_SYSCALL: u64 = 9; // mmap syscall number
 
-//test
-use std::slice;
-
 /// Registers a closure into the `GLOBAL_GRATE` handler table for a specific grateid.
 /// The closure is responsible for handling grate calls by dynamically looking up a Wasm-exported
 /// function by name (following the `<call_name>_grate` suffix convention) and invoking it. This
