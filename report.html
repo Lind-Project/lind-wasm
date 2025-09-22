@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+    </head>
+    <style>
+        table, th, td {
+        border: 1px solid black;
+        border-collapse: collapse;
+        }
+    </style>
+    <body>
+    <h1>Test Report</h1>
+    
+<div class="child-section">
+<h2>deterministic</h2>
+<table class="summary-table">
+<tr><th>Metric</th><th>Count</th></tr>
+<tr><td>Total Test Cases</td><td>20</td></tr>
+<tr><td>Number of Successes</td><td>20</td></tr>
+<tr><td>Number of Failures</td><td>0</td></tr>
+<tr><td>Number of Compilation Failure Native</td><td>0</td></tr>
+<tr><td>Number of Runtime Failure Native</td><td>0</td></tr>
+<tr><td>Number of Segmentation Fault Native</td><td>0</td></tr>
+<tr><td>Number of Timeout During Native</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Compile Failure</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Runtime Failure</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Segmentation Failure</td><td>0</td></tr>
+<tr><td>Number of Timeout During Lind Wasm run</td><td>0</td></tr>
+<tr><td>Number of Unknown Failure</td><td>0</td></tr>
+<tr><td>Number of GCC and Wasm Output mismatch</td><td>0</td></tr>
+</table>
+<div class="child-section">
+<h2>non_deterministic</h2>
+<table class="summary-table">
+<tr><th>Metric</th><th>Count</th></tr>
+<tr><td>Total Test Cases</td><td>16</td></tr>
+<tr><td>Number of Successes</td><td>16</td></tr>
+<tr><td>Number of Failures</td><td>0</td></tr>
+<tr><td>Number of Compilation Failure Native</td><td>0</td></tr>
+<tr><td>Number of Runtime Failure Native</td><td>0</td></tr>
+<tr><td>Number of Segmentation Fault Native</td><td>0</td></tr>
+<tr><td>Number of Timeout During Native</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Compile Failure</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Runtime Failure</td><td>0</td></tr>
+<tr><td>Number of Lind Wasm Segmentation Failure</td><td>0</td></tr>
+<tr><td>Number of Timeout During Lind Wasm run</td><td>0</td></tr>
+<tr><td>Number of Unknown Failure</td><td>0</td></tr>
+<tr><td>Number of GCC and Wasm Output mismatch</td><td>0</td></tr>
+</table>
+<div class="child-section">
+<h2>deterministic</h2>
+<div class="test-lists">
+</div>
+</div>
+<div class="child-section">
+<h2>non_deterministic</h2>
+<div class="test-lists">
+</div>
+</div>
+<h3>deterministic:</h3>
+<table>
+<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Output</th></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/exit.c</td><td>Success</td><td>None</td><td><pre>Exiting...
+
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/function-ptr.c</td><td>Success</td><td>None</td><td><pre>Hello, World!
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/hello.c</td><td>Success</td><td>None</td><td><pre>wark</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/noforkfiles.c</td><td>Success</td><td>None</td><td><pre></pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/waitpid_wnohang.c</td><td>Success</td><td>None</td><td><pre></pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/memory_tests/deterministic/memcpy.c</td><td>Success</td><td>None</td><td><pre>Hello, World!</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/memory_tests/deterministic/malloc.c</td><td>Success</td><td>None</td><td><pre></pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/memory_tests/deterministic/mprotect.c</td><td>Success</td><td>None</td><td><pre>Mprotect write test text</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/socket.c</td><td>Success</td><td>None</td><td><pre>Socket opened succesfully.</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/makepipe.c</td><td>Success</td><td>None</td><td><pre></pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/socketpair.c</td><td>Success</td><td>None</td><td><pre>-->In Xanadu, did Kublai Khan . . .
+-->A stately pleasure dome decree . . .
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/poll.c</td><td>Success</td><td>None</td><td><pre>stdout is ready for writing.
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/config_tests/deterministic/dnstest.c</td><td>Success</td><td>None</td><td><pre>is sockfd valid? yes
+37 is the length sent
+53 is the length recieved
+the dns lookup yields the ip address: 35.172.89.115
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/dupwrite.c</td><td>Success</td><td>None</td><td><pre>write succeeded
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/write.c</td><td>Success</td><td>None</td><td><pre>Hello world from Coulson's WASM
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/writepartial.c</td><td>Success</td><td>None</td><td><pre>write</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/ioctl.c</td><td>Success</td><td>None</td><td><pre>[For 0 = False and <any_other_int> = True]
+[The answers should be F, T, F]
+
+(0) Is the socket set for non-blocking I/O?: 0
+[Setting socket for non_blocking I/O]
+(1) Is the socket set for non-blocking I/O?: 2048
+[Clearing socket for non-blocking I/O]
+(2) Is the socket set for non-blocking I/O?: 0
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/doubleclose.c</td><td>Success</td><td>None</td><td><pre></pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/writeloop.c</td><td>Success</td><td>None</td><td><pre>write succeeded
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/printf.c</td><td>Success</td><td>None</td><td><pre>Hello, World!</pre></td></tr>
+</table>
+<h3>non_deterministic:</h3>
+<table>
+<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Output</th></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/non-deterministic/getpid.c</td><td>Success</td><td>None</td><td><pre>printing pidSuccess
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/non-deterministic/pipe.c</td><td>Success</td><td>None</td><td><pre>pipe() ret: [3, 4]
+write() ret: 3
+read() ret: 3
+hi
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/non-deterministic/pipe2.c</td><td>Success</td><td>None</td><td><pre>pipe2() ret: [3, 4]
+write() ret: 3
+read() ret: 3
+hi
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/non-deterministic/pipewrite.c</td><td>Success</td><td>None</td><td><pre>Made pipe with write end 3 and read end 4
+wrote 16
+write 16
+wrote 16
+wrote three messages to the pipe
+msg 0, length 16: hello, world #1
+msg 1, length 16: hello, world #2
+msg 2, length 16: hello, world #3
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/signal_tests/non-deterministic/signal.c</td><td>Success</td><td>None</td><td><pre>main starts!
+parent in loop, pid=1
+child ready to kill
+child done kill
+parent in loop, pid=1
+Terminated
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/config_tests/non-deterministic/sysconf.c</td><td>Success</td><td>None</td><td><pre>calling sysconf(sysconf())</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/config_tests/non-deterministic/gethostname.c</td><td>Success</td><td>None</td><td><pre>Hostname: effd7c7e5daf
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/read.c</td><td>Success</td><td>None</td><td><pre>open(): No such file or directory
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/fstatfs.c</td><td>Success</td><td>None</td><td><pre>Filesystem type: 794c7630
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/clock_gettime_simple.c</td><td>Success</td><td>None</td><td><pre>Current time: 1758562016 seconds and 591077500 nanoseconds
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/clock_gettime_highlevel.c</td><td>Success</td><td>None</td><td><pre>Running 1,000,000 iterations...
+
+Start time: 4126 clock ticks
+End time: 6110 clock ticks
+Elapsed CPU time: 0.001984 seconds
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/getcwd.c</td><td>Success</td><td>None</td><td><pre>current working directory is: / :: /
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/statfs.c</td><td>Success</td><td>None</td><td><pre>Error in statfs
+: No such file or directory
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/fchdir.c</td><td>Success</td><td>None</td><td><pre>current working directory is: / :: /
+Error with open: No such file or directory
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/chdir_getcwd.c</td><td>Success</td><td>None</td><td><pre>current working directory is: / :: /
+current working directory is: / :: /
+</pre></td></tr>
+<tr style="background-color: lightgreen;"><td>/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/dup.c</td><td>Success</td><td>None</td><td><pre>
+duped fd: 3
+attempting to write to dup() fd
+
+write to dup() fd succeeded
+write to old fd succeeded
+</pre></td></tr>
+</table>
+</body>
+</html>
+

@@ -1,0 +1,278 @@
+{
+    "deterministic": {
+        "total_test_cases": 20,
+        "number_of_success": 20,
+        "success": [
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/exit.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/function-ptr.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/hello.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/noforkfiles.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/waitpid_wnohang.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/memory_tests/deterministic/memcpy.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/memory_tests/deterministic/malloc.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/memory_tests/deterministic/mprotect.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/socket.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/makepipe.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/socketpair.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/poll.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/config_tests/deterministic/dnstest.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/dupwrite.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/write.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/writepartial.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/ioctl.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/doubleclose.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/writeloop.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/printf.c"
+        ],
+        "number_of_failures": 0,
+        "failures": [],
+        "test_cases": {
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/exit.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Exiting...\n\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/function-ptr.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Hello, World!\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/hello.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "wark"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/noforkfiles.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": ""
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/deterministic/waitpid_wnohang.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": ""
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/memory_tests/deterministic/memcpy.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Hello, World!"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/memory_tests/deterministic/malloc.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": ""
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/memory_tests/deterministic/mprotect.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Mprotect write test text"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/socket.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Socket opened succesfully."
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/makepipe.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": ""
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/socketpair.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "-->In Xanadu, did Kublai Khan . . .\n-->A stately pleasure dome decree . . .\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/deterministic/poll.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "stdout is ready for writing.\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/config_tests/deterministic/dnstest.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "is sockfd valid? yes\n37 is the length sent\n53 is the length recieved\nthe dns lookup yields the ip address: 35.172.89.115\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/dupwrite.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "write succeeded\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/write.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Hello world from Coulson's WASM\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/writepartial.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "write"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/ioctl.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "[For 0 = False and <any_other_int> = True]\n[The answers should be F, T, F]\n\n(0) Is the socket set for non-blocking I/O?: 0\n[Setting socket for non_blocking I/O]\n(1) Is the socket set for non-blocking I/O?: 2048\n[Clearing socket for non-blocking I/O]\n(2) Is the socket set for non-blocking I/O?: 0\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/doubleclose.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": ""
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/writeloop.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "write succeeded\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/deterministic/printf.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Hello, World!"
+            }
+        },
+        "number_of_Failure_native_compiling": 0,
+        "Failure_native_compiling": [],
+        "number_of_Failure_native_running": 0,
+        "Failure_native_running": [],
+        "number_of_Native_Segmentation_Fault": 0,
+        "Native_Segmentation_Fault": [],
+        "number_of_Native_Timeout": 0,
+        "Native_Timeout": [],
+        "number_of_Lind_wasm_compiling": 0,
+        "Lind_wasm_compiling": [],
+        "number_of_Lind_wasm_runtime": 0,
+        "Lind_wasm_runtime": [],
+        "number_of_Lind_wasm_Segmentation_Fault": 0,
+        "Lind_wasm_Segmentation_Fault": [],
+        "number_of_Lind_wasm_Timeout": 0,
+        "Lind_wasm_Timeout": [],
+        "number_of_Unknown_Failure": 0,
+        "Unknown_Failure": [],
+        "number_of_Output_mismatch": 0,
+        "Output_mismatch": []
+    },
+    "non_deterministic": {
+        "total_test_cases": 16,
+        "number_of_success": 16,
+        "success": [
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/non-deterministic/getpid.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/non-deterministic/pipe.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/non-deterministic/pipe2.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/non-deterministic/pipewrite.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/signal_tests/non-deterministic/signal.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/config_tests/non-deterministic/sysconf.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/config_tests/non-deterministic/gethostname.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/read.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/fstatfs.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/clock_gettime_simple.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/clock_gettime_highlevel.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/getcwd.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/statfs.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/fchdir.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/chdir_getcwd.c",
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/dup.c"
+        ],
+        "number_of_failures": 0,
+        "failures": [],
+        "test_cases": {
+            "/tmp/wasmtest_artifacts_ot0_c9iu/process_tests/non-deterministic/getpid.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "printing pidSuccess\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/non-deterministic/pipe.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "pipe() ret: [3, 4]\nwrite() ret: 3\nread() ret: 3\nhi\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/non-deterministic/pipe2.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "pipe2() ret: [3, 4]\nwrite() ret: 3\nread() ret: 3\nhi\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/networking_tests/non-deterministic/pipewrite.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Made pipe with write end 3 and read end 4\nwrote 16\nwrite 16\nwrote 16\nwrote three messages to the pipe\nmsg 0, length 16: hello, world #1\nmsg 1, length 16: hello, world #2\nmsg 2, length 16: hello, world #3\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/signal_tests/non-deterministic/signal.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "main starts!\nparent in loop, pid=1\nchild ready to kill\nchild done kill\nparent in loop, pid=1\nTerminated\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/config_tests/non-deterministic/sysconf.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "calling sysconf(sysconf())"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/config_tests/non-deterministic/gethostname.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Hostname: effd7c7e5daf\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/read.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "open(): No such file or directory\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/fstatfs.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Filesystem type: 794c7630\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/clock_gettime_simple.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Current time: 1758562016 seconds and 591077500 nanoseconds\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/clock_gettime_highlevel.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Running 1,000,000 iterations...\n\nStart time: 4126 clock ticks\nEnd time: 6110 clock ticks\nElapsed CPU time: 0.001984 seconds\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/getcwd.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "current working directory is: / :: /\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/statfs.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "Error in statfs\n: No such file or directory\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/fchdir.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "current working directory is: / :: /\nError with open: No such file or directory\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/chdir_getcwd.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "current working directory is: / :: /\ncurrent working directory is: / :: /\n"
+            },
+            "/tmp/wasmtest_artifacts_ot0_c9iu/file_tests/non-deterministic/dup.c": {
+                "status": "Success",
+                "error_type": null,
+                "output": "\nduped fd: 3\nattempting to write to dup() fd\n\nwrite to dup() fd succeeded\nwrite to old fd succeeded\n"
+            }
+        },
+        "number_of_Failure_native_compiling": 0,
+        "Failure_native_compiling": [],
+        "number_of_Failure_native_running": 0,
+        "Failure_native_running": [],
+        "number_of_Native_Segmentation_Fault": 0,
+        "Native_Segmentation_Fault": [],
+        "number_of_Native_Timeout": 0,
+        "Native_Timeout": [],
+        "number_of_Lind_wasm_compiling": 0,
+        "Lind_wasm_compiling": [],
+        "number_of_Lind_wasm_runtime": 0,
+        "Lind_wasm_runtime": [],
+        "number_of_Lind_wasm_Segmentation_Fault": 0,
+        "Lind_wasm_Segmentation_Fault": [],
+        "number_of_Lind_wasm_Timeout": 0,
+        "Lind_wasm_Timeout": [],
+        "number_of_Unknown_Failure": 0,
+        "Unknown_Failure": [],
+        "number_of_Output_mismatch": 0,
+        "Output_mismatch": []
+    }
+}
