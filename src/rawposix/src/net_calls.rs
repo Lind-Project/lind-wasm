@@ -51,15 +51,15 @@ pub fn socket_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "socket_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "socket_syscall", "Invalid Cage ID");
     }
 
     let kernel_fd = unsafe { libc::socket(domain, socktype, protocol) };
        
-        if kernel_fd < 0 {
+    if kernel_fd < 0 {
             let errno = get_errno();
             return handle_errno(errno, "socket");
-        }
+    }
 
         return fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, false, 0).unwrap() as i32;
 }
