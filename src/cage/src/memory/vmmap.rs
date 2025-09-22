@@ -272,6 +272,10 @@ impl Vmmap {
     }
     
     // Clear the vmmap struct, used for exec syscall
+    // The purpose of `clear()` is to simulate the address space reset of exec. It 
+    // ensures that all old mappings and states are discarded, allowing the new cage to 
+    // run in a clean virtual address space, while reusing the existing `Vmmap` container 
+    // to avoid extra allocations.
     pub fn clear(&mut self) {
         self.entries = NoditMap::new();
         self.cached_entry = None;
