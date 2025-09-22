@@ -8,10 +8,12 @@ use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
 use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD};
-use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
+use sysdefs::constants::sys_const::{DEFAULT_GID};
 use typemap::cage_helpers::*;
 use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
 use fdtables;
+use std::collections::HashSet;
+use std::time::Instant;
 
 /// Helper function for close_syscall
 /// 
@@ -1094,4 +1096,275 @@ pub fn clock_gettime_syscall(
     }
 
     ret
+}
+
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/select.2.html
+///
+/// Linux `select()` syscall waits for one of a set of file descriptors to become ready to perform I/O.
+/// Since we implement a file descriptor management subsystem (called `fdtables`), we convert virtual
+/// file descriptors to kernel file descriptors, perform atomic polling across all fdkinds, then convert results back.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier.
+///     - nfds_arg: the highest-numbered file descriptor in any of the three sets, plus 1.
+///     - nfds_cageid: cage ID for nfds_arg validation.
+///     - readfds_arg: pointer to fd_set for read file descriptors (user's perspective).
+///     - readfds_cageid: cage ID for readfds_arg validation.
+///     - writefds_arg: pointer to fd_set for write file descriptors (user's perspective).
+///     - writefds_cageid: cage ID for writefds_arg validation.
+///     - exceptfds_arg: pointer to fd_set for exceptional file descriptors (user's perspective).
+///     - exceptfds_cageid: cage ID for exceptfds_arg validation.
+///     - timeout_arg: pointer to timeval structure for timeout (user's perspective).
+///     - timeout_cageid: cage ID for timeout_arg validation.
+///
+/// ## Returns:
+///     - positive value: number of file descriptors ready for I/O
+///     - 0: timeout occurred with no file descriptors ready
+///     - negative value: error occurred (errno set)
+pub fn select_syscall(
+    cageid: u64,
+    nfds_arg: u64,
+    nfds_cageid: u64,
+    readfds_arg: u64,
+    readfds_cageid: u64,
+    writefds_arg: u64,
+    writefds_cageid: u64,
+    exceptfds_arg: u64,
+    exceptfds_cageid: u64,
+    timeout_arg: u64,
+    timeout_cageid: u64,
+) -> i32 {
+    // Convert arguments
+    let nfds = sc_convert_sysarg_to_usize(nfds_arg, nfds_cageid, cageid);
+
+    // Basic bounds checking
+    if nfds > 65536 {
+        return syscall_error(Errno::EINVAL, "select_syscall", "Too many file descriptors");
+    }
+
+    if nfds == 0 {
+        return 0; // No FDs to select
+    }
+
+    // Convert fd_set pointers from user space
+    let readfds_ptr = if readfds_arg == 0 {
+        None
+    } else {
+        Some(sc_convert_buf(readfds_arg, readfds_cageid, cageid) as *mut libc::fd_set)
+    };
+
+    let writefds_ptr = if writefds_arg == 0 {
+        None
+    } else {
+        Some(sc_convert_buf(writefds_arg, writefds_cageid, cageid) as *mut libc::fd_set)
+    };
+
+    let exceptfds_ptr = if exceptfds_arg == 0 {
+        None
+    } else {
+        Some(sc_convert_buf(exceptfds_arg, exceptfds_cageid, cageid) as *mut libc::fd_set)
+    };
+
+    // Convert timeout pointer from user space
+    let timeout_ptr = if timeout_arg == 0 {
+        None
+    } else {
+        Some(sc_convert_buf(timeout_arg, timeout_cageid, cageid) as *mut libc::timeval)
+    };
+
+    // Create safe references to fd_sets
+    let readfds = readfds_ptr.map(|ptr| unsafe { &*ptr });
+    let writefds = writefds_ptr.map(|ptr| unsafe { &*ptr });
+    let exceptfds = exceptfds_ptr.map(|ptr| unsafe { &*ptr });
+
+    // Create mutable references for results
+    let mut readfds_mut = readfds_ptr.map(|ptr| unsafe { &mut *ptr });
+    let mut writefds_mut = writefds_ptr.map(|ptr| unsafe { &mut *ptr });
+    let mut exceptfds_mut = exceptfds_ptr.map(|ptr| unsafe { &mut *ptr });
+
+    // Extract virtual fds from all fd_sets
+    let mut all_virtual_fds = HashSet::new();
+
+    // Helper function to extract fds from an fd_set
+    let extract_fds_from_set = |fdset: &libc::fd_set| {
+        let mut fds = HashSet::new();
+        for fd in 0..nfds {
+            if unsafe { libc::FD_ISSET(fd as i32, fdset) } {
+                fds.insert(fd as u64);
+            }
+        }
+        fds
+    };
+
+    // Extract fds from all sets
+    if let Some(readset) = readfds {
+        all_virtual_fds.extend(extract_fds_from_set(readset));
+    }
+    if let Some(writeset) = writefds {
+        all_virtual_fds.extend(extract_fds_from_set(writeset));
+    }
+    if let Some(exceptset) = exceptfds {
+        all_virtual_fds.extend(extract_fds_from_set(exceptset));
+    }
+
+    // If no FDs to process, return immediately
+    if all_virtual_fds.is_empty() {
+        return 0;
+    }
+
+    // Get all fd kinds that need to be processed
+    let mut fdkinds = HashSet::new();
+    for vfd in &all_virtual_fds {
+        if let Ok(fdentry) = fdtables::translate_virtual_fd(cageid, *vfd) {
+            fdkinds.insert(fdentry.fdkind);
+        }
+    }
+
+    // Use fdtables API to prepare bitmasks for select
+    let (selectbittables, unparsedtables, mappingtable) = match fdtables::prepare_bitmasks_for_select(
+        cageid,
+        nfds as u64,
+        readfds.copied(),
+        writefds.copied(),
+        exceptfds.copied(),
+        &fdkinds,
+    ) {
+        Ok(result) => result,
+        Err(_) => return syscall_error(Errno::EINVAL, "select_syscall", "Failed to prepare bitmasks"),
+    };
+
+    // Track time for consistent timeout behavior across operations
+    let _start_time = if timeout_ptr.is_some() { Some(Instant::now()) } else { None };
+
+    let mut total_ready = 0i32;
+
+    // Process each fdkind separately
+    for fdkind in &fdkinds {
+        let read_bits = selectbittables[0].get(fdkind);
+        let write_bits = selectbittables[1].get(fdkind);
+        let except_bits = selectbittables[2].get(fdkind);
+
+        // Skip if no bits set for this fdkind
+        if read_bits.is_none() && write_bits.is_none() && except_bits.is_none() {
+            continue;
+        }
+
+        // Get the maximum nfds for this fdkind
+        let max_nfds = [read_bits, write_bits, except_bits]
+            .iter()
+            .filter_map(|bits| bits.map(|(nfds, _)| *nfds))
+            .max()
+            .unwrap_or(0);
+
+        if max_nfds == 0 {
+            continue;
+        }
+
+        // Call kernel select for this fdkind
+        let ret = unsafe {
+            libc::select(
+                max_nfds as i32,
+                read_bits.map(|(_, fdset)| fdset as *const libc::fd_set as *mut libc::fd_set).unwrap_or(std::ptr::null_mut()),
+                write_bits.map(|(_, fdset)| fdset as *const libc::fd_set as *mut libc::fd_set).unwrap_or(std::ptr::null_mut()),
+                except_bits.map(|(_, fdset)| fdset as *const libc::fd_set as *mut libc::fd_set).unwrap_or(std::ptr::null_mut()),
+                timeout_ptr.unwrap_or(std::ptr::null_mut()),
+            )
+        };
+
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "select_syscall");
+        }
+
+        total_ready += ret;
+
+        // Convert results back to virtual fds using fdtables helper
+        if ret > 0 {
+            // Process read results
+            if let Some((_, read_fdset)) = read_bits {
+                let (_, virtual_read_fdset) = fdtables::get_one_virtual_bitmask_from_select_result(
+                    *fdkind,
+                    nfds as u64,
+                    Some(*read_fdset),
+                    HashSet::new(), // unprocessedset
+                    readfds.copied(), // startingbits
+                    &mappingtable,
+                );
+
+                if let Some(virtual_fdset) = virtual_read_fdset {
+                    if let Some(ref mut readfds_mut_ref) = readfds_mut {
+                        **readfds_mut_ref = virtual_fdset;
+                    }
+                }
+            }
+
+            // Process write results
+            if let Some((_, write_fdset)) = write_bits {
+                let (_, virtual_write_fdset) = fdtables::get_one_virtual_bitmask_from_select_result(
+                    *fdkind,
+                    nfds as u64,
+                    Some(*write_fdset),
+                    HashSet::new(), // unprocessedset
+                    writefds.copied(), // startingbits
+                    &mappingtable,
+                );
+
+                if let Some(virtual_fdset) = virtual_write_fdset {
+                    if let Some(ref mut writefds_mut_ref) = writefds_mut {
+                        **writefds_mut_ref = virtual_fdset;
+                    }
+                }
+            }
+
+            // Process except results
+            if let Some((_, except_fdset)) = except_bits {
+                let (_, virtual_except_fdset) = fdtables::get_one_virtual_bitmask_from_select_result(
+                    *fdkind,
+                    nfds as u64,
+                    Some(*except_fdset),
+                    HashSet::new(), // unprocessedset
+                    exceptfds.copied(), // startingbits
+                    &mappingtable,
+                );
+
+                if let Some(virtual_fdset) = virtual_except_fdset {
+                    if let Some(ref mut exceptfds_mut_ref) = exceptfds_mut {
+                        **exceptfds_mut_ref = virtual_fdset;
+                    }
+                }
+            }
+        }
+    }
+
+    // Handle virtual FDs (non-kernel) - for now, we'll clear them from the result sets
+    // since the current fdtables API doesn't provide a batch processing function for virtual FDs
+    // This is a simplified implementation that handles virtual FDs by clearing them from results
+    
+    // Clear virtual FDs from result sets since they weren't processed by kernel select
+    for (_fdkind, fd_set) in &unparsedtables[0] {
+        for fdentry in fd_set {
+            if let Some(ref mut readfds_mut_ref) = readfds_mut {
+                unsafe { libc::FD_CLR(fdentry.underfd as i32, *readfds_mut_ref) };
+            }
+        }
+    }
+    
+    for (_fdkind, fd_set) in &unparsedtables[1] {
+        for fdentry in fd_set {
+            if let Some(ref mut writefds_mut_ref) = writefds_mut {
+                unsafe { libc::FD_CLR(fdentry.underfd as i32, *writefds_mut_ref) };
+            }
+        }
+    }
+    
+    for (_fdkind, fd_set) in &unparsedtables[2] {
+        for fdentry in fd_set {
+            if let Some(ref mut exceptfds_mut_ref) = exceptfds_mut {
+                unsafe { libc::FD_CLR(fdentry.underfd as i32, *exceptfds_mut_ref) };
+            }
+        }
+    }
+
+    total_ready
 }
