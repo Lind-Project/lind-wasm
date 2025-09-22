@@ -50,5 +50,17 @@ jobs:
           path: ${{ env.REPORT_LOCAL_DIR }}/${{ env.REPORT_LOCAL_FILE }}
           if-no-files-found: error
           retention-days: 7
-
-      
+      - name: Install libraries and render template
+        run: |
+          python3 -m pip install --quiet jinja2
+          python3 scripts/render_e2e_templates.py
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('test-reports/e2e_comment.md','utf8');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
