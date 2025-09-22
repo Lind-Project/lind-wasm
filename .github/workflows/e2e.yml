@@ -44,14 +44,7 @@ jobs:
 
           # Extract the HTML report
           docker cp "$cid":"$REPORT_PATH_IN_IMAGE" "$REPORT_LOCAL_DIR/$REPORT_LOCAL_FILE"
-          ls -l "${REPORT_LOCAL_DIR}/${REPORT_LOCAL_FILE}"
-
-          # Run the python script to generate markdown summary
-          docker start "$cid"
-          docker exec "$cid" sh -lc "
-            python3 -m pip install --quiet jinja2 &&
-            python3 scripts/render_e2e_templates.py
-            "
+          ls -l "${REPORT_LOCAL_DIR}/${REPORT_LOCAL_FILE}"          
           
           # Copy the rendered Markdown back out to host
           docker run --rm \            
