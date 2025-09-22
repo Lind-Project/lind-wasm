@@ -1096,7 +1096,7 @@ pub fn poll_syscall(
 
     for (fdkind, fd_set) in poll_data_by_fdkind {
         if fdkind == FDKIND_KERNEL {
-            // Collect all kernel FDs for atomic polling
+            // Collect all kernel FDs for polling
             for (vfd, fdentry) in fd_set {
                 // Use O(1) lookup to find original events for this virtual fd
                 let events = *vfd_to_events.get(&(vfd as i32)).unwrap_or(&0);
