@@ -54,9 +54,15 @@ jobs:
             "
           
           # Copy the rendered Markdown back out to host
-          docker cp "$cid":/test-reports/e2e_comment.md test-reports/e2e_comment.md
-          ls -l test-reports/e2e_comment.md
-          
+          docker run --rm \            
+            -v "$PWD/test-reports:/out" \
+            e2e:latest \
+            sh -lc '
+              python3 -m pip install --quiet jinja2 &&
+              python3 scripts/render_e2e_templates.py &&
+              cp -v test-reports/e2e_comment.md /out/e2e_comment.md
+            '
+
       - name: Upload HTML report artifact to report
         uses: actions/upload-artifact@v4
         with:
