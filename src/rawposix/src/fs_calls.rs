@@ -1122,7 +1122,7 @@ pub fn poll_syscall(
         // Ignore other fdkind types - we only handle FDs with underlying kernel FDs
     }
 
-    // Atomic poll operation for all kernel-backed FDs
+    // Poll all kernel-backed fds with a single kernel libc call
     if !all_kernel_pollfds.is_empty() {
         let ret = unsafe {
             libc::poll(
