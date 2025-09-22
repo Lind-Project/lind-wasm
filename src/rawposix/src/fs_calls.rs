@@ -8,6 +8,8 @@ use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
 use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
 use fdtables;
+use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 /// Helper function for close_syscall
 /// 
@@ -986,4 +988,209 @@ pub fn fcntl_syscall(
             ret
         }
     }
+}
+
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
+///
+/// Linux `poll()` syscall waits for one of a set of file descriptors to become ready to perform I/O.
+/// Since we implement a file descriptor management subsystem (called `fdtables`), we convert virtual
+/// file descriptors to kernel file descriptors, perform atomic polling across all fdkinds, then convert results back.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier.
+///     - fds_arg: pointer to array of pollfd structures (user's perspective).
+///     - fds_cageid: cage ID for fds_arg validation.
+///     - nfds_arg: number of items in the fds array.
+///     - nfds_cageid: cage ID for nfds_arg validation.
+///     - timeout_arg: timeout in milliseconds (-1 = infinite, 0 = non-blocking).
+///     - timeout_cageid: cage ID for timeout_arg validation.
+///
+/// ## Returns:
+///     - positive value: number of file descriptors ready for I/O
+///     - 0: timeout occurred with no file descriptors ready
+///     - negative value: error occurred (errno set)
+pub fn poll_syscall(
+    cageid: u64,
+    fds_arg: u64,
+    fds_cageid: u64,
+    nfds_arg: u64,
+    nfds_cageid: u64,
+    timeout_arg: u64,
+    timeout_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "poll_syscall", "Invalid Cage ID");
+    }
+
+    // Convert arguments
+    let nfds = sc_convert_sysarg_to_usize(nfds_arg, nfds_cageid, cageid);
+    let original_timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
+
+    // Basic bounds checking
+    if nfds > 65536 {
+        return syscall_error(Errno::EINVAL, "poll_syscall", "Too many file descriptors");
+    }
+
+    if nfds == 0 {
+        return 0; // No FDs to poll
+    }
+
+    if fds_arg == 0 {
+        return syscall_error(Errno::EFAULT, "poll_syscall", "pollfd array is null");
+    }
+
+    // Convert pollfd array from user space
+    let fds_ptr = sc_convert_buf(fds_arg, fds_cageid, cageid) as *mut libc::pollfd;
+    if fds_ptr.is_null() {
+        return syscall_error(Errno::EFAULT, "poll_syscall", "pollfd array is null");
+    }
+
+    // Create safe slice for pollfd array
+    let fds_slice = unsafe { std::slice::from_raw_parts_mut(fds_ptr, nfds) };
+
+    // Build index maps for O(1) lookups - avoid O(N²) performance
+    let mut vfd_to_index: HashMap<i32, usize> = HashMap::new();
+    let mut vfd_to_events: HashMap<i32, i16> = HashMap::new();
+    
+    // Clear all revents initially and build lookup maps
+    for i in 0..nfds {
+        fds_slice[i].revents = 0;
+        
+        // Build index mapping for O(1) result updates later
+        vfd_to_index.insert(fds_slice[i].fd, i);
+        vfd_to_events.insert(fds_slice[i].fd, fds_slice[i].events);
+    }
+
+    // Extract virtual fds from pollfd array - let fdtables handle invalid FDs
+    let mut virtual_fds = HashSet::new();
+    
+    for i in 0..nfds {
+        if fds_slice[i].fd >= 0 {
+            virtual_fds.insert(fds_slice[i].fd as u64);
+        }
+    }
+
+    // If no FDs to process, return immediately
+    if virtual_fds.is_empty() {
+        return 0;
+    }
+
+    // Convert virtual fds to kernel fds by fdkind using fdtables API
+    let (poll_data_by_fdkind, fdtables_mapping_table) = fdtables::convert_virtualfds_for_poll(cageid, virtual_fds);
+
+    // Separate kernel-backed FDs from virtual FDs and handle invalid FDs
+    let mut all_kernel_pollfds: Vec<libc::pollfd> = Vec::new();
+    let mut kernel_to_vfd_mapping: HashMap<usize, u64> = HashMap::new();
+    let mut virtual_fd_handlers: HashMap<u32, HashSet<(u64, fdtables::FDTableEntry)>> = HashMap::new();
+    let mut total_ready = 0i32;
+
+    for (fdkind, fd_set) in poll_data_by_fdkind {
+        if fdkind == FDKIND_KERNEL {
+            // Collect all kernel FDs for atomic polling
+            for (vfd, fdentry) in fd_set {
+                // Use O(1) lookup to find original events for this virtual fd
+                let events = *vfd_to_events.get(&(vfd as i32)).unwrap_or(&0);
+
+                let kernel_index = all_kernel_pollfds.len();
+                kernel_to_vfd_mapping.insert(kernel_index, vfd);
+                
+                all_kernel_pollfds.push(libc::pollfd {
+                    fd: fdentry.underfd as i32,
+                    events,
+                    revents: 0,
+                });
+            }
+        } else if fdkind == fdtables::FDT_INVALID_FD {
+            // Handle invalid FDs immediately - fdtables has already identified them
+            for (vfd, _fdentry) in fd_set {
+                if let Some(&array_index) = vfd_to_index.get(&(vfd as i32)) {
+                    fds_slice[array_index].revents = libc::POLLNVAL as i16;
+                    total_ready += 1;
+                }
+            }
+        } else {
+            // Store virtual FDs for separate handling
+            virtual_fd_handlers.insert(fdkind, fd_set);
+        }
+    }
+
+    // Track time for consistent timeout behavior across operations
+    let start_time = if original_timeout > 0 { Some(Instant::now()) } else { None };
+
+    // Atomic poll operation for all kernel-backed FDs
+    if !all_kernel_pollfds.is_empty() {
+        let ret = unsafe {
+            libc::poll(
+                all_kernel_pollfds.as_mut_ptr(),
+                all_kernel_pollfds.len() as libc::nfds_t,
+                original_timeout,
+            )
+        };
+
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "poll_syscall");
+        }
+
+        // Convert kernel results back to virtual fds using fdtables helper
+        for (kernel_index, kernel_pollfd) in all_kernel_pollfds.iter().enumerate() {
+            if kernel_pollfd.revents != 0 {
+                if let Some(&virtual_fd) = kernel_to_vfd_mapping.get(&kernel_index) {
+                    // Use fdtables helper to convert kernel fd back to virtual fd
+                    if let Some(converted_vfd) = fdtables::convert_poll_result_back_to_virtual(
+                        FDKIND_KERNEL, 
+                        kernel_pollfd.fd as u64, 
+                        &fdtables_mapping_table
+                    ) {
+                        // Use O(1) lookup to update original user array
+                        if let Some(&array_index) = vfd_to_index.get(&(converted_vfd as i32)) {
+                            fds_slice[array_index].revents = kernel_pollfd.revents;
+                            total_ready += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Handle virtual FDs (non-kernel) with batch processing and remaining timeout
+    if !virtual_fd_handlers.is_empty() {
+        // Calculate remaining timeout once for all virtual FDs
+        let remaining_timeout = if let Some(start) = start_time {
+            let elapsed_ms = start.elapsed().as_millis() as i32;
+            if original_timeout < 0 {
+                original_timeout // Infinite timeout remains infinite
+            } else {
+                std::cmp::max(0, original_timeout - elapsed_ms)
+            }
+        } else {
+            original_timeout
+        };
+
+        // Batch process virtual FDs by fdkind for efficiency
+        let virtual_fd_results = fdtables::handle_virtual_fds_batch(virtual_fd_handlers, remaining_timeout);
+        
+        // Apply batch results to user array
+        for (vfd, revents) in virtual_fd_results {
+            if let Some(&array_index) = vfd_to_index.get(&(vfd as i32)) {
+                fds_slice[array_index].revents = revents;
+                if revents != 0 {
+                    total_ready += 1;
+                }
+            }
+        }
+    }
+
+    total_ready
 }
