@@ -255,9 +255,15 @@ fn copy_does_not_overwrite_existing_handlers() {
     assert_eq!(got, vec![(11, 77), (12, 100)]);
 }
 
+// This test adds multiple callnums with different destinations
+// Verify that when copying handler tables:
+// - All callnums from the source cage are copied into the destination cage.
+// - Existing handlers in the destination are preserved (not overwritten).
+// - New handlers from the source are merged in alongside existing ones.
+// In this case: callnum 34 is newly added, and callnum 35's new entry is merged
+// without losing the old one.
 #[test]
 #[serial]
-// This test adds multiple callnums with different destinations
 fn copy_merges_multiple_callnums() {
     clear_globals();
 
@@ -283,6 +289,9 @@ fn copy_merges_multiple_callnums() {
     assert_eq!(got35, vec![(21, 190), (22, 191)]);
 }
 
+// Ensure that if the source cage does not have a handler table,
+// attempting to copy from it fails with ELINDAPIABORTED.
+// Also verify that the destination cage remains unaffected (still empty).
 #[test]
 #[serial]
 fn copy_returns_error_if_src_missing_table() {
@@ -307,6 +316,10 @@ fn copy_returns_error_if_src_missing_table() {
     }
 }
 
+// Validate that copying fails with ELINDESRCH if either the source or the
+// destination cage is marked as "exiting".
+// The test covers both cases separately (src exiting, then dst exiting).
+// After each case, the EXITING_TABLE is restored to keep tests independent.
 #[test]
 #[serial]
 fn copy_returns_elindesrch_if_either_src_or_dst_exiting() {

@@ -1,6 +1,5 @@
 use dashmap::DashMap;
 use std::sync::Mutex;
-use lazy_static::lazy_static;
 use crate::threei_const;
 
 /// HANDLERTABLE:
