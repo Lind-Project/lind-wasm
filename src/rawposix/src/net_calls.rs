@@ -88,7 +88,7 @@ pub fn connect_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "connect_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "connect_syscall", "Invalid Cage ID");
     }
     
     let (finalsockaddr, addrlen) = sc_convert_host_sockaddr(addr,addr_cageid, cageid);
@@ -140,7 +140,7 @@ pub fn bind_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "bind_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "bind_syscall", "Invalid Cage ID");
     }
     
     let (finalsockaddr, addrlen) = sc_convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -190,7 +190,7 @@ pub fn listen_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "listen_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "listen_syscall", "Invalid Cage ID");
     }
 
     let ret = unsafe { libc::listen(fd, backlog) };
@@ -242,7 +242,7 @@ pub fn accept_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "accept_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "accept_syscall", "Invalid Cage ID");
     }
 
     let (finalsockaddr, mut addrlen) = sc_convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -301,7 +301,7 @@ pub fn setsockopt_syscall(
 
     if !(sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "setsockopt_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "setsockopt_syscall", "Invalid Cage ID");
     }
     let ret = unsafe { 
         libc::setsockopt(fd, level, optname, optval as *mut c_void, optlen)
@@ -352,7 +352,7 @@ pub fn send_syscall(
     if !(sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "send_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "send_syscall", "Invalid Cage ID");
     }
 
     let ret = unsafe { libc::send(fd as i32, buf as *const c_void, buflen, flags) as i32};
