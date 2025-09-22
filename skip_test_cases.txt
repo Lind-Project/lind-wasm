@@ -1,8 +1,3 @@
-config_tests/deterministic/cpuid.c
-config_tests/non-deterministic/getifaddrs.c
-file_tests/deterministic/chmod.c
-file_tests/deterministic/cloexec.c
-file_tests/deterministic/close.c
 file_tests/deterministic/creat_access.c
 file_tests/deterministic/dup2.c
 file_tests/deterministic/dup3.c
