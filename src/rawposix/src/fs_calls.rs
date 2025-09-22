@@ -1384,8 +1384,8 @@ pub fn fstat_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Convert stat_arg to StatData pointer at the very beginning
-    let stat_ptr = stat_arg as *mut StatData;
+    // Convert WASM virtual address to host address, then cast to StatData pointer
+    let stat_ptr = sc_convert_buf(stat_arg, stat_cageid, cageid) as *mut StatData;
     if stat_ptr.is_null() {
         return syscall_error(Errno::EFAULT, "fstat", "Invalid stat buffer pointer");
     }
@@ -1512,8 +1512,8 @@ pub fn fstatfs_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // Convert statfs_arg to FSData pointer at the very beginning
-    let fsdata_ptr = statfs_arg as *mut FSData;
+    // Convert WASM virtual address to host address, then cast to FSData pointer
+    let fsdata_ptr = sc_convert_buf(statfs_arg, statfs_cageid, cageid) as *mut FSData;
     if fsdata_ptr.is_null() {
         return syscall_error(Errno::EFAULT, "fstatfs", "Invalid statfs buffer pointer");
     }
