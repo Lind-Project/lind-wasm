@@ -308,7 +308,7 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
 /// ## Safety:
 ///     - stat_ptr must be a valid pointer to a StatData structure
 ///     - The caller must ensure the memory is writable and properly aligned
-pub unsafe fn sc_populate_statdata_from_libc_stat(stat_ptr: *mut StatData, libc_stat: &libc::stat) {
+pub unsafe fn sc_convert_statdata(stat_ptr: *mut StatData, libc_stat: &libc::stat) {
     (*stat_ptr).st_blksize = libc_stat.st_blksize as i32;
     (*stat_ptr).st_blocks = libc_stat.st_blocks as u32;
     (*stat_ptr).st_dev = libc_stat.st_dev as u64;
@@ -336,7 +336,7 @@ pub unsafe fn sc_populate_statdata_from_libc_stat(stat_ptr: *mut StatData, libc_
 /// ## Safety:
 ///     - fsdata_ptr must be a valid pointer to a FSData structure
 ///     - The caller must ensure the memory is writable and properly aligned
-pub unsafe fn sc_populate_fsdata_from_libc_statfs(fsdata_ptr: *mut FSData, libc_statfs: &libc::statfs) {
+pub unsafe fn sc_convert_fsdata(fsdata_ptr: *mut FSData, libc_statfs: &libc::statfs) {
     // Safely pack fsid_t (two i32s) into u64
     let fsid_packed: u64 = std::mem::transmute::<libc::fsid_t, u64>(libc_statfs.f_fsid);
     

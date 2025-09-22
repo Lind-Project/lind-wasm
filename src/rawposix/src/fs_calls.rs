@@ -1,6 +1,6 @@
 use libc::c_void;
 // Updated imports - using path_conversion for filesystem operations
-use typemap::datatype_conversion::{sc_populate_statdata_from_libc_stat, sc_populate_fsdata_from_libc_statfs, *};
+use typemap::datatype_conversion::{sc_convert_statdata, sc_convert_fsdata, *};
 use sysdefs::data::fs_struct::{StatData, FSData};
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
@@ -1420,7 +1420,7 @@ pub fn fstat_syscall(
 
     // 3) Populate StatData directly
     unsafe {
-        sc_populate_statdata_from_libc_stat(stat_ptr, &host_stat);
+        sc_convert_statdata(stat_ptr, &host_stat);
     }
 
     0
@@ -1548,7 +1548,7 @@ pub fn fstatfs_syscall(
 
     // 3) Populate FSData directly
     unsafe {
-        sc_populate_fsdata_from_libc_statfs(fsdata_ptr, &host_statfs);
+        sc_convert_fsdata(fsdata_ptr, &host_statfs);
     }
 
     0
@@ -1603,7 +1603,7 @@ pub fn getdents_syscall(
         return syscall_error(Errno::EFAULT, "getdents", "Invalid Cage ID");
     }
 
-    let ret = unsafe {
+        let ret = unsafe {
         libc::syscall(libc::SYS_getdents64 as libc::c_long, kernel_fd, dirp, count) as i64
     };
     if ret < 0 {
@@ -1737,8 +1737,8 @@ pub fn pread_syscall(
     }
 
     let ret = unsafe { libc::pread(kernel_fd, buf as *mut c_void, count, offset) as i32 };
-    if ret < 0 {
-        let errno = get_errno();
+        if ret < 0 {
+            let errno = get_errno();
         return handle_errno(errno, "pread");
     }
     ret
