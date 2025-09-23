@@ -1606,15 +1606,12 @@ pub fn getdents_syscall(
         let ret = unsafe {
         libc::syscall(libc::SYS_getdents64 as libc::c_long, kernel_fd, dirp, count) as i64
     };
+    
     if ret < 0 {
         return handle_errno(get_errno(), "getdents");
     }
-    // Check if the result is too large to fit in i32
-    if ret > i32::MAX as i64 {
-        return i32::MAX;
-    }
 
-    ret as i32
+    ret 
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/lseek.2.html
