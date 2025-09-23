@@ -4,49 +4,7 @@
 <details>
   <summary><strong>HTML preview</strong></summary>
 
-<style>
-/* Success rows: bold and readable */
-tr[style*="lightgreen"] td,
-tr[style*="lightgreen"] th,
-tr[style*="lightgreen"] pre {
-  font-weight: 700;
-  color: #000;
-}
 
-/* Output cells — fix dark grey backgrounds */
-td pre,
-td[style*="#333"],
-td[style*="rgb(51"] {
-  background: none !important;   /* strip the dark box in light mode */
-  color: #000 !important;
-}
-
-/* Adjust for dark mode */
-@media (prefers-color-scheme: dark) {
-  td pre,
-  td[style*="#333"],
-  td[style*="rgb(51"] {
-    background: #222 !important; /* consistent dark box */
-    color: #fff !important;      /* force white text */
-  }
-}
-
-/* Wrap long lines */
-pre {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* Table layout and borders */
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-table, th, td {
-  border: 1px solid #444 !important; /* darker table bars */
-}
-</style>
 
 {{html_body | safe }}
 </details>
