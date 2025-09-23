@@ -50,6 +50,7 @@ jobs:
           # Copy the rendered Markdown back out to host
           HOST_OUT="${{ github.workspace }}/${{ env.REPORT_LOCAL_DIR }}"
           docker run --rm \
+            -e REPORT_PATH="$REPORT_PATH_IN_IMAGE" \
             --mount type=bind,src="$HOST_OUT",dst=/out \
             e2e:latest \
             sh -lc '              
