@@ -1,29 +1,9 @@
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 glibc_base="$script_dir/src/glibc"
 wasmtime_base="$script_dir/src/wasmtime"
-rustposix_base="$script_dir/src/safeposix-rust"
 rawposix_base="$script_dir/src/RawPOSIX"
 
-
 CC="${CLANG:=/home/lind/lind-wasm/clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04}/bin/clang"
-
-export_cmd="export LD_LIBRARY_PATH=$wasmtime_base/crates/rustposix:\$LD_LIBRARY_PATH"
-
-compile_test_cmd_fork="$CC --target=wasm32-unknown-wasi \
---sysroot $glibc_base/sysroot \
--Wl, --export="__stack_pointer",--export=__stack_low \
-[input] -g -O0 -o [output] && \
-wasm-opt --asyncify --debuginfo [output] -o [output]"
-
-compile_test_cmd_noshared="$CC --target=wasm32-unknown-wasi \
---sysroot $glibc_base/sysroot \
--Wl,--export="__stack_pointer",--export=__stack_low \
-[input] -g -O0 -o [output]"
-
-compile_test_cmd="$CC -pthread --target=wasm32-unknown-wasi \
---sysroot $glibc_base/sysroot \
- -Wl,--import-memory,--export-memory,--max-memory=67108864,--export=__stack_low \
- [input] -g -O0 -o [output]"
 
 precompile_wasm="$wasmtime_base/target/debug/wasmtime compile [input] -o [output]"
 
@@ -31,7 +11,7 @@ compile_test_cmd_fork_test="$CC -pthread --target=wasm32-unknown-wasi \
 --sysroot $glibc_base/sysroot \
 -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
 [input] -g -O0 -o [output] && \
- wasm-opt --asyncify --debuginfo [output] -o [output]"
+ $script_dir/tools/binaryen/bin/wasm-opt --epoch-injection --asyncify -O2 --debuginfo [output] -o [output]"
 
 run_cmd="$wasmtime_base/target/debug/wasmtime run --wasi \
 threads=y \
@@ -49,8 +29,7 @@ run_cmd_debug="gdb --args $wasmtime_base/target/debug/wasmtime run \
 --wasi preview2=n [target]"
 
 compile_wasmtime_cmd="cd $wasmtime_base && cargo build"
-compile_rustposix_cmd="cd $rustposix_base && cargo build && cp $rustposix_base/target/debug/librustposix.so $wasmtime_base/crates/rustposix"
-compile_rawposix_cmd="cd $rawposix_base && cargo build && cp $rawposix_base/target/debug/librustposix.so $wasmtime_base/crates/rustposix"
+compile_rawposix_cmd="cd $rawposix_base && cargo build"
 
 compile_pthread_create="$CC --target=wasm32-unkown-wasi \
 -v -Wno-int-conversion pthread_create.c \
