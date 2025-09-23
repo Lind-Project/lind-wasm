@@ -665,8 +665,8 @@ pub fn sigaction_syscall(
     arg6: u64, arg6_cageid: u64,
 ) -> i32 {
     let sig = sc_convert_sysarg_to_i32(sig_arg, sig_arg_cageid, cageid);
-    let act = sc_convert_SigactionStruct(act_arg, act_arg_cageid, cageid);
-    let oact = sc_convert_SigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
+    let act = sc_convert_sigactionStruct(act_arg, act_arg_cageid, cageid);
+    let oact = sc_convert_sigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
     // Validate that the extra unused arguments are indeed unused.
     if !(sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
