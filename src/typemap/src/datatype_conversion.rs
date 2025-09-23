@@ -346,12 +346,6 @@ pub fn sc_convert_sockpair<'a>(arg: u64, arg_cageid: u64, cageid: u64) -> Result
     ));
 }
 
-pub fn fill(bufptr: *mut u8, count: usize, values: &Vec<u8>) -> i32 {
-    let slice = unsafe { std::slice::from_raw_parts_mut(bufptr, count) };
-    slice.copy_from_slice(&values[..count]);
-    count as i32
-}
-
 /// Converts a user-space socket address into a host-compatible `sockaddr` used for syscalls.
 pub fn sc_convert_host_sockaddr(arg: u64, arg_cageid: u64, cageid: u64) -> (*mut sockaddr, u32) {
     #[cfg(feature = "secure")]
