@@ -666,17 +666,6 @@ fn _strlen_in_cage(src: *const u8, max_len: usize) -> Option<usize> {
     None // null terminator not found within max_len
 }
 
-///  Convert a byte address range [addr, addr+len) into page numbers.
-#[inline]
-fn _bytes_to_pages(addr: u64, len: u64) -> (u32, u32) {
-    // start_page: page index of the starting address
-    let start_page = (addr >> PAGESHIFT) as u32;
-    let end_addr   = addr.checked_add(len).expect("addr overflow in ensure_mapped");
-    // end_page: page index after the last byte (exclusive), ceil-rounded
-    let end_page   = ((end_addr + (PAGESIZE as u64 - 1)) >> PAGESHIFT) as u32; // ceil
-    (start_page, end_page)
-}
-
 /// copies memory across cages.  Interposable
 ///
 /// This copies memory across cages.  One common use of this is to read
@@ -691,7 +680,7 @@ fn _bytes_to_pages(addr: u64, len: u64) -> (u32, u32) {
 /// The maxsize and copytype arguments make the behavor act like strncpy or
 /// memcpy.
 ///
-/// ### Multithreading semantics
+/// ### Multithreading
 /// This function performs *range and permission checks* and then copies bytes.
 /// It does **not** acquire or hold any locks on the source or destination
 /// mappings. In a multithreaded program, other threads (or cages) may
@@ -708,14 +697,14 @@ fn _bytes_to_pages(addr: u64, len: u64) -> (u32, u32) {
 /// **Users need to ensure** that the specified memory regions remain valid, 
 /// mapped, and stable (i.e., not unmapped, re-mapped, or concurrently written) 
 /// for the entire duration of this operation.
-///
-/// ### TOCTOU warning
-/// There is an inherent TOCTOU window between:
-/// (a) address/permission validation, and
-/// (b) the actual address translation and byte copy.
-/// If another actor remaps, unmaps, or writes the region in between, the
-/// validation no longer reflects reality. Callers must prevent such races
-/// (e.g., take a lock)
+/// 
+/// ### Scope & constraints
+/// - Cross-cage only: `srccage` and `destcage` must be different. Calls with
+///   the same cage for source and destination are rejected with `ELINDAPIABORTED`.
+/// - No shared memory is assumed between cages; overlapping regions across cages
+///   are therefore impossible since wasm linear memory module.
+/// - For intra-cage copies, callers should use a local memcpy/memmove path
+///   instead of this 3i API.
 ///
 /// ## Arguments:
 /// - thiscage: ID of the cage initiating the call (used for address resolution).
@@ -749,6 +738,12 @@ pub fn copy_data_between_cages(
     _arg6: u64,
     _arg6cage: u64,
 ) -> u64 {
+    // Disallow same-cage copies. This API is for cross-cage transfer only.
+    if srccage == destcage {
+        eprintln!("[3i|copy] src and dest cage cannot be the same: {}", srccage);
+        return threei_const::ELINDAPIABORTED;
+    }
+
     // Reject requests where `len` exceeds the maximum allowed linear memory size
     // (`MAX_LIND_SIZE`), since such a copy would exceed the Wasm 32-bit address space.
     if let Err(code) = _validate_len(len, lind_platform_const::MAX_LINEAR_MEMORY_SIZE) {
