@@ -101,7 +101,7 @@ impl IntervalTimer {
 
                     if remaining_seconds == Duration::ZERO {
                         // Sends a SIGALRM signal to the cage when the timer expires.
-                        // This struct/method is used exclusively by the setitimer syscall,
+                        // This struct/method is used exclusively by the setitimer and alarm syscall,
                         // which is expected to send a SIGALRM signal upon expiration.
                         lind_send_signal(guard.cageid, SIGALRM);
 

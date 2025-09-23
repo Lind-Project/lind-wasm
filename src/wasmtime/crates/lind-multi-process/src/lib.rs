@@ -7,7 +7,7 @@ use threei::threei::make_syscall;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
-use wasmtime_lind_3i_vmctx::{insert_ctx, get_ctx, remove_ctx, VM_TABLE};
+use wasmtime_lind_3i_vmctx::remove_ctx;
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -528,9 +528,10 @@ impl<
                                     THREAD_START_ID as u64,
                                 ) {
                                     // Clean up the context from the global table
-                                    if !remove_ctx(child_cageid as usize) {
-                                        eprintln!("[wasmtime|run] Warning: failed to remove context for cage {}", child_cageid);
-                                    }
+                                    // We only register grate calls into the vmctx table during fork+exec (the logic 
+                                    // lives in the grate module), so a bare fork currently does not register a vmctx 
+                                    // table instance.
+                                    remove_ctx(child_cageid as usize);
 
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
@@ -818,7 +819,7 @@ impl<
                             ) {
                                 // Clean up the context from the global table
                                 if !remove_ctx(child_cageid as usize) {
-                                    eprintln!("[wasmtime|run] Warning: failed to remove context for cage {}", child_cageid);
+                                    eprintln!("[wasmtime|pthread_create] Warning: failed to remove context for cage {}", child_cageid);
                                 }
 
                                 // we clean the cage only if this is the last thread in the cage
