@@ -1603,9 +1603,9 @@ pub fn getdents_syscall(
         return syscall_error(Errno::EFAULT, "getdents", "Invalid Cage ID");
     }
 
-        let ret = unsafe {
+    let ret = unsafe {
         libc::syscall(libc::SYS_getdents64 as libc::c_long, kernel_fd, dirp, count) as i64
-    };
+    }
 
     ret 
 }
