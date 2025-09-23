@@ -19,7 +19,7 @@ use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME
 /// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
 /// which is adding `LIND_ROOT` before the path arguments. Considering actual syscall implementation
 /// logic needs to pass string pointer to underlying rust libc, so this function will return `CString`
-/// lways using arg_cageid to translate. (TODO: the logic here might be different according to 3i/grate
+/// always using arg_cageid to translate. (TODO: the logic here might be different according to 3i/grate
 /// implementation)
 ///     - If arg_cageid != cageid: this call is sent by grate. We need to translate according to cage
 ///     - If arg_cageid == cageid: this call is sent by cage, we can use either one
