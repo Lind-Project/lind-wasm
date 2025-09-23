@@ -677,88 +677,6 @@ fn _bytes_to_pages(addr: u64, len: u64) -> (u32, u32) {
     (start_page, end_page)
 }
 
-/// Ensure that the given [addr, addr+len) region in a cage is mapped with
-/// the required protection flags. If an overlap exists, it will be removed
-/// and replaced by a new mapping.
-/// 
-/// ## Arguments
-/// - cage: reference to the target Cage (contains vmmap)
-/// - cage_id: ID of the cage for ownership metadata
-/// - addr: starting virtual address in user space
-/// - len: length of the region in bytes
-/// - required_prot: protection flags to enforce (e.g., PROT_READ|PROT_WRITE)
-/// - required_maxprot: maximum allowed protection flags
-/// - map_flags: mmap-style flags (e.g., MAP_PRIVATE|MAP_ANONYMOUS)
-/// - backing: type of memory backing (Anonymous, File, SharedMemory, etc.)
-/// 
-/// ## Returns
-/// - Ok(()) if the region was successfully mapped or already valid
-/// - Err(&'static str) if the request is invalid (out of bounds or prot violation)
-fn _ensure_user_range_mapped(
-    cage: &Arc<Cage>,
-    cage_id: u64,
-    addr: u64,
-    len: u64,
-    required_prot: i32,      
-    required_maxprot: i32,   
-    map_flags: i32,           
-    backing: MemoryBackingType,
-) -> Result<(), &'static str> {
-    // Convert byte range to page-aligned region
-    let (start_page, end_page) = _bytes_to_pages(addr, len);
-    if start_page >= end_page {
-        // Do nothing for zero-length or invalid ranges
-        return Ok(());
-    }
-    let npages = end_page - start_page;
-
-    let mut vm = cage.vmmap.write();
-
-    // The requested region must be within vmmap limits
-    if end_page > vm.end_address {
-        return Err("requested range exceeds vmmap end");
-    }
-    if start_page < vm.start_address {
-        return Err("requested range starts before vmmap start");
-    }
-
-    // Validate that requested protections do not exceed existing maxprot
-    for (_iv, ent) in vm.entries.overlapping(ie(start_page, end_page)) {
-        let mut allowed = ent.maxprot;
-        // if any protection is set, always include PROT_READ
-        if allowed & (PROT_EXEC | PROT_READ | PROT_WRITE) != PROT_NONE {
-            allowed |= PROT_READ; 
-        }
-        // return error if caller requires permissions not allowed by maxprot
-        if (required_prot & !allowed) != 0 {
-            return Err("required prot exceeds maxprot");
-        }
-    }
-
-    // Remove any existing entries overlapping [start_page, end_page)
-    let _ = vm.entries.remove_overlapping(ie(start_page, end_page));
-
-    // Insert a new mapping entry covering the entire range
-    let new_ent = VmmapEntry::new(
-        start_page,
-        npages,
-        required_prot,
-        required_maxprot,
-        map_flags,
-        false,     // removed
-        0,         // file_offset
-        0,         // file_size
-        cage_id,
-        backing,
-    );
-    let _ = vm.entries.insert_strict(ie(start_page, end_page), new_ent);
-    
-    // Invalidate cache so next lookup won’t use stale entry
-    vm.cached_entry = None;
-
-    Ok(())
-}
-
 /// copies memory across cages.  Interposable
 ///
 /// This copies memory across cages.  One common use of this is to read
@@ -880,26 +798,9 @@ pub fn copy_data_between_cages(
         }
     };
 
-    // Ensure destination range exists and is writable
-    let destcage_instance = get_cage(destcage).unwrap();
-    if let Err(e) = _ensure_user_range_mapped(
-        &destcage_instance,
-        destcage,
-        destaddr,
-        copy_len as u64,
-        PROT_READ | PROT_WRITE,
-        PROT_READ | PROT_WRITE,
-        (MAP_PRIVATE | MAP_ANONYMOUS) as i32,
-        MemoryBackingType::Anonymous,
-    ) {
-        eprintln!("[3i|copy] ensure dest failed: {}", e);
-        return threei_const::ELINDAPIABORTED;
-    }
-
     // Validate that src and dest ranges are accessible
-    if let Err(_e) = check_addr(srccage, srcaddr, copy_len, PROT_READ) {
-        eprintln!("[3i|copy] src check failed for len={}", copy_len);
-        return threei_const::ELINDAPIABORTED;
+    if let Err(code) = _validate_range(srccage, srcaddr, copy_len, PROT_READ, "source") {
+        return code;
     }
     if let Err(code) = _validate_range(destcage, destaddr, copy_len, PROT_READ | PROT_WRITE, "destination") {
         return code;
@@ -909,6 +810,7 @@ pub fn copy_data_between_cages(
     let host_src_addr = sc_convert_uaddr_to_host(srcaddr, srccage, thiscage);
     let host_dest_addr = sc_convert_uaddr_to_host(destaddr, destcage, thiscage);
     if host_src_addr == 0 || host_dest_addr == 0 {
+        // src addr or dest addr is null
         eprintln!("[3i|copy] host addr translate failed");
         return threei_const::ELINDAPIABORTED;
     }
