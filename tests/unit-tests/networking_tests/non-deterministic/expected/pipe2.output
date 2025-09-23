@@ -1,0 +1,4 @@
+pipe2() ret: [9, 10]
+write() ret: 3
+read() ret: 3
+hi

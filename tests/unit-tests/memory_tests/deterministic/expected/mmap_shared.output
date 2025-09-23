@@ -1,0 +1,6 @@
+parent value: 1234, 4321
+parent value after fork: 1234, 4321
+parent value after modification: 2333, 3332
+parent value: 1234, 4321
+child value after fork: 1234, 4321
+child value after modification: 2333, 4321

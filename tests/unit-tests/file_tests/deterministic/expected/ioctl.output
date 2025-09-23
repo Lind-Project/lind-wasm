@@ -1,0 +1,8 @@
+[For 0 = False and <any_other_int> = True]
+[The answers should be F, T, F]
+
+(0) Is the socket set for non-blocking I/O?: 0
+[Setting socket for non_blocking I/O]
+(1) Is the socket set for non-blocking I/O?: 2048
+[Clearing socket for non-blocking I/O]
+(2) Is the socket set for non-blocking I/O?: 0

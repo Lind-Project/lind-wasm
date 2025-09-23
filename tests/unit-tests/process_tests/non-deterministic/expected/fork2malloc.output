@@ -1,0 +1,7 @@
+first malloc
+Address of mptr1 0x55555555a2b0
+Contents of mptr1 deadbeef
+pre-fork
+in child
+Address of mptr1 0x55555555b260
+done

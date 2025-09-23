@@ -1,0 +1,84 @@
+Starting Ponger
+Starting Pinger 0
+Starting Pinger 1
+client 1 send: 1
+client 0 send: 1
+ponger receive: 1
+ponger send: 2
+client 0 receive: 2
+ponger receive: 1
+client 0 send: 3
+ponger send: 2
+ponger receive: 3
+ponger send: 4
+client 1 receive: 2
+client 0 receive: 4
+client 1 send: 3
+client 0 send: 5
+ponger receive: 3
+ponger send: 4
+ponger receive: 5
+ponger send: 6
+client 0 receive: 6
+client 1 receive: 4
+client 0 send: 7
+client 1 send: 5
+ponger receive: 7
+ponger send: 8
+ponger receive: 5
+ponger send: 6
+client 0 receive: 8
+client 0 send: 9
+client 1 receive: 6
+ponger receive: 9
+ponger send: 10
+client 1 send: 7
+client 0 receive: 10
+client 0 send: 11
+ponger receive: 7
+ponger send: 8
+ponger receive: 11
+ponger send: 12
+client 1 receive: 8
+client 0 receive: 12
+client 1 send: 9
+ponger receive: 9
+ponger send: 10
+client 0 send: 13
+client 1 receive: 10
+client 1 send: 11
+ponger receive: 13
+ponger send: 14
+ponger receive: 11
+ponger send: 12
+client 1 receive: 12
+client 0 receive: 14
+client 0 send: 15
+client 1 send: 13
+ponger receive: 13
+ponger send: 14
+ponger receive: 15
+client 1 receive: 14
+ponger send: 16
+client 1 send: 15
+client 0 receive: 16
+ponger receive: 15
+ponger send: 16
+client 1 receive: 16
+client 0 send: 17
+client 1 send: 17
+ponger receive: 17
+ponger send: 18
+ponger receive: 17
+client 0 receive: 18
+ponger send: 18
+client 0 send: 19
+client 1 receive: 18
+ponger receive: 19
+client 1 send: 19
+ponger send: 20
+ponger receive: 19
+client 0 receive: 20
+ponger send: 20
+client 1 receive: 20
+Threads end

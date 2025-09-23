@@ -1,0 +1,9 @@
+[file is opened]
+[succeeded write(1) process]
+[reading(1) data] from pwrite.txt
+[Lind is amazing!]
+-----------------------------------
+[succeeded write(2) process]
+[reading(2) data] from pwrite.txt
+[NYU is amazing!]
+[succeeded in close]

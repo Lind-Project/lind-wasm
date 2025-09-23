@@ -1,0 +1,15 @@
+
+=== Test Case 1: Remove valid file ===
+Test Case 1: Successfully removed testfiles/unlinkatfile.txt
+
+=== Test Case 2: Remove non-existent file ===
+Test Case 2: Expected failure: No such file or directory
+
+=== Test Case 3: Remove file in a subdirectory ===
+Test Case 3: Successfully removed file in subdirectory
+
+=== Test Case 4: Remove a directory with AT_REMOVEDIR ===
+Test Case 4: Successfully removed directory testfiles/unlinkatsubdir
+
+=== Test Case 5: Remove a directory without AT_REMOVEDIR ===
+Test Case 5: Expected failure: Is a directory

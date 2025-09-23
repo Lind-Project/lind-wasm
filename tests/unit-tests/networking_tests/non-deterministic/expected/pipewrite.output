@@ -1,0 +1,8 @@
+Made pipe with write end 9 and read end 10
+wrote 16
+write 16
+wrote 16
+wrote three messages to the pipe
+msg 0, length 16: hello, world #1
+msg 1, length 16: hello, world #2
+msg 2, length 16: hello, world #3

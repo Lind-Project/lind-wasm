@@ -1,0 +1,6 @@
+lo       AF_PACKET (17)
+tunl0    AF_PACKET (17)
+ip6tnl0  AF_PACKET (17)
+eth0     AF_PACKET (17)
+lo       AF_INET (2)
+eth0     AF_INET (2)

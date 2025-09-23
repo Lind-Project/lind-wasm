@@ -1,0 +1,8 @@
+[#1:L20] pid 2903 forking
+[#2:L57] pid 2903 forking
+[#2:L29] pid 2904 forking
+[#3:L37] pid = 2906, ret = 0, status = 0
+[#3:L65] pid = 2905, ret = 0, status = 0
+[#3:L41] pid 2904 waiting on -1 (PID_ANY), child is 2906
+[#4:L44] pid = 2904, ret = 2906, status = 0
+[#3:L72] pid = 2903, ret = 2905, status = 0

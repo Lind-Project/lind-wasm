@@ -1,0 +1,7 @@
+Child: Writing to shared memory.
+Child: Reading from shared memory: 'Hello from the parent process!'
+Child: Exiting.
+Parent: Waiting for child to write.
+Parent: Reading from shared memory: 'Hello from the child process!'
+Parent: Reading modified shared memory: 'Hello from the parent process!'
+Parent: Exiting.

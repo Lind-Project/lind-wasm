@@ -1,0 +1,17 @@
+[#1:L20] pid 3060 forking
+[#2:L28] pid 3061 forking
+[#3:L34] pid = 3062, ret = 0, status = 0
+[#1:L20] pid 3060 forking
+[#2:L28] pid 3061 forking
+[#3:L37] pid 3061 waiting on -1 (PID_ANY), child is 3062
+[#4:L40] pid = 3061, ret = 3062, status = 0
+[#1:L20] pid 3060 forking
+[#2:L44] pid 3060 waiting on 3061
+[#3:L47] pid = 3060, ret = 3061, status = 0
+[#4:L49] pid 3060 forking
+[#5:L56] pid = 3063, ret = 0, status = 0
+[#1:L20] pid 3060 forking
+[#2:L44] pid 3060 waiting on 3061
+[#3:L47] pid = 3060, ret = 3061, status = 0
+[#4:L49] pid 3060 forking
+[#5:L61] pid = 3060, ret = 3063, status = 0

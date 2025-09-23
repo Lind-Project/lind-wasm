@@ -1,0 +1,3 @@
+pipe() ret: [9, 10]
+read() ret: 3
+hi

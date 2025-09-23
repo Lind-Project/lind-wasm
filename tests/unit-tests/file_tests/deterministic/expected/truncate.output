@@ -1,0 +1,71 @@
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c: In function 'check_filesize':
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:18:56: warning: format '%d' expects argument of type 'int', but argument 3 has type 'off_t' {aka 'long int'} [-Wformat=]
+   18 |                         "ERROR: EXPECT FILESIZE TO BE %d BUT GOT %d\n",
+      |                                                       ~^
+      |                                                        |
+      |                                                        int
+      |                                                       %ld
+   19 |                         target_size,
+      |                         ~~~~~~~~~~~                     
+      |                         |
+      |                         off_t {aka long int}
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:18:67: warning: format '%d' expects argument of type 'int', but argument 4 has type '__off_t' {aka 'long int'} [-Wformat=]
+   18 |                         "ERROR: EXPECT FILESIZE TO BE %d BUT GOT %d\n",
+      |                                                                  ~^
+      |                                                                   |
+      |                                                                   int
+      |                                                                  %ld
+   19 |                         target_size,
+   20 |                         st.st_size
+      |                         ~~~~~~~~~~                                 
+      |                           |
+      |                           __off_t {aka long int}
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c: In function 'main':
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:53:37: warning: format '%d' expects argument of type 'int', but argument 3 has type 'off_t' {aka 'long int'} [-Wformat=]
+   53 |         printf("Truncating %s from %d to %d\n", FILENAME, filesize, filesize_inc);
+      |                                    ~^                     ~~~~~~~~
+      |                                     |                     |
+      |                                     int                   off_t {aka long int}
+      |                                    %ld
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:53:43: warning: format '%d' expects argument of type 'int', but argument 4 has type 'off_t' {aka 'long int'} [-Wformat=]
+   53 |         printf("Truncating %s from %d to %d\n", FILENAME, filesize, filesize_inc);
+      |                                          ~^                         ~~~~~~~~~~~~
+      |                                           |                         |
+      |                                           int                       off_t {aka long int}
+      |                                          %ld
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:58:37: warning: format '%d' expects argument of type 'int', but argument 3 has type 'off_t' {aka 'long int'} [-Wformat=]
+   58 |         printf("Truncating %s from %d to %d\n", FILENAME, filesize_inc, filesize);
+      |                                    ~^                     ~~~~~~~~~~~~
+      |                                     |                     |
+      |                                     int                   off_t {aka long int}
+      |                                    %ld
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:58:43: warning: format '%d' expects argument of type 'int', but argument 4 has type 'off_t' {aka 'long int'} [-Wformat=]
+   58 |         printf("Truncating %s from %d to %d\n", FILENAME, filesize_inc, filesize);
+      |                                          ~^                             ~~~~~~~~
+      |                                           |                             |
+      |                                           int                           off_t {aka long int}
+      |                                          %ld
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:68:37: warning: format '%d' expects argument of type 'int', but argument 3 has type 'off_t' {aka 'long int'} [-Wformat=]
+   68 |         printf("Truncating %s from %d to %d\n", FILENAME, filesize, filesize_inc);
+      |                                    ~^                     ~~~~~~~~
+      |                                     |                     |
+      |                                     int                   off_t {aka long int}
+      |                                    %ld
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:68:43: warning: format '%d' expects argument of type 'int', but argument 4 has type 'off_t' {aka 'long int'} [-Wformat=]
+   68 |         printf("Truncating %s from %d to %d\n", FILENAME, filesize, filesize_inc);
+      |                                          ~^                         ~~~~~~~~~~~~
+      |                                           |                         |
+      |                                           int                       off_t {aka long int}
+      |                                          %ld
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:73:37: warning: format '%d' expects argument of type 'int', but argument 3 has type 'off_t' {aka 'long int'} [-Wformat=]
+   73 |         printf("Truncating %s from %d to %d\n", FILENAME, filesize_inc, filesize);
+      |                                    ~^                     ~~~~~~~~~~~~
+      |                                     |                     |
+      |                                     int                   off_t {aka long int}
+      |                                    %ld
+/home/lind/lind-wasm/tests/unit-tests/file_tests/deterministic/truncate.c:73:43: warning: format '%d' expects argument of type 'int', but argument 4 has type 'off_t' {aka 'long int'} [-Wformat=]
+   73 |         printf("Truncating %s from %d to %d\n", FILENAME, filesize_inc, filesize);
+      |                                          ~^                             ~~~~~~~~
+      |                                           |                             |
+      |                                           int                           off_t {aka long int}
+      |                                          %ld

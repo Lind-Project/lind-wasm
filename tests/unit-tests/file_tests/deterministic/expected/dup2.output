@@ -1,0 +1,3 @@
+Testing dup2
+I should be printed before the file contents!
+I will be printed in the file dup2test.txt

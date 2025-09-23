@@ -1,0 +1,8 @@
+/home/lind/lind-wasm/tests/unit-tests/memory_tests/deterministic/mmap.c: In function 'main':
+/home/lind/lind-wasm/tests/unit-tests/memory_tests/deterministic/mmap.c:9:26: warning: implicit declaration of function '__builtin_wasm_memory_size' [-Wimplicit-function-declaration]
+    9 |     int linear_mem_end = __builtin_wasm_memory_size(0);
+      |                          ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/bin/ld: /tmp/cc3mZVdu.o: in function `main':
+mmap.c:(.text+0x2a): undefined reference to `__builtin_wasm_memory_size'
+/usr/bin/ld: mmap.c:(.text+0x79): undefined reference to `__builtin_wasm_memory_size'
+collect2: error: ld returned 1 exit status

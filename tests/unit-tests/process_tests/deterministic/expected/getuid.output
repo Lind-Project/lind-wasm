@@ -1,0 +1,8 @@
+printing getgid:
+1000
+printing getuid:
+1000
+printing getegid:
+1000
+printing geteuid:
+1000
