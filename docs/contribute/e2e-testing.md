@@ -77,6 +77,25 @@ High level:
 
 ---
 
+## Caching
+
+**What we cache**
+
+- Buildx GHA layer cache (`cache-from/to: type=gha`) for apt/clang/rust/tooling and per-stage layers.
+
+- Multi-stage outputs: `build-wasmtime` and `build-glibc` are mounted into `test`, so tests are fast.
+
+
+**Local build with cache**
+
+### One-time: create/select a builder
+`docker buildx create --use --name lind-builder || docker buildx use lind-builder`
+
+### Build with cache import/export
+`docker buildx build --platform=linux/amd64 -f Docker/Dockerfile.e2e --cache-from type=local,src=~/.cache/docker-buildx --cache-to type=type=local,dest=.~/.cache/docker-buildx,mode=max .`
+
+---
+
 ##Troubleshooting
 
 - Apple Silicon / wrong arch → add --platform=linux/amd64 to all build/run commands.
