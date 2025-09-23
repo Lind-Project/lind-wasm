@@ -2,7 +2,8 @@
 //!
 //! This file provides APIs for converting between different argument types and translation between path from
 //! user's perspective to host's perspective
-use cage;
+use cage::{get_cage, memory::memory::translate_vmmap_addr};
+use crate::datatype_conversion::get_cstr;
 pub use libc::*;
 pub use std::env;
 pub use std::ffi::{CStr, CString};
@@ -136,4 +137,21 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
         Ok(c_path) => c_path,
         Err(_) => panic!("String contains internal null byte"),
     }
+}
+
+/// This function translates 64 bits uadd from the WASM context
+/// into the corresponding host address value. Unlike the previous two functions, it returns
+/// the translated address as a raw `u64` rather than a pointer.
+///
+/// Input:
+///     - uaddr_arg: the original 64-bit address from the WASM space
+///     - uaddr_arg_cageid: the cage ID that owns the address
+///     - cageid: the currently executing cage ID
+///
+/// Output:
+///     - Returns the translated 64-bit address in host space as a u64.
+pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64 {
+    let cage = get_cage(uaddr_arg_cageid).unwrap();
+    let uaddr = translate_vmmap_addr(&cage, uaddr_arg).unwrap();
+    return uaddr;
 }
