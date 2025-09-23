@@ -1665,10 +1665,6 @@ pub fn lseek_syscall(
         return handle_errno(get_errno(), "lseek");
     }
 
-    // Check if the result is too large to fit in i32
-    if ret > i32::MAX as i64 {
-        return syscall_error(Errno::EOVERFLOW, "lseek", "result too large");
-    }
     ret as i32
 }
 
