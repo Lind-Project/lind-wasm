@@ -36,7 +36,7 @@ jobs:
           file: Docker/Dockerfile.e2e
           load: true
           tags: e2e:latest
-      - name: Extract HTML report from built image
+      - name: Extract HTML report and markdown summary from built image
         run: |
           set -euo pipefail
           mkdir -p "$REPORT_LOCAL_DIR"
@@ -48,15 +48,16 @@ jobs:
           ls -l "${REPORT_LOCAL_DIR}/${REPORT_LOCAL_FILE}"          
           
           # Copy the rendered Markdown back out to host
-          docker run --rm \            
-            -v "$PWD/test-reports:/out" \
+          HOST_OUT="${{ github.workspace }}/${{ env.REPORT_LOCAL_DIR }}"
+          docker run --rm \
+            --mount type=bind,src="$HOST_OUT",dst=/out \
             e2e:latest \
             sh -lc '
               python3 -m pip install --quiet jinja2 &&
               python3 scripts/render_e2e_templates.py &&
               cp -v test-reports/e2e_comment.md /out/e2e_comment.md
             '
-
+          ls -l "$HOST_OUT/e2e_comment.md"
       - name: Upload HTML report artifact to report
         uses: actions/upload-artifact@v4
         with:
