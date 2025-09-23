@@ -1606,10 +1606,6 @@ pub fn getdents_syscall(
         let ret = unsafe {
         libc::syscall(libc::SYS_getdents64 as libc::c_long, kernel_fd, dirp, count) as i64
     };
-    
-    if ret < 0 {
-        return handle_errno(get_errno(), "getdents");
-    }
 
     ret 
 }
