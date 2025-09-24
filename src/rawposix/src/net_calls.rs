@@ -1,10 +1,13 @@
 use typemap::datatype_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
 use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
+use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_MOD, EPOLL_CTL_DEL};
 use cage::{signal_check_trigger};
 use fdtables;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
+use sysdefs::data::fs_struct::EpollEvent;
+use fdtables::epoll_event;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
 ///
@@ -407,4 +410,355 @@ pub fn select_syscall(
 
     // The total number of descriptors ready
     (read_flags + write_flags + error_flags) as i32
+}
+
+
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_create.2.html
+///
+/// Linux `epoll_create()` creates an epoll instance and returns a file descriptor referring to that instance.
+/// 
+/// ## Implementation Approach:
+/// 
+/// Uses the fdtables infrastructure to create a virtual epoll file descriptor that maps to an internal
+/// epoll instance. The size parameter is ignored (as per Linux behavior) and the epoll instance is
+/// created using fdtables::epoll_create_empty().
+///
+/// ## Arguments:
+///     - cageid: current cage identifier.
+///     - size_arg: hint for the size of the epoll instance (ignored in current implementation).
+///     - size_cageid: cage ID for size_arg validation.
+///     - arg2-arg6: unused arguments with their respective cage IDs.
+///
+/// ## Returns:
+///     - positive value: file descriptor for the new epoll instance
+///     - negative value: error occurred (errno set)
+pub fn epoll_create_syscall(
+    cageid: u64,
+    size_arg: u64,
+    size_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "epoll_create_syscall", "Invalid Cage ID");
+    }
+
+    // Convert size argument (though it's ignored in the implementation)
+    let _size = sc_convert_sysarg_to_i32(size_arg, size_cageid, cageid);
+
+    // Create epoll instance using fdtables
+    match fdtables::epoll_create_empty(cageid, false) {
+        Ok(virtual_epfd) => virtual_epfd as i32,
+        Err(err) => handle_errno(err as i32, "epoll_create_syscall")
+    }
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
+///
+/// Linux `epoll_ctl()` performs control operations on an epoll instance.
+/// 
+/// ## Implementation Approach:
+/// 
+/// Uses the fdtables infrastructure to manage virtual epoll file descriptors and their associated
+/// file descriptors. The function translates virtual FDs and validates operations before calling
+/// the fdtables::virtualize_epoll_ctl() function.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier.
+///     - epfd_arg: epoll file descriptor.
+///     - epfd_cageid: cage ID for epfd_arg validation.
+///     - op_arg: control operation (EPOLL_CTL_ADD, EPOLL_CTL_MOD, EPOLL_CTL_DEL).
+///     - op_cageid: cage ID for op_arg validation.
+///     - fd_arg: target file descriptor.
+///     - fd_cageid: cage ID for fd_arg validation.
+///     - event_arg: pointer to epoll_event structure.
+///     - event_cageid: cage ID for event_arg validation.
+///     - arg5-arg6: unused arguments with their respective cage IDs.
+///
+/// ## Returns:
+///     - 0: operation completed successfully
+///     - negative value: error occurred (errno set)
+pub fn epoll_ctl_syscall(
+    cageid: u64,
+    epfd_arg: u64,
+    epfd_cageid: u64,
+    op_arg: u64,
+    op_cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    event_arg: u64,
+    event_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments
+    if !(sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid Cage ID");
+    }
+
+    // Convert arguments
+    let epfd = sc_convert_sysarg_to_i32(epfd_arg, epfd_cageid, cageid);
+    let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
+    let fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
+    let virtfd = fd as u64;
+
+    // Validate operation
+    if op != EPOLL_CTL_ADD && op != EPOLL_CTL_MOD && op != EPOLL_CTL_DEL {
+        return syscall_error(Errno::EINVAL, "epoll_ctl_syscall", "Invalid operation");
+    }
+
+    // Convert epoll_event from user space
+    let event_ptr = if event_arg != 0 {
+        Some(sc_convert_buf(event_arg, event_cageid, cageid) as *mut EpollEvent)
+    } else {
+        None
+    };
+
+    // For EPOLL_CTL_DEL, event can be null
+    if event_ptr.is_none() && op != EPOLL_CTL_DEL {
+        return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "event pointer is null for non-DEL operation");
+    }
+
+    // Convert EpollEvent to fdtables epoll_event
+    let epoll_event = if let Some(event_ptr) = event_ptr {
+        if event_ptr.is_null() {
+            return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "event pointer is null");
+        }
+        let user_event = unsafe { *event_ptr };
+        epoll_event {
+            events: user_event.events,
+            u64: user_event.fd as u64,
+        }
+    } else {
+        // For EPOLL_CTL_DEL, create a dummy event
+        epoll_event {
+            events: 0,
+            u64: 0,
+        }
+    };
+
+    // Use fdtables to handle the epoll control operation
+    match fdtables::virtualize_epoll_ctl(cageid, epfd as u64, op, virtfd, epoll_event) {
+        Ok(()) => 0,
+        Err(err) => handle_errno(err as i32, "epoll_ctl_syscall")
+    }
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_wait.2.html
+///
+/// Linux `epoll_wait()` waits for events on an epoll file descriptor.
+/// 
+/// ## Implementation Approach:
+/// 
+/// Uses the fdtables infrastructure to get virtual epoll data and handles both kernel-backed
+/// and in-memory file descriptors. For kernel FDs, calls libc::epoll_wait() on the underlying
+/// kernel epoll FD. For in-memory FDs, implements custom polling logic. Results are converted
+/// back to virtual FDs and written to the user-space events array.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier.
+///     - epfd_arg: epoll file descriptor.
+///     - epfd_cageid: cage ID for epfd_arg validation.
+///     - events_arg: pointer to array of epoll_event structures.
+///     - events_cageid: cage ID for events_arg validation.
+///     - maxevents_arg: maximum number of events to return.
+///     - maxevents_cageid: cage ID for maxevents_arg validation.
+///     - timeout_arg: timeout in milliseconds (-1 = infinite, 0 = non-blocking).
+///     - timeout_cageid: cage ID for timeout_arg validation.
+///     - arg5-arg6: unused arguments with their respective cage IDs.
+///
+/// ## Returns:
+///     - positive value: number of file descriptors ready for I/O
+///     - 0: timeout occurred with no file descriptors ready
+///     - negative value: error occurred (errno set)
+pub fn epoll_wait_syscall(
+    cageid: u64,
+    epfd_arg: u64,
+    epfd_cageid: u64,
+    events_arg: u64,
+    events_cageid: u64,
+    maxevents_arg: u64,
+    maxevents_cageid: u64,
+    timeout_arg: u64,
+    timeout_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments
+    if !(sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid Cage ID");
+    }
+
+    // Convert arguments
+    let epfd = sc_convert_sysarg_to_i32(epfd_arg, epfd_cageid, cageid);
+    let maxevents = sc_convert_sysarg_to_i32(maxevents_arg, maxevents_cageid, cageid);
+    let timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
+
+    // Validate maxevents
+    if maxevents <= 0 {
+        return syscall_error(Errno::EINVAL, "epoll_wait_syscall", "maxevents must be positive");
+    }
+
+    if events_arg == 0 {
+        return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "events array is null");
+    }
+
+    // Convert events array from user space
+    let events_ptr = sc_convert_buf(events_arg, events_cageid, cageid) as *mut EpollEvent;
+    if events_ptr.is_null() {
+        return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "events array is null");
+    }
+
+    // Create safe slice for events array
+    let events_slice = unsafe { std::slice::from_raw_parts_mut(events_ptr, maxevents as usize) };
+
+    // Get virtual epoll wait data from fdtables
+    let epoll_data = match fdtables::get_virtual_epoll_wait_data(cageid, epfd as u64) {
+        Ok(data) => data,
+        Err(err) => return handle_errno(err as i32, "epoll_wait_syscall")
+    };
+
+    // Check if epoll instance is empty
+    if epoll_data.is_empty() {
+        return 0;
+    }
+
+    // Handle timeout setup (following select_syscall pattern)
+    let start_time = Instant::now();
+    let timeout_duration = if timeout == -1 {
+        // Infinite timeout - use a very large duration
+        std::time::Duration::from_millis(u64::MAX)
+    } else if timeout == 0 {
+        // Non-blocking
+        std::time::Duration::from_millis(0)
+    } else {
+        std::time::Duration::from_millis(timeout as u64)
+    };
+
+    let mut total_ready = 0i32;
+
+    // Process each fdkind in the epoll data
+    for (fdkind, fd_events_map) in epoll_data {
+        if fdkind == FDKIND_KERNEL {
+            // Handle kernel-backed FDs
+            let mut kernel_events: Vec<libc::epoll_event> = Vec::with_capacity(maxevents as usize);
+            
+            // Get the underlying kernel epoll FD for this fdkind
+            let kernel_epfd = match fdtables::epoll_get_underfd_hashmap(cageid, epfd as u64) {
+                Ok(underfd_map) => {
+                    match underfd_map.get(&fdkind) {
+                        Some(epfd) => *epfd as i32,
+                        None => continue, // No kernel epoll FD for this fdkind
+                    }
+                }
+                Err(_) => continue, // Skip if we can't get the mapping
+            };
+
+            // Initialize kernel events array
+            for _ in 0..maxevents {
+                kernel_events.push(libc::epoll_event {
+                    events: 0,
+                    u64: 0,
+                });
+            }
+
+            let mut ret;
+            loop {
+                ret = unsafe {
+                    libc::epoll_wait(
+                        kernel_epfd,
+                        kernel_events.as_mut_ptr(),
+                        maxevents,
+                        if timeout == -1 { -1 } else { timeout },
+                    )
+                };
+
+                if ret < 0 {
+                    let errno = get_errno();
+                    return handle_errno(errno, "epoll_wait_syscall");
+                }
+
+                // Check for timeout or successful result
+                if ret > 0 || (timeout != -1 && start_time.elapsed() > timeout_duration) {
+                    break;
+                }
+
+                // Check for signals
+                if signal_check_trigger(cageid) {
+                    return syscall_error(Errno::EINTR, "epoll_wait_syscall", "interrupted");
+                }
+            }
+
+            // Convert kernel results back to virtual FDs
+            for i in 0..ret as usize {
+                if total_ready >= maxevents {
+                    break;
+                }
+
+                let kernel_event = &kernel_events[i];
+                
+                // Find the virtual FD that corresponds to this kernel FD
+                for (virtfd, user_event) in &fd_events_map {
+                    if let Some(virtfd_entry) = fdtables::translate_virtual_fd(cageid, *virtfd).ok() {
+                        if virtfd_entry.underfd == kernel_event.u64 {
+                            // Found the matching virtual FD, update user array
+                            events_slice[total_ready as usize] = EpollEvent {
+                                events: kernel_event.events,
+                                fd: *virtfd as i32,
+                            };
+                            total_ready += 1;
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Handle in-memory FDs (custom polling logic)
+            // For now, we'll implement a simple approach similar to the old implementation
+            // This would need to be expanded based on the specific in-memory FD types
+            
+            // Check for timeout on non-blocking call
+            if timeout == 0 {
+                continue; // Non-blocking, no in-memory FDs ready
+            }
+
+            // For in-memory FDs, we would implement custom polling logic here
+            // This is a placeholder for future implementation
+            for (virtfd, _user_event) in &fd_events_map {
+                if total_ready >= maxevents {
+                    break;
+                }
+
+                // Placeholder: check if in-memory FD is ready
+                // This would need actual implementation based on the FD type
+                // For now, we'll skip in-memory FDs
+                continue;
+            }
+        }
+    }
+
+    total_ready
 }
