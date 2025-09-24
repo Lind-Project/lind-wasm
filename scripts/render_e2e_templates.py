@@ -23,8 +23,8 @@ def main():
     report_path = os.environ["REPORT_PATH"]
     
     tpl_dir = "scripts/templates"
-    out_dir = "test-reports"
-    os.makedirs(out_dir,exist_ok=True)
+    out_dir = os.environ.get("OUT_DIR", ".")   # ← changed from "test-reports"
+    os.makedirs(out_dir, exist_ok=True)
     
     body_html = extract_body(read(report_path))
     body_html = wrap_h3_tables_as_details(body_html)
@@ -36,14 +36,9 @@ def main():
         lstrip_blocks=True
     )
    
-
     md = env.get_template("e2e_comment.md.j2").render(html_body=body_html)
-    pathlib.Path(f"{out_dir}/e2e_comment.md").write_text(md, encoding="utf-8")
-
-    os.makedirs("test-reports", exist_ok=True)
-    out_path = "test-reports/e2e_comment.md"
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(md)
+    out_path = pathlib.Path(out_dir) / "e2e_comment.md"
+    out_path.write_text(md, encoding="utf-8")
 
     print(f"Rendered {out_path}")
 
