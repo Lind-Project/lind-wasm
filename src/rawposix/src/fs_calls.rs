@@ -6,7 +6,7 @@ use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
-use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
+use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, signal_check_trigger};
 use fdtables;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
@@ -1171,3 +1171,227 @@ pub fn poll_syscall(
 
     total_ready
 }
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/select.2.html
+///
+/// Linux `select()` syscall waits for one of a set of file descriptors to become ready to perform I/O.
+/// 
+/// ## Implementation Approach:
+/// 
+/// The design logic for select is first to categorize the file descriptors (fds) received from the user based on FDKIND.
+/// Specifically, kernel fds are passed to the underlying libc select, while impipe and imsock fds would be processed by the
+/// in-memory system. Afterward, the results are combined and consolidated accordingly.
+///
+/// (Note: Currently, only kernel fds are supported. The implementation for in-memory pipes is commented out and will require
+/// further integration and testing once in-memory pipe support is added.)
+///
+/// select() will return:
+///     - the total number of bits that are set in readfds, writefds, errorfds
+///     - 0, if the timeout expired before any file descriptors became ready
+///     - -1, fail
+///
+/// ## Arguments:
+///     - cageid: current cage identifier.
+///     - nfds_arg: highest-numbered file descriptor in any of the three sets, plus 1.
+///     - nfds_cageid: cage ID for nfds_arg validation.
+///     - readfds_arg: pointer to fd_set for read file descriptors (user's perspective).
+///     - readfds_cageid: cage ID for readfds_arg validation.
+///     - writefds_arg: pointer to fd_set for write file descriptors (user's perspective).
+///     - writefds_cageid: cage ID for writefds_arg validation.
+///     - exceptfds_arg: pointer to fd_set for exception file descriptors (user's perspective).
+///     - exceptfds_cageid: cage ID for exceptfds_arg validation.
+///     - timeout_arg: pointer to timeval structure for timeout (user's perspective).
+///     - timeout_cageid: cage ID for timeout_arg validation.
+///     - arg6: unused argument.
+///     - arg6_cageid: cage ID for arg6 validation.
+///
+/// ## Returns:
+///     - positive value: number of file descriptors ready for I/O
+///     - 0: timeout occurred with no file descriptors ready
+///     - negative value: error occurred (errno set)
+pub fn select_syscall(
+    cageid: u64,
+    nfds_arg: u64,
+    nfds_cageid: u64,
+    readfds_arg: u64,
+    readfds_cageid: u64,
+    writefds_arg: u64,
+    writefds_cageid: u64,
+    exceptfds_arg: u64,
+    exceptfds_cageid: u64,
+    timeout_arg: u64,
+    timeout_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments
+    if !sc_unusedarg(arg6, arg6_cageid) {
+        return syscall_error(Errno::EFAULT, "select_syscall", "Invalid Cage ID");
+    }
+
+    // Convert arguments
+    let nfds = sc_convert_sysarg_to_i32(nfds_arg, nfds_cageid, cageid);
+    
+    // Convert fd_set pointers - they can be null
+    let readfds_ptr = if readfds_arg != 0 {
+        Some(sc_convert_buf(readfds_arg, readfds_cageid, cageid) as *mut libc::fd_set)
+    } else {
+        None
+    };
+    
+    let writefds_ptr = if writefds_arg != 0 {
+        Some(sc_convert_buf(writefds_arg, writefds_cageid, cageid) as *mut libc::fd_set)
+    } else {
+        None
+    };
+    
+    let exceptfds_ptr = if exceptfds_arg != 0 {
+        Some(sc_convert_buf(exceptfds_arg, exceptfds_cageid, cageid) as *mut libc::fd_set)
+    } else {
+        None
+    };
+    
+    // Convert timeout pointer - can be null
+    let timeout_ptr = if timeout_arg != 0 {
+        Some(sc_convert_buf(timeout_arg, timeout_cageid, cageid) as *mut libc::timeval)
+    } else {
+        None
+    };
+
+    // Create fdkindset for fdtables processing
+    let mut fdkindset = HashSet::new();
+    fdkindset.insert(FDKIND_KERNEL);
+
+    // Prepare bitmasks for select using fdtables
+    let (selectbittables, unparsedtables, mappingtable) = match fdtables::prepare_bitmasks_for_select(
+        cageid,
+        nfds as u64,
+        readfds_ptr.map(|ptr| unsafe { *ptr }),
+        writefds_ptr.map(|ptr| unsafe { *ptr }),
+        exceptfds_ptr.map(|ptr| unsafe { *ptr }),
+        &fdkindset,
+    ) {
+        Ok(result) => result,
+        Err(_) => return syscall_error(Errno::EINVAL, "select_syscall", "Failed to prepare bitmasks"),
+    };
+
+    // Extract kernel fd_sets from selectbittables
+    // In select, each fd_set is allowed to contain empty values, as it's possible for the user to input a mixture of pure
+    // virtual_fds and those with underlying real file descriptors. This means we need to check each fd_set separately to
+    // handle both types of descriptors properly. The goal here is to ensure that each fd_set (read, write, error) is correctly
+    // initialized. To handle cases where selectbittables does not contain an entry at the expected index or where it doesn't
+    // include a FDKIND_KERNEL entry, the code assigns a default value with an initialized fd_set and an nfd of 0.
+    let (readnfd, mut real_readfds) = selectbittables
+        .get(0)
+        .and_then(|table| table.get(&FDKIND_KERNEL).cloned())
+        .unwrap_or((0, fdtables::_init_fd_set()));
+    let (writenfd, mut real_writefds) = selectbittables
+        .get(1)
+        .and_then(|table| table.get(&FDKIND_KERNEL).cloned())
+        .unwrap_or((0, fdtables::_init_fd_set()));
+    let (errornfd, mut real_errorfds) = selectbittables
+        .get(2)
+        .and_then(|table| table.get(&FDKIND_KERNEL).cloned())
+        .unwrap_or((0, fdtables::_init_fd_set()));
+
+    let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
+
+    // Handle timeout setup
+    let start_time = Instant::now();
+    let mut timeout = if let Some(timeout_ptr) = timeout_ptr {
+        unsafe { *timeout_ptr }
+    } else {
+        libc::timeval { tv_sec: 0, tv_usec: 0 }
+    };
+
+    let mut ret;
+    loop {
+        let mut tmp_readfds = real_readfds.clone();
+        let mut tmp_writefds = real_writefds.clone();
+        let mut tmp_errorfds = real_errorfds.clone();
+        
+        // Call libc select with proper null handling
+        // nfds should be the highest-numbered file descriptor + 1
+        ret = unsafe {
+            libc::select(
+                (realnewnfds + 1) as i32,
+                if readfds_ptr.is_some() { &mut tmp_readfds as *mut _ } else { std::ptr::null_mut() },
+                if writefds_ptr.is_some() { &mut tmp_writefds as *mut _ } else { std::ptr::null_mut() },
+                if exceptfds_ptr.is_some() { &mut tmp_errorfds as *mut _ } else { std::ptr::null_mut() },
+                if timeout_ptr.is_some() { &mut timeout as *mut _ } else { std::ptr::null_mut() },
+            )
+        };
+
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "select_syscall");
+        }
+
+        // Check for timeout or successful result
+        if ret > 0 || (timeout_ptr.is_some() && start_time.elapsed().as_millis() > (timeout.tv_sec as u128 * 1000 + timeout.tv_usec as u128 / 1000)) {
+            real_readfds = tmp_readfds;
+            real_writefds = tmp_writefds;
+            real_errorfds = tmp_errorfds;
+            break;
+        }
+
+        // Check for signals
+        if signal_check_trigger(cageid) {
+            return syscall_error(Errno::EINTR, "select_syscall", "interrupted");
+        }
+    }
+
+    let mut unreal_read = HashSet::new();
+    let mut unreal_write = HashSet::new();
+
+    // Revert result using fdtables helper
+    let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
+        FDKIND_KERNEL,
+        realnewnfds as u64,
+        Some(real_readfds),
+        unreal_read,
+        None,
+        &mappingtable,
+    );
+
+    if let Some(readfds_ptr) = readfds_ptr {
+        if let Some(read_result) = read_result {
+            unsafe { *readfds_ptr = read_result };
+        }
+    }
+
+    let (write_flags, write_result) = fdtables::get_one_virtual_bitmask_from_select_result(
+        FDKIND_KERNEL,
+        realnewnfds as u64,
+        Some(real_writefds),
+        unreal_write,
+        None,
+        &mappingtable,
+    );
+
+    if let Some(writefds_ptr) = writefds_ptr {
+        if let Some(write_result) = write_result {
+            unsafe { *writefds_ptr = write_result };
+        }
+    }
+
+    let (error_flags, error_result) = fdtables::get_one_virtual_bitmask_from_select_result(
+        FDKIND_KERNEL,
+        realnewnfds as u64,
+        Some(real_errorfds),
+        HashSet::new(), // Assuming there are no unreal errorsets
+        None,
+        &mappingtable,
+    );
+
+    if let Some(exceptfds_ptr) = exceptfds_ptr {
+        if let Some(error_result) = error_result {
+            unsafe { *exceptfds_ptr = error_result };
+        }
+    }
+
+    // The total number of descriptors ready
+    (read_flags + write_flags + error_flags) as i32
+}
+
+
