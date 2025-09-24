@@ -6,11 +6,8 @@ use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
-use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, signal_check_trigger};
+use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
 use fdtables;
-use std::collections::{HashMap, HashSet};
-use std::time::Instant;
-
 /// Helper function for close_syscall
 /// 
 /// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard IO stream fds 
@@ -989,7 +986,3 @@ pub fn fcntl_syscall(
         }
     }
 }
-
-
-
-
