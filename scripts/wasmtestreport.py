@@ -438,9 +438,58 @@ def generate_html_report(report):
         <meta charset="UTF-8">
     </head>
     <style>
+        body {
+            color: black;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: white;
+        }
         table, th, td {
-        border: 1px solid black;
-        border-collapse: collapse;
+            border: 1px solid black;
+            border-collapse: collapse;
+            padding: 8px;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .test-section {
+            margin: 30px 0;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .summary-table {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .test-results-table {
+            width: 100%;
+        }
+        .success-row {
+            background-color: #d4edda;
+            color: black;
+        }
+        .failure-row {
+            background-color: #f8d7da;
+            color: black;
+        }
+        .timeout-row {
+            background-color: #fff3cd;
+            color: black;
+        }
+        .test-type-header {
+            background-color: #e9ecef;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.1em;
+            padding: 12px;
         }
     </style>
     <body>
@@ -449,10 +498,13 @@ def generate_html_report(report):
 
     html_content.append(html_header)
 
+    # Generate sections for Deterministic/Non-Deterministic test type
     for test_type, test_result in report.items():
-        html_content.append(f'<div class="child-section">')
-        html_content.append(f'<h2>{test_type}</h2>')
-
+        html_content.append(f'<div class="test-section">')
+        html_content.append(f'<h2>{test_type.replace("_", " ").title()} Tests</h2>')
+        
+        # Summary table
+        html_content.append('<h3>Summary</h3>')
         html_content.append('<table class="summary-table">')
         html_content.append('<tr><th>Metric</th><th>Count</th></tr>')
         html_content.append(f'<tr><td>Total Test Cases</td><td>{test_result.get("total_test_cases", 0)}</td></tr>')
@@ -461,51 +513,61 @@ def generate_html_report(report):
         for error_type in error_types:
             html_content.append(f'<tr><td>Number of {error_types[error_type]}</td><td>{test_result.get(f"number_of_{error_type}", 0)}</td></tr>')
         html_content.append('</table>')
-
-    for test_type, test_result in report.items():
-        html_content.append(f'<div class="child-section">')
-        html_content.append(f'<h2>{test_type}</h2>')
-        html_content.append('<div class="test-lists">')
-
-        failures = test_result.get("failure", [])
-        if failures:
-            html_content.append("<h3>Failures:</h3>")
-            html_content.append("<ul>")
-            for test in failures:
-                html_content.append(f"<li>{test}</li>")
-            html_content.append("</ul>")
-
-        for error_type in error_types:
-            section = test_result.get(error_types[error_type],[])
-            if section:
-                html_content.append(f"<h3>{error_type}:</h3>")
-                html_content.append("<ul>")
-                for test in section:
-                    html_content.append(f"<li>{test}</li>")
-                html_content.append("</ul>")
-
-        html_content.append("</div>")
-        html_content.append("</div>") 
-
-    for test_type, test_result in report.items():
+        
+        # Test cases organized by test type (process, file, memory, etc.)
         test_cases = test_result.get("test_cases", {})
         if test_cases:
-            html_content.append(f'<h3>{test_type}:</h3>')
-            html_content.append('<table>')
+            html_content.append('<h3>Test Results by Category</h3>')
+            
+            # Group test cases by their category
+            test_categories = {}
+            for test_path, result in test_cases.items():
+                # Extract category from path
+                path_parts = test_path.split('/')
+                # Category defaults to unknown
+                category = "unknown"
+                for part in path_parts:
+                    if part.endswith('_tests'):
+                        category = part
+                        break
+                
+                if category not in test_categories:
+                    test_categories[category] = []
+                test_categories[category].append((test_path, result))
+            
+            # Generate table with category headers
+            html_content.append('<table class="test-results-table">')
             html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Output</th></tr>')
-            for test, result in test_cases.items():
-                if result['status'].lower() == "success":
-                    bg_color = "lightgreen"
-                elif result['status'].lower() == "timeout":
-                    bg_color = "orange"
-                else:
-                    bg_color = "red"
-                html_content.append(
-                    f'<tr style="background-color: {bg_color};"><td>{test}</td>'
-                    f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
-                    f'<td><pre>{result["output"]}</pre></td></tr>'
-                )
+            
+            # Sort categories for consistent output
+            for category in sorted(test_categories.keys()):
+                # Add category header row
+                category_display = category.replace('_', ' ').title()
+                html_content.append(f'<tr class="test-type-header"><td colspan="4">{category_display}</td></tr>')
+                
+                # Sort tests within category
+                test_cases_in_category = sorted(test_categories[category], key=lambda x: x[0])
+                
+                for test_path, result in test_cases_in_category:
+                    # Determine row class based on status
+                    if result['status'].lower() == "success":
+                        row_class = "success-row"
+                    elif result['status'].lower() == "timeout":
+                        row_class = "timeout-row"
+                    else:
+                        row_class = "failure-row"
+                    
+                    # Extract just the test file name for display
+                    test_name = test_path.split('/')[-1]
+                    
+                    html_content.append(
+                        f'<tr class="{row_class}"><td>{test_name}</td>'
+                        f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
+                        f'<td><pre>{result["output"]}</pre></td></tr>'
+                    )
+            
             html_content.append('</table>')
+        html_content.append('</div>') 
 
     html_content.append("</body>\n</html>")
     html_content.append("\n")
