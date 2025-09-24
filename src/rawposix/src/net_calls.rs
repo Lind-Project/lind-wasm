@@ -458,14 +458,28 @@ pub fn epoll_create_syscall(
         return syscall_error(Errno::EFAULT, "epoll_create_syscall", "Invalid Cage ID");
     }
 
-    // Convert size argument (though it's ignored in the implementation)
-    let _size = sc_convert_sysarg_to_i32(size_arg, size_cageid, cageid);
+    // Convert size argument
+    let size = sc_convert_sysarg_to_i32(size_arg, size_cageid, cageid);
 
-    // Create epoll instance using fdtables
-    match fdtables::epoll_create_empty(cageid, false) {
-        Ok(virtual_epfd) => virtual_epfd as i32,
-        Err(err) => handle_errno(err as i32, "epoll_create_syscall")
+    // Create the kernel epoll instance
+    let kernel_fd = unsafe { libc::epoll_create(size) };
+
+    if kernel_fd < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "epoll_create_syscall");
     }
+
+    // Get the virtual epfd
+    let virtual_epfd = fdtables::get_unused_virtual_fd(
+        cageid, 
+        FDKIND_KERNEL, 
+        kernel_fd as u64, 
+        false, 
+        0
+    ).unwrap();
+
+    // Return virtual epfd
+    virtual_epfd as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
