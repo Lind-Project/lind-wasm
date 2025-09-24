@@ -108,4 +108,9 @@ COPY --parents scripts tests tools skip_test_cases.txt Makefile .
 # and cache layers. This means they are not preserved in the resulting image.
 RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmtime/target \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
-    make test
+    make test && \
+    OUT_DIR=/ REPORT_PATH=/report.html make md_generation
+
+FROM scratch AS artifacts
+COPY --from=test /report.html /wasm-e2e-report.html
+COPY --from=test /e2e_comment.md /e2e_comment.md
