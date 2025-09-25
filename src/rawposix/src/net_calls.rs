@@ -596,14 +596,7 @@ pub fn epoll_ctl_syscall(
     }
 
     // After successful kernel operation, update fdtables virtual mapping
-    // Create fdtables epoll_event with virtual FD for storage
-    let fdtables_epoll_event = epoll_event {
-        events: user_event.events,
-        u64: virtfd,  // Use virtual FD for fdtables storage
-    };
-
-    // Use fdtables to handle the virtual epoll mapping
-    match fdtables::virtualize_epoll_ctl(cageid, epfd as u64, op, virtfd, fdtables_epoll_event) {
+    match fdtables::virtualize_epoll_ctl(cageid, epfd as u64, op, virtfd, kernel_epoll_event) {
         Ok(()) => 0,
         Err(err) => {
             // If fdtables operation fails after successful kernel operation,
