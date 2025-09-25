@@ -64,7 +64,7 @@ WORKDIR /home/${USERNAME}
 
 # --- Install Rust as user ---
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain nightly-2025-06-01
+    sh -s -- -y --profile minimal
 
 # --- Clone the repo as user ---
 RUN git clone --branch "${BRANCH_NAME}" --single-branch https://github.com/Lind-Project/lind-wasm.git
