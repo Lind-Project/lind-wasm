@@ -1013,6 +1013,7 @@ pub fn epoll_wait_syscall(
     ret
 }
 
+//
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/socketpair.2.html
 ///
 /// The Linux `socketpair()` syscall creates a pair of connected sockets.
@@ -1070,6 +1071,119 @@ pub fn socketpair_syscall(
     virtual_socket_vector.sock1 = vsv_1 as i32;
     virtual_socket_vector.sock2 = vsv_2 as i32;
     return 0;
+}
+
+//
+pub fn shutdown_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    how_arg: u64,
+    how_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+    &&sc_unusedarg(arg4, arg4_cageid)
+    && sc_unusedarg(arg5, arg5_cageid)
+    && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "shutdown_syscall", "Invalide Cage ID");
+    }
+    let ret = unsafe { libc::shutdown(fd, how) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "shutdown");
+    }
+
+    ret
+}
+
+//
+pub fn getsockname_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    address_arg: u64,
+    address_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    
+    if !(sc_unusedarg(arg3, arg3_cageid)
+    &&sc_unusedarg(arg4, arg4_cageid)
+    && sc_unusedarg(arg5, arg5_cageid)
+    && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "getsockname_syscall", "Invalide Cage ID");
+    }
+    
+    let (finalsockaddr, addrlen) = sc_convert_host_sockaddr(addr, addr_cageid, cageid);
+
+    let mut testlen = 128 as u32;
+    let ret = unsafe { libc::getsockname(kernel_fd as i32, finalsockaddr, &mut testlen as *mut u32) };
+
+    if ret < 0  {
+        let errno = get_errno();
+        return handle_errno(errno, "getsockname");
+    }
+
+    ret
+}
+pub fn getsockname_syscall(
+    &self,
+    virtual_fd: i32,
+    address: &mut Option<&mut GenSockaddr>,
+) -> i32 {
+    let kfd = translate_virtual_fd(self.cageid, virtual_fd as u64);
+    if kfd.is_err() {
+        return syscall_error(Errno::EBADF, "getsockname", "Bad File Descriptor");
+    }
+    let kernel_fd = kfd.unwrap();
+
+    let (finalsockaddr, mut addrlen) = match address {
+        Some(GenSockaddr::V6(ref mut addrref6)) => (
+            (addrref6 as *mut SockaddrV6).cast::<libc::sockaddr>(),
+            size_of::<SockaddrV6>() as u32,
+        ),
+        Some(GenSockaddr::V4(ref mut addrref)) => (
+            (addrref as *mut SockaddrV4).cast::<libc::sockaddr>(),
+            size_of::<SockaddrV4>() as u32,
+        ),
+        Some(GenSockaddr::Unix(ref mut addrrefu)) => (
+            (addrrefu as *mut SockaddrUnix).cast::<libc::sockaddr>(),
+            size_of::<SockaddrUnix>() as u32,
+        ),
+        None => (std::ptr::null::<libc::sockaddr>() as *mut libc::sockaddr, 0),
+    };
+
+    let mut testlen = 128 as u32;
+    let ret = unsafe { libc::getsockname(kernel_fd as i32, finalsockaddr, &mut testlen as *mut u32) };
+
+    if ret < 0  {
+        let errno = get_errno();
+        return handle_errno(errno, "getsockname");
+    }
+
+    ret
 }
 
 pub fn virtual_to_real_poll(cageid: u64, virtual_poll: &mut [PollStruct]) -> Vec<pollfd> {
