@@ -1,29 +1,29 @@
-use typemap::datatype_conversion::*;
-use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
-use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
-use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_MOD, EPOLL_CTL_DEL};
-use cage::{signal_check_trigger};
+use cage::signal_check_trigger;
 use fdtables;
+use fdtables::epoll_event;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
+use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::data::fs_struct::EpollEvent;
-use fdtables::epoll_event;
+use typemap::datatype_conversion::*;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
 ///
 /// Linux `poll()` syscall waits for one of a set of file descriptors to become ready to perform I/O.
-/// 
+///
 /// ## Implementation Approach:
-/// 
+///
 /// 1. **Early Validation**: Check `nfds` limits and null pointers before expensive operations
 /// 2. **FD Classification**: Use `fdtables::convert_virtualfds_for_poll()` to separate kernel-backed FDs from invalid ones
-/// 3. **Batch Processing**: 
+/// 3. **Batch Processing**:
 ///    - Invalid FDs → mark as `POLLNVAL` immediately
 ///    - Kernel FDs → collect into array for single `libc::poll()` call
 ///    - Virtual FDs → ignored (we only handle FDs with underlying kernel FDs)
 /// 4. **Result Conversion**: Convert kernel poll results back to virtual FDs using fdtables mapping
 /// 5. **Update User Array**: Use O(1) lookups to update original user array with results
-/// 
+///
 /// This maintains POSIX poll semantics while handling Lind's FD virtualization efficiently.
 ///
 /// ## Arguments:
@@ -91,11 +91,11 @@ pub fn poll_syscall(
     // Build index maps for O(1) lookups - avoid O(N²) performance
     let mut vfd_to_index: HashMap<i32, usize> = HashMap::new();
     let mut vfd_to_events: HashMap<i32, i16> = HashMap::new();
-    
+
     // Clear all revents initially and build lookup maps
     for i in 0..nfds {
         fds_slice[i].revents = 0;
-        
+
         // Build index mapping for O(1) result updates later
         vfd_to_index.insert(fds_slice[i].fd, i);
         vfd_to_events.insert(fds_slice[i].fd, fds_slice[i].events);
@@ -103,7 +103,7 @@ pub fn poll_syscall(
 
     // Extract virtual fds from pollfd array - let fdtables handle invalid FDs
     let mut virtual_fds = HashSet::new();
-    
+
     for i in 0..nfds {
         if fds_slice[i].fd >= 0 {
             virtual_fds.insert(fds_slice[i].fd as u64);
@@ -116,7 +116,8 @@ pub fn poll_syscall(
     }
 
     // Convert virtual fds to kernel fds by fdkind using fdtables API
-    let (poll_data_by_fdkind, fdtables_mapping_table) = fdtables::convert_virtualfds_for_poll(cageid, virtual_fds);
+    let (poll_data_by_fdkind, fdtables_mapping_table) =
+        fdtables::convert_virtualfds_for_poll(cageid, virtual_fds);
 
     // Process kernel-backed FDs and handle invalid FDs
     let mut all_kernel_pollfds: Vec<libc::pollfd> = Vec::new();
@@ -132,7 +133,7 @@ pub fn poll_syscall(
 
                 let kernel_index = all_kernel_pollfds.len();
                 kernel_to_vfd_mapping.insert(kernel_index, vfd);
-                
+
                 all_kernel_pollfds.push(libc::pollfd {
                     fd: fdentry.underfd as i32,
                     events,
@@ -172,9 +173,9 @@ pub fn poll_syscall(
                 if let Some(&virtual_fd) = kernel_to_vfd_mapping.get(&kernel_index) {
                     // Use fdtables helper to convert kernel fd back to virtual fd
                     if let Some(converted_vfd) = fdtables::convert_poll_result_back_to_virtual(
-                        FDKIND_KERNEL, 
-                        kernel_pollfd.fd as u64, 
-                        &fdtables_mapping_table
+                        FDKIND_KERNEL,
+                        kernel_pollfd.fd as u64,
+                        &fdtables_mapping_table,
                     ) {
                         // Use O(1) lookup to update original user array
                         if let Some(&array_index) = vfd_to_index.get(&(converted_vfd as i32)) {
@@ -193,9 +194,9 @@ pub fn poll_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/select.2.html
 ///
 /// Linux `select()` syscall waits for one of a set of file descriptors to become ready to perform I/O.
-/// 
+///
 /// ## Implementation Approach:
-/// 
+///
 /// The design logic for select is first to categorize the file descriptors (fds) received from the user based on FDKIND.
 /// Specifically, kernel fds are passed to the underlying libc select, while impipe and imsock fds would be processed by the
 /// in-memory system. Afterward, the results are combined and consolidated accordingly.
@@ -249,26 +250,26 @@ pub fn select_syscall(
 
     // Convert arguments
     let nfds = sc_convert_sysarg_to_i32(nfds_arg, nfds_cageid, cageid);
-    
+
     // Convert fd_set pointers - they can be null
     let readfds_ptr = if readfds_arg != 0 {
         Some(sc_convert_buf(readfds_arg, readfds_cageid, cageid) as *mut libc::fd_set)
     } else {
         None
     };
-    
+
     let writefds_ptr = if writefds_arg != 0 {
         Some(sc_convert_buf(writefds_arg, writefds_cageid, cageid) as *mut libc::fd_set)
     } else {
         None
     };
-    
+
     let exceptfds_ptr = if exceptfds_arg != 0 {
         Some(sc_convert_buf(exceptfds_arg, exceptfds_cageid, cageid) as *mut libc::fd_set)
     } else {
         None
     };
-    
+
     // Convert timeout pointer - can be null
     let timeout_ptr = if timeout_arg != 0 {
         Some(sc_convert_buf(timeout_arg, timeout_cageid, cageid) as *mut libc::timeval)
@@ -281,17 +282,24 @@ pub fn select_syscall(
     fdkindset.insert(FDKIND_KERNEL);
 
     // Prepare bitmasks for select using fdtables
-    let (selectbittables, unparsedtables, mappingtable) = match fdtables::prepare_bitmasks_for_select(
-        cageid,
-        nfds as u64,
-        readfds_ptr.map(|ptr| unsafe { *ptr }),
-        writefds_ptr.map(|ptr| unsafe { *ptr }),
-        exceptfds_ptr.map(|ptr| unsafe { *ptr }),
-        &fdkindset,
-    ) {
-        Ok(result) => result,
-        Err(_) => return syscall_error(Errno::EINVAL, "select_syscall", "Failed to prepare bitmasks"),
-    };
+    let (selectbittables, unparsedtables, mappingtable) =
+        match fdtables::prepare_bitmasks_for_select(
+            cageid,
+            nfds as u64,
+            readfds_ptr.map(|ptr| unsafe { *ptr }),
+            writefds_ptr.map(|ptr| unsafe { *ptr }),
+            exceptfds_ptr.map(|ptr| unsafe { *ptr }),
+            &fdkindset,
+        ) {
+            Ok(result) => result,
+            Err(_) => {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "select_syscall",
+                    "Failed to prepare bitmasks",
+                )
+            }
+        };
 
     // Extract kernel fd_sets from selectbittables
     // In select, each fd_set is allowed to contain empty values, as it's possible for the user to input a mixture of pure
@@ -319,7 +327,10 @@ pub fn select_syscall(
     let mut timeout = if let Some(timeout_ptr) = timeout_ptr {
         unsafe { *timeout_ptr }
     } else {
-        libc::timeval { tv_sec: 0, tv_usec: 0 }
+        libc::timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        }
     };
 
     let mut ret;
@@ -327,16 +338,32 @@ pub fn select_syscall(
         let mut tmp_readfds = real_readfds.clone();
         let mut tmp_writefds = real_writefds.clone();
         let mut tmp_errorfds = real_errorfds.clone();
-        
+
         // Call libc select with proper null handling
         // nfds should be the highest-numbered file descriptor + 1
         ret = unsafe {
             libc::select(
                 (realnewnfds + 1) as i32,
-                if readfds_ptr.is_some() { &mut tmp_readfds as *mut _ } else { std::ptr::null_mut() },
-                if writefds_ptr.is_some() { &mut tmp_writefds as *mut _ } else { std::ptr::null_mut() },
-                if exceptfds_ptr.is_some() { &mut tmp_errorfds as *mut _ } else { std::ptr::null_mut() },
-                if timeout_ptr.is_some() { &mut timeout as *mut _ } else { std::ptr::null_mut() },
+                if readfds_ptr.is_some() {
+                    &mut tmp_readfds as *mut _
+                } else {
+                    std::ptr::null_mut()
+                },
+                if writefds_ptr.is_some() {
+                    &mut tmp_writefds as *mut _
+                } else {
+                    std::ptr::null_mut()
+                },
+                if exceptfds_ptr.is_some() {
+                    &mut tmp_errorfds as *mut _
+                } else {
+                    std::ptr::null_mut()
+                },
+                if timeout_ptr.is_some() {
+                    &mut timeout as *mut _
+                } else {
+                    std::ptr::null_mut()
+                },
             )
         };
 
@@ -346,7 +373,11 @@ pub fn select_syscall(
         }
 
         // Check for timeout or successful result
-        if ret > 0 || (timeout_ptr.is_some() && start_time.elapsed().as_millis() > (timeout.tv_sec as u128 * 1000 + timeout.tv_usec as u128 / 1000)) {
+        if ret > 0
+            || (timeout_ptr.is_some()
+                && start_time.elapsed().as_millis()
+                    > (timeout.tv_sec as u128 * 1000 + timeout.tv_usec as u128 / 1000))
+        {
             real_readfds = tmp_readfds;
             real_writefds = tmp_writefds;
             real_errorfds = tmp_errorfds;
@@ -412,14 +443,12 @@ pub fn select_syscall(
     (read_flags + write_flags + error_flags) as i32
 }
 
-
-
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_create.2.html
 ///
 /// Linux `epoll_create()` creates an epoll instance and returns a file descriptor referring to that instance.
-/// 
+///
 /// ## Implementation Approach:
-/// 
+///
 /// Uses the fdtables infrastructure to create a virtual epoll file descriptor that maps to an internal
 /// epoll instance. The size parameter is ignored (as per Linux behavior) and the epoll instance is
 /// created using fdtables::epoll_create_empty().
@@ -470,13 +499,8 @@ pub fn epoll_create_syscall(
     }
 
     // Get the virtual epfd
-    let virtual_epfd = fdtables::get_unused_virtual_fd(
-        cageid, 
-        FDKIND_KERNEL, 
-        kernel_fd as u64, 
-        false, 
-        0
-    ).unwrap();
+    let virtual_epfd =
+        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, false, 0).unwrap();
 
     // Return virtual epfd
     virtual_epfd as i32
@@ -485,9 +509,9 @@ pub fn epoll_create_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
 ///
 /// Linux `epoll_ctl()` performs control operations on an epoll instance.
-/// 
+///
 /// ## Implementation Approach:
-/// 
+///
 /// Uses the fdtables infrastructure to manage virtual epoll file descriptors and their associated
 /// file descriptors. The function translates virtual FDs and validates operations before calling
 /// the fdtables::virtualize_epoll_ctl() function.
@@ -523,17 +547,9 @@ pub fn epoll_ctl_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Validate unused arguments
-    if !(sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid Cage ID");
     }
-
-    // Convert arguments
-    let epfd = sc_convert_sysarg_to_i32(epfd_arg, epfd_cageid, cageid);
-    let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
-    let fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
-    let virtfd = fd as u64;
 
     // Validate operation
     if op != EPOLL_CTL_ADD && op != EPOLL_CTL_MOD && op != EPOLL_CTL_DEL {
@@ -542,7 +558,7 @@ pub fn epoll_ctl_syscall(
 
     // Translate virtual FDs to kernel FDs
     let wrappedepfd = fdtables::translate_virtual_fd(cageid, epfd as u64);
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtfd);
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtfd as u64);
     if wrappedvfd.is_err() || wrappedepfd.is_err() {
         return syscall_error(Errno::EBADF, "epoll_ctl_syscall", "Bad File Descriptor");
     }
@@ -558,7 +574,11 @@ pub fn epoll_ctl_syscall(
 
     // For EPOLL_CTL_DEL, event can be null
     if event_ptr.is_none() && op != EPOLL_CTL_DEL {
-        return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "event pointer is null for non-DEL operation");
+        return syscall_error(
+            Errno::EFAULT,
+            "epoll_ctl_syscall",
+            "event pointer is null for non-DEL operation",
+        );
     }
 
     // Get user event data for both kernel and virtual operations
@@ -569,16 +589,13 @@ pub fn epoll_ctl_syscall(
         unsafe { *event_ptr }
     } else {
         // For EPOLL_CTL_DEL, create a dummy event
-        EpollEvent {
-            events: 0,
-            fd: 0,
-        }
+        EpollEvent { events: 0, fd: 0 }
     };
 
     // Create kernel epoll_event with kernel FD in u64 field
     let mut kernel_epoll_event = libc::epoll_event {
         events: user_event.events,
-        u64: vfd.underfd,  // Use kernel FD for kernel call
+        u64: vfd.underfd, // Use kernel FD for kernel call
     };
 
     // Call actual kernel epoll_ctl
@@ -610,9 +627,9 @@ pub fn epoll_ctl_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_wait.2.html
 ///
 /// Linux `epoll_wait()` waits for events on an epoll file descriptor.
-/// 
+///
 /// ## Implementation Approach:
-/// 
+///
 /// Uses the fdtables infrastructure to get virtual epoll data and handles both kernel-backed
 /// and in-memory file descriptors. For kernel FDs, calls libc::epoll_wait() on the underlying
 /// kernel epoll FD. For in-memory FDs, implements custom polling logic. Results are converted
@@ -650,9 +667,7 @@ pub fn epoll_wait_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Validate unused arguments
-    if !(sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid Cage ID");
     }
 
@@ -663,7 +678,11 @@ pub fn epoll_wait_syscall(
 
     // Validate maxevents
     if maxevents <= 0 {
-        return syscall_error(Errno::EINVAL, "epoll_wait_syscall", "maxevents must be positive");
+        return syscall_error(
+            Errno::EINVAL,
+            "epoll_wait_syscall",
+            "maxevents must be positive",
+        );
     }
 
     if events_arg == 0 {
@@ -682,7 +701,7 @@ pub fn epoll_wait_syscall(
     // Get virtual epoll wait data from fdtables
     let epoll_data = match fdtables::get_virtual_epoll_wait_data(cageid, epfd as u64) {
         Ok(data) => data,
-        Err(err) => return handle_errno(err as i32, "epoll_wait_syscall")
+        Err(err) => return handle_errno(err as i32, "epoll_wait_syscall"),
     };
 
     // Check if epoll instance is empty
@@ -709,7 +728,7 @@ pub fn epoll_wait_syscall(
         if fdkind == FDKIND_KERNEL {
             // Handle kernel-backed FDs
             let mut kernel_events: Vec<libc::epoll_event> = Vec::with_capacity(maxevents as usize);
-            
+
             // Get the underlying kernel epoll FD for this fdkind
             let kernel_epfd = match fdtables::epoll_get_underfd_hashmap(cageid, epfd as u64) {
                 Ok(underfd_map) => {
@@ -723,10 +742,7 @@ pub fn epoll_wait_syscall(
 
             // Initialize kernel events array
             for _ in 0..maxevents {
-                kernel_events.push(libc::epoll_event {
-                    events: 0,
-                    u64: 0,
-                });
+                kernel_events.push(libc::epoll_event { events: 0, u64: 0 });
             }
 
             let mut ret;
@@ -763,10 +779,11 @@ pub fn epoll_wait_syscall(
                 }
 
                 let kernel_event = &kernel_events[i];
-                
+
                 // Find the virtual FD that corresponds to this kernel FD
                 for (virtfd, user_event) in &fd_events_map {
-                    if let Some(virtfd_entry) = fdtables::translate_virtual_fd(cageid, *virtfd).ok() {
+                    if let Some(virtfd_entry) = fdtables::translate_virtual_fd(cageid, *virtfd).ok()
+                    {
                         if virtfd_entry.underfd == kernel_event.u64 {
                             // Found the matching virtual FD, update user array
                             events_slice[total_ready as usize] = EpollEvent {
@@ -783,7 +800,7 @@ pub fn epoll_wait_syscall(
             // Handle in-memory FDs (custom polling logic)
             // For now, we'll implement a simple approach similar to the old implementation
             // This would need to be expanded based on the specific in-memory FD types
-            
+
             // Check for timeout on non-blocking call
             if timeout == 0 {
                 continue; // Non-blocking, no in-memory FDs ready
