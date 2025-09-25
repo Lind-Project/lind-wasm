@@ -7,9 +7,7 @@
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
-use fdtables;
 use std::error::Error;
-use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
