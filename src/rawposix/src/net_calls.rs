@@ -540,6 +540,15 @@ pub fn epoll_ctl_syscall(
         return syscall_error(Errno::EINVAL, "epoll_ctl_syscall", "Invalid operation");
     }
 
+    // Translate virtual FDs to kernel FDs
+    let wrappedepfd = fdtables::translate_virtual_fd(cageid, epfd as u64);
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtfd);
+    if wrappedvfd.is_err() || wrappedepfd.is_err() {
+        return syscall_error(Errno::EBADF, "epoll_ctl_syscall", "Bad File Descriptor");
+    }
+    let vepfd = wrappedepfd.unwrap();
+    let vfd = wrappedvfd.unwrap();
+
     // Convert epoll_event from user space
     let event_ptr = if event_arg != 0 {
         Some(sc_convert_buf(event_arg, event_cageid, cageid) as *mut EpollEvent)
@@ -552,28 +561,56 @@ pub fn epoll_ctl_syscall(
         return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "event pointer is null for non-DEL operation");
     }
 
-    // Convert EpollEvent to fdtables epoll_event
-    let epoll_event = if let Some(event_ptr) = event_ptr {
+    // Get user event data for both kernel and virtual operations
+    let user_event = if let Some(event_ptr) = event_ptr {
         if event_ptr.is_null() {
             return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "event pointer is null");
         }
-        let user_event = unsafe { *event_ptr };
-        epoll_event {
-            events: user_event.events,
-            u64: user_event.fd as u64,
-        }
+        unsafe { *event_ptr }
     } else {
         // For EPOLL_CTL_DEL, create a dummy event
-        epoll_event {
+        EpollEvent {
             events: 0,
-            u64: 0,
+            fd: 0,
         }
     };
 
-    // Use fdtables to handle the epoll control operation
-    match fdtables::virtualize_epoll_ctl(cageid, epfd as u64, op, virtfd, epoll_event) {
+    // Create kernel epoll_event with kernel FD in u64 field
+    let mut kernel_epoll_event = libc::epoll_event {
+        events: user_event.events,
+        u64: vfd.underfd,  // Use kernel FD for kernel call
+    };
+
+    // Call actual kernel epoll_ctl
+    let ret = unsafe {
+        libc::epoll_ctl(
+            vepfd.underfd as i32,
+            op,
+            vfd.underfd as i32,
+            &mut kernel_epoll_event,
+        )
+    };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "epoll_ctl_syscall");
+    }
+
+    // After successful kernel operation, update fdtables virtual mapping
+    // Create fdtables epoll_event with virtual FD for storage
+    let fdtables_epoll_event = epoll_event {
+        events: user_event.events,
+        u64: virtfd,  // Use virtual FD for fdtables storage
+    };
+
+    // Use fdtables to handle the virtual epoll mapping
+    match fdtables::virtualize_epoll_ctl(cageid, epfd as u64, op, virtfd, fdtables_epoll_event) {
         Ok(()) => 0,
-        Err(err) => handle_errno(err as i32, "epoll_ctl_syscall")
+        Err(err) => {
+            // If fdtables operation fails after successful kernel operation,
+            // we should ideally roll back the kernel operation, but for now
+            // we'll just return the error
+            handle_errno(err as i32, "epoll_ctl_syscall")
+        }
     }
 }
 
