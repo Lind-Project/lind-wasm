@@ -125,46 +125,81 @@ pub fn poll_syscall(
     let mut total_ready = 0i32;
 
     for (fdkind, fd_set) in poll_data_by_fdkind {
-        if fdkind == FDKIND_KERNEL {
-            // Collect all kernel FDs for polling
-            for (vfd, fdentry) in fd_set {
-                // Use O(1) lookup to find original events for this virtual fd
-                let events = *vfd_to_events.get(&(vfd as i32)).unwrap_or(&0);
+        match fdkind {
+            FDKIND_KERNEL => {
+                // Collect all kernel FDs for polling
+                for (vfd, fdentry) in fd_set {
+                    // Use O(1) lookup to find original events for this virtual fd
+                    let events = *vfd_to_events.get(&(vfd as i32)).unwrap_or(&0);
 
-                let kernel_index = all_kernel_pollfds.len();
-                kernel_to_vfd_mapping.insert(kernel_index, vfd);
+                    let kernel_index = all_kernel_pollfds.len();
+                    kernel_to_vfd_mapping.insert(kernel_index, vfd);
 
-                all_kernel_pollfds.push(libc::pollfd {
-                    fd: fdentry.underfd as i32,
-                    events,
-                    revents: 0,
-                });
-            }
-        } else if fdkind == fdtables::FDT_INVALID_FD {
-            // Handle invalid FDs immediately - fdtables has already identified them
-            for (vfd, _fdentry) in fd_set {
-                if let Some(&array_index) = vfd_to_index.get(&(vfd as i32)) {
-                    fds_slice[array_index].revents = libc::POLLNVAL as i16;
-                    total_ready += 1;
+                    all_kernel_pollfds.push(libc::pollfd {
+                        fd: fdentry.underfd as i32,
+                        events,
+                        revents: 0,
+                    });
                 }
             }
+            fdtables::FDT_INVALID_FD => {
+                // Handle invalid FDs immediately - fdtables has already identified them
+                for (vfd, _fdentry) in fd_set {
+                    if let Some(&array_index) = vfd_to_index.get(&(vfd as i32)) {
+                        fds_slice[array_index].revents = libc::POLLNVAL as i16;
+                        total_ready += 1;
+                    }
+                }
+            }
+            _ => {
+                // Handle non-kernel FDs - consistent with old implementation error handling
+                return syscall_error(Errno::EBADFD, "poll_syscall", "Invalid fdkind");
+            }
         }
-        // Ignore other fdkind types - we only handle FDs with underlying kernel FDs
     }
 
-    // Poll all kernel-backed fds with a single kernel libc call
+    // Poll all kernel-backed fds with timeout/signal checking loop (consistent with old implementation)
     if !all_kernel_pollfds.is_empty() {
-        let ret = unsafe {
-            libc::poll(
-                all_kernel_pollfds.as_mut_ptr(),
-                all_kernel_pollfds.len() as libc::nfds_t,
-                original_timeout,
-            )
+        let start_time = Instant::now();
+        let timeout_duration = if original_timeout >= 0 {
+            Some(std::time::Duration::from_millis(original_timeout as u64))
+        } else {
+            None // Infinite timeout
         };
 
-        if ret < 0 {
-            let errno = get_errno();
-            return handle_errno(errno, "poll_syscall");
+        let ret;
+        loop {
+            let poll_ret = unsafe {
+                libc::poll(
+                    all_kernel_pollfds.as_mut_ptr(),
+                    all_kernel_pollfds.len() as libc::nfds_t,
+                    original_timeout,
+                )
+            };
+
+            if poll_ret < 0 {
+                let errno = get_errno();
+                return handle_errno(errno, "poll_syscall");
+            }
+
+            // Check for ready FDs or timeout
+            if poll_ret > 0 {
+                ret = poll_ret;
+                break;
+            }
+
+            // Check for timeout (if specified)
+            if let Some(timeout_dur) = timeout_duration {
+                if start_time.elapsed() >= timeout_dur {
+                    ret = 0; // Timeout occurred
+                    break;
+                }
+            }
+
+            // Check for signals - consistent with higher-level approach
+            if signal_check_trigger(cageid) {
+                return syscall_error(Errno::EINTR, "poll_syscall", "interrupted");
+            }
         }
 
         // Convert kernel results back to virtual fds using fdtables helper
@@ -551,6 +586,12 @@ pub fn epoll_ctl_syscall(
         return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid Cage ID");
     }
 
+    // Convert arguments
+    let epfd = sc_convert_sysarg_to_i32(epfd_arg, epfd_cageid, cageid);
+    let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
+    let fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
+    let virtfd = fd as u64;
+
     // Validate operation
     if op != EPOLL_CTL_ADD && op != EPOLL_CTL_MOD && op != EPOLL_CTL_DEL {
         return syscall_error(Errno::EINVAL, "epoll_ctl_syscall", "Invalid operation");
@@ -558,7 +599,7 @@ pub fn epoll_ctl_syscall(
 
     // Translate virtual FDs to kernel FDs
     let wrappedepfd = fdtables::translate_virtual_fd(cageid, epfd as u64);
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtfd as u64);
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtfd);
     if wrappedvfd.is_err() || wrappedepfd.is_err() {
         return syscall_error(Errno::EBADF, "epoll_ctl_syscall", "Bad File Descriptor");
     }
