@@ -574,3 +574,14 @@ pub fn sc_convert_itimerval_mut(
         }
     }
 }
+
+pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            return -1;
+        }
+    }
+    
+    (arg as *const u8).is_null()
+}
