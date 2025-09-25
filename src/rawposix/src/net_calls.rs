@@ -1,12 +1,5 @@
-use typemap::datatype_conversion;
-use fdtables;
-use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use libc::*;
-use typemap::CStr;
-use std::io::Write;
-use std::ptr;
-use sysdefs::*;
-use lazy_static::lazy_static;
+use sysdefs::data::net_struct::SockAddr;
+use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/recv.2.html
 ///
@@ -14,14 +7,14 @@ use lazy_static::lazy_static;
 /// This implementation retrieves the virtual file descriptor and target buffer from the current cage,
 /// and performs the message receive operation using the specified flags.
 ///
-/// Input:
+/// ## Input:
 ///     - cageid: current cageid
 ///     - fd_arg: virtual file descriptor from which to receive data
 ///     - buf_arg: pointer to the buffer in user memory to store received data
 ///     - buflen_arg: size of the buffer to receive data into
 ///     - flags_arg: flags controlling message reception behavior
 ///
-/// Return:
+/// ## Return:
 ///     - On success: number of bytes received
 ///     - On failure: a negative errno value indicating the syscall error
 pub fn recv_syscall(
@@ -40,7 +33,7 @@ pub fn recv_syscall(
     arg6_cageid: u64,
 ) -> i32{
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let buf = sc_convert_buf_to_host(buf_arg, buf_cageid, cageid);
+    let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
@@ -64,7 +57,7 @@ pub fn recv_syscall(
 /// This implementation retrieves the virtual file descriptor, buffer, and target socket address
 /// from the current cage, then invokes the host kernel's `sendto()` call.
 ///
-/// Parameters:
+/// ## Input:
 ///     - cageid: identifier of the current cage
 ///     - fd_arg: virtual file descriptor representing the socket
 ///     - buf_arg: pointer to the message buffer in user space
@@ -73,7 +66,7 @@ pub fn recv_syscall(
 ///     - sockaddr_arg: pointer to the destination socket address
 ///     - addrlen_arg: size of the destination address structure
 ///
-/// Returns:
+/// ## Return:
 ///     - On success: number of bytes sent
 ///     - On failure: negative errno indicating the error
 pub fn sendto_syscall(
@@ -98,7 +91,7 @@ pub fn sendto_syscall(
     let sockaddr = sc_convert_addr_to_host(sockaddr_arg, sockaddr_cageid, cageid);
     let addrlen = sc_convert_sysarg_to_u32(addrlen_arg, addrlen_cageid, cageid);
 
-    let (finalsockaddr, addrlen) = sc_convert_host_sockaddr(sockaddr, sockaddr_cageid, cageid);
+    let (finalsockaddr, addrlen) = convert_host_sockaddr(sockaddr, sockaddr_cageid, cageid);
 
     let ret = unsafe {
         libc::sendto(
@@ -126,7 +119,7 @@ pub fn sendto_syscall(
 /// This implementation retrieves the virtual file descriptor and buffer from the current cage,
 /// and optionally copies back the source address to user space.
 ///
-/// Parameters:
+/// ## Input:
 ///     - cageid: identifier of the current cage
 ///     - fd_arg: virtual file descriptor representing the socket
 ///     - buf_arg: pointer to the buffer in user space to store received data
@@ -135,7 +128,7 @@ pub fn sendto_syscall(
 ///     - nullity1_arg(src_addr): pointer to the source address structure or null
 ///     - nullity2_arg(addrlen): pointer to the source address length or null
 ///
-/// Returns:
+/// ## Return:
 ///     - On success: number of bytes received
 ///     - On failure: negative errno indicating the error
 pub fn recvfrom_syscall(
@@ -164,7 +157,7 @@ pub fn recvfrom_syscall(
 
     // Case 1: both NULL → caller doesn’t want peer address
     if nullity1 && nullity2 {
-        let (finalsockaddr, mut addrlen) = sc_convert_host_sockaddr(ptr::null_mut(), nullity1_cageid, cageid);
+        let (finalsockaddr, mut addrlen) = convert_host_sockaddr(ptr::null_mut(), nullity1_cageid, cageid);
         let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, finalsockaddr, &mut addrlen as *mut u32) as i32 };
 
         if ret < 0 {
@@ -176,7 +169,7 @@ pub fn recvfrom_syscall(
     else if !(nullity1 || nullity2) {
         let mut newsockaddr = SockAddr::new_ipv4();
         let ptr = &mut newsockaddr as *mut SockAddr as *mut u8;
-        let (finalsockaddr, mut addrlen) = sc_convert_host_sockaddr(ptr, nullity1_cageid, cageid); 
+        let (finalsockaddr, mut addrlen) = convert_host_sockaddr(ptr, nullity1_cageid, cageid); 
         let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, finalsockaddr, &mut addrlen as *mut u32) as i32 };
 
         if ret < 0 {
@@ -186,7 +179,7 @@ pub fn recvfrom_syscall(
 
         // Copy peer address back to user’s src_addr / addrlen
         if ret >= 0 {
-            sc_convert_copy_out_sockaddr(
+            copy_out_sockaddr(
                 sc_convert_uaddr_to_host(nullity1_arg, nullity1_cageid, cageid),
                 sc_convert_uaddr_to_host(nullity2_arg, nullity2_cageid, cageid) as u64,
                 newsockaddr.sun_family,
@@ -203,12 +196,12 @@ pub fn recvfrom_syscall(
 /// This implementation retrieves the destination buffer and length from the current cage,
 /// and stores the host name into user space.
 ///
-/// Parameters:
+/// ## Input:
 ///     - cageid: identifier of the current cage
 ///     - name_arg: pointer to the buffer in user space to store the hostname
 ///     - len_arg: size of the buffer
 ///
-/// Returns:
+/// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
 pub fn gethostname_syscall(
@@ -237,7 +230,7 @@ pub fn gethostname_syscall(
         return syscall_error(Errno::EFAULT, "gethostname_syscall", "Invalide Cage ID");
     }
 
-    let ret = unsafe { libc::gethostname(name, len) };
+    let ret = unsafe { libc::gethostname(name as *mut i8, len) };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "gethostname");
@@ -252,14 +245,14 @@ pub fn gethostname_syscall(
 /// This implementation retrieves the virtual file descriptor, option level, and option name
 /// from the current cage, and writes the result to the provided user-space buffer.
 ///
-/// Parameters:
+/// ## Input:
 ///     - cageid: identifier of the current cage
 ///     - fd_arg: virtual file descriptor of the socket
 ///     - level_arg: protocol level at which the option resides
 ///     - optname_arg: name of the option to retrieve
 ///     - optval_arg: pointer to a buffer to store the option value
 ///
-/// Returns:
+/// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
 pub fn getsockopt_syscall(
@@ -313,12 +306,12 @@ pub fn getsockopt_syscall(
 /// This implementation obtains the socket file descriptor and address buffer from the current cage,
 /// then invokes the host kernel's `getpeername()` and writes the result to user space.
 ///
-/// Parameters:
+/// ## Input:
 ///     - cageid: identifier of the current cage
 ///     - fd_arg: virtual file descriptor of the connected socket
 ///     - addr_arg: pointer to a buffer in user space to store the peer address
 ///
-/// Returns:
+/// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
 pub fn getpeername_syscall(
@@ -347,21 +340,11 @@ pub fn getpeername_syscall(
         return syscall_error(Errno::EFAULT, "getpeername_syscall", "Invalide Cage ID");
     }
 
-    let (finalsockaddr, mut addrlen) = sc_convert_host_sockaddr(addr, addr_cageid, cageid);
+    let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
     let ret = unsafe { libc::getpeername(fd, finalsockaddr, &mut addrlen as *mut u32) };
 
     if ret < 0 {
-        let err = unsafe {
-            libc::__errno_location()
-        };
-        let err_str = unsafe {
-            libc::strerror(*err)
-        };
-        let err_msg = unsafe {
-            CStr::from_ptr(err_str).to_string_lossy().into_owned()
-        };
         let errno = get_errno();
-        io::stdout().flush().unwrap();
         return handle_errno(errno, "getpeername");
     }
 
@@ -374,14 +357,14 @@ pub fn getpeername_syscall(
 /// This implementation creates the socket pair in the host kernel and assigns virtual file descriptors
 /// to the resulting sockets within the current cage.
 ///
-/// Parameters:
+/// ## Input:
 ///     - cageid: identifier of the current cage
 ///     - domain_arg: communication domain (e.g., AF_UNIX)
 ///     - type_arg: communication semantics (e.g., SOCK_STREAM)
 ///     - protocol_arg: protocol to be used
 ///     - virtual_socket_vector_arg: pointer to a `SockPair` structure in user space to receive the result
 ///nullity1/2
-/// Returns:
+/// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
 pub fn socketpair_syscall(
@@ -400,9 +383,9 @@ pub fn socketpair_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let domain = sc_convert_sysarg_to_i32(domain_arg, domain_cageid, cageid);
-    let type = sc_convert_sysarg_to_i32(type_arg, type_cageid, cageid);
+    let typ = sc_convert_sysarg_to_i32(type_arg, type_cageid, cageid);
     let protocol = sc_convert_sysarg_to_i32(protocol_arg, protocol_cageid, cageid);
-    let virtual_socket_vector = sc_convert_sockpair(virtual_socket_vector_arg, virtual_socket_vector_cageid, cageid).unwrap();
+    let virtual_socket_vector = convert_sockpair(virtual_socket_vector_arg, virtual_socket_vector_cageid, cageid).unwrap();
     
     if !(sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
@@ -412,7 +395,7 @@ pub fn socketpair_syscall(
 
     let mut kernel_socket_vector: [i32; 2] = [0, 0];
 
-    let ret = unsafe { libc::socketpair(domain, type, protocol, kernel_socket_vector.as_mut_ptr()) };
+    let ret = unsafe { libc::socketpair(domain, typ, protocol, kernel_socket_vector.as_mut_ptr()) };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "sockpair");

@@ -297,3 +297,15 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     let buf = translate_vmmap_addr(&cage, buf_arg).unwrap() as *const u8;
     buf
 }
+
+pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            return -1;
+        }
+    }
+    
+    (arg as *const u8).is_null()
+}
+
