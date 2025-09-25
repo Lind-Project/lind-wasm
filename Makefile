@@ -23,6 +23,17 @@ test:
 	cat results.json && \
 	! grep '"number_of_failures": [^0]' results.json
 
+.PHONY: md_generation
+OUT ?= .
+REPORT ?= report.html
+
+md_generation:
+	python3 -m pip install --quiet jinja2
+	REPORT_PATH=$(REPORT) OUT_DIR=$(OUT) python3 scripts/render_e2e_templates.py
+	@echo "Wrote $(OUT)/e2e_comment.md"
+
+	
+
 .PHONY: lint
 lint:
 	cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
