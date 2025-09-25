@@ -223,6 +223,12 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     source_file = Path(source_file)
     native_output = source_file.parent / f"{source_file.stem}.o"
     
+    # Ensure paths are absolute to prevent cwd confusion
+    if not source_file.is_absolute():
+        raise ValueError(f"Source file must be absolute path, got: {source_file}")
+    if not native_output.is_absolute():
+        raise ValueError(f"Native output path must be absolute, got: {native_output}")
+
     # Compile
     compile_cmd = ["gcc", str(source_file), "-o", str(native_output)]
     try:
@@ -536,7 +542,11 @@ def pre_test(tests_to_run=None):
     symlink_path = TESTFILES_DST / "readlinkfile"
     open(readlinkfile_path, 'a').close()
     if not symlink_path.exists():
-        os.symlink(readlinkfile_path, symlink_path)
+        try:
+            os.symlink(readlinkfile_path, symlink_path)
+        except OSError:
+            # Fallback to copying in case symlink creation fails
+            shutil.copy2(readlinkfile_path, symlink_path)
 
 # ----------------------------------------------------------------------
 # Function: generate_html_report
@@ -981,6 +991,9 @@ def run_tests(config, artifacts_root, results, timeout_sec):
             test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
         elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
             test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
+        else:
+            # Log warning for tests not in deterministic/non-deterministic folders
+            logger.warning(f"Test file {original_source} is not in a deterministic or non-deterministic folder - skipping")
 
 def main():
     os.chdir(LIND_WASM_BASE)
