@@ -1,9 +1,9 @@
 pub mod cage_helpers;
 pub mod datatype_conversion;
 pub mod path_conversion;
-pub mod syscall_type_conversion;
+pub mod network_helpers;
 
 pub use cage_helpers::*;
 pub use datatype_conversion::*;
 pub use path_conversion::*;
-pub use syscall_type_conversion::*;
+pub use network_helpers::*;
