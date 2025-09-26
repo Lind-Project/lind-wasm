@@ -73,6 +73,7 @@ RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3
 
 
 # Install rust
+# --profile minimal tells rustup to install only the essentials for the toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"

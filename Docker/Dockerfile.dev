@@ -63,6 +63,7 @@ USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
 # --- Install Rust as user ---
+# --profile minimal tells rustup to install only the essentials for the toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal
 
