@@ -51,7 +51,7 @@ Multi-stage **.e2e** flow for lind-wasm **end-to-end testing and image creation*
 
 ---
 
-##Usage C — create a base image and mount the source
+## Usage C — create a base image and mount the source
 
 `docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e -t dev --target base .`
 
@@ -63,9 +63,39 @@ Multi-stage **.e2e** flow for lind-wasm **end-to-end testing and image creation*
 
 ---
 
-##CI overview (how e2e is wired)
+## Build steps
 
-Workflow: .github/workflows/e2e.yml
+### make sysroot
+
+Runs `scripts/make_glibc_and_sysroot.sh` to:
+
+- Configure & build glibc (WASM/WASI target) and compile additional NPTL/syscall bits and tiny ASM stubs.
+
+- Collect selected `.o` objects (excluding objects defining `main`) and archive them into `src/glibc/sysroot/lib/wasm32-wasi/libc.a`; creates `libpthread.a`; installs headers under `src/glibc/sysroot/include/wasm32-wasi/`; and copies `crt1.o`.
+
+
+
+### make wasmtime
+
+- Builds the embedded Wasmtime with Cargo (release) from `src/wasmtime/`.
+
+
+### make test
+
+Runs `scripts/wasmtestreport.py` which:
+
+- Discovers tests from the repository’s test trees and honors `skip_test_cases.txt`.
+
+- Organizes results (e.g., deterministic / non_deterministic groups), writes `results.json` (and may render an HTML summary if enabled).
+
+- The Makefile prints `results.json` and fails when any failures are present.
+
+
+---
+
+## CI overview (how e2e is wired)
+
+Workflow: `.github/workflows/e2e.yml`
 
 High level:
 
@@ -79,29 +109,43 @@ High level:
 
 ## Caching
 
-**What we cache**
+### What we cache
 
 - Buildx GHA layer cache (`cache-from/to: type=gha`) for apt/clang/rust/tooling and per-stage layers.
 
-- Multi-stage outputs: `build-wasmtime` and `build-glibc` are mounted into `test`, so tests are fast.
+- Multi-stage outputs: `build-wasmtime` and `build-glibc` are mounted into `test`, so tests avoid rebuilding toolchains.
+
+### GitHub Actions semantics
+
+- `cache-from: type=gha` pulls layers from the hosted GitHub Actions cache.
+
+- `cache-to: type=gha,mode=max` pushes all reusable layers (not just the final image).
+
+- The first cold run builds all layers; subsequent runs only rebuild changed layers, dramatically speeding up CI.
+
+> Note: GitHub Actions may evict cached layers over time; when that happens a run starts cold but still passes the same way.
 
 
-**Local build with cache**
+### Local build with cache
 
-### One-time: create/select a builder
+#### One-time: create/select a builder
 `docker buildx create --use --name lind-builder || docker buildx use lind-builder`
 
-### Build with cache import/export
+#### Build with cache import/export
 `docker buildx build --platform=linux/amd64 -f Docker/Dockerfile.e2e --cache-from type=local,src=~/.cache/docker-buildx --cache-to type=type=local,dest=.~/.cache/docker-buildx,mode=max .`
+
+> CI typically uses type=gha; locally a local cache is simple and reliable.
 
 ---
 
-##Troubleshooting
+## Troubleshooting
 
 - Apple Silicon / wrong arch → add --platform=linux/amd64 to all build/run commands.
 
 - Slow first build → increase Docker memory (≈ 6–8 GB) to accommodate sysroot/wasmtime builds.
 
 - Stale artifacts → run make clean/make distclean and rebuild inside the dev (base) container.
+
+- Cache debugging → add --progress=plain to docker build to see which step invalidated.
 
 
