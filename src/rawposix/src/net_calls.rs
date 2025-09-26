@@ -61,7 +61,17 @@ pub fn socket_syscall(
     }
 
     // We need to register this new kernel fd in fdtables
-    return fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, false, 0).unwrap() as i32;
+    // Check if `SOCK_CLOEXEC` flag is set
+    let cloexec = (socktype & libc::SOCK_CLOEXEC) != 0;
+
+    // Register the kernel fd in fdtables with or without cloexec
+    // Note:
+    // `SOCK_NONBLOCK` is part of the kernel's "open file description" state
+    // (equivalent to `O_NONBLOCK`). Since our virtual FD maps directly to a
+    // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
+    // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
+    fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, cloexec, 0)
+        .unwrap() as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/connect.2.html
@@ -398,6 +408,114 @@ pub fn send_syscall(
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "send");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/shutdown.2.html
+///
+/// The Linux `shutdown()` syscall disables sends and/or receives on a socket.
+/// This implementation resolves the given virtual file descriptor to the host kernel
+/// file descriptor, then performs the shutdown operation in the host kernel.
+///
+/// ## Input:
+///     - cageid: identifier of the current cage
+///     - fd_arg: virtual file descriptor of the socket
+///     - how_arg: specifies the type of shutdown (e.g., SHUT_RD, SHUT_WR, SHUT_RDWR)
+///
+/// ## Return:
+///     - On success: 0  
+///     - On failure: negative errno indicating the error
+pub fn shutdown_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    how_arg: u64,
+    how_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
+
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
+    if !(sc_unusedarg(arg3, arg3_cageid)
+    &&sc_unusedarg(arg4, arg4_cageid)
+    && sc_unusedarg(arg5, arg5_cageid)
+    && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "shutdown_syscall", "Invalid Cage ID");
+    }
+
+    let ret = unsafe { libc::shutdown(fd, how) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "shutdown");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getsockname.2.html
+///
+/// The Linux `getsockname()` syscall retrieves the current address to which the socket
+/// is bound.  
+/// This implementation resolves the virtual file descriptor to the host kernel file descriptor,
+/// converts the user-space sockaddr structure into its host representation, and invokes
+/// the host kernel `getsockname()`.
+///
+/// ## Input:
+///     - cageid: identifier of the current cage
+///     - fd_arg: virtual file descriptor of the socket
+///     - addr_arg: pointer to a buffer in user space where the address will be stored
+///
+/// ## Return:
+///     - On success: 0  
+///     - On failure: negative errno indicating the error
+pub fn getsockname_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    addr_arg: u64,
+    addr_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
+    if !(sc_unusedarg(arg3, arg3_cageid)
+    &&sc_unusedarg(arg4, arg4_cageid)
+    && sc_unusedarg(arg5, arg5_cageid)
+    && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "getsockname_syscall", "Invalid Cage ID");
+    }
+    
+    let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
+
+    let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, addrlen as *mut u32) };
+
+    if ret < 0  {
+        let errno = get_errno();
+        return handle_errno(errno, "getsockname");
     }
 
     ret

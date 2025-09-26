@@ -12,23 +12,27 @@ use crate::datatype_conversion::validate_cageid;
 use std::os::raw::{c_void, c_char};
 use std::ptr;
 
-/// `unix_len_from_sun_path` computes the effective `socklen_t` for an `AF_UNIX` 
-/// `sockaddr_un` by applying the Linux length rules to its `sun_path`. On Linux, 
-/// `offsetof(sockaddr_un, sun_path)` is 2 because `sa_family_t` is a 16-bit field; 
-/// this fixed offset is treated as the base. If the first byte of `sun_pat` is zero,
-/// the address is in the abstract namespace and the effective length is the base 
-/// plus the index of the last non-zero byte plus one, with no trailing NULL added. 
+/// Compute the effective `socklen_t` for a Linux `AF_UNIX` address given its `sun_path`.
 ///
-/// If the first byte is non-zero, the address is a pathname and the effective length 
-/// is the base plus the strlen of the path plus one to include the terminating NULL, 
-/// provided there is room in the 108-byte array; if the array is completely full 
-/// with no NUL, the length becomes the base plus 108. The function assumes the caller 
-/// provides a valid 108-byte buffer taken from a properly laid-out `sockaddr_un`.
+/// Linux length rules:
+/// - The base is `offsetof(sockaddr_un, sun_path) == 2` because `sa_family_t` is 16-bit.
+/// - In the case of first byte == 0:
+///   length = base + index_of_last_nonzero_byte_in_sun_path + 1  (no trailing NULL is added)
+/// - In the case of first byte != 0:
+///   length = base + strlen(sun_path) + 1 (to include the terminating NULL)
+///   If the 108-byte array has no NULL at all (completely full), use base + 108.
+///
+/// Why this exists:
+/// Some syscalls (e.g., `bind`, `connect`) and ancillary logic need the address
+/// length. Callers sometimes only have the 108-byte `sun_path` buffer; this helper applies
+/// the kernel’s rules to produce the correct `socklen_t`.
 unsafe fn unix_len_from_sun_path(sun_path: &[i8; 108]) -> libc::socklen_t {
-    // offsetof(sockaddr_un, sun_path) == 2 (sa_family_t is u16)
+    // offset of (sockaddr_un, sun_path) is 2, because sa_family_t is a 16-bit (u16) field
     let base: libc::socklen_t = 2;
 
     if sun_path[0] == 0 {
+        // Find the last non-zero byte; if none, set `used = 0`
+        // (`i` runs forward so `used` ends up `1 + last_nonzero_index`)
         let mut used = 0usize;
         for i in 0..108 {
             if sun_path[i] != 0 { used = i + 1; }
@@ -36,7 +40,10 @@ unsafe fn unix_len_from_sun_path(sun_path: &[i8; 108]) -> libc::socklen_t {
         base + used as libc::socklen_t
     } else {
         let mut n = 0usize;
+        // Count bytes until the first 0 or the end of the array.
         while n < 108 && sun_path[n] != 0 { n += 1; }
+        // If we found a NULL inside the array, include it (+1).
+        // If not (array is completely full), kernel takes the whole 108 without an extra NULL.
         let add_nul = if n < 108 { 1 } else { 0 };
         base + (n + add_nul) as libc::socklen_t
     }
