@@ -18,3 +18,23 @@ pub fn convert_statdata_to_user(stat_ptr: &mut StatData, libc_statbuf: libc::sta
     stat_ptr.st_size = libc_statbuf.st_size as usize;
     stat_ptr.st_uid = libc_statbuf.st_uid;
 }
+
+/// Copies fields from a `libc::statfs` structure into a `FSData` located inside wasm linear memory.
+///
+/// ## Arguments:
+/// - `stat_ptr`: Destination `FSData` (user-space buffer).
+/// - `libc_statbuf`: Source `libc::statfs` obtained from the host kernel.
+pub fn convert_fstatdata_to_user(stat_ptr: &mut FSData, libc_databuf: libc::statfs) {
+    stat_ptr.f_bavail = libc_databuf.f_bavail;
+    stat_ptr.f_bfree = libc_databuf.f_bfree;
+    stat_ptr.f_blocks = libc_databuf.f_blocks;
+    stat_ptr.f_bsize = libc_databuf.f_bsize as u64;
+    stat_ptr.f_files = libc_databuf.f_files;
+    /* TODO: different from libc struct */
+    stat_ptr.f_fsid = 0;
+    stat_ptr.f_type = libc_databuf.f_type as u64;
+    stat_ptr.f_ffiles = 1024 * 1024 * 515;
+    stat_ptr.f_namelen = 254;
+    stat_ptr.f_frsize = 4096;
+    stat_ptr.f_spare = [0; 32];
+}

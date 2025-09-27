@@ -9,7 +9,8 @@ use rawposix::fs_calls::{
     fcntl_syscall, fdatasync_syscall, fsync_syscall, futex_syscall, link_syscall, lseek_syscall, 
     mkdir_syscall, mmap_syscall, munmap_syscall, nanosleep_time64_syscall, open_syscall, pipe2_syscall, 
     pipe_syscall, read_syscall, readlinkat_syscall, rename_syscall, sbrk_syscall, stat_syscall, 
-    sync_file_range_syscall, unlink_syscall, unlinkat_syscall, write_syscall,
+    sync_file_range_syscall, unlink_syscall, unlinkat_syscall, write_syscall, statfs_syscall,
+    readlink_syscall,
 };
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall,
@@ -54,6 +55,8 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (83, mkdir_syscall),
     (86, link_syscall),
     (87, unlink_syscall),
+    (89, readlink_syscall),
+    (137, statfs_syscall),
     (202, futex_syscall),
     (228, clock_gettime_syscall),
     (263, unlinkat_syscall),

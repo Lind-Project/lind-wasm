@@ -11,7 +11,7 @@ use fdtables;
 use std::error::Error;
 use std::str::Utf8Error;
 use sysdefs::constants::err_const::{syscall_error, Errno};
-use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal};
+use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal, StatData, FSData, PipeArray};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME, MAX_CAGEID, PATH_MAX};
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
@@ -336,6 +336,65 @@ pub fn sc_convert_addr_to_statdata<'a>(
     let cage = get_cage(cageid).unwrap();
     let addr = translate_vmmap_addr(&cage, arg).unwrap();
     let pointer = addr as *mut StatData;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
+}
+
+/// Translates a user-provided address from the Cage's virtual memory into
+/// a mutable reference to an `FSData` structure.
+///
+/// This function follows the same logic as `sc_convert_addr_to_statdata`
+pub fn sc_convert_addr_to_fstatdata<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut FSData, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut FSData;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
+}
+
+/// Translates a user-provided address from the Cage's virtual memory into
+/// a mutable reference to a `PipeArray`.
+///
+/// This function follows the same pattern as other `sc_convert_addr_*`
+/// helpers:
+/// - Validates the Cage ID when the `secure` feature is enabled.
+/// - Retrieves the Cage object via `get_cage`.
+/// - Translates the Wasm linear memory address to a host address using
+///   `translate_vmmap_addr`.
+/// - Casts the host address to a `*mut PipeArray` and returns it as a
+///   mutable reference if non-null.
+/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
+///   Linux's `EFAULT` ("Bad address") error semantics.
+pub fn sc_convert_addr_to_pipearray<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut PipeArray, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut PipeArray;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
