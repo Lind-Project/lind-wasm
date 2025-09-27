@@ -1,4 +1,9 @@
-use super::threei::Raw_CallFunc;
+//! rawposix syscall dispatcher table
+//! Source of truth for syscall numbers: Linux x86_64 syscall table
+//! https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
+//! https://filippo.io/linux-syscall-table/ 
+//! Keep these in sync with glibc's lind_syscall_num.h
+use super::threei::RawCallFunc;
 use rawposix::fs_calls::{
     access_syscall, brk_syscall, clock_gettime_syscall, close_syscall, dup2_syscall, dup_syscall, 
     fcntl_syscall, fdatasync_syscall, fsync_syscall, futex_syscall, link_syscall, lseek_syscall, 
@@ -11,7 +16,18 @@ use rawposix::sys_calls::{
 };
 
 /// According to the Linux version
-pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
+/// In glibc, waitpid() is actually implemented by calling wait4(), 
+/// so the Linux kernel itself does not provide a separate syscall 
+/// number for waitpid.
+/// In lind-wasm, however, we treat wait and waitpid as distinct 
+/// syscalls, assigning them arbitrary syscall numbers. These are 
+/// only resolved later in rawposix, where wait is internally implemented 
+/// by invoking waitpid with options = 0.
+/// This design choice may become a future TODO: we could adopt a 
+/// similar approach in lind-glibc by having wait() directly call 
+/// waitpid(), and then remove the separate wait implementation from 
+/// rawposix.
+pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (0, read_syscall),
     (1, write_syscall),
     (2, open_syscall),
@@ -19,7 +35,6 @@ pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (4, stat_syscall),
     (8, lseek_syscall),
     (9, mmap_syscall),
-    (10, open_syscall),
     (11, munmap_syscall),
     (12, brk_syscall),
     (21, access_syscall),
@@ -32,7 +47,6 @@ pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (59, exec_syscall),
     (60, exit_syscall),
     (61, wait_syscall),
-    (61, waitpid_syscall),
     (72, fcntl_syscall),
     (74, fsync_syscall),
     (75, fdatasync_syscall),
@@ -46,5 +60,6 @@ pub const SYSCALL_TABLE: &[(u64, Raw_CallFunc)] = &[
     (267, readlinkat_syscall),
     (277, sync_file_range_syscall),
     (293, pipe2_syscall),
+    (400, waitpid_syscall),
     (1004, sbrk_syscall),
 ];
