@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <stdint.h> // For uint64_t definition
 /* Indirect system call.  Linux generic implementation.
    Copyright (C) 1997-2024 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
@@ -30,9 +31,11 @@ int __imported_wasi_snapshot_preview1_lind_syscall(unsigned int callnumber, unsi
 // arg1-arg6: actual argument of the syscall, note that all the pointers passed here is 32-bit virtual wasm address
 //            and should be handled appropriately. This might be changed later and the address translation might be
 //            handled here instead
-int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6)
+int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6, int raw)
 {
     int ret = __imported_wasi_snapshot_preview1_lind_syscall(callnumber, callname, arg1, arg2, arg3, arg4, arg5, arg6);
+    // if raw is set, we do not do any further process to errno handling and directly return the result
+    if(raw != 0) return ret;
     // handle the errno
     // in rawposix, we use -errno as the return value to indicate the error
     // but this may cause some issues for mmap syscall, because mmap syscall
@@ -50,5 +53,65 @@ int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned
     {
         errno = 0;
     }
+    return ret;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+
+// Entry point for wasmtime, lind_syscall is an imported function from wasmtime
+int __imported_lind_3i_trampoline_register_syscall(uint64_t targetcage, 
+    uint64_t targetcallnum, 
+    uint64_t handlefunc_index_in_this_grate, 
+    uint64_t this_grate_id) __attribute__((
+    __import_module__("lind"),
+    __import_name__("register-syscall")
+));
+
+
+// Shim between the user-facing 3i API (e.g., register_handler) and the
+// Wasmtime trampoline import (__imported_lind_3i_trampoline_register_syscall).
+// The `lind_` prefix marks this as a Lind-Wasm–specific runtime shim rather 
+// than a generic/app symbol.
+//
+// 3i function call to register or deregister a syscall handler in a target cage
+// targetcage: the cage id where the syscall will be registered
+// targetcallnum: the syscall number to be registered in the target cage
+// this_grate_id: the grate id of the syscall jump ends
+// register_flag: deregister(0) or register(non-0)
+int lind_register_syscall (uint64_t targetcage, 
+    uint64_t targetcallnum,
+    uint64_t this_grate_id,
+    uint64_t register_flag)
+{
+    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, register_flag, this_grate_id);
+    
+    return ret;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Entry point for wasmtime, lind_cp_data is an imported function from wasmtime
+int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype) __attribute__((
+    __import_module__("lind"),
+    __import_name__("cp-data-syscall")
+));
+
+// Shim between the user-facing 3i API (e.g., register_handler) and the
+// Wasmtime trampoline import (__imported_lind_3i_trampoline_register_syscall).
+// The `lind_` prefix marks this as a Lind-Wasm–specific runtime shim rather 
+// than a generic/app symbol.
+//
+// 3i function call to copy data between cages
+// thiscage: the cage id of the caller cage
+// targetcage: the cage id of the target cage
+// srcaddr: the source address to copy from
+// srccage: the cage id of the source address
+// destaddr: the destination address to copy to
+// destcage: the cage id of the destination address
+// len: the length of data to copy
+// copytype: the type of copy, 0 for normal copy, 1 for string copy
+int lind_cp_data(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
+{
+    int ret = __imported_lind_3i_trampoline_cp_data(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, copytype);
+    
     return ret;
 }

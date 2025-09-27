@@ -1,9 +1,13 @@
 #![allow(dead_code)]
 
+use cfg_if::cfg_if;
+
 use anyhow::{anyhow, Result};
-use rawposix::safeposix::dispatcher::lind_syscall_api;
+use threei::threei::make_syscall;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
+use wasmtime_lind_3i_vmctx::remove_ctx;
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -17,6 +21,7 @@ use wasmtime::{
 };
 
 use wasmtime_environ::MemoryIndex;
+use cage::signal::{lind_signal_init, lind_thread_exit};
 
 pub mod clone_constants;
 pub mod signal;
@@ -350,18 +355,26 @@ impl<
         }
         let child_cageid = child_cageid.unwrap();
         let parent_pid = self.pid;
-
         // calling fork in rawposix to fork the cage
-        lind_syscall_api(
-            self.pid as u64,
-            FORK_SYSCALL as u32, // fork syscall
-            0,
-            child_cageid,
-            0,
-            0,
-            0,
-            0,
-            0,
+        // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+        // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+        make_syscall(
+            self.pid as u64, // self cage id
+            (FORK_SYSCALL) as u64, // syscall num for fork 
+            UNUSED_NAME, // syscall name
+            self.pid as u64, // target cage id, should be itself
+            child_cageid, // 1st arg
+            self.pid as u64, // 1st arg's cage id
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
         );
 
         // use the same engine for parent and child
@@ -411,7 +424,7 @@ impl<
                     }
 
                     // instantiate the module
-                    let instance = instance_pre
+                    let (instance, _) = instance_pre
                         .instantiate_with_lind(
                             &mut store,
                             InstantiateType::InstantiateChild {
@@ -421,15 +434,26 @@ impl<
                         )
                         .unwrap();
 
-                    // retrieve the epoch global
-                    let lind_epoch = instance
-                        .get_export(&mut store, "epoch")
-                        .and_then(|export| export.into_global())
-                        .expect("Failed to find shared_global");
-                    // retrieve the handler (underlying pointer) for the epoch global
-                    let pointer = lind_epoch.get_handler(&mut store);
+                    cfg_if! {
+                        // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                        // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                        // This is intended for debugging only and should not be used in production.
+                        if #[cfg(feature = "disable_signals")] {
+                            let pointer: *mut u64 = &mut 0;
+                        } else {
+                            // retrieve the epoch global
+                            let lind_epoch = instance
+                                .get_export(&mut store, "epoch")
+                                .and_then(|export| export.into_global())
+                                .expect("Failed to find epoch global export!");
+
+                            // retrieve the handler (underlying pointer) for the epoch global
+                            let pointer = lind_epoch.get_handler(&mut store);
+                        }
+                    }
+
                     // initialize the signal for the main thread of forked cage
-                    rawposix::interface::lind_signal_init(
+                    lind_signal_init(
                         child_cageid,
                         pointer,
                         THREAD_START_ID,
@@ -499,22 +523,37 @@ impl<
                         match exit_code {
                             Val::I32(val) => {
                                 // exit the main thread
-                                if rawposix::interface::lind_thread_exit(
+                                if lind_thread_exit(
                                     child_cageid,
                                     THREAD_START_ID as u64,
                                 ) {
+                                    // Clean up the context from the global table
+                                    // We only register grate calls into the vmctx table during fork+exec (the logic 
+                                    // lives in the grate module), so a bare fork currently does not register a vmctx 
+                                    // table instance.
+                                    remove_ctx(child_cageid as usize);
+
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
-                                    lind_syscall_api(
-                                        child_cageid,
-                                        EXIT_SYSCALL as u32,
-                                        0,
-                                        *val as u64,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
+                                    // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                                    // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+                                    make_syscall(
+                                        child_cageid, // self cage
+                                        (EXIT_SYSCALL) as u64, // syscall num
+                                        UNUSED_NAME, // syscall name
+                                        child_cageid, // target cage, should be itself
+                                        *val as u64, // 1st arg: status
+                                        child_cageid, // 1st arg's cage id
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
                                     );
 
                                     // the cage just exited, decrement the cage counter
@@ -697,15 +736,26 @@ impl<
                         .unwrap();
                     let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
 
-                    // retrieve the epoch global
-                    let lind_epoch = instance
-                        .get_export(&mut store, "epoch")
-                        .and_then(|export| export.into_global())
-                        .expect("Failed to find shared_global");
-                    // retrieve the handler (underlying pointer) for the epoch global
-                    let pointer = lind_epoch.get_handler(&mut store);
+                    cfg_if! {
+                        // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                        // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                        // This is intended for debugging only and should not be used in production.
+                        if #[cfg(feature = "disable_signals")] {
+                            let pointer: *mut u64 = &mut 0;
+                        } else {
+                            // retrieve the epoch global
+                            let lind_epoch = instance
+                                .get_export(&mut store, "epoch")
+                                .and_then(|export| export.into_global())
+                                .expect("Failed to find epoch global export!");
+
+                            // retrieve the handler (underlying pointer) for the epoch global
+                            let pointer = lind_epoch.get_handler(&mut store);
+                        }
+                    }
+
                     // initialize the signal for the thread of the cage
-                    rawposix::interface::lind_signal_init(
+                    lind_signal_init(
                         child_cageid as u64,
                         pointer,
                         next_tid as i32,
@@ -763,22 +813,36 @@ impl<
                     match exit_code {
                         Val::I32(val) => {
                             // exit the thread
-                            if rawposix::interface::lind_thread_exit(
+                            if lind_thread_exit(
                                 child_cageid as u64,
                                 next_tid as u64,
                             ) {
+                                // Clean up the context from the global table
+                                if !remove_ctx(child_cageid as usize) {
+                                    eprintln!("[wasmtime|pthread_create] Warning: failed to remove context for cage {}", child_cageid);
+                                }
+
                                 // we clean the cage only if this is the last thread in the cage
                                 // exit the cage with the exit code
-                                lind_syscall_api(
-                                    child_cageid as u64,
-                                    EXIT_SYSCALL as u32,
-                                    0,
-                                    *val as u64,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
+                                // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                                // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+                                make_syscall(
+                                    (child_cageid) as u64, // self cage
+                                    (EXIT_SYSCALL) as u64, // syscall num
+                                    UNUSED_NAME, // syscall name
+                                    (child_cageid) as u64, // target cage
+                                    *val as u64, // 1st arg: status
+                                    (child_cageid) as u64, // 1st arg's cage id
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
                                 );
 
                                 // the cage just exited, decrement the cage counter
@@ -968,17 +1032,25 @@ impl<
 
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
-            // lind_exec(cloned_pid as u64, cloned_pid as u64);
-            lind_syscall_api(
-                cloned_pid as u64,
-                EXEC_SYSCALL as u32, // exec syscall
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
+            // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+            // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+            make_syscall(
+                cloned_pid as u64, // self cage id
+                (EXEC_SYSCALL) as u64, // syscall num for exec 
+                UNUSED_NAME, // syscall name
+                cloned_pid as u64, // target cage id, should be itself
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID, 
             );
 
             let ret = exec_call(

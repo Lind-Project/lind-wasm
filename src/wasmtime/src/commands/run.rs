@@ -5,26 +5,38 @@
     allow(irrefutable_let_patterns, unreachable_patterns)
 )]
 
+use cfg_if::cfg_if;
+
 use crate::common::{Profile, RunCommon, RunTarget};
 
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
-use rawposix::safeposix::dispatcher::lind_syscall_api;
-use std::ffi::OsString;
+use std::ffi::{OsString, CStr};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
 use wasmtime::{
-    AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType,
+    AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType
 };
+pub use once_cell::sync::Lazy;
+
+use wasmtime::Instance;
+
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
-use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
+use wasmtime_lind_utils::lind_syscall_numbers::{EXIT_SYSCALL};
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_utils::LindCageManager;
+use wasmtime_lind_3i_vmctx::{insert_ctx, get_ctx, remove_ctx};
+
+use threei::threei::{make_syscall, threei_wasm_func};
+use rawposix::sys_calls::{rawposix_start, rawposix_shutdown};
+use wasmtime::Caller;
+use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::WasiNnCtx;
@@ -189,7 +201,7 @@ impl RunCommand {
         }
 
         // Initialize Lind here
-        rawposix::safeposix::dispatcher::lindrustinit(0);
+        rawposix_start(0);
         // new cage is created
         lind_manager.increment();
 
@@ -226,13 +238,37 @@ impl RunCommand {
                     code = *res;
                 }
                 // exit the thread
-                if rawposix::interface::lind_thread_exit(
+                if lind_thread_exit(
                     CAGE_START_ID as u64,
                     THREAD_START_ID as u64,
                 ) {
+                    // Clean up the context from the global table
+                    if !remove_ctx(1 as usize) {
+                        eprintln!("[wasmtime|run] Warning: failed to remove context for cage {}", CAGE_START_ID);
+                    }
+
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
-                    lind_syscall_api(1, EXIT_SYSCALL as u32, 0, code as u64, 0, 0, 0, 0, 0);
+                    // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                    // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+                    make_syscall(
+                        1, // self cage id
+                        (EXIT_SYSCALL) as u64, // syscall num
+                        UNUSED_NAME, // syscall name 
+                        1, // target cage id, should be itself
+                        code as u64, // Exit type
+                        1, // self cage id
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                        UNUSED_ARG,
+                        UNUSED_ID,
+                    );
 
                     // main cage exits
                     lind_manager.decrement();
@@ -241,7 +277,7 @@ impl RunCommand {
                 // we wait until all other cage exits
                 lind_manager.wait();
                 // after all cage exits, finalize the lind
-                rawposix::safeposix::dispatcher::lindrustfinalize();
+                rawposix_shutdown();
             }
             Err(e) => {
                 // Exit the process if Wasmtime understands the error;
@@ -575,16 +611,10 @@ impl RunCommand {
         let result = match linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
-                let instance = linker
-                    .instantiate_with_lind(
-                        &mut *store,
-                        &module,
-                        InstantiateType::InstantiateFirst(pid),
-                    )
-                    .context(format!(
-                        "failed to instantiate {:?}",
-                        self.module_and_args[0]
-                    ))?;
+                let (instance, grate_instanceid) = linker.instantiate_with_lind(&mut *store, &module, InstantiateType::InstantiateFirst(pid)).context(format!(
+                    "failed to instantiate {:?}",
+                    self.module_and_args[0]
+                ))?;
 
                 // If `_initialize` is present, meaning a reactor, then invoke
                 // the function.
@@ -611,17 +641,26 @@ impl RunCommand {
                 store.as_context_mut().set_stack_base(stack_pointer as u64);
                 store.as_context_mut().set_stack_top(stack_low as u64);
 
-                // retrieve the epoch global
-                let lind_epoch = instance
-                    .get_export(&mut *store, "epoch")
-                    .and_then(|export| export.into_global())
-                    .expect("Failed to find epoch global export!");
+                cfg_if! {
+                    // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                    // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                    // This is intended for debugging only and should not be used in production.
+                    if #[cfg(feature = "disable_signals")] {
+                        let pointer = 0;
+                    } else {
+                        // retrieve the epoch global
+                        let lind_epoch = instance
+                            .get_export(&mut *store, "epoch")
+                            .and_then(|export| export.into_global())
+                            .expect("Failed to find epoch global export!");
 
-                // retrieve the handler (underlying pointer) for the epoch global
-                let pointer = lind_epoch.get_handler(&mut *store);
+                        // retrieve the handler (underlying pointer) for the epoch global
+                        let pointer = lind_epoch.get_handler(&mut *store);
+                    }
+                }
 
                 // initialize the signal for the main thread of the cage
-                rawposix::interface::lind_signal_init(
+                lind_signal_init(
                     pid,
                     pointer as *mut u64,
                     THREAD_START_ID,
@@ -629,7 +668,75 @@ impl RunCommand {
                 );
 
                 // see comments at signal_may_trigger for more details
-                rawposix::interface::signal_may_trigger(pid);
+                signal_may_trigger(pid);
+
+                // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s 
+                // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across 
+                // instance boundaries particularly difficult. To overcome this, the design employs low-level context 
+                // capture by extracting and storing vmctx pointers from Wasmtime’s internal StoreOpaque and InstanceHandler 
+                // structures. These pointers are stored in a global registry, enabling safe, cross-thread access 
+                // without violating Rust’s safety guarantees. The closure registered with ThreeI is dynamically 
+                // name-resolving: it receives a raw C string pointer to a syscall name, normalizes it (e.g., 
+                // by stripping prefixes and appending _grate), and uses Wasmtime’s reflective export API to locate 
+                // and type-check the corresponding Wasm function. This allows ThreeI to directly invoke per-syscall 
+                // exports without needing an internal dispatcher within the Wasm module. To complete the bridge 
+                // between host and guest, the system uses Caller::with() to re-enter the Wasmtime runtime context 
+                // from the host side.
+                // 1. get StoreOpaque
+                let grate_storeopaque = store.inner_mut();
+                // 2. get InstanceHandler
+                let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
+                // 3. store InstanceHandler to global table, because we need the ptr to have Send+Sync, we need to 
+                // store the wrapper of vmctx ptr
+                let current_pid = pid;
+                unsafe {
+                    insert_ctx(current_pid as usize, grate_instancehandler.clone());
+                }
+                
+                let res = threei_wasm_func(current_pid, Box::new(move |call_ptr: u64, cageid: u64, arg1: u64, arg1cageid: u64, arg2: u64, arg2cageid: u64, arg3: u64, arg3cageid: u64, arg4: u64, arg4cageid: u64, arg5: u64, arg5cageid: u64, arg6: u64, arg6cageid: u64| -> i32 {
+                    let syscall_name = unsafe {
+                        let c_str = CStr::from_ptr(call_ptr as *const i8); 
+                        let rust_str = c_str.to_str().expect("[wasmtime|run] Invalid UTF-8 in call name field"); 
+                        let trimmed = rust_str.strip_prefix("syscall|").unwrap_or(rust_str);
+                        let modified_str = format!("{}_grate", trimmed);
+                        modified_str
+                    };
+
+                    let grate_handler = get_ctx(current_pid as usize);
+                    let ctx = grate_handler.vmctx();
+                    unsafe {
+                        Caller::with(ctx, |mut caller: Caller<'_, Host>| {
+
+                            let Caller { mut store, caller: instance } = caller;
+                            
+                            let grate_entry_func = instance.host_state()
+                                    .downcast_ref::<Instance>().unwrap()
+                                    .get_export(&mut store, &syscall_name).and_then(|f| f.into_func())
+                                                    .ok_or_else(|| anyhow!("failed to find function export `{}`", syscall_name)).unwrap();
+                            
+                           let grate_entry_point = match grate_entry_func.typed::<(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64), i32>(&mut store) {
+                                Ok(typed_func) => typed_func,
+                                Err(e) => {
+                                    eprintln!("[wasmtime|run] Failed to find function '{}': {:?}", syscall_name, e);
+                                    return -1; 
+                                }
+                            };
+                            let result = match grate_entry_point.call(&mut store, (cageid, arg1, arg1cageid, arg2, arg2cageid, arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6, arg6cageid)) {
+                                Ok(value) => value,
+                                Err(e) => {
+                                    eprintln!("Error calling {}: {:?}", syscall_name, e);
+                                    return -1; 
+                                }
+                            };
+                            result
+                        })
+                    }
+                    
+                    
+                }));
+                if res < 0 {
+                    panic!("[wasmtime|instance] error on passing instance_pre to 3i");
+                }
 
                 match func {
                     Some(func) => self.invoke_func(store, func),

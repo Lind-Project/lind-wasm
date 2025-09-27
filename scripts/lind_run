@@ -1,0 +1,14 @@
+#!/bin/bash
+set -ue
+
+# Run passed optionally pre-compiled wasm file in wasmtime
+#
+# Important notes:
+# - call from source code repository root directory
+# - expects `clang` on $PATH
+# - expects `wasmtime` its release build location
+#
+# Usage:
+#   ./scripts/lind_run /path/to/lind-program.[c]wasm
+
+src/wasmtime/target/release/wasmtime run --allow-precompiled --wasi threads=y --wasi preview2=n  "$@"

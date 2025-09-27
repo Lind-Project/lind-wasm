@@ -18,10 +18,11 @@
 #include <sys/socket.h>
 #include <socketcall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __socketpair (int domain, int type, int protocol, int sv[2])
 {
-   return MAKE_SYSCALL(49, "syscall|socketpair", (uint64_t) domain, (uint64_t) type, (uint64_t) protocol, (uint64_t) sv, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(SOCKETPAIR_SYSCALL, "syscall|socketpair", (uint64_t) domain, (uint64_t) type, (uint64_t) protocol, (uint64_t) sv, NOTUSED, NOTUSED);
 }
 weak_alias (__socketpair, socketpair)

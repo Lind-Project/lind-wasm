@@ -19,12 +19,13 @@
 #include <sys/epoll.h>
 #include <sysdep.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 libc_hidden_proto (epoll_create)
 
 int
 epoll_create (int size)
 {
-   return MAKE_SYSCALL(56, "syscall|epoll_create", (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(EPOLL_CREATE_SYSCALL, "syscall|epoll_create", (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (epoll_create)

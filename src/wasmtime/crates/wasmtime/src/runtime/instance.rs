@@ -12,15 +12,16 @@ use crate::{
 };
 use alloc::sync::Arc;
 use core::ptr::NonNull;
-use rawposix::safeposix::dispatcher::lind_syscall_api;
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
 };
+use threei::threei::make_syscall;
+use cage::memory::{init_vmmap, fork_vmmap};
+use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 use wasmparser::WasmFeatures;
 use wasmtime_environ::{
     EntityIndex, EntityType, FuncIndex, GlobalIndex, MemoryIndex, PrimaryMap, TableIndex, TypeTrace,
 };
-use wasmtime_lind_utils::lind_syscall_numbers::MMAP_SYSCALL;
 
 use super::Val;
 
@@ -215,7 +216,7 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
     ) -> Result<Instance> {
-        let (instance, start) = Instance::new_raw(store.0, module, imports)?;
+        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;
@@ -228,8 +229,8 @@ impl Instance {
         module: &Module,
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
-    ) -> Result<Instance> {
-        let (instance, start) = Instance::new_raw(store.0, module, imports)?;
+    ) -> Result<(Instance, InstanceId)> {
+        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
         // retrieve the initial memory size
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
@@ -239,6 +240,15 @@ impl Instance {
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
         // memory init in wasmtime and do our own initialization here
+        //
+        // The type of memory initialization depends on the kind of wasm module being instantiated.
+        // In the first case (`InstantiateType::InstantiateFirst(pid)`), we are creating the very 
+        // first cage’s linear memory. After initialization, no additional steps are needed.
+        // 
+        // In the case of `InstantiateType::InstantiateChild { parent_pid, child_pid }`, which 
+        // corresponds to a module created via fork. In this case, after the child’s memory is 
+        // initialized, we must also copy the parent’s memory state (`fork_vmmap`) into the child t
+        // o have correct fork semantics.
         match instantiate_type {
             // InstantiateFirst: this is the first wasm instance
             InstantiateType::InstantiateFirst(pid) => {
@@ -248,31 +258,34 @@ impl Instance {
                 let handle = store.0.instance(InstanceId::from_index(0));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let memory_base = defined_memory.base as usize;
-                rawposix::interface::init_vmmap_helper(
-                    pid,
-                    memory_base,
-                    Some(minimal_pages as u32),
-                );
 
-                lind_syscall_api(
+                init_vmmap(pid, memory_base, Some(minimal_pages as u32));
+                
+                // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+                make_syscall(
+                    pid, // self cageid
+                    (MMAP_SYSCALL) as u64, // syscall num
+                    0, // since wasmtime operates with lower level memory, it always interacts with underlying os
+                    pid, // target cageid (should be same)
+                    0, // the first memory region starts from 0
                     pid,
-                    MMAP_SYSCALL as u32,
-                    0,
-                    0,                          // the first memory region starts from 0
                     minimal_pages << PAGESHIFT, // size of first memory region
+                    pid,
                     (PROT_READ | PROT_WRITE) as u64,
+                    pid,
                     (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
-                    // we need to pass -1 here, but since lind_syscall_api only accepts u64
+                    pid,
+                    // we need to pass -1 here, but since make_syscall only accepts u64
                     // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
                     (0 - 1) as u64,
+                    pid,
                     0,
+                    pid,
                 );
-            }
+            },
             // InstantiateChild: this is the child wasm instance forked by parent
-            InstantiateType::InstantiateChild {
-                parent_pid,
-                child_pid,
-            } => {
+            InstantiateType::InstantiateChild { parent_pid, child_pid } => {
                 // if this is a child, we do not need to specifically set up the first memory region
                 // since this should be taken care of when we fork the entire memory region from parent
                 // therefore in this case, we only need to:
@@ -281,16 +294,17 @@ impl Instance {
                 let handle = store.0.instance(InstanceId::from_index(0));
                 let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
                 let child_address = defined_memory.base as usize;
-
-                rawposix::interface::init_vmmap_helper(child_pid, child_address, None);
-                rawposix::interface::fork_vmmap_helper(parent_pid as u64, child_pid);
+            
+                init_vmmap(child_pid, child_address, None);
+                fork_vmmap(parent_pid as u64, child_pid);
             }
         }
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;
         }
-        Ok(instance)
+
+        Ok((instance, instanceid))
     }
 
     /// Internal function to create an instance and run the start function.
@@ -334,7 +348,7 @@ impl Instance {
         store: &mut StoreOpaque,
         module: &Module,
         imports: Imports<'_>,
-    ) -> Result<(Instance, Option<FuncIndex>)> {
+    ) -> Result<(Instance, Option<FuncIndex>, InstanceId)> {
         if !Engine::same(store.engine(), module.engine()) {
             bail!("cross-`Engine` instantiation is not currently supported");
         }
@@ -429,7 +443,7 @@ impl Instance {
                 .contains(WasmFeatures::BULK_MEMORY),
         )?;
 
-        Ok((instance, compiled_module.module().start_func))
+        Ok((instance, compiled_module.module().start_func, id))
     }
 
     pub(crate) fn from_wasmtime(handle: InstanceData, store: &mut StoreOpaque) -> Instance {
@@ -1005,11 +1019,7 @@ impl<T> InstancePre<T> {
         unsafe { Instance::new_started(&mut store, &self.module, imports.as_ref()) }
     }
 
-    pub fn instantiate_with_lind(
-        &self,
-        mut store: impl AsContextMut<Data = T>,
-        instantiate_type: InstantiateType,
-    ) -> Result<Instance> {
+    pub fn instantiate_with_lind(&self, mut store: impl AsContextMut<Data = T>, instantiate_type: InstantiateType) -> Result<(Instance, InstanceId)> {
         let mut store = store.as_context_mut();
         let imports = pre_instantiate_raw(
             &mut store.0,
@@ -1022,14 +1032,7 @@ impl<T> InstancePre<T> {
         // This unsafety should be handled by the type-checking performed by the
         // constructor of `InstancePre` to assert that all the imports we're passing
         // in match the module we're instantiating.
-        unsafe {
-            Instance::new_started_impl_with_lind(
-                &mut store,
-                &self.module,
-                imports.as_ref(),
-                instantiate_type,
-            )
-        }
+        unsafe { Instance::new_started_impl_with_lind(&mut store, &self.module, imports.as_ref(), instantiate_type) }
     }
 
     /// Creates a new instance, running the start function asynchronously
