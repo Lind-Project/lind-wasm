@@ -359,60 +359,6 @@ pub fn setsockopt_syscall(
     ret
 }
 
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/send.2.html
-///
-/// The Linux `send()` syscall is used to transmit a message through a socket.
-/// This implementation extracts the virtual file descriptor and buffer from the current cage,
-/// then forwards the request to the host kernel with the provided flags.
-///
-/// ## Input:
-///     - cageid: current cageid
-///     - fd_arg: virtual file descriptor indicating the socket to send data on
-///     - buf_arg: pointer to the message buffer in user memory
-///     - buflen_arg: length of the message to be sent
-///     - flags_arg: bitmask of flags influencing message transmission behavior
-///
-/// ## Return:
-///     - On success: number of bytes sent
-///     - On failure: a negative errno value indicating the syscall error
-pub fn send_syscall(
-    cageid: u64,
-    fd_arg: u64,
-    fd_cageid: u64,
-    buf_arg: u64,
-    buf_cageid: u64,
-    buflen_arg: u64,
-    buflen_cageid: u64,
-    flags_arg: u64,
-    flags_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32{
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
-    let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
-    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-
-    // would check when `secure` flag has been set during compilation, 
-    // no-op by default
-    if !(sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "send_syscall", "Invalid Cage ID");
-    }
-
-    let ret = unsafe { libc::send(fd as i32, buf as *const c_void, buflen, flags) as i32};
-
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "send");
-    }
-
-    ret
-}
-
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/shutdown.2.html
 ///
 /// The Linux `shutdown()` syscall disables sends and/or receives on a socket.

@@ -23,7 +23,9 @@ int main(void) {
     if (flags & FD_CLOEXEC) {
         printf("SOCK_CLOEXEC is set.\n");
     } else {
+        close(fd);
         printf("SOCK_CLOEXEC is NOT set.\n");
+        exit(EXIT_FAILURE);
     }
 
     close(fd);
