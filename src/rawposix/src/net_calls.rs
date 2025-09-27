@@ -10,10 +10,10 @@ use sysdefs::data::fs_struct::EpollEvent;
 use typemap::datatype_conversion::*;
 use typemap::network_helpers::convert_host_sockaddr;
 use typemap::cage_helpers::convert_fd_to_host;
-use sysdefs::constants::FDKIND_KERNEL;
+use sysdefs::data::net_struct::SockAddr;
+use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
 use libc::*;
 use std::ptr;
-use sysdefs::*;
 
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
@@ -661,7 +661,11 @@ pub fn epoll_ctl_syscall(
     }
 
     // After successful kernel operation, update fdtables virtual mapping
-    match fdtables::virtualize_epoll_ctl(cageid, epfd as u64, op, virtfd, kernel_epoll_event) {
+    let fdtables_event = fdtables::epoll_event {
+        events: kernel_epoll_event.events,
+        u64: kernel_epoll_event.u64,
+    };
+    match fdtables::virtualize_epoll_ctl(cageid, epfd as u64, op, virtfd, fdtables_event) {
         Ok(()) => 0,
         Err(err) => {
             // If fdtables operation fails after successful kernel operation,
@@ -967,7 +971,7 @@ pub fn connect_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation, 
     // no-op by default
@@ -1021,7 +1025,7 @@ pub fn bind_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation, 
     // no-op by default
@@ -1128,7 +1132,7 @@ pub fn accept_syscall(
     arg6_cageid: u64,
 ) -> i32{
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation, 
     // no-op by default
@@ -1191,7 +1195,7 @@ pub fn setsockopt_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = sc_convert_addr_to_host(optval_arg, optval_cageid, cageid);
+    let optval = sc_convert_to_u8_mut(optval_arg, optval_cageid, cageid);
     let optlen = sc_convert_sysarg_to_u32(optlen_arg, optlen_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation, 
