@@ -9,8 +9,9 @@
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
 use std::error::Error;
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
-use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal};
+use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal, StatData};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::Errno;
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
 /// will return true in default mode, and check if `arg` with `arg_cageid` are all null in
@@ -573,6 +574,50 @@ pub fn sc_convert_itimerval_mut(
             Err(_) => panic!("Failed to get ITimerVal from address"),
         }
     }
+}
+
+/// `sc_convert_addr_to_statdata` translates a user-provided address from the
+/// calling Cage's virtual memory into a mutable reference to a `StatData`
+/// structure.
+///
+/// ## Arguments:
+///  - `arg`: The raw virtual address of the user-provided `StatData` buffer.
+///  - `arg_cageid`: The Cage ID associated with the provided address.
+///  - `cageid`: The Cage ID of the current caller (used for validation).
+///
+/// ## Implementation Details:
+///  - When the `secure` feature is enabled, the function validates that the
+///    provided `arg_cageid` matches the current `cageid`.
+///  - The Cage object is retrieved via `get_cage(cageid)`.
+///  - The virtual address is translated into a host address using
+///    `translate_vmmap_addr`.
+///  - The host address is cast into a `*mut StatData`, and if non-null,
+///    reinterpreted as a mutable reference.
+///  - If the pointer is null, the function returns `Err(Errno::EFAULT)`,
+///    indicating a "Bad address" error consistent with Linux error handling.
+///
+/// ## Return Value:
+///  - `Ok(&mut StatData)` if the address translation succeeds.
+///  - `Err(Errno::EFAULT)` if the address is invalid or null.
+pub fn sc_convert_addr_to_statdata<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut StatData, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut StatData;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
 }
 
 pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {

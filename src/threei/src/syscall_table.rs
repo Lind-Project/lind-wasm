@@ -1,21 +1,19 @@
 use super::threei::RawCallFunc;
-// use rawposix::fs_calls::{
-//     brk_syscall, clock_gettime_syscall, close_syscall, dup2_syscall, dup_syscall, fcntl_syscall,
-//     futex_syscall, lseek_syscall, mkdir_syscall, mmap_syscall, munmap_syscall,
-//     nanosleep_time64_syscall, open_syscall, pipe2_syscall, pipe_syscall, read_syscall,
-//     sbrk_syscall, unlink_syscall, write_syscall,
-// };
 use rawposix::fs_calls::{
     close_syscall, mkdir_syscall, open_syscall, read_syscall, mmap_syscall, munmap_syscall,
     brk_syscall, sbrk_syscall, fcntl_syscall, write_syscall, clock_gettime_syscall,
+    stat_syscall, fsync_syscall, fdatasync_syscall, rename_syscall, link_syscall,
+    unlink_syscall, unlinkat_syscall, readlinkat_syscall, sync_file_range_syscall,
+    access_syscall,
 };
 use rawposix::net_calls::{socket_syscall, connect_syscall, bind_syscall, listen_syscall, 
     accept_syscall, setsockopt_syscall, send_syscall, recv_syscall, recvfrom_syscall,
     sendto_syscall, gethostname_syscall, getsockopt_syscall, getpeername_syscall, socketpair_syscall,
-    shutdown_syscall, getsockname_syscall,
+    shutdown_syscall, getsockname_syscall, 
 };
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall,
+    sigaction_syscall,
 };
 
 /// According to the Linux version
@@ -24,14 +22,17 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (1, write_syscall),
     (2, open_syscall),
     (3, close_syscall),
+    (4, stat_syscall),
     // (8, lseek_syscall),
     (9, mmap_syscall),
     (11, munmap_syscall),
     (12, brk_syscall),
+    (13, sigaction_syscall),
     // (22, pipe_syscall),
     // (32, dup_syscall),
     // (33, dup2_syscall),
     // (35, nanosleep_time64_syscall),
+    (21, access_syscall),
     (39, getpid_syscall),
     (41, socket_syscall),
     (42, connect_syscall),
@@ -54,11 +55,18 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (61, wait_syscall),
     (61, waitpid_syscall),
     (72, fcntl_syscall),
+    (74, fsync_syscall),
+    (75, fdatasync_syscall),
+    (82, rename_syscall),
     (83, mkdir_syscall),
-    // (87, unlink_syscall),
+    (86, link_syscall),
+    (87, unlink_syscall),
     // (202, futex_syscall),
     (170, gethostname_syscall),
     (228, clock_gettime_syscall),
+    (263, unlinkat_syscall),
+    (267, readlinkat_syscall),
+    (277, sync_file_range_syscall),
     // (293, pipe2_syscall),
     (1004, sbrk_syscall),
 ];
