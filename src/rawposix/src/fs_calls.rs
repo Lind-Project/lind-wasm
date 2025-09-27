@@ -76,14 +76,14 @@ pub fn open_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "open_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "open", "Invalide Cage ID");
     }
 
     // Get the kernel fd first
     let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
 
     if kernel_fd < 0 {
-        return handle_errno(get_errno(), "open_syscall");
+        return handle_errno(get_errno(), "open");
     }
 
     // Check if `O_CLOEXEC` has been est
@@ -111,12 +111,12 @@ pub fn open_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment.
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective).
 ///     - count_arg: the maximum number of bytes to read from the file descriptor.
 pub fn read_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -130,7 +130,7 @@ pub fn read_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     if kernel_fd == -1 {
         return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
     } else if kernel_fd == -9 {
@@ -174,11 +174,11 @@ pub fn read_syscall(
 /// ## Arguments:
 ///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
 ///     - cageid: current cage identifier.
-///     - virtual_fd: the virtual file descriptor from the RawPOSIX environment to be closed.
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment to be closed.
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
 pub fn close_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64, 
     arg2: u64,
     arg2_cageid: u64,
@@ -191,14 +191,15 @@ pub fn close_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    if !(sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
     }
 
-    match fdtables::close_virtualfd(cageid, virtual_fd) {
+    match fdtables::close_virtualfd(cageid, vfd_arg) {
         Ok(()) => 0,
         Err(e) => {
             if e == Errno::EBADFD as u64 {
@@ -315,7 +316,7 @@ pub fn mkdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "mkdir_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "mkdir", "Invalide Cage ID");
     }
 
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
@@ -324,6 +325,225 @@ pub fn mkdir_syscall(
         let errno = get_errno();
         return handle_errno(errno, "mkdir");
     }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/pipe.2.html
+///
+/// Linux `pipe()` syscall is equivalent to calling `pipe2()` with flags set to zero.
+/// Call to the kernel here.
+///
+/// ## Input:
+///     - cageid: current cage identifier.
+///     - pipefd_arg: a u64 representing the pointer to the PipeArray (user's perspective).
+///     - pipefd_cageid: cage identifier for the pointer argument.
+/// 
+/// ## Return:
+/// On success, zero is returned.  On error, -1 is returned, errno is 
+/// set to indicate the error, and pipefd is left unchanged.
+pub fn pipe_syscall(
+    cageid: u64,
+    pipefd_arg: u64,
+    pipefd_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "pipe_syscall", "Invalid Cage ID");
+    }
+
+    // Convert the u64 pointer into a mutable reference to PipeArray
+    let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
+        Ok(p) => p,
+        Err(e) => return syscall_error(Errno::EFAULT, "pipe", "Invalid address"),
+    };
+
+    // Create an array to hold the two kernel file descriptors
+    let mut kernel_fds: [i32; 2] = [0; 2];
+    let ret = unsafe { libc::pipe(kernel_fds.as_mut_ptr()) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "pipe_syscall");
+    }
+
+    // Get virtual fd for read end
+    let read_vfd = match fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        kernel_fds[0] as u64,
+        false, 
+        0,
+    ) {
+        Ok(fd) => fd as i32,
+        Err(_e) => {
+            unsafe {
+                libc::close(kernel_fds[0]);
+                libc::close(kernel_fds[1]);
+            }
+            return syscall_error(
+                Errno::EMFILE,
+                "pipe_syscall",
+                "Failed to get virtual file descriptor"
+            );
+        }
+    };
+
+    // Get virtual fd for write end
+    let write_vfd = match fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        kernel_fds[1] as u64,
+        false,
+        0,
+    ) {
+        Ok(fd) => fd as i32,
+        Err(_e) => {
+            // close the kernel pipefd if there's an error
+            // on getting virtual fd
+            unsafe {
+                libc::close(kernel_fds[0]);
+                libc::close(kernel_fds[1]);
+            }
+            return syscall_error(
+                Errno::EMFILE,
+                "pipe_syscall", 
+                "Failed to get virtual file descriptor"
+            );
+        }
+    };
+
+    // Update PipeArray located in cage linear memory
+    pipefd.readfd = read_vfd;
+    pipefd.writefd = write_vfd;
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/pipe2.2.html
+///
+/// Linux `pipe2()` syscall creates a unidirectional data channel and returns two file descriptors,
+/// one for reading and one for writing. In our implementation, we first convert the user-supplied
+/// pointer to a mutable reference to a PipeArray. Then, we call libc::pipe2() with the provided flags.
+/// Finally, we obtain new virtual file descriptors for both ends of the pipe using our fd management
+/// subsystem (`fdtables`).
+///
+/// ## Input:
+///     - cageid: current cage identifier.
+///     - pipefd_arg: a u64 representing the pointer to the PipeArray (user's perspective).
+///     - pipefd_cageid: cage identifier for the pointer argument.
+///     - flags_arg: this argument contains flags (e.g., O_CLOEXEC) to be passed to pipe2.
+///     - flags_cageid: cage identifier for the flags argument.
+/// 
+/// ## Return:
+/// On success, zero is returned.  On error, -1 is returned, errno is 
+/// set to indicate the error, and pipefd is left unchanged.
+pub fn pipe2_syscall(
+    cageid: u64,
+    pipefd_arg: u64,
+    pipefd_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // Validate flags (only O_NONBLOCK and O_CLOEXEC are allowed)
+    let allowed_flags = fs_const::O_NONBLOCK | fs_const::O_CLOEXEC;
+    if flags & !allowed_flags != 0 {
+        return syscall_error(Errno::EINVAL, "pipe2_syscall", "Invalid flags");
+    }
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "pipe2_syscall", "Invalid Cage ID");
+    }
+    // Convert the u64 pointer into a mutable reference to PipeArray
+    let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
+        Ok(p) => p,
+        Err(e) => return syscall_error(Errno::EFAULT, "pipe2", "Invalid address"),
+    };
+    // Create an array to hold the two kernel file descriptors
+    let mut kernel_fds: [i32; 2] = [0; 2];
+    let ret = unsafe { libc::pipe2(kernel_fds.as_mut_ptr(), flags) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "pipe2_syscall");
+    }
+
+    // Check whether O_CLOEXEC is set
+    let should_cloexec = (flags & fs_const::O_CLOEXEC) != 0;
+
+    // Get virtual fd for read end
+    let read_vfd = match fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        kernel_fds[0] as u64,
+        should_cloexec,
+        0,
+    ) {
+        Ok(fd) => fd as i32,
+        Err(_e) => {
+            // close the kernel pipefd if there's an error
+            // on getting virtual fd
+            unsafe {
+                libc::close(kernel_fds[0]);
+                libc::close(kernel_fds[1]);
+            }
+            return syscall_error(
+                Errno::EMFILE,
+                "pipe2_syscall",
+                "Failed to get virtual file descriptor"
+            );
+        }
+    };
+
+    // Get virtual fd for write end
+    let write_vfd = match fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        kernel_fds[1] as u64,
+        should_cloexec,
+        0,
+    ) {
+        Ok(fd) => fd as i32,
+        Err(_e) => {
+            unsafe {
+                libc::close(kernel_fds[0]);
+                libc::close(kernel_fds[1]);
+            }
+            return syscall_error(
+                Errno::EMFILE,
+                "pipe2_syscall",
+                "Failed to get virtual file descriptor"
+            );
+        }
+    };
+
+    // Update PipeArray located in cage linear memory
+    pipefd.readfd = read_vfd;
+    pipefd.writefd = write_vfd;
+
     ret
 }
 
@@ -1033,13 +1253,8 @@ pub fn fcntl_syscall(
                 Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
             }
         }
-        // Return (as the function result) the process ID or process
-        // group ID currently receiving SIGIO and SIGURG signals for
-        // events on file descriptor fd.
+        // todo: F_GETOWN and F_SETOWN commands are not implemented yet
         (F_GETOWN, ..) => DEFAULT_GID as i32,
-        // Set the process ID or process group ID that will receive
-        // SIGIO and SIGURG signals for events on the file descriptor
-        // fd.
         (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
             // Get fdtable entry
@@ -1057,6 +1272,31 @@ pub fn fcntl_syscall(
     }
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/clock_gettime.2.html
+///
+/// `clock_gettime_syscall` retrieves the time of the specified clock and
+/// stores it in a user-provided `timespec` structure.  
+///
+/// ## Implementation Details:
+/// - The `clockid` argument is converted from the Cage's virtual argument
+///   into a host `u32`.
+/// - The `tp` pointer (destination for the `timespec` result) is translated
+///   from Wasm linear memory into a host address via `sc_convert_addr_to_host`.
+/// - Unused arguments `arg3`–`arg6` are validated with `sc_unusedarg`.
+/// - The underlying `SYS_clock_gettime` syscall is invoked directly with the
+///   converted arguments.
+/// - On error, `errno` is retrieved with `get_errno()` and normalized through
+///   `handle_errno()`.
+///
+/// ## Arguments:
+/// - `cageid`: Identifier of the calling Cage
+/// - `clockid_arg`: The clock to be queried (e.g., `CLOCK_REALTIME`)
+/// - `tp_arg`: Address of the user buffer for the result `timespec`
+/// - `arg3`–`arg6`: Reserved, must be unused
+///
+/// ## Return Value:
+/// - `0` on success  
+/// - `-1` on failure, with `errno` set appropriately
 pub fn clock_gettime_syscall(
     cageid: u64,
     clockid_arg: u64,
@@ -1212,6 +1452,74 @@ pub fn stat_syscall(
     match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
         Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
         Err(e) => return syscall_error(e, "xstat", "Bad address"),
+    }
+
+    libcret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/statfs.2.html
+///
+/// Linux `statfs()` syscall returns information about a mounted filesystem
+/// that contains the file or directory specified by `path`.  
+/// In RawPOSIX, because each Cage has its own virtualized filesystem view,
+/// the path is first translated from the Cage's namespace into the host
+/// kernel namespace using `sc_convert_path_to_host`.  
+/// After translation, the kernel's `libc::statfs()` is invoked to obtain
+/// the filesystem information. The resulting `statfs` structure is then
+/// converted into our ABI-stable `FStatData` format and copied into the
+/// user-provided buffer in Cage memory.
+///
+/// ## Input:
+/// - `cageid`: Identifier of the current Cage
+/// - `path_arg`: Wasm address of the pathname string
+/// - `path_cageid`: Cage ID associated with `path_arg`
+/// - `statbuf_arg`: Wasm address of the buffer where results will be stored
+/// - `statbuf_cageid`: Cage ID associated with `statbuf_arg`
+/// - `arg3`–`arg6`: Unused arguments (validated for security)
+///
+/// ## Return Value:
+/// - `0` on success  
+/// - `-1` on failure, with `errno` set appropriately
+pub fn statfs_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    statbuf_arg: u64,
+    statbuf_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "statfs_syscall");
+    }
+
+    // Declare statbuf by ourselves
+    let mut libc_statbuf: statfs = unsafe { std::mem::zeroed() };
+    let libcret = unsafe { libc::statfs(path.as_ptr(), &mut libc_statbuf) };
+
+    if libcret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "statfs");
+    }
+
+    // Convert libc stat to FStatData and copy to user buffer
+    match sc_convert_addr_to_fstatdata(statbuf_arg, statbuf_cageid, cageid) {
+        Ok(statbuf_addr) => convert_fstatdata_to_user(statbuf_addr, libc_statbuf),
+        Err(e) => return syscall_error(e, "statfs", "Bad address"),
     }
 
     libcret
@@ -1404,7 +1712,120 @@ pub fn fdatasync_syscall(
     ret
 }
 
-//------------------------------------READLINKAT SYSCALL------------------------------------
+//------------------------------------READLINK & READLINKAT SYSCALL------------------------------------
+/// Reference: https://man7.org/linux/man-pages/man2/readlink.2.html
+///
+/// The return value of the readlink syscall indicates the number of bytes written into the buf and -1 if 
+/// error. The contents of the buf represent the file path that the symbolic link points to. Since the file
+/// path perspectives differ between the user application and the host Linux, the readlink implementation
+/// requires handling the paths for both the input passed to the Rust kernel libc and the output buffer
+/// returned by the kernel libc.
+///
+/// For the input path, the transformation is straightforward: we prepend the LIND_ROOT prefix to convert
+/// the user's relative path into a host-compatible absolute path.
+/// However, for the output buffer, we need to first verify whether the path written to buf is an absolute
+/// path. If it is not, we prepend the current working directory to make it absolute. Next, we remove the
+/// LIND_ROOT prefix to adjust the path to the user's perspective. Finally, we truncate the adjusted result
+/// to fit within the user-provided buflen, ensuring compliance with the behavior described in the Linux
+/// readlink man page, which states that truncation is performed silently if the buffer is too small.
+///
+/// ## Input:
+/// - `cageid`: Identifier of the current Cage
+/// - `path_arg`: Address of the symbolic link pathname in Wasm memory
+/// - `path_cageid`: Cage ID associated with `path_arg`
+/// - `buf_arg`: Address of the user buffer to store the link target
+/// - `buf_cageid`: Cage ID associated with `buf_arg`
+/// - `buflen_arg`: Size of the user buffer
+/// - `buflen_cageid`: Cage ID associated with `buflen_arg`
+/// - `arg4`–`arg6`: Unused arguments (validated for security)
+///
+/// ## Return:
+/// - On success: number of bytes placed in `buf` (not null-terminated)  
+/// - On failure: `-1`, with `errno` set appropriately
+pub fn readlink_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    buflen_arg: u64,
+    buflen_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "readlink_syscall");
+    }
+
+    // We extend the buffer length by `LIND_ROOT.len()` because the host path
+    // is prefixed with `LIND_ROOT``, increasing its length. A new buffer is
+    // allocated instead of reusing the user buffer, since the transformed
+    // path may exceed the original user-allocated region.
+    let libc_buflen = buflen + LIND_ROOT.len();
+    let mut libc_buf = vec![0u8; libc_buflen];
+    let libcret = unsafe {
+        libc::readlink(
+            path.as_ptr(),
+            libc_buf.as_mut_ptr() as *mut c_char,
+            libc_buflen,
+        )
+    };
+
+    if libcret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "readlink");
+    }
+    // Convert the result from readlink to a Rust string
+    let libcbuf_str = unsafe { CStr::from_ptr(libc_buf.as_ptr() as *const c_char) }
+        .to_str()
+        .unwrap();
+
+    // Use libc::getcwd to get the current working directory
+    let mut cwd_buf = vec![0u8; 4096];
+    let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut c_char, cwd_buf.len()) };
+    if cwd_ptr.is_null() {
+        let errno = get_errno();
+        return handle_errno(errno, "getcwd");
+    }
+
+    let pwd = unsafe { CStr::from_ptr(cwd_buf.as_ptr() as *const c_char) }
+        .to_str()
+        .unwrap();
+
+    // Adjust the result to user perspective
+    // Verify if libcbuf_str starts with the current working directory (pwd)
+    let adjusted_result = if libcbuf_str.starts_with(pwd) {
+        libcbuf_str.to_string()
+    } else {
+        format!("{}/{}", pwd, libcbuf_str)
+    };
+    let new_root = format!("{}/", LIND_ROOT);
+    let final_result = adjusted_result
+        .strip_prefix(&new_root)
+        .unwrap_or(&adjusted_result);
+
+    // Check the length and copy the appropriate amount of data to buf
+    let bytes_to_copy = std::cmp::min(buflen, final_result.len());
+    unsafe {
+        std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf, bytes_to_copy);
+    }
+
+    bytes_to_copy as i32
+}
+
 /// `readlinkat` reads the value of a symbolic link relative to a directory file descriptor.
 /// Reference: https://man7.org/linux/man-pages/man2/readlinkat.2.html
 ///
@@ -2224,74 +2645,6 @@ pub fn ftruncate_syscall(
         return handle_errno(get_errno(), "ftruncate");
     }
     ret
-}
-
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/statfs.2.html
-///
-/// Linux `statfs()` syscall returns information about a mounted filesystem
-/// that contains the file or directory specified by `path`.  
-/// In RawPOSIX, because each Cage has its own virtualized filesystem view,
-/// the path is first translated from the Cage's namespace into the host
-/// kernel namespace using `sc_convert_path_to_host`.  
-/// After translation, the kernel's `libc::statfs()` is invoked to obtain
-/// the filesystem information. The resulting `statfs` structure is then
-/// converted into our ABI-stable `FStatData` format and copied into the
-/// user-provided buffer in Cage memory.
-///
-/// ## Input:
-/// - `cageid`: Identifier of the current Cage
-/// - `path_arg`: Wasm address of the pathname string
-/// - `path_cageid`: Cage ID associated with `path_arg`
-/// - `statbuf_arg`: Wasm address of the buffer where results will be stored
-/// - `statbuf_cageid`: Cage ID associated with `statbuf_arg`
-/// - `arg3`–`arg6`: Unused arguments (validated for security)
-///
-/// ## Return Value:
-/// - `0` on success  
-/// - `-1` on failure, with `errno` set appropriately
-pub fn statfs_syscall(
-    cageid: u64,
-    path_arg: u64,
-    path_cageid: u64,
-    statbuf_arg: u64,
-    statbuf_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    // Type conversion
-    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-
-    // Validate unused args
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "statfs_syscall");
-    }
-
-    // Declare statbuf by ourselves
-    let mut libc_statbuf: statfs = unsafe { std::mem::zeroed() };
-    let libcret = unsafe { libc::statfs(path.as_ptr(), &mut libc_statbuf) };
-
-    if libcret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "statfs");
-    }
-
-    // Convert libc stat to FStatData and copy to user buffer
-    match sc_convert_addr_to_fstatdata(statbuf_arg, statbuf_cageid, cageid) {
-        Ok(statbuf_addr) => convert_fstatdata_to_user(statbuf_addr, libc_statbuf),
-        Err(e) => return syscall_error(e, "statfs", "Bad address"),
-    }
-
-    libcret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fstatfs.2.html
