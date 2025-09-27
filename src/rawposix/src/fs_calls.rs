@@ -6,24 +6,10 @@ use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errn
 use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, LIND_ROOT};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
-use sysdefs::data::fs_struct::StatData;
 use typemap::cage_helpers::*;
 use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
 use fdtables;
-
-/// Panic wrapper for unused argument validation failures
-/// 
-/// This function provides a consistent panic message format for sc_unusedarg validation failures.
-/// These failures represent internal programming errors or security violations that should crash
-/// the system rather than return error codes to user programs.
-///
-/// # Arguments
-/// * `syscall_name` - Name of the syscall that failed validation
-/// * `failed_args` - Description of which arguments failed (e.g., "args 2-6", "args 4-6")
-fn panic_unusedarg_validation(syscall_name: &str, failed_args: &str) -> ! {
-    panic!("{}: unused arguments contain unexpected values ({}) - internal programming error or security violation", 
-           syscall_name, failed_args)
-}
+use typemap::filesystem_helpers::convert_statdata_to_user;
 
 /// Helper function for close_syscall
 /// 
@@ -34,11 +20,9 @@ fn panic_unusedarg_validation(syscall_name: &str, failed_args: &str) -> ! {
 /// This function is registered in `fdtables` when creating the cage
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     let kernel_fd = fdentry.underfd as i32;
-    
     if kernel_fd == STDIN_FILENO || kernel_fd == STDOUT_FILENO || kernel_fd == STDERR_FILENO {
         return;
     }
-
     let ret = unsafe { libc::close(fdentry.underfd as i32) };
     if ret < 0 {
         let errno = get_errno();
@@ -1006,24 +990,30 @@ pub fn fcntl_syscall(
 }
 
 //------------------------------------LINK SYSCALL------------------------------------
-/*
- *  `link` creates a hard link to an existing file.
- *  Reference: https://man7.org/linux/man-pages/man2/link.2.html
- *
- *  ## Arguments:
- *   - `oldpath`: Path to the existing file.
- *   - `newpath`: Path where the hard link will be created.
- *
- *  ## Implementation Details:
- *   - Both paths are converted from the RawPOSIX perspective to the host kernel perspective
- *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
- *   - The underlying libc::link() is called with both converted paths.
- *
- *  ## Return Value:
- *   - `0` on success.
- *   - `-1` on failure, with `errno` set appropriately.
- */
- pub fn link_syscall(
+/// Reference: https://man7.org/linux/man-pages/man2/link.2.html
+///
+/// `link_syscall` creates a new link (hard link) to an existing file.
+/// 
+/// ## Arguments:
+///  - `cageid`: Identifier of the calling Cage (namespace / process-like container).
+///  - `oldpath_arg`: Address of the existing pathname in the caller's address space.
+///  - `oldpath_cageid`: Cage ID associated with `oldpath_arg`.
+///  - `newpath_arg`: Address of the new pathname in the caller's address space.
+///  - `newpath_cageid`: Cage ID associated with `newpath_arg`.
+///  - `arg3`–`arg6` and their corresponding `_cageid`: Reserved arguments (must be unused).
+///
+/// ## Implementation Details:
+///  - The path arguments are translated from the RawPOSIX perspective into host kernel paths
+///    using `sc_convert_path_to_host`, which applies `LIND_ROOT` prefixing and path normalization.
+///  - The unused arguments are validated with `sc_unusedarg`; any unexpected values are treated
+///    as a security violation.
+///  - The underlying `libc::link()` is invoked with the translated paths.
+///  - On failure, `errno` is retrieved via `get_errno()` and normalized through `handle_errno()`.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
+pub fn link_syscall(
     cageid: u64,
     oldpath_arg: u64,
     oldpath_cageid: u64,
@@ -1048,7 +1038,7 @@ pub fn fcntl_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic_unusedarg_validation("link_syscall", "args 3-6");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "link_syscall");
     }
 
     let ret = unsafe { libc::link(oldpath.as_ptr(), newpath.as_ptr()) };
@@ -1060,35 +1050,32 @@ pub fn fcntl_syscall(
     ret
 }
 
-
 //------------------------------------XSTAT SYSCALL------------------------------------
-/*
- *  `xstat` retrieves file status information (versioned stat interface).
- *  Reference: https://man7.org/linux/man-pages/man2/stat.2.html
- *
- *  ## Arguments:
- *   - `vers`: Version parameter for stat structure compatibility.
- *   - `pathname`: Path to the file to get status information for.
- *   - `statbuf`: Buffer to store the file status information.
- *
- *  ## Implementation Details:
- *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
- *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
- *   - The statbuf buffer is converted from WASM address to host address using `sc_convert_addr_to_host`.
- *   - The underlying libc::stat() is called and results are copied to the user buffer.
- *
- *  ## Return Value:
- *   - `0` on success.
- *   - `-1` on failure, with `errno` set appropriately.
- */
- pub fn stat_syscall(
+/// `xstat` retrieves file status information (versioned stat interface).
+/// Reference: https://man7.org/linux/man-pages/man2/stat.2.html
+///
+/// ## Arguments:
+///  - `vers`: Version parameter for stat structure compatibility.
+///  - `pathname`: Path to the file to get status information for.
+///  - `statbuf`: Buffer to store the file status information.
+///
+/// ## Implementation Details:
+///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
+///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///  - The statbuf buffer is converted from WASM address to host address using `sc_convert_addr_to_host`.
+///  - The underlying libc::stat() is called and results are copied to the user buffer.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
+pub fn stat_syscall(
     cageid: u64,
-    vers_arg: u64,
-    vers_cageid: u64,
     path_arg: u64,
     path_cageid: u64,
     statbuf_arg: u64,
     statbuf_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -1097,15 +1084,15 @@ pub fn fcntl_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Type conversion
-    let _vers = sc_convert_sysarg_to_i32(vers_arg, vers_cageid, cageid);
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
 
     // Validate unused args
-    if !(sc_unusedarg(arg4, arg4_cageid)
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic_unusedarg_validation("stat_syscall", "args 4-6");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "stat_syscall");
     }
 
     // Declare statbuf by ourselves
@@ -1118,48 +1105,30 @@ pub fn fcntl_syscall(
     }
 
     // Convert libc stat to StatData and copy to user buffer
-    let statbuf_addr = sc_convert_addr_to_host(statbuf_arg, statbuf_cageid, cageid);
-    let statdata = StatData {
-        st_dev: libc_statbuf.st_dev,
-        st_ino: libc_statbuf.st_ino as usize,
-        st_mode: libc_statbuf.st_mode,
-        st_nlink: libc_statbuf.st_nlink as u32,
-        st_uid: libc_statbuf.st_uid,
-        st_gid: libc_statbuf.st_gid,
-        st_rdev: libc_statbuf.st_rdev,
-        st_size: libc_statbuf.st_size as usize,
-        st_blksize: libc_statbuf.st_blksize as i32,
-        st_blocks: libc_statbuf.st_blocks as u32,
-        st_atim: (libc_statbuf.st_atime as u64, libc_statbuf.st_atime_nsec as u64),
-        st_mtim: (libc_statbuf.st_mtime as u64, libc_statbuf.st_mtime_nsec as u64),
-        st_ctim: (libc_statbuf.st_ctime as u64, libc_statbuf.st_ctime_nsec as u64),
-    };
-    
-    unsafe {
-        std::ptr::copy_nonoverlapping(&statdata as *const StatData, statbuf_addr as *mut StatData, 1);
+    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
+        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
+        Err(e) => return syscall_error(e, "xstat", "Bad address"),
     }
 
     libcret
 }
 
 //------------------------------------FSYNC SYSCALL------------------------------------
-/*
- *  `fsync` synchronizes a file's in-core state with storage device.
- *  Reference: https://man7.org/linux/man-pages/man2/fsync.2.html
- *
- *  ## Arguments:
- *   - `fd`: File descriptor to synchronize.
- *
- *  ## Implementation Details:
- *   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
- *   - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
- *   - The underlying libc::fsync() is called, which synchronizes both file data and metadata.
- *
- *  ## Return Value:
- *   - `0` on success.
- *   - `-1` on failure, with `errno` set appropriately.
- */
- pub fn fsync_syscall(
+/// `fsync` synchronizes a file's in-core state with storage device.
+/// Reference: https://man7.org/linux/man-pages/man2/fsync.2.html
+///
+/// ## Arguments:
+///  - `fd`: File descriptor to synchronize.
+///
+/// ## Implementation Details:
+///  - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+///  - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
+///  - The underlying libc::fsync() is called, which synchronizes both file data and metadata.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
+pub fn fsync_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1184,7 +1153,7 @@ pub fn fcntl_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic_unusedarg_validation("fsync_syscall", "args 2-6");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "fsync_syscall");
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
@@ -1205,24 +1174,22 @@ pub fn fcntl_syscall(
 }
 
 //------------------------------------FDATASYNC SYSCALL------------------------------------
-/*
- *  `fdatasync` synchronizes a file's data to storage device (but not metadata).
- *  Reference: https://man7.org/linux/man-pages/man2/fdatasync.2.html
- *
- *  ## Arguments:
- *   - `fd`: File descriptor to synchronize.
- *
- *  ## Implementation Details:
- *   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
- *   - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
- *   - The underlying libc::fdatasync() is called, which synchronizes only file data (not metadata
- *     like timestamps), making it potentially faster than fsync().
- *
- *  ## Return Value:
- *   - `0` on success.
- *   - `-1` on failure, with `errno` set appropriately.
- */
- pub fn fdatasync_syscall(
+/// `fdatasync` synchronizes a file's data to storage device (but not metadata).
+/// Reference: https://man7.org/linux/man-pages/man2/fdatasync.2.html
+///
+/// ## Arguments:
+///  - `fd`: File descriptor to synchronize.
+///
+/// ## Implementation Details:
+///  - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+///  - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
+///  - The underlying libc::fdatasync() is called, which synchronizes only file data (not metadata
+///    like timestamps), making it potentially faster than fsync().
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
+pub fn fdatasync_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1247,7 +1214,7 @@ pub fn fcntl_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic_unusedarg_validation("fdatasync_syscall", "args 2-6");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "fdatasync_syscall");
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
@@ -1268,26 +1235,24 @@ pub fn fcntl_syscall(
 }
 
 //------------------------------------SYNC_FILE_RANGE SYSCALL------------------------------------
-/*
- *  `sync_file_range` synchronizes a specific range of bytes in a file to storage device.
- *  Reference: https://man7.org/linux/man-pages/man2/sync_file_range.2.html
- *
- *  ## Arguments:
- *   - `fd`: File descriptor to synchronize.
- *   - `offset`: Starting byte offset for the range to sync.
- *   - `nbytes`: Number of bytes to synchronize.
- *   - `flags`: Flags controlling the synchronization behavior.
- *
- *  ## Implementation Details:
- *   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
- *   - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
- *   - The underlying libc::sync_file_range() is called with the specified byte range and flags.
- *   - This is more efficient than fsync() for large files when only a specific range needs syncing.
- *
- *  ## Return Value:
- *   - `0` on success.
- *   - `-1` on failure, with `errno` set appropriately.
- */
+/// `sync_file_range` synchronizes a specific range of bytes in a file to storage device.
+/// Reference: https://man7.org/linux/man-pages/man2/sync_file_range.2.html
+///
+/// ## Arguments:
+///  - `fd`: File descriptor to synchronize.
+///  - `offset`: Starting byte offset for the range to sync.
+///  - `nbytes`: Number of bytes to synchronize.
+///  - `flags`: Flags controlling the synchronization behavior.
+///
+/// ## Implementation Details:
+///  - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+///  - This ensures proper translation between RawPOSIX virtual fds and host kernel fds.
+///  - The underlying libc::sync_file_range() is called with the specified byte range and flags.
+///  - This is more efficient than fsync() for large files when only a specific range needs syncing.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
  pub fn sync_file_range_syscall(
     cageid: u64,
     fd_arg: u64,
@@ -1313,7 +1278,7 @@ pub fn fcntl_syscall(
     if !(sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic_unusedarg_validation("sync_file_range_syscall", "args 5-6");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "sync_file_range_syscall");
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
@@ -1335,33 +1300,30 @@ pub fn fcntl_syscall(
     ret
 }
 
-
 //------------------------------------READLINKAT SYSCALL------------------------------------
-/*
- *  `readlinkat` reads the value of a symbolic link relative to a directory file descriptor.
- *  Reference: https://man7.org/linux/man-pages/man2/readlinkat.2.html
- *
- *  ## Arguments:
- *   - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
- *   - `pathname`: Path to the symbolic link (relative to dirfd).
- *   - `buf`: Buffer to store the link target.
- *   - `bufsiz`: Size of the buffer.
- *
- *  There are two cases:
- *  Case 1: When `dirfd` is AT_FDCWD:
- *    - The path is converted using `sc_convert_path_to_host` and libc::readlink() is called.
- *    - This uses the current working directory as the base for relative paths.
- *
- *  Case 2: When `dirfd` is not AT_FDCWD:
- *    - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
- *    - The path is converted using `sc_convert_path_to_host` and libc::readlinkat() is called.
- *    - This reads the symlink relative to the specified directory.
- *
- *  ## Return Value:
- *   - Number of bytes placed in `buf` on success.
- *   - `-1` on failure, with `errno` set appropriately.
- */
- pub fn readlinkat_syscall(
+/// `readlinkat` reads the value of a symbolic link relative to a directory file descriptor.
+/// Reference: https://man7.org/linux/man-pages/man2/readlinkat.2.html
+///
+/// ## Arguments:
+///  - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
+///  - `pathname`: Path to the symbolic link (relative to dirfd).
+///  - `buf`: Buffer to store the link target.
+///  - `bufsiz`: Size of the buffer.
+///
+/// There are two cases:
+/// Case 1: When `dirfd` is AT_FDCWD:
+///   - The path is converted using `sc_convert_path_to_host` and libc::readlink() is called.
+///   - This uses the current working directory as the base for relative paths.
+///
+/// Case 2: When `dirfd` is not AT_FDCWD:
+///   - The virtual file descriptor is converted to a kernel file descriptor using `convert_fd_to_host`.
+///   - The path is converted using `sc_convert_path_to_host` and libc::readlinkat() is called.
+///   - This reads the symlink relative to the specified directory.
+///
+/// ## Return Value:
+///  - Number of bytes placed in `buf` on success.
+///  - `-1` on failure, with `errno` set appropriately.
+pub fn readlinkat_syscall(
     cageid: u64,
     dirfd_arg: u64,
     dirfd_cageid: u64,
@@ -1386,9 +1348,13 @@ pub fn fcntl_syscall(
     if !(sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic_unusedarg_validation("readlinkat_syscall", "args 5-6");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "readlinkat_syscall");
     }
 
+    // We extend the buffer length by `LIND_ROOT.len()` because the host path
+    // is prefixed with `LIND_ROOT``, increasing its length. A new buffer is
+    // allocated instead of reusing the user buffer, since the transformed
+    // path may exceed the original user-allocated region.
     let libc_buflen = buflen + LIND_ROOT.len();
     let mut libc_buf = vec![0u8; libc_buflen];
     
@@ -1448,24 +1414,22 @@ pub fn fcntl_syscall(
 }
 
 //------------------RENAME SYSCALL------------------
-/*
- *  `rename` changes the name or location of a file.
- *  Reference: https://man7.org/linux/man-pages/man2/rename.2.html
- *
- *  ## Arguments:
- *   - `oldpath`: Current path of the file.
- *   - `newpath`: New path for the file.
- *
- *  ## Implementation Details:
- *   - Both paths are converted from the RawPOSIX perspective to the host kernel perspective
- *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
- *   - The underlying libc::rename() is called with both converted paths.
- *   - This can move files across directories within the same filesystem.
- *
- *  ## Return Value:
- *   - `0` on success.
- *   - `-1` on failure, with `errno` set appropriately.
- */
+/// `rename` changes the name or location of a file.
+/// Reference: https://man7.org/linux/man-pages/man2/rename.2.html
+///
+/// ## Arguments:
+///  - `oldpath`: Current path of the file.
+///  - `newpath`: New path for the file.
+///
+/// ## Implementation Details:
+///  - Both paths are converted from the RawPOSIX perspective to the host kernel perspective
+///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///  - The underlying libc::rename() is called with both converted paths.
+///  - This can move files across directories within the same filesystem.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
 pub fn rename_syscall(
     cageid: u64,
     oldpath_arg: u64,
@@ -1491,7 +1455,7 @@ pub fn rename_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic_unusedarg_validation("rename_syscall", "args 3-6");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "rename_syscall");
     }
 
     let ret = unsafe { libc::rename(oldpath.as_ptr(), newpath.as_ptr()) };
@@ -1503,23 +1467,21 @@ pub fn rename_syscall(
     ret
 }
 
-//------------------------------------UNLINK SYSCALL------------------------------------
-/*
- *  `unlink` removes a file from the filesystem.
- *  Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
- *
- *  ## Arguments:
- *   - `pathname`: Path to the file to be removed.
- *
- *  ## Implementation Details:
- *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
- *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
- *   - The underlying libc::unlink() is called with the converted path.
- *
- *  ## Return Value:
- *   - `0` on success.
- *   - `-1` on failure, with `errno` set appropriately.
- */
+//------------------------------------UNLINK & UNLINAT SYSCALL------------------------------------
+/// `unlink` removes a file from the filesystem.
+/// Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+///
+/// ## Arguments:
+///  - `pathname`: Path to the file to be removed.
+///
+/// ## Implementation Details:
+///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
+///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///  - The underlying libc::unlink() is called with the converted path.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
 pub fn unlink_syscall(
     cageid: u64,
     path_arg: u64,
@@ -1545,7 +1507,7 @@ pub fn unlink_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic_unusedarg_validation("unlink_syscall", "args 2-6");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "unlink_syscall");
     }
 
     let ret = unsafe { libc::unlink(path.as_ptr()) };
@@ -1558,80 +1520,22 @@ pub fn unlink_syscall(
     ret
 }
 
-//------------------------------------ACCESS SYSCALL------------------------------------
-/*
- *  `access` checks whether the calling process can access the file pathname.
- *  Reference: https://man7.org/linux/man-pages/man2/access.2.html
- *
- *  ## Arguments:
- *   - `pathname`: Path to the file to check accessibility.
- *   - `mode`: Accessibility check mode (F_OK, R_OK, W_OK, X_OK or combinations).
- *
- *  ## Implementation Details:
- *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
- *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
- *   - The mode parameter is passed directly to the underlying libc::access() call.
- *
- *  ## Return Value:
- *   - `0` on success (file is accessible in the requested mode).
- *   - `-1` on failure, with `errno` set appropriately.
- */
-pub fn access_syscall(
-    cageid: u64,
-    path_arg: u64,
-    path_cageid: u64,
-    amode_arg: u64,
-    amode_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    // Type conversion
-    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    let amode = sc_convert_sysarg_to_i32(amode_arg, amode_cageid, cageid);
-
-    // Validate unused args
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic_unusedarg_validation("access_syscall", "args 3-6");
-    }
-
-    let ret = unsafe { libc::access(path.as_ptr(), amode) };
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "access");
-    }
-    ret
-}
-
-//------------------------------------UNLINKAT SYSCALL------------------------------------
-/*
- *  `unlinkat` deletes a file or directory relative to a directory file descriptor.
- *  Reference: https://man7.org/linux/man-pages/man2/unlinkat.2.html
- *
- *  ## Arguments:
- *   - `dirfd`: Directory file descriptor (or AT_FDCWD for current working directory).
- *   - `pathname`: Path of the file/directory to remove.
- *   - `flags`: Control flags (e.g., AT_REMOVEDIR for directories).
- *
- *  ## Implementation Details:
- *   - Handles both AT_FDCWD and explicit directory file descriptors.
- *   - Converts virtual file descriptor to kernel file descriptor using `convert_fd_to_host`.
- *   - Converts paths using `sc_convert_path_to_host` for proper path handling.
- *   - Supports AT_REMOVEDIR flag for removing directories.
- *
- *  ## Return Value:
- *   - `0` on success.
- *   - `-1` on failure, with `errno` set appropriately.
- */
+/// `unlinkat` deletes a file or directory relative to a directory file descriptor.
+/// Reference: https://man7.org/linux/man-pages/man2/unlinkat.2.html
+/// ## Arguments:
+///  - `dirfd`: Directory file descriptor (or AT_FDCWD for current working directory).
+///  - `pathname`: Path of the file/directory to remove.
+///  - `flags`: Control flags (e.g., AT_REMOVEDIR for directories).
+///
+/// ## Implementation Details:
+///  - Handles both AT_FDCWD and explicit directory file descriptors.
+///  - Converts virtual file descriptor to kernel file descriptor using `convert_fd_to_host`.
+///  - Converts paths using `sc_convert_path_to_host` for proper path handling.
+///  - Supports AT_REMOVEDIR flag for removing directories.
+///
+/// ## Return Value:
+///  - `0` on success.
+///  - `-1` on failure, with `errno` set appropriately.
 pub fn unlinkat_syscall(
     cageid: u64,
     dirfd_arg: u64,
@@ -1656,7 +1560,7 @@ pub fn unlinkat_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic_unusedarg_validation("unlinkat_syscall", "args 4-6");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "unlinkat_syscall");
     }
 
     let result = if virtual_fd == libc::AT_FDCWD {
@@ -1693,4 +1597,53 @@ pub fn unlinkat_syscall(
     }
 
     result
+}
+
+//------------------------------------ACCESS SYSCALL------------------------------------
+/// `access` checks whether the calling process can access the file pathname.
+/// Reference: https://man7.org/linux/man-pages/man2/access.2.html
+/// ## Arguments:
+///  - `pathname`: Path to the file to check accessibility.
+///  - `mode`: Accessibility check mode (F_OK, R_OK, W_OK, X_OK or combinations).
+/// ## Implementation Details:
+///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
+///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///  - The mode parameter is passed directly to the underlying libc::access() call.
+/// ## Return Value:
+///  - `0` on success (file is accessible in the requested mode).
+///  - `-1` on failure, with `errno` set appropriately.
+pub fn access_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    amode_arg: u64,
+    amode_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    let amode = sc_convert_sysarg_to_i32(amode_arg, amode_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "access_syscall");
+    }
+
+    let ret = unsafe { libc::access(path.as_ptr(), amode) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "access");
+    }
+    ret
 }

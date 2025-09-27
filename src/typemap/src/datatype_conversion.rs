@@ -297,3 +297,47 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     let buf = translate_vmmap_addr(&cage, buf_arg).unwrap() as *const u8;
     buf
 }
+
+/// `sc_convert_addr_to_statdata` translates a user-provided address from the
+/// calling Cage's virtual memory into a mutable reference to a `StatData`
+/// structure.
+///
+/// ## Arguments:
+///  - `arg`: The raw virtual address of the user-provided `StatData` buffer.
+///  - `arg_cageid`: The Cage ID associated with the provided address.
+///  - `cageid`: The Cage ID of the current caller (used for validation).
+///
+/// ## Implementation Details:
+///  - When the `secure` feature is enabled, the function validates that the
+///    provided `arg_cageid` matches the current `cageid`.
+///  - The Cage object is retrieved via `get_cage(cageid)`.
+///  - The virtual address is translated into a host address using
+///    `translate_vmmap_addr`.
+///  - The host address is cast into a `*mut StatData`, and if non-null,
+///    reinterpreted as a mutable reference.
+///  - If the pointer is null, the function returns `Err(Errno::EFAULT)`,
+///    indicating a "Bad address" error consistent with Linux error handling.
+///
+/// ## Return Value:
+///  - `Ok(&mut StatData)` if the address translation succeeds.
+///  - `Err(Errno::EFAULT)` if the address is invalid or null.
+pub fn sc_convert_addr_to_statdata<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut StatData, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut StatData;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
+}
