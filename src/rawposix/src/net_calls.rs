@@ -930,17 +930,7 @@ pub fn socket_syscall(
     }
 
     // We need to register this new kernel fd in fdtables
-    // Check if `SOCK_CLOEXEC` flag is set
-    let cloexec = (socktype & libc::SOCK_CLOEXEC) != 0;
-
-    // Register the kernel fd in fdtables with or without cloexec
-    // Note:
-    // `SOCK_NONBLOCK` is part of the kernel's "open file description" state
-    // (equivalent to `O_NONBLOCK`). Since our virtual FD maps directly to a
-    // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
-    // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
-    fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, cloexec, 0)
-        .unwrap() as i32
+    return fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, false, 0).unwrap() as i32;
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/connect.2.html
@@ -1281,7 +1271,6 @@ pub fn send_syscall(
     ret
 }
 
-<<<<<<< HEAD
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/recv.2.html
 ///
 /// The Linux `recv()` syscall is used to receive a message from a connected socket.
@@ -1426,7 +1415,7 @@ pub fn recvfrom_syscall(
     nullity1_cageid: u64,
     nullity2_arg: u64,
     nullity2_cageid: u64,
-) -> i32{
+) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let buf = sc_convert_to_u8_mut(buf_arg, buf_cageid, cageid);
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
@@ -1481,37 +1470,16 @@ pub fn recvfrom_syscall(
 ///     - cageid: identifier of the current cage
 ///     - name_arg: pointer to the buffer in user space to store the hostname
 ///     - len_arg: size of the buffer
-=======
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/shutdown.2.html
-///
-/// The Linux `shutdown()` syscall disables sends and/or receives on a socket.
-/// This implementation resolves the given virtual file descriptor to the host kernel
-/// file descriptor, then performs the shutdown operation in the host kernel.
-///
-/// ## Input:
-///     - cageid: identifier of the current cage
-///     - fd_arg: virtual file descriptor of the socket
-///     - how_arg: specifies the type of shutdown (e.g., SHUT_RD, SHUT_WR, SHUT_RDWR)
->>>>>>> add-netcalls-3i
 ///
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-<<<<<<< HEAD
 pub fn gethostname_syscall(
     cageid: u64,
     name_arg: u64,
     name_cageid: u64,
     len_arg: u64,
     len_cageid: u64,
-=======
-pub fn shutdown_syscall(
-    cageid: u64,
-    fd_arg: u64,
-    fd_cageid: u64,
-    how_arg: u64,
-    how_cageid: u64,
->>>>>>> add-netcalls-3i
     arg3: u64,
     arg3_cageid: u64,
     arg4: u64,
@@ -1521,23 +1489,14 @@ pub fn shutdown_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-<<<<<<< HEAD
     let name = sc_convert_to_u8_mut(name_arg, name_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
 
-=======
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
-
-    // would check when `secure` flag has been set during compilation, 
-    // no-op by default
->>>>>>> add-netcalls-3i
     if !(sc_unusedarg(arg3, arg3_cageid)
     &&sc_unusedarg(arg4, arg4_cageid)
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-<<<<<<< HEAD
         return syscall_error(Errno::EFAULT, "gethostname_syscall", "Invalide Cage ID");
     }
 
@@ -1545,52 +1504,27 @@ pub fn shutdown_syscall(
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "gethostname");
-=======
-        return syscall_error(Errno::EFAULT, "shutdown_syscall", "Invalid Cage ID");
-    }
-
-    let ret = unsafe { libc::shutdown(fd, how) };
-
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "shutdown");
->>>>>>> add-netcalls-3i
     }
 
     ret
 }
 
-<<<<<<< HEAD
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getsockopt.2.html
 ///
 /// The Linux `getsockopt()` syscall retrieves the value of a socket option.
 /// This implementation retrieves the virtual file descriptor, option level, and option name
 /// from the current cage, and writes the result to the provided user-space buffer.
-=======
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/getsockname.2.html
-///
-/// The Linux `getsockname()` syscall retrieves the current address to which the socket
-/// is bound.  
-/// This implementation resolves the virtual file descriptor to the host kernel file descriptor,
-/// converts the user-space sockaddr structure into its host representation, and invokes
-/// the host kernel `getsockname()`.
->>>>>>> add-netcalls-3i
 ///
 /// ## Input:
 ///     - cageid: identifier of the current cage
 ///     - fd_arg: virtual file descriptor of the socket
-<<<<<<< HEAD
 ///     - level_arg: protocol level at which the option resides
 ///     - optname_arg: name of the option to retrieve
 ///     - optval_arg: pointer to a buffer to store the option value
-=======
-///     - addr_arg: pointer to a buffer in user space where the address will be stored
->>>>>>> add-netcalls-3i
 ///
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-<<<<<<< HEAD
 pub fn getsockopt_syscall(
     cageid: u64,
     fd_arg: u64,
@@ -1651,9 +1585,6 @@ pub fn getsockopt_syscall(
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
 pub fn getpeername_syscall(
-=======
-pub fn getsockname_syscall(
->>>>>>> add-netcalls-3i
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1669,21 +1600,13 @@ pub fn getsockname_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-<<<<<<< HEAD
     let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
 
-=======
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
-    
-    // would check when `secure` flag has been set during compilation, 
-    // no-op by default
->>>>>>> add-netcalls-3i
     if !(sc_unusedarg(arg3, arg3_cageid)
     &&sc_unusedarg(arg4, arg4_cageid)
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-<<<<<<< HEAD
         return syscall_error(Errno::EFAULT, "getpeername_syscall", "Invalide Cage ID");
     }
 
@@ -1693,23 +1616,10 @@ pub fn getsockname_syscall(
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getpeername");
-=======
-        return syscall_error(Errno::EFAULT, "getsockname_syscall", "Invalid Cage ID");
-    }
-    
-    let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
-
-    let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, addrlen as *mut u32) };
-
-    if ret < 0  {
-        let errno = get_errno();
-        return handle_errno(errno, "getsockname");
->>>>>>> add-netcalls-3i
     }
 
     ret
 }
-<<<<<<< HEAD
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/socketpair.2.html
 ///
@@ -1769,5 +1679,3 @@ pub fn socketpair_syscall(
     virtual_socket_vector.sock2 = vsv_2 as i32;
     return 0;
 }
-=======
->>>>>>> add-netcalls-3i
