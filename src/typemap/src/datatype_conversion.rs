@@ -144,7 +144,12 @@ pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, arg_cageid: u64, cageid: u64) 
     }
 
     let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    
+    let addr = match translate_vmmap_addr(&cage, arg) {
+        Some(addr) => addr,
+        None => panic!("NULL pointer passed to sc_convert_sysarg_to_i32_ref"), 
+    };
+
     return unsafe { &mut *((addr) as *mut i32) };
 }
 
@@ -271,7 +276,10 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     let cage = get_cage(cageid).unwrap();
     // Convert user buffer address to system address. We don't need to check permission here.
     // Permission check has been handled in 3i
-    let buf = translate_vmmap_addr(&cage, buf_arg).unwrap() as *const u8;
+    let buf = match translate_vmmap_addr(&cage, buf_arg) {
+        Some(addr) => addr as *const u8,
+        None => panic!("NULL pointer passed to sc_convert_buf"),
+    };
     buf
 }
 
@@ -288,7 +296,11 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
 ///     - Returns the translated 64-bit address in host space as a u64.
 pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64 {
     let cage = get_cage(uaddr_arg_cageid).unwrap();
-    let uaddr = translate_vmmap_addr(&cage, uaddr_arg).unwrap();
+    
+    let uaddr = match translate_vmmap_addr(&cage, uaddr_arg) {
+        Some(addr) => addr,
+        None => panic!("NULL pointer passed to sc_convert_uaddr_to_host"),
+    };
     return uaddr;
 }
 
@@ -307,7 +319,10 @@ pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u
 ///       from the guest. The pointer can be used for direct read/write operations.
 pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64) -> *mut u8 {
     let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, addr_arg).unwrap() as *mut u8;
+    let addr = match translate_vmmap_addr(&cage, addr_arg) {
+        Some(addr) => addr as *mut u8,
+        None => panic!("NULL pointer passed to sc_convert_uaddr_to_host"),
+    };
     return addr;
 }
 
@@ -346,8 +361,8 @@ pub fn sc_convert_sigactionStruct<'a>(
 
     // Convert user buffer address to system address. We don't need to check permission here.
     let addr = match translate_vmmap_addr(&cage, act_arg) {
-        Ok(a) => a,
-        Err(_) => return None,
+        Some(a) => a,
+        None => return None,
     };
 
     let ptr = addr as *const SigactionStruct;
@@ -387,8 +402,8 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
     };
     // Convert user buffer address to system address. We don't need to check permission here.
     let addr = match translate_vmmap_addr(&cage, act_arg) {
-        Ok(a) => a,
-        Err(_) => return None,
+        Some(a) => a,
+        None => return None,
     };
 
     let ptr = addr as *mut SigactionStruct;
@@ -419,7 +434,7 @@ pub fn sc_convert_sigset(set_arg: u64, set_cageid: u64, cageid: u64) -> Option<&
     } else {
         let cage = get_cage(cageid).unwrap();
         match translate_vmmap_addr(&cage, set_arg) {
-            Ok(addr) => {
+            Some(addr) => {
                 let ptr = addr as *mut SigsetType;
                 if !ptr.is_null() {
                     unsafe { return Some(&mut *ptr); }
@@ -427,7 +442,7 @@ pub fn sc_convert_sigset(set_arg: u64, set_cageid: u64, cageid: u64) -> Option<&
                     panic!("Failed to get SigsetType from address");
                 }
             }
-            Err(_) => panic!("Failed to get SigsetType from address"), // If translation fails, return None
+            None => panic!("Failed to get SigsetType from address"), // If translation fails, return None
         }
     }
 }
@@ -521,12 +536,12 @@ pub fn sc_convert_itimerval(
         None
     } else {
         match translate_vmmap_addr(&cage, val_arg) {
-            Ok(addr) => match get_constitimerval(addr) {
+            Some(addr) => match get_constitimerval(addr) {
                 Ok(itimeval) => itimeval,
                 Ok(None) => None,
                 Err(_) => panic!("Failed to get ITimerVal from address"),
             },
-            Err(_) => panic!("Failed to get ITimerVal from address"),
+            None => panic!("Failed to get ITimerVal from address"),
         }
     }
 }
@@ -566,12 +581,12 @@ pub fn sc_convert_itimerval_mut(
         None
     } else {
         match translate_vmmap_addr(&cage, val_arg) {
-            Ok(addr) => match get_itimerval(addr) {
+            Some(addr) => match get_itimerval(addr) {
                 Ok(itimeval) => itimeval,
                 Ok(None) => None,
                 Err(_) => panic!("Failed to get ITimerVal from address"),
             },
-            Err(_) => panic!("Failed to get ITimerVal from address"),
+            None => panic!("Failed to get ITimerVal from address"),
         }
     }
 }

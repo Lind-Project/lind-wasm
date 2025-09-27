@@ -182,21 +182,20 @@ pub fn check_addr(cageid: u64, arg: u64, length: usize, prot: i32) -> Result<boo
     Ok(true)
 }
 
-/// This function translates a virtual memory address to a physical address by adding the base address
-/// of the `vmmap` to the given argument. This translation is needed because the system uses a
-/// virtualized address space within each cage, where guest-visible addresses are offsets from the
-/// base of the cage’s allocated memory region. Adding the base address produces the actual physical
-/// (host) address used for memory operations.
+/// This function translates a virtual memory address to a virtual memory by adding the base address of the vmmap to the argument.
 ///
 /// # Arguments
 /// * `cage` - Reference to the memory cage containing the virtual memory map
 /// * `arg` - Virtual memory address to translate
 ///
 /// # Returns
-/// * `Ok(u64)` - Translated physical memory address
-
-pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
+/// * `Option(u64)` - Translated virtual memory address. NULL if user address is NULL.
+pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Option<u64> {
+    // Return None for NULL pointer
+    if arg == 0 {
+        return None;
+    }
     // Get read lock on virtual memory map
     let vmmap = cage.vmmap.read();
-    Ok(vmmap.base_address.unwrap() as u64 + arg)
+    Some(vmmap.base_address.unwrap() as u64 + arg)
 }
