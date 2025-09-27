@@ -70,7 +70,6 @@ process_tests/deterministic/sigpipe.c
 process_tests/deterministic/sigprocmask.c
 process_tests/deterministic/thread-test.c
 process_tests/deterministic/thread.c
-process_tests/non-deterministic/fork.c
 process_tests/non-deterministic/fork2malloc.c
 process_tests/non-deterministic/fork_simple.c
 process_tests/non-deterministic/forkandopen.c
