@@ -10,8 +10,6 @@
 //! user-space timer gives us precise control over which Cage receives `SIGALRM`.
 //! All signal delivery in our system is mediated through the epoch-based mechanism.
 //! (See our online design doc for more details.)
-#![allow(dead_code)]
-
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 pub use std::time::Duration;
