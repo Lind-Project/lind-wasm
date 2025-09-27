@@ -3,16 +3,13 @@
 //! This module provides helpers to translate a guest-provided sockaddr buffer into a 
 //! host-usable pointer and to compute the correct socklen_t for Linux. It is used by 
 //! our socket-related syscalls to bridge from per-cage virtual memory to host libc calls.
-use sysdefs::data::net_struct::SockAddr;
-use libc::{sockaddr, strlen};
+use sysdefs::data::net_struct::{SockAddr, SockPair};
+use libc::{sockaddr_un, sockaddr_in, sockaddr_in6, strlen};
 use sysdefs::constants::lind_platform_const::LIND_ROOT;
-use sysdefs::constants::net_const::{AF_UNIX};
+use sysdefs::constants::net_const::AF_UNIX;
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
 use crate::datatype_conversion::validate_cageid;
-use std::os::raw::{c_void, c_char};
 use std::ptr;
-use sysdefs::data::net_struct::{SockAddr, SockPair};
-use libc::{sockaddr, strlen, sockaddr_un, sockaddr_in, sockaddr_in6};
 use sysdefs::constants::{Errno, syscall_error};
 
 /// `unix_len_from_sun_path` computes the effective `socklen_t` for an `AF_UNIX` 
@@ -57,12 +54,12 @@ unsafe fn unix_len_from_sun_path(sun_path: &[i8; 108]) -> libc::socklen_t {
 /// (now containing the modified bytes) together with the computed length.
 pub fn convert_host_sockaddr(
     arg: *mut u8,
-    arg_cageid: u64,
-    cageid: u64,
+    _arg_cageid: u64,
+    _cageid: u64,
 ) -> (*mut libc::sockaddr, libc::socklen_t) {
     #[cfg(feature = "secure")]
     {
-        if !validate_cageid(arg_cageid, cageid) {
+        if !validate_cageid(_arg_cageid, _cageid) {
             return (core::ptr::null_mut(), 0);
         }
     }
@@ -133,6 +130,7 @@ pub fn convert_host_sockaddr(
     }
 
     (arg as *mut libc::sockaddr, out_len)
+}
 
 pub fn copy_out_sockaddr(
     addr_arg: u64,    
@@ -148,21 +146,21 @@ pub fn copy_out_sockaddr(
     let initaddrlen = unsafe { *addrlen };
 
     let (src_ptr, actual_len): (*const u8, u32) = match family as i32 {
-        AF_INET => {
+        libc::AF_INET => {
             let v4 = SockAddr::new_ipv4(); // self define
             (
                 &v4 as *const _ as *const u8,
                 size_of::<sockaddr_in>() as u32,
             )
         }
-        AF_INET6 => {
+        libc::AF_INET6 => {
             let v6 = SockAddr::new_ipv6();
             (
                 &v6 as *const _ as *const u8,
                 size_of::<sockaddr_in6>() as u32,
             )
         }
-        AF_UNIX => {
+        libc::AF_UNIX => {
             let un = SockAddr::new_unix();
             (
                 &un as *const _ as *const u8,
@@ -179,11 +177,15 @@ pub fn copy_out_sockaddr(
     }
 }
 
-pub fn convert_sockpair<'a>(arg: u64, arg_cageid: u64, cageid: u64) -> Result<&'a mut SockPair, i32> {
+pub fn convert_sockpair<'a>(arg: u64, arg_cageid: u64, _cageid: u64) -> Result<&'a mut SockPair, i32> {
     #[cfg(feature = "secure")]
     {
-        if !validate_cageid(arg_cageid, cageid) {
-            return -1;
+        if !validate_cageid(arg_cageid, _cageid) {
+            return Err(syscall_error(
+                Errno::EINVAL,
+                "convert_sockpair",
+                "invalid cage id",
+            ));
         }
     }
 

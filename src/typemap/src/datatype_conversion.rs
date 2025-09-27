@@ -7,9 +7,7 @@
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
-use std::error::Error;
-use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
-use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal};
+use std::str::Utf8Error;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This

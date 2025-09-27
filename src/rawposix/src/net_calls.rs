@@ -8,10 +8,10 @@ use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
 use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::data::fs_struct::EpollEvent;
 use typemap::datatype_conversion::*;
-use typemap::network_helpers::convert_host_sockaddr;
-use typemap::cage_helpers::convert_fd_to_host;
-use sysdefs::data::net_struct::SockAddr;
 use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
+use typemap::cage_helpers::convert_fd_to_host;
+use typemap::path_conversion::{sc_convert_path_to_host, sc_convert_uaddr_to_host};
+use sysdefs::data::net_struct::SockAddr;
 use libc::*;
 use std::ptr;
 
@@ -1355,10 +1355,10 @@ pub fn sendto_syscall(
     addrlen_cageid: u64,
 ) -> i32{
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = sc_convert_to_u8_mut(buf_arg, buf_cageid, cageid);
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
-    let sockaddr = sc_convert_addr_to_host(sockaddr_arg, sockaddr_cageid, cageid);
+    let sockaddr = sc_convert_to_u8_mut(sockaddr_arg, sockaddr_cageid, cageid);
     let addrlen = sc_convert_sysarg_to_u32(addrlen_arg, addrlen_cageid, cageid);
 
     let (finalsockaddr, addrlen) = convert_host_sockaddr(sockaddr, sockaddr_cageid, cageid);
@@ -1417,7 +1417,7 @@ pub fn recvfrom_syscall(
     nullity2_cageid: u64,
 ) -> i32{
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = sc_convert_to_u8_mut(buf_arg, buf_cageid, cageid);
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
 
@@ -1489,7 +1489,7 @@ pub fn gethostname_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let name = sc_convert_addr_to_host(name_arg, name_cageid, cageid);
+    let name = sc_convert_to_u8_mut(name_arg, name_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
 
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -1543,7 +1543,7 @@ pub fn getsockopt_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = sc_convert_sysarg_to_i32_ref(optval_arg, optval_cageid, cageid);
+    let optval = sc_convert_to_u8_mut(optval_arg, optval_cageid, cageid);
 
     if !(sc_unusedarg(arg5, arg5_cageid)
     &&sc_unusedarg(arg6, arg6_cageid))
@@ -1600,7 +1600,7 @@ pub fn getpeername_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
 
     if !(sc_unusedarg(arg3, arg3_cageid)
     &&sc_unusedarg(arg4, arg4_cageid)
