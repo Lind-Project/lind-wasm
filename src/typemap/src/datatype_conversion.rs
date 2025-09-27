@@ -298,58 +298,71 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     buf
 }
 
-/// Helper function to populate StatData from libc::stat
-/// Directly populates the user's StatData buffer field by field
+/// `sc_convert_addr_to_statdata` translates a user-provided address from the
+/// calling Cage's virtual memory into a mutable reference to a `StatData`
+/// structure.
 ///
 /// ## Arguments:
-///     - stat_ptr: pointer to StatData structure in user memory
-///     - libc_stat: reference to libc::stat structure from kernel
+///  - `arg`: The raw virtual address of the user-provided `StatData` buffer.
+///  - `arg_cageid`: The Cage ID associated with the provided address.
+///  - `cageid`: The Cage ID of the current caller (used for validation).
 ///
-/// ## Safety:
-///     - stat_ptr must be a valid pointer to a StatData structure
-///     - The caller must ensure the memory is writable and properly aligned
-pub unsafe fn sc_convert_statdata(stat_ptr: *mut StatData, libc_stat: &libc::stat) {
-    (*stat_ptr).st_blksize = libc_stat.st_blksize as i32;
-    (*stat_ptr).st_blocks = libc_stat.st_blocks as u32;
-    (*stat_ptr).st_dev = libc_stat.st_dev as u64;
-    (*stat_ptr).st_gid = libc_stat.st_gid;
-    (*stat_ptr).st_ino = libc_stat.st_ino as usize;
-    (*stat_ptr).st_mode = libc_stat.st_mode as u32;
-    (*stat_ptr).st_nlink = libc_stat.st_nlink as u32;
-    (*stat_ptr).st_rdev = libc_stat.st_rdev as u64;
-    (*stat_ptr).st_size = libc_stat.st_size as usize;
-    (*stat_ptr).st_uid = libc_stat.st_uid;
-    // The StatData comment notes we don't currently populate time bits
-    // See: ../../sysdefs/src/data/fs_struct.rs#L46
-    (*stat_ptr).st_atim = (0, 0);
-    (*stat_ptr).st_mtim = (0, 0);
-    (*stat_ptr).st_ctim = (0, 0);
+/// ## Implementation Details:
+///  - When the `secure` feature is enabled, the function validates that the
+///    provided `arg_cageid` matches the current `cageid`.
+///  - The Cage object is retrieved via `get_cage(cageid)`.
+///  - The virtual address is translated into a host address using
+///    `translate_vmmap_addr`.
+///  - The host address is cast into a `*mut StatData`, and if non-null,
+///    reinterpreted as a mutable reference.
+///  - If the pointer is null, the function returns `Err(Errno::EFAULT)`,
+///    indicating a "Bad address" error consistent with Linux error handling.
+///
+/// ## Return Value:
+///  - `Ok(&mut StatData)` if the address translation succeeds.
+///  - `Err(Errno::EFAULT)` if the address is invalid or null.
+pub fn sc_convert_addr_to_statdata<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut StatData, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut StatData;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
 }
 
-/// Helper function to populate FSData from libc::statfs
-/// Directly populates the user's FSData buffer field by field
+/// Translates a user-provided address from the Cage's virtual memory into
+/// a mutable reference to an `FSData` structure.
 ///
-/// ## Arguments:
-///     - fsdata_ptr: pointer to FSData structure in user memory
-///     - libc_statfs: reference to libc::statfs structure from kernel
-///
-/// ## Safety:
-///     - fsdata_ptr must be a valid pointer to a FSData structure
-///     - The caller must ensure the memory is writable and properly aligned
-pub unsafe fn sc_convert_fsdata(fsdata_ptr: *mut FSData, libc_statfs: &libc::statfs) {
-    // Safely pack fsid_t (two i32s) into u64
-    let fsid_packed: u64 = std::mem::transmute::<libc::fsid_t, u64>(libc_statfs.f_fsid);
-    
-    (*fsdata_ptr).f_type = libc_statfs.f_type as u64;
-    (*fsdata_ptr).f_bsize = libc_statfs.f_bsize as u64;
-    (*fsdata_ptr).f_blocks = libc_statfs.f_blocks as u64;
-    (*fsdata_ptr).f_bfree = libc_statfs.f_bfree as u64;
-    (*fsdata_ptr).f_bavail = libc_statfs.f_bavail as u64;
-    (*fsdata_ptr).f_files = libc_statfs.f_files as u64;
-    // Linux exposes f_ffree; map it to our ABI's f_ffiles field
-    (*fsdata_ptr).f_ffiles = libc_statfs.f_ffree as u64;
-    (*fsdata_ptr).f_fsid = fsid_packed;
-    (*fsdata_ptr).f_namelen = libc_statfs.f_namelen as u64;
-    (*fsdata_ptr).f_frsize = libc_statfs.f_frsize as u64;
-    (*fsdata_ptr).f_spare = [0u8; 32];
+/// This function follows the same logic as `sc_convert_addr_to_statdata`
+pub fn sc_convert_addr_to_fstatdata<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut FSData, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut FSData;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
 }
