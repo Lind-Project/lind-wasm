@@ -9,7 +9,7 @@
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
 use std::error::Error;
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
-use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal, StatData};
+use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal, StatData, FSData};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 
@@ -614,6 +614,31 @@ pub fn sc_convert_addr_to_statdata<'a>(
     let cage = get_cage(cageid).unwrap();
     let addr = translate_vmmap_addr(&cage, arg).unwrap();
     let pointer = addr as *mut StatData;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
+}
+
+/// Translates a user-provided address from the Cage's virtual memory into
+/// a mutable reference to an `FSData` structure.
+///
+/// This function follows the same logic as `sc_convert_addr_to_statdata`
+pub fn sc_convert_addr_to_fstatdata<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut FSData, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut FSData;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
