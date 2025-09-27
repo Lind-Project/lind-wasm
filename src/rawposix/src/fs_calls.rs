@@ -987,3 +987,144 @@ pub fn fcntl_syscall(
         }
     }
 }
+
+/*
+ *  `unlink` removes a file from the filesystem.
+ *  Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+ *
+ *  ## Arguments:
+ *   - `pathname`: Path to the file to be removed.
+ *
+ *  ## Implementation Details:
+ *   - The path is converted from the RawPOSIX perspective to the host kernel perspective
+ *     using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+ *   - The underlying libc::unlink() is called with the converted path.
+ *
+ *  ## Return Value:
+ *   - `0` on success.
+ *   - `-1` on failure, with `errno` set appropriately.
+ */
+ pub fn unlink_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("unlink_syscall: unused argument validation failed for args 2-6");
+    }
+
+    let ret = unsafe { libc::unlink(path.as_ptr()) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "unlink");
+    }
+
+    ret
+}
+
+/**
+ * ioctl_syscall - Control device parameters
+ *
+ * ## Description:
+ *   The ioctl() system call manipulates the underlying device parameters of special files.
+ *   In particular, many operating characteristics of character special files (e.g., terminals)
+ *   may be controlled with ioctl() requests.
+ *
+ * ## Parameters:
+ *   - cageid: Current cage identifier
+ *   - fd_arg: File descriptor to control
+ *   - fd_cageid: Cage ID for fd validation
+ *   - request_arg: Request code (e.g., FIONBIO for non-blocking I/O)
+ *   - request_cageid: Cage ID for request validation
+ *   - argp_arg: Pointer to argument data
+ *   - argp_cageid: Cage ID for argp validation
+ *   - unused_arg4: Unused argument
+ *   - unused_arg4_cageid: Unused argument cage ID
+ *   - unused_arg5: Unused argument
+ *   - unused_arg5_cageid: Unused argument cage ID
+ *   - unused_arg6: Unused argument
+ *   - unused_arg6_cageid: Unused argument cage ID
+ *
+ * ## Implementation:
+ *   - Converts the file descriptor using fdtables virtualization
+ *   - Calls the underlying libc::ioctl() with the converted fd and request
+ *   - Handles the argp pointer based on the request type
+ *
+ * ## Return Value:
+ *   - `0` on success
+ *   - `-1` on failure, with `errno` set appropriately
+ */
+pub fn ioctl_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    request_arg: u64,
+    request_cageid: u64,
+    argp_arg: u64,
+    argp_cageid: u64,
+    unused_arg4: u64,
+    unused_arg4_cageid: u64,
+    unused_arg5: u64,
+    unused_arg5_cageid: u64,
+    unused_arg6: u64,
+    unused_arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
+    let request = sc_convert_sysarg_to_i32(request_arg, request_cageid, cageid);
+
+    // Validate unused arguments
+    if !(sc_unusedarg(unused_arg4, unused_arg4_cageid)
+        && sc_unusedarg(unused_arg5, unused_arg5_cageid)
+        && sc_unusedarg(unused_arg6, unused_arg6_cageid))
+    {
+        panic!("ioctl_syscall: unused argument validation failed for args 4-6");
+    }
+
+    // Convert file descriptor using fdtables virtualization
+    let real_fd = match fdtables::translate_virtual_fd(cageid, fd as u64) {
+        Ok(fd_entry) => fd_entry.underfd,
+        Err(_) => {
+            return syscall_error(Errno::EBADF, "ioctl", "invalid file descriptor");
+        }
+    };
+
+    // Handle different request types
+    let ret = if request == libc::FIONBIO as i32 {
+        // FIONBIO: Set/clear non-blocking I/O flag
+        // argp points to an int: 0 = blocking, non-zero = non-blocking
+        let argp = sc_convert_to_u8_mut(argp_arg, argp_cageid, cageid);
+        unsafe { libc::ioctl(real_fd as i32, libc::FIONBIO, argp) }
+    } else {
+        // For other requests, pass the argp pointer directly
+        let argp = sc_convert_to_u8_mut(argp_arg, argp_cageid, cageid);
+        unsafe { libc::ioctl(real_fd as i32, request as u64, argp) }
+    };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "ioctl");
+    }
+
+    ret
+}
