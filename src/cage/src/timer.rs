@@ -1,6 +1,4 @@
 // Timer functions for Rust interface.
-#![allow(dead_code)]
-
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 pub use std::time::Duration;
