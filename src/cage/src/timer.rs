@@ -140,3 +140,44 @@ impl IntervalTimer {
         self.clone()
     }
 }
+
+pub fn timeout_setup(rposix_timeout: Option<Duration>) -> (Duration, libc::timeval) {
+    let end_time = match rposix_timeout {
+        Some(duration) => duration,
+        None => Duration::MAX,
+    };
+
+    let mut timeout;
+    if end_time > Duration::from_millis(100) {
+        timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: 1000000, // 100ms
+        };
+    } else {
+        timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: end_time.subsec_micros() as i64,
+        };
+    }
+
+    (end_time, timeout)
+}
+
+pub fn timeout_setup_ms(timeout_ms: i32) -> (Duration, i32) {
+    let end_time = {
+        if timeout_ms >= 0 {
+            Duration::from_millis(timeout_ms as u64)
+        } else {
+            Duration::MAX
+        }
+    };
+
+    let mut timeout;
+    if end_time > Duration::from_millis(100) {
+        timeout = 100;
+    } else {
+        timeout = timeout_ms;
+    }
+
+    (end_time, timeout)
+}
