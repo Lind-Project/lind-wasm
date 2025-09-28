@@ -84,7 +84,7 @@ pub fn socket_syscall(
 
     // We need to register this new kernel fd in fdtables
     // Check if `SOCK_CLOEXEC` flag is set
-    let cloexec = (socktype & libc::SOCK_CLOEXEC) != 0;
+    let cloexec = (socktype & SOCK_CLOEXEC) != 0;
 
     // Register the kernel fd in fdtables with or without cloexec
     // Note:
@@ -525,10 +525,12 @@ pub fn recv_syscall(
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "recv_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "recv_syscall", "Invalid Cage ID");
     }
 
     let ret = unsafe { libc::recv(fd, buf as *mut c_void, buflen, flags) as i32 };
@@ -710,12 +712,14 @@ pub fn gethostname_syscall(
     let name = sc_convert_addr_to_host(name_arg, name_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
 
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
     &&sc_unusedarg(arg4, arg4_cageid)
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "gethostname_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "gethostname_syscall", "Invalid Cage ID");
     }
 
     let ret = unsafe { libc::gethostname(name as *mut i8, len) };
@@ -763,10 +767,12 @@ pub fn getsockopt_syscall(
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
     let optval = sc_convert_sysarg_to_i32_ref(optval_arg, optval_cageid, cageid);
 
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg5, arg5_cageid)
     &&sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "getsockopt_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "getsockopt_syscall", "Invalid Cage ID");
     }
 
     let mut optlen: socklen_t = 4;
@@ -820,12 +826,14 @@ pub fn getpeername_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
 
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
     &&sc_unusedarg(arg4, arg4_cageid)
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "getpeername_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "getpeername_syscall", "Invalid Cage ID");
     }
 
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -875,10 +883,12 @@ pub fn socketpair_syscall(
     let protocol = sc_convert_sysarg_to_i32(protocol_arg, protocol_cageid, cageid);
     let virtual_socket_vector = convert_sockpair(virtual_socket_vector_arg, virtual_socket_vector_cageid, cageid).unwrap();
     
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "socketpair_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "socketpair_syscall", "Invalid Cage ID");
     }
 
     let mut kernel_socket_vector: [i32; 2] = [0, 0];
@@ -891,8 +901,21 @@ pub fn socketpair_syscall(
 
     let ksv_1 = kernel_socket_vector[0];
     let ksv_2 = kernel_socket_vector[1];
-    let vsv_1 = fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_1 as u64, false, 0).unwrap();
-    let vsv_2 = fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_2 as u64, false, 0).unwrap();
+
+    // We need to register this new kernel fd in fdtables
+    // Check if `SOCK_CLOEXEC` flag is set
+    let cloexec = (typ & SOCK_CLOEXEC) != 0;
+
+    // Register the kernel fd in fdtables with or without cloexec
+    // Note:
+    // `SOCK_NONBLOCK` is part of the kernel's "open file description" state
+    // (equivalent to `O_NONBLOCK`). Since our virtual FD maps directly to a
+    // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
+    // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
+    let vsv_1 = fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_1 as u64, cloexec, 0).unwrap();
+    let vsv_2 = fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_2 as u64, cloexec, 0).unwrap();
+
+    // Update virtual socketpair struct
     virtual_socket_vector.sock1 = vsv_1 as i32;
     virtual_socket_vector.sock2 = vsv_2 as i32;
     return 0;
