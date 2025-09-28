@@ -140,6 +140,18 @@ pub fn convert_host_sockaddr(
     (arg as *mut libc::sockaddr, out_len)
 }
 
+/// `copy_out_sockaddr` copies a sockaddr structure into a user-provided buffer,
+/// adjusting the length field appropriately.  
+/// 
+/// It checks the requested address family (AF_INET/AF_INET6/AF_UNIX), builds
+/// the corresponding rawposix `SockAddr`, and copies it into the destination buffer up to
+/// the caller-provided length (`*addrlen`).  
+/// If the actual sockaddr length is larger than the provided length, the data
+/// is truncated; otherwise, the buffer is fully populated.  
+/// The function updates `*addrlen` to reflect the actual length written or the
+/// expected length in compliance with Linux socket API semantics.
+///
+/// This function is used to update sockaddr info after kernel syscalls (ie: accept)
 pub fn copy_out_sockaddr(
     addr_arg: u64,    
     addr_arg1: u64,   
@@ -185,6 +197,17 @@ pub fn copy_out_sockaddr(
     }
 }
 
+/// `convert_sockpair` validates and converts a raw pointer argument into a
+/// mutable reference to a `SockPair` structure within the given cage context.  
+/// 
+/// Under the "secure" feature, the caller's cage ID is checked against the
+/// current cage ID to prevent cross-cage violations.  
+/// The function translates the user-space virtual address into a host-accessible
+/// pointer using the cage's vmmap, then safely dereferences it into a mutable
+/// reference.  
+///
+/// On success, it returns `Ok(&mut SockPair)`. On failure (e.g., invalid pointer
+/// or unmapped memory), it returns an `EFAULT` syscall error.
 pub fn convert_sockpair<'a>(arg: u64, arg_cageid: u64, cageid: u64) -> Result<&'a mut SockPair, i32> {
     #[cfg(feature = "secure")]
     {
