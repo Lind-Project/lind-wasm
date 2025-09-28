@@ -2291,3 +2291,135 @@ pub fn nanosleep_time64_syscall(
     }
     ret
 }
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/mprotect.2.html
+///
+/// Linux `mprotect()` syscall changes the protection of memory pages. It sets the protection 
+/// bits for memory pages in the range [addr, addr+len-1] to prot.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier
+///     - addr_arg: pointer to the start of the memory region to change protection for
+///     - addr_cageid: cage ID for addr argument validation
+///     - len_arg: length of the memory region in bytes
+///     - len_cageid: cage ID for len argument validation  
+///     - prot_arg: new protection flags (PROT_READ, PROT_WRITE, PROT_EXEC, PROT_NONE)
+///     - prot_cageid: cage ID for prot argument validation
+///     - arg4, arg4_cageid: unused argument and its cage ID
+///     - arg5, arg5_cageid: unused argument and its cage ID
+///     - arg6, arg6_cageid: unused argument and its cage ID
+///
+/// ## Returns:
+///     - 0 on success
+///     - -1 on error with appropriate errno set
+pub fn mprotect_syscall(
+    cageid: u64,
+    addr_arg: u64,
+    addr_cageid: u64,
+    len_arg: u64,
+    len_cageid: u64,
+    prot_arg: u64,
+    prot_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
+    let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid)) {
+        return syscall_error(Errno::EFAULT, "mprotect", "Invalid Cage ID");
+    }
+
+    // Validate protection flags
+    let valid_prot = PROT_READ | PROT_WRITE | PROT_EXEC | PROT_NONE;
+    if prot & !valid_prot != 0 {
+        return syscall_error(Errno::EINVAL, "mprotect", "Invalid protection flags");
+    }
+
+    // For security, we don't allow PROT_EXEC in lind-wasm
+    if prot & PROT_EXEC != 0 {
+        return syscall_error(Errno::EINVAL, "mprotect", "PROT_EXEC is not allowed");
+    }
+
+    // Call the kernel mprotect
+    let ret = unsafe { libc::mprotect(addr as *mut c_void, len, prot) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "mprotect");
+    }
+
+    ret
+}
+
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/ioctl.2.html
+///
+/// Linux `ioctl()` syscall manipulates the underlying device parameters of special files.
+/// In particular, many operating characteristics of character special files (e.g., terminals)
+/// may be controlled with ioctl() operations. The argument fd must be an open file descriptor.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier
+///     - vfd_arg: virtual file descriptor (must be an open file descriptor)
+///     - vfd_cageid: cage ID for vfd argument validation
+///     - req_arg: device-dependent operation code
+///     - req_cageid: cage ID for req argument validation
+///     - ptrunion_arg: pointer to memory (untyped pointer, traditionally char *argp)
+///     - ptrunion_cageid: cage ID for ptrunion argument validation
+///     - arg4, arg4_cageid: unused argument and its cage ID
+///     - arg5, arg5_cageid: unused argument and its cage ID
+///     - arg6, arg6_cageid: unused argument and its cage ID
+///
+/// ## Returns:
+///     - Usually, on success zero is returned. A few ioctl() operations use the return value
+///       as an output parameter and return a nonnegative value on success.
+///     - On error, -1 is returned, and errno is set to indicate the error.
+pub fn ioctl_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    req_arg: u64,
+    req_cageid: u64,
+    ptrunion_arg: u64,
+    ptrunion_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let ptrunion = sc_convert_addr_to_host(ptrunion_arg, ptrunion_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid)) {
+        return syscall_error(Errno::EFAULT, "ioctl", "Invalid Cage ID");
+    }
+
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
+    if wrappedvfd.is_err() {
+        return syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor");
+    }
+
+    let vfd = wrappedvfd.unwrap();
+
+    let ret = unsafe { libc::ioctl(vfd.underfd as i32, req_arg, ptrunion as *mut c_void) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "ioctl");
+    }
+    return ret;
+}
