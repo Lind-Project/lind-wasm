@@ -1,13 +1,28 @@
 use cage::signal_check_trigger;
 use fdtables;
 use fdtables::epoll_event;
-use std::collections::{HashMap, HashSet};
-use std::time::Instant;
-use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
 use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::data::fs_struct::EpollEvent;
+use cage::{signal_check_trigger, starttimer, readtimer, timeout_setup_ms};
+use fdtables;
+use std::collections::{HashMap, HashSet};
+use parking_lot::Mutex;
 use typemap::datatype_conversion::*;
+use std::time::Instant;
+use lazy_static::lazy_static;
+
+/// `epoll_ctl` handles registering, modifying, and removing the watch set, while `epoll_wait` 
+/// simply gathers ready events based on what’s already registered and writes them back to the 
+/// user buffer. Since we currently only have a virtual-FD to kernel-FD mapping, allowing user 
+/// space to use `events[i].data.fd` directly after `epoll_wait` requires translating kernel-side 
+/// info back to the virtual side. We’ll maintain a global reverse mapping (cage, underfd) to vfd, 
+/// register entries during `epoll_ctl`, and translate data from underfd to vfd before writing 
+/// events back in `epoll_wait`.
+lazy_static! {
+    // A hashmap used to store epoll mapping relationships
+    // <virtual_epfd <kernel_fd, virtual_fd>>
+    static ref REAL_EPOLL_MAP: Mutex<HashMap<u64, HashMap<i32, u64>>> = Mutex::new(HashMap::new());
+}
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/poll.2.html
 ///
@@ -533,9 +548,9 @@ pub fn epoll_create_syscall(
         return handle_errno(errno, "epoll_create_syscall");
     }
 
-    // Get the virtual epfd
-    let virtual_epfd =
-        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, false, 0).unwrap();
+    // Get the virtual epfd and register to fdtables 
+    let virtual_epfd = fdtables::epoll_create_empty(cageid, false).unwrap();
+    fdtables::epoll_add_underfd(cageid, virtual_epfd, FDKIND_KERNEL, kernel_fd as u64);
 
     // Return virtual epfd
     virtual_epfd as i32
@@ -581,88 +596,106 @@ pub fn epoll_ctl_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    // Convert arguments
+    let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
     // Validate unused arguments
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid Cage ID");
     }
 
-    // Convert arguments
-    let epfd = sc_convert_sysarg_to_i32(epfd_arg, epfd_cageid, cageid);
-    let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
-    let fd = sc_convert_sysarg_to_i32(fd_arg, fd_cageid, cageid);
-    let virtfd = fd as u64;
+    // Get the underfd of type FDKIND_KERNEL to the vitual fd
+    // Details see documentation on fdtables/epoll_get_underfd_hashmap.md
+    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg).unwrap().get(&FDKIND_KERNEL).unwrap();
 
     // Validate operation
     if op != EPOLL_CTL_ADD && op != EPOLL_CTL_MOD && op != EPOLL_CTL_DEL {
         return syscall_error(Errno::EINVAL, "epoll_ctl_syscall", "Invalid operation");
     }
 
-    // Translate virtual FDs to kernel FDs
-    let wrappedepfd = fdtables::translate_virtual_fd(cageid, epfd as u64);
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtfd);
-    if wrappedvfd.is_err() || wrappedepfd.is_err() {
+    // Translate virtual FDs to kernel FDs. We only need to translate this since this is a 
+    // normal fd, not epfd
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, fd_arg);
+    if wrappedvfd.is_err() {
         return syscall_error(Errno::EBADF, "epoll_ctl_syscall", "Bad File Descriptor");
     }
-    let vepfd = wrappedepfd.unwrap();
+    
     let vfd = wrappedvfd.unwrap();
 
-    // Convert epoll_event from user space
-    let event_ptr = if event_arg != 0 {
-        Some(sc_convert_buf(event_arg, event_cageid, cageid) as *mut EpollEvent)
-    } else {
-        None
+    // Convert epoll_event 
+    let user_event_opt = match sc_convert_addr_to_epollevent(event_arg, event_cageid, cageid) {
+        Ok(p) => Some(p),
+        Err(_) => {
+            if op == EPOLL_CTL_DEL {
+                None
+            } else {
+                return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid address");
+            }
+        },
     };
 
-    // For EPOLL_CTL_DEL, event can be null
-    if event_ptr.is_none() && op != EPOLL_CTL_DEL {
-        return syscall_error(
-            Errno::EFAULT,
-            "epoll_ctl_syscall",
-            "event pointer is null for non-DEL operation",
-        );
-    }
+    // We intentionally DO NOT overwrite the user's epoll_event inside the guest's
+    // linear memory. At this layer we translate the user-visible (virtual) FD into a
+    // kernel FD (underfd), which is not visible to user space. Mutating
+    // the guest-provided epoll_event->data to hold an underfd would leak a kernel-
+    // side detail into user memory
+    // 
+    // Instead, we allocate a host-side (non-linear-memory) epoll_event and populate it
+    // with the same 'events' mask but with 'data.u64' set to the kernel FD. For DEL we
+    // pass a NULL pointer. This host-only struct is passed to libc::epoll_ctl and lives
+    // just long enough for the syscall. User memory remains untouched, and on the way
+    // back (epoll_wait) we translate from underfd to vfd using our reverse map so that
+    // user space continues to see virtual FDs/cookies only.
+    let mut tmp: Option<libc::epoll_event> = user_event_opt.map(|ue| libc::epoll_event {
+        events: ue.events,
+        u64: vfd.underfd as u64,
+    });
 
-    // Get user event data for both kernel and virtual operations
-    let user_event = if let Some(event_ptr) = event_ptr {
-        if event_ptr.is_null() {
-            return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "event pointer is null");
-        }
-        unsafe { *event_ptr }
-    } else {
-        // For EPOLL_CTL_DEL, create a dummy event
-        EpollEvent { events: 0, fd: 0 }
-    };
-
-    // Create kernel epoll_event with kernel FD in u64 field
-    let mut kernel_epoll_event = libc::epoll_event {
-        events: user_event.events,
-        u64: vfd.underfd, // Use kernel FD for kernel call
-    };
+    let kernel_epoll_event: *mut libc::epoll_event =
+        tmp.as_mut()
+           .map(|e| e as *mut libc::epoll_event)
+           .unwrap_or(ptr::null_mut());
 
     // Call actual kernel epoll_ctl
     let ret = unsafe {
         libc::epoll_ctl(
-            vepfd.underfd as i32,
+            epfd as i32,
             op,
             vfd.underfd as i32,
-            &mut kernel_epoll_event,
+            kernel_epoll_event,
         )
     };
+
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "epoll_ctl_syscall");
     }
 
-    // After successful kernel operation, update fdtables virtual mapping
-    match fdtables::virtualize_epoll_ctl(cageid, epfd as u64, op, virtfd, kernel_epoll_event) {
-        Ok(()) => 0,
-        Err(err) => {
-            // If fdtables operation fails after successful kernel operation,
-            // we should ideally roll back the kernel operation, but for now
-            // we'll just return the error
-            handle_errno(err as i32, "epoll_ctl_syscall")
+    // Update the virtual list -- but we only handle the non-real fd case
+    //  try_epoll_ctl will directly return a real fd in libc case
+    //  - maybe we could create a new mapping table to handle the mapping relationship..?
+    //      ceate inside the fdtable interface? or we could handle inside rawposix..?
+
+    // Update the mapping table for epoll
+    if op == libc::EPOLL_CTL_DEL {
+        let mut epollmapping = REAL_EPOLL_MAP.lock();
+        if let Some(fdmap) = epollmapping.get_mut(&(epfd)) {
+            if fdmap.remove(&(vfd.underfd as i32)).is_some() {
+                if fdmap.is_empty() {
+                    epollmapping.remove(&(epfd));
+                }
+                return ret;
+            }
         }
+    } else {
+        let mut epollmapping = REAL_EPOLL_MAP.lock();
+        epollmapping
+            .entry(epfd)
+            .or_insert_with(HashMap::new)
+            .insert(vfd.underfd as i32, fd_arg);
+        return ret;
     }
+
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_wait.2.html
@@ -712,8 +745,11 @@ pub fn epoll_wait_syscall(
         return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid Cage ID");
     }
 
+    // Get the underfd of type FDKIND_KERNEL to the vitual fd
+    // Details see documentation on fdtables/epoll_get_underfd_hashmap.md
+    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg).unwrap().get(&FDKIND_KERNEL).unwrap();
+
     // Convert arguments
-    let epfd = sc_convert_sysarg_to_i32(epfd_arg, epfd_cageid, cageid);
     let maxevents = sc_convert_sysarg_to_i32(maxevents_arg, maxevents_cageid, cageid);
     let timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
 
@@ -731,136 +767,76 @@ pub fn epoll_wait_syscall(
     }
 
     // Convert events array from user space
-    let events_ptr = sc_convert_buf(events_arg, events_cageid, cageid) as *mut EpollEvent;
-    if events_ptr.is_null() {
-        return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "events array is null");
-    }
-
-    // Create safe slice for events array
-    let events_slice = unsafe { std::slice::from_raw_parts_mut(events_ptr, maxevents as usize) };
-
-    // Get virtual epoll wait data from fdtables
-    let epoll_data = match fdtables::get_virtual_epoll_wait_data(cageid, epfd as u64) {
-        Ok(data) => data,
-        Err(err) => return handle_errno(err as i32, "epoll_wait_syscall"),
+    let mut events_ptr = match sc_convert_addr_to_epollevent(events_arg, events_cageid, cageid) {
+        Ok(p) => p,
+        Err(e) => return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid address"),
     };
 
-    // Check if epoll instance is empty
-    if epoll_data.is_empty() {
-        return 0;
-    }
+    // We do not let the kernel write epoll events directly into the guest’s
+    // linear memory. The kernel reports events using kernel-side identifiers
+    // (underfd) in the epoll_event.data field, which are not visible to user space 
+    // in our model. To preserve isolation and avoid leaking underfd
+    // values into guest memory, we allocate a host-side (non-linear-memory) buffer
+    // `kernel_events` and pass its pointer to epoll_wait. After epoll_wait returns,
+    // we translate each reported underfd back into the corresponding virtual FD
+    // using our (cage, underfd) to vfd reverse map, and only then write the
+    // translated (events, vfd) into the user-provided events array. In short:
+    //   kernel to host buffer (underfd) --> translate to guest buffer (vfd).
+    let mut events = unsafe { std::slice::from_raw_parts_mut(events_ptr, maxevents as usize) };
 
-    // Handle timeout setup (following select_syscall pattern)
-    let start_time = Instant::now();
-    let timeout_duration = if timeout == -1 {
-        // Infinite timeout - use a very large duration
-        std::time::Duration::from_millis(u64::MAX)
-    } else if timeout == 0 {
-        // Non-blocking
-        std::time::Duration::from_millis(0)
-    } else {
-        std::time::Duration::from_millis(timeout as u64)
-    };
+    let mut kernel_events: Vec<libc::epoll_event> = Vec::with_capacity(maxevents as usize);
+    // Should always be null value before we call libc::epoll_wait
+    kernel_events.push(libc::epoll_event { events: 0, u64: 0 });
 
-    let mut total_ready = 0i32;
+    if maxevents != 0 {
+        let start_time = starttimer();
+        let (duration, timeout) = timeout_setup_ms(timeout);
 
-    // Process each fdkind in the epoll data
-    for (fdkind, fd_events_map) in epoll_data {
-        if fdkind == FDKIND_KERNEL {
-            // Handle kernel-backed FDs
-            let mut kernel_events: Vec<libc::epoll_event> = Vec::with_capacity(maxevents as usize);
-
-            // Get the underlying kernel epoll FD for this fdkind
-            let kernel_epfd = match fdtables::epoll_get_underfd_hashmap(cageid, epfd as u64) {
-                Ok(underfd_map) => {
-                    match underfd_map.get(&fdkind) {
-                        Some(epfd) => *epfd as i32,
-                        None => continue, // No kernel epoll FD for this fdkind
-                    }
-                }
-                Err(_) => continue, // Skip if we can't get the mapping
+        // Copy results to the guest's events array *after* translation:
+        // - `kernel_events[i].u64` holds an underfd (kernel-only).
+        // - We map (cage, underfd) to vfd and store the vfd in the user's event data.
+        // - We also copy the event mask verbatim.
+        // This ensures guest memory only ever contains guest-visible virtual FDs.
+        let mut ret;
+        loop {
+            ret = unsafe {
+                libc::epoll_wait(
+                    epfd as i32,
+                    kernel_events.as_mut_ptr(),
+                    maxevents,
+                    timeout as i32,
+                )
             };
 
-            // Initialize kernel events array
-            for _ in 0..maxevents {
-                kernel_events.push(libc::epoll_event { events: 0, u64: 0 });
+            if ret < 0 {
+                let errno = get_errno();
+                return handle_errno(errno, "epoll");
             }
 
-            let mut ret;
-            loop {
-                ret = unsafe {
-                    libc::epoll_wait(
-                        kernel_epfd,
-                        kernel_events.as_mut_ptr(),
-                        maxevents,
-                        if timeout == -1 { -1 } else { timeout },
-                    )
-                };
-
-                if ret < 0 {
-                    let errno = get_errno();
-                    return handle_errno(errno, "epoll_wait_syscall");
-                }
-
-                // Check for timeout or successful result
-                if ret > 0 || (timeout != -1 && start_time.elapsed() > timeout_duration) {
-                    break;
-                }
-
-                // Check for signals
-                if signal_check_trigger(cageid) {
-                    return syscall_error(Errno::EINTR, "epoll_wait_syscall", "interrupted");
-                }
+            // check for timeout
+            if ret > 0 || readtimer(start_time) > duration {
+                break;
             }
 
-            // Convert kernel results back to virtual FDs
-            for i in 0..ret as usize {
-                if total_ready >= maxevents {
-                    break;
-                }
-
-                let kernel_event = &kernel_events[i];
-
-                // Find the virtual FD that corresponds to this kernel FD
-                for (virtfd, user_event) in &fd_events_map {
-                    if let Some(virtfd_entry) = fdtables::translate_virtual_fd(cageid, *virtfd).ok()
-                    {
-                        if virtfd_entry.underfd == kernel_event.u64 {
-                            // Found the matching virtual FD, update user array
-                            events_slice[total_ready as usize] = EpollEvent {
-                                events: kernel_event.events,
-                                fd: *virtfd as i32,
-                            };
-                            total_ready += 1;
-                            break;
-                        }
-                    }
-                }
-            }
-        } else {
-            // Handle in-memory FDs (custom polling logic)
-            // For now, we'll implement a simple approach similar to the old implementation
-            // This would need to be expanded based on the specific in-memory FD types
-
-            // Check for timeout on non-blocking call
-            if timeout == 0 {
-                continue; // Non-blocking, no in-memory FDs ready
-            }
-
-            // For in-memory FDs, we would implement custom polling logic here
-            // This is a placeholder for future implementation
-            for (virtfd, _user_event) in &fd_events_map {
-                if total_ready >= maxevents {
-                    break;
-                }
-
-                // Placeholder: check if in-memory FD is ready
-                // This would need actual implementation based on the FD type
-                // For now, we'll skip in-memory FDs
-                continue;
+            // check for signal
+            if signal_check_trigger(cageid) {
+                return syscall_error(Errno::EINTR, "epoll", "interrupted");
             }
         }
+        // Convert back to rawposix's data structure
+        // Loop over virtual epollfd to find corresponding mapping relationship between kernel fd and virtual fd
+        for i in 0..ret as usize {
+            let ret_kernelfd = kernel_events[i].u64;
+            let epollmapping = REAL_EPOLL_MAP.lock();
+            let ret_virtualfd = epollmapping
+                .get(&(epfd))
+                .and_then(|kernel_map| kernel_map.get(&(ret_kernelfd as i32)).copied());
+
+            events[i].fd = ret_virtualfd.unwrap() as i32;
+            events[i].events = kernel_events[i].events;
+        }
+        return ret;
     }
 
-    total_ready
+    return 0; // Should never reach
 }
