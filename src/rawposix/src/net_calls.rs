@@ -1,12 +1,9 @@
 use typemap::datatype_conversion::*;
-use typemap::network_helpers::convert_host_sockaddr;
+use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
 use typemap::cage_helpers::convert_fd_to_host;
-use fdtables;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::FDKIND_KERNEL;
-use libc::*;
-use std::ptr;
-use sysdefs::*;
+use sysdefs::data::net_struct::SockAddr;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/socket.2.html
 ///
@@ -62,7 +59,7 @@ pub fn socket_syscall(
 
     // We need to register this new kernel fd in fdtables
     // Check if `SOCK_CLOEXEC` flag is set
-    let cloexec = (socktype & libc::SOCK_CLOEXEC) != 0;
+    let cloexec = (socktype & SOCK_CLOEXEC) != 0;
 
     // Register the kernel fd in fdtables with or without cloexec
     // Note:
@@ -465,4 +462,394 @@ pub fn getsockname_syscall(
     }
 
     ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/sendto.2.html
+///
+/// The Linux `sendto()` syscall is used to transmit a message to a specific address using a socket.
+/// This implementation retrieves the virtual file descriptor, buffer, and target socket address
+/// from the current cage, then invokes the host kernel's `sendto()` call.
+///
+/// ## Input:
+///     - cageid: identifier of the current cage
+///     - fd_arg: virtual file descriptor representing the socket
+///     - buf_arg: pointer to the message buffer in user space
+///     - buflen_arg: length of the message to send
+///     - flag_arg: flags influencing message transmission behavior
+///     - sockaddr_arg: pointer to the destination socket address
+///     - addrlen_arg: size of the destination address structure
+///
+/// ## Return:
+///     - On success: number of bytes sent
+///     - On failure: negative errno indicating the error
+pub fn sendto_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    buflen_arg: u64,
+    buflen_cageid: u64,
+    flag_arg: u64,
+    flag_cageid: u64,
+    sockaddr_arg: u64,
+    sockaddr_cageid: u64,
+    addrlen_arg: u64,
+    addrlen_cageid: u64,
+) -> i32{
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
+    let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
+    let sockaddr = sc_convert_addr_to_host(sockaddr_arg, sockaddr_cageid, cageid);
+    let addrlen = sc_convert_sysarg_to_u32(addrlen_arg, addrlen_cageid, cageid);
+
+    // We do not need to explicitly handle the NULL case in `sendto`,
+    // because `convert_host_sockaddr` already returns `(ptr::null_mut(), 0)`
+    // when the caller provides no address. In addition, sendto does not
+    // modify the `sockaddr` passed in, so the pointer type does not need
+    // to be mutable.
+    let (finalsockaddr, addrlen) = convert_host_sockaddr(sockaddr, sockaddr_cageid, cageid);
+
+    let ret = unsafe {
+        libc::sendto(
+            fd,
+            buf as *const c_void,
+            buflen,
+            flag,
+            finalsockaddr,
+            addrlen,
+        ) as i32
+    };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "sendto");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/recvfrom.2.html
+///
+/// The Linux `recvfrom()` syscall is used to receive a message from a socket,
+/// optionally storing the source address of the sender.
+/// This implementation retrieves the virtual file descriptor and buffer from the current cage,
+/// and optionally copies back the source address to user space.
+///
+/// ## Input:
+///     - cageid: identifier of the current cage
+///     - fd_arg: virtual file descriptor representing the socket
+///     - buf_arg: pointer to the buffer in user space to store received data
+///     - buflen_arg: size of the buffer
+///     - flag_arg: Flags controlling message reception behavior
+///     - addr_arg(src_addr): pointer to the source address structure or null
+///     - addrlen_arg(addrlen): pointer to the source address length or null
+///
+/// ## Return:
+///     - On success: number of bytes received
+///     - On failure: negative errno indicating the error
+pub fn recvfrom_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    buflen_arg: u64,
+    buflen_cageid: u64,
+    flag_arg: u64,
+    flag_cageid: u64,
+    addr_arg: u64,
+    addr_cageid: u64,
+    addrlen_arg: u64,
+    addrlen_cageid: u64,
+) -> i32{
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
+    let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
+
+    // true means user passed NULL for that pointer
+    let addr_nullity = sc_convert_arg_nullity(addr_arg, addr_cageid, cageid);
+    let addrlen_nullity = sc_convert_arg_nullity(addrlen_arg,addrlen_cageid, cageid);
+
+    // Case 1: both NULL → caller doesn’t want peer address
+    // In this case recvfrom() won’t write to addr/addrlen,  
+    // so we can pass null pointers directly to libc.
+    if addr_nullity && addrlen_nullity {
+        let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, ptr::null_mut(), ptr::null_mut()) as i32 };
+
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "recvfrom");
+        }
+    }
+    // Case 2: both non-NULL → caller wants src_addr + addrlen filled
+    else if !(addr_nullity || addrlen_nullity) {
+        let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid) as *mut SockAddr; 
+
+        let mut src_storage: sockaddr_storage = unsafe {mem::zeroed()};
+        let mut src_len: socklen_t = unsafe { mem::size_of::<sockaddr_storage>() as socklen_t };
+        let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, &mut src_storage as *mut _ as *mut sockaddr,
+            &mut src_len as *mut socklen_t,) as i32 };
+
+        if ret < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "recvfrom");
+        }
+
+        // Copy peer address back to user’s src_addr / addrlen
+        if ret >= 0 {
+            unsafe {
+                copy_out_sockaddr(
+                    addr,
+                    src_len as *mut u32,
+                    &src_storage,
+                );
+            }
+        }
+    }
+
+    0
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/gethostname.2.html
+///
+/// The Linux `gethostname()` syscall returns the current host name of the system.
+/// This implementation retrieves the destination buffer and length from the current cage,
+/// and stores the host name into user space.
+///
+/// ## Input:
+///     - cageid: identifier of the current cage
+///     - name_arg: pointer to the buffer in user space to store the hostname
+///     - len_arg: size of the buffer
+///
+/// ## Return:
+///     - On success: 0  
+///     - On failure: negative errno indicating the error
+pub fn gethostname_syscall(
+    cageid: u64,
+    name_arg: u64,
+    name_cageid: u64,
+    len_arg: u64,
+    len_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let name = sc_convert_addr_to_host(name_arg, name_cageid, cageid);
+    let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
+
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
+    if !(sc_unusedarg(arg3, arg3_cageid)
+    &&sc_unusedarg(arg4, arg4_cageid)
+    && sc_unusedarg(arg5, arg5_cageid)
+    && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "gethostname_syscall", "Invalid Cage ID");
+    }
+
+    let ret = unsafe { libc::gethostname(name as *mut i8, len) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "gethostname");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getsockopt.2.html
+///
+/// The Linux `getsockopt()` syscall retrieves the value of a socket option.
+/// This implementation retrieves the virtual file descriptor, option level, and option name
+/// from the current cage, and writes the result to the provided user-space buffer.
+///
+/// ## Input:
+///     - cageid: identifier of the current cage
+///     - fd_arg: virtual file descriptor of the socket
+///     - level_arg: protocol level at which the option resides
+///     - optname_arg: name of the option to retrieve
+///     - optval_arg: pointer to a buffer to store the option value
+///
+/// ## Return:
+///     - On success: 0  
+///     - On failure: negative errno indicating the error
+pub fn getsockopt_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    level_arg: u64,
+    level_cageid: u64,
+    optname_arg: u64,
+    optname_cageid: u64,
+    optval_arg: u64,
+    optval_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32{
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
+    let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
+    let optval = sc_convert_sysarg_to_i32_ref(optval_arg, optval_cageid, cageid);
+
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
+    if !(sc_unusedarg(arg5, arg5_cageid)
+    &&sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "getsockopt_syscall", "Invalid Cage ID");
+    }
+
+    let mut optlen: socklen_t = 4;
+
+    let ret = unsafe {
+        libc::getsockopt(
+            fd,
+            level,
+            optname,
+            optval as *mut c_int as *mut c_void,
+            &mut optlen as *mut socklen_t,
+        )
+    };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "getsockopt");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getpeername.2.html
+///
+/// The Linux `getpeername()` syscall retrieves the address of the peer connected to a socket.
+/// This implementation obtains the socket file descriptor and address buffer from the current cage,
+/// then invokes the host kernel's `getpeername()` and writes the result to user space.
+///
+/// ## Input:
+///     - cageid: identifier of the current cage
+///     - fd_arg: virtual file descriptor of the connected socket
+///     - addr_arg: pointer to a buffer in user space to store the peer address
+///
+/// ## Return:
+///     - On success: 0  
+///     - On failure: negative errno indicating the error
+pub fn getpeername_syscall(
+    cageid: u64,
+    fd_arg: u64,
+    fd_cageid: u64,
+    addr_arg: u64,
+    addr_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
+    if !(sc_unusedarg(arg3, arg3_cageid)
+    &&sc_unusedarg(arg4, arg4_cageid)
+    && sc_unusedarg(arg5, arg5_cageid)
+    && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "getpeername_syscall", "Invalid Cage ID");
+    }
+
+    let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
+    let ret = unsafe { libc::getpeername(fd, finalsockaddr, &mut addrlen as *mut u32) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "getpeername");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/socketpair.2.html
+///
+/// The Linux `socketpair()` syscall creates a pair of connected sockets.
+/// This implementation creates the socket pair in the host kernel and assigns virtual file descriptors
+/// to the resulting sockets within the current cage.
+///
+/// ## Input:
+///     - cageid: identifier of the current cage
+///     - domain_arg: communication domain (e.g., AF_UNIX)
+///     - type_arg: communication semantics (e.g., SOCK_STREAM)
+///     - protocol_arg: protocol to be used
+///     - virtual_socket_vector_arg: pointer to a `SockPair` structure in user space to receive the result
+///
+/// ## Return:
+///     - On success: 0  
+///     - On failure: negative errno indicating the error
+pub fn socketpair_syscall(
+    cageid: u64,
+    domain_arg: u64,
+    domain_cageid: u64,
+    type_arg: u64,
+    type_cageid: u64,
+    protocol_arg: u64,
+    protocol_cageid: u64,
+    virtual_socket_vector_arg: u64,
+    virtual_socket_vector_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let domain = sc_convert_sysarg_to_i32(domain_arg, domain_cageid, cageid);
+    let typ = sc_convert_sysarg_to_i32(type_arg, type_cageid, cageid);
+    let protocol = sc_convert_sysarg_to_i32(protocol_arg, protocol_cageid, cageid);
+    let virtual_socket_vector = convert_sockpair(virtual_socket_vector_arg, virtual_socket_vector_cageid, cageid).unwrap();
+    
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
+    if !(sc_unusedarg(arg5, arg5_cageid)
+    && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "socketpair_syscall", "Invalid Cage ID");
+    }
+
+    let mut kernel_socket_vector: [i32; 2] = [0, 0];
+
+    let ret = unsafe { libc::socketpair(domain, typ, protocol, kernel_socket_vector.as_mut_ptr()) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "sockpair");
+    }
+
+    let ksv_1 = kernel_socket_vector[0];
+    let ksv_2 = kernel_socket_vector[1];
+
+    // We need to register this new kernel fd in fdtables
+    // Check if `SOCK_CLOEXEC` flag is set
+    let cloexec = (typ & SOCK_CLOEXEC) != 0;
+
+    // Register the kernel fd in fdtables with or without cloexec
+    // Note:
+    // `SOCK_NONBLOCK` is part of the kernel's "open file description" state
+    // (equivalent to `O_NONBLOCK`). Since our virtual FD maps directly to a
+    // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
+    // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
+    let vsv_1 = fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_1 as u64, cloexec, 0).unwrap();
+    let vsv_2 = fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_2 as u64, cloexec, 0).unwrap();
+
+    // Update virtual socketpair struct
+    virtual_socket_vector.sock1 = vsv_1 as i32;
+    virtual_socket_vector.sock2 = vsv_2 as i32;
+    return 0;
 }
