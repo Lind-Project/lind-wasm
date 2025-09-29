@@ -4,7 +4,7 @@
 //! host-usable pointer and to compute the correct socklen_t for Linux. It is used by 
 //! our socket-related syscalls to bridge from per-cage virtual memory to host libc calls.
 use sysdefs::data::net_struct::{SockAddr, SockPair};
-use libc::{sockaddr, strlen, sockaddr_un, sockaddr_in, sockaddr_in6};
+use libc::{sockaddr, strlen, sockaddr_un, sockaddr_in, sockaddr_in6, socklen_t, sockaddr_storage, sa_family_t};
 use sysdefs::constants::{Errno, syscall_error};
 use sysdefs::constants::lind_platform_const::LIND_ROOT;
 use sysdefs::constants::net_const::{AF_UNIX};
@@ -143,8 +143,7 @@ pub fn convert_host_sockaddr(
 /// `copy_out_sockaddr` copies a sockaddr structure into a user-provided buffer,
 /// adjusting the length field appropriately.  
 /// 
-/// It checks the requested address family (AF_INET/AF_INET6/AF_UNIX), builds
-/// the corresponding rawposix `SockAddr`, and copies it into the destination buffer up to
+/// It checks the requested address family (AF_INET/AF_INET6/AF_UNIX) and copies it into the destination buffer up to
 /// the caller-provided length (`*addrlen`).  
 /// If the actual sockaddr length is larger than the provided length, the data
 /// is truncated; otherwise, the buffer is fully populated.  
@@ -152,49 +151,66 @@ pub fn convert_host_sockaddr(
 /// expected length in compliance with Linux socket API semantics.
 ///
 /// This function is used to update sockaddr info after kernel syscalls (ie: accept)
-pub fn copy_out_sockaddr(
-    addr_arg: u64,    
-    addr_arg1: u64,   
-    family: u16,
+pub unsafe fn copy_out_sockaddr(
+    dst_user: *mut SockAddr,        // User buffer points to SockAddr
+    dst_len_ptr: *mut socklen_t,    // actual length
+    src_storage: &sockaddr_storage, // source addr (libc::sockaddr)
 ) {
-    let copyoutaddr = addr_arg as *mut u8; // libc
-    let addrlen = addr_arg1 as *mut u32;
+    if dst_user.is_null() || dst_len_ptr.is_null() {
+        return;
+    }
 
-    assert!(!copyoutaddr.is_null());
-    assert!(!addrlen.is_null());
+    // Read family
+    let sa_ptr = src_storage as *const _ as *const sockaddr;
+    let family: sa_family_t = (*sa_ptr).sa_family;
 
-    let initaddrlen = unsafe { *addrlen };
-
-    let (src_ptr, actual_len): (*const u8, u32) = match family as i32 {
-        AF_INET => {
-            let v4 = SockAddr::new_ipv4(); // self define
-            (
-                &v4 as *const _ as *const u8,
-                size_of::<sockaddr_in>() as u32,
-            )
-        }
-        AF_INET6 => {
-            let v6 = SockAddr::new_ipv6();
-            (
-                &v6 as *const _ as *const u8,
-                size_of::<sockaddr_in6>() as u32,
-            )
-        }
-        AF_UNIX => {
-            let un = SockAddr::new_unix();
-            (
-                &un as *const _ as *const u8,
-                size_of::<sockaddr_un>() as u32,
-            )
-        }
-        _ => return, 
+    // Compute the "actual address length" 
+    let actual_len: socklen_t = match family as i32 {
+        AF_INET  => size_of::<sockaddr_in>()  as socklen_t,
+        AF_INET6 => size_of::<sockaddr_in6>() as socklen_t,
+        AF_UNIX  => size_of::<sockaddr_un>()  as socklen_t, 
+        _ => 0,
     };
 
-    let copy_len = initaddrlen.min(actual_len);
-    unsafe {
-        ptr::copy(src_ptr, copyoutaddr, copy_len as usize);
-        *addrlen = actual_len.max(copy_len);
+    // Write family into the custom SockAddr
+    (*dst_user).sun_family = family as u16;
+
+    // Determine payload size (excluding sa_family_t)
+    let payload_len = match family as i32 {
+        AF_INET  => size_of::<sockaddr_in>()  - size_of::<sa_family_t>(),
+        AF_INET6 => size_of::<sockaddr_in6>() - size_of::<sa_family_t>(),
+        AF_UNIX  => size_of::<sockaddr_un>()  - size_of::<sa_family_t>(),
+        _ => 0,
+    };
+
+    if payload_len > 0 {
+        // Clamp to the capacity of sun_path to avoid overflow
+        let copy_len = core::cmp::min(payload_len, (*dst_user).sun_path.len());
+
+        // Copy bytes after sa_family_t into our own sun_path
+        ptr::copy_nonoverlapping(
+            (sa_ptr as *const u8).add(size_of::<sa_family_t>()),
+            (*dst_user).sun_path.as_mut_ptr() as *mut u8,
+            copy_len,
+        );
+
+        // If payload is smaller than 108, zero the rest to keep determinism
+        if copy_len < (*dst_user).sun_path.len() {
+            ptr::write_bytes(
+                (*dst_user).sun_path.as_mut_ptr().add(copy_len),
+                0,
+                (*dst_user).sun_path.len() - copy_len,
+            );
+        }
+    } else {
+        // Unknown family: zero the payload
+        ptr::write_bytes((*dst_user).sun_path.as_mut_ptr(), 0, (*dst_user).sun_path.len());
     }
+
+    // Write back the "actual length". 
+    // This value is independent of whether truncation occurred,
+    // following Linux semantics.
+    *dst_len_ptr = actual_len;
 }
 
 /// `convert_sockpair` validates and converts a raw pointer argument into a
