@@ -12,7 +12,7 @@ use rawposix::fs_calls::{
     ioctl_syscall,
 };
 use rawposix::net_calls::{socket_syscall, connect_syscall, bind_syscall, listen_syscall, 
-    accept_syscall, setsockopt_syscall, recv_syscall, recvfrom_syscall,
+    accept_syscall, setsockopt_syscall, recvfrom_syscall,
     sendto_syscall, gethostname_syscall, getsockopt_syscall, getpeername_syscall, socketpair_syscall,
     shutdown_syscall, getsockname_syscall, select_syscall, epoll_create_syscall, epoll_ctl_syscall,
     epoll_wait_syscall, poll_syscall,
@@ -53,7 +53,6 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (43, accept_syscall),
     (44, sendto_syscall),
     (45, recvfrom_syscall),
-    (47, recv_syscall),
     (48, shutdown_syscall),
     (49, bind_syscall),
     (50, listen_syscall),

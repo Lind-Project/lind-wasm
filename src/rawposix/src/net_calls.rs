@@ -489,58 +489,6 @@ pub fn getsockname_syscall(
     ret
 }
 
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/recv.2.html
-///
-/// The Linux `recv()` syscall is used to receive a message from a connected socket.
-/// This implementation retrieves the virtual file descriptor and target buffer from the current cage,
-/// and performs the message receive operation using the specified flags.
-///
-/// ## Input:
-///     - cageid: current cageid
-///     - fd_arg: virtual file descriptor from which to receive data
-///     - buf_arg: pointer to the buffer in user memory to store received data
-///     - buflen_arg: size of the buffer to receive data into
-///     - flags_arg: flags controlling message reception behavior
-///
-/// ## Return:
-///     - On success: number of bytes received
-///     - On failure: a negative errno value indicating the syscall error
-pub fn recv_syscall(
-    cageid: u64,
-    fd_arg: u64,
-    fd_cageid: u64,
-    buf_arg: u64,
-    buf_cageid: u64,
-    buflen_arg: u64,
-    buflen_cageid: u64,
-    flags_arg: u64,
-    flags_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32{
-    let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
-    let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
-    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-
-    // would check when `secure` flag has been set during compilation, 
-    // no-op by default
-    if !(sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "recv_syscall", "Invalid Cage ID");
-    }
-
-    let ret = unsafe { libc::recv(fd, buf as *mut c_void, buflen, flags) as i32 };
-    if ret < 0 {
-        let errno = get_errno();
-        return handle_errno(errno, "recv");
-    }
-    ret
-}
-
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/sendto.2.html
 ///
 /// The Linux `sendto()` syscall is used to transmit a message to a specific address using a socket.
@@ -581,6 +529,11 @@ pub fn sendto_syscall(
     let sockaddr = sc_convert_addr_to_host(sockaddr_arg, sockaddr_cageid, cageid);
     let addrlen = sc_convert_sysarg_to_u32(addrlen_arg, addrlen_cageid, cageid);
 
+    // We do not need to explicitly handle the NULL case in `sendto`,
+    // because `convert_host_sockaddr` already returns `(ptr::null_mut(), 0)`
+    // when the caller provides no address. In addition, sendto does not
+    // modify the `sockaddr` passed in, so the pointer type does not need
+    // to be mutable.
     let (finalsockaddr, addrlen) = convert_host_sockaddr(sockaddr, sockaddr_cageid, cageid);
 
     let ret = unsafe {
