@@ -1511,10 +1511,8 @@ pub fn fsync_syscall(
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
     // convert_fd_to_host returns negative errno values on error
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EFAULT, "fsync", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "fsync", "Bad File Descriptor");
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "read");
     }
 
     let ret = unsafe { libc::fsync(kernel_fd) };
@@ -1571,11 +1569,9 @@ pub fn fdatasync_syscall(
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
-    // convert_fd_to_host returns negative errno values on error
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EFAULT, "fdatasync", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "fdatasync", "Bad File Descriptor");
+    // Return error 
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "read");
     }
 
     let ret = unsafe { libc::fdatasync(kernel_fd) };
@@ -1635,11 +1631,9 @@ pub fn fdatasync_syscall(
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
-    // convert_fd_to_host returns negative errno values on error
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EFAULT, "sync_file_range", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "sync_file_range", "Bad File Descriptor");
+    // Return error 
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "read");
     }
 
     let ret = unsafe {
@@ -1836,11 +1830,9 @@ pub fn readlinkat_syscall(
     } else {
         // Case 2: Specific directory fd
         let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
-        // convert_fd_to_host returns negative errno values on error
-        if kernel_fd == -(Errno::EINVAL as i32) {
-            return syscall_error(Errno::EFAULT, "readlinkat", "Invalid Cage ID");
-        } else if kernel_fd == -(Errno::EBADF as i32) {
-            return syscall_error(Errno::EBADF, "readlinkat", "Bad File Descriptor");
+        // Return error 
+        if kernel_fd < 0 {
+            return handle_errno(kernel_fd, "read");
         }
 
         // path is already converted by sc_convert_path_to_host
@@ -2041,11 +2033,9 @@ pub fn unlinkat_syscall(
     } else {
         // Case 2: Specific directory fd
         let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
-        // convert_fd_to_host returns negative errno values on error
-        if kernel_fd == -(Errno::EINVAL as i32) {
-            return syscall_error(Errno::EFAULT, "unlinkat", "Invalid Cage ID");
-        } else if kernel_fd == -(Errno::EBADF as i32) {
-            return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
+        // Return error 
+        if kernel_fd < 0 {
+            return handle_errno(kernel_fd, "read");
         }
 
         unsafe {
