@@ -1,22 +1,35 @@
-//! Interval timer implementation for `itimer` and `SIGALRM`
-//!
-//! This file emulates a per-Cage `ITIMER_REAL` that counts down wall-clock time and
-//! delivers `SIGALRM` when it expires. We chose to implement `itimer` / `SIGALRM` entirely 
-//! in user space rather than relying on the host kernel because of how our runtime manages 
-//! signals:
-//! Host timers (e.g., `setitimer`) deliver signals to host processes or threads. Our runtime, 
-//! however, models Cages as logical processes inside a Wasm environment. The kernel cannot 
-//! deliver a timer interrupt specifically to a Cage or its designated “main thread.” A 
-//! user-space timer gives us precise control over which Cage receives `SIGALRM`.
-//! All signal delivery in our system is mediated through the epoch-based mechanism.
-//! (See our online design doc for more details.)
+// Timer functions for Rust interface.
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 pub use std::time::Duration;
 pub use std::time::Instant;
+use std::time::SystemTime;
 
-use super::lind_send_signal;
 use sysdefs::constants::SIGALRM;
+
+use crate::signal::lind_send_signal;
+
+pub fn timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+// Create a new timer
+pub fn starttimer() -> Instant {
+    Instant::now()
+}
+
+// Return time since timer was started
+pub fn readtimer(now: Instant) -> Duration {
+    now.elapsed()
+}
+
+// Sleep function to sleep for specified duration
+pub fn sleep(dur: Duration) {
+    thread::sleep(dur);
+}
 
 #[derive(Debug)]
 struct _IntervalTimer {
@@ -99,7 +112,7 @@ impl IntervalTimer {
 
                     if remaining_seconds == Duration::ZERO {
                         // Sends a SIGALRM signal to the cage when the timer expires.
-                        // This struct/method is used exclusively by the setitimer and alarm syscall,
+                        // This struct/method is used exclusively by the setitimer syscall,
                         // which is expected to send a SIGALRM signal upon expiration.
                         lind_send_signal(guard.cageid, SIGALRM);
 
