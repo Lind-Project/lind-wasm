@@ -47,8 +47,20 @@ docs-serve:
 .PHONY: clean
 clean:
 	@echo "cleaning glibc artifacts"
+	# Remove only generated sysroot and intermediate .o files,
+	# but KEEP required objects used by subsequent builds.
 	$(RM) -r src/glibc/sysroot
-	@find src/glibc -type f -name '*.o' -exec rm -f {} +
+	@find src/glibc -type f -name '*.o' \
+	    ! -path 'src/glibc/csu/wasm32/wasi_thread_start.o' \
+	    ! -path 'src/glibc/target/lib/Mcrt1.o' \
+	    ! -path 'src/glibc/target/lib/Scrt1.o' \
+	    ! -path 'src/glibc/target/lib/crt1.o' \
+	    ! -path 'src/glibc/target/lib/crti.o' \
+	    ! -path 'src/glibc/target/lib/crtn.o' \
+	    ! -path 'src/glibc/target/lib/gcrt1.o' \
+	    ! -path 'src/glibc/target/lib/grcrt1.o' \
+	    ! -path 'src/glibc/target/lib/rcrt1.o' \
+	    -exec rm -f {} +
 	@echo "cargo clean (wasmtime)"
 	cargo clean --manifest-path src/wasmtime/Cargo.toml
 
