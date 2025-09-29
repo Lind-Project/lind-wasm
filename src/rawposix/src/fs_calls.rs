@@ -2423,3 +2423,78 @@ pub fn ioctl_syscall(
     }
     return ret;
 }
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/flock.2.html
+///
+/// `Flock()` syscall applies or removes an advisory lock on an open file. We first translate the virtual file descriptor to the
+/// corresponding kernel file descriptor, then convert the operation flags from cage memory before invoking
+/// the kernel's `libc::flock()` function.
+///
+/// ## Arguments:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_cageid: cage ID for vfd argument validation
+///     - op_arg: operation flags (LOCK_SH, LOCK_EX, LOCK_UN, optionally ORed with LOCK_NB)
+///     - op_cageid: cage ID for op argument validation
+///     - arg3, arg3_cageid: unused argument and its cage ID
+///     - arg4, arg4_cageid: unused argument and its cage ID
+///     - arg5, arg5_cageid: unused argument and its cage ID
+///     - arg6, arg6_cageid: unused argument and its cage ID
+///
+/// ## Returns:
+///     - 0 on success
+///     - -1 on error, with errno set to indicate the error (EBADF, EINTR, EINVAL, ENOLCK, EWOULDBLOCK)
+pub fn flock_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    op_arg: u64,
+    op_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    if kernel_fd == -(Errno::EINVAL as i32) {
+        return syscall_error(Errno::EINVAL, "flock", "Invalid Cage ID");
+    } else if kernel_fd == -(Errno::EBADF as i32) {
+        return syscall_error(Errno::EBADF, "flock", "Bad File Descriptor");
+    }
+
+    let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
+
+    // Validate unused arguments
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "flock_syscall");
+    }
+
+    // Validate operation flags
+    let valid_ops = libc::LOCK_SH | libc::LOCK_EX | libc::LOCK_UN | libc::LOCK_NB;
+    if op & !valid_ops != 0 {
+        return syscall_error(Errno::EINVAL, "flock", "Invalid operation flags");
+    }
+
+    // Ensure at least one primary operation is specified
+    let primary_ops = libc::LOCK_SH | libc::LOCK_EX | libc::LOCK_UN;
+    if op & primary_ops == 0 {
+        return syscall_error(Errno::EINVAL, "flock", "No primary operation specified");
+    }
+
+    let ret = unsafe { libc::flock(kernel_fd, op) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "flock");
+    }
+
+    ret
+}
