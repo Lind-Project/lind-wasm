@@ -11,7 +11,8 @@ use rawposix::fs_calls::{
     sbrk_syscall, unlink_syscall, write_syscall,
 };
 use rawposix::net_calls::{socket_syscall, connect_syscall, bind_syscall, listen_syscall, 
-    accept_syscall, setsockopt_syscall, shutdown_syscall, getsockname_syscall,
+    accept_syscall, setsockopt_syscall, recvfrom_syscall, sendto_syscall, gethostname_syscall, 
+    getsockopt_syscall, getpeername_syscall, socketpair_syscall, shutdown_syscall, getsockname_syscall, 
 };
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall,
@@ -48,7 +49,6 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (43, accept_syscall),
     (44, sendto_syscall),
     (45, recvfrom_syscall),
-    (47, recv_syscall),
     (48, shutdown_syscall),
     (49, bind_syscall),
     (50, listen_syscall),
