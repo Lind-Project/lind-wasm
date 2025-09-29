@@ -590,8 +590,8 @@ pub fn sendto_syscall(
 ///     - buf_arg: pointer to the buffer in user space to store received data
 ///     - buflen_arg: size of the buffer
 ///     - flag_arg: Flags controlling message reception behavior
-///     - nullity1_arg(src_addr): pointer to the source address structure or null
-///     - nullity2_arg(addrlen): pointer to the source address length or null
+///     - addr_arg(src_addr): pointer to the source address structure or null
+///     - addrlen_arg(addrlen): pointer to the source address length or null
 ///
 /// ## Return:
 ///     - On success: number of bytes received
@@ -606,10 +606,10 @@ pub fn recvfrom_syscall(
     buflen_cageid: u64,
     flag_arg: u64,
     flag_cageid: u64,
-    nullity1_arg: u64,
-    nullity1_cageid: u64,
-    nullity2_arg: u64,
-    nullity2_cageid: u64,
+    addr_arg: u64,
+    addr_cageid: u64,
+    addrlen_arg: u64,
+    addrlen_cageid: u64,
 ) -> i32{
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
@@ -617,13 +617,14 @@ pub fn recvfrom_syscall(
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
 
     // true means user passed NULL for that pointer
-    let nullity1 = sc_convert_arg_nullity(nullity1_arg, nullity1_cageid, cageid);
-    let nullity2 = sc_convert_arg_nullity(nullity2_arg,nullity2_cageid, cageid);
+    let addr_nullity = sc_convert_arg_nullity(addr_arg, addr_cageid, cageid);
+    let addrlen_nullity = sc_convert_arg_nullity(addrlen_arg,addrlen_cageid, cageid);
 
     // Case 1: both NULL → caller doesn’t want peer address
-    if nullity1 && nullity2 {
-        let (finalsockaddr, mut addrlen) = convert_host_sockaddr(ptr::null_mut(), nullity1_cageid, cageid);
-        let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, finalsockaddr, &mut addrlen as *mut u32) as i32 };
+    // In this case recvfrom() won’t write to addr/addrlen,  
+    // so we can pass null pointers directly to libc.
+    if addr_nullity && addrlen_nullity {
+        let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, ptr::null_mut(), ptr::null_mut()) as i32 };
 
         if ret < 0 {
             let errno = get_errno();
@@ -631,11 +632,13 @@ pub fn recvfrom_syscall(
         }
     }
     // Case 2: both non-NULL → caller wants src_addr + addrlen filled
-    else if !(nullity1 || nullity2) {
-        let mut newsockaddr = SockAddr::new_ipv4();
-        let ptr = &mut newsockaddr as *mut SockAddr as *mut u8;
-        let (finalsockaddr, mut addrlen) = convert_host_sockaddr(ptr, nullity1_cageid, cageid); 
-        let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, finalsockaddr, &mut addrlen as *mut u32) as i32 };
+    else if !(addr_nullity || addrlen_nullity) {
+        let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid) as *mut SockAddr; 
+
+        let mut src_storage: sockaddr_storage = unsafe {mem::zeroed()};
+        let mut src_len: socklen_t = unsafe { mem::size_of::<sockaddr_storage>() as socklen_t };
+        let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, &mut src_storage as *mut _ as *mut sockaddr,
+            &mut src_len as *mut socklen_t,) as i32 };
 
         if ret < 0 {
             let errno = get_errno();
@@ -644,11 +647,13 @@ pub fn recvfrom_syscall(
 
         // Copy peer address back to user’s src_addr / addrlen
         if ret >= 0 {
-            copy_out_sockaddr(
-                sc_convert_uaddr_to_host(nullity1_arg, nullity1_cageid, cageid),
-                sc_convert_uaddr_to_host(nullity2_arg, nullity2_cageid, cageid) as u64,
-                newsockaddr.sun_family,
-            );
+            unsafe {
+                copy_out_sockaddr(
+                    addr,
+                    src_len as *mut u32,
+                    &src_storage,
+                );
+            }
         }
     }
 
@@ -834,7 +839,7 @@ pub fn getpeername_syscall(
 ///     - type_arg: communication semantics (e.g., SOCK_STREAM)
 ///     - protocol_arg: protocol to be used
 ///     - virtual_socket_vector_arg: pointer to a `SockPair` structure in user space to receive the result
-///nullity1/2
+///
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
