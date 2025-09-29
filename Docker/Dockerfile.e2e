@@ -46,29 +46,43 @@ RUN apt-get update && \
         libxml2 \
         make \
         python3 \
+        python3-pip \
         sed \
+        wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Install clang
-ARG LLVM="llvmorg-16.0.4"
-ARG CLANG="clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
-# NOTE: We `curl | tar` in spite of Docker best practices to save cache layers
-RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz | \
-       tar -xvJ
-COPY src/glibc/wasi /${CLANG}/lib/clang/16/lib/wasi
+ARG LLVM="llvmorg-18.1.8"
+ARG CLANG="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
+
+# Add retries and robust protection to curl to prevent transient network issues
+# from causing Docker build failures.
+SHELL ["/bin/bash","-o","pipefail","-c"]
+
+RUN set -euo pipefail; \
+    url="https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz"; \
+    echo "Fetching $url"; \
+    curl -fL --retry 5 --retry-delay 3 "$url" | tar -xJ
+
+COPY src/glibc/wasi /${CLANG}/lib/clang/18/lib/wasi
 ENV PATH="/${CLANG}/bin:${PATH}"
 
+# --- Install libtinfo5 ---
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+
+
 # Install rust
-# NOTE: pinning known-to-work nightly-2025-06-01 (see #242)
+# --profile minimal tells rustup to install only the essentials for the toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain nightly-2025-06-01
+    sh -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 
 # Build wasmtime
 FROM base as build-wasmtime
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
-COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs Makefile .
+COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs Makefile rust-toolchain.toml .
 RUN make wasmtime
 
 
@@ -94,4 +108,9 @@ COPY --parents scripts tests tools skip_test_cases.txt Makefile .
 # and cache layers. This means they are not preserved in the resulting image.
 RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmtime/target \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
-    make test
+    make test && \
+    OUT_DIR=/ REPORT_PATH=/report.html make md_generation
+
+FROM scratch AS artifacts
+COPY --from=test /report.html /wasm-e2e-report.html
+COPY --from=test /e2e_comment.md /e2e_comment.md

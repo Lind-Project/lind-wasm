@@ -15,8 +15,8 @@ FROM ubuntu:22.04
 # --- Build arguments ---
 ARG USERNAME=lind
 ARG BRANCH_NAME=main
-ARG LLVM_VERSION="llvmorg-16.0.4"
-ARG CLANG_PACKAGE="clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04"
+ARG LLVM_VERSION="llvmorg-18.1.8"
+ARG CLANG_PACKAGE="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
 
 # --- System setup ---
 ENV DEBIAN_FRONTEND=noninteractive
@@ -54,13 +54,18 @@ RUN groupadd --gid 1000 ${USERNAME} && \
     useradd --uid 1000 --gid ${USERNAME} --create-home --shell /bin/bash ${USERNAME} && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
+# --- Install libtinfo5 as root ---
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+
 # --- Switch to user ASAP ---
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
 # --- Install Rust as user ---
+# --profile minimal tells rustup to install only the essentials for the toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain nightly-2025-06-01
+    sh -s -- -y --profile minimal
 
 # --- Clone the repo as user ---
 RUN git clone --branch "${BRANCH_NAME}" --single-branch https://github.com/Lind-Project/lind-wasm.git
@@ -78,7 +83,7 @@ RUN curl -sL https://github.com/llvm/llvm-project/releases/download/${LLVM_VERSI
 
 # --- Patch glibc wasi includes into clang dir and fix permissions ---
 RUN cp -r /home/${USERNAME}/lind-wasm/src/glibc/wasi \
-         /home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}/lib/clang/16/lib && \
+         /home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}/lib/clang/18/lib && \
     chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/
 
 # --- Back to user for everything else ---
