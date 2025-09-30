@@ -33,7 +33,7 @@ use wasmtime_lind_utils::LindCageManager;
 use wasmtime_lind_3i_vmctx::{insert_ctx, get_ctx, remove_ctx};
 
 use threei::threei::{make_syscall, threei_wasm_func};
-use rawposix::sys_calls::{lindrustinit, lindrustfinalize};
+use rawposix::sys_calls::{rawposix_start, rawposix_shutdown};
 use wasmtime::Caller;
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
@@ -201,7 +201,7 @@ impl RunCommand {
         }
 
         // Initialize Lind here
-        lindrustinit(0);
+        rawposix_start(0);
         // new cage is created
         lind_manager.increment();
 
@@ -277,7 +277,7 @@ impl RunCommand {
                 // we wait until all other cage exits
                 lind_manager.wait();
                 // after all cage exits, finalize the lind
-                lindrustfinalize();
+                rawposix_shutdown();
             }
             Err(e) => {
                 // Exit the process if Wasmtime understands the error;
