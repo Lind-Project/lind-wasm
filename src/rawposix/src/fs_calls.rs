@@ -7,8 +7,9 @@ use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
-use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
+use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, check_addr};
 use fdtables;
+use std::path::PathBuf;
 use typemap::filesystem_helpers::{convert_statdata_to_user, convert_fstatdata_to_user};
 use std::sync::Arc;
 
@@ -77,14 +78,14 @@ pub fn open_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "open", "Invalide Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "open_syscall");
     }
 
     // Get the kernel fd first
     let kernel_fd = unsafe { libc::open(path.as_ptr(), oflag, mode) };
 
     if kernel_fd < 0 {
-        return handle_errno(get_errno(), "open");
+        return handle_errno(get_errno(), "open_syscall");
     }
 
     // Check if `O_CLOEXEC` has been est
@@ -98,7 +99,7 @@ pub fn open_syscall(
         should_cloexec,
         0,
     ) {
-        Ok(virtual_fd) => virtual_fd as i32,
+        Ok(vfd) => vfd as i32,
         Err(_) => syscall_error(Errno::EMFILE, "open_syscall", "Too many files opened"),
     }
 }
@@ -115,6 +116,10 @@ pub fn open_syscall(
 ///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment.
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective).
 ///     - count_arg: the maximum number of bytes to read from the file descriptor.
+///
+/// ## Returns:
+///     - On success, the number of bytes read is returned (zero indicates end of file).
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn read_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -132,29 +137,19 @@ pub fn read_syscall(
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    
-    // Return error 
+    // Return error
     if kernel_fd < 0 {
         return handle_errno(kernel_fd, "read");
     }
 
     // Convert the user buffer and count.
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
-    if buf.is_null() {
-        return syscall_error(Errno::EFAULT, "read", "Buffer is null");
-    }
-
     let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
 
     if !(sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
-    }
-
-    // Early return if count is zero.
-    if count == 0 {
-        return 0;
+        panic!("{}: unused arguments contain unexpected values -- security violation", "read_syscall");
     }
 
     // Call the underlying libc read.
@@ -177,6 +172,10 @@ pub fn read_syscall(
 ///     - cageid: current cage identifier.
 ///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment to be closed.
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error (EBADF, EINTR, EIO).
 pub fn close_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -197,7 +196,7 @@ pub fn close_syscall(
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "close_syscall");
     }
 
     match fdtables::close_virtualfd(cageid, vfd_arg) {
@@ -214,25 +213,75 @@ pub fn close_syscall(
     }
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/futex.2.html
+///
+/// The Linux `futex()` syscall provides a mechanism for fast user-space locking. It allows a process or thread
+/// to wait for or wake another process or thread on a shared memory location without invoking heavy kernel-side
+/// synchronization primitives unless contention arises. This implementation wraps the futex syscall, allowing
+/// direct invocation with the relevant arguments passed from the current cage context.
+///
+/// Input:
+///     - cageid: current cageid
+///     - uaddr_arg: pointer to the futex word in user memory
+///     - futex_op_arg: operation code indicating futex command type
+///     - val_arg: value expected at uaddr or the number of threads to wake
+///     - val2_arg: timeout or other auxiliary parameter depending on operation
+///     - uaddr2_arg: second address used for requeueing operations
+///     - val3_arg: additional value for some futex operations
+///
+/// ## Returns:
+///     - On success: 0 or number of woken threads depending on futex operation
+///     - On failure: a negative errno value indicating the syscall error
+pub fn futex_syscall(
+    cageid: u64,
+    uaddr_arg: u64,
+    uaddr_cageid: u64,
+    futex_op_arg: u64,
+    futex_op_cageid: u64,
+    val_arg: u64,
+    val_cageid: u64,
+    val2_arg: u64,
+    val2_cageid: u64,
+    uaddr2_arg: u64,
+    uaddr2_cageid: u64,
+    val3_arg: u64,
+    val3_cageid: u64,
+) -> i32{
+    let uaddr = sc_convert_uaddr_to_host(uaddr_arg, uaddr_cageid, cageid);
+    let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
+    let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
+    let val2 = sc_convert_sysarg_to_u32(val2_arg, val2_cageid, cageid);
+    let uaddr2 = sc_convert_sysarg_to_u32(uaddr2_arg, uaddr2_cageid, cageid);
+    let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
+
+    let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3)  as i32 };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "futex");
+    }
+    ret
+}
+
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/write.2.html
 ///
 /// Linux `write()` syscall attempts to write `count` bytes from the buffer pointed to by `buf` to the file associated
 /// with the open file descriptor, `fd`. RawPOSIX first converts virtual fd to kernel fd due to the `fdtable` subsystem, second
 /// translates the `buf_arg` pointer to actual system pointer
 ///
-/// ## Input:
+/// Input:
 ///     - cageid: current cageid
-///     - virtual_fd: virtual file descriptor, needs to be translated kernel fd for future kernel operation
+///     - vfd_arg: virtual file descriptor, needs to be translated kernel fd for future kernel operation
 ///     - buf_arg: pointer points to a buffer that stores the data
 ///     - count_arg: length of the buffer
 ///
-/// Output:
+/// ## Returns:
 ///     - Upon successful completion of this call, we return the number of bytes written. This number will never be greater
 ///         than `count`. The value returned may be less than `count` if the write_syscall() was interrupted by a signal, or
 ///         if the file is a pipe or FIFO or special file and has fewer than `count` bytes immediately available for writing.
 pub fn write_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -245,12 +294,10 @@ pub fn write_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let kernel_fd = convert_fd_to_host(virtual_fd, vfd_cageid, cageid);
-
-    if kernel_fd == -1 {
-        return syscall_error(Errno::EFAULT, "write", "Invalid Cage ID");
-    } else if kernel_fd == -9 {
-        return syscall_error(Errno::EBADF, "write", "Bad File Descriptor");
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "write");
     }
 
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
@@ -260,12 +307,7 @@ pub fn write_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "write", "Invalide Cage ID");
-    }
-
-    // Early return
-    if count == 0 {
-        return 0;
+        panic!("{}: unused arguments contain unexpected values -- security violation", "write_syscall");
     }
 
     let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
@@ -317,7 +359,7 @@ pub fn mkdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "mkdir", "Invalide Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "mkdir_syscall");
     }
 
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
@@ -363,7 +405,7 @@ pub fn pipe_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "pipe_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "pipe_syscall");
     }
 
     // Convert the u64 pointer into a mutable reference to PipeArray
@@ -478,7 +520,7 @@ pub fn pipe2_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "pipe2_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "pipe2_syscall");
     }
     // Convert the u64 pointer into a mutable reference to PipeArray
     let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
@@ -580,7 +622,7 @@ pub fn mmap_syscall(
     prot_cageid: u64,
     flags_arg: u64,
     flags_cageid: u64,
-    virtual_fd_arg: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     off_arg: u64,
     off_cageid: u64,
@@ -589,7 +631,7 @@ pub fn mmap_syscall(
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-    let mut fildes = convert_fd_to_host(virtual_fd_arg, vfd_cageid, cageid);
+    let mut fildes = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
     let cage = get_cage(cageid).unwrap();
@@ -749,11 +791,11 @@ pub fn mmap_inner(
     len: usize,
     prot: i32,
     flags: i32,
-    virtual_fd: i32,
+    vfd_arg: i32,
     off: i64,
 ) -> usize {
-    if virtual_fd != -1 {
-        match fdtables::translate_virtual_fd(cageid, virtual_fd as u64) {
+    if vfd_arg != -1 {
+        match fdtables::translate_virtual_fd(cageid, vfd_arg as u64) {
             Ok(kernel_fd) => {
                 let ret = unsafe {
                     libc::mmap(
@@ -803,8 +845,9 @@ pub fn mmap_inner(
 /// * `addr` - Starting address of the region to unmap
 /// * `length` - Length of the region to unmap
 ///
-/// # Returns
-/// * `i32` - 0 for success and -1 for failure
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn munmap_syscall(
     cageid: u64,
     addr_arg: u64,
@@ -828,7 +871,7 @@ pub fn munmap_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "munmap", "Invalide Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "munmap_syscall");
     }
 
     if len == 0 {
@@ -889,9 +932,9 @@ pub fn munmap_syscall(
 /// * `cageid` - Identifier of the cage that initiated the `brk` syscall.
 /// * `brk` - The new program break address.
 ///
-/// # Returns
-/// * `u32` - Returns `0` on success or `-1` on failure.
-///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn brk_syscall(
     cageid: u64,
     brk_arg: u64,
@@ -915,7 +958,7 @@ pub fn brk_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "brk", "Invalide Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "brk_syscall");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -1008,8 +1051,9 @@ pub fn brk_syscall(
 /// * `cageid` - Identifier of the cage that initiated the `sbrk` syscall.
 /// * `brk` - Increment to adjust the program break, which can be negative.
 ///
-/// # Returns
-/// * `u32` - Result of the `sbrk` operation. Refer to `man sbrk` for details.
+/// ## Returns:
+///     - On success, returns the previous program break.
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn sbrk_syscall(
     cageid: u64,
     sbrk_arg: u64,
@@ -1033,7 +1077,7 @@ pub fn sbrk_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "sbrk_syscall", "Invalide Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "sbrk_syscall");
     }
 
     let cage = get_cage(sbrk_cageid).unwrap();
@@ -1092,7 +1136,7 @@ pub fn sbrk_syscall(
 ///
 /// ## Arguments
 /// cageid: cage ID associate with virtual file descriptor
-/// virtual_fd: virtual file descriptor
+/// vfd_arg: virtual file descriptor
 ///
 /// ## Return Type
 /// On success:
@@ -1104,12 +1148,12 @@ pub fn sbrk_syscall(
 ///
 /// On error:
 /// Return error num EBADF(Bad File Descriptor)
-pub fn _fcntl_helper(cageid: u64, virtual_fd: u64) -> Result<fdtables::FDTableEntry, Errno> {
-    if virtual_fd > MAXFD as u64 {
+pub fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry, Errno> {
+    if vfd_arg > MAXFD as u64 {
         return Err(Errno::EBADF);
     }
     // Get underlying kernel fd
-    let wrappedvfd = fdtables::translate_virtual_fd(cageid, virtual_fd);
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
     if wrappedvfd.is_err() {
         return Err(Errno::EBADF);
     }
@@ -1134,29 +1178,27 @@ pub fn _fcntl_helper(cageid: u64, virtual_fd: u64) -> Result<fdtables::FDTableEn
 /// kernel fd, they are redirected to the kernel `fcntl` syscall.
 ///
 /// ## Arguments
-/// virtual_fd: virtual file descriptor
+/// vfd_arg: virtual file descriptor
 /// cmd: The operation
 /// arg: an optional third argument.  Whether or not this argument is required is determined by op.  
 ///
-/// ## Return Type
-/// The return value is related to the operation determined by `cmd` argument.
-///
-/// For a successful call, the return value depends on the operation:
-/// `F_DUPFD`: The new file descriptor.
-/// `F_GETFD`: Value of file descriptor flags.
-/// `F_GETFL`: Value of file status flags.
-/// `F_GETLEASE`: Type of lease held on file descriptor.
-/// `F_GETOWN`: Value of file descriptor owner.
-/// `F_GETSIG`: Value of signal sent when read or write becomes possible, or zero for traditional SIGIO behavior.
-/// `F_GETPIPE_SZ`, `F_SETPIPE_SZ`: The pipe capacity.
-/// `F_GET_SEALS`: A bit mask identifying the seals that have been set for the inode referred to by fd.
-/// All other commands: Zero.
-/// On error, -1 is returned
+/// ## Returns:
+///     - For a successful call, the return value depends on the operation:
+///       - `F_DUPFD`: The new file descriptor.
+///       - `F_GETFD`: Value of file descriptor flags.
+///       - `F_GETFL`: Value of file status flags.
+///       - `F_GETLEASE`: Type of lease held on file descriptor.
+///       - `F_GETOWN`: Value of file descriptor owner.
+///       - `F_GETSIG`: Value of signal sent when read or write becomes possible, or zero for traditional SIGIO behavior.
+///       - `F_GETPIPE_SZ`, `F_SETPIPE_SZ`: The pipe capacity.
+///       - `F_GET_SEALS`: A bit mask identifying the seals that have been set for the inode referred to by fd.
+///       - All other commands: Zero.
+///     - On error, -1 is returned and errno is set to indicate the error.
 ///
 /// TODO: `F_GETOWN`, `F_SETOWN`, `F_GETOWN_EX`, `F_SETOWN_EX`, `F_GETSIG`, and `F_SETSIG` are used to manage I/O availability signals.
 pub fn fcntl_syscall(
     cageid: u64,
-    virtual_fd: u64,
+    vfd_arg: u64,
     vfd_cageid: u64,
     cmd_arg: u64,
     cmd_cageid: u64,
@@ -1176,17 +1218,17 @@ pub fn fcntl_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "fcntl_syscall", "Invalide Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "fcntl_syscall");
     }
 
     match (cmd, arg) {
-        // Duplicate the file descriptor `virtual_fd` using the lowest-numbered
+        // Duplicate the file descriptor `vfd_arg` using the lowest-numbered
         // available file descriptor greater than or equal to `arg`. The operation here
         // is quite similar to `dup_syscall`, for specific operation explanation, see
         // comments on `dup_syscall`.
         (F_DUPFD, arg) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1207,7 +1249,7 @@ pub fn fcntl_syscall(
         // for the duplicate file descriptor.
         (F_DUPFD_CLOEXEC, arg) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1228,7 +1270,7 @@ pub fn fcntl_syscall(
         // Return (as the function result) the file descriptor flags.
         (F_GETFD, ..) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1237,7 +1279,7 @@ pub fn fcntl_syscall(
         // Set the file descriptor flags to the value specified by arg.
         (F_SETFD, arg) => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -1249,7 +1291,7 @@ pub fn fcntl_syscall(
             }
             // Set virtual fd flag
             let cloexec_flag: bool = arg != 0;
-            match fdtables::set_cloexec(cageid, virtual_fd as u64, cloexec_flag) {
+            match fdtables::set_cloexec(cageid, vfd_arg as u64, cloexec_flag) {
                 Ok(_) => return 0,
                 Err(_e) => return syscall_error(Errno::EBADF, "fcntl", "Bad File Descriptor"),
             }
@@ -1259,7 +1301,7 @@ pub fn fcntl_syscall(
         (F_SETOWN, arg) if arg >= 0 => 0,
         _ => {
             // Get fdtable entry
-            let vfd = match _fcntl_helper(cageid, virtual_fd) {
+            let vfd = match _fcntl_helper(cageid, vfd_arg) {
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
@@ -2100,5 +2142,1401 @@ pub fn access_syscall(
         let errno = get_errno();
         return handle_errno(errno, "access");
     }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/clock_gettime.2.html
+///
+/// `clock_gettime_syscall` retrieves the time of the specified clock and
+/// stores it in a user-provided `timespec` structure.  
+///
+/// ## Implementation Details:
+/// - The `clockid` argument is converted from the Cage's virtual argument
+///   into a host `u32`.
+/// - The `tp` pointer (destination for the `timespec` result) is translated
+///   from Wasm linear memory into a host address via `sc_convert_addr_to_host`.
+/// - Unused arguments `arg3`–`arg6` are validated with `sc_unusedarg`.
+/// - The underlying `SYS_clock_gettime` syscall is invoked directly with the
+///   converted arguments.
+/// - On error, `errno` is retrieved with `get_errno()` and normalized through
+///   `handle_errno()`.
+///
+/// ## Arguments:
+/// - `cageid`: Identifier of the calling Cage
+/// - `clockid_arg`: The clock to be queried (e.g., `CLOCK_REALTIME`)
+/// - `tp_arg`: Address of the user buffer for the result `timespec`
+/// - `arg3`–`arg6`: Reserved, must be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on failure, with errno set appropriately.
+pub fn clock_gettime_syscall(
+    cageid: u64,
+    clockid_arg: u64,
+    clockid_cageid: u64,
+    tp_arg: u64,
+    tp_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
+    let tp = sc_convert_addr_to_host(tp_arg, tp_cageid, cageid);
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "clock_gettime_syscall");
+    }
+
+    let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "clock_gettime");
+    }
+
+    ret
+}
+
+/// Linux Reference: https://man7.org/linux/man-pages/man2/dup.2.html
+///
+/// Since the two file descriptors refer to the same open file description, they share file offset
+/// and file status flags. Then, in RawPOSIX, we mapped duplicated file descriptor to same underlying
+/// kernel fd.
+///
+/// ## Arguments:
+/// - `virtual_fd`: virtual file descriptor
+///
+/// ## Returns:
+///     - On success, the new file descriptor is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
+pub fn dup_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "dup_syscall");
+    }
+
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg as u64);
+    if wrappedvfd.is_err() {
+        return syscall_error(Errno::EBADF, "dup", "Bad File Descriptor");
+    }
+    let vfd = wrappedvfd.unwrap();
+    let ret_kernelfd = unsafe { libc::dup(vfd.underfd as i32) };
+    let ret_vfd =
+        fdtables::get_unused_virtual_fd(cageid, vfd.fdkind, ret_kernelfd as u64, false, 0).unwrap();
+    return ret_vfd as i32;
+}
+
+/// dup2() performs the same task as dup(), so we utilize dup() here and mapping underlying kernel
+/// fd with specific `new_virutalfd`
+///
+/// ## Arguments:
+/// - `old_virtualfd`: original virtual file descriptor
+/// - `new_virtualfd`: specified new virtual file descriptor
+///
+/// ## Returns:
+///     - On success, returns the new file descriptor.
+///     - On error, -1 is returned and errno is set to indicate the error.
+pub fn dup2_syscall(
+    cageid: u64,
+    old_vfd_arg: u64,
+    old_vfd_cageid: u64,
+    new_vfd_arg: u64,
+    new_vfd_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "dup2_syscall");
+    }
+
+    // Validate both virtual fds
+    if old_vfd_arg < MAXFD as u64 || new_vfd_arg < MAXFD as u64 {
+        return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
+    } else if old_vfd_arg == new_vfd_arg {
+        // Does nothing
+        return new_vfd_arg as i32;
+    }
+
+    // If the file descriptor newfd was previously open, it is closed before being reused; the
+    // close is performed silently (i.e., any errors during the close are not reported by dup2()).
+    // This step is handled inside `fdtables`
+    match fdtables::translate_virtual_fd(cageid, old_vfd_arg) {
+        Ok(old_vfd) => {
+            // Request another virtual fd to refer to same underlying kernel fd as `virtual_fd`
+            // from input.
+            // The two file descriptors do not share file descriptor flags (the
+            // close-on-exec flag).  The close-on-exec flag (FD_CLOEXEC; see fcntl_syscall())
+            // for the duplicate descriptor is off
+            let _ = fdtables::get_specific_virtual_fd(
+                cageid,
+                new_vfd_arg,
+                old_vfd.fdkind,
+                old_vfd.underfd,
+                false,
+                old_vfd.perfdinfo,
+            )
+            .unwrap();
+
+            return new_vfd_arg as i32;
+        }
+        Err(_e) => {
+            return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
+        }
+    }
+}
+
+/// dup3() duplicates `old_virtualfd` to `new_virtualfd`, similar to dup2(),
+/// but requires the two descriptors to differ and allows setting FD_CLOEXEC via `flags`.
+/// It first calls `dup2_syscall` to copy the file descriptor, then sets the close-on-exec flag if requested.
+
+/// ## Arguments:
+/// - `old_virtualfd`: source virtual file descriptor
+/// - `new_virtualfd`: target virtual file descriptor
+/// - `flags`: must be 0 or O_CLOEXEC
+///
+/// ## Returns:
+///     - On success, returns the new file descriptor.
+///     - On error, -1 is returned and errno is set to indicate the error (EBADF or EINVAL).
+pub fn dup3_syscall(
+    cageid: u64,
+    old_vfd_arg: u64,
+    old_vfd_cageid: u64,
+    new_vfd_arg: u64,
+    new_vfd_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "dup3_syscall");
+    }
+
+    if old_vfd_arg < MAXFD as u64 || new_vfd_arg < MAXFD as u64 {
+        return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
+    }
+
+    if old_vfd_arg == new_vfd_arg {
+        return syscall_error(Errno::EINVAL, "dup3", "oldfd and newfd must be different");
+    }
+
+    if flags != 0 && flags != O_CLOEXEC {
+        return syscall_error(Errno::EINVAL, "dup3", "Invalid flags");
+    }
+
+    let ret = dup2_syscall(cageid, old_vfd_arg, old_vfd_cageid, new_vfd_arg, new_vfd_cageid, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID);
+    if ret < 0 {
+        return ret;
+    }
+
+    if flags == O_CLOEXEC {
+        let _ = fdtables::set_cloexec(cageid, new_vfd_arg, true);
+    }
+
+    return new_vfd_arg as i32;
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/fchdir.2.html
+///
+/// Linux `fchdir()` syscall changes the current working directory of the calling process to the
+/// directory referred to by the open file descriptor `fd`. Since we implement a file descriptor
+/// management subsystem (called `fdtables`), we first translate the virtual file descriptor to the
+/// corresponding kernel file descriptor before invoking the kernel's `libc::fchdir()` function.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment referring to a directory
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
+pub fn fchdir_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "fchdir");
+    }
+
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "fchdir_syscall");
+    }
+
+    let ret = unsafe { libc::fchdir(kernel_fd) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "fchdir");
+    }
+
+    // Update the cage's current working directory
+    // We need to get the current working directory from the kernel to update the cage
+    let mut cwd_buf = [0u8; PATH_MAX as usize];
+    let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut i8, cwd_buf.len()) };
+    if !cwd_ptr.is_null() {
+        if let Some(cage) = get_cage(cageid) {
+            let host_path = unsafe { std::ffi::CStr::from_ptr(cwd_ptr) }.to_string_lossy();
+            let user_path = strip_lind_root(&host_path);
+            let mut cwd = cage.cwd.write();
+            *cwd = Arc::new(user_path);
+        }
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/writev.2.html
+///
+/// Linux `writev()` syscall performs scatter-gather output by writing data from multiple buffers
+/// to a file descriptor in a single operation. Since we implement a file descriptor management
+/// subsystem (called `fdtables`), we first translate the virtual file descriptor to the corresponding
+/// kernel file descriptor, then translate the iovec array pointer from cage virtual memory to host
+/// memory before invoking the kernel's `libc::writev()` function.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - iov_arg: pointer to an array of iovec structures describing the buffers (user's perspective)
+///     - iovcnt_arg: number of iovec structures in the array
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the number of bytes written is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
+pub fn writev_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    iov_arg: u64,
+    iov_cageid: u64,
+    iovcnt_arg: u64,
+    iovcnt_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "writev");
+    }
+
+    let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
+    let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "writev");
+    }
+
+    let ret = unsafe {
+        libc::writev(
+            kernel_fd,
+            iov_ptr as *const libc::iovec,
+            iovcnt,
+        ) as i32
+    };
+    if ret < 0 {
+        return handle_errno(get_errno(), "writev");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/fstat.2.html
+///
+/// Linux `fstat()` syscall retrieves information about the file referred to by the open file descriptor `fd`.
+/// Since we implement a file descriptor management subsystem (called `fdtables`), we first translate the virtual
+/// file descriptor to the corresponding kernel file descriptor, then call the kernel's `libc::fstat()` function.
+/// The returned stat structure is converted to our ABI-stable StatData format and copied to the user's buffer.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - stat_arg: pointer to a stat structure where the file information will be stored (user's perspective)
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
+pub fn fstat_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    statbuf_arg: u64,
+    statbuf_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "fstat");
+    }
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "fstat_syscall");
+    }
+
+    // 1) Call host fstat into a local host variable
+    let mut host_stat: libc::stat = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::fstat(kernel_fd, &mut host_stat as *mut libc::stat) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "fstat");
+    }
+
+    // 2) Validate guest buffer range and writability
+    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
+         // 3) Populate StatData directly
+        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, host_stat),
+        Err(e) => return syscall_error(e, "fstat", "Bad address"),
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/ftruncate.2.html
+///
+/// Linux `ftruncate()` syscall truncates the file referred to by the file descriptor `fd` to be at most
+/// `length` bytes in size. Since we implement a file descriptor management subsystem (called `fdtables`),
+/// we first translate the virtual file descriptor to the corresponding kernel file descriptor, then convert
+/// the length argument from u64 to i64 type before invoking the kernel's `libc::ftruncate()` function.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - length_arg: the desired length in bytes for the file truncation
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
+pub fn ftruncate_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    length_arg: u64,
+    length_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "ftruncate");
+    }
+
+    let length = sc_convert_sysarg_to_i64(length_arg, length_cageid, cageid);
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "ftruncate_syscall");
+    }
+
+    let ret = unsafe { libc::ftruncate(kernel_fd, length) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "ftruncate");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/fstatfs.2.html
+///
+/// Linux `fstatfs()` syscall returns information about a mounted filesystem referred to by the open file
+/// descriptor `fd`. Since we implement a file descriptor management subsystem (called `fdtables`), we first
+/// translate the virtual file descriptor to the corresponding kernel file descriptor, then call the kernel's
+/// `libc::fstatfs()` function. The returned statfs structure is converted to our ABI-stable FSData format
+/// and copied to the user's buffer.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - statfs_arg: pointer to a statfs structure where the filesystem information will be stored (user's perspective)
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
+pub fn fstatfs_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    statfs_arg: u64,
+    statfs_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "fstatfs");
+    }
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "fstatfs_syscall");
+    }
+
+    // 1) Call host fstatfs into a local host variable
+    let mut host_statfs: libc::statfs = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::fstatfs(kernel_fd, &mut host_statfs) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "fstatfs");
+    }
+
+    // 2) Validate guest buffer range and writability
+    match sc_convert_addr_to_fstatdata(statfs_arg, statfs_cageid, cageid) {
+         // 3) Populate StatData directly
+        Ok(statbuf_addr) => convert_fstatdata_to_user(statbuf_addr, host_statfs),
+        Err(e) => return syscall_error(e, "fstatfs", "Bad address"),
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getdents64.2.html
+///
+/// Linux `getdents()` syscall reads several directory entries from the directory referred to by the open file
+/// descriptor `fd` into the buffer pointed to by `dirp`. Since we implement a file descriptor management
+/// subsystem (called `fdtables`), we first translate the virtual file descriptor to the corresponding kernel
+/// file descriptor, then call the kernel's `getdents64` syscall directly to retrieve directory entries.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment referring to a directory
+///     - dirp_arg: pointer to a buffer where the directory entries will be stored (user's perspective)
+///     - count_arg: size of the buffer pointed to by dirp
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the number of bytes read is returned.
+///     - On end of directory, 0 is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
+pub fn getdents_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    dirp_arg: u64,
+    dirp_cageid: u64,
+    count_arg: u64,
+    count_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "getdents");
+    }
+
+    let dirp = sc_convert_buf(dirp_arg, dirp_cageid, cageid);
+    let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "getdents_syscall");
+    }
+
+    let ret = unsafe { libc::syscall(libc::SYS_getdents64 as libc::c_long, kernel_fd, dirp, count) };
+
+    ret as i32
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/lseek.2.html
+///
+/// Linux `lseek()` syscall repositions the file offset of the open file description associated with the file
+/// descriptor `fd` to the argument `offset` according to the directive `whence`. Since we implement a file
+/// descriptor management subsystem (called `fdtables`), we first translate the virtual file descriptor to the
+/// corresponding kernel file descriptor, then convert the offset and whence parameters from cage memory before
+/// invoking the kernel's `libc::lseek()` function.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - offset_arg: the new offset according to the directive whence
+///     - whence_arg: how to interpret the offset (SEEK_SET, SEEK_CUR, or SEEK_END)
+///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the resulting offset location as measured in bytes from the beginning of the file is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
+pub fn lseek_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    whence_arg: u64,
+    whence_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "lseek");
+    }
+
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+    let whence = sc_convert_sysarg_to_i32(whence_arg, whence_cageid, cageid);
+
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "lseek_syscall");
+    }
+
+    let ret = unsafe { libc::lseek(kernel_fd, offset, whence) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "lseek");
+    }
+
+    ret as i32
+}
+
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/pread.2.html
+///
+/// Linux `pread()` syscall reads up to `count` bytes from the file descriptor `fd` at the
+/// given `offset` without changing the file offset. Since we implement a file descriptor management
+/// subsystem (called `fdtables`), we first translate the virtual file descriptor to the corresponding
+/// kernel file descriptor, then convert the buffer and offset from cage memory before invoking the
+/// kernel's `libc::pread()` function.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective)
+///     - count_arg: the maximum number of bytes to read from the file descriptor
+///     - offset_arg: file offset at which the input/output operation takes place
+///     - arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the number of bytes read is returned (zero indicates end of file).
+///     - On error, -1 is returned and errno is set to indicate the error.
+pub fn pread_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    count_arg: u64,
+    count_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "pread");
+    }
+
+    let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
+    let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "pread_syscall");
+    }
+
+    let ret = unsafe { libc::pread(kernel_fd, buf as *mut c_void, count, offset) as i32 };
+        if ret < 0 {
+            let errno = get_errno();
+        return handle_errno(errno, "pread");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/pwrite.2.html
+///
+/// Linux `pwrite()` syscall writes up to `count` bytes from the buffer pointed to by `buf` to the file
+/// associated with the open file descriptor, `fd`, starting at the given `offset` without changing the
+/// file offset. Since we implement a file descriptor management subsystem (called `fdtables`), we first
+/// translate the virtual file descriptor to the corresponding kernel file descriptor, then convert the
+/// buffer, count, and offset from cage memory before invoking the kernel's `libc::pwrite()` function.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - buf_arg: pointer to a buffer that stores the data to be written (user's perspective)
+///     - count_arg: the maximum number of bytes to write to the file descriptor
+///     - offset_arg: file offset at which the input/output operation takes place
+///     - arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the number of bytes written is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
+pub fn pwrite_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    count_arg: u64,
+    count_cageid: u64,
+    offset_arg: u64,
+    offset_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "pwrite");
+    }
+
+    let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
+    let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
+    let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
+
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "pwrite_syscall");
+    }
+
+    let ret = unsafe { libc::pwrite(kernel_fd, buf as *const c_void, count, offset) as i32 };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "pwrite");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/chdir.2.html
+///
+/// Linux `chdir()` syscall changes the current working directory of the calling process to the directory
+/// specified by path. Since path seen by user is different from actual path on host, we need to convert
+/// the path first. RawPOSIX also updates the cage's current working directory in the cage structure after
+/// successfully changing the directory, ensuring cage isolation is maintained.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - path_arg: pointer to a pathname naming the directory (user's perspective)
+///     - path_cageid: cage identifier for the path argument
+///     - arg2, arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
+pub fn chdir_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "chdir_syscall");
+    }
+
+    // Call the kernel chdir function
+    let ret = unsafe { libc::chdir(path.as_ptr()) };
+    
+    // Error handling
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "chdir");
+    }
+
+    // Update the cage's current working directory
+    if let Some(cage) = get_cage(cageid) {
+        let host_path = path.to_string_lossy();
+        let user_path = strip_lind_root(&host_path);
+        let mut cwd = cage.cwd.write();
+        *cwd = Arc::new(user_path);
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/rmdir.2.html
+///
+/// Linux `rmdir()` syscall removes a directory, which must be empty. Since path seen by user is different
+/// from actual path on host, we need to convert the path first. RawPOSIX doesn't have any other operations,
+/// so all operations will be handled by host. RawPOSIX does error handling for this syscall.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - path_arg: pointer to a pathname naming the directory to be removed (user's perspective)
+///     - path_cageid: cage identifier for the path argument
+///     - arg2, arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
+pub fn rmdir_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "rmdir_syscall");
+    }
+
+    // Call the kernel rmdir function
+    let ret = unsafe { libc::rmdir(path.as_ptr()) };
+    
+    // Error handling
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "rmdir");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/chmod.2.html
+///
+/// Linux `chmod()` syscall changes the permissions of a file. Since path seen by user is different from
+/// actual path on host, we need to convert the path first. The mode argument specifies the permissions
+/// to be assigned to the file and is passed directly to the kernel after type conversion.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - path_arg: pointer to a pathname naming the file (user's perspective)
+///     - path_cageid: cage identifier for the path argument
+///     - mode_arg: the new file permissions (user's perspective)
+///     - mode_cageid: cage identifier for the mode argument
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
+pub fn chmod_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    mode_arg: u64,
+    mode_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
+    
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "chmod_syscall");
+    }
+
+    // Call the kernel chmod function
+    let ret = unsafe { libc::chmod(path.as_ptr(), mode) };
+    
+    // Error handling
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "chmod");
+    }
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/fchmod.2.html
+///
+/// Linux `fchmod()` syscall changes the permissions of an open file referred to by file descriptor `fd`.
+/// Since we implement a file descriptor management subsystem (called `fdtables`), we first translate the
+/// virtual file descriptor to the corresponding kernel file descriptor, then convert the mode from cage
+/// memory before invoking the kernel's `libc::fchmod()` function.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - mode_arg: the new file permissions to be applied to the file
+///     - mode_cageid: cage identifier for the mode argument
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
+pub fn fchmod_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    mode_arg: u64,
+    mode_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "fchmod");
+    }
+
+    let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "fchmod_syscall");
+    }
+
+    let ret = unsafe { libc::fchmod(kernel_fd, mode) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "fchmod");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getcwd.2.html
+///
+/// `getcwd_syscall` retrieves the current working directory for the calling Cage.
+/// 
+/// Unlike directly calling `libc::getcwd`, this implementation uses the Cage's
+/// own `cwd` field maintained inside the Cage struct. Each Cage has its own
+/// logical working directory, which may differ from the host kernel's notion
+/// of the filesystem root. Because of this mismatch between the Cage's root
+/// and the kernel root, we cannot delegate to `libc::getcwd` and must instead
+/// return the Cage-specific `cwd` value.
+///
+/// ## Input:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - buf_arg: pointer to a buffer where the current working directory path will be stored (user's perspective)
+///     - size_arg: the size of the buffer in bytes
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, returns 0 after copying the current working directory path to the buffer.
+///     - On error, returns -1 and errno is set to indicate the error.
+pub fn getcwd_syscall(
+    cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    size_arg: u64,
+    size_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    if buf.is_null() {
+        return syscall_error(Errno::EFAULT, "getcwd", "Buffer is null");
+    }
+
+    let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
+    if size == 0 {
+        return syscall_error(Errno::EINVAL, "getcwd", "Size cannot be zero");
+    }
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "getcwd_syscall");
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let cwd_container = cage.cwd.read();
+    let path = cwd_container.to_str().unwrap();
+    // The required size includes the null terminator
+    let required_size = path.len() + 1;
+    if required_size > size as usize {
+        return syscall_error(Errno::ERANGE, "getcwd_syscall", "Invalid buffer size");
+    }
+    unsafe {
+        ptr::copy(path.as_ptr(), buf, path.len());
+        *buf.add(path.len()) = 0;
+    }
+    0
+
+}
+
+/// Truncate a file to a specified length
+/// 
+/// ## Arguments:
+///     - cageid: current cage identifier
+///     - path_arg: pointer to the pathname of the file to truncate
+///     - path_cageid: cage identifier for the path argument
+///     - length_arg: the new length to truncate the file to
+///     - length_cageid: cage identifier for the length argument
+///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
+pub fn truncate_syscall(
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    length_arg: u64,
+    length_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments
+    if !(sc_unusedarg(arg3, arg3_cageid)
+         && sc_unusedarg(arg4, arg4_cageid)
+         && sc_unusedarg(arg5, arg5_cageid)
+         && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "truncate_syscall");
+    }
+
+    // Type conversion
+    let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
+    let length = sc_convert_sysarg_to_i64(length_arg, length_cageid, cageid);
+
+    // Call libc truncate
+    let ret = unsafe { libc::truncate(path.as_ptr() as *const i8, length) };
+    
+    if ret == -1 {
+        let errno = get_errno();
+        return handle_errno(errno, "truncate");
+    }
+
+    0
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/clock_nanosleep.2.html
+///
+/// `nanosleep_time64_syscall` suspends execution of the calling Cage for
+/// the time interval specified in the requested `timespec` structure. 
+///
+/// ## Implementation Details:
+/// - The `req` (requested time) and `rem` (remaining time) pointers are
+///   converted from Wasm linear memory to host addresses using
+///   `sc_convert_buf`.
+/// - Unused arguments `arg5` and `arg6` are validated with `sc_unusedarg`.
+/// - The underlying `SYS_clock_nanosleep` syscall is invoked directly.  
+/// - On error, `errno` is retrieved and normalized through `handle_errno()`.
+///
+/// ## Arguments:
+/// - `cageid`: Identifier of the calling Cage
+/// - `clockid_arg`: The clock against which the sleep interval is measured
+/// - `flags_arg`: Flags controlling sleep behavior
+/// - `req_arg`: Address of the requested sleep interval (`timespec`)
+/// - `rem_arg`: Address of the remaining interval (`timespec`) if interrupted
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on failure, with errno set appropriately.
+pub fn nanosleep_time64_syscall(
+    cageid: u64,
+    clockid_arg: u64,
+    clockid_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    req_arg: u64,
+    req_cageid: u64,
+    rem_arg: u64,
+    rem_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+    let req = sc_convert_buf(req_arg, req_cageid, cageid);
+    let rem = sc_convert_buf(rem_arg, rem_cageid, cageid);
+    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "nanosleep_time64_syscall");
+    }
+    let ret = unsafe { syscall(SYS_clock_nanosleep, clockid, flags, req, rem) as i32 };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "nanosleep");
+    }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/mprotect.2.html
+///
+/// Linux `mprotect()` syscall changes the protection of memory pages. It sets the protection 
+/// bits for memory pages in the range [addr, addr+len-1] to prot.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier
+///     - addr_arg: pointer to the start of the memory region to change protection for
+///     - addr_cageid: cage ID for addr argument validation
+///     - len_arg: length of the memory region in bytes
+///     - len_cageid: cage ID for len argument validation  
+///     - prot_arg: new protection flags (PROT_READ, PROT_WRITE, PROT_EXEC, PROT_NONE)
+///     - prot_cageid: cage ID for prot argument validation
+///     - arg4, arg4_cageid: unused argument and its cage ID
+///     - arg5, arg5_cageid: unused argument and its cage ID
+///     - arg6, arg6_cageid: unused argument and its cage ID
+///
+/// ## Returns:
+///     - 0 on success
+///     - -1 on error with appropriate errno set
+pub fn mprotect_syscall(
+    cageid: u64,
+    addr_arg: u64,
+    addr_cageid: u64,
+    len_arg: u64,
+    len_cageid: u64,
+    prot_arg: u64,
+    prot_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
+    let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "mprotect_syscall");
+    }
+
+    // Validate protection flags
+    let valid_prot = PROT_READ | PROT_WRITE | PROT_EXEC | PROT_NONE;
+    if prot & !valid_prot != 0 {
+        return syscall_error(Errno::EINVAL, "mprotect", "Invalid protection flags");
+    }
+
+    // For security, we don't allow PROT_EXEC in lind-wasm
+    if prot & PROT_EXEC != 0 {
+        return syscall_error(Errno::EINVAL, "mprotect", "PROT_EXEC is not allowed");
+    }
+
+    // Call the kernel mprotect
+    let ret = unsafe { libc::mprotect(addr as *mut c_void, len, prot) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "mprotect");
+    }
+
+    ret
+}
+
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/ioctl.2.html
+///
+/// Linux `ioctl()` syscall manipulates the underlying device parameters of special files.
+/// In particular, many operating characteristics of character special files (e.g., terminals)
+/// may be controlled with ioctl() operations. The argument fd must be an open file descriptor.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier
+///     - vfd_arg: virtual file descriptor (must be an open file descriptor)
+///     - vfd_cageid: cage ID for vfd argument validation
+///     - req_arg: device-dependent operation code
+///     - req_cageid: cage ID for req argument validation
+///     - ptrunion_arg: pointer to memory (untyped pointer, traditionally char *argp)
+///     - ptrunion_cageid: cage ID for ptrunion argument validation
+///     - arg4, arg4_cageid: unused argument and its cage ID
+///     - arg5, arg5_cageid: unused argument and its cage ID
+///     - arg6, arg6_cageid: unused argument and its cage ID
+///
+/// ## Returns:
+///     - Usually, on success zero is returned. A few ioctl() operations use the return value
+///       as an output parameter and return a nonnegative value on success.
+///     - On error, -1 is returned, and errno is set to indicate the error.
+pub fn ioctl_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    req_arg: u64,
+    req_cageid: u64,
+    ptrunion_arg: u64,
+    ptrunion_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Type conversion
+    let ptrunion = sc_convert_addr_to_host(ptrunion_arg, ptrunion_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "ioctl_syscall");
+    }
+
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
+    if wrappedvfd.is_err() {
+        return syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor");
+    }
+
+    let vfd = wrappedvfd.unwrap();
+
+    let ret = unsafe { libc::ioctl(vfd.underfd as i32, req_arg, ptrunion as *mut c_void) };
+
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "ioctl");
+    }
+    return ret;
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/flock.2.html
+///
+/// `Flock()` syscall applies or removes an advisory lock on an open file. We first translate the virtual file descriptor to the
+/// corresponding kernel file descriptor, then convert the operation flags from cage memory before invoking
+/// the kernel's `libc::flock()` function.
+///
+/// ## Arguments:
+///     This call will have one cageid indicating the current cage, and several regular arguments similar to Linux:
+///     - cageid: current cage identifier
+///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
+///     - vfd_cageid: cage ID for vfd argument validation
+///     - op_arg: operation flags (LOCK_SH, LOCK_EX, LOCK_UN, optionally ORed with LOCK_NB)
+///     - op_cageid: cage ID for op argument validation
+///     - arg3, arg3_cageid: unused argument and its cage ID
+///     - arg4, arg4_cageid: unused argument and its cage ID
+///     - arg5, arg5_cageid: unused argument and its cage ID
+///     - arg6, arg6_cageid: unused argument and its cage ID
+///
+/// ## Returns:
+///     - 0 on success
+///     - -1 on error, with errno set to indicate the error (EBADF, EINTR, EINVAL, ENOLCK, EWOULDBLOCK)
+pub fn flock_syscall(
+    cageid: u64,
+    vfd_arg: u64,
+    vfd_cageid: u64,
+    op_arg: u64,
+    op_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "flock");
+    }
+
+    let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
+
+    // Validate unused arguments
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "flock_syscall");
+    }
+
+    // Validate operation flags
+    let valid_ops = libc::LOCK_SH | libc::LOCK_EX | libc::LOCK_UN | libc::LOCK_NB;
+    if op & !valid_ops != 0 {
+        return syscall_error(Errno::EINVAL, "flock", "Invalid operation flags");
+    }
+
+    // Ensure at least one primary operation is specified
+    let primary_ops = libc::LOCK_SH | libc::LOCK_EX | libc::LOCK_UN;
+    if op & primary_ops == 0 {
+        return syscall_error(Errno::EINVAL, "flock", "No primary operation specified");
+    }
+
+    let ret = unsafe { libc::flock(kernel_fd, op) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "flock");
+    }
+
     ret
 }
