@@ -117,6 +117,10 @@ pub fn open_syscall(
 ///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment.
 ///     - buf_arg: pointer to a buffer where the read data will be stored (user's perspective).
 ///     - count_arg: the maximum number of bytes to read from the file descriptor.
+///
+/// ## Returns:
+///     - On success, the number of bytes read is returned (zero indicates end of file).
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn read_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -169,6 +173,10 @@ pub fn read_syscall(
 ///     - cageid: current cage identifier.
 ///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment to be closed.
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused.
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error (EBADF, EINTR, EIO).
 pub fn close_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -221,7 +229,7 @@ pub fn close_syscall(
 ///     - uaddr2_arg: second address used for requeueing operations
 ///     - val3_arg: additional value for some futex operations
 ///
-/// Return:
+/// ## Returns:
 ///     - On success: 0 or number of woken threads depending on futex operation
 ///     - On failure: a negative errno value indicating the syscall error
 pub fn futex_syscall(
@@ -267,7 +275,7 @@ pub fn futex_syscall(
 ///     - buf_arg: pointer points to a buffer that stores the data
 ///     - count_arg: length of the buffer
 ///
-/// Output:
+/// ## Returns:
 ///     - Upon successful completion of this call, we return the number of bytes written. This number will never be greater
 ///         than `count`. The value returned may be less than `count` if the write_syscall() was interrupted by a signal, or
 ///         if the file is a pipe or FIFO or special file and has fewer than `count` bytes immediately available for writing.
@@ -618,8 +626,9 @@ pub fn mmap_inner(
 /// * `addr` - Starting address of the region to unmap
 /// * `length` - Length of the region to unmap
 ///
-/// # Returns
-/// * `i32` - 0 for success and -1 for failure
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn munmap_syscall(
     cageid: u64,
     addr_arg: u64,
@@ -704,9 +713,9 @@ pub fn munmap_syscall(
 /// * `cageid` - Identifier of the cage that initiated the `brk` syscall.
 /// * `brk` - The new program break address.
 ///
-/// # Returns
-/// * `u32` - Returns `0` on success or `-1` on failure.
-///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn brk_syscall(
     cageid: u64,
     brk_arg: u64,
@@ -823,8 +832,9 @@ pub fn brk_syscall(
 /// * `cageid` - Identifier of the cage that initiated the `sbrk` syscall.
 /// * `brk` - Increment to adjust the program break, which can be negative.
 ///
-/// # Returns
-/// * `u32` - Result of the `sbrk` operation. Refer to `man sbrk` for details.
+/// ## Returns:
+///     - On success, returns the previous program break.
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn sbrk_syscall(
     cageid: u64,
     sbrk_arg: u64,
@@ -953,20 +963,18 @@ pub fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry
 /// cmd: The operation
 /// arg: an optional third argument.  Whether or not this argument is required is determined by op.  
 ///
-/// ## Return Type
-/// The return value is related to the operation determined by `cmd` argument.
-///
-/// For a successful call, the return value depends on the operation:
-/// `F_DUPFD`: The new file descriptor.
-/// `F_GETFD`: Value of file descriptor flags.
-/// `F_GETFL`: Value of file status flags.
-/// `F_GETLEASE`: Type of lease held on file descriptor.
-/// `F_GETOWN`: Value of file descriptor owner.
-/// `F_GETSIG`: Value of signal sent when read or write becomes possible, or zero for traditional SIGIO behavior.
-/// `F_GETPIPE_SZ`, `F_SETPIPE_SZ`: The pipe capacity.
-/// `F_GET_SEALS`: A bit mask identifying the seals that have been set for the inode referred to by fd.
-/// All other commands: Zero.
-/// On error, -1 is returned
+/// ## Returns:
+///     - For a successful call, the return value depends on the operation:
+///       - `F_DUPFD`: The new file descriptor.
+///       - `F_GETFD`: Value of file descriptor flags.
+///       - `F_GETFL`: Value of file status flags.
+///       - `F_GETLEASE`: Type of lease held on file descriptor.
+///       - `F_GETOWN`: Value of file descriptor owner.
+///       - `F_GETSIG`: Value of signal sent when read or write becomes possible, or zero for traditional SIGIO behavior.
+///       - `F_GETPIPE_SZ`, `F_SETPIPE_SZ`: The pipe capacity.
+///       - `F_GET_SEALS`: A bit mask identifying the seals that have been set for the inode referred to by fd.
+///       - All other commands: Zero.
+///     - On error, -1 is returned and errno is set to indicate the error.
 ///
 /// TODO: `F_GETOWN`, `F_SETOWN`, `F_GETOWN_EX`, `F_SETOWN_EX`, `F_GETSIG`, and `F_SETSIG` are used to manage I/O availability signals.
 pub fn fcntl_syscall(
@@ -1110,9 +1118,9 @@ pub fn fcntl_syscall(
 /// - `tp_arg`: Address of the user buffer for the result `timespec`
 /// - `arg3`–`arg6`: Reserved, must be unused
 ///
-/// ## Return Value:
-/// - `0` on success  
-/// - `-1` on failure, with `errno` set appropriately
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on failure, with errno set appropriately.
 pub fn clock_gettime_syscall(
     cageid: u64,
     clockid_arg: u64,
@@ -1159,9 +1167,9 @@ pub fn clock_gettime_syscall(
 /// ## Arguments:
 /// - `virtual_fd`: virtual file descriptor
 ///
-/// ## Return type:
-/// - `0` on success.
-/// - `-1` on failure, with `errno` set appropriately.
+/// ## Returns:
+///     - On success, the new file descriptor is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn dup_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1204,9 +1212,9 @@ pub fn dup_syscall(
 /// - `old_virtualfd`: original virtual file descriptor
 /// - `new_virtualfd`: specified new virtual file descriptor
 ///
-/// ## Return type:
-/// - `0` on success.
-/// - `-1` on failure, with `errno` set appropriately.
+/// ## Returns:
+///     - On success, returns the new file descriptor.
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn dup2_syscall(
     cageid: u64,
     old_vfd_arg: u64,
@@ -1276,9 +1284,9 @@ pub fn dup2_syscall(
 /// - `new_virtualfd`: target virtual file descriptor
 /// - `flags`: must be 0 or O_CLOEXEC
 ///
-/// ## Return:
-/// - `new_virtualfd` on success
-/// - `-1` on error, with errno set (EBADF or EINVAL)
+/// ## Returns:
+///     - On success, returns the new file descriptor.
+///     - On error, -1 is returned and errno is set to indicate the error (EBADF or EINVAL).
 pub fn dup3_syscall(
     cageid: u64,
     old_vfd_arg: u64,
@@ -1339,6 +1347,10 @@ pub fn dup3_syscall(
 ///     - cageid: current cage identifier
 ///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment referring to a directory
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn fchdir_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1405,6 +1417,10 @@ pub fn fchdir_syscall(
 ///     - iov_arg: pointer to an array of iovec structures describing the buffers (user's perspective)
 ///     - iovcnt_arg: number of iovec structures in the array
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the number of bytes written is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn writev_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1462,6 +1478,10 @@ pub fn writev_syscall(
 ///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - stat_arg: pointer to a stat structure where the file information will be stored (user's perspective)
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn fstat_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1521,6 +1541,10 @@ pub fn fstat_syscall(
 ///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - length_arg: the desired length in bytes for the file truncation
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn ftruncate_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1573,6 +1597,10 @@ pub fn ftruncate_syscall(
 ///     - vfd_arg: the virtual file descriptor from the RawPOSIX environment
 ///     - statfs_arg: pointer to a statfs structure where the filesystem information will be stored (user's perspective)
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn fstatfs_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1633,6 +1661,11 @@ pub fn fstatfs_syscall(
 ///     - dirp_arg: pointer to a buffer where the directory entries will be stored (user's perspective)
 ///     - count_arg: size of the buffer pointed to by dirp
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the number of bytes read is returned.
+///     - On end of directory, 0 is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn getdents_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1684,6 +1717,10 @@ pub fn getdents_syscall(
 ///     - offset_arg: the new offset according to the directive whence
 ///     - whence_arg: how to interpret the offset (SEEK_SET, SEEK_CUR, or SEEK_END)
 ///     - arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the resulting offset location as measured in bytes from the beginning of the file is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn lseek_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1740,6 +1777,10 @@ pub fn lseek_syscall(
 ///     - count_arg: the maximum number of bytes to read from the file descriptor
 ///     - offset_arg: file offset at which the input/output operation takes place
 ///     - arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the number of bytes read is returned (zero indicates end of file).
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn pread_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1793,6 +1834,10 @@ pub fn pread_syscall(
 ///     - count_arg: the maximum number of bytes to write to the file descriptor
 ///     - offset_arg: file offset at which the input/output operation takes place
 ///     - arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - On success, the number of bytes written is returned.
+///     - On error, -1 is returned and errno is set to indicate the error.
 pub fn pwrite_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -1844,8 +1889,9 @@ pub fn pwrite_syscall(
 ///     - path_cageid: cage identifier for the path argument
 ///     - arg2, arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 ///
-/// ## Return:
-///     - return zero on success. On error, -1 is returned and errno is set to indicate the error.
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn chdir_syscall(
     cageid: u64,
     path_arg: u64,
@@ -1907,8 +1953,9 @@ pub fn chdir_syscall(
 ///     - path_cageid: cage identifier for the path argument
 ///     - arg2, arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 ///
-/// ## Return:
-///     - return zero on success. On error, -1 is returned and errno is set to indicate the error.
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn rmdir_syscall(
     cageid: u64,
     path_arg: u64,
@@ -1964,8 +2011,9 @@ pub fn rmdir_syscall(
 ///     - mode_cageid: cage identifier for the mode argument
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 ///
-/// ## Return:
-///     - return zero on success. On error, -1 is returned and errno is set to indicate the error.
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn chmod_syscall(
     cageid: u64,
     path_arg: u64,
@@ -2020,6 +2068,10 @@ pub fn chmod_syscall(
 ///     - mode_arg: the new file permissions to be applied to the file
 ///     - mode_cageid: cage identifier for the mode argument
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn fchmod_syscall(
     cageid: u64,
     vfd_arg: u64,
@@ -2077,9 +2129,9 @@ pub fn fchmod_syscall(
 ///     - size_arg: the size of the buffer in bytes
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
 ///
-/// ## Return:
-///     - On success, returns a pointer to the buffer containing the current working directory path
-///     - On error, returns NULL and errno is set to indicate the error
+/// ## Returns:
+///     - On success, returns 0 after copying the current working directory path to the buffer.
+///     - On error, returns -1 and errno is set to indicate the error.
 pub fn getcwd_syscall(
     cageid: u64,
     buf_arg: u64,
@@ -2131,13 +2183,17 @@ pub fn getcwd_syscall(
 
 /// Truncate a file to a specified length
 /// 
-/// # Arguments
+/// ## Arguments:
 ///     - cageid: current cage identifier
 ///     - path_arg: pointer to the pathname of the file to truncate
 ///     - path_cageid: cage identifier for the path argument
 ///     - length_arg: the new length to truncate the file to
 ///     - length_cageid: cage identifier for the length argument
 ///     - arg3, arg4, arg5, arg6: additional arguments which are expected to be unused
+///
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on error, with errno set to indicate the error.
 pub fn truncate_syscall(
     cageid: u64,
     path_arg: u64,
@@ -2200,9 +2256,9 @@ pub fn truncate_syscall(
 /// - `req_arg`: Address of the requested sleep interval (`timespec`)
 /// - `rem_arg`: Address of the remaining interval (`timespec`) if interrupted
 ///
-/// ## Return Value:
-/// - `0` on success  
-/// - `-1` on failure, with `errno` set appropriately
+/// ## Returns:
+///     - 0 on success.
+///     - -1 on failure, with errno set appropriately.
 pub fn nanosleep_time64_syscall(
     cageid: u64,
     clockid_arg: u64,
