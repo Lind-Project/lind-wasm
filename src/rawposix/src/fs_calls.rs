@@ -134,10 +134,9 @@ pub fn read_syscall(
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "read", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "read", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "read");
     }
 
     // Convert the user buffer and count.
@@ -297,11 +296,9 @@ pub fn write_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "write", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "write", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "write");
     }
 
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
@@ -1372,10 +1369,9 @@ pub fn fchdir_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "fchdir", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "fchdir", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "fchdir");
     }
 
     if !(sc_unusedarg(arg2, arg2_cageid)
@@ -1439,10 +1435,9 @@ pub fn writev_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "writev", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "writev", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "writev");
     }
 
     let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
@@ -1504,10 +1499,9 @@ pub fn fstat_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "fstat", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "fstat", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "fstat");
     }
 
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -1564,10 +1558,9 @@ pub fn ftruncate_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "ftruncate", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "ftruncate", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "ftruncate");
     }
 
     let length = sc_convert_sysarg_to_i64(length_arg, length_cageid, cageid);
@@ -1622,10 +1615,9 @@ pub fn fstatfs_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "fstatfs", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "fstatfs", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "fstatfs");
     }
 
     if !(sc_unusedarg(arg3, arg3_cageid)
@@ -1683,10 +1675,9 @@ pub fn getdents_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "getdents", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "getdents", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "getdents");
     }
 
     let dirp = sc_convert_buf(dirp_arg, dirp_cageid, cageid);
@@ -1738,10 +1729,9 @@ pub fn lseek_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "lseek", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "lseek", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "lseek");
     }
 
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
@@ -1800,10 +1790,9 @@ pub fn pread_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "pread", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "pread", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "pread");
     }
 
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
@@ -1862,10 +1851,9 @@ pub fn pwrite_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "pwrite", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "pwrite", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "pwrite");
     }
 
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
@@ -2092,10 +2080,9 @@ pub fn fchmod_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "fchmod", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "fchmod", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "fchmod");
     }
 
     let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
@@ -2461,10 +2448,9 @@ pub fn flock_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EINVAL, "flock", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "flock", "Bad File Descriptor");
+    // Return error
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "flock");
     }
 
     let op = sc_convert_sysarg_to_i32(op_arg, op_cageid, cageid);
