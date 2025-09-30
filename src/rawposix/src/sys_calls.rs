@@ -18,7 +18,7 @@ use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDOUT_FILENO, STDIN_FILENO};
 use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
-use sysdefs::constants::sys_const::{EXIT_SUCCESS, DEFAULT_UID, DEFAULT_GID, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK, ITIMER_REAL};
+use sysdefs::constants::sys_const::{EXIT_SUCCESS, DEFAULT_UID, DEFAULT_GID, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK, ITIMER_REAL, SIGCHLD};
 use sysdefs::data::fs_struct::{SigactionStruct, ITimerVal};
 use typemap::datatype_conversion::*;
 use dashmap::DashMap;
@@ -216,6 +216,10 @@ pub fn exit_syscall(
             }
         }
 
+        // if the cage has parent (i.e. it is not the "root" cage)
+        if cageid != selfcage.parent {
+            lind_send_signal(selfcage.parent, SIGCHLD);
+        }
         remove_cage(cageid);
     }
     
