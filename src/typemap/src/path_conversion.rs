@@ -89,6 +89,38 @@ pub fn add_lind_root(cageid: u64, path: &str) -> CString {
     c_path
 }
 
+/// Remove LIND_ROOT prefix from a host path to convert it back to user perspective.
+///
+/// This function is the reverse of `add_lind_root`. It strips the LIND_ROOT prefix from an 
+/// absolute host path and returns the path as it should appear to the user (cage). This is 
+/// primarily used when retrieving paths from the kernel (e.g., via `getcwd()`) that need to 
+/// be stored in cage state or returned to user space.
+///
+/// ## Arguments:
+///     - host_path: The full host path including LIND_ROOT prefix
+///
+/// ## Returns:
+///     - PathBuf representing the path from user's perspective (without LIND_ROOT)
+///
+/// ## Example:
+/// ```
+/// // If LIND_ROOT is "/home/lind/lind-wasm/src/RawPOSIX/tmp"
+/// // and host_path is "/home/lind/lind-wasm/src/RawPOSIX/tmp/foo/bar"
+/// // this returns "/foo/bar"
+/// let user_path = strip_lind_root("/home/lind/lind-wasm/src/RawPOSIX/tmp/foo/bar");
+/// assert_eq!(user_path, PathBuf::from("/foo/bar"));
+/// ```
+pub fn strip_lind_root(host_path: &str) -> PathBuf {
+    if let Ok(stripped) = PathBuf::from(host_path).strip_prefix(LIND_ROOT) {
+        // Prepend "/" to make it an absolute path from user's perspective
+        PathBuf::from("/").join(stripped)
+    } else {
+        // If path doesn't start with LIND_ROOT, return it as-is
+        // This shouldn't normally happen but provides a fallback
+        PathBuf::from(host_path)
+    }
+}
+
 /// Convert received path pointer into a normalized `CString` path in the host cage.
 ///
 /// This function first validates cross-cage access if `secure` feature is enabled.

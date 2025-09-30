@@ -1394,10 +1394,10 @@ pub fn fchdir_syscall(
     let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut i8, cwd_buf.len()) };
     if !cwd_ptr.is_null() {
         if let Some(cage) = get_cage(cageid) {
+            let host_path = unsafe { std::ffi::CStr::from_ptr(cwd_ptr) }.to_string_lossy();
+            let user_path = strip_lind_root(&host_path);
             let mut cwd = cage.cwd.write();
-            *cwd = Arc::new(PathBuf::from(
-                unsafe { std::ffi::CStr::from_ptr(cwd_ptr) }.to_string_lossy().as_ref()
-            ));
+            *cwd = Arc::new(user_path);
         }
     }
 
@@ -1931,8 +1931,10 @@ pub fn chdir_syscall(
 
     // Update the cage's current working directory
     if let Some(cage) = get_cage(cageid) {
+        let host_path = path.to_string_lossy();
+        let user_path = strip_lind_root(&host_path);
         let mut cwd = cage.cwd.write();
-        *cwd = Arc::new(PathBuf::from(path.to_string_lossy().as_ref()));
+        *cwd = Arc::new(user_path);
     }
 
     ret
