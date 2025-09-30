@@ -1,6 +1,11 @@
 use sysdefs::data::fs_struct::{StatData, FSData};
 use libc;
 
+// These conversion functions are necessary because:
+// 1. Host kernel's libc structures vary across platforms, while our StatData/FSData provide a stable ABI
+// 2. WASM linear memory has different alignment requirements than native host memory
+// 3. Explicit type casts ensure consistent field sizes across different host platforms
+
 /// Copies fields from a `libc::stat` structure into a `StatData` located inside wasm linear memory.
 ///
 /// ## Arguments:
