@@ -1708,11 +1708,6 @@ pub fn lseek_syscall(
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
     let whence = sc_convert_sysarg_to_i32(whence_arg, whence_cageid, cageid);
 
-    match whence {
-        SEEK_SET | SEEK_CUR | SEEK_END => {},
-        _ => return syscall_error(Errno::EINVAL, "lseek", "invalid whence parameter"),
-    }
-
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
