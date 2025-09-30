@@ -141,21 +141,12 @@ pub fn read_syscall(
 
     // Convert the user buffer and count.
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
-    if buf.is_null() {
-        return syscall_error(Errno::EFAULT, "read", "Buffer is null");
-    }
-
     let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
 
     if !(sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
         return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
-    }
-
-    // Early return if count is zero.
-    if count == 0 {
-        return 0;
     }
 
     // Call the underlying libc read.
@@ -309,11 +300,6 @@ pub fn write_syscall(
         && sc_unusedarg(arg6, arg6_cageid))
     {
         return syscall_error(Errno::EFAULT, "write", "Invalid Cage ID");
-    }
-
-    // Early return
-    if count == 0 {
-        return 0;
     }
 
     let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
@@ -1441,14 +1427,7 @@ pub fn writev_syscall(
     }
 
     let iovcnt = sc_convert_sysarg_to_i32(iovcnt_arg, iovcnt_cageid, cageid);
-    if iovcnt < 0 {
-        return syscall_error(Errno::EINVAL, "writev", "Invalid iovcnt");
-    }
-
     let iov_ptr = sc_convert_buf(iov_arg, iov_cageid, cageid);
-    if iov_ptr.is_null() {
-        return syscall_error(Errno::EFAULT, "writev", "iovec is null");
-    }
 
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
@@ -1565,11 +1544,6 @@ pub fn ftruncate_syscall(
 
     let length = sc_convert_sysarg_to_i64(length_arg, length_cageid, cageid);
 
-    // Validate that length is not negative
-    if length < 0 {
-        return syscall_error(Errno::EINVAL, "ftruncate", "length cannot be negative");
-    }
-
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
@@ -1681,9 +1655,6 @@ pub fn getdents_syscall(
     }
 
     let dirp = sc_convert_buf(dirp_arg, dirp_cageid, cageid);
-    if dirp.is_null() {
-        return syscall_error(Errno::EFAULT, "getdents", "buffer is null");
-    }
     let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
 
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -1796,19 +1767,11 @@ pub fn pread_syscall(
     }
 
     let buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
-    if buf.is_null() {
-        return syscall_error(Errno::EFAULT, "pread", "Buffer is null");
-    }
-
     let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
 
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!("{}: unused arguments contain unexpected values -- security violation", "pread_syscall");
-    }
-
-    if count == 0 {
-        return 0;
     }
 
     let ret = unsafe { libc::pread(kernel_fd, buf as *mut c_void, count, offset) as i32 };
@@ -1862,10 +1825,6 @@ pub fn pwrite_syscall(
 
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!("{}: unused arguments contain unexpected values -- security violation", "pwrite_syscall");
-    }
-
-    if count == 0 {
-        return 0;
     }
 
     let ret = unsafe { libc::pwrite(kernel_fd, buf as *const c_void, count, offset) as i32 };
