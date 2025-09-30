@@ -2438,10 +2438,6 @@ pub fn truncate_syscall(
 
     // Type conversion
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    if path.is_empty() {
-        return syscall_error(Errno::EFAULT, "truncate", "Invalid path");
-    }
-    
     let length = sc_convert_sysarg_to_i64(length_arg, length_cageid, cageid);
 
     // Call libc truncate
