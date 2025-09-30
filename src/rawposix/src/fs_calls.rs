@@ -78,7 +78,7 @@ pub fn open_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "open_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "open_syscall");
     }
 
     // Get the kernel fd first
@@ -149,7 +149,7 @@ pub fn read_syscall(
     if !(sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "read_syscall");
     }
 
     // Call the underlying libc read.
@@ -196,7 +196,7 @@ pub fn close_syscall(
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "close", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "close_syscall");
     }
 
     match fdtables::close_virtualfd(cageid, vfd_arg) {
@@ -307,7 +307,7 @@ pub fn write_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "write", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "write_syscall");
     }
 
     let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
@@ -359,7 +359,7 @@ pub fn mkdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "mkdir_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "mkdir_syscall");
     }
 
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
@@ -405,7 +405,7 @@ pub fn pipe_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "pipe_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "pipe_syscall");
     }
 
     // Convert the u64 pointer into a mutable reference to PipeArray
@@ -520,7 +520,7 @@ pub fn pipe2_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "pipe2_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "pipe2_syscall");
     }
     // Convert the u64 pointer into a mutable reference to PipeArray
     let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
@@ -871,7 +871,7 @@ pub fn munmap_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "munmap", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "munmap_syscall");
     }
 
     if len == 0 {
@@ -958,7 +958,7 @@ pub fn brk_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "brk", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "brk_syscall");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -1077,7 +1077,7 @@ pub fn sbrk_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "sbrk_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "sbrk_syscall");
     }
 
     let cage = get_cage(sbrk_cageid).unwrap();
@@ -1218,7 +1218,7 @@ pub fn fcntl_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "fcntl_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "fcntl_syscall");
     }
 
     match (cmd, arg) {
@@ -1364,7 +1364,7 @@ pub fn clock_gettime_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "clock_gettime", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "clock_gettime_syscall");
     }
 
     let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
@@ -2433,7 +2433,7 @@ pub fn truncate_syscall(
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "truncate", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "truncate_syscall");
     }
 
     // Type conversion
@@ -2496,7 +2496,7 @@ pub fn nanosleep_time64_syscall(
     let rem = sc_convert_buf(rem_arg, rem_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "nanosleep", "Invalide Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "nanosleep_time64_syscall");
     }
     let ret = unsafe { syscall(SYS_clock_nanosleep, clockid, flags, req, rem) as i32 };
     if ret < 0 {
@@ -2550,7 +2550,7 @@ pub fn mprotect_syscall(
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "mprotect", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "mprotect_syscall");
     }
 
     // Validate protection flags
@@ -2619,7 +2619,7 @@ pub fn ioctl_syscall(
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "ioctl", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "ioctl_syscall");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
