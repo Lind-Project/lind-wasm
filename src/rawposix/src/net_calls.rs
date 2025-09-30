@@ -258,6 +258,7 @@ pub fn poll_syscall(
 /// Specifically, kernel fds are passed to the underlying libc select, while impipe and imsock fds would be processed by the
 /// in-memory system. Afterward, the results are combined and consolidated accordingly.
 ///
+/// TODO: Implement in-memory FD support for select syscall
 /// (Note: Currently, only kernel fds are supported. The implementation for in-memory pipes is commented out and will require
 /// further integration and testing once in-memory pipe support is added.)
 ///
@@ -450,6 +451,10 @@ pub fn select_syscall(
     let mut unreal_read = HashSet::new();
     let mut unreal_write = HashSet::new();
 
+    // TODO: Implement in-memory FD checking for select syscall
+    // Currently only kernel FDs are supported. In-memory pipes and sockets
+    // will require custom polling logic when in-memory system is integrated.
+    
     // Revert result using fdtables helper
     let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
         FDKIND_KERNEL,
@@ -716,8 +721,13 @@ pub fn epoll_ctl_syscall(
 ///
 /// Uses the fdtables infrastructure to get virtual epoll data and handles both kernel-backed
 /// and in-memory file descriptors. For kernel FDs, calls libc::epoll_wait() on the underlying
-/// kernel epoll FD. For in-memory FDs, implements custom polling logic. Results are converted
-/// back to virtual FDs and written to the user-space events array.
+/// kernel epoll FD. 
+///
+/// TODO: Implement in-memory FD support for epoll_wait
+/// For in-memory FDs, custom polling logic needs to be implemented when in-memory system
+/// is integrated. This will involve checking in-memory pipe/socket readiness and converting
+/// results back to virtual FDs. Results are converted back to virtual FDs and written to 
+/// the user-space events array.
 ///
 /// ## Arguments:
 ///     - cageid: current cage identifier.
