@@ -3,12 +3,12 @@
 //! This file provides APIs for converting between different argument types and translation between path from
 //! user's perspective to host's perspective
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
-use crate::datatype_conversion::get_cstr;
 pub use libc::*;
 pub use std::env;
 pub use std::ffi::{CStr, CString};
 pub use std::path::{Component, PathBuf};
 pub use std::{mem, ptr};
+use std::str::Utf8Error;
 pub use sysdefs::constants::{fs_const, err_const};
 
 /// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
@@ -119,6 +119,39 @@ pub fn strip_lind_root(host_path: &str) -> PathBuf {
         // This shouldn't normally happen but provides a fallback
         PathBuf::from(host_path)
     }
+/// This function provides two operations: first, it translates path pointer address from WASM environment
+/// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
+/// which is adding `LIND_ROOT` before the path arguments. Considering actual syscall implementation
+/// logic needs to pass string pointer to underlying rust libc, so this function will return `CString`
+/// always using arg_cageid to translate. (TODO: the logic here might be different according to 3i/grate
+/// implementation)
+///     - If arg_cageid != cageid: this call is sent by grate. We need to translate according to cage
+///     - If arg_cageid == cageid: this call is sent by cage, we can use either one
+///
+/// ## Arguments:
+///     - cageid: required to do address translation for path pointer
+///     - path_arg: the path pointer with address and contents from user's perspective. Address is
+///                 32-bit (because of WASM feature).
+///
+/// ## Returns:
+///     - c_path: a `CString` variable stores the path from host's perspective
+///     - will return error if total length exceed the MAX_PATH (which is 4096). We use `Box<dyn Error>` here to
+///      let upper functions do error handling. (ie: we want to )
+pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Error> {
+    std::ffi::CStr::from_ptr(cstr as *const _).to_str() //returns a result to be unwrapped later
+}
+
+pub fn get_cstr<'a>(arg: u64) -> Result<&'a str, i32> {
+    let ptr = arg as *const i8;
+    if !ptr.is_null() {
+        if let Ok(data) = unsafe { charstar_to_ruststr(ptr) } {
+            return Ok(data);
+        } else {
+            return Err(-1);
+        }
+    }
+
+    return Err(-1);
 }
 
 /// Convert received path pointer into a normalized `CString` path in the host cage.
@@ -169,21 +202,4 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
         Ok(c_path) => c_path,
         Err(_) => panic!("String contains internal null byte"),
     }
-}
-
-/// This function translates 64 bits uadd from the WASM context
-/// into the corresponding host address value. Unlike the previous two functions, it returns
-/// the translated address as a raw `u64` rather than a pointer.
-///
-/// Input:
-///     - uaddr_arg: the original 64-bit address from the WASM space
-///     - uaddr_arg_cageid: the cage ID that owns the address
-///     - cageid: the currently executing cage ID
-///
-/// Output:
-///     - Returns the translated 64-bit address in host space as a u64.
-pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64 {
-    let cage = get_cage(uaddr_arg_cageid).unwrap();
-    let uaddr = translate_vmmap_addr(&cage, uaddr_arg).unwrap();
-    return uaddr;
 }

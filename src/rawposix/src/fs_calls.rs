@@ -1,18 +1,17 @@
 use libc::c_void;
-// Updated imports - using path_conversion for filesystem operations
-use typemap::datatype_conversion::{sc_convert_statdata, sc_convert_fsdata, *};
-use sysdefs::data::fs_struct::{StatData, FSData};
+use std::ffi::CStr;
+use typemap::datatype_conversion::*;
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
-use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE, SEEK_SET, SEEK_CUR, SEEK_END};
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, PATH_MAX};
+use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
+use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
 use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, check_addr};
 use fdtables;
 use std::path::PathBuf;
+use typemap::filesystem_helpers::{convert_statdata_to_user, convert_fstatdata_to_user};
 use std::sync::Arc;
-
 
 /// Helper function for close_syscall
 /// 
@@ -192,7 +191,8 @@ pub fn close_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    if !(sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
@@ -368,6 +368,225 @@ pub fn mkdir_syscall(
         let errno = get_errno();
         return handle_errno(errno, "mkdir");
     }
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/pipe.2.html
+///
+/// Linux `pipe()` syscall is equivalent to calling `pipe2()` with flags set to zero.
+/// Call to the kernel here.
+///
+/// ## Input:
+///     - cageid: current cage identifier.
+///     - pipefd_arg: a u64 representing the pointer to the PipeArray (user's perspective).
+///     - pipefd_cageid: cage identifier for the pointer argument.
+/// 
+/// ## Return:
+/// On success, zero is returned.  On error, -1 is returned, errno is 
+/// set to indicate the error, and pipefd is left unchanged.
+pub fn pipe_syscall(
+    cageid: u64,
+    pipefd_arg: u64,
+    pipefd_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "pipe_syscall", "Invalid Cage ID");
+    }
+
+    // Convert the u64 pointer into a mutable reference to PipeArray
+    let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
+        Ok(p) => p,
+        Err(e) => return syscall_error(Errno::EFAULT, "pipe", "Invalid address"),
+    };
+
+    // Create an array to hold the two kernel file descriptors
+    let mut kernel_fds: [i32; 2] = [0; 2];
+    let ret = unsafe { libc::pipe(kernel_fds.as_mut_ptr()) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "pipe_syscall");
+    }
+
+    // Get virtual fd for read end
+    let read_vfd = match fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        kernel_fds[0] as u64,
+        false, 
+        0,
+    ) {
+        Ok(fd) => fd as i32,
+        Err(_e) => {
+            unsafe {
+                libc::close(kernel_fds[0]);
+                libc::close(kernel_fds[1]);
+            }
+            return syscall_error(
+                Errno::EMFILE,
+                "pipe_syscall",
+                "Failed to get virtual file descriptor"
+            );
+        }
+    };
+
+    // Get virtual fd for write end
+    let write_vfd = match fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        kernel_fds[1] as u64,
+        false,
+        0,
+    ) {
+        Ok(fd) => fd as i32,
+        Err(_e) => {
+            // close the kernel pipefd if there's an error
+            // on getting virtual fd
+            unsafe {
+                libc::close(kernel_fds[0]);
+                libc::close(kernel_fds[1]);
+            }
+            return syscall_error(
+                Errno::EMFILE,
+                "pipe_syscall", 
+                "Failed to get virtual file descriptor"
+            );
+        }
+    };
+
+    // Update PipeArray located in cage linear memory
+    pipefd.readfd = read_vfd;
+    pipefd.writefd = write_vfd;
+
+    ret
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/pipe2.2.html
+///
+/// Linux `pipe2()` syscall creates a unidirectional data channel and returns two file descriptors,
+/// one for reading and one for writing. In our implementation, we first convert the user-supplied
+/// pointer to a mutable reference to a PipeArray. Then, we call libc::pipe2() with the provided flags.
+/// Finally, we obtain new virtual file descriptors for both ends of the pipe using our fd management
+/// subsystem (`fdtables`).
+///
+/// ## Input:
+///     - cageid: current cage identifier.
+///     - pipefd_arg: a u64 representing the pointer to the PipeArray (user's perspective).
+///     - pipefd_cageid: cage identifier for the pointer argument.
+///     - flags_arg: this argument contains flags (e.g., O_CLOEXEC) to be passed to pipe2.
+///     - flags_cageid: cage identifier for the flags argument.
+/// 
+/// ## Return:
+/// On success, zero is returned.  On error, -1 is returned, errno is 
+/// set to indicate the error, and pipefd is left unchanged.
+pub fn pipe2_syscall(
+    cageid: u64,
+    pipefd_arg: u64,
+    pipefd_cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    // Validate flags (only O_NONBLOCK and O_CLOEXEC are allowed)
+    let allowed_flags = fs_const::O_NONBLOCK | fs_const::O_CLOEXEC;
+    if flags & !allowed_flags != 0 {
+        return syscall_error(Errno::EINVAL, "pipe2_syscall", "Invalid flags");
+    }
+
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "pipe2_syscall", "Invalid Cage ID");
+    }
+    // Convert the u64 pointer into a mutable reference to PipeArray
+    let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
+        Ok(p) => p,
+        Err(e) => return syscall_error(Errno::EFAULT, "pipe2", "Invalid address"),
+    };
+    // Create an array to hold the two kernel file descriptors
+    let mut kernel_fds: [i32; 2] = [0; 2];
+    let ret = unsafe { libc::pipe2(kernel_fds.as_mut_ptr(), flags) };
+    if ret < 0 {
+        return handle_errno(get_errno(), "pipe2_syscall");
+    }
+
+    // Check whether O_CLOEXEC is set
+    let should_cloexec = (flags & fs_const::O_CLOEXEC) != 0;
+
+    // Get virtual fd for read end
+    let read_vfd = match fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        kernel_fds[0] as u64,
+        should_cloexec,
+        0,
+    ) {
+        Ok(fd) => fd as i32,
+        Err(_e) => {
+            // close the kernel pipefd if there's an error
+            // on getting virtual fd
+            unsafe {
+                libc::close(kernel_fds[0]);
+                libc::close(kernel_fds[1]);
+            }
+            return syscall_error(
+                Errno::EMFILE,
+                "pipe2_syscall",
+                "Failed to get virtual file descriptor"
+            );
+        }
+    };
+
+    // Get virtual fd for write end
+    let write_vfd = match fdtables::get_unused_virtual_fd(
+        cageid,
+        FDKIND_KERNEL,
+        kernel_fds[1] as u64,
+        should_cloexec,
+        0,
+    ) {
+        Ok(fd) => fd as i32,
+        Err(_e) => {
+            unsafe {
+                libc::close(kernel_fds[0]);
+                libc::close(kernel_fds[1]);
+            }
+            return syscall_error(
+                Errno::EMFILE,
+                "pipe2_syscall",
+                "Failed to get virtual file descriptor"
+            );
+        }
+    };
+
+    // Update PipeArray located in cage linear memory
+    pipefd.readfd = read_vfd;
+    pipefd.writefd = write_vfd;
+
     ret
 }
 
