@@ -132,11 +132,10 @@ pub fn read_syscall(
 ) -> i32 {
     // Convert the virtual fd to the underlying kernel file descriptor.
     let kernel_fd = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
-    // convert_fd_to_host returns negative errno values on error
-    if kernel_fd == -(Errno::EINVAL as i32) {
-        return syscall_error(Errno::EFAULT, "read", "Invalid Cage ID");
-    } else if kernel_fd == -(Errno::EBADF as i32) {
-        return syscall_error(Errno::EBADF, "read", "Bad File Descriptor");
+    
+    // Return error 
+    if kernel_fd < 0 {
+        return handle_errno(kernel_fd, "read");
     }
 
     // Convert the user buffer and count.
