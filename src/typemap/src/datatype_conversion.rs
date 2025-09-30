@@ -638,7 +638,6 @@ pub fn sc_convert_addr_to_statdata<'a>(
     arg_cageid: u64,
     cageid: u64,
 ) -> Result<&'a mut StatData, Errno> {
->>>>>>> threei-integration
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
