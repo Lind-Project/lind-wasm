@@ -274,8 +274,6 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     buf
 }
 
-<<<<<<< HEAD
-=======
 /// This function translates 64 bits uadd from the WASM context
 /// into the corresponding host address value. Unlike the previous two functions, it returns
 /// the translated address as a raw `u64` rather than a pointer.
@@ -577,7 +575,6 @@ pub fn sc_convert_itimerval_mut(
     }
 }
 
->>>>>>> threei-integration
 /// `sc_convert_addr_to_statdata` translates a user-provided address from the
 /// calling Cage's virtual memory into a mutable reference to a `StatData`
 /// structure.
@@ -646,8 +643,6 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
     }
     return Err(Errno::EFAULT);
 }
-<<<<<<< HEAD
-=======
 
 /// Translates a user-provided address from the Cage's virtual memory into
 /// a mutable reference to a `PipeArray`.
@@ -682,4 +677,3 @@ pub fn sc_convert_addr_to_pipearray<'a>(
     }
     return Err(Errno::EFAULT);
 }
->>>>>>> threei-integration
