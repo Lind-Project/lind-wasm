@@ -181,8 +181,8 @@ pub fn poll_syscall(
     // Poll all kernel-backed fds with timeout/signal checking loop
     if !all_kernel_pollfds.is_empty() {
         let start_time = starttimer();
-        // Keep track of total duration and timeout which is split into 100ms chunks if duration > 100ms
-        let (duration, timeout) = timeout_setup_ms(original_timeout); 
+        // Keep track of total duration for our exit check in the poll loop
+        let (duration, _) = timeout_setup_ms(original_timeout); 
 
         let ret;
         loop {
@@ -190,7 +190,7 @@ pub fn poll_syscall(
                 libc::poll(
                     all_kernel_pollfds.as_mut_ptr(),
                     all_kernel_pollfds.len() as libc::nfds_t,
-                    timeout,
+                    0, // Trigger instant return from libc epoll as we check elapsed time from start_time for our timeout handling logic
                 )
             };
 
@@ -816,8 +816,8 @@ pub fn epoll_wait_syscall(
 
     if maxevents != 0 {
         let start_time = starttimer();
-        // Keep track of total duration and timeout which is split into 100ms chunks if duration > 100ms
-        let (duration, timeout) = timeout_setup_ms(timeout);
+        // Keep track of total duration for our exit check in the epoll loop
+        let (duration, _) = timeout_setup_ms(timeout);
 
         // Copy results to the guest's events array *after* translation:
         // - `kernel_events[i].u64` holds an underfd (kernel-only).
@@ -831,7 +831,7 @@ pub fn epoll_wait_syscall(
                     epfd as i32,
                     kernel_events.as_mut_ptr(),
                     maxevents,
-                    timeout as i32,
+                    0, // Trigger instant return from libc epoll as we check elapsed time from start_time for our timeout handling logic
                 )
             };
 
