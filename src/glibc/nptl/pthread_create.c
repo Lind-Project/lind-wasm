@@ -40,6 +40,7 @@
 #include <clone3.h>
 #include <futex-internal.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 #include <shlib-compat.h>
 
@@ -459,7 +460,7 @@ start_thread (void *arg)
 
   /* This is where the try/finally block should be created.  For
      compilers without that support we do use setjmp.  */
-  struct pthread_unwind_buf unwind_buf;
+  struct pthread_unwind_buf __attribute__((aligned(8))) unwind_buf;
 
   int not_first_call;
   DIAG_PUSH_NEEDS_COMMENT;
@@ -470,7 +471,7 @@ start_thread (void *arg)
      the saved signal mask), so that is a false positive.  */
   DIAG_IGNORE_NEEDS_COMMENT (11, "-Wstringop-overflow=");
 #endif
-  not_first_call = setjmp ((struct __jmp_buf_tag *) unwind_buf.cancel_jmp_buf);
+  not_first_call = setjmp ((struct __jmp_buf_tag *) &unwind_buf.cancel_jmp_buf);
   DIAG_POP_NEEDS_COMMENT;
 
   /* No previous handlers.  NB: This must be done after setjmp since the
@@ -659,7 +660,7 @@ out:
   
   // signal other threads that the thread has exited
   pd->tid = 0;
-  MAKE_SYSCALL(98, "syscall|futex", (uint64_t) &pd->tid, (uint64_t) FUTEX_WAKE, (uint64_t) 1, (uint64_t)0, 0, (uint64_t)0);
+  MAKE_SYSCALL(FUTEX_SYSCALL, "syscall|futex", (uint64_t) &pd->tid, (uint64_t) FUTEX_WAKE, (uint64_t) 1, (uint64_t)0, 0, (uint64_t)0);
   while (1)
     // replacing with lind exit
     exit(0);
