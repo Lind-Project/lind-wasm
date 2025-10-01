@@ -172,13 +172,13 @@ pub fn poll_syscall(
                 }
             }
             _ => {
-                // Handle non-kernel FDs - consistent with old implementation error handling
+                // Handle non-kernel FDs
                 return syscall_error(Errno::EBADFD, "poll_syscall", "Invalid fdkind");
             }
         }
     }
 
-    // Poll all kernel-backed fds with timeout/signal checking loop (consistent with old implementation)
+    // Poll all kernel-backed fds with timeout/signal checking loop
     if !all_kernel_pollfds.is_empty() {
         let start_time = starttimer();
         // Keep track of total duration and timeout which is split into 100ms chunks if duration > 100ms
