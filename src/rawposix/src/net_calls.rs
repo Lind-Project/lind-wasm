@@ -371,13 +371,13 @@ pub fn select_syscall(
 
     let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
 
-    // Handle timeout setup
-    // Store original timeout duration for comparison
-     let original_timeout_millis = if let Some(timeout_ptr) = timeout_ptr {
+    // Convert timeval pointer to milliseconds for consistency with poll/epoll_wait timeout handling
+    // select takes a timeval* (tv_sec + tv_usec), but poll/epoll_wait use integer milliseconds
+    let timeout_ms = if let Some(timeout_ptr) = timeout_ptr {
         let t = unsafe { *timeout_ptr };
-        Some(t.tv_sec as u128 * 1000 + t.tv_usec as u128 / 1000)
+        (t.tv_sec as i32 * 1000) + (t.tv_usec as i32 / 1000)
     } else {
-        None
+        -1 // No timeout (infinite)
     };
 
     // Always use zero timeout for instant return from select - libc select requires timeval struct format
@@ -385,7 +385,10 @@ pub fn select_syscall(
         tv_sec: 0,
         tv_usec: 0,
     };
-
+    
+    let start_time = starttimer();
+    // Keep track of total timeout duration for exit handling later
+    let (duration, _) = timeout_setup_ms(timeout_ms);
     let mut ret;
     loop {
         let mut tmp_readfds = real_readfds.clone();
@@ -427,9 +430,7 @@ pub fn select_syscall(
 
         // Check for valid return or time elapsed is greater than the total duration of the timeout
         // Since we have this check here for total time elapsed, we can call libc select with a 0 timeout as we do above
-        if ret > 0
-            || original_timeout_millis
-                .map_or(false, |timeout_ms| start_time.elapsed().as_millis() >= timeout_ms)
+        if ret > 0 || readtimer(start_time) >= duration
         {
             real_readfds = tmp_readfds;
             real_writefds = tmp_writefds;
