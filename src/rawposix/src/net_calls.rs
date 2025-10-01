@@ -2,8 +2,18 @@ use typemap::datatype_conversion::*;
 use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
 use typemap::cage_helpers::convert_fd_to_host;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
+use sysdefs::data::fs_struct::EpollEvent;
+use cage::signal_check_trigger;
+use fdtables;
+use fdtables::epoll_event;
+use std::collections::{HashMap, HashSet};
+use parking_lot::Mutex;
 use sysdefs::constants::FDKIND_KERNEL;
 use sysdefs::data::net_struct::SockAddr;
+use libc::*;
+use std::{ptr, mem};
+use sysdefs::*;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/socket.2.html
 ///

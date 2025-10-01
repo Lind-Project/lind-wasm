@@ -8,10 +8,11 @@
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
 use std::error::Error;
-use std::str::Utf8Error;
-use sysdefs::constants::err_const::{syscall_error, Errno};
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME, MAX_CAGEID, PATH_MAX};
+use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal, StatData, FSData, PipeArray, EpollEvent};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::Errno;
+
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
 /// will return true in default mode, and check if `arg` with `arg_cageid` are all null in
 /// `secure` mode.
@@ -676,4 +677,22 @@ pub fn sc_convert_addr_to_pipearray<'a>(
         return Ok(unsafe { &mut *pointer });
     }
     return Err(Errno::EFAULT);
+}
+
+/// Converts a raw `u64` argument into a nullity check.
+/// If the `secure` feature is enabled, this also validates that the argument’s
+/// cage ID matches the current cage ID. If validation fails, the function
+/// returns early with `-1`.
+/// 
+/// Otherwise, the argument is cast to a pointer and checked for null,
+/// returning `true` if the argument is null and `false` if not.
+pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            return -1;
+        }
+    }
+    
+    (arg as *const u8).is_null()
 }

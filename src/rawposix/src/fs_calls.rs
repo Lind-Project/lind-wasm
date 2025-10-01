@@ -1,5 +1,4 @@
 use libc::c_void;
-use std::ffi::CStr;
 use typemap::datatype_conversion::*;
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
@@ -7,9 +6,8 @@ use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
-use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, check_addr};
+use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps};
 use fdtables;
-use std::path::PathBuf;
 use typemap::filesystem_helpers::{convert_statdata_to_user, convert_fstatdata_to_user};
 use std::sync::Arc;
 
