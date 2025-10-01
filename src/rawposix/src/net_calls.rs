@@ -456,6 +456,7 @@ pub fn select_syscall(
     // Convert kernel FD results back to virtual FDs and subsequently write to user memory
     // This step translates the kernel select() results (which contain kernel FDs) back into
     // virtual FDs that using the mapping table created earlier    let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
+    let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
         FDKIND_KERNEL,
         realnewnfds as u64,
         Some(real_readfds),
