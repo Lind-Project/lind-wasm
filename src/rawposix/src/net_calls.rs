@@ -190,7 +190,7 @@ pub fn poll_syscall(
                 libc::poll(
                     all_kernel_pollfds.as_mut_ptr(),
                     all_kernel_pollfds.len() as libc::nfds_t,
-                    0, // Trigger instant return from libc epoll as we check elapsed time from start_time for our timeout handling logic
+                    0, // Trigger instant return from libc poll as we check elapsed time from start_time for our timeout handling logic
                 )
             };
 
