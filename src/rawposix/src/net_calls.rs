@@ -181,7 +181,8 @@ pub fn poll_syscall(
     // Poll all kernel-backed fds with timeout/signal checking loop (consistent with old implementation)
     if !all_kernel_pollfds.is_empty() {
         let start_time = starttimer();
-        let (duration, timeout) = timeout_setup_ms(original_timeout);
+        // Keep track of total duration and timeout which is split into 100ms chunks if duration > 100ms
+        let (duration, timeout) = timeout_setup_ms(original_timeout); 
 
         let ret;
         loop {
@@ -198,13 +199,16 @@ pub fn poll_syscall(
                 return handle_errno(errno, "poll_syscall");
             }
 
-            // Check for ready FDs or timeout
+            // Check for ready FDs or time elapsed is greater than the total duration of the timeout
             if poll_ret > 0 || readtimer(start_time) > duration {
                 ret = poll_ret;
                 break;
             }
 
-            // Check for signals - consistent with higher-level approach
+            // Check for signals that may have interrupted the select operation
+            // This implements POSIX signal semantics where poll() should return EINTR
+            // if interrupted by a signal before any file descriptors become ready or timeout occurs.
+            // The signal checking happens in the retry loop to ensure we don't block indefinitely
             if signal_check_trigger(cageid) {
                 return syscall_error(Errno::EINTR, "poll_syscall", "interrupted");
             }
@@ -368,14 +372,18 @@ pub fn select_syscall(
     let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
 
     // Handle timeout setup
-    let start_time = Instant::now();
-    let mut timeout = if let Some(timeout_ptr) = timeout_ptr {
-        unsafe { *timeout_ptr }
+    // Store original timeout duration for comparison
+     let original_timeout_millis = if let Some(timeout_ptr) = timeout_ptr {
+        let t = unsafe { *timeout_ptr };
+        Some(t.tv_sec as u128 * 1000 + t.tv_usec as u128 / 1000)
     } else {
-        libc::timeval {
-            tv_sec: 0,
-            tv_usec: 0,
-        }
+        None
+    };
+
+    // Always use zero timeout for instant return from select 
+    let mut zero_timeout = libc::timeval {
+        tv_sec: 0,
+        tv_usec: 0,
     };
 
     let mut ret;
@@ -418,10 +426,10 @@ pub fn select_syscall(
         }
 
         // Check for timeout or successful result
+        // Check for timeout against original total timeout to know when to exit loop
         if ret > 0
-            || (timeout_ptr.is_some()
-                && start_time.elapsed().as_millis()
-                    > (timeout.tv_sec as u128 * 1000 + timeout.tv_usec as u128 / 1000))
+            || original_timeout_millis
+                .map_or(false, |timeout_ms| start_time.elapsed().as_millis() >= timeout_ms)
         {
             real_readfds = tmp_readfds;
             real_writefds = tmp_writefds;
@@ -808,6 +816,7 @@ pub fn epoll_wait_syscall(
 
     if maxevents != 0 {
         let start_time = starttimer();
+        // Keep track of total duration and timeout which is split into 100ms chunks if duration > 100ms
         let (duration, timeout) = timeout_setup_ms(timeout);
 
         // Copy results to the guest's events array *after* translation:
@@ -831,12 +840,15 @@ pub fn epoll_wait_syscall(
                 return handle_errno(errno, "epoll");
             }
 
-            // check for timeout
+            // check for timeout against total duration or if epoll_wait returned successfully. 
             if ret > 0 || readtimer(start_time) > duration {
                 break;
             }
 
-            // check for signal
+            // Check for signals that may have interrupted the select operation
+            // This implements POSIX signal semantics where epoll() should return EINTR
+            // if interrupted by a signal before any file descriptors become ready or timeout occurs.
+            // The signal checking happens in the retry loop to ensure we don't block indefinitely
             if signal_check_trigger(cageid) {
                 return syscall_error(Errno::EINTR, "epoll", "interrupted");
             }
