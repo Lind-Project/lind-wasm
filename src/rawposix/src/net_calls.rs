@@ -361,7 +361,7 @@ pub fn select_syscall(
 
     let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
 
-    // Ttimeout split into (total duration, timeout in milliseconds)
+    // Timeout split into (total duration, timeout in milliseconds)
     // Split the timeout into chunks of 100ms if timeout exceeds 100ms
     let start_time = starttimer();
     let (duration, mut timeout) = timeout_setup_ms(original_timeout);
@@ -421,7 +421,7 @@ pub fn select_syscall(
         }
 
         // Reset timeout if libc::select() modified it to zero (indicating timeout expired)
-        // This ensures we continue waiting for the full duration instead of becoming non-blocking
+        // This ensures we continue waiting for the full duration
         if timeout.tv_sec == 0 && timeout.tv_usec == 0 {
             // Reset to chunk timeout by calling timeout_setup_ms again with original timeout
             let (_, reset_timeout) = timeout_setup_ms(original_timeout);
