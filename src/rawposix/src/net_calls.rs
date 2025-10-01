@@ -200,7 +200,7 @@ pub fn poll_syscall(
             }
 
             // Check for ready FDs or time elapsed is greater than the total duration of the timeout
-            if poll_ret > 0 || readtimer(start_time) > duration {
+            if poll_ret > 0 || readtimer(start_time) >= duration {
                 ret = poll_ret;
                 break;
             }
@@ -380,7 +380,7 @@ pub fn select_syscall(
         None
     };
 
-    // Always use zero timeout for instant return from select 
+    // Always use zero timeout for instant return from select - libc select requires timeval struct format
     let mut zero_timeout = libc::timeval {
         tv_sec: 0,
         tv_usec: 0,
@@ -413,10 +413,10 @@ pub fn select_syscall(
                     std::ptr::null_mut()
                 },
                 if timeout_ptr.is_some() {
-                    &mut timeout as *mut _
+                    &mut zero_timeout as *mut _ // libc select requires timeval struct format
                 } else {
                     std::ptr::null_mut()
-                },
+                }, 
             )
         };
 
@@ -425,8 +425,8 @@ pub fn select_syscall(
             return handle_errno(errno, "select_syscall");
         }
 
-        // Check for timeout or successful result
-        // Check for timeout against original total timeout to know when to exit loop
+        // Check for valid return or time elapsed is greater than the total duration of the timeout
+        // Since we have this check here for total time elapsed, we can call libc select with a 0 timeout as we do above
         if ret > 0
             || original_timeout_millis
                 .map_or(false, |timeout_ms| start_time.elapsed().as_millis() >= timeout_ms)
@@ -841,7 +841,7 @@ pub fn epoll_wait_syscall(
             }
 
             // check for timeout against total duration or if epoll_wait returned successfully. 
-            if ret > 0 || readtimer(start_time) > duration {
+            if ret > 0 || readtimer(start_time) >= duration {
                 break;
             }
 
