@@ -57,7 +57,7 @@ pub fn socket_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "socket_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "socket_syscall");
     }
 
     let kernel_fd = unsafe { libc::socket(domain, socktype, protocol) };
@@ -128,7 +128,7 @@ pub fn connect_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "connect_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "connect_syscall");
     }
     
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -182,7 +182,7 @@ pub fn bind_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "bind_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "bind_syscall");
     }
     
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -234,7 +234,7 @@ pub fn listen_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "listen_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "listen_syscall");
     }
 
     let ret = unsafe { libc::listen(fd, backlog) };
@@ -289,7 +289,7 @@ pub fn accept_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "accept_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "accept_syscall");
     }
 
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -351,7 +351,7 @@ pub fn setsockopt_syscall(
     // no-op by default
     if !(sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "setsockopt_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "setsockopt_syscall");
     }
 
     let ret = unsafe { 
@@ -405,7 +405,7 @@ pub fn shutdown_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "shutdown_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "shutdown_syscall");
     }
 
     let ret = unsafe { libc::shutdown(fd, how) };
@@ -459,7 +459,7 @@ pub fn getsockname_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "getsockname_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "getsockname_syscall");
     }
     
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -662,7 +662,7 @@ pub fn gethostname_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "gethostname_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "gethostname_syscall");
     }
 
     let ret = unsafe { libc::gethostname(name as *mut i8, len) };
@@ -715,7 +715,7 @@ pub fn getsockopt_syscall(
     if !(sc_unusedarg(arg5, arg5_cageid)
     &&sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "getsockopt_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "getsockopt_syscall");
     }
 
     let mut optlen: socklen_t = 4;
@@ -776,7 +776,7 @@ pub fn getpeername_syscall(
     && sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "getpeername_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "getpeername_syscall");
     }
 
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -831,7 +831,7 @@ pub fn socketpair_syscall(
     if !(sc_unusedarg(arg5, arg5_cageid)
     && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "socketpair_syscall", "Invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "sockpair_syscall");
     }
 
     let mut kernel_socket_vector: [i32; 2] = [0, 0];
