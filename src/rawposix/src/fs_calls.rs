@@ -1,17 +1,17 @@
 use libc::c_void;
-use std::ffi::CStr;
 use typemap::datatype_conversion::*;
 use typemap::path_conversion::*;
 use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
-use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE};
+use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE, SHM_DEST,
+    SHM_RDONLY, SHMMIN, SHMMAX};
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
-use cage::{round_up_page, get_cage, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, check_addr};
+use cage::{round_up_page, get_cage, get_shm_length, new_shm_segment, shmat_helper, shmdt_helper, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, SHM_METADATA};
 use fdtables;
-use std::path::PathBuf;
 use typemap::filesystem_helpers::{convert_statdata_to_user, convert_fstatdata_to_user};
 use std::sync::Arc;
+use dashmap::mapref::entry::Entry::{Vacant, Occupied};
 
 /// Helper function for close_syscall
 /// 
@@ -3539,4 +3539,390 @@ pub fn flock_syscall(
     }
 
     ret
+}
+
+/// Linux reference: https://man7.org/linux/man-pages/man2/shmget.2.html
+///
+/// shmget checks whether a shared memory key already exists, and either returns the existing 
+/// segment ID or creates a new segment (after validating flags and size) before registering 
+/// it in the metadata tables. 
+///
+/// ## Arguments
+/// * `cageid`       – The ID of the calling cage, used for ownership and validation.
+/// * `key_arg`      – The key used to identify the shared memory segment (raw u64).
+/// * `key_cageid`   – The cage ID associated with `key_arg` for validation.
+/// * `size_arg`     – The size (in bytes) of the requested segment (raw u64).
+/// * `size_cageid`  – The cage ID associated with `size_arg`.
+/// * `shmflg_arg`   – Flags controlling creation, permissions, and behavior (raw u64).
+/// * `shmflg_cageid`– The cage ID associated with `shmflg_arg`.
+/// 
+/// ## Returns:
+/// On success, it returns the segment ID; on failure, it returns an appropriate error code.
+pub fn shmget_syscall(
+    cageid: u64,
+    key_arg: u64,
+    key_cageid: u64,
+    size_arg: u64,
+    size_cageid: u64,
+    shmflg_arg: u64,
+    shmflg_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let key = sc_convert_sysarg_to_i32(key_arg, key_cageid, cageid);
+    let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
+    let shmflg = sc_convert_sysarg_to_i32(shmflg_arg, shmflg_cageid, cageid);
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "shmget_syscall");
+    }
+
+    if key == IPC_PRIVATE {
+        return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
+    }
+    let shmid: i32;
+    let metadata = &SHM_METADATA;
+
+    match metadata.shmkeyidtable.entry(key) {
+        Occupied(occupied) => {
+            if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
+                return syscall_error(
+                    Errno::EEXIST,
+                    "shmget",
+                    "key already exists and IPC_CREAT and IPC_EXCL were used",
+                );
+            }
+            shmid = *occupied.get();
+        }
+        Vacant(vacant) => {
+            if 0 == (shmflg & IPC_CREAT) {
+                return syscall_error(
+                    Errno::ENOENT,
+                    "shmget",
+                    "tried to use a key that did not exist, and IPC_CREAT was not specified",
+                );
+            }
+
+            if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "shmget",
+                    "Size is less than SHMMIN or more than SHMMAX",
+                );
+            }
+
+            shmid = metadata.new_keyid();
+            vacant.insert(shmid);
+            let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
+
+            let segment = new_shm_segment(
+                key,
+                size,
+                cageid as u32,
+                DEFAULT_UID,
+                DEFAULT_GID,
+                mode,
+            );
+            metadata.shmtable.insert(shmid, segment);
+        }
+    };
+    shmid // return the shmid
+}
+
+/// Linux reference: https://man7.org/linux/man-pages/man3/shmat.3p.html
+///
+/// Handles the shmat syscall by mapping shared memory segments into the cage's address space.
+/// This function manages the attachment of shared memory segments by updating the cage's vmmap
+/// and handling the raw shmat helpers.
+///
+/// # Arguments
+/// * `cageid` - The cage ID that is performing the shmat operation
+/// * `addr` - The requested address to attach the shared memory segment (can be null)
+/// * `prot` - The memory protection flags for the mapping
+/// * `shmflag` - Flags controlling the shared memory attachment behavior
+/// * `shmid` - The ID of the shared memory segment to attach
+///
+/// # Returns
+/// * `u32` - The address where the shared memory segment was attached, or an error code
+///
+/// # Errors
+/// * `EINVAL` - If the provided address is not page-aligned
+/// * `ENOMEM` - If there is insufficient memory to complete the attachment
+pub fn shmat_syscall(
+    cageid: u64,
+    shmid_arg: u64,
+    shmid_cageid: u64,
+    shmaddr_arg: u64,
+    shmaddr_cageid: u64,
+    shmflg_arg: u64,
+    shmflg_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
+    let addr = sc_convert_addr_to_host(shmaddr_arg, shmaddr_cageid, cageid);
+    let shmflag = sc_convert_sysarg_to_i32(shmflg_arg, shmflg_cageid, cageid);
+    let mut prot = 0;
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "shmat_syscall");
+    }
+
+    // Get the cage reference.
+    let cage = get_cage(cageid).unwrap();
+
+    // If SHM_RDONLY is set in shmflag, then use read-only protection,
+    // otherwise default to read–write.
+    prot = if shmflag & SHM_RDONLY != 0 {
+        PROT_READ
+    } else {
+        PROT_READ | PROT_WRITE
+    };
+    let len = match get_shm_length(shmid) {
+        Some(l) => l,
+        None => return syscall_error(Errno::EINVAL, "shmat", "invalid shmid"),
+    };
+
+    // Check that the provided address is page aligned.
+    let rounded_addr = round_up_page(addr as u64);
+    if rounded_addr != addr as u64 {
+        return syscall_error(Errno::EINVAL, "shmat", "address is not aligned");
+    }
+
+    // Round up the length to a multiple of the page size.
+    let rounded_length = round_up_page(len as u64);
+
+    // Initialize the user address from the provided address pointer.
+    // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
+    let mut useraddr = addr as u32;
+    let mut vmmap = cage.vmmap.write();
+    let result;
+    if useraddr == 0 {
+        // Allocate a suitable space in the virtual memory map for the shared memory segment
+        // based on the rounded length of the segment.
+        result = vmmap.find_map_space((rounded_length >> PAGESHIFT) as u32, 1);
+    } else {
+        // Use the user-specified address as a hint to find an appropriate memory address
+        // for the shared memory segment.
+        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+    }
+    if result.is_none() {
+        // If no suitable memory space is found, return an error indicating insufficient memory.
+        return syscall_error(Errno::ENOMEM, "shmat", "no memory") as i32;
+    }
+    let space = result.unwrap();
+    // Update the user address to the start of the allocated memory space.
+    useraddr = (space.start() << PAGESHIFT) as u32;
+
+    // Convert the user address into a system address.
+    // Read the virtual memory map to access the user address space.
+    let vmmap = cage.vmmap.read();
+    // Convert the user address to the corresponding system address for the shared memory segment.
+    let sysaddr = vmmap.user_to_sys(useraddr);
+    // Release the lock on the virtual memory map as we no longer need it.
+    drop(vmmap);
+
+    // Call the raw shmat helper to attach the shared memory segment.
+    let result = shmat_helper(cageid, sysaddr as *mut u8, shmflag, shmid);
+    
+
+    // If the syscall succeeded, update the vmmap entry.
+    if result as i32 >= 0 {
+        // Ensure the syscall attached the segment at the expected address.
+        if result as u32 != useraddr {
+            panic!("shmat did not attach at the expected address");
+        }
+        let mut vmmap = cage.vmmap.write();
+        let backing = MemoryBackingType::SharedMemory(shmid as u64);
+        // Use the effective protection (prot) for both the current and maximum protection.
+        let maxprot = prot;
+        // Add a new vmmap entry for the shared memory segment.
+        // Since shared memory is not file-backed, there are no extra mapping flags
+        // or file offset parameters to consider; thus, we pass 0 for both.
+        let add_result = vmmap.add_entry_with_overwrite(
+            useraddr >> PAGESHIFT,
+            (rounded_length >> PAGESHIFT) as u32,
+            prot,
+            maxprot,
+            0, // No flags for shared memory mapping
+            backing,
+            0, // Offset is not applicable for shared memory
+            len as i64,
+            cageid,
+        );
+
+        // Check if adding the entry was successful.
+        if add_result.is_err() {
+            return syscall_error(Errno::ENOMEM, "shmat", "failed to add vmmap entry");
+        }
+    } else {
+        // If the syscall failed, propagate the error.
+        return result as i32;
+    }
+
+    useraddr as i32
+}
+
+/// Linux reference: https://man7.org/linux/man-pages/man3/shmdt.3p.html
+///
+/// `shmdt_syscall`, interacting with the `vmmap` structure.
+///
+/// This function processes the `shmdt_syscall` by updating the `vmmap` entries and managing
+/// the shared memory detachment operation. It performs address validation, converts user
+/// addresses to system addresses, and updates the virtual memory mappings accordingly.
+///
+/// # Arguments
+/// * `cageid` - Identifier of the cage that calls the `shmdt`
+/// * `addr` - Starting address of the shared memory region to detach
+///
+/// # Returns
+/// * `i32` - 0 for success and negative errno for failure
+pub fn shmdt_syscall(
+    cageid: u64,
+    shmaddr_arg: u64,
+    shmaddr_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let addr = sc_convert_addr_to_host(shmaddr_arg, shmaddr_cageid, cageid);
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "shmdt_syscall");
+    }
+
+    // Retrieve the cage reference.
+    let cage = get_cage(cageid).unwrap();
+
+    // Check that the provided address is aligned on a page boundary.
+    let rounded_addr = round_up_page(addr as u64) as usize;
+    if rounded_addr != addr as usize {
+        return syscall_error(Errno::EINVAL, "shmdt", "address is not aligned");
+    }
+
+    // Convert the user address into a system address using the vmmap.
+    let vmmap = cage.vmmap.read();
+    let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
+    drop(vmmap);
+
+    // Call shmdt_helper which returns length of the detached segment
+    let length = shmdt_helper(cageid, sysaddr as *mut u8);
+    if length < 0 {
+        return length;
+    }
+
+    // Remove the mapping from the vmmap.
+    // This call removes the range starting at the page-aligned user address,
+    // for the number of pages that cover the shared memory region.
+    let mut vmmap = cage.vmmap.write();
+    vmmap.remove_entry(
+        rounded_addr as u32 >> PAGESHIFT,
+        (length as u32) >> PAGESHIFT,
+    );
+
+    0    
+}
+
+/// Linux reference: https://man7.org/linux/man-pages/man3/shmctl.3p.html
+///
+/// It converts and validates the `shmid`, `cmd`, and optional `buf` arguments, enforces that unused
+/// arguments are truly unused (panicking on unexpected values), and then applies
+/// the requested control operation: `IPC_STAT` copies the segment’s metadata
+/// (`shminfo`) into the caller-provided buffer, and `IPC_RMID` marks the segment
+/// for removal (setting `SHM_DEST`) and deletes it immediately if there are no
+/// attachments, also clearing the key to id mapping. 
+/// 
+/// ## Arguments
+/// * `cageid`        – The ID of the calling cage, used for ownership and validation.
+/// * `shmid_arg`     – Shared memory segment ID (raw u64).
+/// * `shmid_cageid`  – Cage ID associated with `shmid_arg`, used for validation.
+/// * `cmd_arg`       – Control command (e.g., `IPC_STAT`, `IPC_RMID`) (raw u64).
+/// * `cmd_cageid`    – Cage ID associated with `cmd_arg`.
+/// * `buf_arg`       – Pointer to a buffer (struct shmid_ds) used for returning or
+///                     updating segment info, depending on the command.
+/// * `buf_cageid`    – Cage ID associated with `buf_arg`.
+///
+/// ## Returns:
+/// On invalid identifiers or
+/// unsupported commands, it returns `-EINVAL` via `syscall_error`; on success,
+/// returns `0`.
+pub fn shmctl_syscall(
+    cageid: u64,
+    shmid_arg: u64,
+    shmid_cageid: u64,
+    cmd_arg: u64,
+    cmd_cageid: u64,
+    buf_arg: u64,
+    buf_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
+    let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
+    let buf = sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!("{}: unused arguments contain unexpected values -- security violation", "shmctl_syscall");
+    }
+
+    let metadata = &SHM_METADATA;
+
+    if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+        match cmd {
+            IPC_STAT => {
+                *buf.unwrap() = segment.shminfo;
+            }
+            IPC_RMID => {
+                segment.rmid = true;
+                segment.shminfo.shm_perm.mode |= SHM_DEST as u16;
+                if segment.shminfo.shm_nattch == 0 {
+                    let key = segment.key;
+                    drop(segment);
+                    metadata.shmtable.remove(&shmid);
+                    metadata.shmkeyidtable.remove(&key);
+                }
+            }
+            _ => {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "shmctl",
+                    "Arguments provided do not match implemented parameters",
+                );
+            }
+        }
+    } else {
+        return syscall_error(Errno::EINVAL, "shmctl", "Invalid identifier");
+    }
+
+    0 //shmctl has succeeded!
 }

@@ -10,8 +10,10 @@ use std::os::unix::io::AsRawFd;
 pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 pub use std::sync::{Arc, LazyLock};
 use std::time::SystemTime;
-use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE};
+use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHM_RDONLY, SHMMIN, SHMMAX};
 use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
+use dashmap::mapref::entry::Entry::{Vacant, Occupied};
+use sysdefs::constants::err_const::{syscall_error, Errno};
 
 pub use dashmap::{mapref::entry::Entry, DashMap, DashSet};
 
@@ -251,5 +253,167 @@ pub fn unmap_shm_mappings(cageid: u64) {
                 panic!("Shm entry not created for some reason");
             }
         };
+    }
+}
+
+//------------------SHMHELPERS----------------------
+/// Finds the index of a given shared memory address in the reverse mapping table.
+/// 
+/// # Arguments
+/// * `rev_shm`  – A vector of `(addr, shmid)` pairs mapping addresses to shared memory IDs.
+/// * `shmaddr`  – The address to search for.
+/// 
+/// # Returns
+/// * `Some(index)` if the address is found in the vector.
+/// * `None` if the address does not exist in the mapping.
+pub fn rev_shm_find_index_by_addr(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Option<usize> {
+    for (index, val) in rev_shm.iter().enumerate() {
+        if val.0 == shmaddr as u32 {
+            return Some(index);
+        }
+    }
+    None
+}
+
+/// Collects all addresses that map to a given shared memory ID from the reverse mapping table.
+/// 
+/// # Arguments
+/// * `rev_shm` – A vector of `(addr, shmid)` pairs mapping addresses to shared memory IDs.
+/// * `shmid`   – The shared memory ID to search for.
+/// 
+/// # Returns
+/// * A vector of all addresses (`u32`) associated with the given `shmid`.
+/// * Returns an empty vector if no addresses are found.
+pub fn rev_shm_find_addrs_by_shmid(rev_shm: &Vec<(u32, i32)>, shmid: i32) -> Vec<u32> {
+    let mut addrvec = Vec::new();
+    for val in rev_shm.iter() {
+        if val.1 == shmid as i32 {
+            addrvec.push(val.0);
+        }
+    }
+
+    return addrvec;
+}
+
+/// Searches for a shared memory region that contains a given address.
+/// 
+/// # Arguments
+/// * `rev_shm`     – A vector of `(addr, shmid)` pairs mapping base addresses to shared memory IDs.
+/// * `search_addr` – The address to look up within existing shared memory regions.
+/// 
+/// # Returns
+/// * `Some((base_addr, shmid))` if `search_addr` falls within the range of a known segment.
+/// * `None` if the address is not within any tracked region.
+pub fn search_for_addr_in_region(
+    rev_shm: &Vec<(u32, i32)>,
+    search_addr: u32,
+) -> Option<(u32, i32)> {
+    let metadata = &SHM_METADATA;
+    for val in rev_shm.iter() {
+        let addr = val.0;
+        let shmid = val.1;
+        if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
+            let range = addr..(addr + segment.size as u32);
+            if range.contains(&search_addr) {
+                return Some((addr, shmid));
+            }
+        }
+    }
+    None
+}
+
+/// Helper function that attaches a shared memory segment to the calling cage’s address space.
+/// 
+/// # Arguments
+/// * `cageid` – ID of the calling cage.
+/// * `shmaddr` – Address where the shared memory segment should be mapped.
+/// * `shmflg` – Flags controlling access (e.g., `SHM_RDONLY`).
+/// * `shmid` – Identifier of the shared memory segment to attach.
+/// 
+/// This function looks up the shared memory segment identified by `shmid`, determines the appropriate 
+/// protection flags from `shmflg`, records the mapping `(shmaddr, shmid)` in the cage’s reverse mapping 
+/// table, and calls `map_shm` to attach the segment to the cage’s address space. If the shmid is 
+/// invalid, it returns an error.
+/// 
+/// # Returns
+/// * On success – the mapped address as a `u32`.
+/// * On error – a negative errno value as a `u32`.
+pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u32 {
+    let metadata = &SHM_METADATA;
+    let prot: i32;
+
+    let cage = get_cage(cageid).unwrap();
+
+    if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
+        if 0 != (shmflg & SHM_RDONLY) {
+            prot = PROT_READ;
+        } else {
+            prot = PROT_READ | PROT_WRITE;
+        }
+        let mut rev_shm = cage.rev_shm.lock();
+        rev_shm.push((shmaddr as u32, shmid));
+        drop(rev_shm);
+
+        segment.map_shm(shmaddr, prot, cageid) as u32
+    } else {
+        syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") as u32
+    }
+}
+
+/// Helper function that detaches a shared memory segment from the calling cage’s address space.
+/// 
+/// # Arguments
+/// * `cageid` – ID of the calling cage.
+/// * `shmaddr` – Address of the shared memory segment to detach.
+/// 
+/// This function searches the cage’s reverse mapping table for the segment mapped at `shmaddr`, 
+/// detaches it with `unmap_shm`, and removes the reverse mapping entry. If the segment was marked 
+/// for removal and has no remaining attachments, it is deleted from both shmtable and `shmkeyidtabl`e. 
+/// On success, it returns the segment length; if no mapping exists at the given address, it returns an error.
+/// 
+/// # Returns
+/// * On success – the length (in bytes) of the detached segment.
+/// * On error – a negative errno value.
+pub fn shmdt_helper(cageid: u64, shmaddr: *mut u8) -> i32 {
+    let metadata = &SHM_METADATA;
+    let mut rm = false;
+    let cage = get_cage(cageid).unwrap();
+    let mut rev_shm = cage.rev_shm.lock();
+    let rev_shm_index = rev_shm_find_index_by_addr(&rev_shm, shmaddr as u32);
+
+    if let Some(index) = rev_shm_index {
+        let shmid = rev_shm[index].1;
+        match metadata.shmtable.entry(shmid) {
+            Occupied(mut occupied) => {
+                let segment = occupied.get_mut();
+                // Retrieve the length before shmdt_syscall since the segment will be cleaned up after
+                // the syscall completes, making the length field unavailable. We need this length
+                // value later to remove the correct number of pages from vmmap.
+                let length = segment.size as i32;
+
+                segment.unmap_shm(shmaddr, cageid);
+
+                if segment.rmid && segment.shminfo.shm_nattch == 0 {
+                    rm = true;
+                }
+                rev_shm.swap_remove(index);
+
+                if rm {
+                    let key = segment.key;
+                    occupied.remove_entry();
+                    metadata.shmkeyidtable.remove(&key);
+                }
+                return length;
+            }
+            Vacant(_) => {
+                panic!("Inode not created for some reason");
+            }
+        };
+    } else {
+        return syscall_error(
+            Errno::EINVAL,
+            "shmdt",
+            "No shared memory segment at shmaddr",
+        );
     }
 }
