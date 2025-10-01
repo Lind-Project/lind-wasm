@@ -1453,6 +1453,8 @@ pub fn recvfrom_syscall(
             let errno = get_errno();
             return handle_errno(errno, "recvfrom");
         }
+
+        return ret;
     }
     // Case 2: both non-NULL → caller wants src_addr + addrlen filled
     else if !(addr_nullity || addrlen_nullity) {
@@ -1478,6 +1480,8 @@ pub fn recvfrom_syscall(
                 );
             }
         }
+
+        return ret;
     }
 
     0
