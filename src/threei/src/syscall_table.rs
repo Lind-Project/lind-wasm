@@ -20,12 +20,9 @@ use rawposix::fs_calls::{
 use rawposix::net_calls::{socket_syscall, connect_syscall, bind_syscall, listen_syscall, 
     accept_syscall, setsockopt_syscall, recvfrom_syscall,
     sendto_syscall, gethostname_syscall, getsockopt_syscall, getpeername_syscall, socketpair_syscall,
-    shutdown_syscall, getsockname_syscall,
-};
-use rawposix::net_calls::{
-    select_syscall, epoll_create_syscall, epoll_ctl_syscall,
+    shutdown_syscall, getsockname_syscall, select_syscall, epoll_create_syscall, epoll_ctl_syscall,
     epoll_wait_syscall, poll_syscall,
-}
+};
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall,
     sigaction_syscall, getppid_syscall, kill_syscall, getuid_syscall, getgid_syscall, geteuid_syscall, 

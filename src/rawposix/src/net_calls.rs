@@ -1,29 +1,21 @@
-// Merged imports from both branches
-use cage::{signal_check_trigger, starttimer, readtimer, timeout_setup_ms};
-use fdtables;
-use std::collections::{HashMap, HashSet};
-use std::{mem, ptr};
-use std::os::raw::{c_void, c_int};
-use parking_lot::Mutex;
 use typemap::datatype_conversion::*;
 use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
 use typemap::cage_helpers::convert_fd_to_host;
-use lazy_static::lazy_static;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::data::fs_struct::EpollEvent;
-use cage::signal_check_trigger;
+use cage::{signal_check_trigger, starttimer, readtimer, timeout_setup_ms};
 use fdtables;
 use fdtables::epoll_event;
 use std::collections::{HashMap, HashSet};
 use parking_lot::Mutex;
-use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD, SOCK_CLOEXEC};
 use sysdefs::constants::FDKIND_KERNEL;
-use sysdefs::data::fs_struct::EpollEvent;
 use sysdefs::data::net_struct::SockAddr;
+use libc::*;
 use std::{ptr, mem};
 use sysdefs::*;
-use libc::{socklen_t, sockaddr, sockaddr_storage};
+use std::time::Instant;
+use lazy_static::lazy_static;
 
 /// `epoll_ctl` handles registering, modifying, and removing the watch set, while `epoll_wait` 
 /// simply gathers ready events based on what's already registered and writes them back to the 
@@ -1460,6 +1452,8 @@ pub fn recvfrom_syscall(
             let errno = get_errno();
             return handle_errno(errno, "recvfrom");
         }
+
+        return ret;
     }
     // Case 2: both non-NULL → caller wants src_addr + addrlen filled
     else if !(addr_nullity || addrlen_nullity) {
@@ -1485,8 +1479,9 @@ pub fn recvfrom_syscall(
                 );
             }
         }
-    }
 
+        return ret;
+    }
     0
 }
 
