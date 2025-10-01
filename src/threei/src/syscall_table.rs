@@ -23,6 +23,10 @@ use rawposix::net_calls::{socket_syscall, connect_syscall, bind_syscall, listen_
     accept_syscall, setsockopt_syscall, recvfrom_syscall, sendto_syscall, gethostname_syscall, 
     getsockopt_syscall, getpeername_syscall, socketpair_syscall, shutdown_syscall, getsockname_syscall, 
 };
+use rawposix::net_calls::{
+    select_syscall, epoll_create_syscall, epoll_ctl_syscall,
+    epoll_wait_syscall, poll_syscall,
+}
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getpid_syscall, wait_syscall, waitpid_syscall,
 };
@@ -44,6 +48,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (1, write_syscall),
     (2, open_syscall),
     (3, close_syscall),
+    (7, poll_syscall),
     (4, stat_syscall),
     (5, fstat_syscall),
     (8, lseek_syscall),
@@ -57,6 +62,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (20, writev_syscall),
     (21, access_syscall),
     (22, pipe_syscall),
+    (23, select_syscall),
     (32, dup_syscall),
     (35, nanosleep_time64_syscall),
     (39, getpid_syscall),
@@ -102,6 +108,9 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (89, readlink_syscall),
     (137, statfs_syscall),
     (202, futex_syscall),
+    (213, epoll_create_syscall),
+    (214, epoll_ctl_syscall),
+    (215, epoll_wait_syscall),
     (228, clock_gettime_syscall),
     (263, unlinkat_syscall),
     (267, readlinkat_syscall),
