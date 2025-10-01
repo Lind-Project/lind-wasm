@@ -275,6 +275,40 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     buf
 }
 
+/// Translates a user-provided address from the Cage's virtual memory into
+/// a mutable reference to a `EpollEvent`.
+///
+/// This function follows the same pattern as other `sc_convert_addr_*`
+/// helpers:
+/// - Validates the Cage ID when the `secure` feature is enabled.
+/// - Retrieves the Cage object via `get_cage`.
+/// - Translates the Wasm linear memory address to a host address using
+///   `translate_vmmap_addr`.
+/// - Casts the host address to a `*mut EpollEvent` and returns it as a
+///   mutable reference if non-null.
+/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
+///   Linux's `EFAULT` ("Bad address") error semantics.
+pub fn sc_convert_addr_to_epollevent<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut EpollEvent, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut EpollEvent;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
+}
+
 /// This function translates 64 bits uadd from the WASM context
 /// into the corresponding host address value. Unlike the previous two functions, it returns
 /// the translated address as a raw `u64` rather than a pointer.
