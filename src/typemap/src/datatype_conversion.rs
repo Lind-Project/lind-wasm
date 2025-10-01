@@ -3,49 +3,15 @@
 //! This file defines conversion helpers for basic primitive types (e.g., `i32`, `u32`, `i64`).
 //! These functions are used during syscall argument decoding and type-safe interpretation
 //! within the RawPOSIX syscall layer (`src/syscalls/`).
+//! Function naming convention:
+//! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
+//! - All other functions are **internal helpers** (inner functions) used only inside this library.
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
-use fdtables;
 use std::error::Error;
-use std::str::Utf8Error;
-use sysdefs::constants::err_const::{syscall_error, Errno};
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
-use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal};
+use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal, StatData, FSData, PipeArray, EpollEvent};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-
-/// This function provides two operations: first, it translates path pointer address from WASM environment
-/// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
-/// which is adding `LIND_ROOT` before the path arguments. Considering actual syscall implementation
-/// logic needs to pass string pointer to underlying rust libc, so this function will return `CString`
-/// lways using arg_cageid to translate. (TODO: the logic here might be different according to 3i/grate
-/// implementation)
-///     - If arg_cageid != cageid: this call is sent by grate. We need to translate according to cage
-///     - If arg_cageid == cageid: this call is sent by cage, we can use either one
-///
-/// ## Arguments:
-///     - cageid: required to do address translation for path pointer
-///     - path_arg: the path pointer with address and contents from user's perspective. Address is
-///                 32-bit (because of WASM feature).
-///
-/// ## Returns:
-///     - c_path: a `CString` variable stores the path from host's perspective
-///     - will return error if total length exceed the MAX_PATH (which is 4096). We use `Box<dyn Error>` here to
-///      let upper functions do error handling. (ie: we want to )
-pub unsafe fn charstar_to_ruststr<'a>(cstr: *const i8) -> Result<&'a str, Utf8Error> {
-    std::ffi::CStr::from_ptr(cstr as *const _).to_str() //returns a result to be unwrapped later
-}
-
-pub fn get_cstr<'a>(arg: u64) -> Result<&'a str, i32> {
-    let ptr = arg as *const i8;
-    if !ptr.is_null() {
-        if let Ok(data) = unsafe { charstar_to_ruststr(ptr) } {
-            return Ok(data);
-        } else {
-            return Err(-1);
-        }
-    }
-
-    return Err(-1);
-}
+use sysdefs::constants::Errno;
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
 /// will return true in default mode, and check if `arg` with `arg_cageid` are all null in
@@ -112,6 +78,9 @@ pub fn get_i32(arg: u64, arg_cageid: u64, cageid: u64) -> i32 {
         panic!("Invalide Cage ID");
     }
 
+    // Check if the upper 32 bits are all 0,
+    // if so, we can safely convert it to u32
+    // Otherwise, we will panic
     if (arg & 0xFFFFFFFF_00000000) != 1 {
         return (arg & 0xFFFFFFFF) as i32;
     }
@@ -156,6 +125,9 @@ pub fn get_u32(arg: u64, arg_cageid: u64, cageid: u64) -> u32 {
         panic!("Invalide Cage ID");
     }
 
+    // Check if the upper 32 bits are all 0,
+    // if so, we can safely convert it to u32
+    // Otherwise, we will panic
     if (arg & 0xFFFFFFFF_00000000) != 1 {
         return (arg & 0xFFFFFFFF) as u32;
     }
@@ -269,6 +241,16 @@ pub fn sc_convert_sysarg_to_i64(arg: u64, arg_cageid: u64, cageid: u64) -> i64 {
     }
 }
 
+/// Convert a raw `u64` argument into a mutable `*mut u8` pointer, with optional
+/// cage ID validation.
+/// 
+/// ## Arguments
+/// - `arg`: The raw 64-bit value to be interpreted as a pointer.
+/// - `arg_cageid`: Cage ID associated with the argument (source).
+/// - `cageid`: Cage ID of the calling context (expected).
+///
+/// ## Returns
+/// - A mutable pointer `*mut u8` corresponding to the given argument.
 pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
     #[cfg(feature = "secure")]
     {
@@ -355,7 +337,7 @@ pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64)
 /// # Returns
 /// * `Some(&SigactionStruct)` if the pointer is nonzero and translation succeeds.
 /// * `None` if `act_arg == 0`.
-pub fn sc_convert_SigactionStruct<'a>(
+pub fn sc_convert_sigactionStruct<'a>(
     act_arg: u64,
     act_arg_cageid: u64,
     cageid: u64, 
@@ -398,7 +380,7 @@ pub fn sc_convert_SigactionStruct<'a>(
 /// # Returns
 /// * `Some(&mut SigactionStruct)` if the pointer is nonzero and translation succeeds.
 /// * `None` if `act_arg == 0`.
-pub fn sc_convert_SigactionStruct_mut<'a>(
+pub fn sc_convert_sigactionStruct_mut<'a>(
     act_arg: u64,
     act_arg_cageid: u64,
     cageid: u64,
@@ -607,4 +589,153 @@ pub fn sc_convert_itimerval_mut(
             None => panic!("Failed to get ITimerVal from address"),
         }
     }
+}
+
+/// `sc_convert_addr_to_statdata` translates a user-provided address from the
+/// calling Cage's virtual memory into a mutable reference to a `StatData`
+/// structure.
+///
+/// ## Arguments:
+///  - `arg`: The raw virtual address of the user-provided `StatData` buffer.
+///  - `arg_cageid`: The Cage ID associated with the provided address.
+///  - `cageid`: The Cage ID of the current caller (used for validation).
+///
+/// ## Implementation Details:
+///  - When the `secure` feature is enabled, the function validates that the
+///    provided `arg_cageid` matches the current `cageid`.
+///  - The Cage object is retrieved via `get_cage(cageid)`.
+///  - The virtual address is translated into a host address using
+///    `translate_vmmap_addr`.
+///  - The host address is cast into a `*mut StatData`, and if non-null,
+///    reinterpreted as a mutable reference.
+///  - If the pointer is null, the function returns `Err(Errno::EFAULT)`,
+///    indicating a "Bad address" error consistent with Linux error handling.
+///
+/// ## Return Value:
+///  - `Ok(&mut StatData)` if the address translation succeeds.
+///  - `Err(Errno::EFAULT)` if the address is invalid or null.
+pub fn sc_convert_addr_to_statdata<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut StatData, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut StatData;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
+}
+
+/// Translates a user-provided address from the Cage's virtual memory into
+/// a mutable reference to an `FSData` structure.
+///
+/// This function follows the same logic as `sc_convert_addr_to_statdata`
+pub fn sc_convert_addr_to_fstatdata<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut FSData, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut FSData;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
+}
+
+/// Translates a user-provided address from the Cage's virtual memory into
+/// a mutable reference to a `PipeArray`.
+///
+/// This function follows the same pattern as other `sc_convert_addr_*`
+/// helpers:
+/// - Validates the Cage ID when the `secure` feature is enabled.
+/// - Retrieves the Cage object via `get_cage`.
+/// - Translates the Wasm linear memory address to a host address using
+///   `translate_vmmap_addr`.
+/// - Casts the host address to a `*mut PipeArray` and returns it as a
+///   mutable reference if non-null.
+/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
+///   Linux's `EFAULT` ("Bad address") error semantics.
+pub fn sc_convert_addr_to_pipearray<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut PipeArray, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut PipeArray;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
+}
+
+/// Translates a user-provided address from the Cage's virtual memory into
+/// a mutable reference to a `EpollEvent`.
+///
+/// This function follows the same pattern as other `sc_convert_addr_*`
+/// helpers:
+/// - Validates the Cage ID when the `secure` feature is enabled.
+/// - Retrieves the Cage object via `get_cage`.
+/// - Translates the Wasm linear memory address to a host address using
+///   `translate_vmmap_addr`.
+/// - Casts the host address to a `*mut EpollEvent` and returns it as a
+///   mutable reference if non-null.
+/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
+///   Linux's `EFAULT` ("Bad address") error semantics.
+pub fn sc_convert_addr_to_epollevent<'a>(
+    arg: u64,
+    arg_cageid: u64,
+    cageid: u64,
+) -> Result<&'a mut EpollEvent, Errno> {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalide Cage ID");
+        }
+    }
+
+    let cage = get_cage(cageid).unwrap();
+    let addr = translate_vmmap_addr(&cage, arg).unwrap();
+    let pointer = addr as *mut EpollEvent;
+    if !pointer.is_null() {
+        return Ok(unsafe { &mut *pointer });
+    }
+    return Err(Errno::EFAULT);
+}
+
+
+pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            return -1;
+        }
+    }
+    
+    (arg as *const u8).is_null()
 }

@@ -28,11 +28,6 @@ pub struct Cage {
     pub parent: u64,
     // Current working directory of cage, must be able to be unique from other cages
     pub cwd: RwLock<Arc<PathBuf>>,
-    // Identifiers for gid/uid/egid/euid
-    pub gid: AtomicI32,
-    pub uid: AtomicI32,
-    pub egid: AtomicI32,
-    pub euid: AtomicI32,
     // Reverse mapping for shared memory of addresses in cage to shmid, used for attaching and deattaching
     // shared memory segments
     pub rev_shm: Mutex<Vec<(u32, i32)>>,

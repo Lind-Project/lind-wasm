@@ -18,18 +18,24 @@ use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDOUT_FILENO, STDIN_FILENO};
 use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
-use sysdefs::constants::sys_const::{EXIT_SUCCESS, DEFAULT_UID, DEFAULT_GID, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK, ITIMER_REAL};
+use sysdefs::constants::sys_const::{EXIT_SUCCESS, DEFAULT_UID, DEFAULT_GID, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK, ITIMER_REAL, SIGCHLD};
 use sysdefs::data::fs_struct::{SigactionStruct, ITimerVal};
 use typemap::datatype_conversion::*;
 use dashmap::DashMap;
 
-
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
 ///
-/// `fork_syscall` creates a new process (cage object). The newly created child process is an exact copy of the
-/// parent process (the process that calls fork) apart from it's cage_id and the parent_id
-/// In this function we separately handle copying fd tables and clone vmmap talbe and create a new Cage object
-/// with this cloned tables.
+/// We implement `fork` in user space because a Cage is not a host kernel process, 
+/// and its granularity does not align with the host kernel’s notion of processes. 
+/// Delegating directly to the kernel would not allow us to capture the Cage-level 
+/// semantics we need. Instead, this function performs the resource management that 
+/// `fork` implies in our model: duplicating the file descriptor table, cloning the 
+/// virtual memory map, and constructing a new Cage object that mirrors the parent’s 
+/// state. In this way, we preserve the familiar fork semantics while keeping control 
+/// at the Cage abstraction level.
+///
+/// Actual operations of the address space is handled by wasmtime when creating a new
+/// instance for the child cage.
 pub fn fork_syscall(
     cageid: u64,
     child_arg: u64,        // Child's cage id
@@ -45,14 +51,15 @@ pub fn fork_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "fork", "Invalide Arguments");
+        return syscall_error(Errno::EFAULT, "fork", "invalid Arguments");
     }
 
     // Modify the fdtable manually
@@ -68,10 +75,6 @@ pub fn fork_syscall(
         cageid: child_arg,
         cwd: RwLock::new(selfcage.cwd.read().clone()),
         parent: child_arg_cageid,
-        gid: AtomicI32::new(selfcage.gid.load(Relaxed)),
-        uid: AtomicI32::new(selfcage.uid.load(Relaxed)),
-        egid: AtomicI32::new(selfcage.egid.load(Relaxed)),
-        euid: AtomicI32::new(selfcage.euid.load(Relaxed)),
         rev_shm: Mutex::new(Vec::new()),
         main_threadid: RwLock::new(0),
         interval_timer: IntervalTimer::new(child_arg),
@@ -88,6 +91,74 @@ pub fn fork_syscall(
     selfcage.child_num.fetch_add(1, SeqCst);
 
     add_cage(child_arg, cageobj);
+    0
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man3/exec.3.html
+///
+/// In our implementation, Wasmtime is responsible for handling functionalities such as loading and executing
+/// the new program, preserving process attributes, and resetting memory and the stack.
+///
+/// In RawPOSIX, the focus is on memory management inheritance and resource cleanup and release. Specifically,
+/// RawPOSIX handles tasks such as clearing memory mappings, resetting shared memory, managing file descriptors
+/// (closing or inheriting them based on the `should_cloexec` flag in fdtable), resetting semaphores, and
+/// managing process attributes and threads (terminating unnecessary threads). This allows us to fully implement
+/// the exec functionality while aligning with POSIX standards. Cage fields remained in exec():
+/// cageid, cwd, parent, interval_timer
+pub fn exec_syscall(
+    cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
+    if !(sc_unusedarg(arg1, arg1_cageid)
+        && sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "exec", "invalid Cage ID");
+    }
+
+    // Empty fd with flag should_cloexec
+    fdtables::empty_fds_for_exec(cageid);
+
+    // Copy necessary data from current cage
+    let selfcage = get_cage(cageid).unwrap();
+
+    selfcage.rev_shm.lock().clear();
+    
+    // ensures that all old mappings and states are discarded, allowing the new cage to 
+    // run in a clean virtual address space, while reusing the existing `Vmmap` container 
+    // to avoid extra allocations.
+    let mut vmmap = selfcage.vmmap.write();
+    vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
+
+    // perform signal related clean up
+    // all the signal handler becomes default after exec
+    // pending signals should be perserved though
+    selfcage.signalhandler.clear();
+    // the sigset will be reset after exec
+    selfcage.sigset.store(0, Relaxed);
+    // we also clean up epoch handler and main thread id
+    // since they will be re-established from wasmtime
+    selfcage.epoch_handler.clear();
+    let mut threadid_guard = selfcage.main_threadid.write();
+    *threadid_guard = 0;
+    drop(threadid_guard);
+
     0
 }
 
@@ -112,18 +183,21 @@ pub fn exit_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "exit", "Invalide Arguments");
+        return syscall_error(Errno::EFAULT, "exit", "invalid Arguments");
     }
 
+    // Cleanup fdtable
     let _ = fdtables::remove_cage_from_fdtable(cageid);
     
+    // Cleanup cage table
     // Get the self cage
     //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
     if let Some(selfcage) = get_cage(cageid) {
@@ -142,6 +216,10 @@ pub fn exit_syscall(
             }
         }
 
+        // if the cage has parent (i.e. it is not the "root" cage)
+        if cageid != selfcage.parent {
+            lind_send_signal(selfcage.parent, SIGCHLD);
+        }
         remove_cage(cageid);
     }
     
@@ -171,7 +249,8 @@ pub fn waitpid_syscall(
 ) -> i32 {
     let status = sc_convert_sysarg_to_i32_ref(status_arg, status_cageid, cageid);
     let options = sc_convert_sysarg_to_i32(options_arg, options_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -311,14 +390,15 @@ pub fn wait_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "waitpid", "Invalid Arguments");
+        return syscall_error(Errno::EFAULT, "wait", "Invalid Arguments");
     }
     // left type conversion done inside waitpid_syscall
     waitpid_syscall(
@@ -338,6 +418,16 @@ pub fn wait_syscall(
     )
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/getpid.2.html
+///
+/// Implements `getpid`.  
+/// In our model, a Cage’s `pid` is simply its `cageid`, stored locally in the Cage
+/// structure rather than managed by the host kernel. This allows each Cage to
+/// behave like a process with its own identifier while remaining within the
+/// user-space runtime.
+///
+/// ## Returns
+/// Get the parent cage ID
 pub fn getpid_syscall(
     cageid: u64,
     arg1: u64,
@@ -353,7 +443,8 @@ pub fn getpid_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -361,7 +452,7 @@ pub fn getpid_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "exec", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "getpid", "invalid Cage ID");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -370,6 +461,8 @@ pub fn getpid_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/getppid.3p.html
+///
+/// See comments of `getpid_syscall` for more details
 /// 
 /// ## Returns
 /// Get the parent cage ID
@@ -388,7 +481,8 @@ pub fn getppid_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
+    // would check when `secure` flag has been set during compilation, 
+    // no-op by default
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -396,7 +490,7 @@ pub fn getppid_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "exec", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "getppid", "invalid Cage ID");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -406,8 +500,10 @@ pub fn getppid_syscall(
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getgid.2.html
 ///
-/// Retrieves the group id (gid) for the current cage. If the cage's group id is uninitialized (i.e. -1),
-/// then it updates it to a default group id defined in the constants and returns -1.
+/// Get the real **host** group ID of the calling process.
+///
+/// ## Returns
+/// These functions are always successful and never modify errno.
 pub fn getgid_syscall(
     cageid: u64,
     arg1: u64, 
@@ -433,29 +529,15 @@ pub fn getgid_syscall(
         return syscall_error(Errno::EFAULT, "getgid", "Invalid arguments");
     }
 
-    // Get the current cage.
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return syscall_error(Errno::ECHILD, "getgid", "Cage not found"),
-    };
-
-    // Read the group id stored in the cage.
-    let gid = cage.gid.load(Relaxed);
-
-    // If the group id is uninitialized (-1), update it to the default and return -1.
-    if gid == -1 {
-        cage.gid.store(DEFAULT_GID as i32, Relaxed);
-        return -1;
-    }
-
-    // Otherwise, return the default group id
-    DEFAULT_GID as i32
+    (unsafe { libc::getgid() }) as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getegid.2.html
 ///
-/// Retrieves the effective group id (egid) for the current cage. If uninitialized (-1),
-/// updates it to a default value and returns -1.
+/// Get the effective **host** group ID of the calling process.
+///
+/// ## Returns
+/// These functions are always successful and never modify errno.
 pub fn getegid_syscall(
     cageid: u64,
     arg1: u64, 
@@ -482,28 +564,15 @@ pub fn getegid_syscall(
         return syscall_error(Errno::EFAULT, "getegid", "Invalid arguments");
     }
 
-    // Retrieve the current cage.
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return syscall_error(Errno::ECHILD, "getegid", "Cage not found"),
-    };
-
-    // Read the effective group id (egid) from the cage.
-    let egid = cage.egid.load(Relaxed);
-    if egid == -1 {
-        // If not set, update with the default and return -1.
-        cage.egid.store(DEFAULT_GID as i32, Relaxed);
-        return -1;
-    }
-
-    // Otherwise, return the default effective group id.
-    DEFAULT_GID as i32
+    (unsafe { libc::getegid() }) as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getuid.2.html
 ///
-/// Retrieves the user id (uid) for the current cage. If the cage’s uid is uninitialized (-1),
-/// it updates it to the default user id and returns -1.
+/// Get the real **host** user ID of the calling process.
+///
+/// ## Returns
+/// These functions are always successful and never modify errno.
 pub fn getuid_syscall(
     cageid: u64,
     arg1: u64, 
@@ -529,28 +598,15 @@ pub fn getuid_syscall(
         return syscall_error(Errno::EFAULT, "getuid", "Invalid arguments");
     }
 
-    // Retrieve the cage.
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return syscall_error(Errno::ECHILD, "getuid", "Cage not found"),
-    };
-
-    // Read the current uid from the cage.
-    let uid = cage.uid.load(Relaxed);
-    if uid == -1 {
-        // If uid is uninitialized, set it to the default and return -1.
-        cage.uid.store(DEFAULT_UID as i32, Relaxed);
-        return -1;
-    }
-
-    // Otherwise, return the stored uid (which is default in Lind's design).
-    DEFAULT_UID as i32
+    (unsafe { libc::getuid() }) as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/geteuid.2.html
 ///
-/// Retrieves the effective user id (euid) for the current cage. If uninitialized (-1),
-/// it updates the euid to the default value and returns -1.
+/// Get the real **host** effective ID of the calling process.
+///
+/// ## Returns
+/// These functions are always successful and never modify errno.
 pub fn geteuid_syscall(
     cageid: u64,
     arg1: u64, 
@@ -576,22 +632,7 @@ pub fn geteuid_syscall(
         return syscall_error(Errno::EFAULT, "geteuid", "Invalid arguments");
     }
 
-    // Retrieve the current cage (process) object.
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return syscall_error(Errno::ECHILD, "geteuid", "Cage not found"),
-    };
-
-    // Load the effective user ID.
-    let euid = cage.euid.load(Relaxed);
-    if euid == -1 {
-        // If uninitialized, update to the default and return -1.
-        cage.euid.store(DEFAULT_UID as i32, Relaxed);
-        return -1;
-    }
-
-    // Otherwise, return the default effective user ID.
-    DEFAULT_UID as i32
+    (unsafe { libc::geteuid() }) as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/sigaction.2.html
@@ -628,8 +669,8 @@ pub fn sigaction_syscall(
     arg6: u64, arg6_cageid: u64,
 ) -> i32 {
     let sig = sc_convert_sysarg_to_i32(sig_arg, sig_arg_cageid, cageid);
-    let act = sc_convert_SigactionStruct(act_arg, act_arg_cageid, cageid);
-    let oact = sc_convert_SigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
+    let act = sc_convert_sigactionStruct(act_arg, act_arg_cageid, cageid);
+    let oact = sc_convert_sigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
     // Validate that the extra unused arguments are indeed unused.
     if !(sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
@@ -786,7 +827,7 @@ pub fn sigprocmask_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "sigprocmask_syscall", "Invalide Cage ID");
+        return syscall_error(Errno::EFAULT, "sigprocmask_syscall", "invalid Cage ID");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -935,7 +976,7 @@ pub fn setitimer_syscall(
 
 /// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
 /// detailed error messages will be printed if set
-pub fn lindrustinit(verbosity: isize) {
+pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
     cagetable_init();
 
@@ -945,10 +986,6 @@ pub fn lindrustinit(verbosity: isize) {
         cageid: 0,
         cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
         parent: 0,
-        gid: AtomicI32::new(-1),
-        uid: AtomicI32::new(-1),
-        egid: AtomicI32::new(-1),
-        euid: AtomicI32::new(-1),
         rev_shm: Mutex::new(Vec::new()),
         main_threadid: RwLock::new(0),
         interval_timer: IntervalTimer::new(0),
@@ -1018,10 +1055,6 @@ pub fn lindrustinit(verbosity: isize) {
         cageid: 1,
         cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
         parent: 1,
-        gid: AtomicI32::new(-1),
-        uid: AtomicI32::new(-1),
-        egid: AtomicI32::new(-1),
-        euid: AtomicI32::new(-1),
         rev_shm: Mutex::new(Vec::new()),
         main_threadid: RwLock::new(0),
         interval_timer: IntervalTimer::new(1),
@@ -1074,7 +1107,7 @@ pub fn lindrustinit(verbosity: isize) {
     .unwrap();
 }
 
-pub fn lindrustfinalize() {
+pub fn rawposix_shutdown() {
     let exitvec = cagetable_clear();
 
     for cageid in exitvec {
@@ -1094,68 +1127,4 @@ pub fn lindrustfinalize() {
             0,
         );
     }
-}
-
-/// Reference to Linux: https://man7.org/linux/man-pages/man3/exec.3.html
-///
-/// In our implementation, WASM is responsible for handling functionalities such as loading and executing
-/// the new program, preserving process attributes, and resetting memory and the stack.
-///
-/// In RawPOSIX, the focus is on memory management inheritance and resource cleanup and release. Specifically,
-/// RawPOSIX handles tasks such as clearing memory mappings, resetting shared memory, managing file descriptors
-/// (closing or inheriting them based on the `should_cloexec` flag in fdtable), resetting semaphores, and
-/// managing process attributes and threads (terminating unnecessary threads). This allows us to fully implement
-/// the exec functionality while aligning with POSIX standards. Cage fields remained in exec():
-/// cageid, cwd, parent, interval_timer
-pub fn exec_syscall(
-    cageid: u64,
-    arg1: u64,
-    arg1_cageid: u64,
-    arg2: u64,
-    arg2_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg1, arg1_cageid)
-        && sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        return syscall_error(Errno::EFAULT, "exec", "Invalide Cage ID");
-    }
-
-    // Empty fd with flag should_cloexec
-    fdtables::empty_fds_for_exec(cageid);
-
-    // Copy necessary data from current cage
-    let selfcage = get_cage(cageid).unwrap();
-
-    selfcage.rev_shm.lock().clear();
-    
-    let mut vmmap = selfcage.vmmap.write();
-    vmmap.clear(); //this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
-    // perform signal related clean up
-
-    // all the signal handler becomes default after exec
-    // pending signals should be perserved though
-    selfcage.signalhandler.clear();
-    // the sigset will be reset after exec
-    selfcage.sigset.store(0, Relaxed);
-    // we also clean up epoch handler and main thread id
-    // since they will be re-established from wasmtime
-    selfcage.epoch_handler.clear();
-    let mut threadid_guard = selfcage.main_threadid.write();
-    *threadid_guard = 0;
-    drop(threadid_guard);
-
-    0
 }

@@ -516,6 +516,7 @@ dependencies = [
  "dashmap 6.1.0",
  "lazy_static",
  "libc",
+ "nodit",
  "once_cell",
  "parking_lot",
  "rawposix",

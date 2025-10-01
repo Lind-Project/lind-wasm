@@ -3,11 +3,12 @@ use cage::memory::check_addr;
 use core::panic;
 use dashmap::DashSet;
 use once_cell::sync::Lazy;
-use std::ptr;
-use std::sync::Mutex;
+use std::sync::Arc;
+use nodit::interval::ie;
 use sysdefs::constants::lind_platform_const;
-use sysdefs::constants::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
+use sysdefs::constants::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE, PROT_NONE, PROT_EXEC, PAGESHIFT, PAGESIZE}; // Used in `copy_data_between_cages`
 use typemap::datatype_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
+use cage::{get_cage, Cage, MemoryBackingType, VmmapEntry};
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_grate_from_handler,
@@ -633,7 +634,7 @@ fn _validate_range(cage: u64, addr: u64, len: usize, prot: i32, what: &str) -> R
     match check_addr(cage, addr, len, prot) {
         Ok(_) => Ok(()),
         Err(_) => {
-            eprintln!("[3i|copy] range invalid: addr={:#x}, len={}", addr, len);
+            eprintln!("[3i|copy] range invalid: addr={:#x}, len={}, what={:?}", addr, len, what);
             Err(threei_const::ELINDAPIABORTED)
         }
     }
@@ -679,6 +680,32 @@ fn _strlen_in_cage(src: *const u8, max_len: usize) -> Option<usize> {
 /// The maxsize and copytype arguments make the behavor act like strncpy or
 /// memcpy.
 ///
+/// ### Multithreading
+/// This function performs *range and permission checks* and then copies bytes.
+/// It does **not** acquire or hold any locks on the source or destination
+/// mappings. In a multithreaded program, other threads (or cages) may
+/// concurrently mutate or unmap these regions while the checks or the copy
+/// are in progress. The behavior in that case is undefined from the caller’s
+/// perspective (typical outcomes include torn reads/writes or faults).
+///
+/// ### Thread safety
+/// This API is **not thread-safe w.r.t. the memory contents**. It is analogous
+/// to calling `memcpy`/`strncpy` on raw pointers in C: the caller must ensure
+/// that the specified intervals are exclusively owned or otherwise protected
+/// for the entire duration of the call. 
+///
+/// **Users need to ensure** that the specified memory regions remain valid, 
+/// mapped, and stable (i.e., not unmapped, re-mapped, or concurrently written) 
+/// for the entire duration of this operation.
+/// 
+/// ### Scope & constraints
+/// - Cross-cage only: `srccage` and `destcage` must be different. Calls with
+///   the same cage for source and destination are rejected with `ELINDAPIABORTED`.
+/// - No shared memory is assumed between cages; overlapping regions across cages
+///   are therefore impossible since wasm linear memory module.
+/// - For intra-cage copies, callers should use a local memcpy/memmove path
+///   instead of this 3i API.
+///
 /// ## Arguments:
 /// - thiscage: ID of the cage initiating the call (used for address resolution).
 /// - srcaddr: Virtual address in srccage where the data starts.
@@ -704,137 +731,102 @@ pub fn copy_data_between_cages(
     destcage: u64,
     len: u64,
     _arg3cage: u64,
-    copytype: u64, // 0 for Raw shallow copy (memcpy), 1 for Shallow copy for strings (strncpy)
+    copytype: u64, // 0=memcpy, 1=strncpy (bounded)
     _arg4cage: u64,
     _arg5: u64,
     _arg5cage: u64,
     _arg6: u64,
     _arg6cage: u64,
 ) -> u64 {
-    // Always check the source address first
+    // Disallow same-cage copies. This API is for cross-cage transfer only.
+    if srccage == destcage {
+        eprintln!("[3i|copy] src and dest cage cannot be the same: {}", srccage);
+        return threei_const::ELINDAPIABORTED;
+    }
+
     // Reject requests where `len` exceeds the maximum allowed linear memory size
     // (`MAX_LIND_SIZE`), since such a copy would exceed the Wasm 32-bit address space.
     if let Err(code) = _validate_len(len, lind_platform_const::MAX_LINEAR_MEMORY_SIZE) {
         eprintln!("[3i|copy] length too large or zero: {}", len);
         return code;
     }
-    // Validate source first (readable)
-    if let Err(code) = _validate_range(srccage, srcaddr, len as usize, PROT_READ, "source") {
-        return code;
+    // destaddr must be provided (no dynamic allocation support)
+    if destaddr == 0 {
+        panic!("Dynamic allocation not yet supported in copy_data_between_cages");
     }
 
-    // Check if destaddr has been set
-    // Because of the underlying vmmap design, all mappings are applied with MAP_FIXED semantics: the entire
-    // interval [destaddr, destaddr + len) will be remapped. This means:
-    //   - Any pages already occupied in that interval will be unmapped and replaced.
-    //   - Any pages not yet allocated will be freshly mapped.
-    // This behavior naturally covers the case where part of the requested range
-    // was already in use and part was free.
-    let destaddr = if destaddr == 0 {
-        // Map the memory region for the destination address, if user doesn't allocate the memory
-        // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
-        // We pass `0` here as a placeholder in the 3rd argument to avoid any unnecessary performance overhead.
-        let mmret = make_syscall(
-            destcage,
-            MMAP_SYSCALL,
-            0,
-            destcage,
-            0, // let sys pick addr
-            destcage,
-            len as u64,
-            destcage,
-            (PROT_READ | PROT_WRITE) as u64,
-            destcage,
-            (MAP_PRIVATE | MAP_ANONYMOUS) as u64,
-            destcage,
-            (0 - 1) as u64,
-            destcage,
-            0,
-            destcage,
-        ) as i64;
-
-        if mmret < 0 {
-            eprintln!("[3i|copy] mmap failed: {}", mmret);
-            return threei_const::ELINDAPIABORTED;
-        }
-
-        mmret as u64
-    } else {
-        destaddr
-    };
-
-    let host_src_addr = sc_convert_uaddr_to_host(srcaddr, srccage, thiscage);
-    let host_dest_addr = sc_convert_uaddr_to_host(destaddr, destcage, thiscage);
-
-    // Boundary checks to prevent overflow
-    if host_src_addr.checked_add(len).is_none() || host_dest_addr.checked_add(len).is_none() {
-        eprintln!("[3i|copy] address overflow: src={:#x} len={} dest={:#x}", srcaddr, len, destaddr);
-        return threei_const::ELINDAPIABORTED;
-    }
-    
-    // Check the end addr is still valid
-    match check_addr(srccage, srcaddr, len as usize, PROT_READ) {
-        Ok(_) => {}
-        Err(_e) => {
-            eprintln!(
-                "[3i|copy_data_between_cages] Source start address check failed: {}",
-                srcaddr
-            );
-            return threei_const::ELINDAPIABORTED; // Error: Invalid source address
-        }
-    }
-
-    // memcpy: Copies exactly n bytes from src to dest.
-    // strncpy: Copies at most n bytes from src to dest.
+    // Decide actual number of bytes to copy depending on CopyType
+    // `memcpy`: Copies exactly n bytes from src to dest.
+    // `strncpy`: Copies at most n bytes from src to dest.
     // If grate doesn't know the length of the content beforehand, it should use `strncpy` and set len to maximum
     // limits to avoid buffer overflow, so 3i needs to check the length of the content before copying.
     // Otherwise, grate should know the exact length of the content, for example the complex data structure etc.
     // In this case, it should use `memcpy` to copy the content.
     // So we have to check the address range and permissions accordingly before copying the data.
-    match CopyType::try_from(copytype) {
-        Ok(CopyType::RawMemcpy) => {
-            // Validate destination fully (rw), exact len
-            if let Err(code) = _validate_range(destcage, destaddr, len as usize, PROT_READ | PROT_WRITE, "destination") {
-                return code;
-            }
-
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    host_src_addr as *const u8,
-                    host_dest_addr as *mut u8,
-                    len as usize,
-                );
-            }
-        }
+    let copy_len: usize = match CopyType::try_from(copytype) {
+        // memcpy: just copy exactly len bytes
+        Ok(CopyType::RawMemcpy) => len as usize,
+        // strncpy: copy until '\0' or len limit, whichever comes first
         Ok(CopyType::Strncpy) => {
-            // Find actual C-string length (caps at MAX to avoid runaway)
-            let max_scan = lind_platform_const::MAX_LINEAR_MEMORY_SIZE as usize;
-            let actual_len = match _strlen_in_cage(host_src_addr as *const u8, max_scan) {
+            // Validate that the source range is readable for at least `len` bytes
+            if let Err(_e) = check_addr(srccage, srcaddr, len as usize, PROT_READ) {
+                eprintln!("[3i|copy] src precheck failed at start {:x}", srcaddr);
+                return threei_const::ELINDAPIABORTED;
+            }
+            // Try to compute actual string length within limit
+            let max_scan = len as usize; 
+            let host_src_try = sc_convert_uaddr_to_host(srcaddr, srccage, thiscage);
+            if host_src_try == 0 {
+                eprintln!("[3i|copy] host_src null");
+                return threei_const::ELINDAPIABORTED;
+            }
+            let actual = match _strlen_in_cage(host_src_try as *const u8, max_scan) {
                 Some(n) => n + 1, // include '\0'
-                None => {
-                    eprintln!("[3i|copy] source string too long or not null-terminated");
-                    return threei_const::ELINDAPIABORTED;
-                }
+                None => len as usize, // assume max length
             };
-
-            // Validate destination for actual length
-            if let Err(code) = _validate_range(destcage, destaddr, actual_len, PROT_READ | PROT_WRITE, "destination") {
-                return code;
-            }
-
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    host_src_addr as *const u8,
-                    host_dest_addr as *mut u8,
-                    actual_len,
-                );
-            }
+            core::cmp::min(actual, len as usize)
         }
+        // Reject invalid copytype values
         Err(other) => {
             eprintln!("[3i|copy] invalid copy type: {}", other);
             return threei_const::ELINDAPIABORTED;
         }
+    };
+
+    // Validate that src and dest ranges are accessible
+    if let Err(code) = _validate_range(srccage, srcaddr, copy_len, PROT_READ, "source") {
+        return code;
+    }
+    if let Err(code) = _validate_range(destcage, destaddr, copy_len, PROT_READ | PROT_WRITE, "destination") {
+        return code;
+    }
+    
+    // Translate user virtual addrs to host pointers
+    let host_src_addr = sc_convert_uaddr_to_host(srcaddr, srccage, thiscage);
+    let host_dest_addr = sc_convert_uaddr_to_host(destaddr, destcage, thiscage);
+    if host_src_addr == 0 || host_dest_addr == 0 {
+        // src addr or dest addr is null
+        eprintln!("[3i|copy] host addr translate failed");
+        return threei_const::ELINDAPIABORTED;
     }
 
+    // Check for arithmetic overflow before doing pointer arithmetic
+    if host_src_addr.checked_add(copy_len as u64).is_none()
+        || host_dest_addr.checked_add(copy_len as u64).is_none()
+    {
+        eprintln!("[3i|copy] address overflow: src={:#x} len={} dest={:#x}", srcaddr, copy_len, destaddr);
+        return threei_const::ELINDAPIABORTED;
+    }
+
+    // Actually perform the copy
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            host_src_addr as *const u8,
+            host_dest_addr as *mut u8,
+            copy_len,
+        );
+    }
+
+    // Return destination address as success indicator
     destaddr
 }
