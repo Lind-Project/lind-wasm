@@ -420,7 +420,9 @@ pub fn select_syscall(
     // Currently only kernel FDs are supported. In-memory pipes and sockets
     // will require custom polling logic when in-memory system is integrated.
     
-    // Revert result using fdtables helper
+    // Convert kernel FD results back to virtual FDs and subsequently write to user memory
+    // This step translates the kernel select() results (which contain kernel FDs) back into
+    // virtual FDs that using the mapping table created earlier
     let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
         FDKIND_KERNEL,
         realnewnfds as u64,
@@ -429,7 +431,7 @@ pub fn select_syscall(
         None,
         &mappingtable,
     );
-
+    // Write read FD results back to user memory
     if let Some(readfds_ptr) = readfds_ptr {
         if let Some(read_result) = read_result {
             unsafe { *readfds_ptr = read_result };
@@ -445,6 +447,7 @@ pub fn select_syscall(
         &mappingtable,
     );
 
+    // Write write FD results back to user memory
     if let Some(writefds_ptr) = writefds_ptr {
         if let Some(write_result) = write_result {
             unsafe { *writefds_ptr = write_result };
@@ -460,6 +463,7 @@ pub fn select_syscall(
         &mappingtable,
     );
 
+    // Write error FD results back to user memory
     if let Some(exceptfds_ptr) = exceptfds_ptr {
         if let Some(error_result) = error_result {
             unsafe { *exceptfds_ptr = error_result };
