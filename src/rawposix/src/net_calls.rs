@@ -295,7 +295,7 @@ pub fn select_syscall(
 
     // Convert arguments
     let nfds = sc_convert_sysarg_to_i32(nfds_arg, nfds_cageid, cageid);
-    let timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
+    let original_timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
 
     // Convert fd_set pointers - they can be null
     let readfds_ptr = if readfds_arg != 0 {
@@ -361,8 +361,10 @@ pub fn select_syscall(
 
     let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
 
+    // Ttimeout split into (total duration, timeout in milliseconds)
+    // Split the timeout into chunks of 100ms if timeout exceeds 100ms
     let start_time = starttimer();
-    let (duration, mut timeout) = timeout_setup_ms(timeout);
+    let (duration, mut timeout) = timeout_setup_ms(original_timeout);
 
     let mut ret;
     loop {
@@ -390,7 +392,7 @@ pub fn select_syscall(
                 } else {
                     std::ptr::null_mut()
                 },
-                &mut timeout as *mut timeval
+                &mut timeout as *mut timeval 
             )
         };
 
@@ -399,7 +401,10 @@ pub fn select_syscall(
             return handle_errno(errno, "select_syscall");
         }
 
-        // Check for timeout or successful result
+        // Check for timeout or successful result and break if either are met
+        // Note: The real timeout check here is against the start time vs. total duration
+        // Hence, even though our timeouts are split into 100ms chunks, we ensure we don't wait 
+        // longer than it takes to get a successful return value or longer than total duration
         if ret > 0 || readtimer(start_time) > duration {
             real_readfds = tmp_readfds;
             real_writefds = tmp_writefds;
@@ -407,9 +412,20 @@ pub fn select_syscall(
             break;
         }
 
-        // Check for signals
+        // Check for signals that may have interrupted the select operation
+        // This implements POSIX signal semantics where select() should return EINTR
+        // if interrupted by a signal before any file descriptors become ready or timeout occurs.
+        // The signal checking happens in the retry loop to ensure we don't block indefinitely
         if signal_check_trigger(cageid) {
             return syscall_error(Errno::EINTR, "select_syscall", "interrupted");
+        }
+
+        // Reset timeout if libc::select() modified it to zero (indicating timeout expired)
+        // This ensures we continue waiting for the full duration instead of becoming non-blocking
+        if timeout.tv_sec == 0 && timeout.tv_usec == 0 {
+            // Reset to chunk timeout by calling timeout_setup_ms again with original timeout
+            let (_, reset_timeout) = timeout_setup_ms(original_timeout);
+            timeout = reset_timeout;
         }
     }
 
