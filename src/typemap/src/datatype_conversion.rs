@@ -713,7 +713,13 @@ pub fn sc_convert_addr_to_epollevent<'a>(
     return Err(Errno::EFAULT);
 }
 
-
+/// Converts a raw `u64` argument into a nullity check.
+/// If the `secure` feature is enabled, this also validates that the argument’s
+/// cage ID matches the current cage ID. If validation fails, the function
+/// returns early with `-1`.
+/// 
+/// Otherwise, the argument is cast to a pointer and checked for null,
+/// returning `true` if the argument is null and `false` if not.
 pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
     #[cfg(feature = "secure")]
     {

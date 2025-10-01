@@ -1333,6 +1333,7 @@ pub fn clock_gettime_syscall(
     ret
 }
 
+//------------------------------------LINK SYSCALL------------------------------------
 /// Reference: https://man7.org/linux/man-pages/man2/link.2.html
 ///
 /// `link_syscall` creates a new link (hard link) to an existing file.
