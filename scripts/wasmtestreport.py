@@ -19,7 +19,6 @@ from pathlib import Path
 import argparse
 import shutil
 import logging
-import tempfile
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -38,15 +37,13 @@ HTML_OUTPUT = "report.html"
 SKIP_FOLDERS = [] # Add folders to be skipped, the test cases inside these will not run
 RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will run
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent
-LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
-LIND_FS_ROOT = Path(os.environ.get("LIND_FS_ROOT", LIND_WASM_BASE / "src/RawPOSIX/tmp")).resolve()
+LIND_WASM_BASE = os.environ.get("LIND_WASM_BASE", "/home/lind/lind-wasm")
+LIND_FS_ROOT = os.environ.get("LIND_FS_ROOT", "/home/lind/lind-wasm/src/RawPOSIX/tmp")
 
-LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
-TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
-TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
-TESTFILES_DST = LIND_FS_ROOT / "testfiles"
+LIND_TOOL_PATH = Path(f"{LIND_WASM_BASE}/scripts")
+TEST_FILE_BASE = Path(f"{LIND_WASM_BASE}/tests/unit-tests")
+TESTFILES_SRC = Path(f"{LIND_WASM_BASE}/tests/testfiles")
+TESTFILES_DST = Path(f"{LIND_FS_ROOT}/testfiles")
 DETERMINISTIC_PARENT_NAME = "deterministic"
 NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 EXPECTED_DIRECTORY = Path("./expected")
@@ -173,7 +170,7 @@ def add_test_result(result, file_path, status, error_type, output):
 #   Dependancy on the script `lind_compile`.
 # ----------------------------------------------------------------------
 def compile_c_to_wasm(source_file):
-    source_file = Path(source_file)
+    source_file = Path(source_file).resolve()
     testcase = str(source_file.with_suffix(''))
     compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
     
@@ -269,7 +266,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 # TODO: Currently for non deterministic cases, we are only compiling and running the test case, success means the compiled test case ran, need to add more specific tests
 # 
 def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    source_file = Path(source_file)
+    source_file = Path(source_file).resolve()
 
     wasm_file, compile_err = compile_c_to_wasm(source_file)
     if wasm_file is None:
@@ -317,7 +314,7 @@ def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_
 #   Cleans up generated files (wasm/cwasm/native output).
 # ----------------------------------------------------------------------
 def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    source_file = Path(source_file)
+    source_file = Path(source_file).resolve()
     expected_output_file = source_file.parent / EXPECTED_DIRECTORY / f"{source_file.stem}.output"
 
     native_output = source_file.parent / f"{source_file.stem}.o"
@@ -409,8 +406,10 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
 #   None
 # ----------------------------------------------------------------------
 def pre_test():
-    os.makedirs(TESTFILES_DST, exist_ok=True)
+    os.makedirs(TESTFILES_DST, exist_ok=True) 
+
     shutil.copytree(TESTFILES_SRC, TESTFILES_DST, dirs_exist_ok=True)
+
     readlinkfile_path = TESTFILES_DST / "readlinkfile.txt"
     symlink_path = TESTFILES_DST / "readlinkfile"
     open(readlinkfile_path, 'a').close()
@@ -459,7 +458,7 @@ def generate_html_report(report):
         html_content.append(f'<tr><td>Number of Successes</td><td>{test_result.get("number_of_success", 0)}</td></tr>')
         html_content.append(f'<tr><td>Number of Failures</td><td>{test_result.get("number_of_failures", 0)}</td></tr>')
         for error_type in error_types:
-            html_content.append(f'<tr><td>Number of {error_types[error_type]}</td><td>{test_result.get(f"number_of_{error_type}", 0)}</td></tr>')
+            html_content.append(f'<tr><td>Number of {error_types[error_type]}</td><td>{test_result.get(f"number_of_{error_types[error_type]}", 0)}</td></tr>')
         html_content.append('</table>')
 
     for test_type, test_result in report.items():
@@ -613,8 +612,6 @@ def parse_arguments():
     parser.add_argument("--clean-results", action="store_true", help="Flag to clean up result files")
     parser.add_argument("--testfiles", type=Path, nargs = "+", help="Run one or more specific test files")
     parser.add_argument("--debug", action="store_true", help="Enable detailed stdout/stderr output for subprocesses")
-    parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
-    parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
 
     args = parser.parse_args()
     return args
@@ -707,20 +704,11 @@ def main():
     pre_test_only = args.pre_test_only
     clean_testfiles = args.clean_testfiles
     clean_results = args.clean_results
-    artifacts_dir_arg = args.artifacts_dir
-    keep_artifacts = args.keep_artifacts
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
     else:
         logger.setLevel(logging.INFO)
-    
-    # Prevent contradictory flags
-    if clean_results and keep_artifacts:
-        logger.error("Error: Cannot use --clean-results with --keep-artifacts")
-        logger.error("--clean-results exits before running any tests")
-        logger.error("--keep-artifacts only applies after tests have generated artifacts")
-        return
     
     if clean_results:
         if os.path.isfile(output_file):
@@ -737,128 +725,78 @@ def main():
         "non_deterministic": get_empty_result()
     }
 
-    # Prepare artifacts root
-    created_temp_dir = False
-    if artifacts_dir_arg:
-        artifacts_root = artifacts_dir_arg.resolve()
-        try:
-            artifacts_root.mkdir(parents=True, exist_ok=True)
-            # Test writability using tempfile
-            with tempfile.NamedTemporaryFile(dir=artifacts_root, delete=True):
-                pass  # Successfully created and auto-deleted
-        except (OSError, PermissionError) as e:
-            logger.error(f"Cannot write to artifacts directory {artifacts_root}: {e}")
-            return
-    else:
-        try:
-            artifacts_root = Path(tempfile.mkdtemp(prefix="wasmtest_artifacts_"))
-            created_temp_dir = True
-        except OSError as e:
-            logger.error(f"Cannot create temporary artifacts directory: {e}")
-            return
-    logger.debug(f"Artifacts root: {artifacts_root}")
-
     try:
-        # All the main execution logic goes here
-        try:
-            shutil.rmtree(TESTFILES_DST)
-            logger.info(f"Testfiles at {LIND_FS_ROOT} deleted")
-        except FileNotFoundError as e:
-            logger.error(f"Testfiles not present at {LIND_FS_ROOT}")
-        
-        if clean_testfiles:
-            return
+        shutil.rmtree(TESTFILES_DST)
+        logger.info(f"Testfiles at {LIND_FS_ROOT} deleted")
+    except FileNotFoundError as e:
+        logger.error(f"Testfiles not present at {LIND_FS_ROOT}")
+    
+    if clean_testfiles:
+        return
 
-        pre_test()
-        if pre_test_only:
-            logger.info(f"Testfiles copied to {LIND_FS_ROOT}")
-            return
+    pre_test()
+    if pre_test_only:
+        logger.info(f"Testfiles copied to {LIND_FS_ROOT}")
+        return
 
-        skip_folders_paths = [Path(sf) for sf in skip_folders]
-        run_folders_paths = [Path(rf) for rf in run_folders]
-        
-        skip_test_cases = set()
-        try:
-            with open(SKIP_TESTS_FILE, "r") as f:
-                skip_test_cases = {TEST_FILE_BASE / line.strip() for line in f if line.strip()}
-        except FileNotFoundError:
-            logger.error(f"{SKIP_TESTS_FILE} not found")
+    skip_folders_paths = [Path(sf) for sf in skip_folders]
+    run_folders_paths = [Path(rf) for rf in run_folders]
+    
+    skip_test_cases = set()
+    try:
+        with open(SKIP_TESTS_FILE, "r") as f:
+            skip_test_cases = {TEST_FILE_BASE / line.strip() for line in f if line.strip()}
+    except FileNotFoundError:
+        logger.error(f"{SKIP_TESTS_FILE} not found")
 
-        # Override test cases in skip_test_cases by passing individual test cases as arguments
-        if args.testfiles: 
-            tests_to_run = [Path(f).resolve() for f in args.testfiles]
-        else:   
-            test_cases = list(TEST_FILE_BASE.rglob("*.c")) # Gets all c files in the TEST_FILE_BASE path at all depths
-            tests_to_run = []
-            for test_case in test_cases:
-                if should_run_file(test_case, run_folders_paths, skip_folders_paths, skip_test_cases):
-                    tests_to_run.append(test_case)
+    # Override test cases in skip_test_cases by passing individual test cases as arguments
+    if args.testfiles: 
+        tests_to_run = [Path(f).resolve() for f in args.testfiles]
+    else:   
+        test_cases = list(TEST_FILE_BASE.rglob("*.c")) # Gets all c files in the TEST_FILE_BASE path at all depths
+        tests_to_run = []
+        for test_case in test_cases:
+            if should_run_file(test_case, run_folders_paths, skip_folders_paths, skip_test_cases):
+                tests_to_run.append(test_case)
 
-        if not tests_to_run:
-            logger.warning("No tests found")
-            return
+    if not tests_to_run:
+        logger.warning("No tests found")
+        return
 
-        total_count = len(tests_to_run)
-        for i, original_source in enumerate(tests_to_run):
-            logger.info(f"[{i+1}/{total_count}] {original_source}")
+    total_count = len(tests_to_run)
+    for i, source_file in enumerate(tests_to_run):
+        logger.info(f"[{i+1}/{total_count}] {source_file}")	
+        parent_name = source_file.parent.name
 
-            # Mirror test folder structure inside artifacts_root
-            try:
-                rel_path = original_source.relative_to(TEST_FILE_BASE)
-            except ValueError:
-                rel_path = Path(original_source.name)
-            dest_dir = artifacts_root / rel_path.parent
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            dest_source = dest_dir / original_source.name
-            if not dest_source.exists():
-                try:
-                    dest_source.symlink_to(original_source)
-                except OSError:
-                    shutil.copy2(original_source, dest_source)
+        # checks the name of immediate parent folder to see if a test is deterministic or non deterministic.
+        if parent_name == DETERMINISTIC_PARENT_NAME:
+            test_single_file_deterministic(source_file, results["deterministic"], timeout_sec)
+        elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
+            test_single_file_non_deterministic(source_file, results["non_deterministic"], timeout_sec)
 
-            # Copy expected outputs directory if present
-            expected_dir_src = original_source.parent / EXPECTED_DIRECTORY
-            if expected_dir_src.is_dir():
-                expected_dir_dst = dest_dir / EXPECTED_DIRECTORY
-                if not expected_dir_dst.exists():
-                    shutil.copytree(expected_dir_src, expected_dir_dst)
+        wasm_file = source_file.with_suffix(".wasm")
+        cwasm_file = source_file.with_suffix(".cwasm")
+        native_file = source_file.with_suffix(".o")
+        if wasm_file and wasm_file.exists():
+            wasm_file.unlink()
+        if cwasm_file and cwasm_file.exists():
+            cwasm_file.unlink()
+        if native_file and native_file.exists():
+            native_file.unlink()
+    
+    shutil.rmtree(TESTFILES_DST) # removes the test files from the lind fs root
+    
+    os.chdir(LIND_WASM_BASE)
+    with open(output_file, "w") as fp:
+        json.dump(results, fp, indent=4)
 
-            parent_name = original_source.parent.name
-            if parent_name == DETERMINISTIC_PARENT_NAME:
-                test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
-            elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
-                test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
+    if should_generate_html:
+        report_html = generate_html_report(results)
+        with open(output_html_file, "w", encoding="utf-8") as out:
+            out.write(report_html)
+        logger.info(f"'{os.path.abspath(output_html_file)}' generated.")	
 
-        os.chdir(LIND_WASM_BASE)
-        with open(output_file, "w") as fp:
-            json.dump(results, fp, indent=4)
-
-        if should_generate_html:
-            report_html = generate_html_report(results)
-            with open(output_html_file, "w", encoding="utf-8") as out:
-                out.write(report_html)
-            logger.info(f"'{os.path.abspath(output_html_file)}' generated.")	
-
-        logger.info(f"'{os.path.abspath(output_file)}' generated.")
-        if keep_artifacts:
-            logger.info("Artifacts kept for troubleshooting.")
-
-    finally:
-        # ALWAYS clean up, regardless of success/failure/interruption
-        try:
-            shutil.rmtree(TESTFILES_DST)
-        except FileNotFoundError:
-            pass
-            
-        # Remove artifacts directory if it was temp and not requested to keep
-        if created_temp_dir and not keep_artifacts:
-            try:
-                shutil.rmtree(artifacts_root, ignore_errors=True)
-                logger.debug(f"Cleaned up temporary artifacts directory: {artifacts_root}")
-            except Exception as e:
-                logger.warning(f"Failed to clean up temporary artifacts directory {artifacts_root}: {e}")
-        else:
-            logger.info(f"Artifacts retained at: {artifacts_root}")
+    logger.info(f"'{os.path.abspath(output_file)}' generated.")
 
 if __name__ == "__main__":
     main()
