@@ -8,7 +8,6 @@ use parking_lot::Mutex;
 use typemap::datatype_conversion::*;
 use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
 use typemap::cage_helpers::convert_fd_to_host;
-use std::time::Instant;
 use lazy_static::lazy_static;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD, SOCK_CLOEXEC};
@@ -181,12 +180,8 @@ pub fn poll_syscall(
 
     // Poll all kernel-backed fds with timeout/signal checking loop (consistent with old implementation)
     if !all_kernel_pollfds.is_empty() {
-        let start_time = Instant::now();
-        let timeout_duration = if original_timeout >= 0 {
-            Some(std::time::Duration::from_millis(original_timeout as u64))
-        } else {
-            None // Infinite timeout
-        };
+        let start_time = starttimer();
+        let (duration, timeout) = timeout_setup_ms(original_timeout);
 
         let ret;
         loop {
@@ -194,7 +189,7 @@ pub fn poll_syscall(
                 libc::poll(
                     all_kernel_pollfds.as_mut_ptr(),
                     all_kernel_pollfds.len() as libc::nfds_t,
-                    original_timeout,
+                    timeout,
                 )
             };
 
@@ -204,17 +199,9 @@ pub fn poll_syscall(
             }
 
             // Check for ready FDs or timeout
-            if poll_ret > 0 {
+            if poll_ret > 0 || readtimer(start_time) > duration {
                 ret = poll_ret;
                 break;
-            }
-
-            // Check for timeout (if specified)
-            if let Some(timeout_dur) = timeout_duration {
-                if start_time.elapsed() >= timeout_dur {
-                    ret = 0; // Timeout occurred
-                    break;
-                }
             }
 
             // Check for signals - consistent with higher-level approach
@@ -308,6 +295,7 @@ pub fn select_syscall(
 
     // Convert arguments
     let nfds = sc_convert_sysarg_to_i32(nfds_arg, nfds_cageid, cageid);
+    let timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
 
     // Convert fd_set pointers - they can be null
     let readfds_ptr = if readfds_arg != 0 {
@@ -324,13 +312,6 @@ pub fn select_syscall(
 
     let exceptfds_ptr = if exceptfds_arg != 0 {
         Some(sc_convert_buf(exceptfds_arg, exceptfds_cageid, cageid) as *mut libc::fd_set)
-    } else {
-        None
-    };
-
-    // Convert timeout pointer - can be null
-    let timeout_ptr = if timeout_arg != 0 {
-        Some(sc_convert_buf(timeout_arg, timeout_cageid, cageid) as *mut libc::timeval)
     } else {
         None
     };
@@ -380,16 +361,8 @@ pub fn select_syscall(
 
     let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
 
-    // Handle timeout setup
-    let start_time = Instant::now();
-    let mut timeout = if let Some(timeout_ptr) = timeout_ptr {
-        unsafe { *timeout_ptr }
-    } else {
-        libc::timeval {
-            tv_sec: 0,
-            tv_usec: 0,
-        }
-    };
+    let start_time = starttimer();
+    let (duration, mut timeout) = timeout_setup_ms(timeout);
 
     let mut ret;
     loop {
@@ -417,11 +390,7 @@ pub fn select_syscall(
                 } else {
                     std::ptr::null_mut()
                 },
-                if timeout_ptr.is_some() {
-                    &mut timeout as *mut _
-                } else {
-                    std::ptr::null_mut()
-                },
+                &mut timeout as *mut timeval
             )
         };
 
@@ -431,11 +400,7 @@ pub fn select_syscall(
         }
 
         // Check for timeout or successful result
-        if ret > 0
-            || (timeout_ptr.is_some()
-                && start_time.elapsed().as_millis()
-                    > (timeout.tv_sec as u128 * 1000 + timeout.tv_usec as u128 / 1000))
-        {
+        if ret > 0 || readtimer(start_time) > duration {
             real_readfds = tmp_readfds;
             real_writefds = tmp_writefds;
             real_errorfds = tmp_errorfds;
