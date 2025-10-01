@@ -295,7 +295,6 @@ pub fn select_syscall(
 
     // Convert arguments
     let nfds = sc_convert_sysarg_to_i32(nfds_arg, nfds_cageid, cageid);
-    let original_timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
 
     // Convert fd_set pointers - they can be null
     let readfds_ptr = if readfds_arg != 0 {
@@ -312,6 +311,13 @@ pub fn select_syscall(
 
     let exceptfds_ptr = if exceptfds_arg != 0 {
         Some(sc_convert_buf(exceptfds_arg, exceptfds_cageid, cageid) as *mut libc::fd_set)
+    } else {
+        None
+    };
+
+    // Convert timeout pointer - can be null
+    let timeout_ptr = if timeout_arg != 0 {
+        Some(sc_convert_buf(timeout_arg, timeout_cageid, cageid) as *mut libc::timeval)
     } else {
         None
     };
@@ -361,10 +367,16 @@ pub fn select_syscall(
 
     let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
 
-    // Timeout split into (total duration, timeout in milliseconds)
-    // Split the timeout into chunks of 100ms if timeout exceeds 100ms
-    let start_time = starttimer();
-    let (duration, mut timeout) = timeout_setup_ms(original_timeout);
+    // Handle timeout setup
+    let start_time = Instant::now();
+    let mut timeout = if let Some(timeout_ptr) = timeout_ptr {
+        unsafe { *timeout_ptr }
+    } else {
+        libc::timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        }
+    };
 
     let mut ret;
     loop {
@@ -392,7 +404,11 @@ pub fn select_syscall(
                 } else {
                     std::ptr::null_mut()
                 },
-                &mut timeout as *mut timeval 
+                if timeout_ptr.is_some() {
+                    &mut timeout as *mut _
+                } else {
+                    std::ptr::null_mut()
+                },
             )
         };
 
@@ -401,11 +417,12 @@ pub fn select_syscall(
             return handle_errno(errno, "select_syscall");
         }
 
-        // Check for timeout or successful result and break if either are met
-        // Note: The real timeout check here is against the start time vs. total duration
-        // Hence, even though our timeouts are split into 100ms chunks, we ensure we don't wait 
-        // longer than it takes to get a successful return value or longer than total duration
-        if ret > 0 || readtimer(start_time) > duration {
+        // Check for timeout or successful result
+        if ret > 0
+            || (timeout_ptr.is_some()
+                && start_time.elapsed().as_millis()
+                    > (timeout.tv_sec as u128 * 1000 + timeout.tv_usec as u128 / 1000))
+        {
             real_readfds = tmp_readfds;
             real_writefds = tmp_writefds;
             real_errorfds = tmp_errorfds;
@@ -419,14 +436,6 @@ pub fn select_syscall(
         if signal_check_trigger(cageid) {
             return syscall_error(Errno::EINTR, "select_syscall", "interrupted");
         }
-
-        // Reset timeout if libc::select() modified it to zero (indicating timeout expired)
-        // This ensures we continue waiting for the full duration
-        if timeout.tv_sec == 0 && timeout.tv_usec == 0 {
-            // Reset to chunk timeout by calling timeout_setup_ms again with original timeout
-            let (_, reset_timeout) = timeout_setup_ms(original_timeout);
-            timeout = reset_timeout;
-        }
     }
 
     let mut unreal_read = HashSet::new();
@@ -438,8 +447,7 @@ pub fn select_syscall(
     
     // Convert kernel FD results back to virtual FDs and subsequently write to user memory
     // This step translates the kernel select() results (which contain kernel FDs) back into
-    // virtual FDs that using the mapping table created earlier
-    let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
+    // virtual FDs that using the mapping table created earlier    let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
         FDKIND_KERNEL,
         realnewnfds as u64,
         Some(real_readfds),
@@ -447,6 +455,7 @@ pub fn select_syscall(
         None,
         &mappingtable,
     );
+
     // Write read FD results back to user memory
     if let Some(readfds_ptr) = readfds_ptr {
         if let Some(read_result) = read_result {
@@ -462,7 +471,6 @@ pub fn select_syscall(
         None,
         &mappingtable,
     );
-
     // Write write FD results back to user memory
     if let Some(writefds_ptr) = writefds_ptr {
         if let Some(write_result) = write_result {
@@ -478,7 +486,6 @@ pub fn select_syscall(
         None,
         &mappingtable,
     );
-
     // Write error FD results back to user memory
     if let Some(exceptfds_ptr) = exceptfds_ptr {
         if let Some(error_result) = error_result {
