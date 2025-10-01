@@ -715,6 +715,12 @@ pub fn epoll_ctl_syscall(
 /// and in-memory file descriptors. For kernel FDs, calls libc::epoll_wait() on the underlying
 /// kernel epoll FD. 
 ///
+/// Implementation follows a 4-step isolation pattern: (1) translate virtual epoll FD to kernel FD,
+/// (2) create host-side buffer to prevent kernel writing directly to user memory, (3) call 
+/// libc::epoll_wait() with timeout/signal handling, (4) translate returned kernel FDs back to 
+/// virtual FDs before writing to user-space events array. This ensures kernel identifiers never leak 
+/// into user memory while maintaining proper syscall semantics.
+///
 /// TODO: Implement in-memory FD support for epoll_wait
 /// For in-memory FDs, custom polling logic needs to be implemented when in-memory system
 /// is integrated. This will involve checking in-memory pipe/socket readiness and converting
