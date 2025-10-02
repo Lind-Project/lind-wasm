@@ -1022,20 +1022,17 @@ pub fn poll_syscall(
                 }
             }
             _ => {
-                // Handle non-kernel FDs - consistent with old implementation error handling
+                // Handle non-kernel FDs
                 return syscall_error(Errno::EBADFD, "poll_syscall", "Invalid fdkind");
             }
         }
     }
 
-    // Poll all kernel-backed fds with timeout/signal checking loop (consistent with old implementation)
+    // Poll all kernel-backed fds with timeout/signal checking loop
     if !all_kernel_pollfds.is_empty() {
-        let start_time = Instant::now();
-        let timeout_duration = if original_timeout >= 0 {
-            Some(std::time::Duration::from_millis(original_timeout as u64))
-        } else {
-            None // Infinite timeout
-        };
+        let start_time = starttimer();
+        // Keep track of total duration for our exit check in the poll loop
+        let (duration, _) = timeout_setup_ms(original_timeout); 
 
         let ret;
         loop {
@@ -1043,7 +1040,7 @@ pub fn poll_syscall(
                 libc::poll(
                     all_kernel_pollfds.as_mut_ptr(),
                     all_kernel_pollfds.len() as libc::nfds_t,
-                    original_timeout,
+                    0, // Trigger instant return from libc epoll as we check elapsed time from start_time for our timeout handling logic
                 )
             };
 
@@ -1052,21 +1049,16 @@ pub fn poll_syscall(
                 return handle_errno(errno, "poll_syscall");
             }
 
-            // Check for ready FDs or timeout
-            if poll_ret > 0 {
+            // Check for ready FDs or time elapsed is greater than the total duration of the timeout
+            if poll_ret > 0 || readtimer(start_time) > duration {
                 ret = poll_ret;
                 break;
             }
 
-            // Check for timeout (if specified)
-            if let Some(timeout_dur) = timeout_duration {
-                if start_time.elapsed() >= timeout_dur {
-                    ret = 0; // Timeout occurred
-                    break;
-                }
-            }
-
-            // Check for signals - consistent with higher-level approach
+            // Check for signals that may have interrupted the select operation
+            // This implements POSIX signal semantics where poll() should return EINTR
+            // if interrupted by a signal before any file descriptors become ready or timeout occurs.
+            // The signal checking happens in the retry loop to ensure we don't block indefinitely
             if signal_check_trigger(cageid) {
                 return syscall_error(Errno::EINTR, "poll_syscall", "interrupted");
             }
@@ -1106,6 +1098,7 @@ pub fn poll_syscall(
 /// Specifically, kernel fds are passed to the underlying libc select, while impipe and imsock fds would be processed by the
 /// in-memory system. Afterward, the results are combined and consolidated accordingly.
 ///
+/// TODO: Implement in-memory FD support for select syscall
 /// (Note: Currently, only kernel fds are supported. The implementation for in-memory pipes is commented out and will require
 /// further integration and testing once in-memory pipe support is added.)
 ///
@@ -1227,17 +1220,24 @@ pub fn select_syscall(
 
     let mut realnewnfds = readnfd.max(writenfd).max(errornfd);
 
-    // Handle timeout setup
-    let start_time = Instant::now();
-    let mut timeout = if let Some(timeout_ptr) = timeout_ptr {
-        unsafe { *timeout_ptr }
+    // Convert timeval pointer to milliseconds for consistency with poll/epoll_wait timeout handling
+    // select takes a timeval* (tv_sec + tv_usec), but poll/epoll_wait use integer milliseconds
+    let timeout_ms = if let Some(timeout_ptr) = timeout_ptr {
+        let t = unsafe { *timeout_ptr };
+        (t.tv_sec as i32 * 1000) + (t.tv_usec as i32 / 1000)
     } else {
-        libc::timeval {
-            tv_sec: 0,
-            tv_usec: 0,
-        }
+        -1 // No timeout (infinite)
     };
 
+    // Always use zero timeout for instant return from select - libc select requires timeval struct format
+    let mut zero_timeout = libc::timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    
+    let start_time = starttimer();
+    // Keep track of total timeout duration for exit handling later
+    let (duration, _) = timeout_setup_ms(timeout_ms);
     let mut ret;
     loop {
         let mut tmp_readfds = real_readfds.clone();
@@ -1265,10 +1265,10 @@ pub fn select_syscall(
                     std::ptr::null_mut()
                 },
                 if timeout_ptr.is_some() {
-                    &mut timeout as *mut _
+                    &mut zero_timeout as *mut _ // libc select requires timeval struct format
                 } else {
                     std::ptr::null_mut()
-                },
+                }, 
             )
         };
 
@@ -1277,11 +1277,9 @@ pub fn select_syscall(
             return handle_errno(errno, "select_syscall");
         }
 
-        // Check for timeout or successful result
-        if ret > 0
-            || (timeout_ptr.is_some()
-                && start_time.elapsed().as_millis()
-                    > (timeout.tv_sec as u128 * 1000 + timeout.tv_usec as u128 / 1000))
+        // Check for valid return or time elapsed is greater than the total duration of the timeout
+        // Since we have this check here for total time elapsed, we can call libc select with a 0 timeout as we do above
+        if ret > 0 || readtimer(start_time) >= duration
         {
             real_readfds = tmp_readfds;
             real_writefds = tmp_writefds;
@@ -1289,7 +1287,10 @@ pub fn select_syscall(
             break;
         }
 
-        // Check for signals
+        // Check for signals that may have interrupted the select operation
+        // This implements POSIX signal semantics where select() should return EINTR
+        // if interrupted by a signal before any file descriptors become ready or timeout occurs.
+        // The signal checking happens in the retry loop to ensure we don't block indefinitely
         if signal_check_trigger(cageid) {
             return syscall_error(Errno::EINTR, "select_syscall", "interrupted");
         }
@@ -1298,7 +1299,13 @@ pub fn select_syscall(
     let mut unreal_read = HashSet::new();
     let mut unreal_write = HashSet::new();
 
-    // Revert result using fdtables helper
+    // TODO: Implement in-memory FD checking for select syscall
+    // Currently only kernel FDs are supported. In-memory pipes and sockets
+    // will require custom polling logic when in-memory system is integrated.
+    
+    // Convert kernel FD results back to virtual FDs and subsequently write to user memory
+    // This step translates the kernel select() results (which contain kernel FDs) back into
+    // virtual FDs that using the mapping table created earlier    let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
     let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
         FDKIND_KERNEL,
         realnewnfds as u64,
@@ -1308,6 +1315,7 @@ pub fn select_syscall(
         &mappingtable,
     );
 
+    // Write read FD results back to user memory
     if let Some(readfds_ptr) = readfds_ptr {
         if let Some(read_result) = read_result {
             unsafe { *readfds_ptr = read_result };
@@ -1322,7 +1330,7 @@ pub fn select_syscall(
         None,
         &mappingtable,
     );
-
+    // Write write FD results back to user memory
     if let Some(writefds_ptr) = writefds_ptr {
         if let Some(write_result) = write_result {
             unsafe { *writefds_ptr = write_result };
@@ -1337,7 +1345,7 @@ pub fn select_syscall(
         None,
         &mappingtable,
     );
-
+    // Write error FD results back to user memory
     if let Some(exceptfds_ptr) = exceptfds_ptr {
         if let Some(error_result) = error_result {
             unsafe { *exceptfds_ptr = error_result };
@@ -1347,6 +1355,7 @@ pub fn select_syscall(
     // The total number of descriptors ready
     (read_flags + write_flags + error_flags) as i32
 }
+
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_create.2.html
 ///
