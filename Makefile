@@ -81,3 +81,58 @@ distclean: clean
 	$(RM) -f results.json report.html
 	$(RM) -r src/RawPOSIX/tmp/testfiles || true
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete
+
+# wasmtime-tiny:
+# - Uses Cargo profile env overrides (release) to optimize for size:
+#     OPT_LEVEL=z      : smallest code size
+#     LTO=fat          : link-time optimization across crates
+#     CODEGEN_UNITS=1  : serial codegen, smaller binaries
+#     PANIC=abort      : no unwinding code
+#     DEBUG=false      : no debug info
+#     STRIP=symbols    : cargo-native stripping (if supported)
+#     CARGO_INCREMENTAL=0 : disables incremental artifacts
+# - RUSTFLAGS:
+#     -C debuginfo=0          : no DWARF info
+#     -Wl,--gc-sections       : drop unused sections
+#     -Wl,--as-needed         : don’t link unused libs
+#     -fuse-ld=lld + --icf=all: if lld is installed, identical code folding
+# - Features:
+#     --no-default-features   : disables Wasmtime’s huge default set
+#     -F run                  : keep only the `run` subcommand
+#     -F winch                : enable Winch JIT (choose cranelift instead if preferred)
+#     -F disable-logging      : compile out log statements
+# - Strip step:
+#     run system `strip` to remove leftover symbols
+# - Optional UPX:
+#     if UPX=1 is passed and `upx` is installed, compress the binary
+# - Outputs final file size with `ls -lh`
+
+.PHONY: wasmtime-tiny
+wasmtime-tiny:
+	CARGO_PROFILE_RELEASE_OPT_LEVEL=z \
+	CARGO_PROFILE_RELEASE_LTO=fat \
+	CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+	CARGO_PROFILE_RELEASE_PANIC=abort \
+	CARGO_PROFILE_RELEASE_DEBUG=false \
+	CARGO_PROFILE_RELEASE_STRIP=symbols \
+	CARGO_INCREMENTAL=0 \
+	RUSTFLAGS="$$( \
+		FLAGS='-C debuginfo=0 -C link-arg=-Wl,--gc-sections -C link-arg=-Wl,--as-needed'; \
+		if command -v ld.lld >/dev/null 2>&1 || command -v lld >/dev/null 2>&1; then \
+			FLAGS="$$FLAGS -C link-arg=-fuse-ld=lld -C link-arg=-Wl,--icf=all"; \
+		fi; \
+		printf '%s' "$$FLAGS" \
+	)" \
+	cargo build --manifest-path src/wasmtime/Cargo.toml \
+		--release --no-default-features \
+		-F run -F winch -F disable-logging
+
+	@if command -v strip >/dev/null 2>&1; then \
+		strip --strip-unneeded target/release/wasmtime || true; \
+	fi
+
+	@if [ "$${UPX:-0}" = "1" ] && command -v upx >/dev/null 2>&1; then \
+		upx -q --best --lzma target/release/wasmtime || true; \
+	fi
+
+	@ls -lh target/release/wasmtime || true
