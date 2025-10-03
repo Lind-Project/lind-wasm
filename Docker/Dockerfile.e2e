@@ -46,6 +46,7 @@ RUN apt-get update && \
         libxml2 \
         make \
         python3 \
+        python3-pip \
         sed \
         wget \
     && rm -rf /var/lib/apt/lists/*
@@ -72,16 +73,16 @@ RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3
 
 
 # Install rust
-# NOTE: pinning known-to-work nightly-2025-06-01 (see #242)
+# --profile minimal tells rustup to install only the essentials for the toolchain
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain nightly-2025-06-01
+    sh -s -- -y --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 
 # Build wasmtime
 FROM base as build-wasmtime
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
-COPY --parents src/wasmtime src/fdtables src/sysdefs src/cage Makefile .
+COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs Makefile rust-toolchain.toml .
 RUN make wasmtime
 
 
@@ -107,4 +108,9 @@ COPY --parents scripts tests tools skip_test_cases.txt Makefile .
 # and cache layers. This means they are not preserved in the resulting image.
 RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmtime/target \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
-    make test
+    make test && \
+    OUT_DIR=/ REPORT_PATH=/report.html make md_generation
+
+FROM scratch AS artifacts
+COPY --from=test /report.html /wasm-e2e-report.html
+COPY --from=test /e2e_comment.md /e2e_comment.md
