@@ -1,5 +1,5 @@
-use sysdefs::data::fs_struct::{StatData, FSData};
 use libc;
+use sysdefs::data::fs_struct::{FSData, StatData};
 
 // These conversion functions are necessary because:
 // 1. Host kernel's libc structures vary across platforms, while our StatData/FSData provide a stable ABI

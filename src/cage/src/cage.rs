@@ -2,6 +2,7 @@
 //! definitions, a global variables that handles cage management, and cage initialization and
 //! finialization required by wasmtime
 use crate::memory::vmmap::*;
+use crate::timer::*;
 use dashmap::DashMap;
 pub use once_cell::sync::Lazy;
 /// Uses spinlocks first (for short waits) and parks threads when blocking to reduce kernel
@@ -10,9 +11,8 @@ pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
 pub use std::sync::atomic::{AtomicI32, AtomicU64};
 pub use std::sync::Arc;
-use sysdefs::data::fs_struct::SigactionStruct;
-use crate::timer::*;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
+use sysdefs::data::fs_struct::SigactionStruct;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Zombie {

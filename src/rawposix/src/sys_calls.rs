@@ -3,12 +3,13 @@
 //! This module contains all system calls that are being emulated/faked in Lind.
 use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
-use cage::{cagetable_init, add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie};
-use cage::signal::signal::{lind_send_signal, convert_signal_mask, signal_check_trigger};
-use cage::timer::{IntervalTimer};
+use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
+use cage::timer::IntervalTimer;
+use cage::{add_cage, cagetable_clear, cagetable_init, get_cage, remove_cage, Cage, Zombie};
+use dashmap::DashMap;
 use fdtables;
 use libc::sched_yield;
-use parking_lot::{RwLock, Mutex};
+use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering::*;
@@ -16,22 +17,24 @@ use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
-use sysdefs::constants::fs_const::{STDERR_FILENO, STDOUT_FILENO, STDIN_FILENO};
+use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
-use sysdefs::constants::sys_const::{EXIT_SUCCESS, DEFAULT_UID, DEFAULT_GID, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK, ITIMER_REAL, SIGCHLD, WNOHANG};
-use sysdefs::data::fs_struct::{SigactionStruct, ITimerVal};
+use sysdefs::constants::sys_const::{
+    DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
+    SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
+};
+use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
 use typemap::datatype_conversion::*;
-use dashmap::DashMap;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
 ///
-/// We implement `fork` in user space because a Cage is not a host kernel process, 
-/// and its granularity does not align with the host kernel’s notion of processes. 
-/// Delegating directly to the kernel would not allow us to capture the Cage-level 
-/// semantics we need. Instead, this function performs the resource management that 
-/// `fork` implies in our model: duplicating the file descriptor table, cloning the 
-/// virtual memory map, and constructing a new Cage object that mirrors the parent’s 
-/// state. In this way, we preserve the familiar fork semantics while keeping control 
+/// We implement `fork` in user space because a Cage is not a host kernel process,
+/// and its granularity does not align with the host kernel’s notion of processes.
+/// Delegating directly to the kernel would not allow us to capture the Cage-level
+/// semantics we need. Instead, this function performs the resource management that
+/// `fork` implies in our model: duplicating the file descriptor table, cloning the
+/// virtual memory map, and constructing a new Cage object that mirrors the parent’s
+/// state. In this way, we preserve the familiar fork semantics while keeping control
 /// at the Cage abstraction level.
 ///
 /// Actual operations of the address space is handled by wasmtime when creating a new
@@ -51,7 +54,7 @@ pub fn fork_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -59,7 +62,10 @@ pub fn fork_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "fork_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fork_syscall"
+        );
     }
 
     // Modify the fdtable manually
@@ -83,7 +89,7 @@ pub fn fork_syscall(
         signalhandler: selfcage.signalhandler.clone(),
         sigset: AtomicU64::new(0),
         zombies: RwLock::new(vec![]),
-        child_num:  AtomicU64::new(0),
+        child_num: AtomicU64::new(0),
         vmmap: RwLock::new(new_vmmap),
     };
 
@@ -120,7 +126,7 @@ pub fn exec_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
@@ -129,7 +135,10 @@ pub fn exec_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "exec_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "exec_syscall"
+        );
     }
 
     // Empty fd with flag should_cloexec
@@ -139,9 +148,9 @@ pub fn exec_syscall(
     let selfcage = get_cage(cageid).unwrap();
 
     selfcage.rev_shm.lock().clear();
-    
-    // ensures that all old mappings and states are discarded, allowing the new cage to 
-    // run in a clean virtual address space, while reusing the existing `Vmmap` container 
+
+    // ensures that all old mappings and states are discarded, allowing the new cage to
+    // run in a clean virtual address space, while reusing the existing `Vmmap` container
     // to avoid extra allocations.
     let mut vmmap = selfcage.vmmap.write();
     vmmap.clear(); //todo: this just clean the vmmap in the cage, still need some modify for wasmtime and call to kernal
@@ -183,7 +192,7 @@ pub fn exit_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -191,12 +200,15 @@ pub fn exit_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "exit_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "exit_syscall"
+        );
     }
 
     // Cleanup fdtable
     let _ = fdtables::remove_cage_from_fdtable(cageid);
-    
+
     // Cleanup cage table
     // Get the self cage
     //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
@@ -222,7 +234,7 @@ pub fn exit_syscall(
         }
         remove_cage(cageid);
     }
-    
+
     status
 }
 
@@ -249,13 +261,16 @@ pub fn waitpid_syscall(
 ) -> i32 {
     let status = sc_convert_sysarg_to_i32_ref(status_arg, status_cageid, cageid);
     let options = sc_convert_sysarg_to_i32(options_arg, options_cageid, cageid);
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "waitpid_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "waitpid_syscall"
+        );
     }
 
     // get the cage instance
@@ -380,7 +395,6 @@ pub fn waitpid_syscall(
     zombie.cageid as i32
 }
 
-
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/wait.2.html
 ///
 /// See comments of waitpid_syscall
@@ -399,7 +413,7 @@ pub fn wait_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -407,7 +421,10 @@ pub fn wait_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "wait_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "wait_syscall"
+        );
     }
     // left type conversion done inside waitpid_syscall
     waitpid_syscall(
@@ -452,7 +469,7 @@ pub fn getpid_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
@@ -461,7 +478,10 @@ pub fn getpid_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "getpid_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getpid_syscall"
+        );
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -472,7 +492,7 @@ pub fn getpid_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/getppid.3p.html
 ///
 /// See comments of `getpid_syscall` for more details
-/// 
+///
 /// ## Returns
 /// Get the parent cage ID
 pub fn getppid_syscall(
@@ -490,7 +510,7 @@ pub fn getppid_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg1, arg1_cageid)
         && sc_unusedarg(arg2, arg2_cageid)
@@ -515,27 +535,31 @@ pub fn getppid_syscall(
 /// These functions are always successful and never modify errno.
 pub fn getgid_syscall(
     cageid: u64,
-    arg1: u64, 
+    arg1: u64,
     arg1_cageid: u64,
-    arg2: u64, 
+    arg2: u64,
     arg2_cageid: u64,
-    arg3: u64, 
+    arg3: u64,
     arg3_cageid: u64,
-    arg4: u64, 
+    arg4: u64,
     arg4_cageid: u64,
-    arg5: u64, 
+    arg5: u64,
     arg5_cageid: u64,
-    arg6: u64, 
+    arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     // Validate that unused arguments are indeed unused.
     if !(sc_unusedarg(arg1, arg1_cageid)
-         && sc_unusedarg(arg2, arg2_cageid)
-         && sc_unusedarg(arg3, arg3_cageid)
-         && sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "getgid_syscall");
+        && sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getgid_syscall"
+        );
     }
 
     (unsafe { libc::getgid() }) as i32
@@ -549,28 +573,31 @@ pub fn getgid_syscall(
 /// These functions are always successful and never modify errno.
 pub fn getegid_syscall(
     cageid: u64,
-    arg1: u64, 
+    arg1: u64,
     arg1_cageid: u64,
-    arg2: u64, 
+    arg2: u64,
     arg2_cageid: u64,
-    arg3: u64, 
+    arg3: u64,
     arg3_cageid: u64,
-    arg4: u64, 
+    arg4: u64,
     arg4_cageid: u64,
-    arg5: u64, 
+    arg5: u64,
     arg5_cageid: u64,
-    arg6: u64, 
+    arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     // Validate that all extra arguments are unused.
     if !(sc_unusedarg(arg1, arg1_cageid)
-         && sc_unusedarg(arg2, arg2_cageid)
-         && sc_unusedarg(arg3, arg3_cageid)
-         && sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid))
+        && sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "getegid_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getegid_syscall"
+        );
     }
 
     (unsafe { libc::getegid() }) as i32
@@ -584,27 +611,31 @@ pub fn getegid_syscall(
 /// These functions are always successful and never modify errno.
 pub fn getuid_syscall(
     cageid: u64,
-    arg1: u64, 
+    arg1: u64,
     arg1_cageid: u64,
-    arg2: u64, 
+    arg2: u64,
     arg2_cageid: u64,
-    arg3: u64, 
+    arg3: u64,
     arg3_cageid: u64,
-    arg4: u64, 
+    arg4: u64,
     arg4_cageid: u64,
-    arg5: u64, 
+    arg5: u64,
     arg5_cageid: u64,
-    arg6: u64, 
+    arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     // Validate unused arguments.
     if !(sc_unusedarg(arg1, arg1_cageid)
-         && sc_unusedarg(arg2, arg2_cageid)
-         && sc_unusedarg(arg3, arg3_cageid)
-         && sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "getuid_syscall");
+        && sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getuid_syscall"
+        );
     }
 
     (unsafe { libc::getuid() }) as i32
@@ -618,39 +649,43 @@ pub fn getuid_syscall(
 /// These functions are always successful and never modify errno.
 pub fn geteuid_syscall(
     cageid: u64,
-    arg1: u64, 
+    arg1: u64,
     arg1_cageid: u64,
-    arg2: u64, 
+    arg2: u64,
     arg2_cageid: u64,
-    arg3: u64, 
+    arg3: u64,
     arg3_cageid: u64,
-    arg4: u64, 
+    arg4: u64,
     arg4_cageid: u64,
-    arg5: u64, 
+    arg5: u64,
     arg5_cageid: u64,
-    arg6: u64, 
+    arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     // Validate that each extra argument is unused.
     if !(sc_unusedarg(arg1, arg1_cageid)
-         && sc_unusedarg(arg2, arg2_cageid)
-         && sc_unusedarg(arg3, arg3_cageid)
-         && sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "geteuid_syscall");
+        && sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "geteuid_syscall"
+        );
     }
 
     (unsafe { libc::geteuid() }) as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/sigaction.2.html
-/// 
-/// Copy the existing signal handler state from the cage into the caller-provided memory 
-/// (oact). Install the new handler provided by the caller into the cage’s signal handler 
-/// table (act). Reserved arguments must remain unused, and SIGKILL/SIGSTOP cannot be 
+///
+/// Copy the existing signal handler state from the cage into the caller-provided memory
+/// (oact). Install the new handler provided by the caller into the cage’s signal handler
+/// table (act). Reserved arguments must remain unused, and SIGKILL/SIGSTOP cannot be
 /// modified.
-/// 
+///
 /// # Arguments
 /// * `cageid` - The ID of the cage invoking the syscall.
 /// * `sig_arg` - Signal number (as u64, later cast to i32).
@@ -665,27 +700,31 @@ pub fn geteuid_syscall(
 /// * Negative errno wrapped via `syscall_error` on failure.
 pub fn sigaction_syscall(
     cageid: u64,
-    sig_arg: u64, 
+    sig_arg: u64,
     sig_arg_cageid: u64,
-    act_arg: u64, 
+    act_arg: u64,
     act_arg_cageid: u64,
-    oact_arg: u64, 
+    oact_arg: u64,
     oact_arg_cageid: u64,
-    arg4: u64, 
+    arg4: u64,
     arg4_cageid: u64,
-    arg5: u64, 
+    arg5: u64,
     arg5_cageid: u64,
-    arg6: u64, arg6_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
 ) -> i32 {
     let sig = sc_convert_sysarg_to_i32(sig_arg, sig_arg_cageid, cageid);
     let act = sc_convert_sigactionStruct(act_arg, act_arg_cageid, cageid);
     let oact = sc_convert_sigactionStruct_mut(oact_arg, oact_arg_cageid, cageid);
     // Validate that the extra unused arguments are indeed unused.
     if !(sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid))
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "sigaction_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "sigaction_syscall"
+        );
     }
 
     // Retrieve the cage.
@@ -709,7 +748,11 @@ pub fn sigaction_syscall(
     if let Some(new_act) = act {
         // Disallow modification for SIGKILL and SIGSTOP.
         if sig == SIGKILL || sig == SIGSTOP {
-            return syscall_error(Errno::EINVAL, "sigaction", "Cannot modify SIGKILL or SIGSTOP");
+            return syscall_error(
+                Errno::EINVAL,
+                "sigaction",
+                "Cannot modify SIGKILL or SIGSTOP",
+            );
         }
         // Insert the new signal action into the cage’s signal handler table.
         cage.signalhandler.insert(sig, new_act.clone());
@@ -719,10 +762,10 @@ pub fn sigaction_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/kill.2.html
-/// 
+///
 /// This function allows one cage (the caller) to send a signal to another cage
 /// (the target), similar to the `kill(2)` syscall in POSIX.
-/// 
+///
 /// ## Arguments
 /// * `cageid` - The ID of the calling cage (not directly used to deliver the signal).
 /// * `target_cage_arg` / `target_cage_arg_cageid` - Encoded system arguments
@@ -731,24 +774,24 @@ pub fn sigaction_syscall(
 ///
 /// ## Returns
 /// On success, returns `0`. If the target cage does not exist, returns `ESRCH`.
-/// 
+///
 /// ## Errors
 /// * `EFAULT` – Reserved arguments were not unused.
 /// * `EINVAL` – Invalid target cage ID or signal number.
 /// * `ESRCH` – Target cage does not exist.
 pub fn kill_syscall(
-    cageid: u64,       
-    target_cage_arg: u64, 
+    cageid: u64,
+    target_cage_arg: u64,
     target_cage_arg_cageid: u64,
-    sig_arg: u64, 
+    sig_arg: u64,
     sig_arg_cageid: u64,
-    arg3: u64, 
+    arg3: u64,
     arg3_cageid: u64,
-    arg4: u64, 
+    arg4: u64,
     arg4_cageid: u64,
-    arg5: u64, 
+    arg5: u64,
     arg5_cageid: u64,
-    arg6: u64, 
+    arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     // Convert target cage id and signal value.
@@ -757,10 +800,14 @@ pub fn kill_syscall(
 
     // Validate the unused arguments.
     if !(sc_unusedarg(arg3, arg3_cageid)
-         && sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "kill_syscall");
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "kill_syscall"
+        );
     }
 
     // Validate the target cage id: it must not be negative and typically within a system-defined maximum.
@@ -787,10 +834,10 @@ pub fn kill_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/sigprocmask.2.html
-/// 
+///
 /// This function allows a cage to examine or change its
 /// signal mask, i.e., the set of signals currently blocked from delivery.
-/// If `oldset` is provided, copies the current signal mask into it. If `set` is 
+/// If `oldset` is provided, copies the current signal mask into it. If `set` is
 /// provided, updates the mask according to `how`:
 ///    - `SIG_BLOCK`: add signals from `set` to the mask.
 ///    - `SIG_UNBLOCK`: remove signals from `set` from the mask; if any pending
@@ -810,7 +857,7 @@ pub fn kill_syscall(
 ///
 /// ## Returns:
 /// Returns `0` on success, or an error code (`EINVAL`, `EFAULT`) on failure.
-/// 
+///
 /// ## Errors
 /// * `EFAULT` – Reserved arguments were not unused.
 /// * `EINVAL` – Invalid value passed for `how`.
@@ -836,7 +883,10 @@ pub fn sigprocmask_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "sigprocmask_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "sigprocmask_syscall"
+        );
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -852,17 +902,13 @@ pub fn sigprocmask_syscall(
         res = match how {
             SIG_BLOCK => {
                 // Block signals in set
-                cage.sigset.store(
-                    curr_sigset | *some_set,
-                    Relaxed,
-                );
+                cage.sigset.store(curr_sigset | *some_set, Relaxed);
                 0
             }
             SIG_UNBLOCK => {
                 // Unblock signals in set
                 let newset = curr_sigset & !*some_set;
-                cage.sigset
-                    .store(newset, Relaxed);
+                cage.sigset.store(newset, Relaxed);
                 // check if any of the unblocked signals are in the pending signal list
                 // and trigger the epoch if it has
                 let pending_signals = cage.pending_signals.read();
@@ -891,8 +937,7 @@ pub fn sigprocmask_syscall(
                     cage::signal_epoch_trigger(cage.cageid);
                 }
                 // Set sigset to set
-                cage.sigset
-                    .store(*some_set, Relaxed);
+                cage.sigset.store(*some_set, Relaxed);
                 0
             }
             _ => syscall_error(Errno::EINVAL, "sigprocmask", "Invalid value for how"),
@@ -902,17 +947,17 @@ pub fn sigprocmask_syscall(
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/setitimer.3p.html
-/// 
-/// This syscall allows a cage to set or retrieve the value of an interval timer. 
-/// Currently only `ITIMER_REAL` is supported, which decrements in real (wall-clock) 
+///
+/// This syscall allows a cage to set or retrieve the value of an interval timer.
+/// Currently only `ITIMER_REAL` is supported, which decrements in real (wall-clock)
 /// time and delivers `SIGALRM` upon expiration.
-/// 
+///
 /// For `ITIMER_REAL`:  
 ///    - If `old_value` is provided, copies the current timer’s remaining time and interval
 ///      into it.  
 ///    - If `new_value` is provided, updates the interval timer with the new durations.  
 /// For `ITIMER_VIRTUAL` and `ITIMER_PROF`, no action is taken (not implemented).
-/// 
+///
 /// ## Arguments
 /// * `cageid` – The ID of the calling cage.
 /// * `which_arg` / `which_arg_cageid` – Encoded argument specifying which timer to use
@@ -922,23 +967,23 @@ pub fn sigprocmask_syscall(
 /// * `old_value_arg` / `old_value_arg_cageid` – Pointer to an `itimerval` struct
 ///   where the previous timer value should be stored. If non-null, the current
 ///   timer is copied here before being changed.
-/// 
+///
 /// ## Returns
 /// * `0` on success.
 /// * Negative errno (`EFAULT`, etc.) on failure.
 pub fn setitimer_syscall(
     cageid: u64,
-    which_arg: u64, 
+    which_arg: u64,
     which_arg_cageid: u64,
-    new_value_arg: u64, 
+    new_value_arg: u64,
     new_value_arg_cageid: u64,
-    old_value_arg: u64, 
+    old_value_arg: u64,
     old_value_arg_cageid: u64,
-    arg4: u64, 
+    arg4: u64,
     arg4_cageid: u64,
-    arg5: u64, 
+    arg5: u64,
     arg5_cageid: u64,
-    arg6: u64, 
+    arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     let which = sc_convert_sysarg_to_i32(which_arg, which_arg_cageid, cageid);
@@ -946,9 +991,13 @@ pub fn setitimer_syscall(
     let old_value = sc_convert_itimerval_mut(old_value_arg, old_value_arg_cageid, cageid);
     // Validate that extra arguments are indeed unused.
     if !(sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "setitimer_syscall");
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "setitimer_syscall"
+        );
     }
 
     // get the cage instance

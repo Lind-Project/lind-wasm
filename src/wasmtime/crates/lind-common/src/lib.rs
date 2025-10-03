@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 
 use anyhow::Result;
-use threei::threei::{copy_data_between_cages, make_syscall, register_handler, copy_handler_table_to_cage};
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
+use threei::threei::{
+    copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
+};
 use wasmtime::Caller;
 use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
@@ -14,8 +16,8 @@ use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_ba
 // Wasmtime, these calls are routed to their dedicated logic, while other
 // syscalls are passed directly to 3i’s `make_syscall`.
 //
-// `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument 
-// for functions that require a fixed number of parameters but do not utilize 
+// `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
+// for functions that require a fixed number of parameters but do not utilize
 // all of them.
 use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
@@ -87,12 +89,12 @@ impl LindCommonCtx {
                     self.pid as u64,
                     call_number as u64,
                     call_name as u64,
-                    self.pid as u64, // Set target_cageid same with self_cageid by defualt 
-                    arg1, 
+                    self.pid as u64, // Set target_cageid same with self_cageid by defualt
+                    arg1,
                     self.pid as u64,
                     arg2,
                     self.pid as u64,
-                    arg3, 
+                    arg3,
                     self.pid as u64,
                     arg4,
                     self.pid as u64,
@@ -209,15 +211,15 @@ pub fn add_to_linker<
         },
     )?;
 
-    // Registers grate-specific syscall-like host functions `register-syscall` / `cp-data-syscall` / 
-    // `copy_handler_table_to_cage` into the Wasmtime linker. This is part of the 3i (inter-cage 
-    // interposition) system, which allows user-level libc code (e.g., glibc) to perform cage-to-grate 
+    // Registers grate-specific syscall-like host functions `register-syscall` / `cp-data-syscall` /
+    // `copy_handler_table_to_cage` into the Wasmtime linker. This is part of the 3i (inter-cage
+    // interposition) system, which allows user-level libc code (e.g., glibc) to perform cage-to-grate
     // syscall routing in a way that *resembles normal syscalls* from the user’s perspective.
     //
     // To maintain consistency with traditional syscall patterns, we expose 3i-related functions
-    // using the same mechanism as `lind` syscalls. These functions are declared in glibc headers and 
-    // invoked like syscalls. At runtime, they are resolved via Wasmtime’s linker and routed to 
-    // closures here. This particular function allows a cage to register a handler function (by index) 
+    // using the same mechanism as `lind` syscalls. These functions are declared in glibc headers and
+    // invoked like syscalls. At runtime, they are resolved via Wasmtime’s linker and routed to
+    // closures here. This particular function allows a cage to register a handler function (by index)
     // for a specific syscall number, targeting a specific grate.
     //
     // The same trampoline mechanism used by `lind-syscall` is reused to simplify design and
@@ -227,8 +229,27 @@ pub fn add_to_linker<
     linker.func_wrap(
         "lind",
         "register-syscall",
-        move |targetcage: u64, targetcallnum: u64, handlefunc_index_in_this_grate: u64, this_grate_id: u64| -> i32 {
-            register_handler(UNUSED_ARG, targetcage, targetcallnum, UNUSED_ID, handlefunc_index_in_this_grate, this_grate_id, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID)
+        move |targetcage: u64,
+              targetcallnum: u64,
+              handlefunc_index_in_this_grate: u64,
+              this_grate_id: u64|
+              -> i32 {
+            register_handler(
+                UNUSED_ARG,
+                targetcage,
+                targetcallnum,
+                UNUSED_ID,
+                handlefunc_index_in_this_grate,
+                this_grate_id,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+            )
         },
     )?;
 
@@ -236,17 +257,31 @@ pub fn add_to_linker<
     linker.func_wrap(
         "lind",
         "cp-data-syscall",
-        move |thiscage: u64, targetcage: u64, srcaddr: u64, srccage: u64, destaddr: u64, destcage: u64, len: u64, copytype: u64| -> i32 {
-            copy_data_between_cages(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, UNUSED_ID, copytype, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID) as i32
+        move |thiscage: u64,
+              targetcage: u64,
+              srcaddr: u64,
+              srccage: u64,
+              destaddr: u64,
+              destcage: u64,
+              len: u64,
+              copytype: u64|
+              -> i32 {
+            copy_data_between_cages(
+                thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, UNUSED_ID,
+                copytype, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
+            ) as i32
         },
     )?;
 
     // attach copy_handler_table_to_cage to wasmtime
     linker.func_wrap(
-        "lind", 
-        "copy_handler_table_to_cage", 
+        "lind",
+        "copy_handler_table_to_cage",
         move |thiscage: u64, targetcage: u64| -> i32 {
-            copy_handler_table_to_cage(UNUSED_ARG, thiscage, targetcage, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID) as i32
+            copy_handler_table_to_cage(
+                UNUSED_ARG, thiscage, targetcage, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG,
+                UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
+            ) as i32
         },
     )?;
 

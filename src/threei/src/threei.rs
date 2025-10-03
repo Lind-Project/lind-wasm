@@ -1,19 +1,20 @@
 //! Threei (Three Interposition) module
 use cage::memory::check_addr;
+use cage::{get_cage, Cage, MemoryBackingType, VmmapEntry};
 use core::panic;
 use dashmap::DashSet;
+use nodit::interval::ie;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
-use nodit::interval::ie;
 use sysdefs::constants::lind_platform_const;
-use sysdefs::constants::{MAP_ANONYMOUS, MAP_PRIVATE, PROT_READ, PROT_WRITE, PROT_NONE, PROT_EXEC, PAGESHIFT, PAGESIZE}; // Used in `copy_data_between_cages`
+use sysdefs::constants::{
+    MAP_ANONYMOUS, MAP_PRIVATE, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+}; // Used in `copy_data_between_cages`
 use typemap::datatype_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
-use cage::{get_cage, Cage, MemoryBackingType, VmmapEntry};
 
 use crate::handler_table::{
-    _check_cage_handler_exist, _get_handler, _rm_grate_from_handler,
-    register_handler_impl, copy_handler_table_to_cage_impl,
-    _rm_cage_from_handler
+    _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
+    copy_handler_table_to_cage_impl, register_handler_impl,
 };
 use crate::syscall_table::SYSCALL_TABLE;
 use crate::threei_const;
@@ -64,12 +65,18 @@ pub fn threei_wasm_func(
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
 pub type RawCallFunc = fn(
     target_cageid: u64,
-    arg1: u64, arg1_cageid: u64,
-    arg2: u64, arg2_cageid: u64,
-    arg3: u64, arg3_cageid: u64,
-    arg4: u64, arg4_cageid: u64,
-    arg5: u64, arg5_cageid: u64,
-    arg6: u64, arg6_cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
 ) -> i32;
 
 /// Each entry in the `Vec` corresponds to a specific grate, and the index is used as its identifier
@@ -238,7 +245,7 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 ///     NOTUSED, 7,  34, NOTUSED,
 ///    foo, mycagenum,
 ///    ...)
-/// 
+///
 ///
 /// If a conflicting mapping exists, the function panics to prevent accidental overwrite.
 ///
@@ -277,12 +284,7 @@ pub fn register_handler(
     }
 
     // Actual implementation is in handler_table module according to feature flag
-    register_handler_impl(
-        targetcage,
-        targetcallnum,
-        handlefunc,
-        handlefunccage,
-    )
+    register_handler_impl(targetcage, targetcallnum, handlefunc, handlefunccage)
 }
 
 /// This copies the handler table used by a cage to another cage.  
@@ -323,7 +325,7 @@ pub fn copy_handler_table_to_cage(
     }
 
     // Actual implementation is in handler_table module according to feature flag
-    copy_handler_table_to_cage_impl(srccage, targetcage) 
+    copy_handler_table_to_cage_impl(srccage, targetcage)
 }
 
 /// actually performs a call.  Not interposable
@@ -599,7 +601,7 @@ pub fn harsh_cage_exit(
 #[repr(u64)]
 enum CopyType {
     RawMemcpy = 0,
-    Strncpy   = 1,
+    Strncpy = 1,
 }
 
 /// Conversion implementation to map a numeric `u64` value into a `CopyType` enum.
@@ -621,7 +623,9 @@ impl TryFrom<u64> for CopyType {
 /// Returns Err(error_code) if the length is greater than the allowed maximum.
 #[inline]
 fn _validate_len(len: u64, max: u64) -> Result<(), u64> {
-    if len > max { return Err(threei_const::ELINDAPIABORTED); }
+    if len > max {
+        return Err(threei_const::ELINDAPIABORTED);
+    }
     Ok(())
 }
 
@@ -634,7 +638,10 @@ fn _validate_range(cage: u64, addr: u64, len: usize, prot: i32, what: &str) -> R
     match check_addr(cage, addr, len, prot) {
         Ok(_) => Ok(()),
         Err(_) => {
-            eprintln!("[3i|copy] range invalid: addr={:#x}, len={}, what={:?}", addr, len, what);
+            eprintln!(
+                "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
+                addr, len, what
+            );
             Err(threei_const::ELINDAPIABORTED)
         }
     }
@@ -692,12 +699,12 @@ fn _strlen_in_cage(src: *const u8, max_len: usize) -> Option<usize> {
 /// This API is **not thread-safe w.r.t. the memory contents**. It is analogous
 /// to calling `memcpy`/`strncpy` on raw pointers in C: the caller must ensure
 /// that the specified intervals are exclusively owned or otherwise protected
-/// for the entire duration of the call. 
+/// for the entire duration of the call.
 ///
-/// **Users need to ensure** that the specified memory regions remain valid, 
-/// mapped, and stable (i.e., not unmapped, re-mapped, or concurrently written) 
+/// **Users need to ensure** that the specified memory regions remain valid,
+/// mapped, and stable (i.e., not unmapped, re-mapped, or concurrently written)
 /// for the entire duration of this operation.
-/// 
+///
 /// ### Scope & constraints
 /// - Cross-cage only: `srccage` and `destcage` must be different. Calls with
 ///   the same cage for source and destination are rejected with `ELINDAPIABORTED`.
@@ -740,7 +747,10 @@ pub fn copy_data_between_cages(
 ) -> u64 {
     // Disallow same-cage copies. This API is for cross-cage transfer only.
     if srccage == destcage {
-        eprintln!("[3i|copy] src and dest cage cannot be the same: {}", srccage);
+        eprintln!(
+            "[3i|copy] src and dest cage cannot be the same: {}",
+            srccage
+        );
         return threei_const::ELINDAPIABORTED;
     }
 
@@ -774,14 +784,14 @@ pub fn copy_data_between_cages(
                 return threei_const::ELINDAPIABORTED;
             }
             // Try to compute actual string length within limit
-            let max_scan = len as usize; 
+            let max_scan = len as usize;
             let host_src_try = sc_convert_uaddr_to_host(srcaddr, srccage, thiscage);
             if host_src_try == 0 {
                 eprintln!("[3i|copy] host_src null");
                 return threei_const::ELINDAPIABORTED;
             }
             let actual = match _strlen_in_cage(host_src_try as *const u8, max_scan) {
-                Some(n) => n + 1, // include '\0'
+                Some(n) => n + 1,     // include '\0'
                 None => len as usize, // assume max length
             };
             core::cmp::min(actual, len as usize)
@@ -797,10 +807,16 @@ pub fn copy_data_between_cages(
     if let Err(code) = _validate_range(srccage, srcaddr, copy_len, PROT_READ, "source") {
         return code;
     }
-    if let Err(code) = _validate_range(destcage, destaddr, copy_len, PROT_READ | PROT_WRITE, "destination") {
+    if let Err(code) = _validate_range(
+        destcage,
+        destaddr,
+        copy_len,
+        PROT_READ | PROT_WRITE,
+        "destination",
+    ) {
         return code;
     }
-    
+
     // Translate user virtual addrs to host pointers
     let host_src_addr = sc_convert_uaddr_to_host(srcaddr, srccage, thiscage);
     let host_dest_addr = sc_convert_uaddr_to_host(destaddr, destcage, thiscage);
@@ -814,7 +830,10 @@ pub fn copy_data_between_cages(
     if host_src_addr.checked_add(copy_len as u64).is_none()
         || host_dest_addr.checked_add(copy_len as u64).is_none()
     {
-        eprintln!("[3i|copy] address overflow: src={:#x} len={} dest={:#x}", srcaddr, copy_len, destaddr);
+        eprintln!(
+            "[3i|copy] address overflow: src={:#x} len={} dest={:#x}",
+            srcaddr, copy_len, destaddr
+        );
         return threei_const::ELINDAPIABORTED;
     }
 

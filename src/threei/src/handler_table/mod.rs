@@ -9,7 +9,7 @@
 //!
 //! The dual implementation exists primarily so that future benchmarking
 //! and performance analysis can easily compare `hashmap` vs `dashmap`
-//! under different workloads. 
+//! under different workloads.
 //!
 //! See README.md in the project directory for usage details.
 #[cfg(feature = "hashmap")]

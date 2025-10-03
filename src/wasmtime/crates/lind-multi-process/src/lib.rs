@@ -3,11 +3,11 @@
 use cfg_if::cfg_if;
 
 use anyhow::{anyhow, Result};
-use threei::threei::make_syscall;
-use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use wasmtime_lind_utils::{parse_env_var, LindCageManager};
+use threei::threei::make_syscall;
 use wasmtime_lind_3i_vmctx::remove_ctx;
+use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
+use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -20,8 +20,8 @@ use wasmtime::{
     InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Trap, Val,
 };
 
-use wasmtime_environ::MemoryIndex;
 use cage::signal::{lind_signal_init, lind_thread_exit};
+use wasmtime_environ::MemoryIndex;
 
 pub mod clone_constants;
 pub mod signal;
@@ -359,12 +359,12 @@ impl<
         // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
         // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
         make_syscall(
-            self.pid as u64, // self cage id
-            (FORK_SYSCALL) as u64, // syscall num for fork 
-            UNUSED_NAME, // syscall name
-            self.pid as u64, // target cage id, should be itself
-            child_cageid, // 1st arg
-            self.pid as u64, // 1st arg's cage id
+            self.pid as u64,       // self cage id
+            (FORK_SYSCALL) as u64, // syscall num for fork
+            UNUSED_NAME,           // syscall name
+            self.pid as u64,       // target cage id, should be itself
+            child_cageid,          // 1st arg
+            self.pid as u64,       // 1st arg's cage id
             UNUSED_ARG,
             UNUSED_ID,
             UNUSED_ARG,
@@ -523,13 +523,10 @@ impl<
                         match exit_code {
                             Val::I32(val) => {
                                 // exit the main thread
-                                if lind_thread_exit(
-                                    child_cageid,
-                                    THREAD_START_ID as u64,
-                                ) {
+                                if lind_thread_exit(child_cageid, THREAD_START_ID as u64) {
                                     // Clean up the context from the global table
-                                    // We only register grate calls into the vmctx table during fork+exec (the logic 
-                                    // lives in the grate module), so a bare fork currently does not register a vmctx 
+                                    // We only register grate calls into the vmctx table during fork+exec (the logic
+                                    // lives in the grate module), so a bare fork currently does not register a vmctx
                                     // table instance.
                                     remove_ctx(child_cageid as usize);
 
@@ -538,12 +535,12 @@ impl<
                                     // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                                     // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                                     make_syscall(
-                                        child_cageid, // self cage
+                                        child_cageid,          // self cage
                                         (EXIT_SYSCALL) as u64, // syscall num
-                                        UNUSED_NAME, // syscall name
-                                        child_cageid, // target cage, should be itself
-                                        *val as u64, // 1st arg: status
-                                        child_cageid, // 1st arg's cage id
+                                        UNUSED_NAME,           // syscall name
+                                        child_cageid,          // target cage, should be itself
+                                        *val as u64,           // 1st arg: status
+                                        child_cageid,          // 1st arg's cage id
                                         UNUSED_ARG,
                                         UNUSED_ID,
                                         UNUSED_ARG,
@@ -1035,10 +1032,10 @@ impl<
             // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
             // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
             make_syscall(
-                cloned_pid as u64, // self cage id
-                (EXEC_SYSCALL) as u64, // syscall num for exec 
-                UNUSED_NAME, // syscall name
-                cloned_pid as u64, // target cage id, should be itself
+                cloned_pid as u64,     // self cage id
+                (EXEC_SYSCALL) as u64, // syscall num for exec
+                UNUSED_NAME,           // syscall name
+                cloned_pid as u64,     // target cage id, should be itself
                 UNUSED_ARG,
                 UNUSED_ID,
                 UNUSED_ARG,
@@ -1050,7 +1047,7 @@ impl<
                 UNUSED_ARG,
                 UNUSED_ID,
                 UNUSED_ARG,
-                UNUSED_ID, 
+                UNUSED_ID,
             );
 
             let ret = exec_call(

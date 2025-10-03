@@ -3,6 +3,7 @@
 
 use crate::cage::get_cage;
 
+use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 pub use parking_lot::Mutex;
 use std::ffi::c_void;
 use std::fs::{self, File, OpenOptions};
@@ -10,10 +11,12 @@ use std::os::unix::io::AsRawFd;
 pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 pub use std::sync::{Arc, LazyLock};
 use std::time::SystemTime;
-use sysdefs::constants::fs_const::{MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHM_RDONLY, SHMMIN, SHMMAX};
-use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
-use dashmap::mapref::entry::Entry::{Vacant, Occupied};
 use sysdefs::constants::err_const::{syscall_error, Errno};
+use sysdefs::constants::fs_const::{
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX,
+    SHMMIN, SHM_RDONLY,
+};
+use sysdefs::data::fs_struct::{IpcPermStruct, ShmidsStruct};
 
 pub use dashmap::{mapref::entry::Entry, DashMap, DashSet};
 
@@ -258,11 +261,11 @@ pub fn unmap_shm_mappings(cageid: u64) {
 
 //------------------SHMHELPERS----------------------
 /// Finds the index of a given shared memory address in the reverse mapping table.
-/// 
+///
 /// # Arguments
 /// * `rev_shm`  – A vector of `(addr, shmid)` pairs mapping addresses to shared memory IDs.
 /// * `shmaddr`  – The address to search for.
-/// 
+///
 /// # Returns
 /// * `Some(index)` if the address is found in the vector.
 /// * `None` if the address does not exist in the mapping.
@@ -276,11 +279,11 @@ pub fn rev_shm_find_index_by_addr(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Op
 }
 
 /// Collects all addresses that map to a given shared memory ID from the reverse mapping table.
-/// 
+///
 /// # Arguments
 /// * `rev_shm` – A vector of `(addr, shmid)` pairs mapping addresses to shared memory IDs.
 /// * `shmid`   – The shared memory ID to search for.
-/// 
+///
 /// # Returns
 /// * A vector of all addresses (`u32`) associated with the given `shmid`.
 /// * Returns an empty vector if no addresses are found.
@@ -296,11 +299,11 @@ pub fn rev_shm_find_addrs_by_shmid(rev_shm: &Vec<(u32, i32)>, shmid: i32) -> Vec
 }
 
 /// Searches for a shared memory region that contains a given address.
-/// 
+///
 /// # Arguments
 /// * `rev_shm`     – A vector of `(addr, shmid)` pairs mapping base addresses to shared memory IDs.
 /// * `search_addr` – The address to look up within existing shared memory regions.
-/// 
+///
 /// # Returns
 /// * `Some((base_addr, shmid))` if `search_addr` falls within the range of a known segment.
 /// * `None` if the address is not within any tracked region.
@@ -323,18 +326,18 @@ pub fn search_for_addr_in_region(
 }
 
 /// Helper function that attaches a shared memory segment to the calling cage’s address space.
-/// 
+///
 /// # Arguments
 /// * `cageid` – ID of the calling cage.
 /// * `shmaddr` – Address where the shared memory segment should be mapped.
 /// * `shmflg` – Flags controlling access (e.g., `SHM_RDONLY`).
 /// * `shmid` – Identifier of the shared memory segment to attach.
-/// 
-/// This function looks up the shared memory segment identified by `shmid`, determines the appropriate 
-/// protection flags from `shmflg`, records the mapping `(shmaddr, shmid)` in the cage’s reverse mapping 
-/// table, and calls `map_shm` to attach the segment to the cage’s address space. If the shmid is 
+///
+/// This function looks up the shared memory segment identified by `shmid`, determines the appropriate
+/// protection flags from `shmflg`, records the mapping `(shmaddr, shmid)` in the cage’s reverse mapping
+/// table, and calls `map_shm` to attach the segment to the cage’s address space. If the shmid is
 /// invalid, it returns an error.
-/// 
+///
 /// # Returns
 /// * On success – the mapped address as a `u32`.
 /// * On error – a negative errno value as a `u32`.
@@ -361,16 +364,16 @@ pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u
 }
 
 /// Helper function that detaches a shared memory segment from the calling cage’s address space.
-/// 
+///
 /// # Arguments
 /// * `cageid` – ID of the calling cage.
 /// * `shmaddr` – Address of the shared memory segment to detach.
-/// 
-/// This function searches the cage’s reverse mapping table for the segment mapped at `shmaddr`, 
-/// detaches it with `unmap_shm`, and removes the reverse mapping entry. If the segment was marked 
-/// for removal and has no remaining attachments, it is deleted from both shmtable and `shmkeyidtabl`e. 
+///
+/// This function searches the cage’s reverse mapping table for the segment mapped at `shmaddr`,
+/// detaches it with `unmap_shm`, and removes the reverse mapping entry. If the segment was marked
+/// for removal and has no remaining attachments, it is deleted from both shmtable and `shmkeyidtabl`e.
 /// On success, it returns the segment length; if no mapping exists at the given address, it returns an error.
-/// 
+///
 /// # Returns
 /// * On success – the length (in bytes) of the detached segment.
 /// * On error – a negative errno value.

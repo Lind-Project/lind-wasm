@@ -1,12 +1,12 @@
 //! Interval timer implementation for `itimer` and `SIGALRM`
 //!
 //! This file emulates a per-Cage `ITIMER_REAL` that counts down wall-clock time and
-//! delivers `SIGALRM` when it expires. We chose to implement `itimer` / `SIGALRM` entirely 
-//! in user space rather than relying on the host kernel because of how our runtime manages 
+//! delivers `SIGALRM` when it expires. We chose to implement `itimer` / `SIGALRM` entirely
+//! in user space rather than relying on the host kernel because of how our runtime manages
 //! signals:
-//! Host timers (e.g., `setitimer`) deliver signals to host processes or threads. Our runtime, 
-//! however, models Cages as logical processes inside a Wasm environment. The kernel cannot 
-//! deliver a timer interrupt specifically to a Cage or its designated “main thread.” A 
+//! Host timers (e.g., `setitimer`) deliver signals to host processes or threads. Our runtime,
+//! however, models Cages as logical processes inside a Wasm environment. The kernel cannot
+//! deliver a timer interrupt specifically to a Cage or its designated “main thread.” A
 //! user-space timer gives us precise control over which Cage receives `SIGALRM`.
 //! All signal delivery in our system is mediated through the epoch-based mechanism.
 //! (See our online design doc for more details.)

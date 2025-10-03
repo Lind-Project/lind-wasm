@@ -7,9 +7,9 @@ pub use libc::*;
 pub use std::env;
 pub use std::ffi::{CStr, CString};
 pub use std::path::{Component, PathBuf};
-pub use std::{mem, ptr};
 use std::str::Utf8Error;
-pub use sysdefs::constants::{fs_const, err_const};
+pub use std::{mem, ptr};
+pub use sysdefs::constants::{err_const, fs_const};
 
 /// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
 /// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
@@ -91,9 +91,9 @@ pub fn add_lind_root(cageid: u64, path: &str) -> CString {
 
 /// Remove LIND_ROOT prefix from a host path to convert it back to user perspective.
 ///
-/// This function is the reverse of `add_lind_root`. It strips the LIND_ROOT prefix from an 
-/// absolute host path and returns the path as it should appear to the user (cage). This is 
-/// primarily used when retrieving paths from the kernel (e.g., via `getcwd()`) that need to 
+/// This function is the reverse of `add_lind_root`. It strips the LIND_ROOT prefix from an
+/// absolute host path and returns the path as it should appear to the user (cage). This is
+/// primarily used when retrieving paths from the kernel (e.g., via `getcwd()`) that need to
 /// be stored in cage state or returned to user space.
 ///
 /// ## Arguments:

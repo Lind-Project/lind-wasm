@@ -1,6 +1,6 @@
+use crate::threei_const;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use crate::threei_const;
 
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
@@ -134,13 +134,13 @@ pub fn register_handler_impl(
                     }
                 }
                 return 0;
-            } 
+            }
 
             match callnum_entry.get(&handlefunc) {
                 Some(existing_dest_grateid) if *existing_dest_grateid == handlefunccage => {
                     // Already registered with same mapping, do nothing
                     return 0;
-                } 
+                }
                 Some(_) => {
                     return threei_const::ELINDAPIABORTED as i32; // Return error if a conflicting mapping exists
                 }

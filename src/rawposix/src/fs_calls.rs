@@ -1,24 +1,30 @@
-use libc::c_void;
-use typemap::datatype_conversion::*;
-use typemap::path_conversion::*;
-use sysdefs::constants::err_const::{syscall_error, Errno, get_errno, handle_errno};
-use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O_CLOEXEC, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, PAGESHIFT, PAGESIZE, SHM_DEST,
-    SHM_RDONLY, SHMMIN, SHMMAX};
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
-use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
-use typemap::cage_helpers::*;
-use cage::{round_up_page, get_cage, get_shm_length, new_shm_segment, shmat_helper, shmdt_helper, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, SHM_METADATA};
+use cage::{
+    get_cage, get_shm_length, new_shm_segment, round_up_page, shmat_helper, shmdt_helper,
+    MemoryBackingType, VmmapOps, HEAP_ENTRY_INDEX, SHM_METADATA,
+};
+use dashmap::mapref::entry::Entry::{Occupied, Vacant};
 use fdtables;
-use typemap::filesystem_helpers::{convert_statdata_to_user, convert_fstatdata_to_user};
+use libc::c_void;
 use std::sync::Arc;
-use dashmap::mapref::entry::Entry::{Vacant, Occupied};
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::fs_const::{
+    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC,
+    PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO,
+    STDIN_FILENO, STDOUT_FILENO,
+};
+use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
+use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
+use typemap::cage_helpers::*;
+use typemap::datatype_conversion::*;
+use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
+use typemap::path_conversion::*;
 
 /// Helper function for close_syscall
-/// 
-/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard IO stream fds 
-/// shouldn't be closed in Lind-WASM execution, which preventing issues where other threads might 
-/// reassign these ds, causing unintended behavior or errors. 
-/// 
+///
+/// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard IO stream fds
+/// shouldn't be closed in Lind-WASM execution, which preventing issues where other threads might
+/// reassign these ds, causing unintended behavior or errors.
+///
 /// This function is registered in `fdtables` when creating the cage
 pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
     let kernel_fd = fdentry.underfd as i32;
@@ -49,7 +55,7 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 ///                 the open file description. The flags are combined together using a bitwise-inclusive-OR and the
 ///                 result is passed as an argument to the function. We need to check if `O_CLOEXEC` has been set.
 ///     - mode_arg: This represents the permission of the newly created file. Directly passing to kernel.
-/// 
+///
 /// ## Returns:
 /// same with man page
 pub fn open_syscall(
@@ -78,7 +84,10 @@ pub fn open_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "open_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "open_syscall"
+        );
     }
 
     // Get the kernel fd first
@@ -147,9 +156,13 @@ pub fn read_syscall(
     let count = sc_convert_sysarg_to_usize(count_arg, count_cageid, cageid);
 
     if !(sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "read_syscall");
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "read_syscall"
+        );
     }
 
     // Call the underlying libc read.
@@ -179,7 +192,7 @@ pub fn read_syscall(
 pub fn close_syscall(
     cageid: u64,
     vfd_arg: u64,
-    vfd_cageid: u64, 
+    vfd_cageid: u64,
     arg2: u64,
     arg2_cageid: u64,
     arg3: u64,
@@ -193,10 +206,14 @@ pub fn close_syscall(
 ) -> i32 {
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
-         && sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "close_syscall");
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "close_syscall"
+        );
     }
 
     match fdtables::close_virtualfd(cageid, vfd_arg) {
@@ -246,7 +263,7 @@ pub fn futex_syscall(
     uaddr2_cageid: u64,
     val3_arg: u64,
     val3_cageid: u64,
-) -> i32{
+) -> i32 {
     let uaddr = sc_convert_uaddr_to_host(uaddr_arg, uaddr_cageid, cageid);
     let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
     let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
@@ -254,14 +271,13 @@ pub fn futex_syscall(
     let uaddr2 = sc_convert_sysarg_to_u32(uaddr2_arg, uaddr2_cageid, cageid);
     let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
 
-    let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3)  as i32 };
+    let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "futex");
     }
     ret
 }
-
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/write.2.html
 ///
@@ -307,7 +323,10 @@ pub fn write_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "write_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "write_syscall"
+        );
     }
 
     let ret = unsafe { libc::write(kernel_fd, buf as *const c_void, count) as i32 };
@@ -359,7 +378,10 @@ pub fn mkdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "mkdir_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "mkdir_syscall"
+        );
     }
 
     let ret = unsafe { libc::mkdir(path.as_ptr(), mode) };
@@ -380,9 +402,9 @@ pub fn mkdir_syscall(
 ///     - cageid: current cage identifier.
 ///     - pipefd_arg: a u64 representing the pointer to the PipeArray (user's perspective).
 ///     - pipefd_cageid: cage identifier for the pointer argument.
-/// 
+///
 /// ## Return:
-/// On success, zero is returned.  On error, -1 is returned, errno is 
+/// On success, zero is returned.  On error, -1 is returned, errno is
 /// set to indicate the error, and pipefd is left unchanged.
 pub fn pipe_syscall(
     cageid: u64,
@@ -405,7 +427,10 @@ pub fn pipe_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "pipe_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "pipe_syscall"
+        );
     }
 
     // Convert the u64 pointer into a mutable reference to PipeArray
@@ -426,7 +451,7 @@ pub fn pipe_syscall(
         cageid,
         FDKIND_KERNEL,
         kernel_fds[0] as u64,
-        false, 
+        false,
         0,
     ) {
         Ok(fd) => fd as i32,
@@ -438,7 +463,7 @@ pub fn pipe_syscall(
             return syscall_error(
                 Errno::EMFILE,
                 "pipe_syscall",
-                "Failed to get virtual file descriptor"
+                "Failed to get virtual file descriptor",
             );
         }
     };
@@ -461,8 +486,8 @@ pub fn pipe_syscall(
             }
             return syscall_error(
                 Errno::EMFILE,
-                "pipe_syscall", 
-                "Failed to get virtual file descriptor"
+                "pipe_syscall",
+                "Failed to get virtual file descriptor",
             );
         }
     };
@@ -488,9 +513,9 @@ pub fn pipe_syscall(
 ///     - pipefd_cageid: cage identifier for the pointer argument.
 ///     - flags_arg: this argument contains flags (e.g., O_CLOEXEC) to be passed to pipe2.
 ///     - flags_cageid: cage identifier for the flags argument.
-/// 
+///
 /// ## Return:
-/// On success, zero is returned.  On error, -1 is returned, errno is 
+/// On success, zero is returned.  On error, -1 is returned, errno is
 /// set to indicate the error, and pipefd is left unchanged.
 pub fn pipe2_syscall(
     cageid: u64,
@@ -520,7 +545,10 @@ pub fn pipe2_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "pipe2_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "pipe2_syscall"
+        );
     }
     // Convert the u64 pointer into a mutable reference to PipeArray
     let pipefd = match sc_convert_addr_to_pipearray(pipefd_arg, pipefd_cageid, cageid) {
@@ -556,7 +584,7 @@ pub fn pipe2_syscall(
             return syscall_error(
                 Errno::EMFILE,
                 "pipe2_syscall",
-                "Failed to get virtual file descriptor"
+                "Failed to get virtual file descriptor",
             );
         }
     };
@@ -578,7 +606,7 @@ pub fn pipe2_syscall(
             return syscall_error(
                 Errno::EMFILE,
                 "pipe2_syscall",
-                "Failed to get virtual file descriptor"
+                "Failed to get virtual file descriptor",
             );
         }
     };
@@ -871,7 +899,10 @@ pub fn munmap_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "munmap_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "munmap_syscall"
+        );
     }
 
     if len == 0 {
@@ -906,12 +937,17 @@ pub fn munmap_syscall(
     // Check for different failure modes with specific error messages
     if result as isize == -1 {
         let errno = get_errno();
-        panic!("munmap: mmap failed during memory protection reset with errno: {:?}", errno);
+        panic!(
+            "munmap: mmap failed during memory protection reset with errno: {:?}",
+            errno
+        );
     }
-    
+
     if result != sysaddr {
-        panic!("munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}", 
-               result as *const c_void, sysaddr as *const c_void);
+        panic!(
+            "munmap: MAP_FIXED violation - mmap returned address {:p} but requested {:p}",
+            result as *const c_void, sysaddr as *const c_void
+        );
     }
 
     let mut vmmap = cage.vmmap.write();
@@ -958,7 +994,10 @@ pub fn brk_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "brk_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "brk_syscall"
+        );
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -1077,7 +1116,10 @@ pub fn sbrk_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "sbrk_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "sbrk_syscall"
+        );
     }
 
     let cage = get_cage(sbrk_cageid).unwrap();
@@ -1218,7 +1260,10 @@ pub fn fcntl_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "fcntl_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fcntl_syscall"
+        );
     }
 
     match (cmd, arg) {
@@ -1319,7 +1364,7 @@ pub fn fcntl_syscall(
 /// Reference: https://man7.org/linux/man-pages/man2/link.2.html
 ///
 /// `link_syscall` creates a new link (hard link) to an existing file.
-/// 
+///
 /// ## Arguments:
 ///  - `cageid`: Identifier of the calling Cage (namespace / process-like container).
 ///  - `oldpath_arg`: Address of the existing pathname in the caller's address space.
@@ -1364,7 +1409,10 @@ pub fn link_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "link_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "link_syscall"
+        );
     }
 
     let ret = unsafe { libc::link(oldpath.as_ptr(), newpath.as_ptr()) };
@@ -1418,7 +1466,10 @@ pub fn stat_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "stat_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "stat_syscall"
+        );
     }
 
     // Declare statbuf by ourselves
@@ -1486,7 +1537,10 @@ pub fn statfs_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "statfs_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "statfs_syscall"
+        );
     }
 
     // Declare statbuf by ourselves
@@ -1547,7 +1601,10 @@ pub fn fsync_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "fsync_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fsync_syscall"
+        );
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
@@ -1606,11 +1663,14 @@ pub fn fdatasync_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "fdatasync_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fdatasync_syscall"
+        );
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
-    // Return error 
+    // Return error
     if kernel_fd < 0 {
         return handle_errno(kernel_fd, "read");
     }
@@ -1643,7 +1703,7 @@ pub fn fdatasync_syscall(
 /// ## Return Value:
 ///  - `0` on success.
 ///  - `-1` on failure, with `errno` set appropriately.
- pub fn sync_file_range_syscall(
+pub fn sync_file_range_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1665,21 +1725,20 @@ pub fn fdatasync_syscall(
     let flags = sc_convert_sysarg_to_u32(flags_arg, flags_cageid, cageid);
 
     // Validate unused args
-    if !(sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "sync_file_range_syscall");
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "sync_file_range_syscall"
+        );
     }
 
     let kernel_fd = convert_fd_to_host(virtual_fd as u64, fd_cageid, cageid);
-    // Return error 
+    // Return error
     if kernel_fd < 0 {
         return handle_errno(kernel_fd, "read");
     }
 
-    let ret = unsafe {
-        libc::sync_file_range(kernel_fd, offset, nbytes, flags)
-    };
+    let ret = unsafe { libc::sync_file_range(kernel_fd, offset, nbytes, flags) };
 
     if ret < 0 {
         let errno = get_errno();
@@ -1691,7 +1750,7 @@ pub fn fdatasync_syscall(
 //------------------------------------READLINK & READLINKAT SYSCALL------------------------------------
 /// Reference: https://man7.org/linux/man-pages/man2/readlink.2.html
 ///
-/// The return value of the readlink syscall indicates the number of bytes written into the buf and -1 if 
+/// The return value of the readlink syscall indicates the number of bytes written into the buf and -1 if
 /// error. The contents of the buf represent the file path that the symbolic link points to. Since the file
 /// path perspectives differ between the user application and the host Linux, the readlink implementation
 /// requires handling the paths for both the input passed to the Rust kernel libc and the output buffer
@@ -1743,7 +1802,10 @@ pub fn readlink_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "readlink_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "readlink_syscall"
+        );
     }
 
     // We extend the buffer length by `LIND_ROOT.len()` because the host path
@@ -1846,10 +1908,11 @@ pub fn readlinkat_syscall(
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
 
     // Validate unused args
-    if !(sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "readlinkat_syscall");
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "readlinkat_syscall"
+        );
     }
 
     // We extend the buffer length by `LIND_ROOT.len()` because the host path
@@ -1858,7 +1921,7 @@ pub fn readlinkat_syscall(
     // path may exceed the original user-allocated region.
     let libc_buflen = buflen + LIND_ROOT.len();
     let mut libc_buf = vec![0u8; libc_buflen];
-    
+
     let libcret = if virtual_fd == libc::AT_FDCWD {
         // Case 1: AT_FDCWD - path is already converted by sc_convert_path_to_host
         unsafe {
@@ -1871,7 +1934,7 @@ pub fn readlinkat_syscall(
     } else {
         // Case 2: Specific directory fd
         let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
-        // Return error 
+        // Return error
         if kernel_fd < 0 {
             return handle_errno(kernel_fd, "read");
         }
@@ -1899,9 +1962,7 @@ pub fn readlinkat_syscall(
 
     // Adjust the result to remove LIND_ROOT prefix if present
     let new_root = format!("{}/", LIND_ROOT);
-    let final_result = libcbuf_str
-        .strip_prefix(&new_root)
-        .unwrap_or(libcbuf_str);
+    let final_result = libcbuf_str.strip_prefix(&new_root).unwrap_or(libcbuf_str);
 
     // Check the length and copy the appropriate amount of data to buf
     let bytes_to_copy = std::cmp::min(buflen, final_result.len());
@@ -1954,7 +2015,10 @@ pub fn rename_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "rename_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "rename_syscall"
+        );
     }
 
     let ret = unsafe { libc::rename(oldpath.as_ptr(), newpath.as_ptr()) };
@@ -1998,7 +2062,7 @@ pub fn unlink_syscall(
 ) -> i32 {
     // Type conversion
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    
+
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -2006,7 +2070,10 @@ pub fn unlink_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "unlink_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "unlink_syscall"
+        );
     }
 
     let ret = unsafe { libc::unlink(path.as_ptr()) };
@@ -2015,19 +2082,19 @@ pub fn unlink_syscall(
         let errno = get_errno();
         return handle_errno(errno, "unlink");
     }
-    
+
     ret
 }
 
 /// Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
 ///
 /// `unlinkat` removes a file or directory relative to a directory file descriptor.
-/// 
+///
 /// ## Arguments:
 /// - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
 /// - `pathname`: Path of the file/directory to be removed.
 /// - `flags`: Can include `AT_REMOVEDIR` to indicate directory removal.
-/// 
+///
 /// There are two cases:
 /// Case 1: When `dirfd` is AT_FDCWD:
 /// - RawPOSIX maintains its own notion of the current working directory.
@@ -2036,12 +2103,12 @@ pub fn unlink_syscall(
 /// - After this conversion, the path is already absolute from the host’s perspective, so `AT_FDCWD`
 ///   doesn't actually rely on the host’s working directory. This avoids mismatches between RawPOSIX
 ///   and the host environment.
-/// 
+///
 /// Case 2: When `dirfd` is not AT_FDCWD:
 /// - We translate the RawPOSIX virtual file descriptor to the corresponding kernel file descriptor.
 /// - In this case, we simply create a C string from the provided `pathname` (without further conversion)
 ///   and let the underlying kernel call resolve the path relative to the directory represented by that fd.
-/// 
+///
 /// ## Return Value:
 /// - `0` on success.
 /// - `-1` on failure, with `errno` set appropriately.
@@ -2068,7 +2135,10 @@ pub fn unlinkat_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "unlinkat_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "unlinkat_syscall"
+        );
     }
 
     let mut c_path;
@@ -2143,7 +2213,10 @@ pub fn access_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "access_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "access_syscall"
+        );
     }
 
     let ret = unsafe { libc::access(path.as_ptr(), amode) };
@@ -2202,7 +2275,10 @@ pub fn clock_gettime_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "clock_gettime_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "clock_gettime_syscall"
+        );
     }
 
     let ret = unsafe { syscall(SYS_clock_gettime, clockid, tp) as i32 };
@@ -2248,7 +2324,10 @@ pub fn dup_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "dup_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "dup_syscall"
+        );
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg as u64);
@@ -2293,7 +2372,10 @@ pub fn dup2_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "dup2_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "dup2_syscall"
+        );
     }
 
     // Validate both virtual fds
@@ -2365,7 +2447,10 @@ pub fn dup3_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "dup3_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "dup3_syscall"
+        );
     }
 
     if old_vfd_arg > MAXFD as u64 || new_vfd_arg > MAXFD as u64 {
@@ -2380,7 +2465,21 @@ pub fn dup3_syscall(
         return syscall_error(Errno::EINVAL, "dup3", "Invalid flags");
     }
 
-    let ret = dup2_syscall(cageid, old_vfd_arg, old_vfd_cageid, new_vfd_arg, new_vfd_cageid, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID);
+    let ret = dup2_syscall(
+        cageid,
+        old_vfd_arg,
+        old_vfd_cageid,
+        new_vfd_arg,
+        new_vfd_cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
     if ret < 0 {
         return ret;
     }
@@ -2435,7 +2534,10 @@ pub fn fchdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "fchdir_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fchdir_syscall"
+        );
     }
 
     let ret = unsafe { libc::fchdir(kernel_fd) };
@@ -2506,16 +2608,13 @@ pub fn writev_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "writev");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "writev"
+        );
     }
 
-    let ret = unsafe {
-        libc::writev(
-            kernel_fd,
-            iov_ptr as *const libc::iovec,
-            iovcnt,
-        ) as i32
-    };
+    let ret = unsafe { libc::writev(kernel_fd, iov_ptr as *const libc::iovec, iovcnt) as i32 };
     if ret < 0 {
         return handle_errno(get_errno(), "writev");
     }
@@ -2565,7 +2664,10 @@ pub fn fstat_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "fstat_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fstat_syscall"
+        );
     }
 
     // 1) Call host fstat into a local host variable
@@ -2577,7 +2679,7 @@ pub fn fstat_syscall(
 
     // 2) Validate guest buffer range and writability
     match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
-         // 3) Populate StatData directly
+        // 3) Populate StatData directly
         Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, host_stat),
         Err(e) => return syscall_error(e, "fstat", "Bad address"),
     }
@@ -2630,7 +2732,10 @@ pub fn ftruncate_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "ftruncate_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "ftruncate_syscall"
+        );
     }
 
     let ret = unsafe { libc::ftruncate(kernel_fd, length) };
@@ -2684,7 +2789,10 @@ pub fn fstatfs_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "fstatfs_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fstatfs_syscall"
+        );
     }
 
     // 1) Call host fstatfs into a local host variable
@@ -2696,7 +2804,7 @@ pub fn fstatfs_syscall(
 
     // 2) Validate guest buffer range and writability
     match sc_convert_addr_to_fstatdata(statfs_arg, statfs_cageid, cageid) {
-         // 3) Populate StatData directly
+        // 3) Populate StatData directly
         Ok(statbuf_addr) => convert_fstatdata_to_user(statbuf_addr, host_statfs),
         Err(e) => return syscall_error(e, "fstatfs", "Bad address"),
     }
@@ -2751,10 +2859,14 @@ pub fn getdents_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "getdents_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getdents_syscall"
+        );
     }
 
-    let ret = unsafe { libc::syscall(libc::SYS_getdents64 as libc::c_long, kernel_fd, dirp, count) };
+    let ret =
+        unsafe { libc::syscall(libc::SYS_getdents64 as libc::c_long, kernel_fd, dirp, count) };
 
     ret as i32
 }
@@ -2806,7 +2918,10 @@ pub fn lseek_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "lseek_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "lseek_syscall"
+        );
     }
 
     let ret = unsafe { libc::lseek(kernel_fd, offset, whence) };
@@ -2816,7 +2931,6 @@ pub fn lseek_syscall(
 
     ret as i32
 }
-
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/pread.2.html
 ///
@@ -2864,12 +2978,15 @@ pub fn pread_syscall(
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
 
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "pread_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "pread_syscall"
+        );
     }
 
     let ret = unsafe { libc::pread(kernel_fd, buf as *mut c_void, count, offset) as i32 };
-        if ret < 0 {
-            let errno = get_errno();
+    if ret < 0 {
+        let errno = get_errno();
         return handle_errno(errno, "pread");
     }
     ret
@@ -2921,7 +3038,10 @@ pub fn pwrite_syscall(
     let offset = sc_convert_sysarg_to_i64(offset_arg, offset_cageid, cageid);
 
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "pwrite_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "pwrite_syscall"
+        );
     }
 
     let ret = unsafe { libc::pwrite(kernel_fd, buf as *const c_void, count, offset) as i32 };
@@ -2966,7 +3086,7 @@ pub fn chdir_syscall(
 ) -> i32 {
     // Type conversion
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    
+
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -2974,12 +3094,15 @@ pub fn chdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "chdir_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "chdir_syscall"
+        );
     }
 
     // Call the kernel chdir function
     let ret = unsafe { libc::chdir(path.as_ptr()) };
-    
+
     // Error handling
     if ret < 0 {
         let errno = get_errno();
@@ -3030,7 +3153,7 @@ pub fn rmdir_syscall(
 ) -> i32 {
     // Type conversion
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    
+
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
@@ -3038,12 +3161,15 @@ pub fn rmdir_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "rmdir_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "rmdir_syscall"
+        );
     }
 
     // Call the kernel rmdir function
     let ret = unsafe { libc::rmdir(path.as_ptr()) };
-    
+
     // Error handling
     if ret < 0 {
         let errno = get_errno();
@@ -3089,19 +3215,22 @@ pub fn chmod_syscall(
     // Type conversion
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
     let mode = sc_convert_sysarg_to_u32(mode_arg, mode_cageid, cageid);
-    
+
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "chmod_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "chmod_syscall"
+        );
     }
 
     // Call the kernel chmod function
     let ret = unsafe { libc::chmod(path.as_ptr(), mode) };
-    
+
     // Error handling
     if ret < 0 {
         let errno = get_errno();
@@ -3157,7 +3286,10 @@ pub fn fchmod_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "fchmod_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "fchmod_syscall"
+        );
     }
 
     let ret = unsafe { libc::fchmod(kernel_fd, mode) };
@@ -3171,7 +3303,7 @@ pub fn fchmod_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getcwd.2.html
 ///
 /// `getcwd_syscall` retrieves the current working directory for the calling Cage.
-/// 
+///
 /// Unlike directly calling `libc::getcwd`, this implementation uses the Cage's
 /// own `cwd` field maintained inside the Cage struct. Each Cage has its own
 /// logical working directory, which may differ from the host kernel's notion
@@ -3219,7 +3351,10 @@ pub fn getcwd_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "getcwd_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getcwd_syscall"
+        );
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -3235,11 +3370,10 @@ pub fn getcwd_syscall(
         *buf.add(path.len()) = 0;
     }
     0
-
 }
 
 /// Truncate a file to a specified length
-/// 
+///
 /// ## Arguments:
 ///     - cageid: current cage identifier
 ///     - path_arg: pointer to the pathname of the file to truncate
@@ -3268,10 +3402,14 @@ pub fn truncate_syscall(
 ) -> i32 {
     // Validate unused arguments
     if !(sc_unusedarg(arg3, arg3_cageid)
-         && sc_unusedarg(arg4, arg4_cageid)
-         && sc_unusedarg(arg5, arg5_cageid)
-         && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "truncate_syscall");
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "truncate_syscall"
+        );
     }
 
     // Type conversion
@@ -3280,7 +3418,7 @@ pub fn truncate_syscall(
 
     // Call libc truncate
     let ret = unsafe { libc::truncate(path.as_ptr() as *const i8, length) };
-    
+
     if ret == -1 {
         let errno = get_errno();
         return handle_errno(errno, "truncate");
@@ -3292,7 +3430,7 @@ pub fn truncate_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/clock_nanosleep.2.html
 ///
 /// `nanosleep_time64_syscall` suspends execution of the calling Cage for
-/// the time interval specified in the requested `timespec` structure. 
+/// the time interval specified in the requested `timespec` structure.
 ///
 /// ## Implementation Details:
 /// - The `req` (requested time) and `rem` (remaining time) pointers are
@@ -3334,7 +3472,10 @@ pub fn nanosleep_time64_syscall(
     let rem = sc_convert_buf(rem_arg, rem_cageid, cageid);
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "nanosleep_time64_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "nanosleep_time64_syscall"
+        );
     }
     let ret = unsafe { syscall(SYS_clock_nanosleep, clockid, flags, req, rem) as i32 };
     if ret < 0 {
@@ -3346,7 +3487,7 @@ pub fn nanosleep_time64_syscall(
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/mprotect.2.html
 ///
-/// Linux `mprotect()` syscall changes the protection of memory pages. It sets the protection 
+/// Linux `mprotect()` syscall changes the protection of memory pages. It sets the protection
 /// bits for memory pages in the range [addr, addr+len-1] to prot.
 ///
 /// ## Arguments:
@@ -3387,8 +3528,12 @@ pub fn mprotect_syscall(
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "mprotect_syscall");
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "mprotect_syscall"
+        );
     }
 
     // Validate protection flags
@@ -3411,7 +3556,6 @@ pub fn mprotect_syscall(
 
     ret
 }
-
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/ioctl.2.html
 ///
@@ -3456,8 +3600,12 @@ pub fn ioctl_syscall(
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "ioctl_syscall");
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "ioctl_syscall"
+        );
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
@@ -3526,7 +3674,10 @@ pub fn flock_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "flock_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "flock_syscall"
+        );
     }
 
     // Validate operation flags
@@ -3552,17 +3703,17 @@ pub fn flock_syscall(
 
 /// Linux reference: https://man7.org/linux/man-pages/man2/shmget.2.html
 ///
-/// shmget checks whether a shared memory key already exists, and either returns the existing 
-/// segment ID or creates a new segment (after validating flags and size) before registering 
-/// it in the metadata tables. 
+/// shmget checks whether a shared memory key already exists, and either returns the existing
+/// segment ID or creates a new segment (after validating flags and size) before registering
+/// it in the metadata tables.
 ///
 /// 1. **Convert arguments**  
-///    - Convert `key_arg`, `size_arg`, and `shmflg_arg` into native types, 
+///    - Convert `key_arg`, `size_arg`, and `shmflg_arg` into native types,
 ///      while validating `arg4`–`arg6` are unused.
-/// 
+///
 /// 2. **Special case: IPC_PRIVATE**  
 ///    - Return `ENOENT` since `IPC_PRIVATE` segments are not supported yet.
-/// 
+///
 /// 3. **Check if key exists**  
 ///    - If the key already exists in `shmkeyidtable`:  
 ///       - If both `IPC_CREAT` and `IPC_EXCL` are set → error `EEXIST`.  
@@ -3573,10 +3724,10 @@ pub fn flock_syscall(
 ///    - Validate `size` against `SHMMIN` and `SHMMAX`.  
 ///    - Allocate new `shmid` via `new_keyid()`.  
 ///    - Insert into `shmkeyidtable`.  
-///    - Create a new shared memory segment with owner `cageid`, default `uid/gid`, 
+///    - Create a new shared memory segment with owner `cageid`, default `uid/gid`,
 ///      and mode = lowest 9 bits of `shmflg`.  
 ///    - Insert segment into `shmtable`.
-/// 
+///
 /// ## Arguments
 /// * `cageid`       – The ID of the calling cage, used for ownership and validation.
 /// * `key_arg`      – The key used to identify the shared memory segment (raw u64).
@@ -3585,7 +3736,7 @@ pub fn flock_syscall(
 /// * `size_cageid`  – The cage ID associated with `size_arg`.
 /// * `shmflg_arg`   – Flags controlling creation, permissions, and behavior (raw u64).
 /// * `shmflg_cageid`– The cage ID associated with `shmflg_arg`.
-/// 
+///
 /// ## Returns:
 /// On success, it returns the segment ID; on failure, it returns an appropriate error code.
 pub fn shmget_syscall(
@@ -3609,8 +3760,12 @@ pub fn shmget_syscall(
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "shmget_syscall");
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "shmget_syscall"
+        );
     }
 
     if key == IPC_PRIVATE {
@@ -3651,14 +3806,7 @@ pub fn shmget_syscall(
             vacant.insert(shmid);
             let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
-            let segment = new_shm_segment(
-                key,
-                size,
-                cageid as u32,
-                DEFAULT_UID,
-                DEFAULT_GID,
-                mode,
-            );
+            let segment = new_shm_segment(key, size, cageid as u32, DEFAULT_UID, DEFAULT_GID, mode);
             metadata.shmtable.insert(shmid, segment);
         }
     };
@@ -3670,7 +3818,7 @@ pub fn shmget_syscall(
 /// Handles the shmat syscall by mapping shared memory segments into the cage's address space.
 /// This function manages the attachment of shared memory segments by updating the cage's vmmap
 /// and handling the raw shmat helpers.
-/// 
+///
 /// 1) **Parse & validate args**
 ///    - Decode `shmid`, `shmaddr`, `shmflg`; ensure `arg4..arg6` are truly unused (panic if not).
 /// 2) **Resolve access mode**
@@ -3728,8 +3876,12 @@ pub fn shmat_syscall(
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "shmat_syscall");
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "shmat_syscall"
+        );
     }
 
     // Get the cage reference.
@@ -3788,7 +3940,6 @@ pub fn shmat_syscall(
 
     // Call the raw shmat helper to attach the shared memory segment.
     let result = shmat_helper(cageid, sysaddr as *mut u8, shmflag, shmid);
-    
 
     // If the syscall succeeded, update the vmmap entry.
     if result as i32 >= 0 {
@@ -3834,7 +3985,7 @@ pub fn shmat_syscall(
 /// This function processes the `shmdt_syscall` by updating the `vmmap` entries and managing
 /// the shared memory detachment operation. It performs address validation, converts user
 /// addresses to system addresses, and updates the virtual memory mappings accordingly.
-/// 
+///
 /// 1) **Parse & validate args**
 ///    - Decode `shmaddr`; ensure `arg2..arg6` are unused (panic if not).
 /// 2) **Validate alignment**
@@ -3874,7 +4025,10 @@ pub fn shmdt_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "shmdt_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "shmdt_syscall"
+        );
     }
 
     // Retrieve the cage reference.
@@ -3906,7 +4060,7 @@ pub fn shmdt_syscall(
         (length as u32) >> PAGESHIFT,
     );
 
-    0    
+    0
 }
 
 /// Linux reference: https://man7.org/linux/man-pages/man3/shmctl.3p.html
@@ -3916,8 +4070,8 @@ pub fn shmdt_syscall(
 /// the requested control operation: `IPC_STAT` copies the segment’s metadata
 /// (`shminfo`) into the caller-provided buffer, and `IPC_RMID` marks the segment
 /// for removal (setting `SHM_DEST`) and deletes it immediately if there are no
-/// attachments, also clearing the key to id mapping. 
-/// 
+/// attachments, also clearing the key to id mapping.
+///
 /// 1) **Parse & validate args**
 ///    - Decode `shmid`, `cmd`, and optional `buf` pointer; ensure `arg4..arg6` unused (panic if not).
 /// 2) **Locate segment**
@@ -3927,7 +4081,7 @@ pub fn shmdt_syscall(
 ///    - `IPC_RMID`: mark for removal (`segment.rmid = true`, set `SHM_DEST` in mode).
 ///        * If `shm_nattch == 0`, remove the segment immediately and clear the key→id mapping.
 ///    - Otherwise: error `EINVAL` (unsupported command).
-/// 
+///
 /// ## Arguments
 /// * `cageid`        – The ID of the calling cage, used for ownership and validation.
 /// * `shmid_arg`     – Shared memory segment ID (raw u64).
@@ -3964,8 +4118,12 @@ pub fn shmctl_syscall(
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid)) {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "shmctl_syscall");
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "shmctl_syscall"
+        );
     }
 
     let metadata = &SHM_METADATA;

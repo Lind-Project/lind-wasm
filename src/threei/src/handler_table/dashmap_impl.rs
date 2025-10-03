@@ -1,6 +1,6 @@
+use crate::threei_const;
 use dashmap::DashMap;
 use std::sync::Mutex;
-use crate::threei_const;
 
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
@@ -8,9 +8,9 @@ use crate::threei_const;
 /// <self_cageid, <callnum, (addr, dest_grateid)>
 /// Keys are the grate, the value is a HashMap with a key of the callnum
 /// and the values are a (target_call_index, grate) tuple for the actual handlers...
-type TargetCageMap = DashMap<u64, u64>;         // Maps destfunc to dest_grateid
-type CallnumMap     = DashMap<u64, TargetCageMap>; // Maps targetcallnum to TargetCageMap
-type CageHandlerTable = DashMap<u64, CallnumMap>;  // Maps self_cageid to CallnumMap
+type TargetCageMap = DashMap<u64, u64>; // Maps destfunc to dest_grateid
+type CallnumMap = DashMap<u64, TargetCageMap>; // Maps targetcallnum to TargetCageMap
+type CageHandlerTable = DashMap<u64, CallnumMap>; // Maps self_cageid to CallnumMap
 
 lazy_static::lazy_static! {
     // <self_cageid, <callnum, (target_call_index, dest_grateid)>
@@ -40,7 +40,8 @@ pub fn _check_cage_handler_exist(cageid: u64) -> bool {
 /// `Some((call_index_in_grate, dest_grateid))` if a handler mapping exists.
 /// `None` if no mapping is found.
 pub fn _get_handler(self_cageid: u64, syscall_num: u64) -> Option<(u64, u64)> {
-    HANDLERTABLE.get(&self_cageid)?
+    HANDLERTABLE
+        .get(&self_cageid)?
         .get(&syscall_num)?
         .iter()
         .next()
@@ -102,13 +103,13 @@ pub fn register_handler_impl(
         if let Some(cage_entry) = HANDLERTABLE.get(&targetcage) {
             cage_entry.remove(&targetcallnum);
             should_remove_cage = cage_entry.value().is_empty();
-            drop(cage_entry); 
+            drop(cage_entry);
             // drop the borrow to cage_entry before mutating handler_table again
             if should_remove_cage {
                 HANDLERTABLE.remove(&targetcage);
             };
         }
-        
+
         return 0;
     }
 
@@ -129,15 +130,15 @@ pub fn register_handler_impl(
                     if should_remove_cage {
                         HANDLERTABLE.remove(&targetcage);
                     }
-                } 
+                }
                 return 0;
-            } 
+            }
 
             match callnum_entry.get(&handlefunc) {
                 Some(existing_dest_grateid) if *existing_dest_grateid == handlefunccage => {
                     // Already registered with same mapping, do nothing
                     return 0;
-                } 
+                }
                 Some(_) => {
                     return threei_const::ELINDAPIABORTED as i32; // Return error if a conflicting mapping exists
                 }
@@ -158,7 +159,7 @@ pub fn register_handler_impl(
             cage_entry.insert(targetcallnum, m);
             return 0;
         }
-        
+
         return 0;
     }
 
@@ -169,11 +170,10 @@ pub fn register_handler_impl(
         return 0;
     }
 
-    let cage_entry = HANDLERTABLE
-        .entry(targetcage)
-        .or_insert_with(DashMap::new);
+    let cage_entry = HANDLERTABLE.entry(targetcage).or_insert_with(DashMap::new);
 
-    let callmap = cage_entry.value()
+    let callmap = cage_entry
+        .value()
         .entry(targetcallnum)
         .or_insert_with(DashMap::new);
 
@@ -191,11 +191,12 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
         let src_entry = src_entry_ref.value();
         let target_entry_guard = HANDLERTABLE.entry(targetcage).or_insert_with(DashMap::new);
         let target_entry = target_entry_guard.value(); // Ensure the scope of lifetime is long enough
-        
+
         for callnum_ref in src_entry.iter() {
             let callnum = callnum_ref.key();
             let callnum_map = callnum_ref.value();
-            let target_callnum_map_guard = target_entry.entry(*callnum).or_insert_with(DashMap::new);
+            let target_callnum_map_guard =
+                target_entry.entry(*callnum).or_insert_with(DashMap::new);
             let target_callnum_map = target_callnum_map_guard.value(); // Ensure the scope of lifetime is long enough
             for handlefunc_ref in callnum_map.iter() {
                 // If not already present, insert

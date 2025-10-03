@@ -1,26 +1,26 @@
 //! Network-related data structures
 //!
-//! This file defines minimal, libc-compatible socket data structures that RawPOSIX uses at the FFI boundary. 
-//! The goal is to expose a single, compact representation (`SockAddr`) that can be filled from a raw 
-//! `sockaddr*` and queried for its effective size without depending on higher-level network crates. 
+//! This file defines minimal, libc-compatible socket data structures that RawPOSIX uses at the FFI boundary.
+//! The goal is to expose a single, compact representation (`SockAddr`) that can be filled from a raw
+//! `sockaddr*` and queried for its effective size without depending on higher-level network crates.
 //!
-//! The layout is Linux-centric and mirrors common libc ABIs: `sa_family_t` is treated as a 16-bit field 
-//! and the trailing payload is stored in a fixed 108-byte buffer. This buffer is reused for 
+//! The layout is Linux-centric and mirrors common libc ABIs: `sa_family_t` is treated as a 16-bit field
+//! and the trailing payload is stored in a fixed 108-byte buffer. This buffer is reused for
 //! `AF_UNIX` (`sun_path[108]`) as well as for the byte payloads of `AF_INET`/`AF_INET6`.
 //!
-//! Critically, we do not operate directly on the original cage pointer/buffer when parsing or normalizing 
-//! contents, because `AF_UNIX` often requires path conversion (e.g., adding or removing the lind_root 
-//! prefix). Such rewrites can change length, require shifting bytes, and must respect Linux abstract-namespace 
-//! vs pathname rules; doing this in the caller’s cage linear memory is risky (partial writes, aliasing, 
-//! out-of-bounds on error, or subtle TOCTOU-style races if other code can observe the buffer). Instead 
-//! we first clone the relevant bytes into `SockAddr` in user-space, reason about the family and `socklen_t`, 
+//! Critically, we do not operate directly on the original cage pointer/buffer when parsing or normalizing
+//! contents, because `AF_UNIX` often requires path conversion (e.g., adding or removing the lind_root
+//! prefix). Such rewrites can change length, require shifting bytes, and must respect Linux abstract-namespace
+//! vs pathname rules; doing this in the caller’s cage linear memory is risky (partial writes, aliasing,
+//! out-of-bounds on error, or subtle TOCTOU-style races if other code can observe the buffer). Instead
+//! we first clone the relevant bytes into `SockAddr` in user-space, reason about the family and `socklen_t`,
 //! and only perform any necessary in-place edits
-use libc::{sa_family_t, sockaddr_un, sockaddr_in, sockaddr_in6};
-use std::mem;
-use std::ptr;
-use std::os::raw::c_char;
-use crate::constants::net_const::{AF_UNIX, AF_INET, AF_INET6};
+use crate::constants::net_const::{AF_INET, AF_INET6, AF_UNIX};
 use libc::sockaddr;
+use libc::{sa_family_t, sockaddr_in, sockaddr_in6, sockaddr_un};
+use std::mem;
+use std::os::raw::c_char;
+use std::ptr;
 
 /// A simplified socket address structure supporting AF_UNIX, AF_INET, and AF_INET6.
 /// This abstraction stores the address family and a 108-byte path or address buffer,
@@ -56,7 +56,7 @@ impl SockAddr {
         }
     }
 
-    /// Returns the expected length of the address structure 
+    /// Returns the expected length of the address structure
     /// based on the current address family.
     pub fn get_len(&self) -> u32 {
         match self.sun_family as i32 {

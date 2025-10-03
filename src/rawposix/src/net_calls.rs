@@ -1,28 +1,28 @@
-use typemap::datatype_conversion::*;
-use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
-use typemap::cage_helpers::convert_fd_to_host;
-use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
-use sysdefs::data::fs_struct::EpollEvent;
-use cage::{signal_check_trigger, starttimer, readtimer, timeout_setup_ms};
+use cage::{readtimer, signal_check_trigger, starttimer, timeout_setup_ms};
 use fdtables;
 use fdtables::epoll_event;
-use std::collections::{HashMap, HashSet};
-use parking_lot::Mutex;
-use sysdefs::constants::FDKIND_KERNEL;
-use sysdefs::data::net_struct::SockAddr;
-use libc::*;
-use std::{ptr, mem};
-use sysdefs::*;
-use std::time::Instant;
 use lazy_static::lazy_static;
+use libc::*;
+use parking_lot::Mutex;
+use std::collections::{HashMap, HashSet};
+use std::time::Instant;
+use std::{mem, ptr};
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
+use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
+use sysdefs::constants::FDKIND_KERNEL;
+use sysdefs::data::fs_struct::EpollEvent;
+use sysdefs::data::net_struct::SockAddr;
+use sysdefs::*;
+use typemap::cage_helpers::convert_fd_to_host;
+use typemap::datatype_conversion::*;
+use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
 
-/// `epoll_ctl` handles registering, modifying, and removing the watch set, while `epoll_wait` 
-/// simply gathers ready events based on what's already registered and writes them back to the 
-/// user buffer. Since we currently only have a virtual-FD to kernel-FD mapping, allowing user 
-/// space to use `events[i].data.fd` directly after `epoll_wait` requires translating kernel-side 
-/// info back to the virtual side. We'll maintain a global reverse mapping (cage, underfd) to vfd, 
-/// register entries during `epoll_ctl`, and translate data from underfd to vfd before writing 
+/// `epoll_ctl` handles registering, modifying, and removing the watch set, while `epoll_wait`
+/// simply gathers ready events based on what's already registered and writes them back to the
+/// user buffer. Since we currently only have a virtual-FD to kernel-FD mapping, allowing user
+/// space to use `events[i].data.fd` directly after `epoll_wait` requires translating kernel-side
+/// info back to the virtual side. We'll maintain a global reverse mapping (cage, underfd) to vfd,
+/// register entries during `epoll_ctl`, and translate data from underfd to vfd before writing
 /// events back in `epoll_wait`.
 lazy_static! {
     // A hashmap used to store epoll mapping relationships
@@ -183,7 +183,7 @@ pub fn poll_syscall(
     if !all_kernel_pollfds.is_empty() {
         let start_time = starttimer();
         // Keep track of total duration for our exit check in the poll loop
-        let (duration, _) = timeout_setup_ms(original_timeout); 
+        let (duration, _) = timeout_setup_ms(original_timeout);
 
         let ret;
         loop {
@@ -238,7 +238,6 @@ pub fn poll_syscall(
 
     total_ready
 }
-
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/select.2.html
 ///
@@ -386,7 +385,7 @@ pub fn select_syscall(
         tv_sec: 0,
         tv_usec: 0,
     };
-    
+
     let start_time = starttimer();
     // Keep track of total timeout duration for exit handling later
     let (duration, _) = timeout_setup_ms(timeout_ms);
@@ -420,7 +419,7 @@ pub fn select_syscall(
                     &mut zero_timeout as *mut _ // libc select requires timeval struct format
                 } else {
                     std::ptr::null_mut()
-                }, 
+                },
             )
         };
 
@@ -431,8 +430,7 @@ pub fn select_syscall(
 
         // Check for valid return or time elapsed is greater than the total duration of the timeout
         // Since we have this check here for total time elapsed, we can call libc select with a 0 timeout as we do above
-        if ret > 0 || readtimer(start_time) >= duration
-        {
+        if ret > 0 || readtimer(start_time) >= duration {
             real_readfds = tmp_readfds;
             real_writefds = tmp_writefds;
             real_errorfds = tmp_errorfds;
@@ -454,7 +452,7 @@ pub fn select_syscall(
     // TODO: Implement in-memory FD checking for select syscall
     // Currently only kernel FDs are supported. In-memory pipes and sockets
     // will require custom polling logic when in-memory system is integrated.
-    
+
     // Convert kernel FD results back to virtual FDs and subsequently write to user memory
     // This step translates the kernel select() results (which contain kernel FDs) back into
     // virtual FDs that using the mapping table created earlier    let (read_flags, read_result) = fdtables::get_one_virtual_bitmask_from_select_result(
@@ -507,7 +505,6 @@ pub fn select_syscall(
     // The total number of descriptors ready
     (read_flags + write_flags + error_flags) as i32
 }
-
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_create.2.html
 ///
@@ -564,14 +561,13 @@ pub fn epoll_create_syscall(
         return handle_errno(errno, "epoll_create_syscall");
     }
 
-    // Get the virtual epfd and register to fdtables 
+    // Get the virtual epfd and register to fdtables
     let virtual_epfd = fdtables::epoll_create_empty(cageid, false).unwrap();
     fdtables::epoll_add_underfd(cageid, virtual_epfd, FDKIND_KERNEL, kernel_fd as u64);
 
     // Return virtual epfd
     virtual_epfd as i32
 }
-
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
 ///
@@ -622,23 +618,26 @@ pub fn epoll_ctl_syscall(
 
     // Get the underfd of type FDKIND_KERNEL to the vitual fd
     // Details see documentation on fdtables/epoll_get_underfd_hashmap.md
-    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg).unwrap().get(&FDKIND_KERNEL).unwrap();
+    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg)
+        .unwrap()
+        .get(&FDKIND_KERNEL)
+        .unwrap();
 
     // Validate operation
     if op != EPOLL_CTL_ADD && op != EPOLL_CTL_MOD && op != EPOLL_CTL_DEL {
         return syscall_error(Errno::EINVAL, "epoll_ctl_syscall", "Invalid operation");
     }
 
-    // Translate virtual FDs to kernel FDs. We only need to translate this since this is a 
+    // Translate virtual FDs to kernel FDs. We only need to translate this since this is a
     // normal fd, not epfd
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, fd_arg);
     if wrappedvfd.is_err() {
         return syscall_error(Errno::EBADF, "epoll_ctl_syscall", "Bad File Descriptor");
     }
-    
+
     let vfd = wrappedvfd.unwrap();
 
-    // Convert epoll_event 
+    // Convert epoll_event
     let user_event_opt = match sc_convert_addr_to_epollevent(event_arg, event_cageid, cageid) {
         Ok(p) => Some(p),
         Err(_) => {
@@ -647,7 +646,7 @@ pub fn epoll_ctl_syscall(
             } else {
                 return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid address");
             }
-        },
+        }
     };
 
     // We intentionally DO NOT overwrite the user's epoll_event inside the guest's
@@ -655,7 +654,7 @@ pub fn epoll_ctl_syscall(
     // kernel FD (underfd), which is not visible to user space. Mutating
     // the guest-provided epoll_event->data to hold an underfd would leak a kernel-
     // side detail into user memory
-    // 
+    //
     // Instead, we allocate a host-side (non-linear-memory) epoll_event and populate it
     // with the same 'events' mask but with 'data.u64' set to the kernel FD. For DEL we
     // pass a NULL pointer. This host-only struct is passed to libc::epoll_ctl and lives
@@ -667,20 +666,13 @@ pub fn epoll_ctl_syscall(
         u64: vfd.underfd as u64,
     });
 
-    let kernel_epoll_event: *mut libc::epoll_event =
-        tmp.as_mut()
-           .map(|e| e as *mut libc::epoll_event)
-           .unwrap_or(ptr::null_mut());
+    let kernel_epoll_event: *mut libc::epoll_event = tmp
+        .as_mut()
+        .map(|e| e as *mut libc::epoll_event)
+        .unwrap_or(ptr::null_mut());
 
     // Call actual kernel epoll_ctl
-    let ret = unsafe {
-        libc::epoll_ctl(
-            epfd as i32,
-            op,
-            vfd.underfd as i32,
-            kernel_epoll_event,
-        )
-    };
+    let ret = unsafe { libc::epoll_ctl(epfd as i32, op, vfd.underfd as i32, kernel_epoll_event) };
 
     if ret < 0 {
         let errno = get_errno();
@@ -715,7 +707,6 @@ pub fn epoll_ctl_syscall(
     ret
 }
 
-
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_wait.2.html
 ///
 /// Linux `epoll_wait()` waits for events on an epoll file descriptor.
@@ -724,18 +715,18 @@ pub fn epoll_ctl_syscall(
 ///
 /// Uses the fdtables infrastructure to get virtual epoll data and handles both kernel-backed
 /// and in-memory file descriptors. For kernel FDs, calls libc::epoll_wait() on the underlying
-/// kernel epoll FD. 
+/// kernel epoll FD.
 ///
 /// Implementation follows a 4-step isolation pattern: (1) translate virtual epoll FD to kernel FD,
-/// (2) create host-side buffer to prevent kernel writing directly to user memory, (3) call 
-/// libc::epoll_wait() with timeout/signal handling, (4) translate returned kernel FDs back to 
-/// virtual FDs before writing to user-space events array. This ensures kernel identifiers never leak 
+/// (2) create host-side buffer to prevent kernel writing directly to user memory, (3) call
+/// libc::epoll_wait() with timeout/signal handling, (4) translate returned kernel FDs back to
+/// virtual FDs before writing to user-space events array. This ensures kernel identifiers never leak
 /// into user memory while maintaining proper syscall semantics.
 ///
 /// TODO: Implement in-memory FD support for epoll_wait
 /// For in-memory FDs, custom polling logic needs to be implemented when in-memory system
 /// is integrated. This will involve checking in-memory pipe/socket readiness and converting
-/// results back to virtual FDs. Results are converted back to virtual FDs and written to 
+/// results back to virtual FDs. Results are converted back to virtual FDs and written to
 /// the user-space events array.
 ///
 /// ## Arguments:
@@ -776,7 +767,10 @@ pub fn epoll_wait_syscall(
 
     // Get the underfd of type FDKIND_KERNEL to the vitual fd
     // Details see documentation on fdtables/epoll_get_underfd_hashmap.md
-    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg).unwrap().get(&FDKIND_KERNEL).unwrap();
+    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg)
+        .unwrap()
+        .get(&FDKIND_KERNEL)
+        .unwrap();
 
     // Convert arguments
     let maxevents = sc_convert_sysarg_to_i32(maxevents_arg, maxevents_cageid, cageid);
@@ -803,7 +797,7 @@ pub fn epoll_wait_syscall(
 
     // We do not let the kernel write epoll events directly into the guest’s
     // linear memory. The kernel reports events using kernel-side identifiers
-    // (underfd) in the epoll_event.data field, which are not visible to user space 
+    // (underfd) in the epoll_event.data field, which are not visible to user space
     // in our model. To preserve isolation and avoid leaking underfd
     // values into guest memory, we allocate a host-side (non-linear-memory) buffer
     // `kernel_events` and pass its pointer to epoll_wait. After epoll_wait returns,
@@ -843,7 +837,7 @@ pub fn epoll_wait_syscall(
                 return handle_errno(errno, "epoll");
             }
 
-            // check for timeout against total duration or if epoll_wait returned successfully. 
+            // check for timeout against total duration or if epoll_wait returned successfully.
             if ret > 0 || readtimer(start_time) >= duration {
                 break;
             }
@@ -910,20 +904,23 @@ pub fn socket_syscall(
     let socktype = sc_convert_sysarg_to_i32(socktype_arg, socktype_cageid, cageid);
     let protocol = sc_convert_sysarg_to_i32(protocol_arg, protocol_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "socket_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "socket_syscall"
+        );
     }
 
     let kernel_fd = unsafe { libc::socket(domain, socktype, protocol) };
-       
+
     if kernel_fd < 0 {
-            let errno = get_errno();
-            return handle_errno(errno, "socket");
+        let errno = get_errno();
+        return handle_errno(errno, "socket");
     }
 
     // We need to register this new kernel fd in fdtables
@@ -936,8 +933,8 @@ pub fn socket_syscall(
     // (equivalent to `O_NONBLOCK`). Since our virtual FD maps directly to a
     // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
     // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
-    fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, cloexec, 0)
-        .unwrap() as i32
+    fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, kernel_fd as u64, cloexec, 0).unwrap()
+        as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/connect.2.html
@@ -980,16 +977,19 @@ pub fn connect_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
-        &&sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "connect_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "connect_syscall"
+        );
     }
-    
+
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret = unsafe { libc::connect(fd, finalsockaddr, addrlen) };
@@ -1034,16 +1034,19 @@ pub fn bind_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
-    &&sc_unusedarg(arg4, arg4_cageid)
-    && sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "bind_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "bind_syscall"
+        );
     }
-    
+
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret = unsafe { libc::bind(fd, finalsockaddr, addrlen) };
@@ -1086,14 +1089,17 @@ pub fn listen_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let backlog = sc_convert_sysarg_to_i32(backlog_arg, backlog_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
-    &&sc_unusedarg(arg4, arg4_cageid)
-    && sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "listen_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "listen_syscall"
+        );
     }
 
     let ret = unsafe { libc::listen(fd, backlog) };
@@ -1104,8 +1110,6 @@ pub fn listen_syscall(
     }
     ret
 }
-
-
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/accept.2.html
 ///
@@ -1138,17 +1142,20 @@ pub fn accept_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32{
+) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg4, arg4_cageid)
-    && sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "accept_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "accept_syscall"
+        );
     }
 
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -1161,12 +1168,12 @@ pub fn accept_syscall(
     }
 
     // We need to register this new kernel fd in fdtables
-    let ret_virtualfd = fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ret_kernelfd as u64, false, 0).unwrap();
-    
+    let ret_virtualfd =
+        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ret_kernelfd as u64, false, 0)
+            .unwrap();
+
     ret_virtualfd as i32
-
 }
-
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/setsockopt.2.html
 ///
@@ -1206,16 +1213,16 @@ pub fn setsockopt_syscall(
     let optval = sc_convert_addr_to_host(optval_arg, optval_cageid, cageid);
     let optlen = sc_convert_sysarg_to_u32(optlen_arg, optlen_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "setsockopt_syscall");
+    if !(sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "setsockopt_syscall"
+        );
     }
 
-    let ret = unsafe { 
-        libc::setsockopt(fd, level, optname, optval as *mut c_void, optlen)
-    };
+    let ret = unsafe { libc::setsockopt(fd, level, optname, optval as *mut c_void, optlen) };
 
     if ret < 0 {
         let errno = get_errno();
@@ -1257,14 +1264,17 @@ pub fn shutdown_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let how = sc_convert_sysarg_to_i32(how_arg, how_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
-    &&sc_unusedarg(arg4, arg4_cageid)
-    && sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "shutdown_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "shutdown_syscall"
+        );
     }
 
     let ret = unsafe { libc::shutdown(fd, how) };
@@ -1310,22 +1320,25 @@ pub fn getsockname_syscall(
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
-    
-    // would check when `secure` flag has been set during compilation, 
+
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
-    &&sc_unusedarg(arg4, arg4_cageid)
-    && sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "getsockname_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getsockname_syscall"
+        );
     }
-    
+
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, addrlen as *mut u32) };
 
-    if ret < 0  {
+    if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getsockname");
     }
@@ -1365,7 +1378,7 @@ pub fn sendto_syscall(
     sockaddr_cageid: u64,
     addrlen_arg: u64,
     addrlen_cageid: u64,
-) -> i32{
+) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
@@ -1432,7 +1445,7 @@ pub fn recvfrom_syscall(
     addr_cageid: u64,
     addrlen_arg: u64,
     addrlen_cageid: u64,
-) -> i32{
+) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
@@ -1440,13 +1453,22 @@ pub fn recvfrom_syscall(
 
     // true means user passed NULL for that pointer
     let addr_nullity = sc_convert_arg_nullity(addr_arg, addr_cageid, cageid);
-    let addrlen_nullity = sc_convert_arg_nullity(addrlen_arg,addrlen_cageid, cageid);
+    let addrlen_nullity = sc_convert_arg_nullity(addrlen_arg, addrlen_cageid, cageid);
 
     // Case 1: both NULL → caller doesn’t want peer address
-    // In this case recvfrom() won’t write to addr/addrlen,  
+    // In this case recvfrom() won’t write to addr/addrlen,
     // so we can pass null pointers directly to libc.
     if addr_nullity && addrlen_nullity {
-        let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, ptr::null_mut(), ptr::null_mut()) as i32 };
+        let ret = unsafe {
+            libc::recvfrom(
+                fd,
+                buf as *mut c_void,
+                buflen,
+                flag,
+                ptr::null_mut(),
+                ptr::null_mut(),
+            ) as i32
+        };
 
         if ret < 0 {
             let errno = get_errno();
@@ -1457,12 +1479,20 @@ pub fn recvfrom_syscall(
     }
     // Case 2: both non-NULL → caller wants src_addr + addrlen filled
     else if !(addr_nullity || addrlen_nullity) {
-        let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid) as *mut SockAddr; 
+        let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid) as *mut SockAddr;
 
-        let mut src_storage: sockaddr_storage = unsafe {mem::zeroed()};
+        let mut src_storage: sockaddr_storage = unsafe { mem::zeroed() };
         let mut src_len: socklen_t = unsafe { mem::size_of::<sockaddr_storage>() as socklen_t };
-        let ret = unsafe { libc::recvfrom(fd, buf as *mut c_void, buflen, flag, &mut src_storage as *mut _ as *mut sockaddr,
-            &mut src_len as *mut socklen_t,) as i32 };
+        let ret = unsafe {
+            libc::recvfrom(
+                fd,
+                buf as *mut c_void,
+                buflen,
+                flag,
+                &mut src_storage as *mut _ as *mut sockaddr,
+                &mut src_len as *mut socklen_t,
+            ) as i32
+        };
 
         if ret < 0 {
             let errno = get_errno();
@@ -1472,11 +1502,7 @@ pub fn recvfrom_syscall(
         // Copy peer address back to user’s src_addr / addrlen
         if ret >= 0 {
             unsafe {
-                copy_out_sockaddr(
-                    addr,
-                    src_len as *mut u32,
-                    &src_storage,
-                );
+                copy_out_sockaddr(addr, src_len as *mut u32, &src_storage);
             }
         }
 
@@ -1518,14 +1544,17 @@ pub fn gethostname_syscall(
     let name = sc_convert_addr_to_host(name_arg, name_cageid, cageid);
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
-    &&sc_unusedarg(arg4, arg4_cageid)
-    && sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "gethostname_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "gethostname_syscall"
+        );
     }
 
     let ret = unsafe { libc::gethostname(name as *mut i8, len) };
@@ -1567,18 +1596,19 @@ pub fn getsockopt_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32{
+) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
     let optval = sc_convert_sysarg_to_i32_ref(optval_arg, optval_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg5, arg5_cageid)
-    &&sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "getsockopt_syscall");
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getsockopt_syscall"
+        );
     }
 
     let mut optlen: socklen_t = 4;
@@ -1632,14 +1662,17 @@ pub fn getpeername_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
 
-    // would check when `secure` flag has been set during compilation, 
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
-    &&sc_unusedarg(arg4, arg4_cageid)
-    && sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
     {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "getpeername_syscall");
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getpeername_syscall"
+        );
     }
 
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
@@ -1687,14 +1720,20 @@ pub fn socketpair_syscall(
     let domain = sc_convert_sysarg_to_i32(domain_arg, domain_cageid, cageid);
     let typ = sc_convert_sysarg_to_i32(type_arg, type_cageid, cageid);
     let protocol = sc_convert_sysarg_to_i32(protocol_arg, protocol_cageid, cageid);
-    let virtual_socket_vector = convert_sockpair(virtual_socket_vector_arg, virtual_socket_vector_cageid, cageid).unwrap();
-    
-    // would check when `secure` flag has been set during compilation, 
+    let virtual_socket_vector = convert_sockpair(
+        virtual_socket_vector_arg,
+        virtual_socket_vector_cageid,
+        cageid,
+    )
+    .unwrap();
+
+    // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg5, arg5_cageid)
-    && sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!("{}: unused arguments contain unexpected values -- security violation", "sockpair_syscall");
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "sockpair_syscall"
+        );
     }
 
     let mut kernel_socket_vector: [i32; 2] = [0, 0];
@@ -1718,8 +1757,10 @@ pub fn socketpair_syscall(
     // (equivalent to `O_NONBLOCK`). Since our virtual FD maps directly to a
     // host kernel FD (`FDKIND_KERNEL`), we simply defer to the kernel as the
     // source of truth and do not duplicate this flag in `fdtables::optionalinfo`.
-    let vsv_1 = fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_1 as u64, cloexec, 0).unwrap();
-    let vsv_2 = fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_2 as u64, cloexec, 0).unwrap();
+    let vsv_1 =
+        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_1 as u64, cloexec, 0).unwrap();
+    let vsv_2 =
+        fdtables::get_unused_virtual_fd(cageid, FDKIND_KERNEL, ksv_2 as u64, cloexec, 0).unwrap();
 
     // Update virtual socketpair struct
     virtual_socket_vector.sock1 = vsv_1 as i32;

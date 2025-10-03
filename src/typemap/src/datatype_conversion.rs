@@ -9,9 +9,11 @@
 use cage::{get_cage, memory::memory::translate_vmmap_addr};
 use std::error::Error;
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
-use sysdefs::data::fs_struct::{SigactionStruct, SigsetType, ITimerVal, StatData, FSData, PipeArray, EpollEvent, ShmidsStruct};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
+use sysdefs::data::fs_struct::{
+    EpollEvent, FSData, ITimerVal, PipeArray, ShmidsStruct, SigactionStruct, SigsetType, StatData,
+};
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
 /// will return true in default mode, and check if `arg` with `arg_cageid` are all null in
@@ -49,7 +51,10 @@ pub fn sc_unusedarg(arg: u64, arg_cageid: u64) -> bool {
 /// true: both of them are valid
 /// false: one of them or neither of them are valid
 pub fn validate_cageid(cageid_1: u64, cageid_2: u64) -> bool {
-    if is_unused(cageid_1, UNUSED_ID) || is_unused(cageid_2, UNUSED_ID) || cageid_1 < 0 || cageid_2 < 0
+    if is_unused(cageid_1, UNUSED_ID)
+        || is_unused(cageid_2, UNUSED_ID)
+        || cageid_1 < 0
+        || cageid_2 < 0
     {
         return false;
     }
@@ -238,7 +243,7 @@ pub fn sc_convert_sysarg_to_i64(arg: u64, arg_cageid: u64, cageid: u64) -> i64 {
 
 /// Convert a raw `u64` argument into a mutable `*mut u8` pointer, with optional
 /// cage ID validation.
-/// 
+///
 /// ## Arguments
 /// - `arg`: The raw 64-bit value to be interpreted as a pointer.
 /// - `arg_cageid`: Cage ID associated with the argument (source).
@@ -253,7 +258,7 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
             panic!("Invalide Cage ID");
         }
     }
-    
+
     arg as *mut u8
 }
 
@@ -330,12 +335,12 @@ pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u
 /// to the corresponding host system address (kernel space). It is typically used when
 /// the guest application passes a pointer argument to a syscall, and we need to dereference
 /// it in the kernel context.
-/// 
+///
 /// Input:
 ///     - addr_arg: the raw 64-bit address from the user
 ///     - addr_arg_cageid: the cage ID where the address belongs to
 ///     - cageid: the current running cage's ID (used for checking context)
-/// 
+///
 /// Output:
 ///     - Returns a mutable pointer to host memory corresponding to the given address
 ///       from the guest. The pointer can be used for direct read/write operations.
@@ -359,7 +364,7 @@ pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64)
 pub fn sc_convert_sigactionStruct<'a>(
     act_arg: u64,
     act_arg_cageid: u64,
-    cageid: u64, 
+    cageid: u64,
 ) -> Option<&'a SigactionStruct> {
     #[cfg(feature = "secure")]
     {
@@ -440,7 +445,11 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
 /// # Returns
 /// * `Some(&mut SigsetType)` if the pointer is nonzero and translation succeeds.
 /// * `None` if `set_arg == 0`.
-pub fn sc_convert_sigset(set_arg: u64, set_cageid: u64, cageid: u64) -> Option<&'static mut SigsetType> {
+pub fn sc_convert_sigset(
+    set_arg: u64,
+    set_cageid: u64,
+    cageid: u64,
+) -> Option<&'static mut SigsetType> {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(set_cageid, cageid) {
@@ -456,7 +465,9 @@ pub fn sc_convert_sigset(set_arg: u64, set_cageid: u64, cageid: u64) -> Option<&
             Ok(addr) => {
                 let ptr = addr as *mut SigsetType;
                 if !ptr.is_null() {
-                    unsafe { return Some(&mut *ptr); }
+                    unsafe {
+                        return Some(&mut *ptr);
+                    }
                 } else {
                     panic!("Failed to get SigsetType from address");
                 }
@@ -751,7 +762,7 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
 /// If the `secure` feature is enabled, this also validates that the argument’s
 /// cage ID matches the current cage ID. If validation fails, the function
 /// returns early with `-1`.
-/// 
+///
 /// Otherwise, the argument is cast to a pointer and checked for null,
 /// returning `true` if the argument is null and `false` if not.
 pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
@@ -761,6 +772,6 @@ pub fn sc_convert_arg_nullity(arg: u64, arg_cageid: u64, cageid: u64) -> bool {
             return -1;
         }
     }
-    
+
     (arg as *const u8).is_null()
 }

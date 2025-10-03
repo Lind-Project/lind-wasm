@@ -1,10 +1,10 @@
-// We mutate global tables (HANDLERTABLE/EXITING_TABLE) in tests. 
-// Rust runs tests in parallel by default, which can cause cross-test interference. 
+// We mutate global tables (HANDLERTABLE/EXITING_TABLE) in tests.
+// Rust runs tests in parallel by default, which can cause cross-test interference.
 // `serial_test` lets us mark those tests #[serial] so they run one at a time.
 use serial_test::serial;
-use threei::EXITING_TABLE;
 use threei::handler_table::HANDLERTABLE;
 use threei::threei_const;
+use threei::EXITING_TABLE;
 mod common;
 use common::*;
 // ---------- [Register_handler] ----------
@@ -79,7 +79,10 @@ fn deregister_entire_callnum_with_constant() {
     assert_eq!(reg(cage, callnum, 3, 92), 0);
 
     // Now remove the entire callnum entry:
-    assert_eq!(reg(cage, callnum, 12345, threei_const::THREEI_DEREGISTER), 0);
+    assert_eq!(
+        reg(cage, callnum, 12345, threei_const::THREEI_DEREGISTER),
+        0
+    );
 
     // No mappings should remain for that (cage, callnum)
     let m = mappings_for(cage, callnum);
@@ -149,7 +152,10 @@ fn cleanup_cage_removed_when_last_callnum_removed() {
     assert_eq!(reg(cage, SYSCALL_BAR, 2, 91), 0);
 
     // remove SYSCALL_FOO entirely
-    assert_eq!(reg(cage, SYSCALL_FOO, 0, threei_const::THREEI_DEREGISTER), 0);
+    assert_eq!(
+        reg(cage, SYSCALL_FOO, 0, threei_const::THREEI_DEREGISTER),
+        0
+    );
     // cage still present because call_b remains
     #[cfg(feature = "hashmap")]
     {
@@ -162,7 +168,10 @@ fn cleanup_cage_removed_when_last_callnum_removed() {
     }
 
     // remove SYSCALL_BAR entirely -> cage should be cleaned up (optional cleanup branch)
-    assert_eq!(reg(cage, SYSCALL_BAR, 0, threei_const::THREEI_DEREGISTER), 0);
+    assert_eq!(
+        reg(cage, SYSCALL_BAR, 0, threei_const::THREEI_DEREGISTER),
+        0
+    );
 
     #[cfg(feature = "hashmap")]
     {
