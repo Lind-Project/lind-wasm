@@ -94,6 +94,7 @@ ENV PATH="/usr/local/bin:/home/${USERNAME}/.cargo/bin:/home/${USERNAME}/go/bin:$
 ENV CLANG="/home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}"
 
 # --- Prebuild ---
-RUN make sysroot && make wasmtime
+RUN make sysroot && make wasmtime-tiny
+RUN make test
 
 CMD ["/bin/bash"]
