@@ -278,7 +278,7 @@ pub fn waitpid_syscall(
     // cageid <= 0 means wait for ANY child
     // cageid < 0 actually refers to wait for any child process whose process group ID equals -pid
     // but we do not have the concept of process group in lind, so let's just treat it as cageid == 0
-    if cageid <= 0 {
+    if cageid_arg <= 0 {
         loop {
             if zombies.len() == 0 && (options & WNOHANG > 0) {
                 // if there is no pending zombies and WNOHANG is set
@@ -294,7 +294,7 @@ pub fn waitpid_syscall(
                     sched_yield();
                 }
                 // Check for pending signals after yielding (only if WNOHANG is not set)
-                if (options & WNOHANG == 0) && signal_check_trigger(cageid) {
+                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
                     return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
                 }
                 // after sleep, get the write access of zombies list back
@@ -313,7 +313,7 @@ pub fn waitpid_syscall(
         // first let's check if the cageid is in the zombie list
         if let Some(index) = zombies
             .iter()
-            .position(|zombie| zombie.cageid == cageid as u64)
+            .position(|zombie| zombie.cageid == cageid_arg as u64)
         {
             // find the cage in zombie list, remove it from the list and break
             zombie_opt = Some(zombies.remove(index));
@@ -323,10 +323,10 @@ pub fn waitpid_syscall(
             // 2. the cage has exited, but it is not the child of this cage, or
             // 3. the cage does not exist
             // we need to make sure the child is still running, and it is the child of this cage
-            let child = get_cage(cageid as u64);
+            let child = get_cage(cageid_arg as u64);
             if let Some(child_cage) = child {
                 // make sure the child's parent is correct
-                if child_cage.parent != cageid {
+                if child_cage.parent != cage.cageid {
                     return syscall_error(
                         Errno::ECHILD,
                         "waitpid",
@@ -350,7 +350,7 @@ pub fn waitpid_syscall(
                     sched_yield();
                 }
                 // Check for pending signals after yielding (only if WNOHANG is not set)
-                if (options & WNOHANG == 0) && signal_check_trigger(cageid) {
+                if (options & WNOHANG == 0) && signal_check_trigger(cage.cageid) {
                     return syscall_error(Errno::EINTR, "waitpid", "interrupted by signal");
                 }
                 // after sleep, get the write access of zombies list back
@@ -359,7 +359,7 @@ pub fn waitpid_syscall(
                 // let's check if the zombie list contains the cage
                 if let Some(index) = zombies
                     .iter()
-                    .position(|zombie| zombie.cageid == cageid as u64)
+                    .position(|zombie| zombie.cageid == cageid_arg as u64)
                 {
                     // find the cage in zombie list, remove it from the list and break
                     zombie_opt = Some(zombies.remove(index));
@@ -379,6 +379,7 @@ pub fn waitpid_syscall(
     // return child's cageid
     zombie.cageid as i32
 }
+
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/wait.2.html
 ///
