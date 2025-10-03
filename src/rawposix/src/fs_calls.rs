@@ -3556,6 +3556,27 @@ pub fn flock_syscall(
 /// segment ID or creates a new segment (after validating flags and size) before registering 
 /// it in the metadata tables. 
 ///
+/// 1. **Convert arguments**  
+///    - Convert `key_arg`, `size_arg`, and `shmflg_arg` into native types, 
+///      while validating `arg4`–`arg6` are unused.
+/// 
+/// 2. **Special case: IPC_PRIVATE**  
+///    - Return `ENOENT` since `IPC_PRIVATE` segments are not supported yet.
+/// 
+/// 3. **Check if key exists**  
+///    - If the key already exists in `shmkeyidtable`:  
+///       - If both `IPC_CREAT` and `IPC_EXCL` are set → error `EEXIST`.  
+///       - Else return the existing `shmid`.
+///
+/// 4. **Key does not exist**  
+///    - If `IPC_CREAT` not set → error `ENOENT`.  
+///    - Validate `size` against `SHMMIN` and `SHMMAX`.  
+///    - Allocate new `shmid` via `new_keyid()`.  
+///    - Insert into `shmkeyidtable`.  
+///    - Create a new shared memory segment with owner `cageid`, default `uid/gid`, 
+///      and mode = lowest 9 bits of `shmflg`.  
+///    - Insert segment into `shmtable`.
+/// 
 /// ## Arguments
 /// * `cageid`       – The ID of the calling cage, used for ownership and validation.
 /// * `key_arg`      – The key used to identify the shared memory segment (raw u64).
@@ -3649,6 +3670,28 @@ pub fn shmget_syscall(
 /// Handles the shmat syscall by mapping shared memory segments into the cage's address space.
 /// This function manages the attachment of shared memory segments by updating the cage's vmmap
 /// and handling the raw shmat helpers.
+/// 
+/// 1) **Parse & validate args**
+///    - Decode `shmid`, `shmaddr`, `shmflg`; ensure `arg4..arg6` are truly unused (panic if not).
+/// 2) **Resolve access mode**
+///    - If `SHM_RDONLY` set → `prot = PROT_READ`; otherwise `prot = PROT_READ|PROT_WRITE`.
+/// 3) **Lookup segment length**
+///    - `get_shm_length(shmid)` → error `EINVAL` if unknown segment.
+/// 4) **Validate alignment & sizes**
+///    - `shmaddr` must be page-aligned (error `EINVAL` if not).
+///    - Round segment length up to page size.
+/// 5) **Choose placement in vmmap**
+///    - If `shmaddr == 0` → `find_map_space(pages, align=1)`.
+///    - Else           → `find_map_space_with_hint(pages, align=1, hint=shmaddr)`.
+///    - No fit → error `ENOMEM`.
+/// 6) **Translate to system address**
+///    - Convert chosen user address to system address via `vmmap.user_to_sys`.
+/// 7) **Perform attach in the backend**
+///    - Call `shmat_helper(cageid, sysaddr, shmflg, shmid)`.
+///    - Must return the same user address; mismatch to panic.
+/// 8) **Record mapping**
+///    - Add a `vmmap` entry with `backing = SharedMemory(shmid)`,
+///      `prot` and `maxprot = prot`, length in pages, offset 0, `len` as filelen.
 ///
 /// # Arguments
 /// * `cageid` - The cage ID that is performing the shmat operation
@@ -3791,6 +3834,17 @@ pub fn shmat_syscall(
 /// This function processes the `shmdt_syscall` by updating the `vmmap` entries and managing
 /// the shared memory detachment operation. It performs address validation, converts user
 /// addresses to system addresses, and updates the virtual memory mappings accordingly.
+/// 
+/// 1) **Parse & validate args**
+///    - Decode `shmaddr`; ensure `arg2..arg6` are unused (panic if not).
+/// 2) **Validate alignment**
+///    - `shmaddr` must be page-aligned (error `EINVAL` if not).
+/// 3) **Translate to system address**
+///    - `vmmap.user_to_sys(shmaddr)` to get the underlying system pointer.
+/// 4) **Perform detach in the backend**
+///    - `shmdt_helper(cageid, sysaddr)` → returns detached length (bytes) or negative errno.
+/// 5) **Remove mapping from vmmap**
+///    - Remove `length >> PAGESHIFT` pages starting at `shmaddr >> PAGESHIFT`.
 ///
 /// # Arguments
 /// * `cageid` - Identifier of the cage that calls the `shmdt`
@@ -3863,6 +3917,16 @@ pub fn shmdt_syscall(
 /// (`shminfo`) into the caller-provided buffer, and `IPC_RMID` marks the segment
 /// for removal (setting `SHM_DEST`) and deletes it immediately if there are no
 /// attachments, also clearing the key to id mapping. 
+/// 
+/// 1) **Parse & validate args**
+///    - Decode `shmid`, `cmd`, and optional `buf` pointer; ensure `arg4..arg6` unused (panic if not).
+/// 2) **Locate segment**
+///    - Lookup `shmid` in `shmtable`; if not found → error `EINVAL`.
+/// 3) **Dispatch by `cmd`**
+///    - `IPC_STAT`: copy `segment.shminfo` into caller’s `*buf`.
+///    - `IPC_RMID`: mark for removal (`segment.rmid = true`, set `SHM_DEST` in mode).
+///        * If `shm_nattch == 0`, remove the segment immediately and clear the key→id mapping.
+///    - Otherwise: error `EINVAL` (unsupported command).
 /// 
 /// ## Arguments
 /// * `cageid`        – The ID of the calling cage, used for ownership and validation.
