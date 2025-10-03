@@ -59,7 +59,7 @@ pub fn fork_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "fork", "invalid Arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "fork_syscall");
     }
 
     // Modify the fdtable manually
@@ -129,7 +129,7 @@ pub fn exec_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "exec", "invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "exec_syscall");
     }
 
     // Empty fd with flag should_cloexec
@@ -191,7 +191,7 @@ pub fn exit_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "exit", "invalid Arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "exit_syscall");
     }
 
     // Cleanup fdtable
@@ -406,7 +406,7 @@ pub fn wait_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "wait", "Invalid Arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "wait_syscall");
     }
     // left type conversion done inside waitpid_syscall
     waitpid_syscall(
@@ -460,7 +460,7 @@ pub fn getpid_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "getpid", "invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "getpid_syscall");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -534,7 +534,7 @@ pub fn getgid_syscall(
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "getgid", "Invalid arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "getgid_syscall");
     }
 
     (unsafe { libc::getgid() }) as i32
@@ -569,7 +569,7 @@ pub fn getegid_syscall(
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "getegid", "Invalid arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "getegid_syscall");
     }
 
     (unsafe { libc::getegid() }) as i32
@@ -603,7 +603,7 @@ pub fn getuid_syscall(
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "getuid", "Invalid arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "getuid_syscall");
     }
 
     (unsafe { libc::getuid() }) as i32
@@ -637,7 +637,7 @@ pub fn geteuid_syscall(
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "geteuid", "Invalid arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "geteuid_syscall");
     }
 
     (unsafe { libc::geteuid() }) as i32
@@ -684,7 +684,7 @@ pub fn sigaction_syscall(
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "sigaction", "Invalid extra arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "sigaction_syscall");
     }
 
     // Retrieve the cage.
@@ -759,7 +759,7 @@ pub fn kill_syscall(
          && sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "kill", "Invalid extra arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "kill_syscall");
     }
 
     // Validate the target cage id: it must not be negative and typically within a system-defined maximum.
@@ -835,7 +835,7 @@ pub fn sigprocmask_syscall(
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
-        return syscall_error(Errno::EFAULT, "sigprocmask_syscall", "invalid Cage ID");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "sigprocmask_syscall");
     }
 
     let cage = get_cage(cageid).unwrap();
@@ -947,7 +947,7 @@ pub fn setitimer_syscall(
     if !(sc_unusedarg(arg4, arg4_cageid)
          && sc_unusedarg(arg5, arg5_cageid)
          && sc_unusedarg(arg6, arg6_cageid)) {
-        return syscall_error(Errno::EFAULT, "setitimer", "Invalid extra arguments");
+        panic!("{}: unused arguments contain unexpected values -- security violation", "setitimer_syscall");
     }
 
     // get the cage instance

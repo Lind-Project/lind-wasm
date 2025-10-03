@@ -119,6 +119,8 @@ pub fn strip_lind_root(host_path: &str) -> PathBuf {
         // This shouldn't normally happen but provides a fallback
         PathBuf::from(host_path)
     }
+}
+
 /// This function provides two operations: first, it translates path pointer address from WASM environment
 /// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
 /// which is adding `LIND_ROOT` before the path arguments. Considering actual syscall implementation
