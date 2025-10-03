@@ -7,7 +7,7 @@ use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
-use cage::{round_up_page, get_cage, get_shm_length, new_shm_segment, shmat_helper, shmdt_helper, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, SHM_METADATA};
+use cage::{round_up_pag
 use fdtables;
 use typemap::filesystem_helpers::{convert_statdata_to_user, convert_fstatdata_to_user};
 use std::sync::Arc;
@@ -2019,22 +2019,32 @@ pub fn unlink_syscall(
     ret
 }
 
-/// `unlinkat` deletes a file or directory relative to a directory file descriptor.
-/// Reference: https://man7.org/linux/man-pages/man2/unlinkat.2.html
+/// Reference: https://man7.org/linux/man-pages/man2/unlink.2.html
+///
+/// `unlinkat` removes a file or directory relative to a directory file descriptor.
+/// 
 /// ## Arguments:
-///  - `dirfd`: Directory file descriptor (or AT_FDCWD for current working directory).
-///  - `pathname`: Path of the file/directory to remove.
-///  - `flags`: Control flags (e.g., AT_REMOVEDIR for directories).
-///
-/// ## Implementation Details:
-///  - Handles both AT_FDCWD and explicit directory file descriptors.
-///  - Converts virtual file descriptor to kernel file descriptor using `convert_fd_to_host`.
-///  - Converts paths using `sc_convert_path_to_host` for proper path handling.
-///  - Supports AT_REMOVEDIR flag for removing directories.
-///
+/// - `dirfd`: Directory file descriptor. If `AT_FDCWD`, it uses the current working directory.
+/// - `pathname`: Path of the file/directory to be removed.
+/// - `flags`: Can include `AT_REMOVEDIR` to indicate directory removal.
+/// 
+/// There are two cases:
+/// Case 1: When `dirfd` is AT_FDCWD:
+/// - RawPOSIX maintains its own notion of the current working directory.
+/// - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
+///   path by prepending the LIND_ROOT prefix.
+/// - After this conversion, the path is already absolute from the host’s perspective, so `AT_FDCWD`
+///   doesn't actually rely on the host’s working directory. This avoids mismatches between RawPOSIX
+///   and the host environment.
+/// 
+/// Case 2: When `dirfd` is not AT_FDCWD:
+/// - We translate the RawPOSIX virtual file descriptor to the corresponding kernel file descriptor.
+/// - In this case, we simply create a C string from the provided `pathname` (without further conversion)
+///   and let the underlying kernel call resolve the path relative to the directory represented by that fd.
+/// 
 /// ## Return Value:
-///  - `0` on success.
-///  - `-1` on failure, with `errno` set appropriately.
+/// - `0` on success.
+/// - `-1` on failure, with `errno` set appropriately.
 pub fn unlinkat_syscall(
     cageid: u64,
     dirfd_arg: u64,
@@ -2050,8 +2060,7 @@ pub fn unlinkat_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
-    let pathname = sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid);
+    let dirfd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
     // Validate unused args - this should never fail in correct implementation
@@ -2062,38 +2071,38 @@ pub fn unlinkat_syscall(
         panic!("{}: unused arguments contain unexpected values -- security violation", "unlinkat_syscall");
     }
 
-    let result = if virtual_fd == libc::AT_FDCWD {
-        // Case 1: AT_FDCWD - path is already converted by sc_convert_path_to_host
-        unsafe {
-            libc::unlinkat(
-                libc::AT_FDCWD,
-                pathname.as_ptr(),
-                flags,
-            )
-        }
+    let mut c_path;
+    // Determine the appropriate kernel file descriptor and pathname conversion based on dirfd.
+    let kernel_fd = if dirfd == AT_FDCWD {
+        // Case 1: When AT_FDCWD is used.
+        // Convert the provided pathname from the RawPOSIX working directory (which is different from the host's)
+        // into a host-absolute path by prepending LIND_ROOT.
+        c_path = sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid);
+        AT_FDCWD
     } else {
-        // Case 2: Specific directory fd
-        let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
-        // Return error 
-        if kernel_fd < 0 {
-            return handle_errno(kernel_fd, "read");
+        // Case 2: When a specific directory fd is provided.
+        // Translate the virtual file descriptor to the corresponding kernel file descriptor.
+        let wrappedvfd = fdtables::translate_virtual_fd(cageid, dirfd as u64);
+        if wrappedvfd.is_err() {
+            return syscall_error(Errno::EBADF, "unlinkat", "Bad File Descriptor");
         }
-
-        unsafe {
-            libc::unlinkat(
-                kernel_fd,
-                pathname.as_ptr(),
-                flags,
-            )
-        }
+        let vfd = wrappedvfd.unwrap();
+        // For this case, we pass the provided pathname directly.
+        let pathname = sc_convert_uaddr_to_host(pathname_arg, pathname_cageid, cageid);
+        let tmp_cstr = get_cstr(pathname).unwrap();
+        c_path = CString::new(tmp_cstr).unwrap();
+        vfd.underfd as i32
     };
 
-    if result < 0 {
+    // Call the underlying libc::unlinkat() function with the fd and pathname.
+    let ret = unsafe { libc::unlinkat(kernel_fd, c_path.as_ptr(), flags) };
+
+    // If the call failed, retrieve and handle the errno
+    if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "unlinkat");
     }
-
-    result
+    ret
 }
 
 //------------------------------------ACCESS SYSCALL------------------------------------
@@ -2288,7 +2297,7 @@ pub fn dup2_syscall(
     }
 
     // Validate both virtual fds
-    if old_vfd_arg < MAXFD as u64 || new_vfd_arg < MAXFD as u64 {
+    if old_vfd_arg > MAXFD as u64 || new_vfd_arg > MAXFD as u64 {
         return syscall_error(Errno::EBADF, "dup2", "Bad File Descriptor");
     } else if old_vfd_arg == new_vfd_arg {
         // Does nothing
@@ -2359,7 +2368,7 @@ pub fn dup3_syscall(
         panic!("{}: unused arguments contain unexpected values -- security violation", "dup3_syscall");
     }
 
-    if old_vfd_arg < MAXFD as u64 || new_vfd_arg < MAXFD as u64 {
+    if old_vfd_arg > MAXFD as u64 || new_vfd_arg > MAXFD as u64 {
         return syscall_error(Errno::EBADF, "dup3", "Bad File Descriptor");
     }
 
