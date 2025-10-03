@@ -7,7 +7,7 @@ use sysdefs::constants::fs_const::{STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, O
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_UID, DEFAULT_GID};
 use typemap::cage_helpers::*;
-use cage::{round_up_pag
+use cage::{round_up_page, get_cage, get_shm_length, new_shm_segment, shmat_helper, shmdt_helper, HEAP_ENTRY_INDEX, MemoryBackingType, VmmapOps, SHM_METADATA};
 use fdtables;
 use typemap::filesystem_helpers::{convert_statdata_to_user, convert_fstatdata_to_user};
 use std::sync::Arc;

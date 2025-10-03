@@ -1483,7 +1483,6 @@ pub fn recvfrom_syscall(
         return ret;
     }
 
-    }
     0
 }
 

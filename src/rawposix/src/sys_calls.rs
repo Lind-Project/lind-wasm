@@ -4,7 +4,7 @@
 use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::{cagetable_init, add_cage, cagetable_clear, get_cage, remove_cage, Cage, Zombie};
-use cage::signal::signal::{lind_send_signal, convert_signal_mask};
+use cage::signal::signal::{lind_send_signal, convert_signal_mask, signal_check_trigger};
 use cage::timer::{IntervalTimer};
 use fdtables;
 use libc::sched_yield;
