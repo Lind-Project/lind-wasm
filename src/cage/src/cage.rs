@@ -20,11 +20,15 @@ pub struct Zombie {
     pub exit_code: i32,
 }
 
-/// I only kept required fields for cage struct
 #[derive(Debug)]
 pub struct Cage {
     // Identifying ID number for this cage
     pub cageid: u64,
+    // parent stores the cage ID of the parent cage that created the current cage.
+    // This hierarchical relationship enables process-like lineage tracking, allowing
+    // operations such as wait(), signal propagation, and cleanup delegation to follow
+    // parent-child relationships between cages. It functions similarly to a parent PID
+    // in traditional operating systems.
     pub parent: u64,
     // Current working directory of cage, must be able to be unique from other cages
     pub cwd: RwLock<Arc<PathBuf>>,
@@ -61,7 +65,13 @@ pub struct Cage {
     // and cage struct is cleaned up, but its exit status are inserted along with its cage id into the end of
     // its parent cage's zombies list
     pub zombies: RwLock<Vec<Zombie>>,
+    // child_num keeps track of the number of active child cages created by the current cage.
+    // It is incremented when a new child cage is spawned (e.g., during `fork` or `clone` operations)
+    // and decremented when a child cage exits. This field helps manage synchronization and
+    // cleanup, and supports wait-related system calls for determining when all children have
+    // terminated.
     pub child_num: AtomicU64,
+    // vmmap represents the virtual memory mapping for this cage. More details on `memory::vmmap`
     pub vmmap: RwLock<Vmmap>,
 }
 

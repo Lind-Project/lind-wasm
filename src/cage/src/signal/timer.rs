@@ -10,12 +10,12 @@
 //! user-space timer gives us precise control over which Cage receives `SIGALRM`.
 //! All signal delivery in our system is mediated through the epoch-based mechanism.
 //! (See our online design doc for more details.)
+use super::lind_send_signal;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 pub use std::time::Duration;
 pub use std::time::Instant;
-
-use super::lind_send_signal;
+use std::time::SystemTime;
 use sysdefs::constants::SIGALRM;
 
 #[derive(Debug)]
@@ -126,4 +126,45 @@ impl IntervalTimer {
 
         self.clone()
     }
+}
+
+pub fn timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+// Create a new timer
+pub fn starttimer() -> Instant {
+    Instant::now()
+}
+
+// Return time since timer was started
+pub fn readtimer(now: Instant) -> Duration {
+    now.elapsed()
+}
+
+// Sleep function to sleep for specified duration
+pub fn sleep(dur: Duration) {
+    thread::sleep(dur);
+}
+
+pub fn timeout_setup_ms(timeout_ms: i32) -> (Duration, i32) {
+    let end_time = {
+        if timeout_ms >= 0 {
+            Duration::from_millis(timeout_ms as u64)
+        } else {
+            Duration::MAX
+        }
+    };
+
+    let mut timeout;
+    if end_time > Duration::from_millis(100) {
+        timeout = 100;
+    } else {
+        timeout = timeout_ms;
+    }
+
+    (end_time, timeout)
 }

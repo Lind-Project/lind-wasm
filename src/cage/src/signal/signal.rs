@@ -57,7 +57,6 @@ pub fn epoch_kill_all(cageid: u64) {
 // get the current epoch state of the thread
 // thread safety: this function will only be invoked by main thread of the cage
 fn get_epoch_state(cageid: u64, thread_id: u64) -> u64 {
-    // let cage = cagetable_getref(cageid);
     let cage = get_cage(cageid).unwrap();
     let epoch_handler = cage
         .epoch_handler
@@ -142,7 +141,6 @@ pub fn signal_get_handler(cageid: u64, signo: i32) -> u32 {
 // send specified signal to the cage, return value indicates whether the cage exists
 // thread safety: this function could possibly be invoked by multiple threads of the same cage
 pub fn lind_send_signal(cageid: u64, signo: i32) -> bool {
-    // if let Some(cage) = cagetable_getref_opt(cageid) {
     if let Some(cage) = get_cage(cageid) {
         let mut pending_signals = cage.pending_signals.write();
         // TODO: currently we are queuing the same signals instead of merging the same signal
