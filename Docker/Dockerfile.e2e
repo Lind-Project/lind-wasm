@@ -82,7 +82,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Build wasmtime
 FROM base as build-wasmtime
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
-COPY --parents src/wasmtime src/RawPOSIX src/fdtables src/sysdefs Makefile rust-toolchain.toml .
+COPY --parents src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs Makefile rust-toolchain.toml .
 RUN make wasmtime
 
 

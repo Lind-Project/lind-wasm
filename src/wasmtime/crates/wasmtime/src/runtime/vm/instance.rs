@@ -1305,7 +1305,7 @@ impl Instance {
 }
 
 /// A handle holding an `Instance` of a WebAssembly module.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InstanceHandle {
     instance: Option<SendSyncPtr<Instance>>,
 }
