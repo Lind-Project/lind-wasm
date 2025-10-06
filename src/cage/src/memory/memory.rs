@@ -167,7 +167,7 @@ pub fn check_addr(cageid: u64, arg: u64, length: usize, prot: i32) -> Result<boo
     // search from the table and get the item from
     let cage = get_cage(cageid).unwrap();
 
-    // Get read lock on virtual memory map
+    // Get write lock on virtual memory map
     let mut vmmap = cage.vmmap.write();
 
     // Calculate page numbers for start and end of region
