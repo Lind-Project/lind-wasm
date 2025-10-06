@@ -240,7 +240,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     
     # Run
     try:
-        proc = run_subprocess([str(native_output)], label="native run", cwd=LIND_FS_ROOT, shell=False, timeout=timeout_sec)
+        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LIND_FS_ROOT, shell=False, timeout=timeout_sec)
         if proc.returncode == 0:
             return True, proc.stdout, 0, None
         else:
