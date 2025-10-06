@@ -267,11 +267,6 @@ pub unsafe fn charstar_to_ruststr<'a>(cstr: CharPtr) -> Result<&'a str, Utf8Erro
     std::ffi::CStr::from_ptr(cstr as *const _).to_str() //returns a result to be unwrapped later
 }
 
-pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
-    return ((unsafe { mmap(addr as *mut c_void, len, prot, flags, fildes, off) } as i64)
-        & 0xffffffff) as i32;
-}
-
 // Sigset Operations
 //
 // sigsetops defined here are different from the ones in glibc. Since the sigset is just a u64

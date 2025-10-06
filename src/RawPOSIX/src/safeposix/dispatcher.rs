@@ -182,6 +182,7 @@ pub fn lind_syscall_api(
     arg5: u64,
     arg6: u64,
 ) -> i32 {
+    // println!("-RAWPOSIX- call_number: {}", call_number);
     let call_number = call_number as i32;
 
     let ret = match call_number {
@@ -755,6 +756,24 @@ pub fn lind_syscall_api(
             interface::shmdt_handler(cageid, addr)
         }
 
+        SHMCTL_SYSCALL => {
+            let cage = interface::cagetable_getref(cageid);
+
+            let shmid = arg1 as i32;
+            let cmd = arg2 as i32;
+            let buf = {
+                if arg3 == 0 {
+                    None
+                } else {
+                    let buf_addr = translate_vmmap_addr(&cage, arg3).unwrap();
+                    let buf = interface::get_shmidstruct(buf_addr).unwrap();
+                    Some(buf)
+                }
+            };
+
+            cage.shmctl_syscall(shmid, cmd, buf)
+        }
+
         PWRITE_SYSCALL => {
             let count = arg3 as usize;
             let cage = interface::cagetable_getref(cageid);
@@ -1094,8 +1113,14 @@ pub fn lind_syscall_api(
         WAIT_SYSCALL => {
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
-            let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
-            let status = interface::get_i32_ref(status_addr).unwrap();
+            let status;
+            let mut _tmp = 0;
+            if arg1 != 0 {
+                let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
+                status = interface::get_i32_ref(status_addr).unwrap();
+            } else {
+                status = &mut _tmp;
+            }
             cage.wait_syscall(status)
         }
 

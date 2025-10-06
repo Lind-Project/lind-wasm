@@ -75,7 +75,7 @@ impl ShmSegment {
     }
     // mmap shared segment into cage, and increase attachments
     // increase in cage references within attached_cages map
-    pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: u64) -> i32 {
+    pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: u64) -> usize {
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
         self.shminfo.shm_nattch += 1;
         self.shminfo.shm_atime = interface::timestamp() as isize;
@@ -88,20 +88,39 @@ impl ShmSegment {
                 vacant.insert(1);
             }
         };
-        interface::libc_mmap(
-            shmaddr,
-            self.size as usize,
-            prot,
-            (MAP_SHARED as i32) | (MAP_FIXED as i32),
-            fobjfdno,
-            0,
-        )
+        // println!("map_shm: shmaddr: {:?}", shmaddr);
+        let cage = interface::cagetable_getref(cageid);
+
+
+        let res = unsafe {
+            (libc::mmap(
+                shmaddr as *mut c_void,
+                self.size as usize,
+                prot,
+                (MAP_SHARED as i32) | (MAP_FIXED as i32),
+                fobjfdno,
+                0,
+            ) as i64)
+        };
+        // let res = cage.mmap_syscall(
+        //     shmaddr,
+        //     self.size as usize,
+        //     prot,
+        //     (MAP_SHARED as i32) | (MAP_FIXED as i32),
+        //     fobjfdno,
+        //     0,
+        // );
+
+        // println!("map_shm: res: {}", res);
+
+        res as usize
     }
 
     // unmap shared segment, decrease attachments
     // decrease references within attached cages map
     pub fn unmap_shm(&mut self, shmaddr: *mut u8, cageid: u64) {
-        interface::libc_mmap(
+        let cage = interface::cagetable_getref(cageid);
+        cage.mmap_syscall(
             shmaddr,
             self.size as usize,
             PROT_NONE,

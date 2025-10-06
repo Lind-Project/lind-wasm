@@ -1573,7 +1573,7 @@ impl Cage {
 
     //------------------SHMAT SYSCALL------------------
 
-    pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32) -> i32 {
+    pub fn shmat_syscall(&self, shmid: i32, shmaddr: *mut u8, shmflg: i32) -> usize {
         let metadata = &SHM_METADATA;
         let prot: i32;
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
@@ -1588,7 +1588,7 @@ impl Cage {
 
             segment.map_shm(shmaddr, prot, self.cageid)
         } else {
-            syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value")
+            syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") as usize
         }
     }
 
@@ -1651,6 +1651,7 @@ impl Cage {
         if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
             match cmd {
                 IPC_STAT => {
+                    // todo: fix unwrap
                     *buf.unwrap() = segment.shminfo;
                 }
                 IPC_RMID => {

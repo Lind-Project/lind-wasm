@@ -167,6 +167,7 @@ pub fn munmap_handler(cageid: u64, addr: *mut u8, len: usize) -> i32 {
 /// * `EINVAL` - If the provided address is not page-aligned
 /// * `ENOMEM` - If there is insufficient memory to complete the attachment
 pub fn shmat_handler(cageid: u64, addr: *mut u8, mut prot: i32, shmflag: i32, shmid: i32) -> u32 {
+    // println!("shmat start");
     // Get the cage reference.
     let cage = cagetable_getref(cageid);
 
@@ -193,9 +194,11 @@ pub fn shmat_handler(cageid: u64, addr: *mut u8, mut prot: i32, shmflag: i32, sh
 
     // Initialize the user address from the provided address pointer.
     // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
+    // println!("before vmmap");
     let mut useraddr = addr as u32;
     let mut vmmap = cage.vmmap.write();
     let result;
+    // println!("after vmmap");
     if useraddr == 0 {
         // Allocate a suitable space in the virtual memory map for the shared memory segment
         // based on the rounded length of the segment.
@@ -212,6 +215,8 @@ pub fn shmat_handler(cageid: u64, addr: *mut u8, mut prot: i32, shmflag: i32, sh
     let space = result.unwrap();
     // Update the user address to the start of the allocated memory space.
     useraddr = (space.start() << PAGESHIFT) as u32;
+    // println!("after vmmap 0.5");
+    drop(vmmap);
 
     // Convert the user address into a system address.
     // Read the virtual memory map to access the user address space.
@@ -220,12 +225,19 @@ pub fn shmat_handler(cageid: u64, addr: *mut u8, mut prot: i32, shmflag: i32, sh
     let sysaddr = vmmap.user_to_sys(useraddr);
     // Release the lock on the virtual memory map as we no longer need it.
     drop(vmmap);
+    // println!("after vmmap 1");
 
+    // println!("sysaddr: {:?}", sysaddr);
     // Call the raw shmat syscall to attach the shared memory segment.
     let result = cage.shmat_syscall(shmid, sysaddr as *mut u8, shmflag);
+    // println!("raw result: {}", result);
+    let vmmap = cage.vmmap.read();
+    let result = vmmap.sys_to_user(result);
+    drop(vmmap);
 
     // If the syscall succeeded, update the vmmap entry.
     if result as i32 >= 0 {
+        // println!("useraddr: {}, result: {}", useraddr, result);
         // Ensure the syscall attached the segment at the expected address.
         if result as u32 != useraddr {
             panic!("shmat did not attach at the expected address");
