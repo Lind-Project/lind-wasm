@@ -294,9 +294,9 @@ pub fn accept_syscall(
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32{
+) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+   
 
     // would check when `secure` flag has been set during compilation, 
     // no-op by default
@@ -307,6 +307,32 @@ pub fn accept_syscall(
         return syscall_error(Errno::EFAULT, "accept_syscall", "Invalid Cage ID");
     }
 
+    // --- NULLability handling for addr/len (check the raw args) ---
+    let addr_is_null = addr_arg == 0;
+    let len_is_null  = len_arg  == 0;
+
+    // If exactly one is NULL -> error
+    if addr_is_null ^ len_is_null {
+        let errno = get_errno();
+        return handle_errno(errno, "accept: exactly one of address/length was NULL");
+    }
+
+    // Case 1: both NULL -> accept(fd, NULL, NULL)
+    if addr_is_null && len_is_null {
+        let ret_kernelfd = unsafe { libc::accept(fd, std::ptr::null_mut(), std::ptr::null_mut()) };
+        if ret_kernelfd < 0 {
+            let errno = get_errno();
+            return handle_errno(errno, "accept");
+        }
+        let ret_virtualfd = fdtables::get_unused_virtual_fd(
+            cageid, FDKIND_KERNEL, ret_kernelfd as u64, false, 0
+        ).unwrap();
+        return ret_virtualfd as i32;
+    }
+
+    // Case 2: both non-NULL -> convert and call accept(fd, addr*, addrlen*)
+    // Convert addr; this must happen only after we know it's non-NULL
+    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
     let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret_kernelfd = unsafe { libc::accept(fd, finalsockaddr, &mut addrlen as *mut u32) };
