@@ -40,7 +40,7 @@ jobs:
       - name: Read test status
         id: e2e
         run: |
-          STATUS_FILE="${{ env.REPORT_LOCAL_DIR }}/.e2e_status"
+          STATUS_FILE="${{ env.REPORT_LOCAL_DIR }}/e2e_status"
           echo "Checking status file at: $STATUS_FILE"
           echo "----- File contents (if any) -----"
           if [[ -f "$STATUS_FILE" ]]; then
