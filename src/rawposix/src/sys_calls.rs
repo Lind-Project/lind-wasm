@@ -832,7 +832,6 @@ pub fn kill_syscall(
         }
     };
 
-
     // Optionally, you could verify that certain signals (e.g., SIGKILL, SIGSTOP)
     // are handled with special semantics; however, in this implementation we assume they are valid.
 
