@@ -27,18 +27,6 @@ use rawposix::sys_calls::{
     sigaction_syscall, sigprocmask_syscall, waitpid_syscall,
 };
 
-/// According to the Linux version
-/// In glibc, waitpid() is actually implemented by calling wait4(),
-/// so the Linux kernel itself does not provide a separate syscall
-/// number for waitpid.
-/// In lind-wasm, however, we treat wait and waitpid as distinct
-/// syscalls, assigning them arbitrary syscall numbers. These are
-/// only resolved later in rawposix, where wait is internally implemented
-/// by invoking waitpid with options = 0.
-/// This design choice may become a future TODO: we could adopt a
-/// similar approach in lind-glibc by having wait() directly call
-/// waitpid(), and then remove the separate wait implementation from
-/// rawposix.
 pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (0, read_syscall),
     (1, write_syscall),
