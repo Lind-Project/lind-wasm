@@ -108,7 +108,6 @@ const READLINKAT_SYSCALL: i32 = 267;
 const WRITEV_SYSCALL: i32 = 20;
 
 const CLONE_SYSCALL: i32 = 56;
-const WAIT_SYSCALL: i32 = 61;
 const WAITPID_SYSCALL: i32 = 61;
 const BRK_SYSCALL: i32 = 12;
 const SBRK_SYSCALL: i32 = 1004;
@@ -1091,20 +1090,19 @@ pub fn lind_syscall_api(
             interface::cagetable_getref(cageid).clock_gettime_syscall(clockid, tp)
         }
 
-        WAIT_SYSCALL => {
-            let cage = interface::cagetable_getref(cageid);
-            // Convert user space buffer address to physical address
-            let status_addr = translate_vmmap_addr(&cage, arg1).unwrap() as u64;
-            let status = interface::get_i32_ref(status_addr).unwrap();
-            cage.wait_syscall(status)
-        }
-
         WAITPID_SYSCALL => {
             let pid = arg1 as i32;
             let cage = interface::cagetable_getref(cageid);
             // Convert user space buffer address to physical address
-            let status_addr = translate_vmmap_addr(&cage, arg2).unwrap();
-            let status = interface::get_i32_ref(status_addr).unwrap();
+            let status = {
+                if arg2 == 0 {
+                    None
+                } else {
+                    let status_addr = translate_vmmap_addr(&cage, arg2).unwrap();
+                    Some(interface::get_i32_ref(status_addr).unwrap())
+                }
+            };
+
             let options = arg3 as i32;
 
             cage.waitpid_syscall(pid, status, options)
