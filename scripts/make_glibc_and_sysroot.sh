@@ -100,6 +100,14 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -o $BUILD/lind_syscall.o \
     -c $GLIBC/lind_syscall/lind_syscall.c
 
+# Compile crt1.c
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $GLIBC/lind_syscall/crt1.o \
+    -c $GLIBC/lind_syscall/crt1/crt1.c \
+ || { echo "ERROR: clang failed compiling crt1.c"; exit 1; }
+ [ -f "$GLIBC/lind_syscall/crt1.o" ] || { echo "ERROR: $GLIBC/lind_syscall/crt1.o not produced"; exit 1; }
+
 # Compile elision-lock.c
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
@@ -115,6 +123,16 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -c $GLIBC/sysdeps/unix/sysv/linux/x86/elision-unlock.c \
     -MD -MP -MF $GLIBC/build/nptl/elision-unlock.o.dt \
     -MT $GLIBC/build/nptl/elision-unlock.o
+
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/register_handler.o \
+    -c $GLIBC/lind_syscall/register_handler.c
+
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/copy_data_between_cages.o \
+    -c $GLIBC/lind_syscall/copy_data_between_cages.c
 
 # Compile assembly files
 cd ../
@@ -174,3 +192,5 @@ cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/register_handler.h" "$SYSROOT/include/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/copy_data_between_cages.h" "$SYSROOT/include/wasm32-wasi/"
