@@ -820,6 +820,18 @@ pub fn kill_syscall(
         return syscall_error(Errno::EINVAL, "kill", "Invalid signal number");
     }
 
+    // If pid equals 0, then sig is sent to every process in the process
+    // group of the calling process.
+    // As we do not have the concept of process group, we just send the signal
+    // to itself
+    let target_cage = {
+        if target_cage == 0 {
+            cageid
+        } else {
+            target_cage as u64
+        }
+    };
+
     // Optionally, you could verify that certain signals (e.g., SIGKILL, SIGSTOP)
     // are handled with special semantics; however, in this implementation we assume they are valid.
 
