@@ -1,5 +1,10 @@
 config_tests/deterministic/cpuid.c
 config_tests/non-deterministic/getifaddrs.c
+file_tests/deterministic/chmod.c
+file_tests/deterministic/cloexec.c
+file_tests/deterministic/close.c
+file_tests/deterministic/creat_access.c
+file_tests/deterministic/dup2.c
 file_tests/deterministic/dup3.c
 file_tests/deterministic/fchmod.c
 file_tests/deterministic/fcntl.c
@@ -34,6 +39,9 @@ memory_tests/deterministic/vtable.c
 memory_tests/non-deterministic/segfault.c
 memory_tests/non-deterministic/shm.c
 networking_tests/deterministic/pipepong.c
+networking_tests/deterministic/uds-getsockname.c
+networking_tests/deterministic/uds-nb-select.c
+networking_tests/non-deterministic/pipeinput.c
 networking_tests/non-deterministic/pipeinput2.c
 networking_tests/non-deterministic/pipeonestring.c
 networking_tests/non-deterministic/serverclient.c
@@ -47,6 +55,9 @@ process_tests/deterministic/chain_thread.c
 process_tests/deterministic/forkdup.c
 process_tests/deterministic/forkexecuid.c
 process_tests/deterministic/forkexecv.c
+process_tests/deterministic/forknodup.c
+process_tests/deterministic/getppid.c
+process_tests/deterministic/getuid.c
 process_tests/deterministic/mutex.c
 process_tests/deterministic/sem_forks.c
 process_tests/deterministic/setsid.c
@@ -75,3 +86,5 @@ signal_tests/non-deterministic/signal_int_thread.c
 signal_tests/non-deterministic/signal_longjmp.c
 signal_tests/non-deterministic/signal_nodefer.c
 signal_tests/non-deterministic/signal_procmask.c
+signal_tests/non-deterministic/signal_recursive.c
+signal_tests/non-deterministic/signal_sa_mask.c
