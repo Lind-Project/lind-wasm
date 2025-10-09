@@ -6,3 +6,6 @@
 pub mod fs_calls;
 pub mod net_calls;
 pub mod sys_calls;
+
+#[cfg(test)]
+mod tests;
