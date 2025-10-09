@@ -36,7 +36,25 @@ jobs:
           cache-to: type=gha,mode=max
           file: Docker/Dockerfile.e2e          
           tags: e2e:latest
-          outputs: type=local,dest=${{ env.REPORT_LOCAL_DIR }}      
+          outputs: type=local,dest=${{ env.REPORT_LOCAL_DIR }}
+      - name: Read test status
+        id: e2e
+        run: |
+          STATUS_FILE="${{ env.REPORT_LOCAL_DIR }}/e2e_status"
+          echo "Checking status file at: $STATUS_FILE"
+          echo "----- File contents (if any) -----"
+          if [[ -f "$STATUS_FILE" ]]; then
+            cat "$STATUS_FILE"
+            # export to step output AND job env
+            cat "$STATUS_FILE" >> "$GITHUB_OUTPUT"   # writes E2E_STATUS=pass|fail
+            cat "$STATUS_FILE" >> "$GITHUB_ENV"
+          else
+            echo "(none)"
+            echo "E2E_STATUS=fail" >> "$GITHUB_OUTPUT"
+            echo "E2E_STATUS=fail" >> "$GITHUB_ENV"
+            echo "::warning file=$STATUS_FILE::Status file missing, defaulting to fail"
+          fi
+          echo "----------------------------------"
 
       - name: Upload HTML report artifact to report
         uses: actions/upload-artifact@v4
@@ -57,4 +75,10 @@ jobs:
             const body = fs.readFileSync(path, 'utf8');
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
-            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });      
+
+      - name: Fail if tests failed
+        if: steps.e2e.outputs.E2E_STATUS == 'fail'
+        run: |
+          echo "Tests failed; failing job after posting the report/comment."
+          exit 1
