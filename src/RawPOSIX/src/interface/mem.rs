@@ -206,7 +206,7 @@ pub fn shmat_handler(cageid: u64, addr: *mut u8, mut prot: i32, shmflag: i32, sh
     } else {
         // Use the user-specified address as a hint to find an appropriate memory address
         // for the shared memory segment.
-        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32 >> PAGESHIFT);
     }
     if result.is_none() {
         // If no suitable memory space is found, return an error indicating insufficient memory.
@@ -395,7 +395,7 @@ pub fn mmap_handler(
         } else {
             // use address user provided as hint to find address
             result =
-                vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+                vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32 >> PAGESHIFT);
         }
 
         // did not find desired memory region

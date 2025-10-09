@@ -655,11 +655,17 @@ pub fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
+    let mut addr = {
+        if addr_arg == 0 {
+            0 as *mut u8
+        } else {
+            sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid)
+        }
+    };
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-    let mut fildes = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
     let cage = get_cage(cageid).unwrap();
@@ -711,7 +717,7 @@ pub fn mmap_syscall(
         } else {
             // use address user provided as hint to find address
             result =
-                vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+                vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32 >> PAGESHIFT);
         }
 
         // did not find desired memory region
@@ -3926,7 +3932,7 @@ pub fn shmat_syscall(
     } else {
         // Use the user-specified address as a hint to find an appropriate memory address
         // for the shared memory segment.
-        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32 >> PAGESHIFT);
     }
     // drop the write lock of vmmap to avoid deadlock
     drop(vmmap);
