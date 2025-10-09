@@ -263,7 +263,11 @@ pub fn waitpid_syscall(
         if status_arg == 0 {
             None
         } else {
-            Some(sc_convert_sysarg_to_i32_ref(status_arg, status_cageid, cageid))
+            Some(sc_convert_sysarg_to_i32_ref(
+                status_arg,
+                status_cageid,
+                cageid,
+            ))
         }
     };
     let options = sc_convert_sysarg_to_i32(options_arg, options_cageid, cageid);
