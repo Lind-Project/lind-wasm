@@ -685,6 +685,23 @@ __qsort_internal (void *const pbase, size_t total_elems, size_t size,
     free (buf);
 }
 
+/*
+ * lind-wasm:
+ * In C, it's legal to cast a function pointer to another type (even with fewer
+ * parameters) and call it with the "wrong" number of arguments. glibc's qsort
+ * implementation relies on this trick.
+ *
+ * However, WebAssembly enforces strict function signatures, so this behavior
+ * causes a runtime error under Wasm.
+ *
+ * While wasm-opt can emulate function pointer casting, that approach adds
+ * significant overhead across the entire Wasm binary. Instead, this change
+ * modifies glibc directly to remove qsort’s function pointer trick.
+ *
+ * Therefore, we duplicates the qsort implementation with a function signature that
+ * has one fewer parameter, eliminating the cast and making qsort work correctly
+ * in a Wasm environment.
+ */
 void
 qsort (void *b, size_t n, size_t s, __compar_fn_t cmp)
 {
