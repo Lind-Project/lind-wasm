@@ -173,7 +173,7 @@ impl ShmSegment {
                 0,
             ) as usize)
         };
-        
+
         self.shminfo.shm_nattch -= 1;
         self.shminfo.shm_dtime = timestamp() as isize;
         match self.attached_cages.entry(cageid) {

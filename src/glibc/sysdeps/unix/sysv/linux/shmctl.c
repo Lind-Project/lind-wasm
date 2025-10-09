@@ -76,11 +76,6 @@ typedef struct kernel_shmid64_ds shmctl_arg_t;
 static int
 shmctl_syscall (int shmid, int cmd, shmctl_arg_t *buf)
 {
-// #ifdef __ASSUME_DIRECT_SYSVIPC_SYSCALLS
-//   return INLINE_SYSCALL_CALL (shmctl, shmid, cmd | __IPC_64, buf);
-// #else
-//   return INLINE_SYSCALL_CALL (ipc, IPCOP_shmctl, shmid, cmd | __IPC_64, 0,
-// 			      buf);
 // #endif
 	return MAKE_SYSCALL(SHMCTL_SYSCALL, "syscall|shmctl", (uint64_t) shmid, (uint64_t) cmd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
 }
@@ -281,15 +276,6 @@ int
 attribute_compat_text_section
 __old_shmctl (int shmid, int cmd, struct __old_shmid_ds *buf)
 {
-// #if defined __ASSUME_DIRECT_SYSVIPC_SYSCALLS \
-//     && !defined __ASSUME_SYSVIPC_DEFAULT_IPC_64
-//   /* For architecture that have wire-up shmctl but also have __IPC_64 to a
-//      value different than default (0x0), it means the compat symbol used the
-//      __NR_ipc syscall.  */
-//   return INLINE_SYSCALL_CALL (shmctl, shmid, cmd, buf);
-// #else
-//   return INLINE_SYSCALL_CALL (ipc, IPCOP_shmctl, shmid, cmd, 0, buf);
-// #endif
 	return MAKE_SYSCALL(SHMCTL_SYSCALL, "syscall|shmctl", (uint64_t) shmid, (uint64_t) cmd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
 }
 compat_symbol (libc, __old_shmctl, shmctl, GLIBC_2_0);

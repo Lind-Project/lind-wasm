@@ -716,8 +716,11 @@ pub fn mmap_syscall(
             result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
         } else {
             // use address user provided as hint to find address
-            result =
-                vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32 >> PAGESHIFT);
+            result = vmmap.find_map_space_with_hint(
+                rounded_length as u32 >> PAGESHIFT,
+                1,
+                addr as u32 >> PAGESHIFT,
+            );
         }
 
         // did not find desired memory region
@@ -3932,7 +3935,11 @@ pub fn shmat_syscall(
     } else {
         // Use the user-specified address as a hint to find an appropriate memory address
         // for the shared memory segment.
-        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32 >> PAGESHIFT);
+        result = vmmap.find_map_space_with_hint(
+            rounded_length as u32 >> PAGESHIFT,
+            1,
+            addr as u32 >> PAGESHIFT,
+        );
     }
     // drop the write lock of vmmap to avoid deadlock
     drop(vmmap);
