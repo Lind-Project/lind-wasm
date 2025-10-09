@@ -23,7 +23,7 @@ int main(void) {
     } else {
         // Parent
         int status = -1;
-        wait(&status);
+        while(wait(&status) == -1);
         printf("Child exited with status %d\n", status);
     }
 
