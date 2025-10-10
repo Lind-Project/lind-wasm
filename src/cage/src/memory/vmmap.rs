@@ -967,3 +967,429 @@ impl VmmapOps for Vmmap {
         None
     }
 }
+
+// Testing
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test: Change protection on entire continuous region
+    /// Expected: Region should remain continuous with updated protection
+    #[test]
+    fn test_change_prot_entire_region() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate a continuous region of 10 pages with READ|WRITE protection
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change protection of the entire region to READ|EXEC
+        vmmap.change_prot(100, 10, PROT_READ | PROT_EXEC);
+
+        // Verify the region is still continuous
+        let entry = vmmap.find_page(100).expect("Entry should exist");
+        assert_eq!(entry.page_num, 100);
+        assert_eq!(entry.npages, 10);
+        assert_eq!(entry.prot, PROT_READ | PROT_EXEC);
+        
+        // Verify no fragmentation - should still be one entry
+        let count = vmmap.entries.overlapping(ie(100, 110)).count();
+        assert_eq!(count, 1, "Region should remain as a single entry");
+    }
+
+    /// Test: Change protection on middle portion of continuous region
+    /// Expected: Region should be split into 3 parts
+    #[test]
+    fn test_change_prot_middle_of_region() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate a continuous region of 10 pages
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change protection of middle 4 pages (102-105)
+        vmmap.change_prot(102, 4, PROT_READ);
+
+        // Verify the region is split into 3 parts
+        let entries: Vec<_> = vmmap.entries.overlapping(ie(100, 110)).collect();
+        assert_eq!(entries.len(), 3, "Region should be split into 3 parts");
+
+        // First part: pages 100-101 with original protection
+        let first = vmmap.find_page(100).expect("First part should exist");
+        assert_eq!(first.prot, PROT_READ | PROT_WRITE);
+        
+        // Middle part: pages 102-105 with new protection
+        let middle = vmmap.find_page(102).expect("Middle part should exist");
+        assert_eq!(middle.prot, PROT_READ);
+        
+        // Last part: pages 106-109 with original protection
+        let last = vmmap.find_page(106).expect("Last part should exist");
+        assert_eq!(last.prot, PROT_READ | PROT_WRITE);
+    }
+
+    /// Test: Change protection on beginning of continuous region
+    /// Expected: Region should be split into 2 parts
+    #[test]
+    fn test_change_prot_beginning_of_region() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate a continuous region of 10 pages
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change protection of first 3 pages
+        vmmap.change_prot(100, 3, PROT_READ);
+
+        // Verify the region is split into 2 parts
+        let entries: Vec<_> = vmmap.entries.overlapping(ie(100, 110)).collect();
+        assert_eq!(entries.len(), 2, "Region should be split into 2 parts");
+
+        // First part: pages 100-102 with new protection
+        let first = vmmap.find_page(100).expect("First part should exist");
+        assert_eq!(first.prot, PROT_READ);
+        
+        // Second part: pages 103-109 with original protection
+        let second = vmmap.find_page(103).expect("Second part should exist");
+        assert_eq!(second.prot, PROT_READ | PROT_WRITE);
+    }
+
+    /// Test: Change protection on end of continuous region
+    /// Expected: Region should be split into 2 parts
+    #[test]
+    fn test_change_prot_end_of_region() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate a continuous region of 10 pages
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change protection of last 3 pages
+        vmmap.change_prot(107, 3, PROT_READ);
+
+        // Verify the region is split into 2 parts
+        let entries: Vec<_> = vmmap.entries.overlapping(ie(100, 110)).collect();
+        assert_eq!(entries.len(), 2, "Region should be split into 2 parts");
+
+        // First part: pages 100-106 with original protection
+        let first = vmmap.find_page(100).expect("First part should exist");
+        assert_eq!(first.prot, PROT_READ | PROT_WRITE);
+        
+        // Second part: pages 107-109 with new protection
+        let second = vmmap.find_page(107).expect("Second part should exist");
+        assert_eq!(second.prot, PROT_READ);
+    }
+
+    /// Test: Change protection spanning multiple continuous regions
+    /// Expected: All affected regions should have updated protection
+    #[test]
+    fn test_change_prot_spanning_multiple_regions() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate three separate continuous regions
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+        
+        vmmap.add_entry_with_overwrite(
+            120, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+        
+        vmmap.add_entry_with_overwrite(
+            140, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change protection spanning parts of all three regions (105-145)
+        vmmap.change_prot(105, 40, PROT_READ);
+
+        // Verify first region is split (100-104 original, 105-109 changed)
+        let first_orig = vmmap.find_page(100).expect("First original part should exist");
+        assert_eq!(first_orig.prot, PROT_READ | PROT_WRITE);
+        
+        let first_changed = vmmap.find_page(105).expect("First changed part should exist");
+        assert_eq!(first_changed.prot, PROT_READ);
+        
+        // Verify second region is fully changed (120-129)
+        let second = vmmap.find_page(120).expect("Second region should exist");
+        assert_eq!(second.prot, PROT_READ);
+        
+        // Verify third region is split (140-144 changed, 145-149 original)
+        let third_changed = vmmap.find_page(140).expect("Third changed part should exist");
+        assert_eq!(third_changed.prot, PROT_READ);
+        
+        let third_orig = vmmap.find_page(145).expect("Third original part should exist");
+        assert_eq!(third_orig.prot, PROT_READ | PROT_WRITE);
+    }
+
+    /// Test: Change protection to same value
+    /// Expected: Region should remain unchanged
+    #[test]
+    fn test_change_prot_to_same_value() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate a continuous region
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change protection to the same value
+        vmmap.change_prot(100, 10, PROT_READ | PROT_WRITE);
+
+        // Verify the region remains continuous and unchanged
+        let entry = vmmap.find_page(100).expect("Entry should exist");
+        assert_eq!(entry.page_num, 100);
+        assert_eq!(entry.npages, 10);
+        assert_eq!(entry.prot, PROT_READ | PROT_WRITE);
+        
+        let count = vmmap.entries.overlapping(ie(100, 110)).count();
+        assert_eq!(count, 1, "Region should remain as a single entry");
+    }
+
+    /// Test: Change protection on overlapping boundary
+    /// Expected: Proper handling of exact boundary cases
+    #[test]
+    fn test_change_prot_exact_boundaries() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate a continuous region
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change protection on a single page in the middle
+        vmmap.change_prot(105, 1, PROT_READ);
+
+        // Should be split into 3 parts: [100-104], [105], [106-109]
+        let entries: Vec<_> = vmmap.entries.overlapping(ie(100, 110)).collect();
+        assert_eq!(entries.len(), 3, "Should be split into 3 parts");
+
+        // Verify boundaries are correct
+        let before = vmmap.find_page(104).expect("Before should exist");
+        assert_eq!(before.prot, PROT_READ | PROT_WRITE);
+        
+        let changed = vmmap.find_page(105).expect("Changed page should exist");
+        assert_eq!(changed.prot, PROT_READ);
+        
+        let after = vmmap.find_page(106).expect("After should exist");
+        assert_eq!(after.prot, PROT_READ | PROT_WRITE);
+    }
+
+    /// Test: Change protection multiple times on same region
+    /// Expected: Protection should be updated correctly each time
+    #[test]
+    fn test_change_prot_multiple_times() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate a continuous region
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // First change: middle portion to READ
+        vmmap.change_prot(103, 4, PROT_READ);
+        
+        // Second change: overlapping portion to EXEC
+        vmmap.change_prot(105, 3, PROT_EXEC);
+
+        // Verify the final state
+        // Should have: [100-102: R|W], [103-104: R], [105-107: X], [108-109: R|W]
+        let page_102 = vmmap.find_page(102).expect("Page 102 should exist");
+        assert_eq!(page_102.prot, PROT_READ | PROT_WRITE);
+        
+        let page_103 = vmmap.find_page(103).expect("Page 103 should exist");
+        assert_eq!(page_103.prot, PROT_READ);
+        
+        let page_105 = vmmap.find_page(105).expect("Page 105 should exist");
+        assert_eq!(page_105.prot, PROT_EXEC);
+        
+        let page_108 = vmmap.find_page(108).expect("Page 108 should exist");
+        assert_eq!(page_108.prot, PROT_READ | PROT_WRITE);
+    }
+
+    /// Test: Change protection with PROT_NONE
+    /// Expected: Region should accept PROT_NONE protection
+    #[test]
+    fn test_change_prot_to_none() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate a continuous region
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change protection to PROT_NONE
+        vmmap.change_prot(103, 4, PROT_NONE);
+
+        // Verify the protection is set to PROT_NONE
+        let entry = vmmap.find_page(103).expect("Entry should exist");
+        assert_eq!(entry.prot, PROT_NONE);
+        
+        // Verify the region is properly split
+        let entries: Vec<_> = vmmap.entries.overlapping(ie(100, 110)).collect();
+        assert_eq!(entries.len(), 3, "Should be split into 3 parts");
+    }
+
+    /// Test: Change protection on adjacent regions with different backing
+    /// Expected: Each region should maintain its backing type
+    #[test]
+    fn test_change_prot_preserves_backing_type() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate anonymous region
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+        
+        // Allocate shared memory region
+        vmmap.add_entry_with_overwrite(
+            120, 
+            10, 
+            PROT_READ | PROT_WRITE, 
+            PROT_READ | PROT_WRITE | PROT_EXEC,
+            0, 
+            MemoryBackingType::SharedMemory(12345),
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change protection on both regions
+        vmmap.change_prot(105, 20, PROT_READ);
+
+        // Verify backing types are preserved
+        let anon_entry = vmmap.find_page(105).expect("Anonymous entry should exist");
+        assert_eq!(anon_entry.backing, MemoryBackingType::Anonymous);
+        assert_eq!(anon_entry.prot, PROT_READ);
+        
+        let shm_entry = vmmap.find_page(120).expect("Shared memory entry should exist");
+        assert_eq!(shm_entry.backing, MemoryBackingType::SharedMemory(12345));
+        assert_eq!(shm_entry.prot, PROT_READ);
+    }
+
+    /// Test: Verify maxprot is preserved during change_prot
+    /// Expected: maxprot should remain unchanged
+    #[test]
+    fn test_change_prot_preserves_maxprot() {
+        let mut vmmap = Vmmap::new();
+        
+        // Allocate with specific maxprot
+        vmmap.add_entry_with_overwrite(
+            100, 
+            10, 
+            PROT_READ, 
+            PROT_READ | PROT_WRITE,  // maxprot allows write but current doesn't
+            0, 
+            MemoryBackingType::Anonymous,
+            0, 
+            0, 
+            0
+        ).unwrap();
+
+        // Change current protection
+        vmmap.change_prot(100, 10, PROT_READ | PROT_WRITE);
+
+        // Verify maxprot is unchanged
+        let entry = vmmap.find_page(100).expect("Entry should exist");
+        assert_eq!(entry.prot, PROT_READ | PROT_WRITE);
+        assert_eq!(entry.maxprot, PROT_READ | PROT_WRITE);
+    }
+}
