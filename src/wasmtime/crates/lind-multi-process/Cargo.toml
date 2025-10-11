@@ -12,7 +12,7 @@ workspace = true
 anyhow = { workspace = true }
 log = { workspace = true }
 rand = "0.8"
-wasi-common = { workspace = true, features = ["exit"]}
+wasi-common = { workspace = true, features = ["exit", "sync"]}
 wasmtime = { workspace = true, features = ['threads'] }
 wasmtime-environ = { workspace = true }
 wasmtime-lind-utils = { path = "../lind-utils" }
@@ -24,4 +24,5 @@ cage = { path = "../cage" }
 cfg-if = { workspace = true }
 
 [features]
+default = []
 disable_signals = []
