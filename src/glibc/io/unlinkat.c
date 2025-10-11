@@ -20,12 +20,13 @@
 #include <stddef.h>
 #include <unistd.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 
 /* Remove the link named NAME.  */
 int
 unlinkat (int fd, const char *name, int flag)
 {
-  return MAKE_SYSCALL(4, "syscall|unlink", (uint64_t) name, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL3(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t)fd, (uint64_t)name, (uint64_t)flag);
 }
 stub_warning (unlinkat)

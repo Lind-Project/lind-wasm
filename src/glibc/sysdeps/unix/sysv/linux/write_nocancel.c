@@ -20,10 +20,11 @@
 #include <sysdep-cancel.h>
 #include <not-cancel.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 ssize_t
 __write_nocancel (int fd, const void *buf, size_t nbytes)
 {
-  return MAKE_SYSCALL(13, "syscall|write", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL3(WRITE_SYSCALL, "syscall|write", (uint64_t)fd, (uint64_t)(uintptr_t)buf, (uint64_t)nbytes);
 }
 hidden_def (__write_nocancel)

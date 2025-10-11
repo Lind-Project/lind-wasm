@@ -30,7 +30,7 @@ __lstat64_time64 (const char *file, struct __stat64_t64 *buf)
 {
   // BUG: we do not have fstatat syscall in rawposix
   // so let's just use xstat - Qianxi Chen
-  return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) file, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED); 
+  return MAKE_SYSCALL2(XSTAT_SYSCALL, "syscall|xstat", (uint64_t)file, (uint64_t)buf); 
 }
 #if __TIMESIZE != 64
 hidden_def (__lstat64_time64)
@@ -38,7 +38,7 @@ hidden_def (__lstat64_time64)
 int
 __lstat64 (const char *file, struct stat64 *buf)
 {
-  return MAKE_SYSCALL(9, "syscall|xstat", (uint64_t) file, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED); 
+  return MAKE_SYSCALL2(XSTAT_SYSCALL, "syscall|xstat", (uint64_t)file, (uint64_t)buf); 
 }
 #endif
 hidden_def (__lstat64)

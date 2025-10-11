@@ -30,7 +30,7 @@
 int
 __fstat64_time64 (int fd, struct __stat64_t64 *buf)
 {
-  return MAKE_SYSCALL(17, "syscall|fstat", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t)buf);
 }
 #if __TIMESIZE != 64
 hidden_def (__fstat64_time64)
@@ -44,7 +44,7 @@ __fstat64 (int fd, struct stat64 *buf)
       return -1;
     }
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-	return MAKE_SYSCALL(FSTATFS_SYSCALL, "syscall|fstat", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t)buf);
 }
 #endif
 

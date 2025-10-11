@@ -22,6 +22,8 @@
 #include <stdarg.h>
 
 #include <not-cancel.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __open64_nocancel (const char *file, int oflag, ...)
@@ -37,7 +39,7 @@ __open64_nocancel (const char *file, int oflag, ...)
     }
 
     // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-    return MAKE_SYSCALL(10, "syscall|open", (uint64_t) file, (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
+    return MAKE_SYSCALL3(OPEN_SYSCALL, "syscall|open", (uint64_t)file, (uint64_t)oflag, (uint64_t)mode);
 }
 
 hidden_def (__open64_nocancel)
