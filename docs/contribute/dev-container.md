@@ -16,7 +16,7 @@ docker build \
   --build-arg BRANCH_NAME=main \
   --build-arg LLVM_VERSION=llvmorg-16.0.4 \
   --build-arg CLANG_PACKAGE=clang+llvm-16.0.4-x86_64-linux-gnu-ubuntu-22.04 \
-  -f ./scripts/Dockerfile.dev \
+  -f ./Docker/Dockerfile.dev \
   -t lind-dev .
 ```
 The build process can be quite long, depending on system resources on the build machine.  

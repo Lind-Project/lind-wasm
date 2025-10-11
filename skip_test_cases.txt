@@ -32,7 +32,6 @@ memory_tests/deterministic/mmap-nagative2.c
 memory_tests/deterministic/mmap.c
 memory_tests/deterministic/mmap_complicated.c
 memory_tests/deterministic/mmap_file.c
-memory_tests/deterministic/mmap_shared.c
 memory_tests/deterministic/mmaptest.c
 memory_tests/deterministic/sbrk.c
 memory_tests/deterministic/shmtest.c
@@ -64,7 +63,6 @@ process_tests/deterministic/sem_forks.c
 process_tests/deterministic/setsid.c
 process_tests/deterministic/sigalrm.c
 process_tests/deterministic/sigchld.c
-process_tests/deterministic/signal-fork.c
 process_tests/deterministic/signal-simple.c
 process_tests/deterministic/sigpipe.c
 process_tests/deterministic/sigprocmask.c

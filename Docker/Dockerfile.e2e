@@ -1,0 +1,117 @@
+# syntax=docker/dockerfile:1.7-labs
+# NOTE: use non-stable syntax for convenient --parents option in COPY command
+
+# Multi-stage Dockerfile for lind-wasm end-to-end testing and image creation
+#
+# - Installs build dependencies
+# - Builds wasmtime, glibc and sysroot for clang cross-compilation
+# - A. Runs end-to-end tests (default)
+# - B. Creates Docker image with lind-wasm toolchain
+#
+# NOTE: The 'test' stage (A) runs end-to-end tests on `docker build`, and is
+# optimized for Docker build time and caching. It is not meant for `docker
+# run`. Use the 'release' stage (B) to create an image that includes the full
+# lind-wasm toolchain, e.g. to run demos, tests, experiments, etc. For
+# development you may want to build just the base image (C) and mount the full
+# source tree.
+#
+# Usage A (test):
+#     docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e .
+#
+# Usage B (create and run image):
+#     docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e -t release --target release .
+#     docker run --platform=linux/amd64 -it release /bin/bash
+#
+# Usage C (create base image and mount source):
+#     docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e -t dev --target base .
+#     docker run --platform=linux/amd64 -v $(PWD):/lind -w /lind -it dev /bin/bash
+
+# Install build dependencies
+# NOTE: We install dependencies for multiple stages at once, to save RUN time
+# and cache layers. Details:
+# - glibc dependencies as per src/glibc/INSTALL
+# - gcc skipped in favor of clang
+# - libc6-dev-i386-cross required for wasi cross-compilation with clang
+# - build-essential, ca-certificates, curl, libxml2 needed by rust and clang
+FROM ubuntu:22.04 AS base
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends -qq \
+        binutils \
+        bison \
+        build-essential \
+        ca-certificates \
+        curl \
+        gawk \
+        libc6-dev-i386-cross \
+        libxml2 \
+        make \
+        python3 \
+        python3-pip \
+        sed \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install clang
+ARG LLVM="llvmorg-18.1.8"
+ARG CLANG="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
+
+# Add retries and robust protection to curl to prevent transient network issues
+# from causing Docker build failures.
+SHELL ["/bin/bash","-o","pipefail","-c"]
+
+RUN set -euo pipefail; \
+    url="https://github.com/llvm/llvm-project/releases/download/${LLVM}/${CLANG}.tar.xz"; \
+    echo "Fetching $url"; \
+    curl -fL --retry 5 --retry-delay 3 "$url" | tar -xJ
+
+COPY src/glibc/wasi /${CLANG}/lib/clang/18/lib/wasi
+ENV PATH="/${CLANG}/bin:${PATH}"
+
+# --- Install libtinfo5 ---
+RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
+    apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+
+
+# Install rust
+# --profile minimal tells rustup to install only the essentials for the toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --profile minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+
+# Build wasmtime
+FROM base as build-wasmtime
+# NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
+COPY --parents src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs Makefile rust-toolchain.toml .
+RUN make wasmtime
+
+
+# Build glibc and generate sysroot
+FROM base AS build-glibc
+# NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
+COPY --parents scripts/make_glibc_and_sysroot.sh src/glibc Makefile .
+RUN make sysroot
+
+
+# Build Docker image that includes the full lind-wasm toolchain
+# NOTE: Lind-wasm source code is not included
+FROM base AS release
+COPY --from=build-wasmtime --parents  src/wasmtime/target .
+COPY --from=build-glibc --parents src/glibc/sysroot .
+COPY --parents scripts tests tools skip_test_cases.txt .
+
+
+# Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
+FROM base AS test
+COPY --parents scripts tests tools skip_test_cases.txt Makefile .
+# NOTE: Build artifacts from prior stages are only mounted, to save COPY time
+# and cache layers. This means they are not preserved in the resulting image.
+RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmtime/target \
+    --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
+    make test && \
+    OUT_DIR=/ REPORT_PATH=/report.html make md_generation
+
+FROM scratch AS artifacts
+COPY --from=test /report.html /wasm-e2e-report.html
+COPY --from=test /e2e_comment.md /e2e_comment.md
+COPY --from=test /e2e_status /e2e_status

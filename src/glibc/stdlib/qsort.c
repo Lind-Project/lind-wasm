@@ -108,6 +108,33 @@ siftdown (void *base, size_t size, size_t k, size_t n,
     }
 }
 
+static inline void
+siftdown_2 (void *base, size_t size, size_t k, size_t n,
+	  enum swap_type_t swap_type, __compar_fn_t cmp)
+{
+  /* There can only be a heap condition violation if there are
+     children.  */
+  while (2 * k + 1 <= n)
+    {
+      /* Left child.  */
+      size_t j = 2 * k + 1;
+      /* If the right child is larger, use it.  */
+      if (j < n && cmp (base + (j * size), base + ((j + 1) * size)) < 0)
+	j++;
+
+      /* If k is already >= to its children, we are done.  */
+      if (j == k || cmp (base + (k * size), base + (j * size)) >= 0)
+	break;
+
+      /* Heal the violation.  */
+      do_swap (base + (size * j), base + (k * size), size, swap_type);
+
+      /* Swapping with j may have introduced a violation at j.  Fix
+	 it in the next loop iteration.  */
+      k = j;
+    }
+}
+
 /* Establish the heap condition for the indices 0 to N (inclusive).  */
 static inline void
 heapify (void *base, size_t size, size_t n, enum swap_type_t swap_type,
@@ -120,6 +147,22 @@ heapify (void *base, size_t size, size_t n, enum swap_type_t swap_type,
   while (1)
     {
       siftdown (base, size, k, n, swap_type, cmp, arg);
+      if (k-- == 0)
+	break;
+    }
+}
+
+static inline void
+heapify_2 (void *base, size_t size, size_t n, enum swap_type_t swap_type,
+	 __compar_fn_t cmp)
+{
+  /* If n is odd, k = n / 2 has a left child at n, so this is the
+     largest index that can have a heap condition violation regarding
+     its children.  */
+  size_t k = n / 2;
+  while (1)
+    {
+      siftdown_2 (base, size, k, n, swap_type, cmp);
       if (k-- == 0)
 	break;
     }
@@ -175,6 +218,35 @@ heapsort_r (void *base, size_t n, size_t size, __compar_d_fn_t cmp, void *arg)
     }
 }
 
+static void
+heapsort_r_2 (void *base, size_t n, size_t size, __compar_fn_t cmp)
+{
+  if (n == 0)
+    return;
+
+  enum swap_type_t swap_type = get_swap_type (base, size);
+
+  /* Build the binary heap, largest value at the base[0].  */
+  heapify_2 (base, size, n, swap_type, cmp);
+
+  while (true)
+    {
+      /* Indices 0 .. n contain the binary heap.  Extract the largest
+	 element put it into the final position in the array.  */
+      do_swap (base, base + (n * size), size, swap_type);
+
+      /* The heap is now one element shorter.  */
+      n--;
+      if (n == 0)
+	break;
+
+      /* By swapping in elements 0 and the previous value of n (now at
+	 n + 1), we likely introduced a heap condition violation.  Fix
+	 it for the reduced heap.  */
+      siftdown_2 (base, size, 0, n, swap_type, cmp);
+    }
+}
+
 /* The maximum size in bytes required by mergesort that will be provided
    through a buffer allocated in the stack.  */
 #define QSORT_STACK_SIZE  1024
@@ -188,6 +260,15 @@ struct msort_param
   size_t s;
   enum swap_type_t var;
   __compar_d_fn_t cmp;
+  void *arg;
+  char *t;
+};
+
+struct msort_param_2
+{
+  size_t s;
+  enum swap_type_t var;
+  __compar_fn_t cmp;
   void *arg;
   char *t;
 };
@@ -294,6 +375,107 @@ msort_with_tmp (const struct msort_param *p, void *b, size_t n)
 }
 
 static void
+msort_with_tmp_2 (const struct msort_param_2 *p, void *b, size_t n)
+{
+  char *b1, *b2;
+  size_t n1, n2;
+
+  if (n <= 1)
+    return;
+
+  n1 = n / 2;
+  n2 = n - n1;
+  b1 = b;
+  b2 = (char *) b + (n1 * p->s);
+
+  msort_with_tmp_2 (p, b1, n1);
+  msort_with_tmp_2 (p, b2, n2);
+
+  char *tmp = p->t;
+  const size_t s = p->s;
+  __compar_fn_t cmp = p->cmp;
+  void *arg = p->arg;
+  switch (p->var)
+    {
+    case SWAP_WORDS_32:
+      while (n1 > 0 && n2 > 0)
+	{
+	  if (cmp (b1, b2) <= 0)
+	    {
+	      *(u32_alias_t *) tmp = *(u32_alias_t *) b1;
+	      b1 += sizeof (u32_alias_t);
+	      --n1;
+	    }
+	  else
+	    {
+	      *(u32_alias_t *) tmp = *(u32_alias_t *) b2;
+	      b2 += sizeof (u32_alias_t);
+	      --n2;
+	    }
+	  tmp += sizeof (u32_alias_t);
+	}
+      break;
+    case SWAP_WORDS_64:
+      while (n1 > 0 && n2 > 0)
+	{
+	  if (cmp (b1, b2) <= 0)
+	    {
+	      *(u64_alias_t *) tmp = *(u64_alias_t *) b1;
+	      b1 += sizeof (u64_alias_t);
+	      --n1;
+	    }
+	  else
+	    {
+	      *(u64_alias_t *) tmp = *(u64_alias_t *) b2;
+	      b2 += sizeof (u64_alias_t);
+	      --n2;
+	    }
+	  tmp += sizeof (u64_alias_t);
+	}
+      break;
+    case SWAP_VOID_ARG:
+      while (n1 > 0 && n2 > 0)
+	{
+	  if ((*cmp) (*(const void **) b1, *(const void **) b2) <= 0)
+	    {
+	      *(void **) tmp = *(void **) b1;
+	      b1 += sizeof (void *);
+	      --n1;
+	    }
+	  else
+	    {
+	      *(void **) tmp = *(void **) b2;
+	      b2 += sizeof (void *);
+	      --n2;
+	    }
+	  tmp += sizeof (void *);
+	}
+      break;
+    default:
+      while (n1 > 0 && n2 > 0)
+	{
+	  if (cmp (b1, b2) <= 0)
+	    {
+	      tmp = (char *) __mempcpy (tmp, b1, s);
+	      b1 += s;
+	      --n1;
+	    }
+	  else
+	    {
+	      tmp = (char *) __mempcpy (tmp, b2, s);
+	      b2 += s;
+	      --n2;
+	    }
+	}
+      break;
+    }
+
+  if (n1 > 0)
+    memcpy (tmp, b1, n1 * s);
+  memcpy (b, p->t, (n - n2) * s);
+}
+
+static void
 __attribute_used__
 indirect_msort_with_tmp (const struct msort_param *p, void *b, size_t n,
 			 size_t s)
@@ -310,6 +492,51 @@ indirect_msort_with_tmp (const struct msort_param *p, void *b, size_t n,
       ip += s;
     }
   msort_with_tmp (p, p->t + n * sizeof (void *), n);
+
+  /* tp[0] .. tp[n - 1] is now sorted, copy around entries of
+     the original array.  Knuth vol. 3 (2nd ed.) exercise 5.2-10.  */
+  char *kp;
+  size_t i;
+  for (i = 0, ip = (char *) b; i < n; i++, ip += s)
+    if ((kp = tp[i]) != ip)
+      {
+	size_t j = i;
+	char *jp = ip;
+	memcpy (tmp_storage, ip, s);
+
+	do
+	  {
+	    size_t k = (kp - (char *) b) / s;
+	    tp[j] = jp;
+	    memcpy (jp, kp, s);
+	    j = k;
+	    jp = kp;
+	    kp = tp[k];
+	  }
+	while (kp != ip);
+
+	tp[j] = jp;
+	memcpy (jp, tmp_storage, s);
+      }
+}
+
+static void
+__attribute_used__
+indirect_msort_with_tmp_2 (const struct msort_param_2 *p, void *b, size_t n,
+			 size_t s)
+{
+  /* Indirect sorting.  */
+  char *ip = (char *) b;
+  void **tp = (void **) (p->t + n * sizeof (void *));
+  void **t = tp;
+  void *tmp_storage = (void *) (tp + n);
+
+  while ((void *) t < tmp_storage)
+    {
+      *t++ = ip;
+      ip += s;
+    }
+  msort_with_tmp_2 (p, p->t + n * sizeof (void *), n);
 
   /* tp[0] .. tp[n - 1] is now sorted, copy around entries of
      the original array.  Knuth vol. 3 (2nd ed.) exercise 5.2-10.  */
@@ -400,8 +627,84 @@ libc_hidden_def (__qsort_r)
 weak_alias (__qsort_r, qsort_r)
 
 void
+__qsort_internal (void *const pbase, size_t total_elems, size_t size,
+	   __compar_fn_t cmp)
+{
+  if (total_elems <= 1)
+    return;
+
+  /* Align to the maximum size used by the swap optimization.  */
+  _Alignas (uint64_t) char tmp[QSORT_STACK_SIZE];
+  size_t total_size = total_elems * size;
+  char *buf;
+
+  if (size > INDIRECT_SORT_SIZE_THRES)
+    total_size = 2 * total_elems * sizeof (void *) + size;
+
+  if (total_size <= sizeof tmp)
+    buf = tmp;
+  else
+    {
+      int save = errno;
+      buf = malloc (total_size);
+      __set_errno (save);
+      if (buf == NULL)
+	{
+	  /* Fallback to heapsort in case of memory failure.  */
+	  heapsort_r_2 (pbase, total_elems - 1, size, cmp);
+	  return;
+	}
+    }
+
+  if (size > INDIRECT_SORT_SIZE_THRES)
+    {
+      const struct msort_param_2 msort_param =
+	{
+	  .s = sizeof (void *),
+	  .cmp = cmp,
+	  .arg = NULL,
+	  .var = SWAP_VOID_ARG,
+	  .t = buf,
+	};
+      indirect_msort_with_tmp_2 (&msort_param, pbase, total_elems, size);
+    }
+  else
+    {
+      const struct msort_param_2 msort_param =
+	{
+	  .s = size,
+	  .cmp = cmp,
+	  .arg = NULL,
+	  .var = get_swap_type (pbase, size),
+	  .t = buf,
+	};
+      msort_with_tmp_2 (&msort_param, pbase, total_elems);
+    }
+
+  if (buf != tmp)
+    free (buf);
+}
+
+/*
+ * lind-wasm:
+ * In C, it's legal to cast a function pointer to another type (even with fewer
+ * parameters) and call it with the "wrong" number of arguments. glibc's qsort
+ * implementation relies on this trick.
+ *
+ * However, WebAssembly enforces strict function signatures, so this behavior
+ * causes a runtime error under Wasm.
+ *
+ * While wasm-opt can emulate function pointer casting, that approach adds
+ * significant overhead across the entire Wasm binary. Instead, this change
+ * modifies glibc directly to remove qsort’s function pointer trick.
+ *
+ * Therefore, we duplicates the qsort implementation with a function signature that
+ * has one fewer parameter, eliminating the cast and making qsort work correctly
+ * in a Wasm environment.
+ */
+void
 qsort (void *b, size_t n, size_t s, __compar_fn_t cmp)
 {
-  return __qsort_r (b, n, s, (__compar_d_fn_t) cmp, NULL);
+  return __qsort_internal (b, n, s, cmp);
 }
 libc_hidden_def (qsort)

@@ -16,7 +16,7 @@ SYSROOT="$GLIBC/sysroot"
 SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
 
 # Define common flags
-CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g"
+CFLAGS="--target=wasm32-unknown-wasi -v -Wno-int-conversion -std=gnu11 -fgnu89-inline -matomics -mbulk-memory -O2 -g -fPIC"
 WARNINGS="-Wall -Wwrite-strings -Wundef -Wstrict-prototypes -Wold-style-definition"
 EXTRA_FLAGS="-fmerge-all-constants -ftrapping-math -fno-stack-protector -fno-common"
 EXTRA_FLAGS+=" -Wp,-U_FORTIFY_SOURCE -fmath-errno -fPIE -ftls-model=local-exec"
@@ -59,7 +59,12 @@ INCLUDE_PATHS="
     -I../libio
     -I.
 "
-SYS_INCLUDE="-nostdinc -isystem $CLANG/lib/clang/16/include -isystem /usr/i686-linux-gnu/include"
+
+
+RESOURCE_DIR="$(clang --target=wasm32-unknown-wasi -print-resource-dir)"
+SYS_INCLUDE="-nostdinc -isystem ${RESOURCE_DIR}/include -isystem /usr/i686-linux-gnu/include"
+
+#SYS_INCLUDE="-nostdinc -isystem $CLANG/lib/clang/18/include -isystem /usr/i686-linux-gnu/include"
 DEFINES="-D_LIBC_REENTRANT -include $BUILD/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
@@ -95,6 +100,40 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -o $BUILD/lind_syscall.o \
     -c $GLIBC/lind_syscall/lind_syscall.c
 
+# Compile crt1.c
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $GLIBC/lind_syscall/crt1.o \
+    -c $GLIBC/lind_syscall/crt1/crt1.c \
+ || { echo "ERROR: clang failed compiling crt1.c"; exit 1; }
+ [ -f "$GLIBC/lind_syscall/crt1.o" ] || { echo "ERROR: $GLIBC/lind_syscall/crt1.o not produced"; exit 1; }
+
+# Compile elision-lock.c
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $GLIBC/build/nptl/elision-lock.o \
+    -c $GLIBC/sysdeps/unix/sysv/linux/x86/elision-lock.c \
+    -MD -MP -MF $GLIBC/build/nptl/elision-lock.o.dt \
+    -MT $GLIBC/build/nptl/elision-lock.o
+
+# Compile elision-unlock.c
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $GLIBC/build/nptl/elision-unlock.o \
+    -c $GLIBC/sysdeps/unix/sysv/linux/x86/elision-unlock.c \
+    -MD -MP -MF $GLIBC/build/nptl/elision-unlock.o.dt \
+    -MT $GLIBC/build/nptl/elision-unlock.o
+
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/register_handler.o \
+    -c $GLIBC/lind_syscall/register_handler.c
+
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/copy_data_between_cages.o \
+    -c $GLIBC/lind_syscall/copy_data_between_cages.c
+
 # Compile assembly files
 cd ../
 $CC --target=wasm32-wasi-threads -matomics \
@@ -110,7 +149,14 @@ $CC --target=wasm32-wasi-threads -matomics \
 rm -rf "$SYSROOT"
 
 # Find all .o files recursively in the source directory, ignoring stamp.o
-object_files=$(find "$BUILD" -type f -name "*.o" ! \( -name "stamp.o" -o -name "argp-pvh.o" -o -name "repertoire.o" -o -name "static-stubs.o" \))
+object_files=$(find "$BUILD" -type f -name '*.o' \
+  ! -name 'stamp.o' \
+  ! -name 'argp-pvh.o' \
+  ! -name 'repertoire.o' \
+  ! -name 'static-stubs.o'\
+  ! -name 'zic.o' \
+  ! -name 'ldconfig.o' \
+  ! -name 'sln.o')
 
 # Check if object files were found
 if [ -z "$object_files" ]; then
@@ -118,11 +164,18 @@ if [ -z "$object_files" ]; then
   exit 1
 fi
 
+
 # Create the sysroot directory structure
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 
-# Pack all found .o files into a single .a archive
-llvm-ar rcs "$SYSROOT_ARCHIVE" $object_files
+# Pack all found .o files into a single .a archive, filtering for no-mains.
+filtered_objects=$(
+  for o in $object_files; do
+    llvm-nm --defined-only -g "$o" 2>/dev/null | grep -qE '\bT[[:space:]]+main$' || printf '%s ' "$o"
+  done
+)
+llvm-ar rcs "$SYSROOT_ARCHIVE" $filtered_objects
+
 llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
 
 # Check if llvm-ar succeeded
@@ -139,3 +192,5 @@ cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/register_handler.h" "$SYSROOT/include/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/copy_data_between_cages.h" "$SYSROOT/include/wasm32-wasi/"
