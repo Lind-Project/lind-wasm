@@ -40,6 +40,7 @@
 #include <clone3.h>
 #include <futex-internal.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 #include <shlib-compat.h>
 
@@ -459,7 +460,7 @@ start_thread (void *arg)
 
   /* This is where the try/finally block should be created.  For
      compilers without that support we do use setjmp.  */
-  struct pthread_unwind_buf unwind_buf;
+  struct pthread_unwind_buf __attribute__((aligned(8))) unwind_buf;
 
   int not_first_call;
   DIAG_PUSH_NEEDS_COMMENT;
