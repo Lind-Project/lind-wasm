@@ -51,21 +51,6 @@ pub fn timestamp() -> u64 {
         .as_secs()
 }
 
-/// Calls the system `mmap` via `libc` and returns the mapped address as a 32-bit integer.
-///
-/// In Lind-WASM, addresses are represented as 32-bit values within the linear memory of a
-/// Wasm module. The return value is truncated to 32 bits to match this representation.
-/// On error, returns `-1` (corresponding to `MAP_FAILED`).
-///
-/// # Safety
-/// This function uses raw pointers and directly invokes `libc::mmap`. The caller must ensure
-/// that all arguments are valid and that using the returned address as a 32-bit pointer is safe
-/// in the Lind-WASM context.
-pub fn libc_mmap(addr: *mut u8, len: usize, prot: i32, flags: i32, fildes: i32, off: i64) -> i32 {
-    return ((unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, fildes, off) } as i64)
-        & 0xffffffff) as i32;
-}
-
 // Mimic shared memory in Linux by creating a file backing and truncating it to the segment size
 // We can then safely unlink the file while still holding a descriptor to that segment,
 // which we can use to map shared across cages.
@@ -149,7 +134,7 @@ impl ShmSegment {
     }
     // mmap shared segment into cage, and increase attachments
     // increase in cage references within attached_cages map
-    pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: u64) -> i32 {
+    pub fn map_shm(&mut self, shmaddr: *mut u8, prot: i32, cageid: u64) -> usize {
         let fobjfdno = self.filebacking.as_fd_handle_raw_int();
         self.shminfo.shm_nattch += 1;
         self.shminfo.shm_atime = timestamp() as isize;
@@ -162,27 +147,33 @@ impl ShmSegment {
                 vacant.insert(1);
             }
         };
-        libc_mmap(
-            shmaddr,
-            self.size as usize,
-            prot,
-            (MAP_SHARED as i32) | (MAP_FIXED as i32),
-            fobjfdno,
-            0,
-        )
+
+        unsafe {
+            (libc::mmap(
+                shmaddr as *mut c_void,
+                self.size as usize,
+                prot,
+                (MAP_SHARED as i32) | (MAP_FIXED as i32),
+                fobjfdno,
+                0,
+            ) as usize)
+        }
     }
 
     // unmap shared segment, decrease attachments
     // decrease references within attached cages map
     pub fn unmap_shm(&mut self, shmaddr: *mut u8, cageid: u64) {
-        libc_mmap(
-            shmaddr,
-            self.size as usize,
-            PROT_NONE,
-            (MAP_PRIVATE as i32) | (MAP_ANONYMOUS as i32) | (MAP_FIXED as i32),
-            -1,
-            0,
-        );
+        unsafe {
+            (libc::mmap(
+                shmaddr as *mut c_void,
+                self.size as usize,
+                PROT_NONE,
+                (MAP_PRIVATE as i32) | (MAP_ANONYMOUS as i32) | (MAP_FIXED as i32),
+                -1,
+                0,
+            ) as usize)
+        };
+
         self.shminfo.shm_nattch -= 1;
         self.shminfo.shm_dtime = timestamp() as isize;
         match self.attached_cages.entry(cageid) {
@@ -341,7 +332,7 @@ pub fn search_for_addr_in_region(
 /// # Returns
 /// * On success – the mapped address as a `u32`.
 /// * On error – a negative errno value as a `u32`.
-pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u32 {
+pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> usize {
     let metadata = &SHM_METADATA;
     let prot: i32;
 
@@ -357,9 +348,9 @@ pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u
         rev_shm.push((shmaddr as u32, shmid));
         drop(rev_shm);
 
-        segment.map_shm(shmaddr, prot, cageid) as u32
+        segment.map_shm(shmaddr, prot, cageid) as usize
     } else {
-        syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") as u32
+        syscall_error(Errno::EINVAL, "shmat", "Invalid shmid value") as usize
     }
 }
 

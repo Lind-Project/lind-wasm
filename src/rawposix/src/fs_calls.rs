@@ -655,11 +655,17 @@ pub fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
+    let mut addr = {
+        if addr_arg == 0 {
+            0 as *mut u8
+        } else {
+            sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid)
+        }
+    };
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-    let mut fildes = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
     let cage = get_cage(cageid).unwrap();
@@ -710,8 +716,11 @@ pub fn mmap_syscall(
             result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
         } else {
             // use address user provided as hint to find address
-            result =
-                vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+            result = vmmap.find_map_space_with_hint(
+                rounded_length as u32 >> PAGESHIFT,
+                1,
+                addr as u32 >> PAGESHIFT,
+            );
         }
 
         // did not find desired memory region
@@ -3870,7 +3879,13 @@ pub fn shmat_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
-    let addr = sc_convert_addr_to_host(shmaddr_arg, shmaddr_cageid, cageid);
+    let addr = {
+        if shmaddr_arg == 0 {
+            0 as *mut u8
+        } else {
+            sc_convert_addr_to_host(shmaddr_arg, shmaddr_cageid, cageid)
+        }
+    };
     let shmflag = sc_convert_sysarg_to_i32(shmflg_arg, shmflg_cageid, cageid);
     let mut prot = 0;
     // Validate unused args
@@ -3920,8 +3935,15 @@ pub fn shmat_syscall(
     } else {
         // Use the user-specified address as a hint to find an appropriate memory address
         // for the shared memory segment.
-        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+        result = vmmap.find_map_space_with_hint(
+            rounded_length as u32 >> PAGESHIFT,
+            1,
+            addr as u32 >> PAGESHIFT,
+        );
     }
+    // drop the write lock of vmmap to avoid deadlock
+    drop(vmmap);
+
     if result.is_none() {
         // If no suitable memory space is found, return an error indicating insufficient memory.
         return syscall_error(Errno::ENOMEM, "shmat", "no memory") as i32;
@@ -3940,6 +3962,9 @@ pub fn shmat_syscall(
 
     // Call the raw shmat helper to attach the shared memory segment.
     let result = shmat_helper(cageid, sysaddr as *mut u8, shmflag, shmid);
+    let vmmap = cage.vmmap.read();
+    let result = vmmap.sys_to_user(result);
+    drop(vmmap);
 
     // If the syscall succeeded, update the vmmap entry.
     if result as i32 >= 0 {
