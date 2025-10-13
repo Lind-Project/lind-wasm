@@ -1186,7 +1186,7 @@ impl<
             let hash =
                 store.store_unwind_data(unwind_data_start_sys as *const u8, rewind_total_size);
             unsafe {
-                *((cloned_address + jmp_buf as u64) as *mut u64) = hash;
+                std::ptr::write_unaligned((cloned_address + jmp_buf as u64) as *mut u64, hash);
             }
 
             // mark the parent to rewind state
@@ -1257,7 +1257,8 @@ impl<
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
-            let hash = unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) };
+            let hash =
+                unsafe { std::ptr::read_unaligned((cloned_address + jmp_buf as u64) as *mut u64) };
             // retrieve the unwind data
             let data = store.retrieve_unwind_data(hash);
 

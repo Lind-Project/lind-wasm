@@ -51,7 +51,6 @@ networking_tests/non-deterministic/socketepoll.c
 networking_tests/non-deterministic/socketselect.c
 networking_tests/non-deterministic/uds-serverclient.c
 networking_tests/non-deterministic/uds-socketselect.c
-process_tests/deterministic/chain_thread.c
 process_tests/deterministic/forkdup.c
 process_tests/deterministic/forkexecuid.c
 process_tests/deterministic/forkexecv.c
@@ -66,8 +65,6 @@ process_tests/deterministic/sigchld.c
 process_tests/deterministic/signal-simple.c
 process_tests/deterministic/sigpipe.c
 process_tests/deterministic/sigprocmask.c
-process_tests/deterministic/thread-test.c
-process_tests/deterministic/thread.c
 process_tests/non-deterministic/fork.c
 process_tests/non-deterministic/fork2malloc.c
 process_tests/non-deterministic/fork_simple.c
@@ -81,7 +78,6 @@ signal_tests/deterministic/setitimer.c
 signal_tests/deterministic/signal_resethand.c
 signal_tests/non-deterministic/signal_SIGCHLD.c
 signal_tests/non-deterministic/signal_fork.c
-signal_tests/non-deterministic/signal_int_thread.c
 signal_tests/non-deterministic/signal_longjmp.c
 signal_tests/non-deterministic/signal_nodefer.c
 signal_tests/non-deterministic/signal_procmask.c
