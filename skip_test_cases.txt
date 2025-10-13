@@ -46,9 +46,7 @@ process_tests/deterministic/getuid.c
 process_tests/deterministic/mutex.c
 process_tests/deterministic/sem_forks.c
 process_tests/deterministic/setsid.c
-process_tests/deterministic/sigalrm.c
-process_tests/deterministic/sigchld.c
-process_tests/deterministic/signal-simple.c
+process_tests/deterministic/signal-fork.c
 process_tests/deterministic/sigpipe.c
 process_tests/deterministic/sigprocmask.c
 process_tests/non-deterministic/fork.c
