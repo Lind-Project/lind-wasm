@@ -330,8 +330,8 @@ pub fn search_for_addr_in_region(
 /// invalid, it returns an error.
 ///
 /// # Returns
-/// * On success – the mapped address as a `u32`.
-/// * On error – a negative errno value as a `u32`.
+/// * On success – the mapped address as a `usize`.
+/// * On error – a negative errno value as a `usize`.
 pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> usize {
     let metadata = &SHM_METADATA;
     let prot: i32;
