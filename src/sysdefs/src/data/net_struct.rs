@@ -1,241 +1,116 @@
-/// THIS FILE NEEDS TO BE REFACTORED LATER!
-///
-use std::str::from_utf8;
-use std::sync::atomic::{AtomicUsize, Ordering};
+//! Network-related data structures
+//!
+//! This file defines minimal, libc-compatible socket data structures that RawPOSIX uses at the FFI boundary.
+//! The goal is to expose a single, compact representation (`SockAddr`) that can be filled from a raw
+//! `sockaddr*` and queried for its effective size without depending on higher-level network crates.
+//!
+//! The layout is Linux-centric and mirrors common libc ABIs: `sa_family_t` is treated as a 16-bit field
+//! and the trailing payload is stored in a fixed 108-byte buffer. This buffer is reused for
+//! `AF_UNIX` (`sun_path[108]`) as well as for the byte payloads of `AF_INET`/`AF_INET6`.
+//!
+//! Critically, we do not operate directly on the original cage pointer/buffer when parsing or normalizing
+//! contents, because `AF_UNIX` often requires path conversion (e.g., adding or removing the lind_root
+//! prefix). Such rewrites can change length, require shifting bytes, and must respect Linux abstract-namespace
+//! vs pathname rules; doing this in the caller’s cage linear memory is risky (partial writes, aliasing,
+//! out-of-bounds on error, or subtle TOCTOU-style races if other code can observe the buffer). Instead
+//! we first clone the relevant bytes into `SockAddr` in user-space, reason about the family and `socklen_t`,
+//! and only perform any necessary in-place edits
+use crate::constants::net_const::{AF_INET, AF_INET6, AF_UNIX};
+use libc::sockaddr;
+use libc::{sa_family_t, sockaddr_in, sockaddr_in6, sockaddr_un};
+use std::mem;
+use std::os::raw::c_char;
+use std::ptr;
 
-extern crate libc;
-
-static mut UD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
-pub enum GenSockaddr {
-    Unix(SockaddrUnix),
-    V4(SockaddrV4),
-    V6(SockaddrV6),
-}
-impl GenSockaddr {
-    pub fn port(&self) -> u16 {
-        match self {
-            GenSockaddr::Unix(_) => panic!("Invalid function called for this type of Sockaddr."),
-            GenSockaddr::V4(v4addr) => v4addr.sin_port,
-            GenSockaddr::V6(v6addr) => v6addr.sin6_port,
-        }
-    }
-    pub fn set_port(&mut self, port: u16) {
-        match self {
-            GenSockaddr::Unix(_) => panic!("Invalid function called for this type of Sockaddr."),
-            GenSockaddr::V4(v4addr) => v4addr.sin_port = port,
-            GenSockaddr::V6(v6addr) => v6addr.sin6_port = port,
-        };
-    }
-
-    pub fn addr(&self) -> GenIpaddr {
-        match self {
-            GenSockaddr::Unix(_) => panic!("Invalid function called for this type of Sockaddr."),
-            GenSockaddr::V4(v4addr) => GenIpaddr::V4(v4addr.sin_addr),
-            GenSockaddr::V6(v6addr) => GenIpaddr::V6(v6addr.sin6_addr),
-        }
-    }
-
-    pub fn set_addr(&mut self, ip: GenIpaddr) {
-        match self {
-            GenSockaddr::Unix(_unixaddr) => {
-                panic!("Invalid function called for this type of Sockaddr.")
-            }
-            GenSockaddr::V4(v4addr) => {
-                v4addr.sin_addr = if let GenIpaddr::V4(v4ip) = ip {
-                    v4ip
-                } else {
-                    unreachable!()
-                }
-            }
-            GenSockaddr::V6(v6addr) => {
-                v6addr.sin6_addr = if let GenIpaddr::V6(v6ip) = ip {
-                    v6ip
-                } else {
-                    unreachable!()
-                }
-            }
-        };
-    }
-
-    pub fn set_family(&mut self, family: u16) {
-        match self {
-            GenSockaddr::Unix(unixaddr) => unixaddr.sun_family = family,
-            GenSockaddr::V4(v4addr) => v4addr.sin_family = family,
-            GenSockaddr::V6(v6addr) => v6addr.sin6_family = family,
-        };
-    }
-
-    pub fn get_family(&self) -> u16 {
-        match self {
-            GenSockaddr::Unix(unixaddr) => unixaddr.sun_family,
-            GenSockaddr::V4(v4addr) => v4addr.sin_family,
-            GenSockaddr::V6(v6addr) => v6addr.sin6_family,
-        }
-    }
-
-    pub fn path(&self) -> &str {
-        match self {
-            GenSockaddr::Unix(unixaddr) => {
-                let pathiter = &mut unixaddr.sun_path.split(|idx| *idx == 0);
-                let pathslice = pathiter.next().unwrap();
-                let path = from_utf8(pathslice).unwrap();
-                path
-            }
-            GenSockaddr::V4(_) => panic!("Invalid function called for this type of Sockaddr."),
-            GenSockaddr::V6(_) => panic!("Invalid function called for this type of Sockaddr."),
-        }
-    }
-}
-
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Copy)]
-pub enum GenIpaddr {
-    V4(V4Addr),
-    V6(V6Addr),
-}
-
-impl GenIpaddr {
-    pub fn is_unspecified(&self) -> bool {
-        match self {
-            GenIpaddr::V4(v4ip) => v4ip.s_addr == 0,
-            GenIpaddr::V6(v6ip) => v6ip.s6_addr == [0; 16],
-        }
-    }
-    pub fn from_string(string: &str) -> Option<Self> {
-        let v4candidate: Vec<&str> = string.split('.').collect();
-        let v6candidate: Vec<&str> = string.split(':').collect();
-        let v4l = v4candidate.len();
-        let v6l = v6candidate.len();
-        if v4l == 1 && v6l > 1 {
-            //then we should try parsing it as an ipv6 address
-            let mut shortarr = [0u8; 16];
-            let mut shortindex = 0;
-            let mut encountered_doublecolon = false;
-            for short in v6candidate {
-                if short.is_empty() {
-                    //you can only have a double colon once in an ipv6 address
-                    if encountered_doublecolon {
-                        return None;
-                    }
-                    encountered_doublecolon = true;
-
-                    let numzeros = 8 - v6l + 1; //+1 to account for this empty string element
-                    if numzeros == 0 {
-                        return None;
-                    }
-                    shortindex += numzeros;
-                } else {
-                    //ok we can actually parse the element in this case
-                    if let Ok(b) = short.parse::<u16>() {
-                        //manually handle big endianness
-                        shortarr[2 * shortindex] = (b >> 8) as u8;
-                        shortarr[2 * shortindex + 1] = (b & 0xff) as u8;
-                        shortindex += 1;
-                    } else {
-                        return None;
-                    }
-                }
-            }
-            return Some(Self::V6(V6Addr { s6_addr: shortarr }));
-        } else if v4l == 4 && v6l == 1 {
-            //then we should try parsing it as an ipv4 address
-            let mut bytearr = [0u8; 4];
-            let mut shortindex = 0;
-            for byte in v4candidate {
-                if let Ok(b) = byte.parse::<u8>() {
-                    bytearr[shortindex] = b;
-                    shortindex += 1;
-                } else {
-                    return None;
-                }
-            }
-            return Some(Self::V4(V4Addr {
-                s_addr: u32::from_ne_bytes(bytearr),
-            }));
-        } else {
-            return None;
-        }
-    }
-}
-
+/// A simplified socket address structure supporting AF_UNIX, AF_INET, and AF_INET6.
+/// This abstraction stores the address family and a 108-byte path or address buffer,
+/// reused for all supported types.
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
-pub struct SockaddrUnix {
+pub struct SockAddr {
     pub sun_family: u16,
-    pub sun_path: [u8; 108],
+    pub sun_path: [c_char; 108],
 }
 
-impl Default for SockaddrUnix {
-    fn default() -> Self {
-        SockaddrUnix {
-            sun_family: 0,
+impl SockAddr {
+    /// Initializes a new UNIX domain socket address.
+    pub fn new_unix() -> Self {
+        SockAddr {
+            sun_family: AF_UNIX as u16,
             sun_path: [0; 108],
         }
     }
-}
 
-pub fn new_sockaddr_unix(family: u16, path: &[u8]) -> SockaddrUnix {
-    let pathlen = path.len();
-    if pathlen > 108 {
-        panic!("Unix domain paths cannot exceed 108 bytes.")
+    /// Initializes a new IPv4 socket address placeholder.
+    pub fn new_ipv4() -> Self {
+        SockAddr {
+            sun_family: AF_INET as u16,
+            sun_path: [0; 108],
+        }
     }
-    let mut array_path: [u8; 108] = [0; 108];
-    array_path[0..pathlen].copy_from_slice(path);
-    SockaddrUnix {
-        sun_family: family,
-        sun_path: array_path,
+
+    /// Initializes a new IPv6 socket address placeholder.
+    pub fn new_ipv6() -> Self {
+        SockAddr {
+            sun_family: AF_INET6 as u16,
+            sun_path: [0; 108],
+        }
+    }
+
+    /// Returns the expected length of the address structure
+    /// based on the current address family.
+    pub fn get_len(&self) -> u32 {
+        match self.sun_family as i32 {
+            AF_INET => mem::size_of::<libc::sockaddr_in>() as u32,
+            AF_INET6 => mem::size_of::<libc::sockaddr_in6>() as u32,
+            AF_UNIX => mem::size_of::<libc::sockaddr_un>() as u32,
+            _ => 0,
+        }
+    }
+
+    /// Creates a `SockAddr` from a raw pointer to a `sockaddr`.
+    /// This function safely copies the address content based on its family,
+    /// skipping the sa_family_t field and storing the rest into `sun_path`.
+    pub fn clone_to_sockaddr(addr: *mut u8) -> Self {
+        let mut out = SockAddr {
+            sun_family: 0,
+            sun_path: [0; 108],
+        };
+
+        if addr.is_null() {
+            return out;
+        }
+
+        unsafe {
+            let addr = addr as *const sockaddr;
+            // read family
+            let family = (*addr).sa_family;
+            out.sun_family = family;
+
+            // copy depending on different type
+            let copy_len = match family as i32 {
+                AF_UNIX => size_of::<sockaddr_un>() - size_of::<sa_family_t>(),
+                AF_INET => size_of::<sockaddr_in>() - size_of::<sa_family_t>(),
+                AF_INET6 => size_of::<sockaddr_in6>() - size_of::<sa_family_t>(),
+                _ => 0,
+            };
+
+            // Clamp to our internal buffer (108 bytes). This prevents overflow.
+            let safe_len = std::cmp::min(copy_len, 108);
+
+            // Copy raw bytes
+            ptr::copy_nonoverlapping(
+                (addr as *const u8).add(size_of::<sa_family_t>()),
+                out.sun_path.as_mut_ptr() as *mut u8,
+                safe_len,
+            );
+        }
+
+        out
     }
 }
 
-pub fn gen_ud_path() -> String {
-    let mut owned_path: String = "/sock".to_owned();
-    unsafe {
-        let id = UD_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-        owned_path.push_str(&id.to_string());
-    }
-    owned_path.clone()
-}
-
 #[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
-pub struct V4Addr {
-    pub s_addr: u32,
-}
-#[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
-pub struct SockaddrV4 {
-    pub sin_family: u16,
-    pub sin_port: u16,
-    pub sin_addr: V4Addr,
-    pub padding: u64,
-}
-
-#[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
-pub struct V6Addr {
-    pub s6_addr: [u8; 16],
-}
-#[repr(C)]
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, Default)]
-pub struct SockaddrV6 {
-    pub sin6_family: u16,
-    pub sin6_port: u16,
-    pub sin6_flowinfo: u32,
-    pub sin6_addr: V6Addr,
-    pub sin6_scope_id: u32,
-}
-
-#[derive(Debug, Default)]
-#[repr(C)]
-pub struct PollStruct {
-    pub fd: i32,
-    pub events: i16,
-    pub revents: i16,
-}
-
-#[repr(C)]
-pub struct SockaddrDummy {
-    pub sa_family: u16,
-    pub _sa_data: [u16; 14],
+pub struct SockPair {
+    pub sock1: i32,
+    pub sock2: i32,
 }

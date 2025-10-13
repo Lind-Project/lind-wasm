@@ -6,13 +6,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-// ===== Lind File System Root =====
-pub const PATH_MAX: usize = 4096;
-pub const LIND_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
-
-// ===== Lind specific
-pub const FDKIND_KERNEL: u32 = 0;
-
 // ===== Standard File Descriptors =====
 pub const STDIN_FILENO: i32 = 0; // File descriptor for standard input
 pub const STDOUT_FILENO: i32 = 1; // File descriptor for standard output

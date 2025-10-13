@@ -31,6 +31,7 @@ nav:
     - Adding to the docs: contribute/add-docs.md
     - Security policy: contribute/security.md
     - Docker Hub release workflow: contribute/docker-release-workflow.md
+    - End-to-End Testing: contribute/e2e-testing.md
   - Community:
     - community/index.md
     - Team: community/team.md
