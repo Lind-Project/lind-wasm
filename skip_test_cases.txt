@@ -15,6 +15,7 @@ file_tests/deterministic/flock.c
 file_tests/deterministic/fstat.c
 file_tests/deterministic/fsync.c
 file_tests/deterministic/mkdir_rmdir.c
+file_tests/deterministic/open.c
 file_tests/deterministic/popen.c
 file_tests/deterministic/pread_pwrite.c
 file_tests/deterministic/readbytes.c
