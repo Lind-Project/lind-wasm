@@ -272,10 +272,17 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
 /// ## Returns:
 ///     - buf: actual system address, which is the actual position that stores data
 pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
-    // Get cage reference to translate address
+    // Get cage reference to determine translation mode
     let cage = get_cage(cageid).unwrap();
-    // Convert user buffer address to system address. We don't need to check permission here.
-    // Permission check has been handled in 3i
+    // If the guest (glibc) has already translated pointers to host addresses,
+    // skip address translation and use the pointer as-is.
+    if cage
+        .guest_addr_translation_initialized
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        return buf_arg as *const u8;
+    }
+    // Otherwise, translate the guest offset to a host pointer.
     let buf = translate_vmmap_addr(&cage, buf_arg).unwrap() as *const u8;
     buf
 }

@@ -20,12 +20,13 @@
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 /* Read NBYTES into BUF from FD.  Return the number read or -1.  */
 // Edit: Dennis
 ssize_t
 __libc_read (int fd, void *buf, size_t nbytes)
 {
-  return MAKE_SYSCALL(READ_SYSCALL, "syscall|read", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(READ_SYSCALL, "syscall|read", (uint64_t) fd, LIND_TO_HOST(buf), (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
   //return SYSCALL_CANCEL (read, fd, buf, nbytes);
 }
 libc_hidden_def (__libc_read)

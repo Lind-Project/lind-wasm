@@ -178,7 +178,19 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
         }
     }
     let cage = get_cage(path_arg_cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, path_arg).unwrap();
+
+    // Determine whether to translate the pointer or treat it as an already-translated host pointer.
+    let addr = if cage
+        .guest_addr_translation_initialized
+        .load(std::sync::atomic::Ordering::SeqCst)
+    {
+        // Guest (glibc) provided a host pointer; use it directly.
+        path_arg
+    } else {
+        // Guest provided an offset; translate to host address first.
+        translate_vmmap_addr(&cage, path_arg).unwrap()
+    };
+
     let path = match get_cstr(addr) {
         Ok(path) => path,
         Err(e) => panic!("{:?}", e),

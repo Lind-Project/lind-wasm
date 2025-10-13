@@ -3,6 +3,7 @@
 use anyhow::Result;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use crate::cage::{get_cage, Cage};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
@@ -282,6 +283,41 @@ pub fn add_to_linker<
                 UNUSED_ARG, thiscage, targetcage, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG,
                 UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
             ) as i32
+        },
+    )?;
+
+    // export lind-get-memory-base for guest to query base address (used by glibc-side translation)
+    linker.func_wrap(
+        "lind",
+        "lind-get-memory-base",
+        move |caller: Caller<'_, T>| -> u64 {
+            // Return the base address of memory[0] for the calling instance
+            let base = get_memory_base(&caller);
+            // Mark this cage as having completed guest-side address translation init.
+            let host = caller.data().clone();
+            let ctx = get_cx(&host);
+            if let Some(cage) = cage::get_cage(ctx.getpid() as u64) {
+                cage
+                    .guest_addr_translation_initialized
+                    .store(true, Ordering::SeqCst);
+            }
+            base
+        },
+    )?;
+
+    // export lind-get-cage-id for guest to query the current cage id (pid)
+    linker.func_wrap(
+        "lind",
+        "lind-get-cage-id",
+        move |caller: Caller<'_, T>| -> u64 {
+            let host = caller.data().clone();
+            let ctx = get_cx(&host);
+            if let Some(cage) = cage::get_cage(ctx.getpid() as u64) {
+                cage
+                    .guest_addr_translation_initialized
+                    .store(true, Ordering::SeqCst);
+            }
+            ctx.getpid() as u64
         },
     )?;
 
