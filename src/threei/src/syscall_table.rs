@@ -12,7 +12,7 @@ use rawposix::fs_calls::{
     link_syscall, lseek_syscall, mkdir_syscall, mmap_syscall, mprotect_syscall, munmap_syscall,
     nanosleep_time64_syscall, open_syscall, pipe2_syscall, pipe_syscall, pread_syscall,
     pwrite_syscall, read_syscall, readlink_syscall, readlinkat_syscall, rename_syscall,
-    rmdir_syscall, sbrk_syscall, stat_syscall, statfs_syscall, sync_file_range_syscall,
+    rmdir_syscall, stat_syscall, statfs_syscall, sync_file_range_syscall,
     truncate_syscall, unlink_syscall, unlinkat_syscall, write_syscall, writev_syscall,
 };
 use rawposix::net_calls::{
@@ -120,5 +120,4 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (277, sync_file_range_syscall),
     (292, dup3_syscall),
     (293, pipe2_syscall),
-    (1004, sbrk_syscall),
 ];

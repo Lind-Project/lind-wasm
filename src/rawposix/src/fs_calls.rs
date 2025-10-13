@@ -964,6 +964,12 @@ pub fn munmap_syscall(
 /// break by modifying the end of the heap entry (the first entry in `vmmap`) and invokes `mmap`
 /// to adjust the memory protection as needed.
 ///
+/// Per man page: the actual Linux system call returns the new program
+/// break on success.  On failure, the system call returns the current
+/// break.  The glibc wrapper function does some work (i.e., checks
+/// whether the new break is less than addr) to provide the 0 and -1
+/// return values.
+///
 /// # Arguments
 /// * `cageid` - Identifier of the cage that initiated the `brk` syscall.
 /// * `brk` - The new program break address.
@@ -1007,6 +1013,11 @@ pub fn brk_syscall(
 
     assert!(heap.npages == vmmap.program_break);
 
+    // passing 0 to brk will always return the current brk
+    if brk == 0 {
+        return (PAGESIZE * heap.npages) as i32;
+    }
+
     let old_brk_page = heap.npages;
     // round up the break to multiple of pages
     let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
@@ -1017,6 +1028,9 @@ pub fn brk_syscall(
             return syscall_error(Errno::ENOMEM, "brk", "no memory");
         }
     }
+
+    // remove the old entries since new entry is overlapping with it.
+    vmmap.remove_entry(0, old_brk_page);
 
     // update vmmap entry
     vmmap.add_entry_with_overwrite(
@@ -1076,99 +1090,9 @@ pub fn brk_syscall(
             panic!("brk mmap failed");
         }
     }
-
-    0
-}
-
-/// Handles the `sbrk_syscall`, interacting with the `vmmap` structure.
-///
-/// This function processes the `sbrk_syscall` by updating the `vmmap` entries and managing
-/// the program break. It calculates the target program break after applying the specified
-/// increment and delegates further processing to the `brk_handler`.
-///
-/// # Arguments
-/// * `cageid` - Identifier of the cage that initiated the `sbrk` syscall.
-/// * `brk` - Increment to adjust the program break, which can be negative.
-///
-/// ## Returns:
-///     - On success, returns the previous program break.
-///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn sbrk_syscall(
-    cageid: u64,
-    sbrk_arg: u64,
-    sbrk_cageid: u64,
-    arg2: u64,
-    arg2_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    let brk = sc_convert_sysarg_to_i32(sbrk_arg, sbrk_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!(
-            "{}: unused arguments contain unexpected values -- security violation",
-            "sbrk_syscall"
-        );
-    }
-
-    let cage = get_cage(sbrk_cageid).unwrap();
-
-    // get the heap entry
-    let mut vmmap = cage.vmmap.read();
-    let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
-
-    // program break should always be the same as the heap entry end
-    assert!(heap.npages == vmmap.program_break);
-
-    // pass 0 to sbrk will just return the current brk
-    if brk == 0 {
-        return (PAGESIZE * heap.npages) as i32;
-    }
-
-    // round up the break to multiple of pages
-    // brk increment could possibly be negative
-    let brk_page;
-    if brk < 0 {
-        brk_page = -((round_up_page(-brk as u64) >> PAGESHIFT) as i32);
-    } else {
-        brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as i32;
-    }
-
-    // drop the vmmap so that brk_handler will not deadlock
-    drop(vmmap);
-
-    if brk_syscall(
-        cageid,
-        ((heap.npages as i32 + brk_page) << PAGESHIFT) as u64,
-        sbrk_cageid,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-    ) < 0
-    {
-        return syscall_error(Errno::ENOMEM, "sbrk", "no memory") as i32;
-    }
-
-    // sbrk syscall should return previous brk address before increment
-    (PAGESIZE * heap.npages) as i32
+    
+    // return brk address
+    (PAGESIZE * brk_page) as i32
 }
 
 //------------------------------------FCNTL SYSCALL------------------------------------
