@@ -56,6 +56,7 @@ process_tests/deterministic/chain_thread.c
 process_tests/deterministic/forkdup.c
 process_tests/deterministic/forkexecuid.c
 process_tests/deterministic/forkexecv.c
+process_tests/deterministic/forkexecv-arg.c
 process_tests/deterministic/forknodup.c
 process_tests/deterministic/getppid.c
 process_tests/deterministic/getuid.c

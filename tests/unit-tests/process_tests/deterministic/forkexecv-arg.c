@@ -18,7 +18,7 @@ int main() {
     if (pid == 0) {
         // child process: call execv with argument
         char *args[] = {"hello-arg", "hello_from_parent", NULL};
-        execv("automated_tests/hello", args);
+        execv("automated_tests/hello-arg", args);
         perror("execv failed");  // only runs if execv fails
         exit(1);
     } else {
