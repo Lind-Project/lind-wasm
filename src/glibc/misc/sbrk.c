@@ -25,7 +25,6 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
-#include <syscall-template.h>
 
 /* Defined in brk.c.  */
 // This is the "virtual brk" exposed to the caller
