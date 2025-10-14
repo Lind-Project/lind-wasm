@@ -20,13 +20,14 @@
 #include <errno.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 /* Truncate PATH to LENGTH bytes.  */
 int
 __truncate (const char *path, off_t length)
 {
-	return MAKE_SYSCALL(TRUNCATE_SYSCALL, "syscall|truncate", (uint64_t) path, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_SYSCALL(TRUNCATE_SYSCALL, "syscall|truncate", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(path), (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__truncate, truncate)
 #endif

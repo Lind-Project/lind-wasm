@@ -20,6 +20,7 @@
 #include <socketcall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 ssize_t
 __libc_recv (int fd, void *buf, size_t len, int flags)
@@ -28,7 +29,7 @@ __libc_recv (int fd, void *buf, size_t len, int flags)
    // `recv(sockfd, buf, size, flags);`
    // is equivalent to
    // `recv(sockfd, buf, size, flags, NULL, NULL);`
-   return MAKE_SYSCALL(RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED);
 }
 weak_alias (__libc_recv, recv)
 weak_alias (__libc_recv, __recv)

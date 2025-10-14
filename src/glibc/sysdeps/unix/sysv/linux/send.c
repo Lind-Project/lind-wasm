@@ -20,6 +20,7 @@
 #include <socketcall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 ssize_t
 __libc_send (int fd, const void *buf, size_t len, int flags)
@@ -28,7 +29,7 @@ __libc_send (int fd, const void *buf, size_t len, int flags)
    // `send(sockfd, buf, size, flags);`
    // is equivalent to
    // `sendto(sockfd, buf, size, flags, NULL, 0);`
-   return MAKE_SYSCALL(SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, 0, 0);
+   return MAKE_SYSCALL(SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), (uint64_t) len, (uint64_t) flags, 0, 0);
 }
 weak_alias (__libc_send, send)
 weak_alias (__libc_send, __send)
