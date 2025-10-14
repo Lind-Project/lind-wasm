@@ -655,11 +655,17 @@ pub fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
+    let mut addr = {
+        if addr_arg == 0 {
+            0 as *mut u8
+        } else {
+            sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid)
+        }
+    };
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-    let mut fildes = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
     let cage = get_cage(cageid).unwrap();
@@ -710,8 +716,11 @@ pub fn mmap_syscall(
             result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
         } else {
             // use address user provided as hint to find address
-            result =
-                vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+            result = vmmap.find_map_space_with_hint(
+                rounded_length as u32 >> PAGESHIFT,
+                1,
+                addr as u32 >> PAGESHIFT,
+            );
         }
 
         // did not find desired memory region
@@ -3698,6 +3707,9 @@ pub fn shmget_syscall(
     let shmid: i32;
     let metadata = &SHM_METADATA;
 
+    // The size of the segment should be rounded up to a multiple of pages
+    let rounded_size = round_up_page(size as u64) as usize;
+
     match metadata.shmkeyidtable.entry(key) {
         Occupied(occupied) => {
             if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
@@ -3718,7 +3730,7 @@ pub fn shmget_syscall(
                 );
             }
 
-            if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
+            if (rounded_size as u32) < SHMMIN || (rounded_size as u32) > SHMMAX {
                 return syscall_error(
                     Errno::EINVAL,
                     "shmget",
@@ -3730,7 +3742,14 @@ pub fn shmget_syscall(
             vacant.insert(shmid);
             let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
-            let segment = new_shm_segment(key, size, cageid as u32, DEFAULT_UID, DEFAULT_GID, mode);
+            let segment = new_shm_segment(
+                key,
+                rounded_size,
+                cageid as u32,
+                DEFAULT_UID,
+                DEFAULT_GID,
+                mode,
+            );
             metadata.shmtable.insert(shmid, segment);
         }
     };
@@ -3794,7 +3813,13 @@ pub fn shmat_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
-    let addr = sc_convert_addr_to_host(shmaddr_arg, shmaddr_cageid, cageid);
+    let mut useraddr = {
+        if shmaddr_arg == 0 {
+            0 as u32
+        } else {
+            sc_convert_sysarg_to_u32(shmaddr_arg, shmaddr_cageid, cageid)
+        }
+    };
     let shmflag = sc_convert_sysarg_to_i32(shmflg_arg, shmflg_cageid, cageid);
     let mut prot = 0;
     // Validate unused args
@@ -3824,8 +3849,8 @@ pub fn shmat_syscall(
     };
 
     // Check that the provided address is page aligned.
-    let rounded_addr = round_up_page(addr as u64);
-    if rounded_addr != addr as u64 {
+    let rounded_addr = round_up_page(useraddr as u64);
+    if rounded_addr != useraddr as u64 {
         return syscall_error(Errno::EINVAL, "shmat", "address is not aligned");
     }
 
@@ -3834,7 +3859,6 @@ pub fn shmat_syscall(
 
     // Initialize the user address from the provided address pointer.
     // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
-    let mut useraddr = addr as u32;
     let mut vmmap = cage.vmmap.write();
     let result;
     if useraddr == 0 {
@@ -3844,8 +3868,15 @@ pub fn shmat_syscall(
     } else {
         // Use the user-specified address as a hint to find an appropriate memory address
         // for the shared memory segment.
-        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+        result = vmmap.find_map_space_with_hint(
+            rounded_length as u32 >> PAGESHIFT,
+            1,
+            useraddr as u32 >> PAGESHIFT,
+        );
     }
+    // drop the write lock of vmmap to avoid deadlock
+    drop(vmmap);
+
     if result.is_none() {
         // If no suitable memory space is found, return an error indicating insufficient memory.
         return syscall_error(Errno::ENOMEM, "shmat", "no memory") as i32;
@@ -3864,6 +3895,9 @@ pub fn shmat_syscall(
 
     // Call the raw shmat helper to attach the shared memory segment.
     let result = shmat_helper(cageid, sysaddr as *mut u8, shmflag, shmid);
+    let vmmap = cage.vmmap.read();
+    let result = vmmap.sys_to_user(result);
+    drop(vmmap);
 
     // If the syscall succeeded, update the vmmap entry.
     if result as i32 >= 0 {
@@ -3878,22 +3912,19 @@ pub fn shmat_syscall(
         // Add a new vmmap entry for the shared memory segment.
         // Since shared memory is not file-backed, there are no extra mapping flags
         // or file offset parameters to consider; thus, we pass 0 for both.
-        let add_result = vmmap.add_entry_with_overwrite(
-            useraddr >> PAGESHIFT,
-            (rounded_length >> PAGESHIFT) as u32,
-            prot,
-            maxprot,
-            0, // No flags for shared memory mapping
-            backing,
-            0, // Offset is not applicable for shared memory
-            len as i64,
-            cageid,
-        );
-
-        // Check if adding the entry was successful.
-        if add_result.is_err() {
-            return syscall_error(Errno::ENOMEM, "shmat", "failed to add vmmap entry");
-        }
+        vmmap
+            .add_entry_with_overwrite(
+                useraddr >> PAGESHIFT,
+                (rounded_length >> PAGESHIFT) as u32,
+                prot,
+                maxprot,
+                0, // No flags for shared memory mapping
+                backing,
+                0, // Offset is not applicable for shared memory
+                len as i64,
+                cageid,
+            )
+            .expect("shmat: failed to add vmmap entry");
     } else {
         // If the syscall failed, propagate the error.
         return result as i32;
@@ -3942,7 +3973,7 @@ pub fn shmdt_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let addr = sc_convert_addr_to_host(shmaddr_arg, shmaddr_cageid, cageid);
+    let useraddr = sc_convert_sysarg_to_u32(shmaddr_arg, shmaddr_cageid, cageid);
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -3959,8 +3990,8 @@ pub fn shmdt_syscall(
     let cage = get_cage(cageid).unwrap();
 
     // Check that the provided address is aligned on a page boundary.
-    let rounded_addr = round_up_page(addr as u64) as usize;
-    if rounded_addr != addr as usize {
+    let rounded_addr = round_up_page(useraddr as u64) as usize;
+    if rounded_addr != useraddr as usize {
         return syscall_error(Errno::EINVAL, "shmdt", "address is not aligned");
     }
 
@@ -3979,10 +4010,12 @@ pub fn shmdt_syscall(
     // This call removes the range starting at the page-aligned user address,
     // for the number of pages that cover the shared memory region.
     let mut vmmap = cage.vmmap.write();
-    vmmap.remove_entry(
-        rounded_addr as u32 >> PAGESHIFT,
-        (length as u32) >> PAGESHIFT,
-    );
+    vmmap
+        .remove_entry(
+            rounded_addr as u32 >> PAGESHIFT,
+            (length as u32) >> PAGESHIFT,
+        )
+        .expect("shmdt: remove_entry failed");
 
     0
 }
@@ -4037,7 +4070,7 @@ pub fn shmctl_syscall(
 ) -> i32 {
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
     let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
-    let buf = sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid);
+    let buf = sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid).unwrap();
 
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -4055,7 +4088,7 @@ pub fn shmctl_syscall(
     if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
         match cmd {
             IPC_STAT => {
-                *buf.unwrap() = segment.shminfo;
+                *buf = segment.shminfo;
             }
             IPC_RMID => {
                 segment.rmid = true;
