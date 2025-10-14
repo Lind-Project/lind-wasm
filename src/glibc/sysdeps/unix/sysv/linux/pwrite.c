@@ -27,7 +27,7 @@
 ssize_t
 __libc_pwrite (int fd, const void *buf, size_t count, off_t offset)
 {
-   return MAKE_SYSCALL(PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd, LIND_TO_HOST(buf), (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd, TRANSLATE_GUEST_POINTER_TO_HOST(buf), (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
 }
 
 strong_alias (__libc_pwrite, __pwrite)

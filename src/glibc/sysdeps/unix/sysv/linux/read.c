@@ -26,7 +26,7 @@
 ssize_t
 __libc_read (int fd, void *buf, size_t nbytes)
 {
-  return MAKE_SYSCALL(READ_SYSCALL, "syscall|read", (uint64_t) fd, LIND_TO_HOST(buf), (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(READ_SYSCALL, "syscall|read", (uint64_t) fd, TRANSLATE_GUEST_POINTER_TO_HOST(buf), (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
   //return SYSCALL_CANCEL (read, fd, buf, nbytes);
 }
 libc_hidden_def (__libc_read)
