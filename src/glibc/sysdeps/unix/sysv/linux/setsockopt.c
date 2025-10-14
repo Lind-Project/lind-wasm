@@ -90,7 +90,9 @@ setsockopt32 (int fd, int level, int optname, const void *optval,
 int
 __setsockopt (int fd, int level, int optname, const void *optval, socklen_t len)
 {
-  int r = setsockopt_syscall (fd, level, optname, optval, len);
+  /* Translate only the guest-provided pointer on the direct path. */
+  const void *translated_optval = TRANSLATE_GUEST_POINTER_TO_HOST(optval);
+  int r = setsockopt_syscall (fd, level, optname, translated_optval, len);
 
 #ifndef __ASSUME_TIME64_SYSCALLS
   if (r == -1 && errno == ENOPROTOOPT)
