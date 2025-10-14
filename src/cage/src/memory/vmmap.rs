@@ -978,19 +978,21 @@ mod tests {
     #[test]
     fn test_change_prot_entire_region() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate a continuous region of 10 pages with READ|WRITE protection
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change protection of the entire region to READ|EXEC
         vmmap.change_prot(100, 10, PROT_READ | PROT_EXEC);
@@ -1000,7 +1002,7 @@ mod tests {
         assert_eq!(entry.page_num, 100);
         assert_eq!(entry.npages, 10);
         assert_eq!(entry.prot, PROT_READ | PROT_EXEC);
-        
+
         // Verify no fragmentation - should still be one entry
         let count = vmmap.entries.overlapping(ie(100, 110)).count();
         assert_eq!(count, 1, "Region should remain as a single entry");
@@ -1011,19 +1013,21 @@ mod tests {
     #[test]
     fn test_change_prot_middle_of_region() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate a continuous region of 10 pages
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change protection of middle 4 pages (102-105)
         vmmap.change_prot(102, 4, PROT_READ);
@@ -1035,11 +1039,11 @@ mod tests {
         // First part: pages 100-101 with original protection
         let first = vmmap.find_page(100).expect("First part should exist");
         assert_eq!(first.prot, PROT_READ | PROT_WRITE);
-        
+
         // Middle part: pages 102-105 with new protection
         let middle = vmmap.find_page(102).expect("Middle part should exist");
         assert_eq!(middle.prot, PROT_READ);
-        
+
         // Last part: pages 106-109 with original protection
         let last = vmmap.find_page(106).expect("Last part should exist");
         assert_eq!(last.prot, PROT_READ | PROT_WRITE);
@@ -1050,19 +1054,21 @@ mod tests {
     #[test]
     fn test_change_prot_beginning_of_region() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate a continuous region of 10 pages
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change protection of first 3 pages
         vmmap.change_prot(100, 3, PROT_READ);
@@ -1074,7 +1080,7 @@ mod tests {
         // First part: pages 100-102 with new protection
         let first = vmmap.find_page(100).expect("First part should exist");
         assert_eq!(first.prot, PROT_READ);
-        
+
         // Second part: pages 103-109 with original protection
         let second = vmmap.find_page(103).expect("Second part should exist");
         assert_eq!(second.prot, PROT_READ | PROT_WRITE);
@@ -1085,19 +1091,21 @@ mod tests {
     #[test]
     fn test_change_prot_end_of_region() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate a continuous region of 10 pages
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change protection of last 3 pages
         vmmap.change_prot(107, 3, PROT_READ);
@@ -1109,7 +1117,7 @@ mod tests {
         // First part: pages 100-106 with original protection
         let first = vmmap.find_page(100).expect("First part should exist");
         assert_eq!(first.prot, PROT_READ | PROT_WRITE);
-        
+
         // Second part: pages 107-109 with new protection
         let second = vmmap.find_page(107).expect("Second part should exist");
         assert_eq!(second.prot, PROT_READ);
@@ -1120,63 +1128,77 @@ mod tests {
     #[test]
     fn test_change_prot_spanning_multiple_regions() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate three separate continuous regions
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
-        
-        vmmap.add_entry_with_overwrite(
-            120, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
-        
-        vmmap.add_entry_with_overwrite(
-            140, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        vmmap
+            .add_entry_with_overwrite(
+                120,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        vmmap
+            .add_entry_with_overwrite(
+                140,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change protection spanning parts of all three regions (105-145)
         vmmap.change_prot(105, 40, PROT_READ);
 
         // Verify first region is split (100-104 original, 105-109 changed)
-        let first_orig = vmmap.find_page(100).expect("First original part should exist");
+        let first_orig = vmmap
+            .find_page(100)
+            .expect("First original part should exist");
         assert_eq!(first_orig.prot, PROT_READ | PROT_WRITE);
-        
-        let first_changed = vmmap.find_page(105).expect("First changed part should exist");
+
+        let first_changed = vmmap
+            .find_page(105)
+            .expect("First changed part should exist");
         assert_eq!(first_changed.prot, PROT_READ);
-        
+
         // Verify second region is fully changed (120-129)
         let second = vmmap.find_page(120).expect("Second region should exist");
         assert_eq!(second.prot, PROT_READ);
-        
+
         // Verify third region is split (140-144 changed, 145-149 original)
-        let third_changed = vmmap.find_page(140).expect("Third changed part should exist");
+        let third_changed = vmmap
+            .find_page(140)
+            .expect("Third changed part should exist");
         assert_eq!(third_changed.prot, PROT_READ);
-        
-        let third_orig = vmmap.find_page(145).expect("Third original part should exist");
+
+        let third_orig = vmmap
+            .find_page(145)
+            .expect("Third original part should exist");
         assert_eq!(third_orig.prot, PROT_READ | PROT_WRITE);
     }
 
@@ -1185,19 +1207,21 @@ mod tests {
     #[test]
     fn test_change_prot_to_same_value() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate a continuous region
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change protection to the same value
         vmmap.change_prot(100, 10, PROT_READ | PROT_WRITE);
@@ -1207,7 +1231,7 @@ mod tests {
         assert_eq!(entry.page_num, 100);
         assert_eq!(entry.npages, 10);
         assert_eq!(entry.prot, PROT_READ | PROT_WRITE);
-        
+
         let count = vmmap.entries.overlapping(ie(100, 110)).count();
         assert_eq!(count, 1, "Region should remain as a single entry");
     }
@@ -1217,19 +1241,21 @@ mod tests {
     #[test]
     fn test_change_prot_exact_boundaries() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate a continuous region
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change protection on a single page in the middle
         vmmap.change_prot(105, 1, PROT_READ);
@@ -1241,10 +1267,10 @@ mod tests {
         // Verify boundaries are correct
         let before = vmmap.find_page(104).expect("Before should exist");
         assert_eq!(before.prot, PROT_READ | PROT_WRITE);
-        
+
         let changed = vmmap.find_page(105).expect("Changed page should exist");
         assert_eq!(changed.prot, PROT_READ);
-        
+
         let after = vmmap.find_page(106).expect("After should exist");
         assert_eq!(after.prot, PROT_READ | PROT_WRITE);
     }
@@ -1254,23 +1280,25 @@ mod tests {
     #[test]
     fn test_change_prot_multiple_times() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate a continuous region
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // First change: middle portion to READ
         vmmap.change_prot(103, 4, PROT_READ);
-        
+
         // Second change: overlapping portion to EXEC
         vmmap.change_prot(105, 3, PROT_EXEC);
 
@@ -1278,13 +1306,13 @@ mod tests {
         // Should have: [100-102: R|W], [103-104: R], [105-107: X], [108-109: R|W]
         let page_102 = vmmap.find_page(102).expect("Page 102 should exist");
         assert_eq!(page_102.prot, PROT_READ | PROT_WRITE);
-        
+
         let page_103 = vmmap.find_page(103).expect("Page 103 should exist");
         assert_eq!(page_103.prot, PROT_READ);
-        
+
         let page_105 = vmmap.find_page(105).expect("Page 105 should exist");
         assert_eq!(page_105.prot, PROT_EXEC);
-        
+
         let page_108 = vmmap.find_page(108).expect("Page 108 should exist");
         assert_eq!(page_108.prot, PROT_READ | PROT_WRITE);
     }
@@ -1294,19 +1322,21 @@ mod tests {
     #[test]
     fn test_change_prot_to_none() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate a continuous region
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change protection to PROT_NONE
         vmmap.change_prot(103, 4, PROT_NONE);
@@ -1314,7 +1344,7 @@ mod tests {
         // Verify the protection is set to PROT_NONE
         let entry = vmmap.find_page(103).expect("Entry should exist");
         assert_eq!(entry.prot, PROT_NONE);
-        
+
         // Verify the region is properly split
         let entries: Vec<_> = vmmap.entries.overlapping(ie(100, 110)).collect();
         assert_eq!(entries.len(), 3, "Should be split into 3 parts");
@@ -1325,32 +1355,36 @@ mod tests {
     #[test]
     fn test_change_prot_preserves_backing_type() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate anonymous region
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Allocate shared memory region
-        vmmap.add_entry_with_overwrite(
-            120, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::SharedMemory(12345),
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                120,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::SharedMemory(12345),
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change protection on both regions
         vmmap.change_prot(105, 20, PROT_READ);
@@ -1359,8 +1393,10 @@ mod tests {
         let anon_entry = vmmap.find_page(105).expect("Anonymous entry should exist");
         assert_eq!(anon_entry.backing, MemoryBackingType::Anonymous);
         assert_eq!(anon_entry.prot, PROT_READ);
-        
-        let shm_entry = vmmap.find_page(120).expect("Shared memory entry should exist");
+
+        let shm_entry = vmmap
+            .find_page(120)
+            .expect("Shared memory entry should exist");
         assert_eq!(shm_entry.backing, MemoryBackingType::SharedMemory(12345));
         assert_eq!(shm_entry.prot, PROT_READ);
     }
@@ -1370,19 +1406,21 @@ mod tests {
     #[test]
     fn test_change_prot_preserves_maxprot() {
         let mut vmmap = Vmmap::new();
-        
+
         // Allocate with specific maxprot
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ, 
-            PROT_READ | PROT_WRITE,  // maxprot allows write but current doesn't
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ,
+                PROT_READ | PROT_WRITE, // maxprot allows write but current doesn't
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
 
         // Change current protection
         vmmap.change_prot(100, 10, PROT_READ | PROT_WRITE);
@@ -1403,43 +1441,47 @@ mod tests {
     #[test]
     fn test_add_entry_with_overwrite_replaces_existing_full_overlap() {
         let mut vmmap = Vmmap::new();
-        
+
         // Add initial entry with READ|WRITE protection
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Verify initial state
         let initial = vmmap.find_page(100).expect("Initial entry should exist");
         assert_eq!(initial.prot, PROT_READ | PROT_WRITE);
         assert_eq!(initial.npages, 10);
-        
+
         // Overwrite with new entry (exact same range, different protection)
-        vmmap.add_entry_with_overwrite(
-            100, 
-            10, 
-            PROT_READ,  // Different protection
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ, // Different protection
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Verify the old entry was replaced, not merged
         let replaced = vmmap.find_page(100).expect("Entry should exist");
         assert_eq!(replaced.prot, PROT_READ, "Protection should be replaced");
         assert_eq!(replaced.npages, 10);
-        
+
         // Verify there's still only one entry
         let count = vmmap.entries.overlapping(ie(100, 110)).count();
         assert_eq!(count, 1, "Should be exactly one entry (old one replaced)");
@@ -1450,47 +1492,51 @@ mod tests {
     #[test]
     fn test_add_entry_with_overwrite_partial_overlap() {
         let mut vmmap = Vmmap::new();
-        
+
         // Add initial large entry: pages 100-119
-        vmmap.add_entry_with_overwrite(
-            100, 
-            20, 
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::Anonymous,
-            0, 
-            0, 
-            0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                20,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Overwrite middle portion: pages 105-114
-        vmmap.add_entry_with_overwrite(
-            105, 
-            10, 
-            PROT_READ,  // Different protection
-            PROT_READ | PROT_EXEC,
-            0, 
-            MemoryBackingType::SharedMemory(999),  // Different backing
-            0, 
-            0, 
-            0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                105,
+                10,
+                PROT_READ, // Different protection
+                PROT_READ | PROT_EXEC,
+                0,
+                MemoryBackingType::SharedMemory(999), // Different backing
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Verify the entry was split into 3 parts
         let entries: Vec<_> = vmmap.entries.overlapping(ie(100, 120)).collect();
         assert_eq!(entries.len(), 3, "Should be split into 3 parts");
-        
+
         // First part: pages 100-104 (original)
         let first = vmmap.find_page(100).expect("First part should exist");
         assert_eq!(first.prot, PROT_READ | PROT_WRITE);
         assert_eq!(first.backing, MemoryBackingType::Anonymous);
-        
+
         // Middle part: pages 105-114 (new/overwritten)
         let middle = vmmap.find_page(105).expect("Middle part should exist");
         assert_eq!(middle.prot, PROT_READ);
         assert_eq!(middle.backing, MemoryBackingType::SharedMemory(999));
-        
+
         // Last part: pages 115-119 (original)
         let last = vmmap.find_page(115).expect("Last part should exist");
         assert_eq!(last.prot, PROT_READ | PROT_WRITE);
@@ -1502,42 +1548,71 @@ mod tests {
     #[test]
     fn test_add_entry_with_overwrite_removes_completely_covered_entries() {
         let mut vmmap = Vmmap::new();
-        
+
         // Add three separate small entries
-        vmmap.add_entry_with_overwrite(
-            100, 5, PROT_READ, PROT_READ | PROT_WRITE, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
-        vmmap.add_entry_with_overwrite(
-            110, 5, PROT_WRITE, PROT_READ | PROT_WRITE, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
-        vmmap.add_entry_with_overwrite(
-            120, 5, PROT_EXEC, PROT_READ | PROT_WRITE | PROT_EXEC, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                5,
+                PROT_READ,
+                PROT_READ | PROT_WRITE,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        vmmap
+            .add_entry_with_overwrite(
+                110,
+                5,
+                PROT_WRITE,
+                PROT_READ | PROT_WRITE,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        vmmap
+            .add_entry_with_overwrite(
+                120,
+                5,
+                PROT_EXEC,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Verify 3 separate entries exist
         assert_eq!(vmmap.entries.iter().count(), 3);
-        
+
         // Overwrite with one large entry covering all three
-        vmmap.add_entry_with_overwrite(
-            95, 
-            35,  // Covers pages 95-129, including all three previous entries
-            PROT_READ | PROT_WRITE, 
-            PROT_READ | PROT_WRITE | PROT_EXEC,
-            0, 
-            MemoryBackingType::SharedMemory(12345),
-            0, 
-            0, 
-            0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                95,
+                35, // Covers pages 95-129, including all three previous entries
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                0,
+                MemoryBackingType::SharedMemory(12345),
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Verify old entries are gone, replaced by single new entry
         assert_eq!(vmmap.entries.iter().count(), 1, "Should be only one entry");
-        
+
         let new_entry = vmmap.find_page(100).expect("New entry should exist");
         assert_eq!(new_entry.prot, PROT_READ | PROT_WRITE);
         assert_eq!(new_entry.backing, MemoryBackingType::SharedMemory(12345));
@@ -1548,35 +1623,62 @@ mod tests {
     #[test]
     fn test_add_entry_with_overwrite_exact_boundaries() {
         let mut vmmap = Vmmap::new();
-        
+
         // Add entry at pages 100-109
-        vmmap.add_entry_with_overwrite(
-            100, 10, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Add adjacent entry at pages 110-119 (no overlap)
-        vmmap.add_entry_with_overwrite(
-            110, 10, PROT_READ, PROT_READ, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                110,
+                10,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Verify two separate entries
         assert_eq!(vmmap.entries.iter().count(), 2);
-        
+
         // Add entry that ends exactly where first starts (pages 90-99)
-        vmmap.add_entry_with_overwrite(
-            90, 10, PROT_EXEC, PROT_EXEC, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                90,
+                10,
+                PROT_EXEC,
+                PROT_EXEC,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Should now have 3 separate entries with no overlap
         assert_eq!(vmmap.entries.iter().count(), 3);
-        
+
         let entry1 = vmmap.find_page(90).expect("First entry should exist");
         let entry2 = vmmap.find_page(100).expect("Second entry should exist");
         let entry3 = vmmap.find_page(110).expect("Third entry should exist");
-        
+
         assert_eq!(entry1.prot, PROT_EXEC);
         assert_eq!(entry2.prot, PROT_READ | PROT_WRITE);
         assert_eq!(entry3.prot, PROT_READ);
@@ -1594,23 +1696,34 @@ mod tests {
         let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
-        
+
         // Add entry at pages 100-109
-        vmmap.add_entry_with_overwrite(
-            100, 10, PROT_READ | PROT_WRITE, PROT_READ | PROT_WRITE, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Find space with hint at page 50 (NOT address 50*PAGESIZE)
         let space = vmmap.find_map_space_with_hint(5, 1, 50);
-        
+
         assert!(space.is_some(), "Should find space");
         let interval = space.unwrap();
-        
+
         // Space should be found after hint page 50 but before occupied page 100
         assert!(interval.start() >= 50, "Should start at or after hint page");
-        assert!(interval.end() <= 100 || interval.start() >= 110, 
-                "Should not overlap with occupied pages 100-109");
+        assert!(
+            interval.end() <= 100 || interval.start() >= 110,
+            "Should not overlap with occupied pages 100-109"
+        );
     }
 
     /// Test: find_map_space_with_hint searches from hint page onwards
@@ -1620,28 +1733,49 @@ mod tests {
         let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
-        
+
         // Add entries leaving gap at pages 50-99
-        vmmap.add_entry_with_overwrite(
-            10, 30, PROT_READ, PROT_READ, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
-        vmmap.add_entry_with_overwrite(
-            100, 50, PROT_READ, PROT_READ, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                10,
+                30,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                50,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Search with hint=60 (page number, not address)
         // Should find space in gap 50-99, specifically from page 60 onwards
         let space = vmmap.find_map_space_with_hint(10, 1, 60);
-        
+
         assert!(space.is_some(), "Should find space");
         let interval = space.unwrap();
-        
+
         // The found space should be at or after hint page 60
-        assert!(interval.start() >= 60, 
-                "Space should start at or after hint page 60, got page {}", interval.start());
+        assert!(
+            interval.start() >= 60,
+            "Space should start at or after hint page 60, got page {}",
+            interval.start()
+        );
     }
 
     /// Test: find_map_space_with_hint with hint=0 behaves like find_map_space
@@ -1651,22 +1785,33 @@ mod tests {
         let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
-        
+
         // Add entry leaving space at beginning
-        vmmap.add_entry_with_overwrite(
-            100, 50, PROT_READ, PROT_READ, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                50,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Find space with hint=0 (start from page 0)
         let space_with_hint = vmmap.find_map_space_with_hint(10, 1, 0);
-        
+
         assert!(space_with_hint.is_some(), "Should find space");
         let interval = space_with_hint.unwrap();
-        
+
         // Should find space starting from page 0
-        assert!(interval.end() <= 100, 
-                "Should find space before occupied region starting at page 100");
+        assert!(
+            interval.end() <= 100,
+            "Should find space before occupied region starting at page 100"
+        );
     }
 
     /// Test: find_map_space_with_hint with large hint page number
@@ -1675,24 +1820,35 @@ mod tests {
     fn test_find_map_space_with_hint_large_page_number() {
         let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
-        vmmap.end_address = 100000;  // Large address space
-        
+        vmmap.end_address = 100000; // Large address space
+
         // Add entry at low pages
-        vmmap.add_entry_with_overwrite(
-            100, 50, PROT_READ, PROT_READ, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                100,
+                50,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Search with hint at high page number (e.g., page 50000)
         let space = vmmap.find_map_space_with_hint(100, 1, 50000);
-        
+
         assert!(space.is_some(), "Should find space in large address space");
         let interval = space.unwrap();
-        
+
         // Space should be found at or after the high hint page
-        assert!(interval.start() >= 50000, 
-                "Should find space at or after hint page 50000, got page {}", 
-                interval.start());
+        assert!(
+            interval.start() >= 50000,
+            "Should find space at or after hint page 50000, got page {}",
+            interval.start()
+        );
     }
 
     /// Test: find_map_space_with_hint respects alignment (pages_per_map)
@@ -1702,24 +1858,39 @@ mod tests {
         let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 10000;
-        
+
         // Add entry creating a gap
-        vmmap.add_entry_with_overwrite(
-            50, 20, PROT_READ, PROT_READ, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                50,
+                20,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Find aligned space: 10 pages, aligned to 8-page boundaries, hint at page 100
         let space = vmmap.find_map_space_with_hint(10, 8, 100);
-        
+
         assert!(space.is_some(), "Should find aligned space");
         let interval = space.unwrap();
-        
+
         // Result should be aligned to pages_per_map (8 pages)
-        assert_eq!(interval.start() % 8, 0, 
-                   "Start should be aligned to 8-page boundary");
-        assert_eq!(interval.end() % 8, 0, 
-                   "End should be aligned to 8-page boundary");
+        assert_eq!(
+            interval.start() % 8,
+            0,
+            "Start should be aligned to 8-page boundary"
+        );
+        assert_eq!(
+            interval.end() % 8,
+            0,
+            "End should be aligned to 8-page boundary"
+        );
     }
 
     // ============================================================================
@@ -1731,31 +1902,49 @@ mod tests {
     #[test]
     fn test_add_entry_strict_no_overlap() {
         let mut vmmap = Vmmap::new();
-        
+
         // Add entry at pages 100-109
         let entry1 = VmmapEntry::new(
-            100, 10, PROT_READ, PROT_READ, 0, false, 0, 0, 0,
-            MemoryBackingType::Anonymous
+            100,
+            10,
+            PROT_READ,
+            PROT_READ,
+            0,
+            false,
+            0,
+            0,
+            0,
+            MemoryBackingType::Anonymous,
         );
         vmmap.add_entry(entry1);
-        
+
         // Try to add overlapping entry at pages 105-114
         // Note: add_entry uses insert_strict, which should fail on overlap
         // However, the current implementation doesn't return Result, so we
         // just verify the behavior
         let entry2 = VmmapEntry::new(
-            105, 10, PROT_WRITE, PROT_WRITE, 0, false, 0, 0, 0,
-            MemoryBackingType::Anonymous
+            105,
+            10,
+            PROT_WRITE,
+            PROT_WRITE,
+            0,
+            false,
+            0,
+            0,
+            0,
+            MemoryBackingType::Anonymous,
         );
         vmmap.add_entry(entry2);
-        
+
         // Check if the second entry was actually added or rejected
         // With insert_strict, it should be rejected
         let count = vmmap.entries.overlapping(ie(100, 115)).count();
         // insert_strict should prevent the overlap, so we should still have 1 entry
-        assert_eq!(count, 1, 
-                   "add_entry with insert_strict should not allow overlapping entries");
-        
+        assert_eq!(
+            count, 1,
+            "add_entry with insert_strict should not allow overlapping entries"
+        );
+
         // Verify original entry is unchanged
         let original = vmmap.find_page(100).expect("Original entry should exist");
         assert_eq!(original.prot, PROT_READ);
@@ -1768,15 +1957,27 @@ mod tests {
         let mut vmmap = Vmmap::new();
         vmmap.start_address = 0;
         vmmap.end_address = 100;
-        
+
         // Fill entire space
-        vmmap.add_entry_with_overwrite(
-            0, 100, PROT_READ, PROT_READ, 0,
-            MemoryBackingType::Anonymous, 0, 0, 0
-        ).unwrap();
-        
+        vmmap
+            .add_entry_with_overwrite(
+                0,
+                100,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
         // Try to find space - should return None
         let space = vmmap.find_space(10);
-        assert!(space.is_none(), "Should return None when no space available");
+        assert!(
+            space.is_none(),
+            "Should return None when no space available"
+        );
     }
 }
