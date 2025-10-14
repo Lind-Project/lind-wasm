@@ -223,6 +223,32 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     source_file = Path(source_file)
     native_output = source_file.parent / f"{source_file.stem}.o"
     
+    # Prepare any executable dependencies required by this test (like execv targets)
+    executable_backups = {}
+    created_native_execs = set()
+    native_dependencies = analyze_executable_dependencies([source_file])
+    for exec_path, dependency_source in native_dependencies.items():
+        dest_path = (LIND_FS_ROOT / exec_path).resolve()
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if dest_path.exists():
+            fd, backup_path = tempfile.mkstemp(prefix=f"{dest_path.name}_orig_", dir=str(dest_path.parent))
+            os.close(fd)
+            shutil.move(str(dest_path), backup_path)
+            executable_backups[dest_path] = Path(backup_path)
+
+        dep_compile_cmd = ["gcc", str(dependency_source), "-o", str(dest_path)]
+        try:
+            dep_proc = run_subprocess(dep_compile_cmd, label="native dep compile", shell=False)
+        except Exception as e:
+            return False, f"Exception compiling dependency {dependency_source}: {e}", "compile_error", "Failure_native_compiling"
+
+        if dep_proc.returncode != 0:
+            error_output = dep_proc.stdout + dep_proc.stderr
+            return False, f"Failed to compile dependency {dependency_source}: {error_output}", "compile_error", "Failure_native_compiling"
+
+        created_native_execs.add(dest_path)
+
     # Ensure paths are absolute to prevent cwd confusion
     if not source_file.is_absolute():
         raise ValueError(f"Source file must be absolute path, got: {source_file}")
@@ -253,6 +279,21 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
         # Clean up native binary
         if native_output.exists():
             native_output.unlink()
+
+        # Restore any executable dependencies that were swapped out
+        for dest_path in created_native_execs:
+            try:
+                if dest_path.exists():
+                    dest_path.unlink()
+            except Exception as cleanup_err:
+                logger.debug(f"Failed to remove native dependency {dest_path}: {cleanup_err}")
+
+        for dest_path, backup_path in executable_backups.items():
+            try:
+                if Path(backup_path).exists():
+                    shutil.move(str(backup_path), str(dest_path))
+            except Exception as restore_err:
+                logger.warning(f"Failed to restore dependency {dest_path} from backup: {restore_err}")
 
 # ----------------------------------------------------------------------
 # Function: get_expected_output
@@ -488,6 +529,99 @@ def analyze_testfile_dependencies(tests_to_run):
     return all_dependencies
 
 # ----------------------------------------------------------------------
+# Function: analyze_executable_dependencies
+#
+# Purpose:
+#   Analyzes test files to determine which executables they need
+#
+# Variables:
+# - Input:
+#   tests_to_run: List of test files to analyze
+# - Output:
+#   Dictionary mapping executable paths to their source file paths
+#   e.g., {'automated_tests/hello-arg': Path('hello-arg.c')}
+# ----------------------------------------------------------------------
+def analyze_executable_dependencies(tests_to_run):
+    import re
+    
+    executable_deps = {}
+    
+    for test_file in tests_to_run:
+        try:
+            with open(test_file, 'r') as f:
+                content = f.read()
+            
+            # Look for execv/execve/execl calls with quoted paths
+            # Pattern matches: execv("path/to/executable", ...)
+            exec_pattern = r'exec[vle]+\s*\(\s*"([^"]+)"'
+            matches = re.findall(exec_pattern, content, re.IGNORECASE)
+            
+            for exec_path in matches:
+                exec_name = Path(exec_path).name
+
+                candidate_sources = [
+                    test_file.parent / f"{exec_name}.c",
+                    test_file.resolve().parent / f"{exec_name}.c"
+                ]
+
+                selected_source = None
+                for candidate in candidate_sources:
+                    if candidate.exists():
+                        selected_source = candidate
+                        break
+
+                if selected_source:
+                    executable_deps[exec_path] = selected_source
+                    logger.debug(f"Found executable dependency in {test_file.name}: {exec_path} -> {selected_source.name}")
+                else:
+                    logger.debug(
+                        f"Executable {exec_path} referenced but no matching source found near {test_file}"
+                    )
+                
+        except Exception as e:
+            logger.debug(f"Could not analyze executable dependencies for {test_file}: {e}")
+    
+    return executable_deps
+
+# ----------------------------------------------------------------------
+# Function: create_required_executables
+#
+# Purpose:
+#   Compiles required executables and places them in LIND_FS_ROOT
+#
+# Variables:
+# - Input:
+#   executable_deps: Dictionary mapping executable paths to source files
+# - Output:
+#   None (creates executables in LIND_FS_ROOT)
+# ----------------------------------------------------------------------
+def create_required_executables(executable_deps):
+    if not executable_deps:
+        return
+    
+    logger.info(f"Creating {len(executable_deps)} required executable(s)")
+    
+    for exec_path, source_file in executable_deps.items():
+        try:
+            # Compile the source file to WASM
+            wasm_file, compile_err = compile_c_to_wasm(source_file)
+            
+            if wasm_file is None:
+                logger.error(f"Failed to compile {source_file}: {compile_err}")
+                continue
+            
+            # Create destination directory in LIND_FS_ROOT
+            dest_path = LIND_FS_ROOT / exec_path
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Move the compiled WASM to the destination
+            shutil.move(str(wasm_file), str(dest_path))
+            logger.info(f"Created executable: {dest_path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create executable {exec_path}: {e}")
+
+# ----------------------------------------------------------------------
 # Function: pre_test
 #
 # Purpose:
@@ -548,6 +682,11 @@ def pre_test(tests_to_run=None):
         except OSError:
             # Fallback to copying in case symlink creation fails
             shutil.copy2(readlinkfile_path, symlink_path)
+    
+    # Create required executables
+    if tests_to_run:
+        executable_deps = analyze_executable_dependencies(tests_to_run)
+        create_required_executables(executable_deps)
 
 # ----------------------------------------------------------------------
 # Function: generate_html_report
