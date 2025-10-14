@@ -262,7 +262,6 @@ pub fn unmap_shm_mappings(cageid: u64) {
 /// * `Some(index)` if the address is found in the vector.
 /// * `None` if the address does not exist in the mapping.
 pub fn rev_shm_find_index_by_addr(rev_shm: &Vec<(u64, i32)>, shmaddr: u64) -> Option<usize> {
-    println!("rev_shm: {:?}, shmaddr: {:?}", rev_shm, shmaddr);
     for (index, val) in rev_shm.iter().enumerate() {
         if val.0 == shmaddr as u64 {
             return Some(index);

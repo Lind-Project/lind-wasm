@@ -3707,6 +3707,9 @@ pub fn shmget_syscall(
     let shmid: i32;
     let metadata = &SHM_METADATA;
 
+    // The size of the segment should be rounded up to a multiple of pages
+    let rounded_size = round_up_page(size as u64) as usize;
+
     match metadata.shmkeyidtable.entry(key) {
         Occupied(occupied) => {
             if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
@@ -3727,7 +3730,7 @@ pub fn shmget_syscall(
                 );
             }
 
-            if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
+            if (rounded_size as u32) < SHMMIN || (rounded_size as u32) > SHMMAX {
                 return syscall_error(
                     Errno::EINVAL,
                     "shmget",
@@ -3739,7 +3742,14 @@ pub fn shmget_syscall(
             vacant.insert(shmid);
             let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
-            let segment = new_shm_segment(key, size, cageid as u32, DEFAULT_UID, DEFAULT_GID, mode);
+            let segment = new_shm_segment(
+                key,
+                rounded_size,
+                cageid as u32,
+                DEFAULT_UID,
+                DEFAULT_GID,
+                mode,
+            );
             metadata.shmtable.insert(shmid, segment);
         }
     };
