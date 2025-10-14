@@ -114,3 +114,4 @@ RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmt
 FROM scratch AS artifacts
 COPY --from=test /report.html /wasm-e2e-report.html
 COPY --from=test /e2e_comment.md /e2e_comment.md
+COPY --from=test /e2e_status /e2e_status

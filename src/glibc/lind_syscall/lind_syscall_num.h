@@ -68,7 +68,6 @@
 #define EXEC_SYSCALL 59
 #define EXECVE_SYSCALL 59
 #define EXIT_SYSCALL 60
-#define WAIT_SYSCALL 61
 #define WAITPID_SYSCALL 61
 #define KILL_SYSCALL 62
 
@@ -113,8 +112,6 @@
 #define SYNC_FILE_RANGE 277
 #define DUP3_SYSCALL 292
 #define PIPE2_SYSCALL 293
-
-#define SBRK_SYSCALL 1004
 
 #endif /* _LIND_SYSCALL_NUM_H */
  

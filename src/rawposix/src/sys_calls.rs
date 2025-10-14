@@ -259,7 +259,17 @@ pub fn waitpid_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let status = sc_convert_sysarg_to_i32_ref(status_arg, status_cageid, cageid);
+    let status = {
+        if status_arg == 0 {
+            None
+        } else {
+            Some(sc_convert_sysarg_to_i32_ref(
+                status_arg,
+                status_cageid,
+                cageid,
+            ))
+        }
+    };
     let options = sc_convert_sysarg_to_i32(options_arg, options_cageid, cageid);
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -389,59 +399,12 @@ pub fn waitpid_syscall(
     // reach here means we already found the desired exited child
     let zombie = zombie_opt.unwrap();
     // update the status
-    *status = zombie.exit_code;
+    if let Some(status) = status {
+        *status = zombie.exit_code;
+    }
 
     // return child's cageid
     zombie.cageid as i32
-}
-
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/wait.2.html
-///
-/// See comments of waitpid_syscall
-pub fn wait_syscall(
-    cageid: u64,
-    status_arg: u64,
-    status_cageid: u64,
-    arg2: u64,
-    arg2_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    // would check when `secure` flag has been set during compilation,
-    // no-op by default
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!(
-            "{}: unused arguments contain unexpected values -- security violation",
-            "wait_syscall"
-        );
-    }
-    // left type conversion done inside waitpid_syscall
-    waitpid_syscall(
-        cageid,
-        0,
-        0,
-        status_arg,
-        status_cageid,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getpid.2.html
@@ -819,6 +782,18 @@ pub fn kill_syscall(
     if sig <= 0 || sig >= 32 {
         return syscall_error(Errno::EINVAL, "kill", "Invalid signal number");
     }
+
+    // If pid equals 0, then sig is sent to every process in the process
+    // group of the calling process.
+    // As we do not have the concept of process group, we just send the signal
+    // to itself
+    let target_cage = {
+        if target_cage == 0 {
+            cageid
+        } else {
+            target_cage as u64
+        }
+    };
 
     // Optionally, you could verify that certain signals (e.g., SIGKILL, SIGSTOP)
     // are handled with special semantics; however, in this implementation we assume they are valid.

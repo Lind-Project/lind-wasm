@@ -20,8 +20,14 @@ test:
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
 	LIND_WASM_BASE=. LIND_FS_ROOT=src/RawPOSIX/tmp \
 	./scripts/wasmtestreport.py && \
-	cat results.json && \
-	! grep '"number_of_failures": [^0]' results.json
+	cat results.json; \
+	if grep -q '"number_of_failures": [^0]' results.json; then \
+	  echo "E2E_STATUS=fail" > e2e_status; \
+	else \
+	  echo "E2E_STATUS=pass" > e2e_status; \
+	fi; \
+	exit 0
+
 
 .PHONY: md_generation
 OUT ?= .
