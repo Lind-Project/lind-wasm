@@ -163,7 +163,7 @@ impl ShmSegment {
     // unmap shared segment, decrease attachments
     // decrease references within attached cages map
     pub fn unmap_shm(&mut self, shmaddr: *mut u8, cageid: u64) {
-        unsafe {
+        let mmap_ret = unsafe {
             (libc::mmap(
                 shmaddr as *mut c_void,
                 self.size as usize,
@@ -173,6 +173,7 @@ impl ShmSegment {
                 0,
             ) as usize)
         };
+        assert!(mmap_ret == shmaddr as usize);
 
         self.shminfo.shm_nattch -= 1;
         self.shminfo.shm_dtime = timestamp() as isize;
@@ -260,9 +261,10 @@ pub fn unmap_shm_mappings(cageid: u64) {
 /// # Returns
 /// * `Some(index)` if the address is found in the vector.
 /// * `None` if the address does not exist in the mapping.
-pub fn rev_shm_find_index_by_addr(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Option<usize> {
+pub fn rev_shm_find_index_by_addr(rev_shm: &Vec<(u64, i32)>, shmaddr: u64) -> Option<usize> {
+    println!("rev_shm: {:?}, shmaddr: {:?}", rev_shm, shmaddr);
     for (index, val) in rev_shm.iter().enumerate() {
-        if val.0 == shmaddr as u32 {
+        if val.0 == shmaddr as u64 {
             return Some(index);
         }
     }
@@ -276,9 +278,9 @@ pub fn rev_shm_find_index_by_addr(rev_shm: &Vec<(u32, i32)>, shmaddr: u32) -> Op
 /// * `shmid`   – The shared memory ID to search for.
 ///
 /// # Returns
-/// * A vector of all addresses (`u32`) associated with the given `shmid`.
+/// * A vector of all addresses (`u64`) associated with the given `shmid`.
 /// * Returns an empty vector if no addresses are found.
-pub fn rev_shm_find_addrs_by_shmid(rev_shm: &Vec<(u32, i32)>, shmid: i32) -> Vec<u32> {
+pub fn rev_shm_find_addrs_by_shmid(rev_shm: &Vec<(u64, i32)>, shmid: i32) -> Vec<u64> {
     let mut addrvec = Vec::new();
     for val in rev_shm.iter() {
         if val.1 == shmid as i32 {
@@ -299,15 +301,15 @@ pub fn rev_shm_find_addrs_by_shmid(rev_shm: &Vec<(u32, i32)>, shmid: i32) -> Vec
 /// * `Some((base_addr, shmid))` if `search_addr` falls within the range of a known segment.
 /// * `None` if the address is not within any tracked region.
 pub fn search_for_addr_in_region(
-    rev_shm: &Vec<(u32, i32)>,
-    search_addr: u32,
-) -> Option<(u32, i32)> {
+    rev_shm: &Vec<(u64, i32)>,
+    search_addr: u64,
+) -> Option<(u64, i32)> {
     let metadata = &SHM_METADATA;
     for val in rev_shm.iter() {
         let addr = val.0;
         let shmid = val.1;
         if let Some(segment) = metadata.shmtable.get_mut(&shmid) {
-            let range = addr..(addr + segment.size as u32);
+            let range = addr..(addr + segment.size as u64);
             if range.contains(&search_addr) {
                 return Some((addr, shmid));
             }
@@ -320,7 +322,7 @@ pub fn search_for_addr_in_region(
 ///
 /// # Arguments
 /// * `cageid` – ID of the calling cage.
-/// * `shmaddr` – Address where the shared memory segment should be mapped.
+/// * `shmaddr` – System Address where the shared memory segment should be mapped.
 /// * `shmflg` – Flags controlling access (e.g., `SHM_RDONLY`).
 /// * `shmid` – Identifier of the shared memory segment to attach.
 ///
@@ -345,7 +347,7 @@ pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u
             prot = PROT_READ | PROT_WRITE;
         }
         let mut rev_shm = cage.rev_shm.lock();
-        rev_shm.push((shmaddr as u32, shmid));
+        rev_shm.push((shmaddr as u64, shmid));
         drop(rev_shm);
 
         segment.map_shm(shmaddr, prot, cageid) as usize
@@ -358,7 +360,7 @@ pub fn shmat_helper(cageid: u64, shmaddr: *mut u8, shmflg: i32, shmid: i32) -> u
 ///
 /// # Arguments
 /// * `cageid` – ID of the calling cage.
-/// * `shmaddr` – Address of the shared memory segment to detach.
+/// * `shmaddr` – System Address of the shared memory segment to detach.
 ///
 /// This function searches the cage’s reverse mapping table for the segment mapped at `shmaddr`,
 /// detaches it with `unmap_shm`, and removes the reverse mapping entry. If the segment was marked
@@ -373,7 +375,7 @@ pub fn shmdt_helper(cageid: u64, shmaddr: *mut u8) -> i32 {
     let mut rm = false;
     let cage = get_cage(cageid).unwrap();
     let mut rev_shm = cage.rev_shm.lock();
-    let rev_shm_index = rev_shm_find_index_by_addr(&rev_shm, shmaddr as u32);
+    let rev_shm_index = rev_shm_find_index_by_addr(&rev_shm, shmaddr as u64);
 
     if let Some(index) = rev_shm_index {
         let shmid = rev_shm[index].1;
