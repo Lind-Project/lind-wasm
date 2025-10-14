@@ -295,13 +295,20 @@ pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
             // To avoid this, we bypass the call to get_epoch_state and set state to 1 directly.
             let state = 1;
 
-            let new_thread_epoch_handler = entry.value().write();
-            let new_thread_epoch = *new_thread_epoch_handler;
-            // TODO: we should also make sure the new thread is not in EPOCH_KILLED state.
-            // Will be integrated with process exiting fix
-            unsafe {
-                *new_thread_epoch = state;
-            };
+            // if the exiting thread has pending signals, migrate to the newly assigned main-thread
+            // NOTE: below implementation of signal migration between threads is based on the assumption
+            // that EPOCH_KILLED state will only occur when all the threads is in EPOCH_KILLED state
+            // which holds true for now since EPOCH_KILLED is currently only used in epoch_kill_all
+            if state == EPOCH_SIGNAL {
+                let new_thread_epoch_handler = entry.value().write();
+                let new_thread_epoch = *new_thread_epoch_handler;
+                unsafe {
+                    // make sure not to overwrite EPOCH_KILLED
+                    if *new_thread_epoch != EPOCH_KILLED {
+                        *new_thread_epoch = state;
+                    }
+                };
+            }
         } else {
             // we just exited the last thread in the cage
             last_thread = true;

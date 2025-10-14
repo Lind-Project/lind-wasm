@@ -40,6 +40,7 @@
 #include <clone3.h>
 #include <futex-internal.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 #include <shlib-compat.h>
 
