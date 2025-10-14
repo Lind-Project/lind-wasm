@@ -31,6 +31,7 @@ memory_tests/deterministic/mmap-nagative1.c
 memory_tests/deterministic/mmap-nagative2.c
 memory_tests/deterministic/mmap.c
 memory_tests/deterministic/mmap_complicated.c
+memory_tests/deterministic/mmap_file.c
 memory_tests/deterministic/mmaptest.c
 memory_tests/deterministic/vtable.c
 memory_tests/non-deterministic/segfault.c
