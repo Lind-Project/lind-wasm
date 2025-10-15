@@ -636,6 +636,9 @@ def create_required_executables(executable_deps):
 #   None
 # ----------------------------------------------------------------------
 def pre_test(tests_to_run=None):
+    # Ensure LIND_FS_ROOT exists (For CI Environment)
+    os.makedirs(LIND_FS_ROOT, exist_ok=True)
+    
     # If tests_to_run is provided, use selective copying
     if tests_to_run:
         all_dependencies = analyze_testfile_dependencies(tests_to_run)
