@@ -179,7 +179,6 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     }
     let cage = get_cage(path_arg_cageid).unwrap();
 
-    // Assume guest (glibc) has already translated pointers to host addresses
     let path = match get_cstr(path_arg) {
         Ok(path) => path,
         Err(e) => panic!("{:?}", e),

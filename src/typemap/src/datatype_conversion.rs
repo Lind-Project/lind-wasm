@@ -148,7 +148,6 @@ pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, arg_cageid: u64, cageid: u64) 
         }
     }
 
-    // Assume guest (glibc) has already translated pointers to host addresses
     unsafe { &mut *(arg as *mut i32) }
 }
 
@@ -271,7 +270,6 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
 /// ## Returns:
 ///     - buf: actual system address, which is the actual position that stores data
 pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
-    // Assume guest (glibc) has already translated pointers to host addresses
     buf_arg as *const u8
 }
 
@@ -300,7 +298,6 @@ pub fn sc_convert_addr_to_epollevent<'a>(
         }
     }
 
-    // Assume guest (glibc) has already translated pointers to host addresses
     let pointer = arg as *mut EpollEvent;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
@@ -320,7 +317,6 @@ pub fn sc_convert_addr_to_epollevent<'a>(
 /// Output:
 ///     - Returns the translated 64-bit address in host space as a u64.
 pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64 {
-    // Assume guest (glibc) has already translated pointers to host addresses
     uaddr_arg
 }
 
@@ -338,7 +334,6 @@ pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u
 ///     - Returns a mutable pointer to host memory corresponding to the given address
 ///       from the guest. The pointer can be used for direct read/write operations.
 pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64) -> *mut u8 {
-    // Assume guest (glibc) has already translated pointers to host addresses
     addr_arg as *mut u8
 }
 
@@ -369,7 +364,6 @@ pub fn sc_convert_sigactionStruct<'a>(
         return None;
     }
 
-    // Assume guest (glibc) has already translated pointers to host addresses
     let ptr = act_arg as *const SigactionStruct;
     unsafe { Some(&*ptr) }
 }
@@ -400,7 +394,7 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
     if act_arg == 0 {
         return None;
     }
-    // Assume guest (glibc) has already translated pointers to host addresses
+
     let ptr = act_arg as *mut SigactionStruct;
     unsafe { Some(&mut *ptr) }
 }
@@ -431,7 +425,6 @@ pub fn sc_convert_sigset(
     if set_arg == 0 {
         return None; // If the argument is 0, return None
     } else {
-        // Assume guest (glibc) has already translated pointers to host addresses
         let ptr = set_arg as *mut SigsetType;
         if !ptr.is_null() {
             unsafe {
@@ -529,7 +522,6 @@ pub fn sc_convert_itimerval(
     if val_arg == 0 {
         None
     } else {
-        // Assume guest (glibc) has already translated pointers to host addresses
         match get_constitimerval(val_arg) {
             Ok(itimeval) => itimeval,
             Ok(None) => None,
@@ -570,7 +562,6 @@ pub fn sc_convert_itimerval_mut(
     if val_arg == 0 {
         None
     } else {
-        // Assume guest (glibc) has already translated pointers to host addresses
         match get_itimerval(val_arg) {
             Ok(itimeval) => itimeval,
             Ok(None) => None,
@@ -614,7 +605,6 @@ pub fn sc_convert_addr_to_statdata<'a>(
         }
     }
 
-    // Assume guest (glibc) has already translated pointers to host addresses
     let pointer = arg as *mut StatData;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
@@ -638,7 +628,6 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
         }
     }
 
-    // Assume guest (glibc) has already translated pointers to host addresses
     let pointer = arg as *mut FSData;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
@@ -671,7 +660,6 @@ pub fn sc_convert_addr_to_pipearray<'a>(
         }
     }
 
-    // Assume guest (glibc) has already translated pointers to host addresses
     let pointer = arg as *mut PipeArray;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
@@ -704,7 +692,6 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
         }
     }
 
-    // Assume guest (glibc) has already translated pointers to host addresses
     let pointer = arg as *mut ShmidsStruct;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });

@@ -241,7 +241,6 @@ pub fn convert_sockpair<'a>(
         }
     }
 
-    // Assume guest (glibc) has already translated pointers to host addresses
     let pointer = arg as *mut SockPair;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
