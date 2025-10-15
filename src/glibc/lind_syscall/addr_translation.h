@@ -8,18 +8,17 @@
 extern "C" {
 #endif
 
-// Imported host function to get the base address of the current cage's linear memory
+// Imported host function to get both the base address of the current cage's
+// linear memory and the current cage id (pid).
 // Module: "lind", name: "lind-get-memory-base"
-unsigned long long __imported_lind_get_memory_base(void) __attribute__((
+typedef struct __lind_meminfo_t {
+    unsigned long long base;
+    unsigned long long cageid;
+} __lind_meminfo_t;
+
+__lind_meminfo_t __imported_lind_get_memory_base(void) __attribute__((
     __import_module__("lind"),
     __import_name__("lind-get-memory-base")
-));
-
-// Imported host function to get the current cage id (pid)
-// Module: "lind", name: "lind-get-cage-id"
-unsigned long long __imported_lind_get_cage_id(void) __attribute__((
-    __import_module__("lind"),
-    __import_name__("lind-get-cage-id")
 ));
 
 // Cached base address for this process (cage). Set once per instance.

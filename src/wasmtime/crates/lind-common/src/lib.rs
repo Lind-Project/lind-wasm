@@ -286,12 +286,12 @@ pub fn add_to_linker<
         },
     )?;
 
-    // export lind-get-memory-base for guest to query base address (used by glibc-side translation)
+    // export lind-get-memory-base for guest to query base address AND cage id (used by glibc-side translation)
     linker.func_wrap(
         "lind",
         "lind-get-memory-base",
-        move |caller: Caller<'_, T>| -> u64 {
-            // Return the base address of memory[0] for the calling instance
+        move |caller: Caller<'_, T>| -> (u64, u64) {
+            // Return the base address of memory[0] and the current cage id for the calling instance
             let base = get_memory_base(&caller);
             // Mark this cage as having completed guest-side address translation init.
             let host = caller.data().clone();
@@ -301,25 +301,10 @@ pub fn add_to_linker<
                     .guest_addr_translation_initialized
                     .store(true, Ordering::SeqCst);
             }
-            base
+            (base, ctx.getpid() as u64)
         },
     )?;
 
-    // export lind-get-cage-id for guest to query the current cage id (pid)
-    linker.func_wrap(
-        "lind",
-        "lind-get-cage-id",
-        move |caller: Caller<'_, T>| -> u64 {
-            let host = caller.data().clone();
-            let ctx = get_cx(&host);
-            if let Some(cage) = cage::get_cage(ctx.getpid() as u64) {
-                cage
-                    .guest_addr_translation_initialized
-                    .store(true, Ordering::SeqCst);
-            }
-            ctx.getpid() as u64
-        },
-    )?;
 
     // attach setjmp to wasmtime
     linker.func_wrap(
