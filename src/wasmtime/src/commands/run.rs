@@ -681,10 +681,10 @@ impl RunCommand {
                 // instance boundaries particularly difficult. To overcome this, the design employs low-level context
                 // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
                 // structures. These pointers are stored in a global registry, enabling safe, cross-thread access
-                // without violating Rust’s safety guarantees. The closure registered with ThreeI uses a unified Wasm 
-                // entry function as the single re-entry point into the Wasm executable. It receives an integer index 
+                // without violating Rust’s safety guarantees. The closure registered with ThreeI uses a unified Wasm
+                // entry function as the single re-entry point into the Wasm executable. It receives an integer index
                 // that identifies the target handler. When invoked, the closure calls the entry function inside the
-                // Wasm module, passing this index as an argument. The entry function then dispatches control to the 
+                // Wasm module, passing this index as an argument. The entry function then dispatches control to the
                 // corresponding per-syscall implementation based on the index value. To complete the bridge
                 // between host and guest, the system uses Caller::with() to re-enter the Wasmtime runtime context
                 // from the host side.
@@ -770,9 +770,9 @@ impl RunCommand {
                                     let result = match grate_entry_point.call(
                                         &mut store,
                                         (
-                                            call_num, cageid, arg1, arg1cageid, arg2, arg2cageid, arg3,
-                                            arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6,
-                                            arg6cageid,
+                                            call_num, cageid, arg1, arg1cageid, arg2, arg2cageid,
+                                            arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid,
+                                            arg6, arg6cageid,
                                         ),
                                     ) {
                                         Ok(value) => value,

@@ -4,9 +4,7 @@ use core::panic;
 use dashmap::DashSet;
 use once_cell::sync::Lazy;
 use sysdefs::constants::lind_platform_const;
-use sysdefs::constants::{
-    PROT_READ, PROT_WRITE,
-}; // Used in `copy_data_between_cages`
+use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
 use typemap::datatype_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
 
 use crate::handler_table::{
@@ -37,10 +35,7 @@ pub type RawCallFunc = fn(
 ) -> i32;
 
 type GrateFn =
-    dyn FnMut(
-        u64, u64, u64, u64, u64, u64, u64,
-        u64, u64, u64, u64, u64, u64, u64
-    ) -> i32;
+    dyn FnMut(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64) -> i32;
 
 /// Each entry in the `Vec` corresponds to a specific grate, and the index is used as its identifier
 /// (`grate_id`). The position must be stable even if some grates are removed, so we use `Option` to
@@ -107,8 +102,8 @@ fn _init_global_grate() {
 
 /// Registers a closure into the `GLOBAL_GRATE` handler table for a specific grateid.
 /// The closure is responsible for handling grate calls by looking up a Wasm-exported
-/// function and invoking it. This function assumes that the `GLOBAL_GRATE` table is 
-/// already initialized or initializes it if needed. 
+/// function and invoking it. This function assumes that the `GLOBAL_GRATE` table is
+/// already initialized or initializes it if needed.
 /// It panics if `grateid` exceeds the preallocated bounds (currently 1024 entries).
 ///
 /// ## Arguments:
@@ -131,7 +126,6 @@ fn _add_global_grate(grateid: u64, mut callback: Box<GrateFn>) {
             }
         }
     }
-
 }
 
 /// Marks the entry corresponding to a grateid in the `GLOBAL_GRATE` table as `None`,

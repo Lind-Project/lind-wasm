@@ -15,19 +15,10 @@
 use sysdefs::constants::lind_platform_const;
 
 type GrateFn =
-    dyn FnMut(
-        u64, u64, u64, u64, u64, u64, u64,
-        u64, u64, u64, u64, u64, u64, u64
-    ) -> i32;
+    dyn FnMut(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64) -> i32;
 
 /// `GrateFn_WasmTable`: central registry for re-entry closures associated with grate IDs.
-static mut GrateFn_WasmTable: Option<
-    Vec<
-        Option<
-            Box<GrateFn>,
-        >,
-    >,
-> = None;
+static mut GrateFn_WasmTable: Option<Vec<Option<Box<GrateFn>>>> = None;
 
 /// Initializes the GrateFn_WasmTable with a capacity for MAX_CAGEID entries.
 fn _init_gratefn_wasm() {
@@ -39,10 +30,7 @@ fn _init_gratefn_wasm() {
 }
 
 /// `set_gratefn_wasm()` stores the runtime entry closure for each grate ID  
-pub fn set_gratefn_wasm(
-    grateid: u64,
-    mut callback: Box<GrateFn>,
-) -> i32 {
+pub fn set_gratefn_wasm(grateid: u64, mut callback: Box<GrateFn>) -> i32 {
     let index = grateid as usize;
     unsafe {
         if GrateFn_WasmTable.is_none() {
