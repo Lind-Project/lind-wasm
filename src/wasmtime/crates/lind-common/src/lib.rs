@@ -232,7 +232,7 @@ pub fn add_to_linker<
         "register-syscall",
         move |targetcage: u64,
               targetcallnum: u64,
-              handlefunc_index_in_this_grate: u64,
+              handlefunc_flag: u64,
               this_grate_id: u64|
               -> i32 {
             
@@ -247,7 +247,7 @@ pub fn add_to_linker<
                 targetcage,
                 targetcallnum,
                 grate_closure,
-                handlefunc_index_in_this_grate,
+                handlefunc_flag,
                 this_grate_id,
                 UNUSED_ARG,
                 UNUSED_ID,

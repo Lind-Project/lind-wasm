@@ -702,7 +702,7 @@ impl RunCommand {
                 let res = set_gratefn_wasm(
                     current_pid,
                     Box::new(
-                        move |call_index: u64,
+                        move |call_num: u64,
                               cageid: u64,
                               arg1: u64,
                               arg1cageid: u64,
@@ -762,7 +762,7 @@ impl RunCommand {
                                         Err(e) => {
                                             eprintln!(
                                                 "[wasmtime|run] Failed to find function '{}': {:?}",
-                                                call_index, e
+                                                call_num, e
                                             );
                                             return -1;
                                         }
@@ -770,14 +770,14 @@ impl RunCommand {
                                     let result = match grate_entry_point.call(
                                         &mut store,
                                         (
-                                            call_index, cageid, arg1, arg1cageid, arg2, arg2cageid, arg3,
+                                            call_num, cageid, arg1, arg1cageid, arg2, arg2cageid, arg3,
                                             arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6,
                                             arg6cageid,
                                         ),
                                     ) {
                                         Ok(value) => value,
                                         Err(e) => {
-                                            eprintln!("Error calling {}: {:?}", call_index, e);
+                                            eprintln!("Error calling {}: {:?}", call_num, e);
                                             return -1;
                                         }
                                     };

@@ -72,7 +72,7 @@ lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(NO
 #define REGISTER_HANDLER_SYSCALL(targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id) \
     lind_register_syscall((uint64_t) targetcage, \
         (uint64_t) targetcallnum, \
-        (uint64_t) handlefunc_index_in_this_grate, \
+        (uint64_t) handlefunc_flag, \
         (uint64_t) this_grate_id)
 
 #define CP_DATA_SYSCALL(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, copytype) \

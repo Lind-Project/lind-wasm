@@ -61,7 +61,7 @@ int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
 int __imported_lind_3i_trampoline_register_syscall(uint64_t targetcage, 
     uint64_t targetcallnum, 
-    uint64_t handlefunc_index_in_this_grate, 
+    uint64_t handlefunc_flag, 
     uint64_t this_grate_id) __attribute__((
     __import_module__("lind"),
     __import_name__("register-syscall")
@@ -80,10 +80,10 @@ int __imported_lind_3i_trampoline_register_syscall(uint64_t targetcage,
 // register_flag: deregister(0) or register(non-0)
 int lind_register_syscall (int64_t targetcage, 
     uint64_t targetcallnum, 
-    uint64_t handlefunc_index_in_this_grate, 
+    uint64_t handlefunc_flag, 
     uint64_t this_grate_id)
 {
-    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id);
+    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, handlefunc_flag, this_grate_id);
     
     return ret;
 }

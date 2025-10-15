@@ -170,7 +170,7 @@ fn _rm_from_global_grate(grateid: u64) {
 /// `None` if the handler or grate entry is missing.
 fn _call_grate_func(
     grateid: u64,
-    call_index: u64,
+    call_num: u64,
     self_cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -193,7 +193,7 @@ fn _call_grate_func(
         // The closure is then called with the extracted syscall name and the full set of
         // arguments + their corresponding cage IDs.
         Some(func(
-            call_index,
+            call_num,
             self_cageid,
             arg1,
             arg1_cageid,
@@ -252,9 +252,9 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// ELINDESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
 pub fn register_handler(
-    _callnum: u64,
+    _arg1: u64,
     targetcage: u64,    // Cage to modify
-    targetcallnum: u64, // Syscall number or match-all indicator. Match-all: 1000.
+    targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all: 1000.
     grate_closure: Box<GrateFn>,
     handlefunc: u64, // Function index to register (for grate, also called destination call) _or_ 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
@@ -274,7 +274,7 @@ pub fn register_handler(
 
     // Add the clousre to the handler table
     _add_global_grate(handlefunccage, grate_closure);
-    
+
     // Actual implementation is in handler_table module according to feature flag
     register_handler_impl(targetcage, targetcallnum, handlefunc, handlefunccage)
 }
@@ -394,12 +394,12 @@ pub fn make_syscall(
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
     if _check_cage_handler_exist(self_cageid) {
-        if let Some((call_index, grateid)) = _get_handler(self_cageid, syscall_num) {
+        if let Some((_call_index, grateid)) = _get_handler(self_cageid, syscall_num) {
             // <targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id>
             // Theoretically, the complexity is O(1), shouldn't affect performance a lot
             if let Some(ret) = _call_grate_func(
                 grateid,
-                call_index,
+                syscall_num,
                 self_cageid,
                 arg1,
                 arg1_cageid,
