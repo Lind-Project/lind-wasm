@@ -285,7 +285,7 @@ pub fn add_to_linker<
         },
     )?;
 
-    // export lind-get-memory-base for guest to query base address (used by glibc-side translation)
+    // export lind-get-memory-base for libc to query base address
     linker.func_wrap(
         "lind",
         "lind-get-memory-base",
@@ -296,7 +296,7 @@ pub fn add_to_linker<
         },
     )?;
 
-    // export lind-get-cage-id for guest to query the current cage id (pid)
+    // export lind-get-cage-id for libc to query the current cage id (pid)
     linker.func_wrap(
         "lind",
         "lind-get-cage-id",
