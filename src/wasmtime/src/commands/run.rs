@@ -35,7 +35,7 @@ use wasmtime_lind_utils::LindCageManager;
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
 use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::threei::{make_syscall};
+use threei::threei::make_syscall;
 use wasmtime::Caller;
 
 #[cfg(feature = "wasi-nn")]

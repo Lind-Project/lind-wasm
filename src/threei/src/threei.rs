@@ -3,7 +3,6 @@ use cage::memory::check_addr;
 use core::panic;
 use dashmap::DashSet;
 use once_cell::sync::Lazy;
-use std::ffi::c_void;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{
     PROT_READ, PROT_WRITE,
