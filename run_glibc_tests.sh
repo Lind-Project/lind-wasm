@@ -4,6 +4,7 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Array of test files - easily add more tests here
@@ -72,50 +73,7 @@ TEST_FILES=(
 )
 
 echo "======================================"
-echo "  Lind-WASM Build and Test Runner"
-echo "======================================"
-echo ""
-
-# Run make all
-echo "Running 'make all'..."
-echo ""
-
-if ! make all 2>&1 | tee build.log; then
-    echo ""
-    echo -e "${RED}Build failed!${NC}"
-    echo ""
-    echo "Error details:"
-    tail -20 build.log
-    rm -f build.log
-    exit 1
-fi
-
-rm -f build.log
-
-echo ""
-echo -e "${GREEN}Build succeeded!${NC}"
-echo ""
-echo "======================================"
 echo "  Running Tests"
-echo "======================================"
-echo ""
-
-# Build the test command
-TEST_CMD="python3 scripts/wasmtestreport.py --testfiles"
-for test_file in "${TEST_FILES[@]}"; do
-    TEST_CMD="$TEST_CMD $test_file"
-done
-
-# Run the tests and capture output
-TEST_OUTPUT=$(eval $TEST_CMD 2>&1)
-TEST_EXIT_CODE=$?
-
-echo "$TEST_OUTPUT"
-echo ""
-
-# Parse results
-echo "======================================"
-echo "  Test Summary"
 echo "======================================"
 echo ""
 
@@ -123,28 +81,51 @@ PASSED=0
 FAILED=0
 TOTAL=${#TEST_FILES[@]}
 
-# Parse the output for each test
-for test_file in "${TEST_FILES[@]}"; do
+# Run each test individually and show output
+for i in "${!TEST_FILES[@]}"; do
+    test_file="${TEST_FILES[$i]}"
     test_name=$(basename "$test_file" .c)
-    # Check if this test has SUCCESS in the output
-    if echo "$TEST_OUTPUT" | grep -q "$test_name.*SUCCESS"; then
-        ((PASSED++))
-        echo -e "${GREEN}✓${NC} $test_name: SUCCESS"
+    test_num=$((i + 1))
+    
+    echo ""
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}Test [$test_num/$TOTAL]: $test_name${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    # Run single test with wasmtestreport.py
+    if python3 scripts/wasmtestreport.py --testfiles "$test_file" 2>&1 | tee test_output.log; then
+        # Check if the test actually succeeded by looking at the output
+        if grep -q "\[INFO\] SUCCESS" test_output.log; then
+            ((PASSED++))
+            echo -e "${GREEN}✓ PASSED${NC}"
+        else
+            ((FAILED++))
+            echo -e "${RED}✗ FAILED${NC}"
+        fi
     else
         ((FAILED++))
-        echo -e "${RED}✗${NC} $test_name: FAILED (no SUCCESS found)"
+        echo -e "${RED}✗ FAILED (execution error)${NC}"
     fi
+    
+    rm -f test_output.log
 done
 
+# Final Summary
+echo ""
+echo ""
+echo "======================================"
+echo "  Test Summary"
+echo "======================================"
 echo ""
 echo "Total: $TOTAL tests"
 echo -e "${GREEN}Passed: $PASSED${NC}"
 if [ $FAILED -gt 0 ]; then
     echo -e "${RED}Failed: $FAILED${NC}"
+    echo ""
+    exit 1
 else
     echo -e "Failed: $FAILED"
+    echo ""
+    exit 0
 fi
-echo ""
-
-exit $TEST_EXIT_CODE
 
