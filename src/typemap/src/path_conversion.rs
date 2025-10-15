@@ -179,19 +179,8 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     }
     let cage = get_cage(path_arg_cageid).unwrap();
 
-    // Determine whether to translate the pointer or treat it as an already-translated host pointer.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        // Guest (glibc) provided a host pointer; use it directly.
-        path_arg
-    } else {
-        // Otherwise, panic to ensure correct dispatch flow during testing
-        panic!("sc_convert_path_to_host: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-
-    let path = match get_cstr(addr) {
+    // Assume guest (glibc) has already translated pointers to host addresses
+    let path = match get_cstr(path_arg) {
         Ok(path) => path,
         Err(e) => panic!("{:?}", e),
     };

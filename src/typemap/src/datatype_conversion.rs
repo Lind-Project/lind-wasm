@@ -148,20 +148,8 @@ pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, arg_cageid: u64, cageid: u64) 
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        arg
-    } else {
-        panic!("sc_convert_sysarg_to_i32_ref: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-    
-    return unsafe { &mut *((addr) as *mut i32) };
+    // Assume guest (glibc) has already translated pointers to host addresses
+    unsafe { &mut *(arg as *mut i32) }
 }
 
 /// ## Arguments:
@@ -283,18 +271,8 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
 /// ## Returns:
 ///     - buf: actual system address, which is the actual position that stores data
 pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
-    // Get cage reference to determine translation mode
-    let cage = get_cage(cageid).unwrap();
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        return buf_arg as *const u8;
-    }
-    // Otherwise, panic to ensure correct dispatch flow during testing
-    panic!("sc_convert_buf: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
+    // Assume guest (glibc) has already translated pointers to host addresses
+    buf_arg as *const u8
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
@@ -322,20 +300,8 @@ pub fn sc_convert_addr_to_epollevent<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        arg
-    } else {
-        panic!("sc_convert_addr_to_epollevent: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-    
-    let pointer = addr as *mut EpollEvent;
+    // Assume guest (glibc) has already translated pointers to host addresses
+    let pointer = arg as *mut EpollEvent;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
@@ -354,19 +320,8 @@ pub fn sc_convert_addr_to_epollevent<'a>(
 /// Output:
 ///     - Returns the translated 64-bit address in host space as a u64.
 pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64 {
-    let cage = get_cage(uaddr_arg_cageid).unwrap();
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        return uaddr_arg;
-    }
-    
-    // Otherwise, panic to ensure correct dispatch flow during testing
-    panic!("sc_convert_uaddr_to_host: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
+    // Assume guest (glibc) has already translated pointers to host addresses
+    uaddr_arg
 }
 
 /// This function translates a memory address from the WASM environment (user space)
@@ -383,19 +338,8 @@ pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u
 ///     - Returns a mutable pointer to host memory corresponding to the given address
 ///       from the guest. The pointer can be used for direct read/write operations.
 pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64) -> *mut u8 {
-    let cage = get_cage(cageid).unwrap();
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        return addr_arg as *mut u8;
-    }
-    
-    // Otherwise, panic to ensure correct dispatch flow during testing
-    panic!("sc_convert_addr_to_host: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
+    // Assume guest (glibc) has already translated pointers to host addresses
+    addr_arg as *mut u8
 }
 
 /// Convert a user-provided pointer (u64) from a cage into a shared reference to
@@ -425,24 +369,8 @@ pub fn sc_convert_sigactionStruct<'a>(
         return None;
     }
 
-    // Get cage reference to translate address
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return None,
-    };
-
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        act_arg
-    } else {
-        panic!("sc_convert_sigactionStruct: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-
-    let ptr = addr as *const SigactionStruct;
+    // Assume guest (glibc) has already translated pointers to host addresses
+    let ptr = act_arg as *const SigactionStruct;
     unsafe { Some(&*ptr) }
 }
 
@@ -472,24 +400,8 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
     if act_arg == 0 {
         return None;
     }
-    // Get cage reference to translate address
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return None,
-    };
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        act_arg
-    } else {
-        panic!("sc_convert_sigactionStruct_mut: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-
-    let ptr = addr as *mut SigactionStruct;
+    // Assume guest (glibc) has already translated pointers to host addresses
+    let ptr = act_arg as *mut SigactionStruct;
     unsafe { Some(&mut *ptr) }
 }
 
@@ -519,20 +431,8 @@ pub fn sc_convert_sigset(
     if set_arg == 0 {
         return None; // If the argument is 0, return None
     } else {
-        let cage = get_cage(cageid).unwrap();
-        
-        // If the guest (glibc) has already translated pointers to host addresses,
-        // skip address translation and use the pointer as-is.
-        let addr = if cage
-            .guest_addr_translation_initialized
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
-            set_arg
-        } else {
-            panic!("sc_convert_sigset: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-        };
-        
-        let ptr = addr as *mut SigsetType;
+        // Assume guest (glibc) has already translated pointers to host addresses
+        let ptr = set_arg as *mut SigsetType;
         if !ptr.is_null() {
             unsafe {
                 return Some(&mut *ptr);
@@ -626,23 +526,11 @@ pub fn sc_convert_itimerval(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-
     if val_arg == 0 {
         None
     } else {
-        // If the guest (glibc) has already translated pointers to host addresses,
-        // skip address translation and use the pointer as-is.
-        let addr = if cage
-            .guest_addr_translation_initialized
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
-            val_arg
-        } else {
-            panic!("sc_convert_itimerval: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-        };
-        
-        match get_constitimerval(addr) {
+        // Assume guest (glibc) has already translated pointers to host addresses
+        match get_constitimerval(val_arg) {
             Ok(itimeval) => itimeval,
             Ok(None) => None,
             Err(_) => panic!("Failed to get ITimerVal from address"),
@@ -679,23 +567,11 @@ pub fn sc_convert_itimerval_mut(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-
     if val_arg == 0 {
         None
     } else {
-        // If the guest (glibc) has already translated pointers to host addresses,
-        // skip address translation and use the pointer as-is.
-        let addr = if cage
-            .guest_addr_translation_initialized
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
-            val_arg
-        } else {
-            panic!("sc_convert_itimerval_mut: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-        };
-        
-        match get_itimerval(addr) {
+        // Assume guest (glibc) has already translated pointers to host addresses
+        match get_itimerval(val_arg) {
             Ok(itimeval) => itimeval,
             Ok(None) => None,
             Err(_) => panic!("Failed to get ITimerVal from address"),
@@ -738,20 +614,8 @@ pub fn sc_convert_addr_to_statdata<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        arg
-    } else {
-        panic!("sc_convert_addr_to_statdata: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-    
-    let pointer = addr as *mut StatData;
+    // Assume guest (glibc) has already translated pointers to host addresses
+    let pointer = arg as *mut StatData;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
@@ -774,20 +638,8 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        arg
-    } else {
-        panic!("sc_convert_addr_to_fstatdata: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-    
-    let pointer = addr as *mut FSData;
+    // Assume guest (glibc) has already translated pointers to host addresses
+    let pointer = arg as *mut FSData;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
@@ -819,20 +671,8 @@ pub fn sc_convert_addr_to_pipearray<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        arg
-    } else {
-        panic!("sc_convert_addr_to_pipearray: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-    
-    let pointer = addr as *mut PipeArray;
+    // Assume guest (glibc) has already translated pointers to host addresses
+    let pointer = arg as *mut PipeArray;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
@@ -864,20 +704,8 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        arg
-    } else {
-        panic!("sc_convert_addr_to_shmidstruct: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-    
-    let pointer = addr as *mut ShmidsStruct;
+    // Assume guest (glibc) has already translated pointers to host addresses
+    let pointer = arg as *mut ShmidsStruct;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }

@@ -292,14 +292,6 @@ pub fn add_to_linker<
         move |caller: Caller<'_, T>| -> u64 {
             // Return the base address of memory[0] for the calling instance
             let base = get_memory_base(&caller);
-            // Mark this cage as having completed guest-side address translation init.
-            let host = caller.data().clone();
-            let ctx = get_cx(&host);
-            if let Some(cage) = cage::get_cage(ctx.getpid() as u64) {
-                cage
-                    .guest_addr_translation_initialized
-                    .store(true, Ordering::SeqCst);
-            }
             base
         },
     )?;
@@ -311,11 +303,6 @@ pub fn add_to_linker<
         move |caller: Caller<'_, T>| -> u64 {
             let host = caller.data().clone();
             let ctx = get_cx(&host);
-            if let Some(cage) = cage::get_cage(ctx.getpid() as u64) {
-                cage
-                    .guest_addr_translation_initialized
-                    .store(true, Ordering::SeqCst);
-            }
             ctx.getpid() as u64
         },
     )?;

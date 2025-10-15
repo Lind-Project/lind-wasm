@@ -13,7 +13,7 @@ use parking_lot::{Mutex, RwLock};
 use std::ffi::CString;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering::*;
-use std::sync::atomic::{AtomicI32, AtomicU64, AtomicBool};
+use std::sync::atomic::{AtomicI32, AtomicU64};
 use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
@@ -90,7 +90,6 @@ pub fn fork_syscall(
         sigset: AtomicU64::new(0),
         zombies: RwLock::new(vec![]),
         child_num: AtomicU64::new(0),
-        guest_addr_translation_initialized: AtomicBool::new(false),
         vmmap: RwLock::new(new_vmmap),
     };
 
@@ -1029,7 +1028,6 @@ pub fn rawposix_start(verbosity: isize) {
         sigset: AtomicU64::new(0),
         zombies: RwLock::new(vec![]),
         child_num: AtomicU64::new(0),
-        guest_addr_translation_initialized: AtomicBool::new(false),
         vmmap: RwLock::new(Vmmap::new()),
     };
 
@@ -1099,7 +1097,6 @@ pub fn rawposix_start(verbosity: isize) {
         sigset: AtomicU64::new(0),
         zombies: RwLock::new(vec![]),
         child_num: AtomicU64::new(0),
-        guest_addr_translation_initialized: AtomicBool::new(false),
         vmmap: RwLock::new(Vmmap::new()),
     };
 

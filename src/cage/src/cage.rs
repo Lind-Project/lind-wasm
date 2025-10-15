@@ -9,7 +9,7 @@ pub use once_cell::sync::Lazy;
 /// interaction and increases efficiency.
 pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
-pub use std::sync::atomic::{AtomicI32, AtomicU64, AtomicBool};
+pub use std::sync::atomic::{AtomicI32, AtomicU64};
 pub use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::data::fs_struct::SigactionStruct;
@@ -71,8 +71,6 @@ pub struct Cage {
     // cleanup, and supports wait-related system calls for determining when all children have
     // terminated.
     pub child_num: AtomicU64,
-    // Flag indicating guest-side address translation init (cage id/base cached)
-    pub guest_addr_translation_initialized: AtomicBool,
     // vmmap represents the virtual memory mapping for this cage. More details on `memory::vmmap`
     pub vmmap: RwLock<Vmmap>,
 }

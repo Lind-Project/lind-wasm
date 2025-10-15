@@ -241,20 +241,8 @@ pub fn convert_sockpair<'a>(
         }
     }
 
-    let cage = get_cage(arg_cageid).unwrap();
-    
-    // If the guest (glibc) has already translated pointers to host addresses,
-    // skip address translation and use the pointer as-is.
-    let addr = if cage
-        .guest_addr_translation_initialized
-        .load(std::sync::atomic::Ordering::SeqCst)
-    {
-        arg
-    } else {
-        panic!("convert_sockpair: guest_addr_translation_initialized is false - ensure glibc-side translation is working");
-    };
-    
-    let pointer = addr as *mut SockPair;
+    // Assume guest (glibc) has already translated pointers to host addresses
+    let pointer = arg as *mut SockPair;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
