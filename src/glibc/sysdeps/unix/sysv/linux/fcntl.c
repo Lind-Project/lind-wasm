@@ -22,6 +22,7 @@
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 
@@ -45,7 +46,7 @@ __libc_fcntl (int fd, int cmd, ...)
     {
       case F_SETLKW:
       case F_SETLKW64:
-        return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
+        return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(arg), NOTUSED, NOTUSED, NOTUSED);
       case F_OFD_SETLKW:
         {
           struct flock *flk = (struct flock *) arg;
@@ -57,7 +58,7 @@ __libc_fcntl (int fd, int cmd, ...)
             .l_len = flk->l_len,
             .l_pid = flk->l_pid
           };
-            return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) &flk64, NOTUSED, NOTUSED, NOTUSED);
+            return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(&flk64), NOTUSED, NOTUSED, NOTUSED);
         }
       case F_OFD_GETLK:
       case F_OFD_SETLK:
@@ -71,7 +72,7 @@ __libc_fcntl (int fd, int cmd, ...)
             .l_len = flk->l_len,
             .l_pid = flk->l_pid
           };
-          int ret = MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) &flk64, NOTUSED, NOTUSED, NOTUSED);
+          int ret = MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(&flk64), NOTUSED, NOTUSED, NOTUSED);
           if (ret == -1)
             return -1;
           if ((off_t) flk64.l_start != flk64.l_start

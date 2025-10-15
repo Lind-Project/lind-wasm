@@ -36,6 +36,7 @@
 #endif
 
 #include <syscall-template.h>
+#include <addr_translation.h>
 
 int
 __libc_fcntl64 (int fd, int cmd, ...)
@@ -50,9 +51,9 @@ __libc_fcntl64 (int fd, int cmd, ...)
   cmd = FCNTL_ADJUST_CMD (cmd);
 
   if (cmd == F_SETLKW || cmd == F_SETLKW64 || cmd == F_OFD_SETLKW)
-    return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
+    return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(arg), NOTUSED, NOTUSED, NOTUSED);
 
-  return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(arg), NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__libc_fcntl64)
 weak_alias (__libc_fcntl64, __fcntl64)
