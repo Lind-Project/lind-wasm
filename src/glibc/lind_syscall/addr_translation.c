@@ -9,8 +9,8 @@ void __lind_init_addr_translation(void) {
     if (__lind_base != 0ULL && __lind_cageid != 0ULL) {
         return; // idempotent
     }
-    // Retrieve both the base address and the cage id
-    __lind_meminfo_t info = __imported_lind_get_memory_base();
-    __lind_base = (uint64_t)info.base;
-    __lind_cageid = (uint64_t)info.cageid;
+    // Query the host for the base address of this cage's linear memory
+    __lind_base = (uint64_t)__imported_lind_get_memory_base();
+    // Query the host for the cage id (pid) for this instance
+    __lind_cageid = (uint64_t)__imported_lind_get_cage_id();
 }
