@@ -29,13 +29,13 @@ use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
-use wasmtime_lind_3i_vmctx::{get_ctx, insert_ctx, remove_ctx};
+use wasmtime_lind_3i::{get_ctx, insert_ctx, remove_ctx, set_gratefn_wasm};
 use wasmtime_lind_utils::LindCageManager;
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
 use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::threei::{make_syscall, threei_wasm_func};
+use threei::threei::make_syscall;
 use wasmtime::Caller;
 
 #[cfg(feature = "wasi-nn")]
@@ -679,13 +679,13 @@ impl RunCommand {
                 // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
                 // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
                 // instance boundaries particularly difficult. To overcome this, the design employs low-level context
-                // capture by extracting and storing vmctx pointers from Wasmtime’s internal StoreOpaque and InstanceHandler
+                // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
                 // structures. These pointers are stored in a global registry, enabling safe, cross-thread access
-                // without violating Rust’s safety guarantees. The closure registered with ThreeI is dynamically
-                // name-resolving: it receives a raw C string pointer to a syscall name, normalizes it (e.g.,
-                // by stripping prefixes and appending _grate), and uses Wasmtime’s reflective export API to locate
-                // and type-check the corresponding Wasm function. This allows ThreeI to directly invoke per-syscall
-                // exports without needing an internal dispatcher within the Wasm module. To complete the bridge
+                // without violating Rust’s safety guarantees. The closure registered with ThreeI uses a unified Wasm 
+                // entry function as the single re-entry point into the Wasm executable. It receives an integer index 
+                // that identifies the target handler. When invoked, the closure calls the entry function inside the
+                // Wasm module, passing this index as an argument. The entry function then dispatches control to the 
+                // corresponding per-syscall implementation based on the index value. To complete the bridge
                 // between host and guest, the system uses Caller::with() to re-enter the Wasmtime runtime context
                 // from the host side.
                 // 1. get StoreOpaque
@@ -699,10 +699,10 @@ impl RunCommand {
                     insert_ctx(current_pid as usize, grate_instancehandler.clone());
                 }
 
-                let res = threei_wasm_func(
+                let res = set_gratefn_wasm(
                     current_pid,
                     Box::new(
-                        move |call_ptr: u64,
+                        move |call_num: u64,
                               cageid: u64,
                               arg1: u64,
                               arg1cageid: u64,
@@ -717,16 +717,6 @@ impl RunCommand {
                               arg6: u64,
                               arg6cageid: u64|
                               -> i32 {
-                            let syscall_name = unsafe {
-                                let c_str = CStr::from_ptr(call_ptr as *const i8);
-                                let rust_str = c_str
-                                    .to_str()
-                                    .expect("[wasmtime|run] Invalid UTF-8 in call name field");
-                                let trimmed = rust_str.strip_prefix("syscall|").unwrap_or(rust_str);
-                                let modified_str = format!("{}_grate", trimmed);
-                                modified_str
-                            };
-
                             let grate_handler = get_ctx(current_pid as usize);
                             let ctx = grate_handler.vmctx();
                             unsafe {
@@ -740,17 +730,18 @@ impl RunCommand {
                                         .host_state()
                                         .downcast_ref::<Instance>()
                                         .unwrap()
-                                        .get_export(&mut store, &syscall_name)
+                                        .get_export(&mut store, "pass_fptr_to_wt")
                                         .and_then(|f| f.into_func())
                                         .ok_or_else(|| {
                                             anyhow!(
                                                 "failed to find function export `{}`",
-                                                syscall_name
+                                                "pass_fptr_to_wt"
                                             )
                                         })
                                         .unwrap();
 
                                     let grate_entry_point = match grate_entry_func.typed::<(
+                                        u64,
                                         u64,
                                         u64,
                                         u64,
@@ -771,7 +762,7 @@ impl RunCommand {
                                         Err(e) => {
                                             eprintln!(
                                                 "[wasmtime|run] Failed to find function '{}': {:?}",
-                                                syscall_name, e
+                                                call_num, e
                                             );
                                             return -1;
                                         }
@@ -779,14 +770,14 @@ impl RunCommand {
                                     let result = match grate_entry_point.call(
                                         &mut store,
                                         (
-                                            cageid, arg1, arg1cageid, arg2, arg2cageid, arg3,
+                                            call_num, cageid, arg1, arg1cageid, arg2, arg2cageid, arg3,
                                             arg3cageid, arg4, arg4cageid, arg5, arg5cageid, arg6,
                                             arg6cageid,
                                         ),
                                     ) {
                                         Ok(value) => value,
                                         Err(e) => {
-                                            eprintln!("Error calling {}: {:?}", syscall_name, e);
+                                            eprintln!("Error calling {}: {:?}", call_num, e);
                                             return -1;
                                         }
                                     };
