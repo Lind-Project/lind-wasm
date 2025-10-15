@@ -39,7 +39,7 @@ static inline uint64_t __lind_translate_ptr_to_host(const void *p) {
 }
 
 // Convenience macro for call sites
-#define LIND_TO_HOST(p) __lind_translate_ptr_to_host((const void*)(p))
+#define TRANSLATE_GUEST_POINTER_TO_HOST(p) __lind_translate_ptr_to_host((const void*)(p))
 
 #ifdef __cplusplus
 }
