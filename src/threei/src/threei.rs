@@ -1,14 +1,12 @@
 //! Threei (Three Interposition) module
 use cage::memory::check_addr;
-use cage::{get_cage, Cage, MemoryBackingType, VmmapEntry};
 use core::panic;
 use dashmap::DashSet;
-use nodit::interval::ie;
 use once_cell::sync::Lazy;
-use std::sync::Arc;
+use std::ffi::c_void;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{
-    MAP_ANONYMOUS, MAP_PRIVATE, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+    PROT_READ, PROT_WRITE,
 }; // Used in `copy_data_between_cages`
 use typemap::datatype_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
 
@@ -21,46 +19,6 @@ use crate::threei_const;
 
 pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
 const MMAP_SYSCALL: u64 = 9; // mmap syscall number
-
-/// Registers a closure into the `GLOBAL_GRATE` handler table for a specific grateid.
-/// The closure is responsible for handling grate calls by dynamically looking up a Wasm-exported
-/// function by name (following the `<call_name>_grate` suffix convention) and invoking it. This
-/// function assumes that the `GLOBAL_GRATE` table is already initialized or initializes it if
-/// needed. It panics if `grateid` exceeds the preallocated bounds (currently 1024 entries).
-/// This function allows 3i to attach a per-grate function resolution mechanism, without needing
-/// internal dispatch in the Wasm module.
-///
-/// ## Arguments:
-/// - grateid: ID of the grate. Used as the index into `GLOBAL_GRATE`.
-/// - callback: A boxed closure that takes the syscall name pointer and six argument pairs (value
-/// and cage ID) and returns an i32. This closure handles dynamic lookup and execution.
-///
-/// ## Returns:
-/// Always returns 0. Panics if grateid is out of bounds.
-pub fn threei_wasm_func(
-    grateid: u64,
-    mut callback: Box<
-        dyn FnMut(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64) -> i32
-            + 'static,
-    >,
-) -> i32 {
-    let index = grateid as usize;
-    unsafe {
-        if GLOBAL_GRATE.is_none() {
-            _init_global_grate();
-        }
-
-        if let Some(ref mut vec) = GLOBAL_GRATE {
-            if index < vec.len() {
-                vec[index] = Some(callback);
-            } else {
-                panic!("[3i|threei_wasm_func] Index out of bounds: {}", index);
-            }
-        }
-    }
-
-    0
-}
 
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
 pub type RawCallFunc = fn(
@@ -78,6 +36,12 @@ pub type RawCallFunc = fn(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32;
+
+type GrateFn =
+    dyn FnMut(
+        u64, u64, u64, u64, u64, u64, u64,
+        u64, u64, u64, u64, u64, u64, u64
+    ) -> i32;
 
 /// Each entry in the `Vec` corresponds to a specific grate, and the index is used as its identifier
 /// (`grate_id`). The position must be stable even if some grates are removed, so we use `Option` to
@@ -142,6 +106,35 @@ fn _init_global_grate() {
     }
 }
 
+/// Registers a closure into the `GLOBAL_GRATE` handler table for a specific grateid.
+/// The closure is responsible for handling grate calls by looking up a Wasm-exported
+/// function and invoking it. This function assumes that the `GLOBAL_GRATE` table is 
+/// already initialized or initializes it if needed. 
+/// It panics if `grateid` exceeds the preallocated bounds (currently 1024 entries).
+///
+/// ## Arguments:
+/// - grateid: ID of the grate. Used as the index into `GLOBAL_GRATE`.
+/// - callback: A boxed closure that takes the syscall name pointer and six argument pairs (value
+/// and cage ID) and returns an i32. This closure handles dynamic lookup and execution.
+fn _add_global_grate(grateid: u64, mut callback: Box<GrateFn>) {
+    let index = grateid as usize;
+
+    unsafe {
+        if GLOBAL_GRATE.is_none() {
+            _init_global_grate();
+        }
+
+        if let Some(ref mut vec) = GLOBAL_GRATE {
+            if index < vec.len() {
+                vec[index] = Some(callback);
+            } else {
+                panic!("[3i|threei_wasm_func] Index out of bounds: {}", index);
+            }
+        }
+    }
+
+}
+
 /// Marks the entry corresponding to a grateid in the `GLOBAL_GRATE` table as `None`,
 /// unregistering its associated handler. This function is useful during cage teardown
 /// or dynamic unloading of a grate.
@@ -177,7 +170,7 @@ fn _rm_from_global_grate(grateid: u64) {
 /// `None` if the handler or grate entry is missing.
 fn _call_grate_func(
     grateid: u64,
-    call_name: u64,
+    call_index: u64,
     self_cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -192,10 +185,6 @@ fn _call_grate_func(
     arg6: u64,
     arg6_cageid: u64,
 ) -> Option<i32> {
-    // syscall_name from glibc is an address ptr inside wasm linear memory, so we need to
-    // manually extract the string content from the address
-    let call_ptr = sc_convert_buf(call_name, self_cageid, self_cageid);
-
     // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
     unsafe {
         let vec = GLOBAL_GRATE.as_mut()?;
@@ -204,7 +193,7 @@ fn _call_grate_func(
         // The closure is then called with the extracted syscall name and the full set of
         // arguments + their corresponding cage IDs.
         Some(func(
-            call_ptr as u64,
+            call_index,
             self_cageid,
             arg1,
             arg1_cageid,
@@ -266,7 +255,7 @@ pub fn register_handler(
     _callnum: u64,
     targetcage: u64,    // Cage to modify
     targetcallnum: u64, // Syscall number or match-all indicator. Match-all: 1000.
-    _arg1cage: u64,
+    grate_closure: Box<GrateFn>,
     handlefunc: u64, // Function index to register (for grate, also called destination call) _or_ 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
@@ -283,6 +272,9 @@ pub fn register_handler(
         return threei_const::ELINDESRCH as i32;
     }
 
+    // Add the clousre to the handler table
+    _add_global_grate(handlefunccage, grate_closure);
+    
     // Actual implementation is in handler_table module according to feature flag
     register_handler_impl(targetcage, targetcallnum, handlefunc, handlefunccage)
 }
@@ -402,12 +394,12 @@ pub fn make_syscall(
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
     if _check_cage_handler_exist(self_cageid) {
-        if let Some((_call_index, grateid)) = _get_handler(self_cageid, syscall_num) {
+        if let Some((call_index, grateid)) = _get_handler(self_cageid, syscall_num) {
             // <targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id>
             // Theoretically, the complexity is O(1), shouldn't affect performance a lot
             if let Some(ret) = _call_grate_func(
                 grateid,
-                syscall_name,
+                call_index,
                 self_cageid,
                 arg1,
                 arg1_cageid,

@@ -5,7 +5,7 @@ use cfg_if::cfg_if;
 use anyhow::{anyhow, Result};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::threei::make_syscall;
-use wasmtime_lind_3i_vmctx::remove_ctx;
+use wasmtime_lind_3i::remove_ctx;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 

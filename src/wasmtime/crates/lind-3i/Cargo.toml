@@ -1,5 +1,5 @@
 [package]
-name = "wasmtime-lind-3i-vmctx"
+name = "wasmtime-lind-3i"
 version.workspace = true
 authors.workspace = true
 description = "lind interface within wasmtime"
@@ -13,3 +13,4 @@ workspace = true
 wasmtime = { workspace = true, features = ['threads'] }
 wasmtime-environ = { workspace = true }
 once_cell = { workspace = true }
+sysdefs = { path = "../sysdefs" }
