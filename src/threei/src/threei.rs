@@ -247,7 +247,7 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 pub fn register_handler(
     _arg1: u64,
     targetcage: u64,    // Cage to modify
-    targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all: 1000.
+    targetcallnum: u64, // Syscall number or match-all indicator. TODO: Match-all
     grate_closure: Box<GrateFn>,
     handlefunc: u64, // Function index to register (for grate, also called destination call) _or_ 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
