@@ -28,7 +28,10 @@ This monorepo combines various subprojects and dependencies that work together t
 | Component     | Location          | Description                                                                 |
 |---------------|-------------------|-----------------------------------------------------------------------------|
 | `fdtables`    | `src/fdtables`    | Provides file descriptor table management, used to emulate POSIX semantics |
-| `RawPOSIX`    | `src/RawPOSIX`    | Implementation of raw POSIX syscall wrappers used internally by Lind       |
+| `rawposix`    | `src/rawposix`    | Implementation of raw POSIX syscall wrappers used internally by Lind       |
+| `threei`    | `src/threei`   | System call mediation layer for policy deployment                          |
+| `typemap`   | `src/typemap`  | Defines custom data structures and type conversion functions used across Lind |
+| `cage`      | `src/cage`     | Implements the custom `Cage` structure and its subsystems, including `vmmap` (virtual memory mapping) and `signal` handling |
 | `sysdefs`     | `src/sysdefs`     | Shared system call definitions and constants for cross-platform support    |
 
 ### Third-Party Projects (Source)
