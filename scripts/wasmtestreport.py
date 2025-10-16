@@ -278,7 +278,7 @@ def get_expected_output(source_file):
             return False, None, f"Exception: {e}", "Failure_reading_expected_file"
     
     # Fall back to native execution
-    # Add expected directory support later
+    # TODO: Add expected output support later
     # logger.info(f"No expected output found at {expected_output_file}")
     success, output, returncode, error_type = compile_and_run_native(source_file)
     return success, output, f"Native execution: {output}" if not success else None, error_type
