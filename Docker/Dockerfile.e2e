@@ -110,8 +110,6 @@ RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
 FROM base AS test
 COPY --parents scripts tests tools skip_test_cases.txt Makefile .
-# Create symlink so hardcoded paths in wasmtime match Docker environment
-RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time
 # and cache layers. This means they are not preserved in the resulting image.
 RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmtime/target \

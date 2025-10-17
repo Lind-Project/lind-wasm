@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Dict
 import argparse
 import shutil
 import logging
@@ -42,6 +43,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
 LIND_FS_ROOT = Path(os.environ.get("LIND_FS_ROOT", LIND_WASM_BASE / "src/RawPOSIX/tmp")).resolve()
+CC = os.environ.get("CC", "gcc")  # C compiler, defaults to gcc
 
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
@@ -63,7 +65,7 @@ error_types = {
     "Lind_wasm_Segmentation_Fault": "Lind Wasm Segmentation Failure",
     "Lind_wasm_Timeout": "Timeout During Lind Wasm run",
     "Unknown_Failure": "Unknown Failure",
-    "Output_mismatch": "GCC and Wasm Output mismatch"
+    "Output_mismatch": "C Compiler and Wasm Output mismatch"
     }
 
 # ----------------------------------------------------------------------
@@ -224,7 +226,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     native_output = source_file.parent / f"{source_file.stem}.o"
     
     # Prepare any executable dependencies required by this test (like execv targets)
-    executable_backups = {}
+    executable_backups: Dict[Path, Path] = {}
     created_native_execs = set()
     native_dependencies = analyze_executable_dependencies([source_file])
     for exec_path, dependency_source in native_dependencies.items():
@@ -234,10 +236,10 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
         if dest_path.exists():
             fd, backup_path = tempfile.mkstemp(prefix=f"{dest_path.name}_orig_", dir=str(dest_path.parent))
             os.close(fd)
-            shutil.move(str(dest_path), backup_path)
+            shutil.copy2(str(dest_path), backup_path)
             executable_backups[dest_path] = Path(backup_path)
 
-        dep_compile_cmd = ["gcc", str(dependency_source), "-o", str(dest_path)]
+        dep_compile_cmd = [CC, str(dependency_source), "-o", str(dest_path)]
         try:
             dep_proc = run_subprocess(dep_compile_cmd, label="native dep compile", shell=False)
         except Exception as e:
@@ -256,9 +258,9 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
         raise ValueError(f"Native output path must be absolute, got: {native_output}")
 
     # Compile
-    compile_cmd = ["gcc", str(source_file), "-o", str(native_output)]
+    compile_cmd = [CC, str(source_file), "-o", str(native_output)]
     try:
-        proc = run_subprocess(compile_cmd, label="gcc compile", cwd=LIND_FS_ROOT, shell=False)
+        proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LIND_FS_ROOT, shell=False)
         if proc.returncode != 0:
             return False, proc.stdout + proc.stderr, "compile_error", "Failure_native_compiling"
     except Exception as e:
@@ -277,22 +279,20 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
         return False, f"Exception: {e}", "unknown_error", "Failure_native_running"
     finally:
         # Clean up native binary
-        if native_output.exists():
-            native_output.unlink()
+        native_output.unlink(missing_ok=True)
 
         # Restore any executable dependencies that were swapped out
         for dest_path in created_native_execs:
             try:
-                if dest_path.exists():
-                    dest_path.unlink()
-            except Exception as cleanup_err:
+                dest_path.unlink(missing_ok=True)
+            except (FileNotFoundError, PermissionError) as cleanup_err:
                 logger.debug(f"Failed to remove native dependency {dest_path}: {cleanup_err}")
 
         for dest_path, backup_path in executable_backups.items():
             try:
-                if Path(backup_path).exists():
+                if backup_path.exists():
                     shutil.move(str(backup_path), str(dest_path))
-            except Exception as restore_err:
+            except (FileNotFoundError, PermissionError) as restore_err:
                 logger.warning(f"Failed to restore dependency {dest_path} from backup: {restore_err}")
 
 # ----------------------------------------------------------------------
@@ -544,15 +544,18 @@ def analyze_testfile_dependencies(tests_to_run):
 def analyze_executable_dependencies(tests_to_run):
     import re
     
-    executable_deps = {}
+    executable_deps: Dict[str, Path] = {}
     
     for test_file in tests_to_run:
         try:
             with open(test_file, 'r') as f:
                 content = f.read()
             
-            # Look for execv/execve/execl calls with quoted paths
-            # Pattern matches: execv("path/to/executable", ...)
+            # Look for execv/execve/execl calls with string literal paths
+            # NOTE: This intentionally only matches simple string literals like execv("path", ...)
+            # It does NOT match variable references like execv(argv[0], ...) or macro expansions
+            # This is a deliberate limitation to keep the dependency analysis simple and predictable
+            # Pattern matches: execv("path/to/executable", ...), execl("/bin/ls", ...), etc.
             exec_pattern = r'exec[vle]+\s*\(\s*"([^"]+)"'
             matches = re.findall(exec_pattern, content, re.IGNORECASE)
             
@@ -614,8 +617,8 @@ def create_required_executables(executable_deps):
             dest_path = LIND_FS_ROOT / exec_path
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             
-            # Move the compiled WASM to the destination
-            shutil.move(str(wasm_file), str(dest_path))
+            # Copy the compiled WASM to the destination (preserves source for potential reuse)
+            shutil.copy2(str(wasm_file), str(dest_path))
             logger.info(f"Created executable: {dest_path}")
             
         except Exception as e:
