@@ -1,3 +1,5 @@
+file_tests/deterministic/dup2.c
+file_tests/deterministic/dup3.c
 file_tests/deterministic/chmod.c
 file_tests/deterministic/cloexec.c
 file_tests/deterministic/close.c
@@ -32,6 +34,7 @@ networking_tests/non-deterministic/shutdown.c
 networking_tests/non-deterministic/socketselect.c
 networking_tests/non-deterministic/uds-serverclient.c
 networking_tests/non-deterministic/uds-socketselect.c
+process_tests/deterministic/forkdup.c
 process_tests/deterministic/forkexecuid.c
 process_tests/deterministic/getuid.c
 process_tests/deterministic/mutex.c
