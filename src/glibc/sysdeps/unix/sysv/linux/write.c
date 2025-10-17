@@ -25,7 +25,7 @@
 ssize_t
 __libc_write (int fd, const void *buf, size_t nbytes)
 {
-  // Dennis Edit
+  
   return MAKE_SYSCALL(WRITE_SYSCALL, "syscall|write", (uint64_t) fd, TRANSLATE_GUEST_POINTER_TO_HOST(buf), (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__libc_write)

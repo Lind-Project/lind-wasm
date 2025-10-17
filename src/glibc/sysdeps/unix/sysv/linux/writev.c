@@ -19,8 +19,10 @@ License along with the GNU C Library; if not, see
 #include <unistd.h>
 #include <sys/uio.h>
 #include <sysdep-cancel.h>
+#include <addr_translation.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <errno.h>
 
 ssize_t
 __writev (int fd, const struct iovec *iov, int iovcnt)

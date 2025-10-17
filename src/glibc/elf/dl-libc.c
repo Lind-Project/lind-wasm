@@ -154,7 +154,7 @@ __libc_dlopen_mode (const char *name, int mode)
   args.name = name;
   args.mode = mode;
   // args.caller_dlopen = RETURN_ADDRESS (0);
-  // Dennis Edit
+  
   args.caller_dlopen = NULL;
 
 #ifdef SHARED
