@@ -27,7 +27,7 @@ static int
 setsockopt_syscall (int fd, int level, int optname, const void *optval,
 		    socklen_t len)
 {
-return MAKE_SYSCALL(SETSOCKOPT_SYSCALL, "syscall|setsockopt", (uint64_t) fd, (uint64_t) level, (uint64_t) optname, (uint64_t)optval, len, (uint64_t)0);
+return MAKE_SYSCALL(SETSOCKOPT_SYSCALL, "syscall|setsockopt", (uint64_t) fd, (uint64_t) level, (uint64_t) optname, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(optval), len, (uint64_t)0);
 }
 
 #ifndef __ASSUME_TIME64_SYSCALLS
@@ -90,9 +90,7 @@ setsockopt32 (int fd, int level, int optname, const void *optval,
 int
 __setsockopt (int fd, int level, int optname, const void *optval, socklen_t len)
 {
-  /* Translate only the guest-provided pointer on the direct path. */
-  const void *translated_optval = TRANSLATE_GUEST_POINTER_TO_HOST(optval);
-  int r = setsockopt_syscall (fd, level, optname, translated_optval, len);
+  int r = setsockopt_syscall (fd, level, optname, optval, len);
 
 #ifndef __ASSUME_TIME64_SYSCALLS
   if (r == -1 && errno == ENOPROTOOPT)
