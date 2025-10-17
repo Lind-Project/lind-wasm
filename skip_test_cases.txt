@@ -1,9 +1,9 @@
+file_tests/deterministic/dup2.c
+file_tests/deterministic/dup3.c
 file_tests/deterministic/chmod.c
 file_tests/deterministic/cloexec.c
 file_tests/deterministic/close.c
 file_tests/deterministic/creat_access.c
-file_tests/deterministic/dup2.c
-file_tests/deterministic/dup3.c
 file_tests/deterministic/fchmod.c
 file_tests/deterministic/fcntl.c
 file_tests/deterministic/fdatasync.c
@@ -22,14 +22,11 @@ file_tests/deterministic/sync_file_range.c
 file_tests/deterministic/truncate.c
 file_tests/deterministic/unlinkat.c
 file_tests/non-deterministic/sc-writev.c
-memory_tests/deterministic/malloc_large.c
-memory_tests/deterministic/mmap-nagative1.c
-memory_tests/deterministic/mmap-nagative2.c
-memory_tests/deterministic/mmap.c
+memory_tests/deterministic/mmap-negative1.c
+memory_tests/deterministic/mmap-negative2.c
 memory_tests/deterministic/mmap_complicated.c
 memory_tests/deterministic/mmap_file.c
 memory_tests/deterministic/mmaptest.c
-memory_tests/deterministic/vtable.c
 networking_tests/deterministic/uds-getsockname.c
 networking_tests/deterministic/uds-nb-select.c
 networking_tests/non-deterministic/serverclient.c
@@ -39,7 +36,6 @@ networking_tests/non-deterministic/uds-serverclient.c
 networking_tests/non-deterministic/uds-socketselect.c
 process_tests/deterministic/forkdup.c
 process_tests/deterministic/forkexecuid.c
-process_tests/deterministic/forknodup.c
 process_tests/deterministic/getuid.c
 process_tests/deterministic/mutex.c
 process_tests/deterministic/setsid.c
