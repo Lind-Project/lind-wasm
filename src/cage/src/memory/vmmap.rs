@@ -975,6 +975,7 @@ mod tests {
 
     /// Test: Change protection on entire continuous region
     /// Expected: Region should remain continuous with updated protection
+    /// Verifies that changing protection on an entire region doesn't fragment it
     #[test]
     fn test_change_prot_entire_region() {
         let mut vmmap = Vmmap::new();
@@ -1010,6 +1011,7 @@ mod tests {
 
     /// Test: Change protection on middle portion of continuous region
     /// Expected: Region should be split into 3 parts
+    /// Confirms proper splitting into 3 parts when modifying middle pages
     #[test]
     fn test_change_prot_middle_of_region() {
         let mut vmmap = Vmmap::new();
@@ -1051,6 +1053,7 @@ mod tests {
 
     /// Test: Change protection on beginning of continuous region
     /// Expected: Region should be split into 2 parts
+    /// Tests splitting into 2 parts when modifying start pages
     #[test]
     fn test_change_prot_beginning_of_region() {
         let mut vmmap = Vmmap::new();
@@ -1088,6 +1091,7 @@ mod tests {
 
     /// Test: Change protection on end of continuous region
     /// Expected: Region should be split into 2 parts
+    /// Tests splitting into 2 parts when modifying end pages
     #[test]
     fn test_change_prot_end_of_region() {
         let mut vmmap = Vmmap::new();
@@ -1125,6 +1129,7 @@ mod tests {
 
     /// Test: Change protection spanning multiple continuous regions
     /// Expected: All affected regions should have updated protection
+    /// Verifies correct handling across multiple non-contiguous regions
     #[test]
     fn test_change_prot_spanning_multiple_regions() {
         let mut vmmap = Vmmap::new();
@@ -1204,6 +1209,7 @@ mod tests {
 
     /// Test: Change protection to same value
     /// Expected: Region should remain unchanged
+    /// Ensures no fragmentation when protection doesn't actually change
     #[test]
     fn test_change_prot_to_same_value() {
         let mut vmmap = Vmmap::new();
@@ -1238,6 +1244,7 @@ mod tests {
 
     /// Test: Change protection on overlapping boundary
     /// Expected: Proper handling of exact boundary cases
+    /// Tests single-page modifications and precise boundary handling
     #[test]
     fn test_change_prot_exact_boundaries() {
         let mut vmmap = Vmmap::new();
@@ -1277,6 +1284,7 @@ mod tests {
 
     /// Test: Change protection multiple times on same region
     /// Expected: Protection should be updated correctly each time
+    /// Verifies correct state after successive protection changes
     #[test]
     fn test_change_prot_multiple_times() {
         let mut vmmap = Vmmap::new();
@@ -1319,6 +1327,7 @@ mod tests {
 
     /// Test: Change protection with PROT_NONE
     /// Expected: Region should accept PROT_NONE protection
+    /// Verifies proper handling of PROT_NONE protection
     #[test]
     fn test_change_prot_to_none() {
         let mut vmmap = Vmmap::new();
@@ -1352,6 +1361,7 @@ mod tests {
 
     /// Test: Change protection on adjacent regions with different backing
     /// Expected: Each region should maintain its backing type
+    /// Confirms backing type (Anonymous, SharedMemory, etc.) is preserved
     #[test]
     fn test_change_prot_preserves_backing_type() {
         let mut vmmap = Vmmap::new();
@@ -1403,6 +1413,7 @@ mod tests {
 
     /// Test: Verify maxprot is preserved during change_prot
     /// Expected: maxprot should remain unchanged
+    /// Verifies that maxprot is preserved during protection changes
     #[test]
     fn test_change_prot_preserves_maxprot() {
         let mut vmmap = Vmmap::new();
@@ -1691,6 +1702,7 @@ mod tests {
 
     /// Test: find_map_space_with_hint expects PAGE NUMBER, not address
     /// Clarifies: The hint parameter is in pages, not bytes
+    /// Confirms hint parameter is a PAGE NUMBER, not a byte address
     #[test]
     fn test_find_map_space_with_hint_uses_page_number() {
         let mut vmmap = Vmmap::new();
@@ -1780,6 +1792,7 @@ mod tests {
 
     /// Test: find_map_space_with_hint with hint=0 behaves like find_map_space
     /// Clarifies: Hint is a page number, 0 means start from beginning
+    // Shows that hint=0 searches from the beginning
     #[test]
     fn test_find_map_space_with_hint_zero_hint() {
         let mut vmmap = Vmmap::new();
