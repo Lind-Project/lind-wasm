@@ -1,14 +1,11 @@
 #include <unistd.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 gid_t
 __getgid (void)
 {
-  return -1;
+  return MAKE_SYSCALL0(GETGID_SYSCALL, "syscall|getgid");
 }
 
-gid_t
-getgid (void)
-{
-  return -1;
-}
-
+weak_alias(__getgid, getgid)
