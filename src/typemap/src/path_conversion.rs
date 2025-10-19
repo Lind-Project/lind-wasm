@@ -17,7 +17,7 @@ pub use sysdefs::constants::{err_const, fs_const};
 /// variable is not present, then this will expand to None, and will be set to default path.
 pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
     Some(path) => path,
-    None => "/home/lind/lind-wasm/src/RawPOSIX/tmp",
+    None => "/home/lind/lind-wasm/src/tmp",
 };
 
 /// Convert data type from `&str` to `PathBuf`
@@ -104,10 +104,10 @@ pub fn add_lind_root(cageid: u64, path: &str) -> CString {
 ///
 /// ## Example:
 /// ```
-/// // If LIND_ROOT is "/home/lind/lind-wasm/src/RawPOSIX/tmp"
-/// // and host_path is "/home/lind/lind-wasm/src/RawPOSIX/tmp/foo/bar"
+/// // If LIND_ROOT is "/home/lind/lind-wasm/src/tmp"
+/// // and host_path is "/home/lind/lind-wasm/src/tmp/foo/bar"
 /// // this returns "/foo/bar"
-/// let user_path = strip_lind_root("/home/lind/lind-wasm/src/RawPOSIX/tmp/foo/bar");
+/// let user_path = strip_lind_root("/home/lind/lind-wasm/src/tmp/foo/bar");
 /// assert_eq!(user_path, PathBuf::from("/foo/bar"));
 /// ```
 pub fn strip_lind_root(host_path: &str) -> PathBuf {

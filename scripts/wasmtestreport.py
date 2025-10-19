@@ -41,7 +41,7 @@ RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
-LIND_FS_ROOT = Path(os.environ.get("LIND_FS_ROOT", LIND_WASM_BASE / "src/RawPOSIX/tmp")).resolve()
+LIND_FS_ROOT = Path(os.environ.get("LIND_FS_ROOT", LIND_WASM_BASE / "src/tmp")).resolve()
 
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
@@ -491,7 +491,7 @@ def analyze_testfile_dependencies(tests_to_run):
 # Function: pre_test
 #
 # Purpose:
-#   Creates /src/RawPOSIX/tmp/testfiles directory, 
+#   Creates /src/tmp/testfiles directory, 
 #   Creates readlinkfile.txt file and a soft link to it as readlinkfile(for the purpose of readlinkfile tests)
 #   Copies the required test files from TESTFILES_SRC to TESTFILES_DST defined above
 #
