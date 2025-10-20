@@ -19,7 +19,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
-int __imported_wasi_snapshot_preview1_lind_syscall(unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6) __attribute__((
+int __imported_lind_trampoline(unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6) __attribute__((
     __import_module__("lind"),
     __import_name__("lind-syscall")
 ));
@@ -33,7 +33,7 @@ int __imported_wasi_snapshot_preview1_lind_syscall(unsigned int callnumber, unsi
 //            handled here instead
 int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6, int raw)
 {
-    int ret = __imported_wasi_snapshot_preview1_lind_syscall(callnumber, callname, arg1, arg2, arg3, arg4, arg5, arg6);
+    int ret = __imported_lind_trampoline(callnumber, callname, arg1, arg2, arg3, arg4, arg5, arg6);
     // if raw is set, we do not do any further process to errno handling and directly return the result
     if(raw != 0) return ret;
     // handle the errno
