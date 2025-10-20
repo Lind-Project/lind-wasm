@@ -12,7 +12,7 @@ void handler(int signum)
 }
 
 
-void main()
+int main()
 {
     sigset_t set, oset, pset;
     struct sigaction new_action;
@@ -43,6 +43,6 @@ void main()
 	printf("Error: program should have terminated\n");
 	fflush(stdout);
     }
-
+    return 0;
 }
 
