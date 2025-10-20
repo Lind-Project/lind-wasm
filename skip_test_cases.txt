@@ -27,7 +27,6 @@ memory_tests/deterministic/mmap-negative2.c
 memory_tests/deterministic/mmap_complicated.c
 memory_tests/deterministic/mmap_file.c
 memory_tests/deterministic/mmaptest.c
-networking_tests/deterministic/uds-getsockname.c
 networking_tests/deterministic/uds-nb-select.c
 networking_tests/non-deterministic/serverclient.c
 networking_tests/non-deterministic/shutdown.c
