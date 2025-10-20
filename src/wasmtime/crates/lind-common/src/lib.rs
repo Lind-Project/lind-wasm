@@ -19,8 +19,8 @@ use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_ba
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
-use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 use wasmtime_lind_3i::take_gratefn_wasm;
+use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
 // then the syscall would be dispatched into rawposix, or other crates under wasmtime, depending on the syscall, to perform its job
@@ -235,9 +235,8 @@ pub fn add_to_linker<
               handlefunc_flag: u64,
               this_grate_id: u64|
               -> i32 {
-            
-            // Attach the wasmtime closure corresponding to the grate function index to the 
-            // register_handler call. This closure will be stored in the threei lib's 
+            // Attach the wasmtime closure corresponding to the grate function index to the
+            // register_handler call. This closure will be stored in the threei lib's
             // handler table for later invocation.
             // This is wasmtime specific
             let grate_closure = take_gratefn_wasm(this_grate_id as usize);
