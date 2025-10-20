@@ -9,7 +9,7 @@ pub const PATH_MAX: usize = 4096;
 /// This prefix is added before passing paths to the host system and removed
 /// when returning paths to the user, ensuring the Lind filesystem remains
 /// isolated from other parts. Only visible within the Lind codebase.
-pub const LIND_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
+pub const LIND_ROOT: &str = "/home/lind/lind-wasm/src/tmp";
 
 /// ===== Lind specific =====
 ///

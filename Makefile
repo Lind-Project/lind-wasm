@@ -18,7 +18,7 @@ wasmtime:
 .PHONY: test
 test:
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
-	LIND_WASM_BASE=. LIND_FS_ROOT=src/RawPOSIX/tmp \
+	LIND_WASM_BASE=. LIND_FS_ROOT=src/tmp \
 	./scripts/wasmtestreport.py && \
 	cat results.json; \
 	if grep -q '"number_of_failures": [^0]' results.json; then \
@@ -85,5 +85,5 @@ clean:
 distclean: clean
 	@echo "removing test outputs & temp files"
 	$(RM) -f results.json report.html
-	$(RM) -r src/RawPOSIX/tmp/testfiles || true
+	$(RM) -r src/tmp/testfiles || true
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete
