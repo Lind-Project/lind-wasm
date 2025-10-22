@@ -9,6 +9,8 @@ use common::*;
 const CAGE_A: u64 = 11;
 const GRATE_G: u64 = 99;
 const SYSCALL_FOO: u64 = 34;
+const OP_ADD: u64 = 1;
+const OP_REMOVE: u64 = 0;
 
 #[test]
 #[serial]
@@ -49,7 +51,7 @@ fn interposed_syscall_invokes_grate_and_returns_its_value() {
     clear_globals();
 
     // Arrange: register (CAGE_A, SYSCALL_FOO) -> (handlefunc=7, grate=GRATE_G)
-    let rc = reg(CAGE_A, SYSCALL_FOO, 7, GRATE_G);
+    let rc = reg(CAGE_A, SYSCALL_FOO, 7, GRATE_G, OP_ADD);
     assert_eq!(rc, 0);
 
     // Act: call the interposed syscall from CAGE_A.

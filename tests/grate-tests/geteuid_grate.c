@@ -66,8 +66,8 @@ int main(int argc, char *argv[]) {
         int cageid = getpid();
         // Set the geteuid (syscallnum=107) of this cage to call this grate
         // function geteuid_grate (func index=0) Syntax of register_handler:
-        // <targetcage, targetcallnum, handlefunc_index_in_this_grate
-        // (non-zero), this_grate_id>
+        // <targetcage, targetcallnum, handlefunc_flag (deregister(0) or register
+        // (non-zero), this_grate_id, fn_ptr_u64)>
         uint64_t fn_ptr_addr = (uint64_t)(uintptr_t)&geteuid_grate;
         printf("[Grate|geteuid] Registering geteuid handler for cage %d in "
                "grate %d with fn ptr addr: %llu\n",

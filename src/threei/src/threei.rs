@@ -18,7 +18,6 @@ use crate::syscall_table::SYSCALL_TABLE;
 use crate::threei_const;
 
 pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
-const MMAP_SYSCALL: u64 = 9; // mmap syscall number
 
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
 pub type RawCallFunc = fn(
@@ -37,6 +36,22 @@ pub type RawCallFunc = fn(
     arg6_cageid: u64,
 ) -> i32;
 
+/// Represents a single Grate function entry shared between the lind-3i crate and Wasmtime.
+///
+/// Each entry stores both:
+/// - `fn_ptr`: a callback function pointer used to re-enter the Wasm module
+///   from the host side (i.e., the actual logic Wasmtime executes when invoking
+///   a Grate callback). See [`lind-3i`] and [`Wasmtime::Run`] crate for details.
+/// - `ctx_ptr`: a pointer to the corresponding context information (`VMContext`) needed by
+//    callback function.
+///
+/// Since `VMContext` is per-thread, the global table `GLOBAL_GRATE` is keyed by `(pid, tid)`
+/// to maintain per-Cage and per-thread associations.  
+///
+/// TODO: Currently, we assume that tid is always 0.
+///
+/// This data structure is also accessed by the lind-3i crate within Wasmtime
+/// to coordinate re-entry into the correct Wasm execution context.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct GrateFnEntry {
@@ -48,12 +63,29 @@ pub struct GrateFnEntry {
 unsafe impl Send for GrateFnEntry {}
 unsafe impl Sync for GrateFnEntry {}
 
+/// Global mapping of `(pid, tid)` to `GrateFnEntry`.
+///
+/// Used **ONLY** by 3i to look up the appropriate Grate callback and its associated `VMContext` when
+/// performing a re-entry into Wasm.
 pub static GLOBAL_GRATE: Lazy<RwLock<HashMap<(u64, u64), GrateFnEntry>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
+/// Registers a new `GrateFnEntry` into the global table `GLOBAL_GRATE`.
+/// It takes a `grateid` (representing the Grate instance) and a u64 pointer (`entry_ptr_u64`) to a 
+/// `GrateFnEntry` that originates from the Wasmtime side.
+///
+/// The function validates that both the pointer and its contained `fn_ptr` and `ctx_ptr` are non-null 
+/// before inserting it into the table.
+///
+/// The key used is `(grateid, 0)`
+/// TODO: the second component (`tid`) is reserved for future per-thread extensions.
+///
+/// Returns 0 on success, -1 on invalid pointer or null context.
 fn _add_global_grate(grateid: u64, entry_ptr_u64: u64) -> i32 {
+    // Validate the pointer is non-null
     if entry_ptr_u64 == 0 { return -1; }
-
+    
+    // Convert the u64 pointer back to a `GrateFnEntry` reference
     let p: *const GrateFnEntry = (entry_ptr_u64 as usize) as *const GrateFnEntry;
 
     let entry = unsafe { *p };
@@ -63,11 +95,21 @@ fn _add_global_grate(grateid: u64, entry_ptr_u64: u64) -> i32 {
     0
 }
 
+/// Removes a `GrateFnEntry` associated with the given `grateid` from the global table.
+/// TODO: the second component (`tid`) is reserved for future per-thread extensions.
 fn _rm_from_global_grate(grateid: u64) {
     let mut map = GLOBAL_GRATE.write().expect("lock poisoned");
     map.remove(&(grateid, 0));
 }
 
+/// Invokes a stored Grate callback function (`fn_ptr`) corresponding to the given `grateid`.
+/// The function first looks up `(grateid, 0)` in the global table to retrieve the associated 
+/// `GrateFnEntry`.
+/// If found, it performs an unsafe call to the `fn_ptr`, passing in its `ctx_ptr` (the per-thread 
+/// `VMContext`) and argument pairs plus `self_cageid`.
+/// This allows the 3i side to re-enter the Wasm runtime and execute a callback inside the Grate module.
+/// 
+/// Returns `Some(i32)` representing the grate call result, or `Some(-1)` if the entry does not exist.
 fn _call_grate_func(
     grateid: u64,
     in_grate_fn_ptr_u64: u64,
@@ -88,13 +130,14 @@ fn _call_grate_func(
     let map = GLOBAL_GRATE.read().unwrap();
     let key = (grateid, 0);
 
+    // Lookup the GrateFnEntry
     let Some(entry) = map.get(&key) else { return Some(-1); };
 
-    // SAFETY: fn_ptr/ctx_ptr provided by Wasmtime side; 3i never mutates ctx
+    // `fn_ptr`/`ctx_ptr` provided by Wasmtime side; 3i never mutates ctx
     let f = entry.fn_ptr;
 
-    unsafe { Some(f(entry.ctx_ptr, in_grate_fn_ptr_u64, self_cageid, arg1, arg1_cageid, arg2, arg2_cageid, arg3, arg3_cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid)) }
-
+    // Call the grate function with the provided arguments
+    Some(f(entry.ctx_ptr, in_grate_fn_ptr_u64, self_cageid, arg1, arg1_cageid, arg2, arg2_cageid, arg3, arg3_cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid))
 }
 
 /// EXITING_TABLE:
@@ -117,20 +160,22 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 ///
 /// Example:
 /// register_handler(
-///     NOTUSED, 7,  34, NOTUSED,
-///    foo, mycagenum,
+///     foo_addr, 7,  34, SOME_ENTRY_PTR,
+///    1, mycagenum,
 ///    ...)
 ///
 ///
 /// If a conflicting mapping exists, the function panics to prevent accidental overwrite.
 ///
-/// If a handler is already registered for this (syscall number, function index) pair with the same
+/// If a handler is already registered for this (syscall number, in grate function address) pair with the same
 /// destination cage, the call is treated as a no-op.
 ///
 /// ## Arguments:
+/// - in_grate_fn_ptr_u64: Pointer to the function inside the grate that will handle this syscall.
 /// - targetcage: The ID of the cage whose syscall table is being modified (i.e., the source of the syscall).
 /// - targetcallnum: The syscall number to interpose on (can be treated as a match-all in some configurations).
-/// - handlefunc: The function index (or exported function address) to register.
+/// - entry_ptr_u64: Pointer to the Grate function entry (contains `fn_ptr` and `ctx_ptr`).
+/// - op_flag: The operation flag to indicate whether to register or deregister.
 /// - handlefunccage: The cage (typically a grate) that owns the destination function to be called.
 ///
 /// ## Returns:
@@ -140,9 +185,9 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 pub fn register_handler(
     in_grate_fn_ptr_u64: u64,
     targetcage: u64,    // Cage to modify
-    targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all: 1000.
-    ctx_ptr_u64: u64,
-    handlefunc: u64, // Function index to register (for grate, also called destination call) _or_ 0 for deregister
+    targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all.
+    entry_ptr_u64: u64,
+    op_flag: u64, // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
     _arg3cage: u64,
@@ -158,16 +203,11 @@ pub fn register_handler(
         return threei_const::ELINDESRCH as i32;
     }
 
-    // Add the clousre to the handler table
-    // unsafe {
-    //     _add_global_grate(handlefunccage, fn_ptr_u64, ctx_ptr_u64);
-    // }
-    unsafe {
-        _add_global_grate(handlefunccage, ctx_ptr_u64);
-    }
+    // Add the `GrateFnEntry` to the global table
+    _add_global_grate(handlefunccage, entry_ptr_u64);
 
     // Actual implementation is in handler_table module according to feature flag
-    register_handler_impl(targetcage, targetcallnum, handlefunc, handlefunccage, in_grate_fn_ptr_u64)
+    register_handler_impl(targetcage, targetcallnum, op_flag, handlefunccage, in_grate_fn_ptr_u64)
 }
 
 /// This copies the handler table used by a cage to another cage.  
@@ -260,7 +300,7 @@ pub fn copy_handler_table_to_cage(
 pub fn make_syscall(
     self_cageid: u64, // is required to get the cage instance
     syscall_num: u64,
-    syscall_name: u64, // syscall name pointer in the calling Wasm instance
+    _syscall_name: u64, // syscall name pointer in the calling Wasm instance
     target_cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -286,7 +326,7 @@ pub fn make_syscall(
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
     if _check_cage_handler_exist(self_cageid) {
         if let Some((in_grate_fn_ptr_u64, grateid)) = _get_handler(self_cageid, syscall_num) {
-            // <targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id>
+            // <targetcage, targetcallnum, in_grate_fn_ptr_u64, this_grate_id>
             // Theoretically, the complexity is O(1), shouldn't affect performance a lot
             if let Some(ret) = _call_grate_func(
                 grateid,
@@ -347,13 +387,13 @@ pub fn make_syscall(
             arg6,
             arg6_cageid,
         );
-        return ret;
+        ret
     } else {
         eprintln!(
             "[3i|make_syscall] Syscall number {} not found!",
             syscall_num
         );
-        return threei_const::ELINDAPIABORTED as i32;
+        threei_const::ELINDAPIABORTED as i32
     }
 }
 
