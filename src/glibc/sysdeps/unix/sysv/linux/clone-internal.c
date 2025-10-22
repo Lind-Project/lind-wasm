@@ -47,25 +47,10 @@ int
 __clone_internal_fallback (struct clone_args *cl_args,
 			   int (*func) (void *arg), void *arg)
 {
-  /* Map clone3 arguments to clone arguments.  NB: No need to check
-     invalid clone3 specific bits in flags nor exit_signal since this
-     is an internal function.  */
-  int flags = cl_args->flags | cl_args->exit_signal;
-  void *stack = cast_to_pointer (cl_args->stack);
-  int ret;
-
-#if !_STACK_GROWS_DOWN && !_STACK_GROWS_UP
-# error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
-#endif
-
-#if _STACK_GROWS_DOWN
-  stack += cl_args->stack_size;
-#endif
-  ret = __clone (func, stack, flags, arg,
-		 cast_to_pointer (cl_args->parent_tid),
-		 cast_to_pointer (cl_args->tls),
-		 cast_to_pointer (cl_args->child_tid));
-  return ret;
+//   /* Map clone3 arguments to clone arguments.  NB: No need to check
+//      invalid clone3 specific bits in flags nor exit_signal since this
+//      is an internal function.  */
+  return 0;
 }
 
 int
