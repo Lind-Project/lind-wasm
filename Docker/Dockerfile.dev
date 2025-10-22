@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends -qq \
     bison \
     build-essential \
     ca-certificates \
+    wabt \
+    strace \
     curl \
     gawk \
     git \

@@ -6,14 +6,24 @@ build: sysroot wasmtime
 .PHONY: all
 all: build
 
+## Build profile (release|debug). Default release (CI/e2e); devcontainer can set debug.
+PROFILE ?= release
+
+# Translate PROFILE -> cargo flags for cargo build
+WASMTIME_CARGO_FLAGS :=
+ifeq ($(PROFILE),release)
+  WASMTIME_CARGO_FLAGS += --release
+endif
+
+
 .PHONY: sysroot
 sysroot:
 	./scripts/make_glibc_and_sysroot.sh
 
 .PHONY: wasmtime
 wasmtime:
-	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
-	cargo build --manifest-path src/wasmtime/Cargo.toml --release
+	# Build wasmtime (honors PROFILE=release|debug)
+	cargo build --manifest-path src/wasmtime/Cargo.toml $(WASMTIME_CARGO_FLAGS)
 
 .PHONY: test
 test:
