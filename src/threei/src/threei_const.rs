@@ -15,12 +15,12 @@ pub const ELINDAPIABORTED: u64 = 0xE001_0001;
 /// See function-level comments for specific usage details.  
 pub const ELINDESRCH: u64 = 0xE001_0002;
 /// Indicates a successful Grate call.
-/// This value (0) is returned from functions that perform a Grate-side 
-/// operation or callback through Wasmtime when the call completes 
+/// This value (0) is returned from functions that perform a Grate-side
+/// operation or callback through Wasmtime when the call completes
 /// normally without error.
-pub const GRATE_OK: i32   = 0;
+pub const GRATE_OK: i32 = 0;
 /// Indicates a failed Grate call.
-/// This value (-1) is used by Wasmtime to signal an error or invalid 
-/// state during Grate function dispatch (e.g., invalid pointer, missing 
+/// This value (-1) is used by Wasmtime to signal an error or invalid
+/// state during Grate function dispatch (e.g., invalid pointer, missing
 /// context, or lookup failure).
-pub const GRATE_ERR: i32  = -1;
+pub const GRATE_ERR: i32 = -1;

@@ -22,23 +22,26 @@ use wasmtime::{
     AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType,
 };
 
-use wasmtime::{Instance, Caller};
+use wasmtime::{Caller, Instance};
 
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
-use wasmtime_lind_3i::{set_gratefn_wasm, remove_gratefn_wasm};
+use wasmtime_lind_3i::{remove_gratefn_wasm, set_gratefn_wasm};
 use wasmtime_lind_utils::LindCageManager;
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
-use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::{make_syscall, GrateFnEntry, threei_const};
-use std::{panic::{catch_unwind, AssertUnwindSafe}, ptr::NonNull};
 use core::ffi::c_void;
-use wasmtime::vm::{VMOpaqueContext, VMContext};
+use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
+use std::{
+    panic::{catch_unwind, AssertUnwindSafe},
+    ptr::NonNull,
+};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use threei::{make_syscall, threei_const, GrateFnEntry};
+use wasmtime::vm::{VMContext, VMOpaqueContext};
 
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::WasiNnCtx;
@@ -59,9 +62,9 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
 
 /// Wraps a raw Wasmtime `VMContext` pointer for cross-boundary use.
 ///
-/// The `VmCtxWrapper` type provides an minimal wrapper around a non-null 
-/// pointer to a `VMContext`. It allows the pointer to be passed between 
-/// Wasmtime and 3i without exposing the raw pointer everywhere in the 
+/// The `VmCtxWrapper` type provides an minimal wrapper around a non-null
+/// pointer to a `VMContext`. It allows the pointer to be passed between
+/// Wasmtime and 3i without exposing the raw pointer everywhere in the
 /// codebase.
 struct VmCtxWrapper {
     vmctx: NonNull<c_void>,
@@ -81,32 +84,41 @@ struct WasmCallbackCtx {
     vm: VmCtxWrapper,
 }
 
-/// The callback function registered with 3i uses a unified Wasm entry 
-/// function as the single re-entry point into the Wasm executable. It 
-/// receives an address inside grate that identifies the target handler. 
-/// When invoked, the callback calls the entry function inside the Wasm 
-/// module, passing this address as an argument. The entry function then 
-/// dispatches control to the corresponding per-syscall implementation 
-/// based on the address provided by `register_handler`. 
-/// To complete the bridge between host and guest, the system uses 
-/// `Caller::with()` to re-enter the  Wasmtime runtime context from the 
+/// The callback function registered with 3i uses a unified Wasm entry
+/// function as the single re-entry point into the Wasm executable. It
+/// receives an address inside grate that identifies the target handler.
+/// When invoked, the callback calls the entry function inside the Wasm
+/// module, passing this address as an argument. The entry function then
+/// dispatches control to the corresponding per-syscall implementation
+/// based on the address provided by `register_handler`.
+/// To complete the bridge between host and guest, the system uses
+/// `Caller::with()` to re-enter the  Wasmtime runtime context from the
 /// host side.
 ///
 /// This function is called by 3i when a syscall is routed to a grate.
 pub extern "C" fn grate_callback_trampoline(
     ctx: *mut c_void,
-    in_grate_fn_ptr_u64: u64, cageid: u64,
-    arg1: u64, arg1cageid: u64,
-    arg2: u64, arg2cageid: u64,
-    arg3: u64, arg3cageid: u64,
-    arg4: u64, arg4cageid: u64,
-    arg5: u64, arg5cageid: u64,
-    arg6: u64, arg6cageid: u64
+    in_grate_fn_ptr_u64: u64,
+    cageid: u64,
+    arg1: u64,
+    arg1cageid: u64,
+    arg2: u64,
+    arg2cageid: u64,
+    arg3: u64,
+    arg3cageid: u64,
+    arg4: u64,
+    arg4cageid: u64,
+    arg5: u64,
+    arg5cageid: u64,
+    arg6: u64,
+    arg6cageid: u64,
 ) -> i32 {
     // Never unwind across the C boundary.
     let res = catch_unwind(AssertUnwindSafe(|| unsafe {
         // Validatation check
-        if ctx.is_null() { return threei_const::GRATE_ERR; }
+        if ctx.is_null() {
+            return threei_const::GRATE_ERR;
+        }
 
         // Convert back to WasmCallbackCtx
         let ctx = &*(ctx as *const WasmCallbackCtx);
@@ -115,7 +127,10 @@ pub extern "C" fn grate_callback_trampoline(
 
         // Re-enter Wasmtime using the stored vmctx pointer
         Caller::with(vmctx_raw, |caller: Caller<'_, Host>| {
-            let Caller { mut store, caller: instance } = caller;
+            let Caller {
+                mut store,
+                caller: instance,
+            } = caller;
 
             // Resolve the unified entry function once per call
             let entry_func = instance
@@ -126,23 +141,50 @@ pub extern "C" fn grate_callback_trampoline(
                 .and_then(|f| f.into_func())
                 .ok_or_else(|| anyhow!("missing export `pass_fptr_to_wt`"))?;
 
-            let typed_func = entry_func
-                .typed::<(u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64), i32>(&mut store)?;
+            let typed_func = entry_func.typed::<(
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+                u64,
+            ), i32>(&mut store)?;
 
             // Call the entry function with all arguments and in grate function pointer
-            typed_func.call(&mut store, (
-                in_grate_fn_ptr_u64, cageid, arg1, arg1cageid, arg2, arg2cageid,
-                arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid,
-                arg6, arg6cageid,
-            ))
-        }).unwrap_or(threei_const::GRATE_ERR)
+            typed_func.call(
+                &mut store,
+                (
+                    in_grate_fn_ptr_u64,
+                    cageid,
+                    arg1,
+                    arg1cageid,
+                    arg2,
+                    arg2cageid,
+                    arg3,
+                    arg3cageid,
+                    arg4,
+                    arg4cageid,
+                    arg5,
+                    arg5cageid,
+                    arg6,
+                    arg6cageid,
+                ),
+            )
+        })
+        .unwrap_or(threei_const::GRATE_ERR)
     }));
 
     match res {
         Ok(v) => v,
-        Err(_) => {
-            threei_const::GRATE_ERR
-        }
+        Err(_) => threei_const::GRATE_ERR,
     }
 }
 
@@ -772,7 +814,7 @@ impl RunCommand {
                 // instance boundaries particularly difficult. To overcome this, the design employs low-level context
                 // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
                 // structures. These pointers are stored in a global registry, enabling safe, cross-thread access
-                // without violating Rust’s safety guarantees. 
+                // without violating Rust’s safety guarantees.
                 // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
                 let grate_storeopaque = store.inner_mut();
                 let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
@@ -790,15 +832,32 @@ impl RunCommand {
                 let boxed: Box<WasmCallbackCtx> = Box::new(ctx);
                 let ctx_ptr: *mut c_void = Box::into_raw(boxed) as *mut c_void;
                 // Convert the trampoline to a function pointer
-                let fn_ptr: extern "C" fn(*mut c_void,
-                                     u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64) -> i32 = grate_callback_trampoline;
+                let fn_ptr: extern "C" fn(
+                    *mut c_void,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                    u64,
+                ) -> i32 = grate_callback_trampoline;
 
                 // 4) Build entry and store in [`crates::lind-3i`] table
                 let entry = GrateFnEntry { fn_ptr, ctx_ptr };
-                let rc = unsafe { set_gratefn_wasm(pid, &entry) }; 
+                let rc = unsafe { set_gratefn_wasm(pid, &entry) };
                 if rc < 0 {
                     // reclaim memory on error
-                    unsafe { drop(Box::from_raw(ctx_ptr as *mut WasmCallbackCtx)); }
+                    unsafe {
+                        drop(Box::from_raw(ctx_ptr as *mut WasmCallbackCtx));
+                    }
                     return Err(anyhow!("3i rejected registration"));
                 }
 

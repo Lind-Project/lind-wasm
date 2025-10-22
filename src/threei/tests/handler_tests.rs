@@ -83,7 +83,13 @@ fn deregister_entire_callnum_with_constant() {
 
     // Now remove the entire callnum entry:
     assert_eq!(
-        reg(cage, callnum, 12345, threei_const::THREEI_DEREGISTER, OP_REMOVE),
+        reg(
+            cage,
+            callnum,
+            12345,
+            threei_const::THREEI_DEREGISTER,
+            OP_REMOVE
+        ),
         0
     );
 
@@ -92,7 +98,16 @@ fn deregister_entire_callnum_with_constant() {
     assert!(m.is_empty());
 
     // Idempotent: removing again is still success
-    assert_eq!(reg(cage, callnum, 9999, threei_const::THREEI_DEREGISTER, OP_REMOVE), 0);
+    assert_eq!(
+        reg(
+            cage,
+            callnum,
+            9999,
+            threei_const::THREEI_DEREGISTER,
+            OP_REMOVE
+        ),
+        0
+    );
 }
 
 #[test]
@@ -157,7 +172,13 @@ fn cleanup_cage_removed_when_last_callnum_removed() {
 
     // remove SYSCALL_FOO entirely
     assert_eq!(
-        reg(cage, SYSCALL_FOO, 0, threei_const::THREEI_DEREGISTER, OP_REMOVE),
+        reg(
+            cage,
+            SYSCALL_FOO,
+            0,
+            threei_const::THREEI_DEREGISTER,
+            OP_REMOVE
+        ),
         0
     );
     // cage still present because call_b remains
@@ -173,7 +194,13 @@ fn cleanup_cage_removed_when_last_callnum_removed() {
 
     // remove SYSCALL_BAR entirely -> cage should be cleaned up (optional cleanup branch)
     assert_eq!(
-        reg(cage, SYSCALL_BAR, 0, threei_const::THREEI_DEREGISTER, OP_REMOVE),
+        reg(
+            cage,
+            SYSCALL_BAR,
+            0,
+            threei_const::THREEI_DEREGISTER,
+            OP_REMOVE
+        ),
         0
     );
 

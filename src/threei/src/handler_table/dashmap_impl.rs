@@ -36,7 +36,10 @@ pub fn print_handler_table() {
             for target_entry in target_map.iter() {
                 let destfunc = target_entry.key();
                 let dest_grateid = target_entry.value();
-                println!("    destfunc: {} -> dest_grateid: {}", destfunc, dest_grateid);
+                println!(
+                    "    destfunc: {} -> dest_grateid: {}",
+                    destfunc, dest_grateid
+                );
             }
         }
     }

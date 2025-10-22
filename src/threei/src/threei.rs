@@ -3,12 +3,12 @@ use cage::memory::check_addr;
 use core::panic;
 use dashmap::DashSet;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::ffi::c_void;
+use std::sync::RwLock;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
 use typemap::datatype_conversion::sc_convert_uaddr_to_host;
-use std::sync::RwLock;
-use std::collections::HashMap;
-use std::ffi::c_void;
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
@@ -55,8 +55,23 @@ pub type RawCallFunc = fn(
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct GrateFnEntry {
-    pub fn_ptr: extern "C" fn(*mut c_void,
-                                     u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64) -> i32,
+    pub fn_ptr: extern "C" fn(
+        *mut c_void,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+    ) -> i32,
     pub ctx_ptr: *mut c_void,
 }
 
@@ -71,10 +86,10 @@ pub static GLOBAL_GRATE: Lazy<RwLock<HashMap<(u64, u64), GrateFnEntry>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
 /// Registers a new `GrateFnEntry` into the global table `GLOBAL_GRATE`.
-/// It takes a `grateid` (representing the Grate instance) and a u64 pointer (`entry_ptr_u64`) to a 
+/// It takes a `grateid` (representing the Grate instance) and a u64 pointer (`entry_ptr_u64`) to a
 /// `GrateFnEntry` that originates from the Wasmtime side.
 ///
-/// The function validates that both the pointer and its contained `fn_ptr` and `ctx_ptr` are non-null 
+/// The function validates that both the pointer and its contained `fn_ptr` and `ctx_ptr` are non-null
 /// before inserting it into the table.
 ///
 /// The key used is `(grateid, 0)`
@@ -83,13 +98,17 @@ pub static GLOBAL_GRATE: Lazy<RwLock<HashMap<(u64, u64), GrateFnEntry>>> =
 /// Returns 0 on success, -1 on invalid pointer or null context.
 fn _add_global_grate(grateid: u64, entry_ptr_u64: u64) -> i32 {
     // Validate the pointer is non-null
-    if entry_ptr_u64 == 0 { return -1; }
-    
+    if entry_ptr_u64 == 0 {
+        return -1;
+    }
+
     // Convert the u64 pointer back to a `GrateFnEntry` reference
     let p: *const GrateFnEntry = (entry_ptr_u64 as usize) as *const GrateFnEntry;
 
     let entry = unsafe { *p };
-    if entry.ctx_ptr.is_null() { return -1; }
+    if entry.ctx_ptr.is_null() {
+        return -1;
+    }
     let mut map = GLOBAL_GRATE.write().unwrap();
     map.insert((grateid, 0), entry);
     0
@@ -103,12 +122,12 @@ fn _rm_from_global_grate(grateid: u64) {
 }
 
 /// Invokes a stored Grate callback function (`fn_ptr`) corresponding to the given `grateid`.
-/// The function first looks up `(grateid, 0)` in the global table to retrieve the associated 
+/// The function first looks up `(grateid, 0)` in the global table to retrieve the associated
 /// `GrateFnEntry`.
-/// If found, it performs an unsafe call to the `fn_ptr`, passing in its `ctx_ptr` (the per-thread 
+/// If found, it performs an unsafe call to the `fn_ptr`, passing in its `ctx_ptr` (the per-thread
 /// `VMContext`) and argument pairs plus `self_cageid`.
 /// This allows the 3i side to re-enter the Wasm runtime and execute a callback inside the Grate module.
-/// 
+///
 /// Returns `Some(i32)` representing the grate call result, or `Some(-1)` if the entry does not exist.
 fn _call_grate_func(
     grateid: u64,
@@ -131,13 +150,31 @@ fn _call_grate_func(
     let key = (grateid, 0);
 
     // Lookup the GrateFnEntry
-    let Some(entry) = map.get(&key) else { return Some(-1); };
+    let Some(entry) = map.get(&key) else {
+        return Some(-1);
+    };
 
     // `fn_ptr`/`ctx_ptr` provided by Wasmtime side; 3i never mutates ctx
     let f = entry.fn_ptr;
 
     // Call the grate function with the provided arguments
-    Some(f(entry.ctx_ptr, in_grate_fn_ptr_u64, self_cageid, arg1, arg1_cageid, arg2, arg2_cageid, arg3, arg3_cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid))
+    Some(f(
+        entry.ctx_ptr,
+        in_grate_fn_ptr_u64,
+        self_cageid,
+        arg1,
+        arg1_cageid,
+        arg2,
+        arg2_cageid,
+        arg3,
+        arg3_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    ))
 }
 
 /// EXITING_TABLE:
@@ -187,7 +224,7 @@ pub fn register_handler(
     targetcage: u64,    // Cage to modify
     targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all.
     entry_ptr_u64: u64,
-    op_flag: u64, // 0 for deregister
+    op_flag: u64,        // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
     _arg3cage: u64,
@@ -207,7 +244,13 @@ pub fn register_handler(
     _add_global_grate(handlefunccage, entry_ptr_u64);
 
     // Actual implementation is in handler_table module according to feature flag
-    register_handler_impl(targetcage, targetcallnum, op_flag, handlefunccage, in_grate_fn_ptr_u64)
+    register_handler_impl(
+        targetcage,
+        targetcallnum,
+        op_flag,
+        handlefunccage,
+        in_grate_fn_ptr_u64,
+    )
 }
 
 /// This copies the handler table used by a cage to another cage.  

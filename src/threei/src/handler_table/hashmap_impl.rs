@@ -29,7 +29,10 @@ pub fn print_handler_table() {
         for (callnum, target_map) in callnum_map.iter() {
             println!("  Callnum: {}", callnum);
             for (destfunc, dest_grateid) in target_map.iter() {
-                println!("    destfunc: {} -> dest_grateid: {}", destfunc, dest_grateid);
+                println!(
+                    "    destfunc: {} -> dest_grateid: {}",
+                    destfunc, dest_grateid
+                );
             }
         }
     }
@@ -195,7 +198,7 @@ pub fn register_handler_impl(
         .entry(targetcallnum)
         .or_insert_with(HashMap::new)
         .insert(in_grate_fn_ptr_u64, handlefunccage);
-    
+
     0
 }
 
