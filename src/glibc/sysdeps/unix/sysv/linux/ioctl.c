@@ -39,35 +39,16 @@ __ioctl (int fd, unsigned long int request, ...)
   /* Only support FIONBIO and FIOASYNC.  Fail fast otherwise. */
   assert (request == FIONBIO || request == FIOASYNC);
 
-  uintptr_t third_arg;
-  if (raw == 0 || raw == 1)
-    {
-      int tmp = (int) raw;
+  /* For FIONBIO and FIOASYNC, the third argument should be a pointer to int (int *argp).
+   * Translate the guest pointer to host pointer.
+   * TODO: Handle the edge case where someone passes a direct integer value (0 or 1)
+   * instead of a pointer. For now, we assume correct API usage (pointer). */
+  void *host_ptr = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
 
-      /* Directly use &tmp as the pointer, since it's a host stack variable. */
-      third_arg = (uintptr_t) &tmp;
-
-      return MAKE_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl",
-                           (uint64_t) fd, (uint64_t) request,
-                           (uint64_t) third_arg,
-                           NOTUSED, NOTUSED, NOTUSED);
-    }
-  else
-    {
-      void *host_ptr = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
-      if (host_ptr == NULL)
-        {
-          errno = EFAULT;
-          return -1;
-        }
-
-      third_arg = (uintptr_t) host_ptr;
-
-      return MAKE_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl",
-                           (uint64_t) fd, (uint64_t) request,
-                           (uint64_t) third_arg,
-                           NOTUSED, NOTUSED, NOTUSED);
-    }
+  return MAKE_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl",
+                       (uint64_t) fd, (uint64_t) request,
+                       (uint64_t) host_ptr,
+                       NOTUSED, NOTUSED, NOTUSED);
 }
 
 libc_hidden_def (__ioctl)
