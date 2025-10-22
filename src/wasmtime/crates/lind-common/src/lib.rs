@@ -233,19 +233,16 @@ pub fn add_to_linker<
         move |targetcage: u64,
               targetcallnum: u64,
               handlefunc_flag: u64,
-              this_grate_id: u64|
+              this_grate_id: u64,
+              in_grate_fn_ptr_u64: u64|
               -> i32 {
-            // Attach the wasmtime closure corresponding to the grate function index to the
-            // register_handler call. This closure will be stored in the threei lib's
-            // handler table for later invocation.
-            // This is wasmtime specific
-            let grate_closure = take_gratefn_wasm(this_grate_id as usize);
+            let entry = take_gratefn_wasm(this_grate_id).unwrap();
 
             register_handler(
-                UNUSED_ARG,
+                in_grate_fn_ptr_u64,
                 targetcage,
                 targetcallnum,
-                grate_closure,
+                entry as u64,
                 handlefunc_flag,
                 this_grate_id,
                 UNUSED_ARG,
