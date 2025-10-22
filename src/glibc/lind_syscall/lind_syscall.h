@@ -2,5 +2,6 @@ int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned
 int lind_register_syscall(uint64_t targetcage, 
     uint64_t targetcallnum, 
     uint64_t handlefunc_flag,
-    uint64_t this_grate_id);
+    uint64_t this_grate_id,
+    uint64_t fn_ptr_u64);
 int lind_cp_data(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype);

@@ -12,7 +12,7 @@ use crate::common::{Profile, RunCommon, RunTarget};
 use anyhow::{anyhow, bail, Context as _, Error, Result};
 use clap::Parser;
 pub use once_cell::sync::Lazy;
-use std::ffi::{CStr, OsString};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
@@ -21,22 +21,25 @@ use wasi_common::sync::{ambient_authority, Dir, TcpListener, WasiCtxBuilder};
 use wasmtime::{
     AsContextMut, Engine, Func, InstantiateType, Module, Store, StoreLimits, Val, ValType,
 };
+// use wasmtime::vm::vmcontext::VMContext;
 
-use wasmtime::Instance;
+use wasmtime::{Instance, Caller};
 
 use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
-use wasmtime_lind_3i::{get_ctx, insert_ctx, remove_ctx, set_gratefn_wasm};
+use wasmtime_lind_3i::{set_gratefn_wasm, GRATE_ERR};
 use wasmtime_lind_utils::LindCageManager;
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
 use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::threei::make_syscall;
-use wasmtime::Caller;
+use threei::threei::{make_syscall, GrateFnEntry};
+use std::{panic::{catch_unwind, AssertUnwindSafe}, ptr::NonNull};
+use core::ffi::c_void;
+use wasmtime::vm::{VMOpaqueContext, VMContext};
 
 #[cfg(feature = "wasi-nn")]
 use wasmtime_wasi_nn::WasiNnCtx;
@@ -53,6 +56,88 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
         bail!("must contain exactly one equals character ('=')");
     }
     Ok((parts[0].into(), parts[1].into()))
+}
+
+struct VmCtxWrapper {
+    vmctx: NonNull<c_void>,
+}
+
+unsafe impl Send for VmCtxWrapper {}
+unsafe impl Sync for VmCtxWrapper {}
+
+#[repr(C)]
+struct WasmCallbackCtx {
+    pid: u64,
+    // anything else you used to capture in the closure:
+    vm: VmCtxWrapper,
+}
+
+/// mmm
+pub extern "C" fn grate_callback_trampoline(
+    ctx: *mut c_void,
+    in_grate_fn_ptr_u64: u64, cageid: u64,
+    arg1: u64, arg1cageid: u64,
+    arg2: u64, arg2cageid: u64,
+    arg3: u64, arg3cageid: u64,
+    arg4: u64, arg4cageid: u64,
+    arg5: u64, arg5cageid: u64,
+    arg6: u64, arg6cageid: u64
+) -> i32 {
+    println!(
+        "[wasmtime|grate_callback_trampoline] invoked for cage {}, in_grate_fn_ptr_u64 {}",
+        cageid, in_grate_fn_ptr_u64
+    );
+    // Never unwind across the C boundary.
+    let res = catch_unwind(AssertUnwindSafe(|| unsafe {
+        if ctx.is_null() { return GRATE_ERR; }
+        let ctx = &*(ctx as *const WasmCallbackCtx);
+
+        let opaque: *mut VMOpaqueContext = ctx.vm.vmctx.as_ptr() as *mut VMOpaqueContext;
+
+        let vmctx_raw: *mut VMContext = VMContext::from_opaque(opaque);
+
+        // Re-enter Wasmtime using the stored vmctx pointer
+        Caller::with(vmctx_raw, |mut caller: Caller<'_, Host>| {
+            let Caller { mut store, caller: instance } = caller;
+
+            println!(
+                "[wasmtime|grate_callback_trampoline] re-entering Wasmtime for cage {}, in_grate_fn_ptr_u64 {}",
+                cageid, in_grate_fn_ptr_u64
+            );
+
+            // Resolve the unified entry function once per call; if hot, you can cache
+            // a typed func pointer in ctx as well (capture instability/tradeoffs).
+            let entry = instance
+                .host_state()
+                .downcast_ref::<Instance>()
+                .ok_or_else(|| anyhow!("bad host_state Instance"))?
+                .get_export(&mut store, "pass_fptr_to_wt")
+                .and_then(|f| f.into_func())
+                .ok_or_else(|| anyhow!("missing export `pass_fptr_to_wt`"))?;
+
+            let typed = entry
+                .typed::<(u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64), i32>(&mut store)?;
+
+            println!(
+                "[wasmtime|grate_callback_trampoline] calling Wasm function for cage {}, call_num {}",
+                cageid, in_grate_fn_ptr_u64
+            );
+
+            typed.call(&mut store, (
+                in_grate_fn_ptr_u64, cageid, arg1, arg1cageid, arg2, arg2cageid,
+                arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid,
+                arg6, arg6cageid,
+            ))
+        }).unwrap_or(GRATE_ERR)
+    }));
+
+    match res {
+        Ok(v) => v,
+        Err(_) => {
+            // log panic if you want; never unwind into C
+            GRATE_ERR
+        }
+    }
 }
 
 /// Runs a WebAssembly module
@@ -239,14 +324,6 @@ impl RunCommand {
                 }
                 // exit the thread
                 if lind_thread_exit(CAGE_START_ID as u64, THREAD_START_ID as u64) {
-                    // Clean up the context from the global table
-                    if !remove_ctx(1 as usize) {
-                        eprintln!(
-                            "[wasmtime|run] Warning: failed to remove context for cage {}",
-                            CAGE_START_ID
-                        );
-                    }
-
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
                     // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -688,107 +765,33 @@ impl RunCommand {
                 // corresponding per-syscall implementation based on the index value. To complete the bridge
                 // between host and guest, the system uses Caller::with() to re-enter the Wasmtime runtime context
                 // from the host side.
-                // 1. get StoreOpaque
+                // 1) Get StoreOpaque & InstanceHandler like before
                 let grate_storeopaque = store.inner_mut();
-                // 2. get InstanceHandler
                 let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                // 3. store InstanceHandler to global table, because we need the ptr to have Send+Sync, we need to
-                // store the wrapper of vmctx ptr
-                let current_pid = pid;
-                unsafe {
-                    insert_ctx(current_pid as usize, grate_instancehandler.clone());
-                }
 
-                let res = set_gratefn_wasm(
-                    current_pid,
-                    Box::new(
-                        move |call_num: u64,
-                              cageid: u64,
-                              arg1: u64,
-                              arg1cageid: u64,
-                              arg2: u64,
-                              arg2cageid: u64,
-                              arg3: u64,
-                              arg3cageid: u64,
-                              arg4: u64,
-                              arg4cageid: u64,
-                              arg5: u64,
-                              arg5cageid: u64,
-                              arg6: u64,
-                              arg6cageid: u64|
-                              -> i32 {
-                            let grate_handler = get_ctx(current_pid as usize);
-                            let ctx = grate_handler.vmctx();
-                            unsafe {
-                                Caller::with(ctx, |mut caller: Caller<'_, Host>| {
-                                    let Caller {
-                                        mut store,
-                                        caller: instance,
-                                    } = caller;
+                // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                let ctx = WasmCallbackCtx {
+                    pid,
+                    vm: VmCtxWrapper {
+                        vmctx: NonNull::new(vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
+                    },
+                };
 
-                                    let grate_entry_func = instance
-                                        .host_state()
-                                        .downcast_ref::<Instance>()
-                                        .unwrap()
-                                        .get_export(&mut store, "pass_fptr_to_wt")
-                                        .and_then(|f| f.into_func())
-                                        .ok_or_else(|| {
-                                            anyhow!(
-                                                "failed to find function export `{}`",
-                                                "pass_fptr_to_wt"
-                                            )
-                                        })
-                                        .unwrap();
+                // 3) Heap-allocate the context; 3i will keep this pointer until unregister
+                let boxed: Box<WasmCallbackCtx> = Box::new(ctx);
+                let ctx_ptr: *mut c_void = Box::into_raw(boxed) as *mut c_void;
 
-                                    let grate_entry_point = match grate_entry_func.typed::<(
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                        u64,
-                                    ), i32>(
-                                        &mut store
-                                    ) {
-                                        Ok(typed_func) => typed_func,
-                                        Err(e) => {
-                                            eprintln!(
-                                                "[wasmtime|run] Failed to find function '{}': {:?}",
-                                                call_num, e
-                                            );
-                                            return -1;
-                                        }
-                                    };
-                                    let result = match grate_entry_point.call(
-                                        &mut store,
-                                        (
-                                            call_num, cageid, arg1, arg1cageid, arg2, arg2cageid,
-                                            arg3, arg3cageid, arg4, arg4cageid, arg5, arg5cageid,
-                                            arg6, arg6cageid,
-                                        ),
-                                    ) {
-                                        Ok(value) => value,
-                                        Err(e) => {
-                                            eprintln!("Error calling {}: {:?}", call_num, e);
-                                            return -1;
-                                        }
-                                    };
-                                    result
-                                })
-                            }
-                        },
-                    ),
-                );
-                if res < 0 {
-                    panic!("[wasmtime|instance] error on passing instance_pre to 3i");
+                let fn_ptr: extern "C" fn(*mut c_void,
+                                     u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64) -> i32 = grate_callback_trampoline;
+
+                // 4) Build entry and hand off to 3i
+                let entry = GrateFnEntry { fn_ptr, ctx_ptr };
+                let rc = unsafe { set_gratefn_wasm(pid, &entry) }; // new raw setter in 3i
+                if rc < 0 {
+                    // reclaim memory on error
+                    unsafe { drop(Box::from_raw(ctx_ptr as *mut WasmCallbackCtx)); }
+                    return Err(anyhow!("3i rejected registration"));
                 }
 
                 match func {

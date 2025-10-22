@@ -4,10 +4,11 @@ use core::panic;
 use dashmap::DashSet;
 use once_cell::sync::Lazy;
 use sysdefs::constants::lind_platform_const;
-use sysdefs::constants::{
-    PROT_READ, PROT_WRITE,
-}; // Used in `copy_data_between_cages`
-use typemap::datatype_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
+use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
+use typemap::datatype_conversion::sc_convert_uaddr_to_host;
+use std::sync::RwLock;
+use std::collections::HashMap;
+use std::ffi::c_void;
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
@@ -36,140 +37,40 @@ pub type RawCallFunc = fn(
     arg6_cageid: u64,
 ) -> i32;
 
-type GrateFn =
-    dyn FnMut(
-        u64, u64, u64, u64, u64, u64, u64,
-        u64, u64, u64, u64, u64, u64, u64
-    ) -> i32;
-
-/// Each entry in the `Vec` corresponds to a specific grate, and the index is used as its identifier
-/// (`grate_id`). The position must be stable even if some grates are removed, so we use `Option` to
-/// allow for "holes" in the vector.
-///
-/// - The outer `Option` represents whether the entire registry has been initialized.
-/// - The inner `Vec<Option<Box<dyn FnMut(...)>>>` holds optional callback closures per grate.
-/// - The inner `Option` allows a specific grate slot to be empty (e.g., after removal).
-///
-/// Each callback is a boxed closure that handles intercepted syscalls (registered at `threei_wasm_func`).
-/// These callbacks are created dynamically and passed from the Wasmtime runtime.
-/// Example layout:
-///     GLOBAL_GRATE = Some(vec![
-///         Some(Box::new(grate0_handler)),  // grate_id = 0
-///         None,                            // grate_id = 1 (removed or not initialized)
-///         Some(Box::new(grate2_handler)),  // grate_id = 2
-///     ])
-static mut GLOBAL_GRATE: Option<
-    Vec<
-        Option<
-            Box<
-                dyn FnMut(
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                ) -> i32,
-            >,
-        >,
-    >,
-> = None;
-
-/// Initializes the `GLOBAL_GRATE` table if it is not already set.
-///
-/// Creates a fixed-size `Vec<Option<Closure>>` (currently 1024 entries) to store per-grate
-/// closures, and sets `GLOBAL_GRATE` to a `Vec<Option<Closure>>` with a fixed number of
-/// entries (currently 1024), each initially set to `None`.
-///
-/// This function should be called before any attempt to insert into or access `GLOBAL_GRATE`.
-///
-/// ## Arguments:
-/// None
-///
-/// ## Returns:
-/// None
-fn _init_global_grate() {
-    // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
-    unsafe {
-        let vec = GLOBAL_GRATE
-            .get_or_insert_with(|| Vec::with_capacity(lind_platform_const::MAX_CAGEID as usize));
-        vec.resize_with(lind_platform_const::MAX_CAGEID as usize, || None);
-    }
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct GrateFnEntry {
+    pub fn_ptr: extern "C" fn(*mut c_void,
+                                     u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64,u64) -> i32,
+    pub ctx_ptr: *mut c_void,
 }
 
-/// Registers a closure into the `GLOBAL_GRATE` handler table for a specific grateid.
-/// The closure is responsible for handling grate calls by looking up a Wasm-exported
-/// function and invoking it. This function assumes that the `GLOBAL_GRATE` table is 
-/// already initialized or initializes it if needed. 
-/// It panics if `grateid` exceeds the preallocated bounds (currently 1024 entries).
-///
-/// ## Arguments:
-/// - grateid: ID of the grate. Used as the index into `GLOBAL_GRATE`.
-/// - callback: A boxed closure that takes the syscall name pointer and six argument pairs (value
-/// and cage ID) and returns an i32. This closure handles dynamic lookup and execution.
-fn _add_global_grate(grateid: u64, mut callback: Box<GrateFn>) {
-    let index = grateid as usize;
+unsafe impl Send for GrateFnEntry {}
+unsafe impl Sync for GrateFnEntry {}
 
-    unsafe {
-        if GLOBAL_GRATE.is_none() {
-            _init_global_grate();
-        }
+pub static GLOBAL_GRATE: Lazy<RwLock<HashMap<(u64, u64), GrateFnEntry>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
 
-        if let Some(ref mut vec) = GLOBAL_GRATE {
-            if index < vec.len() {
-                vec[index] = Some(callback);
-            } else {
-                panic!("[3i|threei_wasm_func] Index out of bounds: {}", index);
-            }
-        }
-    }
+fn _add_global_grate(grateid: u64, entry_ptr_u64: u64) -> i32 {
+    if entry_ptr_u64 == 0 { return -1; }
 
+    let p: *const GrateFnEntry = (entry_ptr_u64 as usize) as *const GrateFnEntry;
+
+    let entry = unsafe { *p };
+    if entry.ctx_ptr.is_null() { return -1; }
+    let mut map = GLOBAL_GRATE.write().unwrap();
+    map.insert((grateid, 0), entry);
+    0
 }
 
-/// Marks the entry corresponding to a grateid in the `GLOBAL_GRATE` table as `None`,
-/// unregistering its associated handler. This function is useful during cage teardown
-/// or dynamic unloading of a grate.
-///
-/// ## Arguments:
-/// - grateid: The index of the grate to be removed.
-///
-/// ## Returns:
-/// None
 fn _rm_from_global_grate(grateid: u64) {
-    // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
-    unsafe {
-        if let Some(ref mut global_grate) = GLOBAL_GRATE {
-            if grateid < global_grate.len() as u64 {
-                global_grate[grateid as usize] = None;
-            }
-        }
-    }
+    let mut map = GLOBAL_GRATE.write().expect("lock poisoned");
+    map.remove(&(grateid, 0));
 }
 
-/// Executes the registered handler closure for a given grateid, using the syscall name to
-/// dynamically resolve the function to be called.
-///
-/// ## Arguments:
-/// - grateid: ID of the target grate (used to locate the closure).
-/// - call_name: Pointer to a UTF-8 encoded syscall name string in the calling Wasm instance.
-/// - self_cageid: ID of the calling cage.
-/// - arg1..arg6: Argument values to be passed to the syscall.
-/// - arg1_cageid..arg6_cageid: Cage IDs corresponding to each argument
-///
-/// ## Returns:
-/// `Some(i32)` if the call succeeds.
-/// `None` if the handler or grate entry is missing.
 fn _call_grate_func(
     grateid: u64,
-    call_num: u64,
+    in_grate_fn_ptr_u64: u64,
     self_cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -184,30 +85,16 @@ fn _call_grate_func(
     arg6: u64,
     arg6_cageid: u64,
 ) -> Option<i32> {
-    // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
-    unsafe {
-        let vec = GLOBAL_GRATE.as_mut()?;
-        let func = vec.get_mut(grateid as usize)?.as_mut()?;
+    let map = GLOBAL_GRATE.read().unwrap();
+    let key = (grateid, 0);
 
-        // The closure is then called with the extracted syscall name and the full set of
-        // arguments + their corresponding cage IDs.
-        Some(func(
-            call_num,
-            self_cageid,
-            arg1,
-            arg1_cageid,
-            arg2,
-            arg2_cageid,
-            arg3,
-            arg3_cageid,
-            arg4,
-            arg4_cageid,
-            arg5,
-            arg5_cageid,
-            arg6,
-            arg6_cageid,
-        ))
-    }
+    let Some(entry) = map.get(&key) else { return Some(-1); };
+
+    // SAFETY: fn_ptr/ctx_ptr provided by Wasmtime side; 3i never mutates ctx
+    let f = entry.fn_ptr;
+
+    unsafe { Some(f(entry.ctx_ptr, in_grate_fn_ptr_u64, self_cageid, arg1, arg1_cageid, arg2, arg2_cageid, arg3, arg3_cageid, arg4, arg4_cageid, arg5, arg5_cageid, arg6, arg6_cageid)) }
+
 }
 
 /// EXITING_TABLE:
@@ -251,10 +138,10 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// ELINDESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
 pub fn register_handler(
-    _arg1: u64,
+    in_grate_fn_ptr_u64: u64,
     targetcage: u64,    // Cage to modify
     targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all: 1000.
-    grate_closure: Box<GrateFn>,
+    ctx_ptr_u64: u64,
     handlefunc: u64, // Function index to register (for grate, also called destination call) _or_ 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
@@ -272,10 +159,15 @@ pub fn register_handler(
     }
 
     // Add the clousre to the handler table
-    _add_global_grate(handlefunccage, grate_closure);
+    // unsafe {
+    //     _add_global_grate(handlefunccage, fn_ptr_u64, ctx_ptr_u64);
+    // }
+    unsafe {
+        _add_global_grate(handlefunccage, ctx_ptr_u64);
+    }
 
     // Actual implementation is in handler_table module according to feature flag
-    register_handler_impl(targetcage, targetcallnum, handlefunc, handlefunccage)
+    register_handler_impl(targetcage, targetcallnum, handlefunc, handlefunccage, in_grate_fn_ptr_u64)
 }
 
 /// This copies the handler table used by a cage to another cage.  
@@ -393,12 +285,12 @@ pub fn make_syscall(
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
     if _check_cage_handler_exist(self_cageid) {
-        if let Some((_call_index, grateid)) = _get_handler(self_cageid, syscall_num) {
+        if let Some((in_grate_fn_ptr_u64, grateid)) = _get_handler(self_cageid, syscall_num) {
             // <targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id>
             // Theoretically, the complexity is O(1), shouldn't affect performance a lot
             if let Some(ret) = _call_grate_func(
                 grateid,
-                syscall_num,
+                in_grate_fn_ptr_u64,
                 self_cageid,
                 arg1,
                 arg1_cageid,

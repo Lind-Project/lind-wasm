@@ -18,6 +18,28 @@ lazy_static::lazy_static! {
     pub static ref HANDLERTABLE: CageHandlerTable = DashMap::new();
 }
 
+pub fn print_handler_table() {
+    println!("=== HANDLERTABLE ===");
+    for cage_entry in HANDLERTABLE.iter() {
+        let self_cageid = cage_entry.key();
+        let callnum_map = cage_entry.value();
+        println!("CageID: {}", self_cageid);
+
+        for callnum_entry in callnum_map.iter() {
+            let callnum = callnum_entry.key();
+            let target_map = callnum_entry.value();
+            println!("  Callnum: {}", callnum);
+
+            for target_entry in target_map.iter() {
+                let destfunc = target_entry.key();
+                let dest_grateid = target_entry.value();
+                println!("    destfunc: {} -> dest_grateid: {}", destfunc, dest_grateid);
+            }
+        }
+    }
+    println!("====================");
+}
+
 /// Checks if a given cage has any registered syscall handlers in HANDLERTABLE.
 ///
 /// ## Arguments:
@@ -93,6 +115,7 @@ pub fn register_handler_impl(
     targetcallnum: u64,
     handlefunc: u64,
     handlefunccage: u64,
+    in_grate_fn_ptr_u64: u64,
 ) -> i32 {
     // If `handlefunccage == THREEI_DEREGISTER`, remove the entire callnum entry
     // for the given (targetcage, targetcallnum).
@@ -134,7 +157,7 @@ pub fn register_handler_impl(
                 return 0;
             }
 
-            match callnum_entry.get(&handlefunc) {
+            match callnum_entry.get(&in_grate_fn_ptr_u64) {
                 Some(existing_dest_grateid) if *existing_dest_grateid == handlefunccage => {
                     // Already registered with same mapping, do nothing
                     return 0;
@@ -144,7 +167,7 @@ pub fn register_handler_impl(
                 }
                 None => {
                     // If `handlefunc` not exists, insert
-                    callnum_entry.insert(handlefunc, handlefunccage);
+                    callnum_entry.insert(in_grate_fn_ptr_u64, handlefunccage);
                     return 0;
                 }
             }
@@ -155,7 +178,7 @@ pub fn register_handler_impl(
                 return 0;
             }
             let mut m = DashMap::new();
-            m.insert(handlefunc, handlefunccage);
+            m.insert(in_grate_fn_ptr_u64, handlefunccage);
             cage_entry.insert(targetcallnum, m);
             return 0;
         }
@@ -177,8 +200,9 @@ pub fn register_handler_impl(
         .entry(targetcallnum)
         .or_insert_with(DashMap::new);
 
-    callmap.insert(handlefunc, handlefunccage);
+    callmap.insert(in_grate_fn_ptr_u64, handlefunccage);
 
+    print_handler_table();
     0
 }
 
