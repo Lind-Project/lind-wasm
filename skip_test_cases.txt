@@ -12,6 +12,7 @@ file_tests/deterministic/fdatasync.c
 file_tests/deterministic/filetest.c
 file_tests/deterministic/filetest1000.c
 file_tests/deterministic/flock.c
+file_tests/deterministic/fstat.c
 file_tests/deterministic/fsync.c
 file_tests/deterministic/mkdir_rmdir.c
 file_tests/deterministic/popen.c
