@@ -40,6 +40,8 @@ RUN apt-get update && \
         bison \
         build-essential \
         ca-certificates \
+        wabt \
+        strace \
         curl \
         gawk \
         libc6-dev-i386-cross \
