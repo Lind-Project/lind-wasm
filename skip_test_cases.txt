@@ -12,7 +12,6 @@ file_tests/deterministic/fdatasync.c
 file_tests/deterministic/filetest.c
 file_tests/deterministic/filetest1000.c
 file_tests/deterministic/flock.c
-file_tests/deterministic/fstat.c
 file_tests/deterministic/fsync.c
 file_tests/deterministic/mkdir_rmdir.c
 file_tests/deterministic/popen.c
@@ -21,7 +20,6 @@ file_tests/deterministic/readbytes.c
 file_tests/deterministic/readlink.c
 file_tests/deterministic/readlinkat.c
 file_tests/deterministic/rename.c
-file_tests/deterministic/stat.c
 file_tests/deterministic/sync_file_range.c
 file_tests/deterministic/truncate.c
 file_tests/deterministic/unlinkat.c
