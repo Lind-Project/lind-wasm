@@ -96,7 +96,8 @@ ENV PATH="/usr/local/bin:/home/${USERNAME}/.cargo/bin:/home/${USERNAME}/go/bin:$
 ENV CLANG="/home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}"
 
 # --- Prebuild ---
-RUN make sysroot && make wasmtime
+ENV WASMTIME_PROFILE=debug
+RUN make sysroot && make wasmtime-debug
 
 # --- Make lind_* available from anywhere in the dev container ---
 # Tell scripts where the repo is (they are installed to /usr/local/bin)
