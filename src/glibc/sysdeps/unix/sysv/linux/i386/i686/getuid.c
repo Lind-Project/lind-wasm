@@ -1,14 +1,11 @@
 #include <unistd.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 __uid_t
 __getuid (void)
 {
-  return 0;
+  return MAKE_SYSCALL0(GETUID_SYSCALL, "syscall|getuid");
 }
 
-__uid_t
-getuid (void)
-{
-  return 0;
-}
-
+weak_alias(__getuid, getuid)
