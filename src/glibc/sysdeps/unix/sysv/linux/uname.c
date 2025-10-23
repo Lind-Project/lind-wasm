@@ -2,6 +2,13 @@
 #include <sysdep-cancel.h>
 #include <sys/utsname.h>
 
+/* Hardcoded uname values for Lind-Wasm environment
+   TODO: These should eventually be retrieved from the runtime environment */
+#define UNAME_SYSNAME "Linux"
+#define UNAME_RELEASE "unknown"
+#define UNAME_VERSION "unknown"
+#define UNAME_MACHINE "x86_64"
+
 int
 __GI___uname (struct utsname *name)
 {
@@ -31,10 +38,10 @@ __GI___uname (struct utsname *name)
       else
 	return -1;
     }
-  strncpy (name->sysname, "Linux", sizeof (name->sysname));
-  strncpy (name->release, "unknown", sizeof (name->release));
-  strncpy (name->version, "unknown", sizeof (name->version));
-  strncpy (name->machine, "x86_64", sizeof (name->machine));
+  strncpy (name->sysname, UNAME_SYSNAME, sizeof (name->sysname));
+  strncpy (name->release, UNAME_RELEASE, sizeof (name->release));
+  strncpy (name->version, UNAME_VERSION, sizeof (name->version));
+  strncpy (name->machine, UNAME_MACHINE, sizeof (name->machine));
 }
 
 weak_alias(__GI___uname, __uname)
