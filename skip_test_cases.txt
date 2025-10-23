@@ -21,6 +21,7 @@ file_tests/deterministic/readbytes.c
 file_tests/deterministic/readlink.c
 file_tests/deterministic/readlinkat.c
 file_tests/deterministic/rename.c
+file_tests/deterministic/stat.c
 file_tests/deterministic/sync_file_range.c
 file_tests/deterministic/truncate.c
 file_tests/deterministic/unlinkat.c
