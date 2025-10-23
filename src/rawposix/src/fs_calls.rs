@@ -655,11 +655,17 @@ pub fn mmap_syscall(
     off_arg: u64,
     off_cageid: u64,
 ) -> i32 {
-    let mut addr = sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid);
+    let mut addr = {
+        if addr_arg == 0 {
+            0 as *mut u8
+        } else {
+            sc_convert_to_u8_mut(addr_arg, addr_cageid, cageid)
+        }
+    };
     let mut len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let mut prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
     let mut flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
-    let mut fildes = convert_fd_to_host(vfd_arg, vfd_cageid, cageid);
+    let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
     let cage = get_cage(cageid).unwrap();
@@ -710,8 +716,11 @@ pub fn mmap_syscall(
             result = vmmap.find_map_space(rounded_length as u32 >> PAGESHIFT, 1);
         } else {
             // use address user provided as hint to find address
-            result =
-                vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+            result = vmmap.find_map_space_with_hint(
+                rounded_length as u32 >> PAGESHIFT,
+                1,
+                addr as u32 >> PAGESHIFT,
+            );
         }
 
         // did not find desired memory region
@@ -964,6 +973,12 @@ pub fn munmap_syscall(
 /// break by modifying the end of the heap entry (the first entry in `vmmap`) and invokes `mmap`
 /// to adjust the memory protection as needed.
 ///
+/// Per man page: the actual Linux system call returns the new program
+/// break on success.  On failure, the system call returns the current
+/// break.  The glibc wrapper function does some work (i.e., checks
+/// whether the new break is less than addr) to provide the 0 and -1
+/// return values.
+///
 /// # Arguments
 /// * `cageid` - Identifier of the cage that initiated the `brk` syscall.
 /// * `brk` - The new program break address.
@@ -1007,6 +1022,11 @@ pub fn brk_syscall(
 
     assert!(heap.npages == vmmap.program_break);
 
+    // passing 0 to brk will always return the current brk
+    if brk == 0 {
+        return (PAGESIZE * heap.npages) as i32;
+    }
+
     let old_brk_page = heap.npages;
     // round up the break to multiple of pages
     let brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as u32;
@@ -1017,6 +1037,9 @@ pub fn brk_syscall(
             return syscall_error(Errno::ENOMEM, "brk", "no memory");
         }
     }
+
+    // remove the old entries since new entry is overlapping with it.
+    vmmap.remove_entry(0, old_brk_page);
 
     // update vmmap entry
     vmmap.add_entry_with_overwrite(
@@ -1077,98 +1100,8 @@ pub fn brk_syscall(
         }
     }
 
-    0
-}
-
-/// Handles the `sbrk_syscall`, interacting with the `vmmap` structure.
-///
-/// This function processes the `sbrk_syscall` by updating the `vmmap` entries and managing
-/// the program break. It calculates the target program break after applying the specified
-/// increment and delegates further processing to the `brk_handler`.
-///
-/// # Arguments
-/// * `cageid` - Identifier of the cage that initiated the `sbrk` syscall.
-/// * `brk` - Increment to adjust the program break, which can be negative.
-///
-/// ## Returns:
-///     - On success, returns the previous program break.
-///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn sbrk_syscall(
-    cageid: u64,
-    sbrk_arg: u64,
-    sbrk_cageid: u64,
-    arg2: u64,
-    arg2_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
-    arg6: u64,
-    arg6_cageid: u64,
-) -> i32 {
-    let brk = sc_convert_sysarg_to_i32(sbrk_arg, sbrk_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
-        panic!(
-            "{}: unused arguments contain unexpected values -- security violation",
-            "sbrk_syscall"
-        );
-    }
-
-    let cage = get_cage(sbrk_cageid).unwrap();
-
-    // get the heap entry
-    let mut vmmap = cage.vmmap.read();
-    let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
-
-    // program break should always be the same as the heap entry end
-    assert!(heap.npages == vmmap.program_break);
-
-    // pass 0 to sbrk will just return the current brk
-    if brk == 0 {
-        return (PAGESIZE * heap.npages) as i32;
-    }
-
-    // round up the break to multiple of pages
-    // brk increment could possibly be negative
-    let brk_page;
-    if brk < 0 {
-        brk_page = -((round_up_page(-brk as u64) >> PAGESHIFT) as i32);
-    } else {
-        brk_page = (round_up_page(brk as u64) >> PAGESHIFT) as i32;
-    }
-
-    // drop the vmmap so that brk_handler will not deadlock
-    drop(vmmap);
-
-    if brk_syscall(
-        cageid,
-        ((heap.npages as i32 + brk_page) << PAGESHIFT) as u64,
-        sbrk_cageid,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-    ) < 0
-    {
-        return syscall_error(Errno::ENOMEM, "sbrk", "no memory") as i32;
-    }
-
-    // sbrk syscall should return previous brk address before increment
-    (PAGESIZE * heap.npages) as i32
+    // return brk address
+    (PAGESIZE * brk_page) as i32
 }
 
 //------------------------------------FCNTL SYSCALL------------------------------------
@@ -3774,6 +3707,9 @@ pub fn shmget_syscall(
     let shmid: i32;
     let metadata = &SHM_METADATA;
 
+    // The size of the segment should be rounded up to a multiple of pages
+    let rounded_size = round_up_page(size as u64) as usize;
+
     match metadata.shmkeyidtable.entry(key) {
         Occupied(occupied) => {
             if (IPC_CREAT | IPC_EXCL) == (shmflg & (IPC_CREAT | IPC_EXCL)) {
@@ -3794,7 +3730,7 @@ pub fn shmget_syscall(
                 );
             }
 
-            if (size as u32) < SHMMIN || (size as u32) > SHMMAX {
+            if (rounded_size as u32) < SHMMIN || (rounded_size as u32) > SHMMAX {
                 return syscall_error(
                     Errno::EINVAL,
                     "shmget",
@@ -3806,7 +3742,14 @@ pub fn shmget_syscall(
             vacant.insert(shmid);
             let mode = (shmflg & 0x1FF) as u16; // mode is 9 least signficant bits of shmflag, even if we dont really do anything with them
 
-            let segment = new_shm_segment(key, size, cageid as u32, DEFAULT_UID, DEFAULT_GID, mode);
+            let segment = new_shm_segment(
+                key,
+                rounded_size,
+                cageid as u32,
+                DEFAULT_UID,
+                DEFAULT_GID,
+                mode,
+            );
             metadata.shmtable.insert(shmid, segment);
         }
     };
@@ -3870,7 +3813,13 @@ pub fn shmat_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
-    let addr = sc_convert_addr_to_host(shmaddr_arg, shmaddr_cageid, cageid);
+    let mut useraddr = {
+        if shmaddr_arg == 0 {
+            0 as u32
+        } else {
+            sc_convert_sysarg_to_u32(shmaddr_arg, shmaddr_cageid, cageid)
+        }
+    };
     let shmflag = sc_convert_sysarg_to_i32(shmflg_arg, shmflg_cageid, cageid);
     let mut prot = 0;
     // Validate unused args
@@ -3900,8 +3849,8 @@ pub fn shmat_syscall(
     };
 
     // Check that the provided address is page aligned.
-    let rounded_addr = round_up_page(addr as u64);
-    if rounded_addr != addr as u64 {
+    let rounded_addr = round_up_page(useraddr as u64);
+    if rounded_addr != useraddr as u64 {
         return syscall_error(Errno::EINVAL, "shmat", "address is not aligned");
     }
 
@@ -3910,7 +3859,6 @@ pub fn shmat_syscall(
 
     // Initialize the user address from the provided address pointer.
     // If addr is null (0), we need to allocate memory space from the virtual memory map (vmmap).
-    let mut useraddr = addr as u32;
     let mut vmmap = cage.vmmap.write();
     let result;
     if useraddr == 0 {
@@ -3920,8 +3868,15 @@ pub fn shmat_syscall(
     } else {
         // Use the user-specified address as a hint to find an appropriate memory address
         // for the shared memory segment.
-        result = vmmap.find_map_space_with_hint(rounded_length as u32 >> PAGESHIFT, 1, addr as u32);
+        result = vmmap.find_map_space_with_hint(
+            rounded_length as u32 >> PAGESHIFT,
+            1,
+            useraddr as u32 >> PAGESHIFT,
+        );
     }
+    // drop the write lock of vmmap to avoid deadlock
+    drop(vmmap);
+
     if result.is_none() {
         // If no suitable memory space is found, return an error indicating insufficient memory.
         return syscall_error(Errno::ENOMEM, "shmat", "no memory") as i32;
@@ -3940,6 +3895,9 @@ pub fn shmat_syscall(
 
     // Call the raw shmat helper to attach the shared memory segment.
     let result = shmat_helper(cageid, sysaddr as *mut u8, shmflag, shmid);
+    let vmmap = cage.vmmap.read();
+    let result = vmmap.sys_to_user(result);
+    drop(vmmap);
 
     // If the syscall succeeded, update the vmmap entry.
     if result as i32 >= 0 {
@@ -3954,22 +3912,19 @@ pub fn shmat_syscall(
         // Add a new vmmap entry for the shared memory segment.
         // Since shared memory is not file-backed, there are no extra mapping flags
         // or file offset parameters to consider; thus, we pass 0 for both.
-        let add_result = vmmap.add_entry_with_overwrite(
-            useraddr >> PAGESHIFT,
-            (rounded_length >> PAGESHIFT) as u32,
-            prot,
-            maxprot,
-            0, // No flags for shared memory mapping
-            backing,
-            0, // Offset is not applicable for shared memory
-            len as i64,
-            cageid,
-        );
-
-        // Check if adding the entry was successful.
-        if add_result.is_err() {
-            return syscall_error(Errno::ENOMEM, "shmat", "failed to add vmmap entry");
-        }
+        vmmap
+            .add_entry_with_overwrite(
+                useraddr >> PAGESHIFT,
+                (rounded_length >> PAGESHIFT) as u32,
+                prot,
+                maxprot,
+                0, // No flags for shared memory mapping
+                backing,
+                0, // Offset is not applicable for shared memory
+                len as i64,
+                cageid,
+            )
+            .expect("shmat: failed to add vmmap entry");
     } else {
         // If the syscall failed, propagate the error.
         return result as i32;
@@ -4018,7 +3973,7 @@ pub fn shmdt_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let addr = sc_convert_addr_to_host(shmaddr_arg, shmaddr_cageid, cageid);
+    let useraddr = sc_convert_sysarg_to_u32(shmaddr_arg, shmaddr_cageid, cageid);
     if !(sc_unusedarg(arg2, arg2_cageid)
         && sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -4035,8 +3990,8 @@ pub fn shmdt_syscall(
     let cage = get_cage(cageid).unwrap();
 
     // Check that the provided address is aligned on a page boundary.
-    let rounded_addr = round_up_page(addr as u64) as usize;
-    if rounded_addr != addr as usize {
+    let rounded_addr = round_up_page(useraddr as u64) as usize;
+    if rounded_addr != useraddr as usize {
         return syscall_error(Errno::EINVAL, "shmdt", "address is not aligned");
     }
 
@@ -4055,10 +4010,12 @@ pub fn shmdt_syscall(
     // This call removes the range starting at the page-aligned user address,
     // for the number of pages that cover the shared memory region.
     let mut vmmap = cage.vmmap.write();
-    vmmap.remove_entry(
-        rounded_addr as u32 >> PAGESHIFT,
-        (length as u32) >> PAGESHIFT,
-    );
+    vmmap
+        .remove_entry(
+            rounded_addr as u32 >> PAGESHIFT,
+            (length as u32) >> PAGESHIFT,
+        )
+        .expect("shmdt: remove_entry failed");
 
     0
 }
@@ -4113,7 +4070,7 @@ pub fn shmctl_syscall(
 ) -> i32 {
     let shmid = sc_convert_sysarg_to_i32(shmid_arg, shmid_cageid, cageid);
     let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
-    let buf = sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid);
+    let buf = sc_convert_addr_to_shmidstruct(buf_arg, buf_cageid, cageid).unwrap();
 
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -4131,7 +4088,7 @@ pub fn shmctl_syscall(
     if let Some(mut segment) = metadata.shmtable.get_mut(&shmid) {
         match cmd {
             IPC_STAT => {
-                *buf.unwrap() = segment.shminfo;
+                *buf = segment.shminfo;
             }
             IPC_RMID => {
                 segment.rmid = true;

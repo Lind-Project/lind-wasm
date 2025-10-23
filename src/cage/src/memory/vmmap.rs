@@ -868,7 +868,7 @@ impl VmmapOps for Vmmap {
     ///
     /// Arguments:
     /// - npages: Number of pages needed
-    /// - hint: Starting address to search from
+    /// - hint: Starting address (in pages) to search from
     ///
     /// Returns:
     /// - Some(Interval) containing the found space
@@ -932,7 +932,7 @@ impl VmmapOps for Vmmap {
     /// Arguments:
     /// - num_pages: Number of pages needed
     /// - pages_per_map: Alignment requirement in pages
-    /// - hint: Starting address to search from
+    /// - hint: Starting address (in pages) to search from
     ///
     /// Returns:
     /// - Some(Interval) containing aligned space

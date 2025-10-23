@@ -113,7 +113,5 @@
 #define DUP3_SYSCALL 292
 #define PIPE2_SYSCALL 293
 
-#define SBRK_SYSCALL 1004
-
 #endif /* _LIND_SYSCALL_NUM_H */
  
