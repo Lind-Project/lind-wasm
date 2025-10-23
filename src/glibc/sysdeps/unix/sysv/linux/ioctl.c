@@ -43,11 +43,11 @@ __ioctl (int fd, unsigned long int request, ...)
    * Translate the guest pointer to host pointer.
    * TODO: Handle the edge case where someone passes a direct integer value (0 or 1)
    * instead of a pointer. For now, we assume correct API usage (pointer). */
-  void *host_ptr = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
+  uint64_t host_ptr = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
 
   return MAKE_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl",
                        (uint64_t) fd, (uint64_t) request,
-                       (uint64_t) host_ptr,
+                       host_ptr,
                        NOTUSED, NOTUSED, NOTUSED);
 }
 
