@@ -515,8 +515,8 @@ def analyze_testfile_dependencies(tests_to_run):
             with open(test_file, 'r') as f:
                 content = f.read()
             
-            # Look for testfiles references in open() calls
-            testfile_pattern = r'open\s*\(\s*"testfiles/([^"]+)"'
+            # Look for any "testfiles/..." string literals in the code
+            testfile_pattern = r'"testfiles/([^"]+)"'
             matches = re.findall(testfile_pattern, content, re.IGNORECASE)
             all_dependencies.update(matches)
             
