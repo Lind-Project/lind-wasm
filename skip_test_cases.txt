@@ -53,14 +53,11 @@ networking_tests/non-deterministic/uds-serverclient.c
 networking_tests/non-deterministic/uds-socketselect.c
 process_tests/deterministic/chain_thread.c
 process_tests/deterministic/forkdup.c
-process_tests/deterministic/forkexecuid.c
 process_tests/deterministic/forkexecv.c
 process_tests/deterministic/forknodup.c
 process_tests/deterministic/getppid.c
-process_tests/deterministic/getuid.c
 process_tests/deterministic/mutex.c
 process_tests/deterministic/sem_forks.c
-process_tests/deterministic/setsid.c
 process_tests/deterministic/sigalrm.c
 process_tests/deterministic/sigchld.c
 process_tests/deterministic/signal-simple.c
