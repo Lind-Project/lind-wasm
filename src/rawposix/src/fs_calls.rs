@@ -10,8 +10,9 @@ use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errn
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC,
     PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO,
-    STDIN_FILENO, STDOUT_FILENO,
+    STDIN_FILENO, STDOUT_FILENO, F_GETLK64, F_SETLK64, F_SETLKW64,
 };
+
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
 use typemap::cage_helpers::*;
@@ -1244,20 +1245,22 @@ pub fn fcntl_syscall(
     vfd_cageid: u64,
     cmd_arg: u64,
     cmd_cageid: u64,
-    arg_arg: u64,
-    arg_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
+    int_arg: u64,        // arg3: integer value (for F_DUPFD, F_SETFD, F_GETFL, etc.)
+    int_arg_cageid: u64,
+    ptr_arg: u64,        // arg4: translated host pointer (for F_GETLK, F_SETLK, etc.)
+    ptr_arg_cageid: u64,
     arg5: u64,
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
-    let arg = sc_convert_sysarg_to_i32(arg_arg, arg_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
+    
+    // Convert int value only, we handle the pointer args if it's a lock operation
+    let arg = int_arg as i32;  
+    
+    // Validate unused arguments
+    if !(sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
         panic!(
@@ -1350,7 +1353,17 @@ pub fn fcntl_syscall(
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
-            let ret = unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) };
+            let is_lock_op = cmd == F_GETLK || cmd == F_SETLK || cmd == F_SETLKW ||
+                cmd == F_GETLK64 || cmd == F_SETLK64 || cmd == F_SETLKW64;
+            
+            let ret = if is_lock_op {
+                // Lock operation - use ptr_arg (arg4)
+                unsafe { libc::fcntl(vfd.underfd as i32, cmd, ptr_arg as *mut c_void) }
+            } else {
+                // Other operations - use int_arg (arg3)
+                unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) }
+            };
+            
             if ret < 0 {
                 let errno = get_errno();
                 return handle_errno(errno, "fcntl");
@@ -1472,22 +1485,17 @@ pub fn stat_syscall(
         );
     }
 
-    // Declare statbuf by ourselves
-    let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
-    let libcret = unsafe { libc::stat(path.as_ptr(), &mut libc_statbuf) };
 
-    if libcret < 0 {
+    // Cast directly to libc::stat and write kernel data into buffer.
+    let statbuf_ptr = statbuf_arg as *mut libc::stat;
+    let ret = unsafe { libc::stat(path.as_ptr(), statbuf_ptr) };
+
+    if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "xstat");
     }
 
-    // Convert libc stat to StatData and copy to user buffer
-    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
-        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
-        Err(e) => return syscall_error(e, "xstat", "Bad address"),
-    }
-
-    libcret
+    ret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/statfs.2.html
@@ -1543,22 +1551,16 @@ pub fn statfs_syscall(
         );
     }
 
-    // Declare statbuf by ourselves
-    let mut libc_statbuf: statfs = unsafe { std::mem::zeroed() };
-    let libcret = unsafe { libc::statfs(path.as_ptr(), &mut libc_statbuf) };
+    // Cast directly to libc::statfs and write kernel data into buffer.
+    let statbuf_ptr = statbuf_arg as *mut libc::statfs;
+    let ret = unsafe { libc::statfs(path.as_ptr(), statbuf_ptr) };
 
-    if libcret < 0 {
+    if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "statfs");
     }
 
-    // Convert libc stat to FStatData and copy to user buffer
-    match sc_convert_addr_to_fstatdata(statbuf_arg, statbuf_cageid, cageid) {
-        Ok(statbuf_addr) => convert_fstatdata_to_user(statbuf_addr, libc_statbuf),
-        Err(e) => return syscall_error(e, "statfs", "Bad address"),
-    }
-
-    libcret
+    ret
 }
 
 //------------------------------------FSYNC SYSCALL------------------------------------
@@ -2670,18 +2672,14 @@ pub fn fstat_syscall(
         );
     }
 
-    // 1) Call host fstat into a local host variable
-    let mut host_stat: libc::stat = unsafe { std::mem::zeroed() };
-    let ret = unsafe { libc::fstat(kernel_fd, &mut host_stat as *mut libc::stat) };
+
+    // Cast directly to libc::stat and write kernel data into buffer.
+
+    let statbuf_ptr = statbuf_arg as *mut libc::stat;
+    let ret = unsafe { libc::fstat(kernel_fd, statbuf_ptr) };
+
     if ret < 0 {
         return handle_errno(get_errno(), "fstat");
-    }
-
-    // 2) Validate guest buffer range and writability
-    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
-        // 3) Populate StatData directly
-        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, host_stat),
-        Err(e) => return syscall_error(e, "fstat", "Bad address"),
     }
 
     ret
@@ -2795,18 +2793,11 @@ pub fn fstatfs_syscall(
         );
     }
 
-    // 1) Call host fstatfs into a local host variable
-    let mut host_statfs: libc::statfs = unsafe { std::mem::zeroed() };
-    let ret = unsafe { libc::fstatfs(kernel_fd, &mut host_statfs) };
+    // Cast directly to libc::statfs and write kernel data into buffer.
+    let statfs_ptr = statfs_arg as *mut libc::statfs;
+    let ret = unsafe { libc::fstatfs(kernel_fd, statfs_ptr) };
     if ret < 0 {
         return handle_errno(get_errno(), "fstatfs");
-    }
-
-    // 2) Validate guest buffer range and writability
-    match sc_convert_addr_to_fstatdata(statfs_arg, statfs_cageid, cageid) {
-        // 3) Populate StatData directly
-        Ok(statbuf_addr) => convert_fstatdata_to_user(statbuf_addr, host_statfs),
-        Err(e) => return syscall_error(e, "fstatfs", "Bad address"),
     }
 
     ret

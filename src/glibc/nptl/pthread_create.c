@@ -40,6 +40,7 @@
 #include <clone3.h>
 #include <futex-internal.h>
 #include <syscall-template.h>
+#include <addr_translation.h>
 
 #include <shlib-compat.h>
 
@@ -659,7 +660,7 @@ out:
   
   // signal other threads that the thread has exited
   pd->tid = 0;
-  MAKE_SYSCALL(FUTEX_SYSCALL, "syscall|futex", (uint64_t) &pd->tid, (uint64_t) FUTEX_WAKE, (uint64_t) 1, (uint64_t)0, 0, (uint64_t)0);
+  MAKE_SYSCALL(FUTEX_SYSCALL, "syscall|futex", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOT(&pd->tid), (uint64_t) FUTEX_WAKE, (uint64_t) 1, (uint64_t)0, 0, (uint64_t)0);
   while (1)
     // replacing with lind exit
     exit(0);

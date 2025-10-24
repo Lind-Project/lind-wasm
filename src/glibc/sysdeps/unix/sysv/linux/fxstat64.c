@@ -36,7 +36,7 @@
 int
 ___fxstat64 (int vers, int fd, struct stat64 *buf)
 {
-  return MAKE_SYSCALL(FSTATFS_SYSCALL, "syscall|fxstat", (uint64_t) vers, (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL(FXSTAT_SYSCALL, "syscall|fxstat", (uint64_t) vers, (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED);
 }
 
 #if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)

@@ -85,7 +85,7 @@ __fstat64 (int fd, struct stat64 *buf)
       return -1;
     }
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-	return MAKE_SYSCALL(FSTATFS_SYSCALL, "syscall|fstat", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_SYSCALL(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 #endif
 
