@@ -40,12 +40,8 @@
 #include <clone3.h>
 #include <futex-internal.h>
 #include <syscall-template.h>
-<<<<<<< HEAD
 #include <addr_translation.h>
-=======
 #include <lind_syscall_num.h>
->>>>>>> main
-
 #include <shlib-compat.h>
 
 #include <stap-probe.h>
