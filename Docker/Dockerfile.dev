@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends -qq \
     bison \
     build-essential \
     ca-certificates \
+    wabt \
+    strace \
     curl \
     gawk \
     git \
@@ -94,6 +96,17 @@ ENV PATH="/usr/local/bin:/home/${USERNAME}/.cargo/bin:/home/${USERNAME}/go/bin:$
 ENV CLANG="/home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}"
 
 # --- Prebuild ---
-RUN make sysroot && make wasmtime
+ENV WASMTIME_PROFILE=debug
+RUN make sysroot && make wasmtime-debug
+
+# --- Make lind_* available from anywhere in the dev container ---
+# Tell scripts where the repo is (they are installed to /usr/local/bin)
+ENV LIND_WASM_ROOT=/home/${USERNAME}/lind-wasm
+USER root
+RUN install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_compile /usr/local/bin/lind_compile \
+ && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_run     /usr/local/bin/lind_run     \
+ && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
+USER ${USERNAME}
 
 CMD ["/bin/bash"]

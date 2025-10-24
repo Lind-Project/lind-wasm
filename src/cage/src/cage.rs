@@ -34,7 +34,7 @@ pub struct Cage {
     pub cwd: RwLock<Arc<PathBuf>>,
     // Reverse mapping for shared memory of addresses in cage to shmid, used for attaching and deattaching
     // shared memory segments
-    pub rev_shm: Mutex<Vec<(u32, i32)>>,
+    pub rev_shm: Mutex<Vec<(u64, i32)>>,
     // signalhandler is a hash map where the key is a signal number, and the value is a SigactionStruct, which
     // defines how the cage should handle a specific signal. Interacts with sigaction_syscall() to register or
     // retrieve the handler for a specific signal.

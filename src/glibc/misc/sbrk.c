@@ -25,15 +25,13 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
-#include <syscall-template.h>
-#include <lind_syscall_num.h>
 
 /* Defined in brk.c.  */
 // This is the "virtual brk" exposed to the caller
 // while the actual end of LinearMemory might be a
 // higher address aligned to pages
 extern void *__curbrk;
-// extern int __brk (void *addr);
+extern int __brk (void *addr);
 
 /* Extend the process's data space by INCREMENT.
    If INCREMENT is negative, shrink data space by - INCREMENT.
@@ -44,16 +42,12 @@ extern void *__curbrk;
 void *
 __sbrk (intptr_t increment)
 {
-	return MAKE_SYSCALL(SBRK_SYSCALL, "syscall|sbrk", (uint64_t) increment, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
-}
+  /* Controls whether __brk (0) is called to read the brk value from
+     the kernel.  */
+  bool update_brk = __curbrk == NULL;
 
-// void *
-// __sbrk (intptr_t increment)
-// {
-//   /* Controls whether __brk (0) is called to read the brk value from
-//      the kernel.  */
-//   bool update_brk = __curbrk == NULL;
-
+// lind-wasm: disabling this for now but may be necessary once dyn-loading is enabled?
+//
 // #if defined (SHARED) && ! IS_IN (rtld)
 //   if (!__libc_initial)
 //     {
@@ -70,27 +64,27 @@ __sbrk (intptr_t increment)
 //     }
 // #endif
 
-//   if (update_brk)
-//     if (__brk (0) < 0)		/* Initialize the break.  */
-//       return (void *) -1;
+  if (update_brk)
+    if (__brk (0) < 0)		/* Initialize the break.  */
+      return (void *) -1;
 
-//   if (increment == 0)
-//     return __curbrk;
+  if (increment == 0)
+    return __curbrk;
 
-//   void *oldbrk = __curbrk;
-//   if (increment > 0
-//       ? ((uintptr_t) oldbrk + (uintptr_t) increment < (uintptr_t) oldbrk)
-//       : ((uintptr_t) oldbrk < (uintptr_t) -increment))
-//     {
-//       __set_errno (ENOMEM);
-//       return (void *) -1;
-//     }
+  void *oldbrk = __curbrk;
+  if (increment > 0
+      ? ((uintptr_t) oldbrk + (uintptr_t) increment < (uintptr_t) oldbrk)
+      : ((uintptr_t) oldbrk < (uintptr_t) -increment))
+    {
+      __set_errno (ENOMEM);
+      return (void *) -1;
+    }
 
-//   if (__brk (oldbrk + increment) < 0)
-//     return (void *) -1;
+  if (__brk (oldbrk + increment) < 0)
+    return (void *) -1;
 
-//   return oldbrk;
-// }
+  return oldbrk;
+}
 
 libc_hidden_def (__sbrk)
 weak_alias (__sbrk, sbrk)

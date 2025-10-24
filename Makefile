@@ -15,6 +15,11 @@ wasmtime:
 	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/wasmtime/Cargo.toml --release
 
+.PHONY: wasmtime-debug
+wasmtime-debug:
+	# Build wasmtime in debug mode for faster iteration in devcontainer
+	cargo build --manifest-path src/wasmtime/Cargo.toml
+
 .PHONY: test
 test:
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py

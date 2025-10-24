@@ -40,6 +40,8 @@ RUN apt-get update && \
         bison \
         build-essential \
         ca-certificates \
+        wabt \
+        strace \
         curl \
         gawk \
         libc6-dev-i386-cross \
@@ -99,6 +101,12 @@ FROM base AS release
 COPY --from=build-wasmtime --parents  src/wasmtime/target .
 COPY --from=build-glibc --parents src/glibc/sysroot .
 COPY --parents scripts tests tools skip_test_cases.txt .
+
+ENV LIND_WASM_ROOT=/
+RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
+ && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run     \
+ && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
 
 
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
