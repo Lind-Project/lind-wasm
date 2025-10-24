@@ -24,18 +24,21 @@ In Old Norse, Old High German and Old English a "lind" is a shield constructed w
 Memory and bookkeeping that encapsulates the idea of a typical OS process, encompassing applications as well as grates.
 
 ### Grates
-Can perform trusted operations on descendant cages without requiring code in the microvisor's TCB. Grates can run arbitrary code, with restrictions only placed by grates beneath them. The microvisor implements a grate with access to call into the Linux kernel.
+Provide services to descendant cages by performing trusted operations on their behalf, without requiring additional code in the microvisor's TCB. 
+
+Grates can run arbitrary code, with restrictions only placed by grates beneath them.
+The microvisor itself implements a grate with privileged access to call into the Linux kernel.
 
 **Inheritance Properties**:
 
-- A child inherits system calls from parent on fork
+- A child inherits system call hanlders from parent on fork
 - If cage A was forked by cage B, cage A will have the same system call handlers as cage B
 - If grate A was forkinterpose()'d by grate B, grate A inherits B's system call behavior changes
 
 ### 3i System
 The 3i system serves as:
 
-- Central point for all communication between cages
+- Central point for all cage communications
 - Table container for system call routing
 - Security control mechanism for system call interception
 - Privilege management system for blocking unnecessary calls
