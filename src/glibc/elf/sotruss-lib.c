@@ -77,7 +77,7 @@ init (void)
      yes, whether we should print into a file.  */
   const char *which_process = getenv ("SOTRUSS_WHICH");
 
-  
+  // Dennis Edit
   pid_t pid = 0;
   // pid_t pid = getpid ();
 
@@ -258,7 +258,7 @@ print_enter (uintptr_t *refcook, uintptr_t *defcook, const char *symname,
   buf[0] = '\0';
   if (print_pid)
 
-    
+    // Dennis Edit
     snprintf (buf, sizeof (buf), "%5ld: ", (long int) 0);
     // snprintf (buf, sizeof (buf), "%5ld: ", (long int) getpid ());
 
@@ -348,7 +348,7 @@ print_exit (uintptr_t *refcook, uintptr_t *defcook, const char *symname,
   buf[0] = '\0';
   if (print_pid)
 
-    
+    // Dennis Edit
     snprintf (buf, sizeof (buf), "%5ld: ", (long int) 0);
     // snprintf (buf, sizeof (buf), "%5ld: ", (long int) getpid ());
 

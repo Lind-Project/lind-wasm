@@ -28,7 +28,7 @@ __socket (int fd, int type, int domain)
 // #else
 //   return SOCKETCALL (socket, fd, type, domain);
 // #endif
-  
+  // Dennis Edit
   return MAKE_SYSCALL(SOCKET_SYSCALL, "syscall|socket", (uint64_t) fd, (uint64_t) type, (uint64_t) domain, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__socket)

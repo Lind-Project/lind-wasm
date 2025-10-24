@@ -136,7 +136,7 @@ fstatat64_time64_stat (int fd, const char *file, struct __stat64_t64 *buf,
 // # endif
 // #endif
 
-  
+  // Dennis Edit
   int r = 0;
   return r;
 }

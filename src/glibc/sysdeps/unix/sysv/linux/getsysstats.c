@@ -246,7 +246,7 @@ weak_alias (__get_nprocs_conf, get_nprocs_conf)
    kernel.sys.c:do_sysinfo() it is set to 1 if unsigned long can
    represent all the sizes measured in bytes].  */
 
-
+// Dennis Edit
 // static long int
 // sysinfo_mempages (unsigned long int num, unsigned int mem_unit)
 // {
@@ -274,7 +274,7 @@ weak_alias (__get_nprocs_conf, get_nprocs_conf)
 long int
 __get_phys_pages (void)
 {
-  
+  // Dennis Edit
   return 0;
 
   // struct sysinfo info;
@@ -288,7 +288,7 @@ weak_alias (__get_phys_pages, get_phys_pages)
 long int
 __get_avphys_pages (void)
 {
-  
+  // Dennis Edit
   return 0;
 
   // struct sysinfo info;

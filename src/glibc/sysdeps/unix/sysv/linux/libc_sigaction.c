@@ -70,7 +70,7 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
   //   }
   // return result;
 
-   
+   // Dennis Edit
   return 0;
   // return MAKE_SYSCALL(147, "syscall|sigaction", (uint64_t) sig, (uint64_t)(uintptr_t) act, (uint64_t)(uintptr_t) oact, NOTUSED, NOTUSED, NOTUSED);
 }

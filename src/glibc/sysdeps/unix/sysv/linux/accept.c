@@ -23,10 +23,10 @@
 #include <addr_translation.h>
 
 int
-__libc_accept (int fd, struct sockaddr * addr, socklen_t *addrlen)
+__libc_accept (int fd, struct sockaddr * addr, socklen_t *len)
 {
-  
-  return MAKE_SYSCALL(ACCEPT_SYSCALL, "syscall|accept", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addr), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addrlen), NOTUSED, NOTUSED, NOTUSED);
+  // Dennis Edit
+  return MAKE_SYSCALL(ACCEPT_SYSCALL, "syscall|accept", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addr), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(len), NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__libc_accept, accept)
 libc_hidden_def (accept)
