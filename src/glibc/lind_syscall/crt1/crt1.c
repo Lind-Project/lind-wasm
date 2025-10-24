@@ -204,7 +204,6 @@ int _start() {
     __libc_setup_tls();
     __wasi_init_tp();
     __wasi_initialize_environ();
-    // Initialize glibc-side address translation (query base from host)
     __lind_init_addr_translation();
     return __main_void();
 }
