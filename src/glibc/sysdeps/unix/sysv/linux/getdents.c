@@ -19,6 +19,7 @@
 #include <dirent.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #if !_DIRENT_MATCHES_DIRENT64
 
@@ -36,7 +37,7 @@
 ssize_t
 __getdents (int fd, void *buf0, size_t nbytes)
 {
-   return MAKE_SYSCALL(GETDENTS_SYSCALL, "syscall|getdents", (uint64_t) fd, (uint64_t) buf0, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(GETDENTS_SYSCALL, "syscall|getdents", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf0), (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
 }
 
 # undef DIRENT_SET_DP_INO

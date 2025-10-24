@@ -20,12 +20,13 @@
 #include <socketcall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 ssize_t
 __libc_sendto (int fd, const void *buf, size_t len, int flags,
 	       const struct sockaddr * addr, socklen_t addrlen)
 {
-	return MAKE_SYSCALL(SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd, (uint64_t) buf, (uint64_t) len, (uint64_t) flags, (uint64_t) addr, (uint64_t) addrlen);
+	return MAKE_SYSCALL(SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), (uint64_t) len, (uint64_t) flags, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addr), (uint64_t) addrlen);
 }
 weak_alias (__libc_sendto, sendto)
 weak_alias (__libc_sendto, __sendto)

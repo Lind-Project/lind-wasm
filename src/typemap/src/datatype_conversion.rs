@@ -6,7 +6,7 @@
 //! Function naming convention:
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
-use cage::{get_cage, memory::memory::translate_vmmap_addr};
+use cage::get_cage;
 use std::error::Error;
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
@@ -148,9 +148,7 @@ pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, arg_cageid: u64, cageid: u64) 
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    return unsafe { &mut *((addr) as *mut i32) };
+    unsafe { &mut *(arg as *mut i32) }
 }
 
 /// ## Arguments:
@@ -272,12 +270,7 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
 /// ## Returns:
 ///     - buf: actual system address, which is the actual position that stores data
 pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
-    // Get cage reference to translate address
-    let cage = get_cage(cageid).unwrap();
-    // Convert user buffer address to system address. We don't need to check permission here.
-    // Permission check has been handled in 3i
-    let buf = translate_vmmap_addr(&cage, buf_arg).unwrap() as *const u8;
-    buf
+    buf_arg as *const u8
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
@@ -288,7 +281,7 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
 /// - Validates the Cage ID when the `secure` feature is enabled.
 /// - Retrieves the Cage object via `get_cage`.
 /// - Translates the Wasm linear memory address to a host address using
-///   `translate_vmmap_addr`.
+///   glibc-side address translation.
 /// - Casts the host address to a `*mut EpollEvent` and returns it as a
 ///   mutable reference if non-null.
 /// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
@@ -305,9 +298,7 @@ pub fn sc_convert_addr_to_epollevent<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut EpollEvent;
+    let pointer = arg as *mut EpollEvent;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
@@ -326,9 +317,7 @@ pub fn sc_convert_addr_to_epollevent<'a>(
 /// Output:
 ///     - Returns the translated 64-bit address in host space as a u64.
 pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64 {
-    let cage = get_cage(uaddr_arg_cageid).unwrap();
-    let uaddr = translate_vmmap_addr(&cage, uaddr_arg).unwrap();
-    return uaddr;
+    uaddr_arg
 }
 
 /// This function translates a memory address from the WASM environment (user space)
@@ -345,9 +334,7 @@ pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u
 ///     - Returns a mutable pointer to host memory corresponding to the given address
 ///       from the guest. The pointer can be used for direct read/write operations.
 pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64) -> *mut u8 {
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, addr_arg).unwrap() as *mut u8;
-    return addr;
+    addr_arg as *mut u8
 }
 
 /// Convert a user-provided pointer (u64) from a cage into a shared reference to
@@ -377,19 +364,7 @@ pub fn sc_convert_sigactionStruct<'a>(
         return None;
     }
 
-    // Get cage reference to translate address
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return None,
-    };
-
-    // Convert user buffer address to system address. We don't need to check permission here.
-    let addr = match translate_vmmap_addr(&cage, act_arg) {
-        Ok(a) => a,
-        Err(_) => return None,
-    };
-
-    let ptr = addr as *const SigactionStruct;
+    let ptr = act_arg as *const SigactionStruct;
     unsafe { Some(&*ptr) }
 }
 
@@ -419,18 +394,8 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
     if act_arg == 0 {
         return None;
     }
-    // Get cage reference to translate address
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return None,
-    };
-    // Convert user buffer address to system address. We don't need to check permission here.
-    let addr = match translate_vmmap_addr(&cage, act_arg) {
-        Ok(a) => a,
-        Err(_) => return None,
-    };
 
-    let ptr = addr as *mut SigactionStruct;
+    let ptr = act_arg as *mut SigactionStruct;
     unsafe { Some(&mut *ptr) }
 }
 
@@ -460,19 +425,13 @@ pub fn sc_convert_sigset(
     if set_arg == 0 {
         return None; // If the argument is 0, return None
     } else {
-        let cage = get_cage(cageid).unwrap();
-        match translate_vmmap_addr(&cage, set_arg) {
-            Ok(addr) => {
-                let ptr = addr as *mut SigsetType;
-                if !ptr.is_null() {
-                    unsafe {
-                        return Some(&mut *ptr);
-                    }
-                } else {
-                    panic!("Failed to get SigsetType from address");
-                }
+        let ptr = set_arg as *mut SigsetType;
+        if !ptr.is_null() {
+            unsafe {
+                return Some(&mut *ptr);
             }
-            Err(_) => panic!("Failed to get SigsetType from address"), // If translation fails, return None
+        } else {
+            panic!("Failed to get SigsetType from address");
         }
     }
 }
@@ -560,17 +519,12 @@ pub fn sc_convert_itimerval(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-
     if val_arg == 0 {
         None
     } else {
-        match translate_vmmap_addr(&cage, val_arg) {
-            Ok(addr) => match get_constitimerval(addr) {
-                Ok(itimeval) => itimeval,
-                Ok(None) => None,
-                Err(_) => panic!("Failed to get ITimerVal from address"),
-            },
+        match get_constitimerval(val_arg) {
+            Ok(itimeval) => itimeval,
+            Ok(None) => None,
             Err(_) => panic!("Failed to get ITimerVal from address"),
         }
     }
@@ -605,17 +559,12 @@ pub fn sc_convert_itimerval_mut(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-
     if val_arg == 0 {
         None
     } else {
-        match translate_vmmap_addr(&cage, val_arg) {
-            Ok(addr) => match get_itimerval(addr) {
-                Ok(itimeval) => itimeval,
-                Ok(None) => None,
-                Err(_) => panic!("Failed to get ITimerVal from address"),
-            },
+        match get_itimerval(val_arg) {
+            Ok(itimeval) => itimeval,
+            Ok(None) => None,
             Err(_) => panic!("Failed to get ITimerVal from address"),
         }
     }
@@ -635,7 +584,7 @@ pub fn sc_convert_itimerval_mut(
 ///    provided `arg_cageid` matches the current `cageid`.
 ///  - The Cage object is retrieved via `get_cage(cageid)`.
 ///  - The virtual address is translated into a host address using
-///    `translate_vmmap_addr`.
+///    glibc-side address translation.
 ///  - The host address is cast into a `*mut StatData`, and if non-null,
 ///    reinterpreted as a mutable reference.
 ///  - If the pointer is null, the function returns `Err(Errno::EFAULT)`,
@@ -656,9 +605,7 @@ pub fn sc_convert_addr_to_statdata<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut StatData;
+    let pointer = arg as *mut StatData;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
@@ -681,9 +628,7 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut FSData;
+    let pointer = arg as *mut FSData;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
@@ -698,7 +643,7 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
 /// - Validates the Cage ID when the `secure` feature is enabled.
 /// - Retrieves the Cage object via `get_cage`.
 /// - Translates the Wasm linear memory address to a host address using
-///   `translate_vmmap_addr`.
+///   glibc-side address translation.
 /// - Casts the host address to a `*mut PipeArray` and returns it as a
 ///   mutable reference if non-null.
 /// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
@@ -715,9 +660,7 @@ pub fn sc_convert_addr_to_pipearray<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut PipeArray;
+    let pointer = arg as *mut PipeArray;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }
@@ -732,7 +675,7 @@ pub fn sc_convert_addr_to_pipearray<'a>(
 /// - Validates the Cage ID when the `secure` feature is enabled.
 /// - Retrieves the Cage object via `get_cage`.
 /// - Translates the Wasm linear memory address to a host address using
-///   `translate_vmmap_addr`.
+///   glibc-side address translation.
 /// - Casts the host address to a `*mut ShmidsStruct` and returns it as a
 ///   mutable reference if non-null.
 /// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
@@ -749,9 +692,7 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut ShmidsStruct;
+    let pointer = arg as *mut ShmidsStruct;
     if !pointer.is_null() {
         return Ok(unsafe { &mut *pointer });
     }

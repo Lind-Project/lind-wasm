@@ -19,10 +19,11 @@
 #include <socketcall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 int
 __socketpair (int domain, int type, int protocol, int sv[2])
 {
-   return MAKE_SYSCALL(SOCKETPAIR_SYSCALL, "syscall|socketpair", (uint64_t) domain, (uint64_t) type, (uint64_t) protocol, (uint64_t) sv, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(SOCKETPAIR_SYSCALL, "syscall|socketpair", (uint64_t) domain, (uint64_t) type, (uint64_t) protocol, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(sv), NOTUSED, NOTUSED);
 }
 weak_alias (__socketpair, socketpair)

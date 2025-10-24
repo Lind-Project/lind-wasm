@@ -27,6 +27,7 @@
 #include <sys/syscall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* If we compile the file for use in ld.so we don't need the feature
    that getcwd() allocates the buffers itself.  */
@@ -49,7 +50,7 @@
 char *
 __getcwd (char *buf, size_t size)
 {
-	return MAKE_SYSCALL(GETCWD_SYSCALL, "syscall|getcwd", (uint64_t) buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_SYSCALL(GETCWD_SYSCALL, "syscall|getcwd", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__getcwd)
 weak_alias (__getcwd, getcwd)

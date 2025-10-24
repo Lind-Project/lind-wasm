@@ -162,8 +162,8 @@ kill_func (char **argv)
     {
       pid_t pid;
       if (strcmp (argv[i], "$$") == 0)
-      
-  // Dennis Edit
+      // Dennis Edit
+  
 	pid = 0;
   // pid = getpid ();
 

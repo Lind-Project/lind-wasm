@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <sysexits.h>
+#include <addr_translation.h>
 
 extern char** environ;
 // environ is a global variable that holds the environment variables for a program.
@@ -203,5 +204,6 @@ int _start() {
     __libc_setup_tls();
     __wasi_init_tp();
     __wasi_initialize_environ();
+    __lind_init_addr_translation();
     return __main_void();
 }

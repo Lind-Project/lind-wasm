@@ -19,10 +19,11 @@
 #include <socketcall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 int
 __getsockname (int fd, struct sockaddr *__restrict addr, socklen_t *len)
 {
-   return MAKE_SYSCALL(GETSOCKNAME_SYSCALL, "syscall|getsockname", (uint64_t) fd, (uint64_t) addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(GETSOCKNAME_SYSCALL, "syscall|getsockname", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addr), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(len), NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__getsockname, getsockname)
