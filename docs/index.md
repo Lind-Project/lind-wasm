@@ -31,14 +31,14 @@ The microvisor itself implements a grate with privileged access to call into the
 
 **Inheritance Properties**:
 
-- A child inherits system call hanlders from parent on fork
+- A child inherits system call handlers from parent on fork
 - If cage A was forked by cage B, cage A will have the same system call handlers as cage B
 - If grate A was forkinterpose()'d by grate B, grate A inherits B's system call behavior changes
 
 ### 3i System
 The 3i system serves as:
 
-- Central point for all cage communications
+- Central point for all cage communication
 - Table container for system call routing
 - Security control mechanism for system call interception
 - Privilege management system for blocking unnecessary calls
