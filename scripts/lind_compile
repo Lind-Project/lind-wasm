@@ -55,7 +55,13 @@ OUT_CWASM="${SRC%.c}.cwasm"
 # --- tool paths & quick checks (anchored to repo) ---
 CLANG_BIN="clang"  # must be on PATH
 WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
-WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
+WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
+WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime"
+# Fallback to release if selected profile isn't built yet
+if [[ ! -x "${WASMTIME_BIN}" ]]; then
+  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
+  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
+fi
 SYSROOT="${REPO_ROOT}/src/glibc/sysroot"
 
 command -v "${CLANG_BIN}" >/dev/null 2>&1 || { echo "error: clang not found on PATH" >&2; exit 2; }
