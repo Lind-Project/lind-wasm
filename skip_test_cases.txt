@@ -38,7 +38,6 @@ process_tests/deterministic/forkdup.c
 process_tests/deterministic/forkexecuid.c
 process_tests/deterministic/getuid.c
 process_tests/deterministic/mutex.c
-process_tests/deterministic/setsid.c
 process_tests/non-deterministic/fork.c
 process_tests/non-deterministic/template.c
 process_tests/non-deterministic/tls_test.c
