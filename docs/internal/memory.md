@@ -93,3 +93,16 @@ In Lind, the heap is always placed at the top of the memory space, right after t
 3. Heap Shrinking:
     - If the program break is decreased, memory beyond the new limit is marked as inaccessible (PROT_NONE) instead of being deallocated immediately, similar to munmap.
     - The vmmap entry is updated accordingly.
+
+## Important Clarifications from Unit Tests
+1. **Page-Based Operations**: All vmmap operations use page numbers internally, not byte addresses. This aligns with the underlying system memory model and ensures efficient address space management.
+
+2. **Entry Splitting**: When operations modify only part of an existing memory entry, the system automatically creates new entries for unchanged portions while preserving their original attributes. This ensures fine-grained control over memory regions.
+
+3. **Attribute Preservation**: Protection changes (via `change_prot`) preserve all entry metadata including `maxprot`, backing type, flags, and other attributes. Only the requested protection field is modified.
+
+4. **Overwrite Semantics**: The `add_entry_with_overwrite` function replaces overlapping entries rather than merging them. New entry attributes completely override old attributes in the overlapping region, with automatic splitting for partial overlaps.
+
+5. **Strict vs Overwrite Modes**: 
+   - `add_entry`: Rejects any overlapping entries (strict mode)
+   - `add_entry_with_overwrite`: Handles overlaps by splitting and replacing existing entries as needed
