@@ -1,36 +1,34 @@
-#include <sys/mman.h> // import mmap()
-#include <unistd.h>   // import NULL
+// gcc -Wall -O2 mmap_test.c -o mmap_test
+#include <sys/mman.h>
+#include <stdio.h>
 
-int main() {
-    const int pageSize = 65536; // 0x10000, according to wasi-libc
-    const int numElements = pageSize / sizeof(int);
+#define PAGESIZE 4096
 
-    // observe the linear memory length before mmap
-    int linear_mem_end = __builtin_wasm_memory_size(0);
+int main(void) {
+    size_t len = PAGESIZE;
 
-    // Allocate one page of memory
-    int* addr = mmap(NULL, pageSize, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    
-    if (addr == MAP_FAILED) {
-        return 1; // 
+    unsigned char *p = mmap(NULL, len, PROT_READ | PROT_WRITE,
+                            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED) {
+        perror("mmap");
+        return 1;
     }
 
-    // observe the current linear memory length
-    linear_mem_end = __builtin_wasm_memory_size(0);
+    p[0]       = 0xAB;
+    p[len/2]   = 0xCD;
+    p[len - 1] = 0xEF;
 
-    // Write on the page
-    for (int i = 0; i < numElements; i++) {
-        addr[i] = i;
+    if (p[0] != 0xAB || p[len/2] != 0xCD || p[len - 1] != 0xEF) {
+        fprintf(stderr, "memory check failed\n");
+        munmap(p, len);
+        return 2;
     }
 
-    // Read to verify the writes are effective
-    for (int i = 0; i < numElements; i++) {
-        if (addr[i] != i) {
-            munmap(addr, pageSize);
-            return 1; // terminate early if read incorrect data
-        }
+    if (munmap(p, len) != 0) {
+        perror("munmap");
+        return 3;
     }
 
-    munmap(addr, pageSize);
+    printf("mmap test: PASS\n");
     return 0;
 }

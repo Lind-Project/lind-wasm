@@ -20,16 +20,14 @@
 #include <sysdep.h>
 #include <socketcall.h>
 #include <socket-constants-time64.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 static int
 getsockopt_syscall (int fd, int level, int optname, void *optval,
 		    socklen_t *len)
 {
-#ifdef __ASSUME_GETSOCKOPT_SYSCALL
-  return INLINE_SYSCALL (getsockopt, 5, fd, level, optname, optval, len);
-#else
-  return SOCKETCALL (getsockopt, fd, level, optname, optval, len);
-#endif
+  return MAKE_SYSCALL5(GETSOCKOPT_SYSCALL, "syscall|getsockopt", (uint64_t)fd, (uint64_t)level, (uint64_t)optname, (uint64_t)optval, (uint64_t)len);
 }
 
 #ifndef __ASSUME_TIME64_SYSCALLS

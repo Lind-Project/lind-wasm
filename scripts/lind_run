@@ -31,7 +31,13 @@ if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
   exit 2
 fi
 
-WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
+WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
+WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime"
+# Fallback to release if selected profile isn't built yet
+if [[ ! -x "${WASMTIME_BIN}" ]]; then
+  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
+  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
+fi
 [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
 
 exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "$@"
