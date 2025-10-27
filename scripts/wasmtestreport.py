@@ -41,12 +41,12 @@ RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
-LIND_FS_ROOT = Path(os.environ.get("LIND_FS_ROOT", LIND_WASM_BASE / "src/tmp")).resolve()
+LIND_ROOT = Path(os.environ.get("LIND_ROOT", LIND_WASM_BASE / "src/tmp")).resolve()
 
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
 TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
-TESTFILES_DST = LIND_FS_ROOT / "testfiles"
+TESTFILES_DST = LIND_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
 NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 EXPECTED_DIRECTORY = Path("./expected")
@@ -232,7 +232,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     # Compile
     compile_cmd = ["gcc", str(source_file), "-o", str(native_output)]
     try:
-        proc = run_subprocess(compile_cmd, label="gcc compile", cwd=LIND_FS_ROOT, shell=False)
+        proc = run_subprocess(compile_cmd, label="gcc compile", cwd=LIND_ROOT, shell=False)
         if proc.returncode != 0:
             return False, proc.stdout + proc.stderr, "compile_error", "Failure_native_compiling"
     except Exception as e:
@@ -240,7 +240,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     
     # Run
     try:
-        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LIND_FS_ROOT, shell=False, timeout=timeout_sec)
+        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LIND_ROOT, shell=False, timeout=timeout_sec)
         if proc.returncode == 0:
             return True, proc.stdout, 0, None
         else:
@@ -1028,8 +1028,8 @@ def main():
             os.remove(output_file)
         if os.path.isfile(output_html_file):
             os.remove(output_html_file)
-        logger.debug(Path(LIND_FS_ROOT))
-        for file in Path(LIND_FS_ROOT).iterdir():
+        logger.debug(Path(LIND_ROOT))
+        for file in Path(LIND_ROOT).iterdir():
             file.unlink()
         return
 
@@ -1063,9 +1063,9 @@ def main():
         # All the main execution logic goes here
         try:
             shutil.rmtree(TESTFILES_DST)
-            logger.info(f"Testfiles at {LIND_FS_ROOT} deleted")
+            logger.info(f"Testfiles at {LIND_ROOT} deleted")
         except FileNotFoundError as e:
-            logger.error(f"Testfiles not present at {LIND_FS_ROOT}")
+            logger.error(f"Testfiles not present at {LIND_ROOT}")
         
         if clean_testfiles:
             return
@@ -1080,7 +1080,7 @@ def main():
         # Use selective testfile copying based on test dependencies
         pre_test(config['tests_to_run'])
         if pre_test_only:
-            logger.info(f"Testfiles copied to {LIND_FS_ROOT}")
+            logger.info(f"Testfiles copied to {LIND_ROOT}")
             return
 
         # Run all tests

@@ -18,7 +18,7 @@ wasmtime:
 .PHONY: test
 test:
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
-	LIND_WASM_BASE=. LIND_FS_ROOT=src/tmp \
+	LIND_WASM_BASE=. LIND_ROOT=src/tmp \
 	./scripts/wasmtestreport.py && \
 	cat results.json; \
 	if grep -q '"number_of_failures": [^0]' results.json; then \

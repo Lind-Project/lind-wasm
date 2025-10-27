@@ -10,15 +10,7 @@ pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
 pub use sysdefs::constants::{err_const, fs_const};
-
-/// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
-/// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
-/// error will be emitted if the environment variable is not a valid Unicode string). If the environment
-/// variable is not present, then this will expand to None, and will be set to default path.
-pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
-    Some(path) => path,
-    None => "/home/lind/lind-wasm/src/tmp",
-};
+use sysdefs::constants::lind_platform_const::LIND_ROOT;
 
 /// Convert data type from `&str` to `PathBuf`
 ///

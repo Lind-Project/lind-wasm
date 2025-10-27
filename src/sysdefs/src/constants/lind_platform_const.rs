@@ -5,11 +5,14 @@
 /// Maximum allowed path length in Lind.  
 /// Used to validate path lengths during operations to prevent overflow.
 pub const PATH_MAX: usize = 4096;
-/// Root directory prefix used internally by Lind.  
-/// This prefix is added before passing paths to the host system and removed
-/// when returning paths to the user, ensuring the Lind filesystem remains
-/// isolated from other parts. Only visible within the Lind codebase.
-pub const LIND_ROOT: &str = "/home/lind/lind-wasm/src/tmp";
+/// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
+/// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
+/// error will be emitted if the environment variable is not a valid Unicode string). If the environment
+/// variable is not present, then this will expand to None, and will be set to default path.
+pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
+    Some(path) => path,
+    None => "/home/lind/lind-wasm/src/tmp",
+};
 
 /// ===== Lind specific =====
 ///
