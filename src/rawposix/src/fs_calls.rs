@@ -20,7 +20,7 @@ use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to
 use typemap::path_conversion::*;
 
 /// Helper function to check if a libc::mmap return value indicates an error.
-/// 
+///
 /// mmap can return error codes in the same value space as valid addresses.
 /// We detect errors using two methods:
 /// 1. Errno range: -256 < ret < 0 (cast to isize)
@@ -34,7 +34,7 @@ fn is_mmap_error(ret: usize) -> bool {
         return true;
     }
     // Check if not page-aligned (valid mmap addresses are always page-aligned)
-    if ret % PAGESIZE != 0 {
+    if ret % PAGESIZE as usize != 0 {
         return true;
     }
     false
