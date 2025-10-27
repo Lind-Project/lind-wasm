@@ -148,16 +148,24 @@ impl ShmSegment {
             }
         };
 
-        unsafe {
-            (libc::mmap(
+        let result = unsafe {
+            libc::mmap(
                 shmaddr as *mut c_void,
                 self.size as usize,
                 prot,
                 (MAP_SHARED as i32) | (MAP_FIXED as i32),
                 fobjfdno,
                 0,
-            ) as usize)
+            ) as usize
+        };
+
+        // Check for mmap errors using the same logic as fs_calls
+        let result_signed = result as isize;
+        if result_signed == -1 || (result_signed < 0 && result_signed > -256) || (result % 4096 != 0) {
+            return syscall_error(Errno::EINVAL, "map_shm", "mmap failed") as usize;
         }
+
+        result
     }
 
     // unmap shared segment, decrease attachments

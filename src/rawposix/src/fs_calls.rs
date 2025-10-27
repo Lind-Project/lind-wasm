@@ -19,6 +19,27 @@ use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
 use typemap::path_conversion::*;
 
+/// Helper function to check if a libc::mmap return value indicates an error.
+/// 
+/// mmap can return error codes in the same value space as valid addresses.
+/// We detect errors using two methods:
+/// 1. Errno range: -256 < ret < 0 (cast to isize)
+/// 2. Page alignment: valid addresses are always page-aligned
+///
+/// Returns true if the value is an error, false if it's a valid address.
+fn is_mmap_error(ret: usize) -> bool {
+    let ret_signed = ret as isize;
+    // Check if in errno range (-256 to -1)
+    if ret_signed < 0 && ret_signed > -256 {
+        return true;
+    }
+    // Check if not page-aligned (valid mmap addresses are always page-aligned)
+    if ret % PAGESIZE != 0 {
+        return true;
+    }
+    false
+}
+
 /// Helper function for close_syscall
 ///
 /// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard IO stream fds
@@ -846,9 +867,9 @@ pub fn mmap_inner(
                 };
 
                 // Check if mmap failed and return the appropriate error if so
-                if ret == -1 {
-                    return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags")
-                        as usize;
+                if ret == -1 || is_mmap_error(ret as usize) {
+                    let errno = get_errno();
+                    return handle_errno(errno, "mmap") as usize;
                 }
 
                 ret as usize
@@ -861,7 +882,7 @@ pub fn mmap_inner(
         // Handle mmap with fd = -1 (anonymous memory mapping or special case)
         let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
         // Check if mmap failed and return the appropriate error if so
-        if ret == -1 {
+        if ret == -1 || is_mmap_error(ret as usize) {
             let errno = get_errno();
             return handle_errno(errno, "mmap") as usize;
         }
@@ -944,7 +965,7 @@ pub fn munmap_syscall(
         ) as usize
     };
     // Check for different failure modes with specific error messages
-    if result as isize == -1 {
+    if result as isize == -1 || is_mmap_error(result) {
         let errno = get_errno();
         panic!(
             "munmap: mmap failed during memory protection reset with errno: {:?}",
