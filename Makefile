@@ -3,6 +3,11 @@
 build: sysroot wasmtime
 	@echo "Build complete"
 
+.PHONY: prepare-lind-root
+prepare-lind-root:
+	mkdir -p $(LIND_ROOT)/dev
+	touch $(LIND_ROOT)/dev/null
+
 .PHONY: all
 all: build
 
@@ -15,7 +20,12 @@ wasmtime:
 	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/wasmtime/Cargo.toml --release
 
-.PHONY: test
+.PHONY: wasmtime-debug
+wasmtime-debug:
+	# Build wasmtime in debug mode for faster iteration in devcontainer
+	cargo build --manifest-path src/wasmtime/Cargo.toml
+
+test: prepare-lind-root
 test:
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
 	LIND_WASM_BASE=. LIND_ROOT=src/tmp \
