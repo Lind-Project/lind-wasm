@@ -16,6 +16,8 @@ To address this, we eschew memory.grow and integrate a vmmap system into Lind th
 
 The vmmap internally uses a [discrete interval tree](https://docs.rs/nodit/latest/nodit/) to manage memory regions efficiently. This data structure functions similarly to a balanced tree, enabling fast lookups, insertions, and deletions of memory mappings. It supports optimized allocation by quickly identifying contiguous free memory blocks. Additionally, it ensures proper handling of updates, such as modifying protections or removing entries, by correctly managing overlapping regions through splitting or merging. Other key features include address range queries to validate memory access and enforce permissions, as well as functions for translating addresses between user space and system memory.
 
+**Internal Operation Details**: All vmmap operations use page numbers internally, not byte addresses, aligning with the underlying system memory model for efficient address space management. When operations modify only part of an existing memory entry, the system automatically creates new entries for unchanged portions while preserving their original attributes, ensuring fine-grained control over memory regions.
+
 ### Why the Vmmap is Necessary
 
 Without a vmmap, syscalls like mmap() and munmap() could still be implemented using a greedy approach with memory.grow, similar to how other systems simulate file-backed mmap, as described above. However, this method would be unsuitable for multi-processing and would violate POSIX compliance, as we explain in this section.
@@ -50,8 +52,8 @@ To ensure that memory mappings remain manageable, mmap works with vmmap to searc
 **How It Works**
 
 1. Memory Region Identification:
-    - If MAP_FIXED is not set, vmmap searches for a suitable free memory region.
-    - If MAP_FIXED is specified, the requested address is used directly.
+    - If MAP_FIXED is not set, vmmap searches for a suitable free memory region in strict mode, rejecting any overlapping entries.
+    - If MAP_FIXED is specified, the requested address is used directly and may result in overwriting existing entries.
 2. Memory Protection and Flags Enforcement:
     - Only a restricted set of flags are allowed to prevent unintended behavior.
     - Execution permissions (PROT_EXEC) are explicitly disallowed for security reasons.
@@ -60,6 +62,7 @@ To ensure that memory mappings remain manageable, mmap works with vmmap to searc
     -The actual mmap operation is invoked on the host system with MAP_FIXED to ensure deterministic placement.
 4. Updating the vmmap:
     - If the mapping is successful, vmmap is updated to reflect the allocated region, including its permissions and backing type (anonymous or file-backed).
+    - When new entries overlap with existing ones, they replace overlapping entries rather than merging them. New entry attributes completely override old attributes in the overlapping region, with automatic splitting for partial overlaps.
 
 ### munmap()
 
@@ -74,6 +77,20 @@ munmap is used to release memory mappings previously allocated via mmap. Unlike 
     - Instead of actually deallocating memory, the affected region is marked as PROT_NONE. The memory remains allocated but becomes inaccessible.
 3. Updating vmmap:
     - The mapping entry is removed from vmmap, ensuring that the region is available for future allocations.
+
+### mprotect()
+
+mprotect() allows modification of protection flags for existing memory mappings, enabling or disabling read, write, and execute permissions for specified regions.
+
+**How It Works**
+
+1. Protection Change:
+    - Only the requested protection field is modified; all other entry metadata remains unchanged, including `maxprot`, backing type, flags, and other attributes.
+2. Address Alignment:
+    - The target address and length must be page-aligned.
+    - The region must correspond to an existing memory mapping in vmmap.
+3. Updating vmmap:
+    - The protection attributes of the affected vmmap entry are updated without affecting other region properties.
 
 ### brk()/sbrk()
 
@@ -94,15 +111,3 @@ In Lind, the heap is always placed at the top of the memory space, right after t
     - If the program break is decreased, memory beyond the new limit is marked as inaccessible (PROT_NONE) instead of being deallocated immediately, similar to munmap.
     - The vmmap entry is updated accordingly.
 
-## Important Clarifications from Unit Tests
-1. **Page-Based Operations**: All vmmap operations use page numbers internally, not byte addresses. This aligns with the underlying system memory model and ensures efficient address space management.
-
-2. **Entry Splitting**: When operations modify only part of an existing memory entry, the system automatically creates new entries for unchanged portions while preserving their original attributes. This ensures fine-grained control over memory regions.
-
-3. **Attribute Preservation**: Protection changes (via `change_prot`) preserve all entry metadata including `maxprot`, backing type, flags, and other attributes. Only the requested protection field is modified.
-
-4. **Overwrite Semantics**: The `add_entry_with_overwrite` function replaces overlapping entries rather than merging them. New entry attributes completely override old attributes in the overlapping region, with automatic splitting for partial overlaps.
-
-5. **Strict vs Overwrite Modes**: 
-   - `add_entry`: Rejects any overlapping entries (strict mode)
-   - `add_entry_with_overwrite`: Handles overlaps by splitting and replacing existing entries as needed

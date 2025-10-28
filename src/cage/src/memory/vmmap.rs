@@ -1746,7 +1746,9 @@ mod tests {
         vmmap.start_address = 0;
         vmmap.end_address = 1000;
 
-        // Add entries leaving gap at pages 50-99
+        // Add entries leaving gap at pages 40-99
+        // pages 10-39 (ends at 40)
+        // pages 100-149 (starts at 100)
         vmmap
             .add_entry_with_overwrite(
                 10,
@@ -1776,7 +1778,7 @@ mod tests {
             .unwrap();
 
         // Search with hint=60 (page number, not address)
-        // Should find space in gap 50-99, specifically from page 60 onwards
+        // Should find space in gap 40-99, specifically from page 60 onwards
         let space = vmmap.find_map_space_with_hint(10, 1, 60);
 
         assert!(space.is_some(), "Should find space");
