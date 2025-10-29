@@ -96,7 +96,7 @@ jobs:
           echo "----------------------------------"
 
       - name: Upload HTML report artifact to report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: wasm-e2e-report
           path: ${{ env.REPORT_LOCAL_DIR }}/${{ env.REPORT_LOCAL_FILE }}
