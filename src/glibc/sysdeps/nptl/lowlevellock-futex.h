@@ -90,9 +90,14 @@
   lll_futex_timed_wait(futexp, val, NULL, private)
 
 # define lll_futex_timed_wait(futexp, val, timeout, private)     \
-  __lll_futex_syscall_with_translated_ptrs(4, futexp,           \
+  ({                                                             \
+    __lind_init_addr_translation();                              \
+    /* Translate timeout pointer - NULL is valid (no timeout) */ \
+    uint64_t __host_timeout = TRANSLATE_GUEST_POINTER_TO_HOST(timeout); \
+    __lll_futex_syscall_with_translated_ptrs(4, futexp,         \
                     __lll_private_flag(FUTEX_WAIT, private),    \
-                    val, timeout)
+                    val, __host_timeout);                       \
+  })
 
 /* Verify whether the supplied clockid is supported by
    lll_futex_clock_wait_bitset.  */
@@ -106,16 +111,48 @@
 
 /* Requeue waiters from FUTEXP to MUTEX.  */
 # define lll_futex_requeue(futexp, nr_wake, nr_move, mutex, val, private) \
-  __lll_futex_syscall_with_translated_ptrs(6, futexp,                   \
-                    __lll_private_flag(FUTEX_CMP_REQUEUE, private),      \
-                    nr_wake, nr_move, TRANSLATE_GUEST_POINTER_TO_HOST(mutex), val)
+  ({                                                                      \
+    __lind_init_addr_translation();                                       \
+    long int __ret;                                                       \
+                                                                          \
+    /* Both futex pointers must be valid and aligned */                  \
+    if (!CHECK_PTR_NOT_NULL(futexp) || !CHECK_FUTEX_ALIGNMENT(futexp) || \
+        !CHECK_PTR_NOT_NULL(mutex) || !CHECK_FUTEX_ALIGNMENT(mutex)) {   \
+      __ret = -EINVAL;                                                    \
+    } else {                                                              \
+      uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST(futexp);    \
+      uint64_t __host_mutex = TRANSLATE_GUEST_POINTER_TO_HOST(mutex);     \
+      __ret = MAKE_RAW_SYSCALL6(FUTEX_SYSCALL, "syscall|futex",          \
+                                __host_futex,                             \
+                                __lll_private_flag(FUTEX_CMP_REQUEUE, private), \
+                                nr_wake, nr_move, __host_mutex, val);     \
+    }                                                                     \
+    (__glibc_unlikely(INTERNAL_SYSCALL_ERROR_P(__ret))                    \
+     ? -INTERNAL_SYSCALL_ERRNO(__ret) : 0);                               \
+  })
 
 /* Wake up up to NR_WAKE waiters on FUTEXP and NR_WAKE2 on FUTEXP2.  */
 # define lll_futex_wake_unlock(futexp, nr_wake, nr_wake2, futexp2, private) \
-  __lll_futex_syscall_with_translated_ptrs(6, futexp,                   \
-                    __lll_private_flag(FUTEX_WAKE_OP, private),          \
-                    nr_wake, nr_wake2, TRANSLATE_GUEST_POINTER_TO_HOST(futexp2), \
-                    FUTEX_OP_CLEAR_WAKE_IF_GT_ONE)
+  ({                                                                      \
+    __lind_init_addr_translation();                                       \
+    long int __ret;                                                       \
+                                                                          \
+    /* Both futex pointers must be valid and aligned */                  \
+    if (!CHECK_PTR_NOT_NULL(futexp) || !CHECK_FUTEX_ALIGNMENT(futexp) || \
+        !CHECK_PTR_NOT_NULL(futexp2) || !CHECK_FUTEX_ALIGNMENT(futexp2)) { \
+      __ret = -EINVAL;                                                    \
+    } else {                                                              \
+      uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST(futexp);    \
+      uint64_t __host_futex2 = TRANSLATE_GUEST_POINTER_TO_HOST(futexp2);  \
+      __ret = MAKE_RAW_SYSCALL6(FUTEX_SYSCALL, "syscall|futex",          \
+                                __host_futex,                             \
+                                __lll_private_flag(FUTEX_WAKE_OP, private), \
+                                nr_wake, nr_wake2, __host_futex2,         \
+                                FUTEX_OP_CLEAR_WAKE_IF_GT_ONE);           \
+    }                                                                     \
+    (__glibc_unlikely(INTERNAL_SYSCALL_ERROR_P(__ret))                    \
+     ? -INTERNAL_SYSCALL_ERRNO(__ret) : 0);                               \
+  })
 
 /* Priority inheritance unlock.  */
 # define lll_futex_timed_unlock_pi(futexp, private) 			\
@@ -125,9 +162,25 @@
 
 /* Like lll_futex_requeue, but pairs with lll_futex_wait_requeue_pi.  */
 # define lll_futex_cmp_requeue_pi(futexp, nr_wake, nr_move, mutex, val, private) \
-  __lll_futex_syscall_with_translated_ptrs(6, futexp,                   \
-                    __lll_private_flag(FUTEX_CMP_REQUEUE_PI, private),   \
-                    nr_wake, nr_move, TRANSLATE_GUEST_POINTER_TO_HOST(mutex), val)
+  ({                                                                      \
+    __lind_init_addr_translation();                                       \
+    long int __ret;                                                       \
+                                                                          \
+    /* Both futex pointers must be valid and aligned */                  \
+    if (!CHECK_PTR_NOT_NULL(futexp) || !CHECK_FUTEX_ALIGNMENT(futexp) || \
+        !CHECK_PTR_NOT_NULL(mutex) || !CHECK_FUTEX_ALIGNMENT(mutex)) {   \
+      __ret = -EINVAL;                                                    \
+    } else {                                                              \
+      uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST(futexp);    \
+      uint64_t __host_mutex = TRANSLATE_GUEST_POINTER_TO_HOST(mutex);     \
+      __ret = MAKE_RAW_SYSCALL6(FUTEX_SYSCALL, "syscall|futex",          \
+                                __host_futex,                             \
+                                __lll_private_flag(FUTEX_CMP_REQUEUE_PI, private), \
+                                nr_wake, nr_move, __host_mutex, val);     \
+    }                                                                     \
+    (__glibc_unlikely(INTERNAL_SYSCALL_ERROR_P(__ret))                    \
+     ? -INTERNAL_SYSCALL_ERRNO(__ret) : 0);                               \
+  })
 
 /* Cancellable wait variants.  */
 # define lll_futex_wait_cancel(futexp, val, private) \

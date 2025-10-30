@@ -19,9 +19,16 @@ void __lind_init_addr_translation(void) {
 }
 
 int CHECK_FUTEX_ALIGNMENT(const void *host_ptr) {
+    // NULL pointers are considered "not aligned" for futex operations
+    if (host_ptr == NULL) {
+        fprintf(stderr, "[glibc-futex] ERROR: NULL futex pointer\n");
+        return 0;
+    }
+    
     uintptr_t addr = (uintptr_t)host_ptr;
     if (addr % 4 != 0) {
-        fprintf(stderr, "[glibc-futex] WARNING: Misaligned futex host address: %p\n", host_ptr);
+        fprintf(stderr, "[glibc-futex] ERROR: Misaligned futex address: %p (alignment: %zu)\n", 
+                host_ptr, addr % 4);
         return 0; 
     }
     return 1; 
