@@ -1239,7 +1239,10 @@ mod tests {
         assert_eq!(entry.prot, PROT_READ | PROT_WRITE);
 
         let count = vmmap.entries.overlapping(ie(100, 110)).count();
-        assert_eq!(count, 1, "Region should remain as a single entry (no fragmentation)");
+        assert_eq!(
+            count, 1,
+            "Region should remain as a single entry (no fragmentation)"
+        );
     }
 
     /// Test: Change protection on overlapping boundary
