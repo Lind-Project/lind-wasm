@@ -1207,9 +1207,9 @@ mod tests {
         assert_eq!(third_orig.prot, PROT_READ | PROT_WRITE);
     }
 
-    /// Test: Change protection to same value
-    /// Expected: Region should remain unchanged
-    /// Ensures no fragmentation when protection doesn't actually change
+    /// Test: Change protection to same value on a smaller subrange
+    /// Expected: Region should remain unchanged and not fragment
+    /// Ensures no fragmentation when protection doesn't actually change on a subrange
     #[test]
     fn test_change_prot_to_same_value() {
         let mut vmmap = Vmmap::new();
@@ -1229,8 +1229,8 @@ mod tests {
             )
             .unwrap();
 
-        // Change protection to the same value
-        vmmap.change_prot(100, 10, PROT_READ | PROT_WRITE);
+        // Change protection to the same value over a smaller subrange
+        vmmap.change_prot(103, 4, PROT_READ | PROT_WRITE);
 
         // Verify the region remains continuous and unchanged
         let entry = vmmap.find_page(100).expect("Entry should exist");
@@ -1239,7 +1239,7 @@ mod tests {
         assert_eq!(entry.prot, PROT_READ | PROT_WRITE);
 
         let count = vmmap.entries.overlapping(ie(100, 110)).count();
-        assert_eq!(count, 1, "Region should remain as a single entry");
+        assert_eq!(count, 1, "Region should remain as a single entry (no fragmentation)");
     }
 
     /// Test: Change protection on overlapping boundary
