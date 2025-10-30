@@ -21,6 +21,7 @@
 #include <time.h>
 #include <futex-internal.h>
 #include <kernel-features.h>
+#include "libioP.h"
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
 
