@@ -29,7 +29,8 @@
 int
 __pipe (int __pipedes[2])
 {
-   return MAKE_SYSCALL(PIPE_SYSCALL, "syscall|pipe", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(__pipedes), NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (PIPE_SYSCALL, "syscall|pipe",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (__pipedes),
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__pipe)
-weak_alias (__pipe, pipe)
+libc_hidden_def (__pipe) weak_alias (__pipe, pipe)

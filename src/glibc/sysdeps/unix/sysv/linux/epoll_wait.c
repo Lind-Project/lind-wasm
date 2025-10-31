@@ -28,5 +28,8 @@
 int
 epoll_wait (int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
-   return MAKE_SYSCALL(EPOLL_WAIT_SYSCALL, "syscall|epoll_wait", (uint64_t) epfd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(events), (uint64_t) maxevents, (uint64_t) timeout, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (
+      EPOLL_WAIT_SYSCALL, "syscall|epoll_wait", (uint64_t) epfd,
+      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (events),
+      (uint64_t) maxevents, (uint64_t) timeout, NOTUSED, NOTUSED);
 }

@@ -35,19 +35,23 @@ int
 __select64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 	    struct __timeval64 *timeout)
 {
-		return MAKE_SYSCALL(SELECT_SYSCALL, "syscall|select", (uint64_t) nfds, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(readfds), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(writefds), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(exceptfds), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(timeout), NOTUSED);
+  return MAKE_SYSCALL (SELECT_SYSCALL, "syscall|select", (uint64_t) nfds,
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (readfds),
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (writefds),
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (exceptfds),
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (timeout),
+		       NOTUSED);
 
-// Lind-Wasm: Original glibc code removed for compatibility
-// to find original source code refer to (2.39.9000) at (/home/lind-wasm/glibc/sysdeps/unix/sysv/linux/select.c):(35-138)
-
+  // Lind-Wasm: Original glibc code removed for compatibility
+  // to find original source code refer to (2.39.9000) at
+  // (/home/lind-wasm/glibc/sysdeps/unix/sysv/linux/select.c):(35-138)
 }
 
 #if __TIMESIZE != 64
 libc_hidden_def (__select64)
 
-int
-__select (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
-	  struct timeval *timeout)
+    int __select (int nfds, fd_set *readfds, fd_set *writefds,
+		  fd_set *exceptfds, struct timeval *timeout)
 {
   struct __timeval64 tv64, *ptv64 = NULL;
   if (timeout != NULL)
@@ -64,5 +68,4 @@ __select (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 #endif
 libc_hidden_def (__select)
 
-weak_alias (__select, select)
-weak_alias (__select, __libc_select)
+    weak_alias (__select, select) weak_alias (__select, __libc_select)

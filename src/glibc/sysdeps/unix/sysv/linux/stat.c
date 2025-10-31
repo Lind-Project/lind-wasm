@@ -26,7 +26,10 @@
 int
 __stat (const char *fd, struct stat *buf)
 {
- return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(fd), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (fd),
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__stat, stat)
 #endif

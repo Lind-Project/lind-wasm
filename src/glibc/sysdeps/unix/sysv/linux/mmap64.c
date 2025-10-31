@@ -28,13 +28,14 @@
 void *
 __mmap64 (void *addr, size_t len, int prot, int flags, int fd, off64_t offset)
 {
-  return MAKE_SYSCALL(MMAP_SYSCALL, "syscall|mmap", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addr), (uint64_t) len, (uint64_t) prot, (uint64_t) flags, (uint64_t) fd, (uint64_t) offset);
+  return MAKE_SYSCALL (MMAP_SYSCALL, "syscall|mmap",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
+		       (uint64_t) len, (uint64_t) prot, (uint64_t) flags,
+		       (uint64_t) fd, (uint64_t) offset);
 }
-weak_alias (__mmap64, mmap64)
-libc_hidden_def (__mmap64)
+weak_alias (__mmap64, mmap64) libc_hidden_def (__mmap64)
 
 #ifdef __OFF_T_MATCHES_OFF64_T
-weak_alias (__mmap64, mmap)
-weak_alias (__mmap64, __mmap)
-libc_hidden_def (__mmap)
+    weak_alias (__mmap64, mmap) weak_alias (__mmap64, __mmap)
+	libc_hidden_def (__mmap)
 #endif

@@ -24,10 +24,11 @@
 
 libc_hidden_proto (epoll_ctl)
 
-int
-epoll_ctl (int __epfd, int __op, int __fd,
-		      struct epoll_event *__event)
+    int epoll_ctl (int __epfd, int __op, int __fd, struct epoll_event *__event)
 {
-   return MAKE_SYSCALL(EPOLL_CTL_SYSCALL, "syscall|epoll_ctl", (uint64_t) __epfd, (uint64_t) __op, (uint64_t) __fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(__event), NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (EPOLL_CTL_SYSCALL, "syscall|epoll_ctl",
+		       (uint64_t) __epfd, (uint64_t) __op, (uint64_t) __fd,
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (__event),
+		       NOTUSED, NOTUSED);
 }
 libc_hidden_def (epoll_ctl)

@@ -22,9 +22,11 @@
 #include <addr_translation.h>
 
 int
-__bind (int fd, const struct sockaddr * addr, socklen_t len)
+__bind (int fd, const struct sockaddr *addr, socklen_t len)
 {
   // Dennis Edit
-  return MAKE_SYSCALL(BIND_SYSCALL, "syscall|bind", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addr), (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (BIND_SYSCALL, "syscall|bind", (uint64_t) fd,
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
+		       (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__bind, bind)

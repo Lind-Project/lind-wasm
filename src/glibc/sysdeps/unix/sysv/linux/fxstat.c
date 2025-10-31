@@ -23,21 +23,24 @@
 #include <syscall-template.h>
 
 #if !XSTAT_IS_XSTAT64
-# include <xstatconv.h>
-# include <xstatover.h>
-# include <shlib-compat.h>
-#include <lind_syscall_num.h>
-#include <addr_translation.h>
+#  include <xstatconv.h>
+#  include <xstatover.h>
+#  include <shlib-compat.h>
+#  include <lind_syscall_num.h>
+#  include <addr_translation.h>
 
-# if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
+#  if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
 
 /* Get information about the file FD in BUF.  */
 int
 __fxstat (int vers, int fd, struct stat *buf)
 {
-	return MAKE_SYSCALL(FSTATFS_SYSCALL, "syscall|fxstat", (uint64_t) vers, (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (FSTATFS_SYSCALL, "syscall|fxstat", (uint64_t) vers,
+		       (uint64_t) fd,
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
+		       NOTUSED, NOTUSED, NOTUSED);
 }
 
-# endif /* LIB_COMPAT  */
+#  endif /* LIB_COMPAT  */
 
 #endif /* XSTAT_IS_XSTAT64  */

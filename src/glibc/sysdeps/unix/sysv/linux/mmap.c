@@ -26,12 +26,12 @@
 #include <addr_translation.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
-# include <mmap_internal.h>
+#  include <mmap_internal.h>
 
 /* An architecture may override this.  */
-# ifndef MMAP_ADJUST_OFFSET
-#  define MMAP_ADJUST_OFFSET(offset) offset
-# endif
+#  ifndef MMAP_ADJUST_OFFSET
+#    define MMAP_ADJUST_OFFSET(offset) offset
+#  endif
 
 // void *
 // __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
@@ -54,9 +54,11 @@
 void *
 __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
 {
-  return MAKE_SYSCALL(MMAP_SYSCALL, "syscall|mmap", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addr), (uint64_t) len, (uint64_t) prot, (uint64_t) flags, (uint64_t) fd, (uint64_t) offset);
+  return MAKE_SYSCALL (MMAP_SYSCALL, "syscall|mmap",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
+		       (uint64_t) len, (uint64_t) prot, (uint64_t) flags,
+		       (uint64_t) fd, (uint64_t) offset);
 }
-weak_alias (__mmap, mmap)
-libc_hidden_def (__mmap)
+weak_alias (__mmap, mmap) libc_hidden_def (__mmap)
 
 #endif /* __OFF_T_MATCHES_OFF64_T  */

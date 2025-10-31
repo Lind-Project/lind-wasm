@@ -23,11 +23,12 @@
 #include <addr_translation.h>
 
 int
-__libc_connect (int fd, const struct sockaddr * addr, socklen_t len)
+__libc_connect (int fd, const struct sockaddr *addr, socklen_t len)
 {
   // Dennis Edit
-  return MAKE_SYSCALL(CONNECT_SYSCALL, "syscall|connect", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addr), (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (CONNECT_SYSCALL, "syscall|connect", (uint64_t) fd,
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
+		       (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
-weak_alias (__libc_connect, connect)
-weak_alias (__libc_connect, __connect)
-libc_hidden_weak (__connect)
+weak_alias (__libc_connect, connect) weak_alias (__libc_connect, __connect)
+    libc_hidden_weak (__connect)

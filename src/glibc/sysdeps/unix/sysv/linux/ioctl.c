@@ -39,21 +39,21 @@ __ioctl (int fd, unsigned long int request, ...)
   /* Only support FIONBIO and FIOASYNC.  Fail fast otherwise. */
   assert (request == FIONBIO || request == FIOASYNC);
 
-  /* For FIONBIO and FIOASYNC, the third argument should be a pointer to int (int *argp).
-   * Translate the guest pointer to host pointer.
-   * TODO: Handle the edge case where someone passes a direct integer value (0 or 1)
-   * instead of a pointer. For now, we assume correct API usage (pointer). */
-  uint64_t host_ptr = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
+  /* For FIONBIO and FIOASYNC, the third argument should be a pointer to int
+   * (int *argp). Translate the guest pointer to host pointer.
+   * TODO: Handle the edge case where someone passes a direct integer value (0
+   * or 1) instead of a pointer. For now, we assume correct API usage
+   * (pointer). */
+  uint64_t host_ptr
+      = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
 
-  return MAKE_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl",
-                       (uint64_t) fd, (uint64_t) request,
-                       host_ptr,
-                       NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd,
+		       (uint64_t) request, host_ptr, NOTUSED, NOTUSED,
+		       NOTUSED);
 }
 
-libc_hidden_def (__ioctl)
-weak_alias (__ioctl, ioctl)
+libc_hidden_def (__ioctl) weak_alias (__ioctl, ioctl)
 
 #if __TIMESIZE != 64
-strong_alias (__ioctl, __ioctl_time64)
+    strong_alias (__ioctl, __ioctl_time64)
 #endif

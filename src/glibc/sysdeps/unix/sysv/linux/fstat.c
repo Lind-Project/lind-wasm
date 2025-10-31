@@ -34,7 +34,9 @@ __fstat (int fd, struct stat *buf)
       return -1;
     }
 
-        return MAKE_SYSCALL(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 weak_alias (__fstat, fstat)

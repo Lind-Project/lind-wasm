@@ -29,7 +29,9 @@
 int
 __gethostname (char *name, size_t len)
 {
-	return MAKE_SYSCALL(GETHOSTNAME_SYSCALL, "syscall|gethostname", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(name), (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (GETHOSTNAME_SYSCALL, "syscall|gethostname",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (name),
+		       (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 weak_alias (__gethostname, gethostname)

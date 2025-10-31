@@ -29,5 +29,7 @@
 void *
 shmat (int shmid, const void *shmaddr, int shmflg)
 {
-   return MAKE_SYSCALL(SHMAT_SYSCALL, "syscall|shmat", (uint64_t) shmid, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(shmaddr), (uint64_t) shmflg, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (SHMAT_SYSCALL, "syscall|shmat", (uint64_t) shmid,
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (shmaddr),
+		       (uint64_t) shmflg, NOTUSED, NOTUSED, NOTUSED);
 }

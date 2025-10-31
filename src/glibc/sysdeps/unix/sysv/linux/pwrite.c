@@ -27,15 +27,16 @@
 ssize_t
 __libc_pwrite (int fd, const void *buf, size_t count, off_t offset)
 {
-   return MAKE_SYSCALL(PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd, TRANSLATE_GUEST_POINTER_TO_HOST(buf), (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd,
+		       TRANSLATE_GUEST_POINTER_TO_HOST (buf), (uint64_t) count,
+		       (uint64_t) offset, NOTUSED, NOTUSED);
 }
 
-strong_alias (__libc_pwrite, __pwrite)
-libc_hidden_weak (__pwrite)
-weak_alias (__libc_pwrite, pwrite)
+strong_alias (__libc_pwrite, __pwrite) libc_hidden_weak (__pwrite)
+    weak_alias (__libc_pwrite, pwrite)
 
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_2)
-compat_symbol (libc, __libc_pwrite, pwrite, GLIBC_2_2);
-# endif
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_2)
+	compat_symbol (libc, __libc_pwrite, pwrite, GLIBC_2_2);
+#  endif
 
 #endif

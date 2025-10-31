@@ -26,7 +26,10 @@ ssize_t
 __libc_recvfrom (int fd, void *buf, size_t len, int flags,
 		 struct sockaddr *__restrict addr, socklen_t *addrlen)
 {
-	return MAKE_SYSCALL(RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), (uint64_t) len, (uint64_t) flags, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addr), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(addrlen));
+  return MAKE_SYSCALL (RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd,
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
+		       (uint64_t) len, (uint64_t) flags,
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addrlen));
 }
-weak_alias (__libc_recvfrom, recvfrom)
-weak_alias (__libc_recvfrom, __recvfrom)
+weak_alias (__libc_recvfrom, recvfrom) weak_alias (__libc_recvfrom, __recvfrom)

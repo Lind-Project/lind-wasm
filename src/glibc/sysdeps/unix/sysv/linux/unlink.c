@@ -27,6 +27,8 @@
 int
 __unlink (const char *name)
 {
-   return MAKE_SYSCALL(UNLINK_SYSCALL, "syscall|unlink", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(name), NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (UNLINK_SYSCALL, "syscall|unlink",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (name),
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__unlink, unlink)

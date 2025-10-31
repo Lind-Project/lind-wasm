@@ -6,11 +6,15 @@
 int
 __chdir (const char *__path)
 {
-  return MAKE_SYSCALL(CHDIR_SYSCALL, "syscall|chdir", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(__path), NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (CHDIR_SYSCALL, "syscall|chdir",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (__path),
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 int
 chdir (const char *__path)
 {
-  return MAKE_SYSCALL(CHDIR_SYSCALL, "syscall|chdir", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(__path), NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (CHDIR_SYSCALL, "syscall|chdir",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (__path),
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }

@@ -41,12 +41,13 @@ __libc_open (const char *file, int oflag, ...)
       va_end (arg);
     }
 
-  return MAKE_SYSCALL(OPEN_SYSCALL, "syscall|open", TRANSLATE_GUEST_POINTER_TO_HOST(file), (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (
+      OPEN_SYSCALL, "syscall|open", TRANSLATE_GUEST_POINTER_TO_HOST (file),
+      (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
   // return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag, mode);
 }
 libc_hidden_def (__libc_open)
 
-weak_alias (__libc_open, __open)
-libc_hidden_weak (__open)
-weak_alias (__libc_open, open)
+    weak_alias (__libc_open, __open) libc_hidden_weak (__open)
+	weak_alias (__libc_open, open)
 #endif

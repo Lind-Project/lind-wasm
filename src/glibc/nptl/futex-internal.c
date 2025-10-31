@@ -30,59 +30,49 @@
 
 // disable syscal cancel - Dennis
 static int
-__futex_abstimed_wait_common32 (unsigned int* futex_word,
-                                unsigned int expected, int op,
-                                const struct __timespec64* abstime,
-                                int private, bool cancel)
+__futex_abstimed_wait_common32 (unsigned int *futex_word,
+				unsigned int expected, int op,
+				const struct __timespec64 *abstime,
+				int private, bool cancel)
 {
-    struct timespec ts32, *pts32 = NULL;
-    if (abstime != NULL)
+  struct timespec ts32, *pts32 = NULL;
+  if (abstime != NULL)
     {
       ts32 = valid_timespec64_to_timespec (*abstime);
       pts32 = &ts32;
     }
 
-    // replace with lind syscall
-    __lind_init_addr_translation();
-    
-    // Validate futex_word pointer alignment (must be 4-byte aligned)
-    if (!CHECK_FUTEX_ALIGNMENT(futex_word)) {
-        return -EINVAL;
-    }
-    
-    uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST(futex_word);
-    // NULL timespec is valid (means no timeout), translated to 0ULL
-    uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST(pts32);
-    return MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex, (uint64_t) op, (uint64_t) expected, host_timespec, 0, (uint64_t)0);
+  // replace with lind syscall
+  __lind_init_addr_translation ();
+  uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
+  uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST (pts32);
+  return MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
+			   (uint64_t) op, (uint64_t) expected, host_timespec,
+			   0, (uint64_t) 0);
 }
 #endif /* ! __ASSUME_TIME64_SYSCALLS */
 
 // BUG: disable syscall cancel - Dennis
 static int
-__futex_abstimed_wait_common64 (unsigned int* futex_word,
-                                unsigned int expected, int op,
-                                const struct __timespec64* abstime,
-                                int private, bool cancel)
+__futex_abstimed_wait_common64 (unsigned int *futex_word,
+				unsigned int expected, int op,
+				const struct __timespec64 *abstime,
+				int private, bool cancel)
 {
-    // replace with lind syscall
-    __lind_init_addr_translation();
-    
-    // Validate futex_word pointer alignment (must be 4-byte aligned)
-    if (!CHECK_FUTEX_ALIGNMENT(futex_word)) {
-        return -EINVAL;
-    }
-    
-    uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST(futex_word);
-    // NULL timespec is valid (means no timeout), translated to 0ULL
-    uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST(abstime);
-    return MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex, (uint64_t) op, (uint64_t) expected, host_timespec, 0, (uint64_t)FUTEX_BITSET_MATCH_ANY);
+  // replace with lind syscall
+  __lind_init_addr_translation ();
+  uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
+  uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST (abstime);
+  return MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
+			   (uint64_t) op, (uint64_t) expected, host_timespec,
+			   0, (uint64_t) FUTEX_BITSET_MATCH_ANY);
 }
 
 static int
-__futex_abstimed_wait_common (unsigned int* futex_word,
-                              unsigned int expected, clockid_t clockid,
-                              const struct __timespec64* abstime,
-                              int private, bool cancel)
+__futex_abstimed_wait_common (unsigned int *futex_word, unsigned int expected,
+			      clockid_t clockid,
+			      const struct __timespec64 *abstime, int private,
+			      bool cancel)
 {
   int err;
   unsigned int clockbit;
@@ -92,7 +82,7 @@ __futex_abstimed_wait_common (unsigned int* futex_word,
   if (__glibc_unlikely ((abstime != NULL) && (abstime->tv_sec < 0)))
     return ETIMEDOUT;
 
-  if (! lll_futex_supported_clockid (clockid))
+  if (!lll_futex_supported_clockid (clockid))
     return EINVAL;
 
   clockbit = (clockid == CLOCK_REALTIME) ? FUTEX_CLOCK_REALTIME : 0;
@@ -111,8 +101,8 @@ __futex_abstimed_wait_common (unsigned int* futex_word,
 	err = -EOVERFLOW;
     }
   else
-    err = __futex_abstimed_wait_common32 (futex_word, expected, FUTEX_WAIT, abstime,
-                                          private, cancel);
+    err = __futex_abstimed_wait_common32 (futex_word, expected, FUTEX_WAIT,
+					  abstime, private, cancel);
 #endif
 
   switch (err)
@@ -122,9 +112,9 @@ __futex_abstimed_wait_common (unsigned int* futex_word,
     case -EINTR:
     case -ETIMEDOUT:
     case -EINVAL:
-    case -EOVERFLOW:  /* Passed absolute timeout uses 64 bit time_t type, but
-                         underlying kernel does not support 64 bit time_t futex
-                         syscalls.  */
+    case -EOVERFLOW: /* Passed absolute timeout uses 64 bit time_t type, but
+			underlying kernel does not support 64 bit time_t futex
+			syscalls.  */
       return -err;
 
     case -EFAULT: /* Must have been caused by a glibc or application bug.  */
@@ -136,68 +126,64 @@ __futex_abstimed_wait_common (unsigned int* futex_word,
 }
 
 int
-__futex_abstimed_wait64 (unsigned int* futex_word, unsigned int expected,
-                         clockid_t clockid,
-                         const struct __timespec64* abstime, int private)
+__futex_abstimed_wait64 (unsigned int *futex_word, unsigned int expected,
+			 clockid_t clockid, const struct __timespec64 *abstime,
+			 int private)
 {
-  return __futex_abstimed_wait_common (futex_word, expected, clockid,
-                                       abstime, private, false);
+  return __futex_abstimed_wait_common (futex_word, expected, clockid, abstime,
+				       private, false);
 }
 libc_hidden_def (__futex_abstimed_wait64)
 
-int
-__futex_abstimed_wait_cancelable64 (unsigned int* futex_word,
-                                    unsigned int expected, clockid_t clockid,
-                                    const struct __timespec64* abstime,
-                                    int private)
+    int __futex_abstimed_wait_cancelable64 (unsigned int *futex_word,
+					    unsigned int expected,
+					    clockid_t clockid,
+					    const struct __timespec64 *abstime,
+					    int private)
 {
-  return __futex_abstimed_wait_common (futex_word, expected, clockid,
-                                       abstime, private, true);
+  return __futex_abstimed_wait_common (futex_word, expected, clockid, abstime,
+				       private, true);
 }
 libc_hidden_def (__futex_abstimed_wait_cancelable64)
 
-int
-__futex_lock_pi64 (int *futex_word, clockid_t clockid,
-		   const struct __timespec64 *abstime, int private)
+    int __futex_lock_pi64 (int *futex_word, clockid_t clockid,
+			   const struct __timespec64 *abstime, int private)
 {
   int err;
 
-  // Initialize address translation and validate futex pointer
-  __lind_init_addr_translation();
-  
-  // Validate futex_word pointer alignment (must be 4-byte aligned)
-  if (!CHECK_FUTEX_ALIGNMENT(futex_word)) {
-      return EINVAL;
-  }
-
-  unsigned int clockbit = clockid == CLOCK_REALTIME
-			  ? FUTEX_CLOCK_REALTIME : 0;
+  unsigned int clockbit = clockid == CLOCK_REALTIME ? FUTEX_CLOCK_REALTIME : 0;
   int op_pi2 = __lll_private_flag (FUTEX_LOCK_PI2 | clockbit, private);
 #if __ASSUME_FUTEX_LOCK_PI2
   /* Assume __ASSUME_TIME64_SYSCALLS since FUTEX_LOCK_PI2 was added later.  */
-  uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST(futex_word);
-  // NULL timespec is valid (means no timeout), translated to 0ULL
-  uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST(abstime);
-  err = MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex, (uint64_t) op_pi2, (uint64_t) 0, host_timespec, 0, (uint64_t)0);
+  __lind_init_addr_translation ();
+  uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
+  uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST (abstime);
+  err = MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
+			  (uint64_t) op_pi2, (uint64_t) 0, host_timespec, 0,
+			  (uint64_t) 0);
 #else
   /* FUTEX_LOCK_PI does not support clock selection, so for CLOCK_MONOTONIC
      the only option is to use FUTEX_LOCK_PI2.  */
   int op_pi1 = __lll_private_flag (FUTEX_LOCK_PI, private);
   int op_pi = abstime != NULL && clockid != CLOCK_REALTIME ? op_pi2 : op_pi1;
 
-# ifdef __ASSUME_TIME64_SYSCALLS
-  uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST(futex_word);
-  // NULL timespec is valid (means no timeout), translated to 0ULL
-  uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST(abstime);
-  err = MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex, (uint64_t) op_pi, (uint64_t) 0, host_timespec, 0, (uint64_t)0);
-# else
+#  ifdef __ASSUME_TIME64_SYSCALLS
+  __lind_init_addr_translation ();
+  uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
+  uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST (abstime);
+  err = MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
+			  (uint64_t) op_pi, (uint64_t) 0, host_timespec, 0,
+			  (uint64_t) 0);
+#  else
   bool need_time64 = abstime != NULL && !in_int32_t_range (abstime->tv_sec);
-  uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST(futex_word);
+  __lind_init_addr_translation ();
+  uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
   if (need_time64)
     {
-      // NULL timespec is valid (means no timeout), translated to 0ULL
-      uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST(abstime);
-      err = MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex, (uint64_t) op_pi, (uint64_t) 0, host_timespec, 0, (uint64_t)0);
+      uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST (abstime);
+      err = MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
+			      (uint64_t) op_pi, (uint64_t) 0, host_timespec, 0,
+			      (uint64_t) 0);
     }
   else
     {
@@ -207,15 +193,16 @@ __futex_lock_pi64 (int *futex_word, clockid_t clockid,
 	  ts32 = valid_timespec64_to_timespec (*abstime);
 	  pts32 = &ts32;
 	}
-      // NULL timespec is valid (means no timeout), translated to 0ULL
-      uint64_t host_timespec32 = TRANSLATE_GUEST_POINTER_TO_HOST(pts32);
-      err = MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex, (uint64_t) op_pi, (uint64_t) 0, host_timespec32, 0, (uint64_t)0);
+      uint64_t host_timespec32 = TRANSLATE_GUEST_POINTER_TO_HOST (pts32);
+      err = MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
+			      (uint64_t) op_pi, (uint64_t) 0, host_timespec32,
+			      0, (uint64_t) 0);
     }
-# endif	 /* __ASSUME_TIME64_SYSCALLS */
-   /* FUTEX_LOCK_PI2 is not available on this kernel.  */
-   if (err == -ENOSYS)
-     err = -EINVAL;
-#endif /* __ASSUME_FUTEX_LOCK_PI2  */
+#  endif /* __ASSUME_TIME64_SYSCALLS */
+  /* FUTEX_LOCK_PI2 is not available on this kernel.  */
+  if (err == -ENOSYS)
+    err = -EINVAL;
+#endif	 /* __ASSUME_FUTEX_LOCK_PI2  */
 
   switch (err)
     {
@@ -226,10 +213,10 @@ __futex_lock_pi64 (int *futex_word, clockid_t clockid,
     case -ESRCH:
     case -EDEADLK:
     case -EINVAL: /* This indicates either state corruption or that the kernel
-                     found a waiter on futex address which is waiting via
-                     FUTEX_WAIT or FUTEX_WAIT_BITSET.  This is reported on
-                     some futex_lock_pi usage (pthread_mutex_timedlock for
-                     instance).  */
+		     found a waiter on futex address which is waiting via
+		     FUTEX_WAIT or FUTEX_WAIT_BITSET.  This is reported on
+		     some futex_lock_pi usage (pthread_mutex_timedlock for
+		     instance).  */
       return -err;
 
     case -EFAULT: /* Must have been caused by a glibc or application bug.  */
