@@ -847,8 +847,8 @@ pub fn mmap_inner(
 
                 // Check if mmap failed and return the appropriate error if so
                 if ret == -1 {
-                    return syscall_error(Errno::EINVAL, "mmap", "mmap failed with invalid flags")
-                        as usize;
+                    let errno = get_errno();
+                    return handle_errno(errno, "mmap") as usize;
                 }
 
                 ret as usize

@@ -11,7 +11,7 @@ use std::os::unix::io::AsRawFd;
 pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 pub use std::sync::{Arc, LazyLock};
 use std::time::SystemTime;
-use sysdefs::constants::err_const::{syscall_error, Errno};
+use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX,
     SHMMIN, SHM_RDONLY,
@@ -148,16 +148,24 @@ impl ShmSegment {
             }
         };
 
-        unsafe {
-            (libc::mmap(
+        let result = unsafe {
+            libc::mmap(
                 shmaddr as *mut c_void,
                 self.size as usize,
                 prot,
                 (MAP_SHARED as i32) | (MAP_FIXED as i32),
                 fobjfdno,
                 0,
-            ) as usize)
+            ) as usize
+        };
+
+        // Check if mmap failed and return the appropriate error
+        if result as isize == -1 {
+            let errno = get_errno();
+            return handle_errno(errno, "map_shm") as usize;
         }
+
+        result
     }
 
     // unmap shared segment, decrease attachments
