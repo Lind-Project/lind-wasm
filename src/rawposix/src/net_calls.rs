@@ -10,7 +10,6 @@ use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
-use sysdefs::data::fs_struct::EpollEvent;
 use sysdefs::data::net_struct::SockAddr;
 use sysdefs::*;
 use typemap::cage_helpers::convert_fd_to_host;
@@ -784,12 +783,7 @@ pub fn epoll_wait_syscall(
         Err(e) => return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid address"),
     };
 
-    // TODO: Replace custom EpollEvent struct with libc::epoll_event
-    // The current EpollEvent uses {events: u32, fd: i32} while libc::epoll_event
-    // uses {events: u32, u64: u64} union. This requires updating all field accesses
-    // from .fd to .u64 and ensuring proper handling of the union data.
-
-    // We do not let the kernel write epoll events directly into the guest’s
+    // We do not let the kernel write epoll events directly into the guest's
     // linear memory. The kernel reports events using kernel-side identifiers
     // (underfd) in the epoll_event.data field, which are not visible to user space
     // in our model. To preserve isolation and avoid leaking underfd
@@ -844,7 +838,7 @@ pub fn epoll_wait_syscall(
                 return syscall_error(Errno::EINTR, "epoll", "interrupted");
             }
         }
-        // Convert back to rawposix's data structure
+        // Convert back to user's data structure
         // Loop over virtual epollfd to find corresponding mapping relationship between kernel fd and virtual fd
         for i in 0..ret as usize {
             let ret_kernelfd = kernel_events[i].u64;
@@ -853,7 +847,8 @@ pub fn epoll_wait_syscall(
                 .get(&(epfd))
                 .and_then(|kernel_map| kernel_map.get(&(ret_kernelfd as i32)).copied());
 
-            events[i].fd = ret_virtualfd.unwrap() as i32;
+            // Write back to user's buffer: store virtual fd in the u64 data field
+            events[i].u64 = ret_virtualfd.unwrap() as u64;
             events[i].events = kernel_events[i].events;
         }
         return ret;

@@ -12,7 +12,7 @@ use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
-    EpollEvent, FSData, ITimerVal, PipeArray, ShmidsStruct, SigactionStruct, SigsetType, StatData,
+    FSData, ITimerVal, PipeArray, ShmidsStruct, SigactionStruct, SigsetType, StatData,
 };
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
@@ -274,21 +274,25 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
-/// a mutable reference to a `EpollEvent`.
+/// a mutable reference to a `libc::epoll_event`.
 ///
 /// This function follows the same pattern as other `sc_convert_addr_*`
 /// helpers:
 /// - Validates the Cage ID when the `secure` feature is enabled.
-/// - Casts the address to a `*mut EpollEvent` and returns it as a
+/// - Casts the address to a `*mut libc::epoll_event` and returns it as a
 ///   mutable reference.
 ///
 /// Note: Null pointer validation is now performed at the glibc layer before
 /// calling into rawposix, so this function assumes the pointer is valid.
+///
+/// The libc::epoll_event structure matches the kernel's struct epoll_event:
+/// - `events: u32` - event mask
+/// - `u64: u64` - union data field (can represent fd, ptr, u32, or u64)
 pub fn sc_convert_addr_to_epollevent<'a>(
     arg: u64,
     arg_cageid: u64,
     cageid: u64,
-) -> Result<&'a mut EpollEvent, Errno> {
+) -> Result<&'a mut libc::epoll_event, Errno> {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
@@ -296,7 +300,7 @@ pub fn sc_convert_addr_to_epollevent<'a>(
         }
     }
 
-    let pointer = arg as *mut EpollEvent;
+    let pointer = arg as *mut libc::epoll_event;
     Ok(unsafe { &mut *pointer })
 }
 
