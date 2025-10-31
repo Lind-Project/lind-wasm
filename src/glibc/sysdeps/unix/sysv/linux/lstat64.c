@@ -44,9 +44,7 @@ hidden_def (__lstat64_time64)
 
     int __lstat64 (const char *file, struct stat64 *buf)
 {
-  struct __stat64_t64 st_t64;
-  return __lstat64_time64 (file, &st_t64)
-	     ?: __cp_stat64_t64_stat64 (&st_t64, buf);
+  return MAKE_SYSCALL2(XSTAT_SYSCALL, "syscall|xstat", (uint64_t)file, (uint64_t)buf); 
 }
 #endif
 hidden_def (__lstat64)

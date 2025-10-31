@@ -14,7 +14,7 @@ In Old Norse, Old High German and Old English a “lind” is a shield construct
 ## Getting started
 
 Check out the [Getting started](https://lind-project.github.io/lind-wasm/getting-started/)
-guide and [docs on our website](https://lind-project.github.io/lind-wasm/)
+guide for a Hello World! example and [our docs](https://lind-project.github.io/lind-wasm/)
 to learn more about Lind!
 
 

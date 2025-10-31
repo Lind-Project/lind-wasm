@@ -31,6 +31,7 @@
 int
 __fstat64_time64 (int fd, struct __stat64_t64 *buf)
 {
+<<<<<<< HEAD
 #if !FSTATAT_USE_STATX
 #  if XSTAT_IS_XSTAT64
   /* The __NR_stat macro is defined for all ABIs that also define
@@ -72,6 +73,9 @@ __fstat64_time64 (int fd, struct __stat64_t64 *buf)
     }
   return __fstatat64_time64 (fd, "", buf, AT_EMPTY_PATH);
 #endif
+=======
+  return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t)buf);
+>>>>>>> main
 }
 #if __TIMESIZE != 64
 hidden_def (__fstat64_time64)
@@ -84,10 +88,14 @@ hidden_def (__fstat64_time64)
       return -1;
     }
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
+<<<<<<< HEAD
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   CHECK_NULL_PTR (host_buf, "buf");
   return MAKE_SYSCALL (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
 		       host_buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+=======
+	return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t)buf);
+>>>>>>> main
 }
 #endif
 
