@@ -11,6 +11,7 @@ double __ieee754_acos(double x) {
 }
 libm_alias_finite (__ieee754_acos, __acos)
 
+// lind-wasm: added wrapper function for wasm compilation
 double acos(double x) {
   return __ieee754_acos(x);
 }

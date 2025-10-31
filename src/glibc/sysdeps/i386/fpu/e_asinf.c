@@ -104,6 +104,7 @@ float __ieee754_asinf(float x)
 }
 libm_alias_finite (__ieee754_asinf, __asinf)
 
+// lind-wasm: added wrapper function for wasm compilation
 double asinf(double x) {
   return __ieee754_asinf(x);
 }

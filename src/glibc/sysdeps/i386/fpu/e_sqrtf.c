@@ -15,6 +15,7 @@ float __ieee754_sqrtf(float x) {
 libm_alias_finite (__ieee754_sqrtf, __sqrtf)
 
 
+// lind-wasm: added wrapper function for wasm compilation
 double sqrtf(double x) {
   return __ieee754_sqrtf(x);
 }

@@ -51,6 +51,7 @@ double __exp_finite(double x) {
 
 libm_alias_finite (__ieee754_exp, __exp)
 
+// lind-wasm: added wrapper function for wasm compilation
 double exp(double x) {
   return __ieee754_exp(x);
 }

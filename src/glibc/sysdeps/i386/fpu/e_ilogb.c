@@ -62,6 +62,7 @@ __ieee754_ilogb (double x)
   return FP_ILOGBNAN;
 }
 
+// lind-wasm: added wrapper function for wasm compilation
 double ilogb(double x) {
   return __ieee754_ilogb(x);
 }

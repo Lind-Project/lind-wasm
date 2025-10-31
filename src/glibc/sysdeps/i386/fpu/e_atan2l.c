@@ -17,6 +17,7 @@ __ieee754_atan2l (long double y, long double x)
 }
 libm_alias_finite (__ieee754_atan2l, __atan2l)
 
+// lind-wasm: added wrapper function for wasm compilation
 double atan2l(double x) {
   return __ieee754_atan2l(x);
 }

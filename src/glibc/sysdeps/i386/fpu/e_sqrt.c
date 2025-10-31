@@ -27,6 +27,7 @@ double __ieee754_sqrt(double x) {
 
 libm_alias_finite (__ieee754_sqrt, __sqrt)
 
+// lind-wasm: added wrapper function for wasm compilation
 double sqrt(double x) {
   return __ieee754_sqrt(x);
 }

@@ -7,6 +7,7 @@ float __ieee754_fmodf(float x, float y) {
 }
 libm_alias_finite (__ieee754_fmodf, __fmodf)
 
+// lind-wasm: added wrapper function for wasm compilation
 double fmodf(double x) {
   return __ieee754_fmodf(x);
 }

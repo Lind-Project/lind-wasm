@@ -178,6 +178,7 @@ libm_alias_finite (__ieee754_asin, __asin)
 /*******************************************************************/
 
 
+// lind-wasm: added wrapper function for wasm compilation
 double asin(double x) {
   return __ieee754_asin(x);
 }

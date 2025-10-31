@@ -34,6 +34,7 @@ long double __ieee754_logl(long double x) {
 
 libm_alias_finite (__ieee754_logl, __logl)
 
+// lind-wasm: added wrapper function for wasm compilation
 double logl(double x) {
   return __ieee754_logl(x);
 }

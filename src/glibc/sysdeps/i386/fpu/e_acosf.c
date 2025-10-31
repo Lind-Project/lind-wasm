@@ -78,6 +78,7 @@ __ieee754_acosf(float x)
 libm_alias_finite (__ieee754_acosf, __acosf)
 
 
+// lind-wasm: added wrapper function for wasm compilation
 double acosf(double x) {
   return __ieee754_acosf(x);
 }

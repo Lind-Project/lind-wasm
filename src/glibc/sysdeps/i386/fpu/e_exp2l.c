@@ -30,6 +30,7 @@ long double __ieee754_exp2l(long double x) {
 
 libm_alias_finite (__ieee754_exp2l, __exp2l)
 
+// lind-wasm: added wrapper function for wasm compilation
 double exp2l(double x) {
   return __ieee754_exp2l(x);
 }

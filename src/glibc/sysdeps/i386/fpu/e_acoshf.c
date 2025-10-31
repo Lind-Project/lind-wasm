@@ -49,6 +49,7 @@ float __ieee754_acoshf(float x)
 libm_alias_finite (__ieee754_acoshf, __acoshf)
 
 
+// lind-wasm: added wrapper function for wasm compilation
 double acoshf(double x) {
   return __ieee754_acoshf(x);
 }

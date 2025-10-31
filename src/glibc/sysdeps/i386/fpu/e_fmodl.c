@@ -21,6 +21,7 @@ __ieee754_fmodl (long double x, long double y)
 }
 libm_alias_finite (__ieee754_fmodl, __fmodl)
 
+// lind-wasm: added wrapper function for wasm compilation
 double fmodl(double x) {
   return __ieee754_fmodl(x);
 }

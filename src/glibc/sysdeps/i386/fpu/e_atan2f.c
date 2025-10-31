@@ -93,6 +93,7 @@ __ieee754_atan2f (float y, float x)
 }
 libm_alias_finite (__ieee754_atan2f, __atan2f)
 
+// lind-wasm: added wrapper function for wasm compilation
 double atan2f(double x) {
   return __ieee754_atan2f(x);
 }

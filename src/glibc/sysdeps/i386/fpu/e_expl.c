@@ -45,6 +45,7 @@ long double __ieee754_expl(long double x) {
 libm_alias_finite (__ieee754_expl, __expl)
 
 
+// lind-wasm: added wrapper function for wasm compilation
 double expl(double x) {
   return __ieee754_expl(x);
 }

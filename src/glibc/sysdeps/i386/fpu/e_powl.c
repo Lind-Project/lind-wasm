@@ -64,6 +64,7 @@ double __ieee754_powl(long double x, long double y) {
 
 libm_alias_finite (__ieee754_powl, __powl)
 
+// lind-wasm: added wrapper function for wasm compilation
 double powl(double x) {
   return __ieee754_powl(x);
 }

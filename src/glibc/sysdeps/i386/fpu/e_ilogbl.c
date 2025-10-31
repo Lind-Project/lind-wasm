@@ -21,6 +21,7 @@ int __ieee754_ilogbl(long double x) {
     return exponent - 1;    // Subtract 1 because frexpl returns x as mantissa * 2^exponent, where mantissa is in [0.5, 1)
 }
 
+// lind-wasm: added wrapper function for wasm compilation
 double ilogbl(double x) {
   return __ieee754_ilogbl(x);
 }

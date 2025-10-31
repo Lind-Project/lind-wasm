@@ -29,6 +29,7 @@ double __ieee754_log2(double x) {
 }
 libm_alias_finite (__ieee754_log2, __log2)
 
+// lind-wasm: added wrapper function for wasm compilation
 double log2(double x) {
   return __ieee754_log2(x);
 }

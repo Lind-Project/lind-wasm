@@ -75,6 +75,7 @@ __ieee754_atanh (double x)
 }
 libm_alias_finite (__ieee754_atanh, __atanh)
 
+// lind-wasm: added wrapper function for wasm compilation
 double atanh(double x) {
   return __ieee754_atanh(x);
 }

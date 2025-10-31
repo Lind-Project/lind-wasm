@@ -56,6 +56,7 @@ double __ieee754_pow(double x, double y) {
 
 libm_alias_finite (__ieee754_pow, __pow)
 
+// lind-wasm: added wrapper function for wasm compilation
 double pow(double x, double y) {
   return __ieee754_pow(x, y);
 }

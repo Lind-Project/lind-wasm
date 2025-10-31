@@ -60,6 +60,7 @@ __ieee754_acoshl(long double x)
 libm_alias_finite (__ieee754_acoshl, __acoshl)
 
 
+// lind-wasm: added wrapper function for wasm compilation
 double acoshl(double x) {
   return __ieee754_acoshl(x);
 }

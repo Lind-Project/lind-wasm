@@ -69,6 +69,7 @@ __ieee754_atanhl(long double x)
 }
 libm_alias_finite (__ieee754_atanhl, __atanhl)
 
+// lind-wasm: added wrapper function for wasm compilation
 double atanhl(double x) {
   return __ieee754_atanhl(x);
 }

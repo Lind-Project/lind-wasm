@@ -56,6 +56,7 @@ libm_alias_double_other (__hypot, hypot)
 libm_alias_double (__hypot, hypot)
 #endif
 
+// lind-wasm: added wrapper function for wasm compilation
 double hypot(double x, double y) {
   return __ieee754_hypot(x, y);
 }

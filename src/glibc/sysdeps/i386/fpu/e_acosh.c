@@ -67,6 +67,7 @@ __ieee754_acosh (double x)
 libm_alias_finite (__ieee754_acosh, __acosh)
 
 
+// lind-wasm: added wrapper function for wasm compilation
 double acosh(double x) {
   return __ieee754_acosh(x);
 }
