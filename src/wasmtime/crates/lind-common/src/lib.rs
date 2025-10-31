@@ -285,6 +285,28 @@ pub fn add_to_linker<
         },
     )?;
 
+    // export lind-get-memory-base for libc to query base address
+    linker.func_wrap(
+        "lind",
+        "lind-get-memory-base",
+        move |caller: Caller<'_, T>| -> u64 {
+            // Return the base address of memory[0] for the calling instance
+            let base = get_memory_base(&caller);
+            base
+        },
+    )?;
+
+    // export lind-get-cage-id for libc to query the current cage id (pid)
+    linker.func_wrap(
+        "lind",
+        "lind-get-cage-id",
+        move |caller: Caller<'_, T>| -> u64 {
+            let host = caller.data().clone();
+            let ctx = get_cx(&host);
+            ctx.getpid() as u64
+        },
+    )?;
+
     // attach setjmp to wasmtime
     linker.func_wrap(
         "lind",

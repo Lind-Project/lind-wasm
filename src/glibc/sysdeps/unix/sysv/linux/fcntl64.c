@@ -26,16 +26,16 @@
 #include <sysdep-cancel.h>
 #include <lind_syscall_num.h>
 
-
 #ifndef __NR_fcntl64
-# define __NR_fcntl64 __NR_fcntl
+#  define __NR_fcntl64 __NR_fcntl
 #endif
 
 #ifndef FCNTL_ADJUST_CMD
-# define FCNTL_ADJUST_CMD(__cmd) __cmd
+#  define FCNTL_ADJUST_CMD(__cmd) __cmd
 #endif
 
 #include <syscall-template.h>
+#include <addr_translation.h>
 
 int
 __libc_fcntl64 (int fd, int cmd, ...)
@@ -49,22 +49,35 @@ __libc_fcntl64 (int fd, int cmd, ...)
 
   cmd = FCNTL_ADJUST_CMD (cmd);
 
-  if (cmd == F_SETLKW || cmd == F_SETLKW64 || cmd == F_OFD_SETLKW)
-    return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_arg = TRANSLATE_GUEST_POINTER_TO_HOST (arg);
+  
+  // TODO: Check if there are any other cases apart from locks where fcntl64 will accept null ptr
+  // arg is a pointer to struct flock/flock64 and must not be NULL
+  if (cmd == F_SETLKW || cmd == F_SETLKW64 || cmd == F_OFD_SETLKW ||
+      cmd == F_OFD_GETLK || cmd == F_OFD_SETLK || cmd == F_GETLK ||
+      cmd == F_SETLK || cmd == F_GETLK64 || cmd == F_SETLK64)
+    {
+      CHECK_NULL_PTR (host_arg, "arg");
+    }
 
-  return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
+  if (cmd == F_SETLKW || cmd == F_SETLKW64 || cmd == F_OFD_SETLKW)
+    return MAKE_SYSCALL (FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
+			 (uint64_t) cmd, host_arg,
+			 NOTUSED, NOTUSED, NOTUSED);
+
+  return MAKE_SYSCALL (FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
+		       (uint64_t) cmd, host_arg,
+		       NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__libc_fcntl64)
-weak_alias (__libc_fcntl64, __fcntl64)
-libc_hidden_weak (__fcntl64)
-weak_alias (__libc_fcntl64, fcntl64)
+libc_hidden_def (__libc_fcntl64) weak_alias (__libc_fcntl64, __fcntl64)
+    libc_hidden_weak (__fcntl64) weak_alias (__libc_fcntl64, fcntl64)
 #if __TIMESIZE != 64
-weak_alias (__libc_fcntl64, __fcntl_time64)
+	weak_alias (__libc_fcntl64, __fcntl_time64)
 #endif
 
 #ifdef __OFF_T_MATCHES_OFF64_T
-weak_alias (__libc_fcntl64, __libc_fcntl)
-weak_alias (__libc_fcntl64, __fcntl)
-weak_alias (__libc_fcntl64, __GI___fcntl)
-weak_alias (__libc_fcntl64, fcntl)
+	    weak_alias (__libc_fcntl64, __libc_fcntl)
+		weak_alias (__libc_fcntl64, __fcntl)
+		    weak_alias (__libc_fcntl64, __GI___fcntl)
+			weak_alias (__libc_fcntl64, fcntl)
 #endif

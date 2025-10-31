@@ -25,17 +25,24 @@
 #undef statfs
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Return information about the filesystem on which FILE resides.  */
 int
 __statfs64 (const char *file, struct statfs64 *buf)
 {
-  return MAKE_SYSCALL(STATFS_SYSCALL, "syscall|statfs", (uint64_t) file, (uint64_t) buf , NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  CHECK_NULL_PTR (host_file, "file");
+  CHECK_NULL_PTR (host_buf, "buf");
+  return MAKE_SYSCALL (STATFS_SYSCALL, "syscall|statfs",
+		       host_file, host_buf,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__statfs64, statfs64)
 
 #if STATFS_IS_STATFS64
 weak_alias (__statfs64, __statfs)
 weak_alias (__statfs64, statfs)
-libc_hidden_ver (__statfs64, __statfs)
+	libc_hidden_ver (__statfs64, __statfs)
 #endif

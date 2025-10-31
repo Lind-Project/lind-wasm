@@ -27,6 +27,7 @@
 #include <shlib-compat.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
 
@@ -35,19 +36,23 @@
 int
 ___fxstat64 (int vers, int fd, struct stat64 *buf)
 {
-  return MAKE_SYSCALL(FSTATFS_SYSCALL, "syscall|fxstat", (uint64_t) vers, (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  CHECK_NULL_PTR (host_buf, "buf");
+  return MAKE_SYSCALL (FXSTAT_SYSCALL, "syscall|fxstat", (uint64_t) vers,
+		       (uint64_t) fd, host_buf,
+		       NOTUSED, NOTUSED, NOTUSED);
 }
 
-#if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
+#  if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
 versioned_symbol (libc, ___fxstat64, __fxstat64, GLIBC_2_2);
 strong_alias (___fxstat64, __old__fxstat64)
-compat_symbol (libc, __old__fxstat64, __fxstat64, GLIBC_2_1);
-#else
+    compat_symbol (libc, __old__fxstat64, __fxstat64, GLIBC_2_1);
+#  else
 strong_alias (___fxstat64, __fxstat64)
-#endif
+#  endif
 
-#if XSTAT_IS_XSTAT64
+#  if XSTAT_IS_XSTAT64
 strong_alias (___fxstat64, __fxstat)
-#endif
+#  endif
 
 #endif /* LIB_COMPAT  */

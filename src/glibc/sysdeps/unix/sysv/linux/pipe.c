@@ -20,6 +20,7 @@
 #include <sysdep.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Create a one-way communication channel (__pipe).
    If successful, two file descriptors are stored in PIPEDES;
@@ -28,7 +29,11 @@
 int
 __pipe (int __pipedes[2])
 {
-   return MAKE_SYSCALL(PIPE_SYSCALL, "syscall|pipe", (uint64_t) __pipedes, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_pipedes = TRANSLATE_GUEST_POINTER_TO_HOST (__pipedes);
+  // pipedes array must not be NULL (mirrors rawposix check)
+  CHECK_NULL_PTR (host_pipedes, "__pipedes");
+  
+  return MAKE_SYSCALL (PIPE_SYSCALL, "syscall|pipe",
+		       host_pipedes, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__pipe)
-weak_alias (__pipe, pipe)
+libc_hidden_def (__pipe) weak_alias (__pipe, pipe)
