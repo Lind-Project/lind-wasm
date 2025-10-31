@@ -1594,7 +1594,7 @@ pub fn getsockopt_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = sc_convert_sysarg_to_i32_ref(optval_arg, optval_cageid, cageid);
+    let optval = optval_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1612,7 +1612,7 @@ pub fn getsockopt_syscall(
             fd,
             level,
             optname,
-            optval as *mut c_int as *mut c_void,
+            optval as *mut c_void,
             &mut optlen as *mut socklen_t,
         )
     };
