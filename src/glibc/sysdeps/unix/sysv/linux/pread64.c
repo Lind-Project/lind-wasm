@@ -25,9 +25,11 @@
 ssize_t
 __libc_pread64 (int fd, void *buf, size_t count, off64_t offset)
 {
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  CHECK_NULL_BUF (host_buf, count);
   return MAKE_SYSCALL (PREAD_SYSCALL, "syscall|pread", (uint64_t) fd,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
-		       (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
+		       host_buf, (uint64_t) count, (uint64_t) offset,
+		       NOTUSED, NOTUSED);
 }
 
 weak_alias (__libc_pread64, __pread64) libc_hidden_weak (__pread64)

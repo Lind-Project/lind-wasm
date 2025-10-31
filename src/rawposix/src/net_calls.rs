@@ -92,19 +92,12 @@ pub fn poll_syscall(
         return 0; // No FDs to poll
     }
 
-    if fds_arg == 0 {
-        return syscall_error(Errno::EFAULT, "poll_syscall", "pollfd array is null");
-    }
-
     // Convert arguments after validation
     let nfds = sc_convert_sysarg_to_usize(nfds_arg, nfds_cageid, cageid);
     let original_timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
 
     // Convert pollfd array from user space
     let fds_ptr = sc_convert_buf(fds_arg, fds_cageid, cageid) as *mut libc::pollfd;
-    if fds_ptr.is_null() {
-        return syscall_error(Errno::EFAULT, "poll_syscall", "pollfd array is null");
-    }
 
     // Create safe slice for pollfd array
     let fds_slice = unsafe { std::slice::from_raw_parts_mut(fds_ptr, nfds) };
@@ -785,15 +778,16 @@ pub fn epoll_wait_syscall(
         );
     }
 
-    if events_arg == 0 {
-        return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "events array is null");
-    }
-
     // Convert events array from user space
     let mut events_ptr = match sc_convert_addr_to_epollevent(events_arg, events_cageid, cageid) {
         Ok(p) => p,
         Err(e) => return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid address"),
     };
+
+    // TODO: Replace custom EpollEvent struct with libc::epoll_event
+    // The current EpollEvent uses {events: u32, fd: i32} while libc::epoll_event
+    // uses {events: u32, u64: u64} union. This requires updating all field accesses
+    // from .fd to .u64 and ensuring proper handling of the union data.
 
     // We do not let the kernel write epoll events directly into the guest’s
     // linear memory. The kernel reports events using kernel-side identifiers

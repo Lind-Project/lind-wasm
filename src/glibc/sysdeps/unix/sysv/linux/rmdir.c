@@ -27,8 +27,10 @@
 int
 __rmdir (const char *path)
 {
+  uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
+  CHECK_NULL_PTR (host_path, "path");
+  
   return MAKE_SYSCALL (RMDIR_SYSCALL, "syscall|rmdir",
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (path),
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+		       host_path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__rmdir, rmdir)

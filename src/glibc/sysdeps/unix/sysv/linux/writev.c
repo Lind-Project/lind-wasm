@@ -23,6 +23,7 @@
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
 #include <errno.h>
+#include <stdlib.h>
 
 ssize_t
 __writev (int fd, const struct iovec *iov, int iovcnt)
@@ -38,12 +39,25 @@ __writev (int fd, const struct iovec *iov, int iovcnt)
       return 0;
     }
 
+  // Check that iov is not NULL when iovcnt > 0
+  if (iov == NULL)
+    {
+      __set_errno (EFAULT);
+      return -1;
+    }
+
   struct iovec *host_iov = malloc (iovcnt * sizeof (struct iovec));
+  if (host_iov == NULL)
+    {
+      __set_errno (ENOMEM);
+      return -1;
+    }
+
   for (int i = 0; i < iovcnt; ++i)
     {
       host_iov[i].iov_base
-	  = TRANSLATE_GUEST_POINTER_TO_HOST (user_iov[i].iov_base);
-      host_iov[i].iov_len = user_iov[i].iov_len;
+	  = (void *) TRANSLATE_GUEST_POINTER_TO_HOST (iov[i].iov_base);
+      host_iov[i].iov_len = iov[i].iov_len;
     }
 
   ssize_t ret = MAKE_SYSCALL (WRITEV_SYSCALL, "syscall|writev", (uint64_t) fd,

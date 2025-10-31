@@ -22,15 +22,18 @@
 #include <socket-constants-time64.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 static int
 setsockopt_syscall (int fd, int level, int optname, const void *optval,
 		    socklen_t len)
 {
+  uint64_t host_optval = TRANSLATE_GUEST_POINTER_TO_HOST (optval);
+  // optval can be NULL only if len is 0
+  CHECK_NULL_BUF (host_optval, len);
   return MAKE_SYSCALL (SETSOCKOPT_SYSCALL, "syscall|setsockopt", (uint64_t) fd,
 		       (uint64_t) level, (uint64_t) optname,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (optval),
-		       len, (uint64_t) 0);
+		       host_optval, len, (uint64_t) 0);
 }
 
 #ifndef __ASSUME_TIME64_SYSCALLS

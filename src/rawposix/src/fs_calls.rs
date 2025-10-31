@@ -8,9 +8,9 @@ use libc::c_void;
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC,
-    PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO,
-    STDIN_FILENO, STDOUT_FILENO, F_GETLK64, F_SETLK64, F_SETLKW64,
+    F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC,
+    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST,
+    SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
 };
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
@@ -1178,9 +1178,9 @@ pub fn fcntl_syscall(
     vfd_cageid: u64,
     cmd_arg: u64,
     cmd_cageid: u64,
-    int_arg: u64,        // arg3: integer value (for F_DUPFD, F_SETFD, F_GETFL, etc.)
+    int_arg: u64, // arg3: integer value (for F_DUPFD, F_SETFD, F_GETFL, etc.)
     int_arg_cageid: u64,
-    ptr_arg: u64,        // arg4: translated host pointer (for F_GETLK, F_SETLK, etc.)
+    ptr_arg: u64, // arg4: translated host pointer (for F_GETLK, F_SETLK, etc.)
     ptr_arg_cageid: u64,
     arg5: u64,
     arg5_cageid: u64,
@@ -1188,14 +1188,12 @@ pub fn fcntl_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
-    
+
     // Convert int value only, we handle the pointer args if it's a lock operation
-    let arg = int_arg as i32;  
-    
+    let arg = int_arg as i32;
+
     // Validate unused arguments
-    if !(sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
             "fcntl_syscall"
@@ -1286,9 +1284,13 @@ pub fn fcntl_syscall(
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
-            let is_lock_op = cmd == F_GETLK || cmd == F_SETLK || cmd == F_SETLKW ||
-                cmd == F_GETLK64 || cmd == F_SETLK64 || cmd == F_SETLKW64;
-            
+            let is_lock_op = cmd == F_GETLK
+                || cmd == F_SETLK
+                || cmd == F_SETLKW
+                || cmd == F_GETLK64
+                || cmd == F_SETLK64
+                || cmd == F_SETLKW64;
+
             let ret = if is_lock_op {
                 // Lock operation - use ptr_arg (arg4)
                 unsafe { libc::fcntl(vfd.underfd as i32, cmd, ptr_arg as *mut c_void) }
@@ -1296,7 +1298,7 @@ pub fn fcntl_syscall(
                 // Other operations - use int_arg (arg3)
                 unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) }
             };
-            
+
             if ret < 0 {
                 let errno = get_errno();
                 return handle_errno(errno, "fcntl");
@@ -1417,7 +1419,6 @@ pub fn stat_syscall(
             "stat_syscall"
         );
     }
-
 
     // Cast directly to libc::stat and write kernel data into buffer.
     let statbuf_ptr = statbuf_arg as *mut libc::stat;
@@ -2605,7 +2606,6 @@ pub fn fstat_syscall(
         );
     }
 
-
     // Cast directly to libc::stat and write kernel data into buffer.
 
     let statbuf_ptr = statbuf_arg as *mut libc::stat;
@@ -3261,9 +3261,6 @@ pub fn getcwd_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
-    if buf.is_null() {
-        return syscall_error(Errno::EFAULT, "getcwd", "Buffer is null");
-    }
 
     let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
     if size == 0 {

@@ -36,9 +36,10 @@
 int
 __clock_gettime64 (clockid_t clock_id, struct __timespec64 *tp)
 {
+  uint64_t host_tp = TRANSLATE_GUEST_POINTER_TO_HOST (tp);
+  CHECK_NULL_PTR (host_tp, "tp");
   return MAKE_SYSCALL (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
-		       (uint64_t) clock_id,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (tp),
+		       (uint64_t) clock_id, host_tp,
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
@@ -47,9 +48,10 @@ libc_hidden_def (__clock_gettime64)
 
     int __clock_gettime (clockid_t clock_id, struct timespec *tp)
 {
+  uint64_t host_tp = TRANSLATE_GUEST_POINTER_TO_HOST (tp);
+  CHECK_NULL_PTR (host_tp, "tp");
   return MAKE_SYSCALL (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
-		       (uint64_t) clock_id,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (tp),
+		       (uint64_t) clock_id, host_tp,
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 

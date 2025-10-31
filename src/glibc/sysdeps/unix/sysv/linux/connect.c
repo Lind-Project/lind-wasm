@@ -26,9 +26,12 @@ int
 __libc_connect (int fd, const struct sockaddr *addr, socklen_t len)
 {
   // Dennis Edit
+  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
+  // addr must not be NULL for connect
+  CHECK_NULL_PTR (host_addr, "addr");
+  
   return MAKE_SYSCALL (CONNECT_SYSCALL, "syscall|connect", (uint64_t) fd,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
-		       (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+		       host_addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__libc_connect, connect) weak_alias (__libc_connect, __connect)
     libc_hidden_weak (__connect)

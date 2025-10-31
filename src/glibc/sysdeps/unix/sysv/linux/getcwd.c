@@ -48,8 +48,11 @@
 char *
 __getcwd (char *buf, size_t size)
 {
+  // buf CAN be NULL - this means kernel should allocate the buffer
+  // Do NOT add null check here - NULL is valid
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  
   return MAKE_SYSCALL (GETCWD_SYSCALL, "syscall|getcwd",
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
-		       (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+		       host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__getcwd) weak_alias (__getcwd, getcwd)

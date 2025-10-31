@@ -24,10 +24,15 @@
 int
 __getsockname (int fd, struct sockaddr *__restrict addr, socklen_t *len)
 {
+  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
+  uint64_t host_len = TRANSLATE_GUEST_POINTER_TO_HOST (len);
+  
+  // Both addr and len must not be NULL - caller needs the socket address
+  CHECK_NULL_PTR (host_addr, "addr");
+  CHECK_NULL_PTR (host_len, "len");
+  
   return MAKE_SYSCALL (GETSOCKNAME_SYSCALL, "syscall|getsockname",
-		       (uint64_t) fd,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (len),
+		       (uint64_t) fd, host_addr, host_len,
 		       NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__getsockname, getsockname)

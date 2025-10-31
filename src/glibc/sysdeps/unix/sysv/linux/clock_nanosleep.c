@@ -35,8 +35,11 @@ __clock_nanosleep_time64 (clockid_t clock_id, int flags,
 			  const struct __timespec64 *req,
 			  struct __timespec64 *rem)
 {
+  uint64_t host_req = TRANSLATE_GUEST_POINTER_TO_HOST (req);
+  uint64_t host_rem = TRANSLATE_GUEST_POINTER_TO_HOST (rem);
+  // req is mandatory, rem can be NULL (for absolute timers or when not needed)
+  CHECK_NULL_PTR (host_req, "req");
   return MAKE_SYSCALL (
       NANOSLEEP_TIME64_SYSCALL, "syscall|nanosleep", (uint64_t) clock_id,
-      (uint64_t) flags, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (req),
-      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (rem), NOTUSED, NOTUSED);
+      (uint64_t) flags, host_req, host_rem, NOTUSED, NOTUSED);
 }

@@ -26,10 +26,17 @@ ssize_t
 __libc_sendto (int fd, const void *buf, size_t len, int flags,
 	       const struct sockaddr *addr, socklen_t addrlen)
 {
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
+  
+  // buf must not be NULL if len > 0
+  CHECK_NULL_BUF (host_buf, len);
+  
+  // NOTE: addr can be NULL for connected sockets (sendto with NULL addr)
+  // Do NOT check addr - NULL is valid for connected sockets
+  
   return MAKE_SYSCALL (SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
-		       (uint64_t) len, (uint64_t) flags,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
-		       (uint64_t) addrlen);
+		       host_buf, (uint64_t) len, (uint64_t) flags,
+		       host_addr, (uint64_t) addrlen);
 }
 weak_alias (__libc_sendto, sendto) weak_alias (__libc_sendto, __sendto)

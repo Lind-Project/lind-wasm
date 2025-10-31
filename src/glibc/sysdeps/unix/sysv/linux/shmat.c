@@ -29,7 +29,11 @@
 void *
 shmat (int shmid, const void *shmaddr, int shmflg)
 {
+  // shmaddr CAN be NULL - kernel chooses the address (like mmap)
+  // This is the recommended way to use shmat for portability
+  // Do NOT add null check here - NULL is valid and expected
+  uint64_t host_shmaddr = TRANSLATE_GUEST_POINTER_TO_HOST (shmaddr);
   return MAKE_SYSCALL (SHMAT_SYSCALL, "syscall|shmat", (uint64_t) shmid,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (shmaddr),
-		       (uint64_t) shmflg, NOTUSED, NOTUSED, NOTUSED);
+		       host_shmaddr, (uint64_t) shmflg,
+		       NOTUSED, NOTUSED, NOTUSED);
 }

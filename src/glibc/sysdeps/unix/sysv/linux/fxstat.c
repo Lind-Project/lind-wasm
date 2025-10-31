@@ -35,9 +35,10 @@
 int
 __fxstat (int vers, int fd, struct stat *buf)
 {
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  CHECK_NULL_PTR (host_buf, "buf");
   return MAKE_SYSCALL (FSTATFS_SYSCALL, "syscall|fxstat", (uint64_t) vers,
-		       (uint64_t) fd,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
+		       (uint64_t) fd, host_buf,
 		       NOTUSED, NOTUSED, NOTUSED);
 }
 

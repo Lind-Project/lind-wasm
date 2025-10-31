@@ -29,9 +29,12 @@
 int
 __statfs (const char *file, struct statfs *buf)
 {
+  uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  CHECK_NULL_PTR (host_file, "file");
+  CHECK_NULL_PTR (host_buf, "buf");
   return MAKE_SYSCALL (STATFS_SYSCALL, "syscall|statfs",
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
+		       host_file, host_buf,
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__statfs) weak_alias (__statfs, statfs)

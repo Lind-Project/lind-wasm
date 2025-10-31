@@ -34,9 +34,11 @@ __fstat (int fd, struct stat *buf)
       return -1;
     }
 
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  CHECK_NULL_PTR (host_buf, "buf");
+
   return MAKE_SYSCALL (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+		       host_buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 weak_alias (__fstat, fstat)

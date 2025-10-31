@@ -26,9 +26,12 @@ ssize_t
 __libc_write (int fd, const void *buf, size_t nbytes)
 {
   // Dennis Edit
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  // Check for null buffer only if count > 0 (NULL buffer with 0 count is valid)
+  CHECK_NULL_BUF (host_buf, nbytes);
+  
   return MAKE_SYSCALL (WRITE_SYSCALL, "syscall|write", (uint64_t) fd,
-		       TRANSLATE_GUEST_POINTER_TO_HOST (buf),
-		       (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
+		       host_buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__libc_write)
 

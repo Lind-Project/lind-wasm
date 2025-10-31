@@ -26,9 +26,13 @@ int
 __libc_accept (int fd, struct sockaddr *addr, socklen_t *len)
 {
   // Dennis Edit
+  // NOTE: addr and len can be NULL - this is valid to not get peer address
+  // Do NOT add null checks - NULL is valid and common for accept
+  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
+  uint64_t host_len = TRANSLATE_GUEST_POINTER_TO_HOST (len);
+  
   return MAKE_SYSCALL (ACCEPT_SYSCALL, "syscall|accept", (uint64_t) fd,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (addr),
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (len),
+		       host_addr, host_len,
 		       NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__libc_accept, accept) libc_hidden_def (accept)

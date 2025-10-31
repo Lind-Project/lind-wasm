@@ -36,9 +36,12 @@
 int
 ___xstat64 (int vers, const char *name, struct stat64 *buf)
 {
+  uint64_t host_name = TRANSLATE_GUEST_POINTER_TO_HOST (name);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  CHECK_NULL_PTR (host_name, "name");
+  CHECK_NULL_PTR (host_buf, "buf");
   return MAKE_SYSCALL (XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (name),
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
+		       host_name, host_buf,
 		       NOTUSED, NOTUSED, NOTUSED);
 }
 

@@ -279,13 +279,11 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
 /// This function follows the same pattern as other `sc_convert_addr_*`
 /// helpers:
 /// - Validates the Cage ID when the `secure` feature is enabled.
-/// - Retrieves the Cage object via `get_cage`.
-/// - Translates the Wasm linear memory address to a host address using
-///   glibc-side address translation.
-/// - Casts the host address to a `*mut EpollEvent` and returns it as a
-///   mutable reference if non-null.
-/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
-///   Linux's `EFAULT` ("Bad address") error semantics.
+/// - Casts the address to a `*mut EpollEvent` and returns it as a
+///   mutable reference.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_epollevent<'a>(
     arg: u64,
     arg_cageid: u64,
@@ -299,10 +297,7 @@ pub fn sc_convert_addr_to_epollevent<'a>(
     }
 
     let pointer = arg as *mut EpollEvent;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
+    Ok(unsafe { &mut *pointer })
 }
 
 /// This function translates 64 bits uadd from the WASM context
@@ -582,17 +577,13 @@ pub fn sc_convert_itimerval_mut(
 /// ## Implementation Details:
 ///  - When the `secure` feature is enabled, the function validates that the
 ///    provided `arg_cageid` matches the current `cageid`.
-///  - The Cage object is retrieved via `get_cage(cageid)`.
-///  - The virtual address is translated into a host address using
-///    glibc-side address translation.
-///  - The host address is cast into a `*mut StatData`, and if non-null,
-///    reinterpreted as a mutable reference.
-///  - If the pointer is null, the function returns `Err(Errno::EFAULT)`,
-///    indicating a "Bad address" error consistent with Linux error handling.
+///  - The address is cast into a `*mut StatData` and returned as a mutable reference.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
 ///
 /// ## Return Value:
 ///  - `Ok(&mut StatData)` if the address translation succeeds.
-///  - `Err(Errno::EFAULT)` if the address is invalid or null.
 pub fn sc_convert_addr_to_statdata<'a>(
     arg: u64,
     arg_cageid: u64,
@@ -606,16 +597,16 @@ pub fn sc_convert_addr_to_statdata<'a>(
     }
 
     let pointer = arg as *mut StatData;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
+    Ok(unsafe { &mut *pointer })
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
 /// a mutable reference to an `FSData` structure.
 ///
-/// This function follows the same logic as `sc_convert_addr_to_statdata`
+/// This function follows the same logic as `sc_convert_addr_to_statdata`.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_fstatdata<'a>(
     arg: u64,
     arg_cageid: u64,
@@ -629,10 +620,7 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
     }
 
     let pointer = arg as *mut FSData;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
+    Ok(unsafe { &mut *pointer })
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
@@ -641,13 +629,11 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
 /// This function follows the same pattern as other `sc_convert_addr_*`
 /// helpers:
 /// - Validates the Cage ID when the `secure` feature is enabled.
-/// - Retrieves the Cage object via `get_cage`.
-/// - Translates the Wasm linear memory address to a host address using
-///   glibc-side address translation.
-/// - Casts the host address to a `*mut PipeArray` and returns it as a
-///   mutable reference if non-null.
-/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
-///   Linux's `EFAULT` ("Bad address") error semantics.
+/// - Casts the address to a `*mut PipeArray` and returns it as a
+///   mutable reference.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_pipearray<'a>(
     arg: u64,
     arg_cageid: u64,
@@ -661,10 +647,7 @@ pub fn sc_convert_addr_to_pipearray<'a>(
     }
 
     let pointer = arg as *mut PipeArray;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
+    Ok(unsafe { &mut *pointer })
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
@@ -673,13 +656,11 @@ pub fn sc_convert_addr_to_pipearray<'a>(
 /// This function mirrors the structure of other `sc_convert_addr_*`
 /// helpers:
 /// - Validates the Cage ID when the `secure` feature is enabled.
-/// - Retrieves the Cage object via `get_cage`.
-/// - Translates the Wasm linear memory address to a host address using
-///   glibc-side address translation.
-/// - Casts the host address to a `*mut ShmidsStruct` and returns it as a
-///   mutable reference if non-null.
-/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
-///   Linux's `EFAULT` ("Bad address") error semantics.
+/// - Casts the address to a `*mut ShmidsStruct` and returns it as a
+///   mutable reference.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_shmidstruct<'a>(
     arg: u64,
     arg_cageid: u64,
@@ -693,10 +674,7 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
     }
 
     let pointer = arg as *mut ShmidsStruct;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
+    Ok(unsafe { &mut *pointer })
 }
 
 /// Converts a raw `u64` argument into a nullity check.

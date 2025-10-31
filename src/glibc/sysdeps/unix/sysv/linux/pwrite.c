@@ -27,8 +27,15 @@
 ssize_t
 __libc_pwrite (int fd, const void *buf, size_t count, off_t offset)
 {
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  if (count > 0 && host_buf == 0ULL)
+    {
+      errno = EFAULT;
+      return -1;
+    }
+  
   return MAKE_SYSCALL (PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd,
-		       TRANSLATE_GUEST_POINTER_TO_HOST (buf), (uint64_t) count,
+		       host_buf, (uint64_t) count,
 		       (uint64_t) offset, NOTUSED, NOTUSED);
 }
 
