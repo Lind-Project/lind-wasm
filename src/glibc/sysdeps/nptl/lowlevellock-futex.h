@@ -70,7 +70,6 @@
    from user space to host space (used in Lind WASM build).  */
 #    define __lll_futex_syscall_with_translated_ptrs(nargs, futexp, op, ...)  \
       ({                                                                      \
-	__lind_init_addr_translation ();                                      \
 	uint64_t __host_futex_ptr = TRANSLATE_GUEST_POINTER_TO_HOST (futexp); \
 	long int __ret;                                                       \
                                                                               \
@@ -112,7 +111,6 @@
 /* Requeue waiters from FUTEXP to MUTEX.  */
 #    define lll_futex_requeue(futexp, nr_wake, nr_move, mutex, val, private)  \
       ({                                                                      \
-	__lind_init_addr_translation ();                                      \
 	uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futexp);     \
 	uint64_t __host_mutex = TRANSLATE_GUEST_POINTER_TO_HOST (mutex);      \
 	long int __ret = MAKE_RAW_SYSCALL6 (                                  \
@@ -128,7 +126,6 @@
 #    define lll_futex_wake_unlock(futexp, nr_wake, nr_wake2, futexp2,         \
 				  private)                                    \
       ({                                                                      \
-	__lind_init_addr_translation ();                                      \
 	uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futexp);     \
 	uint64_t __host_futex2 = TRANSLATE_GUEST_POINTER_TO_HOST (futexp2);   \
 	long int __ret = MAKE_RAW_SYSCALL6 (                                  \
@@ -149,7 +146,6 @@
 #    define lll_futex_cmp_requeue_pi(futexp, nr_wake, nr_move, mutex, val,    \
 				     private)                                 \
       ({                                                                      \
-	__lind_init_addr_translation ();                                      \
 	uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futexp);     \
 	uint64_t __host_mutex = TRANSLATE_GUEST_POINTER_TO_HOST (mutex);      \
 	long int __ret = MAKE_RAW_SYSCALL6 (                                  \

@@ -43,7 +43,6 @@ __futex_abstimed_wait_common32 (unsigned int *futex_word,
     }
 
   // replace with lind syscall
-  __lind_init_addr_translation ();
   uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
   uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST (pts32);
   return MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
@@ -60,7 +59,6 @@ __futex_abstimed_wait_common64 (unsigned int *futex_word,
 				int private, bool cancel)
 {
   // replace with lind syscall
-  __lind_init_addr_translation ();
   uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
   uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST (abstime);
   return MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
@@ -155,7 +153,6 @@ libc_hidden_def (__futex_abstimed_wait_cancelable64)
   int op_pi2 = __lll_private_flag (FUTEX_LOCK_PI2 | clockbit, private);
 #if __ASSUME_FUTEX_LOCK_PI2
   /* Assume __ASSUME_TIME64_SYSCALLS since FUTEX_LOCK_PI2 was added later.  */
-  __lind_init_addr_translation ();
   uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
   uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST (abstime);
   err = MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
@@ -168,7 +165,6 @@ libc_hidden_def (__futex_abstimed_wait_cancelable64)
   int op_pi = abstime != NULL && clockid != CLOCK_REALTIME ? op_pi2 : op_pi1;
 
 #  ifdef __ASSUME_TIME64_SYSCALLS
-  __lind_init_addr_translation ();
   uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
   uint64_t host_timespec = TRANSLATE_GUEST_POINTER_TO_HOST (abstime);
   err = MAKE_RAW_SYSCALL (FUTEX_SYSCALL, "syscall|futex", host_futex,
@@ -176,7 +172,6 @@ libc_hidden_def (__futex_abstimed_wait_cancelable64)
 			  (uint64_t) 0);
 #  else
   bool need_time64 = abstime != NULL && !in_int32_t_range (abstime->tv_sec);
-  __lind_init_addr_translation ();
   uint64_t host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futex_word);
   if (need_time64)
     {
