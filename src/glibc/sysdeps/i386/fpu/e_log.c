@@ -28,3 +28,7 @@ double __ieee754_log(double x) {
     return log(x); // Use the standard library function
 }
 libm_alias_finite (__ieee754_log, __log)
+
+double log(double x) {
+  return __ieee754_log(x);
+}

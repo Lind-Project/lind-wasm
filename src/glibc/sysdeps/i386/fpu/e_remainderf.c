@@ -6,3 +6,7 @@ float __ieee754_remainderf(float x, float y) {
 }
 
 
+
+double remainderf(double x) {
+  return __ieee754_remainderf(x);
+}

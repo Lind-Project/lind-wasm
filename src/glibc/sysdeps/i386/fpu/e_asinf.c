@@ -103,3 +103,7 @@ float __ieee754_asinf(float x)
 	if(hx>0) return t; else return -t;
 }
 libm_alias_finite (__ieee754_asinf, __asinf)
+
+double asinf(double x) {
+  return __ieee754_asinf(x);
+}

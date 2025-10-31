@@ -7,3 +7,7 @@ double __ieee754_fmod(double x, double y) {
 }
 
 libm_alias_finite (__ieee754_fmod, __fmod)
+
+double fmod(double x, double y) {
+  return __ieee754_fmod(x, y);
+}

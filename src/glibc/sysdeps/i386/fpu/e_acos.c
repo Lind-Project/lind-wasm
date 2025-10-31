@@ -10,3 +10,7 @@ double __ieee754_acos(double x) {
     return atan2(sqrt(1 - x * x), x);
 }
 libm_alias_finite (__ieee754_acos, __acos)
+
+double acos(double x) {
+  return __ieee754_acos(x);
+}

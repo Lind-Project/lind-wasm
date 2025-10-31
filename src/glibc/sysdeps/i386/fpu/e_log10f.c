@@ -52,3 +52,7 @@ __ieee754_log10f(float x)
 	return  z+y*log10_2hi;
 }
 libm_alias_finite (__ieee754_log10f, __log10f)
+
+double log10f(double x) {
+  return __ieee754_log10f(x);
+}

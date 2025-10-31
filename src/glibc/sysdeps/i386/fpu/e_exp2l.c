@@ -29,3 +29,7 @@ long double __ieee754_exp2l(long double x) {
 }
 
 libm_alias_finite (__ieee754_exp2l, __exp2l)
+
+double exp2l(double x) {
+  return __ieee754_exp2l(x);
+}

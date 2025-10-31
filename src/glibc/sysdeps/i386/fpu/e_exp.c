@@ -50,3 +50,7 @@ double __exp_finite(double x) {
 }
 
 libm_alias_finite (__ieee754_exp, __exp)
+
+double exp(double x) {
+  return __ieee754_exp(x);
+}

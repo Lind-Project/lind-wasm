@@ -66,3 +66,7 @@ __ieee754_acosh (double x)
 }
 libm_alias_finite (__ieee754_acosh, __acosh)
 
+
+double acosh(double x) {
+  return __ieee754_acosh(x);
+}

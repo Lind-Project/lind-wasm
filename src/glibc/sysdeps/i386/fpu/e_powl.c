@@ -63,3 +63,7 @@ double __ieee754_powl(long double x, long double y) {
 }
 
 libm_alias_finite (__ieee754_powl, __powl)
+
+double powl(double x) {
+  return __ieee754_powl(x);
+}

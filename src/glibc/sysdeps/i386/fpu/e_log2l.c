@@ -30,3 +30,7 @@ long double __ieee754_log2l(long double x) {
     return log2l(x);  // Use the standard library function for other cases
 }
 libm_alias_finite (__ieee754_log2l, __log2l)
+
+double log2l(double x) {
+  return __ieee754_log2l(x);
+}

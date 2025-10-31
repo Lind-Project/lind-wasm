@@ -44,3 +44,7 @@ long double __ieee754_expl(long double x) {
 }
 libm_alias_finite (__ieee754_expl, __expl)
 
+
+double expl(double x) {
+  return __ieee754_expl(x);
+}

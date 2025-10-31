@@ -36,3 +36,7 @@ long double __ieee754_scalbl(long double x, long double y) {
 }
 
 libm_alias_finite (__ieee754_scalbl, __scalbl)
+
+double scalbl(double x) {
+  return __ieee754_scalbl(x);
+}

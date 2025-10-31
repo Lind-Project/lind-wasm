@@ -177,3 +177,7 @@ libm_alias_finite (__ieee754_asin, __asin)
 /*                                                                 */
 /*******************************************************************/
 
+
+double asin(double x) {
+  return __ieee754_asin(x);
+}

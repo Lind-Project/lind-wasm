@@ -365,3 +365,7 @@ __ieee754_atan2 (double y, double x)
 #ifndef __ieee754_atan2
 libm_alias_finite (__ieee754_atan2, __atan2)
 #endif
+
+double atan2(double x, double y) {
+  return __ieee754_atan2(x, y);
+}

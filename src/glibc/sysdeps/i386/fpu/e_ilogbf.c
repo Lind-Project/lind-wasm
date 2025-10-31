@@ -41,3 +41,7 @@ int __ieee754_ilogbf(float x)
 	}
 	return FP_ILOGBNAN;
 }
+
+double ilogbf(double x) {
+  return __ieee754_ilogbf(x);
+}

@@ -26,3 +26,7 @@ __ieee754_acosl (long double x)
   return res;
 }
 libm_alias_finite (__ieee754_acosl, __acosl)
+
+double acosl(double x) {
+  return __ieee754_acosl(x);
+}

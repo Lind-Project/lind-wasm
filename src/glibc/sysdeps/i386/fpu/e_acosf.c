@@ -77,3 +77,7 @@ __ieee754_acosf(float x)
 }
 libm_alias_finite (__ieee754_acosf, __acosf)
 
+
+double acosf(double x) {
+  return __ieee754_acosf(x);
+}

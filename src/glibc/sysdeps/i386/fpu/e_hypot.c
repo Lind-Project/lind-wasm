@@ -55,3 +55,7 @@ libm_alias_double_other (__hypot, hypot)
 #else
 libm_alias_double (__hypot, hypot)
 #endif
+
+double hypot(double x, double y) {
+  return __ieee754_hypot(x, y);
+}

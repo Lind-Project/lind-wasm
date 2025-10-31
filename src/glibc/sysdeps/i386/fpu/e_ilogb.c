@@ -61,3 +61,7 @@ __ieee754_ilogb (double x)
     }
   return FP_ILOGBNAN;
 }
+
+double ilogb(double x) {
+  return __ieee754_ilogb(x);
+}

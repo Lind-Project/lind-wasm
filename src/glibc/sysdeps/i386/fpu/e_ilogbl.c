@@ -20,3 +20,7 @@ int __ieee754_ilogbl(long double x) {
     frexpl(x, &exponent);   // frexpl returns the mantissa, and the exponent is stored in the second argument
     return exponent - 1;    // Subtract 1 because frexpl returns x as mantissa * 2^exponent, where mantissa is in [0.5, 1)
 }
+
+double ilogbl(double x) {
+  return __ieee754_ilogbl(x);
+}

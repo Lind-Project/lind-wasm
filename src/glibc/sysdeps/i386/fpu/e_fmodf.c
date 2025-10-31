@@ -6,3 +6,7 @@ float __ieee754_fmodf(float x, float y) {
     return fmodf(x, y);
 }
 libm_alias_finite (__ieee754_fmodf, __fmodf)
+
+double fmodf(double x) {
+  return __ieee754_fmodf(x);
+}

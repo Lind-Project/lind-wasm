@@ -6,3 +6,7 @@ double __ieee754_remainder(double x, double y) {
 }
 
 libm_alias_finite (__ieee754_remainder, __remainder)
+
+double remainder(double x, double y) {
+  return __ieee754_remainder(x, y);
+}

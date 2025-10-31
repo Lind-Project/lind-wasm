@@ -20,3 +20,7 @@ __ieee754_fmodl (long double x, long double y)
   return res;
 }
 libm_alias_finite (__ieee754_fmodl, __fmodl)
+
+double fmodl(double x) {
+  return __ieee754_fmodl(x);
+}

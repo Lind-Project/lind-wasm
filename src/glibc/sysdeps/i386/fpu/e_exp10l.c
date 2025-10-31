@@ -40,3 +40,7 @@ long double __ieee754_exp10l(long double x) {
 }
 libm_alias_finite (__ieee754_exp10l, __exp10l)
 
+
+double exp10l(double x) {
+  return __ieee754_exp10l(x);
+}

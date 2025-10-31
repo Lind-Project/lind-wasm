@@ -74,3 +74,7 @@ __ieee754_atanh (double x)
   return copysign (t, x);
 }
 libm_alias_finite (__ieee754_atanh, __atanh)
+
+double atanh(double x) {
+  return __ieee754_atanh(x);
+}

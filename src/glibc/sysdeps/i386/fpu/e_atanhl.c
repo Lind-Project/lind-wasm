@@ -68,3 +68,7 @@ __ieee754_atanhl(long double x)
 	if(se<=0x7fff) return t; else return -t;
 }
 libm_alias_finite (__ieee754_atanhl, __atanhl)
+
+double atanhl(double x) {
+  return __ieee754_atanhl(x);
+}

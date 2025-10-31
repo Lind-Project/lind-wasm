@@ -36,3 +36,7 @@ float __ieee754_scalbf(float x, float y) {
 }
 
 libm_alias_finite (__ieee754_scalbf, __scalbf)
+
+double scalbf(double x) {
+  return __ieee754_scalbf(x);
+}

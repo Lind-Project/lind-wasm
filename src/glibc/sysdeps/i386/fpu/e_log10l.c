@@ -33,3 +33,7 @@ long double __ieee754_log10l(long double x) {
 }
 
 libm_alias_finite (__ieee754_log10l, __log10l)
+
+double log10l(double x) {
+  return __ieee754_log10l(x);
+}

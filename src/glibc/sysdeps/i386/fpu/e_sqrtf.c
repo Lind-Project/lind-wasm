@@ -14,3 +14,7 @@ float __ieee754_sqrtf(float x) {
 
 libm_alias_finite (__ieee754_sqrtf, __sqrtf)
 
+
+double sqrtf(double x) {
+  return __ieee754_sqrtf(x);
+}

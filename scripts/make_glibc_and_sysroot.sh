@@ -42,6 +42,9 @@ INCLUDE_PATHS="
     -I../sysdeps/unix/i386
     -I../sysdeps/unix
     -I../sysdeps/posix
+    -I../sysdeps/ieee754/dbl-64
+    -I../sysdeps/ieee754/flt-32
+    -I../sysdeps/ieee754
     -I../sysdeps/i386/fpu
     -I../sysdeps/x86/fpu
     -I../sysdeps/i386
@@ -51,9 +54,6 @@ INCLUDE_PATHS="
     -I../sysdeps/ieee754/float128
     -I../sysdeps/ieee754/ldbl-96/include
     -I../sysdeps/ieee754/ldbl-96
-    -I../sysdeps/ieee754/dbl-64
-    -I../sysdeps/ieee754/flt-32
-    -I../sysdeps/ieee754
     -I../sysdeps/generic
     -I..
     -I../libio
@@ -64,7 +64,6 @@ INCLUDE_PATHS="
 RESOURCE_DIR="$(clang --target=wasm32-unknown-wasi -print-resource-dir)"
 SYS_INCLUDE="-nostdinc -isystem ${RESOURCE_DIR}/include -isystem /usr/i686-linux-gnu/include"
 
-#SYS_INCLUDE="-nostdinc -isystem $CLANG/lib/clang/18/include -isystem /usr/i686-linux-gnu/include"
 DEFINES="-D_LIBC_REENTRANT -include $BUILD/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 

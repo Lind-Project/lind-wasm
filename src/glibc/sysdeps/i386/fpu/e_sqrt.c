@@ -26,3 +26,7 @@ double __ieee754_sqrt(double x) {
 }
 
 libm_alias_finite (__ieee754_sqrt, __sqrt)
+
+double sqrt(double x) {
+  return __ieee754_sqrt(x);
+}
