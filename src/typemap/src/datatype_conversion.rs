@@ -273,6 +273,26 @@ pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
     buf_arg as *const u8
 }
 
+// TODO: This function can be removed/revamped significantly
+// Leaving it in for now since it is used threei/
+/// ## Arguments:
+/// - `uaddr`: The user address to convert (u64).
+/// - `addr_cageid`: The cage ID associated with the address.
+/// - `cageid`: The calling cage ID (used for validation in secure mode).
+///
+/// ## Returns:
+/// - The host address as u64, or 0 if the address is null.
+pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, cageid: u64) -> u64 {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(addr_cageid, cageid) {
+            return 0;
+        }
+    }
+
+    uaddr
+}
+
 /// Translates a user-provided address from the Cage's virtual memory into
 /// a mutable reference to a `libc::epoll_event`.
 ///
