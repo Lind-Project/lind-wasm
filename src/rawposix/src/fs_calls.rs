@@ -269,7 +269,7 @@ pub fn futex_syscall(
     let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
     let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
     let val2 = sc_convert_sysarg_to_u32(val2_arg, val2_cageid, cageid);
-    let uaddr2 = uaddr2_arg;  // Keep as u64 - this is a pointer (second futex address), not a scalar value
+    let uaddr2 = uaddr2_arg;
     let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
 
     let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };

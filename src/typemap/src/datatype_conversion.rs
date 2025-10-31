@@ -300,7 +300,6 @@ pub fn sc_convert_addr_to_epollevent<'a>(
     Ok(unsafe { &mut *pointer })
 }
 
-
 /// Convert a user-provided pointer (u64) from a cage into a shared reference to
 /// a `SigactionStruct`.
 ///
