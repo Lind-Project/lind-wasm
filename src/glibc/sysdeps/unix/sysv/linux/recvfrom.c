@@ -40,4 +40,5 @@ __libc_recvfrom (int fd, void *buf, size_t len, int flags,
 		       host_buf, (uint64_t) len, (uint64_t) flags,
 		       host_addr, host_addrlen);
 }
-weak_alias (__libc_recvfrom, recvfrom) weak_alias (__libc_recvfrom, __recvfrom)
+weak_alias (__libc_recvfrom, recvfrom)
+weak_alias (__libc_recvfrom, __recvfrom)

@@ -42,6 +42,7 @@ __statfs64 (const char *file, struct statfs64 *buf)
 weak_alias (__statfs64, statfs64)
 
 #if STATFS_IS_STATFS64
-    weak_alias (__statfs64, __statfs) weak_alias (__statfs64, statfs)
+weak_alias (__statfs64, __statfs)
+weak_alias (__statfs64, statfs)
 	libc_hidden_ver (__statfs64, __statfs)
 #endif

@@ -53,8 +53,10 @@ hidden_def (__stat64_time64)
 #undef __stat
 #undef stat
 
-hidden_def (__stat64) weak_alias (__stat64, stat64)
+hidden_def (__stat64)
+weak_alias (__stat64, stat64)
 
 #if XSTAT_IS_XSTAT64
-    strong_alias (__stat64, __stat) weak_alias (__stat64, stat)
+strong_alias (__stat64, __stat)
+weak_alias (__stat64, stat)
 #endif

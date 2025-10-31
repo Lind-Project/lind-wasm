@@ -94,8 +94,10 @@ hidden_def (__fstat64_time64)
 #undef __fstat
 #undef fstat
 
-hidden_def (__fstat64) weak_alias (__fstat64, fstat64)
+hidden_def (__fstat64)
+weak_alias (__fstat64, fstat64)
 
 #if XSTAT_IS_XSTAT64
-    strong_alias (__fstat64, __fstat) weak_alias (__fstat64, fstat)
+strong_alias (__fstat64, __fstat)
+weak_alias (__fstat64, fstat)
 #endif

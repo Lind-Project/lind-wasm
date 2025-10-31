@@ -49,11 +49,13 @@ hidden_def (__lstat64_time64)
 	     ?: __cp_stat64_t64_stat64 (&st_t64, buf);
 }
 #endif
-hidden_def (__lstat64) weak_alias (__lstat64, lstat64)
+hidden_def (__lstat64)
+weak_alias (__lstat64, lstat64)
 
 #undef __lstat
 #undef lstat
 
 #if XSTAT_IS_XSTAT64
-    strong_alias (__lstat64, __lstat) weak_alias (__lstat64, lstat)
+strong_alias (__lstat64, __lstat)
+weak_alias (__lstat64, lstat)
 #endif

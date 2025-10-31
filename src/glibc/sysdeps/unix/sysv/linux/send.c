@@ -36,5 +36,6 @@ __libc_send (int fd, const void *buf, size_t len, int flags)
   return MAKE_SYSCALL (SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd,
 		       host_buf, (uint64_t) len, (uint64_t) flags, 0, 0);
 }
-weak_alias (__libc_send, send) weak_alias (__libc_send, __send)
-    libc_hidden_def (__send)
+weak_alias (__libc_send, send)
+weak_alias (__libc_send, __send)
+libc_hidden_def (__send)

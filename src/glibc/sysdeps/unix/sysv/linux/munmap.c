@@ -17,4 +17,5 @@ __GI___munmap (void *addr, size_t len)
 		       host_addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
-weak_alias (__GI___munmap, __munmap) weak_alias (__GI___munmap, munmap)
+weak_alias (__GI___munmap, __munmap)
+weak_alias (__GI___munmap, munmap)

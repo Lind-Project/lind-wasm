@@ -39,7 +39,8 @@ __getdents64 (int fd, void *buf, size_t nbytes)
 		       host_buf, (uint64_t) nbytes,
 		       NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__getdents64) weak_alias (__getdents64, getdents64)
+libc_hidden_def (__getdents64)
+weak_alias (__getdents64, getdents64)
 
 #if _DIRENT_MATCHES_DIRENT64
     strong_alias (__getdents64, __getdents)

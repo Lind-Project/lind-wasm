@@ -68,4 +68,5 @@ libc_hidden_def (__select64)
 #endif
 libc_hidden_def (__select)
 
-    weak_alias (__select, select) weak_alias (__select, __libc_select)
+weak_alias (__select, select)
+weak_alias (__select, __libc_select)

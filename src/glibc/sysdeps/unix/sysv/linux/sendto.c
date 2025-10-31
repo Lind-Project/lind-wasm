@@ -39,4 +39,5 @@ __libc_sendto (int fd, const void *buf, size_t len, int flags,
 		       host_buf, (uint64_t) len, (uint64_t) flags,
 		       host_addr, (uint64_t) addrlen);
 }
-weak_alias (__libc_sendto, sendto) weak_alias (__libc_sendto, __sendto)
+weak_alias (__libc_sendto, sendto)
+weak_alias (__libc_sendto, __sendto)
