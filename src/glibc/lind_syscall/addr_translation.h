@@ -30,8 +30,6 @@ extern "C"
   // Initialize address translation (idempotent). Queries base from host once.
   void __lind_init_addr_translation (void);
 
-  int CHECK_FUTEX_ALIGNMENT (const void *host_ptr);
-
   // Translate a guest pointer (offset in wasm32 linear memory) to a host
   // pointer (u64)
   static inline uint64_t

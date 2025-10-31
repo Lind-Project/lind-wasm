@@ -20,17 +20,3 @@ __lind_init_addr_translation (void)
   // Query the host for the cage id (pid) for this instance
   __lind_cageid = (uint64_t) __imported_lind_get_cage_id ();
 }
-
-int
-CHECK_FUTEX_ALIGNMENT (const void *host_ptr)
-{
-  uintptr_t addr = (uintptr_t) host_ptr;
-  if (addr % 4 != 0)
-    {
-      fprintf (stderr,
-	       "[glibc-futex] WARNING: Misaligned futex host address: %p\n",
-	       host_ptr);
-      return 0;
-    }
-  return 1;
-}

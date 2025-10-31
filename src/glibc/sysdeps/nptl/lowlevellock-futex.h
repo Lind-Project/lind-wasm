@@ -73,7 +73,7 @@
 	uint64_t __host_futex_ptr = TRANSLATE_GUEST_POINTER_TO_HOST (futexp); \
 	long int __ret;                                                       \
                                                                               \
-	if (!__host_futex_ptr || !CHECK_FUTEX_ALIGNMENT (futexp))             \
+	if (!__host_futex_ptr)                                                \
 	  {                                                                   \
 	    __ret = -EINVAL;                                                  \
 	  }                                                                   \
