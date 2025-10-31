@@ -969,7 +969,7 @@ pub fn connect_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1026,7 +1026,7 @@ pub fn bind_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1138,7 +1138,7 @@ pub fn accept_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1204,7 +1204,7 @@ pub fn setsockopt_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = sc_convert_addr_to_host(optval_arg, optval_cageid, cageid);
+    let optval = optval_arg as *mut u8;
     let optlen = sc_convert_sysarg_to_u32(optlen_arg, optlen_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation,
@@ -1313,7 +1313,7 @@ pub fn getsockname_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1374,10 +1374,10 @@ pub fn sendto_syscall(
     addrlen_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
-    let sockaddr = sc_convert_addr_to_host(sockaddr_arg, sockaddr_cageid, cageid);
+    let sockaddr = sockaddr_arg as *mut u8;
     let addrlen = sc_convert_sysarg_to_u32(addrlen_arg, addrlen_cageid, cageid);
 
     // We do not need to explicitly handle the NULL case in `sendto`,
@@ -1441,7 +1441,7 @@ pub fn recvfrom_syscall(
     addrlen_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
 
@@ -1473,7 +1473,7 @@ pub fn recvfrom_syscall(
     }
     // Case 2: both non-NULL → caller wants src_addr + addrlen filled
     else if !(addr_nullity || addrlen_nullity) {
-        let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid) as *mut SockAddr;
+        let addr = addr_arg as *mut SockAddr;
 
         let mut src_storage: sockaddr_storage = unsafe { mem::zeroed() };
         let mut src_len: socklen_t = unsafe { mem::size_of::<sockaddr_storage>() as socklen_t };
@@ -1535,7 +1535,7 @@ pub fn gethostname_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let name = sc_convert_addr_to_host(name_arg, name_cageid, cageid);
+    let name = name_arg as *mut u8;
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation,
@@ -1654,7 +1654,7 @@ pub fn getpeername_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default

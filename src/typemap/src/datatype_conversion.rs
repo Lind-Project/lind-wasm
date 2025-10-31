@@ -300,37 +300,6 @@ pub fn sc_convert_addr_to_epollevent<'a>(
     Ok(unsafe { &mut *pointer })
 }
 
-/// This function translates 64 bits uadd from the WASM context
-/// into the corresponding host address value. Unlike the previous two functions, it returns
-/// the translated address as a raw `u64` rather than a pointer.
-///
-/// Input:
-///     - uaddr_arg: the original 64-bit address from the WASM space
-///     - uaddr_arg_cageid: the cage ID that owns the address
-///     - cageid: the currently executing cage ID
-///
-/// Output:
-///     - Returns the translated 64-bit address in host space as a u64.
-pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64 {
-    uaddr_arg
-}
-
-/// This function translates a memory address from the WASM environment (user space)
-/// to the corresponding host system address (kernel space). It is typically used when
-/// the guest application passes a pointer argument to a syscall, and we need to dereference
-/// it in the kernel context.
-///
-/// Input:
-///     - addr_arg: the raw 64-bit address from the user
-///     - addr_arg_cageid: the cage ID where the address belongs to
-///     - cageid: the current running cage's ID (used for checking context)
-///
-/// Output:
-///     - Returns a mutable pointer to host memory corresponding to the given address
-///       from the guest. The pointer can be used for direct read/write operations.
-pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64) -> *mut u8 {
-    addr_arg as *mut u8
-}
 
 /// Convert a user-provided pointer (u64) from a cage into a shared reference to
 /// a `SigactionStruct`.

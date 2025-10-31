@@ -265,11 +265,11 @@ pub fn futex_syscall(
     val3_arg: u64,
     val3_cageid: u64,
 ) -> i32 {
-    let uaddr = sc_convert_uaddr_to_host(uaddr_arg, uaddr_cageid, cageid);
+    let uaddr = uaddr_arg;
     let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
     let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
     let val2 = sc_convert_sysarg_to_u32(val2_arg, val2_cageid, cageid);
-    let uaddr2 = sc_convert_sysarg_to_u32(uaddr2_arg, uaddr2_cageid, cageid);
+    let uaddr2 = uaddr2_arg;  // Keep as u64 - this is a pointer (second futex address), not a scalar value
     let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
 
     let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
@@ -1730,7 +1730,7 @@ pub fn readlink_syscall(
 ) -> i32 {
     // Type conversion
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
 
     // Validate unused args
@@ -1840,7 +1840,7 @@ pub fn readlinkat_syscall(
     // Type conversion
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
 
     // Validate unused args
@@ -2094,7 +2094,7 @@ pub fn unlinkat_syscall(
         }
         let vfd = wrappedvfd.unwrap();
         // For this case, we pass the provided pathname directly.
-        let pathname = sc_convert_uaddr_to_host(pathname_arg, pathname_cageid, cageid);
+        let pathname = pathname_arg;
         let tmp_cstr = get_cstr(pathname).unwrap();
         c_path = CString::new(tmp_cstr).unwrap();
         vfd.underfd as i32
@@ -2204,7 +2204,7 @@ pub fn clock_gettime_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
-    let tp = sc_convert_addr_to_host(tp_arg, tp_cageid, cageid);
+    let tp = tp_arg as *mut u8;
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -3260,7 +3260,7 @@ pub fn getcwd_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = buf_arg as *mut u8;
 
     let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
     if size == 0 {
@@ -3442,7 +3442,7 @@ pub fn mprotect_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Type conversion
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
 
@@ -3516,7 +3516,7 @@ pub fn ioctl_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Type conversion
-    let ptrunion = sc_convert_addr_to_host(ptrunion_arg, ptrunion_cageid, cageid);
+    let ptrunion = ptrunion_arg as *mut u8;
 
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
