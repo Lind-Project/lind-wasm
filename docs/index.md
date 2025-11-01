@@ -16,7 +16,7 @@ In Old Norse, Old High German and Old English a "lind" is a shield constructed w
 - **Microvisor**: RawPOSIX is a small kernel running within the Lind process.  This is analogous to the Linux kernel.  Note, however, that this and all of the rest of Lind runs as an unprivileged Linux process.
     - Provides a POSIXish interface (runs most Linux programs)
     - Handles file descriptor separation, fork, exec, signals, threading, etc.
-- **3i (three eye)**: Capability-based POSIX interface to call between cages or into the microvisor.  This is conceptually similar to a programmable system call table.
+- **3i (three eye)**: Capability-based POSIX interface to call between cages or into the microvisor.  This is conceptually similar to a programmable system call table and IPC interface. 
     - Each cage has a separate system call table which can be independently changed to redirect into other cages or the microvisor
     - Fast, isolated calling between cages
     - Enables complex functionality (system call filtering, file systems, proxies, etc.) to be external to the microvisor
