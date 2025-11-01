@@ -13,7 +13,7 @@ In Old Norse, Old High German and Old English a "lind" is a shield constructed w
 - **Cage**: This term describes the isolated memory namespace that an application executes in.  It is analogous to a process in Linux. 
     - Can run legacy code compiled with Wasm as a target
     - Protects and isolates memory, control flow, etc.
-- **Microvisor**: RawPOSIX is a small kernel running within the Lind process.  This is analogous to the Linux kernel.
+- **Microvisor**: RawPOSIX is a small kernel running within the Lind process.  This is analogous to the Linux kernel.  Note, however, that this and all of the rest of Lind runs as an unprivileged Linux process.
     - Provides a POSIXish interface (runs most Linux programs)
     - Handles file descriptor separation, fork, exec, signals, threading, etc.
 - **3i (three eye)**: Capability-based POSIX interface to call between cages or into the microvisor.  This is conceptually similar to a programmable system call table.
