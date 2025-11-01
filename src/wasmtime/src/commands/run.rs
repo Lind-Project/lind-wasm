@@ -813,8 +813,7 @@ impl RunCommand {
                 // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
                 // instance boundaries particularly difficult. To overcome this, the design employs low-level context
                 // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
-                // structures. These pointers are stored in a global registry, enabling safe, cross-thread access
-                // without violating Rust’s safety guarantees.
+                // structures. 
                 // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
                 let grate_storeopaque = store.inner_mut();
                 let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);

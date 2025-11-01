@@ -45,7 +45,7 @@ pub fn mappings_for(cage: u64, callnum: u64) -> Vec<(u64, u64)> {
 }
 
 /// Convenience to call register_handler with only the meaningful args.
-pub fn reg(
+pub fn register_simple(
     targetcage: u64,
     targetcallnum: u64,
     handlefunc: u64,
