@@ -24,7 +24,7 @@ In Old Norse, Old High German and Old English a "lind" is a shield constructed w
 ## Technology Overview
 
 ### Cages
-A cage is simply a Linux process.  The code must recompiled to run in Wasm and linked to our modified glibc so that it makes its system calls through 3i.  However, the source code for applications only needs to be modified in rare cases (such as applications that directly make system calls).
+A cage runs a Linux application in an isolated part of the Lind process's namespace.  The code must recompiled to run in Wasm and linked to our modified glibc so that it makes its system calls through 3i.  However, the source code for applications only needs to be modified in rare cases (such as applications that directly make system calls).
 
 ### Grates
 A key advantage of 3i is the ability to support interposition.  In other words, a cage can intercept the system calls from another cage.  Because the use case of writing a cage to intercept system calls is very lightweight it is common in Lind.  As such, we give these cages the special name "grate".  This is meant to convey the mental picture of a caged application which calls down through a series of grates before (potentially) reaching the operating system.
