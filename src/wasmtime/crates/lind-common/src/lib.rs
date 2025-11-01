@@ -19,6 +19,7 @@ use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_ba
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
+use wasmtime_lind_3i::take_gratefn_wasm;
 use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
@@ -231,15 +232,18 @@ pub fn add_to_linker<
         "register-syscall",
         move |targetcage: u64,
               targetcallnum: u64,
-              handlefunc_index_in_this_grate: u64,
-              this_grate_id: u64|
+              handlefunc_flag: u64,
+              this_grate_id: u64,
+              in_grate_fn_ptr_u64: u64|
               -> i32 {
+            let entry = take_gratefn_wasm(this_grate_id).unwrap();
+
             register_handler(
-                UNUSED_ARG,
+                in_grate_fn_ptr_u64,
                 targetcage,
                 targetcallnum,
-                UNUSED_ID,
-                handlefunc_index_in_this_grate,
+                entry as u64,
+                handlefunc_flag,
                 this_grate_id,
                 UNUSED_ARG,
                 UNUSED_ID,
