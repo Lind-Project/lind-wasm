@@ -4,7 +4,7 @@ id: Overview
 
 # Lind-Wasm
 
-Lind is a sandbox that isolates different applications in the same address space. Thus, conceptually, it executes different applications (which traditionally would be different processes) in separate parts of a single address space, under a single, non-privileged Linux process.   To provide memory safety, control flow integrity, memory isolation, and similar properties, this version of Lind executes applications using WebAssembly for software fault isolation.  Lind also contains a custom kernel microvisor, written in Rust, to limit the potential damage of bugs or security flaws in an application.
+Lind is a sandbox that isolates different applications in the same address space. Thus, conceptually, it executes different applications (which traditionally would be different processes) in separate, non-overlapping parts of a single address space, under a single, non-privileged Linux process.   To provide memory safety, control flow integrity, memory isolation, and similar properties, this version of Lind executes applications using WebAssembly for software fault isolation.  Lind also contains a custom kernel microvisor, written in Rust, to limit the potential damage of bugs or security flaws in an application.
 
 In Old Norse, Old High German and Old English a "lind" is a shield constructed with two layers of linden wood. Linden wood shields are lightweight, and do not split easily, an appropriate metaphor for a sandboxing system which is lightweight and which provides layered security.
 
