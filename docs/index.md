@@ -29,7 +29,7 @@ A cage is simply a Linux process.  The code must recompiled to run in Wasm and l
 ### Grates
 A key advantage of 3i is the ability to support interposition.  In other words, a cage can intercept the system calls from another cage.  Because the use case of writing a cage to intercept system calls is very lightweight it is common in Lind.  As such, we give these cages the special name "grate".  This is meant to convey the mental picture of a caged application which calls down through a series of grates before (potentially) reaching the operating system.
 
-Note that a grate is a fully functioning cage and Lind makes no actual distinction between them.  Any cage can make the system calls available to grates (unless a grate below it prevents it).  It is just that most legacy applications do not need to regularly make such calls.
+Note that a grate is a cage and Lind makes no actual distinction between them.  Any cage can make the system calls available to grates (unless a grate below it prevents it).  It is just that most legacy applications do not need to regularly make such calls.  This is analogous to strace and its use of the ptrace mechanism.
 
 A major advantage is that this means that implementing something like an in-memory file system can now be done without changing the microvisor or other trusted code.  A grate can intercept the file system calls and code written in C, Rust, etc. can be used to provide this functionality.  Similarly, a network file system can be implemented in a grate by the grate making whatever network system calls are needed.  
 
