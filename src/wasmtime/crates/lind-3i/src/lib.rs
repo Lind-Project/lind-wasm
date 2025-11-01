@@ -47,11 +47,11 @@ pub static GRATE_FN_WASM_TABLE: Lazy<RwLock<HashMap<(u64, u64), Box<GrateFnEntry
 ///
 /// This function is `extern "C"` and `unsafe` because it crosses the FFI boundary and dereferences
 /// raw pointers.
-pub unsafe extern "C" fn set_gratefn_wasm(pid: u64, entry: *const GrateFnEntry) -> i32 {
+pub extern "C" fn set_gratefn_wasm(pid: u64, entry: *const GrateFnEntry) -> i32 {
     if entry.is_null() {
         return threei_const::GRATE_ERR;
     }
-    let entry = *entry;
+    let entry = unsafe { *entry };
     if entry.ctx_ptr.is_null() {
         return threei_const::GRATE_ERR;
     }
