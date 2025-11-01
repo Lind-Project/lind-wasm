@@ -67,4 +67,4 @@ Provides normal POSIX system calls including:
 - Separate handling of cages' fds and threads
 
 ### 3i Implementation
-The intra-process interposable interface (3i) enables secure and efficient cage communication with close to function call-like speed. It provides POSIX interfaces between cages with interposition capabilities, enabling fine-grained security and access control by supporting the construction of grates.
+The intra-process interposable interface (3i) enables secure and efficient cage communication with speed similar to a function call. It provides POSIX interfaces between cages with interposition capabilities, enabling fine-grained security and access control by supporting the construction of grates.
