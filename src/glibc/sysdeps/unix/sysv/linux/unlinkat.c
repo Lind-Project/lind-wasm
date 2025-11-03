@@ -1,6 +1,6 @@
-/* Delete a name and possibly the file it refers to in a directory. Linux
-   version. Copyright (C) 2011-2024 Free Software Foundation, Inc. This file is
-   part of the GNU C Library.
+/* Delete a name and possibly the file it refers to in a directory. Linux version.
+   Copyright (C) 2011-2024 Free Software Foundation, Inc.
+   This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -23,14 +23,13 @@
 #include <lind_syscall_num.h>
 #include <addr_translation.h>
 
-/* Remove the link named NAME in the directory referred to by DIRFD, using
- * FLAGS.  */
+/* Remove the link named NAME in the directory referred to by DIRFD, using FLAGS.  */
 int
 __unlinkat (int dirfd, const char *name, int flags)
 {
-  return MAKE_SYSCALL (UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t) dirfd,
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (name),
-		       (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
+   uint64_t host_name = TRANSLATE_GUEST_POINTER_TO_HOST (name);
+   
+   return MAKE_SYSCALL(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t) dirfd, host_name, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
 }
 
 weak_alias (__unlinkat, unlinkat)

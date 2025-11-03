@@ -28,21 +28,17 @@
    LEN bytes of BUF.  The contents are not null-terminated.
    Returns the number of characters read, or -1 for errors.  */
 /*
- * Edit Note:
- * Linux kernel has two different implementations for `readlink` and
- * `readlinkat` syscall. In original glibc implementaion, there was only one
- * entry point and `readlinkat` will be redirected through `readlink`, and
- * kernel has different callnums for them so in lind-wasm, we have separately
- * implemented `readlink` and `readlinkat`.
- */
+* Edit Note:
+* Linux kernel has two different implementations for `readlink` and `readlinkat` syscall.
+* In original glibc implementaion, there was only one entry point and `readlinkat` will be redirected through `readlink`, 
+* and kernel has different callnums for them so in lind-wasm, we have separately implemented `readlink` and `readlinkat`.
+*/
 ssize_t
 __readlink (const char *path, char *buf, size_t len)
 {
-  uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
-  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-  
-  return MAKE_SYSCALL (READLINK_SYSCALL, "syscall|readlink",
-		       host_path, host_buf,
-		       (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
+   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+   
+   return MAKE_SYSCALL(READLINK_SYSCALL, "syscall|readlink", host_path, host_buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__readlink, readlink)

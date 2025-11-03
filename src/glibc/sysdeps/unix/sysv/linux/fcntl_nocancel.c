@@ -26,11 +26,11 @@
 #include <addr_translation.h>
 
 #ifndef __NR_fcntl64
-#  define __NR_fcntl64 __NR_fcntl
+# define __NR_fcntl64 __NR_fcntl
 #endif
 
 #ifndef FCNTL_ADJUST_CMD
-#  define FCNTL_ADJUST_CMD(__cmd) __cmd
+# define FCNTL_ADJUST_CMD(__cmd) __cmd
 #endif
 
 int
@@ -49,7 +49,8 @@ __fcntl64_nocancel (int fd, int cmd, ...)
 }
 hidden_def (__fcntl64_nocancel)
 
-    int __fcntl64_nocancel_adjusted (int fd, int cmd, void *arg)
+int
+__fcntl64_nocancel_adjusted (int fd, int cmd, void *arg)
 {
   if (cmd == F_GETOWN)
     {

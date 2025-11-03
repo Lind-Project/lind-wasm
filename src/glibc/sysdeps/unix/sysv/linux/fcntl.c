@@ -115,19 +115,20 @@ __libc_fcntl (int fd, int cmd, ...)
 }
 libc_hidden_def (__libc_fcntl)
 
-    weak_alias (__libc_fcntl, __fcntl) libc_hidden_weak (__fcntl)
+weak_alias (__libc_fcntl, __fcntl)
+libc_hidden_weak (__fcntl)
 
-#  include <shlib-compat.h>
-#  if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_28)
-	int __old_libc_fcntl64 (int fd, int cmd, ...)
+# include <shlib-compat.h>
+# if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_28)
+int
+__old_libc_fcntl64 (int fd, int cmd, ...)
 {
-  return MAKE_SYSCALL (FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
-		       (uint64_t) cmd, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 compat_symbol (libc, __old_libc_fcntl64, fcntl, GLIBC_2_0);
 versioned_symbol (libc, __libc_fcntl, fcntl, GLIBC_2_28);
-#  else
-	weak_alias (__libc_fcntl, fcntl)
-#  endif
+# else
+weak_alias (__libc_fcntl, fcntl)
+# endif
 
 #endif /* __OFF_T_MATCHES_OFF64_T  */

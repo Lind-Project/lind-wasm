@@ -26,25 +26,25 @@ ssize_t
 __libc_pread64 (int fd, void *buf, size_t count, off64_t offset)
 {
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-  return MAKE_SYSCALL (PREAD_SYSCALL, "syscall|pread", (uint64_t) fd,
-		       host_buf, (uint64_t) count, (uint64_t) offset,
-		       NOTUSED, NOTUSED);
+  
+  return MAKE_SYSCALL(PREAD_SYSCALL, "syscall|pread", (uint64_t) fd, host_buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
 }
 
-weak_alias (__libc_pread64, __pread64) libc_hidden_weak (__pread64)
-    weak_alias (__libc_pread64, pread64)
+weak_alias (__libc_pread64, __pread64)
+libc_hidden_weak (__pread64)
+weak_alias (__libc_pread64, pread64)
 
 #ifdef __OFF_T_MATCHES_OFF64_T
-	strong_alias (__libc_pread64, __libc_pread)
-	    weak_alias (__libc_pread64, __pread)
-		weak_alias (__libc_pread64, pread)
+strong_alias (__libc_pread64, __libc_pread)
+weak_alias (__libc_pread64, __pread)
+weak_alias (__libc_pread64, pread)
 
-#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_2)
-		    compat_symbol (libc, __libc_pread64, pread, GLIBC_2_2);
-#  endif
+# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_2)
+compat_symbol (libc, __libc_pread64, pread, GLIBC_2_2);
+# endif
 #endif
 
-#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_2)
+#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_2)
 compat_symbol (libc, __libc_pread64, pread64, GLIBC_2_2);
 compat_symbol (libc, __libc_pread64, __pread64, GLIBC_2_2);
 #endif

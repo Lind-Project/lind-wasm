@@ -42,21 +42,22 @@ __libc_open64 (const char *file, int oflag, ...)
     }
 
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-  return MAKE_SYSCALL (OPEN_SYSCALL, "syscall|open",
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
-		       (uint64_t) oflag | O_LARGEFILE, (uint64_t) mode,
-		       NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
+  
+  return MAKE_SYSCALL(OPEN_SYSCALL, "syscall|open", host_file, (uint64_t) oflag | O_LARGEFILE, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
 }
 
-strong_alias (__libc_open64, __open64) libc_hidden_weak (__open64)
-    weak_alias (__libc_open64, open64)
+strong_alias (__libc_open64, __open64)
+libc_hidden_weak (__open64)
+weak_alias (__libc_open64, open64)
 
 #ifdef __OFF_T_MATCHES_OFF64_T
-	strong_alias (__libc_open64, __libc_open)
-	    strong_alias (__libc_open64, __open) libc_hidden_weak (__open)
-		weak_alias (__libc_open64, open)
+strong_alias (__libc_open64, __libc_open)
+strong_alias (__libc_open64, __open)
+libc_hidden_weak (__open)
+weak_alias (__libc_open64, open)
 #endif
 
-#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_2)
-		    compat_symbol (libc, __libc_open64, open64, GLIBC_2_2);
+#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_2)
+compat_symbol (libc, __libc_open64, open64, GLIBC_2_2);
 #endif
