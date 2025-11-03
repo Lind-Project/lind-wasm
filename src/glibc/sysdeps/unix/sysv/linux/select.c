@@ -23,6 +23,7 @@
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Check the first NFDS descriptors each in READFDS (if not NULL) for read
    readiness, in WRITEFDS (if not NULL) for write readiness, and in EXCEPTFDS
@@ -34,7 +35,12 @@ int
 __select64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 	    struct __timeval64 *timeout)
 {
-		return MAKE_SYSCALL(SELECT_SYSCALL, "syscall|select", (uint64_t) nfds, (uint64_t) readfds, (uint64_t) writefds, (uint64_t) exceptfds, (uint64_t) timeout, NOTUSED);
+		uint64_t host_readfds = TRANSLATE_GUEST_POINTER_TO_HOST (readfds);
+		uint64_t host_writefds = TRANSLATE_GUEST_POINTER_TO_HOST (writefds);
+		uint64_t host_exceptfds = TRANSLATE_GUEST_POINTER_TO_HOST (exceptfds);
+		uint64_t host_timeout = TRANSLATE_GUEST_POINTER_TO_HOST (timeout);
+		
+		return MAKE_SYSCALL(SELECT_SYSCALL, "syscall|select", (uint64_t) nfds, host_readfds, host_writefds, host_exceptfds, host_timeout, NOTUSED);
 
 // Lind-Wasm: Original glibc code removed for compatibility
 // to find original source code refer to (2.39.9000) at (/home/lind-wasm/glibc/sysdeps/unix/sysv/linux/select.c):(35-138)

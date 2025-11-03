@@ -20,12 +20,15 @@
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 /* Write NBYTES of BUF to FD.  Return the number written, or -1.  */
 ssize_t
 __libc_write (int fd, const void *buf, size_t nbytes)
 {
   // Dennis Edit
-  return MAKE_SYSCALL(WRITE_SYSCALL, "syscall|write", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  
+  return MAKE_SYSCALL(WRITE_SYSCALL, "syscall|write", (uint64_t) fd, host_buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__libc_write)
 

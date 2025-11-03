@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Detach shared memory segment starting at address specified by SHMADDR
    from the caller's data segment.  */
@@ -27,5 +28,7 @@
 int
 shmdt (const void *shmaddr)
 {
-   return MAKE_SYSCALL(SHMDT_SYSCALL, "syscall|shmdt", (uint64_t) shmaddr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   uint64_t host_shmaddr = TRANSLATE_GUEST_POINTER_TO_HOST (shmaddr);
+   
+   return MAKE_SYSCALL(SHMDT_SYSCALL, "syscall|shmdt", host_shmaddr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }

@@ -23,13 +23,17 @@
 #include <tv32-compat.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 int
 __setitimer64 (__itimer_which_t which,
                const struct __itimerval64 *restrict new_value,
                struct __itimerval64 *restrict old_value)
 {
-  return MAKE_SYSCALL(SETITIMER_SYSCALL, "syscall|setitimer", (uint64_t) which, (uint64_t) new_value, (uint64_t) old_value, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_new_value = TRANSLATE_GUEST_POINTER_TO_HOST (new_value);
+  uint64_t host_old_value = TRANSLATE_GUEST_POINTER_TO_HOST (old_value);
+  
+  return MAKE_SYSCALL(SETITIMER_SYSCALL, "syscall|setitimer", (uint64_t) which, host_new_value, host_old_value, NOTUSED, NOTUSED, NOTUSED);
 }
 
 #if __TIMESIZE != 64

@@ -21,11 +21,14 @@
 #include <sysdep.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Remove the link named NAME.  */
 int
 __unlink (const char *name)
 {
-   return MAKE_SYSCALL(UNLINK_SYSCALL, "syscall|unlink", (uint64_t) name, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   uint64_t host_name = TRANSLATE_GUEST_POINTER_TO_HOST (name);
+   
+   return MAKE_SYSCALL(UNLINK_SYSCALL, "syscall|unlink", host_name, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__unlink, unlink)

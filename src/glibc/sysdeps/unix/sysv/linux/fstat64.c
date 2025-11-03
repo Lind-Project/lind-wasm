@@ -26,11 +26,14 @@
 #include <errno.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 int
 __fstat64_time64 (int fd, struct __stat64_t64 *buf)
 {
-  return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t)buf);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  
+  return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, host_buf);
 }
 #if __TIMESIZE != 64
 hidden_def (__fstat64_time64)
@@ -44,7 +47,9 @@ __fstat64 (int fd, struct stat64 *buf)
       return -1;
     }
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-	return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t)buf);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  
+	return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, host_buf);
 }
 #endif
 

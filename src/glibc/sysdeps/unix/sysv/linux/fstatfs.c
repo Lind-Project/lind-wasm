@@ -22,6 +22,7 @@
 #include <kernel_stat.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #if !STATFS_IS_STATFS64
 
@@ -29,7 +30,9 @@
 int
 __fstatfs (int fd, struct statfs *buf)
 {
-   return MAKE_SYSCALL(FSTATFS_SYSCALL, "syscall|fstatfs", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+   
+   return MAKE_SYSCALL(FSTATFS_SYSCALL, "syscall|fstatfs", (uint64_t) fd, host_buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__fstatfs)
 weak_alias (__fstatfs, fstatfs)

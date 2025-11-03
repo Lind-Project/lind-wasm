@@ -21,6 +21,7 @@
 #include <kernel_stat.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #if !XSTAT_IS_XSTAT64
 int
@@ -28,7 +29,10 @@ __lstat (const char *file, struct stat *buf)
 {
   // BUG: we do not have fstatat syscall in rawposix
   // so let's just use xstat - Qianxi Chen
-  return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) file, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED); 
+  uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  
+  return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", host_file, host_buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED); 
 }
 
 weak_alias (__lstat, lstat)

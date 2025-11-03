@@ -20,6 +20,7 @@
 #include <sys/wait.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Wait for a child matching PID to die.
    If PID is greater than 0, match any process whose process ID is PID.
@@ -36,7 +37,7 @@
 pid_t
 __waitpid (pid_t pid, int *stat_loc, int options)
 {
-   return MAKE_SYSCALL(WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) pid, (uint64_t) stat_loc, (uint64_t) options, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_SYSCALL(WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) pid, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(stat_loc), (uint64_t) options, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__waitpid)
 weak_alias (__waitpid, waitpid)

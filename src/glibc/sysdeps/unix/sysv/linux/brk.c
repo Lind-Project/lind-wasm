@@ -22,6 +22,7 @@
 #include <brk_call.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* This must be initialized data because commons can't have aliases.  */
 // This is the "virtual brk" exposed to the caller
@@ -41,6 +42,9 @@ weak_alias (__curbrk, ___brk_addr)
 int
 __brk (void *addr)
 {
+   // TODO: Need to eventually add translation for addr pointer in brk
+   // This does require additional platform specific logic so will be
+   // handled in a future PR
    __curbrk = MAKE_SYSCALL(BRK_SYSCALL, "syscall|brk", (uint64_t) addr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
    if (__curbrk < addr)
    {

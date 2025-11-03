@@ -23,6 +23,7 @@
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
 #include <sysdep-cancel.h>
+#include <addr_translation.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 /* Open FILE with access OFLAG.  If O_CREAT or O_TMPFILE is in OFLAG,
@@ -40,7 +41,9 @@ __libc_open (const char *file, int oflag, ...)
       va_end (arg);
     }
 
-  return MAKE_SYSCALL(OPEN_SYSCALL, "syscall|open", (uint64_t) file, (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
+
+  return MAKE_SYSCALL(OPEN_SYSCALL, "syscall|open", host_file, (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED);
   // return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag, mode);
 }
 libc_hidden_def (__libc_open)
