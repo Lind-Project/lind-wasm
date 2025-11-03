@@ -26,14 +26,13 @@
 #include <stdlib.h>
 
 #ifndef MIN
-# define MIN(a, b) ((a) < (b) ? (a) : (b))
+#  define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
 static const char dev[] = "/dev";
 
-static int getttyname_r (int fd, char *buf, size_t buflen,
-			 dev_t mydev, ino_t myino, int save,
-			 int *dostat) __THROW;
+static int getttyname_r (int fd, char *buf, size_t buflen, dev_t mydev,
+			 ino_t myino, int save, int *dostat) __THROW;
 
 static int
 getttyname_r (int fd, char *buf, size_t buflen, dev_t mydev, ino_t myino,
@@ -52,8 +51,7 @@ getttyname_r (int fd, char *buf, size_t buflen, dev_t mydev, ino_t myino,
 
   while ((d = __readdir (dirstream)) != NULL)
     if (((ino_t) d->d_fileno == myino || *dostat)
-	&& strcmp (d->d_name, "stdin")
-	&& strcmp (d->d_name, "stdout")
+	&& strcmp (d->d_name, "stdin") && strcmp (d->d_name, "stdout")
 	&& strcmp (d->d_name, "stderr"))
       {
 	char *cp;
@@ -76,7 +74,7 @@ getttyname_r (int fd, char *buf, size_t buflen, dev_t mydev, ino_t myino,
 #else
 	    && (ino_t) d->d_fileno == myino && st.st_dev == mydev
 #endif
-	   )
+	)
 	  {
 	    (void) __closedir (dirstream);
 	    __set_errno (save);
@@ -130,22 +128,20 @@ __ttyname_r (int fd, char *buf, size_t buflen)
   buflen -= sizeof (dev);
 
 #ifdef _STATBUF_ST_RDEV
-  ret = getttyname_r (fd, buf, buflen, st.st_rdev, st.st_ino, save,
-		      &dostat);
+  ret = getttyname_r (fd, buf, buflen, st.st_rdev, st.st_ino, save, &dostat);
 #else
-  ret = getttyname_r (fd, buf, buflen, st.st_dev, st.st_ino, save,
-		      &dostat);
+  ret = getttyname_r (fd, buf, buflen, st.st_dev, st.st_ino, save, &dostat);
 #endif
 
   if (ret && dostat != -1)
     {
       dostat = 1;
 #ifdef _STATBUF_ST_RDEV
-      ret = getttyname_r (fd, buf, buflen, st.st_rdev, st.st_ino,
-			  save, &dostat);
+      ret = getttyname_r (fd, buf, buflen, st.st_rdev, st.st_ino, save,
+			  &dostat);
 #else
-      ret = getttyname_r (fd, buf, buflen, st.st_dev, st.st_ino,
-			  save, &dostat);
+      ret = getttyname_r (fd, buf, buflen, st.st_dev, st.st_ino, save,
+			  &dostat);
 #endif
     }
 

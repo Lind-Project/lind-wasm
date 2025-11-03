@@ -16,37 +16,37 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WMEMCMP_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WMEMCMP_IFUNC 1
 #else
-# define HAVE_WMEMCMP_IFUNC	0
+#  define HAVE_WMEMCMP_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WMEMCMP_IFUNC_AND_VX_SUPPORT HAVE_WMEMCMP_IFUNC
+#  define HAVE_WMEMCMP_IFUNC_AND_VX_SUPPORT HAVE_WMEMCMP_IFUNC
 #else
-# define HAVE_WMEMCMP_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WMEMCMP_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WMEMCMP_DEFAULT	WMEMCMP_Z13
-# define HAVE_WMEMCMP_C		0
-# define HAVE_WMEMCMP_Z13	1
+#  define WMEMCMP_DEFAULT WMEMCMP_Z13
+#  define HAVE_WMEMCMP_C 0
+#  define HAVE_WMEMCMP_Z13 1
 #else
-# define WMEMCMP_DEFAULT	WMEMCMP_C
-# define HAVE_WMEMCMP_C		1
-# define HAVE_WMEMCMP_Z13	HAVE_WMEMCMP_IFUNC_AND_VX_SUPPORT
+#  define WMEMCMP_DEFAULT WMEMCMP_C
+#  define HAVE_WMEMCMP_C 1
+#  define HAVE_WMEMCMP_Z13 HAVE_WMEMCMP_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WMEMCMP_C
-# define WMEMCMP_C		__wmemcmp_c
+#  define WMEMCMP_C __wmemcmp_c
 #else
-# define WMEMCMP_C		NULL
+#  define WMEMCMP_C NULL
 #endif
 
 #if HAVE_WMEMCMP_Z13
-# define WMEMCMP_Z13		__wmemcmp_vx
+#  define WMEMCMP_Z13 __wmemcmp_vx
 #else
-# define WMEMCMP_Z13		NULL
+#  define WMEMCMP_Z13 NULL
 #endif

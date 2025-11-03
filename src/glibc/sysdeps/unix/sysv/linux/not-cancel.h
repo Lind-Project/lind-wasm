@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef NOT_CANCEL_H
-# define NOT_CANCEL_H
+#define NOT_CANCEL_H
 
 #include <fcntl.h>
 #include <sysdep.h>
@@ -55,22 +55,17 @@ __typeof (__close) __close_nocancel;
 /* Uncancelable fcntl.  */
 __typeof (__fcntl) __fcntl64_nocancel;
 
-#if IS_IN (libc) || IS_IN (rtld)
-hidden_proto (__open_nocancel)
-hidden_proto (__open64_nocancel)
-hidden_proto (__openat_nocancel)
-hidden_proto (__openat64_nocancel)
-hidden_proto (__read_nocancel)
-hidden_proto (__pread64_nocancel)
-hidden_proto (__write_nocancel)
-hidden_proto (__close_nocancel)
-hidden_proto (__fcntl64_nocancel)
+#if IS_IN(libc) || IS_IN(rtld)
+hidden_proto (__open_nocancel) hidden_proto (__open64_nocancel)
+    hidden_proto (__openat_nocancel) hidden_proto (__openat64_nocancel)
+	hidden_proto (__read_nocancel) hidden_proto (__pread64_nocancel)
+	    hidden_proto (__write_nocancel) hidden_proto (__close_nocancel)
+		hidden_proto (__fcntl64_nocancel)
 #endif
 
-/* Non cancellable close syscall that does not also set errno in case of
-   failure.  */
-static inline void
-__close_nocancel_nostatus (int fd)
+    /* Non cancellable close syscall that does not also set errno in case of
+       failure.  */
+    static inline void __close_nocancel_nostatus (int fd)
 {
   __close_nocancel (fd);
 }

@@ -20,16 +20,16 @@
 
 int
 __pthread_rwlockattr_getpshared (const pthread_rwlockattr_t *attr,
-                                  int *pshared)
+				 int *pshared)
 {
   *pshared = ((const struct pthread_rwlockattr *) attr)->pshared;
 
   return 0;
 }
 versioned_symbol (libc, __pthread_rwlockattr_getpshared,
-                  pthread_rwlockattr_getpshared, GLIBC_2_34);
+		  pthread_rwlockattr_getpshared, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_rwlockattr_getpshared,
-               pthread_rwlockattr_getpshared, GLIBC_2_1);
+	       pthread_rwlockattr_getpshared, GLIBC_2_1);
 #endif

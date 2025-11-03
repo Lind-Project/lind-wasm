@@ -43,7 +43,7 @@ __lll_trylock_elision (int *futex, short *adapt_count)
     {
       unsigned status;
 
-      if ((status = _xbegin()) == _XBEGIN_STARTED)
+      if ((status = _xbegin ()) == _XBEGIN_STARTED)
 	{
 	  if (*futex == 0)
 	    return 0;
@@ -55,20 +55,20 @@ __lll_trylock_elision (int *futex, short *adapt_count)
 	}
 
       if (!(status & _XABORT_RETRY))
-        {
-          /* Internal abort.  No chance for retry.  For future
-             locks don't try speculation for some time.  See above for MO.  */
-          if (atomic_load_relaxed (adapt_count)
-              != aconf.skip_lock_internal_abort)
-            atomic_store_relaxed (adapt_count, aconf.skip_lock_internal_abort);
-        }
+	{
+	  /* Internal abort.  No chance for retry.  For future
+	     locks don't try speculation for some time.  See above for MO.  */
+	  if (atomic_load_relaxed (adapt_count)
+	      != aconf.skip_lock_internal_abort)
+	    atomic_store_relaxed (adapt_count, aconf.skip_lock_internal_abort);
+	}
       /* Could do some retries here.  */
     }
   else
     {
       /* Lost updates are possible but harmless (see above).  */
       atomic_store_relaxed (adapt_count,
-	  atomic_load_relaxed (adapt_count) - 1);
+			    atomic_load_relaxed (adapt_count) - 1);
     }
 
   return lll_trylock (*futex);

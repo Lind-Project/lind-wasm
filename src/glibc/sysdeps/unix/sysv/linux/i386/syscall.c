@@ -1,4 +1,6 @@
-long syscall(void) {
-    long result = 0;
-    return result;
+long
+syscall (void)
+{
+  long result = 0;
+  return result;
 }

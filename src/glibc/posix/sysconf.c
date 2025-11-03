@@ -25,7 +25,6 @@
 #include <sys/param.h>
 #include <sys/sysinfo.h>
 
-
 /* Get the value of the system variable NAME.  */
 long int
 __sysconf (int name)
@@ -40,28 +39,28 @@ __sysconf (int name)
       return -1;
 
     case _SC_CHARCLASS_NAME_MAX:
-#ifdef	CHARCLASS_NAME_MAX
+#ifdef CHARCLASS_NAME_MAX
       return CHARCLASS_NAME_MAX;
 #else
       return -1;
 #endif
 
     case _SC_COLL_WEIGHTS_MAX:
-#ifdef	COLL_WEIGHTS_MAX
+#ifdef COLL_WEIGHTS_MAX
       return COLL_WEIGHTS_MAX;
 #else
       return -1;
 #endif
 
     case _SC_EQUIV_CLASS_MAX:
-#ifdef	EQUIV_CLASS_MAX
+#ifdef EQUIV_CLASS_MAX
       return EQUIV_CLASS_MAX;
 #else
       return -1;
 #endif
 
     case _SC_2_LOCALEDEF:
-#ifdef	_POSIX2_LOCALEDEF
+#ifdef _POSIX2_LOCALEDEF
       return _POSIX2_LOCALEDEF;
 #else
       return -1;
@@ -276,7 +275,6 @@ __sysconf (int name)
   return -1;
 }
 
-weak_alias (__sysconf, sysconf)
-libc_hidden_def (__sysconf)
+weak_alias (__sysconf, sysconf) libc_hidden_def (__sysconf)
 
-stub_warning (sysconf)
+    stub_warning (sysconf)

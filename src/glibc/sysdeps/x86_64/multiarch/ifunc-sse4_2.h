@@ -22,11 +22,10 @@
 extern __typeof (REDIRECT_NAME) OPTIMIZE (generic) attribute_hidden;
 extern __typeof (REDIRECT_NAME) OPTIMIZE (sse42) attribute_hidden;
 
-static inline void *
-inhibit_stack_protector
+static inline void *inhibit_stack_protector
 IFUNC_SELECTOR (void)
 {
-  const struct cpu_features* cpu_features = __get_cpu_features ();
+  const struct cpu_features *cpu_features = __get_cpu_features ();
 
   /* This function uses the `pcmpstri` sse4.2 instruction which can be
      slow on some CPUs.  This normally would be guarded by a

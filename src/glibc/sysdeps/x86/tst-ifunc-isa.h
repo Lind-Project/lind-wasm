@@ -29,8 +29,7 @@ enum isa
   avx512f
 };
 
-enum isa
-inhibit_stack_protector
+enum isa inhibit_stack_protector
 get_isa (void)
 {
   if (CPU_FEATURE_ACTIVE (AVX512F))
@@ -84,8 +83,7 @@ isa_none (void)
 
 int foo (void) __attribute__ ((ifunc ("foo_ifunc")));
 
-void *
-inhibit_stack_protector
+void *inhibit_stack_protector
 foo_ifunc (void)
 {
   switch (get_isa ())

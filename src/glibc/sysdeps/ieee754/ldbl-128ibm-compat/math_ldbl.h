@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_LDBL_H_IBM128_COMPAT
-#define _MATH_LDBL_H_IBM128_COMPAT 1
+#  define _MATH_LDBL_H_IBM128_COMPAT 1
 
-#include <bits/floatn.h>
+#  include <bits/floatn.h>
 
 /* Trampoline in the ldbl-128ibm headers if building against the
    old abi.  Otherwise, we have nothing to add. */
-#if __LDOUBLE_REDIRECTS_TO_FLOAT128_ABI == 0
-#include_next <math_ldbl.h>
-#endif
+#  if __LDOUBLE_REDIRECTS_TO_FLOAT128_ABI == 0
+#    include_next <math_ldbl.h>
+#  endif
 
 #endif /* _MATH_LDBL_H_IBM128_COMPAT */

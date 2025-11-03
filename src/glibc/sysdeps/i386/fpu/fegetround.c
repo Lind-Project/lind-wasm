@@ -23,10 +23,9 @@ __fegetround (void)
 {
   int cw;
 
-  __asm__ ("fnstcw %0" : "=m" (*&cw));
+  __asm__ ("fnstcw %0" : "=m"(*&cw));
 
   return cw & 0xc00;
 }
-libm_hidden_def (__fegetround)
-weak_alias (__fegetround, fegetround)
-libm_hidden_weak (fegetround)
+libm_hidden_def (__fegetround) weak_alias (__fegetround, fegetround)
+    libm_hidden_weak (fegetround)

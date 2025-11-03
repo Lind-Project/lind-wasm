@@ -29,8 +29,7 @@
 static ucontext_t ctx[5];
 static atomic_int done;
 
-static void
-__attribute__((noinline)) __attribute_noclone__
+static void __attribute__ ((noinline)) __attribute_noclone__
 f2 (void)
 {
   printf ("start f2\n");
@@ -100,7 +99,8 @@ do_test (void)
     {
       if (ctx[3].__ssp[1] != 0
 	  && munmap ((void *) (uintptr_t) ctx[3].__ssp[1],
-		     (size_t) ctx[3].__ssp[2]) != 0)
+		     (size_t) ctx[3].__ssp[2])
+		 != 0)
 	{
 	  printf ("%s: munmap: %m\n", __FUNCTION__);
 	  exit (EXIT_FAILURE);
@@ -108,7 +108,8 @@ do_test (void)
 
       if (ctx[4].__ssp[1] != 0
 	  && munmap ((void *) (uintptr_t) ctx[4].__ssp[1],
-		     (size_t) ctx[4].__ssp[2]) != 0)
+		     (size_t) ctx[4].__ssp[2])
+		 != 0)
 	{
 	  printf ("%s: munmap: %m\n", __FUNCTION__);
 	  exit (EXIT_FAILURE);

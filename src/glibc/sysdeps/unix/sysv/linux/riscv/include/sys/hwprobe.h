@@ -1,8 +1,8 @@
 #ifndef _SYS_HWPROBE_H
-# include_next <sys/hwprobe.h>
+#  include_next <sys/hwprobe.h>
 
-#ifndef _ISOMAC
+#  ifndef _ISOMAC
 libc_hidden_proto (__riscv_hwprobe)
-#endif
+#  endif
 
 #endif

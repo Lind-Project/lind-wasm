@@ -19,9 +19,9 @@
 /* We always need to build this implementation as strspn-sse4 needs to
    be able to fallback to it.  */
 #include <isa-level.h>
-#if ISA_SHOULD_BUILD (2)
+#if ISA_SHOULD_BUILD(2)
 
-# define WCPCPY __wcpcpy_generic
-# include <wcsmbs/wcpcpy.c>
+#  define WCPCPY __wcpcpy_generic
+#  include <wcsmbs/wcpcpy.c>
 
 #endif

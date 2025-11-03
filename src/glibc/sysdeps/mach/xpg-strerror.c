@@ -29,8 +29,9 @@
    `dgettext' to use `dcgettext' for optimizing programs this is not
    always guaranteed.  */
 #ifndef dgettext
-# include <locale.h>		/* We need LC_MESSAGES.  */
-# define dgettext(domainname, msgid) dcgettext (domainname, msgid, LC_MESSAGES)
+#  include <locale.h> /* We need LC_MESSAGES.  */
+#  define dgettext(domainname, msgid)                                         \
+    dcgettext (domainname, msgid, LC_MESSAGES)
 #endif
 
 /* Fill buf with a string describing the errno code in ERRNUM.  */
@@ -50,9 +51,9 @@ __xpg_strerror_r (int errnum, char *buf, size_t buflen)
   sub = err_get_sub (errnum);
   code = err_get_code (errnum);
 
-  if (system > err_max_system || ! __mach_error_systems[system].bad_sub)
+  if (system > err_max_system || !__mach_error_systems[system].bad_sub)
     {
-      __snprintf (buf, buflen, "%s%X", _("Error in unknown error system: "),
+      __snprintf (buf, buflen, "%s%X", _ ("Error in unknown error system: "),
 		  errnum);
       return EINVAL;
     }
@@ -64,7 +65,7 @@ __xpg_strerror_r (int errnum, char *buf, size_t buflen)
   else if (code >= es->subsystem[sub].max_code)
     return EINVAL;
   else
-    estr = (const char *) _(es->subsystem[sub].codes[code]);
+    estr = (const char *) _ (es->subsystem[sub].codes[code]);
 
   size_t estrlen = strlen (estr);
 

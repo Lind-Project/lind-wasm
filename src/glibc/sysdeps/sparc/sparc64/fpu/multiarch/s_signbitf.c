@@ -22,7 +22,5 @@
 extern int __signbitf_vis3 (float) attribute_hidden;
 extern int __signbitf_generic (float) attribute_hidden;
 
-sparc_libm_ifunc(__signbitf,
-		 hwcap & HWCAP_SPARC_VIS3
-		 ? __signbitf_vis3
-		 : __signbitf_generic);
+sparc_libm_ifunc (__signbitf, hwcap &HWCAP_SPARC_VIS3 ? __signbitf_vis3
+						      : __signbitf_generic);

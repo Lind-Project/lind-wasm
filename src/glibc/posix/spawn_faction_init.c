@@ -22,7 +22,6 @@
 
 #include "spawn_int.h"
 
-
 /* Function used to increase the size of the allocated array.  This
    function is called from the `add'-functions.  */
 int
@@ -41,7 +40,6 @@ __posix_spawn_file_actions_realloc (posix_spawn_file_actions_t *file_actions)
 
   return 0;
 }
-
 
 /* Initialize data structure for file attribute for `spawn' call.  */
 int

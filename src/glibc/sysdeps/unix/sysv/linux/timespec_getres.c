@@ -33,8 +33,7 @@ __timespec_getres64 (struct __timespec64 *ts, int base)
 #if __TIMESIZE != 64
 libc_hidden_def (__timespec_getres64)
 
-int
-__timespec_getres (struct timespec *ts, int base)
+    int __timespec_getres (struct timespec *ts, int base)
 {
   int ret;
   struct __timespec64 tp64;

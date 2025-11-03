@@ -26,7 +26,7 @@ pthread_mutex_t mtx_errorchk = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 pthread_mutex_t mtx_adaptive = PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP;
 pthread_rwlock_t rwl_normal = PTHREAD_RWLOCK_INITIALIZER;
 pthread_rwlock_t rwl_writer
-  = PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP;
+    = PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 static int

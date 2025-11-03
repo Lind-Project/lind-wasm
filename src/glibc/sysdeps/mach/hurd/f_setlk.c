@@ -30,15 +30,22 @@
    by using flock.  This is definitely the Wrong Thing,
    but it might be better than nothing (?).  */
 int
-__f_setlk (int fd, int type, int whence, __off64_t start, __off64_t len, int wait)
+__f_setlk (int fd, int type, int whence, __off64_t start, __off64_t len,
+	   int wait)
 {
   int cmd = 0;
 
   switch (type)
     {
-    case F_RDLCK: cmd = LOCK_SH; break;
-    case F_WRLCK: cmd = LOCK_EX; break;
-    case F_UNLCK: cmd = LOCK_UN; break;
+    case F_RDLCK:
+      cmd = LOCK_SH;
+      break;
+    case F_WRLCK:
+      cmd = LOCK_EX;
+      break;
+    case F_UNLCK:
+      cmd = LOCK_UN;
+      break;
     default:
       return __hurd_fail (EINVAL);
     }

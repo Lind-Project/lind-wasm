@@ -24,8 +24,8 @@
    librt, so ensure they remain as part of the ABI.  */
 
 #ifdef SHARED
-# undef SHLIB_COMPAT
-# define SHLIB_COMPAT(lib, introduced, obsoleted) 1
+#  undef SHLIB_COMPAT
+#  define SHLIB_COMPAT(lib, introduced, obsoleted) 1
 #endif
 
 #include <rt/clock-compat.c>

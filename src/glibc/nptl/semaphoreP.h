@@ -20,9 +20,10 @@
 #include <futex-internal.h>
 #include "pthreadP.h"
 
-#define SEM_SHM_PREFIX  "sem."
+#define SEM_SHM_PREFIX "sem."
 
-static inline void __new_sem_open_init (struct new_sem *sem, unsigned value)
+static inline void
+__new_sem_open_init (struct new_sem *sem, unsigned value)
 {
 #if __HAVE_64B_ATOMICS
   sem->data = value;
@@ -48,14 +49,12 @@ extern int __new_sem_trywait (sem_t *sem);
 extern int __new_sem_getvalue (sem_t *sem, int *sval);
 
 #if __TIMESIZE == 64
-# define __sem_clockwait64 __sem_clockwait
-# define __sem_timedwait64 __sem_timedwait
+#  define __sem_clockwait64 __sem_clockwait
+#  define __sem_timedwait64 __sem_timedwait
 #else
-extern int
-__sem_clockwait64 (sem_t *sem, clockid_t clockid,
-                   const struct __timespec64 *abstime);
-libc_hidden_proto (__sem_clockwait64)
-extern int
-__sem_timedwait64 (sem_t *sem, const struct __timespec64 *abstime);
+extern int __sem_clockwait64 (sem_t *sem, clockid_t clockid,
+			      const struct __timespec64 *abstime);
+libc_hidden_proto (__sem_clockwait64) extern int __sem_timedwait64 (
+    sem_t *sem, const struct __timespec64 *abstime);
 libc_hidden_proto (__sem_timedwait64)
 #endif

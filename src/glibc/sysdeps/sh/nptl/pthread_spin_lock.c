@@ -24,16 +24,13 @@ __pthread_spin_lock (pthread_spinlock_t *lock)
   unsigned int val;
 
   do
-    asm volatile ("tas.b @%1; movt %0"
-		  : "=&r" (val)
-		  : "r" (lock)
-		  : "memory");
+    asm volatile ("tas.b @%1; movt %0" : "=&r"(val) : "r"(lock) : "memory");
   while (val == 0);
 
   return 0;
 }
 versioned_symbol (libc, __pthread_spin_lock, pthread_spin_lock, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_spin_lock, pthread_spin_lock, GLIBC_2_2);
 #endif

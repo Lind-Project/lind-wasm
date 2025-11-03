@@ -17,37 +17,37 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_ERRNO_H
-#define _BITS_ERRNO_H 1
+#  define _BITS_ERRNO_H 1
 
-#if !defined _ERRNO_H
-# error "Never include <bits/errno.h> directly; use <errno.h> instead."
-#endif
+#  if !defined _ERRNO_H
+#    error "Never include <bits/errno.h> directly; use <errno.h> instead."
+#  endif
 
-# include <linux/errno.h>
+#  include <linux/errno.h>
 
 /* Older Linux headers do not define these constants.  */
-# ifndef ENOTSUP
-#  define ENOTSUP		EOPNOTSUPP
-# endif
+#  ifndef ENOTSUP
+#    define ENOTSUP EOPNOTSUPP
+#  endif
 
-# ifndef ECANCELED
-#  define ECANCELED		127
-# endif
+#  ifndef ECANCELED
+#    define ECANCELED 127
+#  endif
 
-# ifndef EOWNERDEAD
-#  define EOWNERDEAD		132
-# endif
+#  ifndef EOWNERDEAD
+#    define EOWNERDEAD 132
+#  endif
 
-# ifndef ENOTRECOVERABLE
-#  define ENOTRECOVERABLE	133
-# endif
+#  ifndef ENOTRECOVERABLE
+#    define ENOTRECOVERABLE 133
+#  endif
 
-# ifndef ERFKILL
-#  define ERFKILL		134
-# endif
+#  ifndef ERFKILL
+#    define ERFKILL 134
+#  endif
 
-# ifndef EHWPOISON
-#  define EHWPOISON		135
-# endif
+#  ifndef EHWPOISON
+#    define EHWPOISON 135
+#  endif
 
 #endif /* bits/errno.h.  */

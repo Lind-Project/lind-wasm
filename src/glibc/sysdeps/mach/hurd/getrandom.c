@@ -21,10 +21,10 @@
 #include <fcntl.h>
 
 __libc_rwlock_define_initialized (static, lock);
-static file_t random_server, random_server_nonblock,
-              urandom_server, urandom_server_nonblock;
+static file_t random_server, random_server_nonblock, urandom_server,
+    urandom_server_nonblock;
 
-extern char *__trivfs_server_name __attribute__((weak));
+extern char *__trivfs_server_name __attribute__ ((weak));
 
 /* Write up to LENGTH bytes of randomness starting at BUFFER.
    Return the number of bytes written, or -1 on error.  */
@@ -64,12 +64,9 @@ __getrandom (void *buffer, size_t length, unsigned int flags)
      to file_name_lookup, since we're not making an fd.  */
 
   if (&__trivfs_server_name && __trivfs_server_name
-      && __trivfs_server_name[0] == 'r'
-      && __trivfs_server_name[1] == 'a'
-      && __trivfs_server_name[2] == 'n'
-      && __trivfs_server_name[3] == 'd'
-      && __trivfs_server_name[4] == 'o'
-      && __trivfs_server_name[5] == 'm'
+      && __trivfs_server_name[0] == 'r' && __trivfs_server_name[1] == 'a'
+      && __trivfs_server_name[2] == 'n' && __trivfs_server_name[3] == 'd'
+      && __trivfs_server_name[4] == 'o' && __trivfs_server_name[5] == 'm'
       && __trivfs_server_name[6] == '\0')
     /* We are random, don't try to read ourselves!  */
     return length;
@@ -90,37 +87,37 @@ again:
       mach_port_urefs_t urefs;
 
       /* Slow path: the cached port didn't work, or there was no
-         cached port in the first place.  */
+	 cached port in the first place.  */
 
       __libc_rwlock_wrlock (lock);
       server = *cached_server;
       if (server != oldserver)
-        {
-          /* Someone else must have refetched the port while we were
-             waiting for the lock. */
-          __libc_rwlock_unlock (lock);
-          goto again;
-        }
+	{
+	  /* Someone else must have refetched the port while we were
+	     waiting for the lock. */
+	  __libc_rwlock_unlock (lock);
+	  goto again;
+	}
 
       if (MACH_PORT_VALID (server))
-        {
-          /* It could be that someone else has refetched the port and
-             it got the very same name.  So check whether it is a send
-             right (and not a dead name).  */
-          err = __mach_port_get_refs (__mach_task_self (), server,
-                                      MACH_PORT_RIGHT_SEND, &urefs);
-          if (!err && urefs > 0)
-            {
-              __libc_rwlock_unlock (lock);
-              goto again;
-            }
+	{
+	  /* It could be that someone else has refetched the port and
+	     it got the very same name.  So check whether it is a send
+	     right (and not a dead name).  */
+	  err = __mach_port_get_refs (__mach_task_self (), server,
+				      MACH_PORT_RIGHT_SEND, &urefs);
+	  if (!err && urefs > 0)
+	    {
+	      __libc_rwlock_unlock (lock);
+	      goto again;
+	    }
 
-          /* Now we're sure that it's dead.  */
-          __mach_port_deallocate (__mach_task_self (), server);
-        }
+	  /* Now we're sure that it's dead.  */
+	  __mach_port_deallocate (__mach_task_self (), server);
+	}
 
-      server = *cached_server = __file_name_lookup (random_source,
-                                                    open_flags, 0);
+      server = *cached_server
+	  = __file_name_lookup (random_source, open_flags, 0);
       __libc_rwlock_unlock (lock);
       if (!MACH_PORT_VALID (server))
 	{
@@ -140,10 +137,10 @@ again:
   if (data != buffer)
     {
       if (nread > length)
-        {
-          __vm_deallocate (__mach_task_self (), (vm_address_t) data, nread);
-          return __hurd_fail (EGRATUITOUS);
-        }
+	{
+	  __vm_deallocate (__mach_task_self (), (vm_address_t) data, nread);
+	  return __hurd_fail (EGRATUITOUS);
+	}
       memcpy (buffer, data, nread);
       __vm_deallocate (__mach_task_self (), (vm_address_t) data, nread);
     }
@@ -151,5 +148,4 @@ again:
   return nread;
 }
 
-libc_hidden_def (__getrandom)
-weak_alias (__getrandom, getrandom)
+libc_hidden_def (__getrandom) weak_alias (__getrandom, getrandom)

@@ -25,22 +25,21 @@ __feholdexcept (fenv_t *envp)
 
   /* Store the environment.  */
 #ifdef __mcoldfire__
-  __asm__ ("fmove%.l %/fpcr,%0" : "=dm" (envp->__control_register));
-  __asm__ ("fmove%.l %/fpsr,%0" : "=dm" (envp->__status_register));
-  __asm__ ("fmove%.l %/fpiar,%0" : "=dm" (envp->__instruction_address));
+  __asm__ ("fmove%.l %/fpcr,%0" : "=dm"(envp->__control_register));
+  __asm__ ("fmove%.l %/fpsr,%0" : "=dm"(envp->__status_register));
+  __asm__ ("fmove%.l %/fpiar,%0" : "=dm"(envp->__instruction_address));
 #else
-  __asm__ ("fmovem%.l %/fpcr/%/fpsr/%/fpiar,%0" : "=m" (*envp));
+  __asm__ ("fmovem%.l %/fpcr/%/fpsr/%/fpiar,%0" : "=m"(*envp));
 #endif
 
   /* Now clear all exceptions.  */
   fpsr = envp->__status_register & ~FE_ALL_EXCEPT;
-  __asm__ __volatile__ ("fmove%.l %0,%/fpsr" : : "dm" (fpsr));
+  __asm__ __volatile__ ("fmove%.l %0,%/fpsr" : : "dm"(fpsr));
   /* And set all exceptions to non-stop.  */
   fpcr = envp->__control_register & ~(FE_ALL_EXCEPT << 6);
-  __asm__ __volatile__ ("fmove%.l %0,%!" : : "dm" (fpcr));
+  __asm__ __volatile__ ("fmove%.l %0,%!" : : "dm"(fpcr));
 
   return 0;
 }
-libm_hidden_def (__feholdexcept)
-weak_alias (__feholdexcept, feholdexcept)
-libm_hidden_weak (feholdexcept)
+libm_hidden_def (__feholdexcept) weak_alias (__feholdexcept, feholdexcept)
+    libm_hidden_weak (feholdexcept)

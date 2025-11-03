@@ -18,8 +18,8 @@
 
 #define STRSPN __strspn_ppc
 #ifdef SHARED
-#undef libc_hidden_def
-#define libc_hidden_def(name)
+#  undef libc_hidden_def
+#  define libc_hidden_def(name)
 #endif
 
 #include <string/strspn.c>

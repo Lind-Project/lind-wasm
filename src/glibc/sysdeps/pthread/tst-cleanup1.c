@@ -20,14 +20,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static int do_test (void);
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"
 
 static int global;
-
 
 static void
 ch (void *arg)
@@ -39,7 +37,6 @@ ch (void *arg)
   global *= val;
   global += val;
 }
-
 
 static void *
 tf (void *a)
@@ -62,7 +59,6 @@ tf (void *a)
 
   return NULL;
 }
-
 
 int
 do_test (void)

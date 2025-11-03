@@ -17,37 +17,37 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PLATFORM_PPC_H
-#define _SYS_PLATFORM_PPC_H	1
+#  define _SYS_PLATFORM_PPC_H 1
 
-#include <features.h>
-#include <stdint.h>
-#include <bits/ppc.h>
+#  include <features.h>
+#  include <stdint.h>
+#  include <bits/ppc.h>
 
 /* Read the Time Base Register.   */
 static __inline__ uint64_t
 __ppc_get_timebase (void)
 {
-#if __GNUC_PREREQ (4, 8)
+#  if __GNUC_PREREQ(4, 8)
   return __builtin_ppc_get_timebase ();
-#else
-# ifdef __powerpc64__
+#  else
+#    ifdef __powerpc64__
   uint64_t __tb;
   /* "volatile" is necessary here, because the user expects this assembly
      isn't moved after an optimization.  */
-  __asm__ volatile ("mfspr %0, 268" : "=r" (__tb));
+  __asm__ volatile ("mfspr %0, 268" : "=r"(__tb));
   return __tb;
-# else  /* not __powerpc64__ */
-  uint32_t __tbu, __tbl, __tmp; \
+#    else  /* not __powerpc64__ */
+  uint32_t __tbu, __tbl, __tmp;
   __asm__ volatile ("0:\n\t"
 		    "mftbu %0\n\t"
 		    "mftbl %1\n\t"
 		    "mftbu %2\n\t"
 		    "cmpw %0, %2\n\t"
 		    "bne- 0b"
-		    : "=r" (__tbu), "=r" (__tbl), "=r" (__tmp));
+		    : "=r"(__tbu), "=r"(__tbl), "=r"(__tmp));
   return (((uint64_t) __tbu << 32) | __tbl);
-# endif  /* not __powerpc64__ */
-#endif
+#    endif /* not __powerpc64__ */
+#  endif
 }
 
 /* The following functions provide hints about the usage of shared processor
@@ -81,7 +81,6 @@ __ppc_mdoom (void)
 {
   __asm__ volatile ("or 30,30,30");
 }
-
 
 /* ISA 2.05 and beyond support the Program Priority Register (PPR) to adjust
    thread priorities based on lock acquisition, wait and release. The ISA
@@ -127,7 +126,7 @@ __ppc_set_ppr_low (void)
    field is set to medium.
  */
 
-#ifdef _ARCH_PWR8
+#  ifdef _ARCH_PWR8
 
 static __inline__ void
 __ppc_set_ppr_very_low (void)
@@ -141,6 +140,6 @@ __ppc_set_ppr_med_high (void)
   __asm__ volatile ("or 5,5,5");
 }
 
-#endif
+#  endif
 
-#endif  /* sys/platform/ppc.h */
+#endif /* sys/platform/ppc.h */

@@ -21,29 +21,29 @@
 
 #define M_LIT(c) __f128 (c)
 #define M_PFX FLT128
-#define M_SUF(c) c ## f128
+#define M_SUF(c) c##f128
 #define FLOAT _Float128
 #define M_STRTO_NAN __strtof128_nan
-#define M_USE_BUILTIN(c) USE_ ##c ##F128_BUILTIN
+#define M_USE_BUILTIN(c) USE_##c##F128_BUILTIN
 
 #define CFLOAT __CFLOAT128
 
-#define M_MLIT(c) c ## f128
+#define M_MLIT(c) c##f128
 
 #include <libm-alias-float128.h>
 #include <math-nan-payload-float128.h>
 
 #ifndef declare_mgen_alias
-# define declare_mgen_alias(from, to) libm_alias_float128 (from, to)
+#  define declare_mgen_alias(from, to) libm_alias_float128 (from, to)
 #endif
 
 #ifndef declare_mgen_alias_r
-# define declare_mgen_alias_r(from, to) libm_alias_float128_r (from, to, _r)
+#  define declare_mgen_alias_r(from, to) libm_alias_float128_r (from, to, _r)
 #endif
 
 #ifndef declare_mgen_alias_narrow
-# define declare_mgen_alias_narrow(from, to)	\
-  libm_alias_float128_narrow (from, to)
+#  define declare_mgen_alias_narrow(from, to)                                 \
+    libm_alias_float128_narrow (from, to)
 #endif
 
 /* Supply the generic macros.  */

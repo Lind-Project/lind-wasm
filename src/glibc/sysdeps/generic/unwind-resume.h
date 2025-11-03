@@ -19,15 +19,14 @@
 /* These describe the arguments to unwinder personality functions,
    specifically __gcc_personality_v0.  A machine-specific sysdeps
    file might define them differently.  */
-#define PERSONALITY_PROTO                       \
-  (int version, _Unwind_Action actions,         \
-   _Unwind_Exception_Class exception_class,     \
-   struct _Unwind_Exception *ue_header,         \
-   struct _Unwind_Context *context)
-#define PERSONALITY_ARGS                                        \
+#define PERSONALITY_PROTO                                                     \
+  (int version, _Unwind_Action actions,                                       \
+   _Unwind_Exception_Class exception_class,                                   \
+   struct _Unwind_Exception *ue_header, struct _Unwind_Context *context)
+#define PERSONALITY_ARGS                                                      \
   (version, actions, exception_class, ue_header, context)
 
 /* This is defined nonzero by a machine-specific sysdeps file if
    _Unwind_Resume is provided separately and thus the generic C
    version should not be defined.  */
-#define HAVE_ARCH_UNWIND_RESUME		0
+#define HAVE_ARCH_UNWIND_RESUME 0

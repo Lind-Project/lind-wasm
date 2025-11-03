@@ -17,9 +17,9 @@
 
 #include <shlib-compat.h>
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
-# include "pthreadP.h"
-# include <libc-lock.h>
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34)
+#  include "pthreadP.h"
+#  include <libc-lock.h>
 
 void attribute_compat_text_section
 _pthread_cleanup_push_defer (struct _pthread_cleanup_buffer *buffer,

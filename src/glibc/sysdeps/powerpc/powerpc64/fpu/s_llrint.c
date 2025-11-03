@@ -37,19 +37,16 @@ long long int
 __llrint (double x)
 {
   long int ret;
-  __asm__ ("fctid %0, %1" : "=d" (ret) : "d" (x));
+  __asm__ ("fctid %0, %1" : "=d"(ret) : "d"(x));
   return ret;
 }
 #ifndef __llrint
-strong_alias (__llrint, __lrint)
-libm_alias_double (__llrint, llrint)
-libm_alias_double (__lrint, lrint)
+strong_alias (__llrint, __lrint) libm_alias_double (__llrint, llrint)
+    libm_alias_double (__lrint, lrint)
 
-/* The double version also works for single-precision as both float and
-   double parameters are passed in 64bit FPRs and both versions are expected
-   to return [long] long type.  */
-strong_alias (__llrint, __llrintf)
-libm_alias_float (__llrint, llrint)
-strong_alias (__lrint, __lrintf)
-libm_alias_float (__lrint, lrint)
+    /* The double version also works for single-precision as both float and
+       double parameters are passed in 64bit FPRs and both versions are
+       expected to return [long] long type.  */
+    strong_alias (__llrint, __llrintf) libm_alias_float (__llrint, llrint)
+	strong_alias (__lrint, __lrintf) libm_alias_float (__lrint, lrint)
 #endif

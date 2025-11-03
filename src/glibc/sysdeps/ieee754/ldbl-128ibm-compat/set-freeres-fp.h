@@ -16,7 +16,7 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-extern char * __libc_efgcvtieee128_freemem_ptr attribute_hidden;
+extern char *__libc_efgcvtieee128_freemem_ptr attribute_hidden;
 
-#define call_freeres_fp_funcs \
+#define call_freeres_fp_funcs                                                 \
   call_free_static_weak (__libc_efgcvtieee128_freemem_ptr)

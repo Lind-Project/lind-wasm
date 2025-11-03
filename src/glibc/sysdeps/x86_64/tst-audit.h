@@ -19,14 +19,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef __ILP32__
-# define pltenter la_x86_64_gnu_pltenter
-# define pltexit la_x86_64_gnu_pltexit
-# define La_regs La_x86_64_regs
-# define La_retval La_x86_64_retval
+#  define pltenter la_x86_64_gnu_pltenter
+#  define pltexit la_x86_64_gnu_pltexit
+#  define La_regs La_x86_64_regs
+#  define La_retval La_x86_64_retval
 #else
-# define pltenter la_x32_gnu_pltenter
-# define pltexit la_x32_gnu_pltexit
-# define La_regs La_x32_regs
-# define La_retval La_x32_retval
+#  define pltenter la_x32_gnu_pltenter
+#  define pltexit la_x32_gnu_pltexit
+#  define La_regs La_x32_regs
+#  define La_retval La_x32_retval
 #endif
 #define int_retval lrv_rax

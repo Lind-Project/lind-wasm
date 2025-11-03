@@ -26,23 +26,26 @@
 
 #include <support/test-driver.h>
 
-#define call_str(f, name) f(name, #name)
+#define call_str(f, name) f (name, #name)
 
 long
-do_sysconf (int name, const char * str)
+do_sysconf (int name, const char *str)
 {
   int rc = 0;
   long val;
   errno = 0;
   val = sysconf (name);
-  if (val == -1) {
-    if (errno != EINVAL) {
-      printf("error: sysconf(%s): unexpected errno(%d)\n", str, errno);
-      exit (1);
+  if (val == -1)
+    {
+      if (errno != EINVAL)
+	{
+	  printf ("error: sysconf(%s): unexpected errno(%d)\n", str, errno);
+	  exit (1);
+	}
+      printf ("info: sysconf(%s): unsupported\n", str);
+      rc = 1;
     }
-    printf ("info: sysconf(%s): unsupported\n", str);
-    rc = 1;
-  } else
+  else
     printf ("sysconf(%s) = 0x%lx (%ld)\n", str, val, val);
   return rc;
 }

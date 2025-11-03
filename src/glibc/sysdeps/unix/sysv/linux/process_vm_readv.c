@@ -23,10 +23,9 @@
 
 ssize_t
 process_vm_readv (pid_t pid, const struct iovec *local_iov,
-		  unsigned long int liovcnt,
-		  const struct iovec *remote_iov,
+		  unsigned long int liovcnt, const struct iovec *remote_iov,
 		  unsigned long int riovcnt, unsigned long int flags)
 {
-  return INLINE_SYSCALL_CALL (process_vm_readv, pid, local_iov,
-			      liovcnt, remote_iov, riovcnt, flags);
+  return INLINE_SYSCALL_CALL (process_vm_readv, pid, local_iov, liovcnt,
+			      remote_iov, riovcnt, flags);
 }

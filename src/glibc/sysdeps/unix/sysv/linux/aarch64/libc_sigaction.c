@@ -16,15 +16,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Required for AArch32 compatibility. */
-#define SA_RESTORER	0x04000000
+#define SA_RESTORER 0x04000000
 
-#define SET_SA_RESTORER(kact, act)		\
- ({						\
-    if ((kact)->sa_flags & SA_RESTORER)		\
-      (kact)->sa_restorer = (act)->sa_restorer;	\
- })
+#define SET_SA_RESTORER(kact, act)                                            \
+  ({                                                                          \
+    if ((kact)->sa_flags & SA_RESTORER)                                       \
+      (kact)->sa_restorer = (act)->sa_restorer;                               \
+  })
 
-#define RESET_SA_RESTORER(act, kact)		\
-  (act)->sa_restorer = (kact)->sa_restorer;
+#define RESET_SA_RESTORER(act, kact) (act)->sa_restorer = (kact)->sa_restorer;
 
 #include <sysdeps/unix/sysv/linux/libc_sigaction.c>

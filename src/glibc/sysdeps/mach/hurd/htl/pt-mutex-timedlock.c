@@ -24,8 +24,7 @@
 #include <hurdlock.h>
 
 int
-__pthread_mutex_clocklock (pthread_mutex_t *mtxp,
-			   clockid_t clockid,
+__pthread_mutex_clocklock (pthread_mutex_t *mtxp, clockid_t clockid,
 			   const struct timespec *tsp)
 {
   struct __pthread *self;
@@ -47,7 +46,8 @@ __pthread_mutex_clocklock (pthread_mutex_t *mtxp,
 	  ++mtxp->__cnt;
 	  ret = 0;
 	}
-      else if ((ret = lll_abstimed_lock (mtxp->__lock, tsp, flags, clockid)) == 0)
+      else if ((ret = lll_abstimed_lock (mtxp->__lock, tsp, flags, clockid))
+	       == 0)
 	{
 	  mtx_set_owner (mtxp, self, flags);
 	  mtxp->__cnt = 1;
@@ -59,7 +59,8 @@ __pthread_mutex_clocklock (pthread_mutex_t *mtxp,
       self = _pthread_self ();
       if (mtx_owned_p (mtxp, self, flags))
 	ret = EDEADLK;
-      else if ((ret = lll_abstimed_lock (mtxp->__lock, tsp, flags, clockid)) == 0)
+      else if ((ret = lll_abstimed_lock (mtxp->__lock, tsp, flags, clockid))
+	       == 0)
 	mtx_set_owner (mtxp, self, flags);
 
       break;
@@ -80,11 +81,10 @@ __pthread_mutex_clocklock (pthread_mutex_t *mtxp,
 }
 weak_alias (__pthread_mutex_clocklock, pthread_mutex_clocklock)
 
-int
-__pthread_mutex_timedlock (pthread_mutex_t *mutex,
-			   const struct timespec *tsp)
+    int __pthread_mutex_timedlock (pthread_mutex_t *mutex,
+				   const struct timespec *tsp)
 {
   return __pthread_mutex_clocklock (mutex, CLOCK_REALTIME, tsp);
 }
 weak_alias (__pthread_mutex_timedlock, pthread_mutex_timedlock)
-hidden_def (__pthread_mutex_timedlock)
+    hidden_def (__pthread_mutex_timedlock)

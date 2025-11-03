@@ -37,8 +37,7 @@ fchmodat_fallback (int fd, const char *file, mode_t mode, int flag)
      However, we can create an O_PATH descriptor and change that
      via /proc (which does not resolve symbolic links).  */
 
-  int pathfd = __openat_nocancel (fd, file,
-				  O_PATH | O_NOFOLLOW | O_CLOEXEC);
+  int pathfd = __openat_nocancel (fd, file, O_PATH | O_NOFOLLOW | O_CLOEXEC);
   if (pathfd < 0)
     /* This may report errors such as ENFILE and EMFILE.  The
        caller can treat them as temporary if necessary.  */

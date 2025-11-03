@@ -26,7 +26,7 @@ unsigned long int
 __malloc_default_thp_pagesize (void)
 {
   int fd = __open64_nocancel (
-    "/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", O_RDONLY);
+      "/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", O_RDONLY);
   if (fd == -1)
     return 0;
 
@@ -55,11 +55,11 @@ __malloc_thp_mode (void)
   if (fd == -1)
     return malloc_thp_mode_not_supported;
 
-  static const char mode_always[]  = "[always] madvise never\n";
+  static const char mode_always[] = "[always] madvise never\n";
   static const char mode_madvise[] = "always [madvise] never\n";
-  static const char mode_never[]   = "always madvise [never]\n";
+  static const char mode_never[] = "always madvise [never]\n";
 
-  char str[sizeof(mode_always)];
+  char str[sizeof (mode_always)];
   ssize_t s = __read_nocancel (fd, str, sizeof (str));
   if (s >= sizeof str || s < 0)
     return malloc_thp_mode_not_supported;
@@ -157,27 +157,27 @@ __malloc_hugepage_config (size_t requested, size_t *pagesize, int *flags)
   while (true)
     {
 #if !IS_IN(libc)
-# define __getdents64 getdents64
+#  define __getdents64 getdents64
 #endif
       ssize_t ret = __getdents64 (dirfd, buffer, sizeof (buffer));
       if (ret == -1)
 	break;
       else if (ret == 0)
-        break;
+	break;
 
       bool found = false;
       char *begin = buffer, *end = buffer + ret;
       while (begin != end)
-        {
-          unsigned short int d_reclen;
-          memcpy (&d_reclen, begin + offsetof (struct dirent64, d_reclen),
-                  sizeof (d_reclen));
-          const char *dname = begin + offsetof (struct dirent64, d_name);
-          begin += d_reclen;
+	{
+	  unsigned short int d_reclen;
+	  memcpy (&d_reclen, begin + offsetof (struct dirent64, d_reclen),
+		  sizeof (d_reclen));
+	  const char *dname = begin + offsetof (struct dirent64, d_name);
+	  begin += d_reclen;
 
-          if (dname[0] == '.'
+	  if (dname[0] == '.'
 	      || strncmp (dname, "hugepages-", sizeof ("hugepages-") - 1) != 0)
-            continue;
+	    continue;
 
 	  size_t hpsize = 0;
 	  const char *sizestr = dname + sizeof ("hugepages-") - 1;
@@ -195,7 +195,7 @@ __malloc_hugepage_config (size_t requested, size_t *pagesize, int *flags)
 	      found = true;
 	      break;
 	    }
-        }
+	}
       if (found)
 	break;
     }

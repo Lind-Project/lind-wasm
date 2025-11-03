@@ -7,4 +7,4 @@ __GI___sysinfo (struct sysinfo *__info)
   return 0;
 }
 
-weak_alias(__GI___sysinfo, __sysinfo)
+weak_alias (__GI___sysinfo, __sysinfo)

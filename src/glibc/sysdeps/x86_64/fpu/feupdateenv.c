@@ -25,7 +25,7 @@ __feupdateenv (const fenv_t *envp)
   unsigned int xtemp;
 
   /* Save current exceptions.  */
-  __asm__ ("fnstsw %0\n\tstmxcsr %1" : "=m" (*&temp), "=m" (xtemp));
+  __asm__ ("fnstsw %0\n\tstmxcsr %1" : "=m"(*&temp), "=m"(xtemp));
   temp = (temp | xtemp) & FE_ALL_EXCEPT;
 
   /* Install new environment.  */
@@ -41,11 +41,10 @@ __feupdateenv (const fenv_t *envp)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__feupdateenv, __old_feupdateenv)
-compat_symbol (libm, __old_feupdateenv, feupdateenv, GLIBC_2_1);
+    compat_symbol (libm, __old_feupdateenv, feupdateenv, GLIBC_2_1);
 #endif
 
-libm_hidden_def (__feupdateenv)
-libm_hidden_ver (__feupdateenv, feupdateenv)
-versioned_symbol (libm, __feupdateenv, feupdateenv, GLIBC_2_2);
+libm_hidden_def (__feupdateenv) libm_hidden_ver (__feupdateenv, feupdateenv)
+    versioned_symbol (libm, __feupdateenv, feupdateenv, GLIBC_2_2);

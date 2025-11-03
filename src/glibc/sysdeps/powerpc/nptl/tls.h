@@ -17,47 +17,46 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TLS_H
-#define _TLS_H	1
+#  define _TLS_H 1
 
-# include <dl-sysdep.h>
+#  include <dl-sysdep.h>
 
-#ifndef __ASSEMBLER__
-# include <stdbool.h>
-# include <stddef.h>
-# include <stdint.h>
-# include <dl-dtv.h>
-# include <thread_pointer.h>
+#  ifndef __ASSEMBLER__
+#    include <stdbool.h>
+#    include <stddef.h>
+#    include <stdint.h>
+#    include <dl-dtv.h>
+#    include <thread_pointer.h>
 
-#else /* __ASSEMBLER__ */
-# include <tcb-offsets.h>
-# define __ASSEMBLY__
-# include <asm/ptrace.h>
-#endif /* __ASSEMBLER__ */
+#  else /* __ASSEMBLER__ */
+#    include <tcb-offsets.h>
+#    define __ASSEMBLY__
+#    include <asm/ptrace.h>
+#  endif /* __ASSEMBLER__ */
 
-#ifndef __powerpc64__
+#  ifndef __powerpc64__
 /* Register r2 (tp) is reserved by the ABI as "thread pointer". */
-# define PT_THREAD_POINTER PT_R2
+#    define PT_THREAD_POINTER PT_R2
 
-#else /* __powerpc64__ */
+#  else /* __powerpc64__ */
 /* Register r13 (tp) is reserved by the ABI as "thread pointer". */
-# define PT_THREAD_POINTER PT_R13
-#endif /* __powerpc64__ */
+#    define PT_THREAD_POINTER PT_R13
+#  endif /* __powerpc64__ */
 
-#ifndef __ASSEMBLER__
+#  ifndef __ASSEMBLER__
 
 /* Get system call information.  */
-# include <sysdep.h>
+#    include <sysdep.h>
 
 /* The TP points to the start of the thread blocks.  */
-# define TLS_DTV_AT_TP	1
-# define TLS_TCB_AT_TP	0
+#    define TLS_DTV_AT_TP 1
+#    define TLS_TCB_AT_TP 0
 
 /* We use the multiple_threads field in the pthread struct */
-#define TLS_MULTIPLE_THREADS_IN_TCB	1
+#    define TLS_MULTIPLE_THREADS_IN_TCB 1
 
 /* Get the thread descriptor definition.  */
-# include <nptl/descr.h>
-
+#    include <nptl/descr.h>
 
 /* The stack_guard is accessed directly by GCC -fstack-protector code,
    so it is a part of public ABI.  The dtv and pointer_guard fields
@@ -74,16 +73,16 @@ typedef struct
      __builtin_cpu_is(), so it is a part of public ABI.  Since there
      are different ABIs for 32 and 64 bit, we put this field in a
      previously empty padding space for powerpc64.  */
-#ifndef __powerpc64__
+#    ifndef __powerpc64__
   /* Padding to maintain alignment.  */
   uint32_t padding;
   uint32_t at_platform;
-#endif
+#    endif
   uint32_t __unused;
   /* Reservation for AT_PLATFORM data - powerpc64.  */
-#ifdef __powerpc64__
+#    ifdef __powerpc64__
   uint32_t at_platform;
-#endif
+#    endif
   /* Reservation for Dynamic System Optimizer ABI.  */
   uintptr_t dso_slot2;
   uintptr_t dso_slot1;
@@ -101,19 +100,19 @@ typedef struct
   dtv_t *dtv;
 } tcbhead_t;
 
-# include <hwcapinfo.h>
+#    include <hwcapinfo.h>
 
 /* This is the size of the initial TCB.  */
-# define TLS_INIT_TCB_SIZE	0
+#    define TLS_INIT_TCB_SIZE 0
 
 /* This is the size of the TCB.  */
-# define TLS_TCB_SIZE		0
+#    define TLS_TCB_SIZE 0
 
 /* This is the size we need before TCB.  */
-# define TLS_PRE_TCB_SIZE \
-  (sizeof (struct pthread)						      \
-   + ((sizeof (tcbhead_t) + __alignof (struct pthread) - 1)		      \
-      & ~(__alignof (struct pthread) - 1)))
+#    define TLS_PRE_TCB_SIZE                                                  \
+      (sizeof (struct pthread)                                                \
+       + ((sizeof (tcbhead_t) + __alignof (struct pthread) - 1)               \
+	  & ~(__alignof (struct pthread) - 1)))
 
 /* The following assumes that TP (R2 or R13) points to the end of the
    TCB + 0x7000 (per the ABI).  This implies that TCB address is
@@ -121,124 +120,120 @@ typedef struct
    assume that the pthread struct is allocated immediately ahead of the
    TCB.  This implies that the pthread_descr address is
    TP - (TLS_PRE_TCB_SIZE + 0x7000).  */
-# define TLS_TCB_OFFSET	0x7000
+#    define TLS_TCB_OFFSET 0x7000
 
 /* Install the dtv pointer.  The pointer passed is to the element with
    index -1 which contain the length.  */
-# define INSTALL_DTV(tcbp, dtvp) \
-  ((tcbhead_t *) (tcbp))[-1].dtv = dtvp + 1
+#    define INSTALL_DTV(tcbp, dtvp) ((tcbhead_t *) (tcbp))[-1].dtv = dtvp + 1
 
 /* Install new dtv for current thread.  */
-# define INSTALL_NEW_DTV(dtv) (THREAD_DTV() = (dtv))
+#    define INSTALL_NEW_DTV(dtv) (THREAD_DTV () = (dtv))
 
 /* Return dtv of given thread descriptor.  */
-# define GET_DTV(tcbp)	(((tcbhead_t *) (tcbp))[-1].dtv)
+#    define GET_DTV(tcbp) (((tcbhead_t *) (tcbp))[-1].dtv)
 
 /* Code to initially initialize the thread pointer.  This might need
    special attention since 'errno' is not yet available and if the
    operation can cause a failure 'errno' must not be touched.  */
-# define TLS_INIT_TP(tcbp) \
-  ({ 									      \
-    __thread_register = (void *) (tcbp) + TLS_TCB_OFFSET;		      \
-    THREAD_SET_HWCAP (__tcb.hwcap);					      \
-    THREAD_SET_HWCAP_EXTN (__tcb.hwcap_extn);				      \
-    THREAD_SET_AT_PLATFORM (__tcb.at_platform);				      \
-    true;								      \
-  })
+#    define TLS_INIT_TP(tcbp)                                                 \
+      ({                                                                      \
+	__thread_register = (void *) (tcbp) + TLS_TCB_OFFSET;                 \
+	THREAD_SET_HWCAP (__tcb.hwcap);                                       \
+	THREAD_SET_HWCAP_EXTN (__tcb.hwcap_extn);                             \
+	THREAD_SET_AT_PLATFORM (__tcb.at_platform);                           \
+	true;                                                                 \
+      })
 
 /* Value passed to 'clone' for initialization of the thread register.  */
-# define TLS_DEFINE_INIT_TP(tp, pd) \
-    void *tp = (void *) (pd) + TLS_TCB_OFFSET + TLS_PRE_TCB_SIZE;	      \
-    (((tcbhead_t *) ((char *) tp - TLS_TCB_OFFSET))[-1].hwcap) =	      \
-      THREAD_GET_HWCAP ();						      \
-    (((tcbhead_t *) ((char *) tp - TLS_TCB_OFFSET))[-1].hwcap_extn) =	      \
-      THREAD_GET_HWCAP_EXTN ();						      \
-    (((tcbhead_t *) ((char *) tp - TLS_TCB_OFFSET))[-1].at_platform) =	      \
-      THREAD_GET_AT_PLATFORM ();
+#    define TLS_DEFINE_INIT_TP(tp, pd)                                        \
+      void *tp = (void *) (pd) + TLS_TCB_OFFSET + TLS_PRE_TCB_SIZE;           \
+      (((tcbhead_t *) ((char *) tp - TLS_TCB_OFFSET))[-1].hwcap)              \
+	  = THREAD_GET_HWCAP ();                                              \
+      (((tcbhead_t *) ((char *) tp - TLS_TCB_OFFSET))[-1].hwcap_extn)         \
+	  = THREAD_GET_HWCAP_EXTN ();                                         \
+      (((tcbhead_t *) ((char *) tp - TLS_TCB_OFFSET))[-1].at_platform)        \
+	  = THREAD_GET_AT_PLATFORM ();
 
 /* Return the address of the dtv for the current thread.  */
-# define THREAD_DTV() \
-    (((tcbhead_t *) (__thread_register - TLS_TCB_OFFSET))[-1].dtv)
+#    define THREAD_DTV()                                                      \
+      (((tcbhead_t *) (__thread_register - TLS_TCB_OFFSET))[-1].dtv)
 
 /* Return the thread descriptor for the current thread.  */
-# define THREAD_SELF \
-    ((struct pthread *) (__thread_register \
-			 - TLS_TCB_OFFSET - TLS_PRE_TCB_SIZE))
+#    define THREAD_SELF                                                       \
+      ((struct pthread *) (__thread_register - TLS_TCB_OFFSET                 \
+			   - TLS_PRE_TCB_SIZE))
 
 /* Magic for libthread_db to know how to do THREAD_SELF.  */
-# define DB_THREAD_SELF							      \
-  REGISTER (32, 32, PT_THREAD_POINTER * 4,				      \
-	    - TLS_TCB_OFFSET - TLS_PRE_TCB_SIZE)			      \
-  REGISTER (64, 64, PT_THREAD_POINTER * 8,				      \
-	    - TLS_TCB_OFFSET - TLS_PRE_TCB_SIZE)
+#    define DB_THREAD_SELF                                                    \
+      REGISTER (32, 32, PT_THREAD_POINTER * 4,                                \
+		-TLS_TCB_OFFSET - TLS_PRE_TCB_SIZE)                           \
+      REGISTER (64, 64, PT_THREAD_POINTER * 8,                                \
+		-TLS_TCB_OFFSET - TLS_PRE_TCB_SIZE)
 
-# include <tcb-access.h>
-
-/* Set the stack guard field in TCB head.  */
-# define THREAD_SET_STACK_GUARD(value) \
-    (((tcbhead_t *) ((char *) __thread_register				      \
-		     - TLS_TCB_OFFSET))[-1].stack_guard = (value))
-# define THREAD_COPY_STACK_GUARD(descr) \
-    (((tcbhead_t *) ((char *) (descr)					      \
-		     + TLS_PRE_TCB_SIZE))[-1].stack_guard		      \
-     = ((tcbhead_t *) ((char *) __thread_register			      \
-		       - TLS_TCB_OFFSET))[-1].stack_guard)
+#    include <tcb-access.h>
 
 /* Set the stack guard field in TCB head.  */
-# define THREAD_GET_POINTER_GUARD() \
-    (((tcbhead_t *) ((char *) __thread_register				      \
-		     - TLS_TCB_OFFSET))[-1].pointer_guard)
-# define THREAD_SET_POINTER_GUARD(value) \
-    (THREAD_GET_POINTER_GUARD () = (value))
-# define THREAD_COPY_POINTER_GUARD(descr) \
-    (((tcbhead_t *) ((char *) (descr)					      \
-		     + TLS_PRE_TCB_SIZE))[-1].pointer_guard		      \
-     = THREAD_GET_POINTER_GUARD())
+#    define THREAD_SET_STACK_GUARD(value)                                     \
+      (((tcbhead_t *) ((char *) __thread_register - TLS_TCB_OFFSET))[-1]      \
+	   .stack_guard                                                       \
+       = (value))
+#    define THREAD_COPY_STACK_GUARD(descr)                                    \
+      (((tcbhead_t *) ((char *) (descr) + TLS_PRE_TCB_SIZE))[-1].stack_guard  \
+       = ((tcbhead_t *) ((char *) __thread_register - TLS_TCB_OFFSET))[-1]    \
+	     .stack_guard)
+
+/* Set the stack guard field in TCB head.  */
+#    define THREAD_GET_POINTER_GUARD()                                        \
+      (((tcbhead_t *) ((char *) __thread_register - TLS_TCB_OFFSET))[-1]      \
+	   .pointer_guard)
+#    define THREAD_SET_POINTER_GUARD(value)                                   \
+      (THREAD_GET_POINTER_GUARD () = (value))
+#    define THREAD_COPY_POINTER_GUARD(descr)                                  \
+      (((tcbhead_t *) ((char *) (descr) + TLS_PRE_TCB_SIZE))[-1]              \
+	   .pointer_guard                                                     \
+       = THREAD_GET_POINTER_GUARD ())
 
 /* hwcap & hwcap_extn fields in TCB head.  */
-# define THREAD_GET_HWCAP() \
-    (((tcbhead_t *) ((char *) __thread_register				      \
-		     - TLS_TCB_OFFSET))[-1].hwcap)
-# define THREAD_GET_HWCAP_EXTN() \
-    (((tcbhead_t *) ((char *) __thread_register				      \
-		     - TLS_TCB_OFFSET))[-1].hwcap_extn)
-# define THREAD_SET_HWCAP(value) \
-    (THREAD_GET_HWCAP () = (value))
-# define THREAD_SET_HWCAP_EXTN(value) \
-    (THREAD_GET_HWCAP_EXTN () = (value))
+#    define THREAD_GET_HWCAP()                                                \
+      (((tcbhead_t *) ((char *) __thread_register - TLS_TCB_OFFSET))[-1].hwcap)
+#    define THREAD_GET_HWCAP_EXTN()                                           \
+      (((tcbhead_t *) ((char *) __thread_register - TLS_TCB_OFFSET))[-1]      \
+	   .hwcap_extn)
+#    define THREAD_SET_HWCAP(value) (THREAD_GET_HWCAP () = (value))
+#    define THREAD_SET_HWCAP_EXTN(value) (THREAD_GET_HWCAP_EXTN () = (value))
 
 /* at_platform field in TCB head.  */
-# define THREAD_GET_AT_PLATFORM() \
-    (((tcbhead_t *) ((char *) __thread_register				      \
-		     - TLS_TCB_OFFSET))[-1].at_platform)
-# define THREAD_SET_AT_PLATFORM(value) \
-    (THREAD_GET_AT_PLATFORM () = (value))
+#    define THREAD_GET_AT_PLATFORM()                                          \
+      (((tcbhead_t *) ((char *) __thread_register - TLS_TCB_OFFSET))[-1]      \
+	   .at_platform)
+#    define THREAD_SET_AT_PLATFORM(value) (THREAD_GET_AT_PLATFORM () = (value))
 
 /* l_tls_offset == 0 is perfectly valid on PPC, so we have to use some
    different value to mean unset l_tls_offset.  */
-# define NO_TLS_OFFSET		-1
+#    define NO_TLS_OFFSET -1
 
 /* Get and set the global scope generation counter in struct pthread.  */
-#define THREAD_GSCOPE_FLAG_UNUSED 0
-#define THREAD_GSCOPE_FLAG_USED   1
-#define THREAD_GSCOPE_FLAG_WAIT   2
-#define THREAD_GSCOPE_RESET_FLAG() \
-  do									     \
-    { int __res								     \
-	= atomic_exchange_release (&THREAD_SELF->header.gscope_flag,	     \
-			       THREAD_GSCOPE_FLAG_UNUSED);		     \
-      if (__res == THREAD_GSCOPE_FLAG_WAIT)				     \
-	lll_futex_wake (&THREAD_SELF->header.gscope_flag, 1, LLL_PRIVATE);   \
-    }									     \
-  while (0)
-#define THREAD_GSCOPE_SET_FLAG() \
-  do									     \
-    {									     \
-      THREAD_SELF->header.gscope_flag = THREAD_GSCOPE_FLAG_USED;	     \
-      atomic_write_barrier ();						     \
-    }									     \
-  while (0)
+#    define THREAD_GSCOPE_FLAG_UNUSED 0
+#    define THREAD_GSCOPE_FLAG_USED 1
+#    define THREAD_GSCOPE_FLAG_WAIT 2
+#    define THREAD_GSCOPE_RESET_FLAG()                                        \
+      do                                                                      \
+	{                                                                     \
+	  int __res = atomic_exchange_release (                               \
+	      &THREAD_SELF->header.gscope_flag, THREAD_GSCOPE_FLAG_UNUSED);   \
+	  if (__res == THREAD_GSCOPE_FLAG_WAIT)                               \
+	    lll_futex_wake (&THREAD_SELF->header.gscope_flag, 1,              \
+			    LLL_PRIVATE);                                     \
+	}                                                                     \
+      while (0)
+#    define THREAD_GSCOPE_SET_FLAG()                                          \
+      do                                                                      \
+	{                                                                     \
+	  THREAD_SELF->header.gscope_flag = THREAD_GSCOPE_FLAG_USED;          \
+	  atomic_write_barrier ();                                            \
+	}                                                                     \
+      while (0)
 
-#endif /* __ASSEMBLER__ */
+#  endif /* __ASSEMBLER__ */
 
-#endif	/* tls.h */
+#endif /* tls.h */

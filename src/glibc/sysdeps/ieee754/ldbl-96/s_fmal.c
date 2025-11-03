@@ -38,19 +38,20 @@ __fmal (long double x, long double y, long double z)
   v.d = y;
   w.d = z;
   if (__builtin_expect (u.ieee.exponent + v.ieee.exponent
-			>= 0x7fff + IEEE854_LONG_DOUBLE_BIAS
-			   - LDBL_MANT_DIG, 0)
+			    >= 0x7fff + IEEE854_LONG_DOUBLE_BIAS
+				   - LDBL_MANT_DIG,
+			0)
       || __builtin_expect (u.ieee.exponent >= 0x7fff - LDBL_MANT_DIG, 0)
       || __builtin_expect (v.ieee.exponent >= 0x7fff - LDBL_MANT_DIG, 0)
       || __builtin_expect (w.ieee.exponent >= 0x7fff - LDBL_MANT_DIG, 0)
       || __builtin_expect (u.ieee.exponent + v.ieee.exponent
-			   <= IEEE854_LONG_DOUBLE_BIAS + LDBL_MANT_DIG, 0))
+			       <= IEEE854_LONG_DOUBLE_BIAS + LDBL_MANT_DIG,
+			   0))
     {
       /* If z is Inf, but x and y are finite, the result should be
 	 z rather than NaN.  */
-      if (w.ieee.exponent == 0x7fff
-	  && u.ieee.exponent != 0x7fff
-          && v.ieee.exponent != 0x7fff)
+      if (w.ieee.exponent == 0x7fff && u.ieee.exponent != 0x7fff
+	  && v.ieee.exponent != 0x7fff)
 	return (z + x) + y;
       /* If z is zero and x are y are nonzero, compute the result
 	 as x * y to avoid the wrong sign of a zero result if x * y
@@ -59,11 +60,8 @@ __fmal (long double x, long double y, long double z)
 	return x * y;
       /* If x or y or z is Inf/NaN, or if x * y is zero, compute as
 	 x * y + z.  */
-      if (u.ieee.exponent == 0x7fff
-	  || v.ieee.exponent == 0x7fff
-	  || w.ieee.exponent == 0x7fff
-	  || x == 0
-	  || y == 0)
+      if (u.ieee.exponent == 0x7fff || v.ieee.exponent == 0x7fff
+	  || w.ieee.exponent == 0x7fff || x == 0 || y == 0)
 	return x * y + z;
       /* If fma will certainly overflow, compute as x * y.  */
       if (u.ieee.exponent + v.ieee.exponent
@@ -86,12 +84,11 @@ __fmal (long double x, long double y, long double z)
 	     exceptions.  */
 	  v.d = z * 0x1p65L + tiny;
 	  if (TININESS_AFTER_ROUNDING
-	      ? v.ieee.exponent < 66
-	      : (w.ieee.exponent == 0
-		 || (w.ieee.exponent == 1
-		     && w.ieee.negative != neg
-		     && w.ieee.mantissa1 == 0
-		     && w.ieee.mantissa0 == 0x80000000)))
+		  ? v.ieee.exponent < 66
+		  : (w.ieee.exponent == 0
+		     || (w.ieee.exponent == 1 && w.ieee.negative != neg
+			 && w.ieee.mantissa1 == 0
+			 && w.ieee.mantissa0 == 0x80000000)))
 	    {
 	      long double force_underflow = x * y;
 	      math_force_eval (force_underflow);
@@ -250,7 +247,7 @@ __fmal (long double x, long double y, long double z)
       feupdateenv (&env);
       /* Ensure the following computations are performed in default rounding
 	 mode instead of just reusing the round to zero computation.  */
-    //   asm volatile ("" : "=m" (u) : "m" (u));
+      //   asm volatile ("" : "=m" (u) : "m" (u));
       /* If a1 + u.d is exact, the only rounding happens during
 	 scaling down.  */
       if (j == 0)

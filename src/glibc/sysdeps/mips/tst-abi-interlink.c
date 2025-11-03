@@ -23,86 +23,84 @@
 #include <errno.h>
 
 #if defined PR_GET_FP_MODE && defined PR_SET_FP_MODE
-# define HAVE_PRCTL_FP_MODE 1
-# define FR1_MODE (PR_FP_MODE_FR)
-# define FRE_MODE (PR_FP_MODE_FR | PR_FP_MODE_FRE)
+#  define HAVE_PRCTL_FP_MODE 1
+#  define FR1_MODE (PR_FP_MODE_FR)
+#  define FRE_MODE (PR_FP_MODE_FR | PR_FP_MODE_FRE)
 #else
-# define HAVE_PRCTL_FP_MODE 0
-# define FR1_MODE 0x1
-# define FRE_MODE 0x2
+#  define HAVE_PRCTL_FP_MODE 0
+#  define FR1_MODE 0x1
+#  define FRE_MODE 0x2
 #endif
 
 #define STR_VAL(VAL) #VAL
-#define N_STR(VAL) STR_VAL(VAL)
+#define N_STR(VAL) STR_VAL (VAL)
 
-#define START_STATE(NAME) 					\
-case s_ ## NAME: 						\
-  {								\
-    switch (obj) 						\
-      {
+#define START_STATE(NAME)                                                     \
+  case s_##NAME:                                                              \
+    {                                                                         \
+      switch (obj)                                                            \
+	{
 
-#define END_STATE						\
-      default:							\
-        return false;						\
-      }								\
-  break;							\
-  }
+#define END_STATE                                                             \
+  default:                                                                    \
+    return false;                                                             \
+    }                                                                         \
+    break;                                                                    \
+    }
 
-#define NEXT(OBJ, NEXT_STATE)					\
-case o_ ## OBJ: 						\
-  current_fp_state = s_ ## NEXT_STATE;				\
-  break;
+#define NEXT(OBJ, NEXT_STATE)                                                 \
+  case o_##OBJ:                                                               \
+    current_fp_state = s_##NEXT_STATE;                                        \
+    break;
 
-#define NEXT_REQ_FR1(OBJ, NEXT_STATE)				\
-case o_ ## OBJ:							\
-  {								\
-    if (has_fr1)						\
-      current_fp_state = s_ ## NEXT_STATE;			\
-    else							\
-      return false;						\
-  }								\
-  break;
+#define NEXT_REQ_FR1(OBJ, NEXT_STATE)                                         \
+  case o_##OBJ:                                                               \
+    {                                                                         \
+      if (has_fr1)                                                            \
+	current_fp_state = s_##NEXT_STATE;                                    \
+      else                                                                    \
+	return false;                                                         \
+    }                                                                         \
+    break;
 
-#define NEXT_REQ_FR0(OBJ, NEXT_STATE) 				\
-case o_ ## OBJ:							\
-  {								\
-    if (!is_r6							\
-        || (is_r6 && has_fr1 && has_fre))			\
-      current_fp_state = s_ ## NEXT_STATE;			\
-    else 							\
-      return false;						\
-  }								\
-  break;
+#define NEXT_REQ_FR0(OBJ, NEXT_STATE)                                         \
+  case o_##OBJ:                                                               \
+    {                                                                         \
+      if (!is_r6 || (is_r6 && has_fr1 && has_fre))                            \
+	current_fp_state = s_##NEXT_STATE;                                    \
+      else                                                                    \
+	return false;                                                         \
+    }                                                                         \
+    break;
 
-#define NEXT_REQ_FRE(OBJ, NEXT_STATE)				\
-case o_ ## OBJ: 						\
-  {								\
-    if (has_fr1 && has_fre)					\
-      current_fp_state = s_ ## NEXT_STATE;			\
-    else							\
-      return false;						\
-  }								\
-  break;
+#define NEXT_REQ_FRE(OBJ, NEXT_STATE)                                         \
+  case o_##OBJ:                                                               \
+    {                                                                         \
+      if (has_fr1 && has_fre)                                                 \
+	current_fp_state = s_##NEXT_STATE;                                    \
+      else                                                                    \
+	return false;                                                         \
+    }                                                                         \
+    break;
 
-#define NEXT_NO_MODE_CHANGE(OBJ, NEXT_STATE)			\
-case o_ ## OBJ: 						\
-  {								\
-    if (current_mode_valid_p (s_ ## NEXT_STATE))			\
-      {								\
-	current_fp_state = s_ ## NEXT_STATE;			\
-	cant_change_mode = true;				\
-      }								\
-    else							\
-      return false;						\
-  }								\
-  break;
+#define NEXT_NO_MODE_CHANGE(OBJ, NEXT_STATE)                                  \
+  case o_##OBJ:                                                               \
+    {                                                                         \
+      if (current_mode_valid_p (s_##NEXT_STATE))                              \
+	{                                                                     \
+	  current_fp_state = s_##NEXT_STATE;                                  \
+	  cant_change_mode = true;                                            \
+	}                                                                     \
+      else                                                                    \
+	return false;                                                         \
+    }                                                                         \
+    break;
 
-static const char * const shared_lib_names[] =
-  {
-    "tst-abi-fpanymod.so", "tst-abi-fpsoftmod.so", "tst-abi-fpsinglemod.so",
-    "tst-abi-fp32mod.so", "tst-abi-fp64mod.so", "tst-abi-fp64amod.so",
-    "tst-abi-fpxxmod.so", "tst-abi-fpxxomod.so"
-  };
+static const char *const shared_lib_names[]
+    = { "tst-abi-fpanymod.so",	  "tst-abi-fpsoftmod.so",
+	"tst-abi-fpsinglemod.so", "tst-abi-fp32mod.so",
+	"tst-abi-fp64mod.so",	  "tst-abi-fp64amod.so",
+	"tst-abi-fpxxmod.so",	  "tst-abi-fpxxomod.so" };
 
 struct fp_mode_req
 {
@@ -154,14 +152,13 @@ enum fp_state
   s_fp64_fpxx_fpxxo
 };
 
-
 static int current_fp_mode;
 static bool cant_change_mode = false;
 static bool has_fr1 = false;
 static bool has_fre = false;
 static bool is_r6 = false;
 static unsigned int fp_obj_count[o_max];
-void * shared_lib_ptrs[o_max];
+void *shared_lib_ptrs[o_max];
 static enum fp_state current_fp_state = s_any;
 static enum fp_obj test_objects[FPABI_COUNT] = { FPABI_LIST };
 
@@ -180,7 +177,7 @@ compute_fp_modes (enum fp_state state)
     {
     case s_single:
       {
-        if (is_r6)
+	if (is_r6)
 	  requirements.mode1 = FR1_MODE;
 	else
 	  {
@@ -248,8 +245,8 @@ compute_fp_modes (enum fp_state state)
     case s_fp32_fp64a_fpxxo:
     case s_fp32_fp64a_fpxxo_fpxx:
       {
-        requirements.mode1 = FRE_MODE;
-        break;
+	requirements.mode1 = FRE_MODE;
+	break;
       }
     }
   return requirements;
@@ -261,8 +258,7 @@ static bool
 current_mode_valid_p (enum fp_state s)
 {
   struct fp_mode_req req = compute_fp_modes (s);
-  return (req.mode1 == current_fp_mode
-	  || req.mode2 == current_fp_mode
+  return (req.mode1 == current_fp_mode || req.mode2 == current_fp_mode
 	  || req.mode3 == current_fp_mode);
 }
 
@@ -275,217 +271,217 @@ set_next_fp_state (enum fp_obj obj)
   switch (current_fp_state)
     {
 
-    START_STATE(soft)
-    NEXT(soft,soft)
-    NEXT(any,soft)
-    END_STATE
+      START_STATE (soft)
+      NEXT (soft, soft)
+      NEXT (any, soft)
+      END_STATE
 
-    START_STATE(single)
-    NEXT(single,single)
-    NEXT(any,single)
-    END_STATE
+      START_STATE (single)
+      NEXT (single, single)
+      NEXT (any, single)
+      END_STATE
 
-    START_STATE(any)
-    NEXT_REQ_FR0(fp32, fp32)
-    NEXT(fpxx, fpxx)
-    NEXT(fpxxo, fpxxo)
-    NEXT_REQ_FR1(fp64a, fp64a)
-    NEXT_REQ_FR1(fp64, fp64)
-    NEXT(any,any)
-    NEXT(soft,soft)
-    NEXT(single,single)
-    END_STATE
+      START_STATE (any)
+      NEXT_REQ_FR0 (fp32, fp32)
+      NEXT (fpxx, fpxx)
+      NEXT (fpxxo, fpxxo)
+      NEXT_REQ_FR1 (fp64a, fp64a)
+      NEXT_REQ_FR1 (fp64, fp64)
+      NEXT (any, any)
+      NEXT (soft, soft)
+      NEXT (single, single)
+      END_STATE
 
-    START_STATE(fp32)
-    NEXT_REQ_FR0(fp32,fp32)
-    NEXT(fpxx, fp32_fpxx)
-    NEXT(fpxxo, fp32_fpxxo)
-    NEXT_REQ_FRE(fp64a, fp64a_fp32)
-    NEXT(any,fp32)
-    END_STATE
+      START_STATE (fp32)
+      NEXT_REQ_FR0 (fp32, fp32)
+      NEXT (fpxx, fp32_fpxx)
+      NEXT (fpxxo, fp32_fpxxo)
+      NEXT_REQ_FRE (fp64a, fp64a_fp32)
+      NEXT (any, fp32)
+      END_STATE
 
-    START_STATE(fpxx)
-    NEXT_REQ_FR0(fp32, fp32_fpxx)
-    NEXT_REQ_FR1(fp64, fp64_fpxx)
-    NEXT_REQ_FR1(fp64a, fp64a_fpxx)
-    NEXT(fpxxo, fpxxo_fpxx)
-    NEXT(fpxx,fpxx)
-    NEXT(any,fpxx)
-    END_STATE
+      START_STATE (fpxx)
+      NEXT_REQ_FR0 (fp32, fp32_fpxx)
+      NEXT_REQ_FR1 (fp64, fp64_fpxx)
+      NEXT_REQ_FR1 (fp64a, fp64a_fpxx)
+      NEXT (fpxxo, fpxxo_fpxx)
+      NEXT (fpxx, fpxx)
+      NEXT (any, fpxx)
+      END_STATE
 
-    START_STATE(fpxxo)
-    NEXT_NO_MODE_CHANGE(fp32, fp32_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64, fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64a, fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxx, fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxxo,fpxxo)
-    NEXT_NO_MODE_CHANGE(any,fpxxo)
-    END_STATE
+      START_STATE (fpxxo)
+      NEXT_NO_MODE_CHANGE (fp32, fp32_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64, fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64a, fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxx, fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxxo, fpxxo)
+      NEXT_NO_MODE_CHANGE (any, fpxxo)
+      END_STATE
 
-    START_STATE(fp64a)
-    NEXT_REQ_FRE(fp32, fp64a_fp32)
-    NEXT_REQ_FR1(fp64, fp64a_fp64)
-    NEXT(fpxxo, fp64a_fpxxo)
-    NEXT(fpxx, fp64a_fpxx)
-    NEXT_REQ_FR1(fp64a, fp64a)
-    NEXT(any, fp64a)
-    END_STATE
+      START_STATE (fp64a)
+      NEXT_REQ_FRE (fp32, fp64a_fp32)
+      NEXT_REQ_FR1 (fp64, fp64a_fp64)
+      NEXT (fpxxo, fp64a_fpxxo)
+      NEXT (fpxx, fp64a_fpxx)
+      NEXT_REQ_FR1 (fp64a, fp64a)
+      NEXT (any, fp64a)
+      END_STATE
 
-    START_STATE(fp64)
-    NEXT_REQ_FR1(fp64a, fp64a_fp64)
-    NEXT(fpxxo, fp64_fpxxo)
-    NEXT(fpxx, fp64_fpxx)
-    NEXT_REQ_FR1(fp64, fp64)
-    NEXT(any, fp64)
-    END_STATE
+      START_STATE (fp64)
+      NEXT_REQ_FR1 (fp64a, fp64a_fp64)
+      NEXT (fpxxo, fp64_fpxxo)
+      NEXT (fpxx, fp64_fpxx)
+      NEXT_REQ_FR1 (fp64, fp64)
+      NEXT (any, fp64)
+      END_STATE
 
-    START_STATE(fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp32, fp32_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp64, fp64_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64a, fp64a_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxx, fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxxo, fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(any, fpxxo_fpxx)
-    END_STATE
+      START_STATE (fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp32, fp32_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp64, fp64_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64a, fp64a_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxx, fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxxo, fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (any, fpxxo_fpxx)
+      END_STATE
 
-    START_STATE(fp32_fpxx)
-    NEXT_REQ_FR0(fp32, fp32_fpxx)
-    NEXT(fpxx, fp32_fpxx)
-    NEXT(fpxxo, fp32_fpxxo_fpxx)
-    NEXT_REQ_FRE(fp64a, fp32_fp64a_fpxx)
-    NEXT(any, fp32_fpxx)
-    END_STATE
+      START_STATE (fp32_fpxx)
+      NEXT_REQ_FR0 (fp32, fp32_fpxx)
+      NEXT (fpxx, fp32_fpxx)
+      NEXT (fpxxo, fp32_fpxxo_fpxx)
+      NEXT_REQ_FRE (fp64a, fp32_fp64a_fpxx)
+      NEXT (any, fp32_fpxx)
+      END_STATE
 
-    START_STATE(fp32_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp32, fp32_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp32_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxx, fp32_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp64a, fp32_fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(any, fp32_fpxxo)
-    END_STATE
+      START_STATE (fp32_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp32, fp32_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp32_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxx, fp32_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp64a, fp32_fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (any, fp32_fpxxo)
+      END_STATE
 
-    START_STATE(fp32_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp32, fp32_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp32_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxx, fp32_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp64a, fp32_fp64a_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(any, fp32_fpxxo_fpxx)
-    END_STATE
+      START_STATE (fp32_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp32, fp32_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp32_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxx, fp32_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp64a, fp32_fp64a_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (any, fp32_fpxxo_fpxx)
+      END_STATE
 
-    START_STATE(fp64a_fp32)
-    NEXT_REQ_FRE(fp32, fp64a_fp32)
-    NEXT_REQ_FRE(fp64a, fp64a_fp32)
-    NEXT(fpxxo, fp32_fp64a_fpxxo)
-    NEXT(fpxx, fp32_fp64a_fpxx)
-    NEXT(any, fp64a_fp32)
-    END_STATE
+      START_STATE (fp64a_fp32)
+      NEXT_REQ_FRE (fp32, fp64a_fp32)
+      NEXT_REQ_FRE (fp64a, fp64a_fp32)
+      NEXT (fpxxo, fp32_fp64a_fpxxo)
+      NEXT (fpxx, fp32_fp64a_fpxx)
+      NEXT (any, fp64a_fp32)
+      END_STATE
 
-    START_STATE(fp64a_fpxx)
-    NEXT_REQ_FRE(fp32, fp32_fp64a_fpxx)
-    NEXT_REQ_FR1(fp64a, fp64a_fpxx)
-    NEXT(fpxx, fp64a_fpxx)
-    NEXT(fpxxo, fp64a_fpxx_fpxxo)
-    NEXT_REQ_FR1(fp64, fp64a_fp64_fpxx)
-    NEXT(any, fp64a_fpxx)
-    END_STATE
+      START_STATE (fp64a_fpxx)
+      NEXT_REQ_FRE (fp32, fp32_fp64a_fpxx)
+      NEXT_REQ_FR1 (fp64a, fp64a_fpxx)
+      NEXT (fpxx, fp64a_fpxx)
+      NEXT (fpxxo, fp64a_fpxx_fpxxo)
+      NEXT_REQ_FR1 (fp64, fp64a_fp64_fpxx)
+      NEXT (any, fp64a_fpxx)
+      END_STATE
 
-    START_STATE(fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp32, fp32_fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64a, fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxx, fp64a_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64, fp64a_fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(any, fp64a_fpxxo)
-    END_STATE
+      START_STATE (fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp32, fp32_fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64a, fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxx, fp64a_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64, fp64a_fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (any, fp64a_fpxxo)
+      END_STATE
 
-    START_STATE(fp64a_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp32, fp32_fp64a_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp64a, fp64a_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxx, fp64a_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp64a_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64, fp64a_fp64_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(any, fp64a_fpxx_fpxxo)
-    END_STATE
+      START_STATE (fp64a_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp32, fp32_fp64a_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp64a, fp64a_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxx, fp64a_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp64a_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64, fp64a_fp64_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (any, fp64a_fpxx_fpxxo)
+      END_STATE
 
-    START_STATE(fp64_fpxx)
-    NEXT_REQ_FR1(fp64a, fp64a_fp64_fpxx)
-    NEXT(fpxxo, fp64_fpxx_fpxxo)
-    NEXT(fpxx, fp64_fpxx)
-    NEXT_REQ_FR1(fp64, fp64_fpxx)
-    NEXT(any, fp64_fpxx)
-    END_STATE
+      START_STATE (fp64_fpxx)
+      NEXT_REQ_FR1 (fp64a, fp64a_fp64_fpxx)
+      NEXT (fpxxo, fp64_fpxx_fpxxo)
+      NEXT (fpxx, fp64_fpxx)
+      NEXT_REQ_FR1 (fp64, fp64_fpxx)
+      NEXT (any, fp64_fpxx)
+      END_STATE
 
-    START_STATE(fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64a, fp64a_fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxx, fp64_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64, fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(any, fp64_fpxxo)
-    END_STATE
+      START_STATE (fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64a, fp64a_fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxx, fp64_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64, fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (any, fp64_fpxxo)
+      END_STATE
 
-    START_STATE(fp64_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64a, fp64a_fp64_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp64_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxx, fp64_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64, fp64_fpxx_fpxxo)
-    NEXT_NO_MODE_CHANGE(any, fp64_fpxx_fpxxo)
-    END_STATE
+      START_STATE (fp64_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64a, fp64a_fp64_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp64_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxx, fp64_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64, fp64_fpxx_fpxxo)
+      NEXT_NO_MODE_CHANGE (any, fp64_fpxx_fpxxo)
+      END_STATE
 
-    START_STATE(fp64a_fp64)
-    NEXT_REQ_FR1(fp64a, fp64a_fp64)
-    NEXT(fpxxo, fp64a_fp64_fpxxo)
-    NEXT(fpxx, fp64a_fp64_fpxx)
-    NEXT_REQ_FR1(fp64, fp64a_fp64)
-    NEXT(any, fp64a_fp64)
-    END_STATE
+      START_STATE (fp64a_fp64)
+      NEXT_REQ_FR1 (fp64a, fp64a_fp64)
+      NEXT (fpxxo, fp64a_fp64_fpxxo)
+      NEXT (fpxx, fp64a_fp64_fpxx)
+      NEXT_REQ_FR1 (fp64, fp64a_fp64)
+      NEXT (any, fp64a_fp64)
+      END_STATE
 
-    START_STATE(fp64a_fp64_fpxx)
-    NEXT_REQ_FR1(fp64a, fp64a_fp64_fpxx)
-    NEXT(fpxxo, fp64a_fp64_fpxxo_fpxx)
-    NEXT(fpxx, fp64a_fp64_fpxx)
-    NEXT_REQ_FR1(fp64, fp64a_fp64_fpxx)
-    NEXT(any, fp64a_fp64_fpxx)
-    END_STATE
+      START_STATE (fp64a_fp64_fpxx)
+      NEXT_REQ_FR1 (fp64a, fp64a_fp64_fpxx)
+      NEXT (fpxxo, fp64a_fp64_fpxxo_fpxx)
+      NEXT (fpxx, fp64a_fp64_fpxx)
+      NEXT_REQ_FR1 (fp64, fp64a_fp64_fpxx)
+      NEXT (any, fp64a_fp64_fpxx)
+      END_STATE
 
-    START_STATE(fp64a_fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64a, fp64a_fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxx, fp64a_fp64_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp64a_fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64, fp64a_fp64_fpxxo)
-    NEXT_NO_MODE_CHANGE(any, fp64a_fp64_fpxxo)
-    END_STATE
+      START_STATE (fp64a_fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64a, fp64a_fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxx, fp64a_fp64_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp64a_fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64, fp64a_fp64_fpxxo)
+      NEXT_NO_MODE_CHANGE (any, fp64a_fp64_fpxxo)
+      END_STATE
 
-    START_STATE(fp64a_fp64_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp64a, fp64a_fp64_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxx, fp64a_fp64_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp64a_fp64_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp64, fp64a_fp64_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(any, fp64a_fp64_fpxxo_fpxx)
-    END_STATE
+      START_STATE (fp64a_fp64_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp64a, fp64a_fp64_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxx, fp64a_fp64_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp64a_fp64_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp64, fp64a_fp64_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (any, fp64a_fp64_fpxxo_fpxx)
+      END_STATE
 
-    START_STATE(fp32_fp64a_fpxx)
-    NEXT_REQ_FRE(fp32, fp32_fp64a_fpxx)
-    NEXT_REQ_FRE(fp64a, fp32_fp64a_fpxx)
-    NEXT(fpxxo, fp32_fp64a_fpxxo_fpxx)
-    NEXT(fpxx, fp32_fp64a_fpxx)
-    NEXT(any, fp32_fp64a_fpxx)
-    END_STATE
+      START_STATE (fp32_fp64a_fpxx)
+      NEXT_REQ_FRE (fp32, fp32_fp64a_fpxx)
+      NEXT_REQ_FRE (fp64a, fp32_fp64a_fpxx)
+      NEXT (fpxxo, fp32_fp64a_fpxxo_fpxx)
+      NEXT (fpxx, fp32_fp64a_fpxx)
+      NEXT (any, fp32_fp64a_fpxx)
+      END_STATE
 
-    START_STATE(fp32_fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp32, fp32_fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(fp64a, fp32_fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(fpxx, fp32_fp64a_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp32_fp64a_fpxxo)
-    NEXT_NO_MODE_CHANGE(any, fp32_fp64a_fpxxo)
-    END_STATE
+      START_STATE (fp32_fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp32, fp32_fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (fp64a, fp32_fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (fpxx, fp32_fp64a_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp32_fp64a_fpxxo)
+      NEXT_NO_MODE_CHANGE (any, fp32_fp64a_fpxxo)
+      END_STATE
 
-    START_STATE(fp32_fp64a_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp32, fp32_fp64a_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fp64a, fp32_fp64a_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxx, fp32_fp64a_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(fpxxo, fp32_fp64a_fpxxo_fpxx)
-    NEXT_NO_MODE_CHANGE(any, fp32_fp64a_fpxxo_fpxx)
-    END_STATE
+      START_STATE (fp32_fp64a_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp32, fp32_fp64a_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fp64a, fp32_fp64a_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxx, fp32_fp64a_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (fpxxo, fp32_fp64a_fpxxo_fpxx)
+      NEXT_NO_MODE_CHANGE (any, fp32_fp64a_fpxxo_fpxx)
+      END_STATE
     }
 
   if (obj != o_max)
@@ -511,138 +507,138 @@ remove_object (enum fp_obj obj)
 
   switch (current_fp_state)
     {
-    START_STATE(soft)
-    NEXT(soft,any)
-    END_STATE
+      START_STATE (soft)
+      NEXT (soft, any)
+      END_STATE
 
-    START_STATE(single)
-    NEXT(single,any)
-    END_STATE
+      START_STATE (single)
+      NEXT (single, any)
+      END_STATE
 
-    START_STATE(any)
-    NEXT(any,any)
-    END_STATE
+      START_STATE (any)
+      NEXT (any, any)
+      END_STATE
 
-    START_STATE(fp32)
-    NEXT (fp32,any)
-    END_STATE
+      START_STATE (fp32)
+      NEXT (fp32, any)
+      END_STATE
 
-    START_STATE(fpxx)
-    NEXT (fpxx,any)
-    END_STATE
+      START_STATE (fpxx)
+      NEXT (fpxx, any)
+      END_STATE
 
-    START_STATE(fpxxo)
-    NEXT (fpxxo,any)
-    END_STATE
+      START_STATE (fpxxo)
+      NEXT (fpxxo, any)
+      END_STATE
 
-    START_STATE(fp64a)
-    NEXT(fp64a, any)
-    END_STATE
+      START_STATE (fp64a)
+      NEXT (fp64a, any)
+      END_STATE
 
-    START_STATE(fp64)
-    NEXT(fp64, any)
-    END_STATE
+      START_STATE (fp64)
+      NEXT (fp64, any)
+      END_STATE
 
-    START_STATE(fpxxo_fpxx)
-    NEXT(fpxx, fpxxo)
-    NEXT(fpxxo, fpxx)
-    END_STATE
+      START_STATE (fpxxo_fpxx)
+      NEXT (fpxx, fpxxo)
+      NEXT (fpxxo, fpxx)
+      END_STATE
 
-    START_STATE(fp32_fpxx)
-    NEXT(fp32, fpxx)
-    NEXT(fpxx, fp32)
-    END_STATE
+      START_STATE (fp32_fpxx)
+      NEXT (fp32, fpxx)
+      NEXT (fpxx, fp32)
+      END_STATE
 
-    START_STATE(fp32_fpxxo)
-    NEXT(fp32, fpxxo)
-    NEXT(fpxxo, fp32)
-    END_STATE
+      START_STATE (fp32_fpxxo)
+      NEXT (fp32, fpxxo)
+      NEXT (fpxxo, fp32)
+      END_STATE
 
-    START_STATE(fp32_fpxxo_fpxx)
-    NEXT(fp32, fpxxo_fpxx)
-    NEXT(fpxxo, fp32_fpxx)
-    NEXT(fpxx, fp32_fpxxo)
-    END_STATE
+      START_STATE (fp32_fpxxo_fpxx)
+      NEXT (fp32, fpxxo_fpxx)
+      NEXT (fpxxo, fp32_fpxx)
+      NEXT (fpxx, fp32_fpxxo)
+      END_STATE
 
-    START_STATE(fp64a_fp32)
-    NEXT(fp32, fp64a)
-    NEXT(fp64a, fp32)
-    END_STATE
+      START_STATE (fp64a_fp32)
+      NEXT (fp32, fp64a)
+      NEXT (fp64a, fp32)
+      END_STATE
 
-    START_STATE(fp64a_fpxx)
-    NEXT(fp64a, fpxx)
-    NEXT(fpxx, fp64a)
-    END_STATE
+      START_STATE (fp64a_fpxx)
+      NEXT (fp64a, fpxx)
+      NEXT (fpxx, fp64a)
+      END_STATE
 
-    START_STATE(fp64a_fpxxo)
-    NEXT(fp64a, fpxxo)
-    NEXT(fpxxo, fp64a)
-    END_STATE
+      START_STATE (fp64a_fpxxo)
+      NEXT (fp64a, fpxxo)
+      NEXT (fpxxo, fp64a)
+      END_STATE
 
-    START_STATE(fp64a_fpxx_fpxxo)
-    NEXT(fp64a, fpxxo_fpxx)
-    NEXT(fpxx, fp64a_fpxxo)
-    NEXT(fpxxo, fp64a_fpxx)
-    END_STATE
+      START_STATE (fp64a_fpxx_fpxxo)
+      NEXT (fp64a, fpxxo_fpxx)
+      NEXT (fpxx, fp64a_fpxxo)
+      NEXT (fpxxo, fp64a_fpxx)
+      END_STATE
 
-    START_STATE(fp64_fpxx)
-    NEXT(fpxx, fp64)
-    NEXT(fp64, fpxx)
-    END_STATE
+      START_STATE (fp64_fpxx)
+      NEXT (fpxx, fp64)
+      NEXT (fp64, fpxx)
+      END_STATE
 
-    START_STATE(fp64_fpxxo)
-    NEXT(fpxxo, fp64)
-    NEXT(fp64, fpxxo)
-    END_STATE
+      START_STATE (fp64_fpxxo)
+      NEXT (fpxxo, fp64)
+      NEXT (fp64, fpxxo)
+      END_STATE
 
-    START_STATE(fp64_fpxx_fpxxo)
-    NEXT(fp64, fpxxo_fpxx)
-    NEXT(fpxxo, fp64_fpxx)
-    NEXT(fpxx, fp64_fpxxo)
-    END_STATE
+      START_STATE (fp64_fpxx_fpxxo)
+      NEXT (fp64, fpxxo_fpxx)
+      NEXT (fpxxo, fp64_fpxx)
+      NEXT (fpxx, fp64_fpxxo)
+      END_STATE
 
-    START_STATE(fp64a_fp64)
-    NEXT(fp64a, fp64)
-    NEXT(fp64, fp64a)
-    END_STATE
+      START_STATE (fp64a_fp64)
+      NEXT (fp64a, fp64)
+      NEXT (fp64, fp64a)
+      END_STATE
 
-    START_STATE(fp64a_fp64_fpxx)
-    NEXT(fp64a, fp64_fpxx)
-    NEXT(fpxx, fp64a_fp64)
-    NEXT(fp64, fp64a_fpxx)
-    END_STATE
+      START_STATE (fp64a_fp64_fpxx)
+      NEXT (fp64a, fp64_fpxx)
+      NEXT (fpxx, fp64a_fp64)
+      NEXT (fp64, fp64a_fpxx)
+      END_STATE
 
-    START_STATE(fp64a_fp64_fpxxo)
-    NEXT(fp64a, fp64_fpxxo)
-    NEXT(fpxxo, fp64a_fp64)
-    NEXT(fp64, fp64a_fpxxo)
-    END_STATE
+      START_STATE (fp64a_fp64_fpxxo)
+      NEXT (fp64a, fp64_fpxxo)
+      NEXT (fpxxo, fp64a_fp64)
+      NEXT (fp64, fp64a_fpxxo)
+      END_STATE
 
-    START_STATE(fp64a_fp64_fpxxo_fpxx)
-    NEXT(fp64a, fp64_fpxx_fpxxo)
-    NEXT(fpxx, fp64a_fp64_fpxxo)
-    NEXT(fpxxo, fp64a_fp64_fpxx)
-    NEXT(fp64, fp64a_fpxx_fpxxo)
-    END_STATE
+      START_STATE (fp64a_fp64_fpxxo_fpxx)
+      NEXT (fp64a, fp64_fpxx_fpxxo)
+      NEXT (fpxx, fp64a_fp64_fpxxo)
+      NEXT (fpxxo, fp64a_fp64_fpxx)
+      NEXT (fp64, fp64a_fpxx_fpxxo)
+      END_STATE
 
-    START_STATE(fp32_fp64a_fpxx)
-    NEXT(fp32, fp64a_fpxx)
-    NEXT(fp64a, fp32_fpxx)
-    NEXT(fpxx, fp64a_fp32)
-    END_STATE
+      START_STATE (fp32_fp64a_fpxx)
+      NEXT (fp32, fp64a_fpxx)
+      NEXT (fp64a, fp32_fpxx)
+      NEXT (fpxx, fp64a_fp32)
+      END_STATE
 
-    START_STATE(fp32_fp64a_fpxxo)
-    NEXT(fp32, fp64a_fpxxo)
-    NEXT(fp64a, fp32_fpxxo)
-    NEXT(fpxxo, fp64a_fp32)
-    END_STATE
+      START_STATE (fp32_fp64a_fpxxo)
+      NEXT (fp32, fp64a_fpxxo)
+      NEXT (fp64a, fp32_fpxxo)
+      NEXT (fpxxo, fp64a_fp32)
+      END_STATE
 
-    START_STATE(fp32_fp64a_fpxxo_fpxx)
-    NEXT(fp32, fp64a_fpxx_fpxxo)
-    NEXT(fp64a, fp32_fpxxo_fpxx)
-    NEXT(fpxx, fp32_fp64a_fpxxo)
-    NEXT(fpxxo, fp32_fp64a_fpxx)
-    END_STATE
+      START_STATE (fp32_fp64a_fpxxo_fpxx)
+      NEXT (fp32, fp64a_fpxx_fpxxo)
+      NEXT (fp64a, fp32_fpxxo_fpxx)
+      NEXT (fpxx, fp32_fp64a_fpxxo)
+      NEXT (fpxxo, fp32_fp64a_fpxx)
+      END_STATE
     }
 
   return true;
@@ -667,8 +663,7 @@ mode_transition_valid_p (void)
     return 0;
 
   /* Check if mode changes are not allowed but a mode change happened.  */
-  if (cant_change_mode
-      && current_fp_mode != prev_fp_mode)
+  if (cant_change_mode && current_fp_mode != prev_fp_mode)
     return 0;
 
   return 1;
@@ -721,7 +716,7 @@ test_permutations (enum fp_obj objects[], int count)
 {
   int i;
 
-  for (i = 0 ; i < count ; i++)
+  for (i = 0; i < count; i++)
     {
       if (!load_object (objects[i]))
 	return false;
@@ -732,7 +727,7 @@ test_permutations (enum fp_obj objects[], int count)
 	  int j;
 	  int k = 0;
 
-	  for (j = 0 ; j < count ; j++)
+	  for (j = 0; j < count; j++)
 	    {
 	      if (j != i)
 		new_objects[k++] = objects[j];
@@ -817,7 +812,7 @@ do_test (void)
   /* Set up the initial state from executable and LDSO.  Assumptions:
      1) All system libraries have the same ABI as ld.so.
      2) Due to the fact that ld.so is tested by invoking it directly
-        rather than via an interpreter, there is no point in varying
+	rather than via an interpreter, there is no point in varying
 	the ABI of the test program.  Instead the ABI only varies for
 	the shared libraries which get loaded.  */
   if (!set_next_fp_state (FPABI_NATIVE))

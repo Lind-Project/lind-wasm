@@ -54,11 +54,10 @@
 extern size_t __strspn_generic (const char *, const char *) attribute_hidden;
 
 #ifndef STRSPN
-# define STRSPN	__strspn_sse42
+#  define STRSPN __strspn_sse42
 #endif
 
-size_t
-__attribute__ ((section (".text.sse4.2")))
+size_t __attribute__ ((section (".text.sse4.2")))
 STRSPN (const char *s, const char *a)
 {
   if (*a == 0)
@@ -79,15 +78,15 @@ STRSPN (const char *s, const char *a)
       /* Find where the NULL terminator is.  */
       maskz_bits = _mm_movemask_epi8 (maskz) >> offset;
       if (maskz_bits != 0)
-        {
-          mask = __m128i_shift_right (mask0, offset);
-          offset = (unsigned int) ((size_t) s & 15);
-          if (offset)
-            goto start_unaligned;
+	{
+	  mask = __m128i_shift_right (mask0, offset);
+	  offset = (unsigned int) ((size_t) s & 15);
+	  if (offset)
+	    goto start_unaligned;
 
-          aligned = s;
-          goto start_loop;
-        }
+	  aligned = s;
+	  goto start_loop;
+	}
     }
 
   /* A is aligned.  */
@@ -99,9 +98,9 @@ STRSPN (const char *s, const char *a)
   if (maskz_bits == 0)
     {
       /* There is no NULL terminator.  Don't use SSE4.2 if the length
-         of A > 16.  */
+	 of A > 16.  */
       if (a[16] != 0)
-        return __strspn_generic (s, a);
+	return __strspn_generic (s, a);
     }
   aligned = s;
   offset = (unsigned int) ((size_t) s & 15);

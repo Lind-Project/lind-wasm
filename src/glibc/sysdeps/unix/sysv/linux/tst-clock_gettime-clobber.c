@@ -31,7 +31,7 @@ test_clock (clockid_t clk)
       errno = original_errno;
       struct timespec ts;
       if (clock_gettime (clk, &ts) == 0)
-        TEST_COMPARE (errno, original_errno);
+	TEST_COMPARE (errno, original_errno);
     }
 }
 

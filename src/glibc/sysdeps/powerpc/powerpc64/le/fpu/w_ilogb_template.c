@@ -10,7 +10,7 @@ M_DECL_FUNC (__ilogb) (FLOAT x)
 {
   int r;
   /* Check for exceptional cases.  */
-  if (! M_SUF(__builtin_test_dc_ilogb) (x, 0x7f))
+  if (!M_SUF (__builtin_test_dc_ilogb) (x, 0x7f))
     r = M_SUF (__builtin_ilogb) (x);
   else
     /* Fallback to the generic ilogb if x is NaN, Inf or subnormal.  */
@@ -26,5 +26,5 @@ M_DECL_FUNC (__ilogb) (FLOAT x)
 }
 declare_mgen_alias (__ilogb, ilogb)
 #else
-#include <math/w_ilogb_template.c>
+#  include <math/w_ilogb_template.c>
 #endif

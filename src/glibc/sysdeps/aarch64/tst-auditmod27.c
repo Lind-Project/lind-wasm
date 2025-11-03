@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include "tst-audit27mod.h"
 
-#define TEST_NAME  "tst-audit27"
+#define TEST_NAME "tst-audit27"
 
 #define AUDIT27_COOKIE 0
 
@@ -47,14 +47,14 @@ la_objopen (struct link_map *map, Lmid_t lmid, uintptr_t *cookie)
   return ck == -1 ? 0 : LA_FLG_BINDFROM | LA_FLG_BINDTO;
 }
 
-ElfW(Addr)
-la_aarch64_gnu_pltenter (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
-			 uintptr_t *defcook, La_aarch64_regs *regs,
-			 unsigned int *flags, const char *symname,
-			 long int *framesizep)
+ElfW (Addr)
+    la_aarch64_gnu_pltenter (ElfW (Sym) * sym, unsigned int ndx,
+			     uintptr_t *refcook, uintptr_t *defcook,
+			     La_aarch64_regs *regs, unsigned int *flags,
+			     const char *symname, long int *framesizep)
 {
-  printf ("pltenter: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n",
-	  symname, (long int) sym->st_value, ndx, *flags);
+  printf ("pltenter: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n", symname,
+	  (long int) sym->st_value, ndx, *flags);
 
   if (strcmp (symname, "tst_audit27_func_float") == 0)
     {
@@ -96,14 +96,14 @@ la_aarch64_gnu_pltenter (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
 
   /* Clobber the q registers on exit.  */
   uint8_t v = 0xff;
-  asm volatile ("dup v0.8b, %w0" : : "r" (v) : "v0");
-  asm volatile ("dup v1.8b, %w0" : : "r" (v) : "v1");
-  asm volatile ("dup v2.8b, %w0" : : "r" (v) : "v2");
-  asm volatile ("dup v3.8b, %w0" : : "r" (v) : "v3");
-  asm volatile ("dup v4.8b, %w0" : : "r" (v) : "v4");
-  asm volatile ("dup v5.8b, %w0" : : "r" (v) : "v5");
-  asm volatile ("dup v6.8b, %w0" : : "r" (v) : "v6");
-  asm volatile ("dup v7.8b, %w0" : : "r" (v) : "v7");
+  asm volatile ("dup v0.8b, %w0" : : "r"(v) : "v0");
+  asm volatile ("dup v1.8b, %w0" : : "r"(v) : "v1");
+  asm volatile ("dup v2.8b, %w0" : : "r"(v) : "v2");
+  asm volatile ("dup v3.8b, %w0" : : "r"(v) : "v3");
+  asm volatile ("dup v4.8b, %w0" : : "r"(v) : "v4");
+  asm volatile ("dup v5.8b, %w0" : : "r"(v) : "v5");
+  asm volatile ("dup v6.8b, %w0" : : "r"(v) : "v6");
+  asm volatile ("dup v7.8b, %w0" : : "r"(v) : "v7");
 
   *framesizep = 1024;
 
@@ -111,14 +111,13 @@ la_aarch64_gnu_pltenter (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
 }
 
 unsigned int
-la_aarch64_gnu_pltexit (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
-                        uintptr_t *defcook,
+la_aarch64_gnu_pltexit (ElfW (Sym) * sym, unsigned int ndx, uintptr_t *refcook,
+			uintptr_t *defcook,
 			const struct La_aarch64_regs *inregs,
-                        struct La_aarch64_retval *outregs,
-			const char *symname)
+			struct La_aarch64_retval *outregs, const char *symname)
 {
-  printf ("pltexit: symname=%s, st_value=%#lx, ndx=%u\n",
-	  symname, (long int) sym->st_value, ndx);
+  printf ("pltexit: symname=%s, st_value=%#lx, ndx=%u\n", symname,
+	  (long int) sym->st_value, ndx);
 
   if (strcmp (symname, "tst_audit27_func_float") == 0)
     {
@@ -167,14 +166,14 @@ la_aarch64_gnu_pltexit (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
 
   /* Clobber the q registers on exit.  */
   uint8_t v = 0xff;
-  asm volatile ("dup v0.8b, %w0" : : "r" (v) : "v0");
-  asm volatile ("dup v1.8b, %w0" : : "r" (v) : "v1");
-  asm volatile ("dup v2.8b, %w0" : : "r" (v) : "v2");
-  asm volatile ("dup v3.8b, %w0" : : "r" (v) : "v3");
-  asm volatile ("dup v4.8b, %w0" : : "r" (v) : "v4");
-  asm volatile ("dup v5.8b, %w0" : : "r" (v) : "v5");
-  asm volatile ("dup v6.8b, %w0" : : "r" (v) : "v6");
-  asm volatile ("dup v7.8b, %w0" : : "r" (v) : "v7");
+  asm volatile ("dup v0.8b, %w0" : : "r"(v) : "v0");
+  asm volatile ("dup v1.8b, %w0" : : "r"(v) : "v1");
+  asm volatile ("dup v2.8b, %w0" : : "r"(v) : "v2");
+  asm volatile ("dup v3.8b, %w0" : : "r"(v) : "v3");
+  asm volatile ("dup v4.8b, %w0" : : "r"(v) : "v4");
+  asm volatile ("dup v5.8b, %w0" : : "r"(v) : "v5");
+  asm volatile ("dup v6.8b, %w0" : : "r"(v) : "v6");
+  asm volatile ("dup v7.8b, %w0" : : "r"(v) : "v7");
 
   return 0;
 }

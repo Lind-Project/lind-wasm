@@ -26,9 +26,9 @@
 #include <support/check.h>
 
 #if defined CET_IS_PERMISSIVE || defined CET_DISABLED_BY_ENV
-# define CET_MAYBE_DISABLED 1
+#  define CET_MAYBE_DISABLED 1
 #else
-# define CET_MAYBE_DISABLED 0
+#  define CET_MAYBE_DISABLED 0
 #endif
 
 static void

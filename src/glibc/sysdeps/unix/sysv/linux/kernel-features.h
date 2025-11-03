@@ -21,14 +21,14 @@
    to allow using the file also in assembler files.  */
 
 #ifndef _LINUX_KERNEL_FEATURES_H
-#define _LINUX_KERNEL_FEATURES_H 1
+#  define _LINUX_KERNEL_FEATURES_H 1
 
-#include <bits/wordsize.h>
+#  include <bits/wordsize.h>
 
-#ifndef __LINUX_KERNEL_VERSION
+#  ifndef __LINUX_KERNEL_VERSION
 /* We assume the worst; all kernels should be supported.  */
-# define __LINUX_KERNEL_VERSION	0
-#endif
+#    define __LINUX_KERNEL_VERSION 0
+#  endif
 
 /* We assume for __LINUX_KERNEL_VERSION the same encoding used in
    linux/version.h.  I.e., the major, minor, and subminor all get a
@@ -43,56 +43,56 @@
    corrected.  */
 
 /* The statfs64 syscalls are available in 2.5.74 (but not for alpha).  */
-#define __ASSUME_STATFS64	1
+#  define __ASSUME_STATFS64 1
 
 /* pselect/ppoll were introduced just after 2.6.16-rc1.  On x86_64 and
    SH this appeared first in 2.6.19-rc1.  */
-#define __ASSUME_PSELECT	1
+#  define __ASSUME_PSELECT 1
 
 /* Support for inter-process robust mutexes was added in 2.6.17 (but
    some architectures lack futex_atomic_cmpxchg_inatomic in some
    configurations).  */
-#define __ASSUME_SET_ROBUST_LIST	1
+#  define __ASSUME_SET_ROBUST_LIST 1
 
 /* Support for various CLOEXEC and NONBLOCK flags was added in
    2.6.27.  */
-#define __ASSUME_IN_NONBLOCK	1
+#  define __ASSUME_IN_NONBLOCK 1
 
 /* Support for preadv and pwritev was added in 2.6.30.  */
-#define __ASSUME_PREADV	1
-#define __ASSUME_PWRITEV	1
+#  define __ASSUME_PREADV 1
+#  define __ASSUME_PWRITEV 1
 
 /* Support for sendmmsg functionality was added in 3.0.  */
-#define __ASSUME_SENDMMSG	1
+#  define __ASSUME_SENDMMSG 1
 
 /* On most architectures, most socket syscalls are supported for all
    supported kernel versions, but on some socketcall architectures
    separate syscalls were only added later.  */
-#define __ASSUME_SENDMSG_SYSCALL	1
-#define __ASSUME_RECVMSG_SYSCALL	1
-#define __ASSUME_ACCEPT_SYSCALL		1
-#define __ASSUME_CONNECT_SYSCALL	1
-#define __ASSUME_RECVFROM_SYSCALL	1
-#define __ASSUME_SENDTO_SYSCALL		1
-#define __ASSUME_ACCEPT4_SYSCALL	1
-#define __ASSUME_RECVMMSG_SYSCALL	1
-#define __ASSUME_SENDMMSG_SYSCALL	1
-#define __ASSUME_GETSOCKOPT_SYSCALL	1
-#define __ASSUME_SETSOCKOPT_SYSCALL	1
-#define __ASSUME_BIND_SYSCALL		1
-#define __ASSUME_SOCKET_SYSCALL		1
-#define __ASSUME_SOCKETPAIR_SYSCALL	1
-#define __ASSUME_LISTEN_SYSCALL		1
-#define __ASSUME_SHUTDOWN_SYSCALL	1
-#define __ASSUME_GETSOCKNAME_SYSCALL	1
-#define __ASSUME_GETPEERNAME_SYSCALL	1
+#  define __ASSUME_SENDMSG_SYSCALL 1
+#  define __ASSUME_RECVMSG_SYSCALL 1
+#  define __ASSUME_ACCEPT_SYSCALL 1
+#  define __ASSUME_CONNECT_SYSCALL 1
+#  define __ASSUME_RECVFROM_SYSCALL 1
+#  define __ASSUME_SENDTO_SYSCALL 1
+#  define __ASSUME_ACCEPT4_SYSCALL 1
+#  define __ASSUME_RECVMMSG_SYSCALL 1
+#  define __ASSUME_SENDMMSG_SYSCALL 1
+#  define __ASSUME_GETSOCKOPT_SYSCALL 1
+#  define __ASSUME_SETSOCKOPT_SYSCALL 1
+#  define __ASSUME_BIND_SYSCALL 1
+#  define __ASSUME_SOCKET_SYSCALL 1
+#  define __ASSUME_SOCKETPAIR_SYSCALL 1
+#  define __ASSUME_LISTEN_SYSCALL 1
+#  define __ASSUME_SHUTDOWN_SYSCALL 1
+#  define __ASSUME_GETSOCKNAME_SYSCALL 1
+#  define __ASSUME_GETPEERNAME_SYSCALL 1
 
 /* Support for SysV IPC through wired syscalls.  All supported architectures
    either support ipc syscall and/or all the ipc correspondent syscalls.  */
-#define __ASSUME_DIRECT_SYSVIPC_SYSCALLS	1
+#  define __ASSUME_DIRECT_SYSVIPC_SYSCALLS 1
 /* The generic default __IPC_64 value is 0x0, however some architectures
    require a different value of 0x100.  */
-#define __ASSUME_SYSVIPC_DEFAULT_IPC_64		1
+#  define __ASSUME_SYSVIPC_DEFAULT_IPC_64 1
 
 /* All supported architectures reserve a 32-bit for MODE field in sysvipc
    ipc_perm.  However, some kernel ABI interfaces still expect a 16-bit
@@ -108,23 +108,23 @@
    non supported flags.  */
 
 /* Support for the renameat2 system call was added in kernel 3.15.  */
-#if __LINUX_KERNEL_VERSION >= 0x030F00
-# define __ASSUME_RENAMEAT2
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x030F00
+#    define __ASSUME_RENAMEAT2
+#  endif
 
 /* Support for the execveat syscall was added in 3.19.  */
-#if __LINUX_KERNEL_VERSION >= 0x031300
-# define __ASSUME_EXECVEAT	1
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x031300
+#    define __ASSUME_EXECVEAT 1
+#  endif
 
-#if __LINUX_KERNEL_VERSION >= 0x040400
-# define __ASSUME_MLOCK2 1
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x040400
+#    define __ASSUME_MLOCK2 1
+#  endif
 
 /* Support for statx was added in kernel 4.11.  */
-#if __LINUX_KERNEL_VERSION >= 0x040B00
-# define __ASSUME_STATX 1
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x040B00
+#    define __ASSUME_STATX 1
+#  endif
 
 /* Support for clone call used on fork.  The signature varies across the
    architectures with current 4 different variants:
@@ -156,7 +156,7 @@
    - __ASSUME_CLONE_DEFAULT: for variant 4.
    */
 
-#define __ASSUME_CLONE_DEFAULT 1
+#  define __ASSUME_CLONE_DEFAULT 1
 
 /* Support for 64-bit time_t in the system call interface.  When this
    flag is set, the kernel provides a version of each of these system
@@ -204,57 +204,56 @@
    and __TIMESIZE equal to 64 does not mean __ASSUME_TIME64_SYSCALLS
    is set.  All four cases are possible.  */
 
-#if __LINUX_KERNEL_VERSION >= 0x050100                          \
-  || __WORDSIZE == 64                                           \
-  || (defined __SYSCALL_WORDSIZE && __SYSCALL_WORDSIZE == 64)
-# define __ASSUME_TIME64_SYSCALLS 1
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x050100 || __WORDSIZE == 64                  \
+      || (defined __SYSCALL_WORDSIZE && __SYSCALL_WORDSIZE == 64)
+#    define __ASSUME_TIME64_SYSCALLS 1
+#  endif
 
 /* Linux waitid prior kernel 5.4 does not support waiting for the current
    process group.  */
-#if __LINUX_KERNEL_VERSION >= 0x050400
-# define __ASSUME_WAITID_PID0_P_PGID
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x050400
+#    define __ASSUME_WAITID_PID0_P_PGID
+#  endif
 
 /* The faccessat2 system call was introduced across all architectures
    in Linux 5.8.  */
-#if __LINUX_KERNEL_VERSION >= 0x050800
-# define __ASSUME_FACCESSAT2 1
-#else
-# define __ASSUME_FACCESSAT2 0
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x050800
+#    define __ASSUME_FACCESSAT2 1
+#  else
+#    define __ASSUME_FACCESSAT2 0
+#  endif
 
 /* The close_range system call was introduced across all architectures
    in Linux 5.9.  */
-#if __LINUX_KERNEL_VERSION >= 0x050900
-# define __ASSUME_CLOSE_RANGE 1
-#else
-# define __ASSUME_CLOSE_RANGE 0
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x050900
+#    define __ASSUME_CLOSE_RANGE 1
+#  else
+#    define __ASSUME_CLOSE_RANGE 0
+#  endif
 
-/* The FUTEX_LOCK_PI2 operation was introduced across all architectures in Linux
-   5.14.  */
-#if __LINUX_KERNEL_VERSION >= 0x050e00
-# define __ASSUME_FUTEX_LOCK_PI2 1
-#else
-# define __ASSUME_FUTEX_LOCK_PI2 0
-#endif
+/* The FUTEX_LOCK_PI2 operation was introduced across all architectures in
+   Linux 5.14.  */
+#  if __LINUX_KERNEL_VERSION >= 0x050e00
+#    define __ASSUME_FUTEX_LOCK_PI2 1
+#  else
+#    define __ASSUME_FUTEX_LOCK_PI2 0
+#  endif
 
 /* The clone3 system call was introduced across on most architectures in
    Linux 5.3.  Not all ports implements it, so it should be used along
    HAVE_CLONE3_WRAPPER define.  */
-#if __LINUX_KERNEL_VERSION >= 0x050300
-# define __ASSUME_CLONE3 1
-#else
-# define __ASSUME_CLONE3 0
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x050300
+#    define __ASSUME_CLONE3 1
+#  else
+#    define __ASSUME_CLONE3 0
+#  endif
 
 /* The fchmodat2 system call was introduced across all architectures
    in Linux 6.6.  */
-#if __LINUX_KERNEL_VERSION >= 0x060600
-# define __ASSUME_FCHMODAT2 1
-#else
-# define __ASSUME_FCHMODAT2 0
-#endif
+#  if __LINUX_KERNEL_VERSION >= 0x060600
+#    define __ASSUME_FCHMODAT2 1
+#  else
+#    define __ASSUME_FCHMODAT2 0
+#  endif
 
 #endif /* kernel-features.h */

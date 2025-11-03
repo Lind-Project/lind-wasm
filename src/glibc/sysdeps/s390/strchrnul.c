@@ -19,23 +19,22 @@
 #include <ifunc-strchrnul.h>
 
 #if HAVE_STRCHRNUL_IFUNC
-# define __strchrnul __redirect_strchrnul
-# include <string.h>
-# undef __strchrnul
-# include <ifunc-resolve.h>
+#  define __strchrnul __redirect_strchrnul
+#  include <string.h>
+#  undef __strchrnul
+#  include <ifunc-resolve.h>
 
-# if HAVE_STRCHRNUL_C
+#  if HAVE_STRCHRNUL_C
 extern __typeof (__redirect_strchrnul) STRCHRNUL_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_STRCHRNUL_Z13
+#  if HAVE_STRCHRNUL_Z13
 extern __typeof (__redirect_strchrnul) STRCHRNUL_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect_strchrnul, __strchrnul,
 		      (HAVE_STRCHRNUL_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? STRCHRNUL_Z13
-		      : STRCHRNUL_DEFAULT
-		      )
-weak_alias (__strchrnul, strchrnul)
+			  ? STRCHRNUL_Z13
+			  : STRCHRNUL_DEFAULT)
+    weak_alias (__strchrnul, strchrnul)
 #endif /* HAVE_STRCHRNUL_IFUNC  */

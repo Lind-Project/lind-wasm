@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _NFS_NFS_H
-#define _NFS_NFS_H 1
+#  define _NFS_NFS_H 1
 
 /* This file is empty for now.  Its contents do not seem to be
    standardized in any way.  It exists solely for the sake of

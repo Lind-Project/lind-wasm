@@ -16,9 +16,9 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 #ifndef _PTHREAD_MUTEX_CONF_H
-#define _PTHREAD_MUTEX_CONF_H 1
+#  define _PTHREAD_MUTEX_CONF_H 1
 
-#include <adaptive_spin_count.h>
+#  include <adaptive_spin_count.h>
 
 struct mutex_config
 {
@@ -28,6 +28,6 @@ struct mutex_config
 extern struct mutex_config __mutex_aconf;
 libc_hidden_proto (__mutex_aconf)
 
-extern void __pthread_tunables_init (void) attribute_hidden;
+    extern void __pthread_tunables_init (void) attribute_hidden;
 
 #endif

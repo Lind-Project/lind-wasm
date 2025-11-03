@@ -109,7 +109,8 @@ log_inline (uint64_t ix, double_t *tail)
 #endif
   /* p = log1p(r) - r - A[0]*r*r.  */
   p = (ar3
-       * (A[1] + r * A[2] + ar2 * (A[3] + r * A[4] + ar2 * (A[5] + r * A[6]))));
+       * (A[1] + r * A[2]
+	  + ar2 * (A[3] + r * A[4] + ar2 * (A[5] + r * A[6]))));
   lo = lo1 + lo2 + lo3 + lo4 + p;
   y = hi + lo;
   *tail = hi - y + lo;
@@ -274,11 +275,10 @@ zeroinfnan (uint64_t i)
 }
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
-double
-SECTION
+double SECTION
 __pow (double x, double y)
 {
   uint32_t sign_bias = 0;
@@ -379,12 +379,11 @@ __pow (double x, double y)
   return exp_inline (ehi, elo, sign_bias);
 }
 #ifndef __pow
-strong_alias (__pow, __ieee754_pow)
-libm_alias_finite (__ieee754_pow, __pow)
-# if LIBM_SVID_COMPAT
-versioned_symbol (libm, __pow, pow, GLIBC_2_29);
+strong_alias (__pow, __ieee754_pow) libm_alias_finite (__ieee754_pow, __pow)
+#  if LIBM_SVID_COMPAT
+    versioned_symbol (libm, __pow, pow, GLIBC_2_29);
 libm_alias_double_other (__pow, pow)
-# else
-libm_alias_double (__pow, pow)
-# endif
+#  else
+    libm_alias_double (__pow, pow)
+#  endif
 #endif

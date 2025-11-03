@@ -15,25 +15,23 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_TIMERFD_H
-#define	_SYS_TIMERFD_H	1
+#ifndef _SYS_TIMERFD_H
+#  define _SYS_TIMERFD_H 1
 
-#include <time.h>
-#include <bits/types/struct_itimerspec.h>
+#  include <time.h>
+#  include <bits/types/struct_itimerspec.h>
 
 /* Get the platform-dependent flags.  */
-#include <bits/timerfd.h>
-
+#  include <bits/timerfd.h>
 
 /* Bits to be set in the FLAGS parameter of `timerfd_settime'.  */
 enum
-  {
-    TFD_TIMER_ABSTIME = 1 << 0,
-#define TFD_TIMER_ABSTIME TFD_TIMER_ABSTIME
-    TFD_TIMER_CANCEL_ON_SET = 1 << 1
-#define TFD_TIMER_CANCEL_ON_SET TFD_TIMER_CANCEL_ON_SET
-  };
-
+{
+  TFD_TIMER_ABSTIME = 1 << 0,
+#  define TFD_TIMER_ABSTIME TFD_TIMER_ABSTIME
+  TFD_TIMER_CANCEL_ON_SET = 1 << 1
+#  define TFD_TIMER_CANCEL_ON_SET TFD_TIMER_CANCEL_ON_SET
+};
 
 __BEGIN_DECLS
 
@@ -47,30 +45,30 @@ extern int timerfd_settime (int __ufd, int __flags,
 			    const struct itimerspec *__utmr,
 			    struct itimerspec *__otmr) __THROW;
 
-#ifdef __USE_TIME_BITS64
-# if defined(__REDIRECT_NTH)
+#  ifdef __USE_TIME_BITS64
+#    if defined(__REDIRECT_NTH)
 extern int __REDIRECT_NTH (timerfd_settime,
-                           (int __ufd, int __flags,
-                            const struct itimerspec *__restrict __value,
-                            struct itimerspec *__restrict __ovalue),
-                           __timerfd_settime64);
-# else
-# define timerfd_settime __timerfd_settime64
-# endif
-#endif
+			   (int __ufd, int __flags,
+			    const struct itimerspec *__restrict __value,
+			    struct itimerspec *__restrict __ovalue),
+			   __timerfd_settime64);
+#    else
+#      define timerfd_settime __timerfd_settime64
+#    endif
+#  endif
 
 /* Return the next expiration time of UFD.  */
 extern int timerfd_gettime (int __ufd, struct itimerspec *__otmr) __THROW;
 
-#ifdef __USE_TIME_BITS64
-# if defined(__REDIRECT_NTH)
-extern int __REDIRECT_NTH (timerfd_gettime, (int __ufd,
-                                             struct itimerspec *__otmr),
-                           __timerfd_gettime64);
-# else
-# define timerfd_gettime __timerfd_gettime64
-# endif
-#endif
+#  ifdef __USE_TIME_BITS64
+#    if defined(__REDIRECT_NTH)
+extern int __REDIRECT_NTH (timerfd_gettime,
+			   (int __ufd, struct itimerspec *__otmr),
+			   __timerfd_gettime64);
+#    else
+#      define timerfd_gettime __timerfd_gettime64
+#    endif
+#  endif
 
 __END_DECLS
 

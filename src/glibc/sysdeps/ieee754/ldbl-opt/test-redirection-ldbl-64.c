@@ -25,44 +25,44 @@
 #include <complex.h>
 
 #if defined __FINITE_MATH_ONLY__ && __FINITE_MATH_ONLY__ > 0
-# error "This test should never request finite functions"
+#  error "This test should never request finite functions"
 #endif
 
-#define MATH_REDIRX(function, to) \
+#define MATH_REDIRX(function, to)                                             \
   extern typeof (function) *function##_ptr = &to;
-#define MATH_REDIR(function) MATH_REDIRX (function, __ ## function)
+#define MATH_REDIR(function) MATH_REDIRX (function, __##function)
 
 #if __HAVE_FLOAT32
-# define MATH_F32(function) MATH_REDIR(function ## f32)
+#  define MATH_F32(function) MATH_REDIR (function##f32)
 #else
-# define MATH_F32(function)
+#  define MATH_F32(function)
 #endif
 
 #if __HAVE_FLOAT32X
-# define MATH_F32X(function) MATH_REDIR(function ## f32x)
+#  define MATH_F32X(function) MATH_REDIR (function##f32x)
 #else
-# define MATH_F32X(function)
+#  define MATH_F32X(function)
 #endif
 
 #if __HAVE_FLOAT64
-# define MATH_F64(function) MATH_REDIR(function ## f64)
+#  define MATH_F64(function) MATH_REDIR (function##f64)
 #else
-# define MATH_F64(function)
+#  define MATH_F64(function)
 #endif
 
 #if __HAVE_FLOAT64X
-# define MATH_F64X(function) MATH_REDIR(function ## f64x)
+#  define MATH_F64X(function) MATH_REDIR (function##f64x)
 #else
-# define MATH_F64X(function)
+#  define MATH_F64X(function)
 #endif
 
-#define MATH_FUNCTION(function) \
-  MATH_REDIR(function); \
-  MATH_REDIR(function ## f); \
-  MATH_F32(function); \
-  MATH_F32X(function); \
-  MATH_F64(function); \
-  MATH_F64X(function);
+#define MATH_FUNCTION(function)                                               \
+  MATH_REDIR (function);                                                      \
+  MATH_REDIR (function##f);                                                   \
+  MATH_F32 (function);                                                        \
+  MATH_F32X (function);                                                       \
+  MATH_F64 (function);                                                        \
+  MATH_F64X (function);
 
 MATH_FUNCTION (acos);
 MATH_FUNCTION (asin);

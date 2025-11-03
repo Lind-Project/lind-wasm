@@ -24,7 +24,7 @@
 static inline uintptr_t
 sigcontext_get_pc (const ucontext_t *ctx)
 {
- return ctx->uc_mcontext.__gregs[REG_PC];
+  return ctx->uc_mcontext.__gregs[REG_PC];
 }
 
 #endif

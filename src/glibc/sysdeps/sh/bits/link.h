@@ -15,10 +15,9 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_LINK_H
-# error "Never include <bits/link.h> directly; use <link.h> instead."
+#ifndef _LINK_H
+#  error "Never include <bits/link.h> directly; use <link.h> instead."
 #endif
-
 
 /* Registers for entry into PLT on SH.  */
 typedef struct La_sh_regs
@@ -49,21 +48,17 @@ typedef struct La_sh_retval
   float lrv_fr1;
 } La_sh_retval;
 
-
 __BEGIN_DECLS
 
 extern Elf32_Addr la_sh_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
 				      uintptr_t *__refcook,
-				      uintptr_t *__defcook,
-				      La_sh_regs *__regs,
+				      uintptr_t *__defcook, La_sh_regs *__regs,
 				      unsigned int *__flags,
 				      const char *__symname,
 				      long int *__framesizep);
-extern unsigned int la_sh_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx,
-				       uintptr_t *__refcook,
-				       uintptr_t *__defcook,
-				       const La_sh_regs *__inregs,
-				       La_sh_retval *__outregs,
-				       const char *__symname);
+extern unsigned int
+la_sh_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx, uintptr_t *__refcook,
+		   uintptr_t *__defcook, const La_sh_regs *__inregs,
+		   La_sh_retval *__outregs, const char *__symname);
 
 __END_DECLS

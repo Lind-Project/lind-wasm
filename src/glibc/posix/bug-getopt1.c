@@ -21,21 +21,19 @@ one_test (const char *fmt, int argc, char *argv[], int expected[argc - 1])
       int c = getopt (argc, argv, fmt);
       if (c != expected[i])
 	{
-	  printf ("format '%s' test %d failed: expected '%c', got '%c'\n",
-		  fmt, i, expected[i], c);
+	  printf ("format '%s' test %d failed: expected '%c', got '%c'\n", fmt,
+		  i, expected[i], c);
 	  res = 1;
 	}
       if (ftell (stderr) != 0)
 	{
-	  printf ("format '%s' test %d failed: printed to stderr\n",
-		  fmt, i);
+	  printf ("format '%s' test %d failed: printed to stderr\n", fmt, i);
 	  res = 1;
 	}
     }
 
   return res;
 }
-
 
 static int
 do_test (void)
@@ -59,12 +57,12 @@ do_test (void)
 
   int ret = one_test ("+:a:b", 2,
 		      (char *[2]) { (char *) "bug-getopt1", (char *) "-a" },
-		      (int [1]) { ':' });
+		      (int[1]) { ':' });
 
-  ret |= one_test ("+:a:b", 3,
-		   (char *[3]) { (char *) "bug-getopt1", (char *) "-b",
-				 (char *) "-a" },
-		   (int [2]) { 'b', ':' });
+  ret |= one_test (
+      "+:a:b", 3,
+      (char *[3]) { (char *) "bug-getopt1", (char *) "-b", (char *) "-a" },
+      (int[2]) { 'b', ':' });
 
   if (ret == 0)
     puts ("all OK");

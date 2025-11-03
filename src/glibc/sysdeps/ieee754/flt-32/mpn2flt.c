@@ -34,7 +34,7 @@ __mpn_construct_float (mp_srcptr frac_ptr, int expt, int sign)
 #if BITS_PER_MP_LIMB > FLT_MANT_DIG
   u.ieee.mantissa = frac_ptr[0] & (((mp_limb_t) 1 << FLT_MANT_DIG) - 1);
 #else
-  #error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
+#  error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
 #endif
 
   return u.f;

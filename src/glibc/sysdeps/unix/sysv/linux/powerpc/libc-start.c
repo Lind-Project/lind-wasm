@@ -21,11 +21,11 @@
 #include <sysdep.h>
 
 #ifndef SHARED
-#include <hwcapinfo.h>
+#  include <hwcapinfo.h>
 #endif
 #if ENABLE_STATIC_PIE && !defined SHARED
 /* For elf_machine_load_address.  */
-#include <dl-machine.h>
+#  include <dl-machine.h>
 #endif
 
 /* The main work is done in the generic function.  */
@@ -37,20 +37,17 @@
 #include <csu/libc-start.c>
 
 struct startup_info
-  {
-    void *sda_base;
-    int (*main) (int, char **, char **, void *);
-    int (*init) (int, char **, char **, void *);
-    void (*fini) (void);
-  };
+{
+  void *sda_base;
+  int (*main) (int, char **, char **, void *);
+  int (*init) (int, char **, char **, void *);
+  void (*fini) (void);
+};
 
 int
-__libc_start_main_impl (int argc, char **argv,
-			char **ev,
-			ElfW (auxv_t) * auxvec,
-			void (*rtld_fini) (void),
-			struct startup_info *stinfo,
-			char **stack_on_entry)
+__libc_start_main_impl (int argc, char **argv, char **ev,
+			ElfW (auxv_t) * auxvec, void (*rtld_fini) (void),
+			struct startup_info *stinfo, char **stack_on_entry)
 {
   /* the PPC SVR4 ABI says that the top thing on the stack will
      be a NULL pointer, so if not we assume that we're being called
@@ -59,8 +56,8 @@ __libc_start_main_impl (int argc, char **argv,
     {
       char **temp;
       /* ...in which case, we have argc as the top thing on the
-         stack, followed by argv (NULL-terminated), envp (likewise),
-         and the auxiliary vector.  */
+	 stack, followed by argv (NULL-terminated), envp (likewise),
+	 and the auxiliary vector.  */
       /* 32/64-bit agnostic load from stack */
       argc = *(long int *) stack_on_entry;
       argv = stack_on_entry + 1;
@@ -69,17 +66,17 @@ __libc_start_main_impl (int argc, char **argv,
       temp = ev;
       while (*temp != NULL)
 	++temp;
-      auxvec = (ElfW (auxv_t) *)++ temp;
+      auxvec = (ElfW (auxv_t) *) ++temp;
 #endif
       rtld_fini = NULL;
     }
 
-  for (ElfW (auxv_t) * av = auxvec; av->a_type != AT_NULL; ++av)
+  for (ElfW (auxv_t) *av = auxvec; av->a_type != AT_NULL; ++av)
     switch (av->a_type)
       {
       /* For the static case, we also need _dl_hwcap, _dl_hwcap2 and
-         _dl_platform, so we can call
-         __tcb_parse_hwcap_and_convert_at_platform ().  */
+	 _dl_platform, so we can call
+	 __tcb_parse_hwcap_and_convert_at_platform ().  */
 #ifndef SHARED
       case AT_HWCAP:
 	_dl_hwcap = (unsigned long int) av->a_un.a_val;
@@ -99,8 +96,8 @@ __libc_start_main_impl (int argc, char **argv,
 #endif
       }
 
-  /* Initialize hwcap/hwcap2 and platform data so it can be copied to
-     the TCB later in __libc_setup_tls (). (static case only).  */
+    /* Initialize hwcap/hwcap2 and platform data so it can be copied to
+       the TCB later in __libc_setup_tls (). (static case only).  */
 #ifndef SHARED
   __tcb_parse_hwcap_and_convert_at_platform ();
 #endif
@@ -112,8 +109,7 @@ __libc_start_main_impl (int argc, char **argv,
     stmain = (char *) stmain + elf_machine_load_address ();
 #endif
 
-  return generic_start_main (stmain, argc, argv, auxvec,
-			     NULL, NULL, rtld_fini,
+  return generic_start_main (stmain, argc, argv, auxvec, NULL, NULL, rtld_fini,
 			     stack_on_entry);
 }
 DEFINE_LIBC_START_MAIN_VERSION

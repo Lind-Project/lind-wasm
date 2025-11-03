@@ -20,34 +20,33 @@
 #include <kernel_stat.h>
 
 #if !XSTAT_IS_XSTAT64
-# include <glob.h>
-# include <dirent.h>
-# include <sys/stat.h>
+#  include <glob.h>
+#  include <dirent.h>
+#  include <sys/stat.h>
 
-# define dirent dirent64
-# define __readdir(dirp) __readdir64 (dirp)
+#  define dirent dirent64
+#  define __readdir(dirp) __readdir64 (dirp)
 
-# define glob_t glob64_t
-# define __glob __glob64
-# define globfree(pglob) globfree64 (pglob)
+#  define glob_t glob64_t
+#  define __glob __glob64
+#  define globfree(pglob) globfree64 (pglob)
 
-# define COMPILE_GLOB64	1
-# define struct_stat    struct stat64
-# define struct_stat64  struct stat64
-# define GLOB_LSTAT     gl_lstat
-# define GLOB_STAT64    __stat64
-# define GLOB_LSTAT64   __lstat64
+#  define COMPILE_GLOB64 1
+#  define struct_stat struct stat64
+#  define struct_stat64 struct stat64
+#  define GLOB_LSTAT gl_lstat
+#  define GLOB_STAT64 __stat64
+#  define GLOB_LSTAT64 __lstat64
 
-# include <posix/glob.c>
+#  include <posix/glob.c>
 
-# include <shlib-compat.h>
+#  include <shlib-compat.h>
 
-# ifdef GLOB_NO_OLD_VERSION
-strong_alias (__glob64, glob64)
-libc_hidden_def (glob64)
-# else
+#  ifdef GLOB_NO_OLD_VERSION
+strong_alias (__glob64, glob64) libc_hidden_def (glob64)
+#  else
 libc_hidden_def (__glob64)
-versioned_symbol (libc, __glob64, glob64, GLIBC_2_27);
+    versioned_symbol (libc, __glob64, glob64, GLIBC_2_27);
 libc_hidden_ver (__glob64, glob64)
-# endif
+#  endif
 #endif /* XSTAT_IS_XSTAT64  */

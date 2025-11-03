@@ -18,7 +18,6 @@
 #include <pthread.h>
 #include <stdio.h>
 
-
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 
 static int global;
@@ -28,7 +27,6 @@ once_handler (void)
 {
   ++global;
 }
-
 
 static int
 do_test (void)

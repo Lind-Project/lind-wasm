@@ -37,6 +37,5 @@ __statvfs (const char *file, struct statvfs *buf)
   /* We signal success if the statfs call succeeded.  */
   return 0;
 }
-weak_alias (__statvfs, statvfs)
-libc_hidden_weak (statvfs)
+weak_alias (__statvfs, statvfs) libc_hidden_weak (statvfs)
 #endif

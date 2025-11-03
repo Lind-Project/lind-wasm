@@ -21,6 +21,6 @@
 
 #include <eloop-threshold.h>
 
-#define SYMLOOP_MAX     (__eloop_threshold ())
+#define SYMLOOP_MAX (__eloop_threshold ())
 
 #include <sysdeps/posix/sysconf.c>

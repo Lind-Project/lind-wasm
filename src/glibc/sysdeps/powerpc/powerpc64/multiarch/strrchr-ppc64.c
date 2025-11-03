@@ -22,10 +22,10 @@
 #undef weak_alias
 #define weak_alias(name, aliasname)
 
-#if IS_IN (libc) && defined(SHARED)
-# undef libc_hidden_builtin_def
-# define libc_hidden_builtin_def(name) \
-  __hidden_ver1(__strrchr_ppc, __GI_strrchr, __strrchr_ppc);
+#if IS_IN(libc) && defined(SHARED)
+#  undef libc_hidden_builtin_def
+#  define libc_hidden_builtin_def(name)                                       \
+    __hidden_ver1 (__strrchr_ppc, __GI_strrchr, __strrchr_ppc);
 #endif
 
 extern __typeof (strrchr) __strrchr_ppc attribute_hidden;

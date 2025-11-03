@@ -25,6 +25,8 @@
 int
 __dup3 (int fd, int fd2, int flags)
 {
-  return MAKE_SYSCALL(DUP3_SYSCALL, "syscall|dup3", (uint64_t) fd, (uint64_t) fd2, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (DUP3_SYSCALL, "syscall|dup3", (uint64_t) fd,
+		       (uint64_t) fd2, (uint64_t) flags, NOTUSED, NOTUSED,
+		       NOTUSED);
 }
 weak_alias (__dup3, dup3)

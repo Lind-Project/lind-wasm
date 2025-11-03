@@ -20,12 +20,12 @@
 
 #if _POSIX_MAPPED_FILES
 
-#include <alloc_buffer.h>
-#include <shm-directory.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <fcntl.h>
-#include <errno.h>
+#  include <alloc_buffer.h>
+#  include <shm-directory.h>
+#  include <string.h>
+#  include <sys/mman.h>
+#  include <fcntl.h>
+#  include <errno.h>
 
 int
 __shm_get_name (struct shmdir_name *result, const char *name, bool sem_prefix)
@@ -36,17 +36,17 @@ __shm_get_name (struct shmdir_name *result, const char *name, bool sem_prefix)
   buffer = alloc_buffer_create (result->name, sizeof (result->name));
   alloc_buffer_copy_bytes (&buffer, SHMDIR, strlen (SHMDIR));
 
-#if defined (SHM_ANON) && defined (O_TMPFILE)
+#  if defined(SHM_ANON) && defined(O_TMPFILE)
   if (name == SHM_ANON)
     {
       /* For SHM_ANON, we want shm_open () to pass O_TMPFILE to open (),
-         with SHMDIR itself as the path.  So, leave it at that.  */
+	 with SHMDIR itself as the path.  So, leave it at that.  */
       alloc_buffer_add_byte (&buffer, 0);
       if (alloc_buffer_has_failed (&buffer))
-        return -1;
+	return -1;
       return 0;
     }
-#endif
+#  endif
 
   while (name[0] == '/')
     ++name;
@@ -60,7 +60,7 @@ __shm_get_name (struct shmdir_name *result, const char *name, bool sem_prefix)
   if (alloc_buffer_has_failed (&buffer))
     {
       if (namelen > NAME_MAX)
-        return ENAMETOOLONG;
+	return ENAMETOOLONG;
       return EINVAL;
     }
   return 0;

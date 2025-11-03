@@ -22,12 +22,11 @@
 /* There is a DT_DEBUG entry in the dynamic section.  Fill it in with the
    run-time address of the r_debug structure  */
 
-static inline void
-__attribute ((always_inline))
+static inline void __attribute ((always_inline))
 elf_setup_debug_entry (struct link_map *l, struct r_debug *r)
 {
   if (l->l_info[DT_DEBUG] != NULL)
-    l->l_info[DT_DEBUG]->d_un.d_ptr = (ElfW(Addr)) r;
+    l->l_info[DT_DEBUG]->d_un.d_ptr = (ElfW (Addr)) r;
 }
 
 #endif /* _DL_DEBUG_H */

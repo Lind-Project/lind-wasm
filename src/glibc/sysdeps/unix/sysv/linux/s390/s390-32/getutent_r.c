@@ -23,15 +23,14 @@
 #include "utmp-private.h"
 
 #if defined SHARED
-weak_alias (__setutent, setutent)
-weak_alias (__endutent, endutent)
+weak_alias (__setutent, setutent) weak_alias (__endutent, endutent)
 
-# undef weak_alias
-# define weak_alias(n,a)
+#  undef weak_alias
+#  define weak_alias(n, a)
 #endif
 #include "login/getutent_r.c"
 
 #if defined SHARED
-default_symbol_version (__getutent_r, getutent_r, UTMP_COMPAT_BASE);
+    default_symbol_version (__getutent_r, getutent_r, UTMP_COMPAT_BASE);
 default_symbol_version (__pututline, pututline, UTMP_COMPAT_BASE);
 #endif

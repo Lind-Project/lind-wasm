@@ -17,18 +17,16 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_PROCINFO_H
-#define _DL_PROCINFO_H	1
+#  define _DL_PROCINFO_H 1
 
-#include <ldsodefs.h>
-
+#  include <ldsodefs.h>
 
 /* Mask to filter out platforms.  */
-#define _DL_HWCAP_PLATFORM    (-1ULL)
+#  define _DL_HWCAP_PLATFORM (-1ULL)
 
-#define _DL_PLATFORMS_COUNT   5
+#  define _DL_PLATFORMS_COUNT 5
 
-static inline int
-__attribute__ ((unused, always_inline))
+static inline int __attribute__ ((unused, always_inline))
 _dl_string_platform (const char *str)
 {
   int i;
@@ -36,22 +34,22 @@ _dl_string_platform (const char *str)
   if (str != NULL)
     for (i = 0; i < _DL_PLATFORMS_COUNT; ++i)
       {
-        if (strcmp (str, GLRO(dl_alpha_platforms)[i]) == 0)
-          return i;
+	if (strcmp (str, GLRO (dl_alpha_platforms)[i]) == 0)
+	  return i;
       }
   return -1;
 };
 
 /* We cannot provide a general printing function.  */
-#define _dl_procinfo(type, word) -1
+#  define _dl_procinfo(type, word) -1
 
 /* There are no hardware capabilities defined.  */
-#define _dl_hwcap_string(idx) ""
+#  define _dl_hwcap_string(idx) ""
 
 /* By default there is no important hardware capability.  */
-#define HWCAP_IMPORTANT (0)
+#  define HWCAP_IMPORTANT (0)
 
 /* We don't have any hardware capabilities.  */
-#define _DL_HWCAP_COUNT	0
+#  define _DL_HWCAP_COUNT 0
 
 #endif /* dl-procinfo.h */

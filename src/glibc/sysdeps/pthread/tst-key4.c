@@ -21,14 +21,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 #ifdef PTHREAD_KEYS_MAX
 const int max = PTHREAD_KEYS_MAX;
 #else
 const int max = _POSIX_THREAD_KEYS_MAX;
 #endif
 static pthread_key_t *keys;
-
 
 static void *
 tf1 (void *arg)
@@ -44,7 +42,6 @@ tf1 (void *arg)
   return NULL;
 }
 
-
 static void *
 tf2 (void *arg)
 {
@@ -58,7 +55,6 @@ tf2 (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -129,7 +125,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

@@ -24,17 +24,17 @@
 
 #ifndef TEST_FUNCTION
 static int do_test (void);
-# define TEST_FUNCTION do_test ()
+#  define TEST_FUNCTION do_test ()
 #endif
 #include "../test-skeleton.c"
 
 #ifndef ATTR
 pthread_mutexattr_t *attr;
-# define ATTR attr
+#  define ATTR attr
 #endif
 
 #ifndef ATTR_NULL
-# define ATTR_NULL (ATTR == NULL)
+#  define ATTR_NULL (ATTR == NULL)
 #endif
 
 static int

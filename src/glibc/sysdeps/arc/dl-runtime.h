@@ -37,6 +37,6 @@ reloc_index (uintptr_t plt0, uintptr_t pltn, size_t size)
 static inline uintptr_t
 reloc_offset (uintptr_t plt0, uintptr_t pltn)
 {
-  size_t sz = sizeof (ElfW(Rela));
+  size_t sz = sizeof (ElfW (Rela));
   return reloc_index (plt0, pltn, sz) * sz;
 }

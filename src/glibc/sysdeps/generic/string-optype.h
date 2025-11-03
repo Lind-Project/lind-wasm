@@ -17,7 +17,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_OPTYPE_H
-#define _STRING_OPTYPE_H 1
+#  define _STRING_OPTYPE_H 1
 
 typedef unsigned long int __attribute__ ((__may_alias__)) op_t;
 

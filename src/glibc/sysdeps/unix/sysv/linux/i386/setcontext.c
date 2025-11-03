@@ -1,4 +1,6 @@
-int __setcontext (void) {
+int
+__setcontext (void)
+{
   return 0;
 }
 

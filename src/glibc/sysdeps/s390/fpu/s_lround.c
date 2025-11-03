@@ -18,17 +18,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# include <math.h>
-# include <libm-alias-double.h>
+#  include <math.h>
+#  include <libm-alias-double.h>
 
 /* The sizeof (long int) differs between s390x (8byte) and s390 (4byte).
    Thus we need different instructions as the target size is encoded there.
    Note: On s390 this instruction is only used if build with -mzarch.  */
-# ifdef __s390x__
-#  define INSN "cgdbra"
-# else
-#  define INSN "cfdbra"
-# endif
+#  ifdef __s390x__
+#    define INSN "cgdbra"
+#  else
+#    define INSN "cfdbra"
+#  endif
 
 long int
 __lround (double x)
@@ -37,11 +37,11 @@ __lround (double x)
   /* The z196 zarch "convert to fixed" (cgdbra) instruction is rounding
      x to the nearest integer with "ties away from 0" rounding mode
      (M3-field: 1) where inexact exceptions are suppressed (M4-field: 4).  */
-  __asm__ (INSN " %0,1,%1,4" : "=d" (y) : "f" (x) : "cc");
+  __asm__ (INSN " %0,1,%1,4" : "=d"(y) : "f"(x) : "cc");
   return y;
 }
 libm_alias_double (__lround, lround)
 
 #else
-# include <sysdeps/ieee754/dbl-64/s_lround.c>
+#  include <sysdeps/ieee754/dbl-64/s_lround.c>
 #endif

@@ -47,8 +47,8 @@ __ulimit (int cmd, ...)
       /* Get limit on file size.  */
       if (__getrlimit (RLIMIT_FSIZE, &limit) == 0)
 	/* Convert from bytes to 512 byte units.  */
-	result =  (limit.rlim_cur == RLIM_INFINITY
-		   ? LONG_MAX : limit.rlim_cur / 512);
+	result = (limit.rlim_cur == RLIM_INFINITY ? LONG_MAX
+						  : limit.rlim_cur / 512);
       break;
 
     case UL_SETFSIZE:

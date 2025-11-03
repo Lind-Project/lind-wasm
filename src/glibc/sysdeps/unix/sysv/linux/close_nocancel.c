@@ -23,6 +23,6 @@
 int
 __close_nocancel (int fd)
 {
-  return close(fd);
+  return close (fd);
 }
 libc_hidden_def (__close_nocancel)

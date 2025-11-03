@@ -26,7 +26,7 @@
    Both SRCP and DSTP should be aligned for memory operations on `op_t's.  */
 
 #ifndef WORDCOPY_FWD_ALIGNED
-# define WORDCOPY_FWD_ALIGNED _wordcopy_fwd_aligned
+#  define WORDCOPY_FWD_ALIGNED _wordcopy_fwd_aligned
 #endif
 
 void
@@ -35,15 +35,15 @@ WORDCOPY_FWD_ALIGNED (long int dstp, long int srcp, size_t len)
   op_t a0, a1;
 
   if (len & 1)
-  {
-    ((op_t *) dstp)[0] = ((op_t *) srcp)[0];
+    {
+      ((op_t *) dstp)[0] = ((op_t *) srcp)[0];
 
-    if (len == 1)
-      return;
-    srcp += OPSIZ;
-    dstp += OPSIZ;
-    len -= 1;
-  }
+      if (len == 1)
+	return;
+      srcp += OPSIZ;
+      dstp += OPSIZ;
+      len -= 1;
+    }
 
   do
     {
@@ -65,7 +65,7 @@ WORDCOPY_FWD_ALIGNED (long int dstp, long int srcp, size_t len)
    *not* be aligned.  */
 
 #ifndef WORDCOPY_FWD_DEST_ALIGNED
-# define WORDCOPY_FWD_DEST_ALIGNED _wordcopy_fwd_dest_aligned
+#  define WORDCOPY_FWD_DEST_ALIGNED _wordcopy_fwd_dest_aligned
 #endif
 
 void
@@ -86,18 +86,18 @@ WORDCOPY_FWD_DEST_ALIGNED (long int dstp, long int srcp, size_t len)
   a0 = ((op_t *) srcp)[0];
 
   if (len & 1)
-  {
-    a1 = ((op_t *) srcp)[1];
-    ((op_t *) dstp)[0] = MERGE (a0, sh_1, a1, sh_2);
+    {
+      a1 = ((op_t *) srcp)[1];
+      ((op_t *) dstp)[0] = MERGE (a0, sh_1, a1, sh_2);
 
-    if (len == 1)
-      return;
+      if (len == 1)
+	return;
 
-    a0 = a1;
-    srcp += OPSIZ;
-    dstp += OPSIZ;
-    len -= 1;
-  }
+      a0 = a1;
+      srcp += OPSIZ;
+      dstp += OPSIZ;
+      len -= 1;
+    }
 
   do
     {
@@ -120,7 +120,7 @@ WORDCOPY_FWD_DEST_ALIGNED (long int dstp, long int srcp, size_t len)
    operations on `op_t's.  */
 
 #ifndef WORDCOPY_BWD_ALIGNED
-# define WORDCOPY_BWD_ALIGNED _wordcopy_bwd_aligned
+#  define WORDCOPY_BWD_ALIGNED _wordcopy_bwd_aligned
 #endif
 
 void
@@ -129,15 +129,15 @@ WORDCOPY_BWD_ALIGNED (long int dstp, long int srcp, size_t len)
   op_t a0, a1;
 
   if (len & 1)
-  {
-    srcp -= OPSIZ;
-    dstp -= OPSIZ;
-    ((op_t *) dstp)[0] = ((op_t *) srcp)[0];
+    {
+      srcp -= OPSIZ;
+      dstp -= OPSIZ;
+      ((op_t *) dstp)[0] = ((op_t *) srcp)[0];
 
-    if (len == 1)
-      return;
-    len -= 1;
-  }
+      if (len == 1)
+	return;
+      len -= 1;
+    }
 
   do
     {
@@ -160,7 +160,7 @@ WORDCOPY_BWD_ALIGNED (long int dstp, long int srcp, size_t len)
    operations on `op_t', but SRCP must *not* be aligned.  */
 
 #ifndef WORDCOPY_BWD_DEST_ALIGNED
-# define WORDCOPY_BWD_DEST_ALIGNED _wordcopy_bwd_dest_aligned
+#  define WORDCOPY_BWD_DEST_ALIGNED _wordcopy_bwd_dest_aligned
 #endif
 
 void
@@ -181,18 +181,18 @@ WORDCOPY_BWD_DEST_ALIGNED (long int dstp, long int srcp, size_t len)
   a2 = ((op_t *) srcp)[0];
 
   if (len & 1)
-  {
-    srcp -= OPSIZ;
-    dstp -= OPSIZ;
-    a1 = ((op_t *) srcp)[0];
-    ((op_t *) dstp)[0] = MERGE (a1, sh_1, a2, sh_2);
+    {
+      srcp -= OPSIZ;
+      dstp -= OPSIZ;
+      a1 = ((op_t *) srcp)[0];
+      ((op_t *) dstp)[0] = MERGE (a1, sh_1, a2, sh_2);
 
-    if (len == 1)
-      return;
+      if (len == 1)
+	return;
 
-    a2 = a1;
-    len -= 1;
-  }
+      a2 = a1;
+      len -= 1;
+    }
 
   do
     {

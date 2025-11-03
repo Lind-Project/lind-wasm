@@ -39,7 +39,7 @@ __adjtime (const struct timeval *delta, struct timeval *olddelta)
 
   err = __host_adjust_time (hostpriv,
 			    /* `time_value_t' and `struct timeval' are in
-                               fact identical with the names changed.  */
+			       fact identical with the names changed.  */
 			    *(time_value_t *) delta,
 			    (time_value_t *) olddelta);
   __mach_port_deallocate (__mach_task_self (), hostpriv);

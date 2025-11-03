@@ -32,23 +32,23 @@
 #include "mathimpl.h"
 
 #ifndef suffix
-#define suffix /*empty*/
+#  define suffix /*empty*/
 #endif
 #ifndef float_type
-#define float_type double
+#  define float_type double
 #endif
 
-#define __CONCATX(a,b) __CONCAT(a,b)
+#define __CONCATX(a, b) __CONCAT (a, b)
 
 float_type
-__CONCATX(__scalbn,suffix) (float_type x, int exp)
+__CONCATX (__scalbn, suffix) (float_type x, int exp)
 {
-  return __m81_u(__CONCATX(__scalbn,suffix))(x, exp);
+  return __m81_u (__CONCATX (__scalbn, suffix)) (x, exp);
 }
-strong_alias (__CONCATX(__scalbn,suffix), __CONCATX(__scalbln,suffix))
+strong_alias (__CONCATX (__scalbn, suffix), __CONCATX (__scalbln, suffix))
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libc, GLIBC_2_1, GLIBC_2_20)
-compat_symbol (libc, __CONCATX(__scalbn,suffix), __CONCATX(scalbln,suffix),
-	       GLIBC_2_1);
+#if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_20)
+    compat_symbol (libc, __CONCATX (__scalbn, suffix),
+		   __CONCATX (scalbln, suffix), GLIBC_2_1);
 #endif

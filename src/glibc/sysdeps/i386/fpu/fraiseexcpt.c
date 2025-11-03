@@ -32,7 +32,7 @@ __feraiseexcept (int excepts)
     {
       /* One example of an invalid operation is 0.0 / 0.0.  */
       double d;
-      __asm__ __volatile__ ("fldz; fdiv %%st, %%st(0); fwait" : "=t" (d));
+      __asm__ __volatile__ ("fldz; fdiv %%st, %%st(0); fwait" : "=t"(d));
       (void) &d;
     }
 
@@ -41,7 +41,7 @@ __feraiseexcept (int excepts)
     {
       double d;
       __asm__ __volatile__ ("fldz; fld1; fdivp %%st, %%st(1); fwait"
-			    : "=t" (d));
+			    : "=t"(d));
       (void) &d;
     }
 
@@ -54,13 +54,13 @@ __feraiseexcept (int excepts)
 
       /* Bah, we have to clear selected exceptions.  Since there is no
 	 `fldsw' instruction we have to do it the hard way.  */
-      __asm__ __volatile__ ("fnstenv %0" : "=m" (*&temp));
+      __asm__ __volatile__ ("fnstenv %0" : "=m"(*&temp));
 
       /* Set the relevant bits.  */
       temp.__status_word |= FE_OVERFLOW;
 
       /* Put the new data in effect.  */
-      __asm__ __volatile__ ("fldenv %0" : : "m" (*&temp));
+      __asm__ __volatile__ ("fldenv %0" : : "m"(*&temp));
 
       /* And raise the exception.  */
       __asm__ __volatile__ ("fwait");
@@ -75,13 +75,13 @@ __feraiseexcept (int excepts)
 
       /* Bah, we have to clear selected exceptions.  Since there is no
 	 `fldsw' instruction we have to do it the hard way.  */
-      __asm__ __volatile__ ("fnstenv %0" : "=m" (*&temp));
+      __asm__ __volatile__ ("fnstenv %0" : "=m"(*&temp));
 
       /* Set the relevant bits.  */
       temp.__status_word |= FE_UNDERFLOW;
 
       /* Put the new data in effect.  */
-      __asm__ __volatile__ ("fldenv %0" : : "m" (*&temp));
+      __asm__ __volatile__ ("fldenv %0" : : "m"(*&temp));
 
       /* And raise the exception.  */
       __asm__ __volatile__ ("fwait");
@@ -96,13 +96,13 @@ __feraiseexcept (int excepts)
 
       /* Bah, we have to clear selected exceptions.  Since there is no
 	 `fldsw' instruction we have to do it the hard way.  */
-      __asm__ __volatile__ ("fnstenv %0" : "=m" (*&temp));
+      __asm__ __volatile__ ("fnstenv %0" : "=m"(*&temp));
 
       /* Set the relevant bits.  */
       temp.__status_word |= FE_INEXACT;
 
       /* Put the new data in effect.  */
-      __asm__ __volatile__ ("fldenv %0" : : "m" (*&temp));
+      __asm__ __volatile__ ("fldenv %0" : : "m"(*&temp));
 
       /* And raise the exception.  */
       __asm__ __volatile__ ("fwait");
@@ -113,11 +113,11 @@ __feraiseexcept (int excepts)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__feraiseexcept, __old_feraiseexcept)
-compat_symbol (libm, __old_feraiseexcept, feraiseexcept, GLIBC_2_1);
+    compat_symbol (libm, __old_feraiseexcept, feraiseexcept, GLIBC_2_1);
 #endif
 
 libm_hidden_def (__feraiseexcept)
-libm_hidden_ver (__feraiseexcept, feraiseexcept)
-versioned_symbol (libm, __feraiseexcept, feraiseexcept, GLIBC_2_2);
+    libm_hidden_ver (__feraiseexcept, feraiseexcept)
+	versioned_symbol (libm, __feraiseexcept, feraiseexcept, GLIBC_2_2);

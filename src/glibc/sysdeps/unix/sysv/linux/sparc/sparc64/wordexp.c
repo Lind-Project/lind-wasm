@@ -18,26 +18,22 @@
 #include <shlib-compat.h>
 
 /* For Linux/Alpha we have to make the wordexp symbols versioned.  */
-#define wordexp(words, pwordexp, flags) \
-  __new_wordexp (words, pwordexp, flags)
+#define wordexp(words, pwordexp, flags) __new_wordexp (words, pwordexp, flags)
 
 #include <posix/wordexp.c>
 
 versioned_symbol (libc, __new_wordexp, wordexp, GLIBC_2_2_2);
 
-
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_2_2)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_2_2)
 /* The old, incorrect wordexp_t definition.  */
 typedef struct
-  {
-    int we_wordc;              /* Count of words matched.  */
-    char **we_wordv;           /* List of expanded words.  */
-    int we_offs;               /* Slots to reserve in `we_wordv'.  */
-  } old_wordexp_t;
+{
+  int we_wordc;	   /* Count of words matched.  */
+  char **we_wordv; /* List of expanded words.  */
+  int we_offs;	   /* Slots to reserve in `we_wordv'.  */
+} old_wordexp_t;
 
-
-int
-attribute_compat_text_section
+int attribute_compat_text_section
 __old_wordexp (const char *words, old_wordexp_t *pwordexp, int flags)
 {
   wordexp_t we;

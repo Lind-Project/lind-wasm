@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ELISION_CONF_H
-#define _ELISION_CONF_H 1
+#  define _ELISION_CONF_H 1
 
 /* No elision support by default.  */
-#define ENABLE_ELISION_SUPPORT 0
+#  define ENABLE_ELISION_SUPPORT 0
 
 /* Whether __lll_unlock_elision expects a pointer argument to the
    adaptive counter.  Here, an unused arbitrary value.  */
-#define ELISION_UNLOCK_NEEDS_ADAPT_COUNT 0
+#  define ELISION_UNLOCK_NEEDS_ADAPT_COUNT 0
 
 #endif

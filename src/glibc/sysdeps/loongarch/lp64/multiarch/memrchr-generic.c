@@ -16,8 +16,8 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define MEMRCHR __memrchr_generic
+#if IS_IN(libc)
+#  define MEMRCHR __memrchr_generic
 #endif
 
 #include <string/memrchr.c>

@@ -4,12 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const struct option opts[] =
-  {
-    { "alpha",	no_argument,       NULL, 'a' },
-    { "beta",	required_argument, NULL, 'b' },
-    { NULL,	0,                 NULL, 0 }
-  };
+static const struct option opts[] = { { "alpha", no_argument, NULL, 'a' },
+				      { "beta", required_argument, NULL, 'b' },
+				      { NULL, 0, NULL, 0 } };
 
 static int
 one_test (const char *fmt, int argc, char *argv[], int n, int expected[n],
@@ -30,21 +27,20 @@ one_test (const char *fmt, int argc, char *argv[], int n, int expected[n],
       int c = getopt_long (argc, argv, fmt, opts, NULL);
       if (c != expected[i])
 	{
-	  printf ("format '%s' test %d failed: expected '%c', got '%c'\n",
-		  fmt, i, expected[i], c);
+	  printf ("format '%s' test %d failed: expected '%c', got '%c'\n", fmt,
+		  i, expected[i], c);
 	  res = 1;
 	}
       if ((ftell (stderr) != 0) != out[i])
 	{
-	  printf ("format '%s' test %d failed: %sprinted to stderr\n",
-		  fmt, i, out[i] ? "not " : "");
+	  printf ("format '%s' test %d failed: %sprinted to stderr\n", fmt, i,
+		  out[i] ? "not " : "");
 	  res = 1;
 	}
     }
 
   return res;
 }
-
 
 static int
 do_test (void)
@@ -68,11 +64,11 @@ do_test (void)
 
   int ret = one_test ("ab:W;", 2,
 		      (char *[2]) { (char *) "bug-getopt3", (char *) "-a;" },
-		      2, (int [2]) { 'a', '?' }, (int [2]) { 0, 1 });
+		      2, (int[2]) { 'a', '?' }, (int[2]) { 0, 1 });
 
   ret |= one_test ("ab:W;", 2,
 		   (char *[2]) { (char *) "bug-getopt3", (char *) "-a:" }, 2,
-		   (int [2]) { 'a', '?' }, (int [2]) { 0, 1 });
+		   (int[2]) { 'a', '?' }, (int[2]) { 0, 1 });
 
   if (ret == 0)
     puts ("all OK");

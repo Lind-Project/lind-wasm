@@ -30,7 +30,8 @@ static char rcsid[] = "$NetBSD: $";
 #include <math_private.h>
 #include <math_ldbl_opt.h>
 
-long double __frexpl(long double x, int *eptr)
+long double
+__frexpl (long double x, int *eptr)
 {
   uint64_t hx, lx, ix, ixl;
   int64_t explo, expon;
@@ -40,7 +41,7 @@ long double __frexpl(long double x, int *eptr)
   EXTRACT_WORDS64 (hx, xhi);
   EXTRACT_WORDS64 (lx, xlo);
   ixl = 0x7fffffffffffffffULL & lx;
-  ix  = 0x7fffffffffffffffULL & hx;
+  ix = 0x7fffffffffffffffULL & hx;
   expon = 0;
   if (ix >= 0x7ff0000000000000ULL || ix == 0)
     {
@@ -75,8 +76,7 @@ long double __frexpl(long double x, int *eptr)
       /* If the high double is an exact power of two and the low
 	 double has the opposite sign, then the exponent calculated
 	 from the high double is one too big.  */
-      if (ix == 0
-	  && (int64_t) (hx ^ lx) < 0)
+      if (ix == 0 && (int64_t) (hx ^ lx) < 0)
 	{
 	  hx += 1LL << 52;
 	  expon -= 1;
@@ -105,7 +105,7 @@ long double __frexpl(long double x, int *eptr)
 	 denormal.  */
       explo -= expon;
       ixl &= 0x000fffffffffffffULL;
-      lx  &= 0x8000000000000000ULL;
+      lx &= 0x8000000000000000ULL;
       if (explo <= 0)
 	{
 	  /* Handle denormal low double.  */
@@ -140,7 +140,7 @@ long double __frexpl(long double x, int *eptr)
   *eptr = expon;
   return x;
 }
-#if IS_IN (libm)
+#if IS_IN(libm)
 long_double_symbol (libm, __frexpl, frexpl);
 #else
 long_double_symbol (libc, __frexpl, frexpl);

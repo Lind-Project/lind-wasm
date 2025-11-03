@@ -16,6 +16,6 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef __powerpc64__
-# define USE_IFUNC_GETTIMEOFDAY
+#  define USE_IFUNC_GETTIMEOFDAY
 #endif
 #include <sysdeps/unix/sysv/linux/gettimeofday.c>

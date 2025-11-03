@@ -15,8 +15,8 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_LINK_H
-# error "Never include <bits/link.h> directly; use <link.h> instead."
+#ifndef _LINK_H
+#  error "Never include <bits/link.h> directly; use <link.h> instead."
 #endif
 
 #if defined HAVE_S390_VX_ASM_SUPPORT
@@ -35,7 +35,7 @@ typedef struct La_s390_32_regs
   uint32_t lr_r6;
   double lr_fp0;
   double lr_fp2;
-# if defined HAVE_S390_VX_ASM_SUPPORT
+#  if defined HAVE_S390_VX_ASM_SUPPORT
   La_s390_vr lr_v24;
   La_s390_vr lr_v25;
   La_s390_vr lr_v26;
@@ -44,7 +44,7 @@ typedef struct La_s390_32_regs
   La_s390_vr lr_v29;
   La_s390_vr lr_v30;
   La_s390_vr lr_v31;
-# endif
+#  endif
 } La_s390_32_regs;
 
 /* Return values for calls from PLT on s390-32.  */
@@ -53,29 +53,23 @@ typedef struct La_s390_32_retval
   uint32_t lrv_r2;
   uint32_t lrv_r3;
   double lrv_fp0;
-# if defined HAVE_S390_VX_ASM_SUPPORT
+#  if defined HAVE_S390_VX_ASM_SUPPORT
   La_s390_vr lrv_v24;
-# endif
+#  endif
 } La_s390_32_retval;
-
 
 __BEGIN_DECLS
 
-extern Elf32_Addr la_s390_32_gnu_pltenter (Elf32_Sym *__sym,
-					   unsigned int __ndx,
-					   uintptr_t *__refcook,
-					   uintptr_t *__defcook,
-					   La_s390_32_regs *__regs,
-					   unsigned int *__flags,
-					   const char *__symname,
-					   long int *__framesizep);
-extern unsigned int la_s390_32_gnu_pltexit (Elf32_Sym *__sym,
-					    unsigned int __ndx,
-					    uintptr_t *__refcook,
-					    uintptr_t *__defcook,
-					    const La_s390_32_regs *__inregs,
-					    La_s390_32_retval *__outregs,
-					    const char *symname);
+extern Elf32_Addr
+la_s390_32_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
+			 uintptr_t *__refcook, uintptr_t *__defcook,
+			 La_s390_32_regs *__regs, unsigned int *__flags,
+			 const char *__symname, long int *__framesizep);
+extern unsigned int
+la_s390_32_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx,
+			uintptr_t *__refcook, uintptr_t *__defcook,
+			const La_s390_32_regs *__inregs,
+			La_s390_32_retval *__outregs, const char *symname);
 
 __END_DECLS
 
@@ -93,7 +87,7 @@ typedef struct La_s390_64_regs
   double lr_fp2;
   double lr_fp4;
   double lr_fp6;
-# if defined HAVE_S390_VX_ASM_SUPPORT
+#  if defined HAVE_S390_VX_ASM_SUPPORT
   La_s390_vr lr_v24;
   La_s390_vr lr_v25;
   La_s390_vr lr_v26;
@@ -102,7 +96,7 @@ typedef struct La_s390_64_regs
   La_s390_vr lr_v29;
   La_s390_vr lr_v30;
   La_s390_vr lr_v31;
-# endif
+#  endif
 } La_s390_64_regs;
 
 /* Return values for calls from PLT on s390-64.  */
@@ -110,29 +104,23 @@ typedef struct La_s390_64_retval
 {
   uint64_t lrv_r2;
   double lrv_fp0;
-# if defined HAVE_S390_VX_ASM_SUPPORT
+#  if defined HAVE_S390_VX_ASM_SUPPORT
   La_s390_vr lrv_v24;
-# endif
+#  endif
 } La_s390_64_retval;
-
 
 __BEGIN_DECLS
 
-extern Elf64_Addr la_s390_64_gnu_pltenter (Elf64_Sym *__sym,
-					   unsigned int __ndx,
-					   uintptr_t *__refcook,
-					   uintptr_t *__defcook,
-					   La_s390_64_regs *__regs,
-					   unsigned int *__flags,
-					   const char *__symname,
-					   long int *__framesizep);
-extern unsigned int la_s390_64_gnu_pltexit (Elf64_Sym *__sym,
-					    unsigned int __ndx,
-					    uintptr_t *__refcook,
-					    uintptr_t *__defcook,
-					    const La_s390_64_regs *__inregs,
-					    La_s390_64_retval *__outregs,
-					    const char *__symname);
+extern Elf64_Addr
+la_s390_64_gnu_pltenter (Elf64_Sym *__sym, unsigned int __ndx,
+			 uintptr_t *__refcook, uintptr_t *__defcook,
+			 La_s390_64_regs *__regs, unsigned int *__flags,
+			 const char *__symname, long int *__framesizep);
+extern unsigned int
+la_s390_64_gnu_pltexit (Elf64_Sym *__sym, unsigned int __ndx,
+			uintptr_t *__refcook, uintptr_t *__defcook,
+			const La_s390_64_regs *__inregs,
+			La_s390_64_retval *__outregs, const char *__symname);
 
 __END_DECLS
 

@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <string.h>
 
-
 static int
 do_test (void)
 {

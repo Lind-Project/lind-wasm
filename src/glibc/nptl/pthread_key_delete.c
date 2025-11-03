@@ -29,23 +29,22 @@ ___pthread_key_delete (pthread_key_t key)
     {
       unsigned int seq = __pthread_keys[key].seq;
 
-      if (__builtin_expect (! KEY_UNUSED (seq), 1)
-	  && ! atomic_compare_and_exchange_bool_acq (&__pthread_keys[key].seq,
-						     seq + 1, seq))
+      if (__builtin_expect (!KEY_UNUSED (seq), 1)
+	  && !atomic_compare_and_exchange_bool_acq (&__pthread_keys[key].seq,
+						    seq + 1, seq))
 	/* We deleted a valid key.  */
 	result = 0;
     }
 
   return result;
 }
-versioned_symbol (libc, ___pthread_key_delete, pthread_key_delete,
-		  GLIBC_2_34);
+versioned_symbol (libc, ___pthread_key_delete, pthread_key_delete, GLIBC_2_34);
 libc_hidden_ver (___pthread_key_delete, __pthread_key_delete)
 #ifndef SHARED
-strong_alias (___pthread_key_delete, __pthread_key_delete)
+    strong_alias (___pthread_key_delete, __pthread_key_delete)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_key_delete, pthread_key_delete,
-	       GLIBC_2_0);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_key_delete, pthread_key_delete,
+		       GLIBC_2_0);
 #endif

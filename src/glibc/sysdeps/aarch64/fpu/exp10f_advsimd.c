@@ -51,10 +51,10 @@ static const struct data
 
 #if WANT_SIMD_EXCEPT
 
-# define SpecialBound 38.0f	       /* rint(log10(2^127)).  */
-# define TinyBound v_u32 (0x20000000) /* asuint (0x1p-63).  */
-# define BigBound v_u32 (0x42180000)  /* asuint (SpecialBound).  */
-# define Thres v_u32 (0x22180000)     /* BigBound - TinyBound.  */
+#  define SpecialBound 38.0f	       /* rint(log10(2^127)).  */
+#  define TinyBound v_u32 (0x20000000) /* asuint (0x1p-63).  */
+#  define BigBound v_u32 (0x42180000)  /* asuint (SpecialBound).  */
+#  define Thres v_u32 (0x22180000)     /* BigBound - TinyBound.  */
 
 static float32x4_t VPCS_ATTR NOINLINE
 special_case (float32x4_t x, float32x4_t y, uint32x4_t cmp)
@@ -66,9 +66,9 @@ special_case (float32x4_t x, float32x4_t y, uint32x4_t cmp)
 
 #else
 
-# define SpecialBound 126.0f /* rint (log2 (2^127 / (1 + sqrt (2)))).  */
-# define SpecialOffset v_u32 (0x82000000)
-# define SpecialBias v_u32 (0x7f000000)
+#  define SpecialBound 126.0f /* rint (log2 (2^127 / (1 + sqrt (2)))).  */
+#  define SpecialOffset v_u32 (0x82000000)
+#  define SpecialBias v_u32 (0x7f000000)
 
 static float32x4_t VPCS_ATTR NOINLINE
 special_case (float32x4_t poly, float32x4_t n, uint32x4_t e, uint32x4_t cmp1,
@@ -93,7 +93,8 @@ special_case (float32x4_t poly, float32x4_t n, uint32x4_t e, uint32x4_t cmp1,
    Algorithm is accurate to 2.36 ULP.
    _ZGVnN4v_exp10f(0x1.be2b36p+1) got 0x1.7e79c4p+11
 				 want 0x1.7e79cp+11.  */
-float32x4_t VPCS_ATTR NOINLINE V_NAME_F1 (exp10) (float32x4_t x)
+float32x4_t VPCS_ATTR NOINLINE
+V_NAME_F1 (exp10) (float32x4_t x)
 {
   const struct data *d = ptr_barrier (&data);
 #if WANT_SIMD_EXCEPT
@@ -137,5 +138,4 @@ float32x4_t VPCS_ATTR NOINLINE V_NAME_F1 (exp10) (float32x4_t x)
 
   return vfmaq_f32 (scale, poly, scale);
 }
-libmvec_hidden_def (V_NAME_F1 (exp10))
-HALF_WIDTH_ALIAS_F1 (exp10)
+libmvec_hidden_def (V_NAME_F1 (exp10)) HALF_WIDTH_ALIAS_F1 (exp10)

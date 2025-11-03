@@ -26,11 +26,9 @@
 #include <support/xthread.h>
 #include <support/xtime.h>
 
-
 #define CLOCK_USE_TIMEDJOIN (-1)
 
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-
 
 static void *
 tf (void *arg)
@@ -41,19 +39,18 @@ tf (void *arg)
   return (void *) 42l;
 }
 
-
 static int
 do_test_clock (clockid_t clockid)
 {
-  const clockid_t clockid_for_get =
-    (clockid == CLOCK_USE_TIMEDJOIN) ? CLOCK_REALTIME : clockid;
+  const clockid_t clockid_for_get
+      = (clockid == CLOCK_USE_TIMEDJOIN) ? CLOCK_REALTIME : clockid;
 
   xpthread_mutex_lock (&lock);
   pthread_t th = xpthread_create (NULL, tf, NULL);
 
   void *status;
   struct timespec timeout = timespec_add (xclock_now (clockid_for_get),
-                                          make_timespec (0, 200000000));
+					  make_timespec (0, 200000000));
 
   int val;
   if (clockid == CLOCK_USE_TIMEDJOIN)
@@ -68,12 +65,12 @@ do_test_clock (clockid_t clockid)
   while (1)
     {
       timeout = timespec_add (xclock_now (clockid_for_get),
-                              make_timespec (0, 200000000));
+			      make_timespec (0, 200000000));
 
       if (clockid == CLOCK_USE_TIMEDJOIN)
-        val = pthread_timedjoin_np (th, &status, &timeout);
+	val = pthread_timedjoin_np (th, &status, &timeout);
       else
-        val = pthread_clockjoin_np (th, &status, clockid, &timeout);
+	val = pthread_clockjoin_np (th, &status, clockid, &timeout);
       if (val == 0)
 	break;
 

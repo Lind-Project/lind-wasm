@@ -54,11 +54,11 @@ do_test (void)
 #elif _STACK_GROWS_UP
   pid_t p = clone (f, st, 0, 0);
 #else
-# error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
+#  error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
 #endif
   if (p == -1)
     {
-      printf("clone failed: %m\n");
+      printf ("clone failed: %m\n");
       return 1;
     }
 

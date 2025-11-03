@@ -56,10 +56,10 @@ do_test (void)
      with LFS should not incur in failure.  */
 
   struct flock64 lck64 = {
-    .l_type   = F_WRLCK,
+    .l_type = F_WRLCK,
     .l_whence = SEEK_SET,
-    .l_start  = (off64_t)INT32_MAX + 1024,
-    .l_len    = 1024,
+    .l_start = (off64_t) INT32_MAX + 1024,
+    .l_len = 1024,
   };
   int ret = fcntl (temp_fd, F_OFD_SETLKW, &lck64);
   if (ret == -1 && errno == EINVAL)
@@ -76,10 +76,10 @@ do_test (void)
   TEST_VERIFY_EXIT (fd != -1);
 
   struct flock64 lck = {
-    .l_type   = F_WRLCK,
+    .l_type = F_WRLCK,
     .l_whence = SEEK_SET,
-    .l_start  = INT32_MAX - 1024,
-    .l_len    = 4 * 1024,
+    .l_start = INT32_MAX - 1024,
+    .l_len = 4 * 1024,
   };
   TEST_VERIFY (fcntl (fd, F_OFD_GETLK, &lck) == 0);
 

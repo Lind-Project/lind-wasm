@@ -48,21 +48,21 @@ ___pthread_cond_signal (pthread_cond_t *cond)
   /* Load the waiter sequence number, which represents our relative ordering
      to any waiters.  Relaxed MO is sufficient for that because:
      1) We can pick any position that is allowed by external happens-before
-        constraints.  In particular, if another __pthread_cond_wait call
-        happened before us, this waiter must be eligible for being woken by
-        us.  The only way do establish such a happens-before is by signaling
-        while having acquired the mutex associated with the condvar and
-        ensuring that the signal's critical section happens after the waiter.
-        Thus, the mutex ensures that we see that waiter's __wseq increase.
+	constraints.  In particular, if another __pthread_cond_wait call
+	happened before us, this waiter must be eligible for being woken by
+	us.  The only way do establish such a happens-before is by signaling
+	while having acquired the mutex associated with the condvar and
+	ensuring that the signal's critical section happens after the waiter.
+	Thus, the mutex ensures that we see that waiter's __wseq increase.
      2) Once we pick a position, we do not need to communicate this to the
-        program via a happens-before that we set up: First, any wake-up could
-        be a spurious wake-up, so the program must not interpret a wake-up as
-        an indication that the waiter happened before a particular signal;
-        second, a program cannot detect whether a waiter has not yet been
-        woken (i.e., it cannot distinguish between a non-woken waiter and one
-        that has been woken but hasn't resumed execution yet), and thus it
-        cannot try to deduce that a signal happened before a particular
-        waiter.  */
+	program via a happens-before that we set up: First, any wake-up could
+	be a spurious wake-up, so the program must not interpret a wake-up as
+	an indication that the waiter happened before a particular signal;
+	second, a program cannot detect whether a waiter has not yet been
+	woken (i.e., it cannot distinguish between a non-woken waiter and one
+	that has been woken but hasn't resumed execution yet), and thus it
+	cannot try to deduce that a signal happened before a particular
+	waiter.  */
   unsigned long long int wseq = __condvar_load_wseq_relaxed (cond);
   unsigned int g1 = (wseq & 1) ^ 1;
   wseq >>= 1;
@@ -98,5 +98,5 @@ versioned_symbol (libpthread, ___pthread_cond_signal, pthread_cond_signal,
 		  GLIBC_2_3_2);
 libc_hidden_ver (___pthread_cond_signal, __pthread_cond_signal)
 #ifndef SHARED
-strong_alias (___pthread_cond_signal, __pthread_cond_signal)
+    strong_alias (___pthread_cond_signal, __pthread_cond_signal)
 #endif

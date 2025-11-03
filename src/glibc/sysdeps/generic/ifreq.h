@@ -22,7 +22,6 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 
-
 static inline void
 __if_freereq (struct ifreq *ifreqs, int num_ifs)
 {

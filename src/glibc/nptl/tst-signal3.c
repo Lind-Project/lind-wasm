@@ -23,16 +23,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 #ifdef SIGRTMIN
 
 /* Number of different signals to use.  Also is the number of threads.  */
-# define N 10
+#  define N 10
 /* Maximum number of threads in flight at any one time.  */
-# define INFLIGHT 5
+#  define INFLIGHT 5
 /* Number of signals sent in total.  */
-# define ROUNDS 10000
-
+#  define ROUNDS 10000
 
 static int received[N][N];
 static int nsig[N];
@@ -65,7 +63,6 @@ handler (int sig)
   sem_post (&sem);
 }
 
-
 static void *
 tf (void *arg)
 {
@@ -89,7 +86,6 @@ tf (void *arg)
   return NULL;
 }
 
-
 static int
 do_test (void)
 {
@@ -111,11 +107,7 @@ do_test (void)
   int i;
   for (i = 0; i < N; ++i)
     {
-      struct sigaction sa =
-	{
-	  .sa_handler = handler,
-	  .sa_flags = 0
-	};
+      struct sigaction sa = { .sa_handler = handler, .sa_flags = 0 };
       sigfillset (&sa.sa_mask);
 
       if (sigaction (sig0 + i, &sa, NULL) != 0)
@@ -226,8 +218,8 @@ do_test (void)
 
   if (total != ROUNDS)
     {
-      printf ("total number of handled signals is %d, expected %d\n",
-	      total, ROUNDS);
+      printf ("total number of handled signals is %d, expected %d\n", total,
+	      ROUNDS);
       result = 1;
     }
 
@@ -244,7 +236,6 @@ do_test (void)
 	}
 
       putchar ('\n');
-
     }
 
   printf ("\nTotal    :");
@@ -255,10 +246,10 @@ do_test (void)
   return result;
 }
 
-# define TEST_FUNCTION do_test ()
+#  define TEST_FUNCTION do_test ()
 
 #else
-# define TEST_FUNCTION 0
+#  define TEST_FUNCTION 0
 #endif
 
 #include "../test-skeleton.c"

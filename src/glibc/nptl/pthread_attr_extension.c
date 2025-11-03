@@ -21,7 +21,7 @@
 #include <stdlib.h>
 
 int
- __pthread_attr_extension (struct pthread_attr *attr)
+__pthread_attr_extension (struct pthread_attr *attr)
 {
   if (attr->extension != NULL)
     return 0;

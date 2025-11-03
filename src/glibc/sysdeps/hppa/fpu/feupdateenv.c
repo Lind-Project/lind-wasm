@@ -22,17 +22,22 @@
 int
 __feupdateenv (const fenv_t *envp)
 {
-  union { unsigned long long l; unsigned int sw[2]; } s;
+  union
+  {
+    unsigned long long l;
+    unsigned int sw[2];
+  } s;
   fenv_t temp;
   /* Get the current exception status */
   __asm__ ("fstd %%fr0,0(%1)	\n\t"
-           "fldd 0(%1),%%fr0	\n\t"
-	   : "=m" (s.l) : "r" (&s.l));
+	   "fldd 0(%1),%%fr0	\n\t"
+	   : "=m"(s.l)
+	   : "r"(&s.l));
 
   /* Given environment with exception flags not cleared.  */
   if ((envp != FE_DFL_ENV) && (envp != FE_NOMASK_ENV))
     {
-      memcpy(&temp, envp, sizeof (fenv_t));
+      memcpy (&temp, envp, sizeof (fenv_t));
       temp.__status_word |= s.sw[0] & (FE_ALL_EXCEPT << 27);
     }
 
@@ -49,6 +54,5 @@ __feupdateenv (const fenv_t *envp)
   /* Success.  */
   return 0;
 }
-libm_hidden_def (__feupdateenv)
-weak_alias (__feupdateenv, feupdateenv)
-libm_hidden_weak (feupdateenv)
+libm_hidden_def (__feupdateenv) weak_alias (__feupdateenv, feupdateenv)
+    libm_hidden_weak (feupdateenv)

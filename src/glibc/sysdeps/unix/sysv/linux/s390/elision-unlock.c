@@ -21,7 +21,7 @@
 #include <htm.h>
 
 int
-__lll_unlock_elision(int *futex, short *adapt_count, int private)
+__lll_unlock_elision (int *futex, short *adapt_count, int private)
 {
   /* If the lock is free, we elided the lock earlier.  This does not
      necessarily mean that we are in a transaction, because the user code may

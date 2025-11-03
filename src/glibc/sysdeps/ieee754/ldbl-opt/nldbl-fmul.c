@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef fmull
 
-float
-attribute_hidden
+float attribute_hidden
 fmull (double x, double y)
 {
   return fmul (x, y);

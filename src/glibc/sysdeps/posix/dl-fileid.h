@@ -22,10 +22,10 @@
 /* For POSIX.1 systems, the pair of st_dev and st_ino constitute
    a unique identifier for a file.  */
 struct r_file_id
-  {
-    dev_t dev;
-    ino64_t ino;
-  };
+{
+  dev_t dev;
+  ino64_t ino;
+};
 
 /* Sample FD to fill in *ID.  Returns true on success.
    On error, returns false, with errno set.  */

@@ -31,11 +31,11 @@ do_test (void)
 {
   uint64_t t1, t2, t3;
   t1 = __ppc_get_timebase ();
-  printf ("Time Base = %"PRIu64"\n", t1);
+  printf ("Time Base = %" PRIu64 "\n", t1);
   t2 = __ppc_get_timebase ();
-  printf ("Time Base = %"PRIu64"\n", t2);
+  printf ("Time Base = %" PRIu64 "\n", t2);
   t3 = __ppc_get_timebase ();
-  printf ("Time Base = %"PRIu64"\n", t3);
+  printf ("Time Base = %" PRIu64 "\n", t3);
   if (t1 != t2 && t1 != t3 && t2 != t3)
     return 0;
 

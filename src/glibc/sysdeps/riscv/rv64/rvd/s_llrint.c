@@ -23,7 +23,7 @@ long long int
 __llrint (double x)
 {
   int64_t res;
-  asm ("fcvt.l.d %0, %1" : "=r" (res) : "f" (x));
+  asm ("fcvt.l.d %0, %1" : "=r"(res) : "f"(x));
   return res;
 }
 

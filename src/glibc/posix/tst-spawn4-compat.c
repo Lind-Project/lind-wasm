@@ -50,14 +50,14 @@ do_test (void)
   /* For compat symbol it verifies that trying to issued a shell script
      without a shebang is correctly executed.  */
   status = posix_spawn (&pid, scriptname, NULL, NULL, (char *[]) { 0 },
-                        (char *[]) { 0 });
+			(char *[]) { 0 });
   TEST_VERIFY_EXIT (status == 0);
 
   TEST_VERIFY_EXIT (waitpid (pid, &status, 0) == pid);
   TEST_VERIFY_EXIT (WIFEXITED (status) == 1 && WEXITSTATUS (status) == 65);
 
   status = posix_spawnp (&pid, scriptname, NULL, NULL, (char *[]) { 0 },
-                         (char *[]) { 0 });
+			 (char *[]) { 0 });
   TEST_VERIFY_EXIT (status == 0);
 
   TEST_VERIFY_EXIT (waitpid (pid, &status, 0) == pid);

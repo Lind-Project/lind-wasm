@@ -23,8 +23,8 @@
 static inline int
 statfs64_conv (struct statfs *buf, const struct statfs64 *buf64)
 {
-# define DO(memb)							      \
-  buf->memb = buf64->memb;						      \
+#define DO(memb)                                                              \
+  buf->memb = buf64->memb;                                                    \
   if (sizeof buf->memb != sizeof buf64->memb && buf->memb != buf64->memb)     \
     return __hurd_fail (EOVERFLOW);
 
@@ -41,7 +41,7 @@ statfs64_conv (struct statfs *buf, const struct statfs64 *buf64)
   DO (f_frsize);
   DO (f_flag);
 
-# undef DO
+#undef DO
 
   return 0;
 }

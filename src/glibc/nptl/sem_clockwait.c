@@ -24,7 +24,7 @@
 
 int
 ___sem_clockwait64 (sem_t *sem, clockid_t clockid,
-                   const struct __timespec64 *abstime)
+		    const struct __timespec64 *abstime)
 {
   /* Check that supplied clockid is one we support, even if we don't end up
      waiting.  */
@@ -34,7 +34,7 @@ ___sem_clockwait64 (sem_t *sem, clockid_t clockid,
       return -1;
     }
 
-  if (! valid_nanoseconds (abstime->tv_nsec))
+  if (!valid_nanoseconds (abstime->tv_nsec))
     {
       __set_errno (EINVAL);
       return -1;
@@ -48,19 +48,19 @@ ___sem_clockwait64 (sem_t *sem, clockid_t clockid,
 
 #if __TIMESIZE == 64
 strong_alias (___sem_clockwait64, ___sem_clockwait)
-#else /* __TIMESPEC64 != 64 */
+#else  /* __TIMESPEC64 != 64 */
 strong_alias (___sem_clockwait64, __sem_clockwait64)
-libc_hidden_def (__sem_clockwait64)
+    libc_hidden_def (__sem_clockwait64)
 
-int
-___sem_clockwait (sem_t *sem, clockid_t clockid, const struct timespec *abstime)
+	int ___sem_clockwait (sem_t *sem, clockid_t clockid,
+			      const struct timespec *abstime)
 {
   struct __timespec64 ts64 = valid_timespec_to_timespec64 (*abstime);
 
   return __sem_clockwait64 (sem, clockid, &ts64);
 }
 #endif /* __TIMESPEC64 != 64 */
-versioned_symbol (libc, ___sem_clockwait, sem_clockwait, GLIBC_2_34);
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_30, GLIBC_2_34)
+    versioned_symbol (libc, ___sem_clockwait, sem_clockwait, GLIBC_2_34);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_30, GLIBC_2_34)
 compat_symbol (libpthread, ___sem_clockwait, sem_clockwait, GLIBC_2_30);
 #endif

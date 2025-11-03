@@ -26,12 +26,10 @@ struct tests
   const char *string;
   int cflags;
   int retval;
-} tests[] = {
-  { "a.b", "a\nb", REG_EXTENDED | REG_NEWLINE, REG_NOMATCH },
-  { "a.b", "a\nb", REG_EXTENDED, 0 },
-  { "a[^x]b", "a\nb", REG_EXTENDED | REG_NEWLINE, REG_NOMATCH },
-  { "a[^x]b", "a\nb", REG_EXTENDED, 0 }
-};
+} tests[] = { { "a.b", "a\nb", REG_EXTENDED | REG_NEWLINE, REG_NOMATCH },
+	      { "a.b", "a\nb", REG_EXTENDED, 0 },
+	      { "a[^x]b", "a\nb", REG_EXTENDED | REG_NEWLINE, REG_NOMATCH },
+	      { "a[^x]b", "a\nb", REG_EXTENDED, 0 } };
 
 int
 main (void)
@@ -52,8 +50,8 @@ main (void)
       int rv = regexec (&r, tests[i].string, 0, NULL, 0);
       if (rv != tests[i].retval)
 	{
-	  printf ("regexec %zd unexpected value %d != %d\n",
-		  i, rv, tests[i].retval);
+	  printf ("regexec %zd unexpected value %d != %d\n", i, rv,
+		  tests[i].retval);
 	  ret = 1;
 	}
       regfree (&r);

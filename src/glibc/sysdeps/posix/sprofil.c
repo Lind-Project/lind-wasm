@@ -26,47 +26,44 @@
 #include <sys/profil.h>
 
 #ifndef SIGPROF
-# include <gmon/sprofil.c>
+#  include <gmon/sprofil.c>
 #else
 
-#include <libc-internal.h>
+#  include <libc-internal.h>
 
 struct region
+{
+  size_t offset;
+  size_t nsamples;
+  unsigned int scale;
+  union
   {
-    size_t offset;
-    size_t nsamples;
-    unsigned int scale;
-    union
-      {
-	void *vp;
-	unsigned short *us;
-	unsigned int *ui;
-      }
-    sample;
-    size_t start;
-    size_t end;
-  };
+    void *vp;
+    unsigned short *us;
+    unsigned int *ui;
+  } sample;
+  size_t start;
+  size_t end;
+};
 
 struct prof_info
-  {
-    unsigned int num_regions;
-    struct region *region;
-    struct region *last, *overflow;
-    struct itimerval saved_timer;
-    struct sigaction saved_action;
-  };
+{
+  unsigned int num_regions;
+  struct region *region;
+  struct region *last, *overflow;
+  struct itimerval saved_timer;
+  struct sigaction saved_action;
+};
 
 static unsigned int overflow_counter;
 
-static struct region default_overflow_region =
-  {
-    .offset	= 0,
-    .nsamples	= 1,
-    .scale	= 2,
-    .sample	= { &overflow_counter },
-    .start	= 0,
-    .end	= ~(size_t) 0
-  };
+static struct region default_overflow_region
+    = { .offset = 0,
+	.nsamples = 1,
+	.scale = 2,
+	.sample = { &overflow_counter },
+	.start = 0,
+	.end = ~(size_t) 0 };
 
 static struct prof_info prof_info;
 
@@ -116,7 +113,8 @@ profil_count (uintptr_t pcp, int prof_uint)
   else
     {
       /* Slow path: do a binary search for the right region.  */
-      lo = 0; hi = prof_info.num_regions - 1;
+      lo = 0;
+      hi = prof_info.num_regions - 1;
       while (lo <= hi)
 	{
 	  mid = (lo + hi) / 2;
@@ -166,16 +164,16 @@ profil_count (uintptr_t pcp, int prof_uint)
 /* Get the machine-dependent definition of `__profil_counter', the signal
    handler for SIGPROF.  It calls `profil_count' (above) with the PC of the
    interrupted code.  */
-#define __profil_counter	__profil_counter_ushort
-#define profil_count(pc)	profil_count (pc, 0)
-#include <profil-counter.h>
+#  define __profil_counter __profil_counter_ushort
+#  define profil_count(pc) profil_count (pc, 0)
+#  include <profil-counter.h>
 
-#undef __profil_counter
-#undef profil_count
+#  undef __profil_counter
+#  undef profil_count
 
-#define __profil_counter	__profil_counter_uint
-#define profil_count(pc)	profil_count (pc, 1)
-#include <profil-counter.h>
+#  define __profil_counter __profil_counter_uint
+#  define profil_count(pc) profil_count (pc, 1)
+#  include <profil-counter.h>
 
 static int
 insert (int i, unsigned long int start, unsigned long int end, struct prof *p,
@@ -185,7 +183,7 @@ insert (int i, unsigned long int start, unsigned long int end, struct prof *p,
   size_t to_copy;
 
   if (start >= end)
-    return 0;		/* don't bother with empty regions */
+    return 0; /* don't bother with empty regions */
 
   if (prof_info.num_regions == 0)
     r = malloc (sizeof (*r));
@@ -278,7 +276,7 @@ __sprofil (struct prof *profp, int profcnt, struct timeval *tvp,
     {
       /* Return profiling period.  */
       unsigned long int t = 1000000 / __profile_frequency ();
-      tvp->tv_sec  = t / 1000000;
+      tvp->tv_sec = t / 1000000;
       tvp->tv_usec = t % 1000000;
     }
 
@@ -321,24 +319,22 @@ __sprofil (struct prof *profp, int profcnt, struct timeval *tvp,
   prof_info.last = prof_info.region;
 
   /* Install SIGPROF handler.  */
-#ifdef SA_SIGINFO
-  act.sa_sigaction= flags & PROF_UINT
-		    ? __profil_counter_uint
-		    : __profil_counter_ushort;
+#  ifdef SA_SIGINFO
+  act.sa_sigaction
+      = flags & PROF_UINT ? __profil_counter_uint : __profil_counter_ushort;
   act.sa_flags = SA_SIGINFO;
-#else
-  act.sa_handler = flags & PROF_UINT
-		   ? (sighandler_t) __profil_counter_uint
-		   : (sighandler_t) __profil_counter_ushort;
+#  else
+  act.sa_handler = flags & PROF_UINT ? (sighandler_t) __profil_counter_uint
+				     : (sighandler_t) __profil_counter_ushort;
   act.sa_flags = 0;
-#endif
+#  endif
   act.sa_flags |= SA_RESTART;
   __sigfillset (&act.sa_mask);
   if (__sigaction (SIGPROF, &act, &prof_info.saved_action) < 0)
     return -1;
 
   /* Setup profiling timer.  */
-  timer.it_value.tv_sec  = 0;
+  timer.it_value.tv_sec = 0;
   timer.it_value.tv_usec = 1;
   timer.it_interval = timer.it_value;
   return __setitimer (ITIMER_PROF, &timer, &prof_info.saved_timer);

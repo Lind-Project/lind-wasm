@@ -16,12 +16,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* The following must match the kernel's <asm/hwcap2.h>.  */
-#define HWCAP2_RING3MWAIT	(1 << 0)
-#define HWCAP2_FSGSBASE		(1 << 1)
+#define HWCAP2_RING3MWAIT (1 << 0)
+#define HWCAP2_FSGSBASE (1 << 1)
 
 static inline void
 dl_check_hwcap2 (struct cpu_features *cpu_features)
 {
-  if ((GLRO(dl_hwcap2) & HWCAP2_FSGSBASE) != 0)
+  if ((GLRO (dl_hwcap2) & HWCAP2_FSGSBASE) != 0)
     CPU_FEATURE_SET_ACTIVE (cpu_features, FSGSBASE);
 }

@@ -26,7 +26,6 @@ extern __typeof (__redirect_llrint) __llrint_vis3 attribute_hidden;
 extern __typeof (__redirect_llrint) __llrint_generic attribute_hidden;
 
 sparc_libm_ifunc_redirected (__redirect_llrint, __llrint,
-			     hwcap & HWCAP_SPARC_VIS3
-			     ? __llrint_vis3
-			     : __llrint_generic);
+			     hwcap &HWCAP_SPARC_VIS3 ? __llrint_vis3
+						     : __llrint_generic);
 libm_alias_double (__llrint, llrint)

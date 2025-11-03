@@ -23,10 +23,10 @@
 #include <shlib-compat.h>
 
 #if !XSTAT_IS_XSTAT64
-# include <xstatconv.h>
-# include <xstatover.h>
+#  include <xstatconv.h>
+#  include <xstatover.h>
 
-# if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
+#  if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
 
 /* Get information about the file NAME in BUF.  */
 int
@@ -36,32 +36,32 @@ __lxstat (int vers, const char *name, struct stat *buf)
     {
     case _STAT_VER_KERNEL:
       {
-# if STAT_IS_KERNEL_STAT
+#    if STAT_IS_KERNEL_STAT
 	/* New kABIs which uses generic pre 64-bit time Linux ABI,
 	   e.g. csky, nios2  */
 	int r = INLINE_SYSCALL_CALL (fstatat64, AT_FDCWD, name, buf,
 				     AT_SYMLINK_NOFOLLOW);
 	return r ?: stat_overflow (buf);
-# else
+#    else
 	/* Old kABIs with old non-LFS support, e.g. arm, i386, hppa, m68k,
 	   microblaze, s390, sh, powerpc, and sparc.  */
 	return INLINE_SYSCALL_CALL (lstat, name, buf);
-# endif
+#    endif
       }
 
     default:
       {
-# if STAT_IS_KERNEL_STAT
+#    if STAT_IS_KERNEL_STAT
 	return INLINE_SYSCALL_ERROR_RETURN_VALUE (EINVAL);
-# else
+#    else
 	struct stat64 buf64;
 	int r = INLINE_SYSCALL_CALL (lstat64, name, &buf64);
 	return r ?: __xstat32_conv (vers, &buf64, buf);
-#endif
+#    endif
       }
     }
 }
 
-# endif /* SHLIB_COMPAT  */
+#  endif /* SHLIB_COMPAT  */
 
 #endif /* XSTAT_IS_XSTAT64  */

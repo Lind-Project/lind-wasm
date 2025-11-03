@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_SETJMP_H
-#define _BITS_SETJMP_H  1
+#  define _BITS_SETJMP_H 1
 
-#if !defined _SETJMP_H && !defined _PTHREAD_H
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
-#endif
+#  if !defined _SETJMP_H && !defined _PTHREAD_H
+#    error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  endif
 
 /* The previous bits/setjmp.h had __jmp_buf defined as a structure.
    We use an array of 'long int' instead, to make writing the
@@ -54,8 +54,8 @@
  * registers.
  */
 
-#ifndef __ASSEMBLY__
+#  ifndef __ASSEMBLY__
 typedef long int __jmp_buf[17];
-#endif
+#  endif
 
-#endif  /* bits/setjmp.h */
+#endif /* bits/setjmp.h */

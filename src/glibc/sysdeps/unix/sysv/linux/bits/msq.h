@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_MSG_H
-# error "Never use <bits/msq.h> directly; include <sys/msg.h> instead."
+#  error "Never use <bits/msq.h> directly; include <sys/msg.h> instead."
 #endif
 
 #include <bits/types.h>
@@ -29,32 +29,32 @@ typedef __syscall_ulong_t msglen_t;
 #include <bits/types/struct_msqid64_ds.h>
 
 /* Define options for message queue functions.  */
-#define MSG_NOERROR	010000	/* no error if message is too big */
+#define MSG_NOERROR 010000 /* no error if message is too big */
 #ifdef __USE_GNU
-# define MSG_EXCEPT	020000	/* recv any msg except of specified type */
-# define MSG_COPY	040000	/* copy (not remove) all queue messages */
+#  define MSG_EXCEPT 020000 /* recv any msg except of specified type */
+#  define MSG_COPY 040000   /* copy (not remove) all queue messages */
 #endif
 
 #ifdef __USE_MISC
 
-# define msg_cbytes	__msg_cbytes
+#  define msg_cbytes __msg_cbytes
 
 /* ipcs ctl commands */
-# define MSG_STAT 11
-# define MSG_INFO 12
-# define MSG_STAT_ANY 13
+#  define MSG_STAT 11
+#  define MSG_INFO 12
+#  define MSG_STAT_ANY 13
 
 /* buffer for msgctl calls IPC_INFO, MSG_INFO */
 struct msginfo
-  {
-    int msgpool;
-    int msgmap;
-    int msgmax;
-    int msgmnb;
-    int msgmni;
-    int msgssz;
-    int msgtql;
-    unsigned short int msgseg;
-  };
+{
+  int msgpool;
+  int msgmap;
+  int msgmax;
+  int msgmnb;
+  int msgmni;
+  int msgssz;
+  int msgtql;
+  unsigned short int msgseg;
+};
 
 #endif /* __USE_MISC */

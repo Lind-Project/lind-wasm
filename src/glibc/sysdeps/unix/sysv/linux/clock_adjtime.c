@@ -27,15 +27,14 @@ int
 __clock_adjtime64 (const clockid_t clock_id, struct __timex64 *tx64)
 {
 #ifndef __NR_clock_adjtime64
-# define __NR_clock_adjtime64 __NR_clock_adjtime
+#  define __NR_clock_adjtime64 __NR_clock_adjtime
 #endif
   int r = INLINE_SYSCALL_CALL (clock_adjtime64, clock_id, tx64);
 #ifndef __ASSUME_TIME64_SYSCALLS
   if (r >= 0 || errno != ENOSYS)
     return r;
 
-  if (tx64->modes & ADJ_SETOFFSET
-      && ! in_int32_t_range (tx64->time.tv_sec))
+  if (tx64->modes & ADJ_SETOFFSET && !in_int32_t_range (tx64->time.tv_sec))
     {
       __set_errno (EOVERFLOW);
       return -1;
@@ -52,8 +51,7 @@ __clock_adjtime64 (const clockid_t clock_id, struct __timex64 *tx64)
 #if __TIMESIZE != 64
 libc_hidden_def (__clock_adjtime64)
 
-int
-__clock_adjtime (const clockid_t clock_id, struct timex *tx)
+    int __clock_adjtime (const clockid_t clock_id, struct timex *tx)
 {
   struct __timex64 tx64;
   int retval;

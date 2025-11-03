@@ -26,7 +26,6 @@ __getresuid (uid_t *ruid, uid_t *euid, uid_t *suid)
   __set_errno (ENOSYS);
   return -1;
 }
-libc_hidden_def (__getresuid)
-stub_warning (getresuid)
+libc_hidden_def (__getresuid) stub_warning (getresuid)
 
-weak_alias (__getresuid, getresuid)
+    weak_alias (__getresuid, getresuid)

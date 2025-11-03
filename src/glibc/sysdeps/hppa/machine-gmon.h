@@ -18,7 +18,6 @@
 
 /* We can call _mcount directly since gcc supplies the correct
  * arguments */
-#define _MCOUNT_DECL(from, self) \
- void _mcount (u_long from, u_long self)
+#define _MCOUNT_DECL(from, self) void _mcount (u_long from, u_long self)
 
 #define MCOUNT

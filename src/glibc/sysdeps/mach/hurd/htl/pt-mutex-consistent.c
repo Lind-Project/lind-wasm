@@ -32,8 +32,8 @@ pthread_mutex_consistent (pthread_mutex_t *mtxp)
   if ((mtxp->__flags & PTHREAD_MUTEX_ROBUST) != 0
       && (val & LLL_DEAD_OWNER) != 0
       && atomic_compare_and_exchange_bool_acq (&mtxp->__lock,
-					       __getpid () | LLL_WAITERS,
-					       val) == 0)
+					       __getpid () | LLL_WAITERS, val)
+	     == 0)
     {
       /* The mutex is now ours, and it's consistent. */
       mtxp->__owner_id = _pthread_self ()->thread;

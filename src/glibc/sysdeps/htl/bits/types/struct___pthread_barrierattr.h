@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES_STRUCT___PTHREAD_BARRIERATTR_H
-#define _BITS_TYPES_STRUCT___PTHREAD_BARRIERATTR_H	1
+#  define _BITS_TYPES_STRUCT___PTHREAD_BARRIERATTR_H 1
 
 enum __pthread_process_shared;
 

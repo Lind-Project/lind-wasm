@@ -23,12 +23,11 @@
 #include <sysdep-cancel.h>
 
 #ifndef __ASSUME_TIME64_SYSCALL
-#include <sysdeps/unix/sysv/linux/pselect32.c>
+#  include <sysdeps/unix/sysv/linux/pselect32.c>
 #elif !defined __ASSUME_PSELECT
 int
-__pselect32 (int nfds, fd_set *readfds, fd_set *writefds,
-	     fd_set *exceptfds, const struct __timespec64 *timeout,
-	     const sigset_t *sigmask)
+__pselect32 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+	     const struct __timespec64 *timeout, const sigset_t *sigmask)
 {
   /* The fallback uses 'select' which shows the race condition regarding
      signal mask set/restore, requires two additional syscalls, and has
@@ -37,7 +36,7 @@ __pselect32 (int nfds, fd_set *readfds, fd_set *writefds,
   struct timeval tv32, *ptv32 = NULL;
   if (timeout != NULL)
     {
-      if (! valid_nanoseconds (timeout->tv_nsec))
+      if (!valid_nanoseconds (timeout->tv_nsec))
 	{
 	  __set_errno (EINVAL);
 	  return -1;

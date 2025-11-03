@@ -17,29 +17,29 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef MATH_USE_BUILTINS_H
-#define MATH_USE_BUILTINS_H	1
+#  define MATH_USE_BUILTINS_H 1
 
-#include <features.h> /* For __GNUC_PREREQ.  */
+#  include <features.h> /* For __GNUC_PREREQ.  */
 
 /* Define these macros to 1 to use __builtin_xyz instead of the
    generic implementation.  */
 
-#include <math-use-builtins-nearbyint.h>
-#include <math-use-builtins-rint.h>
-#include <math-use-builtins-floor.h>
-#include <math-use-builtins-ceil.h>
-#include <math-use-builtins-trunc.h>
-#include <math-use-builtins-round.h>
-#include <math-use-builtins-roundeven.h>
-#include <math-use-builtins-copysign.h>
-#include <math-use-builtins-sqrt.h>
-#include <math-use-builtins-fma.h>
-#include <math-use-builtins-fmax.h>
-#include <math-use-builtins-fmin.h>
-#include <math-use-builtins-fabs.h>
-#include <math-use-builtins-lrint.h>
-#include <math-use-builtins-llrint.h>
-#include <math-use-builtins-logb.h>
-#include <math-use-builtins-ffs.h>
+#  include <math-use-builtins-nearbyint.h>
+#  include <math-use-builtins-rint.h>
+#  include <math-use-builtins-floor.h>
+#  include <math-use-builtins-ceil.h>
+#  include <math-use-builtins-trunc.h>
+#  include <math-use-builtins-round.h>
+#  include <math-use-builtins-roundeven.h>
+#  include <math-use-builtins-copysign.h>
+#  include <math-use-builtins-sqrt.h>
+#  include <math-use-builtins-fma.h>
+#  include <math-use-builtins-fmax.h>
+#  include <math-use-builtins-fmin.h>
+#  include <math-use-builtins-fabs.h>
+#  include <math-use-builtins-lrint.h>
+#  include <math-use-builtins-llrint.h>
+#  include <math-use-builtins-logb.h>
+#  include <math-use-builtins-ffs.h>
 
 #endif /* MATH_USE_BUILTINS_H  */

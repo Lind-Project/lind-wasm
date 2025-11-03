@@ -26,7 +26,7 @@ int
 __sched_rr_get_interval64 (pid_t pid, struct __timespec64 *tp)
 {
 #ifndef __NR_sched_rr_get_interval_time64
-# define __NR_sched_rr_get_interval_time64 __NR_sched_rr_get_interval
+#  define __NR_sched_rr_get_interval_time64 __NR_sched_rr_get_interval
 #endif
   int ret = INLINE_SYSCALL_CALL (sched_rr_get_interval_time64, pid, tp);
 #ifndef __ASSUME_TIME64_SYSCALLS
@@ -44,8 +44,7 @@ __sched_rr_get_interval64 (pid_t pid, struct __timespec64 *tp)
 #if __TIMESIZE != 64
 libc_hidden_def (__sched_rr_get_interval64)
 
-int
-__sched_rr_get_interval (pid_t pid, struct timespec *tp)
+    int __sched_rr_get_interval (pid_t pid, struct timespec *tp)
 {
   int ret;
   struct __timespec64 tp64;
@@ -54,11 +53,11 @@ __sched_rr_get_interval (pid_t pid, struct timespec *tp)
 
   if (ret == 0)
     {
-      if (! in_time_t_range (tp64.tv_sec))
-        {
-          __set_errno (EOVERFLOW);
-          return -1;
-        }
+      if (!in_time_t_range (tp64.tv_sec))
+	{
+	  __set_errno (EOVERFLOW);
+	  return -1;
+	}
 
       *tp = valid_timespec64_to_timespec (tp64);
     }

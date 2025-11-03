@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* 256 is arbitrary here and is known to trigger PR 13862.  */
-__thread int var[256] attribute_hidden = {0};
+__thread int var[256] attribute_hidden = { 0 };
 
 void
 function (void)

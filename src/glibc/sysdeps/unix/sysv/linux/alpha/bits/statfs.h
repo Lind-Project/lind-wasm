@@ -16,51 +16,51 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_STATFS_H
-# error "Never include <bits/statfs.h> directly; use <sys/statfs.h> instead."
+#  error "Never include <bits/statfs.h> directly; use <sys/statfs.h> instead."
 #endif
 
-#include <bits/types.h>  /* for __fsid_t and __fsblkcnt_t.  */
+#include <bits/types.h> /* for __fsid_t and __fsblkcnt_t.  */
 
 struct statfs
-  {
-    int f_type;
-    int f_bsize;
+{
+  int f_type;
+  int f_bsize;
 #ifndef __USE_FILE_OFFSET64
-    __fsblkcnt_t f_blocks;
-    __fsblkcnt_t f_bfree;
-    __fsblkcnt_t f_bavail;
-    __fsfilcnt_t f_files;
-    __fsfilcnt_t f_ffree;
+  __fsblkcnt_t f_blocks;
+  __fsblkcnt_t f_bfree;
+  __fsblkcnt_t f_bavail;
+  __fsfilcnt_t f_files;
+  __fsfilcnt_t f_ffree;
 #else
-    __fsblkcnt64_t f_blocks;
-    __fsblkcnt64_t f_bfree;
-    __fsblkcnt64_t f_bavail;
-    __fsfilcnt64_t f_files;
-    __fsfilcnt64_t f_ffree;
+  __fsblkcnt64_t f_blocks;
+  __fsblkcnt64_t f_bfree;
+  __fsblkcnt64_t f_bavail;
+  __fsfilcnt64_t f_files;
+  __fsfilcnt64_t f_ffree;
 #endif
-    __fsid_t f_fsid;
-    int f_namelen;
-    int f_frsize;
-    int f_flags;
-    int f_spare[4];
-  };
+  __fsid_t f_fsid;
+  int f_namelen;
+  int f_frsize;
+  int f_flags;
+  int f_spare[4];
+};
 
 #ifdef __USE_LARGEFILE64
 struct statfs64
-  {
-    int f_type;
-    int f_bsize;
-    __fsblkcnt64_t f_blocks;
-    __fsblkcnt64_t f_bfree;
-    __fsblkcnt64_t f_bavail;
-    __fsfilcnt64_t f_files;
-    __fsfilcnt64_t f_ffree;
-    __fsid_t f_fsid;
-    int f_namelen;
-    int f_frsize;
-    int f_flags;
-    int f_spare[4];
-  };
+{
+  int f_type;
+  int f_bsize;
+  __fsblkcnt64_t f_blocks;
+  __fsblkcnt64_t f_bfree;
+  __fsblkcnt64_t f_bavail;
+  __fsfilcnt64_t f_files;
+  __fsfilcnt64_t f_ffree;
+  __fsid_t f_fsid;
+  int f_namelen;
+  int f_frsize;
+  int f_flags;
+  int f_spare[4];
+};
 #endif
 
 /* Tell code we have this member.  */

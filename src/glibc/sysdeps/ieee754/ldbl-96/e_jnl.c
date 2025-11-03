@@ -64,8 +64,8 @@
 #include <math-underflow.h>
 #include <libm-alias-finite.h>
 
-static const long double
-  invsqrtpi = 5.64189583547756286948079e-1L, two = 2.0e0L, one = 1.0e0L;
+static const long double invsqrtpi = 5.64189583547756286948079e-1L,
+			 two = 2.0e0L, one = 1.0e0L;
 
 static const long double zero = 0.0L;
 
@@ -97,7 +97,7 @@ __ieee754_jnl (int n, long double x)
     return (__ieee754_j0l (x));
   if (n == 1)
     return (__ieee754_j1l (x));
-  sgn = (n & 1) & (se >> 15);	/* even n -- 0, odd n -- sign(x) */
+  sgn = (n & 1) & (se >> 15); /* even n -- 0, odd n -- sign(x) */
   x = fabsl (x);
   {
     SET_RESTORE_ROUNDL (FE_TONEAREST);
@@ -108,7 +108,7 @@ __ieee754_jnl (int n, long double x)
       {
 	/* Safe to use J(n+1,x)=2n/x *J(n,x)-J(n-1,x) */
 	if (ix >= 0x412D)
-	  {			/* x > 2**302 */
+	  { /* x > 2**302 */
 
 	    /* ??? This might be a futile gesture.
 	       If x exceeds X_TLOSS anyway, the wrapper function
@@ -156,7 +156,7 @@ __ieee754_jnl (int n, long double x)
 	    for (i = 1; i < n; i++)
 	      {
 		temp = b;
-		b = b * ((long double) (i + i) / x) - a;	/* avoid underflow */
+		b = b * ((long double) (i + i) / x) - a; /* avoid underflow */
 		a = temp;
 	      }
 	  }
@@ -164,11 +164,11 @@ __ieee754_jnl (int n, long double x)
     else
       {
 	if (ix < 0x3fde)
-	  {			/* x < 2**-33 */
+	  { /* x < 2**-33 */
 	    /* x is tiny, return the first Taylor expansion of J(n,x)
 	     * J(n,x) = 1/n!*(x/2)^n  - ...
 	     */
-	    if (n >= 400)		/* underflow, result < 10^-4952 */
+	    if (n >= 400) /* underflow, result < 10^-4952 */
 	      b = zero;
 	    else
 	      {
@@ -176,8 +176,8 @@ __ieee754_jnl (int n, long double x)
 		b = temp;
 		for (a = one, i = 2; i <= n; i++)
 		  {
-		    a *= (long double) i;	/* a = n! */
-		    b *= temp;	/* b = (x/2)^n */
+		    a *= (long double) i; /* a = n! */
+		    b *= temp;		  /* b = (x/2)^n */
 		  }
 		b = b / a;
 	      }
@@ -304,14 +304,12 @@ __ieee754_jnl (int n, long double x)
 }
 libm_alias_finite (__ieee754_jnl, __jnl)
 
-long double
-__ieee754_ynl (int n, long double x)
+    long double __ieee754_ynl (int n, long double x)
 {
   uint32_t se, i0, i1;
   int32_t i, ix;
   int32_t sign;
   long double a, b, temp, ret;
-
 
   GET_LDOUBLE_WORDS (se, i0, i1, x);
   ix = se & 0x7fff;
@@ -341,7 +339,7 @@ __ieee754_ynl (int n, long double x)
     if (__glibc_unlikely (ix == 0x7fff))
       return zero;
     if (ix >= 0x412D)
-      {				/* x > 2**302 */
+      { /* x > 2**302 */
 
 	/* ??? See comment above on the possible futility of this.  */
 
@@ -396,14 +394,14 @@ __ieee754_ynl (int n, long double x)
 	  }
       }
     /* If B is +-Inf, set up errno accordingly.  */
-    if (! isfinite (b))
+    if (!isfinite (b))
       __set_errno (ERANGE);
     if (sign > 0)
       ret = b;
     else
       ret = -b;
   }
- out:
+out:
   if (isinf (ret))
     ret = copysignl (LDBL_MAX, ret) * LDBL_MAX;
   return ret;

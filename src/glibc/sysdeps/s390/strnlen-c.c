@@ -19,18 +19,18 @@
 #include <ifunc-strnlen.h>
 
 #if HAVE_STRNLEN_C
-# if HAVE_STRNLEN_IFUNC
-#  define STRNLEN STRNLEN_C
-# endif
+#  if HAVE_STRNLEN_IFUNC
+#    define STRNLEN STRNLEN_C
+#  endif
 
-# include <string/strnlen.c>
+#  include <string/strnlen.c>
 
-# if HAVE_STRNLEN_IFUNC
-#  if defined SHARED && IS_IN (libc)
+#  if HAVE_STRNLEN_IFUNC
+#    if defined SHARED && IS_IN(libc)
 __hidden_ver1 (__strnlen_c, __GI_strnlen, __strnlen_c);
 strong_alias (__strnlen_c, __strnlen_c_1);
 __hidden_ver1 (__strnlen_c_1, __GI___strnlen, __strnlen_c_1);
+#    endif
 #  endif
-# endif
 
 #endif

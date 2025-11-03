@@ -10,7 +10,7 @@ __rintl (long double x)
 {
   long double res;
 
-  asm ("frndint" : "=t" (res) : "0" (x));
+  asm ("frndint" : "=t"(res) : "0"(x));
   return res;
 }
 

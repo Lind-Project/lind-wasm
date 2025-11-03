@@ -28,10 +28,10 @@ __feclearexcept (int x)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__feclearexcept, __old_feclearexcept)
-compat_symbol (libm, __old_feclearexcept, feclearexcept, GLIBC_2_1);
+    compat_symbol (libm, __old_feclearexcept, feclearexcept, GLIBC_2_1);
 #endif
 
 libm_hidden_ver (__feclearexcept, feclearexcept)
-versioned_symbol (libm, __feclearexcept, feclearexcept, GLIBC_2_2);
+    versioned_symbol (libm, __feclearexcept, feclearexcept, GLIBC_2_2);

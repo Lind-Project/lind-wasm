@@ -26,11 +26,12 @@
 void __rt_sigreturn_stub (void);
 void __sigreturn_stub (void);
 
-#define STUB(act, sigsetsize) \
-  (act) ? ((unsigned long)((act->sa_flags & SA_SIGINFO)	\
-			    ? &__rt_sigreturn_stub	\
-			    : &__sigreturn_stub) - 8)	\
-	: 0,						\
-  (sigsetsize)
+#define STUB(act, sigsetsize)                                                 \
+  (act)                                                                       \
+      ? ((unsigned long) ((act->sa_flags & SA_SIGINFO) ? &__rt_sigreturn_stub \
+						       : &__sigreturn_stub)   \
+	 - 8)                                                                 \
+      : 0,                                                                    \
+      (sigsetsize)
 
 #include <sysdeps/unix/sysv/linux/libc_sigaction.c>

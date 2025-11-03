@@ -17,7 +17,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _THREAD_MUTEX_INTERNAL_H
-#define _THREAD_MUTEX_INTERNAL_H 1
+#  define _THREAD_MUTEX_INTERNAL_H 1
 
 /* Generic struct for both POSIX and C11 mutexes.  New ports are expected
    to use the default layout, however architecture can redefine it to
@@ -29,9 +29,9 @@ struct __pthread_mutex_s
   int __lock __LOCK_ALIGNMENT;
   unsigned int __count;
   int __owner;
-#if __WORDSIZE == 64
+#  if __WORDSIZE == 64
   unsigned int __nusers;
-#endif
+#  endif
   /* KIND must stay at this position in the structure to maintain
      binary compatibility with static initializers.
 
@@ -56,29 +56,27 @@ struct __pthread_mutex_s
      Afterwards the lock / unlock functions are using specific elision
      code-paths.  */
   int __kind;
-#if __WORDSIZE != 64
+#  if __WORDSIZE != 64
   unsigned int __nusers;
-#endif
-#if __WORDSIZE == 64
+#  endif
+#  if __WORDSIZE == 64
   int __spins;
   __pthread_list_t __list;
-# define __PTHREAD_MUTEX_HAVE_PREV      1
-#else
+#    define __PTHREAD_MUTEX_HAVE_PREV 1
+#  else
   __extension__ union
   {
     int __spins;
     __pthread_slist_t __list;
   };
-# define __PTHREAD_MUTEX_HAVE_PREV      0
-#endif
+#    define __PTHREAD_MUTEX_HAVE_PREV 0
+#  endif
 };
 
-#if __PTHREAD_MUTEX_HAVE_PREV == 1
-# define __PTHREAD_MUTEX_INITIALIZER(__kind) \
-  0, 0, 0, 0, __kind, 0, { 0, 0 }
-#else
-# define __PTHREAD_MUTEX_INITIALIZER(__kind) \
-  0, 0, 0, __kind, 0, { 0 }
-#endif
+#  if __PTHREAD_MUTEX_HAVE_PREV == 1
+#    define __PTHREAD_MUTEX_INITIALIZER(__kind) 0, 0, 0, 0, __kind, 0, { 0, 0 }
+#  else
+#    define __PTHREAD_MUTEX_INITIALIZER(__kind) 0, 0, 0, __kind, 0, { 0 }
+#  endif
 
 #endif

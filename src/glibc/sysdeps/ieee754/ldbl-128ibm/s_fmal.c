@@ -155,8 +155,7 @@ __fmal (long double x, long double y, long double z)
 
   /* If x or y or z is Inf/NaN, or if x * y is zero, compute as x * y
      + z.  */
-  if (xexp == 0x7ff || yexp == 0x7ff || zexp == 0x7ff
-      || x == 0 || y == 0)
+  if (xexp == 0x7ff || yexp == 0x7ff || zexp == 0x7ff || x == 0 || y == 0)
     return (x * y) + z;
 
   {
@@ -240,7 +239,7 @@ __fmal (long double x, long double y, long double z)
     return ret;
   }
 
- scale_out:
+scale_out:
   scale_val = math_opt_barrier (scale_val);
   scale_val = __scalbn (scale_val, scale_exp);
   if (fabs (scale_val) == DBL_MAX)
@@ -248,12 +247,12 @@ __fmal (long double x, long double y, long double z)
   math_check_force_underflow (scale_val);
   return scale_val;
 
- zero_out:;
+zero_out:;
   double zero = 0.0;
   zero = math_opt_barrier (zero);
   return zero - zero;
 }
-#if IS_IN (libm)
+#if IS_IN(libm)
 long_double_symbol (libm, __fmal, fmal);
 #else
 long_double_symbol (libc, __fmal, fmal);

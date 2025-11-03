@@ -22,7 +22,6 @@
 #include <scratch_buffer.h>
 #include "getsourcefilter.h"
 
-
 int
 setsourcefilter (int s, uint32_t interface, const struct sockaddr *group,
 		 socklen_t grouplen, uint32_t fmode, uint32_t numsrc,

@@ -22,11 +22,9 @@
 #include <time.h>
 #include <unistd.h>
 
-
 #if defined _POSIX_THREAD_CPUTIME && _POSIX_THREAD_CPUTIME >= 0
 static pthread_barrier_t b2;
 static pthread_barrier_t bN;
-
 
 static void *
 tf (void *arg)
@@ -49,20 +47,19 @@ tf (void *arg)
 }
 #endif
 
-
 int
 do_test (void)
 {
 #if defined _POSIX_THREAD_CPUTIME && _POSIX_THREAD_CPUTIME >= 0
-# define N 10
+#  define N 10
 
-# if _POSIX_THREAD_CPUTIME == 0
+#  if _POSIX_THREAD_CPUTIME == 0
   if (sysconf (_SC_THREAD_CPUTIME) < 0)
     {
       puts ("_POSIX_THREAD_CPUTIME option not available");
       return 0;
     }
-# endif
+#  endif
 
   if (pthread_barrier_init (&b2, NULL, 2) != 0
       || pthread_barrier_init (&bN, NULL, N + 1) != 0)
@@ -76,15 +73,15 @@ do_test (void)
 
   pthread_t th[N + 1];
   clockid_t cl[N + 1];
-# ifndef CLOCK_THREAD_CPUTIME_ID
+#  ifndef CLOCK_THREAD_CPUTIME_ID
   if (pthread_getcpuclockid (pthread_self (), &cl[0]) != 0)
     {
       puts ("own pthread_getcpuclockid failed");
       return 1;
     }
-# else
+#  else
   cl[0] = CLOCK_THREAD_CPUTIME_ID;
-# endif
+#  endif
 
   pthread_attr_t at;
 
@@ -162,8 +159,8 @@ difference between thread %d and %d too small (%ld.%09ld)\n",
 	  return 1;
 	}
 
-      printf ("diff %d->%d: %ld.%09ld\n",
-	      i, i + 1, (long int) diff.tv_sec, (long int) diff.tv_nsec);
+      printf ("diff %d->%d: %ld.%09ld\n", i, i + 1, (long int) diff.tv_sec,
+	      (long int) diff.tv_nsec);
     }
 
   ts.tv_sec = 0;
@@ -194,7 +191,6 @@ difference between thread %d and %d too small (%ld.%09ld)\n",
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

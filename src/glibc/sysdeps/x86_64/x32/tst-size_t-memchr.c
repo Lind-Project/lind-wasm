@@ -17,29 +17,28 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef WIDE
-# define TEST_NAME "memchr"
+#  define TEST_NAME "memchr"
 #else
-# define TEST_NAME "wmemchr"
+#  define TEST_NAME "wmemchr"
 #endif /* WIDE */
 #include "test-size_t.h"
 
 #ifndef WIDE
-# define MEMCHR memchr
-# define CHAR char
-# define UCHAR unsigned char
+#  define MEMCHR memchr
+#  define CHAR char
+#  define UCHAR unsigned char
 #else
-# include <wchar.h>
-# define MEMCHR wmemchr
-# define CHAR wchar_t
-# define UCHAR wchar_t
+#  include <wchar.h>
+#  define MEMCHR wmemchr
+#  define CHAR wchar_t
+#  define UCHAR wchar_t
 #endif /* WIDE */
 
 IMPL (MEMCHR, 1)
 
-typedef CHAR * (*proto_t) (const CHAR*, int, size_t);
+typedef CHAR *(*proto_t) (const CHAR *, int, size_t);
 
-static CHAR *
-__attribute__ ((noinline, noclone))
+static CHAR *__attribute__ ((noinline, noclone))
 do_memchr (parameter_t a, parameter_t b)
 {
   return CALL (&b, a.p, (uintptr_t) b.p, a.len);
@@ -60,8 +59,8 @@ test_main (void)
       CHAR *res = do_memchr (src, c);
       if (res)
 	{
-	  error (0, 0, "Wrong result in function %s: %p != NULL",
-		 impl->name, res);
+	  error (0, 0, "Wrong result in function %s: %p != NULL", impl->name,
+		 res);
 	  ret = 1;
 	}
     }

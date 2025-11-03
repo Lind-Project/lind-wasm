@@ -17,17 +17,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef FIX_FP_INT_CONVERT_OVERFLOW_H
-#define FIX_FP_INT_CONVERT_OVERFLOW_H	1
+#  define FIX_FP_INT_CONVERT_OVERFLOW_H 1
 
 /* Define these macros to 1 to workaround conversions of out-of-range
    floating-point numbers to integer types failing to raise the
    "invalid" exception, or raising spurious "inexact" or other
    exceptions.  */
-#define FIX_FLT_LONG_CONVERT_OVERFLOW 1
-#define FIX_FLT_LLONG_CONVERT_OVERFLOW 1
-#define FIX_DBL_LONG_CONVERT_OVERFLOW 1
-#define FIX_DBL_LLONG_CONVERT_OVERFLOW 1
-#define FIX_LDBL_LONG_CONVERT_OVERFLOW 1
-#define FIX_LDBL_LLONG_CONVERT_OVERFLOW 1
+#  define FIX_FLT_LONG_CONVERT_OVERFLOW 1
+#  define FIX_FLT_LLONG_CONVERT_OVERFLOW 1
+#  define FIX_DBL_LONG_CONVERT_OVERFLOW 1
+#  define FIX_DBL_LLONG_CONVERT_OVERFLOW 1
+#  define FIX_LDBL_LONG_CONVERT_OVERFLOW 1
+#  define FIX_LDBL_LLONG_CONVERT_OVERFLOW 1
 
 #endif /* fix-fp-int-convert-overflow.h */

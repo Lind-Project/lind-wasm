@@ -23,13 +23,11 @@ ssize_t
 __libc_read (int fd, void *buf, size_t nbytes)
 {
   ssize_t ret;
-  int cancel_oldtype = LIBC_CANCEL_ASYNC();
+  int cancel_oldtype = LIBC_CANCEL_ASYNC ();
   ret = __read_nocancel (fd, buf, nbytes);
   LIBC_CANCEL_RESET (cancel_oldtype);
   return ret;
 }
-libc_hidden_def (__libc_read)
-weak_alias (__libc_read, __read)
-libc_hidden_weak (__read)
-weak_alias (__libc_read, read)
-libc_hidden_weak (read)
+libc_hidden_def (__libc_read) weak_alias (__libc_read, __read)
+    libc_hidden_weak (__read) weak_alias (__libc_read, read)
+	libc_hidden_weak (read)

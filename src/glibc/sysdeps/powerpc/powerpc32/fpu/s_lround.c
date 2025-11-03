@@ -55,23 +55,22 @@ __lround (double x)
       double t = ax + 0x1p+52;
       t = t - 0x1p+52;
       if (ax != t)
-        {
+	{
 	  ax = ax + 0.5;
 	  if (x < 0.0)
 	    ax = -fabs (ax);
 	  x = ax;
-        }
+	}
     }
 #endif
   /* Force evaluation of values larger than long int, so invalid
      exceptions are raise.  */
   long long int ret;
-  asm ("fctiwz %0, %1" : "=d" (ret) : "d" (x));
+  asm ("fctiwz %0, %1" : "=d"(ret) : "d"(x));
   return ret;
 }
 #ifndef __lround
 libm_alias_double (__lround, lround)
 
-strong_alias (__lround, __lroundf)
-libm_alias_float (__lround, lround)
+    strong_alias (__lround, __lroundf) libm_alias_float (__lround, lround)
 #endif

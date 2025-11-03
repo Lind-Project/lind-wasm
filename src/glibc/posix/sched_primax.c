@@ -18,7 +18,6 @@
 #include <errno.h>
 #include <sched.h>
 
-
 /* Get maximum priority value for a scheduler.  */
 int
 __sched_get_priority_max (int algorithm)
@@ -27,6 +26,6 @@ __sched_get_priority_max (int algorithm)
   return -1;
 }
 libc_hidden_def (__sched_get_priority_max)
-stub_warning (sched_get_priority_max)
+    stub_warning (sched_get_priority_max)
 
-weak_alias (__sched_get_priority_max, sched_get_priority_max)
+	weak_alias (__sched_get_priority_max, sched_get_priority_max)

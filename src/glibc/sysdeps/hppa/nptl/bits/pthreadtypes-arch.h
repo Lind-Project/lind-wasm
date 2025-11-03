@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_PTHREADTYPES_ARCH_H
-#define _BITS_PTHREADTYPES_ARCH_H	1
+#  define _BITS_PTHREADTYPES_ARCH_H 1
 
 /* Linuxthread type sizes (bytes):
    sizeof(pthread_attr_t) = 0x24 (36)
@@ -30,17 +30,17 @@
    sizeof(pthread_rwlockattr_t) = 0x8 (8)
    sizeof(pthread_spinlock_t) = 0x10 (16) */
 
-#define __SIZEOF_PTHREAD_ATTR_T 36
-#define __SIZEOF_PTHREAD_MUTEX_T 48
-#define __SIZEOF_PTHREAD_BARRIER_T 48
-#define __SIZEOF_PTHREAD_BARRIERATTR_T 4
-#define __SIZEOF_PTHREAD_COND_T 48
-#define __SIZEOF_PTHREAD_CONDATTR_T 4
-#define __SIZEOF_PTHREAD_MUTEXATTR_T 4
-#define __SIZEOF_PTHREAD_RWLOCK_T 64
-#define __SIZEOF_PTHREAD_RWLOCKATTR_T 8
+#  define __SIZEOF_PTHREAD_ATTR_T 36
+#  define __SIZEOF_PTHREAD_MUTEX_T 48
+#  define __SIZEOF_PTHREAD_BARRIER_T 48
+#  define __SIZEOF_PTHREAD_BARRIERATTR_T 4
+#  define __SIZEOF_PTHREAD_COND_T 48
+#  define __SIZEOF_PTHREAD_CONDATTR_T 4
+#  define __SIZEOF_PTHREAD_MUTEXATTR_T 4
+#  define __SIZEOF_PTHREAD_RWLOCK_T 64
+#  define __SIZEOF_PTHREAD_RWLOCKATTR_T 8
 
-#define __LOCK_ALIGNMENT __attribute__ ((__aligned__(16)))
-#define __ONCE_ALIGNMENT
+#  define __LOCK_ALIGNMENT __attribute__ ((__aligned__ (16)))
+#  define __ONCE_ALIGNMENT
 
-#endif	/* bits/pthreadtypes.h */
+#endif /* bits/pthreadtypes.h */

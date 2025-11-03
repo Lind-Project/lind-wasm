@@ -35,7 +35,7 @@ get_address_family (int fd)
      signaling.  */
   _Static_assert (sizeof (sa.ss_family) < sizeof (int), "address family size");
   _Static_assert (0 < (__typeof__ (sa.ss_family)) -1,
-                  "address family unsigned");
+		  "address family unsigned");
   return sa.ss_family;
 }
 
@@ -49,57 +49,55 @@ __netlink_assert_response (int fd, ssize_t result)
       int error_code = errno;
       int family = get_address_family (fd);
       if (family != AF_NETLINK)
-        /* If the address family does not match (or getsockname
-           failed), report the original error.  */
-        terminate = true;
-      else if (error_code == EBADF
-          || error_code == ENOTCONN
-          || error_code == ENOTSOCK
-          || error_code == ECONNREFUSED)
-        /* These errors indicate that the descriptor is not a
-           connected socket.  */
-        terminate = true;
+	/* If the address family does not match (or getsockname
+	   failed), report the original error.  */
+	terminate = true;
+      else if (error_code == EBADF || error_code == ENOTCONN
+	       || error_code == ENOTSOCK || error_code == ECONNREFUSED)
+	/* These errors indicate that the descriptor is not a
+	   connected socket.  */
+	terminate = true;
       else if (error_code == EAGAIN || error_code == EWOULDBLOCK)
-        {
-          /* The kernel might return EAGAIN for other reasons than a
-             non-blocking socket.  But if the socket is not blocking,
-             it is not ours, so report the error.  */
-          int mode = __fcntl (fd, F_GETFL, 0);
-          if (mode < 0 || (mode & O_NONBLOCK) != 0)
-            terminate = true;
-        }
+	{
+	  /* The kernel might return EAGAIN for other reasons than a
+	     non-blocking socket.  But if the socket is not blocking,
+	     it is not ours, so report the error.  */
+	  int mode = __fcntl (fd, F_GETFL, 0);
+	  if (mode < 0 || (mode & O_NONBLOCK) != 0)
+	    terminate = true;
+	}
       if (terminate)
-        {
-          char message[200];
-          if (family < 0)
-            __snprintf (message, sizeof (message),
-                        "Unexpected error %d on netlink descriptor %d.\n",
-                        error_code, fd);
-          else
-            __snprintf (message, sizeof (message),
-                        "Unexpected error %d on netlink descriptor %d"
-                        " (address family %d).\n",
-                        error_code, fd, family);
-          __libc_fatal (message);
-        }
+	{
+	  char message[200];
+	  if (family < 0)
+	    __snprintf (message, sizeof (message),
+			"Unexpected error %d on netlink descriptor %d.\n",
+			error_code, fd);
+	  else
+	    __snprintf (message, sizeof (message),
+			"Unexpected error %d on netlink descriptor %d"
+			" (address family %d).\n",
+			error_code, fd, family);
+	  __libc_fatal (message);
+	}
       else
-        /* Restore original errno value.  */
-        __set_errno (error_code);
+	/* Restore original errno value.  */
+	__set_errno (error_code);
     }
   else if (result < sizeof (struct nlmsghdr))
     {
       char message[200];
       int family = get_address_family (fd);
       if (family < 0)
-          __snprintf (message, sizeof (message),
-                      "Unexpected netlink response of size %zd"
-                      " on descriptor %d\n",
-                      result, fd);
+	__snprintf (message, sizeof (message),
+		    "Unexpected netlink response of size %zd"
+		    " on descriptor %d\n",
+		    result, fd);
       else
-          __snprintf (message, sizeof (message),
-                      "Unexpected netlink response of size %zd"
-                      " on descriptor %d (address family %d)\n",
-                      result, fd, family);
+	__snprintf (message, sizeof (message),
+		    "Unexpected netlink response of size %zd"
+		    " on descriptor %d (address family %d)\n",
+		    result, fd, family);
       __libc_fatal (message);
     }
 }

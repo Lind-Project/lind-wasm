@@ -18,43 +18,41 @@
 #ifndef _DL_HWCAP_H
 #define _DL_HWCAP_H
 
-#if IS_IN (ldconfig)
+#if IS_IN(ldconfig)
 /* Since ldconfig processes both i386 and x86-64 libraries, it needs
    to cover all platforms and hardware capabilities.  */
-# define HWCAP_PLATFORMS_START	0
-# define HWCAP_PLATFORMS_COUNT	4
-# define HWCAP_START		0
-# define HWCAP_COUNT		3
-# define HWCAP_IMPORTANT \
-  (HWCAP_X86_SSE2 | HWCAP_X86_64 | HWCAP_X86_AVX512_1)
+#  define HWCAP_PLATFORMS_START 0
+#  define HWCAP_PLATFORMS_COUNT 4
+#  define HWCAP_START 0
+#  define HWCAP_COUNT 3
+#  define HWCAP_IMPORTANT (HWCAP_X86_SSE2 | HWCAP_X86_64 | HWCAP_X86_AVX512_1)
 #elif defined __x86_64__
 /* For 64 bit, only cover x86-64 platforms and capabilities.  */
-# define HWCAP_PLATFORMS_START	2
-# define HWCAP_PLATFORMS_COUNT	4
-# define HWCAP_START		1
-# define HWCAP_COUNT		3
-# define HWCAP_IMPORTANT	(HWCAP_X86_64 | HWCAP_X86_AVX512_1)
+#  define HWCAP_PLATFORMS_START 2
+#  define HWCAP_PLATFORMS_COUNT 4
+#  define HWCAP_START 1
+#  define HWCAP_COUNT 3
+#  define HWCAP_IMPORTANT (HWCAP_X86_64 | HWCAP_X86_AVX512_1)
 #else
 /* For 32 bit, only cover i586, i686 and SSE2.  */
-# define HWCAP_PLATFORMS_START	0
-# define HWCAP_PLATFORMS_COUNT	2
-# define HWCAP_START		0
-# define HWCAP_COUNT		1
-# define HWCAP_IMPORTANT	(HWCAP_X86_SSE2)
+#  define HWCAP_PLATFORMS_START 0
+#  define HWCAP_PLATFORMS_COUNT 2
+#  define HWCAP_START 0
+#  define HWCAP_COUNT 1
+#  define HWCAP_IMPORTANT (HWCAP_X86_SSE2)
 #endif
 
 enum
 {
-  HWCAP_X86_SSE2		= 1 << 0,
-  HWCAP_X86_64			= 1 << 1,
-  HWCAP_X86_AVX512_1		= 1 << 2
+  HWCAP_X86_SSE2 = 1 << 0,
+  HWCAP_X86_64 = 1 << 1,
+  HWCAP_X86_AVX512_1 = 1 << 2
 };
 
-static inline const char *
-__attribute__ ((unused))
+static inline const char *__attribute__ ((unused))
 _dl_hwcap_string (int idx)
 {
-  return GLRO(dl_x86_hwcap_flags)[idx];
+  return GLRO (dl_x86_hwcap_flags)[idx];
 };
 
 /* We cannot provide a general printing function.  */

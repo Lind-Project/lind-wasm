@@ -32,13 +32,12 @@ bool __nptl_set_robust_list_avail;
 rtld_hidden_data_def (__nptl_set_robust_list_avail)
 #endif
 
-bool __nptl_initial_report_events;
+    bool __nptl_initial_report_events;
 rtld_hidden_def (__nptl_initial_report_events)
 
 #ifdef SHARED
-/* Dummy implementation.  See __rtld_mutex_init.  */
-static int
-rtld_mutex_dummy (pthread_mutex_t *lock)
+    /* Dummy implementation.  See __rtld_mutex_init.  */
+    static int rtld_mutex_dummy (pthread_mutex_t *lock)
 {
   return 0;
 }
@@ -71,10 +70,10 @@ __tls_init_tp (void)
   /* Set up thread stack list management.  */
   list_add (&pd->list, &GL (dl_stack_user));
 
-   /* Early initialization of the TCB.   */
-   pd->tid = INTERNAL_SYSCALL_CALL (set_tid_address, &pd->tid);
-   THREAD_SETMEM (pd, specific[0], &pd->specific_1stblock[0]);
-   THREAD_SETMEM (pd, user_stack, true);
+  /* Early initialization of the TCB.   */
+  pd->tid = INTERNAL_SYSCALL_CALL (set_tid_address, &pd->tid);
+  THREAD_SETMEM (pd, specific[0], &pd->specific_1stblock[0]);
+  THREAD_SETMEM (pd, user_stack, true);
 
   /* Before initializing GL (dl_stack_user), the debugger could not
      find us and had to set __nptl_initial_report_events.  Propagate
@@ -87,15 +86,15 @@ __tls_init_tp (void)
     pd->robust_prev = &pd->robust_head;
 #endif
     pd->robust_head.list = &pd->robust_head;
-    pd->robust_head.futex_offset = (offsetof (pthread_mutex_t, __data.__lock)
-                                    - offsetof (pthread_mutex_t,
-                                                __data.__list.__next));
+    pd->robust_head.futex_offset
+	= (offsetof (pthread_mutex_t, __data.__lock)
+	   - offsetof (pthread_mutex_t, __data.__list.__next));
     int res = INTERNAL_SYSCALL_CALL (set_robust_list, &pd->robust_head,
-                                     sizeof (struct robust_list_head));
+				     sizeof (struct robust_list_head));
     if (!INTERNAL_SYSCALL_ERROR_P (res))
       {
 #ifndef __ASSUME_SET_ROBUST_LIST
-        __nptl_set_robust_list_avail = true;
+	__nptl_set_robust_list_avail = true;
 #endif
       }
   }
@@ -105,10 +104,10 @@ __tls_init_tp (void)
     do_rseq = TUNABLE_GET (rseq, int, NULL);
     if (rseq_register_current_thread (pd, do_rseq))
       {
-        /* We need a writable view of the variables.  They are in
-           .data.relro and are not yet write-protected.  */
-        volatile unsigned int size;
-        size = sizeof (pd->rseq_area);
+	/* We need a writable view of the variables.  They are in
+	   .data.relro and are not yet write-protected.  */
+	volatile unsigned int size;
+	size = sizeof (pd->rseq_area);
       }
 
 #ifdef RSEQ_SIG

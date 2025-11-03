@@ -23,7 +23,6 @@
 #include <pthreadP.h>
 #include "kernel-posix-timers.h"
 
-
 /* List of active SIGEV_THREAD timers.  */
 struct timer *__timer_active_sigev_thread;
 
@@ -35,7 +34,6 @@ struct thread_start_data
   void (*thrfunc) (sigval_t);
   sigval_t sival;
 };
-
 
 /* Helper thread to call the user-provided function.  */
 static void *
@@ -56,7 +54,6 @@ timer_sigev_thread (void *arg)
   return NULL;
 }
 
-
 /* Helper function to support starting threads for SIGEV_THREAD.  */
 static _Noreturn void *
 timer_helper_thread (void *arg)
@@ -67,7 +64,8 @@ timer_helper_thread (void *arg)
     {
       siginfo_t si;
 
-      while (__sigwaitinfo (&sigtimer_set, &si) < 0);
+      while (__sigwaitinfo (&sigtimer_set, &si) < 0)
+	;
       if (si.si_code == SI_TIMER)
 	{
 	  struct timer *tk = (struct timer *) si.si_ptr;
@@ -80,8 +78,8 @@ timer_helper_thread (void *arg)
 	  while (runp != NULL)
 	    if (runp == tk)
 	      break;
-	  else
-	    runp = runp->next;
+	    else
+	      runp = runp->next;
 
 	  if (runp != NULL)
 	    {
@@ -104,14 +102,11 @@ timer_helper_thread (void *arg)
     }
 }
 
-
 /* Control variable for helper thread creation.  */
 pthread_once_t __timer_helper_once = PTHREAD_ONCE_INIT;
 
-
 /* TID of the helper thread.  */
 pid_t __timer_helper_tid;
-
 
 /* Reset variables so that after a fork a new helper thread gets started.  */
 void
@@ -120,7 +115,6 @@ __timer_fork_subprocess (void)
   __timer_helper_once = PTHREAD_ONCE_INIT;
   __timer_helper_tid = 0;
 }
-
 
 void
 __timer_start_helper_thread (void)

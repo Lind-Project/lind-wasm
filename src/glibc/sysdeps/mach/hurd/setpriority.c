@@ -27,54 +27,52 @@ __setpriority (enum __priority_which which, id_t who, int prio)
   error_t pidloser, priloser;
   unsigned int npids, ntasks, nwin, nperm, nacces;
 
-  error_t setonepriority (pid_t pid, struct procinfo *pi)
-    {
-      task_t task;
-      error_t piderr = __USEPORT (PROC, __proc_pid2task (port, pid, &task));
-      if (piderr == EPERM)
-	++nperm;
-      if (piderr != ESRCH)
-	{
-	  ++npids;
-	  if (piderr && piderr != EPERM)
-	    pidloser = piderr;
-	}
-      if (! piderr)
-	{
-	  error_t prierr;
-	  ++ntasks;
+  error_t setonepriority (pid_t pid, struct procinfo * pi)
+  {
+    task_t task;
+    error_t piderr = __USEPORT (PROC, __proc_pid2task (port, pid, &task));
+    if (piderr == EPERM)
+      ++nperm;
+    if (piderr != ESRCH)
+      {
+	++npids;
+	if (piderr && piderr != EPERM)
+	  pidloser = piderr;
+      }
+    if (!piderr)
+      {
+	error_t prierr;
+	++ntasks;
 #ifdef POLICY_TIMESHARE_BASE_COUNT
-	  {
-	    /* XXX This assumes timeshare policy.  */
-	    struct policy_timeshare_base base
-	      = { NICE_TO_MACH_PRIORITY (prio) };
-	    prierr = __task_policy (task, POLICY_TIMESHARE,
-				    (policy_base_t) &base,
-				    POLICY_TIMESHARE_BASE_COUNT,
-				    0, 1);
-	  }
-#else
-	  prierr = __task_priority (task, NICE_TO_MACH_PRIORITY (prio), 1);
-#endif
-	  __mach_port_deallocate (__mach_task_self (), task);
-	  switch (prierr)
-	    {
-	    case KERN_FAILURE:
-	      ++nacces;
-	      break;
-	    case KERN_SUCCESS:
-	      ++nwin;
-	      break;
-	    case KERN_INVALID_ARGUMENT: /* Task died.  */
-	      --npids;
-	      --ntasks;
-	      break;
-	    default:
-	      priloser = prierr;
-	    }
+	{
+	  /* XXX This assumes timeshare policy.  */
+	  struct policy_timeshare_base base = { NICE_TO_MACH_PRIORITY (prio) };
+	  prierr
+	      = __task_policy (task, POLICY_TIMESHARE, (policy_base_t) &base,
+			       POLICY_TIMESHARE_BASE_COUNT, 0, 1);
 	}
-      return 0;
-    }
+#else
+	prierr = __task_priority (task, NICE_TO_MACH_PRIORITY (prio), 1);
+#endif
+	__mach_port_deallocate (__mach_task_self (), task);
+	switch (prierr)
+	  {
+	  case KERN_FAILURE:
+	    ++nacces;
+	    break;
+	  case KERN_SUCCESS:
+	    ++nwin;
+	    break;
+	  case KERN_INVALID_ARGUMENT: /* Task died.  */
+	    --npids;
+	    --ntasks;
+	    break;
+	  default:
+	    priloser = prierr;
+	  }
+      }
+    return 0;
+  }
 
   npids = ntasks = nwin = nperm = nacces = 0;
   pidloser = priloser = 0;
@@ -94,5 +92,4 @@ __setpriority (enum __priority_which which, id_t who, int prio)
 
   return err ? __hurd_fail (err) : 0;
 }
-libc_hidden_def (__setpriority)
-weak_alias (__setpriority, setpriority)
+libc_hidden_def (__setpriority) weak_alias (__setpriority, setpriority)

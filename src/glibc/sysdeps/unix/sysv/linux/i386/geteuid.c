@@ -5,4 +5,3 @@ __geteuid (void)
 {
   return 0;
 }
-

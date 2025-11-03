@@ -1,7 +1,6 @@
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 obstack_printf (struct obstack *obstack, const char *fmt, ...)
 {
   int result;

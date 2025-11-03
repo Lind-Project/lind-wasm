@@ -22,10 +22,8 @@
 #include <time.h>
 #include <sys/time.h>
 
-
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t mut = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
-
 
 static void *
 tf (void *arg)
@@ -42,7 +40,6 @@ tf (void *arg)
       printf ("cond_wait didn't return EPERM but %d\n", err);
       exit (1);
     }
-
 
   /* Current time.  */
   struct timeval tv;
@@ -68,7 +65,6 @@ tf (void *arg)
   return (void *) 1l;
 }
 
-
 static int
 do_test (void)
 {
@@ -89,7 +85,6 @@ do_test (void)
       printf ("cond_wait didn't return EPERM but %d\n", err);
       exit (1);
     }
-
 
   /* Current time.  */
   struct timeval tv;
@@ -142,7 +137,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

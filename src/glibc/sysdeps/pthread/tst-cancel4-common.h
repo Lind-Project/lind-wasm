@@ -70,11 +70,11 @@ set_socket_buffer (int s)
   int val = 1;
   socklen_t len = sizeof (val);
 
-  TEST_VERIFY_EXIT (setsockopt (s, SOL_SOCKET, SO_SNDBUF, &val,
-		    sizeof (val)) == 0);
+  TEST_VERIFY_EXIT (setsockopt (s, SOL_SOCKET, SO_SNDBUF, &val, sizeof (val))
+		    == 0);
   TEST_VERIFY_EXIT (getsockopt (s, SOL_SOCKET, SO_SNDBUF, &val, &len) == 0);
   TEST_VERIFY_EXIT (val < WRITE_BUFFER_SIZE);
-  printf("got size %d\n", val);
+  printf ("got size %d\n", val);
 }
 
 /* Cleanup handling test.  */
@@ -91,8 +91,7 @@ cl (void *arg)
 static char fifoname[] = "/tmp/tst-cancel4-fifo-XXXXXX";
 static int fifofd;
 
-static void
-__attribute__ ((used))
+static void __attribute__ ((used))
 cl_fifo (void *arg)
 {
   ++cl_called;

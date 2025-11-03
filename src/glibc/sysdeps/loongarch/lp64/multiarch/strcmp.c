@@ -18,18 +18,18 @@
    <http://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define strcmp __redirect_strcmp
-# include <string.h>
-# undef strcmp
+#if IS_IN(libc)
+#  define strcmp __redirect_strcmp
+#  include <string.h>
+#  undef strcmp
 
-# define SYMBOL_NAME strcmp
-# include "ifunc-strcmp.h"
+#  define SYMBOL_NAME strcmp
+#  include "ifunc-strcmp.h"
 
 libc_ifunc_redirected (__redirect_strcmp, strcmp, IFUNC_SELECTOR ());
 
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (strcmp, __GI_strcmp, __redirect_strcmp)
-  __attribute__ ((visibility ("hidden"))) __attribute_copy__ (strcmp);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (strcmp);
+#  endif
 #endif

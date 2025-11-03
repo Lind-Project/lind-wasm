@@ -16,36 +16,34 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined SHARED && IS_IN (libc)
-# define strcmp __redirect_strcmp
+#if defined SHARED && IS_IN(libc)
+#  define strcmp __redirect_strcmp
 /* Omit the strcmp inline definitions because it would redefine strcmp.  */
-# define __NO_STRING_INLINES
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#  define __NO_STRING_INLINES
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (strcmp) __strcmp_ppc attribute_hidden;
 extern __typeof (strcmp) __strcmp_power7 attribute_hidden;
 extern __typeof (strcmp) __strcmp_power8 attribute_hidden;
-# ifdef __LITTLE_ENDIAN__
+#  ifdef __LITTLE_ENDIAN__
 extern __typeof (strcmp) __strcmp_power9 attribute_hidden;
 extern __typeof (strcmp) __strcmp_power10 attribute_hidden;
-# endif
+#  endif
 
-# undef strcmp
+#  undef strcmp
 
-libc_ifunc_redirected (__redirect_strcmp, strcmp,
-# ifdef __LITTLE_ENDIAN__
-		        (hwcap2 & PPC_FEATURE2_ARCH_3_1
-			 && hwcap & PPC_FEATURE_HAS_VSX)
-			? __strcmp_power10 :
-			(hwcap2 & PPC_FEATURE2_ARCH_3_00
-			 && hwcap & PPC_FEATURE_HAS_ALTIVEC)
-			? __strcmp_power9 :
-# endif
-		       (hwcap2 & PPC_FEATURE2_ARCH_2_07)
-		       ? __strcmp_power8
-		       : (hwcap & PPC_FEATURE_ARCH_2_06)
-			 ? __strcmp_power7
-			 : __strcmp_ppc);
+libc_ifunc_redirected (
+    __redirect_strcmp, strcmp,
+#  ifdef __LITTLE_ENDIAN__
+    (hwcap2 & PPC_FEATURE2_ARCH_3_1 && hwcap & PPC_FEATURE_HAS_VSX)
+	? __strcmp_power10
+    : (hwcap2 & PPC_FEATURE2_ARCH_3_00 && hwcap & PPC_FEATURE_HAS_ALTIVEC)
+	? __strcmp_power9
+    :
+#  endif
+    (hwcap2 &PPC_FEATURE2_ARCH_2_07) ? __strcmp_power8
+    : (hwcap &PPC_FEATURE_ARCH_2_06) ? __strcmp_power7
+				     : __strcmp_ppc);
 #endif

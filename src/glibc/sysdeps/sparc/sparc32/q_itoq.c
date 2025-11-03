@@ -21,13 +21,14 @@
 #include "soft-fp.h"
 #include "quad.h"
 
-long double _Q_itoq(const int a)
+long double
+_Q_itoq (const int a)
 {
-  FP_DECL_Q(C);
+  FP_DECL_Q (C);
   int b = a;
   long double c;
 
-  FP_FROM_INT_Q(C, b, 32, unsigned int);
-  FP_PACK_RAW_Q(c, C);
+  FP_FROM_INT_Q (C, b, 32, unsigned int);
+  FP_PACK_RAW_Q (c, C);
   return c;
 }

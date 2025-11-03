@@ -2,8 +2,7 @@
 #include "nldbl-compat.h"
 #undef __signbitl
 
-int
-attribute_hidden
+int attribute_hidden
 __signbitl (double x)
 {
   return signbit (x);

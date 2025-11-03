@@ -35,8 +35,8 @@ __pthread_barrier_destroy (pthread_barrier_t *barrier)
      they have exited as well.  To get the notification, pretend that we have
      reached the reset threshold.  */
   unsigned int count = bar->count;
-  unsigned int max_in_before_reset = BARRIER_IN_THRESHOLD
-				   - BARRIER_IN_THRESHOLD % count;
+  unsigned int max_in_before_reset
+      = BARRIER_IN_THRESHOLD - BARRIER_IN_THRESHOLD % count;
   /* Relaxed MO sufficient because the program must have ensured that all
      modifications happen-before this load (see above).  */
   unsigned int in = atomic_load_relaxed (&bar->in);
@@ -59,9 +59,9 @@ __pthread_barrier_destroy (pthread_barrier_t *barrier)
   return 0;
 }
 versioned_symbol (libc, __pthread_barrier_destroy, pthread_barrier_destroy,
-                  GLIBC_2_34);
+		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_barrier_destroy, pthread_barrier_destroy,
-               GLIBC_2_2);
+	       GLIBC_2_2);
 #endif

@@ -16,35 +16,35 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ATOMIC_MACHINE_H
-#define _ATOMIC_MACHINE_H	1
+#  define _ATOMIC_MACHINE_H 1
 
-#include <sysdep.h>
+#  include <sysdep.h>
 
 /* Coldfire has no atomic compare-and-exchange operation, but the
    kernel provides userspace atomicity operations.  Use them.  */
 
-#define __HAVE_64B_ATOMICS 0
-#define USE_ATOMIC_COMPILER_BUILTINS 0
+#  define __HAVE_64B_ATOMICS 0
+#  define USE_ATOMIC_COMPILER_BUILTINS 0
 
 /* XXX Is this actually correct?  */
-#define ATOMIC_EXCHANGE_USES_CAS 1
+#  define ATOMIC_EXCHANGE_USES_CAS 1
 
 /* The only basic operation needed is compare and exchange.  */
-#define atomic_compare_and_exchange_val_acq(mem, newval, oldval)	\
-  ({									\
-    /* Use temporary variables to workaround call-clobberness of 	\
-       the registers.  */						\
-    __typeof (mem) _mem = mem;						\
-    __typeof (oldval) _oldval = oldval;					\
-    __typeof (newval) _newval = newval;					\
-    register uint32_t _d0  = SYS_ify (atomic_cmpxchg_32);	\
-    register uint32_t *_a0  = (uint32_t *) _mem;		\
-    register uint32_t _d2  = (uint32_t) _oldval;		\
-    register uint32_t _d1  = (uint32_t) _newval;		\
-    (__typeof (oldval)) _d0;						\
-  })
+#  define atomic_compare_and_exchange_val_acq(mem, newval, oldval)            \
+    ({                                                                        \
+      /* Use temporary variables to workaround call-clobberness of            \
+	 the registers.  */                                                   \
+      __typeof (mem) _mem = mem;                                              \
+      __typeof (oldval) _oldval = oldval;                                     \
+      __typeof (newval) _newval = newval;                                     \
+      register uint32_t _d0 = SYS_ify (atomic_cmpxchg_32);                    \
+      register uint32_t *_a0 = (uint32_t *) _mem;                             \
+      register uint32_t _d2 = (uint32_t) _oldval;                             \
+      register uint32_t _d1 = (uint32_t) _newval;                             \
+      (__typeof (oldval)) _d0;                                                \
+    })
 
-# define atomic_full_barrier()				\
-  (INTERNAL_SYSCALL_CALL (atomic_barrier), (void) 0)
+#  define atomic_full_barrier()                                               \
+    (INTERNAL_SYSCALL_CALL (atomic_barrier), (void) 0)
 
 #endif

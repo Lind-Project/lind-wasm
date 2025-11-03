@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef SHARED
-# define ARCH_SETUP_IREL() apply_irel ()
-# define ARCH_APPLY_IREL()
-# ifdef __CET__
+#  define ARCH_SETUP_IREL() apply_irel ()
+#  define ARCH_APPLY_IREL()
+#  ifdef __CET__
 /* Get CET features enabled in the static executable.  */
 
 static inline unsigned int
@@ -39,9 +39,9 @@ get_cet_feature (void)
 
   /* Scan program headers backward to check PT_GNU_PROPERTY early for
      x86 feature bits on static executable.  */
-  const ElfW(Phdr) *phdr = GL(dl_phdr);
-  const ElfW(Phdr) *ph;
-  for (ph = phdr + GL(dl_phnum); ph != phdr; ph--)
+  const ElfW (Phdr) *phdr = GL (dl_phdr);
+  const ElfW (Phdr) * ph;
+  for (ph = phdr + GL (dl_phnum); ph != phdr; ph--)
     if (ph[-1].p_type == PT_GNU_PROPERTY)
       {
 	_dl_process_pt_gnu_property (main_map, -1, &ph[-1]);
@@ -51,7 +51,7 @@ get_cet_feature (void)
 			& (GNU_PROPERTY_X86_FEATURE_1_IBT
 			   | GNU_PROPERTY_X86_FEATURE_1_SHSTK));
 	/* Set GL(dl_x86_feature_1) to the enabled CET features.  */
-	GL(dl_x86_feature_1) = cet_feature;
+	GL (dl_x86_feature_1) = cet_feature;
 	break;
       }
 
@@ -60,15 +60,15 @@ get_cet_feature (void)
 
 /* The function using this macro to enable shadow stack must not return
    to avoid shadow stack underflow.  */
-#  define ARCH_SETUP_TLS()						\
-  {									\
-    __libc_setup_tls ();						\
-									\
-    unsigned int cet_feature = get_cet_feature ();			\
-    ENABLE_X86_CET (cet_feature);					\
-    _dl_cet_setup_features (cet_feature);				\
-  }
-# else
-#  define ARCH_SETUP_TLS()	__libc_setup_tls ()
-# endif
+#    define ARCH_SETUP_TLS()                                                  \
+      {                                                                       \
+	__libc_setup_tls ();                                                  \
+                                                                              \
+	unsigned int cet_feature = get_cet_feature ();                        \
+	ENABLE_X86_CET (cet_feature);                                         \
+	_dl_cet_setup_features (cet_feature);                                 \
+      }
+#  else
+#    define ARCH_SETUP_TLS() __libc_setup_tls ()
+#  endif
 #endif /* !SHARED */

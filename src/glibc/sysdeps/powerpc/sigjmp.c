@@ -17,7 +17,7 @@
 
 /* Versioned copy of sysdeps/generic/sigjmp.c modified for AltiVec support.  */
 
-#include  <shlib-compat.h>
+#include <shlib-compat.h>
 #include <stddef.h>
 #include <setjmp.h>
 #include <signal.h>
@@ -29,11 +29,12 @@
 int
 __vmx__sigjmp_save (sigjmp_buf env, int savemask)
 {
-  env[0].__mask_was_saved = (savemask
-			     && __sigprocmask (SIG_BLOCK, (sigset_t *) NULL,
-					       &env[0].__saved_mask) == 0);
+  env[0].__mask_was_saved
+      = (savemask
+	 && __sigprocmask (SIG_BLOCK, (sigset_t *) NULL, &env[0].__saved_mask)
+		== 0);
 
   return 0;
 }
 
-strong_alias (__vmx__sigjmp_save,__sigjmp_save)
+strong_alias (__vmx__sigjmp_save, __sigjmp_save)

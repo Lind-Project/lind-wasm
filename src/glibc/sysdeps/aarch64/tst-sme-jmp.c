@@ -27,7 +27,8 @@
 #include <support/support.h>
 #include <support/test-driver.h>
 
-struct blk {
+struct blk
+{
   void *za_save_buffer;
   uint16_t num_za_save_slices;
   char __reserved[6];
@@ -42,9 +43,7 @@ static unsigned long
 get_svl (void)
 {
   register unsigned long x0 asm ("x0");
-  asm volatile (
-    ".inst   0x04bf5820  /* rdsvl   x0, 1  */\n"
-    : "=r" (x0));
+  asm volatile (".inst   0x04bf5820  /* rdsvl   x0, 1  */\n" : "=r"(x0));
   return x0;
 }
 
@@ -52,8 +51,7 @@ get_svl (void)
 static void
 start_za (void)
 {
-  asm volatile (
-    ".inst   0xd503457f  /* smstart za  */");
+  asm volatile (".inst   0xd503457f  /* smstart za  */");
 }
 
 /* Read SVCR to get SM (bit0) and ZA (bit1) state.  */
@@ -61,9 +59,7 @@ static unsigned long
 get_svcr (void)
 {
   register unsigned long x0 asm ("x0");
-  asm volatile (
-    ".inst   0xd53b4240  /* mrs     x0, svcr  */\n"
-    : "=r" (x0));
+  asm volatile (".inst   0xd53b4240  /* mrs     x0, svcr  */\n" : "=r"(x0));
   return x0;
 }
 
@@ -72,29 +68,27 @@ static void __attribute__ ((noinline))
 load_za (const void *p)
 {
   register unsigned long x15 asm ("x15") = 0;
-  register unsigned long x16 asm ("x16") = (unsigned long)p;
+  register unsigned long x16 asm ("x16") = (unsigned long) p;
   register unsigned long x17 asm ("x17") = svl;
 
-  asm volatile (
-    ".inst   0xd503437f  /* smstart sm  */\n"
-    ".L_ldr_loop:\n"
-    ".inst   0xe1006200  /* ldr     za[w15, 0], [x16]  */\n"
-    "add     w15, w15, 1\n"
-    ".inst   0x04305030  /* addvl   x16, x16, 1  */\n"
-    "cmp     w15, w17\n"
-    "bne     .L_ldr_loop\n"
-    ".inst   0xd503427f  /* smstop  sm  */\n"
-    : "+r"(x15), "+r"(x16), "+r"(x17));
+  asm volatile (".inst   0xd503437f  /* smstart sm  */\n"
+		".L_ldr_loop:\n"
+		".inst   0xe1006200  /* ldr     za[w15, 0], [x16]  */\n"
+		"add     w15, w15, 1\n"
+		".inst   0x04305030  /* addvl   x16, x16, 1  */\n"
+		"cmp     w15, w17\n"
+		"bne     .L_ldr_loop\n"
+		".inst   0xd503427f  /* smstop  sm  */\n"
+		: "+r"(x15), "+r"(x16), "+r"(x17));
 }
 
 /* Set tpidr2 to BLK.  */
 static void
 set_tpidr2 (struct blk *blk)
 {
-  register unsigned long x0 asm ("x0") = (unsigned long)blk;
-  asm volatile (
-    ".inst   0xd51bd0a0  /* msr     tpidr2_el0, x0  */\n"
-    :: "r"(x0) : "memory");
+  register unsigned long x0 asm ("x0") = (unsigned long) blk;
+  asm volatile (".inst   0xd51bd0a0  /* msr     tpidr2_el0, x0  */\n" ::"r"(x0)
+		: "memory");
 }
 
 /* Returns tpidr2.  */
@@ -102,14 +96,13 @@ static void *
 get_tpidr2 (void)
 {
   register unsigned long x0 asm ("x0");
-  asm volatile (
-    ".inst   0xd53bd0a0  /* mrs     x0, tpidr2_el0  */\n"
-    : "=r"(x0) :: "memory");
+  asm volatile (".inst   0xd53bd0a0  /* mrs     x0, tpidr2_el0  */\n"
+		: "=r"(x0)::"memory");
   return (void *) x0;
 }
 
 static void
-print_data(const char *msg, void *p)
+print_data (const char *msg, void *p)
 {
   unsigned char *a = p;
   printf ("%s:\n", msg);
@@ -117,22 +110,20 @@ print_data(const char *msg, void *p)
     {
       printf ("%d: ", i);
       for (int j = 0; j < svl; j++)
-	printf("%02x,", a[i*svl+j]);
-      printf("\n");
+	printf ("%02x,", a[i * svl + j]);
+      printf ("\n");
     }
-  printf(".\n");
+  printf (".\n");
   fflush (stdout);
 }
 
-__attribute__ ((noinline))
-static void
+__attribute__ ((noinline)) static void
 do_longjmp (jmp_buf env)
 {
   longjmp (env, 1);
 }
 
-__attribute__ ((noinline))
-static void
+__attribute__ ((noinline)) static void
 do_setcontext (const ucontext_t *p)
 {
   setcontext (p);
@@ -145,7 +136,7 @@ longjmp_test (void)
   jmp_buf env;
   void *p;
   int r;
-  struct blk blk = {za_save, svl, {0}};
+  struct blk blk = { za_save, svl, { 0 } };
 
   printf ("longjmp test:\n");
   p = get_tpidr2 ();
@@ -163,7 +154,7 @@ longjmp_test (void)
   p = get_tpidr2 ();
   printf ("before setjmp: tp2 = %p\n", p);
   if (p != &blk)
-    FAIL_EXIT1 ("tpidr2 is not set to BLK %p", (void *)&blk);
+    FAIL_EXIT1 ("tpidr2 is not set to BLK %p", (void *) &blk);
   if (setjmp (env) == 0)
     {
       p = get_tpidr2 ();
@@ -181,7 +172,7 @@ longjmp_test (void)
   if (svcr != 0)
     FAIL_EXIT1 ("svcr != 0: %lu", svcr);
   print_data ("za save space", za_save);
-  r = memcmp (za_orig, za_save, svl*svl);
+  r = memcmp (za_orig, za_save, svl * svl);
   if (r != 0)
     FAIL_EXIT1 ("saving za failed");
 }
@@ -194,7 +185,7 @@ setcontext_test (void)
   ucontext_t ctx;
   void *p;
   int r;
-  struct blk blk = {za_save, svl, {0}};
+  struct blk blk = { za_save, svl, { 0 } };
 
   printf ("setcontext test:\n");
   p = get_tpidr2 ();
@@ -212,7 +203,7 @@ setcontext_test (void)
   p = get_tpidr2 ();
   printf ("before getcontext: tp2 = %p\n", p);
   if (p != &blk)
-    FAIL_EXIT1 ("tpidr2 is not set to BLK %p", (void *)&blk);
+    FAIL_EXIT1 ("tpidr2 is not set to BLK %p", (void *) &blk);
   r = getcontext (&ctx);
   if (r != 0)
     FAIL_EXIT1 ("getcontext failed");
@@ -234,7 +225,7 @@ setcontext_test (void)
   if (svcr != 0)
     FAIL_EXIT1 ("svcr != 0: %lu", svcr);
   print_data ("za save space", za_save);
-  r = memcmp (za_orig, za_save, svl*svl);
+  r = memcmp (za_orig, za_save, svl * svl);
   if (r != 0)
     FAIL_EXIT1 ("saving za failed");
 }
@@ -253,21 +244,21 @@ do_test (void)
   if (svl < 16 || svl % 16 != 0 || svl >= (1 << 16))
     FAIL_EXIT1 ("invalid svl");
 
-  za_orig = xmalloc (svl*svl);
-  za_save = xmalloc (svl*svl);
-  za_dump = xmalloc (svl*svl);
-  memset (za_orig, 1, svl*svl);
-  memset (za_save, 2, svl*svl);
-  memset (za_dump, 3, svl*svl);
+  za_orig = xmalloc (svl * svl);
+  za_save = xmalloc (svl * svl);
+  za_dump = xmalloc (svl * svl);
+  memset (za_orig, 1, svl * svl);
+  memset (za_save, 2, svl * svl);
+  memset (za_dump, 3, svl * svl);
   for (int i = 0; i < svl; i++)
     for (int j = 0; j < svl; j++)
-      za_orig[i*svl+j] = i*svl+j;
+      za_orig[i * svl + j] = i * svl + j;
   print_data ("original data", za_orig);
 
   longjmp_test ();
 
-  memset (za_save, 2, svl*svl);
-  memset (za_dump, 3, svl*svl);
+  memset (za_save, 2, svl * svl);
+  memset (za_dump, 3, svl * svl);
 
   setcontext_test ();
 

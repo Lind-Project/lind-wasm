@@ -16,14 +16,14 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined SHARED && IS_IN (libc)
+#if defined SHARED && IS_IN(libc)
 /* Redefine strlen so that the compiler won't complain about the type
    mismatch with the IFUNC selector in strong_alias, below.  */
-# undef strlen
-# define strlen __redirect_strlen
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#  undef strlen
+#  define strlen __redirect_strlen
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (__redirect_strlen) __libc_strlen;
 
@@ -34,22 +34,19 @@ extern __typeof (__redirect_strlen) __strlen_power9 attribute_hidden;
 extern __typeof (__redirect_strlen) __strlen_power10 attribute_hidden;
 
 libc_ifunc (__libc_strlen,
-# ifdef __LITTLE_ENDIAN__
-	(hwcap2 & PPC_FEATURE2_ARCH_3_1
-	 && hwcap & PPC_FEATURE_HAS_VSX)
-	? __strlen_power10 :
-	  (hwcap2 & PPC_FEATURE2_ARCH_3_00
-	   && hwcap & PPC_FEATURE_HAS_VSX)
-	  ? __strlen_power9 :
-# endif
+#  ifdef __LITTLE_ENDIAN__
+	    (hwcap2 & PPC_FEATURE2_ARCH_3_1 && hwcap & PPC_FEATURE_HAS_VSX)
+		? __strlen_power10
+	    : (hwcap2 & PPC_FEATURE2_ARCH_3_00 && hwcap & PPC_FEATURE_HAS_VSX)
+		? __strlen_power9
+	    :
+#  endif
 	    (hwcap2 & PPC_FEATURE2_ARCH_2_07
 	     && hwcap & PPC_FEATURE_HAS_ALTIVEC)
-	    ? __strlen_power8 :
-	      (hwcap & PPC_FEATURE_ARCH_2_06)
-	      ? __strlen_power7
-	      : __strlen_ppc);
+		? __strlen_power8
+	    : (hwcap &PPC_FEATURE_ARCH_2_06) ? __strlen_power7
+					     : __strlen_ppc);
 
-#undef strlen
-strong_alias (__libc_strlen, strlen)
-libc_hidden_ver (__libc_strlen, strlen)
+#  undef strlen
+strong_alias (__libc_strlen, strlen) libc_hidden_ver (__libc_strlen, strlen)
 #endif

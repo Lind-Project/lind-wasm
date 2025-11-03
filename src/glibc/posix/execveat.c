@@ -24,8 +24,8 @@
    arguments argv and environment envp.
    argv and envp are terminated by NULL pointers.  */
 int
-__execveat (int dirfd, const char *path, char *const argv[], char *const envp[],
-            int flags)
+__execveat (int dirfd, const char *path, char *const argv[],
+	    char *const envp[], int flags)
 {
   if (path == NULL || argv == NULL || envp == NULL)
     {
@@ -38,4 +38,4 @@ __execveat (int dirfd, const char *path, char *const argv[], char *const envp[],
 }
 stub_warning (execveat)
 
-weak_alias (__execveat, execveat)
+    weak_alias (__execveat, execveat)

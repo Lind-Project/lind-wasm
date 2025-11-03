@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LIBC_MMAP_H
-#define _LIBC_MMAP_H 1
+#  define _LIBC_MMAP_H 1
 
 /* Using MAP_FIXED with mmap sometimes requires larger alignment.  */
-#include <sys/shm.h>
-#define MAP_FIXED_ALIGNMENT SHMLBA
+#  include <sys/shm.h>
+#  define MAP_FIXED_ALIGNMENT SHMLBA
 
 #endif

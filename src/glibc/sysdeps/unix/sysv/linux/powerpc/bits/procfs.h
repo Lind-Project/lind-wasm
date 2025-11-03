@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
+#  error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
 #endif
 
 #include <signal.h>
@@ -27,13 +27,13 @@
    asm/sigcontext.h, asm/ptrace.h, and asm/elf.h.  Otherwise we define
    them here.  */
 #if !defined __PPC64_ELF_H && !defined _ASM_POWERPC_ELF_H
-#define ELF_NGREG       48      /* includes nip, msr, lr, etc. */
-#define ELF_NFPREG      33      /* includes fpscr */
-#if __WORDSIZE == 32
-# define ELF_NVRREG      33      /* includes vscr */
-#else
-# define ELF_NVRREG      34      /* includes vscr */
-#endif
+#  define ELF_NGREG 48	/* includes nip, msr, lr, etc. */
+#  define ELF_NFPREG 33 /* includes fpscr */
+#  if __WORDSIZE == 32
+#    define ELF_NVRREG 33 /* includes vscr */
+#  else
+#    define ELF_NVRREG 34 /* includes vscr */
+#  endif
 
 typedef unsigned long elf_greg_t;
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];
@@ -42,7 +42,8 @@ typedef double elf_fpreg_t;
 typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 
 /* Altivec registers */
-typedef struct {
+typedef struct
+{
   unsigned int u[4];
 } __attribute__ ((__aligned__ (16))) elf_vrreg_t;
 typedef elf_vrreg_t elf_vrregset_t[ELF_NVRREG];

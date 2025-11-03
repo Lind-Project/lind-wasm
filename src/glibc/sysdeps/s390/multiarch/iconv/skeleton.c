@@ -17,5 +17,5 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef IGNORE_ICONV_SKELETON
-# include_next <iconv/skeleton.c>
+#  include_next <iconv/skeleton.c>
 #endif

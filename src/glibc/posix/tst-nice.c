@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-
 /* Test that nice() does not incorrectly return 0.  */
 static int
 do_test (void)
@@ -63,7 +62,6 @@ do_test (void)
       printf ("FAIL: errno = %i, but wanted EBADF (%i)\n", errno, EBADF);
       return 1;
     }
-
 
   printf ("PASS: nice(%d) from %d return: %d\n", incr, old, ret);
   return 0;

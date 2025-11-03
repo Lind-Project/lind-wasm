@@ -37,16 +37,15 @@ __lroundl (long double x)
      raises FE_INVALID.  */
   if (
 #if __LONG_MAX__ == 2147483647
-      __builtin_expect
-      ((__builtin_fabs (xh) <= (double) __LONG_MAX__ + 2), 1)
+      __builtin_expect ((__builtin_fabs (xh) <= (double) __LONG_MAX__ + 2), 1)
 #else
-      __builtin_expect
-      ((__builtin_fabs (xh) <= -(double) (-__LONG_MAX__ - 1)), 1)
+      __builtin_expect ((__builtin_fabs (xh) <= -(double) (-__LONG_MAX__ - 1)),
+			1)
 #endif
-#if !defined (FE_INVALID)
+#if !defined(FE_INVALID)
       || 1
 #endif
-    )
+  )
     {
 #if __LONG_MAX__ == 2147483647
       long long llhi = (long long) xh;
@@ -79,8 +78,8 @@ __lroundl (long double x)
       lo = (long) xh;
 
       /* Peg at max/min values, assuming that the above conversions do so.
-         Strictly speaking, we can return anything for values that overflow,
-         but this is more useful.  */
+	 Strictly speaking, we can return anything for values that overflow,
+	 but this is more useful.  */
       res = (long int) ((unsigned long int) hi + (unsigned long int) lo);
 
       /* This is just sign(hi) == sign(lo) && sign(res) != sign(hi).  */

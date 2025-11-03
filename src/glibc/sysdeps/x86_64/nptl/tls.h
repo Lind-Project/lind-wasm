@@ -17,18 +17,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TLS_H
-#define _TLS_H	1
+#  define _TLS_H 1
 
-#ifndef __ASSEMBLER__
-# include <asm/prctl.h>	/* For ARCH_SET_FS.  */
-# include <stdbool.h>
-# include <stddef.h>
-# include <stdint.h>
-# include <stdlib.h>
-# include <sysdep.h>
-# include <libc-pointer-arith.h> /* For cast_to_integer.  */
-# include <kernel-features.h>
-# include <dl-dtv.h>
+#  ifndef __ASSEMBLER__
+#    include <asm/prctl.h> /* For ARCH_SET_FS.  */
+#    include <stdbool.h>
+#    include <stddef.h>
+#    include <stdint.h>
+#    include <stdlib.h>
+#    include <sysdep.h>
+#    include <libc-pointer-arith.h> /* For cast_to_integer.  */
+#    include <kernel-features.h>
+#    include <dl-dtv.h>
 
 /* Replacement type for __m128 since this file is included by ld.so,
    which is compiled with -mno-sse.  It must not change the alignment
@@ -38,13 +38,12 @@ typedef struct
   int i[4];
 } __128bits;
 
-
 typedef struct
 {
-  void *tcb;		/* Pointer to the TCB.  Not necessarily the
-			   thread descriptor used by libpthread.  */
+  void *tcb; /* Pointer to the TCB.  Not necessarily the
+		thread descriptor used by libpthread.  */
   dtv_t *dtv;
-  void *self;		/* Pointer to the thread descriptor.  */
+  void *self; /* Pointer to the thread descriptor.  */
   int multiple_threads;
   int gscope_flag;
   uintptr_t sysinfo;
@@ -69,7 +68,7 @@ typedef struct
   void *__padding[8];
 } tcbhead_t;
 
-# ifdef __ILP32__
+#    ifdef __ILP32__
 /* morestack.S in libgcc uses offset 0x40 to access __private_ss,   */
 _Static_assert (offsetof (tcbhead_t, __private_ss) == 0x40,
 		"offset of __private_ss != 0x40");
@@ -78,60 +77,56 @@ _Static_assert (offsetof (tcbhead_t, __private_ss) == 0x40,
    next field, __glibc_unused2, is unchanged.  */
 _Static_assert (offsetof (tcbhead_t, __glibc_unused2) == 0x60,
 		"offset of __glibc_unused2 != 0x60");
-# else
+#    else
 /* morestack.S in libgcc uses offset 0x70 to access __private_ss,   */
 _Static_assert (offsetof (tcbhead_t, __private_ss) == 0x70,
 		"offset of __private_ss != 0x70");
 _Static_assert (offsetof (tcbhead_t, __glibc_unused2) == 0x80,
 		"offset of __glibc_unused2 != 0x80");
-# endif
+#    endif
 
-#else /* __ASSEMBLER__ */
-# include <tcb-offsets.h>
-#endif
-
+#  else /* __ASSEMBLER__ */
+#    include <tcb-offsets.h>
+#  endif
 
 /* Alignment requirement for the stack.  */
-#define STACK_ALIGN	16
+#  define STACK_ALIGN 16
 
-
-#ifndef __ASSEMBLER__
+#  ifndef __ASSEMBLER__
 /* Get system call information.  */
-# include <sysdep.h>
+#    include <sysdep.h>
 
-#define LOCK_PREFIX "lock;"
+#    define LOCK_PREFIX "lock;"
 
 /* This is the size of the initial TCB.  Can't be just sizeof (tcbhead_t),
    because NPTL getpid, __libc_alloca_cutoff etc. need (almost) the whole
    struct pthread even when not linked with -lpthread.  */
-# define TLS_INIT_TCB_SIZE sizeof (struct pthread)
+#    define TLS_INIT_TCB_SIZE sizeof (struct pthread)
 
 /* This is the size of the TCB.  */
-# define TLS_TCB_SIZE sizeof (struct pthread)
+#    define TLS_TCB_SIZE sizeof (struct pthread)
 
 /* The TCB can have any size and the memory following the address the
    thread pointer points to is unspecified.  Allocate the TCB there.  */
-# define TLS_TCB_AT_TP	1
-# define TLS_DTV_AT_TP	0
+#    define TLS_TCB_AT_TP 1
+#    define TLS_DTV_AT_TP 0
 
 /* Get the thread descriptor definition.  */
-# include <nptl/descr.h>
-
+#    include <nptl/descr.h>
 
 /* Install the dtv pointer.  The pointer passed is to the element with
    index -1 which contain the length.  */
-# define INSTALL_DTV(descr, dtvp) \
-  ((tcbhead_t *) (descr))->dtv = (dtvp) + 1
+#    define INSTALL_DTV(descr, dtvp) ((tcbhead_t *) (descr))->dtv = (dtvp) + 1
 
 /* Install new dtv for current thread.  */
-# define INSTALL_NEW_DTV(dtvp) \
-  ({ struct pthread *__pd;						      \
-     THREAD_SETMEM (__pd, header.dtv, (dtvp)); })
+#    define INSTALL_NEW_DTV(dtvp)                                             \
+      ({                                                                      \
+	struct pthread *__pd;                                                 \
+	THREAD_SETMEM (__pd, header.dtv, (dtvp));                             \
+      })
 
 /* Return dtv of given thread descriptor.  */
-# define GET_DTV(descr) \
-  (((tcbhead_t *) (descr))->dtv)
-
+#    define GET_DTV(descr) (((tcbhead_t *) (descr))->dtv)
 
 /* Code to initially initialize the thread pointer.  This might need
    special attention since 'errno' is not yet available and if the
@@ -139,34 +134,34 @@ _Static_assert (offsetof (tcbhead_t, __glibc_unused2) == 0x80,
 
    We have to make the syscall for both uses of the macro since the
    address might be (and probably is) different.  */
-# define TLS_INIT_TP(thrdescr) \
-  ({ void *_thrdescr = (thrdescr);					      \
-     tcbhead_t *_head = _thrdescr;					      \
-     int _result;							      \
-									      \
-     _head->tcb = _thrdescr;						      \
-     /* For now the thread descriptor is at the same address.  */	      \
-     _head->self = _thrdescr;						      \
-									      \
-     /* It is a simple syscall to set the %fs value for the thread.  */	      \
-     asm volatile ("syscall"						      \
-		   : "=a" (_result)					      \
-		   : "0" ((unsigned long int) __NR_arch_prctl),		      \
-		     "D" ((unsigned long int) ARCH_SET_FS),		      \
-		     "S" (_thrdescr)					      \
-		   : "memory", "cc", "r11", "cx");			      \
-									      \
-    _result == 0;							      \
-  })
+#    define TLS_INIT_TP(thrdescr)                                             \
+      ({                                                                      \
+	void *_thrdescr = (thrdescr);                                         \
+	tcbhead_t *_head = _thrdescr;                                         \
+	int _result;                                                          \
+                                                                              \
+	_head->tcb = _thrdescr;                                               \
+	/* For now the thread descriptor is at the same address.  */          \
+	_head->self = _thrdescr;                                              \
+                                                                              \
+	/* It is a simple syscall to set the %fs value for the thread.  */    \
+	asm volatile ("syscall"                                               \
+		      : "=a"(_result)                                         \
+		      : "0"((unsigned long int) __NR_arch_prctl),             \
+			"D"((unsigned long int) ARCH_SET_FS), "S"(_thrdescr)  \
+		      : "memory", "cc", "r11", "cx");                         \
+                                                                              \
+	_result == 0;                                                         \
+      })
 
-# define TLS_DEFINE_INIT_TP(tp, pd) void *tp = (pd)
-
+#    define TLS_DEFINE_INIT_TP(tp, pd) void *tp = (pd)
 
 /* Return the address of the dtv for the current thread.  */
-# define THREAD_DTV() \
-  ({ struct pthread *__pd;						      \
-     THREAD_GETMEM (__pd, header.dtv); })
-
+#    define THREAD_DTV()                                                      \
+      ({                                                                      \
+	struct pthread *__pd;                                                 \
+	THREAD_GETMEM (__pd, header.dtv);                                     \
+      })
 
 /* Return the thread descriptor for the current thread.
 
@@ -174,57 +169,60 @@ _Static_assert (offsetof (tcbhead_t, __glibc_unused2) == 0x80,
    assignments like
 	pthread_descr self = thread_self();
    do not get optimized away.  */
-# if __GNUC_PREREQ (6, 0)
-#  define THREAD_SELF \
-  (*(struct pthread *__seg_fs *) offsetof (struct pthread, header.self))
-# else
-#  define THREAD_SELF \
-  ({ struct pthread *__self;						      \
-     asm ("mov %%fs:%c1,%0" : "=r" (__self)				      \
-	  : "i" (offsetof (struct pthread, header.self)));	 	      \
-     __self;})
-# endif
+#    if __GNUC_PREREQ(6, 0)
+#      define THREAD_SELF                                                     \
+	(*(struct pthread * __seg_fs *) offsetof (struct pthread, header.self))
+#    else
+#      define THREAD_SELF                                                     \
+	({                                                                    \
+	  struct pthread *__self;                                             \
+	  asm ("mov %%fs:%c1,%0"                                              \
+	       : "=r"(__self)                                                 \
+	       : "i"(offsetof (struct pthread, header.self)));                \
+	  __self;                                                             \
+	})
+#    endif
 
 /* Magic for libthread_db to know how to do THREAD_SELF.  */
-# define DB_THREAD_SELF_INCLUDE  <sys/reg.h> /* For the FS constant.  */
-# define DB_THREAD_SELF CONST_THREAD_AREA (64, FS)
+#    define DB_THREAD_SELF_INCLUDE <sys / reg.h> /* For the FS constant.  */
+#    define DB_THREAD_SELF CONST_THREAD_AREA (64, FS)
 
-# include <tcb-access.h>
+#    include <tcb-access.h>
 
 /* Set the stack guard field in TCB head.  */
-# define THREAD_SET_STACK_GUARD(value) \
-    THREAD_SETMEM (THREAD_SELF, header.stack_guard, value)
-# define THREAD_COPY_STACK_GUARD(descr) \
-    ((descr)->header.stack_guard					      \
-     = THREAD_GETMEM (THREAD_SELF, header.stack_guard))
-
+#    define THREAD_SET_STACK_GUARD(value)                                     \
+      THREAD_SETMEM (THREAD_SELF, header.stack_guard, value)
+#    define THREAD_COPY_STACK_GUARD(descr)                                    \
+      ((descr)->header.stack_guard                                            \
+       = THREAD_GETMEM (THREAD_SELF, header.stack_guard))
 
 /* Set the pointer guard field in the TCB head.  */
-# define THREAD_SET_POINTER_GUARD(value) \
-  THREAD_SETMEM (THREAD_SELF, header.pointer_guard, value)
-# define THREAD_COPY_POINTER_GUARD(descr) \
-  ((descr)->header.pointer_guard					      \
-   = THREAD_GETMEM (THREAD_SELF, header.pointer_guard))
-
+#    define THREAD_SET_POINTER_GUARD(value)                                   \
+      THREAD_SETMEM (THREAD_SELF, header.pointer_guard, value)
+#    define THREAD_COPY_POINTER_GUARD(descr)                                  \
+      ((descr)->header.pointer_guard                                          \
+       = THREAD_GETMEM (THREAD_SELF, header.pointer_guard))
 
 /* Get and set the global scope generation counter in the TCB head.  */
-# define THREAD_GSCOPE_FLAG_UNUSED 0
-# define THREAD_GSCOPE_FLAG_USED   1
-# define THREAD_GSCOPE_FLAG_WAIT   2
-# define THREAD_GSCOPE_RESET_FLAG() \
-  do									      \
-    { int __res;							      \
-      asm volatile ("xchgl %0, %%fs:%P1"				      \
-		    : "=r" (__res)					      \
-		    : "i" (offsetof (struct pthread, header.gscope_flag)),    \
-		      "0" (THREAD_GSCOPE_FLAG_UNUSED));			      \
-      if (__res == THREAD_GSCOPE_FLAG_WAIT)				      \
-	lll_futex_wake (&THREAD_SELF->header.gscope_flag, 1, LLL_PRIVATE);    \
-    }									      \
-  while (0)
-# define THREAD_GSCOPE_SET_FLAG() \
-  THREAD_SETMEM (THREAD_SELF, header.gscope_flag, THREAD_GSCOPE_FLAG_USED)
+#    define THREAD_GSCOPE_FLAG_UNUSED 0
+#    define THREAD_GSCOPE_FLAG_USED 1
+#    define THREAD_GSCOPE_FLAG_WAIT 2
+#    define THREAD_GSCOPE_RESET_FLAG()                                        \
+      do                                                                      \
+	{                                                                     \
+	  int __res;                                                          \
+	  asm volatile ("xchgl %0, %%fs:%P1"                                  \
+			: "=r"(__res)                                         \
+			: "i"(offsetof (struct pthread, header.gscope_flag)), \
+			  "0"(THREAD_GSCOPE_FLAG_UNUSED));                    \
+	  if (__res == THREAD_GSCOPE_FLAG_WAIT)                               \
+	    lll_futex_wake (&THREAD_SELF->header.gscope_flag, 1,              \
+			    LLL_PRIVATE);                                     \
+	}                                                                     \
+      while (0)
+#    define THREAD_GSCOPE_SET_FLAG()                                          \
+      THREAD_SETMEM (THREAD_SELF, header.gscope_flag, THREAD_GSCOPE_FLAG_USED)
 
-#endif /* __ASSEMBLER__ */
+#  endif /* __ASSEMBLER__ */
 
-#endif	/* tls.h */
+#endif /* tls.h */

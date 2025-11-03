@@ -26,5 +26,4 @@ __statfs (const char *file, struct statfs *buf)
 {
   return INLINE_SYSCALL_CALL (statfs, file, buf);
 }
-libc_hidden_def (__statfs)
-weak_alias (__statfs, statfs)
+libc_hidden_def (__statfs) weak_alias (__statfs, statfs)

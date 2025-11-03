@@ -14,7 +14,7 @@
 
 #include <stdio.h>
 
-const int __attribute__ ((section(".bar"))) bar = 0x12345678;
+const int __attribute__ ((section (".bar"))) bar = 0x12345678;
 static const char foo[] = "foo";
 
 static int

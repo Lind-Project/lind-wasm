@@ -41,27 +41,26 @@ __getrlimit64 (enum __rlimit_resource resource, struct rlimit64 *rlimits)
 libc_hidden_def (__getrlimit64)
 
 #if __RLIM_T_MATCHES_RLIM64_T
-/* If both rlim_t and rlimt64_t are essentially the same type we can use
-   alias both interfaces.  */
-strong_alias (__getrlimit64, __GI_getrlimit)
-strong_alias (__getrlimit64, __GI___getrlimit)
-strong_alias (__getrlimit64, __getrlimit)
+    /* If both rlim_t and rlimt64_t are essentially the same type we can use
+       alias both interfaces.  */
+    strong_alias (__getrlimit64, __GI_getrlimit)
+	strong_alias (__getrlimit64, __GI___getrlimit)
+	    strong_alias (__getrlimit64, __getrlimit)
 /* Alpha defines a versioned getrlimit{64}.  */
-# ifndef USE_VERSIONED_RLIMIT
-weak_alias (__getrlimit64, getrlimit)
-weak_alias (__getrlimit64, getrlimit64)
-libc_hidden_weak (getrlimit64)
-# else
-weak_alias (__getrlimit64, __GI_getrlimit64)
-# endif
+#  ifndef USE_VERSIONED_RLIMIT
+		weak_alias (__getrlimit64, getrlimit)
+		    weak_alias (__getrlimit64, getrlimit64)
+			libc_hidden_weak (getrlimit64)
+#  else
+		weak_alias (__getrlimit64, __GI_getrlimit64)
+#  endif
 
-#elif SHLIB_COMPAT (libc, GLIBC_2_1, GLIBC_2_2)
-/* Back compatible 2GiB limited rlimit.  */
-extern int __new_getrlimit (enum __rlimit_resource, struct rlimit *)
-  attribute_hidden;
+#elif SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
+    /* Back compatible 2GiB limited rlimit.  */
+    extern int __new_getrlimit (enum __rlimit_resource,
+				struct rlimit *) attribute_hidden;
 
-int
-attribute_compat_text_section
+int attribute_compat_text_section
 __old_getrlimit64 (enum __rlimit_resource resource, struct rlimit64 *rlimits)
 {
   struct rlimit rlimits32;
@@ -83,6 +82,5 @@ __old_getrlimit64 (enum __rlimit_resource resource, struct rlimit64 *rlimits)
 versioned_symbol (libc, __getrlimit64, getrlimit64, GLIBC_2_2);
 compat_symbol (libc, __old_getrlimit64, getrlimit64, GLIBC_2_1);
 #else
-weak_alias (__getrlimit64, getrlimit64)
-libc_hidden_weak (getrlimit64)
+    weak_alias (__getrlimit64, getrlimit64) libc_hidden_weak (getrlimit64)
 #endif /* __RLIM_T_MATCHES_RLIM64_T  */

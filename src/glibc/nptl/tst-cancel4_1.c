@@ -59,8 +59,9 @@ tf_sendmmsg (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
   tempfname = strdup (sun.sun_path);
 
   tempfd2 = socket (AF_UNIX, SOCK_DGRAM, 0);
@@ -84,8 +85,8 @@ tf_sendmmsg (void *arg)
 
   struct mmsghdr mm;
   mm.msg_hdr.msg_name = &sun;
-  mm.msg_hdr.msg_namelen = (offsetof (struct sockaddr_un, sun_path)
-			   + strlen (sun.sun_path) + 1);
+  mm.msg_hdr.msg_namelen
+      = (offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path) + 1);
   mm.msg_hdr.msg_iov = iov;
   mm.msg_hdr.msg_iovlen = 1;
   mm.msg_hdr.msg_control = NULL;
@@ -100,8 +101,7 @@ tf_sendmmsg (void *arg)
   FAIL_EXIT1 ("sendmmsg returned");
 }
 
-struct cancel_tests tests[] =
-{
+struct cancel_tests tests[] = {
   ADD_TEST (sendmmsg, 2, 1),
 };
 #define ntest_tf (sizeof (tests) / sizeof (tests[0]))

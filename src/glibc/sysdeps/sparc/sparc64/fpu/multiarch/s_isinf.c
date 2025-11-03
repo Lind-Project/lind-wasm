@@ -29,9 +29,8 @@ extern __typeof (isinf) __isinf_vis3 attribute_hidden;
 extern __typeof (isinf) __isinf_generic attribute_hidden;
 
 sparc_libm_ifunc_redirected (__redirect___isinf, __isinf,
-			     hwcap & HWCAP_SPARC_VIS3
-			     ? __isinf_vis3
-			     : __isinf_generic)
+			     hwcap &HWCAP_SPARC_VIS3 ? __isinf_vis3
+						     : __isinf_generic)
 
-sparc_ifunc_redirected_hidden_def (__redirect___isinf, __isinf)
-weak_alias (__isinf, isinf)
+    sparc_ifunc_redirected_hidden_def (__redirect___isinf, __isinf)
+	weak_alias (__isinf, isinf)

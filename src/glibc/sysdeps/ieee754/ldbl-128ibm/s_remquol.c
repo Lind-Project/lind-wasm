@@ -21,15 +21,13 @@
 #include <math_private.h>
 #include <math_ldbl_opt.h>
 
-
 static const long double zero = 0.0;
-
 
 long double
 __remquol (long double x, long double y, int *quo)
 {
-  int64_t hx,hy;
-  uint64_t sx,lx,ly,qs;
+  int64_t hx, hy;
+  uint64_t sx, lx, ly, qs;
   int cquo;
   double xhi, xlo, yhi, ylo;
 
@@ -48,13 +46,13 @@ __remquol (long double x, long double y, int *quo)
 
   /* Purge off exception values.  */
   if (hy == 0)
-    return (x * y) / (x * y); 			/* y = 0 */
-  if ((hx >= 0x7ff0000000000000LL)		/* x not finite */
-      || (hy > 0x7ff0000000000000LL))		/* y is NaN */
+    return (x * y) / (x * y);	      /* y = 0 */
+  if ((hx >= 0x7ff0000000000000LL)    /* x not finite */
+      || (hy > 0x7ff0000000000000LL)) /* y is NaN */
     return (x * y) / (x * y);
 
   if (hy <= 0x7fbfffffffffffffLL)
-    x = __ieee754_fmodl (x, 8 * y);              /* now x < 8y */
+    x = __ieee754_fmodl (x, 8 * y); /* now x < 8y */
 
   if (((hx - hy) | (lx - ly)) == 0)
     {
@@ -62,8 +60,8 @@ __remquol (long double x, long double y, int *quo)
       return zero * x;
     }
 
-  x  = fabsl (x);
-  y  = fabsl (y);
+  x = fabsl (x);
+  y = fabsl (y);
   cquo = 0;
 
   if (hy <= 0x7fcfffffffffffffLL && x >= 4 * y)

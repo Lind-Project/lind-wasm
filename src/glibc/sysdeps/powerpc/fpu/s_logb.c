@@ -19,12 +19,12 @@
 /* ISA 2.07 provides fast GPR to FP instruction (mfvsr{d,wz}) which make
    generic implementation faster.  */
 #if defined(_ARCH_PWR8) || !defined(_ARCH_PWR7)
-# include <sysdeps/ieee754/dbl-64/s_logb.c>
+#  include <sysdeps/ieee754/dbl-64/s_logb.c>
 #else
-# include <math.h>
-# include <math_private.h>
-# include <math_ldbl_opt.h>
-# include <libm-alias-double.h>
+#  include <math.h>
+#  include <math_private.h>
+#  include <math_ldbl_opt.h>
+#  include <libm-alias-double.h>
 
 /* This implementation avoids FP to INT conversions by using VSX
    bitwise instructions over FP values.  */
@@ -40,8 +40,8 @@ __logb (double x)
   /* Mask to extract the exponent.  */
   asm ("xxland %x0,%x1,%x2\n"
        "fcfid  %0,%0"
-       : "=d" (ret)
-       : "d" (x), "d" (0x7ff0000000000000ULL));
+       : "=d"(ret)
+       : "d"(x), "d"(0x7ff0000000000000ULL));
   ret = (ret * 0x1p-52) - 1023.0;
   if (ret > 1023.0)
     /* Multiplication is used to set logb (+-INF) = INF.  */
@@ -49,7 +49,7 @@ __logb (double x)
   else if (ret == -1023.0)
     {
       /* POSIX specifies that denormal numbers are treated as
-         though they were normalized.  */
+	 though they were normalized.  */
       int64_t ix;
       EXTRACT_WORDS64 (ix, x);
       ix &= UINT64_C (0x7fffffffffffffff);
@@ -58,7 +58,7 @@ __logb (double x)
   /* Test to avoid logb_downward (0.0) == -0.0.  */
   return ret == -0.0 ? 0.0 : ret;
 }
-# ifndef __logb
+#  ifndef __logb
 libm_alias_double (__logb, logb)
-# endif
+#  endif
 #endif

@@ -38,7 +38,8 @@ special_case (svfloat64_t x, svfloat64_t y, svbool_t cmp)
    The maximum observed error is 2.58 ULP:
    SV_NAME_D1 (log2)(0x1.0b556b093869bp+0) got 0x1.fffb34198d9dap-5
 					  want 0x1.fffb34198d9ddp-5.  */
-svfloat64_t SV_NAME_D1 (log2) (svfloat64_t x, const svbool_t pg)
+svfloat64_t
+SV_NAME_D1 (log2) (svfloat64_t x, const svbool_t pg)
 {
   svuint64_t ix = svreinterpret_u64 (x);
   svbool_t special = svcmpge (pg, svsub_x (pg, ix, Min), Thresh);

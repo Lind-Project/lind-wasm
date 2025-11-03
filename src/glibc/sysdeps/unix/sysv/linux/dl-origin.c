@@ -33,8 +33,8 @@ _dl_get_origin (void)
   char *result;
   int len;
 
-  len = INTERNAL_SYSCALL_CALL (readlinkat, AT_FDCWD, "/proc/self/exe",
-			       linkval, sizeof (linkval));
+  len = INTERNAL_SYSCALL_CALL (readlinkat, AT_FDCWD, "/proc/self/exe", linkval,
+			       sizeof (linkval));
   if (len > 0 && linkval[0] != '[')
     {
       /* We can use this value.  */
@@ -54,15 +54,15 @@ _dl_get_origin (void)
       result = (char *) -1;
       /* We use the environment variable LD_ORIGIN_PATH.  If it is set make
 	 a copy and strip out trailing slashes.  */
-      if (GLRO(dl_origin_path) != NULL)
+      if (GLRO (dl_origin_path) != NULL)
 	{
-	  size_t len = strlen (GLRO(dl_origin_path));
+	  size_t len = strlen (GLRO (dl_origin_path));
 	  result = (char *) malloc (len + 1);
 	  if (result == NULL)
 	    result = (char *) -1;
 	  else
 	    {
-	      char *cp = __mempcpy (result, GLRO(dl_origin_path), len);
+	      char *cp = __mempcpy (result, GLRO (dl_origin_path), len);
 	      while (cp > result + 1 && cp[-1] == '/')
 		--cp;
 	      *cp = '\0';

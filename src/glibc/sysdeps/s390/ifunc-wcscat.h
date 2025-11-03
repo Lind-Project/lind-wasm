@@ -16,38 +16,38 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WCSCAT_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WCSCAT_IFUNC 1
 #else
-# define HAVE_WCSCAT_IFUNC	0
+#  define HAVE_WCSCAT_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WCSCAT_IFUNC_AND_VX_SUPPORT HAVE_WCSCAT_IFUNC
+#  define HAVE_WCSCAT_IFUNC_AND_VX_SUPPORT HAVE_WCSCAT_IFUNC
 #else
-# define HAVE_WCSCAT_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WCSCAT_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WCSCAT_DEFAULT		WCSCAT_Z13
+#  define WCSCAT_DEFAULT WCSCAT_Z13
 /* The z13 ifunc variant is using the common code variant as fallback!  */
-# define HAVE_WCSCAT_C		1
-# define HAVE_WCSCAT_Z13	1
+#  define HAVE_WCSCAT_C 1
+#  define HAVE_WCSCAT_Z13 1
 #else
-# define WCSCAT_DEFAULT		WCSCAT_C
-# define HAVE_WCSCAT_C		1
-# define HAVE_WCSCAT_Z13	HAVE_WCSCAT_IFUNC_AND_VX_SUPPORT
+#  define WCSCAT_DEFAULT WCSCAT_C
+#  define HAVE_WCSCAT_C 1
+#  define HAVE_WCSCAT_Z13 HAVE_WCSCAT_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WCSCAT_C
-# define WCSCAT_C		__wcscat_c
+#  define WCSCAT_C __wcscat_c
 #else
-# define WCSCAT_C		NULL
+#  define WCSCAT_C NULL
 #endif
 
 #if HAVE_WCSCAT_Z13
-# define WCSCAT_Z13		__wcscat_vx
+#  define WCSCAT_Z13 __wcscat_vx
 #else
-# define WCSCAT_Z13		NULL
+#  define WCSCAT_Z13 NULL
 #endif

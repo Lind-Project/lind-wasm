@@ -26,12 +26,10 @@
 #include <sys/types.h>
 #include <mcheck.h>
 
-
 static char *next_input (char **line, int first, int last);
 static int convert_flags (const char *str);
 static char *flag_output (int flags);
 static char *escape (const char *str, size_t *reslenp, char **resbuf);
-
 
 static int
 do_test (void)
@@ -54,7 +52,7 @@ do_test (void)
 
      where `result' is either 0 or 1.  If the first character of a
      string is '"' we read until the next '"' and handled escaped '"'.  */
-  while (! feof (stdin))
+  while (!feof (stdin))
     {
       ssize_t n = getline (&linebuf, &linebuflen, stdin);
       char *cp;
@@ -96,7 +94,7 @@ do_test (void)
 
       if (strcmp (result_str, "0") == 0)
 	result = 0;
-      else if  (strcasecmp (result_str, "NOMATCH") == 0)
+      else if (strcasecmp (result_str, "NOMATCH") == 0)
 	result = FNM_NOMATCH;
       else
 	{
@@ -130,24 +128,23 @@ do_test (void)
 
       fnmres = fnmatch (pattern, input, flags_val);
 
-      printf ("%3d: fnmatch (\"%s\", \"%s\", %s) = %s%c",
-	      ++nr,
+      printf ("%3d: fnmatch (\"%s\", \"%s\", %s) = %s%c", ++nr,
 	      escape (pattern, &escpatternlen, &escpattern),
-	      escape (input, &escinputlen, &escinput),
-	      flag_output (flags_val),
-	      (fnmres == 0
-	       ? "0" : (fnmres == FNM_NOMATCH
-			? "FNM_NOMATCH"
-			: (sprintf (numbuf, "%d", fnmres), numbuf))),
+	      escape (input, &escinputlen, &escinput), flag_output (flags_val),
+	      (fnmres == 0 ? "0"
+			   : (fnmres == FNM_NOMATCH
+				  ? "FNM_NOMATCH"
+				  : (sprintf (numbuf, "%d", fnmres), numbuf))),
 	      (fnmres != 0) != (result != 0) ? ' ' : '\n');
 
       if ((fnmres != 0) != (result != 0))
 	{
 	  printf ("(FAIL, expected %s) ***\n",
 		  result == 0
-		  ? "0" : (result == FNM_NOMATCH
-			   ? "FNM_NOMATCH"
-			   : (sprintf (numbuf, "%d", result), numbuf)));
+		      ? "0"
+		      : (result == FNM_NOMATCH
+			     ? "FNM_NOMATCH"
+			     : (sprintf (numbuf, "%d", result), numbuf)));
 	  ++nfailed;
 	}
     }
@@ -160,7 +157,6 @@ do_test (void)
 
   return nfailed != 0;
 }
-
 
 static char *
 next_input (char **line, int first, int last)
@@ -201,7 +197,7 @@ next_input (char **line, int first, int last)
 		  {
 		    cval *= 8;
 		    cval += (*cp++) - '0';
-		    ndigits ++;
+		    ndigits++;
 		  }
 		*wp++ = cval;
 		--cp;
@@ -226,7 +222,7 @@ next_input (char **line, int first, int last)
       while (*cp != '\0' && *cp != '\n' && *cp != ' ' && *cp != '\t')
 	++cp;
 
-      if (cp == result && ! last)
+      if (cp == result && !last)
 	/* Premature end of line.  */
 	return NULL;
     }
@@ -237,7 +233,6 @@ next_input (char **line, int first, int last)
   *line = cp;
   return result;
 }
-
 
 static int
 convert_flags (const char *str)
@@ -295,7 +290,6 @@ convert_flags (const char *str)
   return result;
 }
 
-
 static char *
 flag_output (int flags)
 {
@@ -310,35 +304,35 @@ flag_output (int flags)
     }
   if (flags & FNM_NOESCAPE)
     {
-      if (! first)
+      if (!first)
 	*cp++ = '|';
       cp = stpcpy (cp, "FNM_NOESCAPE");
       first = 0;
     }
   if (flags & FNM_PERIOD)
     {
-      if (! first)
+      if (!first)
 	*cp++ = '|';
       cp = stpcpy (cp, "FNM_PERIOD");
       first = 0;
     }
   if (flags & FNM_LEADING_DIR)
     {
-      if (! first)
+      if (!first)
 	*cp++ = '|';
       cp = stpcpy (cp, "FNM_LEADING_DIR");
       first = 0;
     }
   if (flags & FNM_CASEFOLD)
     {
-      if (! first)
+      if (!first)
 	*cp++ = '|';
       cp = stpcpy (cp, "FNM_CASEFOLD");
       first = 0;
     }
   if (flags & FNM_EXTMATCH)
     {
-      if (! first)
+      if (!first)
 	*cp++ = '|';
       cp = stpcpy (cp, "FNM_EXTMATCH");
       first = 0;
@@ -349,7 +343,6 @@ flag_output (int flags)
 
   return buf;
 }
-
 
 static char *
 escape (const char *str, size_t *reslenp, char **resbufp)

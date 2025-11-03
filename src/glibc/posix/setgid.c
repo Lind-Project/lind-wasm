@@ -31,4 +31,4 @@ __setgid (gid_t gid)
 }
 stub_warning (setgid)
 
-weak_alias (__setgid, setgid)
+    weak_alias (__setgid, setgid)

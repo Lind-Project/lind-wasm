@@ -26,16 +26,15 @@ struct test
   double hi, lo1, lo2;
 };
 
-static const struct test tests[] =
-  {
-    { __builtin_nan (""), 1, __builtin_nans ("") },
-    { -__builtin_nan (""), 1, __builtin_nans ("") },
-    { __builtin_nans (""), 1, __builtin_nan ("") },
-    { -__builtin_nans (""), 1, __builtin_nan ("") },
-    { __builtin_inf (), 0.0, -0.0 },
-    { -__builtin_inf (), 0.0, -0.0 },
-    { 1.5, 0.0, -0.0 },
-  };
+static const struct test tests[] = {
+  { __builtin_nan (""), 1, __builtin_nans ("") },
+  { -__builtin_nan (""), 1, __builtin_nans ("") },
+  { __builtin_nans (""), 1, __builtin_nan ("") },
+  { -__builtin_nans (""), 1, __builtin_nan ("") },
+  { __builtin_inf (), 0.0, -0.0 },
+  { -__builtin_inf (), 0.0, -0.0 },
+  { 1.5, 0.0, -0.0 },
+};
 
 static int
 do_test (void)

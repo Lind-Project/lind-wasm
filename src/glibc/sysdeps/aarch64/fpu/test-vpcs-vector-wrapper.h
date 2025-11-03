@@ -18,8 +18,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #define VPCS_VECTOR_WRAPPER(scalar_func, vector_func)                         \
-  extern __attribute__ ((aarch64_vector_pcs))                                 \
-  VEC_TYPE vector_func (VEC_TYPE);                                            \
+  extern                                                                      \
+      __attribute__ ((aarch64_vector_pcs)) VEC_TYPE vector_func (VEC_TYPE);   \
   FLOAT scalar_func (FLOAT x)                                                 \
   {                                                                           \
     int i;                                                                    \
@@ -31,8 +31,8 @@
   }
 
 #define VPCS_VECTOR_WRAPPER_ff(scalar_func, vector_func)                      \
-  extern __attribute__ ((aarch64_vector_pcs))                                 \
-  VEC_TYPE vector_func (VEC_TYPE, VEC_TYPE);                                  \
+  extern __attribute__ ((aarch64_vector_pcs)) VEC_TYPE vector_func (          \
+      VEC_TYPE, VEC_TYPE);                                                    \
   FLOAT scalar_func (FLOAT x, FLOAT y)                                        \
   {                                                                           \
     int i;                                                                    \

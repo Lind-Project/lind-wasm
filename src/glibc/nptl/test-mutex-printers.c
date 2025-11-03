@@ -120,7 +120,7 @@ test_locking_state_robust (pthread_mutex_t *mutex)
 static void *
 thread_func (void *arg)
 {
-  pthread_mutex_t *mutex = (pthread_mutex_t *)arg;
+  pthread_mutex_t *mutex = (pthread_mutex_t *) arg;
 
   if (pthread_mutex_lock (mutex) != 0) /* Thread function.  */
     exit (FAIL);
@@ -138,11 +138,9 @@ test_recursive_locks (pthread_mutex_t *mutex, pthread_mutexattr_t *attr)
 
   if (pthread_mutexattr_settype (attr, PTHREAD_MUTEX_RECURSIVE) == 0
       && pthread_mutex_init (mutex, attr) == 0
-      && pthread_mutex_lock (mutex) == 0
-      && pthread_mutex_lock (mutex) == 0
+      && pthread_mutex_lock (mutex) == 0 && pthread_mutex_lock (mutex) == 0
       && pthread_mutex_lock (mutex) == 0 /* Test recursive locks.  */
-      && pthread_mutex_unlock (mutex) == 0
-      && pthread_mutex_unlock (mutex) == 0
+      && pthread_mutex_unlock (mutex) == 0 && pthread_mutex_unlock (mutex) == 0
       && pthread_mutex_unlock (mutex) == 0
       && pthread_mutex_destroy (mutex) == 0)
     result = PASS;

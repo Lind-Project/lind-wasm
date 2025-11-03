@@ -52,7 +52,7 @@ posix_fallocate (int fd, __off_t offset, __off_t len)
     return EBADF;
   if (S_ISFIFO (st.st_mode))
     return ESPIPE;
-  if (! S_ISREG (st.st_mode))
+  if (!S_ISREG (st.st_mode))
     return ENODEV;
 
   if (len == 0)

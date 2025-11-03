@@ -24,7 +24,6 @@
 #include <sys/statfs.h>
 #include <sys/statvfs.h>
 
-
 /* Get file-specific information about PATH.  */
 long int
 __pathconf (const char *path, int name)
@@ -42,28 +41,28 @@ __pathconf (const char *path, int name)
       return -1;
 
     case _PC_LINK_MAX:
-#ifdef	LINK_MAX
+#ifdef LINK_MAX
       return LINK_MAX;
 #else
       return -1;
 #endif
 
     case _PC_MAX_CANON:
-#ifdef	MAX_CANON
+#ifdef MAX_CANON
       return MAX_CANON;
 #else
       return -1;
 #endif
 
     case _PC_MAX_INPUT:
-#ifdef	MAX_INPUT
+#ifdef MAX_INPUT
       return MAX_INPUT;
 #else
       return -1;
 #endif
 
     case _PC_NAME_MAX:
-#ifdef	NAME_MAX
+#ifdef NAME_MAX
       {
 	struct statvfs64 sv;
 	int save_errno = errno;
@@ -87,14 +86,14 @@ __pathconf (const char *path, int name)
 #endif
 
     case _PC_PATH_MAX:
-#ifdef	PATH_MAX
+#ifdef PATH_MAX
       return PATH_MAX;
 #else
       return -1;
 #endif
 
     case _PC_PIPE_BUF:
-#ifdef	PIPE_BUF
+#ifdef PIPE_BUF
       return PIPE_BUF;
 #else
       return -1;
@@ -102,37 +101,37 @@ __pathconf (const char *path, int name)
 
     case _PC_CHOWN_RESTRICTED:
 #if _POSIX_CHOWN_RESTRICTED == -1
-# error "Invalid value for _POSIX_CHOWN_RESTRICTED"
+#  error "Invalid value for _POSIX_CHOWN_RESTRICTED"
 #endif
       return _POSIX_CHOWN_RESTRICTED;
 
     case _PC_NO_TRUNC:
 #if _POSIX_NO_TRUNC == -1
-# error "Invalid value for _POSIX_NO_TRUNC"
+#  error "Invalid value for _POSIX_NO_TRUNC"
 #endif
       return _POSIX_NO_TRUNC;
 
     case _PC_VDISABLE:
 #if _POSIX_VDISABLE == -1U
-# error "Invalid value for _POSIX_VDISABLE"
+#  error "Invalid value for _POSIX_VDISABLE"
 #endif
       return _POSIX_VDISABLE;
 
     case _PC_SYNC_IO:
-#ifdef	_POSIX_SYNC_IO
+#ifdef _POSIX_SYNC_IO
       return _POSIX_SYNC_IO;
 #else
       return -1;
 #endif
 
     case _PC_ASYNC_IO:
-#ifdef	_POSIX_ASYNC_IO
+#ifdef _POSIX_ASYNC_IO
       {
 	/* AIO is only allowed on regular files and block devices.  */
 	struct __stat64_t64 st;
 
 	if (__stat64_time64 (path, &st) < 0
-	    || (! S_ISREG (st.st_mode) && ! S_ISBLK (st.st_mode)))
+	    || (!S_ISREG (st.st_mode) && !S_ISBLK (st.st_mode)))
 	  return -1;
 	else
 	  return 1;
@@ -142,14 +141,14 @@ __pathconf (const char *path, int name)
 #endif
 
     case _PC_PRIO_IO:
-#ifdef	_POSIX_PRIO_IO
+#ifdef _POSIX_PRIO_IO
       return _POSIX_PRIO_IO;
 #else
       return -1;
 #endif
 
     case _PC_SOCK_MAXBUF:
-#ifdef	SOCK_MAXBUF
+#ifdef SOCK_MAXBUF
       return SOCK_MAXBUF;
 #else
       return -1;

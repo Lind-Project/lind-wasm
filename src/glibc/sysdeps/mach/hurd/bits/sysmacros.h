@@ -17,44 +17,45 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_SYSMACROS_H
-#define _BITS_SYSMACROS_H 1
+#  define _BITS_SYSMACROS_H 1
 
-#ifndef _SYS_SYSMACROS_H
-# error "Never include <bits/sysmacros.h> directly; use <sys/sysmacros.h> instead."
-#endif
+#  ifndef _SYS_SYSMACROS_H
+#    error                                                                     \
+	"Never include <bits/sysmacros.h> directly; use <sys/sysmacros.h> instead."
+#  endif
 
 /* The Hurd version of dev_t in glibc is a 32-bit quantity, with 8-bit
    major and 24-bit minor numbers.  The encoding is mmmmMMmm, where M is a
    hex digit of the major number and m is a hex digit of the minor number.  */
 
-#define __SYSMACROS_DECLARE_MAJOR(DECL_TEMPL)                   \
-  DECL_TEMPL(unsigned int, major, (__dev_t __dev))
+#  define __SYSMACROS_DECLARE_MAJOR(DECL_TEMPL)                               \
+    DECL_TEMPL (unsigned int, major, (__dev_t __dev))
 
-#define __SYSMACROS_DEFINE_MAJOR(DECL_TEMPL)                    \
-  __SYSMACROS_DECLARE_MAJOR (DECL_TEMPL)                        \
-  {                                                             \
-    return ((__dev & (__dev_t) 0x0000ff00u) >> 8);              \
-  }
+#  define __SYSMACROS_DEFINE_MAJOR(DECL_TEMPL)                                \
+    __SYSMACROS_DECLARE_MAJOR (DECL_TEMPL)                                    \
+    {                                                                         \
+      return ((__dev & (__dev_t) 0x0000ff00u) >> 8);                          \
+    }
 
-#define __SYSMACROS_DECLARE_MINOR(DECL_TEMPL)                   \
-  DECL_TEMPL(unsigned int, minor, (__dev_t __dev))
+#  define __SYSMACROS_DECLARE_MINOR(DECL_TEMPL)                               \
+    DECL_TEMPL (unsigned int, minor, (__dev_t __dev))
 
-#define __SYSMACROS_DEFINE_MINOR(DECL_TEMPL)                    \
-  __SYSMACROS_DECLARE_MINOR (DECL_TEMPL)                        \
-  {                                                             \
-    return (__dev & (__dev_t) 0xffff00ff);                      \
-  }
+#  define __SYSMACROS_DEFINE_MINOR(DECL_TEMPL)                                \
+    __SYSMACROS_DECLARE_MINOR (DECL_TEMPL)                                    \
+    {                                                                         \
+      return (__dev & (__dev_t) 0xffff00ff);                                  \
+    }
 
-#define __SYSMACROS_DECLARE_MAKEDEV(DECL_TEMPL)                 \
-  DECL_TEMPL(__dev_t, makedev, (unsigned int __major, unsigned int __minor))
+#  define __SYSMACROS_DECLARE_MAKEDEV(DECL_TEMPL)                             \
+    DECL_TEMPL (__dev_t, makedev, (unsigned int __major, unsigned int __minor))
 
-#define __SYSMACROS_DEFINE_MAKEDEV(DECL_TEMPL)                  \
-  __SYSMACROS_DECLARE_MAKEDEV (DECL_TEMPL)                      \
-  {                                                             \
-    __dev_t __dev;                                              \
-    __dev  = (((__dev_t) (__major & 0x000000ffu)) << 8);        \
-    __dev |= (((__dev_t) (__minor & 0xffff00ffu)) << 0);        \
-    return __dev;                                               \
-  }
+#  define __SYSMACROS_DEFINE_MAKEDEV(DECL_TEMPL)                              \
+    __SYSMACROS_DECLARE_MAKEDEV (DECL_TEMPL)                                  \
+    {                                                                         \
+      __dev_t __dev;                                                          \
+      __dev = (((__dev_t) (__major & 0x000000ffu)) << 8);                     \
+      __dev |= (((__dev_t) (__minor & 0xffff00ffu)) << 0);                    \
+      return __dev;                                                           \
+    }
 
 #endif /* bits/sysmacros.h */

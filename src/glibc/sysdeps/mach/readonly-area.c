@@ -35,10 +35,10 @@ __readonly_area (const char *ptr, size_t size)
   mach_port_t object_name;
   vm_offset_t offset;
 
-  while (__vm_region (__mach_task_self (),
-		      &region_address, &region_length,
+  while (__vm_region (__mach_task_self (), &region_address, &region_length,
 		      &protection, &max_protection, &inheritance, &is_shared,
-		      &object_name, &offset) == KERN_SUCCESS
+		      &object_name, &offset)
+	     == KERN_SUCCESS
 	 && region_address <= (uintptr_t) ptr)
     {
       region_address += region_length;

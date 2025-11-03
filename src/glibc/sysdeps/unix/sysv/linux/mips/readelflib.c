@@ -15,12 +15,11 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-
-int process_elf32_file (const char *file_name, const char *lib,
-			int *flag, unsigned int *isa_level, char **soname,
+int process_elf32_file (const char *file_name, const char *lib, int *flag,
+			unsigned int *isa_level, char **soname,
 			void *file_contents, size_t file_length);
-int process_elf64_file (const char *file_name, const char *lib,
-			int *flag, unsigned int *isa_level, char **soname,
+int process_elf64_file (const char *file_name, const char *lib, int *flag,
+			unsigned int *isa_level, char **soname,
 			void *file_contents, size_t file_length);
 
 /* Returns 0 if everything is ok, != 0 in case of error.  */
@@ -30,16 +29,15 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
 		  size_t file_length)
 {
   union
-    {
-      Elf64_Ehdr *eh64;
-      Elf32_Ehdr *eh32;
-      ElfW(Ehdr) *eh;
-    }
-  elf_header;
+  {
+    Elf64_Ehdr *eh64;
+    Elf32_Ehdr *eh32;
+    ElfW (Ehdr) * eh;
+  } elf_header;
   int ret;
 
   elf_header.eh = file_contents;
-  if (elf_header.eh->e_ident [EI_CLASS] == ELFCLASS32)
+  if (elf_header.eh->e_ident[EI_CLASS] == ELFCLASS32)
     {
       ret = process_elf32_file (file_name, lib, flag, isa_level, soname,
 				file_contents, file_length);
@@ -50,8 +48,8 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
 
 	  /* n32 libraries are always libc.so.6+, o32 only if 2008 NaN.  */
 	  if ((flags & EF_MIPS_ABI2) != 0)
-	    *flag = (nan2008 ? FLAG_MIPS64_LIBN32_NAN2008
-		     : FLAG_MIPS64_LIBN32) | FLAG_ELF_LIBC6;
+	    *flag = (nan2008 ? FLAG_MIPS64_LIBN32_NAN2008 : FLAG_MIPS64_LIBN32)
+		    | FLAG_ELF_LIBC6;
 	  else if (nan2008)
 	    *flag = FLAG_MIPS_LIB32_NAN2008 | FLAG_ELF_LIBC6;
 	}
@@ -66,8 +64,8 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
 	  Elf64_Word flags = elf_header.eh64->e_flags;
 	  int nan2008 = (flags & EF_MIPS_NAN2008) != 0;
 
-	  *flag = (nan2008 ? FLAG_MIPS64_LIBN64_NAN2008
-		   : FLAG_MIPS64_LIBN64) | FLAG_ELF_LIBC6;
+	  *flag = (nan2008 ? FLAG_MIPS64_LIBN64_NAN2008 : FLAG_MIPS64_LIBN64)
+		  | FLAG_ELF_LIBC6;
 	}
     }
 

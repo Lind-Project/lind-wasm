@@ -16,37 +16,37 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_STRLEN_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_STRLEN_IFUNC 1
 #else
-# define HAVE_STRLEN_IFUNC	0
+#  define HAVE_STRLEN_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_STRLEN_IFUNC_AND_VX_SUPPORT HAVE_STRLEN_IFUNC
+#  define HAVE_STRLEN_IFUNC_AND_VX_SUPPORT HAVE_STRLEN_IFUNC
 #else
-# define HAVE_STRLEN_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_STRLEN_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define STRLEN_DEFAULT		STRLEN_Z13
-# define HAVE_STRLEN_C		0
-# define HAVE_STRLEN_Z13	1
+#  define STRLEN_DEFAULT STRLEN_Z13
+#  define HAVE_STRLEN_C 0
+#  define HAVE_STRLEN_Z13 1
 #else
-# define STRLEN_DEFAULT		STRLEN_C
-# define HAVE_STRLEN_C		1
-# define HAVE_STRLEN_Z13	HAVE_STRLEN_IFUNC_AND_VX_SUPPORT
+#  define STRLEN_DEFAULT STRLEN_C
+#  define HAVE_STRLEN_C 1
+#  define HAVE_STRLEN_Z13 HAVE_STRLEN_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_STRLEN_C
-# define STRLEN_C		__strlen_c
+#  define STRLEN_C __strlen_c
 #else
-# define STRLEN_C		NULL
+#  define STRLEN_C NULL
 #endif
 
 #if HAVE_STRLEN_Z13
-# define STRLEN_Z13		__strlen_vx
+#  define STRLEN_Z13 __strlen_vx
 #else
-# define STRLEN_Z13		NULL
+#  define STRLEN_Z13 NULL
 #endif

@@ -4,10 +4,8 @@
 #include <stdlib.h>
 #include <internal-signals.h>
 
-
 static pthread_barrier_t b;
 static pthread_t th2;
-
 
 static void *
 tf2 (void *arg)
@@ -28,7 +26,7 @@ tf2 (void *arg)
 
   /* Sync with the main thread so that we do not test anything else.  */
   int e = pthread_barrier_wait (&b);
-  if (e != 0  && e != PTHREAD_BARRIER_SERIAL_THREAD)
+  if (e != 0 && e != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("barrier_wait failed");
       exit (1);
@@ -44,7 +42,6 @@ tf2 (void *arg)
   return NULL;
 }
 
-
 static void
 unwhand (void *arg)
 {
@@ -55,7 +52,6 @@ unwhand (void *arg)
     }
 }
 
-
 static void *
 tf (void *arg)
 {
@@ -63,7 +59,7 @@ tf (void *arg)
 
   /* Sync with the main thread so that we do not test anything else.  */
   int e = pthread_barrier_wait (&b);
-  if (e != 0  && e != PTHREAD_BARRIER_SERIAL_THREAD)
+  if (e != 0 && e != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("barrier_wait failed");
       exit (1);
@@ -80,7 +76,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -99,7 +94,7 @@ do_test (void)
     }
 
   int e = pthread_barrier_wait (&b);
-  if (e != 0  && e != PTHREAD_BARRIER_SERIAL_THREAD)
+  if (e != 0 && e != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("barrier_wait failed");
       return 1;
@@ -129,7 +124,7 @@ do_test (void)
     }
 
   e = pthread_barrier_wait (&b);
-  if (e != 0  && e != PTHREAD_BARRIER_SERIAL_THREAD)
+  if (e != 0 && e != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("barrier_wait failed");
       return 1;

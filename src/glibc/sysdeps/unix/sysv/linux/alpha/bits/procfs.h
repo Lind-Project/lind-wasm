@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
+#  error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
 #endif
 
 #include <signal.h>
@@ -28,8 +28,8 @@
  * I have no idea why that is so.  For now, we just leave it at 33
  * (32 general regs + processor status word).
  */
-#define ELF_NGREG       33
-#define ELF_NFPREG      32
+#define ELF_NGREG 33
+#define ELF_NFPREG 32
 
 typedef unsigned long elf_greg_t;
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];

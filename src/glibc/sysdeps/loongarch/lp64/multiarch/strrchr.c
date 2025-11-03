@@ -18,19 +18,19 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define strrchr __redirect_strrchr
-# include <string.h>
-# undef strrchr
+#if IS_IN(libc)
+#  define strrchr __redirect_strrchr
+#  include <string.h>
+#  undef strrchr
 
-# define SYMBOL_NAME strrchr
-# include "ifunc-strrchr.h"
+#  define SYMBOL_NAME strrchr
+#  include "ifunc-strrchr.h"
 
 libc_ifunc_redirected (__redirect_strrchr, strrchr, IFUNC_SELECTOR ());
 weak_alias (strrchr, rindex)
-# ifdef SHARED
-__hidden_ver1 (strrchr, __GI_strrchr, __redirect_strrchr)
-  __attribute__ ((visibility ("hidden"))) __attribute_copy__ (strrchr);
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (strrchr, __GI_strrchr, __redirect_strrchr)
+	__attribute__ ((visibility ("hidden"))) __attribute_copy__ (strrchr);
+#  endif
 
 #endif

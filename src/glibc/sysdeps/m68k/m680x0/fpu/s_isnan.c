@@ -1,2 +1,2 @@
-#define	FUNC	isnan
+#define FUNC isnan
 #include <s_isinf.c>

@@ -26,4 +26,4 @@ __thread_stack_pointer (void)
   return (uintptr_t) CURRENT_STACK_FRAME;
 }
 
-#endif	/* machine-sp.h */
+#endif /* machine-sp.h */

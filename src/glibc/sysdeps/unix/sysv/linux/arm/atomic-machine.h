@@ -21,9 +21,9 @@
 /* If the compiler doesn't provide a primitive, we'll use this macro
    to get assistance from the kernel.  */
 #ifdef __thumb2__
-# define __arm_assisted_full_barrier() 
+#  define __arm_assisted_full_barrier()
 #else
-# define __arm_assisted_full_barrier() 
+#  define __arm_assisted_full_barrier()
 #endif
 
 /* Atomic compare and exchange.  This sequence relies on the kernel to
@@ -49,27 +49,55 @@
 #ifdef __thumb2__
 /* Thumb-2 has ldrex/strex.  However it does not have barrier instructions,
    so we still need to use the kernel helper.  */
-# define __arm_assisted_compare_and_exchange_val_32_acq(mem, newval, oldval) \
-  ({ union { __typeof (mem) a; uint32_t v; } mem_arg = { .a = (mem) };       \
-     union { __typeof (oldval) a; uint32_t v; } oldval_arg = { .a = (oldval) };\
-     union { __typeof (newval) a; uint32_t v; } newval_arg = { .a = (newval) };\
-     register uint32_t a_oldval ;				      \
-     register uint32_t a_newval  = newval_arg.v;		      \
-     register uint32_t a_ptr  = mem_arg.v;			      \
-     register uint32_t a_tmp  ;				      \
-     register uint32_t a_oldval2  = oldval_arg.v;		      \
-     (__typeof (oldval)) a_tmp; })
+#  define __arm_assisted_compare_and_exchange_val_32_acq(mem, newval, oldval) \
+    ({                                                                        \
+      union                                                                   \
+      {                                                                       \
+	__typeof (mem) a;                                                     \
+	uint32_t v;                                                           \
+      } mem_arg = { .a = (mem) };                                             \
+      union                                                                   \
+      {                                                                       \
+	__typeof (oldval) a;                                                  \
+	uint32_t v;                                                           \
+      } oldval_arg = { .a = (oldval) };                                       \
+      union                                                                   \
+      {                                                                       \
+	__typeof (newval) a;                                                  \
+	uint32_t v;                                                           \
+      } newval_arg = { .a = (newval) };                                       \
+      register uint32_t a_oldval;                                             \
+      register uint32_t a_newval = newval_arg.v;                              \
+      register uint32_t a_ptr = mem_arg.v;                                    \
+      register uint32_t a_tmp;                                                \
+      register uint32_t a_oldval2 = oldval_arg.v;                             \
+      (__typeof (oldval)) a_tmp;                                              \
+    })
 #else
-# define __arm_assisted_compare_and_exchange_val_32_acq(mem, newval, oldval) \
-  ({ union { __typeof (mem) a; uint32_t v; } mem_arg = { .a = (mem) };       \
-     union { __typeof (oldval) a; uint32_t v; } oldval_arg = { .a = (oldval) };\
-     union { __typeof (newval) a; uint32_t v; } newval_arg = { .a = (newval) };\
-     register uint32_t a_oldval ;				      \
-     register uint32_t a_newval  = newval_arg.v;		      \
-     register uint32_t a_ptr  = mem_arg.v;			      \
-     register uint32_t a_tmp ;				      \
-     register uint32_t a_oldval2  = oldval_arg.v;		      \
-     (__typeof (oldval)) a_tmp; })
+#  define __arm_assisted_compare_and_exchange_val_32_acq(mem, newval, oldval) \
+    ({                                                                        \
+      union                                                                   \
+      {                                                                       \
+	__typeof (mem) a;                                                     \
+	uint32_t v;                                                           \
+      } mem_arg = { .a = (mem) };                                             \
+      union                                                                   \
+      {                                                                       \
+	__typeof (oldval) a;                                                  \
+	uint32_t v;                                                           \
+      } oldval_arg = { .a = (oldval) };                                       \
+      union                                                                   \
+      {                                                                       \
+	__typeof (newval) a;                                                  \
+	uint32_t v;                                                           \
+      } newval_arg = { .a = (newval) };                                       \
+      register uint32_t a_oldval;                                             \
+      register uint32_t a_newval = newval_arg.v;                              \
+      register uint32_t a_ptr = mem_arg.v;                                    \
+      register uint32_t a_tmp;                                                \
+      register uint32_t a_oldval2 = oldval_arg.v;                             \
+      (__typeof (oldval)) a_tmp;                                              \
+    })
 #endif
 
 #include <sysdeps/arm/atomic-machine.h>

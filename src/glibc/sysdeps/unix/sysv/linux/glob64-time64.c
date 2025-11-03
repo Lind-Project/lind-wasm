@@ -19,28 +19,28 @@
 #include <sys/stat.h>
 
 #if __TIMESIZE != 64
-# include <glob.h>
-# include <dirent.h>
-# include <sys/stat.h>
+#  include <glob.h>
+#  include <dirent.h>
+#  include <sys/stat.h>
 
-# define dirent dirent64
-# define __readdir(dirp) __readdir64 (dirp)
+#  define dirent dirent64
+#  define __readdir(dirp) __readdir64 (dirp)
 
-# define glob_t glob64_time64_t
-# define __glob __glob64_time64
+#  define glob_t glob64_time64_t
+#  define __glob __glob64_time64
 
-# define globfree(pglob) __globfree64_time64 (pglob)
+#  define globfree(pglob) __globfree64_time64 (pglob)
 
-# define COMPILE_GLOB64  1
-# define struct_stat     struct __stat64_t64
-# define struct_stat64   struct __stat64_t64
-# define GLOB_LSTAT      gl_lstat
-# define GLOB_STAT64     __stat64_time64
-# define GLOB_LSTAT64    __lstat64_time64
-# define GLOB_FSTATAT64    __fstatat64_time64
+#  define COMPILE_GLOB64 1
+#  define struct_stat struct __stat64_t64
+#  define struct_stat64 struct __stat64_t64
+#  define GLOB_LSTAT gl_lstat
+#  define GLOB_STAT64 __stat64_time64
+#  define GLOB_LSTAT64 __lstat64_time64
+#  define GLOB_FSTATAT64 __fstatat64_time64
 
-# define COMPILE_GLOB64	1
+#  define COMPILE_GLOB64 1
 
-# include <posix/glob.c>
+#  include <posix/glob.c>
 libc_hidden_def (__glob64_time64)
 #endif

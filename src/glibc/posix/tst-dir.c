@@ -48,11 +48,10 @@ main (int argc, char *argv[])
   int result = 0;
   struct dirent64 *d;
   union
-    {
-      struct dirent64 d;
-      char room [offsetof (struct dirent64, d_name[0]) + NAME_MAX + 1];
-    }
-    direntbuf;
+  {
+    struct dirent64 d;
+    char room[offsetof (struct dirent64, d_name[0]) + NAME_MAX + 1];
+  } direntbuf;
   char *objdir_copy1;
   char *objdir_copy2;
   char *buf;
@@ -434,7 +433,8 @@ main (int argc, char *argv[])
     }
   if (errno != ENOTDIR)
     {
-      printf ("chdir to \"another-dir/../and-a-file\" didn't set correct error\n");
+      printf (
+	  "chdir to \"another-dir/../and-a-file\" didn't set correct error\n");
       result = 1;
     }
 
@@ -446,8 +446,7 @@ main (int argc, char *argv[])
   rewinddir (dir2);
   while (readdir64_r (dir2, &direntbuf.d, &d) == 0 && d != NULL)
     {
-      if (strcmp (d->d_name, ".") == 0
-	  || strcmp (d->d_name, "..") == 0
+      if (strcmp (d->d_name, ".") == 0 || strcmp (d->d_name, "..") == 0
 	  || strcmp (d->d_name, "another-dir") == 0)
 	{
 	  if (d->d_type != DT_UNKNOWN && d->d_type != DT_DIR)
@@ -460,7 +459,7 @@ main (int argc, char *argv[])
 	      printf ("cannot stat \"%s\" is wrong\n", d->d_name);
 	      result = 1;
 	    }
-	  else if (! S_ISDIR (st3.st_mode))
+	  else if (!S_ISDIR (st3.st_mode))
 	    {
 	      printf ("\"%s\" is no directory\n", d->d_name);
 	      result = 1;
@@ -478,7 +477,7 @@ main (int argc, char *argv[])
 	      printf ("cannot stat \"%s\" is wrong\n", d->d_name);
 	      result = 1;
 	    }
-	  else if (! S_ISREG (st3.st_mode))
+	  else if (!S_ISREG (st3.st_mode))
 	    {
 	      printf ("\"%s\" is no regular file\n", d->d_name);
 	      result = 1;

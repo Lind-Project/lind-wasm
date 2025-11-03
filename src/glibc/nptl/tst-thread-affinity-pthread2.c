@@ -39,24 +39,19 @@ affinity_access_thread (void *closure)
 {
   struct affinity_access_task *task = closure;
   if (task->get)
-    task->result = pthread_getaffinity_np
-      (task->thread, task->size, task->set);
+    task->result
+	= pthread_getaffinity_np (task->thread, task->size, task->set);
   else
-    task->result = pthread_setaffinity_np
-      (task->thread, task->size, task->set);
+    task->result
+	= pthread_setaffinity_np (task->thread, task->size, task->set);
   return NULL;
 }
 
 static int
 run_affinity_access_thread (cpu_set_t *set, size_t size, bool get)
 {
-  struct affinity_access_task task =
-    {
-      .thread = pthread_self (),
-      .set = set,
-      .size = size,
-      .get = get
-    };
+  struct affinity_access_task task
+      = { .thread = pthread_self (), .set = set, .size = size, .get = get };
   pthread_t thr;
   int ret = pthread_create (&thr, NULL, affinity_access_thread, &task);
   if (ret != 0)

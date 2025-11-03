@@ -17,28 +17,28 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_PTHREADTYPES_ARCH_H
-#define _BITS_PTHREADTYPES_ARCH_H	1
+#  define _BITS_PTHREADTYPES_ARCH_H 1
 
-#include <bits/endian.h>
+#  include <bits/endian.h>
 
-#if _MIPS_SIM == _ABI64
-# define __SIZEOF_PTHREAD_ATTR_T 56
-# define __SIZEOF_PTHREAD_MUTEX_T 40
-# define __SIZEOF_PTHREAD_RWLOCK_T 56
-# define __SIZEOF_PTHREAD_BARRIER_T 32
-#else
-# define __SIZEOF_PTHREAD_ATTR_T 36
-# define __SIZEOF_PTHREAD_MUTEX_T 24
-# define __SIZEOF_PTHREAD_RWLOCK_T 32
-# define __SIZEOF_PTHREAD_BARRIER_T 20
-#endif
-#define __SIZEOF_PTHREAD_MUTEXATTR_T 4
-#define __SIZEOF_PTHREAD_COND_T 48
-#define __SIZEOF_PTHREAD_CONDATTR_T 4
-#define __SIZEOF_PTHREAD_RWLOCKATTR_T 8
-#define __SIZEOF_PTHREAD_BARRIERATTR_T 4
+#  if _MIPS_SIM == _ABI64
+#    define __SIZEOF_PTHREAD_ATTR_T 56
+#    define __SIZEOF_PTHREAD_MUTEX_T 40
+#    define __SIZEOF_PTHREAD_RWLOCK_T 56
+#    define __SIZEOF_PTHREAD_BARRIER_T 32
+#  else
+#    define __SIZEOF_PTHREAD_ATTR_T 36
+#    define __SIZEOF_PTHREAD_MUTEX_T 24
+#    define __SIZEOF_PTHREAD_RWLOCK_T 32
+#    define __SIZEOF_PTHREAD_BARRIER_T 20
+#  endif
+#  define __SIZEOF_PTHREAD_MUTEXATTR_T 4
+#  define __SIZEOF_PTHREAD_COND_T 48
+#  define __SIZEOF_PTHREAD_CONDATTR_T 4
+#  define __SIZEOF_PTHREAD_RWLOCKATTR_T 8
+#  define __SIZEOF_PTHREAD_BARRIERATTR_T 4
 
-#define __LOCK_ALIGNMENT
-#define __ONCE_ALIGNMENT
+#  define __LOCK_ALIGNMENT
+#  define __ONCE_ALIGNMENT
 
-#endif	/* bits/pthreadtypes.h */
+#endif /* bits/pthreadtypes.h */

@@ -22,11 +22,10 @@
 #include <pt-internal.h>
 
 /* Implemented in pt-rwlock-timedwrlock.c.  */
-extern int __pthread_rwlock_timedwrlock_internal (struct __pthread_rwlock
-						  *rwlock,
-						  clockid_t clockid,
-						  const struct timespec
-						  *abstime);
+extern int
+__pthread_rwlock_timedwrlock_internal (struct __pthread_rwlock *rwlock,
+				       clockid_t clockid,
+				       const struct timespec *abstime);
 
 /* Acquire RWLOCK for writing.  */
 int

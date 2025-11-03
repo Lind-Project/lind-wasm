@@ -12,7 +12,7 @@ main (void)
   int res = 0;
   char *buf = NULL;
   size_t len = 0;
-  while (! feof (stdin))
+  while (!feof (stdin))
     {
       ssize_t n = getline (&buf, &len, stdin);
       if (n <= 0)

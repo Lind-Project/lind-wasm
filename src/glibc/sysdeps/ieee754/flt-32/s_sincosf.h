@@ -58,7 +58,7 @@ reduce_fast (double x, const sincos_t *p, int *np)
      hpi_inv is prescaled by 2^24 so the quadrant ends up in bits 24..31.
      This avoids inaccuracies introduced by truncating negative values.  */
   r = x * p->hpi_inv;
-  int n = ((int32_t)r + 0x800000) >> 24;
+  int n = ((int32_t) r + 0x800000) >> 24;
   *np = n;
   return x - n * p->hpi;
 #endif
@@ -82,14 +82,14 @@ reduce_large (uint32_t xi, int *np)
   xi <<= shift;
 
   res0 = xi * arr[0];
-  res1 = (uint64_t)xi * arr[4];
-  res2 = (uint64_t)xi * arr[8];
+  res1 = (uint64_t) xi * arr[4];
+  res2 = (uint64_t) xi * arr[8];
   res0 = (res2 >> 32) | (res0 << 32);
   res0 += res1;
 
   n = (res0 + (1ULL << 61)) >> 62;
   res0 -= n << 62;
-  double x = (int64_t)res0;
+  double x = (int64_t) res0;
   *np = n;
   return x * pi63;
 }

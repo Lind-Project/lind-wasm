@@ -62,28 +62,25 @@
 #include <math-underflow.h>
 #include <libc-diag.h>
 
-static const long double
-  one = 1.0L,
-  pio4hi = 0xc.90fdaa22168c235p-4L,
-  pio4lo = -0x3.b399d747f23e32ecp-68L,
+static const long double one = 1.0L, pio4hi = 0xc.90fdaa22168c235p-4L,
+			 pio4lo = -0x3.b399d747f23e32ecp-68L,
 
-  /* tan x = x + x^3 / 3 + x^5 T(x^2)/U(x^2)
-     0 <= x <= 0.6743316650390625
-     Peak relative error 8.0e-36  */
- TH =  3.333333333333333333333333333333333333333E-1L,
- T0 = -1.813014711743583437742363284336855889393E7L,
- T1 =  1.320767960008972224312740075083259247618E6L,
- T2 = -2.626775478255838182468651821863299023956E4L,
- T3 =  1.764573356488504935415411383687150199315E2L,
- T4 = -3.333267763822178690794678978979803526092E-1L,
+			 /* tan x = x + x^3 / 3 + x^5 T(x^2)/U(x^2)
+			    0 <= x <= 0.6743316650390625
+			    Peak relative error 8.0e-36  */
+    TH = 3.333333333333333333333333333333333333333E-1L,
+			 T0 = -1.813014711743583437742363284336855889393E7L,
+			 T1 = 1.320767960008972224312740075083259247618E6L,
+			 T2 = -2.626775478255838182468651821863299023956E4L,
+			 T3 = 1.764573356488504935415411383687150199315E2L,
+			 T4 = -3.333267763822178690794678978979803526092E-1L,
 
- U0 = -1.359761033807687578306772463253710042010E8L,
- U1 =  6.494370630656893175666729313065113194784E7L,
- U2 = -4.180787672237927475505536849168729386782E6L,
- U3 =  8.031643765106170040139966622980914621521E4L,
- U4 = -5.323131271912475695157127875560667378597E2L;
-  /* 1.000000000000000000000000000000000000000E0 */
-
+			 U0 = -1.359761033807687578306772463253710042010E8L,
+			 U1 = 6.494370630656893175666729313065113194784E7L,
+			 U2 = -4.180787672237927475505536849168729386782E6L,
+			 U3 = 8.031643765106170040139966622980914621521E4L,
+			 U4 = -5.323131271912475695157127875560667378597E2L;
+/* 1.000000000000000000000000000000000000000E0 */
 
 long double
 __kernel_tanl (long double x, long double y, int iy)
@@ -95,7 +92,7 @@ __kernel_tanl (long double x, long double y, int iy)
   if (absx < 0x1p-33)
     {
       if ((int) x == 0)
-	{			/* generate inexact */
+	{ /* generate inexact */
 	  if (x == 0 && iy == -1)
 	    return one / fabsl (x);
 	  else if (iy == 1)
@@ -136,9 +133,9 @@ __kernel_tanl (long double x, long double y, int iy)
       v = (long double) iy;
       w = (v - 2.0 * (x - (w * w / (w + v) - r)));
       /* SIGN is set for arguments that reach this code, but not
-        otherwise, resulting in warnings that it may be used
-        uninitialized although in the cases where it is used it has
-        always been set.  */
+	otherwise, resulting in warnings that it may be used
+	uninitialized although in the cases where it is used it has
+	always been set.  */
       DIAG_PUSH_NEEDS_COMMENT;
       DIAG_IGNORE_NEEDS_COMMENT_GCC (4.8, "-Wmaybe-uninitialized");
       if (sign < 0)

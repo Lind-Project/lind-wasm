@@ -19,21 +19,20 @@
 #include <ifunc-wcspbrk.h>
 
 #if HAVE_WCSPBRK_IFUNC
-# define wcspbrk __redirect_wcspbrk
-# include <wchar.h>
-# undef wcspbrk
-# include <ifunc-resolve.h>
-# if HAVE_WCSPBRK_C
+#  define wcspbrk __redirect_wcspbrk
+#  include <wchar.h>
+#  undef wcspbrk
+#  include <ifunc-resolve.h>
+#  if HAVE_WCSPBRK_C
 extern __typeof (__redirect_wcspbrk) WCSPBRK_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCSPBRK_Z13
+#  if HAVE_WCSPBRK_Z13
 extern __typeof (__redirect_wcspbrk) WCSPBRK_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect_wcspbrk, wcspbrk,
 		      (HAVE_WCSPBRK_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCSPBRK_Z13
-		      : WCSPBRK_DEFAULT
-		      )
+			  ? WCSPBRK_Z13
+			  : WCSPBRK_DEFAULT)
 #endif

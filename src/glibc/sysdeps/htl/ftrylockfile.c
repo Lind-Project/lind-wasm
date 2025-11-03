@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <libc-lockP.h>
 
-
 int
 __ftrylockfile (FILE *stream)
 {
@@ -30,4 +29,4 @@ __ftrylockfile (FILE *stream)
 #endif
 }
 weak_alias (__ftrylockfile, _IO_ftrylockfile)
-weak_alias (__ftrylockfile, ftrylockfile)
+    weak_alias (__ftrylockfile, ftrylockfile)

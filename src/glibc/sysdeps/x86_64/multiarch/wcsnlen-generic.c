@@ -18,16 +18,16 @@
 
 #include <isa-level.h>
 
-#if ISA_SHOULD_BUILD (1)
+#if ISA_SHOULD_BUILD(1)
 
-# include <wchar.h>
+#  include <wchar.h>
 
-# ifndef WCSNLEN
-#  define WCSNLEN __wcsnlen_generic
-# endif
+#  ifndef WCSNLEN
+#    define WCSNLEN __wcsnlen_generic
+#  endif
 
 extern __typeof (wcsnlen) __wcsnlen_generic;
 
-# include "wcsmbs/wcsnlen.c"
+#  include "wcsmbs/wcsnlen.c"
 
 #endif

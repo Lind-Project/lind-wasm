@@ -5,11 +5,12 @@
 pid_t
 __getpid (void)
 {
-  return MAKE_SYSCALL(GETPID_SYSCALL, "syscall|getpid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (GETPID_SYSCALL, "syscall|getpid", NOTUSED, NOTUSED,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 pid_t
 getpid (void)
 {
-  return __getpid();
+  return __getpid ();
 }

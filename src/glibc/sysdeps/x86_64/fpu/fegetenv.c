@@ -25,11 +25,11 @@ __fegetenv (fenv_t *envp)
 	   /* fnstenv changes the exception mask, so load back the
 	      stored environment.  */
 	   "fldenv %0\n"
-	   "stmxcsr %1" : "=m" (*envp), "=m" (envp->__mxcsr));
+	   "stmxcsr %1"
+	   : "=m"(*envp), "=m"(envp->__mxcsr));
 
   /* Success.  */
   return 0;
 }
-libm_hidden_def (__fegetenv)
-weak_alias (__fegetenv, fegetenv)
-libm_hidden_weak (fegetenv)
+libm_hidden_def (__fegetenv) weak_alias (__fegetenv, fegetenv)
+    libm_hidden_weak (fegetenv)

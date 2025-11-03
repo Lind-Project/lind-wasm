@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_USER_H
-#define _SYS_USER_H	1
+#  define _SYS_USER_H 1
 
 /* The whole purpose of this file is for GDB and GDB only.  Don't read
    too much into it.  Don't use it for anything other than GDB unless
@@ -37,9 +37,9 @@ struct _user_fpregs_struct
 struct _user_per_struct
 {
   unsigned long control_regs[3];
-  unsigned single_step       : 1;
+  unsigned single_step : 1;
   unsigned instruction_fetch : 1;
-  unsigned                   : 30;
+  unsigned : 30;
   unsigned long starting_addr;
   unsigned long ending_addr;
   unsigned short perc_atmid;
@@ -49,34 +49,35 @@ struct _user_per_struct
 
 struct _user_regs_struct
 {
-  struct _user_psw_struct psw;		/* Program status word.  */
-  unsigned long gprs[16];		/* General purpose registers.  */
-  unsigned int  acrs[16];		/* Access registers.  */
-  unsigned long orig_gpr2;		/* Original gpr2.  */
-  struct _user_fpregs_struct fp_regs;	/* Floating point registers.  */
-  struct _user_per_struct per_info;	/* Hardware tracing registers.  */
-  unsigned long ieee_instruction_pointer;	/* Always 0.  */
+  struct _user_psw_struct psw;		  /* Program status word.  */
+  unsigned long gprs[16];		  /* General purpose registers.  */
+  unsigned int acrs[16];		  /* Access registers.  */
+  unsigned long orig_gpr2;		  /* Original gpr2.  */
+  struct _user_fpregs_struct fp_regs;	  /* Floating point registers.  */
+  struct _user_per_struct per_info;	  /* Hardware tracing registers.  */
+  unsigned long ieee_instruction_pointer; /* Always 0.  */
 };
 
-struct user {
-  struct _user_regs_struct regs;	/* User registers.  */
-  unsigned long int u_tsize;		/* Text segment size (pages).  */
-  unsigned long int u_dsize;		/* Data segment size (pages).  */
-  unsigned long int u_ssize;		/* Stack segment size (pages).  */
-  unsigned long start_code;		/* Starting address of text.  */
-  unsigned long start_stack;		/* Starting address of stack area.  */
-  long int signal;			/* Signal causing the core dump.  */
-  struct _user_regs_struct *u_ar0;	/* Help gdb find registers.  */
-  unsigned long magic;			/* Identifies a core file.  */
-  char u_comm[32];			/* User command naem.  */
+struct user
+{
+  struct _user_regs_struct regs;   /* User registers.  */
+  unsigned long int u_tsize;	   /* Text segment size (pages).  */
+  unsigned long int u_dsize;	   /* Data segment size (pages).  */
+  unsigned long int u_ssize;	   /* Stack segment size (pages).  */
+  unsigned long start_code;	   /* Starting address of text.  */
+  unsigned long start_stack;	   /* Starting address of stack area.  */
+  long int signal;		   /* Signal causing the core dump.  */
+  struct _user_regs_struct *u_ar0; /* Help gdb find registers.  */
+  unsigned long magic;		   /* Identifies a core file.  */
+  char u_comm[32];		   /* User command naem.  */
 };
 
-#define PAGE_SHIFT		12
-#define PAGE_SIZE		(1UL << PAGE_SHIFT)
-#define PAGE_MASK		(~(PAGE_SIZE-1))
-#define NBPG			PAGE_SIZE
-#define UPAGES			1
-#define HOST_TEXT_START_ADDR	(u.start_code)
-#define HOST_STACK_END_ADDR	(u.start_stack + u.u_ssize * NBPG)
+#  define PAGE_SHIFT 12
+#  define PAGE_SIZE (1UL << PAGE_SHIFT)
+#  define PAGE_MASK (~(PAGE_SIZE - 1))
+#  define NBPG PAGE_SIZE
+#  define UPAGES 1
+#  define HOST_TEXT_START_ADDR (u.start_code)
+#  define HOST_STACK_END_ADDR (u.start_stack + u.u_ssize * NBPG)
 
-#endif	/* _SYS_USER_H */
+#endif /* _SYS_USER_H */

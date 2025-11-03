@@ -24,8 +24,8 @@ int
 tst_avx_aux (void)
 {
 #ifdef __AVX__
-  extern __m256i avx_test (__m256i, __m256i, __m256i, __m256i,
-			   __m256i, __m256i, __m256i, __m256i);
+  extern __m256i avx_test (__m256i, __m256i, __m256i, __m256i, __m256i,
+			   __m256i, __m256i, __m256i);
 
   __m256i ymm0 = _mm256_set1_epi32 (0);
   __m256i ymm1 = _mm256_set1_epi32 (1);
@@ -35,13 +35,12 @@ tst_avx_aux (void)
   __m256i ymm5 = _mm256_set1_epi32 (5);
   __m256i ymm6 = _mm256_set1_epi32 (6);
   __m256i ymm7 = _mm256_set1_epi32 (7);
-  __m256i ret = avx_test (ymm0, ymm1, ymm2, ymm3,
-			  ymm4, ymm5, ymm6, ymm7);
-  ymm0 =  _mm256_set1_epi32 (0x12349876);
+  __m256i ret = avx_test (ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm6, ymm7);
+  ymm0 = _mm256_set1_epi32 (0x12349876);
   if (memcmp (&ymm0, &ret, sizeof (ret)))
     abort ();
   return 0;
 #else  /* __AVX__ */
   return 77;
-#endif  /* __AVX__ */
+#endif /* __AVX__ */
 }

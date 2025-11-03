@@ -19,7 +19,7 @@
 #include <stdint.h>
 
 #ifndef HWCAPINFO_H
-# define HWCAPINFO_H
+#  define HWCAPINFO_H
 
 extern tcbhead_t __tcb attribute_hidden;
 

@@ -22,6 +22,6 @@ __rtld_static_init_arch (struct link_map *map, struct rtld_global_ro *dl)
   /* This field does not exist in the generic _rtld_global_ro version.  */
 
   extern __typeof (dl->_dl_cache_line_size) _dl_cache_line_size
-    attribute_hidden;
+      attribute_hidden;
   dl->_dl_cache_line_size = _dl_cache_line_size;
 }

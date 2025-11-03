@@ -18,11 +18,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _POWERPC_NOFPU_GET_ROUNDING_MODE_H
-#define _POWERPC_NOFPU_GET_ROUNDING_MODE_H	1
+#  define _POWERPC_NOFPU_GET_ROUNDING_MODE_H 1
 
-#include <fenv.h>
+#  include <fenv.h>
 
-#include "soft-supp.h"
+#  include "soft-supp.h"
 
 /* Return the floating-point rounding mode.  */
 

@@ -89,11 +89,10 @@ top12 (double x)
 }
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
-double
-SECTION
+double SECTION
 __exp (double x)
 {
   uint32_t abstop;
@@ -157,13 +156,12 @@ __exp (double x)
   return scale + scale * tmp;
 }
 #ifndef __exp
-hidden_def (__exp)
-strong_alias (__exp, __ieee754_exp)
-libm_alias_finite (__ieee754_exp, __exp)
-# if LIBM_SVID_COMPAT
-versioned_symbol (libm, __exp, exp, GLIBC_2_29);
+hidden_def (__exp) strong_alias (__exp, __ieee754_exp)
+    libm_alias_finite (__ieee754_exp, __exp)
+#  if LIBM_SVID_COMPAT
+	versioned_symbol (libm, __exp, exp, GLIBC_2_29);
 libm_alias_double_other (__exp, exp)
-# else
-libm_alias_double (__exp, exp)
-# endif
+#  else
+	libm_alias_double (__exp, exp)
+#  endif
 #endif

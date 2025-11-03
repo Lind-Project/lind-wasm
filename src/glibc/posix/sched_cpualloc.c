@@ -18,7 +18,6 @@
 #include <sched.h>
 #include <stdlib.h>
 
-
 cpu_set_t *
 __sched_cpualloc (size_t count)
 {

@@ -19,7 +19,6 @@
 #include "pthreadP.h"
 #include <shlib-compat.h>
 
-
 #if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_3_2)
 int
 __pthread_cond_init_2_0 (pthread_cond_2_0_t *cond,
@@ -39,6 +38,5 @@ __pthread_cond_init_2_0 (pthread_cond_2_0_t *cond,
 
   return 0;
 }
-compat_symbol (libc, __pthread_cond_init_2_0, pthread_cond_init,
-	       GLIBC_2_0);
+compat_symbol (libc, __pthread_cond_init_2_0, pthread_cond_init, GLIBC_2_0);
 #endif

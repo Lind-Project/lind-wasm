@@ -64,12 +64,9 @@
 #include <math-underflow.h>
 #include <libm-alias-finite.h>
 
-static const long double
-  invsqrtpi = 5.6418958354775628694807945156077258584405E-1L,
-  two = 2.0e0L,
-  one = 1.0e0L,
-  zero = 0.0L;
-
+static const long double invsqrtpi
+    = 5.6418958354775628694807945156077258584405E-1L,
+    two = 2.0e0L, one = 1.0e0L, zero = 0.0L;
 
 long double
 __ieee754_jnl (int n, long double x)
@@ -79,7 +76,6 @@ __ieee754_jnl (int n, long double x)
   long double a, b, temp, di, ret;
   long double z, w;
   double xhi;
-
 
   /* J(-n,x) = (-1)^n * J(n, x), J(n, -x) = (-1)^n * J(n, x)
    * Thus, J(-n,x) = J(n,-x)
@@ -106,18 +102,18 @@ __ieee754_jnl (int n, long double x)
     return (__ieee754_j0l (x));
   if (n == 1)
     return (__ieee754_j1l (x));
-  sgn = (n & 1) & (se >> 31);	/* even n -- 0, odd n -- sign(x) */
+  sgn = (n & 1) & (se >> 31); /* even n -- 0, odd n -- sign(x) */
   x = fabsl (x);
 
   {
     SET_RESTORE_ROUNDL (FE_TONEAREST);
-    if (x == 0.0L || ix >= 0x7ff00000)	/* if x is 0 or inf */
+    if (x == 0.0L || ix >= 0x7ff00000) /* if x is 0 or inf */
       return sgn == 1 ? -zero : zero;
     else if ((long double) n <= x)
       {
 	/* Safe to use J(n+1,x)=2n/x *J(n,x)-J(n-1,x) */
 	if (ix >= 0x52d00000)
-	  {			/* x > 2**302 */
+	  { /* x > 2**302 */
 
 	    /* ??? Could use an expansion for large x here.  */
 
@@ -163,7 +159,7 @@ __ieee754_jnl (int n, long double x)
 	    for (i = 1; i < n; i++)
 	      {
 		temp = b;
-		b = b * ((long double) (i + i) / x) - a;	/* avoid underflow */
+		b = b * ((long double) (i + i) / x) - a; /* avoid underflow */
 		a = temp;
 	      }
 	  }
@@ -171,11 +167,11 @@ __ieee754_jnl (int n, long double x)
     else
       {
 	if (ix < 0x3e100000)
-	  {			/* x < 2**-29 */
+	  { /* x < 2**-29 */
 	    /* x is tiny, return the first Taylor expansion of J(n,x)
 	     * J(n,x) = 1/n!*(x/2)^n  - ...
 	     */
-	    if (n >= 33)		/* underflow, result < 10^-300 */
+	    if (n >= 33) /* underflow, result < 10^-300 */
 	      b = zero;
 	    else
 	      {
@@ -183,8 +179,8 @@ __ieee754_jnl (int n, long double x)
 		b = temp;
 		for (a = one, i = 2; i <= n; i++)
 		  {
-		    a *= (long double) i;	/* a = n! */
-		    b *= temp;	/* b = (x/2)^n */
+		    a *= (long double) i; /* a = n! */
+		    b *= temp;		  /* b = (x/2)^n */
 		  }
 		b = b / a;
 	      }
@@ -311,8 +307,7 @@ __ieee754_jnl (int n, long double x)
 }
 libm_alias_finite (__ieee754_jnl, __jnl)
 
-long double
-__ieee754_ynl (int n, long double x)
+    long double __ieee754_ynl (int n, long double x)
 {
   uint32_t se, lx;
   int32_t i, ix;
@@ -355,7 +350,7 @@ __ieee754_ynl (int n, long double x)
     if (ix >= 0x7ff00000)
       return zero;
     if (ix >= 0x52D00000)
-      {				/* x > 2**302 */
+      { /* x > 2**302 */
 
 	/* ??? See comment above on the possible futility of this.  */
 
@@ -413,14 +408,14 @@ __ieee754_ynl (int n, long double x)
 	  }
       }
     /* If B is +-Inf, set up errno accordingly.  */
-    if (! isfinite (b))
+    if (!isfinite (b))
       __set_errno (ERANGE);
     if (sign > 0)
       ret = b;
     else
       ret = -b;
   }
- out:
+out:
   if (isinf (ret))
     ret = copysignl (LDBL_MAX, ret) * LDBL_MAX;
   return ret;

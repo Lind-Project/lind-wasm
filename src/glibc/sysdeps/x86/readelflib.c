@@ -15,11 +15,11 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-int process_elf32_file (const char *file_name, const char *lib,
-			int *flag, unsigned int *isa_level, char **soname,
+int process_elf32_file (const char *file_name, const char *lib, int *flag,
+			unsigned int *isa_level, char **soname,
 			void *file_contents, size_t file_length);
-int process_elf64_file (const char *file_name, const char *lib,
-			int *flag, unsigned int *isa_level, char **soname,
+int process_elf64_file (const char *file_name, const char *lib, int *flag,
+			unsigned int *isa_level, char **soname,
 			void *file_contents, size_t file_length);
 
 /* Returns 0 if everything is ok, != 0 in case of error.  */
@@ -28,7 +28,7 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
 		  unsigned int *isa_level, char **soname, void *file_contents,
 		  size_t file_length)
 {
-  ElfW(Ehdr) *elf_header = (ElfW(Ehdr) *) file_contents;
+  ElfW (Ehdr) *elf_header = (ElfW (Ehdr) *) file_contents;
   int ret, file_flag = 0;
 
   switch (elf_header->e_machine)
@@ -36,18 +36,18 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
     case EM_X86_64:
       if (elf_header->e_ident[EI_CLASS] == ELFCLASS64)
 	/* X86-64 64bit libraries are always libc.so.6+.  */
-	file_flag = FLAG_X8664_LIB64|FLAG_ELF_LIBC6;
+	file_flag = FLAG_X8664_LIB64 | FLAG_ELF_LIBC6;
       else
 	/* X32 libraries are always libc.so.6+.  */
-	file_flag = FLAG_X8664_LIBX32|FLAG_ELF_LIBC6;
+	file_flag = FLAG_X8664_LIBX32 | FLAG_ELF_LIBC6;
       break;
     case EM_386:
       if (elf_header->e_ident[EI_CLASS] == ELFCLASS32)
 	break;
       /* Fall through.  */
     default:
-      error (0, 0, _("%s is for unknown machine %d.\n"),
-	     file_name, elf_header->e_machine);
+      error (0, 0, _ ("%s is for unknown machine %d.\n"), file_name,
+	     elf_header->e_machine);
       return 1;
     }
 

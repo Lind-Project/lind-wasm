@@ -19,20 +19,19 @@
 #include <ifunc-wcsrchr.h>
 
 #if HAVE_WCSRCHR_IFUNC
-# include <wchar.h>
-# include <ifunc-resolve.h>
+#  include <wchar.h>
+#  include <ifunc-resolve.h>
 
-# if HAVE_WCSRCHR_C
+#  if HAVE_WCSRCHR_C
 extern __typeof (wcsrchr) WCSRCHR_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCSRCHR_Z13
+#  if HAVE_WCSRCHR_Z13
 extern __typeof (wcsrchr) WCSRCHR_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (wcsrchr, wcsrchr,
 		      (HAVE_WCSRCHR_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCSRCHR_Z13
-		      : WCSRCHR_DEFAULT
-		      )
+			  ? WCSRCHR_Z13
+			  : WCSRCHR_DEFAULT)
 #endif

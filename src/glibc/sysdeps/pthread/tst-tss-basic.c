@@ -25,7 +25,7 @@
 /* Thread specific storage.  */
 static tss_t key;
 
-#define TSS_VALUE (void*) 0xFF
+#define TSS_VALUE (void *) 0xFF
 
 static int
 tss_thrd (void *arg)

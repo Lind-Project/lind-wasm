@@ -26,30 +26,27 @@
 
 struct test_s
 {
-  __attribute__ ((aligned(0x20))) int a;
-  __attribute__ ((aligned(0x200))) int b;
+  __attribute__ ((aligned (0x20))) int a;
+  __attribute__ ((aligned (0x200))) int b;
 };
 
 #define INIT_A 1
 #define INIT_B 42
 /* Deliberately not static.  */
-__thread struct test_s s __attribute__ ((tls_model ("local-exec"))) =
-{
-  .a = INIT_A,
-  .b = INIT_B
-};
+__thread struct test_s s __attribute__ ((tls_model ("local-exec")))
+= { .a = INIT_A, .b = INIT_B };
 
 /* Use noinline in combination with not static to ensure that the
    alignment check is really done.  Otherwise it was optimized out!  */
 __attribute__ ((noinline)) void
-check_alignment (const char *thr_name, const char *ptr_name,
-		 int *ptr, int alignment)
+check_alignment (const char *thr_name, const char *ptr_name, int *ptr,
+		 int alignment)
 {
   uintptr_t offset_aligment = ((uintptr_t) ptr) & (alignment - 1);
   if (offset_aligment)
     {
-      FAIL_EXIT1 ("%s (%p) is not 0x%x-byte aligned in %s thread\n",
-		  ptr_name, ptr, alignment, thr_name);
+      FAIL_EXIT1 ("%s (%p) is not 0x%x-byte aligned in %s thread\n", ptr_name,
+		  ptr, alignment, thr_name);
     }
 }
 
@@ -72,7 +69,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 int
 do_test (void)

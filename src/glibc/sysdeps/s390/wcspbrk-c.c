@@ -19,19 +19,19 @@
 #include <ifunc-wcspbrk.h>
 
 #if HAVE_WCSPBRK_C
-# if HAVE_WCSPBRK_IFUNC || HAVE_WCSPBRK_Z13
-#  define WCSPBRK WCSPBRK_C
+#  if HAVE_WCSPBRK_IFUNC || HAVE_WCSPBRK_Z13
+#    define WCSPBRK WCSPBRK_C
 
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_def
-#   if ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-#    define libc_hidden_def(name)			\
-  __hidden_ver1 (__wcspbrk_c, __GI_wcspbrk, __wcspbrk_c);
-#   else
-#    define libc_hidden_def(name)
-#   endif
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_def
+#      if !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#	define libc_hidden_def(name)                                         \
+	  __hidden_ver1 (__wcspbrk_c, __GI_wcspbrk, __wcspbrk_c);
+#      else
+#	define libc_hidden_def(name)
+#      endif
+#    endif
 #  endif
-# endif
 
-# include <wcsmbs/wcspbrk.c>
+#  include <wcsmbs/wcspbrk.c>
 #endif

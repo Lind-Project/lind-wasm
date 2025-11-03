@@ -27,34 +27,33 @@
    caller-save register) before storing it to environment.
    See BZ #22624.  */
 
-int
-inhibit_stack_protector
+int inhibit_stack_protector
 __sigsetjmp_aux (jmp_buf env, int savemask, long long sp, long long fp,
 		 long long gp)
 {
 #ifdef __mips_hard_float
   /* Store the floating point callee-saved registers...  */
-#if _MIPS_SIM == _ABI64
-  asm volatile ("s.d $f24, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[0]));
-  asm volatile ("s.d $f25, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[1]));
-  asm volatile ("s.d $f26, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[2]));
-  asm volatile ("s.d $f27, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[3]));
-  asm volatile ("s.d $f28, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[4]));
-  asm volatile ("s.d $f29, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[5]));
-  asm volatile ("s.d $f30, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[6]));
-  asm volatile ("s.d $f31, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[7]));
-#else
-  asm volatile ("s.d $f20, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[0]));
-  asm volatile ("s.d $f22, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[1]));
-  asm volatile ("s.d $f24, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[2]));
-  asm volatile ("s.d $f26, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[3]));
-  asm volatile ("s.d $f28, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[4]));
-  asm volatile ("s.d $f30, %0" : : "m" (env[0].__jmpbuf[0].__fpregs[5]));
-#endif
+#  if _MIPS_SIM == _ABI64
+  asm volatile ("s.d $f24, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[0]));
+  asm volatile ("s.d $f25, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[1]));
+  asm volatile ("s.d $f26, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[2]));
+  asm volatile ("s.d $f27, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[3]));
+  asm volatile ("s.d $f28, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[4]));
+  asm volatile ("s.d $f29, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[5]));
+  asm volatile ("s.d $f30, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[6]));
+  asm volatile ("s.d $f31, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[7]));
+#  else
+  asm volatile ("s.d $f20, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[0]));
+  asm volatile ("s.d $f22, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[1]));
+  asm volatile ("s.d $f24, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[2]));
+  asm volatile ("s.d $f26, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[3]));
+  asm volatile ("s.d $f28, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[4]));
+  asm volatile ("s.d $f30, %0" : : "m"(env[0].__jmpbuf[0].__fpregs[5]));
+#  endif
 #endif
 
   /* .. and the PC;  */
-  asm volatile ("sd $31, %0" : : "m" (env[0].__jmpbuf[0].__pc));
+  asm volatile ("sd $31, %0" : : "m"(env[0].__jmpbuf[0].__pc));
 
   /* .. and the stack pointer;  */
   env[0].__jmpbuf[0].__sp = sp;
@@ -66,14 +65,14 @@ __sigsetjmp_aux (jmp_buf env, int savemask, long long sp, long long fp,
   env[0].__jmpbuf[0].__gp = gp;
 
   /* .. and the callee-saved registers; */
-  asm volatile ("sd $16, %0" : : "m" (env[0].__jmpbuf[0].__regs[0]));
-  asm volatile ("sd $17, %0" : : "m" (env[0].__jmpbuf[0].__regs[1]));
-  asm volatile ("sd $18, %0" : : "m" (env[0].__jmpbuf[0].__regs[2]));
-  asm volatile ("sd $19, %0" : : "m" (env[0].__jmpbuf[0].__regs[3]));
-  asm volatile ("sd $20, %0" : : "m" (env[0].__jmpbuf[0].__regs[4]));
-  asm volatile ("sd $21, %0" : : "m" (env[0].__jmpbuf[0].__regs[5]));
-  asm volatile ("sd $22, %0" : : "m" (env[0].__jmpbuf[0].__regs[6]));
-  asm volatile ("sd $23, %0" : : "m" (env[0].__jmpbuf[0].__regs[7]));
+  asm volatile ("sd $16, %0" : : "m"(env[0].__jmpbuf[0].__regs[0]));
+  asm volatile ("sd $17, %0" : : "m"(env[0].__jmpbuf[0].__regs[1]));
+  asm volatile ("sd $18, %0" : : "m"(env[0].__jmpbuf[0].__regs[2]));
+  asm volatile ("sd $19, %0" : : "m"(env[0].__jmpbuf[0].__regs[3]));
+  asm volatile ("sd $20, %0" : : "m"(env[0].__jmpbuf[0].__regs[4]));
+  asm volatile ("sd $21, %0" : : "m"(env[0].__jmpbuf[0].__regs[5]));
+  asm volatile ("sd $22, %0" : : "m"(env[0].__jmpbuf[0].__regs[6]));
+  asm volatile ("sd $23, %0" : : "m"(env[0].__jmpbuf[0].__regs[7]));
 
   /* Save the signal mask if requested.  */
   return __sigjmp_save (env, savemask);

@@ -19,6 +19,6 @@
 #include <sgidefs.h>
 
 #if !defined __NO_LONG_DOUBLE_MATH && _MIPS_SIM == _ABIO32
-# define __NO_LONG_DOUBLE_MATH	1
+#  define __NO_LONG_DOUBLE_MATH 1
 #endif
 #define __LDOUBLE_REDIRECTS_TO_FLOAT128_ABI 0

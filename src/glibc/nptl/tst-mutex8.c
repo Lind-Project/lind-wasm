@@ -29,7 +29,6 @@ static pthread_barrier_t b;
 static pthread_cond_t c;
 static bool done;
 
-
 static void
 cl (void *arg)
 {
@@ -39,7 +38,6 @@ cl (void *arg)
       exit (1);
     }
 }
-
 
 static void *
 tf (void *arg)
@@ -64,7 +62,7 @@ tf (void *arg)
 	  puts ("tf: cond_wait failed");
 	  return (void *) 1l;
 	}
-    while (! done);
+    while (!done);
   else
     do
       {
@@ -78,7 +76,7 @@ tf (void *arg)
 
 	pthread_cleanup_pop (0);
       }
-    while (! done);
+    while (!done);
 
   if (pthread_mutex_unlock (m) != 0)
     {
@@ -88,7 +86,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 check_type (const char *mas, pthread_mutexattr_t *ma)
@@ -110,9 +107,10 @@ check_type (const char *mas, pthread_mutexattr_t *ma)
     }
   if (ma_type == PTHREAD_MUTEX_TIMED_NP)
     {
-      /* This type of mutex can be elided if elision is enabled via the tunables
-	 framework.  Some tests below are failing if the mutex is elided.
-	 Thus we only run those if we assume that the mutex won't be elided.  */
+      /* This type of mutex can be elided if elision is enabled via the
+	 tunables framework.  Some tests below are failing if the mutex is
+	 elided. Thus we only run those if we assume that the mutex won't be
+	 elided.  */
       if (TUNABLE_GET_FULL (glibc, elision, enable, int32_t, NULL) == 1)
 	assume_elided_mutex = true;
     }
@@ -156,7 +154,8 @@ check_type (const char *mas, pthread_mutexattr_t *ma)
       e = pthread_mutex_destroy (m);
       if (e == 0)
 	{
-	  printf ("mutex_destroy of self-locked mutex succeeded for %s\n", mas);
+	  printf ("mutex_destroy of self-locked mutex succeeded for %s\n",
+		  mas);
 	  return 1;
 	}
       if (e != EBUSY)
@@ -245,7 +244,8 @@ mutex_destroy of self-trylocked mutex did not return EBUSY %s\n",
       if (e != EBUSY)
 	{
 	  printf ("\
-mutex_destroy of condvar-used mutex did not return EBUSY for %s\n", mas);
+mutex_destroy of condvar-used mutex did not return EBUSY for %s\n",
+		  mas);
 	  return 1;
 	}
     }
@@ -351,7 +351,6 @@ mutex_destroy of condvar-used mutex did not return EBUSY for %s\n", mas);
 
   return 0;
 }
-
 
 static int
 do_test (void)

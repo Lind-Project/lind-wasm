@@ -22,10 +22,10 @@
 #include <hurd/threadvar.h>
 #include <setjmp.h>
 #include <thread_state.h>
-#include <sysdep.h>		/* For stack growth direction.  */
+#include <sysdep.h> /* For stack growth direction.  */
 #include "set-hooks.h"
 #include <assert.h>
-#include "hurdmalloc.h"		/* XXX */
+#include "hurdmalloc.h" /* XXX */
 #include <tls.h>
 #include <malloc/malloc-internal.h>
 #include <nss/nss_database.h>
@@ -34,25 +34,23 @@
 
 #undef __fork
 
-
 /* Things that want to be locked while forking.  */
 symbol_set_declare (_hurd_fork_locks)
 
-/* Things that want to be called before we fork, to prepare the parent for
-   task_create, when the new child task will inherit our address space.  */
-DEFINE_HOOK (_hurd_fork_prepare_hook, (void));
+    /* Things that want to be called before we fork, to prepare the parent for
+       task_create, when the new child task will inherit our address space.  */
+    DEFINE_HOOK (_hurd_fork_prepare_hook, (void) );
 
 /* Things that want to be called when we are forking, with the above all
    locked.  They are passed the task port of the child.  The child process
    is all set up except for doing proc_child, and has no threads yet.  */
-DEFINE_HOOK (_hurd_fork_setup_hook, (void));
+DEFINE_HOOK (_hurd_fork_setup_hook, (void) );
 
 /* Things to be run in the child fork.  */
-DEFINE_HOOK (_hurd_fork_child_hook, (void));
+DEFINE_HOOK (_hurd_fork_child_hook, (void) );
 
 /* Things to be run in the parent fork.  */
-DEFINE_HOOK (_hurd_fork_parent_hook, (void));
-
+DEFINE_HOOK (_hurd_fork_parent_hook, (void) );
 
 /* Clone the calling process, creating an exact copy.
    Return -1 for errors, 0 to the new process,
@@ -70,10 +68,16 @@ _Fork (void)
 retry:
   __spin_lock (&ss->critical_section_lock);
 
-#undef	LOSE
-#define LOSE do { assert_perror (err); goto lose; } while (0) /* XXX */
+#undef LOSE
+#define LOSE                                                                  \
+  do                                                                          \
+    {                                                                         \
+      assert_perror (err);                                                    \
+      goto lose;                                                              \
+    }                                                                         \
+  while (0) /* XXX */
 
-  if (! setjmp (env))
+  if (!setjmp (env))
     {
       process_t newproc;
       task_t newtask;
@@ -90,17 +94,17 @@ retry:
       int ports_locked = 0, stopped = 0;
 
       void resume_threads (void)
-	{
-	  if (! stopped)
-	    return;
+      {
+	if (!stopped)
+	  return;
 
-	  assert (threads);
+	assert (threads);
 
-	  for (i = 0; i < nthreads; ++i)
-	    if (threads[i] != ss->thread)
-	      __thread_resume (threads[i]);
-	  stopped = 0;
-	}
+	for (i = 0; i < nthreads; ++i)
+	  if (threads[i] != ss->thread)
+	    __thread_resume (threads[i]);
+	stopped = 0;
+      }
 
       /* Run things that prepare for forking before we create the task.  */
       RUN_HOOK (_hurd_fork_prepare_hook, ());
@@ -109,8 +113,7 @@ retry:
       {
 	void *const *p;
 	for (p = symbol_set_first_element (_hurd_fork_locks);
-	     ! symbol_set_end_p (_hurd_fork_locks, p);
-	     ++p)
+	     !symbol_set_end_p (_hurd_fork_locks, p); ++p)
 	  __mutex_lock (*p);
       }
       __mutex_lock (&_hurd_siglock);
@@ -132,9 +135,8 @@ retry:
 	__spin_lock (&_hurd_ports[i].lock);
       ports_locked = 1;
 
-
       /* Keep our SS locked while stopping other threads, so they don't get a
-         chance to have it locked in the copied space.  */
+	 chance to have it locked in the copied space.  */
       __spin_lock (&ss->lock);
       /* Stop all other threads while copying the address space,
 	 so nothing changes.  */
@@ -166,7 +168,7 @@ retry:
 	  /* Create the child task.  It will inherit a copy of our memory.  */
 	  err = __task_create (__mach_task_self (),
 #ifdef KERN_INVALID_LEDGER
-			       NULL, 0,	/* OSF Mach */
+			       NULL, 0, /* OSF Mach */
 #endif
 			       1, &newtask);
 	}
@@ -179,9 +181,8 @@ retry:
 	LOSE;
 
       /* Fetch the names of all ports used in this task.  */
-      if (err = __mach_port_names (__mach_task_self (),
-				   &portnames, &nportnames,
-				   &porttypes, &nporttypes))
+      if (err = __mach_port_names (__mach_task_self (), &portnames,
+				   &nportnames, &porttypes, &nporttypes))
 	LOSE;
       if (nportnames != nporttypes)
 	{
@@ -197,8 +198,8 @@ retry:
       /* Get the child process's proc server port.  We will insert it into
 	 the child with the same name as we use for our own proc server
 	 port; and we will need it to set the child's message port.  */
-      if (err = __proc_task2proc (_hurd_ports[INIT_PORT_PROC].port,
-				  newtask, &newproc))
+      if (err = __proc_task2proc (_hurd_ports[INIT_PORT_PROC].port, newtask,
+				  &newproc))
 	LOSE;
 
       /* Insert all our port rights into the child task.  */
@@ -209,9 +210,8 @@ retry:
 	    {
 	      /* This is a receive right.  We want to give the child task
 		 its own new receive right under the same name.  */
-	      if (err = __mach_port_allocate_name (newtask,
-						   MACH_PORT_RIGHT_RECEIVE,
-						   portnames[i]))
+	      if (err = __mach_port_allocate_name (
+		      newtask, MACH_PORT_RIGHT_RECEIVE, portnames[i]))
 		LOSE;
 	      if (porttypes[i] & MACH_PORT_TYPE_SEND)
 		{
@@ -222,11 +222,9 @@ retry:
 		  mach_msg_type_name_t poly;
 		  if (err = __mach_port_get_refs (__mach_task_self (),
 						  portnames[i],
-						  MACH_PORT_RIGHT_SEND,
-						  &refs))
+						  MACH_PORT_RIGHT_SEND, &refs))
 		    LOSE;
-		  if (err = __mach_port_extract_right (newtask,
-						       portnames[i],
+		  if (err = __mach_port_extract_right (newtask, portnames[i],
 						       MACH_MSG_TYPE_MAKE_SEND,
 						       &port, &poly))
 		    LOSE;
@@ -246,29 +244,29 @@ retry:
 			 on its message port.  */
 		      if (err =
 #ifdef TASK_EXCEPTION_PORT
-			  __task_set_special_port (newtask,
-						   TASK_EXCEPTION_PORT,
-						   port)
-#elif defined (EXC_MASK_ALL)
-			  __task_set_exception_ports
-			  (newtask, EXC_MASK_ALL & ~(EXC_MASK_SYSCALL
-						     | EXC_MASK_MACH_SYSCALL
-						     | EXC_MASK_RPC_ALERT),
-			   port, EXCEPTION_DEFAULT, MACHINE_THREAD_STATE)
+			      __task_set_special_port (
+				  newtask, TASK_EXCEPTION_PORT, port)
+#elif defined(EXC_MASK_ALL)
+			      __task_set_exception_ports (
+				  newtask,
+				  EXC_MASK_ALL
+				      & ~(EXC_MASK_SYSCALL
+					  | EXC_MASK_MACH_SYSCALL
+					  | EXC_MASK_RPC_ALERT),
+				  port, EXCEPTION_DEFAULT,
+				  MACHINE_THREAD_STATE)
 #else
-# error task_set_exception_port?
+#  error task_set_exception_port?
 #endif
-			  )
+		      )
 			LOSE;
 		    }
-		  if (err = __mach_port_insert_right (newtask,
-						      portnames[i],
-						      port,
-						      MACH_MSG_TYPE_MOVE_SEND))
+		  if (err
+		      = __mach_port_insert_right (newtask, portnames[i], port,
+						  MACH_MSG_TYPE_MOVE_SEND))
 		    LOSE;
 		  if (refs > 1
-		      && (err = __mach_port_mod_refs (newtask,
-						      portnames[i],
+		      && (err = __mach_port_mod_refs (newtask, portnames[i],
 						      MACH_PORT_RIGHT_SEND,
 						      refs - 1)))
 		    LOSE;
@@ -279,21 +277,18 @@ retry:
 		     since we have one for ours.  */
 		  mach_port_t port;
 		  mach_msg_type_name_t poly;
-		  if (err = __mach_port_extract_right
-		      (newtask,
-		       portnames[i],
-		       MACH_MSG_TYPE_MAKE_SEND_ONCE,
-		       &port, &poly))
+		  if (err = __mach_port_extract_right (
+			  newtask, portnames[i], MACH_MSG_TYPE_MAKE_SEND_ONCE,
+			  &port, &poly))
 		    LOSE;
-		  if (err = __mach_port_insert_right
-		      (newtask,
-		       portnames[i], port,
-		       MACH_MSG_TYPE_MOVE_SEND_ONCE))
+		  if (err = __mach_port_insert_right (
+			  newtask, portnames[i], port,
+			  MACH_MSG_TYPE_MOVE_SEND_ONCE))
 		    LOSE;
 		}
 	    }
 	  else if (porttypes[i]
-		   & (MACH_PORT_TYPE_SEND|MACH_PORT_TYPE_DEAD_NAME))
+		   & (MACH_PORT_TYPE_SEND | MACH_PORT_TYPE_DEAD_NAME))
 	    {
 	      /* This is a send right or a dead name.
 		 Give the child as many references for it as we have.  */
@@ -324,8 +319,8 @@ retry:
 		     placeholder, so the kernel will not chose this name
 		     for any other new port (it might use it for one of the
 		     rights created when a thread is created).  */
-		  if (err = __mach_port_allocate_name
-		      (newtask, MACH_PORT_RIGHT_DEAD_NAME, portnames[i]))
+		  if (err = __mach_port_allocate_name (
+			  newtask, MACH_PORT_RIGHT_DEAD_NAME, portnames[i]))
 		    LOSE;
 		}
 	      else if (portnames[i] == _hurd_msgport_thread)
@@ -336,8 +331,8 @@ retry:
 		  insert = MACH_PORT_NULL;
 		  record_refs = &sigthread_refs;
 		  /* Allocate a dead name right as a placeholder.  */
-		  if (err = __mach_port_allocate_name
-		      (newtask, MACH_PORT_RIGHT_DEAD_NAME, portnames[i]))
+		  if (err = __mach_port_allocate_name (
+			  newtask, MACH_PORT_RIGHT_DEAD_NAME, portnames[i]))
 		    LOSE;
 		}
 	      else
@@ -355,10 +350,9 @@ retry:
 		}
 	      /* Find out how many user references we have for
 		 the send right with this name.  */
-	      if (err = __mach_port_get_refs (__mach_task_self (),
-					      portnames[i],
-					      MACH_PORT_RIGHT_SEND,
-					      record_refs ?: &refs))
+	      if (err = __mach_port_get_refs (
+		      __mach_task_self (), portnames[i], MACH_PORT_RIGHT_SEND,
+		      record_refs ?: &refs))
 		LOSE;
 	      if (insert == MACH_PORT_NULL)
 		continue;
@@ -367,14 +361,12 @@ retry:
 		/* This is a dead name; allocate another dead name
 		   with the same name in the child.  */
 	      allocate_dead_name:
-		err = __mach_port_allocate_name (newtask,
-						 MACH_PORT_RIGHT_DEAD_NAME,
-						 portnames[i]);
+		err = __mach_port_allocate_name (
+		    newtask, MACH_PORT_RIGHT_DEAD_NAME, portnames[i]);
 	      else
 		/* Insert the chosen send right into the child.  */
-		err = __mach_port_insert_right (newtask,
-						portnames[i],
-						insert, insert_type);
+		err = __mach_port_insert_right (newtask, portnames[i], insert,
+						insert_type);
 	      switch (err)
 		{
 		case KERN_NAME_EXISTS:
@@ -387,11 +379,12 @@ retry:
 		    mach_msg_type_name_t poly;
 		    assert (__mach_port_extract_right (newtask, portnames[i],
 						       MACH_MSG_TYPE_COPY_SEND,
-						       &childport,
-						       &poly) == 0
+						       &childport, &poly)
+				== 0
 			    && childport == insert
 			    && __mach_port_deallocate (__mach_task_self (),
-						       childport) == 0);
+						       childport)
+				   == 0);
 		    break;
 		  }
 
@@ -407,8 +400,7 @@ retry:
 		case KERN_SUCCESS:
 		  /* Give the child as many user references as we have.  */
 		  if (refs > 1
-		      && (err = __mach_port_mod_refs (newtask,
-						      portnames[i],
+		      && (err = __mach_port_mod_refs (newtask, portnames[i],
 						      MACH_PORT_RIGHT_SEND,
 						      refs - 1)))
 		    LOSE;
@@ -436,22 +428,19 @@ retry:
 	 in the child as placeholders.  Now deallocate them so we can use
 	 the names.  */
       if ((err = __mach_port_deallocate (newtask, ss->thread))
-	  || (err = __mach_port_insert_right (newtask, ss->thread,
-					      thread,
+	  || (err = __mach_port_insert_right (newtask, ss->thread, thread,
 					      MACH_MSG_TYPE_COPY_SEND)))
 	LOSE;
       /* XXX consumed? (_hurd_sigthread is no more) */
       if (thread_refs > 1
-	  && (err = __mach_port_mod_refs (newtask, ss->thread,
-					  MACH_PORT_RIGHT_SEND,
-					  thread_refs - 1)))
+	  && (err = __mach_port_mod_refs (
+		  newtask, ss->thread, MACH_PORT_RIGHT_SEND, thread_refs - 1)))
 	LOSE;
       if ((_hurd_msgport_thread != MACH_PORT_NULL) /* Let user have none.  */
 	  && ((err = __mach_port_deallocate (newtask, _hurd_msgport_thread))
-	      || (err = __mach_port_insert_right (newtask,
-						  _hurd_msgport_thread,
-						  sigthread,
-						  MACH_MSG_TYPE_COPY_SEND))))
+	      || (err = __mach_port_insert_right (
+		      newtask, _hurd_msgport_thread, sigthread,
+		      MACH_MSG_TYPE_COPY_SEND))))
 	LOSE;
       if (sigthread_refs > 1
 	  && (err = __mach_port_mod_refs (newtask, _hurd_msgport_thread,
@@ -466,7 +455,7 @@ retry:
       {
 	vm_address_t argv, envp;
 	err = (__USEPORT (PROC, __proc_get_arg_locations (port, &argv, &envp))
-	       ?: __proc_set_arg_locations (newproc, argv, envp));
+		   ?: __proc_set_arg_locations (newproc, argv, envp));
 	if (err)
 	  LOSE;
       }
@@ -482,10 +471,10 @@ retry:
 				    (natural_t *) &state, &statecount))
 	LOSE;
 
-      MACHINE_THREAD_STATE_SETUP_CALL(&state,
-	  __hurd_sigthread_stack_base,
-	  __hurd_sigthread_stack_end - __hurd_sigthread_stack_base,
-	  (uintptr_t) _hurd_msgport_receive);
+      MACHINE_THREAD_STATE_SETUP_CALL (&state, __hurd_sigthread_stack_base,
+				       __hurd_sigthread_stack_end
+					   - __hurd_sigthread_stack_base,
+				       (uintptr_t) _hurd_msgport_receive);
 
       /* Do special signal thread setup for TLS if needed.  */
       if (err = _hurd_tls_fork (sigthread, _hurd_msgport_thread, &state))
@@ -551,19 +540,16 @@ retry:
 	__mach_port_deallocate (__mach_task_self (), newproc);
 
       if (portnames)
-	__vm_deallocate (__mach_task_self (),
-			 (vm_address_t) portnames,
+	__vm_deallocate (__mach_task_self (), (vm_address_t) portnames,
 			 nportnames * sizeof (*portnames));
       if (porttypes)
-	__vm_deallocate (__mach_task_self (),
-			 (vm_address_t) porttypes,
+	__vm_deallocate (__mach_task_self (), (vm_address_t) porttypes,
 			 nporttypes * sizeof (*porttypes));
       if (threads)
 	{
 	  for (i = 0; i < nthreads; ++i)
 	    __mach_port_deallocate (__mach_task_self (), threads[i]);
-	  __vm_deallocate (__mach_task_self (),
-			   (vm_address_t) threads,
+	  __vm_deallocate (__mach_task_self (), (vm_address_t) threads,
 			   nthreads * sizeof (*threads));
 	}
 
@@ -607,18 +593,18 @@ retry:
       _hurd_sigstates = ss;
       __mutex_unlock (&_hurd_siglock);
       /* Earlier on, the global sigstate may have been tainted and now needs to
-         be reinitialized.  Nobody is interested in its present state anymore:
-         we're not, the signal thread will be restarted, and there are no other
-         threads.
+	 be reinitialized.  Nobody is interested in its present state anymore:
+	 we're not, the signal thread will be restarted, and there are no other
+	 threads.
 
-         We can't simply allocate a fresh global sigstate here, as
-         _hurd_thread_sigstate will call malloc and that will deadlock trying
-         to determine the current thread's sigstate.  */
+	 We can't simply allocate a fresh global sigstate here, as
+	 _hurd_thread_sigstate will call malloc and that will deadlock trying
+	 to determine the current thread's sigstate.  */
 #if 0
       _hurd_thread_sigstate_init (_hurd_global_sigstate, MACH_PORT_NULL);
 #else
       /* Only reinitialize the lock -- otherwise we might have to do additional
-         setup as done in hurdsig.c:_hurdsig_init.  */
+	 setup as done in hurdsig.c:_hurdsig_init.  */
       __spin_lock_init (&_hurd_global_sigstate->lock);
 #endif
 
@@ -684,8 +670,7 @@ retry:
   {
     void *const *p;
     for (p = symbol_set_first_element (_hurd_fork_locks);
-	 ! symbol_set_end_p (_hurd_fork_locks, p);
-	 ++p)
+	 !symbol_set_end_p (_hurd_fork_locks, p); ++p)
       __mutex_unlock (*p);
   }
 

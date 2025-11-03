@@ -18,30 +18,29 @@
 
 #define TEST_MAIN
 #ifdef WIDE
-# define TEST_NAME "wmemcmp"
+#  define TEST_NAME "wmemcmp"
 #else
-# define TEST_NAME "memcmp"
+#  define TEST_NAME "memcmp"
 #endif
 
 #include "test-size_t.h"
 
 #ifdef WIDE
-# include <inttypes.h>
-# include <wchar.h>
+#  include <inttypes.h>
+#  include <wchar.h>
 
-# define MEMCMP wmemcmp
-# define CHAR wchar_t
+#  define MEMCMP wmemcmp
+#  define CHAR wchar_t
 #else
-# define MEMCMP memcmp
-# define CHAR char
+#  define MEMCMP memcmp
+#  define CHAR char
 #endif
 
 IMPL (MEMCMP, 1)
 
 typedef int (*proto_t) (const CHAR *, const CHAR *, size_t);
 
-static int
-__attribute__ ((noinline, noclone))
+static int __attribute__ ((noinline, noclone))
 do_memcmp (parameter_t a, parameter_t b)
 {
   return CALL (&b, a.p, b.p, a.len);
@@ -64,8 +63,8 @@ test_main (void)
       int res = do_memcmp (dest, src);
       if (res)
 	{
-	  error (0, 0, "Wrong result in function %s: %i != 0",
-		 impl->name, res);
+	  error (0, 0, "Wrong result in function %s: %i != 0", impl->name,
+		 res);
 	  ret = 1;
 	}
     }

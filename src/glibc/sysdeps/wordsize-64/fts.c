@@ -12,8 +12,6 @@
 #undef fts64_set
 #undef fts64_children
 
-weak_alias (fts_open, fts64_open)
-weak_alias (fts_close, fts64_close)
-weak_alias (fts_read, fts64_read)
-weak_alias (fts_set, fts64_set)
-weak_alias (fts_children, fts64_children)
+weak_alias (fts_open, fts64_open) weak_alias (fts_close, fts64_close)
+    weak_alias (fts_read, fts64_read) weak_alias (fts_set, fts64_set)
+	weak_alias (fts_children, fts64_children)

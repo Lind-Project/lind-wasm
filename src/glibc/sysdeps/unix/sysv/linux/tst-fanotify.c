@@ -33,7 +33,8 @@ do_test (void)
       switch (errno)
 	{
 	case ENOSYS:
-	  puts ("SKIP: missing support for fanotify (check CONFIG_FANOTIFY=y)");
+	  puts (
+	      "SKIP: missing support for fanotify (check CONFIG_FANOTIFY=y)");
 	  return 0;
 	case EPERM:
 	  puts ("SKIP: missing proper permissions for runtime test");
@@ -44,9 +45,10 @@ do_test (void)
       return 1;
     }
 
-  ret = fanotify_mark (fd, FAN_MARK_ADD | FAN_MARK_MOUNT, FAN_ACCESS
-		       | FAN_MODIFY | FAN_OPEN | FAN_CLOSE | FAN_ONDIR
-		       | FAN_EVENT_ON_CHILD, AT_FDCWD, ".");
+  ret = fanotify_mark (fd, FAN_MARK_ADD | FAN_MARK_MOUNT,
+		       FAN_ACCESS | FAN_MODIFY | FAN_OPEN | FAN_CLOSE
+			   | FAN_ONDIR | FAN_EVENT_ON_CHILD,
+		       AT_FDCWD, ".");
   if (ret)
     {
       perror ("fanotify_mark (...) failed");

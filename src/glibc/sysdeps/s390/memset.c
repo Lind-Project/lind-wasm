@@ -18,31 +18,29 @@
 
 #include <ifunc-memset.h>
 #if HAVE_MEMSET_IFUNC
-# define memset __redirect_memset
-# include <string.h>
-# undef memset
-# include <ifunc-resolve.h>
+#  define memset __redirect_memset
+#  include <string.h>
+#  undef memset
+#  include <ifunc-resolve.h>
 
-# if HAVE_MEMSET_Z900_G5
+#  if HAVE_MEMSET_Z900_G5
 extern __typeof (__redirect_memset) MEMSET_Z900_G5 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMSET_Z10
+#  if HAVE_MEMSET_Z10
 extern __typeof (__redirect_memset) MEMSET_Z10 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMSET_Z196
+#  if HAVE_MEMSET_Z196
 extern __typeof (__redirect_memset) MEMSET_Z196 attribute_hidden;
-# endif
+#  endif
 
-s390_libc_ifunc_expr (__redirect_memset, memset,
-		      ({
+s390_libc_ifunc_expr (__redirect_memset, memset, ({
 			s390_libc_ifunc_expr_stfle_init ();
 			(HAVE_MEMSET_Z196 && S390_IS_Z196 (stfle_bits))
-			  ? MEMSET_Z196
-			  : (HAVE_MEMSET_Z10 && S390_IS_Z10 (stfle_bits))
-			  ? MEMSET_Z10
-			  : MEMSET_DEFAULT;
-		      })
-		      )
+			    ? MEMSET_Z196
+			: (HAVE_MEMSET_Z10 && S390_IS_Z10 (stfle_bits))
+			    ? MEMSET_Z10
+			    : MEMSET_DEFAULT;
+		      }))
 #endif

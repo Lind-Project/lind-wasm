@@ -41,5 +41,4 @@ __getpriority (enum __priority_which which, id_t who)
     res = PZERO - res;
   return res;
 }
-libc_hidden_def (__getpriority)
-weak_alias (__getpriority, getpriority)
+libc_hidden_def (__getpriority) weak_alias (__getpriority, getpriority)

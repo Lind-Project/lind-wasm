@@ -48,14 +48,14 @@ handler (int signal, siginfo_t *info, void *ctx)
     {
       const char *marker;
       if ((uintptr_t) callstack[i] == pc)
-        {
-          found = true;
-          marker = " *";
-        }
+	{
+	  found = true;
+	  marker = " *";
+	}
       else
-        marker = "";
-      printf ("info: call stack entry %d: 0x%" PRIxPTR "%s\n",
-              i, (uintptr_t) callstack[i], marker);
+	marker = "";
+      printf ("info: call stack entry %d: 0x%" PRIxPTR "%s\n", i,
+	      (uintptr_t) callstack[i], marker);
     }
   TEST_VERIFY (found);
   handler_called = true;
@@ -64,11 +64,7 @@ handler (int signal, siginfo_t *info, void *ctx)
 static int
 do_test (void)
 {
-  struct sigaction sa =
-    {
-     .sa_sigaction = &handler,
-     .sa_flags = SA_SIGINFO
-    };
+  struct sigaction sa = { .sa_sigaction = &handler, .sa_flags = SA_SIGINFO };
   xsigaction (SIGUSR1, &sa, NULL);
   raise (SIGUSR1);
   TEST_VERIFY (handler_called);

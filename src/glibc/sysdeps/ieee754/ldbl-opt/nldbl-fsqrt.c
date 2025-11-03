@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef fsqrtl
 
-float
-attribute_hidden
+float attribute_hidden
 fsqrtl (double x)
 {
   return fsqrt (x);

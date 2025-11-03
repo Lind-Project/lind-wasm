@@ -21,7 +21,6 @@
 #include <sys/types.h>
 #include <shlib-compat.h>
 
-
 int
 __pthread_setaffinity_new (pthread_t th, size_t cpusetsize,
 			   const cpu_set_t *cpuset)
@@ -29,22 +28,19 @@ __pthread_setaffinity_new (pthread_t th, size_t cpusetsize,
   const struct pthread *pd = (const struct pthread *) th;
   int res;
 
-  res = INTERNAL_SYSCALL_CALL (sched_setaffinity, pd->tid, cpusetsize,
-			       cpuset);
+  res = INTERNAL_SYSCALL_CALL (sched_setaffinity, pd->tid, cpusetsize, cpuset);
 
-  return (INTERNAL_SYSCALL_ERROR_P (res)
-	  ? INTERNAL_SYSCALL_ERRNO (res)
-	  : 0);
+  return (INTERNAL_SYSCALL_ERROR_P (res) ? INTERNAL_SYSCALL_ERRNO (res) : 0);
 }
-versioned_symbol (libc, __pthread_setaffinity_new,
-		  pthread_setaffinity_np, GLIBC_2_34);
+versioned_symbol (libc, __pthread_setaffinity_new, pthread_setaffinity_np,
+		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_3_4, GLIBC_2_34)
-compat_symbol (libpthread, __pthread_setaffinity_new,
-	       pthread_setaffinity_np, GLIBC_2_3_4);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_3_4, GLIBC_2_34)
+compat_symbol (libpthread, __pthread_setaffinity_new, pthread_setaffinity_np,
+	       GLIBC_2_3_4);
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_3_3, GLIBC_2_3_4)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_3_3, GLIBC_2_3_4)
 int
 __pthread_setaffinity_old (pthread_t th, cpu_set_t *cpuset)
 {

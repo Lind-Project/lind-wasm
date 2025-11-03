@@ -72,7 +72,6 @@ tf (void *p)
   return NULL;
 }
 
-
 static int
 do_test (void)
 {
@@ -101,7 +100,7 @@ do_test (void)
       while (count != N);
 
       if (i & 1)
-        pthread_mutex_unlock (&mut);
+	pthread_mutex_unlock (&mut);
 
       if (i & 2)
 	pthread_cond_broadcast (&cond);
@@ -116,7 +115,7 @@ do_test (void)
 	}
 
       if ((i & 1) == 0)
-        pthread_mutex_unlock (&mut);
+	pthread_mutex_unlock (&mut);
 
       err = pthread_cond_destroy (&cond);
       if (err)
@@ -126,7 +125,7 @@ do_test (void)
 	}
 
       /* Now clobber the cond variable which has been successfully
-         destroyed above.  */
+	 destroyed above.  */
       memset (&cond, (char) i, sizeof (cond));
 
       err = pthread_barrier_wait (&b);
@@ -165,7 +164,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

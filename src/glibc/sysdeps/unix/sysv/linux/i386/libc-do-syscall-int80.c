@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef SHARED
-# define I386_USE_SYSENTER 0
-# include <sysdep.h>
+#  define I386_USE_SYSENTER 0
+#  include <sysdep.h>
 
-# define __libc_do_syscall __libc_do_syscall_int80
-# include "libc-do-syscall.c"
+#  define __libc_do_syscall __libc_do_syscall_int80
+#  include "libc-do-syscall.c"
 #endif

@@ -17,17 +17,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef SECTION
-# define SECTION(p)	p
+#  define SECTION(p) p
 #endif
 
-	.section SECTION(.text),"ax",@progbits
+.section SECTION(.text),"ax",@progbits
 #ifdef _dl_runtime_resolve
 
-# undef REGISTER_SAVE_AREA
-# undef LOCAL_STORAGE_AREA
-# undef BASE
+#  undef REGISTER_SAVE_AREA
+#  undef LOCAL_STORAGE_AREA
+#  undef BASE
 
-# include "dl-trampoline-state.h"
+#  include "dl-trampoline-state.h"
 
 	.globl _dl_runtime_resolve
 	.hidden _dl_runtime_resolve
@@ -37,31 +37,31 @@
 _dl_runtime_resolve:
 	cfi_adjust_cfa_offset(16) # Incorporate PLT
 	_CET_ENDBR
-# if DL_RUNTIME_RESOLVE_REALIGN_STACK
-#  if LOCAL_STORAGE_AREA != 8
-#   error LOCAL_STORAGE_AREA must be 8
-#  endif
+#  if DL_RUNTIME_RESOLVE_REALIGN_STACK
+#    if LOCAL_STORAGE_AREA != 8
+#      error LOCAL_STORAGE_AREA must be 8
+#    endif
 	pushq %rbx			# push subtracts stack by 8.
 	cfi_adjust_cfa_offset(8)
 	cfi_rel_offset(%rbx, 0)
 	mov %RSP_LP, %RBX_LP
 	cfi_def_cfa_register(%rbx)
 	and $-STATE_SAVE_ALIGNMENT, %RSP_LP
-# endif
-# ifdef REGISTER_SAVE_AREA
+#  endif
+#  ifdef REGISTER_SAVE_AREA
 	sub $REGISTER_SAVE_AREA, %RSP_LP
-#  if !DL_RUNTIME_RESOLVE_REALIGN_STACK
+#    if !DL_RUNTIME_RESOLVE_REALIGN_STACK
 	cfi_adjust_cfa_offset(REGISTER_SAVE_AREA)
-#  endif
-# else
-	# Allocate stack space of the required size to save the state.
-#  if IS_IN (rtld)
-	sub _rtld_local_ro+RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_OFFSET+XSAVE_STATE_SIZE_OFFSET(%rip), %RSP_LP
+#    endif
 #  else
+#    Allocate stack space of the required size to save the state.
+#    if IS_IN(rtld)
+	sub _rtld_local_ro+RTLD_GLOBAL_RO_DL_X86_CPU_FEATURES_OFFSET+XSAVE_STATE_SIZE_OFFSET(%rip), %RSP_LP
+#    else
 	sub _dl_x86_cpu_features+XSAVE_STATE_SIZE_OFFSET(%rip), %RSP_LP
+#    endif
 #  endif
-# endif
-	# Preserve registers otherwise clobbered.
+#  Preserve registers otherwise clobbered.
 	movq %rax, REGISTER_SAVE_RAX(%rsp)
 	movq %rcx, REGISTER_SAVE_RCX(%rsp)
 	movq %rdx, REGISTER_SAVE_RDX(%rsp)
@@ -69,42 +69,42 @@ _dl_runtime_resolve:
 	movq %rdi, REGISTER_SAVE_RDI(%rsp)
 	movq %r8, REGISTER_SAVE_R8(%rsp)
 	movq %r9, REGISTER_SAVE_R9(%rsp)
-# ifdef USE_FXSAVE
+#  ifdef USE_FXSAVE
 	fxsave STATE_SAVE_OFFSET(%rsp)
-# else
+#  else
 	movl $STATE_SAVE_MASK, %eax
 	xorl %edx, %edx
-	# Clear the XSAVE Header.
-#  ifdef USE_XSAVE
+#    Clear the XSAVE Header.
+#    ifdef USE_XSAVE
 	movq %rdx, (STATE_SAVE_OFFSET + 512)(%rsp)
 	movq %rdx, (STATE_SAVE_OFFSET + 512 + 8)(%rsp)
-#  endif
+#    endif
 	movq %rdx, (STATE_SAVE_OFFSET + 512 + 8 * 2)(%rsp)
 	movq %rdx, (STATE_SAVE_OFFSET + 512 + 8 * 3)(%rsp)
 	movq %rdx, (STATE_SAVE_OFFSET + 512 + 8 * 4)(%rsp)
 	movq %rdx, (STATE_SAVE_OFFSET + 512 + 8 * 5)(%rsp)
 	movq %rdx, (STATE_SAVE_OFFSET + 512 + 8 * 6)(%rsp)
 	movq %rdx, (STATE_SAVE_OFFSET + 512 + 8 * 7)(%rsp)
-#  ifdef USE_XSAVE
+#    ifdef USE_XSAVE
 	xsave STATE_SAVE_OFFSET(%rsp)
-#  else
+#    else
 	xsavec STATE_SAVE_OFFSET(%rsp)
+#    endif
 #  endif
-# endif
-	# Copy args pushed by PLT in register.
-	# %rdi: link_map, %rsi: reloc_index
+#  Copy args pushed by PLT in register.
+#  % rdi : link_map, % rsi : reloc_index
 	mov (LOCAL_STORAGE_AREA + 8)(%BASE), %RSI_LP
 	mov LOCAL_STORAGE_AREA(%BASE), %RDI_LP
 	call _dl_fixup		# Call resolver.
 	mov %RAX_LP, %R11_LP	# Save return value
-	# Get register content back.
-# ifdef USE_FXSAVE
+#  Get register content back.
+#  ifdef USE_FXSAVE
 	fxrstor STATE_SAVE_OFFSET(%rsp)
-# else
+#  else
 	movl $STATE_SAVE_MASK, %eax
 	xorl %edx, %edx
 	xrstor STATE_SAVE_OFFSET(%rsp)
-# endif
+#  endif
 	movq REGISTER_SAVE_R9(%rsp), %r9
 	movq REGISTER_SAVE_R8(%rsp), %r8
 	movq REGISTER_SAVE_RDI(%rsp), %rdi
@@ -112,13 +112,13 @@ _dl_runtime_resolve:
 	movq REGISTER_SAVE_RDX(%rsp), %rdx
 	movq REGISTER_SAVE_RCX(%rsp), %rcx
 	movq REGISTER_SAVE_RAX(%rsp), %rax
-# if DL_RUNTIME_RESOLVE_REALIGN_STACK
+#  if DL_RUNTIME_RESOLVE_REALIGN_STACK
 	mov %RBX_LP, %RSP_LP
 	cfi_def_cfa_register(%rsp)
 	movq (%rsp), %rbx
 	cfi_restore(%rbx)
-# endif
-	# Adjust stack(PLT did 2 pushes)
+#  endif
+#  Adjust stack(PLT did 2 pushes)
 	add $(LOCAL_STORAGE_AREA + 16), %RSP_LP
 	cfi_adjust_cfa_offset(-(LOCAL_STORAGE_AREA + 16))
 	jmp *%r11		# Jump to function address.
@@ -126,11 +126,10 @@ _dl_runtime_resolve:
 	.size _dl_runtime_resolve, .-_dl_runtime_resolve
 #endif
 
-
 #if !defined PROF && defined _dl_runtime_profile
-# if (LR_VECTOR_OFFSET % VEC_SIZE) != 0
-#  error LR_VECTOR_OFFSET must be multiple of VEC_SIZE
-# endif
+#  if (LR_VECTOR_OFFSET % VEC_SIZE) != 0
+#    error LR_VECTOR_OFFSET must be multiple of VEC_SIZE
+#  endif
 
 	.globl _dl_runtime_profile
 	.hidden _dl_runtime_profile
@@ -200,7 +199,7 @@ _dl_runtime_profile:
 	VMOVA %xmm6, (LR_XMM_OFFSET + XMM_SIZE*6)(%rsp)
 	VMOVA %xmm7, (LR_XMM_OFFSET + XMM_SIZE*7)(%rsp)
 
-# ifdef RESTORE_AVX
+#  ifdef RESTORE_AVX
 	/* This is to support AVX audit modules.  */
 	VMOVA %VEC(0), (LR_VECTOR_OFFSET + VECTOR_SIZE*0)(%rsp)
 	VMOVA %VEC(1), (LR_VECTOR_OFFSET + VECTOR_SIZE*1)(%rsp)
@@ -221,7 +220,7 @@ _dl_runtime_profile:
 	vmovdqa %xmm5, (LR_SIZE + XMM_SIZE*5)(%rsp)
 	vmovdqa %xmm6, (LR_SIZE + XMM_SIZE*6)(%rsp)
 	vmovdqa %xmm7, (LR_SIZE + XMM_SIZE*7)(%rsp)
-# endif
+#  endif
 
 	mov %RSP_LP, %RCX_LP	# La_x86_64_regs pointer to %rcx.
 	mov 48(%rbx), %RDX_LP	# Load return address if needed.
@@ -246,7 +245,7 @@ _dl_runtime_profile:
 	VMOVA (LR_XMM_OFFSET + XMM_SIZE*6)(%rsp), %xmm6
 	VMOVA (LR_XMM_OFFSET + XMM_SIZE*7)(%rsp), %xmm7
 
-# ifdef RESTORE_AVX
+#  ifdef RESTORE_AVX
 	/* Check if any xmm0-xmm7 registers are changed by audit
 	   module.  */
 	vpcmpeqb (LR_SIZE)(%rsp), %xmm0, %xmm8
@@ -322,7 +321,7 @@ _dl_runtime_profile:
 	vmovdqa	%xmm7, (LR_XMM_OFFSET + XMM_SIZE*7)(%rsp)
 
 1:
-# endif
+#  endif
 
 	mov  16(%rbx), %RCX_LP	# Anything in framesize?
 	test %RCX_LP, %RCX_LP
@@ -342,7 +341,7 @@ _dl_runtime_profile:
 	cfi_def_cfa_register(%rsp)
 
 	add $48, %RSP_LP	# Adjust the stack to the return value
-				# (eats the reloc index and link_map)
+#  (eats the reloc index and link_map)
 	cfi_adjust_cfa_offset(-48)
 	jmp *%r11		# Jump to function address.
 
@@ -371,26 +370,26 @@ _dl_runtime_profile:
 
 	mov 24(%rbx), %RSP_LP	# Drop the copied stack content
 
-	/* Now we have to prepare the La_x86_64_retval structure for the
-	   _dl_audit_pltexit.  The La_x86_64_regs is being pointed by rsp now,
-	   so we just need to allocate the sizeof(La_x86_64_retval) space on
-	   the stack, since the alignment has already been taken care of. */
-# ifdef RESTORE_AVX
-	/* sizeof(La_x86_64_retval).  Need extra space for 2 SSE
-	   registers to detect if xmm0/xmm1 registers are changed
-	   by audit module.  Since rsp is aligned to VEC_SIZE, we
-	   need to make sure that the address of La_x86_64_retval +
-	   LRV_VECTOR0_OFFSET is aligned to VEC_SIZE.  */
-#  define LRV_SPACE (LRV_SIZE + XMM_SIZE*2)
-#  define LRV_MISALIGNED ((LRV_SIZE + LRV_VECTOR0_OFFSET) & (VEC_SIZE - 1))
-#  if LRV_MISALIGNED == 0
+/* Now we have to prepare the La_x86_64_retval structure for the
+   _dl_audit_pltexit.  The La_x86_64_regs is being pointed by rsp now,
+   so we just need to allocate the sizeof(La_x86_64_retval) space on
+   the stack, since the alignment has already been taken care of. */
+#  ifdef RESTORE_AVX
+/* sizeof(La_x86_64_retval).  Need extra space for 2 SSE
+   registers to detect if xmm0/xmm1 registers are changed
+   by audit module.  Since rsp is aligned to VEC_SIZE, we
+   need to make sure that the address of La_x86_64_retval +
+   LRV_VECTOR0_OFFSET is aligned to VEC_SIZE.  */
+#    define LRV_SPACE (LRV_SIZE + XMM_SIZE * 2)
+#    define LRV_MISALIGNED ((LRV_SIZE + LRV_VECTOR0_OFFSET) & (VEC_SIZE - 1))
+#    if LRV_MISALIGNED == 0
 	sub $LRV_SPACE, %RSP_LP
-#  else
+#    else
 	sub $(LRV_SPACE + VEC_SIZE - LRV_MISALIGNED), %RSP_LP
-#  endif
-# else
+#    endif
+#  else
 	sub $LRV_SIZE, %RSP_LP	# sizeof(La_x86_64_retval)
-# endif
+#  endif
 	mov %RSP_LP, %RCX_LP	# La_x86_64_retval argument to %rcx.
 
 	/* Fill in the La_x86_64_retval structure.  */
@@ -400,7 +399,7 @@ _dl_runtime_profile:
 	VMOVA %xmm0, LRV_XMM0_OFFSET(%rcx)
 	VMOVA %xmm1, LRV_XMM1_OFFSET(%rcx)
 
-# ifdef RESTORE_AVX
+#  ifdef RESTORE_AVX
 	/* This is to support AVX audit modules.  */
 	VMOVA %VEC(0), LRV_VECTOR0_OFFSET(%rcx)
 	VMOVA %VEC(1), LRV_VECTOR1_OFFSET(%rcx)
@@ -409,7 +408,7 @@ _dl_runtime_profile:
 	   by audit module.  */
 	vmovdqa %xmm0, (LRV_SIZE + XMM_SIZE*0)(%rcx)
 	vmovdqa %xmm1, (LRV_SIZE + XMM_SIZE*1)(%rcx)
-# endif
+#  endif
 
 	fstpt LRV_ST0_OFFSET(%rcx)
 	fstpt LRV_ST1_OFFSET(%rcx)
@@ -426,7 +425,7 @@ _dl_runtime_profile:
 	VMOVA LRV_XMM0_OFFSET(%rsp), %xmm0
 	VMOVA LRV_XMM1_OFFSET(%rsp), %xmm1
 
-# ifdef RESTORE_AVX
+#  ifdef RESTORE_AVX
 	/* Check if xmm0/xmm1 registers are changed by audit module.  */
 	vpcmpeqb (LRV_SIZE)(%rsp), %xmm0, %xmm2
 	vpmovmskb %xmm2, %esi
@@ -441,7 +440,7 @@ _dl_runtime_profile:
 	VMOVA LRV_VECTOR1_OFFSET(%rsp), %VEC(1)
 
 1:
-# endif
+#  endif
 
 	fldt LRV_ST1_OFFSET(%rsp)
 	fldt LRV_ST0_OFFSET(%rsp)
@@ -452,7 +451,7 @@ _dl_runtime_profile:
 	cfi_def_cfa_register(%rsp)
 
 	add $48, %RSP_LP	# Adjust the stack to the return value
-				# (eats the reloc index and link_map)
+#  (eats the reloc index and link_map)
 	cfi_adjust_cfa_offset(-48)
 	retq
 

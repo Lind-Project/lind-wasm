@@ -17,21 +17,20 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define rawmemchr __redirect_rawmemchr
-# define __rawmemchr __redirect___rawmemchr
-# include <string.h>
-# undef rawmemchr
-# undef __rawmemchr
+#if IS_IN(libc)
+#  define rawmemchr __redirect_rawmemchr
+#  define __rawmemchr __redirect___rawmemchr
+#  include <string.h>
+#  undef rawmemchr
+#  undef __rawmemchr
 
-# define SYMBOL_NAME rawmemchr
-# include "ifunc-rawmemchr.h"
+#  define SYMBOL_NAME rawmemchr
+#  include "ifunc-rawmemchr.h"
 
-libc_ifunc_redirected (__redirect_rawmemchr, __rawmemchr,
-                       IFUNC_SELECTOR ());
+libc_ifunc_redirected (__redirect_rawmemchr, __rawmemchr, IFUNC_SELECTOR ());
 weak_alias (__rawmemchr, rawmemchr)
-# ifdef SHARED
-__hidden_ver1 (__rawmemchr, __GI___rawmemchr, __redirect___rawmemchr)
-  __attribute__((visibility ("hidden")));
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (__rawmemchr, __GI___rawmemchr, __redirect___rawmemchr)
+	__attribute__ ((visibility ("hidden")));
+#  endif
 #endif

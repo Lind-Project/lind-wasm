@@ -21,7 +21,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 int
 do_test (void)
 {
@@ -84,7 +83,8 @@ do_test (void)
 	  if (s != PTHREAD_CREATE_JOINABLE)
 	    {
 	      printf ("\
-detach state changed to %d by invalid setdetachstate call\n", s);
+detach state changed to %d by invalid setdetachstate call\n",
+		      s);
 	      exit (1);
 	    }
 	}
@@ -114,7 +114,8 @@ detach state changed to %d by invalid setdetachstate call\n", s);
 	  if (s != PTHREAD_INHERIT_SCHED)
 	    {
 	      printf ("\
-inheritsched changed to %d by invalid setinheritsched call\n", s);
+inheritsched changed to %d by invalid setinheritsched call\n",
+		      s);
 	      exit (1);
 	    }
 	}
@@ -144,7 +145,8 @@ inheritsched changed to %d by invalid setinheritsched call\n", s);
 	  if (s != SCHED_OTHER)
 	    {
 	      printf ("\
-schedpolicy changed to %d by invalid setschedpolicy call\n", s);
+schedpolicy changed to %d by invalid setschedpolicy call\n",
+		      s);
 	      exit (1);
 	    }
 	}
@@ -174,7 +176,8 @@ schedpolicy changed to %d by invalid setschedpolicy call\n", s);
 	  if (s != PTHREAD_SCOPE_SYSTEM)
 	    {
 	      printf ("\
-contentionscope changed to %d by invalid setscope call\n", s);
+contentionscope changed to %d by invalid setscope call\n",
+		      s);
 	      exit (1);
 	    }
 	}
@@ -204,7 +207,8 @@ contentionscope changed to %d by invalid setscope call\n", s);
 	  if (s != PTHREAD_PROCESS_PRIVATE)
 	    {
 	      printf ("\
-pshared changed to %d by invalid mutexattr_setpshared call\n", s);
+pshared changed to %d by invalid mutexattr_setpshared call\n",
+		      s);
 	      exit (1);
 	    }
 
@@ -230,7 +234,8 @@ pshared changed to %d by invalid mutexattr_setpshared call\n", s);
 	  if (s != PTHREAD_PROCESS_PRIVATE)
 	    {
 	      printf ("\
-pshared changed to %d by invalid rwlockattr_setpshared call\n", s);
+pshared changed to %d by invalid rwlockattr_setpshared call\n",
+		      s);
 	      exit (1);
 	    }
 	}
@@ -298,7 +303,6 @@ pshared changed to %d by invalid rwlockattr_setpshared call\n", s);
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

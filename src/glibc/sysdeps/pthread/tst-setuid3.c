@@ -27,11 +27,21 @@ static const uid_t test_uid = 1;
 static pthread_barrier_t barrier1;
 static pthread_barrier_t barrier2;
 
-#define FAIL(fmt, ...) \
-  do { printf ("FAIL: " fmt "\n", __VA_ARGS__); _exit (1); } while (0)
+#define FAIL(fmt, ...)                                                        \
+  do                                                                          \
+    {                                                                         \
+      printf ("FAIL: " fmt "\n", __VA_ARGS__);                                \
+      _exit (1);                                                              \
+    }                                                                         \
+  while (0)
 
-#define FAIL_ERR(fmt, ...) \
-  do { printf ("FAIL: " fmt ": %m\n", __VA_ARGS__); _exit (1); } while (0)
+#define FAIL_ERR(fmt, ...)                                                    \
+  do                                                                          \
+    {                                                                         \
+      printf ("FAIL: " fmt ": %m\n", __VA_ARGS__);                            \
+      _exit (1);                                                              \
+    }                                                                         \
+  while (0)
 
 /* True if x is not a successful return code from pthread_barrier_wait.  */
 static inline bool

@@ -26,7 +26,7 @@
    case there are machine-specific rules to disregard some
    symbols.  */
 static inline bool
-elf_machine_sym_no_match (const ElfW(Sym) *sym)
+elf_machine_sym_no_match (const ElfW (Sym) * sym)
 {
   return false;
 }

@@ -21,7 +21,7 @@
 
 extern int
 ___ieee128___swprintf_chk (wchar_t *string, size_t maxlen, int flag,
-			size_t slen, const wchar_t *format, ...)
+			   size_t slen, const wchar_t *format, ...)
 {
   va_list ap;
   int done;

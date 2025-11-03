@@ -31,10 +31,9 @@
 #include <ieee754.h>
 
 #ifdef USE_AS_NEARBYINTL
-# define rintl nearbyintl
-# define __rintl __nearbyintl
+#  define rintl nearbyintl
+#  define __rintl __nearbyintl
 #endif
-
 
 long double
 __rintl (long double x)
@@ -44,9 +43,10 @@ __rintl (long double x)
   ldbl_unpack (x, &xh, &xl);
 
   /* Return Inf, Nan, +/-0 unchanged.  */
-  if (__builtin_expect (xh != 0.0
-			&& __builtin_isless (__builtin_fabs (xh),
-					     __builtin_inf ()), 1))
+  if (__builtin_expect (
+	  xh != 0.0
+	      && __builtin_isless (__builtin_fabs (xh), __builtin_inf ()),
+	  1))
     {
       double orig_xh;
       int save_round = fegetround ();
@@ -107,7 +107,7 @@ __rintl (long double x)
 	}
 
       /* Ensure the final value is canonical.  In certain cases,
-         rounding causes hi,lo calculated so far to be non-canonical.  */
+	 rounding causes hi,lo calculated so far to be non-canonical.  */
       xh = hi;
       xl = lo;
       ldbl_canonicalize (&xh, &xl);

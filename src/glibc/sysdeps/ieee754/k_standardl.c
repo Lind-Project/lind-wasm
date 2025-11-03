@@ -37,7 +37,6 @@
 #include <float.h>
 #include <errno.h>
 
-
 #if LIBM_SVID_COMPAT
 
 static double zero = 0.0;

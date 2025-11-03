@@ -22,10 +22,8 @@
 
 #include <shlib-compat.h>
 
-
 struct pthread_attr *__attr_list;
 int __attr_list_lock = LLL_LOCK_INITIALIZER;
-
 
 int
 __pthread_attr_init (pthread_attr_t *attr)
@@ -48,8 +46,7 @@ __pthread_attr_init (pthread_attr_t *attr)
   return 0;
 }
 libc_hidden_def (__pthread_attr_init)
-versioned_symbol (libc, __pthread_attr_init, pthread_attr_init, GLIBC_2_1);
-
+    versioned_symbol (libc, __pthread_attr_init, pthread_attr_init, GLIBC_2_1);
 
 #if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_1)
 int

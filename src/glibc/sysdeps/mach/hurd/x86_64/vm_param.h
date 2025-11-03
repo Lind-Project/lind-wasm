@@ -16,9 +16,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _X86_86_VM_PARAM_H
-#define _X86_64_VM_PARAM_H
+#  define _X86_64_VM_PARAM_H
 
-/* Arbitrary start of the brk. This is after usual binary and library mappings.  */
-#define BRK_START	0x200000000000
+/* Arbitrary start of the brk. This is after usual binary and library mappings.
+ */
+#  define BRK_START 0x200000000000
 
 #endif /* x86_64/vm_param.h */

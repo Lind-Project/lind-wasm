@@ -23,7 +23,7 @@ int
 __fesetenv (const fenv_t *envp)
 {
   if (envp == FE_DFL_ENV)
-      _FPU_SETCW (_FPU_DEFAULT);
+    _FPU_SETCW (_FPU_DEFAULT);
   else
     {
       fpu_control_t temp = envp->__fpscr;
@@ -31,6 +31,5 @@ __fesetenv (const fenv_t *envp)
     }
   return 0;
 }
-libm_hidden_def (__fesetenv)
-weak_alias (__fesetenv, fesetenv)
-libm_hidden_weak (fesetenv)
+libm_hidden_def (__fesetenv) weak_alias (__fesetenv, fesetenv)
+    libm_hidden_weak (fesetenv)

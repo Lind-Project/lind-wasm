@@ -19,22 +19,21 @@
 #include <ifunc-strlen.h>
 
 #if HAVE_STRLEN_IFUNC
-# define strlen __redirect_strlen
-# include <string.h>
-# include <ifunc-resolve.h>
-# undef strlen
+#  define strlen __redirect_strlen
+#  include <string.h>
+#  include <ifunc-resolve.h>
+#  undef strlen
 
-# if HAVE_STRLEN_C
+#  if HAVE_STRLEN_C
 extern __typeof (__redirect_strlen) STRLEN_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_STRLEN_Z13
+#  if HAVE_STRLEN_Z13
 extern __typeof (__redirect_strlen) STRLEN_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect_strlen, strlen,
 		      (HAVE_STRLEN_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? STRLEN_Z13
-		      : STRLEN_DEFAULT
-		      )
+			  ? STRLEN_Z13
+			  : STRLEN_DEFAULT)
 #endif

@@ -21,7 +21,6 @@
 #include <time.h>
 #include <unistd.h>
 
-
 #if defined _POSIX_CLOCK_SELECTION && _POSIX_CLOCK_SELECTION >= 0
 static int
 check (pthread_condattr_t *condattr, int pshared, clockid_t cl)
@@ -47,8 +46,8 @@ check (pthread_condattr_t *condattr, int pshared, clockid_t cl)
     }
   else if (p != pshared)
     {
-      printf ("condattr_getpshared returned wrong value: %d, expected %d\n",
-	      p, pshared);
+      printf ("condattr_getpshared returned wrong value: %d, expected %d\n", p,
+	      pshared);
       return 1;
     }
 
@@ -144,7 +143,6 @@ run_test (clockid_t cl)
 }
 #endif
 
-
 static int
 do_test (void)
 {
@@ -157,8 +155,8 @@ do_test (void)
 
   int res = run_test (CLOCK_REALTIME);
 
-# if defined _POSIX_MONOTONIC_CLOCK && _POSIX_MONOTONIC_CLOCK >= 0
-#  if _POSIX_MONOTONIC_CLOCK == 0
+#  if defined _POSIX_MONOTONIC_CLOCK && _POSIX_MONOTONIC_CLOCK >= 0
+#    if _POSIX_MONOTONIC_CLOCK == 0
   int e = sysconf (_SC_MONOTONIC_CLOCK);
   if (e < 0)
     puts ("CLOCK_MONOTONIC not supported");
@@ -168,11 +166,11 @@ do_test (void)
       res = 1;
     }
   else
-#  endif
+#    endif
     res |= run_test (CLOCK_MONOTONIC);
-# else
+#  else
   puts ("_POSIX_MONOTONIC_CLOCK not defined");
-# endif
+#  endif
 
   return res;
 #endif

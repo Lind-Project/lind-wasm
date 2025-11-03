@@ -33,4 +33,4 @@ ___ieee128___asprintf (char **string_ptr, const char *format, ...)
   return done;
 }
 hidden_def (___ieee128___asprintf)
-strong_alias (___ieee128___asprintf, __asprintfieee128)
+    strong_alias (___ieee128___asprintf, __asprintfieee128)

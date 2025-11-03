@@ -44,20 +44,20 @@ getentropy (void *buffer, size_t length)
       /* NB: No cancellation point.  */
       ssize_t bytes = INLINE_SYSCALL_CALL (getrandom, buffer, end - buffer, 0);
       if (bytes < 0)
-        {
-          if (errno == EINTR)
-            /* Try again if interrupted by a signal.  */
-            continue;
-          else
-            return -1;
-        }
+	{
+	  if (errno == EINTR)
+	    /* Try again if interrupted by a signal.  */
+	    continue;
+	  else
+	    return -1;
+	}
       if (bytes == 0)
-        {
-          /* No more bytes available.  This should not happen under
-             normal circumstances.  */
-          __set_errno (EIO);
-          return -1;
-        }
+	{
+	  /* No more bytes available.  This should not happen under
+	     normal circumstances.  */
+	  __set_errno (EIO);
+	  return -1;
+	}
       /* Try again in case of a short read.  */
       buffer += bytes;
     }

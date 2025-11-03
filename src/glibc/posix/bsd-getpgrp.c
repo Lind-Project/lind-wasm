@@ -21,8 +21,7 @@
 /* Don't include unistd.h because it declares a conflicting
    prototype for the POSIX.1 `getpgrp' function.  */
 extern pid_t __getpgid (pid_t);
-libc_hidden_proto (__getpgid)
-extern pid_t __bsd_getpgrp (pid_t);
+libc_hidden_proto (__getpgid) extern pid_t __bsd_getpgrp (pid_t);
 
 pid_t
 __bsd_getpgrp (pid_t pid)

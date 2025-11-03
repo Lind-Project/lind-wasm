@@ -170,8 +170,7 @@ main (int argc, char **argv)
 	    {
 	      char buf[500];
 	      regerror (n, &re, buf, sizeof (buf));
-	      printf ("FAIL regcomp unexpectedly failed: %s\n",
-		      buf);
+	      printf ("FAIL regcomp unexpectedly failed: %s\n", buf);
 	      ret = 1;
 	    }
 	  continue;
@@ -211,8 +210,8 @@ main (int argc, char **argv)
 
 	  if (rm[i].rm_so != rm_so || rm[i].rm_eo != rm_eo)
 	    {
-	      printf ("FAIL rm[%d] %d..%d != expected %d..%d\n",
-		      i, rm[i].rm_so, rm[i].rm_eo, rm_so, rm_eo);
+	      printf ("FAIL rm[%d] %d..%d != expected %d..%d\n", i,
+		      rm[i].rm_so, rm[i].rm_eo, rm_so, rm_eo);
 	      ret = 1;
 	      break;
 	    }

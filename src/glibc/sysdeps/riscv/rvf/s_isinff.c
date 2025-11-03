@@ -25,5 +25,4 @@ __isinff (float x)
   int cls = _FCLASS (x);
   return -((cls & _FCLASS_MINF) ? 1 : 0) | ((cls & _FCLASS_PINF) ? 1 : 0);
 }
-hidden_def (__isinff)
-weak_alias (__isinff, isinff)
+hidden_def (__isinff) weak_alias (__isinff, isinff)

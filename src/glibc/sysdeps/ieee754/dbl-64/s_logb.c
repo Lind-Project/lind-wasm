@@ -32,7 +32,7 @@ __logb (double x)
   int64_t ix, ex;
 
   EXTRACT_WORDS64 (ix, x);
-  ix &= UINT64_C(0x7fffffffffffffff);
+  ix &= UINT64_C (0x7fffffffffffffff);
   if (ix == 0)
     return -1.0 / fabs (x);
   ex = ix >> 52;

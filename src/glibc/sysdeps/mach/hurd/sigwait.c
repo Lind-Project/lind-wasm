@@ -30,10 +30,9 @@ __sigwait (const sigset_t *set, int *sig)
     return -1;
 
   if (!ret)
-    return __hurd_fail(EAGAIN);
+    return __hurd_fail (EAGAIN);
 
   *sig = ret;
   return 0;
 }
-libc_hidden_def (__sigwait)
-weak_alias (__sigwait, sigwait)
+libc_hidden_def (__sigwait) weak_alias (__sigwait, sigwait)

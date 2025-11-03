@@ -33,14 +33,14 @@ __mpn_construct_double (mp_srcptr frac_ptr, int expt, int negative)
   u.ieee.exponent = expt + IEEE754_DOUBLE_BIAS;
 #if BITS_PER_MP_LIMB == 32
   u.ieee.mantissa1 = frac_ptr[0];
-  u.ieee.mantissa0 = frac_ptr[1] & (((mp_limb_t) 1
-				     << (DBL_MANT_DIG - 32)) - 1);
+  u.ieee.mantissa0
+      = frac_ptr[1] & (((mp_limb_t) 1 << (DBL_MANT_DIG - 32)) - 1);
 #elif BITS_PER_MP_LIMB == 64
   u.ieee.mantissa1 = frac_ptr[0] & (((mp_limb_t) 1 << 32) - 1);
-  u.ieee.mantissa0 = (frac_ptr[0] >> 32) & (((mp_limb_t) 1
-					     << (DBL_MANT_DIG - 32)) - 1);
+  u.ieee.mantissa0
+      = (frac_ptr[0] >> 32) & (((mp_limb_t) 1 << (DBL_MANT_DIG - 32)) - 1);
 #else
-  # error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
+#  error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
 #endif
 
   return u.d;

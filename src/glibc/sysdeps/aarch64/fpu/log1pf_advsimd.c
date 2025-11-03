@@ -68,7 +68,8 @@ special_case (float32x4_t x, float32x4_t y, uint32x4_t special)
 /* Vector log1pf approximation using polynomial on reduced interval. Accuracy
    is roughly 2.02 ULP:
    log1pf(0x1.21e13ap-2) got 0x1.fe8028p-3 want 0x1.fe802cp-3.  */
-VPCS_ATTR float32x4_t V_NAME_F1 (log1p) (float32x4_t x)
+VPCS_ATTR float32x4_t
+V_NAME_F1 (log1p) (float32x4_t x)
 {
   const struct data *d = ptr_barrier (&data);
 
@@ -126,5 +127,4 @@ VPCS_ATTR float32x4_t V_NAME_F1 (log1p) (float32x4_t x)
     return special_case (special_arg, y, special_cases);
   return y;
 }
-libmvec_hidden_def (V_NAME_F1 (log1p))
-HALF_WIDTH_ALIAS_F1 (log1p)
+libmvec_hidden_def (V_NAME_F1 (log1p)) HALF_WIDTH_ALIAS_F1 (log1p)

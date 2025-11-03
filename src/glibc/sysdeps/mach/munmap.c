@@ -34,8 +34,8 @@ __munmap (void *addr, size_t len)
       return -1;
     }
 
-  if (err = __vm_deallocate (__mach_task_self (),
-			     (vm_address_t) addr, (vm_size_t) len))
+  if (err = __vm_deallocate (__mach_task_self (), (vm_address_t) addr,
+			     (vm_size_t) len))
     {
       errno = err;
       return -1;
@@ -43,5 +43,4 @@ __munmap (void *addr, size_t len)
   return 0;
 }
 
-libc_hidden_def (__munmap)
-weak_alias (__munmap, munmap)
+libc_hidden_def (__munmap) weak_alias (__munmap, munmap)

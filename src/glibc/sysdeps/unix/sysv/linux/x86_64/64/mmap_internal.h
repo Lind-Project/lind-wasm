@@ -24,18 +24,15 @@
 
 /* If the Prefer_MAP_32BIT_EXEC bit is set, try to map executable or
     denywrite pages with MAP_32BIT first.  */
-#define MMAP_PREPARE(addr, len, prot, flags, fd, offset)		\
-  if ((addr) == NULL							\
-      && (((prot) & PROT_EXEC) != 0					\
-	  || ((flags) & MAP_DENYWRITE) != 0)				\
-      && HAS_ARCH_FEATURE (Prefer_MAP_32BIT_EXEC))			\
-    {									\
-      void *ret = (void*) INLINE_SYSCALL_CALL (mmap, (addr), (len),	\
-					      (prot),			\
-					      (flags) | MAP_32BIT,	\
-					      (fd), (offset));		\
-      if (ret != MAP_FAILED)						\
-	return ret;							\
+#define MMAP_PREPARE(addr, len, prot, flags, fd, offset)                      \
+  if ((addr) == NULL                                                          \
+      && (((prot) & PROT_EXEC) != 0 || ((flags) & MAP_DENYWRITE) != 0)        \
+      && HAS_ARCH_FEATURE (Prefer_MAP_32BIT_EXEC))                            \
+    {                                                                         \
+      void *ret = (void *) INLINE_SYSCALL_CALL (                              \
+	  mmap, (addr), (len), (prot), (flags) | MAP_32BIT, (fd), (offset));  \
+      if (ret != MAP_FAILED)                                                  \
+	return ret;                                                           \
     }
 
 #include_next <mmap_internal.h>

@@ -22,7 +22,7 @@
 #include <pt-internal.h>
 
 int
-pthread_condattr_getclock (const pthread_condattr_t *attr, clockid_t * clock)
+pthread_condattr_getclock (const pthread_condattr_t *attr, clockid_t *clock)
 {
   *clock = attr->__clock;
   return 0;

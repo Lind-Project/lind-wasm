@@ -24,5 +24,4 @@ __isnanf (float x)
 {
   return (_FCLASS (x) & _FCLASS_NAN) != 0;
 }
-hidden_def (__isnanf)
-weak_alias (__isnanf, isnanf)
+hidden_def (__isnanf) weak_alias (__isnanf, isnanf)

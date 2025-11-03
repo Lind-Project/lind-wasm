@@ -67,5 +67,4 @@ __fmal (long double a, long double b, long double c)
 }
 DIAG_POP_NEEDS_COMMENT;
 
-libm_alias_ldouble (__fma, fma)
-libm_alias_ldouble_narrow (__fma, fma)
+libm_alias_ldouble (__fma, fma) libm_alias_ldouble_narrow (__fma, fma)

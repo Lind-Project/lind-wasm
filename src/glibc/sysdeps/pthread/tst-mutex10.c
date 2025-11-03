@@ -64,8 +64,8 @@ static int
 do_test (void)
 {
   unsigned int i;
-  printf ("Starting %d threads to run %lld iterations.\n",
-	  thread_count, iteration_count);
+  printf ("Starting %d threads to run %lld iterations.\n", thread_count,
+	  iteration_count);
 
   pthread_t *threads = xmalloc (thread_count * sizeof (pthread_t));
   xpthread_barrier_init (&barrier, NULL, thread_count);
@@ -83,11 +83,11 @@ do_test (void)
   return EXIT_SUCCESS;
 }
 
-#define OPT_ITERATIONS	10000
-#define OPT_THREADS	10001
-#define CMDLINE_OPTIONS						\
-  { "iterations", required_argument, NULL, OPT_ITERATIONS },	\
-  { "threads", required_argument, NULL, OPT_THREADS },
+#define OPT_ITERATIONS 10000
+#define OPT_THREADS 10001
+#define CMDLINE_OPTIONS                                                       \
+  { "iterations", required_argument, NULL, OPT_ITERATIONS },                  \
+      { "threads", required_argument, NULL, OPT_THREADS },
 static void
 cmdline_process (int c)
 {

@@ -28,4 +28,4 @@ __getgid (void)
 }
 stub_warning (getgid)
 
-weak_alias (__getgid, getgid)
+    weak_alias (__getgid, getgid)

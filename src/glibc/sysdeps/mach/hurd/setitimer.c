@@ -30,12 +30,12 @@
 /* XXX Temporary cheezoid implementation of ITIMER_REAL/SIGALRM.  */
 
 spin_lock_t _hurd_itimer_lock = SPIN_LOCK_INITIALIZER;
-struct itimerval _hurd_itimerval; /* Current state of the timer.  */
-mach_port_t _hurd_itimer_port;	/* Port the timer thread blocks on.  */
-thread_t _hurd_itimer_thread;	/* Thread waiting for timeout.  */
+struct itimerval _hurd_itimerval;  /* Current state of the timer.  */
+mach_port_t _hurd_itimer_port;	   /* Port the timer thread blocks on.  */
+thread_t _hurd_itimer_thread;	   /* Thread waiting for timeout.  */
 int _hurd_itimer_thread_suspended; /* Nonzero if that thread is suspended.  */
 vm_address_t _hurd_itimer_thread_stack_base; /* Base of its stack.  */
-vm_size_t _hurd_itimer_thread_stack_size; /* Size of its stack.  */
+vm_size_t _hurd_itimer_thread_stack_size;    /* Size of its stack.  */
 struct timeval _hurd_itimer_started; /* Time the thread started waiting.  */
 
 static void
@@ -76,24 +76,24 @@ timer_thread (void)
     {
       error_t err;
       /* The only message we ever expect to receive is the reply from the
-         signal thread to a sig_post call we did.  We never examine the
+	 signal thread to a sig_post call we did.  We never examine the
 	 contents.  */
       struct
-	{
-	  mach_msg_header_t header;
-	  mach_msg_type_t return_code_type;
-	  error_t return_code;
-	} msg;
+      {
+	mach_msg_header_t header;
+	mach_msg_type_t return_code_type;
+	error_t return_code;
+      } msg;
 
       /* Wait for a message on a port that no one sends to.  The purpose is
 	 the receive timeout.  Notice interrupts so that if we are
 	 thread_abort'd, we will loop around and fetch new values from
 	 _hurd_itimerval.  */
       err = __mach_msg (&msg.header,
-			MACH_RCV_MSG|MACH_RCV_TIMEOUT|MACH_RCV_INTERRUPT,
-			0, sizeof(msg), _hurd_itimer_port,
+			MACH_RCV_MSG | MACH_RCV_TIMEOUT | MACH_RCV_INTERRUPT,
+			0, sizeof (msg), _hurd_itimer_port,
 			_hurd_itimerval.it_value.tv_sec * 1000
-			+ _hurd_itimerval.it_value.tv_usec / 1000,
+			    + _hurd_itimerval.it_value.tv_usec / 1000,
 			MACH_PORT_NULL);
       switch (err)
 	{
@@ -103,10 +103,9 @@ timer_thread (void)
 	     _hurd_itimer_port as the reply port just so we will block until
 	     the signal thread has frobnicated things to reload the itimer or
 	     has terminated this thread.  */
-	  __msg_sig_post_request (_hurd_msgport,
-				  _hurd_itimer_port,
-				  MACH_MSG_TYPE_MAKE_SEND_ONCE,
-				  SIGALRM, SI_TIMER, __mach_task_self ());
+	  __msg_sig_post_request (_hurd_msgport, _hurd_itimer_port,
+				  MACH_MSG_TYPE_MAKE_SEND_ONCE, SIGALRM,
+				  SI_TIMER, __mach_task_self ());
 	  break;
 
 	case MACH_RCV_INTERRUPTED:
@@ -128,7 +127,6 @@ timer_thread (void)
     }
 }
 
-
 /* Forward declaration.  */
 static int setitimer_locked (const struct itimerval *new,
 			     struct itimerval *old, void *crit,
@@ -136,8 +134,8 @@ static int setitimer_locked (const struct itimerval *new,
 
 static sighandler_t
 restart_itimer (struct hurd_signal_preemptor *preemptor,
-		struct hurd_sigstate *ss,
-		int *signo, struct hurd_signal_detail *detail)
+		struct hurd_sigstate *ss, int *signo,
+		struct hurd_signal_detail *detail)
 {
   /* This function gets called in the signal thread
      each time a SIGALRM is arriving (even if blocked).  */
@@ -152,7 +150,6 @@ restart_itimer (struct hurd_signal_preemptor *preemptor,
   return SIG_ERR;
 }
 
-
 /* Called before any normal SIGALRM signal is delivered.
    Reload the itimer, or disable the itimer.  */
 
@@ -166,13 +163,12 @@ setitimer_locked (const struct itimerval *new, struct itimerval *old,
   error_t err;
 
   inline void kill_itimer_thread (void)
-    {
-      __thread_terminate (_hurd_itimer_thread);
-      __vm_deallocate (__mach_task_self (),
-		       _hurd_itimer_thread_stack_base,
-		       _hurd_itimer_thread_stack_size);
-      _hurd_itimer_thread = MACH_PORT_NULL;
-    }
+  {
+    __thread_terminate (_hurd_itimer_thread);
+    __vm_deallocate (__mach_task_self (), _hurd_itimer_thread_stack_base,
+		     _hurd_itimer_thread_stack_size);
+    _hurd_itimer_thread = MACH_PORT_NULL;
+  }
 
   if (!new)
     {
@@ -194,14 +190,15 @@ setitimer_locked (const struct itimerval *new, struct itimerval *old,
 
       /* Set up a signal preemptor global for all threads to
 	 run `restart_itimer' each time a SIGALRM would arrive.  */
-      static struct hurd_signal_preemptor preemptor =
-	{
-	  __sigmask (SIGALRM), SI_TIMER, SI_TIMER,
-	  &restart_itimer,
-	};
+      static struct hurd_signal_preemptor preemptor = {
+	__sigmask (SIGALRM),
+	SI_TIMER,
+	SI_TIMER,
+	&restart_itimer,
+      };
       if (!hurd_siglocked)
 	__mutex_lock (&_hurd_siglock);
-      if (! preemptor.next && _hurdsig_preemptors != &preemptor)
+      if (!preemptor.next && _hurdsig_preemptors != &preemptor)
 	{
 	  preemptor.next = _hurdsig_preemptors;
 	  _hurdsig_preemptors = &preemptor;
@@ -223,17 +220,16 @@ setitimer_locked (const struct itimerval *new, struct itimerval *old,
       if (_hurd_itimer_thread == MACH_PORT_NULL)
 	{
 	  /* Start up the itimer thread running `timer_thread' (below).  */
-	  if (err = __thread_create (__mach_task_self (),
-				     &_hurd_itimer_thread))
+	  if (err
+	      = __thread_create (__mach_task_self (), &_hurd_itimer_thread))
 	    goto out;
-	  _hurd_itimer_thread_stack_base = 0; /* Anywhere.  */
+	  _hurd_itimer_thread_stack_base = 0;		   /* Anywhere.  */
 	  _hurd_itimer_thread_stack_size = __vm_page_size; /* Small stack.  */
-	  if ((err = __mach_setup_thread_call (__mach_task_self (),
-					       _hurd_itimer_thread,
-					       &timer_thread,
-					       &_hurd_itimer_thread_stack_base,
-					       &_hurd_itimer_thread_stack_size))
-	      || (err = __mach_setup_tls(_hurd_itimer_thread)))
+	  if ((err = __mach_setup_thread_call (
+		   __mach_task_self (), _hurd_itimer_thread, &timer_thread,
+		   &_hurd_itimer_thread_stack_base,
+		   &_hurd_itimer_thread_stack_size))
+	      || (err = __mach_setup_tls (_hurd_itimer_thread)))
 	    {
 	      __thread_terminate (_hurd_itimer_thread);
 	      _hurd_itimer_thread = MACH_PORT_NULL;
@@ -308,7 +304,8 @@ setitimer_locked (const struct itimerval *new, struct itimerval *old,
 	 thread_abort will make mach_msg return MACH_RCV_INTERRUPTED, so it
 	 will loop around and use the new timeout value.  */
       if (err = (_hurd_itimer_thread_suspended
-		 ? __thread_resume : __thread_abort) (_hurd_itimer_thread))
+		     ? __thread_resume
+		     : __thread_abort) (_hurd_itimer_thread))
 	{
 	  kill_itimer_thread ();
 	  goto out;
@@ -326,7 +323,7 @@ setitimer_locked (const struct itimerval *new, struct itimerval *old,
     }
   return 0;
 
- out:
+out:
   __spin_unlock (&_hurd_itimer_lock);
   _hurd_critical_section_unlock (crit);
   return __hurd_fail (err);
@@ -365,7 +362,7 @@ retry:
 
   return ret;
 }
-
+
 static void
 fork_itimer (void)
 {
@@ -380,7 +377,7 @@ fork_itimer (void)
 
   setitimer_locked (&it, NULL, NULL, 0);
 
-  (void) &fork_itimer;		/* Avoid gcc optimizing out the function.  */
+  (void) &fork_itimer; /* Avoid gcc optimizing out the function.  */
 }
 text_set_element (_hurd_fork_child_hook, fork_itimer);
 

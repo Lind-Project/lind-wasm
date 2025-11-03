@@ -27,7 +27,6 @@
 #include <sys/time.h>
 #include <sys/wait.h>
 
-
 int *condition;
 
 static int
@@ -73,8 +72,7 @@ do_test (void)
       exit (1);
     }
 
-  mut1 = (pthread_mutex_t *) (((uintptr_t) mem
-			       + __alignof (pthread_mutex_t))
+  mut1 = (pthread_mutex_t *) (((uintptr_t) mem + __alignof (pthread_mutex_t))
 			      & ~(__alignof (pthread_mutex_t) - 1));
   mut2 = mut1 + 1;
 
@@ -225,7 +223,7 @@ do_test (void)
       puts ("parent done");
     }
 
- return result;
+  return result;
 }
 
 #define TEST_FUNCTION do_test ()

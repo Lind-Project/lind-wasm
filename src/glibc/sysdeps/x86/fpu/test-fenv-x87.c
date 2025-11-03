@@ -76,7 +76,6 @@ set_x87_sw_bits (uint16_t mask, uint16_t bits)
   fenv_t temp;
 
   temp.__status_word = (temp.__status_word & ~mask) | bits;
-
 }
 
 static int

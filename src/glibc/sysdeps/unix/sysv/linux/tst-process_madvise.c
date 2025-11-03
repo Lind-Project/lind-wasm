@@ -52,7 +52,7 @@ subprocess (void)
 
   void *p2 = xmmap (NULL, page_size, PROT_READ | PROT_WRITE,
 		    MAP_PRIVATE | MAP_ANONYMOUS, -1);
-  xmunmap(p2, page_size);
+  xmunmap (p2, page_size);
 
   xsendto (sockets[1], &(struct iovec) { p1, page_size * 2 },
 	   sizeof (struct iovec), 0, NULL, 0);
@@ -121,8 +121,8 @@ do_test (void)
 
   {
     struct iovec iv[IOV_MAX + 1];
-    TEST_COMPARE (process_madvise (pidfd, iv, array_length (iv), MADV_COLD,
-				   0), -1);
+    TEST_COMPARE (process_madvise (pidfd, iv, array_length (iv), MADV_COLD, 0),
+		  -1);
     TEST_COMPARE (errno, EINVAL);
   }
 

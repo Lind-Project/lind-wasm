@@ -32,5 +32,4 @@ __fstat64 (int fd, struct stat64 *buf)
 
   return 0;
 }
-hidden_def (__fstat64)
-weak_alias (__fstat64, fstat64)
+hidden_def (__fstat64) weak_alias (__fstat64, fstat64)

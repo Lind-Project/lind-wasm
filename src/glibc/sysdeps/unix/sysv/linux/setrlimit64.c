@@ -45,11 +45,11 @@ weak_alias (__setrlimit64, setrlimit64)
 #endif
 
 #if __RLIM_T_MATCHES_RLIM64_T
-strong_alias (__setrlimit64, __setrlimit)
-# ifndef USE_VERSIONED_RLIMIT
-weak_alias (__setrlimit64, setrlimit)
-# endif
-# ifdef SHARED
-__hidden_ver1 (__setrlimit64, __GI___setrlimit, __setrlimit64);
-# endif
+    strong_alias (__setrlimit64, __setrlimit)
+#  ifndef USE_VERSIONED_RLIMIT
+	weak_alias (__setrlimit64, setrlimit)
+#  endif
+#  ifdef SHARED
+	    __hidden_ver1 (__setrlimit64, __GI___setrlimit, __setrlimit64);
+#  endif
 #endif

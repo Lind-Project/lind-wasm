@@ -15,10 +15,9 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_LINK_H
-# error "Never include <bits/link.h> directly; use <link.h> instead."
+#ifndef _LINK_H
+#  error "Never include <bits/link.h> directly; use <link.h> instead."
 #endif
-
 
 /* Registers for entry into PLT on Alpha.  */
 typedef struct La_alpha_regs
@@ -48,16 +47,13 @@ typedef struct La_alpha_retval
   double lrv_f1;
 } La_alpha_retval;
 
-
 __BEGIN_DECLS
 
-extern Elf64_Addr la_alpha_gnu_pltenter (Elf64_Sym *__sym, unsigned int __ndx,
-				         uintptr_t *__refcook,
-				         uintptr_t *__defcook,
-				         La_alpha_regs *__regs,
-				         unsigned int *__flags,
-				         const char *__symname,
-				         long int *__framesizep);
+extern Elf64_Addr
+la_alpha_gnu_pltenter (Elf64_Sym *__sym, unsigned int __ndx,
+		       uintptr_t *__refcook, uintptr_t *__defcook,
+		       La_alpha_regs *__regs, unsigned int *__flags,
+		       const char *__symname, long int *__framesizep);
 extern unsigned int la_alpha_gnu_pltexit (Elf64_Sym *__sym, unsigned int __ndx,
 					  uintptr_t *__refcook,
 					  uintptr_t *__defcook,

@@ -24,8 +24,8 @@
    which smaller alignments would suffice. It may be defined as larger
    than this though. Note however that code and data structures are
    optimized for the case of 8-byte alignment.  */
-#define MALLOC_ALIGNMENT (2 * SIZE_SZ < __alignof__ (long double) \
-			  ? __alignof__ (long double) : 2 * SIZE_SZ)
-
+#define MALLOC_ALIGNMENT                                                      \
+  (2 * SIZE_SZ < __alignof__ (long double) ? __alignof__ (long double)        \
+					   : 2 * SIZE_SZ)
 
 #endif /* !defined(_GENERIC_MALLOC_ALIGNMENT_H) */

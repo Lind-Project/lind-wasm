@@ -29,12 +29,11 @@
    mapped to _itoa_word.  */
 
 #ifndef _ITOA_NEEDED
-# define _ITOA_NEEDED		(LONG_MAX != LLONG_MAX)
+#  define _ITOA_NEEDED (LONG_MAX != LLONG_MAX)
 #endif
 #ifndef _ITOA_WORD_TYPE
-# define _ITOA_WORD_TYPE	unsigned long int
+#  define _ITOA_WORD_TYPE unsigned long int
 #endif
-
 
 /* Convert VALUE into ASCII in base BASE (2..36).
    Write backwards starting the character just before BUFLIM.
@@ -46,32 +45,29 @@ extern char *_itoa (unsigned long long int value, char *buflim,
 
 extern const char _itoa_upper_digits[];
 extern const char _itoa_lower_digits[];
-#if IS_IN (libc) || IS_IN (rtld)
-hidden_proto (_itoa_upper_digits)
-hidden_proto (_itoa_lower_digits)
+#if IS_IN(libc) || IS_IN(rtld)
+hidden_proto (_itoa_upper_digits) hidden_proto (_itoa_lower_digits)
 #endif
 
-#if IS_IN (libc)
-extern char *_itoa_word (_ITOA_WORD_TYPE value, char *buflim,
-			 unsigned int base,
-			 int upper_case) attribute_hidden;
+#if IS_IN(libc)
+    extern char *_itoa_word (_ITOA_WORD_TYPE value, char *buflim,
+			     unsigned int base,
+			     int upper_case) attribute_hidden;
 #else
-static inline char * __attribute__ ((unused, always_inline))
-_itoa_word (_ITOA_WORD_TYPE value, char *buflim,
-	    unsigned int base, int upper_case)
+static inline char *__attribute__ ((unused, always_inline))
+_itoa_word (_ITOA_WORD_TYPE value, char *buflim, unsigned int base,
+	    int upper_case)
 {
-  const char *digits = (upper_case
-			? _itoa_upper_digits
-			: _itoa_lower_digits);
+  const char *digits = (upper_case ? _itoa_upper_digits : _itoa_lower_digits);
 
   switch (base)
     {
-# define SPECIAL(Base)							      \
-    case Base:								      \
-      do								      \
-	*--buflim = digits[value % Base];				      \
-      while ((value /= Base) != 0);					      \
-      break
+#  define SPECIAL(Base)                                                       \
+  case Base:                                                                  \
+    do                                                                        \
+      *--buflim = digits[value % Base];                                       \
+    while ((value /= Base) != 0);                                             \
+    break
 
       SPECIAL (10);
       SPECIAL (16);
@@ -83,23 +79,22 @@ _itoa_word (_ITOA_WORD_TYPE value, char *buflim,
     }
   return buflim;
 }
-# undef SPECIAL
+#  undef SPECIAL
 #endif
 
 /* Similar to the _itoa functions, but output starts at buf and pointer
    after the last written character is returned.  */
-extern char *_fitoa_word (_ITOA_WORD_TYPE value, char *buf,
-			  unsigned int base,
+extern char *_fitoa_word (_ITOA_WORD_TYPE value, char *buf, unsigned int base,
 			  int upper_case) attribute_hidden;
 extern char *_fitoa (unsigned long long value, char *buf, unsigned int base,
 		     int upper_case) attribute_hidden;
 
 #if !_ITOA_NEEDED
 /* No need for special long long versions.  */
-# define _itoa(value, buf, base, upper_case) \
-  _itoa_word (value, buf, base, upper_case)
-# define _fitoa(value, buf, base, upper_case) \
-  _fitoa_word (value, buf, base, upper_case)
+#  define _itoa(value, buf, base, upper_case)                                 \
+    _itoa_word (value, buf, base, upper_case)
+#  define _fitoa(value, buf, base, upper_case)                                \
+    _fitoa_word (value, buf, base, upper_case)
 #endif
 
-#endif	/* itoa.h */
+#endif /* itoa.h */

@@ -18,13 +18,14 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <stdio.h>	/* For BUFSIZ.  */
-#include <sys/param.h>	/* For MIN and MAX.  */
+#include <stdio.h>     /* For BUFSIZ.  */
+#include <sys/param.h> /* For MIN and MAX.  */
 
 #include <not-cancel.h>
 
-enum {
-  opendir_oflags = O_RDONLY|O_NDELAY|O_DIRECTORY|O_LARGEFILE|O_CLOEXEC
+enum
+{
+  opendir_oflags = O_RDONLY | O_NDELAY | O_DIRECTORY | O_LARGEFILE | O_CLOEXEC
 };
 
 static bool
@@ -52,7 +53,7 @@ opendir_tail (int fd)
   struct stat statbuf;
   if (__glibc_unlikely (fstat (fd, &statbuf) < 0))
     goto lose;
-  if (__glibc_unlikely (! S_ISDIR (statbuf.st_mode)))
+  if (__glibc_unlikely (!S_ISDIR (statbuf.st_mode)))
     {
       __set_errno (ENOTDIR);
     lose:
@@ -63,8 +64,7 @@ opendir_tail (int fd)
   return __alloc_dir (fd, true, 0, &statbuf);
 }
 
-
-#if IS_IN (libc)
+#if IS_IN(libc)
 DIR *
 __opendirat (int dfd, const char *name)
 {
@@ -74,7 +74,6 @@ __opendirat (int dfd, const char *name)
   return opendir_tail (__openat_nocancel (dfd, name, opendir_oflags));
 }
 #endif
-
 
 /* Open a directory stream on NAME.  */
 DIR *
@@ -87,9 +86,8 @@ __opendir (const char *name)
 }
 weak_alias (__opendir, opendir)
 
-DIR *
-__alloc_dir (int fd, bool close_fd, int flags,
-	     const struct __stat64_t64 *statp)
+    DIR *__alloc_dir (int fd, bool close_fd, int flags,
+		      const struct __stat64_t64 *statp)
 {
   /* We have to set the close-on-exit flag if the user provided the
      file descriptor.  */
@@ -101,16 +99,23 @@ __alloc_dir (int fd, bool close_fd, int flags,
      size of the buffer which receives struct dirent values from the
      kernel.  st_blksize is limited to max_buffer_size, in case the
      file system provides a bogus value.  */
-  enum { max_buffer_size = 1048576 };
+  enum
+  {
+    max_buffer_size = 1048576
+  };
 
-  enum { allocation_size = 32768 };
+  enum
+  {
+    allocation_size = 32768
+  };
   _Static_assert (allocation_size >= sizeof (struct dirent64),
 		  "allocation_size < sizeof (struct dirent64)");
 
   /* Increase allocation if requested, but not if the value appears to
      be bogus.  It will be between 32Kb and 1Mb.  */
-  size_t allocation = MIN (MAX ((size_t) statp->st_blksize, (size_t)
-                                allocation_size), (size_t) max_buffer_size);
+  size_t allocation
+      = MIN (MAX ((size_t) statp->st_blksize, (size_t) allocation_size),
+	     (size_t) max_buffer_size);
 
   DIR *dirp = (DIR *) malloc (sizeof (DIR) + allocation);
   if (dirp == NULL)
@@ -121,7 +126,7 @@ __alloc_dir (int fd, bool close_fd, int flags,
     }
 
   dirp->fd = fd;
-#if IS_IN (libc)
+#if IS_IN(libc)
   __libc_lock_init (dirp->lock);
 #endif
   dirp->allocation = allocation;

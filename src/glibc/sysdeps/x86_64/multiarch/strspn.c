@@ -18,18 +18,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define strspn __redirect_strspn
-# include <string.h>
-# undef strspn
+#if IS_IN(libc)
+#  define strspn __redirect_strspn
+#  include <string.h>
+#  undef strspn
 
-# define SYMBOL_NAME strspn
-# include "ifunc-sse4_2.h"
+#  define SYMBOL_NAME strspn
+#  include "ifunc-sse4_2.h"
 
 libc_ifunc_redirected (__redirect_strspn, strspn, IFUNC_SELECTOR ());
 
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (strspn, __GI_strspn, __redirect_strspn)
-  __attribute__ ((visibility ("hidden"))) __attribute_copy__ (strspn);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (strspn);
+#  endif
 #endif

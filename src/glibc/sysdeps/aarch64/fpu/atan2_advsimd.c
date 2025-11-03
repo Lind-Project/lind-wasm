@@ -63,7 +63,8 @@ zeroinfnan (uint64x2_t i)
    _ZGVnN2vv_atan2 (0x1.9651a429a859ap+5, 0x1.953075f4ee26p+5)
 	got 0x1.92d628ab678ccp-1
        want 0x1.92d628ab678cfp-1.  */
-float64x2_t VPCS_ATTR V_NAME_D2 (atan2) (float64x2_t y, float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D2 (atan2) (float64x2_t y, float64x2_t x)
 {
   const struct data *data_ptr = ptr_barrier (&data);
 

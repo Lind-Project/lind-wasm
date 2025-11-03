@@ -19,7 +19,6 @@
 #include <sys/types.h>
 #include <sched.h>
 
-
 /* Set scheduling parameters for a process.  */
 int
 __sched_setparam (pid_t pid, const struct sched_param *param)
@@ -29,5 +28,5 @@ __sched_setparam (pid_t pid, const struct sched_param *param)
 }
 stub_warning (sched_setparam)
 
-libc_hidden_def (__sched_setparam)
-weak_alias (__sched_setparam, sched_setparam)
+    libc_hidden_def (__sched_setparam)
+	weak_alias (__sched_setparam, sched_setparam)

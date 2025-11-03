@@ -22,9 +22,9 @@
    of two 4byte registers instead of a 8byte register which is produced by the
    instruction.
    Note: On s390 this instruction would only be used if build with -mzarch.  */
-# include <math.h>
-# include <math_private.h>
-# include <libm-alias-ldouble.h>
+#  include <math.h>
+#  include <math_private.h>
+#  include <libm-alias-ldouble.h>
 
 long long int
 __llroundl (_Float128 x)
@@ -33,11 +33,11 @@ __llroundl (_Float128 x)
   /* The z196 zarch "convert to fixed" (cgxbra) instruction is rounding
      x to the nearest integer with "ties away from 0" rounding mode
      (M3-field: 1) where inexact exceptions are suppressed (M4-field: 4).  */
-  __asm__ ("cgxbra %0,1,%1,4" : "=d" (y) : "f" (x) : "cc");
+  __asm__ ("cgxbra %0,1,%1,4" : "=d"(y) : "f"(x) : "cc");
   return y;
 }
 libm_alias_ldouble (__llround, llround)
 
 #else
-# include <sysdeps/ieee754/ldbl-128/s_llroundl.c>
+#  include <sysdeps/ieee754/ldbl-128/s_llroundl.c>
 #endif

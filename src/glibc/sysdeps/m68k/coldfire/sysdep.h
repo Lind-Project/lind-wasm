@@ -22,19 +22,20 @@
 
 /* Perform operation OP with PC-relative SRC as the first operand and
    DST as the second.  TMP is available as a temporary if needed.  */
-# define PCREL_OP(OP, SRC, DST, TMP) \
-  move.l &SRC - ., TMP; OP (-8, %pc, TMP), DST
+#  define PCREL_OP(OP, SRC, DST, TMP)                                         \
+    move.l &SRC -., TMP;                                                      \
+    OP (-8, % pc, TMP), DST
 
 /* Load the address of the GOT into register R.  */
-# define LOAD_GOT(R) \
-  move.l &_GLOBAL_OFFSET_TABLE_@GOTPC, R; \
-  lea (-6, %pc, R), R
+#  define LOAD_GOT(R)                                                         \
+    move.l &_GLOBAL_OFFSET_TABLE_ @GOTPC, R;                                  \
+    lea (-6, % pc, R), R
 
 #else
 
 /* As above, but PC is the spelling of the PC register.  We need this
    so that the macro can be used in both normal and extended asms.  */
-# define PCREL_OP(OP, SRC, DST, TMP, PC) \
-  "move.l #" SRC " - ., " TMP "\n\t" OP " (-8, " PC ", " TMP "), " DST
+#  define PCREL_OP(OP, SRC, DST, TMP, PC)                                     \
+    "move.l #" SRC " - ., " TMP "\n\t" OP " (-8, " PC ", " TMP "), " DST
 
-#endif	/* __ASSEMBLER__ */
+#endif /* __ASSEMBLER__ */

@@ -24,13 +24,10 @@ pselect64_syscall (int nfds, fd_set *readfds, fd_set *writefds,
 		   const sigset_t *sigmask)
 {
 #ifndef __NR_pselect6_time64
-# define __NR_pselect6_time64 __NR_pselect6
+#  define __NR_pselect6_time64 __NR_pselect6
 #endif
   /* NB: This is required by ARGIFY used in x32 internal_syscallN.  */
-  __syscall_ulong_t data[2] =
-    {
-      (uintptr_t) sigmask, __NSIG_BYTES
-    };
+  __syscall_ulong_t data[2] = { (uintptr_t) sigmask, __NSIG_BYTES };
   return SYSCALL_CANCEL (pselect6_time64, nfds, readfds, writefds, exceptfds,
 			 timeout, data);
 }
@@ -48,10 +45,10 @@ __pselect64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
       timeout = &tval;
     }
 
-  /* Note: the system call expects 7 values but on most architectures
-     we can only pass in 6 directly.  If there is an architecture with
-     support for more parameters a new version of this file needs to
-     be created.  */
+    /* Note: the system call expects 7 values but on most architectures
+       we can only pass in 6 directly.  If there is an architecture with
+       support for more parameters a new version of this file needs to
+       be created.  */
 #ifdef __ASSUME_TIME64_SYSCALLS
   return pselect64_syscall (nfds, readfds, writefds, exceptfds, timeout,
 			    sigmask);
@@ -74,9 +71,9 @@ __pselect64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 #if __TIMESIZE != 64
 libc_hidden_def (__pselect64)
 
-int
-__pselect (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
-	   const struct timespec *timeout, const sigset_t *sigmask)
+    int __pselect (int nfds, fd_set *readfds, fd_set *writefds,
+		   fd_set *exceptfds, const struct timespec *timeout,
+		   const sigset_t *sigmask)
 {
   struct __timespec64 ts64, *pts64 = NULL;
   if (timeout != NULL)

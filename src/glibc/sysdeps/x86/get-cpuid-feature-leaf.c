@@ -24,8 +24,8 @@ __x86_get_cpuid_feature_leaf (unsigned int leaf)
 {
   static const struct cpuid_feature feature = {};
   if (leaf < CPUID_INDEX_MAX)
-    return ((const struct cpuid_feature *)
-	    &GLRO(dl_x86_cpu_features).features[leaf]);
+    return ((const struct cpuid_feature *) &GLRO (dl_x86_cpu_features)
+		.features[leaf]);
   else
     return &feature;
 }

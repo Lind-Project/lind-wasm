@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _INCLUDE_SYS_SYSINFO_H
-#define _INCLUDE_SYS_SYSINFO_H	1
+#  define _INCLUDE_SYS_SYSINFO_H 1
 
-#include_next <sys/sysinfo.h>
+#  include_next <sys/sysinfo.h>
 
-# ifndef _ISOMAC
+#  ifndef _ISOMAC
 
 extern __typeof (sysinfo) __sysinfo __THROW attribute_hidden;
 
-# endif /* _ISOMAC */
-#endif /* sys/sysinfo.h */
+#  endif /* _ISOMAC */
+#endif	 /* sys/sysinfo.h */

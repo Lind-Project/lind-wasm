@@ -46,14 +46,12 @@
    code. CLONE_VFORK ensures that the parent does not run until the
    child has either exec'ed successfully or exited.  */
 
-
 /* The Unix standard contains a long explanation of the way to signal
    an error after the fork() was successful.  Since no new wait status
    was wanted there is no way to signal an error using one of the
    available methods.  The committee chose to signal an error by a
    normal program exit with the exit code 127.  */
-#define SPAWN_ERROR	127
-
+#define SPAWN_ERROR 127
 
 struct posix_spawn_args
 {
@@ -156,8 +154,7 @@ __spawni_child (void *arguments)
     }
 #endif
 
-  if ((attr->__flags & POSIX_SPAWN_SETSID) != 0
-      && __setsid () < 0)
+  if ((attr->__flags & POSIX_SPAWN_SETSID) != 0 && __setsid () < 0)
     goto fail;
 
   /* Set the process group ID.  */
@@ -202,17 +199,18 @@ __spawni_child (void *arguments)
 
 	    case spawn_do_open:
 	      {
-		/* POSIX states that if fildes was already an open file descriptor,
-		   it shall be closed before the new file is opened.  This avoid
-		   potential issues when posix_spawn plus addopen action is called
-		   with the process already at maximum number of file descriptor
-		   opened and also for multiple actions on single-open special
-		   paths (like /dev/watchdog).  */
+		/* POSIX states that if fildes was already an open file
+		   descriptor, it shall be closed before the new file is
+		   opened.  This avoid potential issues when posix_spawn plus
+		   addopen action is called with the process already at maximum
+		   number of file descriptor opened and also for multiple
+		   actions on single-open special paths (like /dev/watchdog).
+		 */
 		__close_nocancel (action->action.open_action.fd);
 
 		int ret = __open_nocancel (action->action.open_action.path,
-					   action->action.
-					   open_action.oflag | O_LARGEFILE,
+					   action->action.open_action.oflag
+					       | O_LARGEFILE,
 					   action->action.open_action.mode);
 
 		if (ret == -1)
@@ -265,17 +263,19 @@ __spawni_child (void *arguments)
 	    case spawn_do_closefrom:
 	      {
 		int lowfd = action->action.closefrom_action.from;
-	        int r = INLINE_SYSCALL_CALL (close_range, lowfd, ~0U, 0);
+		int r = INLINE_SYSCALL_CALL (close_range, lowfd, ~0U, 0);
 		if (r != 0 && !__closefrom_fallback (lowfd, false))
 		  goto fail;
-	      } break;
+	      }
+	      break;
 
 	    case spawn_do_tcsetpgrp:
 	      {
 		/* Check if it is possible to avoid an extra syscall.  */
 		pid_t pgrp = (attr->__flags & POSIX_SPAWN_SETPGROUP) != 0
-			       && attr->__pgrp != 0
-			     ? attr->__pgrp : __getpgid (0);
+				     && attr->__pgrp != 0
+				 ? attr->__pgrp
+				 : __getpgid (0);
 		if (__tcsetpgrp (action->action.setpgrp_action.fd, pgrp) != 0)
 		  goto fail;
 	      }
@@ -303,7 +303,7 @@ fail:
      (EINTERNALBUG) describing that, use ECHILD.  Another option would
      be to set args->err to some negative sentinel and have the parent
      abort(), but that seems needlessly harsh.  */
-  args->err = errno ? : ECHILD;
+  args->err = errno ?: ECHILD;
   _exit (SPAWN_ERROR);
 }
 
@@ -311,8 +311,8 @@ fail:
    Before running the process perform the actions described in FILE-ACTIONS. */
 static int
 __spawnix (int *pid, const char *file,
-	   const posix_spawn_file_actions_t * file_actions,
-	   const posix_spawnattr_t * attrp, char *const argv[],
+	   const posix_spawn_file_actions_t *file_actions,
+	   const posix_spawnattr_t *attrp, char *const argv[],
 	   char *const envp[], int xflags,
 	   int (*exec) (const char *, char *const *, char *const *))
 {
@@ -349,7 +349,7 @@ __spawnix (int *pid, const char *file,
       }
 
   int prot = (PROT_READ | PROT_WRITE
-	     | ((GL (dl_stack_flags) & PF_X) ? PROT_EXEC : 0));
+	      | ((GL (dl_stack_flags) & PF_X) ? PROT_EXEC : 0));
 
   /* Add a slack area for child's stack.  */
   size_t argv_size = (argc * sizeof (void *)) + 512;
@@ -360,7 +360,7 @@ __spawnix (int *pid, const char *file,
      It also acts the slack for spawn_closefrom (including MIPS64 getdents64
      where it might use about 1k extra stack space).  */
   argv_size += (32 * 1024);
-  size_t stack_size = ALIGN_UP (argv_size, GLRO(dl_pagesize));
+  size_t stack_size = ALIGN_UP (argv_size, GLRO (dl_pagesize));
   void *stack = __mmap (NULL, stack_size, prot,
 			MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
   if (__glibc_unlikely (stack == MAP_FAILED))
@@ -394,36 +394,32 @@ __spawnix (int *pid, const char *file,
      namespace, there will be no concurrent access for TLS variables (errno
      for instance).  */
   bool set_cgroup = attrp ? (attrp->__flags & POSIX_SPAWN_SETCGROUP) : false;
-  struct clone_args clone_args =
-    {
-      /* Unsupported flags like CLONE_CLEAR_SIGHAND will be cleared up by
-	 __clone_internal_fallback.  */
-      .flags = (set_cgroup ? CLONE_INTO_CGROUP : 0)
-	       | (use_pidfd ? CLONE_PIDFD : 0)
-	       | CLONE_CLEAR_SIGHAND
-	       | CLONE_VM
-	       | CLONE_VFORK,
-      .exit_signal = SIGCHLD,
-      .stack = (uintptr_t) stack,
-      .stack_size = stack_size,
-      .cgroup = (set_cgroup ? attrp->__cgroup : 0),
-      .pidfd = use_pidfd ? (uintptr_t) &args.pidfd : 0,
-      /* This is require for clone fallback, where pidfd is returned
-	 on parent_tid.  */
-      .parent_tid = use_pidfd ? (uintptr_t) &args.pidfd : 0,
-    };
+  struct clone_args clone_args = {
+    /* Unsupported flags like CLONE_CLEAR_SIGHAND will be cleared up by
+       __clone_internal_fallback.  */
+    .flags = (set_cgroup ? CLONE_INTO_CGROUP : 0)
+	     | (use_pidfd ? CLONE_PIDFD : 0) | CLONE_CLEAR_SIGHAND | CLONE_VM
+	     | CLONE_VFORK,
+    .exit_signal = SIGCHLD,
+    .stack = (uintptr_t) stack,
+    .stack_size = stack_size,
+    .cgroup = (set_cgroup ? attrp->__cgroup : 0),
+    .pidfd = use_pidfd ? (uintptr_t) &args.pidfd : 0,
+    /* This is require for clone fallback, where pidfd is returned
+       on parent_tid.  */
+    .parent_tid = use_pidfd ? (uintptr_t) &args.pidfd : 0,
+  };
 #ifdef HAVE_CLONE3_WRAPPER
   args.use_clone3 = true;
-  new_pid = __clone3 (&clone_args, sizeof (clone_args), __spawni_child,
-		      &args);
+  new_pid = __clone3 (&clone_args, sizeof (clone_args), __spawni_child, &args);
   /* clone3 was added in 5.3 and CLONE_CLEAR_SIGHAND in 5.5.  */
   if (new_pid == -1 && (errno == ENOSYS || errno == EINVAL))
 #endif
     {
       args.use_clone3 = false;
       if (!set_cgroup)
-	new_pid = __clone_internal_fallback (&clone_args, __spawni_child,
-					     &args);
+	new_pid
+	    = __clone_internal_fallback (&clone_args, __spawni_child, &args);
       else
 	{
 	  /* No fallback for POSIX_SPAWN_SETCGROUP if clone3 is not
@@ -475,13 +471,12 @@ __spawnix (int *pid, const char *file,
 /* Spawn a new process executing PATH with the attributes describes in *ATTRP.
    Before running the process perform the actions described in FILE-ACTIONS. */
 int
-__spawni (pid_t * pid, const char *file,
-	  const posix_spawn_file_actions_t * acts,
-	  const posix_spawnattr_t * attrp, char *const argv[],
+__spawni (pid_t *pid, const char *file, const posix_spawn_file_actions_t *acts,
+	  const posix_spawnattr_t *attrp, char *const argv[],
 	  char *const envp[], int xflags)
 {
   /* It uses __execvpex to avoid run ENOEXEC in non compatibility mode (it
      will be handled by maybe_script_execute).  */
   return __spawnix (pid, file, acts, attrp, argv, envp, xflags,
-		    xflags & SPAWN_XFLAGS_USE_PATH ? __execvpex :__execve);
+		    xflags & SPAWN_XFLAGS_USE_PATH ? __execvpex : __execve);
 }

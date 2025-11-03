@@ -24,10 +24,8 @@
 #include <string.h>
 #include <unistd.h>
 
-
 static pthread_barrier_t bar;
 static sem_t sem;
-
 
 static void
 cleanup (void *arg)
@@ -40,7 +38,6 @@ cleanup (void *arg)
       exit (1);
     }
 }
-
 
 static void *
 tf (void *arg)
@@ -61,7 +58,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -120,7 +116,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

@@ -23,7 +23,7 @@
    SEMTIMEDOP where on s390 the third parameter is used as a pointer
    to a struct timespec where the generic variant uses fifth parameter.  */
 #undef SEMTIMEDOP_IPC_ARGS
-#define SEMTIMEDOP_IPC_ARGS(__nsops, __sops, __timeout) \
+#define SEMTIMEDOP_IPC_ARGS(__nsops, __sops, __timeout)                       \
   (__nsops), (__timeout), (__sops)
 
 #include <ipc_ops.h>

@@ -27,5 +27,4 @@ __sched_yield (void)
   (void) __swtch ();
   return 0;
 }
-libc_hidden_def (__sched_yield)
-weak_alias (__sched_yield, sched_yield)
+libc_hidden_def (__sched_yield) weak_alias (__sched_yield, sched_yield)

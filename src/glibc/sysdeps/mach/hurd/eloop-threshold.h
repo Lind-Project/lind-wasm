@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ELOOP_THRESHOLD_H
-#define _ELOOP_THRESHOLD_H      1
+#  define _ELOOP_THRESHOLD_H 1
 
 /* Return the maximum number of symlink traversals to permit
    before diagnosing ELOOP.
@@ -34,4 +34,4 @@ __eloop_threshold (void)
   return 32;
 }
 
-#endif  /* eloop-threshold.h */
+#endif /* eloop-threshold.h */

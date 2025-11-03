@@ -1,7 +1,9 @@
-long __libc_do_syscall(void) {
-    long result;
+long
+__libc_do_syscall (void)
+{
+  long result;
 
-    result = 0;
+  result = 0;
 
-    return result;
+  return result;
 }

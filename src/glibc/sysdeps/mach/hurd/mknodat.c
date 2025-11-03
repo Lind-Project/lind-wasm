@@ -65,7 +65,7 @@ __mknodat (int fd, const char *path, mode_t mode, dev_t dev)
   else
     return __hurd_fail (EINVAL);
 
-  if (translator != NULL && ! S_ISFIFO (mode))
+  if (translator != NULL && !S_ISFIFO (mode))
     {
       /* We set the translator to "ifmt\0major\0minor\0", where IFMT
 	 depends on the S_IFMT bits of our MODE argument, and MAJOR and
@@ -89,27 +89,25 @@ __mknodat (int fd, const char *path, mode_t mode, dev_t dev)
     return -1;
 
   /* Create a new, unlinked node in the target directory.  */
-  errnode = err = __dir_mkfile (dir, O_WRITE, (mode & ~S_IFMT) & ~_hurd_umask, &node);
+  errnode = err
+      = __dir_mkfile (dir, O_WRITE, (mode & ~S_IFMT) & ~_hurd_umask, &node);
 
-  if (! err && translator != NULL)
+  if (!err && translator != NULL)
     /* Set the node's translator to make it a device.  */
-    err = __file_set_translator (node,
-				 FS_TRANS_EXCL | FS_TRANS_SET,
-				 FS_TRANS_EXCL | FS_TRANS_SET, 0,
-				 translator, len,
-				 MACH_PORT_NULL, MACH_MSG_TYPE_COPY_SEND);
+    err = __file_set_translator (node, FS_TRANS_EXCL | FS_TRANS_SET,
+				 FS_TRANS_EXCL | FS_TRANS_SET, 0, translator,
+				 len, MACH_PORT_NULL, MACH_MSG_TYPE_COPY_SEND);
 
-  if (! err)
+  if (!err)
     /* Link the node, now a valid device, into the target directory.  */
     err = __dir_link (dir, node, name, 1);
 
   __mach_port_deallocate (__mach_task_self (), dir);
-  if (! errnode)
+  if (!errnode)
     __mach_port_deallocate (__mach_task_self (), node);
 
   if (err)
     return __hurd_fail (err);
   return 0;
 }
-libc_hidden_def (__mknodat)
-weak_alias (__mknodat, mknodat)
+libc_hidden_def (__mknodat) weak_alias (__mknodat, mknodat)

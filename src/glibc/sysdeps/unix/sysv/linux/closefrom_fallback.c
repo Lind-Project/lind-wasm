@@ -30,8 +30,8 @@
 _Bool
 __closefrom_fallback (int from, _Bool dirfd_fallback)
 {
-  int dirfd = __open_nocancel (FD_TO_FILENAME_PREFIX, O_RDONLY | O_DIRECTORY,
-                               0);
+  int dirfd
+      = __open_nocancel (FD_TO_FILENAME_PREFIX, O_RDONLY | O_DIRECTORY, 0);
   if (dirfd == -1)
     {
       /* Return if procfs can not be opened for some reason.  */
@@ -41,16 +41,16 @@ __closefrom_fallback (int from, _Bool dirfd_fallback)
 
       /* The closefrom should work even when process can't open new files.  */
       for (int i = from; i < INT_MAX; i++)
-        {
-          int r = __close_nocancel (i);
-          if (r == 0 || (r == -1 && errno != EBADF))
-            break;
-        }
+	{
+	  int r = __close_nocancel (i);
+	  if (r == 0 || (r == -1 && errno != EBADF))
+	    break;
+	}
 
-      dirfd = __open_nocancel (FD_TO_FILENAME_PREFIX, O_RDONLY | O_DIRECTORY,
-                               0);
+      dirfd
+	  = __open_nocancel (FD_TO_FILENAME_PREFIX, O_RDONLY | O_DIRECTORY, 0);
       if (dirfd == -1)
-        return false;
+	return false;
     }
 
   char buffer[1024];
@@ -59,40 +59,40 @@ __closefrom_fallback (int from, _Bool dirfd_fallback)
     {
       ssize_t ret = __getdents64 (dirfd, buffer, sizeof (buffer));
       if (ret == -1)
-        goto err;
+	goto err;
       else if (ret == 0)
-        break;
+	break;
 
       /* If any file descriptor is closed it resets the /proc/self position
-         read again from the start (to obtain any possible kernel update).  */
+	 read again from the start (to obtain any possible kernel update).  */
       bool closed = false;
       char *begin = buffer, *end = buffer + ret;
       while (begin != end)
-        {
-          unsigned short int d_reclen;
-          memcpy (&d_reclen, begin + offsetof (struct dirent64, d_reclen),
-                  sizeof (d_reclen));
-          const char *dname = begin + offsetof (struct dirent64, d_name);
-          begin += d_reclen;
+	{
+	  unsigned short int d_reclen;
+	  memcpy (&d_reclen, begin + offsetof (struct dirent64, d_reclen),
+		  sizeof (d_reclen));
+	  const char *dname = begin + offsetof (struct dirent64, d_name);
+	  begin += d_reclen;
 
-          if (dname[0] == '.')
-            continue;
+	  if (dname[0] == '.')
+	    continue;
 
-          int fd = 0;
-          for (const char *s = dname; (unsigned int) (*s) - '0' < 10; s++)
-            fd = 10 * fd + (*s - '0');
+	  int fd = 0;
+	  for (const char *s = dname; (unsigned int) (*s) - '0' < 10; s++)
+	    fd = 10 * fd + (*s - '0');
 
-          if (fd == dirfd || fd < from)
-            continue;
+	  if (fd == dirfd || fd < from)
+	    continue;
 
-          /* We ignore close errors because EBADF, EINTR, and EIO means the
-             descriptor has been released.  */
-          __close_nocancel (fd);
-          closed = true;
-        }
+	  /* We ignore close errors because EBADF, EINTR, and EIO means the
+	     descriptor has been released.  */
+	  __close_nocancel (fd);
+	  closed = true;
+	}
 
       if (closed && __lseek (dirfd, 0, SEEK_SET) < 0)
-        goto err;
+	goto err;
     }
 
   ret = true;

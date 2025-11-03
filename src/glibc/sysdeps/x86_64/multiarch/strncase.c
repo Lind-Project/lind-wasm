@@ -18,15 +18,15 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define strncasecmp __redirect_strncasecmp
-# define __strncasecmp __redirect___strncasecmp
-# include <string.h>
-# undef strncasecmp
-# undef __strncasecmp
+#if IS_IN(libc)
+#  define strncasecmp __redirect_strncasecmp
+#  define __strncasecmp __redirect___strncasecmp
+#  include <string.h>
+#  undef strncasecmp
+#  undef __strncasecmp
 
-# define SYMBOL_NAME strncasecmp
-# include "ifunc-strcasecmp.h"
+#  define SYMBOL_NAME strncasecmp
+#  include "ifunc-strcasecmp.h"
 
 libc_ifunc_redirected (__redirect_strncasecmp, __strncasecmp,
 		       IFUNC_SELECTOR ());

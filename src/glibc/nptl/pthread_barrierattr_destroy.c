@@ -26,9 +26,9 @@ __pthread_barrierattr_destroy (pthread_barrierattr_t *attr)
   return 0;
 }
 versioned_symbol (libc, __pthread_barrierattr_destroy,
-                  pthread_barrierattr_destroy, GLIBC_2_34);
+		  pthread_barrierattr_destroy, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_barrierattr_destroy,
-               pthread_barrierattr_destroy, GLIBC_2_2);
+	       pthread_barrierattr_destroy, GLIBC_2_2);
 #endif

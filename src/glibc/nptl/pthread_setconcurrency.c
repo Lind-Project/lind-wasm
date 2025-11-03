@@ -22,7 +22,6 @@
 /* Global definition.  Needed in pthread_getconcurrency as well.  */
 int __concurrency_level;
 
-
 int
 __pthread_setconcurrency (int level)
 {
@@ -37,9 +36,9 @@ __pthread_setconcurrency (int level)
   return 0;
 }
 versioned_symbol (libc, __pthread_setconcurrency, pthread_setconcurrency,
-                  GLIBC_2_34);
+		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_setconcurrency, pthread_setconcurrency,
-               GLIBC_2_1);
+	       GLIBC_2_1);
 #endif

@@ -32,10 +32,10 @@
 #include <math-underflow.h>
 #include <libm-alias-finite.h>
 
-#define SCALE      0x8p-8257L
-#define LARGE_VAL  0xb.504f333f9de6484p+8188L
-#define TINY_VAL   0x8p-8194L
-#define EPS        0x8p-68L
+#define SCALE 0x8p-8257L
+#define LARGE_VAL 0xb.504f333f9de6484p+8188L
+#define TINY_VAL 0x8p-8194L
+#define EPS 0x8p-68L
 
 /* Hypot kernel. The inputs must be adjusted so that ax >= ay >= 0
    and squaring ax, ay and (ax - ay) does not overflow or underflow.  */
@@ -64,10 +64,9 @@ kernel (long double ax, long double ay)
 long double
 __ieee754_hypotl (long double x, long double y)
 {
-  if (!isfinite(x) || !isfinite(y))
+  if (!isfinite (x) || !isfinite (y))
     {
-      if ((isinf (x) || isinf (y))
-	  && !issignaling (x) && !issignaling (y))
+      if ((isinf (x) || isinf (y)) && !issignaling (x) && !issignaling (y))
 	return INFINITY;
       return x + y;
     }

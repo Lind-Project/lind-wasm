@@ -35,10 +35,16 @@
 #include <support/xthread.h>
 
 /* Number of threads to create.  */
-enum { threads_to_create = 100000 };
+enum
+{
+  threads_to_create = 100000
+};
 
 /* Number of threads which should spawn other threads.  */
-enum { creator_threads  = 2 };
+enum
+{
+  creator_threads = 2
+};
 
 /* Counter of threads created so far.  This is incremented by all the
    running creator threads.  */
@@ -71,9 +77,10 @@ creator_thread (void *arg)
       /* Thread creation will fail if the kernel does not free old
 	 threads quickly enough, so we do not report errors.  */
       ret = pthread_create (&thr, &detached, do_nothing, NULL);
-      if (ret == 0 && __atomic_add_fetch (&threads_created, 1, __ATOMIC_SEQ_CST)
-          >= threads_to_create)
-        break;
+      if (ret == 0
+	  && __atomic_add_fetch (&threads_created, 1, __ATOMIC_SEQ_CST)
+		 >= threads_to_create)
+	break;
     }
 
   return NULL;
@@ -88,20 +95,20 @@ do_test (void)
     struct rlimit limit;
     if (getrlimit (RLIMIT_AS, &limit) != 0)
       {
-        printf ("FAIL: getrlimit (RLIMIT_AS) failed: %m\n");
-        return 1;
+	printf ("FAIL: getrlimit (RLIMIT_AS) failed: %m\n");
+	return 1;
       }
     /* This limit, 800MB, is just a heuristic. Any value can be
        picked.  */
     long target = 800 * 1024 * 1024;
     if (limit.rlim_cur == RLIM_INFINITY || limit.rlim_cur > target)
       {
-        limit.rlim_cur = target;
-        if (setrlimit (RLIMIT_AS, &limit) != 0)
-          {
-            printf ("FAIL: setrlimit (RLIMIT_AS) failed: %m\n");
-            return 1;
-          }
+	limit.rlim_cur = target;
+	if (setrlimit (RLIMIT_AS, &limit) != 0)
+	  {
+	    printf ("FAIL: setrlimit (RLIMIT_AS) failed: %m\n");
+	    return 1;
+	  }
       }
   }
 

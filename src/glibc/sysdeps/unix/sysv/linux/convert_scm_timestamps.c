@@ -19,11 +19,11 @@
 #include <bits/timesize.h>
 
 #if __TIMESIZE != 64
-# include <stdint.h>
-# include <string.h>
-# include <sys/socket.h>
-# include <socket-constants-time64.h>
-# include <libc-diag.h>
+#  include <stdint.h>
+#  include <string.h>
+#  include <sys/socket.h>
+#  include <socket-constants-time64.h>
+#  include <libc-diag.h>
 
 /* It converts the first SO_TIMESTAMP or SO_TIMESTAMPNS with 32-bit time and
    appends it to the control buffer.  The 32-bit time field is kept as-is.
@@ -59,8 +59,7 @@ __convert_scm_timestamps (struct msghdr *msg, socklen_t msgsize)
   struct cmsghdr *cmsg, *last = NULL;
   int type = 0;
 
-  for (cmsg = CMSG_FIRSTHDR (msg);
-       cmsg != NULL;
+  for (cmsg = CMSG_FIRSTHDR (msg); cmsg != NULL;
        cmsg = CMSG_NXTHDR (msg, cmsg))
     {
       last = cmsg;
@@ -99,8 +98,7 @@ __convert_scm_timestamps (struct msghdr *msg, socklen_t msgsize)
 
   /* Zero memory for the new cmsghdr, so reading cmsg_len field
      by CMSG_NXTHDR does not trigger UB.  */
-  memset (msg->msg_control + msg->msg_controllen, 0,
-	  CMSG_SPACE (sizeof tvts));
+  memset (msg->msg_control + msg->msg_controllen, 0, CMSG_SPACE (sizeof tvts));
   msg->msg_controllen += CMSG_SPACE (sizeof tvts);
   cmsg = CMSG_NXTHDR (msg, last);
   cmsg->cmsg_level = SOL_SOCKET;

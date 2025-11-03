@@ -49,9 +49,7 @@ __lroundl (_Float128 x)
 	      i0 += 0x0000800000000000LL >> j0;
 	      result = i0 >> (48 - j0);
 #ifdef FE_INVALID
-	      if (sizeof (long int) == 4
-		  && sign == 1
-		  && result == LONG_MIN)
+	      if (sizeof (long int) == 4 && sign == 1 && result == LONG_MIN)
 		/* Rounding brought the value out of range.  */
 		feraiseexcept (FE_INVALID);
 #endif
@@ -71,9 +69,7 @@ __lroundl (_Float128 x)
 	    {
 	      result = ((long int) i0 << (j0 - 48)) | (j >> (112 - j0));
 #ifdef FE_INVALID
-	      if (sizeof (long int) == 8
-		  && sign == 1
-		  && result == LONG_MIN)
+	      if (sizeof (long int) == 8 && sign == 1 && result == LONG_MIN)
 		/* Rounding brought the value out of range.  */
 		feraiseexcept (FE_INVALID);
 #endif
@@ -87,13 +83,13 @@ __lroundl (_Float128 x)
 	 unspecified.  */
 #ifdef FE_INVALID
       if (FIX_LDBL_LONG_CONVERT_OVERFLOW
-	  && !(sign == -1 && x > (_Float128) LONG_MIN - L(0.5)))
+	  && !(sign == -1 && x > (_Float128) LONG_MIN - L (0.5)))
 	{
 	  feraiseexcept (FE_INVALID);
 	  return sign == 1 ? LONG_MAX : LONG_MIN;
 	}
       else if (!FIX_LDBL_LONG_CONVERT_OVERFLOW
-	       && x <= (_Float128) LONG_MIN - L(0.5))
+	       && x <= (_Float128) LONG_MIN - L (0.5))
 	{
 	  /* If truncation produces LONG_MIN, the cast will not raise
 	     the exception, but may raise "inexact".  */

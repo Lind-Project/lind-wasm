@@ -44,10 +44,7 @@ elf_machine_dynamic (void)
      an asm we can let the compiler choose any register.  */
 
   Elf32_Addr got_entry_0;
-  __asm__ __volatile__(
-    "lwi %0,r20,0"
-    :"=r"(got_entry_0)
-    );
+  __asm__ __volatile__ ("lwi %0,r20,0" : "=r"(got_entry_0));
   return got_entry_0;
 }
 
@@ -60,10 +57,7 @@ elf_machine_load_address (void)
      unrelocated first GOT entry.  */
 
   Elf32_Addr dyn;
-  __asm__ __volatile__ (
-    "addik %0,r20,_DYNAMIC@GOTOFF"
-    : "=r"(dyn)
-    );
+  __asm__ __volatile__ ("addik %0,r20,_DYNAMIC@GOTOFF" : "=r"(dyn));
   return dyn - elf_machine_dynamic ();
 }
 
@@ -85,13 +79,14 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
 
 /* Mask identifying addresses reserved for the user program,
    where the dynamic linker should not map anything.  */
-#define ELF_MACHINE_USER_ADDRESS_MASK	0x80000000UL
+#define ELF_MACHINE_USER_ADDRESS_MASK 0x80000000UL
 
 /* Initial entry point code for the dynamic linker.
    The C function `_dl_start' is the real entry point;
    its return value is the user program's entry point.  */
 
-#define RTLD_START asm ("\
+#define RTLD_START                                                            \
+  asm ("\
 	.text\n\
 	.globl _start\n\
 	.type _start,@function\n\
@@ -150,27 +145,26 @@ _dl_start_user:\n\
    ELF_RTYPE_CLASS_COPY iff TYPE should not be allowed to resolve to one
    of the main executable's symbols, as for a COPY reloc.  */
 #ifndef RTLD_BOOTSTRAP
-# define elf_machine_type_class(type) \
-  (((type) == R_MICROBLAZE_JUMP_SLOT \
-    || (type) == R_MICROBLAZE_TLSDTPREL32 \
-    || (type) == R_MICROBLAZE_TLSDTPMOD32 \
-    || (type) == R_MICROBLAZE_TLSTPREL32) \
-    * ELF_RTYPE_CLASS_PLT \
-   | ((type) == R_MICROBLAZE_COPY) * ELF_RTYPE_CLASS_COPY)
+#  define elf_machine_type_class(type)                                        \
+    (((type) == R_MICROBLAZE_JUMP_SLOT || (type) == R_MICROBLAZE_TLSDTPREL32  \
+      || (type) == R_MICROBLAZE_TLSDTPMOD32                                   \
+      || (type) == R_MICROBLAZE_TLSTPREL32)                                   \
+	 * ELF_RTYPE_CLASS_PLT                                                \
+     | ((type) == R_MICROBLAZE_COPY) * ELF_RTYPE_CLASS_COPY)
 #else
-# define elf_machine_type_class(type) \
-  (((type) == R_MICROBLAZE_JUMP_SLOT) * ELF_RTYPE_CLASS_PLT \
-   | ((type) == R_MICROBLAZE_COPY) * ELF_RTYPE_CLASS_COPY)
+#  define elf_machine_type_class(type)                                        \
+    (((type) == R_MICROBLAZE_JUMP_SLOT) * ELF_RTYPE_CLASS_PLT                 \
+     | ((type) == R_MICROBLAZE_COPY) * ELF_RTYPE_CLASS_COPY)
 #endif
 
 /* A reloc type used for ld.so cmdline arg lookups to reject PLT entries.  */
-#define ELF_MACHINE_JMP_SLOT	R_MICROBLAZE_JUMP_SLOT
+#define ELF_MACHINE_JMP_SLOT R_MICROBLAZE_JUMP_SLOT
 
 static inline Elf32_Addr
 elf_machine_fixup_plt (struct link_map *map, lookup_t t,
-		       const ElfW(Sym) *refsym, const ElfW(Sym) *sym,
-		       const Elf32_Rela *reloc,
-		       Elf32_Addr *reloc_addr, Elf32_Addr value)
+		       const ElfW (Sym) * refsym, const ElfW (Sym) * sym,
+		       const Elf32_Rela *reloc, Elf32_Addr *reloc_addr,
+		       Elf32_Addr value)
 {
   return *reloc_addr = value;
 }
@@ -195,11 +189,13 @@ elf_machine_plt_value (struct link_map *map, const Elf32_Rela *reloc,
    MAP is the object containing the reloc.  */
 
 /* Macro to put 32-bit relocation value into 2 words.  */
-#define PUT_REL_64(rel_addr,val) \
-  do { \
-    ((unsigned short *)(rel_addr))[1] = (val) >> 16; \
-    ((unsigned short *)(rel_addr))[3] = (val) & 0xffff; \
-  } while (0)
+#define PUT_REL_64(rel_addr, val)                                             \
+  do                                                                          \
+    {                                                                         \
+      ((unsigned short *) (rel_addr))[1] = (val) >> 16;                       \
+      ((unsigned short *) (rel_addr))[3] = (val) & 0xffff;                    \
+    }                                                                         \
+  while (0)
 
 static inline void __attribute__ ((always_inline))
 elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
@@ -217,21 +213,21 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
   else
     {
       const Elf32_Sym *const refsym = sym;
-      struct link_map *sym_map = RESOLVE_MAP (map, scope, &sym, version,
-					      r_type);
+      struct link_map *sym_map
+	  = RESOLVE_MAP (map, scope, &sym, version, r_type);
       Elf32_Addr value = SYMBOL_ADDRESS (sym_map, sym, true);
 
       value += reloc->r_addend;
-      if (r_type == R_MICROBLAZE_GLOB_DAT
-          || r_type == R_MICROBLAZE_JUMP_SLOT
-          || r_type == R_MICROBLAZE_32)
+      if (r_type == R_MICROBLAZE_GLOB_DAT || r_type == R_MICROBLAZE_JUMP_SLOT
+	  || r_type == R_MICROBLAZE_32)
 	{
 	  *reloc_addr = value;
 	}
       else if (r_type == R_MICROBLAZE_COPY)
 	{
-	  if (sym != NULL && (sym->st_size > refsym->st_size
-	      || (sym->st_size < refsym->st_size && GLRO (dl_verbose))) )
+	  if (sym != NULL
+	      && (sym->st_size > refsym->st_size
+		  || (sym->st_size < refsym->st_size && GLRO (dl_verbose))))
 	    {
 	      const char *strtab;
 
@@ -262,7 +258,8 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	  if (sym != NULL)
 	    {
 	      CHECK_STATIC_TLS (map, sym_map);
-	      *reloc_addr = sym->st_value + sym_map->l_tls_offset + reloc->r_addend;
+	      *reloc_addr
+		  = sym->st_value + sym_map->l_tls_offset + reloc->r_addend;
 	    }
 	}
 #endif

@@ -15,12 +15,12 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_DIRSTREAM_H
-#define	_DIRSTREAM_H	1
+#ifndef _DIRSTREAM_H
+#  define _DIRSTREAM_H 1
 
-#include <sys/types.h>
+#  include <sys/types.h>
 
-#include <libc-lock.h>
+#  include <libc-lock.h>
 
 /* Directory stream type.
 
@@ -28,28 +28,28 @@
    into a buffer and return `struct dirent *' pointers into it.  */
 
 struct __dirstream
-  {
-    int fd;			/* File descriptor.  */
+{
+  int fd; /* File descriptor.  */
 
-    __libc_lock_define (, lock) /* Mutex lock for this structure.  */
+  __libc_lock_define (, lock) /* Mutex lock for this structure.  */
 
-    size_t allocation;		/* Space allocated for the block.  */
-    size_t size;		/* Total valid data in the block.  */
-    size_t offset;		/* Current offset into the block.  */
+      size_t allocation; /* Space allocated for the block.  */
+  size_t size;		 /* Total valid data in the block.  */
+  size_t offset;	 /* Current offset into the block.  */
 
-    off_t filepos;		/* Position of next entry to read.  */
+  off_t filepos; /* Position of next entry to read.  */
 
-    int errcode;		/* Delayed error code.  */
+  int errcode; /* Delayed error code.  */
 
-    /* Directory block.  We must make sure that this block starts
-       at an address that is aligned adequately enough to store
-       dirent entries.  Using the alignment of "void *" is not
-       sufficient because dirents on 32-bit platforms can require
-       64-bit alignment.  We use "long double" here to be consistent
-       with what malloc uses.  */
-    char data[0] __attribute__ ((aligned (__alignof__ (long double))));
-  };
+  /* Directory block.  We must make sure that this block starts
+     at an address that is aligned adequately enough to store
+     dirent entries.  Using the alignment of "void *" is not
+     sufficient because dirents on 32-bit platforms can require
+     64-bit alignment.  We use "long double" here to be consistent
+     with what malloc uses.  */
+  char data[0] __attribute__ ((aligned (__alignof__ (long double))));
+};
 
-#define _DIR_dirfd(dirp)	((dirp)->fd)
+#  define _DIR_dirfd(dirp) ((dirp)->fd)
 
-#endif	/* dirstream.h */
+#endif /* dirstream.h */

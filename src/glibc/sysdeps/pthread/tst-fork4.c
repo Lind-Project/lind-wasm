@@ -24,7 +24,6 @@
 #include <sys/wait.h>
 #include <string.h>
 
-
 static int
 do_test (void)
 {

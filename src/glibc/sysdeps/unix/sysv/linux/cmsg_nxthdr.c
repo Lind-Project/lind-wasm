@@ -19,7 +19,6 @@
 #include <stddef.h>
 #include <sys/socket.h>
 
-
 struct cmsghdr *
 __cmsg_nxthdr (struct msghdr *mhdr, struct cmsghdr *cmsg)
 {
@@ -30,11 +29,11 @@ __cmsg_nxthdr (struct msghdr *mhdr, struct cmsghdr *cmsg)
      trust the value of cmsg->cmsg_len and therefore do not use it in any
      pointer arithmetic until we check its value.  */
 
-  unsigned char * msg_control_ptr = (unsigned char *) mhdr->msg_control;
-  unsigned char * cmsg_ptr = (unsigned char *) cmsg;
+  unsigned char *msg_control_ptr = (unsigned char *) mhdr->msg_control;
+  unsigned char *cmsg_ptr = (unsigned char *) cmsg;
 
-  size_t size_needed = sizeof (struct cmsghdr)
-                       + __CMSG_PADDING (cmsg->cmsg_len);
+  size_t size_needed
+      = sizeof (struct cmsghdr) + __CMSG_PADDING (cmsg->cmsg_len);
 
   /* The current header is malformed, too small to be a full header.  */
   if ((size_t) cmsg->cmsg_len < sizeof (struct cmsghdr))
@@ -42,13 +41,11 @@ __cmsg_nxthdr (struct msghdr *mhdr, struct cmsghdr *cmsg)
 
   /* There isn't enough space between cmsg and the end of the buffer to
   hold the current cmsg *and* the next one.  */
-  if (((size_t)
-         (msg_control_ptr + mhdr->msg_controllen - cmsg_ptr)
+  if (((size_t) (msg_control_ptr + mhdr->msg_controllen - cmsg_ptr)
        < size_needed)
-      || ((size_t)
-            (msg_control_ptr + mhdr->msg_controllen - cmsg_ptr
-             - size_needed)
-          < cmsg->cmsg_len))
+      || ((size_t) (msg_control_ptr + mhdr->msg_controllen - cmsg_ptr
+		    - size_needed)
+	  < cmsg->cmsg_len))
 
     return (struct cmsghdr *) 0;
 

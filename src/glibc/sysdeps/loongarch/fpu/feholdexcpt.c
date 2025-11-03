@@ -37,4 +37,4 @@ __feholdexcept (fenv_t *envp)
 }
 
 libm_hidden_def (__feholdexcept) weak_alias (__feholdexcept, feholdexcept)
-libm_hidden_weak (feholdexcept)
+    libm_hidden_weak (feholdexcept)

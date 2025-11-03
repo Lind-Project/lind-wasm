@@ -28,14 +28,14 @@ int
 __ttyname_r (int fd, char *buf, size_t buflen)
 {
   error_t err;
-  char nodename[1024];	/* XXX */
+  char nodename[1024]; /* XXX */
   size_t len;
 
   nodename[0] = '\0';
   if (err = HURD_DPORT_USE (fd, __term_get_nodename (port, nodename)))
     {
       if (err == MIG_BAD_ID || err == EOPNOTSUPP)
-        err = ENOTTY;
+	err = ENOTTY;
       return __hurd_dfail (fd, err), errno;
     }
 
@@ -46,5 +46,4 @@ __ttyname_r (int fd, char *buf, size_t buflen)
   memcpy (buf, nodename, len);
   return 0;
 }
-libc_hidden_def (__ttyname_r)
-weak_alias (__ttyname_r, ttyname_r)
+libc_hidden_def (__ttyname_r) weak_alias (__ttyname_r, ttyname_r)

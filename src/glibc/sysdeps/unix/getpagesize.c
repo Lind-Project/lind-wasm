@@ -22,18 +22,17 @@
 int
 __getpagesize (void)
 {
-#ifdef	EXEC_PAGESIZE
+#ifdef EXEC_PAGESIZE
   return EXEC_PAGESIZE;
-#else	/* No EXEC_PAGESIZE.  */
-#ifdef	NBPG
-#ifndef	CLSIZE
-#define	CLSIZE	1
-#endif	/* No CLSIZE.  */
+#else /* No EXEC_PAGESIZE.  */
+#  ifdef NBPG
+#    ifndef CLSIZE
+#      define CLSIZE 1
+#    endif /* No CLSIZE.  */
   return NBPG * CLSIZE;
-#else	/* No NBPG.  */
+#  else	   /* No NBPG.  */
   return NBPC;
-#endif	/* NBPG.  */
-#endif	/* EXEC_PAGESIZE.  */
+#  endif   /* NBPG.  */
+#endif	   /* EXEC_PAGESIZE.  */
 }
-libc_hidden_def (__getpagesize)
-weak_alias (__getpagesize, getpagesize)
+libc_hidden_def (__getpagesize) weak_alias (__getpagesize, getpagesize)

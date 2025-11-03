@@ -20,10 +20,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static long int linux_sysconf (int name);
 
-#define CSHAPE(totalsize, linesize, assoc) \
+#define CSHAPE(totalsize, linesize, assoc)                                    \
   ((totalsize & ~0xff) | (linesize << 4) | assoc)
 
 extern long __libc_alpha_cache_shape[4];
@@ -68,9 +67,9 @@ __sysconf (int name)
 	  if (__builtin_alpha_amask (1 << 8))
 	    {
 	      /* MAX insns not present; either EV5 or EV56.  */
-	      shape_l1i = shape_l1d = CSHAPE(8*1024, 5, 1);
+	      shape_l1i = shape_l1d = CSHAPE (8 * 1024, 5, 1);
 	      /* ??? L2 and L3 *can* be configured as 32-byte line.  */
-	      shape_l2 = CSHAPE (96*1024, 6, 3);
+	      shape_l2 = CSHAPE (96 * 1024, 6, 3);
 	      /* EV5/EV56 has 1M to 16M Bcache.  */
 	      shape_l3 = CSHAPE (0, 6, 1);
 	    }
@@ -85,14 +84,14 @@ __sysconf (int name)
 	  break;
 
 	case 2: /* EV6 */
-	  shape_l1i = shape_l1d = CSHAPE(64*1024, 6, 2);
+	  shape_l1i = shape_l1d = CSHAPE (64 * 1024, 6, 2);
 	  /* EV6/EV67/EV68* had 1M to 16M Bcache.  */
 	  shape_l2 = CSHAPE (0, 6, 1);
 	  break;
 
 	case 3: /* EV7 */
-	  shape_l1i = shape_l1d = CSHAPE(64*1024, 6, 2);
-	  shape_l2 = CSHAPE(7*1024*1024/4, 6, 7);
+	  shape_l1i = shape_l1d = CSHAPE (64 * 1024, 6, 2);
+	  shape_l2 = CSHAPE (7 * 1024 * 1024 / 4, 6, 7);
 	  break;
 
 	default:

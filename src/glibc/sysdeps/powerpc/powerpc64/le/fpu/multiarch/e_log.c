@@ -29,9 +29,8 @@ extern __typeof (log) __log_power10 attribute_hidden;
 
 libc_ifunc_redirected (__redirect_ieee754_log, __ieee754_log,
 #ifdef USE_PPC64_MCPU_POWER10
-	    (hwcap2 & PPC_FEATURE2_ARCH_3_1)
-	    ? __log_power10 :
+		       (hwcap2 & PPC_FEATURE2_ARCH_3_1) ? __log_power10 :
 #endif
-            __log_ppc64);
+							__log_ppc64);
 
 libm_alias_finite (__ieee754_log, __log)

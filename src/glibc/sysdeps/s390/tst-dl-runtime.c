@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#if defined (__s390x__)
+#if defined(__s390x__)
 static const unsigned long magic_value = 0x0011223344556677UL;
 #else
 static const unsigned long magic_value = 0x00112233;
@@ -35,7 +35,7 @@ unsigned long r0x2_trampoline (unsigned long);
    _dl_runtime_resolve and _dl_runtime_profile.  */
 asm ("    .type r0x2_trampoline, @function\n"
      "r0x2_trampoline:\n"
-#if defined (__s390x__)
+#if defined(__s390x__)
      "    lgr %r0,%r2\n"
      "    stg %r14,112(%r15)\n"
      "    aghi %r15,-160\n"
@@ -44,7 +44,7 @@ asm ("    .type r0x2_trampoline, @function\n"
      "    lg %r14,112(%r15)\n"
      "    lgr %r2,%r0\n"
      "    br %r14\n"
-#elif defined (__zarch__)
+#elif defined(__zarch__)
      "    lr %r0,%r2\n"
      "    st %r14,56(%r15)\n"
      "    ahi %r15,-96\n"
@@ -66,7 +66,7 @@ asm ("    .type r0x2_trampoline, @function\n"
      "    br %r14\n"
      "1: .long r0x2\n"
 #endif
-     );
+);
 
 static int
 do_test (void)

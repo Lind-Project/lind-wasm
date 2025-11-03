@@ -32,16 +32,14 @@ int
 ___timer_create (clockid_t clock_id, struct sigevent *evp, timer_t *timerid)
 {
   {
-    clockid_t syscall_clockid = (clock_id == CLOCK_PROCESS_CPUTIME_ID
-				 ? PROCESS_CLOCK
-				 : clock_id == CLOCK_THREAD_CPUTIME_ID
-				 ? THREAD_CLOCK
-				 : clock_id);
+    clockid_t syscall_clockid
+	= (clock_id == CLOCK_PROCESS_CPUTIME_ID	 ? PROCESS_CLOCK
+	   : clock_id == CLOCK_THREAD_CPUTIME_ID ? THREAD_CLOCK
+						 : clock_id);
 
     /* If the user wants notification via a thread we need to handle
        this special.  */
-    if (evp == NULL
-	|| __builtin_expect (evp->sigev_notify != SIGEV_THREAD, 1))
+    if (evp == NULL || __builtin_expect (evp->sigev_notify != SIGEV_THREAD, 1))
       {
 	struct sigevent local_evp;
 
@@ -58,8 +56,8 @@ ___timer_create (clockid_t clock_id, struct sigevent *evp, timer_t *timerid)
 	  }
 
 	kernel_timer_t ktimerid;
-	if (INLINE_SYSCALL_CALL (timer_create, syscall_clockid, evp,
-				 &ktimerid) == -1)
+	if (INLINE_SYSCALL_CALL (timer_create, syscall_clockid, evp, &ktimerid)
+	    == -1)
 	  return -1;
 
 	*timerid = kernel_timer_to_timerid (ktimerid);
@@ -107,11 +105,11 @@ ___timer_create (clockid_t clock_id, struct sigevent *evp, timer_t *timerid)
 	__pthread_attr_setdetachstate (&newp->attr, PTHREAD_CREATE_DETACHED);
 
 	/* Create the event structure for the kernel timer.  */
-	struct sigevent sev =
-	  { .sigev_value.sival_ptr = newp,
-	    .sigev_signo = SIGTIMER,
-	    .sigev_notify = SIGEV_SIGNAL | SIGEV_THREAD_ID,
-	    ._sigev_un = { ._pad = { [0] = __timer_helper_tid } } };
+	struct sigevent sev
+	    = { .sigev_value.sival_ptr = newp,
+		.sigev_signo = SIGTIMER,
+		.sigev_notify = SIGEV_SIGNAL | SIGEV_THREAD_ID,
+		._sigev_un = { ._pad = { [0] = __timer_helper_tid } } };
 
 	/* Create the timer.  */
 	int res;
@@ -140,11 +138,11 @@ versioned_symbol (libc, ___timer_create, timer_create, GLIBC_2_34);
 libc_hidden_ver (___timer_create, __timer_create)
 
 #if TIMER_T_WAS_INT_COMPAT
-# if OTHER_SHLIB_COMPAT (librt, GLIBC_2_3_3, GLIBC_2_34)
-compat_symbol (librt, ___timer_create, timer_create, GLIBC_2_3_3);
-# endif
+#  if OTHER_SHLIB_COMPAT(librt, GLIBC_2_3_3, GLIBC_2_34)
+    compat_symbol (librt, ___timer_create, timer_create, GLIBC_2_3_3);
+#  endif
 
-# if OTHER_SHLIB_COMPAT (librt, GLIBC_2_2, GLIBC_2_3_3)
+#  if OTHER_SHLIB_COMPAT(librt, GLIBC_2_2, GLIBC_2_3_3)
 timer_t __timer_compat_list[OLD_TIMER_MAX];
 
 int
@@ -158,8 +156,8 @@ __timer_create_old (clockid_t clock_id, struct sigevent *evp, int *timerid)
       int i;
       for (i = 0; i < OLD_TIMER_MAX; ++i)
 	if (__timer_compat_list[i] == NULL
-	    && ! atomic_compare_and_exchange_bool_acq (&__timer_compat_list[i],
-						       newp, NULL))
+	    && !atomic_compare_and_exchange_bool_acq (&__timer_compat_list[i],
+						      newp, NULL))
 	  {
 	    *timerid = i;
 	    break;
@@ -177,10 +175,10 @@ __timer_create_old (clockid_t clock_id, struct sigevent *evp, int *timerid)
   return res;
 }
 compat_symbol (librt, __timer_create_old, timer_create, GLIBC_2_2);
-# endif /* OTHER_SHLIB_COMPAT */
+#  endif /* OTHER_SHLIB_COMPAT */
 
 #else /* !TIMER_T_WAS_INT_COMPAT */
-# if OTHER_SHLIB_COMPAT (librt, GLIBC_2_2, GLIBC_2_34)
-compat_symbol (librt, ___timer_create, timer_create, GLIBC_2_2);
-# endif
+#  if OTHER_SHLIB_COMPAT(librt, GLIBC_2_2, GLIBC_2_34)
+    compat_symbol (librt, ___timer_create, timer_create, GLIBC_2_2);
+#  endif
 #endif /* !TIMER_T_WAS_INT_COMPAT */

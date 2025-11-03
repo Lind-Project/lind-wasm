@@ -34,5 +34,7 @@ __clock_nanosleep_time64 (clockid_t clock_id, int flags,
 			  const struct __timespec64 *req,
 			  struct __timespec64 *rem)
 {
-  return MAKE_SYSCALL(NANOSLEEP_TIME64_SYSCALL, "syscall|nanosleep", (uint64_t) clock_id, (uint64_t) flags, (uint64_t)req, (uint64_t)rem, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (NANOSLEEP_TIME64_SYSCALL, "syscall|nanosleep",
+		       (uint64_t) clock_id, (uint64_t) flags, (uint64_t) req,
+		       (uint64_t) rem, NOTUSED, NOTUSED);
 }

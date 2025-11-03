@@ -30,7 +30,6 @@
 double round (double);
 // double round (double) asm ("__round");
 
-
 long double
 __roundl (long double x)
 {
@@ -39,9 +38,10 @@ __roundl (long double x)
   ldbl_unpack (x, &xh, &xl);
 
   /* Return Inf, Nan, +/-0 unchanged.  */
-  if (__builtin_expect (xh != 0.0
-			&& __builtin_isless (__builtin_fabs (xh),
-					     __builtin_inf ()), 1))
+  if (__builtin_expect (
+	  xh != 0.0
+	      && __builtin_isless (__builtin_fabs (xh), __builtin_inf ()),
+	  1))
     {
       hi = round (xh);
       if (hi != xh)

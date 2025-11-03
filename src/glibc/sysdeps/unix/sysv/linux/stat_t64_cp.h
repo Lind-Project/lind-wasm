@@ -20,6 +20,5 @@
 
 #if __TIMESIZE != 64
 extern int __cp_stat64_t64_stat64 (const struct __stat64_t64 *st64_t64,
-				   struct stat64 *st64)
-  attribute_hidden;
+				   struct stat64 *st64) attribute_hidden;
 #endif

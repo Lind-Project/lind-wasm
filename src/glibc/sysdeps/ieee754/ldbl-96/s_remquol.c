@@ -21,16 +21,14 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-
 static const long double zero = 0.0;
-
 
 long double
 __remquol (long double x, long double p, int *quo)
 {
-  int32_t ex,ep,hx,hp;
-  uint32_t sx,lx,lp;
-  int cquo,qs;
+  int32_t ex, ep, hx, hp;
+  uint32_t sx, lx, lp;
+  int cquo, qs;
 
   GET_LDOUBLE_WORDS (ex, hx, lx, x);
   GET_LDOUBLE_WORDS (ep, hp, lp, p);
@@ -41,14 +39,14 @@ __remquol (long double x, long double p, int *quo)
 
   /* Purge off exception values.  */
   if ((ep | hp | lp) == 0)
-    return (x * p) / (x * p); 			/* p = 0 */
-  if ((ex == 0x7fff)				/* x not finite */
-      || ((ep == 0x7fff)			/* p is NaN */
+    return (x * p) / (x * p); /* p = 0 */
+  if ((ex == 0x7fff)	      /* x not finite */
+      || ((ep == 0x7fff)      /* p is NaN */
 	  && (((hp & 0x7fffffff) | lp) != 0)))
     return (x * p) / (x * p);
 
   if (ep <= 0x7ffb)
-    x = __ieee754_fmodl (x, 8 * p);		/* now x < 8p */
+    x = __ieee754_fmodl (x, 8 * p); /* now x < 8p */
 
   if (((ex - ep) | (hx - hp) | (lx - lp)) == 0)
     {
@@ -56,8 +54,8 @@ __remquol (long double x, long double p, int *quo)
       return zero * x;
     }
 
-  x  = fabsl (x);
-  p  = fabsl (p);
+  x = fabsl (x);
+  p = fabsl (p);
   cquo = 0;
 
   if (ep <= 0x7ffc && x >= 4 * p)

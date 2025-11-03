@@ -23,4 +23,4 @@
 
 weak_alias (___gettimeofday, __wgettimeofday);
 default_symbol_version (___gettimeofday, __gettimeofday, GLIBC_2.1);
-default_symbol_version (__wgettimeofday,   gettimeofday, GLIBC_2.1);
+default_symbol_version (__wgettimeofday, gettimeofday, GLIBC_2.1);

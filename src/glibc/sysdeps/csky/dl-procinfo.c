@@ -39,23 +39,21 @@
   */
 
 #ifndef PROCINFO_CLASS
-# define PROCINFO_CLASS
+#  define PROCINFO_CLASS
 #endif
 
 #if !defined PROCINFO_DECL && defined SHARED
-  ._dl_csky_platforms
+._dl_csky_platforms
 #else
 PROCINFO_CLASS const char _dl_csky_platforms[4][6]
 #endif
 #ifndef PROCINFO_DECL
-= {
-    "ck610", "ck807", "ck810", "ck860"
-  }
+    = { "ck610", "ck807", "ck810", "ck860" }
 #endif
 #if !defined SHARED || defined PROCINFO_DECL
 ;
 #else
-,
+    ,
 #endif
 
 #undef PROCINFO_DECL

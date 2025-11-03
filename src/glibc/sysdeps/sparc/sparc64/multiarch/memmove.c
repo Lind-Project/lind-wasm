@@ -17,15 +17,15 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define memmove __redirect_memmove
-# include <string.h>
-# undef memmove
+#if IS_IN(libc)
+#  define memmove __redirect_memmove
+#  include <string.h>
+#  undef memmove
 
-# include <sparc-ifunc.h>
+#  include <sparc-ifunc.h>
 
-# define SYMBOL_NAME memmove
-# include "ifunc-memmove.h"
+#  define SYMBOL_NAME memmove
+#  include "ifunc-memmove.h"
 
 sparc_libc_ifunc_redirected (__redirect_memmove, memmove, IFUNC_SELECTOR);
 

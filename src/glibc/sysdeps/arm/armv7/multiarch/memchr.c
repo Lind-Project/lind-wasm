@@ -19,15 +19,15 @@
 
 /* For __ARM_NEON__ memchr_neon.S defines memchr directly and ifunc
    is not used.  */
-#if IS_IN (libc) && !defined (__ARM_NEON__)
-# define memchr __redirect_memchr
-# include <string.h>
-# undef memchr
+#if IS_IN(libc) && !defined(__ARM_NEON__)
+#  define memchr __redirect_memchr
+#  include <string.h>
+#  undef memchr
 
-# include <arm-ifunc.h>
+#  include <arm-ifunc.h>
 
-# define SYMBOL_NAME memchr
-# include "ifunc-memchr.h"
+#  define SYMBOL_NAME memchr
+#  include "ifunc-memchr.h"
 
 arm_libc_ifunc_redirected (__redirect_memchr, memchr, IFUNC_SELECTOR);
 #endif

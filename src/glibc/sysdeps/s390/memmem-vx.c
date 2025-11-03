@@ -19,43 +19,44 @@
 #include <ifunc-memmem.h>
 
 #if HAVE_MEMMEM_Z13
-# include <string.h>
-# if HAVE_MEMMEM_IFUNC || MEMMEM_Z13_ONLY_USED_AS_FALLBACK
+#  include <string.h>
+#  if HAVE_MEMMEM_IFUNC || MEMMEM_Z13_ONLY_USED_AS_FALLBACK
 
-#  ifndef _LIBC
-#   define memmem MEMMEM_Z13
-#  else
-#   define __memmem MEMMEM_Z13
+#    ifndef _LIBC
+#      define memmem MEMMEM_Z13
+#    else
+#      define __memmem MEMMEM_Z13
+#    endif
+
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_def
+#      undef libc_hidden_weak
+
+#      if HAVE_MEMMEM_C || MEMMEM_Z13_ONLY_USED_AS_FALLBACK
+#	define libc_hidden_def(name)
+#	define libc_hidden_weak(name)
+#      else
+#	define libc_hidden_def(name)                                         \
+	  strong_alias (__memmem_vx, __memmem_vx_1);                          \
+	  __hidden_ver1 (__memmem_vx, __GI___memmem, __memmem_vx);
+
+#	define libc_hidden_weak(name)                                        \
+	  __hidden_ver1 (__memmem_vx_1, __GI_memmem, __memmem_vx_1)           \
+	      __attribute__ ((weak));
+#      endif
+#    endif
+
+#    undef weak_alias
+#    define weak_alias(a, b)
 #  endif
 
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_def
-#   undef libc_hidden_weak
-
-#   if HAVE_MEMMEM_C || MEMMEM_Z13_ONLY_USED_AS_FALLBACK
-#    define libc_hidden_def(name)
-#    define libc_hidden_weak(name)
-#   else
-#    define libc_hidden_def(name)				\
-  strong_alias (__memmem_vx, __memmem_vx_1);			\
-  __hidden_ver1 (__memmem_vx, __GI___memmem, __memmem_vx);
-
-#    define libc_hidden_weak(name)					\
-  __hidden_ver1 (__memmem_vx_1, __GI_memmem, __memmem_vx_1) __attribute__((weak));
-#   endif
-#  endif
-
-#  undef weak_alias
-#  define weak_alias(a, b)
-# endif
-
-# ifdef USE_MULTIARCH
+#  ifdef USE_MULTIARCH
 extern __typeof (memchr) __memchr_vx attribute_hidden;
-# define memchr __memchr_vx
+#    define memchr __memchr_vx
 
 extern __typeof (memcmp) __memcmp_z196 attribute_hidden;
-# define memcmp __memcmp_z196
-# endif
+#    define memcmp __memcmp_z196
+#  endif
 
-# include <string/memmem.c>
+#  include <string/memmem.c>
 #endif

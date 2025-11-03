@@ -56,7 +56,6 @@ f (void *a)
   return 0;
 }
 
-
 static int
 do_test (void)
 {
@@ -72,17 +71,16 @@ do_test (void)
 
 #define STACK_SIZE 128 * 1024
   char st[STACK_SIZE] __attribute__ ((aligned));
-  struct clone_args clone_args =
-    {
-      .stack = (uintptr_t) st,
-      .stack_size = sizeof (st),
-    };
+  struct clone_args clone_args = {
+    .stack = (uintptr_t) st,
+    .stack_size = sizeof (st),
+  };
   pid_t p = __clone_internal (&clone_args, f, 0);
 
   close (pipefd[1]);
 
   if (p == -1)
-    FAIL_EXIT1("clone failed: %m");
+    FAIL_EXIT1 ("clone failed: %m");
 
   pid_t ppid, pid, tid;
   if (read (pipefd[0], &ppid, sizeof pid) != sizeof pid)
@@ -109,8 +107,8 @@ do_test (void)
   /* Some sanity checks for clone syscall: returned ppid should be current
      pid and both returned tid/pid should be different from current one.  */
   if ((ppid != own_pid) || (pid == own_pid) || (tid == own_tid))
-    FAIL_RET ("ppid=%i pid=%i tid=%i | own_pid=%i own_tid=%i",
-	      (int)ppid, (int)pid, (int)tid, (int)own_pid, (int)own_tid);
+    FAIL_RET ("ppid=%i pid=%i tid=%i | own_pid=%i own_tid=%i", (int) ppid,
+	      (int) pid, (int) tid, (int) own_pid, (int) own_tid);
 
   int e;
   xwaitpid (p, &e, __WCLONE);

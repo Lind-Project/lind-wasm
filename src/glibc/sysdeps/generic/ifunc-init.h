@@ -41,17 +41,17 @@
    libc_ifunc_redirected (__redirect_foo, foo, IFUNC_SELECTOR ());
 */
 
-#define PASTER1(x,y)	x##_##y
-#define EVALUATOR1(x,y)	PASTER1 (x,y)
-#define PASTER2(x,y)	__##x##_##y
-#define EVALUATOR2(x,y)	PASTER2 (x,y)
+#define PASTER1(x, y) x##_##y
+#define EVALUATOR1(x, y) PASTER1 (x, y)
+#define PASTER2(x, y) __##x##_##y
+#define EVALUATOR2(x, y) PASTER2 (x, y)
 
 /* Basically set '__redirect_<symbol>' to use as type definition,
    '__<symbol>_<variant>' as the optimized implementation and
    '<symbol>_ifunc_selector' as the IFUNC selector.  */
-#define REDIRECT_NAME	EVALUATOR1 (__redirect, SYMBOL_NAME)
-#define IFUNC_SELECTOR	EVALUATOR1 (SYMBOL_NAME, ifunc_selector)
-#define OPTIMIZE1(name)	EVALUATOR1 (SYMBOL_NAME, name)
-#define OPTIMIZE2(name)	EVALUATOR2 (SYMBOL_NAME, name)
+#define REDIRECT_NAME EVALUATOR1 (__redirect, SYMBOL_NAME)
+#define IFUNC_SELECTOR EVALUATOR1 (SYMBOL_NAME, ifunc_selector)
+#define OPTIMIZE1(name) EVALUATOR1 (SYMBOL_NAME, name)
+#define OPTIMIZE2(name) EVALUATOR2 (SYMBOL_NAME, name)
 /* Default is to use OPTIMIZE2.  */
-#define OPTIMIZE(name)	OPTIMIZE2(name)
+#define OPTIMIZE(name) OPTIMIZE2 (name)

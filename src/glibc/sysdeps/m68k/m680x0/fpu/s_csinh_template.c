@@ -20,37 +20,38 @@
 #include <math.h>
 #include "mathimpl.h"
 
-#define CONCATX(a,b) __CONCAT(a,b)
+#define CONCATX(a, b) __CONCAT (a, b)
 #define s(name) M_SUF (name)
-#define m81(func) __m81_u(s(func))
+#define m81(func) __m81_u (s (func))
 
 CFLOAT
-s(__csinh) (CFLOAT x)
+s (__csinh) (CFLOAT x)
 {
   CFLOAT retval;
   unsigned long ix_cond;
 
   ix_cond = __m81_test (__imag__ x);
 
-  if ((ix_cond & (__M81_COND_INF|__M81_COND_NAN)) == 0)
+  if ((ix_cond & (__M81_COND_INF | __M81_COND_NAN)) == 0)
     {
       /* Imaginary part is finite.  */
       FLOAT sin_ix, cos_ix;
 
-      __asm ("fsincos%.x %2,%1:%0" : "=f" (sin_ix), "=f" (cos_ix)
-	     : "f" (__imag__ x));
-      __real__ retval = cos_ix * m81(__ieee754_sinh) (__real__ x);
+      __asm ("fsincos%.x %2,%1:%0"
+	     : "=f"(sin_ix), "=f"(cos_ix)
+	     : "f"(__imag__ x));
+      __real__ retval = cos_ix * m81 (__ieee754_sinh) (__real__ x);
       if (ix_cond & __M81_COND_ZERO)
 	__imag__ retval = __imag__ x;
       else
-	__imag__ retval = sin_ix * m81(__ieee754_cosh) (__real__ x);
+	__imag__ retval = sin_ix * m81 (__ieee754_cosh) (__real__ x);
     }
   else
     {
       unsigned long rx_cond = __m81_test (__real__ x);
 
       __imag__ retval = __imag__ x - __imag__ x;
-      if (rx_cond & (__M81_COND_ZERO|__M81_COND_INF|__M81_COND_NAN))
+      if (rx_cond & (__M81_COND_ZERO | __M81_COND_INF | __M81_COND_NAN))
 	__real__ retval = __real__ x;
       else
 	__real__ retval = __imag__ retval;

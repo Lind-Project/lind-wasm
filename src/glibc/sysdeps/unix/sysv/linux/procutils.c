@@ -23,40 +23,40 @@
 
 static int
 next_line (char **r, int fd, char *const buffer, char **cp, char **re,
-           char *const buffer_end)
+	   char *const buffer_end)
 {
   char *res = *cp;
   char *nl = memchr (*cp, '\n', *re - *cp);
   if (nl == NULL)
     {
       if (*cp != buffer)
-        {
-          if (*re == buffer_end)
-            {
-              memmove (buffer, *cp, *re - *cp);
-              *re = buffer + (*re - *cp);
-              *cp = buffer;
+	{
+	  if (*re == buffer_end)
+	    {
+	      memmove (buffer, *cp, *re - *cp);
+	      *re = buffer + (*re - *cp);
+	      *cp = buffer;
 
-              ssize_t n = TEMP_FAILURE_RETRY (
-		__read_nocancel (fd, *re, buffer_end - *re));
-              if (n < 0)
-                return -1;
+	      ssize_t n = TEMP_FAILURE_RETRY (
+		  __read_nocancel (fd, *re, buffer_end - *re));
+	      if (n < 0)
+		return -1;
 
-              *re += n;
+	      *re += n;
 
-              nl = memchr (*cp, '\n', *re - *cp);
+	      nl = memchr (*cp, '\n', *re - *cp);
 	      if (nl == NULL)
-	        /* Line too long.  */
+		/* Line too long.  */
 		return 0;
-            }
-          else
-            nl = memchr (*cp, '\n', *re - *cp);
+	    }
+	  else
+	    nl = memchr (*cp, '\n', *re - *cp);
 
-          res = *cp;
-        }
+	  res = *cp;
+	}
 
       if (nl == NULL)
-        nl = *re - 1;
+	nl = *re - 1;
     }
 
   *nl = '\0';
@@ -74,14 +74,17 @@ bool
 procutils_read_file (const char *filename, procutils_closure_t closure,
 		     void *arg)
 {
-  enum { buffer_size = PROCUTILS_MAX_LINE_LEN };
+  enum
+  {
+    buffer_size = PROCUTILS_MAX_LINE_LEN
+  };
   char buffer[buffer_size];
   char *buffer_end = buffer + buffer_size;
   char *cp = buffer_end;
   char *re = buffer_end;
 
   int fd = TEMP_FAILURE_RETRY (
-    __open64_nocancel (filename, O_RDONLY | O_CLOEXEC));
+      __open64_nocancel (filename, O_RDONLY | O_CLOEXEC));
   if (fd == -1)
     return false;
 

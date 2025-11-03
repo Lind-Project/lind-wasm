@@ -33,28 +33,29 @@
 /* The stack size can be overridden.  With a sufficiently large stack
    size, thread stacks for terminated threads are freed, but this does
    not happen with the default size of 1 MiB.  */
-enum { default_stack_size_in_mb = 1 };
+enum
+{
+  default_stack_size_in_mb = 1
+};
 static long stack_size_in_mb;
 
 #define N 10
 static pthread_t th[N];
-
 
 static int do_test (void);
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"
 
-#define CB(n) \
-static void								      \
-cb##n (void)								      \
-{									      \
-  if (th[n] != pthread_self ())						      \
-    {									      \
-      write_message ("wrong callback\n");				      \
-      _exit (1);							      \
-    }									      \
-}
+#define CB(n)                                                                 \
+  static void cb##n (void)                                                    \
+  {                                                                           \
+    if (th[n] != pthread_self ())                                             \
+      {                                                                       \
+	write_message ("wrong callback\n");                                   \
+	_exit (1);                                                            \
+      }                                                                       \
+  }
 CB (0)
 CB (1)
 CB (2)
@@ -65,20 +66,15 @@ CB (6)
 CB (7)
 CB (8)
 CB (9)
-static void (*cbs[]) (void) =
-{
-  cb0, cb1, cb2, cb3, cb4, cb5, cb6, cb7, cb8, cb9
-};
-
+static void (*cbs[]) (void)
+    = { cb0, cb1, cb2, cb3, cb4, cb5, cb6, cb7, cb8, cb9 };
 
 sem_t s;
-
 
 pthread_barrier_t b;
 
 #define TOTAL_SIGS 1000
 int nsigs;
-
 
 int
 do_test (void)

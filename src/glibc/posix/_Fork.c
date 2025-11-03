@@ -30,5 +30,4 @@ _Fork (void)
   __set_errno (ENOSYS);
   return -1;
 }
-libc_hidden_def (_Fork)
-stub_warning (_Fork)
+libc_hidden_def (_Fork) stub_warning (_Fork)

@@ -23,13 +23,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 static void *
 thread_function (void *arg)
 {
   abort ();
 }
-
 
 static int
 do_test (void)
@@ -41,12 +39,12 @@ do_test (void)
 
   int err;
 
-#define TRY(func, arglist)                              \
-  if ((err = func arglist) != 0)                        \
-    {                                                   \
-      printf ("%s: %s\n", #func, strerror (err));       \
-      return 2;                                         \
-    }
+#  define TRY(func, arglist)                                                  \
+    if ((err = func arglist) != 0)                                            \
+      {                                                                       \
+	printf ("%s: %s\n", #func, strerror (err));                           \
+	return 2;                                                             \
+      }
 
   int fifo_max = sched_get_priority_max (SCHED_FIFO);
   if (fifo_max == -1)
@@ -84,14 +82,13 @@ do_test (void)
   if (err != EINVAL)
     {
       printf ("pthread_create returned %d (%s), expected %d (EINVAL: %s)\n",
-              err, strerror (err), EINVAL, strerror (EINVAL));
+	      err, strerror (err), EINVAL, strerror (EINVAL));
       return 1;
     }
 
   return 0;
 #endif
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

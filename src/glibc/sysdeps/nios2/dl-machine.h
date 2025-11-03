@@ -34,7 +34,6 @@ elf_machine_matches_host (const Elf32_Ehdr *ehdr)
   return ehdr->e_machine == EM_ALTERA_NIOS2;
 }
 
-
 /* Return the link-time address of _DYNAMIC.  Conveniently, this is the
    first element of the GOT.  */
 static inline Elf32_Addr
@@ -46,10 +45,9 @@ elf_machine_dynamic (void)
        "1: movhi\t%1, %%hiadj(_GLOBAL_OFFSET_TABLE_ - 1b)\n\t"
        "addi\t%1, %1, %%lo(_GLOBAL_OFFSET_TABLE_ - 1b)\n\t"
        "add\t%0, %0, %1\n"
-       : "=r" (dynamic), "=r" (tmp));
+       : "=r"(dynamic), "=r"(tmp));
   return *dynamic;
 }
-
 
 /* Return the run-time load address of the shared object.  */
 static inline Elf32_Addr
@@ -61,7 +59,7 @@ elf_machine_load_address (void)
        "1: movhi\t%1, %%hiadj(1b)\n\t"
        "addi\t%1, %1, %%lo(1b)\n\t"
        "sub\t%0, %0, %1\n"
-       : "=r" (result), "=r" (tmp));
+       : "=r"(result), "=r"(tmp));
   return result;
 }
 
@@ -77,12 +75,12 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
   if (l->l_info[DT_JMPREL] && lazy)
     {
       /* The GOT entries for functions in the PLT have not yet been filled
-         in.  Their initial contents will arrange when called to load r15 with
-         an offset into the .got section, load r14 with
+	 in.  Their initial contents will arrange when called to load r15 with
+	 an offset into the .got section, load r14 with
 	 _GLOBAL_OFFSET_TABLE_[1], and then jump to _GLOBAL_OFFSET_TABLE[2].
       */
       Elf32_Addr *got = (Elf32_Addr *) D_PTR (l, l_info[DT_PLTGOT]);
-      got[1] = (Elf32_Addr) l;	/* Identify this shared object.  */
+      got[1] = (Elf32_Addr) l; /* Identify this shared object.  */
 
       /* This function will get called to fix up the GOT entry indicated by
 	 the offset on the stack, and then jump to the resolved address.  */
@@ -96,7 +94,8 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
    The C function `_dl_start' is the real entry point;
    its return value is the user program's entry point.  */
 
-#define RTLD_START asm ("\
+#define RTLD_START                                                            \
+  asm ("\
 .text\n\
 .globl _start\n\
 .type _start, %function\n\
@@ -161,23 +160,22 @@ _start:\n\
    PLT entries should not be allowed to define the value.
    ELF_RTYPE_CLASS_COPY iff TYPE should not be allowed to resolve to one
    of the main executable's symbols, as for a COPY reloc.  */
-#define elf_machine_type_class(type)				\
-  ((((type) == R_NIOS2_JUMP_SLOT				\
-     || (type) == R_NIOS2_TLS_DTPMOD				\
-     || (type) == R_NIOS2_TLS_DTPREL				\
-     || (type) == R_NIOS2_TLS_TPREL) * ELF_RTYPE_CLASS_PLT)	\
+#define elf_machine_type_class(type)                                          \
+  ((((type) == R_NIOS2_JUMP_SLOT || (type) == R_NIOS2_TLS_DTPMOD              \
+     || (type) == R_NIOS2_TLS_DTPREL || (type) == R_NIOS2_TLS_TPREL)          \
+    * ELF_RTYPE_CLASS_PLT)                                                    \
    | (((type) == R_NIOS2_COPY) * ELF_RTYPE_CLASS_COPY))
 
 /* A reloc type used for ld.so cmdline arg lookups to reject PLT entries.  */
-#define ELF_MACHINE_JMP_SLOT  R_NIOS2_JUMP_SLOT
+#define ELF_MACHINE_JMP_SLOT R_NIOS2_JUMP_SLOT
 
 /* Fixup a PLT entry to bounce directly to the function at VALUE.  */
 
 static inline Elf32_Addr
 elf_machine_fixup_plt (struct link_map *map, lookup_t t,
-		       const ElfW(Sym) *refsym, const ElfW(Sym) *sym,
-		       const Elf32_Rela *reloc,
-		       Elf32_Addr *reloc_addr, Elf32_Addr value)
+		       const ElfW (Sym) * refsym, const ElfW (Sym) * sym,
+		       const Elf32_Rela *reloc, Elf32_Addr *reloc_addr,
+		       Elf32_Addr value)
 {
   return *reloc_addr = value;
 }
@@ -185,7 +183,7 @@ elf_machine_fixup_plt (struct link_map *map, lookup_t t,
 /* Return the final value of a plt relocation.  */
 static inline Elf32_Addr
 elf_machine_plt_value (struct link_map *map, const Elf32_Rela *reloc,
-                       Elf32_Addr value)
+		       Elf32_Addr value)
 {
   return value;
 }
@@ -204,7 +202,7 @@ elf_machine_plt_value (struct link_map *map, const Elf32_Rela *reloc,
 
 static inline void __attribute__ ((always_inline))
 elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
-		  const ElfW(Rela) *reloc, const ElfW(Sym) *sym,
+		  const ElfW (Rela) * reloc, const ElfW (Sym) * sym,
 		  const struct r_found_version *version,
 		  void *const reloc_addr_arg, int skip_ifunc)
 {
@@ -218,83 +216,83 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
   else
     {
       const Elf32_Sym *const refsym = sym;
-      struct link_map *sym_map = RESOLVE_MAP (map, scope, &sym, version,
-					      r_type);
+      struct link_map *sym_map
+	  = RESOLVE_MAP (map, scope, &sym, version, r_type);
       Elf32_Addr value = SYMBOL_ADDRESS (sym_map, sym, true);
 
       switch (r_type)
 	{
-        case R_NIOS2_COPY:
-          if (sym == NULL)
-            /* This can happen in trace mode if an object could not be
-               found.  */
-            break;
-          if (sym->st_size > refsym->st_size
-              || (sym->st_size < refsym->st_size && GLRO(dl_verbose)))
-            {
-              const char *strtab;
+	case R_NIOS2_COPY:
+	  if (sym == NULL)
+	    /* This can happen in trace mode if an object could not be
+	       found.  */
+	    break;
+	  if (sym->st_size > refsym->st_size
+	      || (sym->st_size < refsym->st_size && GLRO (dl_verbose)))
+	    {
+	      const char *strtab;
 
-              strtab = (const void *) D_PTR (map, l_info[DT_STRTAB]);
-              _dl_error_printf ("\
+	      strtab = (const void *) D_PTR (map, l_info[DT_STRTAB]);
+	      _dl_error_printf ("\
 %s: Symbol `%s' has different size in shared object, consider re-linking\n",
 				rtld_progname ?: "<program name unknown>",
 				strtab + refsym->st_name);
-            }
-          memcpy (reloc_addr_arg, (void *) value,
-                  MIN (sym->st_size, refsym->st_size));
-          break;
+	    }
+	  memcpy (reloc_addr_arg, (void *) value,
+		  MIN (sym->st_size, refsym->st_size));
+	  break;
 	case R_NIOS2_GLOB_DAT:
 	case R_NIOS2_JUMP_SLOT:
-# ifdef RTLD_BOOTSTRAP
-          /* Fix weak undefined references.  */
-          if (sym != NULL && sym->st_value == 0)
-            *reloc_addr = 0;
-          else
-# endif
-            *reloc_addr = value;
-          break;
-#ifndef RTLD_BOOTSTRAP
-        case R_NIOS2_TLS_DTPMOD:
-          /* Get the information from the link map returned by the
-             resolv function.  */
-          if (sym_map != NULL)
-            *reloc_addr = sym_map->l_tls_modid;
-          break;
-
-        case R_NIOS2_TLS_DTPREL:
-          *reloc_addr = reloc->r_addend + TLS_DTPREL_VALUE(sym);
-          break;
-
-        case R_NIOS2_TLS_TPREL:
-          if (sym != NULL)
-            {
-              CHECK_STATIC_TLS (map, sym_map);
-              *reloc_addr = reloc->r_addend + TLS_TPREL_VALUE(sym_map, sym);
-            }
-          break;
+#ifdef RTLD_BOOTSTRAP
+	  /* Fix weak undefined references.  */
+	  if (sym != NULL && sym->st_value == 0)
+	    *reloc_addr = 0;
+	  else
 #endif
-        case R_NIOS2_BFD_RELOC_32:
-          *reloc_addr = value + reloc->r_addend;
-          break;
+	    *reloc_addr = value;
+	  break;
+#ifndef RTLD_BOOTSTRAP
+	case R_NIOS2_TLS_DTPMOD:
+	  /* Get the information from the link map returned by the
+	     resolv function.  */
+	  if (sym_map != NULL)
+	    *reloc_addr = sym_map->l_tls_modid;
+	  break;
+
+	case R_NIOS2_TLS_DTPREL:
+	  *reloc_addr = reloc->r_addend + TLS_DTPREL_VALUE (sym);
+	  break;
+
+	case R_NIOS2_TLS_TPREL:
+	  if (sym != NULL)
+	    {
+	      CHECK_STATIC_TLS (map, sym_map);
+	      *reloc_addr = reloc->r_addend + TLS_TPREL_VALUE (sym_map, sym);
+	    }
+	  break;
+#endif
+	case R_NIOS2_BFD_RELOC_32:
+	  *reloc_addr = value + reloc->r_addend;
+	  break;
 
 	default:
-          _dl_reloc_bad_type (map, r_type, 0);
-          break;
+	  _dl_reloc_bad_type (map, r_type, 0);
+	  break;
 	}
     }
 }
 
-static inline void __attribute__((always_inline))
-elf_machine_rela_relative (ElfW(Addr) l_addr, const ElfW(Rela) *reloc,
+static inline void __attribute__ ((always_inline))
+elf_machine_rela_relative (ElfW (Addr) l_addr, const ElfW (Rela) * reloc,
 			   void *const reloc_addr_arg)
 {
   Elf32_Addr *const reloc_addr = reloc_addr_arg;
   *reloc_addr = l_addr + reloc->r_addend;
 }
 
-static inline void __attribute__((always_inline))
+static inline void __attribute__ ((always_inline))
 elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
-		      ElfW(Addr) l_addr, const ElfW(Rela) *reloc,
+		      ElfW (Addr) l_addr, const ElfW (Rela) * reloc,
 		      int skip_ifunc)
 {
   Elf32_Addr *const reloc_addr = (void *) (l_addr + reloc->r_offset);

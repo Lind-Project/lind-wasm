@@ -25,7 +25,7 @@
 float
 __fmaf (float x, float y, float z)
 {
-  asm ("fmadd.s %0, %1, %2, %3" : "=f" (x) : "f" (x), "f" (y), "f" (z));
+  asm ("fmadd.s %0, %1, %2, %3" : "=f"(x) : "f"(x), "f"(y), "f"(z));
   return x;
 }
 libm_alias_float (__fma, fma)

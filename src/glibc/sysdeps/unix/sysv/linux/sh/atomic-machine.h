@@ -42,9 +42,10 @@
       r1:     saved stack pointer
 */
 
-#define __arch_compare_and_exchange_val_8_acq(mem, newval, oldval) \
-  ({ __typeof (*(mem)) __result; \
-     __asm __volatile ("\
+#define __arch_compare_and_exchange_val_8_acq(mem, newval, oldval)            \
+  ({                                                                          \
+    __typeof (*(mem)) __result;                                               \
+    __asm __volatile ("\
 	mova 1f,r0\n\
 	.align 2\n\
 	mov r15,r1\n\
@@ -53,14 +54,17 @@
 	cmp/eq %0,%3\n\
 	bf 1f\n\
 	mov.b %2,@%1\n\
-     1: mov r1,r15"\
-	: "=&r" (__result) : "u" (mem), "u" (newval), "u" (oldval) \
-	: "r0", "r1", "t", "memory"); \
-     __result; })
+     1: mov r1,r15"                                                      \
+		      : "=&r"(__result)                                       \
+		      : "u"(mem), "u"(newval), "u"(oldval)                    \
+		      : "r0", "r1", "t", "memory");                           \
+    __result;                                                                 \
+  })
 
-#define __arch_compare_and_exchange_val_16_acq(mem, newval, oldval) \
-  ({ __typeof (*(mem)) __result; \
-     __asm __volatile ("\
+#define __arch_compare_and_exchange_val_16_acq(mem, newval, oldval)           \
+  ({                                                                          \
+    __typeof (*(mem)) __result;                                               \
+    __asm __volatile ("\
 	mova 1f,r0\n\
 	mov r15,r1\n\
 	.align 2\n\
@@ -70,14 +74,17 @@
 	cmp/eq %0,%3\n\
 	bf 1f\n\
 	mov.w %2,@%1\n\
-     1: mov r1,r15"\
-	: "=&r" (__result) : "u" (mem), "u" (newval), "u" (oldval) \
-	: "r0", "r1", "t", "memory"); \
-     __result; })
+     1: mov r1,r15"                                                      \
+		      : "=&r"(__result)                                       \
+		      : "u"(mem), "u"(newval), "u"(oldval)                    \
+		      : "r0", "r1", "t", "memory");                           \
+    __result;                                                                 \
+  })
 
-#define __arch_compare_and_exchange_val_32_acq(mem, newval, oldval) \
-  ({ __typeof (*(mem)) __result; \
-     __asm __volatile ("\
+#define __arch_compare_and_exchange_val_32_acq(mem, newval, oldval)           \
+  ({                                                                          \
+    __typeof (*(mem)) __result;                                               \
+    __asm __volatile ("\
 	mova 1f,r0\n\
 	.align 2\n\
 	mov r15,r1\n\
@@ -86,23 +93,26 @@
 	cmp/eq %0,%3\n\
 	bf 1f\n\
 	mov.l %2,@%1\n\
-     1: mov r1,r15"\
-	: "=&r" (__result) : "u" (mem), "u" (newval), "u" (oldval) \
-	: "r0", "r1", "t", "memory"); \
-     __result; })
+     1: mov r1,r15"                                                      \
+		      : "=&r"(__result)                                       \
+		      : "u"(mem), "u"(newval), "u"(oldval)                    \
+		      : "r0", "r1", "t", "memory");                           \
+    __result;                                                                 \
+  })
 
 /* XXX We do not really need 64-bit compare-and-exchange.  At least
    not in the moment.  Using it would mean causing portability
    problems since not many other 32-bit architectures have support for
    such an operation.  So don't define any code for now.  */
 
-# define __arch_compare_and_exchange_val_64_acq(mem, newval, oldval) \
+#define __arch_compare_and_exchange_val_64_acq(mem, newval, oldval)           \
   (abort (), (__typeof (*mem)) 0)
 
-#define atomic_exchange_and_add(mem, value) \
-  ({ __typeof (*(mem)) __result, __tmp, __value = (value); \
-     if (sizeof (*(mem)) == 1) \
-       __asm __volatile ("\
+#define atomic_exchange_and_add(mem, value)                                   \
+  ({                                                                          \
+    __typeof (*(mem)) __result, __tmp, __value = (value);                     \
+    if (sizeof (*(mem)) == 1)                                                 \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  .align 2\n\
 	  mov r15,r1\n\
@@ -111,11 +121,12 @@
 	  mov %1,r2\n\
 	  add %0,r2\n\
 	  mov.b r2,@%2\n\
-       1: mov r1,r15"\
-	: "=&r" (__result), "=&r" (__tmp) : "u" (mem), "1" (__value) \
-	: "r0", "r1", "r2", "memory");		       \
-     else if (sizeof (*(mem)) == 2) \
-       __asm __volatile ("\
+       1: mov r1,r15"                                                    \
+			: "=&r"(__result), "=&r"(__tmp)                       \
+			: "u"(mem), "1"(__value)                              \
+			: "r0", "r1", "r2", "memory");                        \
+    else if (sizeof (*(mem)) == 2)                                            \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  .align 2\n\
 	  mov r15,r1\n\
@@ -124,11 +135,12 @@
 	  mov %1,r2\n\
 	  add %0,r2\n\
 	  mov.w r2,@%2\n\
-       1: mov r1,r15"\
-	: "=&r" (__result), "=&r" (__tmp) : "u" (mem), "1" (__value) \
-	: "r0", "r1", "r2", "memory"); \
-     else if (sizeof (*(mem)) == 4) \
-       __asm __volatile ("\
+       1: mov r1,r15"                                                    \
+			: "=&r"(__result), "=&r"(__tmp)                       \
+			: "u"(mem), "1"(__value)                              \
+			: "r0", "r1", "r2", "memory");                        \
+    else if (sizeof (*(mem)) == 4)                                            \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  .align 2\n\
 	  mov r15,r1\n\
@@ -137,24 +149,28 @@
 	  mov %1,r2\n\
 	  add %0,r2\n\
 	  mov.l r2,@%2\n\
-       1: mov r1,r15"\
-	: "=&r" (__result), "=&r" (__tmp) : "u" (mem), "1" (__value) \
-	: "r0", "r1", "r2", "memory"); \
-     else \
-       { \
-	 __typeof (mem) memp = (mem); \
-	 do \
-	   __result = *memp; \
-	 while (__arch_compare_and_exchange_val_64_acq \
-		 (memp,	__result + __value, __result) == __result); \
-	 (void) __value; \
-       } \
-     __result; })
+       1: mov r1,r15"                                                    \
+			: "=&r"(__result), "=&r"(__tmp)                       \
+			: "u"(mem), "1"(__value)                              \
+			: "r0", "r1", "r2", "memory");                        \
+    else                                                                      \
+      {                                                                       \
+	__typeof (mem) memp = (mem);                                          \
+	do                                                                    \
+	  __result = *memp;                                                   \
+	while (__arch_compare_and_exchange_val_64_acq (                       \
+		   memp, __result + __value, __result)                        \
+	       == __result);                                                  \
+	(void) __value;                                                       \
+      }                                                                       \
+    __result;                                                                 \
+  })
 
-#define atomic_add(mem, value) \
-  (void) ({ __typeof (*(mem)) __tmp, __value = (value); \
-	    if (sizeof (*(mem)) == 1) \
-	      __asm __volatile ("\
+#define atomic_add(mem, value)                                                \
+  (void) ({                                                                   \
+    __typeof (*(mem)) __tmp, __value = (value);                               \
+    if (sizeof (*(mem)) == 1)                                                 \
+      __asm __volatile ("\
 		mova 1f,r0\n\
 		mov r15,r1\n\
 		.align 2\n\
@@ -162,11 +178,12 @@
 	     0: mov.b @%1,r2\n\
 		add %0,r2\n\
 		mov.b r2,@%1\n\
-	     1: mov r1,r15"\
-		: "=&r" (__tmp) : "u" (mem), "0" (__value) \
-		: "r0", "r1", "r2", "memory"); \
-	    else if (sizeof (*(mem)) == 2) \
-	      __asm __volatile ("\
+	     1: mov r1,r15"                                                    \
+			: "=&r"(__tmp)                                        \
+			: "u"(mem), "0"(__value)                              \
+			: "r0", "r1", "r2", "memory");                        \
+    else if (sizeof (*(mem)) == 2)                                            \
+      __asm __volatile ("\
 		mova 1f,r0\n\
 		mov r15,r1\n\
 		.align 2\n\
@@ -174,11 +191,12 @@
 	     0: mov.w @%1,r2\n\
 		add %0,r2\n\
 		mov.w r2,@%1\n\
-	     1: mov r1,r15"\
-		: "=&r" (__tmp) : "u" (mem), "0" (__value) \
-		: "r0", "r1", "r2", "memory"); \
-	    else if (sizeof (*(mem)) == 4) \
-	      __asm __volatile ("\
+	     1: mov r1,r15"                                                    \
+			: "=&r"(__tmp)                                        \
+			: "u"(mem), "0"(__value)                              \
+			: "r0", "r1", "r2", "memory");                        \
+    else if (sizeof (*(mem)) == 4)                                            \
+      __asm __volatile ("\
 		mova 1f,r0\n\
 		mov r15,r1\n\
 		.align 2\n\
@@ -186,26 +204,29 @@
 	     0: mov.l @%1,r2\n\
 		add %0,r2\n\
 		mov.l r2,@%1\n\
-	     1: mov r1,r15"\
-		: "=&r" (__tmp) : "u" (mem), "0" (__value) \
-		: "r0", "r1", "r2", "memory"); \
-	    else \
-	      { \
-		__typeof (*(mem)) oldval; \
-		__typeof (mem) memp = (mem); \
-		do \
-		  oldval = *memp; \
-		while (__arch_compare_and_exchange_val_64_acq \
-			(memp, oldval + __value, oldval) == oldval); \
-		(void) __value; \
-	      } \
-	    })
+	     1: mov r1,r15"                                                    \
+			: "=&r"(__tmp)                                        \
+			: "u"(mem), "0"(__value)                              \
+			: "r0", "r1", "r2", "memory");                        \
+    else                                                                      \
+      {                                                                       \
+	__typeof (*(mem)) oldval;                                             \
+	__typeof (mem) memp = (mem);                                          \
+	do                                                                    \
+	  oldval = *memp;                                                     \
+	while (__arch_compare_and_exchange_val_64_acq (                       \
+		   memp, oldval + __value, oldval)                            \
+	       == oldval);                                                    \
+	(void) __value;                                                       \
+      }                                                                       \
+  })
 
-#define atomic_add_negative(mem, value) \
-  ({ unsigned char __result; \
-     __typeof (*(mem)) __tmp, __value = (value); \
-     if (sizeof (*(mem)) == 1) \
-       __asm __volatile ("\
+#define atomic_add_negative(mem, value)                                       \
+  ({                                                                          \
+    unsigned char __result;                                                   \
+    __typeof (*(mem)) __tmp, __value = (value);                               \
+    if (sizeof (*(mem)) == 1)                                                 \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  mov r15,r1\n\
 	  .align 2\n\
@@ -215,11 +236,12 @@
 	  mov.b r2,@%2\n\
        1: mov r1,r15\n\
 	  shal r2\n\
-	  movt %0"\
-	: "=r" (__result), "=&r" (__tmp) : "u" (mem), "1" (__value) \
-	: "r0", "r1", "r2", "t", "memory"); \
-     else if (sizeof (*(mem)) == 2) \
-       __asm __volatile ("\
+	  movt %0"                                                    \
+			: "=r"(__result), "=&r"(__tmp)                        \
+			: "u"(mem), "1"(__value)                              \
+			: "r0", "r1", "r2", "t", "memory");                   \
+    else if (sizeof (*(mem)) == 2)                                            \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  mov r15,r1\n\
 	  .align 2\n\
@@ -229,11 +251,12 @@
 	  mov.w r2,@%2\n\
        1: mov r1,r15\n\
 	  shal r2\n\
-	  movt %0"\
-	: "=r" (__result), "=&r" (__tmp) : "u" (mem), "1" (__value) \
-	: "r0", "r1", "r2", "t", "memory"); \
-     else if (sizeof (*(mem)) == 4) \
-       __asm __volatile ("\
+	  movt %0"                                                    \
+			: "=r"(__result), "=&r"(__tmp)                        \
+			: "u"(mem), "1"(__value)                              \
+			: "r0", "r1", "r2", "t", "memory");                   \
+    else if (sizeof (*(mem)) == 4)                                            \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  mov r15,r1\n\
 	  .align 2\n\
@@ -243,18 +266,21 @@
 	  mov.l r2,@%2\n\
        1: mov r1,r15\n\
 	  shal r2\n\
-	  movt %0"\
-	: "=r" (__result), "=&r" (__tmp) : "u" (mem), "1" (__value) \
-	: "r0", "r1", "r2", "t", "memory"); \
-     else \
-       abort (); \
-     __result; })
+	  movt %0"                                                    \
+			: "=r"(__result), "=&r"(__tmp)                        \
+			: "u"(mem), "1"(__value)                              \
+			: "r0", "r1", "r2", "t", "memory");                   \
+    else                                                                      \
+      abort ();                                                               \
+    __result;                                                                 \
+  })
 
-#define atomic_add_zero(mem, value) \
-  ({ unsigned char __result; \
-     __typeof (*(mem)) __tmp, __value = (value); \
-     if (sizeof (*(mem)) == 1) \
-       __asm __volatile ("\
+#define atomic_add_zero(mem, value)                                           \
+  ({                                                                          \
+    unsigned char __result;                                                   \
+    __typeof (*(mem)) __tmp, __value = (value);                               \
+    if (sizeof (*(mem)) == 1)                                                 \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  mov r15,r1\n\
 	  .align 2\n\
@@ -264,11 +290,12 @@
 	  mov.b r2,@%2\n\
        1: mov r1,r15\n\
 	  tst r2,r2\n\
-	  movt %0"\
-	: "=r" (__result), "=&r" (__tmp) : "u" (mem), "1" (__value) \
-	: "r0", "r1", "r2", "t", "memory"); \
-     else if (sizeof (*(mem)) == 2) \
-       __asm __volatile ("\
+	  movt %0"                                                    \
+			: "=r"(__result), "=&r"(__tmp)                        \
+			: "u"(mem), "1"(__value)                              \
+			: "r0", "r1", "r2", "t", "memory");                   \
+    else if (sizeof (*(mem)) == 2)                                            \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  mov r15,r1\n\
 	  .align 2\n\
@@ -278,11 +305,12 @@
 	  mov.w r2,@%2\n\
        1: mov r1,r15\n\
 	  tst r2,r2\n\
-	  movt %0"\
-	: "=r" (__result), "=&r" (__tmp) : "u" (mem), "1" (__value) \
-	: "r0", "r1", "r2", "t", "memory"); \
-     else if (sizeof (*(mem)) == 4) \
-       __asm __volatile ("\
+	  movt %0"                                                    \
+			: "=r"(__result), "=&r"(__tmp)                        \
+			: "u"(mem), "1"(__value)                              \
+			: "r0", "r1", "r2", "t", "memory");                   \
+    else if (sizeof (*(mem)) == 4)                                            \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  mov r15,r1\n\
 	  .align 2\n\
@@ -292,20 +320,23 @@
 	  mov.l r2,@%2\n\
        1: mov r1,r15\n\
 	  tst r2,r2\n\
-	  movt %0"\
-	: "=r" (__result), "=&r" (__tmp) : "u" (mem), "1" (__value) \
-	: "r0", "r1", "r2", "t", "memory"); \
-     else \
-       abort (); \
-     __result; })
+	  movt %0"                                                    \
+			: "=r"(__result), "=&r"(__tmp)                        \
+			: "u"(mem), "1"(__value)                              \
+			: "r0", "r1", "r2", "t", "memory");                   \
+    else                                                                      \
+      abort ();                                                               \
+    __result;                                                                 \
+  })
 
-#define atomic_increment_and_test(mem) atomic_add_zero((mem), 1)
-#define atomic_decrement_and_test(mem) atomic_add_zero((mem), -1)
+#define atomic_increment_and_test(mem) atomic_add_zero ((mem), 1)
+#define atomic_decrement_and_test(mem) atomic_add_zero ((mem), -1)
 
-#define atomic_bit_set(mem, bit) \
-  (void) ({ unsigned int __mask = 1 << (bit); \
-	    if (sizeof (*(mem)) == 1) \
-	      __asm __volatile ("\
+#define atomic_bit_set(mem, bit)                                              \
+  (void) ({                                                                   \
+    unsigned int __mask = 1 << (bit);                                         \
+    if (sizeof (*(mem)) == 1)                                                 \
+      __asm __volatile ("\
 		mova 1f,r0\n\
 		mov r15,r1\n\
 		.align 2\n\
@@ -313,11 +344,12 @@
 	     0: mov.b @%0,r2\n\
 		or %1,r2\n\
 		mov.b r2,@%0\n\
-	     1: mov r1,r15"\
-		: : "u" (mem), "u" (__mask) \
-		: "r0", "r1", "r2", "memory"); \
-	    else if (sizeof (*(mem)) == 2) \
-	      __asm __volatile ("\
+	     1: mov r1,r15"                                                    \
+			:                                                     \
+			: "u"(mem), "u"(__mask)                               \
+			: "r0", "r1", "r2", "memory");                        \
+    else if (sizeof (*(mem)) == 2)                                            \
+      __asm __volatile ("\
 		mova 1f,r0\n\
 		mov r15,r1\n\
 		.align 2\n\
@@ -325,11 +357,12 @@
 	     0: mov.w @%0,r2\n\
 		or %1,r2\n\
 		mov.w r2,@%0\n\
-	     1: mov r1,r15"\
-		: : "u" (mem), "u" (__mask) \
-		: "r0", "r1", "r2", "memory"); \
-	    else if (sizeof (*(mem)) == 4) \
-	      __asm __volatile ("\
+	     1: mov r1,r15"                                                    \
+			:                                                     \
+			: "u"(mem), "u"(__mask)                               \
+			: "r0", "r1", "r2", "memory");                        \
+    else if (sizeof (*(mem)) == 4)                                            \
+      __asm __volatile ("\
 		mova 1f,r0\n\
 		mov r15,r1\n\
 		.align 2\n\
@@ -337,18 +370,20 @@
 	     0: mov.l @%0,r2\n\
 		or %1,r2\n\
 		mov.l r2,@%0\n\
-	     1: mov r1,r15"\
-		: : "u" (mem), "u" (__mask) \
-		: "r0", "r1", "r2", "memory"); \
-	    else \
-	      abort (); \
-	    })
+	     1: mov r1,r15"                                                    \
+			:                                                     \
+			: "u"(mem), "u"(__mask)                               \
+			: "r0", "r1", "r2", "memory");                        \
+    else                                                                      \
+      abort ();                                                               \
+  })
 
-#define atomic_bit_test_set(mem, bit) \
-  ({ unsigned int __mask = 1 << (bit); \
-     unsigned int __result = __mask; \
-     if (sizeof (*(mem)) == 1) \
-       __asm __volatile ("\
+#define atomic_bit_test_set(mem, bit)                                         \
+  ({                                                                          \
+    unsigned int __mask = 1 << (bit);                                         \
+    unsigned int __result = __mask;                                           \
+    if (sizeof (*(mem)) == 1)                                                 \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  .align 2\n\
 	  mov r15,r1\n\
@@ -358,12 +393,12 @@
 	  or %1,r2\n\
 	  mov.b r2,@%2\n\
        1: mov r1,r15\n\
-	  and r3,%0"\
-	: "=&r" (__result), "=&r" (__mask) \
-	: "u" (mem), "0" (__result), "1" (__mask) \
-	: "r0", "r1", "r2", "r3", "memory");	\
-     else if (sizeof (*(mem)) == 2) \
-       __asm __volatile ("\
+	  and r3,%0"                                                    \
+			: "=&r"(__result), "=&r"(__mask)                      \
+			: "u"(mem), "0"(__result), "1"(__mask)                \
+			: "r0", "r1", "r2", "r3", "memory");                  \
+    else if (sizeof (*(mem)) == 2)                                            \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  .align 2\n\
 	  mov r15,r1\n\
@@ -373,12 +408,12 @@
 	  or %1,r2\n\
 	  mov.w %1,@%2\n\
        1: mov r1,r15\n\
-	  and r3,%0"\
-	: "=&r" (__result), "=&r" (__mask) \
-	: "u" (mem), "0" (__result), "1" (__mask) \
-	: "r0", "r1", "r2", "r3", "memory"); \
-     else if (sizeof (*(mem)) == 4) \
-       __asm __volatile ("\
+	  and r3,%0"                                                    \
+			: "=&r"(__result), "=&r"(__mask)                      \
+			: "u"(mem), "0"(__result), "1"(__mask)                \
+			: "r0", "r1", "r2", "r3", "memory");                  \
+    else if (sizeof (*(mem)) == 4)                                            \
+      __asm __volatile ("\
 	  mova 1f,r0\n\
 	  .align 2\n\
 	  mov r15,r1\n\
@@ -388,10 +423,11 @@
 	  or r2,%1\n\
 	  mov.l %1,@%2\n\
        1: mov r1,r15\n\
-	  and r3,%0"\
-	: "=&r" (__result), "=&r" (__mask) \
-	: "u" (mem), "0" (__result), "1" (__mask) \
-	: "r0", "r1", "r2", "r3", "memory"); \
-     else \
-       abort (); \
-     __result; })
+	  and r3,%0"                                                    \
+			: "=&r"(__result), "=&r"(__mask)                      \
+			: "u"(mem), "0"(__result), "1"(__mask)                \
+			: "r0", "r1", "r2", "r3", "memory");                  \
+    else                                                                      \
+      abort ();                                                               \
+    __result;                                                                 \
+  })

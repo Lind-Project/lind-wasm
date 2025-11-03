@@ -30,7 +30,7 @@ __GI___uname (struct utsname *name)
 	  name->nodename[0] = '\0';
 	  __set_errno (save);
 	}
-#ifdef	ENAMETOOLONG
+#ifdef ENAMETOOLONG
       else if (errno == ENAMETOOLONG)
 	/* The name was truncated.  */
 	__set_errno (save);
@@ -44,6 +44,5 @@ __GI___uname (struct utsname *name)
   strncpy (name->machine, UNAME_MACHINE, sizeof (name->machine));
 }
 
-weak_alias(__GI___uname, __uname)
-weak_alias(__GI___uname, __GI_uname)
-weak_alias(__GI___uname, uname)
+weak_alias (__GI___uname, __uname) weak_alias (__GI___uname, __GI_uname)
+    weak_alias (__GI___uname, uname)

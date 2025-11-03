@@ -23,7 +23,7 @@
 #include <kernel_stat.h>
 
 /* Special internal-only bit value.  */
-# define ST_VALID 0x0020
+#define ST_VALID 0x0020
 
 #if !STATFS_IS_STATFS64
 void
@@ -47,15 +47,16 @@ __internal_statvfs (struct statvfs *buf, const struct statfs *fsbuf)
     buf->f_fsid = ((fsbuf->f_fsid.__val[0]
 		    & ((1ULL << (8 * sizeof (fsbuf->f_fsid.__val[0]))) - 1))
 		   | ((unsigned long long int) fsbuf->f_fsid.__val[1]
-		      << (8 * (sizeof (buf->f_fsid)
-			       - sizeof (fsbuf->f_fsid.__val[0])))));
+		      << (8
+			  * (sizeof (buf->f_fsid)
+			     - sizeof (fsbuf->f_fsid.__val[0])))));
   else
     /* We cannot help here.  The statvfs element is not large enough to
        contain both words of the statfs f_fsid field.  */
     buf->f_fsid = fsbuf->f_fsid.__val[0];
-#ifdef _STATVFSBUF_F_UNUSED
+#  ifdef _STATVFSBUF_F_UNUSED
   buf->__f_unused = 0;
-#endif
+#  endif
   buf->f_namemax = fsbuf->f_namelen;
   buf->f_type = fsbuf->f_type;
   memset (buf->__f_spare, '\0', sizeof (buf->__f_spare));
@@ -90,8 +91,9 @@ __internal_statvfs64 (struct statvfs64 *buf, const struct statfs64 *fsbuf)
     buf->f_fsid = ((fsbuf->f_fsid.__val[0]
 		    & ((1ULL << (8 * sizeof (fsbuf->f_fsid.__val[0]))) - 1))
 		   | ((unsigned long long int) fsbuf->f_fsid.__val[1]
-		      << (8 * (sizeof (buf->f_fsid)
-			       - sizeof (fsbuf->f_fsid.__val[0])))));
+		      << (8
+			  * (sizeof (buf->f_fsid)
+			     - sizeof (fsbuf->f_fsid.__val[0])))));
   else
     /* We cannot help here.  The statvfs element is not large enough to
        contain both words of the statfs f_fsid field.  */

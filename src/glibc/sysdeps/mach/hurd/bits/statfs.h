@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_STATFS_H
-# error "Never include <bits/statfs.h> directly; use <sys/statfs.h> instead."
+#  error "Never include <bits/statfs.h> directly; use <sys/statfs.h> instead."
 #endif
 
 #include <bits/types.h>
@@ -35,51 +35,51 @@
    Any changes made here must also be made in that file.  */
 
 struct statfs
-  {
-    unsigned int f_type;
-    unsigned long int f_bsize;
+{
+  unsigned int f_type;
+  unsigned long int f_bsize;
 #ifndef __USE_FILE_OFFSET64
-    __fsblkcnt_t f_blocks;
-    __fsblkcnt_t f_bfree;
-    __fsblkcnt_t f_bavail;
-    __fsblkcnt_t f_files;
-    __fsblkcnt_t f_ffree;
+  __fsblkcnt_t f_blocks;
+  __fsblkcnt_t f_bfree;
+  __fsblkcnt_t f_bavail;
+  __fsblkcnt_t f_files;
+  __fsblkcnt_t f_ffree;
 #else
-    __fsblkcnt64_t f_blocks;
-    __fsblkcnt64_t f_bfree;
-    __fsblkcnt64_t f_bavail;
-    __fsblkcnt64_t f_files;
-    __fsblkcnt64_t f_ffree;
+  __fsblkcnt64_t f_blocks;
+  __fsblkcnt64_t f_bfree;
+  __fsblkcnt64_t f_bavail;
+  __fsblkcnt64_t f_files;
+  __fsblkcnt64_t f_ffree;
 #endif
-    __fsid_t f_fsid;
-    unsigned long int f_namelen;
+  __fsid_t f_fsid;
+  unsigned long int f_namelen;
 #ifndef __USE_FILE_OFFSET64
-    __fsfilcnt_t f_favail;
+  __fsfilcnt_t f_favail;
 #else
-    __fsfilcnt64_t f_favail;
+  __fsfilcnt64_t f_favail;
 #endif
-    unsigned long int f_frsize;
-    unsigned long int f_flag;
-    unsigned int f_spare[3];
-  };
+  unsigned long int f_frsize;
+  unsigned long int f_flag;
+  unsigned int f_spare[3];
+};
 
 #ifdef __USE_LARGEFILE64
 struct statfs64
-  {
-    unsigned int f_type;
-    unsigned long int f_bsize;
-    __fsblkcnt64_t f_blocks;
-    __fsblkcnt64_t f_bfree;
-    __fsblkcnt64_t f_bavail;
-    __fsblkcnt64_t f_files;
-    __fsblkcnt64_t f_ffree;
-    __fsid_t f_fsid;
-    unsigned long int f_namelen;
-    __fsfilcnt64_t f_favail;
-    unsigned long int f_frsize;
-    unsigned long int f_flag;
-    unsigned int f_spare[3];
-  };
+{
+  unsigned int f_type;
+  unsigned long int f_bsize;
+  __fsblkcnt64_t f_blocks;
+  __fsblkcnt64_t f_bfree;
+  __fsblkcnt64_t f_bavail;
+  __fsblkcnt64_t f_files;
+  __fsblkcnt64_t f_ffree;
+  __fsid_t f_fsid;
+  unsigned long int f_namelen;
+  __fsfilcnt64_t f_favail;
+  unsigned long int f_frsize;
+  unsigned long int f_flag;
+  unsigned int f_spare[3];
+};
 #endif
 
 /* Tell code we have this member.  */

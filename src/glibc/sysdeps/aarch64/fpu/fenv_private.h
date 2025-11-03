@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef AARCH64_FENV_PRIVATE_H
-#define AARCH64_FENV_PRIVATE_H 1
+#  define AARCH64_FENV_PRIVATE_H 1
 
-#include <fenv.h>
-#include <fpu_control.h>
+#  include <fenv.h>
+#  include <fpu_control.h>
 
 static __always_inline void
 libc_feholdexcept_aarch64 (fenv_t *envp)
@@ -46,9 +46,9 @@ libc_feholdexcept_aarch64 (fenv_t *envp)
     _FPU_SETFPSR (new_fpsr);
 }
 
-#define libc_feholdexcept  libc_feholdexcept_aarch64
-#define libc_feholdexceptf libc_feholdexcept_aarch64
-#define libc_feholdexceptl libc_feholdexcept_aarch64
+#  define libc_feholdexcept libc_feholdexcept_aarch64
+#  define libc_feholdexceptf libc_feholdexcept_aarch64
+#  define libc_feholdexceptl libc_feholdexcept_aarch64
 
 static __always_inline void
 libc_fesetround_aarch64 (int round)
@@ -65,9 +65,9 @@ libc_fesetround_aarch64 (int round)
     _FPU_SETCW (fpcr ^ round);
 }
 
-#define libc_fesetround  libc_fesetround_aarch64
-#define libc_fesetroundf libc_fesetround_aarch64
-#define libc_fesetroundl libc_fesetround_aarch64
+#  define libc_fesetround libc_fesetround_aarch64
+#  define libc_fesetroundf libc_fesetround_aarch64
+#  define libc_fesetroundl libc_fesetround_aarch64
 
 static __always_inline void
 libc_feholdexcept_setround_aarch64 (fenv_t *envp, int round)
@@ -95,9 +95,9 @@ libc_feholdexcept_setround_aarch64 (fenv_t *envp, int round)
     _FPU_SETFPSR (new_fpsr);
 }
 
-#define libc_feholdexcept_setround  libc_feholdexcept_setround_aarch64
-#define libc_feholdexcept_setroundf libc_feholdexcept_setround_aarch64
-#define libc_feholdexcept_setroundl libc_feholdexcept_setround_aarch64
+#  define libc_feholdexcept_setround libc_feholdexcept_setround_aarch64
+#  define libc_feholdexcept_setroundf libc_feholdexcept_setround_aarch64
+#  define libc_feholdexcept_setroundl libc_feholdexcept_setround_aarch64
 
 static __always_inline int
 libc_fetestexcept_aarch64 (int ex)
@@ -108,9 +108,9 @@ libc_fetestexcept_aarch64 (int ex)
   return fpsr & ex & FE_ALL_EXCEPT;
 }
 
-#define libc_fetestexcept  libc_fetestexcept_aarch64
-#define libc_fetestexceptf libc_fetestexcept_aarch64
-#define libc_fetestexceptl libc_fetestexcept_aarch64
+#  define libc_fetestexcept libc_fetestexcept_aarch64
+#  define libc_fetestexceptf libc_fetestexcept_aarch64
+#  define libc_fetestexceptl libc_fetestexcept_aarch64
 
 static __always_inline void
 libc_fesetenv_aarch64 (const fenv_t *envp)
@@ -127,12 +127,12 @@ libc_fesetenv_aarch64 (const fenv_t *envp)
   _FPU_SETFPSR (envp->__fpsr);
 }
 
-#define libc_fesetenv  libc_fesetenv_aarch64
-#define libc_fesetenvf libc_fesetenv_aarch64
-#define libc_fesetenvl libc_fesetenv_aarch64
-#define libc_feresetround_noex  libc_fesetenv_aarch64
-#define libc_feresetround_noexf libc_fesetenv_aarch64
-#define libc_feresetround_noexl libc_fesetenv_aarch64
+#  define libc_fesetenv libc_fesetenv_aarch64
+#  define libc_fesetenvf libc_fesetenv_aarch64
+#  define libc_fesetenvl libc_fesetenv_aarch64
+#  define libc_feresetround_noex libc_fesetenv_aarch64
+#  define libc_feresetround_noexf libc_fesetenv_aarch64
+#  define libc_feresetround_noexl libc_fesetenv_aarch64
 
 static __always_inline int
 libc_feupdateenv_test_aarch64 (const fenv_t *envp, int ex)
@@ -164,9 +164,9 @@ libc_feupdateenv_test_aarch64 (const fenv_t *envp, int ex)
   return excepts & ex;
 }
 
-#define libc_feupdateenv_test  libc_feupdateenv_test_aarch64
-#define libc_feupdateenv_testf libc_feupdateenv_test_aarch64
-#define libc_feupdateenv_testl libc_feupdateenv_test_aarch64
+#  define libc_feupdateenv_test libc_feupdateenv_test_aarch64
+#  define libc_feupdateenv_testf libc_feupdateenv_test_aarch64
+#  define libc_feupdateenv_testl libc_feupdateenv_test_aarch64
 
 static __always_inline void
 libc_feupdateenv_aarch64 (const fenv_t *envp)
@@ -174,9 +174,9 @@ libc_feupdateenv_aarch64 (const fenv_t *envp)
   libc_feupdateenv_test_aarch64 (envp, 0);
 }
 
-#define libc_feupdateenv  libc_feupdateenv_aarch64
-#define libc_feupdateenvf libc_feupdateenv_aarch64
-#define libc_feupdateenvl libc_feupdateenv_aarch64
+#  define libc_feupdateenv libc_feupdateenv_aarch64
+#  define libc_feupdateenvf libc_feupdateenv_aarch64
+#  define libc_feupdateenvl libc_feupdateenv_aarch64
 
 static __always_inline void
 libc_feholdsetround_aarch64 (fenv_t *envp, int round)
@@ -197,9 +197,9 @@ libc_feholdsetround_aarch64 (fenv_t *envp, int round)
     _FPU_SETCW (fpcr ^ round);
 }
 
-#define libc_feholdsetround  libc_feholdsetround_aarch64
-#define libc_feholdsetroundf libc_feholdsetround_aarch64
-#define libc_feholdsetroundl libc_feholdsetround_aarch64
+#  define libc_feholdsetround libc_feholdsetround_aarch64
+#  define libc_feholdsetroundf libc_feholdsetround_aarch64
+#  define libc_feholdsetroundl libc_feholdsetround_aarch64
 
 static __always_inline void
 libc_feresetround_aarch64 (fenv_t *envp)
@@ -217,12 +217,12 @@ libc_feresetround_aarch64 (fenv_t *envp)
     _FPU_SETCW (fpcr ^ round);
 }
 
-#define libc_feresetround  libc_feresetround_aarch64
-#define libc_feresetroundf libc_feresetround_aarch64
-#define libc_feresetroundl libc_feresetround_aarch64
+#  define libc_feresetround libc_feresetround_aarch64
+#  define libc_feresetroundf libc_feresetround_aarch64
+#  define libc_feresetroundl libc_feresetround_aarch64
 
 /* We have support for rounding mode context.  */
-#define HAVE_RM_CTX 1
+#  define HAVE_RM_CTX 1
 
 static __always_inline void
 libc_feholdsetround_aarch64_ctx (struct rm_ctx *ctx, int r)
@@ -242,9 +242,9 @@ libc_feholdsetround_aarch64_ctx (struct rm_ctx *ctx, int r)
     _FPU_SETCW (fpcr ^ round);
 }
 
-#define libc_feholdsetround_ctx		libc_feholdsetround_aarch64_ctx
-#define libc_feholdsetroundf_ctx	libc_feholdsetround_aarch64_ctx
-#define libc_feholdsetroundl_ctx	libc_feholdsetround_aarch64_ctx
+#  define libc_feholdsetround_ctx libc_feholdsetround_aarch64_ctx
+#  define libc_feholdsetroundf_ctx libc_feholdsetround_aarch64_ctx
+#  define libc_feholdsetroundl_ctx libc_feholdsetround_aarch64_ctx
 
 static __always_inline void
 libc_feresetround_aarch64_ctx (struct rm_ctx *ctx)
@@ -254,9 +254,9 @@ libc_feresetround_aarch64_ctx (struct rm_ctx *ctx)
     _FPU_SETCW (ctx->env.__fpcr);
 }
 
-#define libc_feresetround_ctx		libc_feresetround_aarch64_ctx
-#define libc_feresetroundf_ctx		libc_feresetround_aarch64_ctx
-#define libc_feresetroundl_ctx		libc_feresetround_aarch64_ctx
+#  define libc_feresetround_ctx libc_feresetround_aarch64_ctx
+#  define libc_feresetroundf_ctx libc_feresetround_aarch64_ctx
+#  define libc_feresetroundl_ctx libc_feresetround_aarch64_ctx
 
 static __always_inline void
 libc_feholdsetround_noex_aarch64_ctx (struct rm_ctx *ctx, int r)
@@ -279,9 +279,9 @@ libc_feholdsetround_noex_aarch64_ctx (struct rm_ctx *ctx, int r)
     _FPU_SETCW (fpcr ^ round);
 }
 
-#define libc_feholdsetround_noex_ctx	libc_feholdsetround_noex_aarch64_ctx
-#define libc_feholdsetround_noexf_ctx	libc_feholdsetround_noex_aarch64_ctx
-#define libc_feholdsetround_noexl_ctx	libc_feholdsetround_noex_aarch64_ctx
+#  define libc_feholdsetround_noex_ctx libc_feholdsetround_noex_aarch64_ctx
+#  define libc_feholdsetround_noexf_ctx libc_feholdsetround_noex_aarch64_ctx
+#  define libc_feholdsetround_noexl_ctx libc_feholdsetround_noex_aarch64_ctx
 
 static __always_inline void
 libc_feresetround_noex_aarch64_ctx (struct rm_ctx *ctx)
@@ -294,10 +294,10 @@ libc_feresetround_noex_aarch64_ctx (struct rm_ctx *ctx)
   _FPU_SETFPSR (ctx->env.__fpsr);
 }
 
-#define libc_feresetround_noex_ctx	libc_feresetround_noex_aarch64_ctx
-#define libc_feresetround_noexf_ctx	libc_feresetround_noex_aarch64_ctx
-#define libc_feresetround_noexl_ctx	libc_feresetround_noex_aarch64_ctx
+#  define libc_feresetround_noex_ctx libc_feresetround_noex_aarch64_ctx
+#  define libc_feresetround_noexf_ctx libc_feresetround_noex_aarch64_ctx
+#  define libc_feresetround_noexl_ctx libc_feresetround_noex_aarch64_ctx
 
-#include_next <fenv_private.h>
+#  include_next <fenv_private.h>
 
 #endif

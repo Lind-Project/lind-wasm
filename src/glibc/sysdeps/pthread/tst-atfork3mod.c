@@ -36,7 +36,8 @@ mod_child (void)
 {
 }
 
-int atfork3mod_func (void)
+int
+atfork3mod_func (void)
 {
   TEST_COMPARE (pthread_atfork (mod_prepare, mod_parent, mod_child), 0);
 

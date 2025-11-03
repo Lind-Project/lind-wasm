@@ -33,8 +33,8 @@ clock (void)
   error_t err;
 
   count = TASK_BASIC_INFO_COUNT;
-  err = __task_info (__mach_task_self (), TASK_BASIC_INFO,
-		     (task_info_t) &bi, &count);
+  err = __task_info (__mach_task_self (), TASK_BASIC_INFO, (task_info_t) &bi,
+		     &count);
   if (err)
     return __hurd_fail (err);
 

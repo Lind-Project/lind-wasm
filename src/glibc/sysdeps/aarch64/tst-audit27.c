@@ -25,13 +25,12 @@ int
 do_test (void)
 {
   {
-    float r = tst_audit27_func_float (FUNC_FLOAT_ARG0, FUNC_FLOAT_ARG1,
-				      FUNC_FLOAT_ARG2, FUNC_FLOAT_ARG3,
-				      FUNC_FLOAT_ARG4, FUNC_FLOAT_ARG5,
-				      FUNC_FLOAT_ARG6, FUNC_FLOAT_ARG7);
+    float r = tst_audit27_func_float (
+	FUNC_FLOAT_ARG0, FUNC_FLOAT_ARG1, FUNC_FLOAT_ARG2, FUNC_FLOAT_ARG3,
+	FUNC_FLOAT_ARG4, FUNC_FLOAT_ARG5, FUNC_FLOAT_ARG6, FUNC_FLOAT_ARG7);
     if (r != FUNC_FLOAT_RET)
-      FAIL_EXIT1 ("tst_audit27_func_float() returned %a, expected %a",
-		  r, FUNC_FLOAT_RET);
+      FAIL_EXIT1 ("tst_audit27_func_float() returned %a, expected %a", r,
+		  FUNC_FLOAT_RET);
   }
 
   {
@@ -40,22 +39,18 @@ do_test (void)
 					FUNC_DOUBLE_ARG4, FUNC_DOUBLE_ARG5,
 					FUNC_DOUBLE_ARG6, FUNC_DOUBLE_ARG7);
     if (r != FUNC_DOUBLE_RET)
-      FAIL_EXIT1 ("tst_audit27_func_double() returned %la, expected %la",
-		  r, FUNC_DOUBLE_RET);
+      FAIL_EXIT1 ("tst_audit27_func_double() returned %la, expected %la", r,
+		  FUNC_DOUBLE_RET);
   }
 
   {
-    long double r = tst_audit27_func_ldouble (FUNC_LDOUBLE_ARG0,
-					      FUNC_LDOUBLE_ARG1,
-					      FUNC_LDOUBLE_ARG2,
-					      FUNC_LDOUBLE_ARG3,
-					      FUNC_LDOUBLE_ARG4,
-					      FUNC_LDOUBLE_ARG5,
-					      FUNC_LDOUBLE_ARG6,
-					      FUNC_LDOUBLE_ARG7);
+    long double r = tst_audit27_func_ldouble (
+	FUNC_LDOUBLE_ARG0, FUNC_LDOUBLE_ARG1, FUNC_LDOUBLE_ARG2,
+	FUNC_LDOUBLE_ARG3, FUNC_LDOUBLE_ARG4, FUNC_LDOUBLE_ARG5,
+	FUNC_LDOUBLE_ARG6, FUNC_LDOUBLE_ARG7);
     if (r != FUNC_LDOUBLE_RET)
-      FAIL_EXIT1 ("tst_audit27_func_ldouble() returned %La, expected %La",
-		  r, FUNC_LDOUBLE_RET);
+      FAIL_EXIT1 ("tst_audit27_func_ldouble() returned %La, expected %La", r,
+		  FUNC_LDOUBLE_RET);
   }
 
   return 0;

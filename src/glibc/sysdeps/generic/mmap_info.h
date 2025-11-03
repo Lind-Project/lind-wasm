@@ -10,7 +10,7 @@ static inline uint64_t
 mmap64_maximum_offset (long int page_shift)
 {
   if (sizeof (off_t) < sizeof (off64_t))
-    return (UINT64_C(1) << (page_shift + (8 * sizeof (off_t)))) - 1;
+    return (UINT64_C (1) << (page_shift + (8 * sizeof (off_t)))) - 1;
   else
     return UINT64_MAX;
 }

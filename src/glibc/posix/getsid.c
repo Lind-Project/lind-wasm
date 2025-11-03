@@ -26,5 +26,4 @@ getsid (pid_t pid)
   __set_errno (ENOSYS);
   return (pid_t) -1;
 }
-libc_hidden_def (getsid)
-stub_warning (getsid)
+libc_hidden_def (getsid) stub_warning (getsid)

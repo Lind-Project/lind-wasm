@@ -27,24 +27,20 @@
    Both _sys_siglist and sys_siglist alias to __sys_siglist while
    sys_sigabbrev alias to __sys_sigabbrev.  Both target alias are
    define in siglist.c.  */
-#define DEFINE_COMPAT_SIGLIST(NUMBERSIG, VERSION) 			     \
-  declare_object_symbol_alias (__ ## VERSION ## _sys_siglist,		     \
-			       __sys_siglist,				     \
-			       NUMBERSIG * (ULONG_WIDTH / UCHAR_WIDTH))      \
-			       ASM_LINE_SEP				     \
-  declare_object_symbol_alias (__ ## VERSION ## sys_siglist,		     \
-			       __sys_siglist,				     \
-			       NUMBERSIG * (ULONG_WIDTH / UCHAR_WIDTH))      \
-			       ASM_LINE_SEP				     \
-  declare_object_symbol_alias (__ ## VERSION ## _sys_sigabbrev,		     \
-			       __sys_sigabbrev,				     \
-			       NUMBERSIG * (ULONG_WIDTH / UCHAR_WIDTH))      \
-			       ASM_LINE_SEP				     \
-  compat_symbol (libc, __## VERSION ## _sys_siglist,   _sys_siglist,	     \
-		 VERSION) ASM_LINE_SEP					     \
-  compat_symbol (libc, __## VERSION ## sys_siglist,    sys_siglist,	     \
-		 VERSION) ASM_LINE_SEP					     \
-  compat_symbol (libc, __## VERSION ## _sys_sigabbrev, sys_sigabbrev,	     \
-		 VERSION)
+#define DEFINE_COMPAT_SIGLIST(NUMBERSIG, VERSION)                             \
+  declare_object_symbol_alias (__##VERSION##_sys_siglist, __sys_siglist,      \
+			       NUMBERSIG *(ULONG_WIDTH / UCHAR_WIDTH))        \
+      ASM_LINE_SEP                                                            \
+      declare_object_symbol_alias (__##VERSION##sys_siglist, __sys_siglist,   \
+				   NUMBERSIG *(ULONG_WIDTH / UCHAR_WIDTH))    \
+	  ASM_LINE_SEP declare_object_symbol_alias (                          \
+	      __##VERSION##_sys_sigabbrev, __sys_sigabbrev,                   \
+	      NUMBERSIG *(ULONG_WIDTH / UCHAR_WIDTH))                         \
+	      ASM_LINE_SEP compat_symbol (libc, __##VERSION##_sys_siglist,    \
+					  _sys_siglist, VERSION)              \
+  ASM_LINE_SEP                                                                \
+  compat_symbol (libc, __##VERSION##sys_siglist, sys_siglist,                 \
+		 VERSION) ASM_LINE_SEP                                        \
+  compat_symbol (libc, __##VERSION##_sys_sigabbrev, sys_sigabbrev, VERSION)
 
 #endif

@@ -25,6 +25,7 @@
 union pthread_attr_transparent __default_pthread_attr;
 libc_hidden_data_def (__default_pthread_attr)
 
-/* Mutex protecting __default_pthread_attr.  */
-int __default_pthread_attr_lock = LLL_LOCK_INITIALIZER;
+    /* Mutex protecting __default_pthread_attr.  */
+    int __default_pthread_attr_lock
+    = LLL_LOCK_INITIALIZER;
 libc_hidden_data_def (__default_pthread_attr_lock)

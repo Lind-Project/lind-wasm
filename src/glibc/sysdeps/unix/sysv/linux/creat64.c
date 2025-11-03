@@ -34,6 +34,5 @@ __creat64 (const char *file, mode_t mode)
 weak_alias (__creat64, creat64)
 
 #ifdef __OFF_T_MATCHES_OFF64_T
-strong_alias (__creat64, __creat)
-weak_alias (__creat64, creat)
+    strong_alias (__creat64, __creat) weak_alias (__creat64, creat)
 #endif

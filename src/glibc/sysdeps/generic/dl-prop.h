@@ -37,7 +37,7 @@ _dl_open_check (struct link_map *m)
 }
 
 static inline void __attribute__ ((always_inline))
-_dl_process_pt_note (struct link_map *l, int fd, const ElfW(Phdr) *ph)
+_dl_process_pt_note (struct link_map *l, int fd, const ElfW (Phdr) * ph)
 {
 }
 

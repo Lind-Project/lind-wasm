@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LINUX_I686_DL_SYSDEP_H
-#define _LINUX_I686_DL_SYSDEP_H	1
+#  define _LINUX_I686_DL_SYSDEP_H 1
 
 /* The i386 file does most of the work.  */
-#include_next <dl-sysdep.h>
+#  include_next <dl-sysdep.h>
 
 /* Actually use the vDSO entry point for syscalls.
    i386/dl-sysdep.h arranges to support it, but not use it.  */
-#define USE_DL_SYSINFO	1
+#  define USE_DL_SYSINFO 1
 
-#endif	/* dl-sysdep.h */
+#endif /* dl-sysdep.h */

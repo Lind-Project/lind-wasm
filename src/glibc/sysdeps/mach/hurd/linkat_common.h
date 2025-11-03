@@ -15,9 +15,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_LINKAT_COMMON_H
-#define	_LINKAT_COMMON_H	1
+#ifndef _LINKAT_COMMON_H
+#  define _LINKAT_COMMON_H 1
 
-extern int __linkat_common (int fromfd, const char *from, int tofd, const char *to, int at_flags, int flags);
+extern int __linkat_common (int fromfd, const char *from, int tofd,
+			    const char *to, int at_flags, int flags);
 
 #endif /* link_common.h */

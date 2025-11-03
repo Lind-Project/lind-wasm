@@ -80,7 +80,8 @@ special_case (float64x2_t x, float64x2_t y, float64x2_t hi, float64x2_t r2,
    Maximum measured at 2.46 ulp for x in [0.96, 0.97]
    _ZGVnN2v_log10(0x1.13192407fcb46p+0) got 0x1.fff6be3cae4bbp-6
 				       want 0x1.fff6be3cae4b9p-6.  */
-float64x2_t VPCS_ATTR V_NAME_D1 (log10) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (log10) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
   uint64x2_t ix = vreinterpretq_u64_f64 (x);

@@ -15,12 +15,11 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-
-int process_elf32_file (const char *file_name, const char *lib,
-			int *flag, unsigned int *isa_level, char **soname,
+int process_elf32_file (const char *file_name, const char *lib, int *flag,
+			unsigned int *isa_level, char **soname,
 			void *file_contents, size_t file_length);
-int process_elf64_file (const char *file_name, const char *lib,
-			int *flag, unsigned int *isa_level, char **soname,
+int process_elf64_file (const char *file_name, const char *lib, int *flag,
+			unsigned int *isa_level, char **soname,
 			void *file_contents, size_t file_length);
 
 /* Returns 0 if everything is ok, != 0 in case of error.  */
@@ -29,22 +28,23 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
 		  unsigned int *isa_level, char **soname, void *file_contents,
 		  size_t file_length)
 {
-  ElfW(Ehdr) *elf_header = (ElfW(Ehdr) *) file_contents;
+  ElfW (Ehdr) *elf_header = (ElfW (Ehdr) *) file_contents;
   int ret;
 
-  if (elf_header->e_ident [EI_CLASS] == ELFCLASS32)
+  if (elf_header->e_ident[EI_CLASS] == ELFCLASS32)
     {
       Elf32_Ehdr *elf32_header = (Elf32_Ehdr *) elf_header;
 
       ret = process_elf32_file (file_name, lib, flag, isa_level, soname,
 				file_contents, file_length);
 
-      if (!ret && EF_ARM_EABI_VERSION (elf32_header->e_flags) == EF_ARM_EABI_VER5)
+      if (!ret
+	  && EF_ARM_EABI_VERSION (elf32_header->e_flags) == EF_ARM_EABI_VER5)
 	{
 	  if (elf32_header->e_flags & EF_ARM_ABI_FLOAT_HARD)
-	    *flag = FLAG_ARM_LIBHF|FLAG_ELF_LIBC6;
+	    *flag = FLAG_ARM_LIBHF | FLAG_ELF_LIBC6;
 	  else if (elf32_header->e_flags & EF_ARM_ABI_FLOAT_SOFT)
-	    *flag = FLAG_ARM_LIBSF|FLAG_ELF_LIBC6;
+	    *flag = FLAG_ARM_LIBSF | FLAG_ELF_LIBC6;
 	  else
 	    /* We must assume the unmarked objects are compatible
 	       with all ABI variants. Such objects may have been
@@ -59,7 +59,7 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
 				file_contents, file_length);
       /* AArch64 libraries are always libc.so.6+.  */
       if (!ret)
-	*flag = FLAG_AARCH64_LIB64|FLAG_ELF_LIBC6;
+	*flag = FLAG_AARCH64_LIB64 | FLAG_ELF_LIBC6;
     }
   return ret;
 }

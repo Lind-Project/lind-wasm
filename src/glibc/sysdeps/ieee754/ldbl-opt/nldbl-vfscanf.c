@@ -5,8 +5,7 @@
 
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 __vfscanf (FILE *s, const char *fmt, va_list ap)
 {
   return __nldbl__IO_vfscanf (s, fmt, ap, NULL);

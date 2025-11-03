@@ -18,9 +18,8 @@
 
 #ifndef _NET_IF_H
 
-#define _NET_IF_H	1
-#include <features.h>
-
+#  define _NET_IF_H 1
+#  include <features.h>
 
 __BEGIN_DECLS
 
@@ -32,10 +31,10 @@ extern char *if_indextoname (unsigned int __ifindex, char *__ifname) __THROW;
 /* Return a list of all interfaces and their indices.  */
 
 struct if_nameindex
-  {
-    unsigned int if_index;	/* 1, 2, ... */
-    char *if_name;		/* null terminated name: "eth0", ... */
-  };
+{
+  unsigned int if_index; /* 1, 2, ... */
+  char *if_name;	 /* null terminated name: "eth0", ... */
+};
 
 extern struct if_nameindex *if_nameindex (void) __THROW;
 
@@ -44,6 +43,5 @@ extern struct if_nameindex *if_nameindex (void) __THROW;
 extern void if_freenameindex (struct if_nameindex *__ptr) __THROW;
 
 __END_DECLS
-
 
 #endif /* net/if.h */

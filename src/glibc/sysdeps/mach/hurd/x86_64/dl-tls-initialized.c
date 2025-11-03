@@ -16,6 +16,6 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if !defined (SHARED) || IS_IN (rtld)
+#if !defined(SHARED) || IS_IN(rtld)
 unsigned short __libc_tls_initialized;
 #endif

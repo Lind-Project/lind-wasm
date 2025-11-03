@@ -24,7 +24,6 @@ __getpgid (pid_t pid)
 {
   return pid;
 }
-libc_hidden_def (__getpgid)
-weak_alias (__getpgid, getpgid)
+libc_hidden_def (__getpgid) weak_alias (__getpgid, getpgid)
 
-stub_warning (getpgid)
+    stub_warning (getpgid)

@@ -30,6 +30,5 @@ __fegetenv (fenv_t *envp)
   envp->__fpsr = fpsr;
   return 0;
 }
-libm_hidden_def (__fegetenv)
-weak_alias (__fegetenv, fegetenv)
-libm_hidden_weak (fegetenv)
+libm_hidden_def (__fegetenv) weak_alias (__fegetenv, fegetenv)
+    libm_hidden_weak (fegetenv)

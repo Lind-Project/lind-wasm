@@ -24,11 +24,10 @@
    __tls_get_addr may be called with 8-byte stack alignment.  Although
    this bug has been fixed in GCC 4.9.4, 5.3 and 6, we can't assume
    that stack will be always aligned at 16 bytes.  */
-# define DL_STACK_ALIGNMENT 8
+#  define DL_STACK_ALIGNMENT 8
 #endif
 
 /* True if _dl_runtime_resolve should align stack for STATE_SAVE or align
    stack to 16 bytes before calling _dl_fixup.  */
-#define DL_RUNTIME_RESOLVE_REALIGN_STACK \
-  (STATE_SAVE_ALIGNMENT > DL_STACK_ALIGNMENT \
-   || 16 > DL_STACK_ALIGNMENT)
+#define DL_RUNTIME_RESOLVE_REALIGN_STACK                                      \
+  (STATE_SAVE_ALIGNMENT > DL_STACK_ALIGNMENT || 16 > DL_STACK_ALIGNMENT)

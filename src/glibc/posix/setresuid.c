@@ -27,7 +27,6 @@ __setresuid (uid_t ruid, uid_t euid, uid_t suid)
   __set_errno (ENOSYS);
   return -1;
 }
-libc_hidden_def (__setresuid)
-stub_warning (setresuid)
+libc_hidden_def (__setresuid) stub_warning (setresuid)
 
-weak_alias (__setresuid, setresuid)
+    weak_alias (__setresuid, setresuid)

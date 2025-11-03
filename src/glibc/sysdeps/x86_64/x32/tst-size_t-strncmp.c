@@ -17,32 +17,30 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef WIDE
-# define TEST_NAME "wcsncmp"
+#  define TEST_NAME "wcsncmp"
 #else
-# define TEST_NAME "strncmp"
+#  define TEST_NAME "strncmp"
 #endif
 
 #include "test-size_t.h"
 
 #ifdef WIDE
-# include <wchar.h>
+#  include <wchar.h>
 
-# define STRNCMP wcsncmp
-# define STRNCPY wcsncpy
-# define CHAR wchar_t
+#  define STRNCMP wcsncmp
+#  define STRNCPY wcsncpy
+#  define CHAR wchar_t
 #else
-# define STRNCMP strncmp
-# define STRNCPY strncpy
-# define CHAR char
+#  define STRNCMP strncmp
+#  define STRNCPY strncpy
+#  define CHAR char
 #endif
 
 IMPL (STRNCMP, 1)
 
 typedef int (*proto_t) (const CHAR *, const CHAR *, size_t);
 
-
-static int
-__attribute__ ((noinline, noclone))
+static int __attribute__ ((noinline, noclone))
 do_strncmp (parameter_t a, parameter_t b)
 {
   return CALL (&b, a.p, b.p, a.len);
@@ -66,8 +64,8 @@ test_main (void)
       int res = do_strncmp (dest, src);
       if (res)
 	{
-	  error (0, 0, "Wrong result in function %s: %i != 0",
-		 impl->name, res);
+	  error (0, 0, "Wrong result in function %s: %i != 0", impl->name,
+		 res);
 	  ret = 1;
 	}
     }

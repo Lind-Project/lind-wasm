@@ -19,15 +19,11 @@
 #include <spawn.h>
 #include <string.h>
 
-#define ALL_FLAGS (POSIX_SPAWN_RESETIDS					      \
-		   | POSIX_SPAWN_SETPGROUP				      \
-		   | POSIX_SPAWN_SETSIGDEF				      \
-		   | POSIX_SPAWN_SETSIGMASK				      \
-		   | POSIX_SPAWN_SETSCHEDPARAM				      \
-		   | POSIX_SPAWN_SETSCHEDULER				      \
-		   | POSIX_SPAWN_SETSID					      \
-		   | POSIX_SPAWN_USEVFORK				      \
-		   | POSIX_SPAWN_SETCGROUP)
+#define ALL_FLAGS                                                             \
+  (POSIX_SPAWN_RESETIDS | POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGDEF       \
+   | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSCHEDPARAM                       \
+   | POSIX_SPAWN_SETSCHEDULER | POSIX_SPAWN_SETSID | POSIX_SPAWN_USEVFORK     \
+   | POSIX_SPAWN_SETCGROUP)
 
 /* Store flags in the attribute structure.  */
 int

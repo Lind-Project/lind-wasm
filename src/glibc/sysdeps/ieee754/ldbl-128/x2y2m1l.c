@@ -22,7 +22,6 @@
 #include <mul_splitl.h>
 #include <stdlib.h>
 
-
 /* Calculate X + Y exactly and store the result in *HI + *LO.  It is
    given that |X| >= |Y| and the values are small enough that no
    overflow occurs.  */

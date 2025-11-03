@@ -28,7 +28,6 @@ __llrintf (float x)
   /* Prevent gcc from calling llrintf directly when compiled with
      -fno-math-errno by inserting a barrier.  */
 
-
   math_opt_barrier (r);
   return r;
 }

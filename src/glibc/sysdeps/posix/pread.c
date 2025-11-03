@@ -56,6 +56,5 @@ __libc_pread (int fd, void *buf, size_t nbyte, off_t offset)
 }
 
 #ifndef __libc_pread
-strong_alias (__libc_pread, __pread)
-weak_alias (__libc_pread, pread)
+strong_alias (__libc_pread, __pread) weak_alias (__libc_pread, pread)
 #endif

@@ -17,32 +17,32 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FLOAT128_PRIVATE_PPC64LE
-#define _FLOAT128_PRIVATE_PPC64LE 1
+#  define _FLOAT128_PRIVATE_PPC64LE 1
 
-#ifndef _F128_ENABLE_IFUNC
+#  ifndef _F128_ENABLE_IFUNC
 /* multiarch is not supported.  Do nothing and pass through.  */
-#include_next <float128_private.h>
-#else
+#    include_next <float128_private.h>
+#  else
 
 /* Include fenv.h now before turning off libm_hidden_proto.
    At minimum, fereaiseexcept is needed. */
-#include <fenv.h>
+#    include <fenv.h>
 
 /* The PLT bypass trick used by libm_hidden_proto uses asm-renames.
    If gcc detects a second rename to a different function, it will
    emit errors.  */
-#undef libm_hidden_proto
-#define libm_hidden_proto(f)
+#    undef libm_hidden_proto
+#    define libm_hidden_proto(f)
 
 /* Always disable redirects.  We supply these uniquely later on.  */
-#undef NO_MATH_REDIRECT
-#define NO_MATH_REDIRECT
-#include <math.h>
-#undef NO_MATH_REDIRECT
+#    undef NO_MATH_REDIRECT
+#    define NO_MATH_REDIRECT
+#    include <math.h>
+#    undef NO_MATH_REDIRECT
 
-#include_next <float128_private.h>
+#    include_next <float128_private.h>
 
-#include <float128-ifunc-macros.h>
+#    include <float128-ifunc-macros.h>
 
 /* Declare these now.  These prototypes are not included
    in any header.  */
@@ -91,9 +91,9 @@ F128_REDIR (__tanf128)
 F128_REDIR (__truncf128)
 F128_REDIR (__lgamma_productf128)
 
-#include <float128-ifunc-redirects-mp.h>
-#include <float128-ifunc-redirects.h>
+#    include <float128-ifunc-redirects-mp.h>
+#    include <float128-ifunc-redirects.h>
 
-#endif /* _F128_ENABLE_IFUNC */
+#  endif /* _F128_ENABLE_IFUNC */
 
 #endif /* _FLOAT128_PRIVATE_PPC64LE */

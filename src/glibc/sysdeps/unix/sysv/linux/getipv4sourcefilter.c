@@ -25,7 +25,6 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 
-
 int
 getipv4sourcefilter (int s, struct in_addr interface, struct in_addr group,
 		     uint32_t *fmode, uint32_t *numsrc, struct in_addr *slist)

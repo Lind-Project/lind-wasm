@@ -18,8 +18,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <ldbl-128/printf_fphex_macros.h>
-#define PRINT_FPHEX_LONG_DOUBLE \
-  PRINT_FPHEX (long double, fpnum.ldbl, ieee854_long_double, \
+#define PRINT_FPHEX_LONG_DOUBLE                                               \
+  PRINT_FPHEX (long double, fpnum.ldbl, ieee854_long_double,                  \
 	       IEEE854_LONG_DOUBLE_BIAS)
 
 #include <stdio-common/printf_fphex.c>

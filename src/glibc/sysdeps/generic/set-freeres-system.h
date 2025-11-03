@@ -22,6 +22,6 @@
 #include <set-freeres-os.h>
 #include <set-freeres-fp.h>
 
-#define call_freeres_system_funcs	\
-  call_freeres_os_funcs;		\
+#define call_freeres_system_funcs                                             \
+  call_freeres_os_funcs;                                                      \
   call_freeres_fp_funcs

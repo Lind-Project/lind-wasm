@@ -21,7 +21,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-
 static void
 handler (int sig)
 {
@@ -36,7 +35,6 @@ handler (int sig)
   /* Rearm the timer.  */
   alarm (1);
 }
-
 
 static int
 do_test (void)

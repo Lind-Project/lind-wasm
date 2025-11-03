@@ -25,9 +25,8 @@
 #define mcount_internal __mcount_internal
 
 extern void mcount_internal (u_long frompc, u_long selfpc);
-#define _MCOUNT_DECL(frompc, selfpc) \
+#define _MCOUNT_DECL(frompc, selfpc)                                          \
   void mcount_internal (u_long frompc, u_long selfpc)
-
 
 /* Define MCOUNT as empty since we have the implementation in another file.  */
 #define MCOUNT

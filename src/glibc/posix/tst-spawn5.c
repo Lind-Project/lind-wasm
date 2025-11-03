@@ -43,8 +43,7 @@ static int restart;
 static char *initial_argv[7];
 static int initial_argv_count;
 
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 
 #define NFDS 100
 
@@ -87,20 +86,20 @@ handle_restart (int argc, char *argv[])
       errno = 0;
       struct dirent64 *e = readdir64 (dirp);
       if (e == NULL)
-        {
-          if (errno != 0)
-            FAIL_EXIT1 ("readdir: %m");
-          break;
-        }
+	{
+	  if (errno != 0)
+	    FAIL_EXIT1 ("readdir: %m");
+	  break;
+	}
 
       if (e->d_name[0] == '.')
-        continue;
+	continue;
 
       char *endptr;
       long int fd = strtol (e->d_name, &endptr, 10);
       if (*endptr != '\0' || fd < 0 || fd > INT_MAX)
-        FAIL_EXIT1 ("readdir: invalid file descriptor name: /proc/self/fd/%s",
-                    e->d_name);
+	FAIL_EXIT1 ("readdir: invalid file descriptor name: /proc/self/fd/%s",
+		    e->d_name);
 
       /* Ignore the descriptors not in the range of the opened files.  */
       if (fd < lowfd || fd == dirfd (dirp))
@@ -185,7 +184,8 @@ do_test_closefrom (void)
     int ret = posix_spawn_file_actions_addclosefrom_np (&fa, half_fd);
     if (ret == EINVAL)
       /* Hurd currently does not support closefrom fileaction.  */
-      FAIL_UNSUPPORTED ("posix_spawn_file_actions_addclosefrom_np unsupported");
+      FAIL_UNSUPPORTED (
+	  "posix_spawn_file_actions_addclosefrom_np unsupported");
     TEST_COMPARE (ret, 0);
 
     spawn_closefrom_test (&fa, lowfd, half_fd, NULL, 0);
@@ -217,7 +217,8 @@ do_test_closefrom (void)
     posix_spawn_file_actions_t fa;
     TEST_COMPARE (posix_spawn_file_actions_init (&fa), 0);
 
-    TEST_COMPARE (posix_spawn_file_actions_addclosefrom_np (&fa, lowfd + 1), 0);
+    TEST_COMPARE (posix_spawn_file_actions_addclosefrom_np (&fa, lowfd + 1),
+		  0);
 
     spawn_closefrom_test (&fa, lowfd, lowfd + 1, NULL, 0);
 
@@ -241,14 +242,17 @@ do_test_closefrom (void)
     posix_spawn_file_actions_t fa;
     TEST_COMPARE (posix_spawn_file_actions_init (&fa), 0);
 
-    TEST_COMPARE (posix_spawn_file_actions_addclosefrom_np (&fa, lowfd + 1), 0);
+    TEST_COMPARE (posix_spawn_file_actions_addclosefrom_np (&fa, lowfd + 1),
+		  0);
     TEST_COMPARE (posix_spawn_file_actions_addopen (&fa, lowfd, "/dev/null",
-						    0666, O_RDONLY), 0);
+						    0666, O_RDONLY),
+		  0);
     TEST_COMPARE (posix_spawn_file_actions_adddup2 (&fa, lowfd, lowfd + 1), 0);
     TEST_COMPARE (posix_spawn_file_actions_addopen (&fa, lowfd, "/dev/null",
-						    0666, O_RDONLY), 0);
+						    0666, O_RDONLY),
+		  0);
 
-    spawn_closefrom_test (&fa, lowfd, lowfd, (int[]){lowfd, lowfd + 1}, 2);
+    spawn_closefrom_test (&fa, lowfd, lowfd, (int[]) { lowfd, lowfd + 1 }, 2);
 
     TEST_COMPARE (posix_spawn_file_actions_destroy (&fa), 0);
   }

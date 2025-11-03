@@ -23,11 +23,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
-static const uint64_t tests[] =
-  {
-    0, 1, 0x4000000000000000ULL, 0x4000000000000001ULL,
-    0x7fffffffffffffffULL
-  };
+static const uint64_t tests[]
+    = { 0, 1, 0x4000000000000000ULL, 0x4000000000000001ULL,
+	0x7fffffffffffffffULL };
 
 static int
 do_test (void)
@@ -41,15 +39,12 @@ do_test (void)
 	/* Verify that the high bit of the mantissa is ignored for
 	   infinities and NaNs for the M68K variant of this
 	   format.  */
-	SET_LDOUBLE_WORDS (ldx, 0x7fff,
-			   tests[i] >> 32, tests[i] & 0xffffffffULL);
-	SET_LDOUBLE_WORDS (ldy, 0x7fff,
-			   (tests[i] >> 32) | 0x80000000,
+	SET_LDOUBLE_WORDS (ldx, 0x7fff, tests[i] >> 32,
 			   tests[i] & 0xffffffffULL);
-	SET_LDOUBLE_WORDS (ldnx, -1,
-			   tests[i] >> 32, tests[i] & 0xffffffffULL);
-	SET_LDOUBLE_WORDS (ldny, -1,
-			   (tests[i] >> 32) | 0x80000000,
+	SET_LDOUBLE_WORDS (ldy, 0x7fff, (tests[i] >> 32) | 0x80000000,
+			   tests[i] & 0xffffffffULL);
+	SET_LDOUBLE_WORDS (ldnx, -1, tests[i] >> 32, tests[i] & 0xffffffffULL);
+	SET_LDOUBLE_WORDS (ldny, -1, (tests[i] >> 32) | 0x80000000,
 			   tests[i] & 0xffffffffULL);
 	bool to1 = totalorderl (&ldx, &ldy);
 	bool to2 = totalorderl (&ldy, &ldx);

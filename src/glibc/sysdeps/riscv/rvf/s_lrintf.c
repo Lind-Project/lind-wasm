@@ -21,18 +21,18 @@
 #include <stdint.h>
 
 #if __WORDSIZE == 64
-# define OP "fcvt.l.s"
+#  define OP "fcvt.l.s"
 #elif __WORDSIZE == 32
-# define OP "fcvt.w.s"
+#  define OP "fcvt.w.s"
 #else
-# error Unsupported
+#  error Unsupported
 #endif
 
 long int
 __lrintf (float x)
 {
   long int res;
-  asm (OP "\t%0, %1" : "=r" (res) : "f" (x));
+  asm (OP "\t%0, %1" : "=r"(res) : "f"(x));
   return res;
 }
 

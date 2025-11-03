@@ -16,36 +16,36 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if !defined (_SYS_AUXV_H) && !defined (_LINUX_ARM_SYSDEP_H)
-# error "Never include <bits/hwcap.h> directly; use <sys/auxv.h> instead."
+#if !defined(_SYS_AUXV_H) && !defined(_LINUX_ARM_SYSDEP_H)
+#  error "Never include <bits/hwcap.h> directly; use <sys/auxv.h> instead."
 #endif
 
 /* The following must match the kernel's <asm/hwcap.h>.  */
-#define HWCAP_ARM_SWP		1
-#define HWCAP_ARM_HALF		2
-#define HWCAP_ARM_THUMB		4
-#define HWCAP_ARM_26BIT		8
-#define HWCAP_ARM_FAST_MULT	16
-#define HWCAP_ARM_FPA		32
-#define HWCAP_ARM_VFP		64
-#define HWCAP_ARM_EDSP		128
-#define HWCAP_ARM_JAVA		256
-#define HWCAP_ARM_IWMMXT	512
-#define HWCAP_ARM_CRUNCH	1024
-#define HWCAP_ARM_THUMBEE	2048
-#define HWCAP_ARM_NEON		4096
-#define HWCAP_ARM_VFPv3		8192
-#define HWCAP_ARM_VFPv3D16	16384
-#define HWCAP_ARM_TLS		32768
-#define HWCAP_ARM_VFPv4		65536
-#define HWCAP_ARM_IDIVA		131072
-#define HWCAP_ARM_IDIVT		262144
-#define HWCAP_ARM_VFPD32	524288
-#define HWCAP_ARM_LPAE		1048576
-#define HWCAP_ARM_EVTSTRM	2097152
-#define HWCAP_FPHP		4194304
-#define HWCAP_ASIMDHP		8388608
-#define HWCAP_ASIMDDP		16777216
-#define HWCAP_ASIMDFHM		33554432
-#define HWCAP_ASIMDBF16		67108864
-#define HWCAP_I8MM		134217728
+#define HWCAP_ARM_SWP 1
+#define HWCAP_ARM_HALF 2
+#define HWCAP_ARM_THUMB 4
+#define HWCAP_ARM_26BIT 8
+#define HWCAP_ARM_FAST_MULT 16
+#define HWCAP_ARM_FPA 32
+#define HWCAP_ARM_VFP 64
+#define HWCAP_ARM_EDSP 128
+#define HWCAP_ARM_JAVA 256
+#define HWCAP_ARM_IWMMXT 512
+#define HWCAP_ARM_CRUNCH 1024
+#define HWCAP_ARM_THUMBEE 2048
+#define HWCAP_ARM_NEON 4096
+#define HWCAP_ARM_VFPv3 8192
+#define HWCAP_ARM_VFPv3D16 16384
+#define HWCAP_ARM_TLS 32768
+#define HWCAP_ARM_VFPv4 65536
+#define HWCAP_ARM_IDIVA 131072
+#define HWCAP_ARM_IDIVT 262144
+#define HWCAP_ARM_VFPD32 524288
+#define HWCAP_ARM_LPAE 1048576
+#define HWCAP_ARM_EVTSTRM 2097152
+#define HWCAP_FPHP 4194304
+#define HWCAP_ASIMDHP 8388608
+#define HWCAP_ASIMDDP 16777216
+#define HWCAP_ASIMDFHM 33554432
+#define HWCAP_ASIMDBF16 67108864
+#define HWCAP_I8MM 134217728

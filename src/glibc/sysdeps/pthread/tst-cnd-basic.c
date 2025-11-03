@@ -56,8 +56,7 @@ do_test (void)
   if (mtx_lock (&mutex) != thrd_success)
     FAIL_EXIT1 ("mtx_lock failed");
 
-  if (thrd_create (&id, (thrd_start_t) signal_parent, NULL)
-      != thrd_success)
+  if (thrd_create (&id, (thrd_start_t) signal_parent, NULL) != thrd_success)
     FAIL_EXIT1 ("thrd_create failed");
 
   if (cnd_wait (&cond, &mutex) != thrd_success)

@@ -17,18 +17,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_STRUCT_STAT_TIME64_H
-#define _BITS_STRUCT_STAT_TIME64_H 1
+#  define _BITS_STRUCT_STAT_TIME64_H 1
 
-#if __TIMESIZE == 64
-# define __stat64_t64 stat64
-#else
-# include <struct___timespec64.h>
+#  if __TIMESIZE == 64
+#    define __stat64_t64 stat64
+#  else
+#    include <struct___timespec64.h>
 
 struct __stat64_t64
-  {
-# define __struct_timespec struct __timespec64
-# include <bits/struct_stat_time64_helper.h>
-  };
-#endif /* __TIMESIZE == 64  */
+{
+#    define __struct_timespec struct __timespec64
+#    include <bits/struct_stat_time64_helper.h>
+};
+#  endif /* __TIMESIZE == 64  */
 
 #endif /* _BITS_STRUCT_STAT_TIME64_H  */

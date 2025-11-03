@@ -17,12 +17,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_USER_H
-#define _SYS_USER_H	1
+#  define _SYS_USER_H 1
 
 /* Struct user_regs_struct is exported by kernel header
    However apps like strace also expect a struct user, so it's better to
    have a dummy implementation.  */
-#include <asm/ptrace.h>
+#  include <asm/ptrace.h>
 
 struct user
 {

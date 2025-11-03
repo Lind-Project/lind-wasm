@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MACHINE_LOCK_H
-#define	_MACHINE_LOCK_H
+#define _MACHINE_LOCK_H
 
 /* The type of a spin lock variable.  */
 
@@ -25,11 +25,10 @@ typedef volatile int __spin_lock_t;
 
 /* Value to initialize `__spin_lock_t' variables to.  */
 
-#define	__SPIN_LOCK_INITIALIZER	0
-
+#define __SPIN_LOCK_INITIALIZER 0
 
 #ifndef _EXTERN_INLINE
-#define _EXTERN_INLINE __extern_inline
+#  define _EXTERN_INLINE __extern_inline
 #endif
 
 /* Unlock LOCK.  */
@@ -70,6 +69,5 @@ __spin_lock_locked (__spin_lock_t *__lock)
   return *__lock != 0;
 }
 #endif
-
 
 #endif /* machine-lock.h */

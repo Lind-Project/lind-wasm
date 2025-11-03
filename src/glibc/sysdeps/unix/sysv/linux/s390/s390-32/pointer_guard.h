@@ -19,27 +19,26 @@
 #ifndef POINTER_GUARD_H
 #define POINTER_GUARD_H
 
-#if IS_IN (rtld)
+#if IS_IN(rtld)
 /* We cannot use the thread descriptor because in ld.so we use setjmp
    earlier than the descriptor is initialized.  */
-# include <sysdeps/generic/pointer_guard.h>
+#  include <sysdeps/generic/pointer_guard.h>
 #else
 /* For the time being just use stack_guard rather than a separate
    pointer_guard.  */
-# ifdef __ASSEMBLER__
-#  define PTR_MANGLE(reg, tmpreg) \
-  ear     tmpreg,%a0;                   \
-  x       reg,STACK_GUARD(tmpreg)
-#  define PTR_MANGLE2(reg, tmpreg) \
-  x       reg,STACK_GUARD(tmpreg)
-#  define PTR_DEMANGLE(reg, tmpreg) PTR_MANGLE (reg, tmpreg)
-# else
-#  include <stdint.h>
-#  include <tls.h>
-#  define PTR_MANGLE(var) \
-  (var) = (void *) ((uintptr_t) (var) ^ THREAD_GET_POINTER_GUARD ())
-#  define PTR_DEMANGLE(var)     PTR_MANGLE (var)
-# endif
+#  ifdef __ASSEMBLER__
+#    define PTR_MANGLE(reg, tmpreg)                                           \
+      ear tmpreg, % a0;                                                       \
+      x reg, STACK_GUARD (tmpreg)
+#    define PTR_MANGLE2(reg, tmpreg) x reg, STACK_GUARD (tmpreg)
+#    define PTR_DEMANGLE(reg, tmpreg) PTR_MANGLE (reg, tmpreg)
+#  else
+#    include <stdint.h>
+#    include <tls.h>
+#    define PTR_MANGLE(var)                                                   \
+      (var) = (void *) ((uintptr_t) (var) ^ THREAD_GET_POINTER_GUARD ())
+#    define PTR_DEMANGLE(var) PTR_MANGLE (var)
+#  endif
 #endif
 
 #endif /* POINTER_GUARD_H */

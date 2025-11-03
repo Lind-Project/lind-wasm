@@ -41,27 +41,27 @@ __nptl_stack_in_use (struct pthread *pd)
 void __nptl_stack_list_del (list_t *elem);
 libc_hidden_proto (__nptl_stack_list_del)
 
-/* Add ELEM to a stack list.  LIST can be either &GL (dl_stack_used)
-   or &GL (dl_stack_cache).  */
-void __nptl_stack_list_add (list_t *elem, list_t *list);
+    /* Add ELEM to a stack list.  LIST can be either &GL (dl_stack_used)
+       or &GL (dl_stack_cache).  */
+    void __nptl_stack_list_add (list_t *elem, list_t *list);
 libc_hidden_proto (__nptl_stack_list_add)
 
-/* Free allocated stack.  */
-extern void __nptl_deallocate_stack (struct pthread *pd);
+    /* Free allocated stack.  */
+    extern void __nptl_deallocate_stack (struct pthread *pd);
 libc_hidden_proto (__nptl_deallocate_stack)
 
-/* Free stacks until cache size is lower than LIMIT.  */
-void __nptl_free_stacks (size_t limit) attribute_hidden;
+    /* Free stacks until cache size is lower than LIMIT.  */
+    void __nptl_free_stacks (size_t limit) attribute_hidden;
 
 /* Compute the size of the static TLS area based on data from the
    dynamic loader.  */
 static inline size_t
 __nptl_tls_static_size_for_stack (void)
 {
-   // lind-wasm: original glibc code uses ELF header to retrieve TLS related information
-   // but since we are wasm, we have our own method to retrieve TLS size
-   // original glibc code replaced due to this reason
-   return __builtin_wasm_tls_size();
+  // lind-wasm: original glibc code uses ELF header to retrieve TLS related
+  // information but since we are wasm, we have our own method to retrieve TLS
+  // size original glibc code replaced due to this reason
+  return __builtin_wasm_tls_size ();
 }
 
 #endif /* _NPTL_STACK_H */

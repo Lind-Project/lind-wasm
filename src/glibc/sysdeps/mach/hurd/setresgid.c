@@ -86,7 +86,7 @@ retry:
 		auxs[0] = _hurd_id.gen.gids[0];
 	      else
 		/* Not even an effective GID.
-                   Fall back to the only GID we have. */
+		   Fall back to the only GID we have. */
 		auxs[0] = sgid;
 	    }
 	  if (_hurd_id.aux.ngids <= 1)
@@ -102,12 +102,11 @@ retry:
 	    }
 	}
 
-      err = __USEPORT (AUTH, __auth_makeauth
-		       (port, NULL, MACH_MSG_TYPE_COPY_SEND, 0,
-			_hurd_id.gen.uids, _hurd_id.gen.nuids,
-			_hurd_id.aux.uids, _hurd_id.aux.nuids,
-			newgen, ngen, newaux, naux,
-			&newauth));
+      err = __USEPORT (AUTH,
+		       __auth_makeauth (port, NULL, MACH_MSG_TYPE_COPY_SEND, 0,
+					_hurd_id.gen.uids, _hurd_id.gen.nuids,
+					_hurd_id.aux.uids, _hurd_id.aux.nuids,
+					newgen, ngen, newaux, naux, &newauth));
     }
   __mutex_unlock (&_hurd_id.lock);
   HURD_CRITICAL_END;
@@ -123,5 +122,4 @@ retry:
   __mach_port_deallocate (__mach_task_self (), newauth);
   return err;
 }
-libc_hidden_def (__setresgid)
-weak_alias (__setresgid, setresgid)
+libc_hidden_def (__setresgid) weak_alias (__setresgid, setresgid)

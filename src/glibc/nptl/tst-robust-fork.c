@@ -35,15 +35,15 @@ struct shared
 /* These flags control which mutex settings are enabled in the parent
    and child (separately).  */
 enum mutex_bits
-  {
-    mutex_pshared = 1,
-    mutex_robust = 2,
-    mutex_pi = 4,
-    mutex_check = 8,
+{
+  mutex_pshared = 1,
+  mutex_robust = 2,
+  mutex_pi = 4,
+  mutex_check = 8,
 
-    /* All bits combined.  */
-    mutex_all_bits = 15,
-  };
+  /* All bits combined.  */
+  mutex_all_bits = 15,
+};
 
 static void
 mutex_init (pthread_mutex_t *mutex, int bits)
@@ -64,12 +64,12 @@ mutex_init (pthread_mutex_t *mutex, int bits)
 
 static void
 one_test (int parent_bits, int child_bits, int nonshared_bits,
-          bool lock_nonshared, bool lock_child)
+	  bool lock_nonshared, bool lock_child)
 {
 
-  struct shared *shared = xmmap (NULL, sizeof (*shared),
-                                 PROT_READ | PROT_WRITE,
-                                 MAP_ANONYMOUS | MAP_SHARED, -1);
+  struct shared *shared
+      = xmmap (NULL, sizeof (*shared), PROT_READ | PROT_WRITE,
+	       MAP_ANONYMOUS | MAP_SHARED, -1);
   mutex_init (&shared->parent_mutex, parent_bits);
   mutex_init (&shared->child_mutex, child_bits);
 
@@ -86,18 +86,18 @@ one_test (int parent_bits, int child_bits, int nonshared_bits,
     {
       /* Child process.  */
       if (lock_child)
-        xpthread_mutex_lock (&shared->child_mutex);
+	xpthread_mutex_lock (&shared->child_mutex);
       else
-        xmunmap (shared, sizeof (*shared));
+	xmunmap (shared, sizeof (*shared));
       if (lock_nonshared)
-        /* Reinitialize the non-shared mutex if it was locked in the
-           parent.  */
-        mutex_init (&nonshared_mutex, nonshared_bits);
+	/* Reinitialize the non-shared mutex if it was locked in the
+	   parent.  */
+	mutex_init (&nonshared_mutex, nonshared_bits);
       xpthread_mutex_lock (&nonshared_mutex);
       /* For robust mutexes, the _exit call will perform the unlock
-         instead.  */
+	 instead.  */
       if (lock_child && !(child_bits & mutex_robust))
-        xpthread_mutex_unlock (&shared->child_mutex);
+	xpthread_mutex_unlock (&shared->child_mutex);
       _exit (0);
     }
   /* Parent process. */
@@ -116,30 +116,30 @@ one_test (int parent_bits, int child_bits, int nonshared_bits,
   if (pid == 0)
     {
       /* Child process.  We can perform some checks only if we are
-         dealing with process-shared mutexes.  */
+	 dealing with process-shared mutexes.  */
       if (parent_bits & mutex_pshared)
-        /* It must not be possible to acquire the parent mutex.
+	/* It must not be possible to acquire the parent mutex.
 
-           NB: This check touches a mutex which has been acquired in
-           the parent at fork time, so it might be deemed undefined
-           behavior, pending the resolution of Austin Groups issue
-           1112.  */
-        TEST_VERIFY_EXIT (pthread_mutex_trylock (&shared->parent_mutex)
-                          == EBUSY);
+	   NB: This check touches a mutex which has been acquired in
+	   the parent at fork time, so it might be deemed undefined
+	   behavior, pending the resolution of Austin Groups issue
+	   1112.  */
+	TEST_VERIFY_EXIT (pthread_mutex_trylock (&shared->parent_mutex)
+			  == EBUSY);
       if (lock_child && (child_bits & mutex_robust))
-        {
-          if (!(child_bits & mutex_pshared))
-            /* No further tests possible.  */
-            _exit (0);
-          TEST_VERIFY_EXIT (pthread_mutex_lock (&shared->child_mutex)
-                            == EOWNERDEAD);
-          xpthread_mutex_consistent (&shared->child_mutex);
-        }
+	{
+	  if (!(child_bits & mutex_pshared))
+	    /* No further tests possible.  */
+	    _exit (0);
+	  TEST_VERIFY_EXIT (pthread_mutex_lock (&shared->child_mutex)
+			    == EOWNERDEAD);
+	  xpthread_mutex_consistent (&shared->child_mutex);
+	}
       else
-        /* We did not acquire the lock in the first child process, or
-           we unlocked the mutex again because the mutex is not a
-           robust mutex.  */
-        xpthread_mutex_lock (&shared->child_mutex);
+	/* We did not acquire the lock in the first child process, or
+	   we unlocked the mutex again because the mutex is not a
+	   robust mutex.  */
+	xpthread_mutex_lock (&shared->child_mutex);
       xpthread_mutex_unlock (&shared->child_mutex);
       _exit (0);
     }
@@ -165,19 +165,19 @@ do_test (void)
   for (int parent_bits = 0; parent_bits <= mutex_all_bits; ++parent_bits)
     for (int child_bits = 0; child_bits <= mutex_all_bits; ++child_bits)
       for (int nonshared_bits = 0; nonshared_bits <= mutex_all_bits;
-           ++nonshared_bits)
-        for (int lock_nonshared = 0; lock_nonshared < 2; ++lock_nonshared)
-          for (int lock_child = 0; lock_child < 2; ++lock_child)
-            {
-              if (test_verbose)
-                printf ("info: parent_bits=0x%x child_bits=0x%x"
-                        " nonshared_bits=0x%x%s%s\n",
-                        parent_bits, child_bits, nonshared_bits,
-                        lock_nonshared ? " lock_nonshared" : "",
-                        lock_child ? " lock_child" : "");
-              one_test (parent_bits, child_bits, nonshared_bits,
-                        lock_nonshared, lock_child);
-            }
+	   ++nonshared_bits)
+	for (int lock_nonshared = 0; lock_nonshared < 2; ++lock_nonshared)
+	  for (int lock_child = 0; lock_child < 2; ++lock_child)
+	    {
+	      if (test_verbose)
+		printf ("info: parent_bits=0x%x child_bits=0x%x"
+			" nonshared_bits=0x%x%s%s\n",
+			parent_bits, child_bits, nonshared_bits,
+			lock_nonshared ? " lock_nonshared" : "",
+			lock_child ? " lock_child" : "");
+	      one_test (parent_bits, child_bits, nonshared_bits,
+			lock_nonshared, lock_child);
+	    }
   return 0;
 }
 

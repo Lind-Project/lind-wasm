@@ -43,6 +43,5 @@ weak_alias (__statvfs64, statvfs64)
 #undef statvfs
 
 #if STATFS_IS_STATFS64
-weak_alias (__statvfs64, __statvfs)
-weak_alias (__statvfs64, statvfs)
+    weak_alias (__statvfs64, __statvfs) weak_alias (__statvfs64, statvfs)
 #endif

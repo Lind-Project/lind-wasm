@@ -17,26 +17,27 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _PTHREADP_H
-#define _PTHREADP_H	1
+#  define _PTHREADP_H 1
 
-#define __PTHREAD_HTL
+#  define __PTHREAD_HTL
 
-#include <pthread.h>
-#include <link.h>
+#  include <pthread.h>
+#  include <link.h>
 
 /* Attribute to indicate thread creation was issued from C11 thrd_create.  */
-#define ATTR_C11_THREAD ((void*)(uintptr_t)-1)
+#  define ATTR_C11_THREAD ((void *) (uintptr_t) -1)
 
 extern void __pthread_init_static_tls (struct link_map *) attribute_hidden;
 
 /* These represent the interface used by glibc itself.  */
 
-extern int __pthread_mutex_init (pthread_mutex_t *__mutex, const pthread_mutexattr_t *__attr);
+extern int __pthread_mutex_init (pthread_mutex_t *__mutex,
+				 const pthread_mutexattr_t *__attr);
 extern int __pthread_mutex_destroy (pthread_mutex_t *__mutex);
 extern int __pthread_mutex_lock (pthread_mutex_t *__mutex);
 extern int __pthread_mutex_trylock (pthread_mutex_t *_mutex);
 extern int __pthread_mutex_timedlock (pthread_mutex_t *__mutex,
-     const struct timespec *__abstime);
+				      const struct timespec *__abstime);
 extern int __pthread_mutex_unlock (pthread_mutex_t *__mutex);
 extern int __pthread_mutexattr_init (pthread_mutexattr_t *attr);
 extern int __pthread_mutexattr_settype (pthread_mutexattr_t *attr, int kind);
@@ -50,19 +51,17 @@ extern int __pthread_cond_timedwait (pthread_cond_t *cond,
 				     pthread_mutex_t *mutex,
 				     const struct timespec *abstime);
 extern int __pthread_cond_clockwait (pthread_cond_t *cond,
-				     pthread_mutex_t *mutex,
-				     clockid_t clockid,
+				     pthread_mutex_t *mutex, clockid_t clockid,
 				     const struct timespec *abstime)
-  __nonnull ((1, 2, 4));
+    __nonnull ((1, 2, 4));
 extern int __pthread_cond_destroy (pthread_cond_t *cond);
 
 typedef struct __cthread *__cthread_t;
 typedef int __cthread_key_t;
-typedef void *	(*__cthread_fn_t)(void *__arg);
+typedef void *(*__cthread_fn_t) (void *__arg);
 
 __cthread_t __cthread_fork (__cthread_fn_t, void *);
-int __pthread_create (pthread_t *newthread,
-		      const pthread_attr_t *attr,
+int __pthread_create (pthread_t *newthread, const pthread_attr_t *attr,
 		      void *(*start_routine) (void *), void *arg);
 
 void __cthread_detach (__cthread_t);
@@ -94,23 +93,20 @@ void __pthread_testcancel (void);
 
 libc_hidden_proto (__pthread_self)
 
-#if IS_IN (libpthread)
-hidden_proto (__pthread_create)
-hidden_proto (__pthread_detach)
-hidden_proto (__pthread_key_create)
-hidden_proto (__pthread_getspecific)
-hidden_proto (__pthread_setspecific)
-hidden_proto (__pthread_mutex_init)
-hidden_proto (__pthread_mutex_destroy)
-hidden_proto (__pthread_mutex_lock)
-hidden_proto (__pthread_mutex_trylock)
-hidden_proto (__pthread_mutex_unlock)
-hidden_proto (__pthread_mutex_timedlock)
-hidden_proto (__pthread_get_cleanup_stack)
-#endif
+#  if IS_IN(libpthread)
+    hidden_proto (__pthread_create) hidden_proto (__pthread_detach)
+	hidden_proto (__pthread_key_create) hidden_proto (
+	    __pthread_getspecific) hidden_proto (__pthread_setspecific)
+	    hidden_proto (__pthread_mutex_init)
+		hidden_proto (__pthread_mutex_destroy)
+		    hidden_proto (__pthread_mutex_lock)
+			hidden_proto (__pthread_mutex_trylock)
+			    hidden_proto (__pthread_mutex_unlock)
+				hidden_proto (__pthread_mutex_timedlock)
+				    hidden_proto (__pthread_get_cleanup_stack)
+#  endif
 
-#define ASSERT_TYPE_SIZE(type, size) 					\
-  _Static_assert (sizeof (type) == size,				\
-		  "sizeof (" #type ") != " #size)
+#  define ASSERT_TYPE_SIZE(type, size)                                        \
+    _Static_assert (sizeof (type) == size, "sizeof (" #type ") != " #size)
 
-#endif	/* pthreadP.h */
+#endif /* pthreadP.h */

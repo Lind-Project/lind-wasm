@@ -17,6 +17,6 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-/* Most stubs mustn't be hidden in ld.so on Hurd since they need to be preempted
-   by functions from libc.so after bootstrap.  */
+/* Most stubs mustn't be hidden in ld.so on Hurd since they need to be
+   preempted by functions from libc.so after bootstrap.  */
 extern __typeof (__profil) __profil attribute_hidden;

@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef RISCV_MATH_TESTS_SNAN_PAYLOAD_H
-#define RISCV_MATH_TESTS_SNAN_PAYLOAD_H 1
+#  define RISCV_MATH_TESTS_SNAN_PAYLOAD_H 1
 
 /* RISC-V floating-point instructions do not preserve NaN
    payloads.  */
-#define SNAN_TESTS_PRESERVE_PAYLOAD	0
+#  define SNAN_TESTS_PRESERVE_PAYLOAD 0
 
 #endif /* math-tests-snan-payload.h.  */

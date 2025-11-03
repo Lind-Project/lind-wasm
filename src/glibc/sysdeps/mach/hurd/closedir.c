@@ -35,8 +35,8 @@ __closedir (DIR *dirp)
     return __hurd_fail (EINVAL);
 
   __libc_lock_lock (dirp->__lock);
-  err = __vm_deallocate (__mach_task_self (),
-			 (vm_address_t) dirp->__data, dirp->__allocation);
+  err = __vm_deallocate (__mach_task_self (), (vm_address_t) dirp->__data,
+			 dirp->__allocation);
   dirp->__data = NULL;
   err = _hurd_fd_close (dirp->__fd);
 

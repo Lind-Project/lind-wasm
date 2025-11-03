@@ -23,8 +23,7 @@
 static bool errors;
 
 void
-check_size (const char *name1, size_t size1,
-            const char *name2, size_t size2)
+check_size (const char *name1, size_t size1, const char *name2, size_t size2)
 {
   const char *prefix;
   const char *op;
@@ -39,11 +38,11 @@ check_size (const char *name1, size_t size1,
       prefix = "info";
       op = "==";
     }
-  printf ("%s: sizeof (%s) [%zu] %s sizeof (%s) [%zu]\n",
-          prefix, name1, size1, op, name2, size2);
+  printf ("%s: sizeof (%s) [%zu] %s sizeof (%s) [%zu]\n", prefix, name1, size1,
+	  op, name2, size2);
 }
 
-#define CHECK_SIZE(type1, type2) \
+#define CHECK_SIZE(type1, type2)                                              \
   check_size (#type1, sizeof (type1), #type2, sizeof (type2))
 
 int

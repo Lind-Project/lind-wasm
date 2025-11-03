@@ -21,23 +21,23 @@
 #include <math_private.h>
 #include <math_ldbl_opt.h>
 
-  /*
-   *		hx                  lx
-   * +NaN	7ffn nnnn nnnn nnnn xxxx xxxx xxxx xxxx
-   * -NaN	fffn nnnn nnnn nnnn xxxx xxxx xxxx xxxx
-   * +Inf	7ff0 0000 0000 0000 xxxx xxxx xxxx xxxx
-   * -Inf	fff0 0000 0000 0000 xxxx xxxx xxxx xxxx
-   * +0		0000 0000 0000 0000 xxxx xxxx xxxx xxxx
-   * -0		8000 0000 0000 0000 xxxx xxxx xxxx xxxx
-   * +normal	0360 0000 0000 0000 0000 0000 0000 0000 (smallest)
-   * -normal	8360 0000 0000 0000 0000 0000 0000 0000 (smallest)
-   * +normal	7fef ffff ffff ffff 7c8f ffff ffff fffe (largest)
-   * +normal	ffef ffff ffff ffff fc8f ffff ffff fffe (largest)
-   * +denorm	0360 0000 0000 0000 8000 0000 0000 0001 (largest)
-   * -denorm	8360 0000 0000 0000 0000 0000 0000 0001 (largest)
-   * +denorm	000n nnnn nnnn nnnn xxxx xxxx xxxx xxxx
-   * -denorm	800n nnnn nnnn nnnn xxxx xxxx xxxx xxxx
-   */
+/*
+ *		hx                  lx
+ * +NaN	7ffn nnnn nnnn nnnn xxxx xxxx xxxx xxxx
+ * -NaN	fffn nnnn nnnn nnnn xxxx xxxx xxxx xxxx
+ * +Inf	7ff0 0000 0000 0000 xxxx xxxx xxxx xxxx
+ * -Inf	fff0 0000 0000 0000 xxxx xxxx xxxx xxxx
+ * +0		0000 0000 0000 0000 xxxx xxxx xxxx xxxx
+ * -0		8000 0000 0000 0000 xxxx xxxx xxxx xxxx
+ * +normal	0360 0000 0000 0000 0000 0000 0000 0000 (smallest)
+ * -normal	8360 0000 0000 0000 0000 0000 0000 0000 (smallest)
+ * +normal	7fef ffff ffff ffff 7c8f ffff ffff fffe (largest)
+ * +normal	ffef ffff ffff ffff fc8f ffff ffff fffe (largest)
+ * +denorm	0360 0000 0000 0000 8000 0000 0000 0001 (largest)
+ * -denorm	8360 0000 0000 0000 0000 0000 0000 0001 (largest)
+ * +denorm	000n nnnn nnnn nnnn xxxx xxxx xxxx xxxx
+ * -denorm	800n nnnn nnnn nnnn xxxx xxxx xxxx xxxx
+ */
 
 int
 ___fpclassifyl (long double x)
@@ -48,42 +48,60 @@ ___fpclassifyl (long double x)
 
   ldbl_unpack (x, &xhi, &xlo);
   EXTRACT_WORDS64 (hx, xhi);
-  if ((hx & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL) {
+  if ((hx & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL)
+    {
       /* +/-NaN or +/-Inf */
-      if (hx & 0x000fffffffffffffULL) {
+      if (hx & 0x000fffffffffffffULL)
+	{
 	  /* +/-NaN */
 	  retval = FP_NAN;
-      } else {
+	}
+      else
+	{
 	  retval = FP_INFINITE;
-      }
-  } else {
+	}
+    }
+  else
+    {
       /* +/-zero or +/- normal or +/- denormal */
-      if (hx & 0x7fffffffffffffffULL) {
+      if (hx & 0x7fffffffffffffffULL)
+	{
 	  /* +/- normal or +/- denormal */
-	  if ((hx & 0x7ff0000000000000ULL) > 0x0360000000000000ULL) {
+	  if ((hx & 0x7ff0000000000000ULL) > 0x0360000000000000ULL)
+	    {
 	      /* +/- normal */
 	      retval = FP_NORMAL;
-	  } else {
-	      if ((hx & 0x7ff0000000000000ULL) == 0x0360000000000000ULL) {
+	    }
+	  else
+	    {
+	      if ((hx & 0x7ff0000000000000ULL) == 0x0360000000000000ULL)
+		{
 		  EXTRACT_WORDS64 (lx, xlo);
-		  if ((lx & 0x7fffffffffffffff)	/* lower is non-zero */
-		  && ((lx^hx) & 0x8000000000000000ULL)) { /* and sign differs */
+		  if ((lx & 0x7fffffffffffffff) /* lower is non-zero */
+		      && ((lx ^ hx) & 0x8000000000000000ULL))
+		    { /* and sign differs */
 		      /* +/- denormal */
 		      retval = FP_SUBNORMAL;
-		  } else {
+		    }
+		  else
+		    {
 		      /* +/- normal */
 		      retval = FP_NORMAL;
-		  }
-	      } else {
+		    }
+		}
+	      else
+		{
 		  /* +/- denormal */
 		  retval = FP_SUBNORMAL;
-	      }
-	  }
-      } else {
+		}
+	    }
+	}
+      else
+	{
 	  /* +/- zero */
 	  retval = FP_ZERO;
-      }
-  }
+	}
+    }
 
   return retval;
 }

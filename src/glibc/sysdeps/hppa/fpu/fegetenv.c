@@ -24,13 +24,13 @@ __fegetenv (fenv_t *envp)
 {
   unsigned long long buf[4], *bufptr = buf;
 
-  __asm__ (
-	   "fstd,ma %%fr0,8(%1)	\n\t"
+  __asm__ ("fstd,ma %%fr0,8(%1)	\n\t"
 	   "fldd -8(%1),%%fr0	\n\t"
-	   : "=m" (buf), "+r" (bufptr) : : "%r0");
-  memcpy(envp, buf, sizeof (*envp));
+	   : "=m"(buf), "+r"(bufptr)
+	   :
+	   : "%r0");
+  memcpy (envp, buf, sizeof (*envp));
   return 0;
 }
-libm_hidden_def (__fegetenv)
-weak_alias (__fegetenv, fegetenv)
-libm_hidden_weak (fegetenv)
+libm_hidden_def (__fegetenv) weak_alias (__fegetenv, fegetenv)
+    libm_hidden_weak (fegetenv)

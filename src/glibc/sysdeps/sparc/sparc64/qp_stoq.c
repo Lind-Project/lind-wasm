@@ -21,23 +21,24 @@
 #include "single.h"
 #include "quad.h"
 
-void _Qp_stoq(long double *c, const float a)
+void
+_Qp_stoq (long double *c, const float a)
 {
   FP_DECL_EX;
-  FP_DECL_S(A);
-  FP_DECL_Q(C);
+  FP_DECL_S (A);
+  FP_DECL_Q (C);
 
   FP_INIT_ROUNDMODE;
-  FP_UNPACK_RAW_S(A, a);
+  FP_UNPACK_RAW_S (A, a);
 #if _FP_W_TYPE_SIZE < 64
-  FP_EXTEND(Q,S,4,1,C,A);
+  FP_EXTEND (Q, S, 4, 1, C, A);
 #else
-  FP_EXTEND(Q,S,2,1,C,A);
+  FP_EXTEND (Q, S, 2, 1, C, A);
 #endif
-  FP_PACK_RAW_QP(c, C);
-  QP_HANDLE_EXCEPTIONS(__asm (
-"	fstoq %1, %%f60\n"
-"	std %%f60, [%0]\n"
-"	std %%f62, [%0+8]\n"
-"	" : : "r" (c), "f" (a) : QP_CLOBBER));
+  FP_PACK_RAW_QP (c, C);
+  QP_HANDLE_EXCEPTIONS (__asm ("	fstoq %1, %%f60\n"
+			       "	std %%f60, [%0]\n"
+			       "	std %%f62, [%0+8]\n"
+			       "	" : : "r"(c),
+			       "f"(a) : QP_CLOBBER));
 }

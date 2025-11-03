@@ -19,29 +19,29 @@
 #ifndef _MATH_TYPE_MACROS_LDOUBLE
 #define _MATH_TYPE_MACROS_LDOUBLE
 
-#define M_LIT(c) c ## L
-#define M_MLIT(c) c ## l
+#define M_LIT(c) c##L
+#define M_MLIT(c) c##l
 #define M_PFX LDBL
-#define M_SUF(c) c ## l
+#define M_SUF(c) c##l
 #define FLOAT long double
 #define CFLOAT _Complex long double
 #define M_STRTO_NAN __strtold_nan
-#define M_USE_BUILTIN(c) USE_ ##c ##L_BUILTIN
+#define M_USE_BUILTIN(c) USE_##c##L_BUILTIN
 
 #include <libm-alias-ldouble.h>
 #include <math-nan-payload-ldouble.h>
 
 #ifndef declare_mgen_alias
-# define declare_mgen_alias(from, to) libm_alias_ldouble (from, to)
+#  define declare_mgen_alias(from, to) libm_alias_ldouble (from, to)
 #endif
 
 #ifndef declare_mgen_alias_r
-# define declare_mgen_alias_r(from, to) libm_alias_ldouble_r (from, to, _r)
+#  define declare_mgen_alias_r(from, to) libm_alias_ldouble_r (from, to, _r)
 #endif
 
 #ifndef declare_mgen_alias_narrow
-# define declare_mgen_alias_narrow(from, to)	\
-  libm_alias_ldouble_narrow (from, to)
+#  define declare_mgen_alias_narrow(from, to)                                 \
+    libm_alias_ldouble_narrow (from, to)
 #endif
 
 /* Supply the generic macros.  */

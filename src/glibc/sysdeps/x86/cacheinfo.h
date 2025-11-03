@@ -22,10 +22,10 @@
 #include <cpu-features.h>
 
 #define TUNABLE_NAMESPACE cpu
-#include <unistd.h>		/* Get STDOUT_FILENO for _dl_printf.  */
+#include <unistd.h> /* Get STDOUT_FILENO for _dl_printf.  */
 #include <elf/dl-tunables.h>
 
-#if IS_IN (libc)
+#if IS_IN(libc)
 /* Data cache size for use in memory and string routines, typically
    L1 size, rounded to multiple of 256 bytes.  */
 long int __x86_data_cache_size_half attribute_hidden = 32 * 1024 / 2;
@@ -74,15 +74,13 @@ init_cacheinfo (void)
       __x86_shared_cache_size = shared;
     }
 
-  __x86_shared_non_temporal_threshold
-    = cpu_features->non_temporal_threshold;
+  __x86_shared_non_temporal_threshold = cpu_features->non_temporal_threshold;
 
   __x86_rep_movsb_threshold = cpu_features->rep_movsb_threshold;
   __x86_rep_stosb_threshold = cpu_features->rep_stosb_threshold;
-  __x86_rep_movsb_stop_threshold =  cpu_features->rep_movsb_stop_threshold;
+  __x86_rep_movsb_stop_threshold = cpu_features->rep_movsb_stop_threshold;
 
   if (CPU_FEATURES_ARCH_P (cpu_features, Avoid_Short_Distance_REP_MOVSB))
-    __x86_string_control
-      |= X86_STRING_CONTROL_AVOID_SHORT_DISTANCE_REP_MOVSB;
+    __x86_string_control |= X86_STRING_CONTROL_AVOID_SHORT_DISTANCE_REP_MOVSB;
 }
 #endif

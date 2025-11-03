@@ -49,17 +49,18 @@ __fma (double x, double y, double z)
   v.d = y;
   w.d = z;
   if (__builtin_expect (u.ieee.exponent + v.ieee.exponent
-			>= 0x7ff + IEEE754_DOUBLE_BIAS - DBL_MANT_DIG, 0)
+			    >= 0x7ff + IEEE754_DOUBLE_BIAS - DBL_MANT_DIG,
+			0)
       || __builtin_expect (u.ieee.exponent >= 0x7ff - DBL_MANT_DIG, 0)
       || __builtin_expect (v.ieee.exponent >= 0x7ff - DBL_MANT_DIG, 0)
       || __builtin_expect (w.ieee.exponent >= 0x7ff - DBL_MANT_DIG, 0)
       || __builtin_expect (u.ieee.exponent + v.ieee.exponent
-			   <= IEEE754_DOUBLE_BIAS + DBL_MANT_DIG, 0))
+			       <= IEEE754_DOUBLE_BIAS + DBL_MANT_DIG,
+			   0))
     {
       /* If z is Inf, but x and y are finite, the result should be
 	 z rather than NaN.  */
-      if (w.ieee.exponent == 0x7ff
-	  && u.ieee.exponent != 0x7ff
+      if (w.ieee.exponent == 0x7ff && u.ieee.exponent != 0x7ff
 	  && v.ieee.exponent != 0x7ff)
 	return (z + x) + y;
       /* If z is zero and x are y are nonzero, compute the result
@@ -69,11 +70,8 @@ __fma (double x, double y, double z)
 	return x * y;
       /* If x or y or z is Inf/NaN, or if x * y is zero, compute as
 	 x * y + z.  */
-      if (u.ieee.exponent == 0x7ff
-	  || v.ieee.exponent == 0x7ff
-	  || w.ieee.exponent == 0x7ff
-	  || x == 0
-	  || y == 0)
+      if (u.ieee.exponent == 0x7ff || v.ieee.exponent == 0x7ff
+	  || w.ieee.exponent == 0x7ff || x == 0 || y == 0)
 	return x * y + z;
       /* If fma will certainly overflow, compute as x * y.  */
       if (u.ieee.exponent + v.ieee.exponent > 0x7ff + IEEE754_DOUBLE_BIAS)
@@ -95,12 +93,10 @@ __fma (double x, double y, double z)
 	     exceptions.  */
 	  v.d = z * 0x1p54 + tiny;
 	  if (TININESS_AFTER_ROUNDING
-	      ? v.ieee.exponent < 55
-	      : (w.ieee.exponent == 0
-		 || (w.ieee.exponent == 1
-		     && w.ieee.negative != neg
-		     && w.ieee.mantissa1 == 0
-		     && w.ieee.mantissa0 == 0)))
+		  ? v.ieee.exponent < 55
+		  : (w.ieee.exponent == 0
+		     || (w.ieee.exponent == 1 && w.ieee.negative != neg
+			 && w.ieee.mantissa1 == 0 && w.ieee.mantissa0 == 0)))
 	    {
 	      double force_underflow = x * y;
 	      math_force_eval (force_underflow);
@@ -196,7 +192,7 @@ __fma (double x, double y, double z)
   libc_feholdexcept_setround (&env, FE_TONEAREST);
 
   /* Multiplication m1 + m2 = x * y using Dekker's algorithm.  */
-#define C ((1 << (DBL_MANT_DIG + 1) / 2) + 1)
+#  define C ((1 << (DBL_MANT_DIG + 1) / 2) + 1)
   double x1 = x * C;
   double y1 = y * C;
   double m1 = x * y;
@@ -305,6 +301,5 @@ __fma (double x, double y, double z)
 #endif /* ! USE_FMA_BUILTIN  */
 }
 #ifndef __fma
-libm_alias_double (__fma, fma)
-libm_alias_double_narrow (__fma, fma)
+libm_alias_double (__fma, fma) libm_alias_double_narrow (__fma, fma)
 #endif

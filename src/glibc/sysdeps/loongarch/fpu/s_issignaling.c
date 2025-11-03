@@ -23,7 +23,7 @@ int
 __issignaling (double x)
 {
   int x_cond;
-  asm volatile ("fclass.d \t%0, %1" : "=f" (x_cond) : "f" (x));
+  asm volatile ("fclass.d \t%0, %1" : "=f"(x_cond) : "f"(x));
   return (x_cond & _FCLASS_SNAN) != 0;
 }
 libm_hidden_def (__issignaling)

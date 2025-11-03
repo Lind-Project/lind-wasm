@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef FIX_INT_FP_CONVERT_ZERO_H
-#define FIX_INT_FP_CONVERT_ZERO_H	1
+#  define FIX_INT_FP_CONVERT_ZERO_H 1
 
 /* Define this macro to 1 to work around conversions of integer 0 to
    floating point returning -0 instead of the correct +0 in some
    rounding modes.  */
-#define FIX_INT_FP_CONVERT_ZERO 0
+#  define FIX_INT_FP_CONVERT_ZERO 0
 
 #endif /* fix-int-fp-convert-zero.h */

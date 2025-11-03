@@ -18,61 +18,63 @@
 
 #ifndef __ASSEMBLY__
 
-#undef SYS_ify
-#define SYS_ify(syscall_name)	__NR_##syscall_name
+#  undef SYS_ify
+#  define SYS_ify(syscall_name) __NR_##syscall_name
 
-#undef INTERNAL_SYSCALL_NCS
-#define INTERNAL_SYSCALL_NCS(no, nr, args...)				      \
-  ({									      \
-    DECLARGS_##nr(args)							      \
-    register unsigned long int _nr = (unsigned long int)(no);    \
-    register long int _ret ;				      \
-    _ret; })
+#  undef INTERNAL_SYSCALL_NCS
+#  define INTERNAL_SYSCALL_NCS(no, nr, args...)                               \
+    ({                                                                        \
+      DECLARGS_##nr (args) register unsigned long int _nr                     \
+	  = (unsigned long int) (no);                                         \
+      register long int _ret;                                                 \
+      _ret;                                                                   \
+    })
 
-#undef INTERNAL_SYSCALL
-#define INTERNAL_SYSCALL(name, nr, args...)				\
-  INTERNAL_SYSCALL_NCS(__NR_##name, nr, args)
+#  undef INTERNAL_SYSCALL
+#  define INTERNAL_SYSCALL(name, nr, args...)                                 \
+    INTERNAL_SYSCALL_NCS (__NR_##name, nr, args)
 
-#define DECLARGS_0()
-#define DECLARGS_1(arg1) \
-  register unsigned long int gpr2 = (unsigned long int)(arg1);
-#define DECLARGS_2(arg1, arg2) \
-  DECLARGS_1(arg1) \
-  register unsigned long int gpr3  = (unsigned long int)(arg2);
-#define DECLARGS_3(arg1, arg2, arg3) \
-  DECLARGS_2(arg1, arg2) \
-  register unsigned long int gpr4 = (unsigned long int)(arg3);
-#define DECLARGS_4(arg1, arg2, arg3, arg4) \
-  DECLARGS_3(arg1, arg2, arg3) \
-  register unsigned long int gpr5  = (unsigned long int)(arg4);
-#define DECLARGS_5(arg1, arg2, arg3, arg4, arg5) \
-  DECLARGS_4(arg1, arg2, arg3, arg4) \
-  register unsigned long int gpr6  = (unsigned long int)(arg5);
-#define DECLARGS_6(arg1, arg2, arg3, arg4, arg5, arg6) \
-  DECLARGS_5(arg1, arg2, arg3, arg4, arg5) \
-  register unsigned long int gpr7  = (unsigned long int)(arg6);
+#  define DECLARGS_0()
+#  define DECLARGS_1(arg1)                                                    \
+    register unsigned long int gpr2 = (unsigned long int) (arg1);
+#  define DECLARGS_2(arg1, arg2)                                              \
+    DECLARGS_1 (arg1)                                                         \
+    register unsigned long int gpr3 = (unsigned long int) (arg2);
+#  define DECLARGS_3(arg1, arg2, arg3)                                        \
+    DECLARGS_2 (arg1, arg2)                                                   \
+    register unsigned long int gpr4 = (unsigned long int) (arg3);
+#  define DECLARGS_4(arg1, arg2, arg3, arg4)                                  \
+    DECLARGS_3 (arg1, arg2, arg3)                                             \
+    register unsigned long int gpr5 = (unsigned long int) (arg4);
+#  define DECLARGS_5(arg1, arg2, arg3, arg4, arg5)                            \
+    DECLARGS_4 (arg1, arg2, arg3, arg4)                                       \
+    register unsigned long int gpr6 = (unsigned long int) (arg5);
+#  define DECLARGS_6(arg1, arg2, arg3, arg4, arg5, arg6)                      \
+    DECLARGS_5 (arg1, arg2, arg3, arg4, arg5)                                 \
+    register unsigned long int gpr7 = (unsigned long int) (arg6);
 
-#define ASMFMT_0
-#define ASMFMT_1 , "0" (gpr2)
-#define ASMFMT_2 , "0" (gpr2), "d" (gpr3)
-#define ASMFMT_3 , "0" (gpr2), "d" (gpr3), "d" (gpr4)
-#define ASMFMT_4 , "0" (gpr2), "d" (gpr3), "d" (gpr4), "d" (gpr5)
-#define ASMFMT_5 , "0" (gpr2), "d" (gpr3), "d" (gpr4), "d" (gpr5), "d" (gpr6)
-#define ASMFMT_6 , "0" (gpr2), "d" (gpr3), "d" (gpr4), "d" (gpr5), "d" (gpr6), "d" (gpr7)
+#  define ASMFMT_0
+#  define ASMFMT_1 , "0"(gpr2)
+#  define ASMFMT_2 , "0"(gpr2), "d"(gpr3)
+#  define ASMFMT_3 , "0"(gpr2), "d"(gpr3), "d"(gpr4)
+#  define ASMFMT_4 , "0"(gpr2), "d"(gpr3), "d"(gpr4), "d"(gpr5)
+#  define ASMFMT_5 , "0"(gpr2), "d"(gpr3), "d"(gpr4), "d"(gpr5), "d"(gpr6)
+#  define ASMFMT_6                                                            \
+    , "0"(gpr2), "d"(gpr3), "d"(gpr4), "d"(gpr5), "d"(gpr6), "d"(gpr7)
 
-#define VDSO_NAME  "LINUX_2.6.29"
-#define VDSO_HASH  123718585
+#  define VDSO_NAME "LINUX_2.6.29"
+#  define VDSO_HASH 123718585
 
 /* List of system calls which are supported as vsyscalls.  */
-#ifdef __s390x__
-#define HAVE_CLOCK_GETRES64_VSYSCALL	"__kernel_clock_getres"
-#define HAVE_CLOCK_GETTIME64_VSYSCALL	"__kernel_clock_gettime"
-#else
-#define HAVE_CLOCK_GETRES_VSYSCALL	"__kernel_clock_getres"
-#define HAVE_CLOCK_GETTIME_VSYSCALL	"__kernel_clock_gettime"
-#endif
-#define HAVE_GETTIMEOFDAY_VSYSCALL	"__kernel_gettimeofday"
-#define HAVE_GETCPU_VSYSCALL		"__kernel_getcpu"
+#  ifdef __s390x__
+#    define HAVE_CLOCK_GETRES64_VSYSCALL "__kernel_clock_getres"
+#    define HAVE_CLOCK_GETTIME64_VSYSCALL "__kernel_clock_gettime"
+#  else
+#    define HAVE_CLOCK_GETRES_VSYSCALL "__kernel_clock_getres"
+#    define HAVE_CLOCK_GETTIME_VSYSCALL "__kernel_clock_gettime"
+#  endif
+#  define HAVE_GETTIMEOFDAY_VSYSCALL "__kernel_gettimeofday"
+#  define HAVE_GETCPU_VSYSCALL "__kernel_getcpu"
 
-#define HAVE_CLONE3_WRAPPER		1
+#  define HAVE_CLONE3_WRAPPER 1
 #endif

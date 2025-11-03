@@ -32,10 +32,8 @@ __posix_spawnp (pid_t *pid, const char *file,
 }
 versioned_symbol (libc, __posix_spawnp, posix_spawnp, GLIBC_2_15);
 
-
-#if SHLIB_COMPAT (libc, GLIBC_2_2, GLIBC_2_15)
-int
-attribute_compat_text_section
+#if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_15)
+int attribute_compat_text_section
 __posix_spawnp_compat (pid_t *pid, const char *file,
 		       const posix_spawn_file_actions_t *file_actions,
 		       const posix_spawnattr_t *attrp, char *const argv[],

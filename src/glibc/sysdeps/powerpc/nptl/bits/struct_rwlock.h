@@ -37,7 +37,7 @@ struct __pthread_rwlock_arch_t
   /* FLAGS must stay at this position in the structure to maintain
      binary compatibility.  */
   unsigned int __flags;
-# define __PTHREAD_RWLOCK_ELISION_EXTRA 0, {0, 0, 0, 0, 0, 0, 0 }
+#  define __PTHREAD_RWLOCK_ELISION_EXTRA 0, { 0, 0, 0, 0, 0, 0, 0 }
 #else
   unsigned char __rwelision;
   unsigned char __pad2;
@@ -46,16 +46,16 @@ struct __pthread_rwlock_arch_t
      binary compatibility.  */
   unsigned char __flags;
   int __cur_writer;
-# define __PTHREAD_RWLOCK_ELISION_EXTRA 0
+#  define __PTHREAD_RWLOCK_ELISION_EXTRA 0
 #endif
 };
 
 #if __WORDSIZE == 64
-# define __PTHREAD_RWLOCK_INITIALIZER(__flags) \
-  0, 0, 0, 0, 0, 0, 0, 0, __PTHREAD_RWLOCK_ELISION_EXTRA, 0, __flags
+#  define __PTHREAD_RWLOCK_INITIALIZER(__flags)                               \
+    0, 0, 0, 0, 0, 0, 0, 0, __PTHREAD_RWLOCK_ELISION_EXTRA, 0, __flags
 #else
-# define __PTHREAD_RWLOCK_INITIALIZER(__flags) \
-  0, 0, 0, 0, 0, 0, __PTHREAD_RWLOCK_ELISION_EXTRA, 0, 0, __flags, 0
+#  define __PTHREAD_RWLOCK_INITIALIZER(__flags)                               \
+    0, 0, 0, 0, 0, 0, __PTHREAD_RWLOCK_ELISION_EXTRA, 0, 0, __flags, 0
 #endif
 
 #endif

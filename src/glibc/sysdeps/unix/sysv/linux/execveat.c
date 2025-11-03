@@ -24,7 +24,7 @@
    ARGV and ENVP are passed to the new program, as for 'execve'.  */
 int
 execveat (int dirfd, const char *path, char *const argv[], char *const envp[],
-          int flags)
+	  int flags)
 {
   /* Avoid implicit array coercion in syscall macros.  */
   return INLINE_SYSCALL_CALL (execveat, dirfd, path, &argv[0], &envp[0],

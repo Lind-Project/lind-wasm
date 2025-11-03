@@ -41,7 +41,7 @@ do_test (void)
     FAIL_EXIT1 ("thrd_create failed");
 
   /* Give some time so the thread can finish.  */
-  thrd_sleep (&(struct timespec) {.tv_sec = 2}, NULL);
+  thrd_sleep (&(struct timespec) { .tv_sec = 2 }, NULL);
 
   if (thrd_join (id, NULL) == thrd_success)
     FAIL_EXIT1 ("thrd_join succeed where it should fail");

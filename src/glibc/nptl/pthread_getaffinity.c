@@ -24,7 +24,6 @@
 #include <sys/types.h>
 #include <shlib-compat.h>
 
-
 int
 __pthread_getaffinity_np (pthread_t th, size_t cpusetsize, cpu_set_t *cpuset)
 {
@@ -41,16 +40,16 @@ __pthread_getaffinity_np (pthread_t th, size_t cpusetsize, cpu_set_t *cpuset)
   return 0;
 }
 libc_hidden_def (__pthread_getaffinity_np)
-versioned_symbol (libc, __pthread_getaffinity_np, pthread_getaffinity_np,
-		  GLIBC_2_32);
+    versioned_symbol (libc, __pthread_getaffinity_np, pthread_getaffinity_np,
+		      GLIBC_2_32);
 
-#if SHLIB_COMPAT (libc, GLIBC_2_3_4, GLIBC_2_32)
+#if SHLIB_COMPAT(libc, GLIBC_2_3_4, GLIBC_2_32)
 strong_alias (__pthread_getaffinity_np, __pthread_getaffinity_alias)
-compat_symbol (libc, __pthread_getaffinity_alias, pthread_getaffinity_np,
-	       GLIBC_2_3_4);
+    compat_symbol (libc, __pthread_getaffinity_alias, pthread_getaffinity_np,
+		   GLIBC_2_3_4);
 #endif
 
-#if SHLIB_COMPAT (libc, GLIBC_2_3_3, GLIBC_2_3_4)
+#if SHLIB_COMPAT(libc, GLIBC_2_3_3, GLIBC_2_3_4)
 int
 __pthread_getaffinity_old (pthread_t th, cpu_set_t *cpuset)
 {

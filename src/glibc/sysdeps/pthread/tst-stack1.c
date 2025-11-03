@@ -22,10 +22,8 @@
 #include <sys/param.h>
 #include <unistd.h>
 
-
 static void *stack;
 static size_t size;
-
 
 static void *
 tf (void *a)
@@ -68,7 +66,6 @@ tf (void *a)
   return result ? (void *) 1l : NULL;
 }
 
-
 int
 do_test (void)
 {
@@ -109,8 +106,8 @@ do_test (void)
 
   if (test_size != size)
     {
-      printf ("reported size differs: is %zu, expected %zu\n",
-	      test_size, size);
+      printf ("reported size differs: is %zu, expected %zu\n", test_size,
+	      size);
       result = 1;
     }
 
@@ -141,7 +138,6 @@ do_test (void)
 
   return result;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

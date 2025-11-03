@@ -17,15 +17,15 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _INCLUDE_SYS_MOUNT_H
-#define _INCLUDE_SYS_MOUNT_H	1
+#  define _INCLUDE_SYS_MOUNT_H 1
 
-#include_next <sys/mount.h>
+#  include_next <sys/mount.h>
 
-# ifndef _ISOMAC
+#  ifndef _ISOMAC
 
 extern __typeof (umount) __umount __THROW;
 extern __typeof (umount2) __umount2 __THROW;
 libc_hidden_proto (__umount2)
 
-# endif /* _ISOMAC */
-#endif /* sys/sysinfo.h */
+#  endif /* _ISOMAC */
+#endif	 /* sys/sysinfo.h */

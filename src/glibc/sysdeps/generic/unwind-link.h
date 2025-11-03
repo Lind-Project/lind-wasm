@@ -31,25 +31,25 @@ unwind_arch_adjustment (void *prev, void *addr)
 #endif
 
 #ifdef SHARED
-# include <pointer_guard.h>
-# include <unwind-resume.h>
+#  include <pointer_guard.h>
+#  include <unwind-resume.h>
 
-# if UNWIND_LINK_FRAME_STATE_FOR
+#  if UNWIND_LINK_FRAME_STATE_FOR
 struct frame_state;
-# endif
+#  endif
 
 struct unwind_link
 {
   __typeof (_Unwind_Backtrace) *ptr__Unwind_Backtrace;
   __typeof (_Unwind_ForcedUnwind) *ptr__Unwind_ForcedUnwind;
   __typeof (_Unwind_GetCFA) *ptr__Unwind_GetCFA;
-# if UNWIND_LINK_GETIP
+#  if UNWIND_LINK_GETIP
   __typeof (_Unwind_GetIP) *ptr__Unwind_GetIP;
-# endif
+#  endif
   __typeof (_Unwind_Resume) *ptr__Unwind_Resume;
-#if UNWIND_LINK_FRAME_STATE_FOR
+#  if UNWIND_LINK_FRAME_STATE_FOR
   struct frame_state *(*ptr___frame_state_for) (void *, struct frame_state *);
-#endif
+#  endif
   _Unwind_Reason_Code (*ptr_personality) PERSONALITY_PROTO;
   UNWIND_LINK_EXTRA_FIELDS
 };
@@ -61,15 +61,15 @@ libc_hidden_proto (__libc_unwind_link_get)
 /* UNWIND_LINK_PTR returns the stored function pointer NAME from the
    cached unwind link OBJ (which was previously returned by
    __libc_unwind_link_get).  */
-# define UNWIND_LINK_PTR(obj, name, ...)                             \
-  ({                                                                \
-    __typeof ((obj)->ptr_##name) __unwind_fptr = (obj)->ptr_##name; \
-    PTR_DEMANGLE (__unwind_fptr);                                   \
-    __unwind_fptr;                                                  \
-  })
+#  define UNWIND_LINK_PTR(obj, name, ...)                                     \
+    ({                                                                        \
+      __typeof ((obj)->ptr_##name) __unwind_fptr = (obj)->ptr_##name;         \
+      PTR_DEMANGLE (__unwind_fptr);                                           \
+      __unwind_fptr;                                                          \
+    })
 
-/* Called from fork, in the new subprocess.  */
-void __libc_unwind_link_after_fork (void);
+    /* Called from fork, in the new subprocess.  */
+    void __libc_unwind_link_after_fork (void);
 
 /* Called from __libc_freeres.  */
 void __libc_unwind_link_freeres (void) attribute_hidden;
@@ -88,8 +88,7 @@ __libc_unwind_link_get (void)
 }
 
 /* Directly call the static implementation.  */
-# define UNWIND_LINK_PTR(obj, name, ...) \
-  ((void) (obj), &name)
+#  define UNWIND_LINK_PTR(obj, name, ...) ((void) (obj), &name)
 
 static inline void
 __libc_unwind_link_after_fork (void)

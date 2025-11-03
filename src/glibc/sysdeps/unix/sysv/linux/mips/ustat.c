@@ -17,11 +17,11 @@
 
 #include <sys/sysmacros.h>
 
-#define DEV_TO_KDEV(__dev)					\
-  ({								\
-    unsigned long k_dev;					\
-    k_dev = ((major (dev) & 0xff) << 8) | (minor (dev) & 0xff);	\
-    k_dev;							\
+#define DEV_TO_KDEV(__dev)                                                    \
+  ({                                                                          \
+    unsigned long k_dev;                                                      \
+    k_dev = ((major (dev) & 0xff) << 8) | (minor (dev) & 0xff);               \
+    k_dev;                                                                    \
   })
 
 #include <sysdeps/unix/sysv/linux/ustat.c>

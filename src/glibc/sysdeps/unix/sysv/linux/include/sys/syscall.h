@@ -18,12 +18,12 @@
 #ifndef _SYSCALL_H
 
 #ifdef _ISOMAC
-# include <sysdeps/unix/sysv/linux/sys/syscall.h>
+#  include <sysdeps/unix/sysv/linux/sys/syscall.h>
 #else /* !_ISOMAC */
 /* Use the built-in system call list, not <asm/unistd.h>, which may
    not list all the system call numbers we need.  */
-# define _SYSCALL_H
-# include <arch-syscall.h>
+#  define _SYSCALL_H
+#  include <arch-syscall.h>
 #endif /* !_ISOMAC */
 
 #endif /* _SYSCALL_H */

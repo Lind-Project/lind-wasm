@@ -23,14 +23,14 @@
 #include <assert.h>
 
 void
-__makecontext (ucontext_t *ucp, void (*func) (void), int argc,
-	       long int a0, long int a1, long int a2, long int a3, long int a4,
-	       ...)
+__makecontext (ucontext_t *ucp, void (*func) (void), int argc, long int a0,
+	       long int a1, long int a2, long int a3, long int a4, ...)
 {
   extern void __start_context (void) attribute_hidden;
   long int i, sp;
 
-  _Static_assert (REG_NARGS == 8, "__makecontext assumes 8 argument registers");
+  _Static_assert (REG_NARGS == 8,
+		  "__makecontext assumes 8 argument registers");
 
   /* Set up the stack.  */
   sp = ((long int) ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size) & ALMASK;
@@ -60,7 +60,7 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc,
 
       long reg_args = argc < REG_NARGS ? argc : REG_NARGS;
       for (i = 5; i < reg_args; i++)
-        ucp->uc_mcontext.__gregs[REG_A0 + i] = va_arg (vl, long);
+	ucp->uc_mcontext.__gregs[REG_A0 + i] = va_arg (vl, long);
 
       long int stack_args = argc - reg_args;
       if (stack_args > 0)

@@ -36,7 +36,6 @@ get_sse_mxcsr (void)
 static void
 set_sse_mxcsr (uint32_t val)
 {
-
 }
 
 static void
@@ -79,12 +78,11 @@ sse_tests (void)
   set_sse_mxcsr_bits (MXCSR_FZ, MXCSR_FZ);
   fegetenv (&env2);
   fesetenv (&env1);
-  result |= test_sse_mxcsr_bits ("fesetenv FZ restoration",
-				 MXCSR_FZ, 0);
+  result |= test_sse_mxcsr_bits ("fesetenv FZ restoration", MXCSR_FZ, 0);
   set_sse_mxcsr_bits (MXCSR_FZ, 0);
   fesetenv (&env2);
-  result |= test_sse_mxcsr_bits ("fesetenv FZ restoration 2",
-				 MXCSR_FZ, MXCSR_FZ);
+  result
+      |= test_sse_mxcsr_bits ("fesetenv FZ restoration 2", MXCSR_FZ, MXCSR_FZ);
   set_sse_mxcsr_bits (MXCSR_FZ, MXCSR_FZ);
   fesetenv (FE_NOMASK_ENV);
   result |= test_sse_mxcsr_bits ("fesetenv (FE_NOMASK_ENV) FZ restoration",
@@ -97,12 +95,11 @@ sse_tests (void)
   set_sse_mxcsr_bits (MXCSR_DAZ, MXCSR_DAZ);
   fegetenv (&env2);
   fesetenv (&env1);
-  result |= test_sse_mxcsr_bits ("fesetenv DAZ restoration",
-				 MXCSR_DAZ, 0);
+  result |= test_sse_mxcsr_bits ("fesetenv DAZ restoration", MXCSR_DAZ, 0);
   set_sse_mxcsr_bits (MXCSR_DAZ, 0);
   fesetenv (&env2);
-  result |= test_sse_mxcsr_bits ("fesetenv DAZ restoration 2",
-				 MXCSR_DAZ, MXCSR_DAZ);
+  result |= test_sse_mxcsr_bits ("fesetenv DAZ restoration 2", MXCSR_DAZ,
+				 MXCSR_DAZ);
   set_sse_mxcsr_bits (MXCSR_DAZ, MXCSR_DAZ);
   fesetenv (FE_NOMASK_ENV);
   result |= test_sse_mxcsr_bits ("fesetenv (FE_NOMASK_ENV) DAZ restoration",
@@ -115,12 +112,11 @@ sse_tests (void)
   set_sse_mxcsr_bits (MXCSR_DM, 0);
   fegetenv (&env2);
   fesetenv (&env1);
-  result |= test_sse_mxcsr_bits ("fesetenv DM restoration",
-				 MXCSR_DM, MXCSR_DM);
+  result
+      |= test_sse_mxcsr_bits ("fesetenv DM restoration", MXCSR_DM, MXCSR_DM);
   set_sse_mxcsr_bits (MXCSR_DM, MXCSR_DM);
   fesetenv (&env2);
-  result |= test_sse_mxcsr_bits ("fesetenv DM restoration 2",
-				 MXCSR_DM, 0);
+  result |= test_sse_mxcsr_bits ("fesetenv DM restoration 2", MXCSR_DM, 0);
   set_sse_mxcsr_bits (MXCSR_DM, 0);
   /* Presume FE_NOMASK_ENV should leave the "denormal operand"
      exception masked, as not a standard exception.  */
@@ -135,12 +131,11 @@ sse_tests (void)
   set_sse_mxcsr_bits (MXCSR_DE, MXCSR_DE);
   fegetenv (&env2);
   fesetenv (&env1);
-  result |= test_sse_mxcsr_bits ("fesetenv DE restoration",
-				 MXCSR_DE, 0);
+  result |= test_sse_mxcsr_bits ("fesetenv DE restoration", MXCSR_DE, 0);
   set_sse_mxcsr_bits (MXCSR_DE, 0);
   fesetenv (&env2);
-  result |= test_sse_mxcsr_bits ("fesetenv DE restoration 2",
-				 MXCSR_DE, MXCSR_DE);
+  result
+      |= test_sse_mxcsr_bits ("fesetenv DE restoration 2", MXCSR_DE, MXCSR_DE);
   set_sse_mxcsr_bits (MXCSR_DE, MXCSR_DE);
   fesetenv (FE_NOMASK_ENV);
   result |= test_sse_mxcsr_bits ("fesetenv (FE_NOMASK_ENV) DE restoration",

@@ -44,11 +44,11 @@ do_test (void)
 
   /* Check if scripts without shebang are correctly not executed.  */
   status = POSIX_SPAWN (&pid, scriptname, NULL, NULL, (char *[]) { 0 },
-                        (char *[]) { 0 });
+			(char *[]) { 0 });
   TEST_VERIFY_EXIT (status == ENOEXEC);
 
   status = POSIX_SPAWNP (&pid, scriptname, NULL, NULL, (char *[]) { 0 },
-                         (char *[]) { 0 });
+			 (char *[]) { 0 });
   TEST_VERIFY_EXIT (status == ENOEXEC);
 
   return 0;

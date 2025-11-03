@@ -25,7 +25,10 @@ static int
 do_test (void)
 {
   /* This is a typical affinity size.  */
-  enum { cpu_count = 128 };
+  enum
+  {
+    cpu_count = 128
+  };
   cpu_set_t *set = CPU_ALLOC (cpu_count);
   size_t set_size = CPU_ALLOC_SIZE (cpu_count);
   CPU_ZERO_S (set_size, set);
@@ -46,7 +49,6 @@ do_test (void)
   for (int i = 0; i < cpu_count; ++i)
     TEST_COMPARE (!!CPU_ISSET (i, set), i == 1 || i == 3);
 
-
   /* Apply a larger CPU affinity mask to the default attribute, to
      trigger reallocation.  */
   {
@@ -55,8 +57,9 @@ do_test (void)
     CPU_ZERO_S (large_set_size, large_set);
     pthread_attr_t large_attr;
     xpthread_attr_init (&large_attr);
-    TEST_COMPARE (pthread_attr_setaffinity_np (&large_attr,
-                                               large_set_size, large_set), 0);
+    TEST_COMPARE (
+	pthread_attr_setaffinity_np (&large_attr, large_set_size, large_set),
+	0);
     TEST_COMPARE (pthread_setattr_default_np (&large_attr), 0);
     xpthread_attr_destroy (&large_attr);
     CPU_FREE (large_set);

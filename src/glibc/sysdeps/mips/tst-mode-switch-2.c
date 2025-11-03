@@ -25,28 +25,25 @@
 #include <sys/prctl.h>
 
 #if __mips_fpr != 0 || _MIPS_SPFPSET != 16
-# error This test requires -mfpxx -mno-odd-spreg
+#  error This test requires -mfpxx -mno-odd-spreg
 #endif
 
 /* This test verifies that all threads in a process see a mode
    change when any thread causes a mode change.  */
 
-static int mode[6] =
-  {
-    0,
-    PR_FP_MODE_FR,
-    PR_FP_MODE_FR | PR_FP_MODE_FRE,
-    PR_FP_MODE_FR,
-    0,
-    PR_FP_MODE_FR | PR_FP_MODE_FRE
-  };
+static int mode[6] = { 0,
+		       PR_FP_MODE_FR,
+		       PR_FP_MODE_FR | PR_FP_MODE_FRE,
+		       PR_FP_MODE_FR,
+		       0,
+		       PR_FP_MODE_FR | PR_FP_MODE_FRE };
 static volatile int current_mode;
 static volatile int finished;
 static pthread_barrier_t barr_ready;
 static pthread_barrier_t barr_cont;
 
 static void *
-thread_function (void * arg __attribute__ ((unused)))
+thread_function (void *arg __attribute__ ((unused)))
 {
   while (!finished)
     {
@@ -108,7 +105,7 @@ do_test (void)
 	exit (1);
       }
 
-  for (i = 0 ; i < 7 ; i++)
+  for (i = 0; i < 7; i++)
     {
       if (prctl (PR_SET_FP_MODE, mode[i % 6]) != 0)
 	{
@@ -120,7 +117,6 @@ do_test (void)
 	}
       else
 	current_mode = mode[i % 6];
-
 
       int res = pthread_barrier_wait (&barr_ready);
 

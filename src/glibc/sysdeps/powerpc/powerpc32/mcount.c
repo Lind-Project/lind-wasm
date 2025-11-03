@@ -11,7 +11,7 @@
    GLIBC_PRIVATE version obsolete and add it to GLIBC_2.16 instead.  */
 versioned_symbol (libc, ___mcount_internal, __mcount_internal, GLIBC_2_16);
 
-#if SHLIB_COMPAT (libc, GLIBC_2_15, GLIBC_2_16)
+#if SHLIB_COMPAT(libc, GLIBC_2_15, GLIBC_2_16)
 strong_alias (___mcount_internal, ___mcount_internal_private);
 symbol_version (___mcount_internal_private, __mcount_internal, GLIBC_PRIVATE);
 #endif

@@ -26,14 +26,15 @@ __pthread_mutexattr_getpshared (const pthread_mutexattr_t *attr, int *pshared)
   iattr = (const struct pthread_mutexattr *) attr;
 
   *pshared = ((iattr->mutexkind & PTHREAD_MUTEXATTR_FLAG_PSHARED) != 0
-	      ? PTHREAD_PROCESS_SHARED : PTHREAD_PROCESS_PRIVATE);
+		  ? PTHREAD_PROCESS_SHARED
+		  : PTHREAD_PROCESS_PRIVATE);
 
   return 0;
 }
 versioned_symbol (libc, __pthread_mutexattr_getpshared,
 		  pthread_mutexattr_getpshared, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_mutexattr_getpshared,
-               pthread_mutexattr_getpshared, GLIBC_2_2);
+	       pthread_mutexattr_getpshared, GLIBC_2_2);
 #endif

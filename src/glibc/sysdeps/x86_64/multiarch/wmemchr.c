@@ -18,22 +18,22 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define wmemchr __redirect_wmemchr
-# define __wmemchr __redirect___wmemchr
-# include <wchar.h>
-# undef wmemchr
-# undef __wmemchr
+#if IS_IN(libc)
+#  define wmemchr __redirect_wmemchr
+#  define __wmemchr __redirect___wmemchr
+#  include <wchar.h>
+#  undef wmemchr
+#  undef __wmemchr
 
-# define SYMBOL_NAME wmemchr
-# include "ifunc-evex.h"
+#  define SYMBOL_NAME wmemchr
+#  include "ifunc-evex.h"
 
 libc_ifunc_redirected (__redirect_wmemchr, __wmemchr, IFUNC_SELECTOR ());
 weak_alias (__wmemchr, wmemchr)
-# ifdef SHARED
-__hidden_ver1 (__wmemchr, __GI___wmemchr, __redirect___wmemchr)
-  __attribute__((visibility ("hidden")));
+#  ifdef SHARED
+    __hidden_ver1 (__wmemchr, __GI___wmemchr, __redirect___wmemchr)
+	__attribute__ ((visibility ("hidden")));
 __hidden_ver1 (wmemchr, __GI_wmemchr, __redirect_wmemchr)
-  __attribute__((weak, visibility ("hidden")));
-# endif
+    __attribute__ ((weak, visibility ("hidden")));
+#  endif
 #endif

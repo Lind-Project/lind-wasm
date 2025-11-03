@@ -18,5 +18,5 @@
 
 #include <sys/syscall.h>
 
-extern int __xstat_conv (int vers, struct kernel_stat *kbuf, void *ubuf)
-  attribute_hidden;
+extern int __xstat_conv (int vers, struct kernel_stat *kbuf,
+			 void *ubuf) attribute_hidden;

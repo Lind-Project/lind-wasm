@@ -19,18 +19,18 @@
 #include "mathimpl.h"
 
 #ifndef SUFF
-#define SUFF
+#  define SUFF
 #endif
 #ifndef float_type
-#define float_type double
+#  define float_type double
 #endif
 
-#define CONCATX(a,b) __CONCAT(a,b)
-#define s(name) CONCATX(name,SUFF)
-#define m81(func) __m81_u(s(func))
+#define CONCATX(a, b) __CONCAT (a, b)
+#define s(name) CONCATX (name, SUFF)
+#define m81(func) __m81_u (s (func))
 
 int
-s(__ieee754_ilogb) (float_type x)
+s (__ieee754_ilogb) (float_type x)
 {
   float_type result;
   unsigned long x_cond;
@@ -42,6 +42,6 @@ s(__ieee754_ilogb) (float_type x)
   if (x_cond & (__M81_COND_NAN | __M81_COND_INF))
     return FP_ILOGBNAN;
 
-  __asm ("fgetexp%.x %1, %0" : "=f" (result) : "f" (x));
+  __asm ("fgetexp%.x %1, %0" : "=f"(result) : "f"(x));
   return (int) result;
 }

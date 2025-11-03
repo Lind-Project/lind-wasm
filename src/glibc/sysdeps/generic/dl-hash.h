@@ -17,14 +17,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_HASH_H
-#define _DL_HASH_H	1
-
+#  define _DL_HASH_H 1
 
 /* This is the hashing function specified by the ELF ABI.  In the
    first five operations no overflow is possible so we optimized it a
    bit.  */
-static unsigned int
-__attribute__ ((unused))
+static unsigned int __attribute__ ((unused))
 _dl_elf_hash (const char *name_arg)
 {
   const unsigned char *name = (const unsigned char *) name_arg;

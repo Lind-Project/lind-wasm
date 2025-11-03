@@ -17,35 +17,39 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_MMAN_H
-# error "Never use <bits/mman.h> directly; include <sys/mman.h> instead."
+#  error "Never use <bits/mman.h> directly; include <sys/mman.h> instead."
 #endif
 
 /* The following definitions basically come from the kernel headers.
    But the kernel header is not namespace clean.  */
 
-#define PROT_SAO	0x10		/* Strong Access Ordering.  */
+#define PROT_SAO 0x10 /* Strong Access Ordering.  */
 
 /* These are Linux-specific.  */
-#define MAP_GROWSDOWN	0x00100		/* Stack-like segment.  */
-#define MAP_DENYWRITE	0x00800		/* ETXTBSY */
-#define MAP_EXECUTABLE	0x01000		/* Mark it as an executable.  */
-#define MAP_LOCKED	0x00080		/* Lock the mapping.  */
-#define MAP_NORESERVE	0x00040		/* Don't check for reservations.  */
-#define MAP_POPULATE	0x08000		/* Populate (prefault) pagetables.  */
-#define MAP_NONBLOCK	0x10000		/* Do not block on IO.  */
-#define MAP_STACK	0x20000		/* Allocation is for a stack.  */
-#define MAP_HUGETLB	0x40000		/* Create huge page mapping.  */
-#define MAP_SYNC	0x80000		/* Perform synchronous page
-					   faults for the mapping.  */
-#define MAP_FIXED_NOREPLACE 0x100000	/* MAP_FIXED but do not unmap
-					   underlying mapping.  */
+#define MAP_GROWSDOWN 0x00100  /* Stack-like segment.  */
+#define MAP_DENYWRITE 0x00800  /* ETXTBSY */
+#define MAP_EXECUTABLE 0x01000 /* Mark it as an executable.  */
+#define MAP_LOCKED 0x00080     /* Lock the mapping.  */
+#define MAP_NORESERVE 0x00040  /* Don't check for reservations.  */
+#define MAP_POPULATE 0x08000   /* Populate (prefault) pagetables.  */
+#define MAP_NONBLOCK 0x10000   /* Do not block on IO.  */
+#define MAP_STACK 0x20000      /* Allocation is for a stack.  */
+#define MAP_HUGETLB 0x40000    /* Create huge page mapping.  */
+#define MAP_SYNC                                                              \
+  0x80000 /* Perform synchronous page                                         \
+	     faults for the mapping.  */
+#define MAP_FIXED_NOREPLACE                                                   \
+  0x100000 /* MAP_FIXED but do not unmap                                      \
+	      underlying mapping.  */
 
 /* Flags for `mlockall'.  */
-#define MCL_CURRENT	0x2000		/* Lock all currently mapped pages.  */
-#define MCL_FUTURE	0x4000		/* Lock all additions to address
-					   space.  */
-#define MCL_ONFAULT	0x8000		/* Lock all pages that are
-					   faulted in.  */
+#define MCL_CURRENT 0x2000 /* Lock all currently mapped pages.  */
+#define MCL_FUTURE                                                            \
+  0x4000 /* Lock all additions to address                                     \
+	    space.  */
+#define MCL_ONFAULT                                                           \
+  0x8000 /* Lock all pages that are                                           \
+	    faulted in.  */
 
 /* Include generic Linux declarations.  */
 #include <bits/mman-linux.h>

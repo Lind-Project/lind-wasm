@@ -34,11 +34,9 @@ legacy_1 (void)
   done = 1;
 }
 
-void (*init_array []) (void)
-     __attribute__ ((section (".init_array"), aligned (sizeof (void *)))) =
-{
-  &legacy_1
-};
+void (*init_array[]) (void)
+    __attribute__ ((section (".init_array"), aligned (sizeof (void *))))
+    = { &legacy_1 };
 
 static int
 do_test (void)

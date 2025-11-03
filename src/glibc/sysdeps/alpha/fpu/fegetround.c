@@ -23,10 +23,9 @@ __fegetround (void)
 {
   unsigned long fpcr;
 
-  __asm__ __volatile__("excb; mf_fpcr %0" : "=f"(fpcr));
+  __asm__ __volatile__ ("excb; mf_fpcr %0" : "=f"(fpcr));
 
   return (fpcr >> FPCR_ROUND_SHIFT) & 3;
 }
-libm_hidden_def (__fegetround)
-weak_alias (__fegetround, fegetround)
-libm_hidden_weak (fegetround)
+libm_hidden_def (__fegetround) weak_alias (__fegetround, fegetround)
+    libm_hidden_weak (fegetround)

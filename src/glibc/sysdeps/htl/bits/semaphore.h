@@ -17,18 +17,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_SEMAPHORE_H
-#define _BITS_SEMAPHORE_H	1
+#  define _BITS_SEMAPHORE_H 1
 
-#ifndef _SEMAPHORE_H
-# error Never include <bits/semaphore.h> directly.
-#endif
+#  ifndef _SEMAPHORE_H
+#    error Never include <bits/semaphore.h> directly.
+#  endif
 
-#include <bits/types/__pthread_spinlock_t.h>
-#include <bits/pthread.h>
+#  include <bits/types/__pthread_spinlock_t.h>
+#  include <bits/pthread.h>
 
 /* User visible part of a semaphore.  */
 
-#define __SIZEOF_SEM_T	20
+#  define __SIZEOF_SEM_T 20
 
 typedef union
 {
@@ -36,6 +36,6 @@ typedef union
   long int __align;
 } sem_t;
 
-#define SEM_FAILED ((void *) 0)
+#  define SEM_FAILED ((void *) 0)
 
 #endif /* bits/semaphore.h */

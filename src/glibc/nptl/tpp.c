@@ -25,22 +25,20 @@
 #include <atomic.h>
 
 int __sched_fifo_min_prio = -1;
-libc_hidden_data_def (__sched_fifo_min_prio)
-int __sched_fifo_max_prio = -1;
+libc_hidden_data_def (__sched_fifo_min_prio) int __sched_fifo_max_prio = -1;
 libc_hidden_data_def (__sched_fifo_max_prio)
 
-/* We only want to initialize __sched_fifo_min_prio and __sched_fifo_max_prio
-   once.  The standard solution would be similar to pthread_once, but then
-   readers would need to use an acquire fence.  In this specific case,
-   initialization is comprised of just idempotent writes to two variables
-   that have an initial value of -1.  Therefore, we can treat each variable as
-   a separate, at-least-once initialized value.  This enables using just
-   relaxed MO loads and stores, but requires that consumers check for
-   initialization of each value that is to be used; see
-   __pthread_tpp_change_priority for an example.
- */
-void
-__init_sched_fifo_prio (void)
+    /* We only want to initialize __sched_fifo_min_prio and
+       __sched_fifo_max_prio once.  The standard solution would be similar to
+       pthread_once, but then readers would need to use an acquire fence.  In
+       this specific case, initialization is comprised of just idempotent
+       writes to two variables that have an initial value of -1.  Therefore, we
+       can treat each variable as a separate, at-least-once initialized value.
+       This enables using just relaxed MO loads and stores, but requires that
+       consumers check for initialization of each value that is to be used; see
+       __pthread_tpp_change_priority for an example.
+     */
+    void __init_sched_fifo_prio (void)
 {
   atomic_store_relaxed (&__sched_fifo_max_prio,
 			__sched_get_priority_max (SCHED_FIFO));
@@ -49,8 +47,7 @@ __init_sched_fifo_prio (void)
 }
 libc_hidden_def (__init_sched_fifo_prio)
 
-int
-__pthread_tpp_change_priority (int previous_prio, int new_prio)
+    int __pthread_tpp_change_priority (int previous_prio, int new_prio)
 {
   struct pthread *self = THREAD_SELF;
   struct priority_protection_data *tpp = THREAD_GETMEM (self, tpp);
@@ -60,9 +57,9 @@ __pthread_tpp_change_priority (int previous_prio, int new_prio)
   if (tpp == NULL)
     {
       /* See __init_sched_fifo_prio.  We need both the min and max prio,
-         so need to check both, and run initialization if either one is
-         not initialized.  The memory model's write-read coherence rule
-         makes this work.  */
+	 so need to check both, and run initialization if either one is
+	 not initialized.  The memory model's write-read coherence rule
+	 makes this work.  */
       if (fifo_min_prio == -1 || fifo_max_prio == -1)
 	{
 	  __init_sched_fifo_prio ();
@@ -71,8 +68,7 @@ __pthread_tpp_change_priority (int previous_prio, int new_prio)
 	}
 
       size_t size = sizeof *tpp;
-      size += (fifo_max_prio - fifo_min_prio + 1)
-	      * sizeof (tpp->priomap[0]);
+      size += (fifo_max_prio - fifo_min_prio + 1) * sizeof (tpp->priomap[0]);
       tpp = calloc (size, 1);
       if (tpp == NULL)
 	return ENOMEM;
@@ -81,11 +77,10 @@ __pthread_tpp_change_priority (int previous_prio, int new_prio)
     }
 
   assert (new_prio == -1
-	  || (new_prio >= fifo_min_prio
-	      && new_prio <= fifo_max_prio));
-  assert (previous_prio == -1
-	  || (previous_prio >= fifo_min_prio
-	      && previous_prio <= fifo_max_prio));
+	  || (new_prio >= fifo_min_prio && new_prio <= fifo_max_prio));
+  assert (
+      previous_prio == -1
+      || (previous_prio >= fifo_min_prio && previous_prio <= fifo_max_prio));
 
   int priomax = tpp->priomax;
   int newpriomax = priomax;
@@ -101,8 +96,7 @@ __pthread_tpp_change_priority (int previous_prio, int new_prio)
   if (previous_prio != -1)
     {
       if (--tpp->priomap[previous_prio - fifo_min_prio] == 0
-	  && priomax == previous_prio
-	  && previous_prio > new_prio)
+	  && priomax == previous_prio && previous_prio > new_prio)
 	{
 	  int i;
 	  for (i = previous_prio - 1; i >= fifo_min_prio; --i)
@@ -158,8 +152,7 @@ __pthread_tpp_change_priority (int previous_prio, int new_prio)
 }
 libc_hidden_def (__pthread_tpp_change_priority)
 
-int
-__pthread_current_priority (void)
+    int __pthread_current_priority (void)
 {
   struct pthread *self = THREAD_SELF;
   if ((self->flags & (ATTR_FLAG_POLICY_SET | ATTR_FLAG_SCHED_SET))

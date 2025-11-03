@@ -38,13 +38,14 @@ extern int __libc_argc attribute_hidden;
 extern char **__libc_argv attribute_hidden;
 extern char **_dl_argv;
 
-#if !defined (SHARED) && (defined (THREAD_SET_STACK_GUARD) || defined (THREAD_SET_POINTER_GUARD))
+#if !defined(SHARED)                                                          \
+    && (defined(THREAD_SET_STACK_GUARD) || defined(THREAD_SET_POINTER_GUARD))
 /* In the static case, we need to set up TLS early so that the stack
    protection guard can be read at from TLS by the GCC-generated snippets,
    on architectures that store the guard in TLS and not globally.  */
-# define USE_INIT1_TCBHEAD 1
+#  define USE_INIT1_TCBHEAD 1
 #else
-# define USE_INIT1_TCBHEAD 0
+#  define USE_INIT1_TCBHEAD 0
 #endif
 
 #if USE_INIT1_TCBHEAD
@@ -53,8 +54,7 @@ static tcbhead_t __init1_tcbhead;
 
 /* Things that want to be run before _hurd_init or much anything else.
    Importantly, these are called before anything tries to use malloc.  */
-DEFINE_HOOK (_hurd_preinit_hook, (void));
-
+DEFINE_HOOK (_hurd_preinit_hook, (void) );
 
 /* We call this once the Hurd magic is all set up and we are ready to be a
    Posixoid program.  This does the same things the generic version does.  */
@@ -119,26 +119,26 @@ init (void **data)
     {
       __libc_enable_secure = 0;
       /* With a new enough linker (binutils-2.23 or better),
-         the magic __ehdr_start symbol will be available and
-         __libc_start_main will have done this that way already.  */
+	 the magic __ehdr_start symbol will be available and
+	 __libc_start_main will have done this that way already.  */
       if (_dl_phdr == NULL)
-        {
-          /* We may need to see our own phdrs, e.g. for TLS setup.
-             Try the usual kludge to find the headers without help from
-             the exec server.  */
-          extern const void __executable_start;
-          const ElfW(Ehdr) *const ehdr = &__executable_start;
-          _dl_phdr = (const void *) ehdr + ehdr->e_phoff;
-          _dl_phnum = ehdr->e_phnum;
-          assert (ehdr->e_phentsize == sizeof (ElfW(Phdr)));
-        }
+	{
+	  /* We may need to see our own phdrs, e.g. for TLS setup.
+	     Try the usual kludge to find the headers without help from
+	     the exec server.  */
+	  extern const void __executable_start;
+	  const ElfW (Ehdr) *const ehdr = &__executable_start;
+	  _dl_phdr = (const void *) ehdr + ehdr->e_phoff;
+	  _dl_phnum = ehdr->e_phnum;
+	  assert (ehdr->e_phentsize == sizeof (ElfW (Phdr)));
+	}
     }
   else
     {
       __libc_enable_secure = d->flags & EXEC_SECURE;
-      _dl_phdr = (ElfW(Phdr) *) d->phdr;
-      _dl_phnum = d->phdrsz / sizeof (ElfW(Phdr));
-      assert (d->phdrsz % sizeof (ElfW(Phdr)) == 0);
+      _dl_phdr = (ElfW (Phdr) *) d->phdr;
+      _dl_phnum = d->phdrsz / sizeof (ElfW (Phdr));
+      assert (d->phdrsz % sizeof (ElfW (Phdr)) == 0);
     }
 #endif
 
@@ -150,9 +150,8 @@ init (void **data)
 
   if (d->portarray || d->intarray)
     /* Initialize library data structures, start signal processing, etc.  */
-    _hurd_init (d->flags, argv,
-		d->portarray, d->portarraysize,
-		d->intarray, d->intarraysize);
+    _hurd_init (d->flags, argv, d->portarray, d->portarraysize, d->intarray,
+		d->intarraysize);
 }
 
 /* Do the first essential initializations that must precede all else.  */
@@ -163,7 +162,7 @@ first_init (void)
   __mach_init ();
 
 #ifndef SHARED
-  GLRO(dl_pagesize) = __vm_page_size;
+  GLRO (dl_pagesize) = __vm_page_size;
 #endif
 
 #if USE_INIT1_TCBHEAD
@@ -206,8 +205,7 @@ strong_alias (posixland_init, __libc_init_first);
 /* XXX This is all a crock and I am not happy with it.
    This poorly-named function is called by static-start.S,
    which should not exist at all.  */
-void
-inhibit_stack_protector
+void inhibit_stack_protector
 _hurd_stack_setup (void **argptr)
 {
   /* This is the very first C code that runs in a statically linked
@@ -227,11 +225,11 @@ _hurd_stack_setup (void **argptr)
   first_init ();
 
   void doinit (intptr_t *data)
-    {
-      init ((void **) data);
-      RETURN_TO (data, caller, 0);
-      __builtin_unreachable ();
-    }
+  {
+    init ((void **) data);
+    RETURN_TO (data, caller, 0);
+    __builtin_unreachable ();
+  }
 
   /* _hurd_startup () will attempt to receive the data block from the exec
      server; or if that is not possible, will take the data from the pointer
@@ -250,7 +248,6 @@ _hurd_stack_setup (void **argptr)
   __builtin_unreachable ();
 }
 #endif
-
 
 /* This function is defined here so that if this file ever gets into
    ld.so we will get a link error.  Having this file silently included

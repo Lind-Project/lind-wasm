@@ -16,37 +16,37 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_STRNCMP_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_STRNCMP_IFUNC 1
 #else
-# define HAVE_STRNCMP_IFUNC	0
+#  define HAVE_STRNCMP_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_STRNCMP_IFUNC_AND_VX_SUPPORT HAVE_STRNCMP_IFUNC
+#  define HAVE_STRNCMP_IFUNC_AND_VX_SUPPORT HAVE_STRNCMP_IFUNC
 #else
-# define HAVE_STRNCMP_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_STRNCMP_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define STRNCMP_DEFAULT	STRNCMP_Z13
-# define HAVE_STRNCMP_C		0
-# define HAVE_STRNCMP_Z13	1
+#  define STRNCMP_DEFAULT STRNCMP_Z13
+#  define HAVE_STRNCMP_C 0
+#  define HAVE_STRNCMP_Z13 1
 #else
-# define STRNCMP_DEFAULT	STRNCMP_C
-# define HAVE_STRNCMP_C		1
-# define HAVE_STRNCMP_Z13	HAVE_STRNCMP_IFUNC_AND_VX_SUPPORT
+#  define STRNCMP_DEFAULT STRNCMP_C
+#  define HAVE_STRNCMP_C 1
+#  define HAVE_STRNCMP_Z13 HAVE_STRNCMP_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_STRNCMP_C
-# define STRNCMP_C		__strncmp_c
+#  define STRNCMP_C __strncmp_c
 #else
-# define STRNCMP_C		NULL
+#  define STRNCMP_C NULL
 #endif
 
 #if HAVE_STRNCMP_Z13
-# define STRNCMP_Z13		__strncmp_vx
+#  define STRNCMP_Z13 __strncmp_vx
 #else
-# define STRNCMP_Z13		NULL
+#  define STRNCMP_Z13 NULL
 #endif

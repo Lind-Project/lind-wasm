@@ -87,8 +87,7 @@ __fmodf (float x, float y)
   /* Common case where exponents are close: |x/y| < 2^9, x not inf/NaN
      and |x%y| not denormal.  */
   if (__glibc_likely (ey < (EXPONENT_MASK >> MANTISSA_WIDTH) - EXPONENT_WIDTH
-		     && ey > MANTISSA_WIDTH
-		     && exp_diff <= EXPONENT_WIDTH))
+		      && ey > MANTISSA_WIDTH && exp_diff <= EXPONENT_WIDTH))
     {
       uint32_t mx = (hx << EXPONENT_WIDTH) | SIGN_MASK;
       uint32_t my = (hy << EXPONENT_WIDTH) | SIGN_MASK;
@@ -101,7 +100,7 @@ __fmodf (float x, float y)
       ex -= shift + 1;
       mx <<= shift;
       mx = sx | (mx >> EXPONENT_WIDTH);
-      return asfloat (mx + ((uint32_t)ex << MANTISSA_WIDTH));
+      return asfloat (mx + ((uint32_t) ex << MANTISSA_WIDTH));
     }
 
   if (__glibc_unlikely (hy == 0 || hx >= EXPONENT_MASK))
@@ -155,14 +154,15 @@ __fmodf (float x, float y)
 
   /* Multiplication with the inverse is faster than repeated modulo.  */
   uint32_t inv_hy = UINT32_MAX / my;
-  while (exp_diff > sides_zeroes) {
-    exp_diff -= sides_zeroes;
-    uint32_t hd = (mx * inv_hy) >> (BIT_WIDTH - sides_zeroes);
-    mx <<= sides_zeroes;
-    mx -= hd * my;
-    while (__glibc_unlikely (mx > my))
-      mx -= my;
-  }
+  while (exp_diff > sides_zeroes)
+    {
+      exp_diff -= sides_zeroes;
+      uint32_t hd = (mx * inv_hy) >> (BIT_WIDTH - sides_zeroes);
+      mx <<= sides_zeroes;
+      mx -= hd * my;
+      while (__glibc_unlikely (mx > my))
+	mx -= my;
+    }
   uint32_t hd = (mx * inv_hy) >> (BIT_WIDTH - exp_diff);
   mx <<= exp_diff;
   mx -= hd * my;
@@ -173,9 +173,9 @@ __fmodf (float x, float y)
 }
 strong_alias (__fmodf, __ieee754_fmodf)
 #if LIBM_SVID_COMPAT
-versioned_symbol (libm, __fmodf, fmodf, GLIBC_2_38);
+    versioned_symbol (libm, __fmodf, fmodf, GLIBC_2_38);
 libm_alias_float_other (__fmod, fmod)
 #else
-libm_alias_float (__fmod, fmod)
+    libm_alias_float (__fmod, fmod)
 #endif
-libm_alias_finite (__ieee754_fmodf, __fmodf)
+    libm_alias_finite (__ieee754_fmodf, __fmodf)

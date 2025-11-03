@@ -19,7 +19,7 @@
 #define TUNABLE_NAMESPACE cpu
 #include <stdbool.h>
 #include <stdint.h>
-#include <unistd.h>		/* Get STDOUT_FILENO for _dl_printf.  */
+#include <unistd.h> /* Get STDOUT_FILENO for _dl_printf.  */
 #include <elf/dl-tunables.h>
 #include <string.h>
 #include <cpu-features.h>
@@ -27,64 +27,62 @@
 #include <dl-tunables-parse.h>
 #include <dl-symbol-redir-ifunc.h>
 
-#define CHECK_GLIBC_IFUNC_CPU_OFF(f, cpu_features, name, len)		\
-  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);	\
-  if (tunable_str_comma_strcmp_cte (&f, #name))				\
-    {									\
-      CPU_FEATURE_UNSET (cpu_features, name)				\
-      break;								\
+#define CHECK_GLIBC_IFUNC_CPU_OFF(f, cpu_features, name, len)                 \
+  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);              \
+  if (tunable_str_comma_strcmp_cte (&f, #name))                               \
+    {                                                                         \
+      CPU_FEATURE_UNSET (cpu_features, name)                                  \
+      break;                                                                  \
     }
 
-#define CHECK_GLIBC_IFUNC_CPU_BOTH(f, cpu_features, name, len)		\
-  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);	\
-  if (tunable_str_comma_strcmp_cte (&f, #name))				\
-    {									\
-      if (f.disable)							\
-	CPU_FEATURE_UNSET (cpu_features, name)				\
-      else								\
-	CPU_FEATURE_SET_ACTIVE (cpu_features, name)			\
-      break;								\
+#define CHECK_GLIBC_IFUNC_CPU_BOTH(f, cpu_features, name, len)                \
+  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);              \
+  if (tunable_str_comma_strcmp_cte (&f, #name))                               \
+    {                                                                         \
+      if (f.disable)                                                          \
+	CPU_FEATURE_UNSET (cpu_features, name)                                \
+      else                                                                    \
+	CPU_FEATURE_SET_ACTIVE (cpu_features, name)                           \
+      break;                                                                  \
     }
 
 /* Disable a preferred feature NAME.  We don't enable a preferred feature
    which isn't available.  */
-#define CHECK_GLIBC_IFUNC_PREFERRED_OFF(f, cpu_features, name, len)	\
-  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);	\
-  if (tunable_str_comma_strcmp_cte (&f, #name))				\
-    {									\
-      cpu_features->preferred[index_arch_##name]			\
-	&= ~bit_arch_##name;						\
-      break;								\
+#define CHECK_GLIBC_IFUNC_PREFERRED_OFF(f, cpu_features, name, len)           \
+  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);              \
+  if (tunable_str_comma_strcmp_cte (&f, #name))                               \
+    {                                                                         \
+      cpu_features->preferred[index_arch_##name] &= ~bit_arch_##name;         \
+      break;                                                                  \
     }
 
 /* Enable/disable a preferred feature NAME.  */
-#define CHECK_GLIBC_IFUNC_PREFERRED_BOTH(f, cpu_features, name, len)	\
-  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);	\
-  if (tunable_str_comma_strcmp_cte (&f, #name))				\
-    {									\
-      if (f.disable)							\
-	cpu_features->preferred[index_arch_##name] &= ~bit_arch_##name;	\
-      else								\
-	cpu_features->preferred[index_arch_##name] |= bit_arch_##name;	\
-      break;								\
+#define CHECK_GLIBC_IFUNC_PREFERRED_BOTH(f, cpu_features, name, len)          \
+  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);              \
+  if (tunable_str_comma_strcmp_cte (&f, #name))                               \
+    {                                                                         \
+      if (f.disable)                                                          \
+	cpu_features->preferred[index_arch_##name] &= ~bit_arch_##name;       \
+      else                                                                    \
+	cpu_features->preferred[index_arch_##name] |= bit_arch_##name;        \
+      break;                                                                  \
     }
 
 /* Enable/disable a preferred feature NAME.  Enable a preferred feature
    only if the feature NEED is usable.  */
-#define CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH(f, cpu_features, name,	\
-					      need, len)		\
-  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);	\
-  if (tunable_str_comma_strcmp_cte (&f, #name))				\
-    {									\
-      if (f.disable)							\
-	cpu_features->preferred[index_arch_##name] &= ~bit_arch_##name;	\
-      else if (CPU_FEATURE_USABLE_P (cpu_features, need))		\
-	cpu_features->preferred[index_arch_##name] |= bit_arch_##name;	\
-      break;								\
+#define CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH(f, cpu_features, name, need,    \
+					      len)                            \
+  _Static_assert (sizeof (#name) - 1 == len, #name " != " #len);              \
+  if (tunable_str_comma_strcmp_cte (&f, #name))                               \
+    {                                                                         \
+      if (f.disable)                                                          \
+	cpu_features->preferred[index_arch_##name] &= ~bit_arch_##name;       \
+      else if (CPU_FEATURE_USABLE_P (cpu_features, need))                     \
+	cpu_features->preferred[index_arch_##name] |= bit_arch_##name;        \
+      break;                                                                  \
     }
 
-attribute_hidden
-void
+attribute_hidden void
 TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *valp)
 {
   /* The current IFUNC selection is based on microbenchmarks in glibc.
@@ -104,7 +102,7 @@ TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *valp)
      NOTE: the IFUNC selection may change over time.  Please check all
      multiarch implementations when experimenting.  */
 
-  struct cpu_features *cpu_features = &GLRO(dl_x86_cpu_features);
+  struct cpu_features *cpu_features = &GLRO (dl_x86_cpu_features);
 
   struct tunable_str_comma_state_t ts;
   tunable_str_comma_init (&ts, valp);
@@ -163,7 +161,7 @@ TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *valp)
 		{
 		  /* Update xsave_state_size to XSAVE state size.  */
 		  cpu_features->xsave_state_size
-		    = cpu_features->xsave_state_full_size;
+		      = cpu_features->xsave_state_full_size;
 		  CPU_FEATURE_UNSET (cpu_features, XSAVEC);
 		}
 	    }
@@ -188,93 +186,89 @@ TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *valp)
 	  CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features, Slow_BSF, 8);
 	  break;
 	case 11:
-	    {
-	      CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features, Prefer_ERMS,
-						11);
-	      CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features, Prefer_FSRM,
-						11);
-	      CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH (n, cpu_features,
-						     Slow_SSE4_2,
-						     SSE4_2,
-						     11);
-	    }
+	  {
+	    CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features, Prefer_ERMS,
+					      11);
+	    CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features, Prefer_FSRM,
+					      11);
+	    CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH (n, cpu_features,
+						   Slow_SSE4_2, SSE4_2, 11);
+	  }
 	  break;
 	case 15:
-	    {
-	      CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features,
-						Fast_Rep_String, 15);
-	    }
+	  {
+	    CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features, Fast_Rep_String,
+					      15);
+	  }
 	  break;
 	case 16:
-	    {
-	      CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH
-		(n, cpu_features, Prefer_No_AVX512, AVX512F, 16);
-	    }
+	  {
+	    CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH (
+		n, cpu_features, Prefer_No_AVX512, AVX512F, 16);
+	  }
 	  break;
 	case 18:
-	    {
-	      CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features,
-						Fast_Copy_Backward, 18);
-	    }
+	  {
+	    CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features,
+					      Fast_Copy_Backward, 18);
+	  }
 	  break;
 	case 19:
-	    {
-	      CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features,
-						Fast_Unaligned_Load, 19);
-	      CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features,
-						Fast_Unaligned_Copy, 19);
-	    }
+	  {
+	    CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features,
+					      Fast_Unaligned_Load, 19);
+	    CHECK_GLIBC_IFUNC_PREFERRED_BOTH (n, cpu_features,
+					      Fast_Unaligned_Copy, 19);
+	  }
 	  break;
 	case 20:
-	    {
-	      CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH
-		(n, cpu_features, Prefer_No_VZEROUPPER, AVX, 20);
-	    }
+	  {
+	    CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH (
+		n, cpu_features, Prefer_No_VZEROUPPER, AVX, 20);
+	  }
 	  break;
 	case 23:
-	    {
-	      CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH
-		(n, cpu_features, AVX_Fast_Unaligned_Load, AVX, 23);
-	    }
+	  {
+	    CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH (
+		n, cpu_features, AVX_Fast_Unaligned_Load, AVX, 23);
+	  }
 	  break;
 	case 24:
-	    {
-	      CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH
-		(n, cpu_features, MathVec_Prefer_No_AVX512, AVX512F, 24);
-	    }
+	  {
+	    CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH (
+		n, cpu_features, MathVec_Prefer_No_AVX512, AVX512F, 24);
+	  }
 	  break;
 	case 26:
-	    {
-	      CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH
-		(n, cpu_features, Prefer_PMINUB_for_stringop, SSE2, 26);
-	    }
+	  {
+	    CHECK_GLIBC_IFUNC_PREFERRED_NEED_BOTH (
+		n, cpu_features, Prefer_PMINUB_for_stringop, SSE2, 26);
+	  }
 	  break;
 	}
     }
 }
 
 #if CET_ENABLED
-attribute_hidden
-void
+attribute_hidden void
 TUNABLE_CALLBACK (set_x86_ibt) (tunable_val_t *valp)
 {
   if (tunable_strcmp_cte (valp, "on"))
-    GL(dl_x86_feature_control).ibt = cet_always_on;
+    GL (dl_x86_feature_control).ibt = cet_always_on;
   else if (tunable_strcmp_cte (valp, "off"))
-    GL(dl_x86_feature_control).ibt = cet_always_off;
+    GL (dl_x86_feature_control).ibt = cet_always_off;
   else if (tunable_strcmp_cte (valp, "permissive"))
-    GL(dl_x86_feature_control).ibt = cet_permissive;
+    GL (dl_x86_feature_control).ibt = cet_permissive;
 }
 
-attribute_hidden
-void
+attribute_hidden void
 TUNABLE_CALLBACK (set_x86_shstk) (tunable_val_t *valp)
 {
   if (tunable_strcmp_cte (valp, "on"))
-    GL(dl_x86_feature_control).shstk = cet_always_on;
+    GL (dl_x86_feature_control).shstk = cet_always_on;
   else if (tunable_strcmp_cte (valp, "off"))
-    GL(dl_x86_feature_control).shstk = cet_always_off;
+    GL (dl_x86_feature_control).shstk = cet_always_off;
   else if (tunable_strcmp_cte (valp, "permissive"))
-    GL(dl_x86_feature_control).shstk = cet_permissive;
+    GL (dl_x86_feature_control).shstk = cet_permissive;
 }
 #endif

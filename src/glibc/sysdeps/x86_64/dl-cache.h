@@ -16,36 +16,35 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define _DL_CACHE_DEFAULT_ID	0x303
+#define _DL_CACHE_DEFAULT_ID 0x303
 
-#define _dl_cache_check_flags(flags)			\
-  ((flags) == _DL_CACHE_DEFAULT_ID)
+#define _dl_cache_check_flags(flags) ((flags) == _DL_CACHE_DEFAULT_ID)
 
-#define add_system_dir(dir) \
-  do								\
-    {								\
-      size_t len = strlen (dir);				\
-      char path[len + 4];					\
-      memcpy (path, dir, len + 1);				\
-      if (len >= 6 && ! memcmp (path + len - 6, "/lib64", 6))	\
-	{							\
-	  len -= 2;						\
-	  path[len] = '\0';					\
-	}							\
-      else if (len >= 7						\
-	       && ! memcmp (path + len - 7, "/libx32", 7))	\
-	{							\
-	  len -= 3;						\
-	  path[len] = '\0';					\
-	}							\
-      add_dir (path);						\
-      if (len >= 4 && ! memcmp (path + len - 4, "/lib", 4))	\
-	{							\
-	  memcpy (path + len, "64", 3);				\
-	  add_dir (path);					\
-	  memcpy (path + len, "x32", 4);				\
-	  add_dir (path);					\
-	}							\
-    } while (0)
+#define add_system_dir(dir)                                                   \
+  do                                                                          \
+    {                                                                         \
+      size_t len = strlen (dir);                                              \
+      char path[len + 4];                                                     \
+      memcpy (path, dir, len + 1);                                            \
+      if (len >= 6 && !memcmp (path + len - 6, "/lib64", 6))                  \
+	{                                                                     \
+	  len -= 2;                                                           \
+	  path[len] = '\0';                                                   \
+	}                                                                     \
+      else if (len >= 7 && !memcmp (path + len - 7, "/libx32", 7))            \
+	{                                                                     \
+	  len -= 3;                                                           \
+	  path[len] = '\0';                                                   \
+	}                                                                     \
+      add_dir (path);                                                         \
+      if (len >= 4 && !memcmp (path + len - 4, "/lib", 4))                    \
+	{                                                                     \
+	  memcpy (path + len, "64", 3);                                       \
+	  add_dir (path);                                                     \
+	  memcpy (path + len, "x32", 4);                                      \
+	  add_dir (path);                                                     \
+	}                                                                     \
+    }                                                                         \
+  while (0)
 
 #include <sysdeps/generic/dl-cache.h>

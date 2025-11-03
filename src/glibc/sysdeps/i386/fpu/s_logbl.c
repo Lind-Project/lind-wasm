@@ -10,7 +10,9 @@ __logbl (long double x)
   long double res;
 
   asm ("fxtract\n"
-       "fstp	%%st" : "=t" (res) : "0" (x));
+       "fstp	%%st"
+       : "=t"(res)
+       : "0"(x));
   return res;
 }
 

@@ -5,8 +5,8 @@
 #include <immintrin.h>
 
 __m128i
-sse_test (__m128i x0, __m128i x1, __m128i x2, __m128i x3,
-	  __m128i x4, __m128i x5, __m128i x6, __m128i x7)
+sse_test (__m128i x0, __m128i x1, __m128i x2, __m128i x3, __m128i x4,
+	  __m128i x5, __m128i x6, __m128i x7)
 {
   __m128i xmm;
 

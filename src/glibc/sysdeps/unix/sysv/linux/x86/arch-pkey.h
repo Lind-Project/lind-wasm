@@ -32,7 +32,6 @@ pkey_read (void)
 static inline void
 pkey_write (unsigned int value)
 {
-
 }
 
 #endif /* _ARCH_PKEY_H */

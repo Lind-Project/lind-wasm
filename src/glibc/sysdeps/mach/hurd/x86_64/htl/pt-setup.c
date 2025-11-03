@@ -48,9 +48,9 @@ stack_setup (struct __pthread *thread)
 
 int
 __pthread_setup (struct __pthread *thread,
-		 void (*entry_point) (struct __pthread *, void *(*)(void *),
-				      void *), void *(*start_routine) (void *),
-		 void *arg)
+		 void (*entry_point) (struct __pthread *, void *(*) (void *),
+				      void *),
+		 void *(*start_routine) (void *), void *arg)
 {
   error_t err;
   struct i386_thread_state state;
@@ -64,7 +64,6 @@ __pthread_setup (struct __pthread *thread,
        Leave the unused one registered so that it doesn't leak.  */
     return 0;
 
-
   thread->mcontext.pc = entry_point;
   thread->mcontext.sp = stack_setup (thread);
 
@@ -77,8 +76,7 @@ __pthread_setup (struct __pthread *thread,
   state.rdx = (uintptr_t) arg;
 
   err = __thread_set_state (thread->kernel_thread, i386_THREAD_STATE,
-			    (thread_state_t) &state,
-			    i386_THREAD_STATE_COUNT);
+			    (thread_state_t) &state, i386_THREAD_STATE_COUNT);
   assert_perror (err);
 
   /* Set fs_base to the TCB pointer for the thread.  */

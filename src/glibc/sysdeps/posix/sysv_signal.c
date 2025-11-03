@@ -17,18 +17,18 @@
 
 #include <errno.h>
 #include <signal.h>
-#include <string.h>	/* For the real memset prototype.  */
+#include <string.h> /* For the real memset prototype.  */
 #include <sigsetops.h>
 
 /* Tolerate non-threads versions of Posix */
 #ifndef SA_ONESHOT
-#define SA_ONESHOT 0
+#  define SA_ONESHOT 0
 #endif
 #ifndef SA_NOMASK
-#define SA_NOMASK 0
+#  define SA_NOMASK 0
 #endif
 #ifndef SA_INTERRUPT
-#define SA_INTERRUPT 0
+#  define SA_INTERRUPT 0
 #endif
 
 /* Set the handler for the signal SIG to HANDLER,

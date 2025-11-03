@@ -19,31 +19,31 @@
 #include <isa-level.h>
 
 #ifndef DEFAULT_IMPL_V1
-# error "Must have at least ISA V1 Version"
+#  error "Must have at least ISA V1 Version"
 #endif
 
 #ifndef DEFAULT_IMPL_V2
-# define DEFAULT_IMPL_V2 DEFAULT_IMPL_V1
+#  define DEFAULT_IMPL_V2 DEFAULT_IMPL_V1
 #endif
 
 #ifndef DEFAULT_IMPL_V3
-# define DEFAULT_IMPL_V3 DEFAULT_IMPL_V2
+#  define DEFAULT_IMPL_V3 DEFAULT_IMPL_V2
 #endif
 
 #ifndef DEFAULT_IMPL_V4
-# define DEFAULT_IMPL_V4 DEFAULT_IMPL_V3
+#  define DEFAULT_IMPL_V4 DEFAULT_IMPL_V3
 #endif
 
 #if MINIMUM_X86_ISA_LEVEL == 1
-# define ISA_DEFAULT_IMPL DEFAULT_IMPL_V1
+#  define ISA_DEFAULT_IMPL DEFAULT_IMPL_V1
 #elif MINIMUM_X86_ISA_LEVEL == 2
-# define ISA_DEFAULT_IMPL DEFAULT_IMPL_V2
+#  define ISA_DEFAULT_IMPL DEFAULT_IMPL_V2
 #elif MINIMUM_X86_ISA_LEVEL == 3
-# define ISA_DEFAULT_IMPL DEFAULT_IMPL_V3
+#  define ISA_DEFAULT_IMPL DEFAULT_IMPL_V3
 #elif MINIMUM_X86_ISA_LEVEL == 4
-# define ISA_DEFAULT_IMPL DEFAULT_IMPL_V4
+#  define ISA_DEFAULT_IMPL DEFAULT_IMPL_V4
 #else
-# error "Unsupported ISA Level!"
+#  error "Unsupported ISA Level!"
 #endif
 
 #include ISA_DEFAULT_IMPL

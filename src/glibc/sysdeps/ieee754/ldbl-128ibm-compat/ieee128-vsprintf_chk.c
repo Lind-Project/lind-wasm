@@ -20,7 +20,7 @@
 
 extern int
 ___ieee128___vsprintf_chk (char *string, int flag, size_t slen,
-			const char *format, va_list ap)
+			   const char *format, va_list ap)
 {
   unsigned int mode = PRINTF_LDBL_USES_FLOAT128;
   if (flag > 0)
@@ -36,4 +36,4 @@ ___ieee128___vsprintf_chk (char *string, int flag, size_t slen,
   return __vsprintf_internal (string, slen, format, ap, mode);
 }
 hidden_def (___ieee128___vsprintf_chk)
-strong_alias (___ieee128___vsprintf_chk, __vsprintf_chkieee128)
+    strong_alias (___ieee128___vsprintf_chk, __vsprintf_chkieee128)

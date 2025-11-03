@@ -17,12 +17,12 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _POWERPC_STRING_FZA_H
-#define _POWERPC_STRING_FZA_H 1
+#  define _POWERPC_STRING_FZA_H 1
 
 /* PowerISA 2.05 (POWER6) provides cmpb instruction.  */
-#ifdef _ARCH_PWR6
-# include <string-misc.h>
-# include <string-optype.h>
+#  ifdef _ARCH_PWR6
+#    include <string-misc.h>
+#    include <string-optype.h>
 
 /* The functions return a byte mask.  */
 typedef op_t find_t;
@@ -61,11 +61,11 @@ find_zero_ne_all (op_t x1, op_t x2)
 }
 
 /* Define the "inexact" versions in terms of the exact versions.  */
-# define find_zero_low		find_zero_all
-# define find_eq_low		find_eq_all
-# define find_zero_eq_low	find_zero_eq_all
-#else
-# include <sysdeps/generic/string-fza.h>
-#endif /* _ARCH_PWR6  */
+#    define find_zero_low find_zero_all
+#    define find_eq_low find_eq_all
+#    define find_zero_eq_low find_zero_eq_all
+#  else
+#    include <sysdeps/generic/string-fza.h>
+#  endif /* _ARCH_PWR6  */
 
 #endif /* _POWERPC_STRING_FZA_H  */

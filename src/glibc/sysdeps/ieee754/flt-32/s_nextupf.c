@@ -31,12 +31,12 @@ __nextupf (float x)
   ix = hx & 0x7fffffff;
   if (ix == 0)
     return FLT_TRUE_MIN;
-  if (ix > 0x7f800000)		/* x is nan.  */
+  if (ix > 0x7f800000) /* x is nan.  */
     return x + x;
   if (hx >= 0)
-    {				/* x > 0.  */
+    { /* x > 0.  */
       if (isinf (x))
-        return x;
+	return x;
       hx += 1;
     }
   else

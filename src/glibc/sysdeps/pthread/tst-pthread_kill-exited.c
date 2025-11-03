@@ -34,10 +34,10 @@ noop_thread (void *closure)
   return NULL;
 }
 
-#if TEST_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34) && PTHREAD_IN_LIBC
+#if TEST_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34) && PTHREAD_IN_LIBC
 extern __typeof (pthread_kill) compat_pthread_kill;
 compat_symbol_reference (libpthread, compat_pthread_kill, pthread_kill,
-                         GLIBC_2_0);
+			 GLIBC_2_0);
 #endif
 
 static int
@@ -50,7 +50,7 @@ do_test (void)
   /* NB: Always uses the default symbol due to separate compilation.  */
   xpthread_kill (thr, SIGUSR1);
 
-#if TEST_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34) && PTHREAD_IN_LIBC
+#if TEST_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34) && PTHREAD_IN_LIBC
   /* Old binaries need the non-conforming ESRCH error code.  */
   TEST_COMPARE (compat_pthread_kill (thr, SIGUSR1), ESRCH);
 #endif

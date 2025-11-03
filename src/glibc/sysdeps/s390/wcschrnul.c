@@ -19,21 +19,20 @@
 #include <ifunc-wcschrnul.h>
 
 #if HAVE_WCSCHRNUL_IFUNC
-# include <wchar.h>
-# include <ifunc-resolve.h>
+#  include <wchar.h>
+#  include <ifunc-resolve.h>
 
-# if HAVE_WCSCHRNUL_C
+#  if HAVE_WCSCHRNUL_C
 extern __typeof (__wcschrnul) WCSCHRNUL_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCSCHRNUL_Z13
+#  if HAVE_WCSCHRNUL_Z13
 extern __typeof (__wcschrnul) WCSCHRNUL_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__wcschrnul, __wcschrnul,
 		      (HAVE_WCSCHRNUL_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCSCHRNUL_Z13
-		      : WCSCHRNUL_DEFAULT
-		      )
-weak_alias (__wcschrnul, wcschrnul)
+			  ? WCSCHRNUL_Z13
+			  : WCSCHRNUL_DEFAULT)
+    weak_alias (__wcschrnul, wcschrnul)
 #endif

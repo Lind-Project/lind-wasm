@@ -21,20 +21,21 @@
 #include <sysdeps/x86_64/dl-machine.h>
 
 #ifndef _X32_DL_MACHINE_H
-#define _X32_DL_MACHINE_H
+#  define _X32_DL_MACHINE_H
 
-#undef ARCH_LA_PLTENTER
-#undef ARCH_LA_PLTEXIT
-#undef RTLD_START
+#  undef ARCH_LA_PLTENTER
+#  undef ARCH_LA_PLTEXIT
+#  undef RTLD_START
 
 /* Names of the architecture-specific auditing callback functions.  */
-#define ARCH_LA_PLTENTER x32_gnu_pltenter
-#define ARCH_LA_PLTEXIT x32_gnu_pltexit
+#  define ARCH_LA_PLTENTER x32_gnu_pltenter
+#  define ARCH_LA_PLTEXIT x32_gnu_pltexit
 
 /* Initial entry point code for the dynamic linker.
    The C function `_dl_start' is the real entry point;
    its return value is the user program's entry point.  */
-#define RTLD_START asm ("\n\
+#  define RTLD_START                                                          \
+    asm ("\n\
 .text\n\
 	.p2align 4\n\
 .globl _start\n\

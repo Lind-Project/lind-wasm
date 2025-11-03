@@ -24,25 +24,23 @@
 #include <unistd.h>
 #include <ldsodefs.h>
 
-#define ELF_MACHINE_IRELA	1
+#define ELF_MACHINE_IRELA 1
 
-static inline ElfW(Addr)
-__attribute ((always_inline))
-elf_ifunc_invoke (ElfW(Addr) addr)
+static inline ElfW (Addr) __attribute ((always_inline))
+elf_ifunc_invoke (ElfW (Addr) addr)
 {
-  return ((ElfW(Addr) (*) (unsigned long int)) (addr)) (GLRO(dl_hwcap));
+  return ((ElfW (Addr) (*) (unsigned long int) ) (addr)) (GLRO (dl_hwcap));
 }
 
-static inline void
-__attribute ((always_inline))
-elf_irela (const ElfW(Rela) *reloc)
+static inline void __attribute ((always_inline))
+elf_irela (const ElfW (Rela) * reloc)
 {
-  ElfW(Addr) *const reloc_addr = (void *) reloc->r_offset;
-  const unsigned long int r_type = ELFW(R_TYPE) (reloc->r_info);
+  ElfW (Addr) *const reloc_addr = (void *) reloc->r_offset;
+  const unsigned long int r_type = ELFW (R_TYPE) (reloc->r_info);
 
   if (__glibc_likely (r_type == R_390_IRELATIVE))
     {
-      ElfW(Addr) value = elf_ifunc_invoke(reloc->r_addend);
+      ElfW (Addr) value = elf_ifunc_invoke (reloc->r_addend);
       *reloc_addr = value;
     }
   else

@@ -18,18 +18,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc. */
-#if IS_IN (libc)
-# define memchr __redirect_memchr
-# include <string.h>
-# undef memchr
+#if IS_IN(libc)
+#  define memchr __redirect_memchr
+#  include <string.h>
+#  undef memchr
 
-# define SYMBOL_NAME memchr
-# include "ifunc-evex.h"
+#  define SYMBOL_NAME memchr
+#  include "ifunc-evex.h"
 
 libc_ifunc_redirected (__redirect_memchr, memchr, IFUNC_SELECTOR ());
 strong_alias (memchr, __memchr)
-# ifdef SHARED
-__hidden_ver1 (memchr, __GI_memchr, __redirect_memchr)
-  __attribute__((visibility ("hidden"))) __attribute_copy__ (memchr);
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (memchr, __GI_memchr, __redirect_memchr)
+	__attribute__ ((visibility ("hidden"))) __attribute_copy__ (memchr);
+#  endif
 #endif

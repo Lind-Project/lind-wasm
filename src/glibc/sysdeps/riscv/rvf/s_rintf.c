@@ -39,8 +39,8 @@ __rintf (float x)
       int32_t i;
       float new_x;
 
-      asm ("fcvt.w.s %0, %1" : "=r" (i) : "f" (x));
-      asm ("fcvt.s.w %0, %1" : "=f" (new_x) : "r" (i));
+      asm ("fcvt.w.s %0, %1" : "=r"(i) : "f"(x));
+      asm ("fcvt.s.w %0, %1" : "=f"(new_x) : "r"(i));
 
       /* rint(-0) == -0, and in general we'll always have the same
 	 sign as our input.  */

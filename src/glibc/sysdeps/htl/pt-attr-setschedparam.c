@@ -26,7 +26,8 @@ int
 __pthread_attr_setschedparam (pthread_attr_t *attr,
 			      const struct sched_param *param)
 {
-  if (param->sched_priority == __pthread_default_attr.__schedparam.__sched_priority)
+  if (param->sched_priority
+      == __pthread_default_attr.__schedparam.__sched_priority)
     {
       attr->__schedparam.__sched_priority = param->sched_priority;
       return 0;

@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _HP_TIMING_H
-#define _HP_TIMING_H	1
+#  define _HP_TIMING_H 1
 
 /* We indeed have inlined functions.  */
-#define HP_TIMING_INLINE	(1)
+#  define HP_TIMING_INLINE (1)
 
 /* We use 64bit values for the times.  */
 typedef unsigned long long int hp_timing_t;
@@ -30,12 +30,13 @@ typedef unsigned long long int hp_timing_t;
    running in this moment.  This could be changed by using a barrier like
    'lwsync' right before the `mftb' instruction.  But we are not interested
    in accurate clock cycles here so we don't do this.  */
-#ifdef _ARCH_PWR4
-#define HP_TIMING_NOW(Var)	__asm__ __volatile__ ("mfspr %0,268" : "=r" (Var))
-#else
-#define HP_TIMING_NOW(Var)	__asm__ __volatile__ ("mftb %0" : "=r" (Var))
-#endif
+#  ifdef _ARCH_PWR4
+#    define HP_TIMING_NOW(Var)                                                \
+      __asm__ __volatile__ ("mfspr %0,268" : "=r"(Var))
+#  else
+#    define HP_TIMING_NOW(Var) __asm__ __volatile__ ("mftb %0" : "=r"(Var))
+#  endif
 
-#include <hp-timing-common.h>
+#  include <hp-timing-common.h>
 
-#endif	/* hp-timing.h */
+#endif /* hp-timing.h */

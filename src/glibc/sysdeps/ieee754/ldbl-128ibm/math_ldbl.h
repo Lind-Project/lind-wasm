@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_LDBL_H_
-#define _MATH_LDBL_H_ 1
+#  define _MATH_LDBL_H_ 1
 
-#include <ieee754.h>
-#include <stdint.h>
+#  include <ieee754.h>
+#  include <stdint.h>
 
 /* To suit our callers we return *hi64 and *lo64 as if they came from
    an ieee854 112 bit mantissa, that is, 48 bits in *hi64 (plus one
@@ -81,8 +81,7 @@ ldbl_extract_mantissa (int64_t *hi64, uint64_t *lo64, int *exp, long double x)
       else if (ediff < 0)
 	lo = lo << -ediff;
 
-      if (u.d[0].ieee.negative != u.d[1].ieee.negative
-	  && lo != 0)
+      if (u.d[0].ieee.negative != u.d[1].ieee.negative && lo != 0)
 	{
 	  hi--;
 	  lo = ((uint64_t) 1 << 60) - lo;
@@ -201,15 +200,15 @@ default_ldbl_unpack (long double l, double *a, double *aa)
   *aa = u.d[1].d;
 }
 
-#ifndef ldbl_pack
-# define ldbl_pack   default_ldbl_pack
-#endif
-#ifndef ldbl_unpack
-# define ldbl_unpack default_ldbl_unpack
-#endif
+#  ifndef ldbl_pack
+#    define ldbl_pack default_ldbl_pack
+#  endif
+#  ifndef ldbl_unpack
+#    define ldbl_unpack default_ldbl_unpack
+#  endif
 
 /* Extract high double.  */
-#define ldbl_high(x) ((double) x)
+#  define ldbl_high(x) ((double) x)
 
 /* Convert a finite long double to canonical form.
    Does not handle +/-Inf properly.  */
@@ -259,7 +258,11 @@ ldbl_canonicalize_int (double *a, double *aa)
   /* Previously we used EXTRACT_WORDS64 from math_private.h, but in order
      to avoid including internal headers we duplicate that code here.  */
   uint64_t ax, aax;
-  union { double value; uint64_t word; } extractor;
+  union
+  {
+    double value;
+    uint64_t word;
+  } extractor;
   extractor.value = *a;
   ax = extractor.word;
   extractor.value = *aa;

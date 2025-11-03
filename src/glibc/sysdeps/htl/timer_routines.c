@@ -31,11 +31,11 @@
 #include <timer_routines.h>
 
 #ifndef DELAYTIMER_MAX
-# define DELAYTIMER_MAX INT_MAX
+#  define DELAYTIMER_MAX INT_MAX
 #endif
 
 /* Number of threads used.  */
-#define THREAD_MAXNODES	16
+#define THREAD_MAXNODES 16
 
 /* Array containing the descriptors for the used threads.  */
 static struct thread_node thread_array[THREAD_MAXNODES];
@@ -60,11 +60,9 @@ static struct list_head timer_free_list;
 static struct list_head thread_free_list;
 static struct list_head thread_active_list;
 
-
 #ifdef __NR_rt_sigqueueinfo
 extern int __syscall_rt_sigqueueinfo (int, int, siginfo_t *);
 #endif
-
 
 /* List handling functions.  */
 static inline void
@@ -120,7 +118,6 @@ list_isempty (struct list_head *list)
   return list->next == list;
 }
 
-
 /* Functions build on top of the list functions.  */
 static inline struct thread_node *
 thread_links2ptr (struct list_head *list)
@@ -136,10 +133,10 @@ timer_links2ptr (struct list_head *list)
 				- offsetof (struct timer_node, links));
 }
 
-
 /* Initialize a newly allocated thread structure.  */
 static void
-thread_init (struct thread_node *thread, const pthread_attr_t *attr, clockid_t clock_id)
+thread_init (struct thread_node *thread, const pthread_attr_t *attr,
+	     clockid_t clock_id)
 {
   if (attr != NULL)
     thread->attr = *attr;
@@ -156,7 +153,6 @@ thread_init (struct thread_node *thread, const pthread_attr_t *attr, clockid_t c
   thread->captured = pthread_self ();
   thread->clock_id = clock_id;
 }
-
 
 /* Initialize the global lists, and acquire global resources.  Error
    reporting is done by storing a non-zero value to the global variable
@@ -182,7 +178,6 @@ init_module (void)
   thread_init (&__timer_signal_thread_rclk, 0, CLOCK_REALTIME);
 }
 
-
 /* This is a handler executed in a child process after a fork()
    occurs.  It reinitializes the module, resetting all of the data
    structures to their initial state.  The mutex is initialized in
@@ -194,7 +189,6 @@ reinit_after_fork (void)
   pthread_mutex_init (&__timer_mutex, 0);
 }
 
-
 /* Called once form pthread_once in timer_init. This initializes the
    module and ensures that reinit_after_fork will be executed in any
    child process.  */
@@ -205,7 +199,6 @@ __timer_init_once (void)
   pthread_atfork (0, 0, reinit_after_fork);
 }
 
-
 /* Deinitialize a thread that is about to be deallocated.  */
 static void
 thread_deinit (struct thread_node *thread)
@@ -213,7 +206,6 @@ thread_deinit (struct thread_node *thread)
   assert (list_isempty (&thread->timer_queue));
   pthread_cond_destroy (&thread->cond);
 }
-
 
 /* Allocate a thread structure from the global free list.  Global
    mutex lock must be held by caller.  The thread is moved to
@@ -235,7 +227,6 @@ __timer_thread_alloc (const pthread_attr_t *desired_attr, clockid_t clock_id)
   return 0;
 }
 
-
 /* Return a thread structure to the global free list.  Global lock
    must be held by caller.  */
 void
@@ -245,7 +236,6 @@ __timer_thread_dealloc (struct thread_node *thread)
   list_unlink (&thread->links);
   list_append (&thread_free_list, &thread->links);
 }
-
 
 /* Each of our threads which terminates executes this cleanup
    handler. We never terminate threads ourselves; if a thread gets here
@@ -284,7 +274,6 @@ thread_cleanup (void *val)
     }
 }
 
-
 /* Handle a timer which is supposed to go off now.  */
 static void
 thread_expire_timer (struct thread_node *self, struct timer_node *timer)
@@ -307,7 +296,7 @@ thread_expire_timer (struct thread_node *self, struct timer_node *timer)
 	   stack content to other tasks.  */
 	memset (&info, 0, sizeof (siginfo_t));
 	/* We must pass the information about the data in a siginfo_t
-           value.  */
+	   value.  */
 	info.si_signo = timer->event.sigev_signo;
 	info.si_code = SI_TIMER;
 	info.si_pid = timer->creator_pid;
@@ -321,7 +310,7 @@ thread_expire_timer (struct thread_node *self, struct timer_node *timer)
 	{
 	  if (pthread_kill (self->id, timer->event.sigev_signo) != 0)
 	    abort ();
-        }
+	}
 #endif
       break;
 
@@ -330,7 +319,7 @@ thread_expire_timer (struct thread_node *self, struct timer_node *timer)
       break;
 
     default:
-      assert (! "unknown event");
+      assert (!"unknown event");
       break;
     }
 
@@ -341,13 +330,11 @@ thread_expire_timer (struct thread_node *self, struct timer_node *timer)
   pthread_cond_broadcast (&self->cond);
 }
 
-
 /* Thread function; executed by each timer thread. The job of this
    function is to wait on the thread's timer queue and expire the
    timers in chronological order as close to their scheduled time as
    possible.  */
-static void
-__attribute__ ((noreturn))
+static void __attribute__ ((noreturn))
 thread_func (void *arg)
 {
   struct thread_node *self = arg;
@@ -428,7 +415,6 @@ thread_func (void *arg)
   pthread_cleanup_pop (1);
 }
 
-
 /* Enqueue a timer in wakeup order in the thread's timer queue.
    Returns 1 if the timer was inserted at the head of the queue,
    causing the queue's next wakeup time to change. */
@@ -441,20 +427,18 @@ __timer_thread_queue_timer (struct thread_node *thread,
   int athead = 1;
 
   for (iter = list_first (&thread->timer_queue);
-       iter != list_null (&thread->timer_queue);
-        iter = list_next (iter))
+       iter != list_null (&thread->timer_queue); iter = list_next (iter))
     {
       struct timer_node *timer = timer_links2ptr (iter);
 
       if (timespec_compare (&insert->expirytime, &timer->expirytime) < 0)
-	  break;
+	break;
       athead = 0;
     }
 
   list_insbefore (iter, &insert->links);
   return athead;
 }
-
 
 /* Start a thread and associate it with the given thread node.  Global
    lock must be held by caller.  */
@@ -471,7 +455,8 @@ __timer_thread_start (struct thread_node *thread)
   pthread_sigmask (SIG_SETMASK, &set, &oset);
 
   if (pthread_create (&thread->id, &thread->attr,
-		      (void *(*) (void *)) thread_func, thread) != 0)
+		      (void *(*) (void *) ) thread_func, thread)
+      != 0)
     {
       thread->exists = 0;
       retval = -1;
@@ -482,14 +467,11 @@ __timer_thread_start (struct thread_node *thread)
   return retval;
 }
 
-
 void
 __timer_thread_wakeup (struct thread_node *thread)
 {
   pthread_cond_broadcast (&thread->cond);
 }
-
-
 
 /* Search the list of active threads and find one which has matching
    attributes.  Global mutex lock must be held by caller.  */
@@ -513,7 +495,6 @@ __timer_thread_find_matching (const pthread_attr_t *desired_attr,
   return NULL;
 }
 
-
 /* Grab a free timer structure from the global free list.  The global
    lock must be held by the caller.  */
 struct timer_node *
@@ -533,18 +514,16 @@ __timer_alloc (void)
   return NULL;
 }
 
-
 /* Return a timer structure to the global free list.  The global lock
    must be held by the caller.  */
 void
 __timer_dealloc (struct timer_node *timer)
 {
   assert (timer->refcount == 0);
-  timer->thread = NULL;	/* Break association between timer and thread.  */
+  timer->thread = NULL; /* Break association between timer and thread.  */
   timer->inuse = TIMER_FREE;
   list_append (&timer_free_list, &timer->links);
 }
-
 
 /* Thread cancellation handler which unlocks a mutex.  */
 void

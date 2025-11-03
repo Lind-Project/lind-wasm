@@ -26,7 +26,7 @@ fesetexceptflag (const fexcept_t *flagp, int excepts)
   fpu_control_t temp;
 
   /* Get the current exceptions.  */
-   _FPU_GETFPSR (temp);
+  _FPU_GETFPSR (temp);
 
   /* Make sure the flags we want restored are legal.  */
   excepts &= FE_ALL_EXCEPT;

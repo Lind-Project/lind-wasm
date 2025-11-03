@@ -49,28 +49,25 @@ __totalorder (const double *x, const double *y)
   return ix <= iy;
 }
 #ifdef SHARED
-# define CONCATX(x, y) x ## y
-# define CONCAT(x, y) CONCATX (x, y)
-# define UNIQUE_ALIAS(name) CONCAT (name, __COUNTER__)
-# define do_symbol(orig_name, name, aliasname)		\
-  strong_alias (orig_name, name)			\
-  versioned_symbol (libm, name, aliasname, GLIBC_2_31)
-# undef weak_alias
-# define weak_alias(name, aliasname)			\
-  do_symbol (name, UNIQUE_ALIAS (name), aliasname);
+#  define CONCATX(x, y) x##y
+#  define CONCAT(x, y) CONCATX (x, y)
+#  define UNIQUE_ALIAS(name) CONCAT (name, __COUNTER__)
+#  define do_symbol(orig_name, name, aliasname)                               \
+    strong_alias (orig_name, name)                                            \
+	versioned_symbol (libm, name, aliasname, GLIBC_2_31)
+#  undef weak_alias
+#  define weak_alias(name, aliasname)                                         \
+    do_symbol (name, UNIQUE_ALIAS (name), aliasname);
 #endif
 libm_alias_double (__totalorder, totalorder)
-#if SHLIB_COMPAT (libm, GLIBC_2_25, GLIBC_2_31)
-int
-attribute_compat_text_section
-__totalorder_compat (double x, double y)
+#if SHLIB_COMPAT(libm, GLIBC_2_25, GLIBC_2_31)
+    int attribute_compat_text_section __totalorder_compat (double x, double y)
 {
   return __totalorder (&x, &y);
 }
-#undef do_symbol
-#define do_symbol(orig_name, name, aliasname)			\
-  strong_alias (orig_name, name)				\
-  compat_symbol (libm, name, aliasname,				\
-		 CONCAT (FIRST_VERSION_libm_, aliasname))
+#  undef do_symbol
+#  define do_symbol(orig_name, name, aliasname)                               \
+    strong_alias (orig_name, name) compat_symbol (                            \
+	libm, name, aliasname, CONCAT (FIRST_VERSION_libm_, aliasname))
 libm_alias_double (__totalorder_compat, totalorder)
 #endif

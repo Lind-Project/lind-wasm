@@ -38,18 +38,18 @@ __pthread_cleanup_upto (__jmp_buf target, char *targetframe)
     {
 #if _STACK_GROWS_DOWN
       if ((uintptr_t) cbuf - adj <= targetframe_adj)
-        {
-          cbuf = NULL;
-          break;
-        }
+	{
+	  cbuf = NULL;
+	  break;
+	}
 #elif _STACK_GROWS_UP
       if ((uintptr_t) cbuf - adj >= targetframe_adj)
-        {
-          cbuf = NULL;
-          break;
-        }
+	{
+	  cbuf = NULL;
+	  break;
+	}
 #else
-# error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
+#  error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
 #endif
 
       /* Call the cleanup code.  */

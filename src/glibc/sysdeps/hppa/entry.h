@@ -5,4 +5,4 @@ extern unsigned int __canonicalize_funcptr_for_compare (unsigned int fptr);
 
 /* The function's entry point is stored in the first word of the
    function descriptor (plabel) of _start().  */
-#define ENTRY_POINT __canonicalize_funcptr_for_compare((unsigned int)_start)
+#define ENTRY_POINT __canonicalize_funcptr_for_compare ((unsigned int) _start)

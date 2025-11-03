@@ -56,29 +56,28 @@
 #include <features.h>
 
 /* masking of interrupts */
-#define _FPU_MASK_IM  0x01
-#define _FPU_MASK_DM  0x02
-#define _FPU_MASK_ZM  0x04
-#define _FPU_MASK_OM  0x08
-#define _FPU_MASK_UM  0x10
-#define _FPU_MASK_PM  0x20
+#define _FPU_MASK_IM 0x01
+#define _FPU_MASK_DM 0x02
+#define _FPU_MASK_ZM 0x04
+#define _FPU_MASK_OM 0x08
+#define _FPU_MASK_UM 0x10
+#define _FPU_MASK_PM 0x20
 
 /* precision control -- without effect on Alpha */
-#define _FPU_EXTENDED 0x300   /* RECOMMENDED */
-#define _FPU_DOUBLE   0x200
-#define _FPU_SINGLE   0x0     /* DO NOT USE */
+#define _FPU_EXTENDED 0x300 /* RECOMMENDED */
+#define _FPU_DOUBLE 0x200
+#define _FPU_SINGLE 0x0 /* DO NOT USE */
 
 /*
  * rounding control---notice that on the Alpha this affects only
  * instructions with the dynamic rounding mode qualifier (/d).
  */
 #define _FPU_RC_NEAREST 0x000 /* RECOMMENDED */
-#define _FPU_RC_DOWN    0x400
-#define _FPU_RC_UP      0x800
-#define _FPU_RC_ZERO    0xC00
+#define _FPU_RC_DOWN 0x400
+#define _FPU_RC_UP 0x800
+#define _FPU_RC_ZERO 0xC00
 
-#define _FPU_RESERVED 0xF0C0  /* Reserved bits in cw */
-
+#define _FPU_RESERVED 0xF0C0 /* Reserved bits in cw */
 
 /* Now two recommended cw */
 
@@ -90,10 +89,10 @@
        (so long as the default isn't changed, of course...)
      - no exceptions enabled.  */
 
-#define _FPU_DEFAULT  0x137f
+#define _FPU_DEFAULT 0x137f
 
 /* IEEE:  same as above. */
-#define _FPU_IEEE     0x137f
+#define _FPU_IEEE 0x137f
 
 /* Type of the control word.  */
 typedef unsigned int fpu_control_t;
@@ -101,4 +100,4 @@ typedef unsigned int fpu_control_t;
 /* Default control word set at startup.  */
 extern fpu_control_t __fpu_control;
 
-#endif	/* _ALPHA_FPU_CONTROL */
+#endif /* _ALPHA_FPU_CONTROL */

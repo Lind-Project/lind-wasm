@@ -18,9 +18,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_CACHECTL_H
-#define _SYS_CACHECTL_H 1
+#  define _SYS_CACHECTL_H 1
 
-#include <features.h>
+#  include <features.h>
 
 __BEGIN_DECLS
 

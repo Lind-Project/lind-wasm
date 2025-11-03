@@ -33,5 +33,5 @@ do_test (void)
   return test ();
 }
 
-#include <support/test-driver.c>
+#  include <support/test-driver.c>
 #endif

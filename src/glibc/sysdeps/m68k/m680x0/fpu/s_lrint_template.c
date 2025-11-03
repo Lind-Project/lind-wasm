@@ -23,6 +23,6 @@
 long int
 M_DECL_FUNC (__lrint) (FLOAT x)
 {
-  return __m81_u(M_SUF (__lrint)) (x);
+  return __m81_u (M_SUF (__lrint)) (x);
 }
 declare_mgen_alias (__lrint, lrint)

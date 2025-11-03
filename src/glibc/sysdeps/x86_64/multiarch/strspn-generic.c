@@ -19,12 +19,12 @@
 /* We always need to build this implementation as strspn-sse4 needs to
    be able to fallback to it.  */
 #include <isa-level.h>
-#if IS_IN (libc) || MINIMUM_X86_ISA_LEVEL >= 2
-# include <sysdep.h>
-# define STRSPN __strspn_generic
+#if IS_IN(libc) || MINIMUM_X86_ISA_LEVEL >= 2
+#  include <sysdep.h>
+#  define STRSPN __strspn_generic
 
-# undef libc_hidden_builtin_def
-# define libc_hidden_builtin_def(STRSPN)
+#  undef libc_hidden_builtin_def
+#  define libc_hidden_builtin_def(STRSPN)
 
 #endif
 

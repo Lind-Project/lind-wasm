@@ -50,7 +50,7 @@ do_test (void)
   if (TEST_STACK_ALIGN ())
     FAIL_EXIT1 ("stack isn't aligned\n");
 
-# define STACK_SIZE (128 * 1024)
+#define STACK_SIZE (128 * 1024)
 
   char st[STACK_SIZE + 1];
   /* NB: Align child stack to 1 byte.  */
@@ -61,7 +61,7 @@ do_test (void)
 #elif _STACK_GROWS_UP
   pid_t p = clone (check_stack_alignment, stack, 0, 0);
 #else
-# error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
+#  error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
 #endif
 
   /* Clone must not fail.  */
@@ -73,7 +73,7 @@ do_test (void)
     {
       if (WIFSIGNALED (e))
 	printf ("died from signal %s\n", strsignal (WTERMSIG (e)));
-     FAIL_EXIT1 ("process did not terminate correctly");
+      FAIL_EXIT1 ("process did not terminate correctly");
     }
 
   if (WEXITSTATUS (e) != 0)

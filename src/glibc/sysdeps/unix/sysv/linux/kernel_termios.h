@@ -16,22 +16,22 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _KERNEL_TERMIOS_H
-#define _KERNEL_TERMIOS_H 1
+#  define _KERNEL_TERMIOS_H 1
 /* The following corresponds to the values from the Linux 2.1.20 kernel.  */
 
-#define __KERNEL_NCCS 19
+#  define __KERNEL_NCCS 19
 
 struct __kernel_termios
-  {
-    tcflag_t c_iflag;		/* input mode flags */
-    tcflag_t c_oflag;		/* output mode flags */
-    tcflag_t c_cflag;		/* control mode flags */
-    tcflag_t c_lflag;		/* local mode flags */
-    cc_t c_line;		/* line discipline */
-    cc_t c_cc[__KERNEL_NCCS];	/* control characters */
-  };
+{
+  tcflag_t c_iflag;	    /* input mode flags */
+  tcflag_t c_oflag;	    /* output mode flags */
+  tcflag_t c_cflag;	    /* control mode flags */
+  tcflag_t c_lflag;	    /* local mode flags */
+  cc_t c_line;		    /* line discipline */
+  cc_t c_cc[__KERNEL_NCCS]; /* control characters */
+};
 
-#define _HAVE_C_ISPEED 0
-#define _HAVE_C_OSPEED 0
+#  define _HAVE_C_ISPEED 0
+#  define _HAVE_C_OSPEED 0
 
 #endif /* kernel_termios.h */

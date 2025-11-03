@@ -17,15 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SIGSETOPS_H
-#define _SIGSETOPS_H 1
+#  define _SIGSETOPS_H 1
 
-#include <signal.h>
-#include <limits.h>
-#include <libc-pointer-arith.h>
+#  include <signal.h>
+#  include <limits.h>
+#  include <libc-pointer-arith.h>
 
 /* Return a mask that includes the bit for SIG only.  */
-#define __sigmask(sig) \
-  (1UL << (((sig) - 1) % ULONG_WIDTH))
+#  define __sigmask(sig) (1UL << (((sig) - 1) % ULONG_WIDTH))
 
 /* Return the word index for SIG.  */
 static inline int
@@ -37,21 +36,21 @@ __sigword (int sig)
 /* Linux sig* functions only handle up to __NSIG_WORDS words instead of
    full _SIGSET_NWORDS sigset size.  The signal numbers are 1-based, and
    bit 0 of a signal mask is for signal 1.  */
-#define __NSIG_WORDS (ALIGN_UP ((_NSIG - 1), ULONG_WIDTH) / ULONG_WIDTH)
+#  define __NSIG_WORDS (ALIGN_UP ((_NSIG - 1), ULONG_WIDTH) / ULONG_WIDTH)
 _Static_assert (__NSIG_WORDS <= _SIGSET_NWORDS,
 		"__NSIG_WORDS > _SIGSET_WORDS");
 
 /* This macro is used on syscall that takes a sigset_t to specify the expected
    size in bytes.  As for glibc, kernel sigset is implemented as an array of
    unsigned long.  */
-#define __NSIG_BYTES (__NSIG_WORDS * (ULONG_WIDTH / UCHAR_WIDTH))
+#  define __NSIG_BYTES (__NSIG_WORDS * (ULONG_WIDTH / UCHAR_WIDTH))
 
 static inline void
 __sigemptyset (sigset_t *set)
 {
   int cnt = __NSIG_WORDS;
   while (--cnt >= 0)
-   set->__val[cnt] = 0;
+    set->__val[cnt] = 0;
 }
 
 static inline void
@@ -59,7 +58,7 @@ __sigfillset (sigset_t *set)
 {
   int cnt = __NSIG_WORDS;
   while (--cnt >= 0)
-   set->__val[cnt] = ~0UL;
+    set->__val[cnt] = ~0UL;
 }
 
 static inline int

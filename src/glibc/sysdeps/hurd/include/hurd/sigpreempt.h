@@ -17,16 +17,16 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _HURD_SIGPREEMPT_H
-# include <hurd/hurd/sigpreempt.h>
+#  include <hurd/hurd/sigpreempt.h>
 
-# ifndef _ISOMAC
-#  define HURD_PREEMPT_SIGNAL_P(preemptor, signo, sigcode) \
-  (((preemptor)->signals & __sigmask (signo)) \
-   && (sigcode) >= (preemptor)->first && (sigcode) <= (preemptor)->last)
+#  ifndef _ISOMAC
+#    define HURD_PREEMPT_SIGNAL_P(preemptor, signo, sigcode)                  \
+      (((preemptor)->signals & __sigmask (signo))                             \
+       && (sigcode) >= (preemptor)->first && (sigcode) <= (preemptor)->last)
 
 /* Signal preemptors applying to all threads; locked by _hurd_siglock.  */
 extern struct hurd_signal_preemptor *_hurdsig_preemptors;
 extern sigset_t _hurdsig_preempted_set;
 
-# endif /* _ISOMAC */
-#endif /* _HURD_SIGPREEMPT_H */
+#  endif /* _ISOMAC */
+#endif	 /* _HURD_SIGPREEMPT_H */

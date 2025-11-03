@@ -55,11 +55,11 @@ backtrace_helper (struct _Unwind_Context *ctx, void *a)
 
       /* Check whether we make any progress.  */
       _Unwind_Word cfa
-	= UNWIND_LINK_PTR (arg->unwind_link, _Unwind_GetCFA) (ctx);
+	  = UNWIND_LINK_PTR (arg->unwind_link, _Unwind_GetCFA) (ctx);
 
       if (arg->cnt > 0 && arg->array[arg->cnt - 1] == arg->array[arg->cnt]
-	 && cfa == arg->cfa)
-       return _URC_END_OF_STACK;
+	  && cfa == arg->cfa)
+	return _URC_END_OF_STACK;
       arg->cfa = cfa;
     }
   if (++arg->cnt == arg->size)
@@ -71,13 +71,12 @@ int
 __backtrace (void **array, int size)
 {
   int count;
-  struct trace_arg arg =
-    {
-     .array = array,
-     .unwind_link = __libc_unwind_link_get (),
-     .size = size,
-     .cnt = -1,
-    };
+  struct trace_arg arg = {
+    .array = array,
+    .unwind_link = __libc_unwind_link_get (),
+    .size = size,
+    .cnt = -1,
+  };
 
   if (size <= 0)
     return 0;
@@ -96,7 +95,7 @@ __backtrace (void **array, int size)
       if (size == 1)
 	return 1;
 
-      backtrace_flush_register_windows();
+      backtrace_flush_register_windows ();
       for (count = 1; count < size; count++)
 	{
 	  array[count] = current->return_address;
@@ -108,7 +107,7 @@ __backtrace (void **array, int size)
   else
     {
       UNWIND_LINK_PTR (arg.unwind_link, _Unwind_Backtrace)
-	(backtrace_helper, &arg);
+      (backtrace_helper, &arg);
 
       /* _Unwind_Backtrace seems to put NULL address above
 	 _start.  Fix it up here.  */
@@ -118,5 +117,4 @@ __backtrace (void **array, int size)
     }
   return count;
 }
-weak_alias (__backtrace, backtrace)
-libc_hidden_def (__backtrace)
+weak_alias (__backtrace, backtrace) libc_hidden_def (__backtrace)

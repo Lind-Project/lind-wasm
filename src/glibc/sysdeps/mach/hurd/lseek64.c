@@ -29,5 +29,4 @@ __libc_lseek64 (int fd, off64_t offset, int whence)
   return offset;
 }
 
-weak_alias (__libc_lseek64, __lseek64)
-weak_alias (__libc_lseek64, lseek64)
+weak_alias (__libc_lseek64, __lseek64) weak_alias (__libc_lseek64, lseek64)

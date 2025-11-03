@@ -1,11 +1,10 @@
 /* Used by the elf ifunc tests.  */
 #ifndef ELF_IFUNC_SEL_H
-#define ELF_IFUNC_SEL_H 1
+#  define ELF_IFUNC_SEL_H 1
 
 extern int global;
 
-static inline __attribute__ ((always_inline)) void *
-inhibit_stack_protector
+static inline __attribute__ ((always_inline)) void *inhibit_stack_protector
 ifunc_sel (int (*f1) (void), int (*f2) (void), int (*f3) (void))
 {
   register void *ret __asm__ ("r3");
@@ -26,14 +25,13 @@ ifunc_sel (int (*f1) (void), int (*f2) (void), int (*f3) (void))
 	   "addis %0,11,%4-1b@ha\n\t"
 	   "addi %0,%0,%4-1b@l\n\t"
 	   "2:"
-	   : "=r" (ret)
-	   : "i" (&global), "i" (f1), "i" (f2), "i" (f3)
+	   : "=r"(ret)
+	   : "i"(&global), "i"(f1), "i"(f2), "i"(f3)
 	   : "11", "12", "cr0");
   return ret;
 }
 
-static inline __attribute__ ((always_inline)) void *
-inhibit_stack_protector
+static inline __attribute__ ((always_inline)) void *inhibit_stack_protector
 ifunc_one (int (*f1) (void))
 {
   register void *ret __asm__ ("r3");
@@ -43,8 +41,8 @@ ifunc_one (int (*f1) (void))
 	   "mtlr 12\n\t"
 	   "addis %0,%0,%1-1b@ha\n\t"
 	   "addi %0,%0,%1-1b@l"
-	   : "=r" (ret)
-	   : "i" (f1)
+	   : "=r"(ret)
+	   : "i"(f1)
 	   : "12");
   return ret;
 }

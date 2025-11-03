@@ -17,21 +17,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SAFE_FATAL_H
-#define _SAFE_FATAL_H   1
+#  define _SAFE_FATAL_H 1
 
-#include <abort-instr.h>
+#  include <abort-instr.h>
 
 static inline void
 __safe_fatal (void)
 {
-#ifdef ABORT_INSTRUCTION
+#  ifdef ABORT_INSTRUCTION
   /* This is not guaranteed to be free from the possibility of deadlock,
      since it might generate a signal that can be caught.  But it's better
      than nothing.  */
   ABORT_INSTRUCTION;
-#else
-# error Need an OS-specific or machine-specific safe-fatal.h
-#endif
+#  else
+#    error Need an OS-specific or machine-specific safe-fatal.h
+#  endif
 }
 
-#endif  /* safe-fatal.h */
+#endif /* safe-fatal.h */

@@ -26,11 +26,9 @@ extern __typeof (__llround) __llround_ppc32 attribute_hidden;
 extern __typeof (__llround) __llround_power5plus attribute_hidden;
 extern __typeof (__llround) __llround_power6 attribute_hidden;
 
-libc_ifunc (__llround,
-	    (hwcap & PPC_FEATURE_ARCH_2_05)
-	    ? __llround_power6 :
-	      (hwcap & PPC_FEATURE_POWER5_PLUS)
-	      ? __llround_power5plus
-            : __llround_ppc32);
+libc_ifunc (__llround, (hwcap & PPC_FEATURE_ARCH_2_05) ? __llround_power6
+		       : (hwcap &PPC_FEATURE_POWER5_PLUS)
+			   ? __llround_power5plus
+			   : __llround_ppc32);
 
 libm_alias_double (__llround, llround)

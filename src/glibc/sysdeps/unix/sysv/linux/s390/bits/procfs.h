@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
+#  error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
 #endif
 
 #include <sys/ucontext.h>
@@ -25,5 +25,5 @@
 typedef greg_t elf_greg_t;
 #define ELF_NGREG NGREG
 typedef gregset_t elf_gregset_t;
-typedef fpreg_t   elf_fpreg_t;
+typedef fpreg_t elf_fpreg_t;
 typedef fpregset_t elf_fpregset_t;

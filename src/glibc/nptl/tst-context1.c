@@ -24,23 +24,23 @@
 #include <ucontext.h>
 #include <support/support.h>
 
-#define N	4
+#define N 4
 #if __WORDSIZE == 64
-#define GUARD_PATTERN 0xdeadbeafdeadbeaf
+#  define GUARD_PATTERN 0xdeadbeafdeadbeaf
 #else
-#define GUARD_PATTERN 0xdeadbeaf
+#  define GUARD_PATTERN 0xdeadbeaf
 #endif
 
-typedef struct {
-       ucontext_t uctx;
-       unsigned long	guard[3];
-   } tst_context_t;
+typedef struct
+{
+  ucontext_t uctx;
+  unsigned long guard[3];
+} tst_context_t;
 
 static char *stacks[N];
 static size_t stack_size;
 static tst_context_t ctx[N][2];
 static volatile int failures;
-
 
 static void
 fct (long int n)
@@ -59,16 +59,16 @@ fct (long int n)
     }
 
   if ((ctx[n][0].guard[0] != GUARD_PATTERN)
-  ||  (ctx[n][0].guard[1] != GUARD_PATTERN)
-  ||  (ctx[n][0].guard[2] != GUARD_PATTERN))
+      || (ctx[n][0].guard[1] != GUARD_PATTERN)
+      || (ctx[n][0].guard[2] != GUARD_PATTERN))
     {
       printf ("%ld: %s context[0] overflow detected!\n", n, __FUNCTION__);
       ++failures;
     }
 
   if ((ctx[n][1].guard[0] != GUARD_PATTERN)
-  ||  (ctx[n][1].guard[1] != GUARD_PATTERN)
-  ||  (ctx[n][1].guard[2] != GUARD_PATTERN))
+      || (ctx[n][1].guard[1] != GUARD_PATTERN)
+      || (ctx[n][1].guard[2] != GUARD_PATTERN))
     {
       printf ("%ld: %s context[1] overflow detected!\n", n, __FUNCTION__);
       ++failures;
@@ -86,7 +86,6 @@ fct (long int n)
       exit (1);
     }
 }
-
 
 static void *
 tf (void *arg)
@@ -127,9 +126,7 @@ tf (void *arg)
   return NULL;
 }
 
-
 static volatile int global;
-
 
 static int
 do_test (void)

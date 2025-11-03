@@ -22,33 +22,31 @@
 /* If we don't use ifunc, an alias is defined for memmove
    in sysdeps/s390/memmove-c.c or sysdeps/s390/memcpy.S
    depending on the used default implementation.  */
-# undef memmove
-# define memmove __redirect_memmove
-# include <string.h>
-# include <ifunc-resolve.h>
-# undef memmove
+#  undef memmove
+#  define memmove __redirect_memmove
+#  include <string.h>
+#  include <ifunc-resolve.h>
+#  undef memmove
 
-# if HAVE_MEMMOVE_C
+#  if HAVE_MEMMOVE_C
 extern __typeof (__redirect_memmove) MEMMOVE_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMMOVE_Z13
+#  if HAVE_MEMMOVE_Z13
 extern __typeof (__redirect_memmove) MEMMOVE_Z13 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMMOVE_ARCH13
+#  if HAVE_MEMMOVE_ARCH13
 extern __typeof (__redirect_memmove) MEMMOVE_ARCH13 attribute_hidden;
-# endif
+#  endif
 
-s390_libc_ifunc_expr (__redirect_memmove, memmove,
-		      ({
+s390_libc_ifunc_expr (__redirect_memmove, memmove, ({
 			s390_libc_ifunc_expr_stfle_init ();
 			(HAVE_MEMMOVE_ARCH13 && (hwcap & HWCAP_S390_VXRS_EXT2)
 			 && S390_IS_ARCH13_MIE3 (stfle_bits))
-			  ? MEMMOVE_ARCH13
-			  : (HAVE_MEMMOVE_Z13 && (hwcap & HWCAP_S390_VX))
-			  ? MEMMOVE_Z13
-			  : MEMMOVE_DEFAULT;
-		      })
-		      )
+			    ? MEMMOVE_ARCH13
+			: (HAVE_MEMMOVE_Z13 && (hwcap & HWCAP_S390_VX))
+			    ? MEMMOVE_Z13
+			    : MEMMOVE_DEFAULT;
+		      }))
 #endif

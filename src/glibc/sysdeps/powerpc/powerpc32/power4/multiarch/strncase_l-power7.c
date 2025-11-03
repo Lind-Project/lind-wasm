@@ -19,7 +19,7 @@
 #include <string.h>
 
 #define __strncasecmp_l __strncasecmp_l_power7
-#define USE_IN_EXTENDED_LOCALE_MODEL    1
+#define USE_IN_EXTENDED_LOCALE_MODEL 1
 
 extern __typeof (strncasecmp_l) __strncasecmp_l_power7 attribute_hidden;
 

@@ -18,17 +18,17 @@
 
 #include <sysdeps/x86/isa-level.h>
 #if MINIMUM_X86_ISA_LEVEL < SSE4_1_X86_ISA_LEVEL
-# define NO_MATH_REDIRECT
-# include <libm-alias-float.h>
+#  define NO_MATH_REDIRECT
+#  include <libm-alias-float.h>
 
-# define ceilf __redirect_ceilf
-# define __ceilf __redirect___ceilf
-# include <math.h>
-# undef ceilf
-# undef __ceilf
+#  define ceilf __redirect_ceilf
+#  define __ceilf __redirect___ceilf
+#  include <math.h>
+#  undef ceilf
+#  undef __ceilf
 
-# define SYMBOL_NAME ceilf
-# include "ifunc-sse4_1.h"
+#  define SYMBOL_NAME ceilf
+#  include "ifunc-sse4_1.h"
 
 libc_ifunc_redirected (__redirect_ceilf, __ceilf, IFUNC_SELECTOR ());
 libm_alias_float (__ceil, ceil)

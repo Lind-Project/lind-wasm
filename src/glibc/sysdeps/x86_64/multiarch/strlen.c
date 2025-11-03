@@ -18,17 +18,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define strlen __redirect_strlen
-# include <string.h>
-# undef strlen
+#if IS_IN(libc)
+#  define strlen __redirect_strlen
+#  include <string.h>
+#  undef strlen
 
-# define SYMBOL_NAME strlen
-# include "ifunc-avx2.h"
+#  define SYMBOL_NAME strlen
+#  include "ifunc-avx2.h"
 
 libc_ifunc_redirected (__redirect_strlen, strlen, IFUNC_SELECTOR ());
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (strlen, __GI_strlen, __redirect_strlen)
-  __attribute__((visibility ("hidden"))) __attribute_copy__ (strlen);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (strlen);
+#  endif
 #endif

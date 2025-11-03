@@ -1,9 +1,9 @@
-#if __GNUC_PREREQ (13, 0)
-# define USE_FMAX_BUILTIN 1
-# define USE_FMAXF_BUILTIN 1
+#if __GNUC_PREREQ(13, 0)
+#  define USE_FMAX_BUILTIN 1
+#  define USE_FMAXF_BUILTIN 1
 #else
-# define USE_FMAX_BUILTIN 0
-# define USE_FMAXF_BUILTIN 0
+#  define USE_FMAX_BUILTIN 0
+#  define USE_FMAXF_BUILTIN 0
 #endif
 
 #define USE_FMAXL_BUILTIN 0

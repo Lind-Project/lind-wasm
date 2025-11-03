@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <setxid.h>
 
-
 int
 __setresuid (uid_t ruid, uid_t euid, uid_t suid)
 {
@@ -31,5 +30,5 @@ __setresuid (uid_t ruid, uid_t euid, uid_t suid)
 }
 libc_hidden_def (__setresuid)
 #ifndef __setresuid
-weak_alias (__setresuid, setresuid)
+    weak_alias (__setresuid, setresuid)
 #endif

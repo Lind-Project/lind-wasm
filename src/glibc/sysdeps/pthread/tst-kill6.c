@@ -23,7 +23,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static int do_test (void);
 
 #define TEST_FUNCTION do_test ()
@@ -55,7 +54,6 @@ handler (int sig)
     }
 }
 
-
 static void *
 tf (void *a)
 {
@@ -68,7 +66,6 @@ tf (void *a)
 
   return NULL;
 }
-
 
 int
 do_test (void)

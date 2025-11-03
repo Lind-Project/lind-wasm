@@ -18,7 +18,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_TESTS_TRAP_H
-#define _MATH_TESTS_TRAP_H 1
+#  define _MATH_TESTS_TRAP_H 1
 
 /* Indicate whether the given exception trap(s) can be enabled in
    feenableexcept.  If non-zero, the traps are always supported.  If
@@ -26,7 +26,7 @@
    (this can be determined by checking the return value of
    feenableexcept).  This enables skipping of tests which use traps.
    By default traps are supported unless overridden.  */
-#define EXCEPTION_ENABLE_SUPPORTED(EXCEPT)		\
-  (EXCEPTION_TESTS_float || EXCEPTION_TESTS_double)
+#  define EXCEPTION_ENABLE_SUPPORTED(EXCEPT)                                  \
+    (EXCEPTION_TESTS_float || EXCEPTION_TESTS_double)
 
 #endif /* math-tests-trap.h.  */

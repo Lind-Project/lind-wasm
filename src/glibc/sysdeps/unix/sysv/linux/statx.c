@@ -22,8 +22,8 @@
 #include "statx_generic.c"
 
 int
-statx (int fd, const char *path, int flags,
-       unsigned int mask, struct statx *buf)
+statx (int fd, const char *path, int flags, unsigned int mask,
+       struct statx *buf)
 {
   int ret = INLINE_SYSCALL_CALL (statx, fd, path, flags, mask, buf);
 #ifdef __ASSUME_STATX

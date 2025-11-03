@@ -21,22 +21,23 @@
 /* Expand the appropriate macro for whether to enable tests for a
    given type.  */
 #if __HAVE_DISTINCT_FLOAT128
-# define MATH_TESTS_TG(PREFIX, ARGS, TYPE)				\
-  (sizeof (TYPE) == sizeof (float) ? PREFIX ## float ARGS		\
-   : sizeof (TYPE) == sizeof (double) ? PREFIX ## double ARGS		\
-   : __builtin_types_compatible_p (TYPE, _Float128) ? PREFIX ## float128 ARGS \
-   : PREFIX ## long_double ARGS)
-# else
-# define MATH_TESTS_TG(PREFIX, ARGS, TYPE)				\
-  (sizeof (TYPE) == sizeof (float) ? PREFIX ## float ARGS		\
-   : sizeof (TYPE) == sizeof (double) ? PREFIX ## double ARGS		\
-   : PREFIX ## long_double ARGS)
+#  define MATH_TESTS_TG(PREFIX, ARGS, TYPE)                                   \
+    (sizeof (TYPE) == sizeof (float)	? PREFIX##float ARGS                  \
+     : sizeof (TYPE) == sizeof (double) ? PREFIX##double ARGS                 \
+     : __builtin_types_compatible_p (TYPE, _Float128)                         \
+	 ? PREFIX##float128 ARGS                                              \
+	 : PREFIX##long_double ARGS)
+#else
+#  define MATH_TESTS_TG(PREFIX, ARGS, TYPE)                                   \
+    (sizeof (TYPE) == sizeof (float)	? PREFIX##float ARGS                  \
+     : sizeof (TYPE) == sizeof (double) ? PREFIX##double ARGS                 \
+					: PREFIX##long_double ARGS)
 #endif
 
 /* Return nonzero value if to run tests involving sNaN values for X.  */
 #define SNAN_TESTS(x) MATH_TESTS_TG (SNAN_TESTS_, , x)
 
-#define ROUNDING_TESTS(TYPE, MODE)		\
+#define ROUNDING_TESTS(TYPE, MODE)                                            \
   MATH_TESTS_TG (ROUNDING_TESTS_, (MODE), TYPE)
 
 #define EXCEPTION_TESTS(TYPE) MATH_TESTS_TG (EXCEPTION_TESTS_, , TYPE)

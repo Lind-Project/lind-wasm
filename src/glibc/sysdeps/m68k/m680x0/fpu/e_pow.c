@@ -21,18 +21,18 @@
 #include <libm-alias-finite.h>
 
 #ifndef SUFF
-#define SUFF
+#  define SUFF
 #endif
 #ifndef float_type
-#define float_type double
+#  define float_type double
 #endif
 
-#define CONCATX(a,b) __CONCAT(a,b)
-#define s(name) CONCATX(name,SUFF)
-#define m81(func) __m81_u(s(func))
+#define CONCATX(a, b) __CONCAT (a, b)
+#define s(name) CONCATX (name, SUFF)
+#define m81(func) __m81_u (s (func))
 
 float_type
-s(__ieee754_pow) (float_type x, float_type y)
+s (__ieee754_pow) (float_type x, float_type y)
 {
   float_type z;
   float_type ax;
@@ -50,7 +50,7 @@ s(__ieee754_pow) (float_type x, float_type y)
 
   if (y_cond & __M81_COND_INF)
     {
-      ax = s(fabs) (x);
+      ax = s (fabs) (x);
       if (ax == 1.0)
 	return ax;
       if (ax > 1.0)
@@ -59,26 +59,26 @@ s(__ieee754_pow) (float_type x, float_type y)
 	return y_cond & __M81_COND_NEG ? -y : 0;
     }
 
-  if (s(fabs) (y) == 1.0)
+  if (s (fabs) (y) == 1.0)
     return y_cond & __M81_COND_NEG ? 1 / x : x;
 
   if (y == 2)
     return x * x;
   if (y == 0.5 && !(x_cond & __M81_COND_NEG))
-    return m81(sqrt) (x);
+    return m81 (sqrt) (x);
 
   if (x == 10.0)
     {
-      __asm ("ftentox%.x %1, %0" : "=f" (z) : "f" (y));
+      __asm ("ftentox%.x %1, %0" : "=f"(z) : "f"(y));
       return z;
     }
   if (x == 2.0)
     {
-      __asm ("ftwotox%.x %1, %0" : "=f" (z) : "f" (y));
+      __asm ("ftwotox%.x %1, %0" : "=f"(z) : "f"(y));
       return z;
     }
 
-  ax = s(fabs) (x);
+  ax = s (fabs) (x);
   if (x_cond & (__M81_COND_INF | __M81_COND_ZERO) || ax == 1.0)
     {
       z = ax;
@@ -86,7 +86,7 @@ s(__ieee754_pow) (float_type x, float_type y)
 	z = 1 / z;
       if (x_cond & __M81_COND_NEG)
 	{
-	  if (y != m81(__rint) (y))
+	  if (y != m81 (__rint) (y))
 	    {
 	      if (x == -1)
 		z = (z - z) / (z - z);
@@ -99,9 +99,9 @@ s(__ieee754_pow) (float_type x, float_type y)
 
   if (x_cond & __M81_COND_NEG)
     {
-      if (y == m81(__rint) (y))
+      if (y == m81 (__rint) (y))
 	{
-	  z = m81(__ieee754_exp) (y * m81(__ieee754_log) (-x));
+	  z = m81 (__ieee754_exp) (y * m81 (__ieee754_log) (-x));
 	maybe_negate:
 	  /* We always use the long double format, since y is already in
 	     this format and rounding won't change the result.  */
@@ -111,9 +111,8 @@ s(__ieee754_pow) (float_type x, float_type y)
 	    GET_LDOUBLE_WORDS (exponent, i0, i1, y);
 	    exponent = (exponent & 0x7fff) - 0x3fff;
 	    if (exponent <= 31
-		? i0 & (1 << (31 - exponent))
-		: (exponent <= 63
-		   && i1 & (1 << (63 - exponent))))
+		    ? i0 & (1 << (31 - exponent))
+		    : (exponent <= 63 && i1 & (1 << (63 - exponent))))
 	      z = -z;
 	  }
 	}
@@ -121,7 +120,7 @@ s(__ieee754_pow) (float_type x, float_type y)
 	z = (y - y) / (y - y);
     }
   else
-    z = m81(__ieee754_exp) (y * m81(__ieee754_log) (x));
+    z = m81 (__ieee754_exp) (y * m81 (__ieee754_log) (x));
   return z;
 }
-libm_alias_finite (s(__ieee754_pow), s (__pow))
+libm_alias_finite (s (__ieee754_pow), s (__pow))

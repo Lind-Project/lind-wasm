@@ -16,9 +16,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PCI_H
-#define _SYS_PCI_H	1
+#  define _SYS_PCI_H 1
 
 /* We use the constants from the kernel.  */
-#include <linux/pci.h>
+#  include <linux/pci.h>
 
 #endif /* sys/pci.h */

@@ -32,5 +32,4 @@ __mknodat (int fd, const char *path, mode_t mode, dev_t dev)
 
   return INLINE_SYSCALL_CALL (mknodat, fd, path, mode, k_dev);
 }
-libc_hidden_def (__mknodat)
-weak_alias (__mknodat, mknodat)
+libc_hidden_def (__mknodat) weak_alias (__mknodat, mknodat)

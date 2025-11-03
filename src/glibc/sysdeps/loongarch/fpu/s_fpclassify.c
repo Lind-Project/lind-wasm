@@ -23,7 +23,7 @@ int
 __fpclassify (double x)
 {
   int cls;
-  asm volatile ("fclass.d \t%0, %1" : "=f" (cls) : "f" (x));
+  asm volatile ("fclass.d \t%0, %1" : "=f"(cls) : "f"(x));
 
   if (__glibc_likely (!!(cls & _FCLASS_NORM)))
     return FP_NORMAL;

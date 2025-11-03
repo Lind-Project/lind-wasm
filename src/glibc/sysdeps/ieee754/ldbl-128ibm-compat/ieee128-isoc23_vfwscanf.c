@@ -21,8 +21,8 @@
 extern int
 ___ieee128_isoc23_vfwscanf (FILE *fp, const wchar_t *format, va_list ap)
 {
-  int mode_flags =
-    SCANF_ISOC99_A | SCANF_ISOC23_BIN_CST | SCANF_LDBL_USES_FLOAT128;
+  int mode_flags
+      = SCANF_ISOC99_A | SCANF_ISOC23_BIN_CST | SCANF_LDBL_USES_FLOAT128;
   return __vfwscanf_internal (fp, format, ap, mode_flags);
 }
 strong_alias (___ieee128_isoc23_vfwscanf, __isoc23_vfwscanfieee128)

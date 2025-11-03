@@ -1,7 +1,6 @@
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 __fwprintf_chk (FILE *stream, int flag, const wchar_t *fmt, ...)
 {
   va_list arg;

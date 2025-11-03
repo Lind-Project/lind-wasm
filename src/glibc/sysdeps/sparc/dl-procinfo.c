@@ -39,24 +39,25 @@
   */
 
 #ifndef PROCINFO_CLASS
-#define PROCINFO_CLASS
+#  define PROCINFO_CLASS
 #endif
 
 #if !defined PROCINFO_DECL && defined SHARED
-  ._dl_sparc_cap_flags
+._dl_sparc_cap_flags
 #else
 PROCINFO_CLASS const char _dl_sparc_cap_flags[28][11]
 #endif
 #ifndef PROCINFO_DECL
-  = { "flush", "stbar", "swap", "muldiv", "v9", "ultra3", "v9v", "v9v2",
-      "mul32", "div32", "fsmuld", "v8plus", "popc", "vis", "vis2",
-      "ASIBlkInit", "fmaf", "vis3", "hpc", "random", "trans", "fjfmau",
-      "ima", "cspare", "pause", "cbcond", "crypto", "adp" }
+    = { "flush", "stbar",  "swap",   "muldiv",	   "v9",     "ultra3",
+	"v9v",	 "v9v2",   "mul32",  "div32",	   "fsmuld", "v8plus",
+	"popc",	 "vis",	   "vis2",   "ASIBlkInit", "fmaf",   "vis3",
+	"hpc",	 "random", "trans",  "fjfmau",	   "ima",    "cspare",
+	"pause", "cbcond", "crypto", "adp" }
 #endif
 #if !defined SHARED || defined PROCINFO_DECL
 ;
 #else
-,
+    ,
 #endif
 
 #undef PROCINFO_DECL

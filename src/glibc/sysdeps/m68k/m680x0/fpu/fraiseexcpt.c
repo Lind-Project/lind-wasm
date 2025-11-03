@@ -34,14 +34,14 @@ __feraiseexcept (int excepts)
     {
       /* One example of an invalid operation is 0 * Infinity.  */
       double d = HUGE_VAL;
-      __asm__ __volatile__ ("fmul%.s %#0r0,%0; fnop" : "=f" (d) : "0" (d));
+      __asm__ __volatile__ ("fmul%.s %#0r0,%0; fnop" : "=f"(d) : "0"(d));
     }
 
   /* Next: division by zero.  */
   if (excepts & FE_DIVBYZERO)
     {
       double d = 1.0;
-      __asm__ __volatile__ ("fdiv%.s %#0r0,%0; fnop" : "=f" (d) : "0" (d));
+      __asm__ __volatile__ ("fdiv%.s %#0r0,%0; fnop" : "=f"(d) : "0"(d));
     }
 
   /* Next: overflow.  */
@@ -49,7 +49,7 @@ __feraiseexcept (int excepts)
     {
       long double d = LDBL_MAX;
 
-      __asm__ __volatile__ ("fmul%.x %0,%0; fnop" : "=f" (d) : "0" (d));
+      __asm__ __volatile__ ("fmul%.x %0,%0; fnop" : "=f"(d) : "0"(d));
     }
 
   /* Next: underflow.  */
@@ -57,14 +57,14 @@ __feraiseexcept (int excepts)
     {
       long double d = -LDBL_MAX;
 
-      __asm__ __volatile__ ("fetox%.x %0; fnop" : "=f" (d) : "0" (d));
+      __asm__ __volatile__ ("fetox%.x %0; fnop" : "=f"(d) : "0"(d));
     }
 
   /* Last: inexact.  */
   if (excepts & FE_INEXACT)
     {
       long double d = 1.0;
-      __asm__ __volatile__ ("fdiv%.s %#0r3,%0; fnop" : "=f" (d) : "0" (d));
+      __asm__ __volatile__ ("fdiv%.s %#0r3,%0; fnop" : "=f"(d) : "0"(d));
     }
 
   /* Success.  */
@@ -72,11 +72,11 @@ __feraiseexcept (int excepts)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__feraiseexcept, __old_feraiseexcept)
-compat_symbol (libm, __old_feraiseexcept, feraiseexcept, GLIBC_2_1);
+    compat_symbol (libm, __old_feraiseexcept, feraiseexcept, GLIBC_2_1);
 #endif
 
 libm_hidden_def (__feraiseexcept)
-libm_hidden_ver (__feraiseexcept, feraiseexcept)
-versioned_symbol (libm, __feraiseexcept, feraiseexcept, GLIBC_2_2);
+    libm_hidden_ver (__feraiseexcept, feraiseexcept)
+	versioned_symbol (libm, __feraiseexcept, feraiseexcept, GLIBC_2_2);

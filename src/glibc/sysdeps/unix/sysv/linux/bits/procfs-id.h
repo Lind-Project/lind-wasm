@@ -18,7 +18,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs-id.h> directly; use <sys/procfs.h> instead."
+#  error                                                                       \
+      "Never include <bits/procfs-id.h> directly; use <sys/procfs.h> instead."
 #endif
 
 typedef unsigned int __pr_uid_t;

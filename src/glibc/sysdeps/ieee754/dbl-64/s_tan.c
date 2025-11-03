@@ -40,21 +40,19 @@
 #include <fenv.h>
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
 /* tan with max ULP of ~0.619 based on random sampling.  */
-double
-SECTION
+double SECTION
 __tan (double x)
 {
 #include "utan.h"
 #include "utan.tbl"
 
   int ux, i, n;
-  double a, da, a2, b, db, c, dc, fi, gi, pz,
-	 s, sy, t, t1, t2, t3, t4, w, x2, xn, y, ya,
-         yya, z0, z, z2;
+  double a, da, a2, b, db, c, dc, fi, gi, pz, s, sy, t, t1, t2, t3, t4, w, x2,
+      xn, y, ya, yya, z0, z, z2;
   mynumber num, v;
 
   double retval;

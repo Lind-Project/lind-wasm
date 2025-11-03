@@ -54,7 +54,8 @@ special_case (svfloat32_t x, svfloat32_t y, svbool_t special)
    Maximum error is 3.31ulps:
    SV_NAME_F1 (log10)(0x1.555c16p+0) got 0x1.ffe2fap-4
 				    want 0x1.ffe2f4p-4.  */
-svfloat32_t SV_NAME_F1 (log10) (svfloat32_t x, const svbool_t pg)
+svfloat32_t
+SV_NAME_F1 (log10) (svfloat32_t x, const svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
   svuint32_t ix = svreinterpret_u32 (x);

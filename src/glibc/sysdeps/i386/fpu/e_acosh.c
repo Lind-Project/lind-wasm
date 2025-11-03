@@ -27,9 +27,9 @@
 #include <math_private.h>
 #include <libm-alias-finite.h>
 
-static const double
-one	= 1.0,
-ln2	= 6.93147180559945286227e-01;  /* 0x3FE62E42, 0xFEFA39EF */
+static const double one = 1.0,
+		    ln2
+		    = 6.93147180559945286227e-01; /* 0x3FE62E42, 0xFEFA39EF */
 
 double
 __ieee754_acosh (double x)
@@ -46,7 +46,7 @@ __ieee754_acosh (double x)
 	    /* x is inf of NaN */
 	    return x + x;
 	  else
-	    return __ieee754_log (x) + ln2;/* acosh(huge)=log(2x) */
+	    return __ieee754_log (x) + ln2; /* acosh(huge)=log(2x) */
 	}
 
       /* 2**28 > x > 2 */
@@ -60,9 +60,8 @@ __ieee754_acosh (double x)
       return __log1p (t + sqrt (2.0 * t + t * t));
     }
   else if (__glibc_likely (hx == INT64_C (0x3ff0000000000000)))
-    return 0.0;				/* acosh(1) = 0 */
-  else					/* x < 1 */
+    return 0.0; /* acosh(1) = 0 */
+  else		/* x < 1 */
     return (x - x) / (x - x);
 }
 libm_alias_finite (__ieee754_acosh, __acosh)
-

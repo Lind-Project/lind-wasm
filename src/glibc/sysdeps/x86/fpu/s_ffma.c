@@ -35,10 +35,10 @@
    SSE floating point and that the fma call will be inlined, so the
    x86 macros will work with only the SSE state and that is
    sufficient.  */
-# undef libc_feholdexcept_setround
-# define libc_feholdexcept_setround	default_libc_feholdexcept_setround
-# undef libc_feupdateenv_test
-# define libc_feupdateenv_test		default_libc_feupdateenv_test
+#  undef libc_feholdexcept_setround
+#  define libc_feholdexcept_setround default_libc_feholdexcept_setround
+#  undef libc_feupdateenv_test
+#  define libc_feupdateenv_test default_libc_feupdateenv_test
 #endif
 
 float

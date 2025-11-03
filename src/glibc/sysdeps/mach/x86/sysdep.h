@@ -17,34 +17,36 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MACH_X86_SYSDEP_H
-#define _MACH_X86_SYSDEP_H 1
+#  define _MACH_X86_SYSDEP_H 1
 
 /* Defines RTLD_PRIVATE_ERRNO and USE_DL_SYSINFO.  */
-#include <dl-sysdep.h>
-#include <tls.h>
+#  include <dl-sysdep.h>
+#  include <tls.h>
 
-#define LOSE asm volatile ("hlt")
+#  define LOSE asm volatile ("hlt")
 
-#define STACK_GROWTH_DOWN
+#  define STACK_GROWTH_DOWN
 
 /* Get the machine-independent Mach definitions.  */
-#include <sysdeps/mach/sysdep.h>
+#  include <sysdeps/mach/sysdep.h>
 
-#undef ENTRY
-#undef ALIGN
+#  undef ENTRY
+#  undef ALIGN
 
-#ifdef __x86_64__
-#define RETURN_TO(sp, pc, retval) \
-  asm volatile ("movq %0, %%rsp; jmp %*%1 # %2" \
-		: : "g" (sp), "r" (pc), "a" (retval))
+#  ifdef __x86_64__
+#    define RETURN_TO(sp, pc, retval)                                         \
+      asm volatile ("movq %0, %%rsp; jmp %*%1 # %2"                           \
+		    :                                                         \
+		    : "g"(sp), "r"(pc), "a"(retval))
 /* This should be rearranged, but at the moment this file provides
    the most useful definitions for assembler syntax details.  */
-#include <sysdeps/unix/x86_64/sysdep.h>
-#else
-#define RETURN_TO(sp, pc, retval) \
-  asm volatile ("movl %0, %%esp; jmp %*%1 # %2" \
-		: : "g" (sp), "r" (pc), "a" (retval))
-#include <sysdeps/unix/i386/sysdep.h>
-#endif
+#    include <sysdeps/unix/x86_64/sysdep.h>
+#  else
+#    define RETURN_TO(sp, pc, retval)                                         \
+      asm volatile ("movl %0, %%esp; jmp %*%1 # %2"                           \
+		    :                                                         \
+		    : "g"(sp), "r"(pc), "a"(retval))
+#    include <sysdeps/unix/i386/sysdep.h>
+#  endif
 
 #endif /* mach/x86/sysdep.h */

@@ -16,13 +16,13 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 #ifndef _ELISION_CONF_H
-#define _ELISION_CONF_H 1
+#  define _ELISION_CONF_H 1
 
-#include <pthread.h>
-#include <time.h>
+#  include <pthread.h>
+#  include <time.h>
 
-#define ENABLE_ELISION_SUPPORT 1
-#define ELISION_UNLOCK_NEEDS_ADAPT_COUNT 1
+#  define ENABLE_ELISION_SUPPORT 1
+#  define ELISION_UNLOCK_NEEDS_ADAPT_COUNT 1
 
 /* Should make sure there is no false sharing on this.  */
 

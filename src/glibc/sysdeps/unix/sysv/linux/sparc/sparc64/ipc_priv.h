@@ -16,7 +16,7 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define __OLD_IPC_ID_TYPE   unsigned int
+#define __OLD_IPC_ID_TYPE unsigned int
 #define __OLD_IPC_MODE_TYPE unsigned int
 #include <sysdeps/unix/sysv/linux/ipc_priv.h>
 
@@ -29,7 +29,7 @@
 #undef MSGRCV_ARGS
 #define MSGRCV_ARGS(__msgp, __msgtyp) __msgp, __msgtyp
 
-#define SEMTIMEDOP_IPC_ARGS(__nsops, __sops, __timeout) \
+#define SEMTIMEDOP_IPC_ARGS(__nsops, __sops, __timeout)                       \
   (__nsops), 0, (__sops), (__timeout)
 
 #include <ipc_ops.h>

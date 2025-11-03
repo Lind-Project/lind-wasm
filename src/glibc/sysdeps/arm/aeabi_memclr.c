@@ -27,4 +27,4 @@ __aeabi_memclr (void *dest, size_t n)
 
 /* Versions of the above which may assume memory alignment.  */
 strong_alias (__aeabi_memclr, __aeabi_memclr4)
-strong_alias (__aeabi_memclr, __aeabi_memclr8)
+    strong_alias (__aeabi_memclr, __aeabi_memclr8)

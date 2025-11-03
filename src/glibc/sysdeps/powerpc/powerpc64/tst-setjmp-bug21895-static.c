@@ -22,54 +22,55 @@
 #include <dlfcn.h>
 
 /* Set TOC area pointed by sp to zero.  */
-#define SET_TOC_TO_ZERO(sp)					 \
-  ({								 \
-    unsigned int zero = 0;					 \
-    asm volatile ("std %0, 24(%1)\n\t" :: "r" (zero), "r" (sp)); \
+#define SET_TOC_TO_ZERO(sp)                                                   \
+  ({                                                                          \
+    unsigned int zero = 0;                                                    \
+    asm volatile ("std %0, 24(%1)\n\t" ::"r"(zero), "r"(sp));                 \
   })
 
 static void
 bar (jmp_buf jb, unsigned long sp)
 {
   static int i;
-  if (i++==1)
-    exit(0);	/* Success.  */
+  if (i++ == 1)
+    exit (0); /* Success.  */
 
   /* This will set TOC are on caller frame (foo) to zero. __longjmp
      must restore r2 otherwise a segmentation fault will happens after
      it jumps back to foo.  */
-  SET_TOC_TO_ZERO(sp);
-  longjmp(jb, i);
+  SET_TOC_TO_ZERO (sp);
+  longjmp (jb, i);
 }
 
 static int
 do_test (void)
 {
-  void *h = dlopen("setjmp-bug21895.so", RTLD_NOW);
+  void *h = dlopen ("setjmp-bug21895.so", RTLD_NOW);
   if (!h)
     {
-      puts(dlerror());
+      puts (dlerror ());
       return 1;
     }
 
-  void (*pfoo)(void) = dlsym(h, "foo");
+  void (*pfoo) (void) = dlsym (h, "foo");
   if (!pfoo)
     {
-      puts(dlerror());
+      puts (dlerror ());
       return 1;
     }
 
-  void (**ppbar)(jmp_buf, unsigned long) = dlsym(h, "bar");
+  void (**ppbar) (jmp_buf, unsigned long) = dlsym (h, "bar");
   if (!ppbar)
     {
-      puts(dlerror());
+      puts (dlerror ());
       return 1;
     }
 
   *ppbar = bar;
-  pfoo();
+  pfoo ();
 
-  for(;;);
+  for (;;)
+    ;
 }
 
 #include <support/test-driver.c>

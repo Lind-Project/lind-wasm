@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SHM_H
-# error "Never use <bits/shmlba.h> directly; include <sys/shm.h> instead."
+#  error "Never use <bits/shmlba.h> directly; include <sys/shm.h> instead."
 #endif
 
 __BEGIN_DECLS
 
 /* Segment low boundary address multiple.  */
-#define SHMLBA		(__getshmlba ())
+#define SHMLBA (__getshmlba ())
 extern int __getshmlba (void) __attribute__ ((__const__));
 
 __END_DECLS

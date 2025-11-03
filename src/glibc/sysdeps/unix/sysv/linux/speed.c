@@ -29,8 +29,7 @@
    We use an unused bit in the `c_iflag' field to keep track of this
    use of `cfsetispeed'.  The value here must correspond to the one used
    in `tcsetattr.c'.  */
-#define IBAUD0	020000000000
-
+#define IBAUD0 020000000000
 
 /* Return the output baud rate stored in *TERMIOS_P.  */
 speed_t
@@ -47,15 +46,15 @@ speed_t
 cfgetispeed (const struct termios *termios_p)
 {
   return ((termios_p->c_iflag & IBAUD0)
-	  ? 0 : termios_p->c_cflag & (CBAUD | CBAUDEX));
+	      ? 0
+	      : termios_p->c_cflag & (CBAUD | CBAUDEX));
 }
 
 /* Set the output baud rate stored in *TERMIOS_P to SPEED.  */
 int
 cfsetospeed (struct termios *termios_p, speed_t speed)
 {
-  if ((speed & ~CBAUD) != 0
-      && (speed < B57600 || speed > __MAX_BAUD))
+  if ((speed & ~CBAUD) != 0 && (speed < B57600 || speed > __MAX_BAUD))
     return INLINE_SYSCALL_ERROR_RETURN_VALUE (EINVAL);
 
 #if _HAVE_STRUCT_TERMIOS_C_OSPEED
@@ -68,16 +67,13 @@ cfsetospeed (struct termios *termios_p, speed_t speed)
 }
 libc_hidden_def (cfsetospeed)
 
-
-/* Set the input baud rate stored in *TERMIOS_P to SPEED.
-   Although for Linux there is no difference between input and output
-   speed, the numerical 0 is a special case for the input baud rate.  It
-   should set the input baud rate to the output baud rate.  */
-int
-cfsetispeed (struct termios *termios_p, speed_t speed)
+    /* Set the input baud rate stored in *TERMIOS_P to SPEED.
+       Although for Linux there is no difference between input and output
+       speed, the numerical 0 is a special case for the input baud rate.  It
+       should set the input baud rate to the output baud rate.  */
+    int cfsetispeed (struct termios *termios_p, speed_t speed)
 {
-  if ((speed & ~CBAUD) != 0
-      && (speed < B57600 || speed > __MAX_BAUD))
+  if ((speed & ~CBAUD) != 0 && (speed < B57600 || speed > __MAX_BAUD))
     return INLINE_SYSCALL_ERROR_RETURN_VALUE (EINVAL);
 
 #if _HAVE_STRUCT_TERMIOS_C_ISPEED

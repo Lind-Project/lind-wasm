@@ -22,9 +22,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-
 static int val;
-
 
 static void
 prepare1 (void)
@@ -61,7 +59,6 @@ child2 (void)
 {
   val *= 8;
 }
-
 
 static int
 do_test (void)

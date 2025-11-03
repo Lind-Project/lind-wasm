@@ -38,5 +38,4 @@ __prctl (int option, ...)
   return INLINE_SYSCALL_CALL (prctl, option, arg2, arg3, arg4, arg5);
 }
 
-libc_hidden_def (__prctl)
-weak_alias (__prctl, prctl)
+libc_hidden_def (__prctl) weak_alias (__prctl, prctl)

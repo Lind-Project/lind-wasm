@@ -20,13 +20,14 @@
 #include "soft-fp.h"
 #include "quad.h"
 
-void _Qp_itoq(long double *c, const int a)
+void
+_Qp_itoq (long double *c, const int a)
 {
   FP_DECL_EX;
-  FP_DECL_Q(C);
+  FP_DECL_Q (C);
   int b = a;
 
-  FP_FROM_INT_Q(C, b, 32, unsigned int);
-  FP_PACK_RAW_QP(c, C);
+  FP_FROM_INT_Q (C, b, 32, unsigned int);
+  FP_PACK_RAW_QP (c, C);
   QP_NO_EXCEPTIONS;
 }

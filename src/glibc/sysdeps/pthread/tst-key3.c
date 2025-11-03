@@ -21,7 +21,6 @@
 
 #define N 2
 
-
 static int do_test (void);
 
 #define TEST_FUNCTION do_test ()
@@ -34,7 +33,6 @@ f0 (void *p)
   ++cnt0;
 }
 
-
 static int cnt1;
 static void
 f1 (void *p)
@@ -42,16 +40,9 @@ f1 (void *p)
   ++cnt1;
 }
 
-
-static void (*fcts[N]) (void *) =
-{
-  f0,
-  f1
-};
-
+static void (*fcts[N]) (void *) = { f0, f1 };
 
 static pthread_barrier_t b;
-
 
 static void *
 tf (void *arg)
@@ -73,7 +64,6 @@ tf (void *arg)
   /* NOTREACHED */
   return NULL;
 }
-
 
 int
 do_test (void)

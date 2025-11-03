@@ -19,19 +19,19 @@
 /* Define the machine-dependent type `jmp_buf'.  */
 
 #ifndef _BITS_SETJMP_H
-# define _BITS_SETJMP_H 1
+#  define _BITS_SETJMP_H 1
 
-#if !defined _SETJMP_H && !defined _PTHREAD_H
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
-#endif
+#  if !defined _SETJMP_H && !defined _PTHREAD_H
+#    error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  endif
 
 typedef struct __jmp_buf_internal_tag
-  {
-    /* There are 21 4-byte registers that should be saved:
-       r1, r2, r13-r31. Actually, there seems no need to save
-       r14, r16, r17, r18 (return addresses for interrupt/exception/trap).  */
-    int *__sp; /* dedicated name for r1.  */
-    long int __gregs[20];
-  } __jmp_buf[1];
+{
+  /* There are 21 4-byte registers that should be saved:
+     r1, r2, r13-r31. Actually, there seems no need to save
+     r14, r16, r17, r18 (return addresses for interrupt/exception/trap).  */
+  int *__sp; /* dedicated name for r1.  */
+  long int __gregs[20];
+} __jmp_buf[1];
 
 #endif

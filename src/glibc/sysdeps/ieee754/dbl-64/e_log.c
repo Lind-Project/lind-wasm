@@ -40,11 +40,10 @@ top16 (double x)
 }
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
-double
-SECTION
+double SECTION
 __log (double x)
 {
   /* double_t for better performance on targets with FLT_EVAL_METHOD==2.  */
@@ -67,9 +66,11 @@ __log (double x)
       r = x - 1.0;
       r2 = r * r;
       r3 = r * r2;
-      y = r3 * (B[1] + r * B[2] + r2 * B[3]
-		+ r3 * (B[4] + r * B[5] + r2 * B[6]
-			+ r3 * (B[7] + r * B[8] + r2 * B[9] + r3 * B[10])));
+      y = r3
+	  * (B[1] + r * B[2] + r2 * B[3]
+	     + r3
+		   * (B[4] + r * B[5] + r2 * B[6]
+		      + r3 * (B[7] + r * B[8] + r2 * B[9] + r3 * B[10])));
       /* Worst-case error is around 0.507 ULP.  */
       w = r * 0x1p27;
       double_t rhi = r + w - w;
@@ -127,16 +128,16 @@ __log (double x)
   r2 = r * r; /* rounding error: 0x1p-54/N^2.  */
   /* Worst case error if |y| > 0x1p-4: 0.519 ULP (0.520 ULP without fma).
      0.5 + 2.06/N + abs-poly-error*2^56 ULP (+ 0.001 ULP without fma).  */
-  y = lo + r2 * A[0] + r * r2 * (A[1] + r * A[2] + r2 * (A[3] + r * A[4])) + hi;
+  y = lo + r2 * A[0] + r * r2 * (A[1] + r * A[2] + r2 * (A[3] + r * A[4]))
+      + hi;
   return y;
 }
 #ifndef __log
-strong_alias (__log, __ieee754_log)
-libm_alias_finite (__ieee754_log, __log)
-# if LIBM_SVID_COMPAT
-versioned_symbol (libm, __log, log, GLIBC_2_29);
+strong_alias (__log, __ieee754_log) libm_alias_finite (__ieee754_log, __log)
+#  if LIBM_SVID_COMPAT
+    versioned_symbol (libm, __log, log, GLIBC_2_29);
 libm_alias_double_other (__log, log)
-# else
-libm_alias_double (__log, log)
-# endif
+#  else
+    libm_alias_double (__log, log)
+#  endif
 #endif

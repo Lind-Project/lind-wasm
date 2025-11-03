@@ -39,11 +39,11 @@
   */
 
 #ifndef PROCINFO_CLASS
-#define PROCINFO_CLASS
+#  define PROCINFO_CLASS
 #endif
 
 #if !defined PROCINFO_DECL && defined SHARED
-  ._dl_arm_cap_flags
+._dl_arm_cap_flags
 #else
 PROCINFO_CLASS const char _dl_arm_cap_flags[35][10]
 #endif
@@ -59,7 +59,7 @@ PROCINFO_CLASS const char _dl_arm_cap_flags[35][10]
 #if !defined SHARED || defined PROCINFO_DECL
 ;
 #else
-,
+    ,
 #endif
 
 #undef PROCINFO_DECL

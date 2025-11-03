@@ -15,5 +15,5 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define __WORDSIZE	64
-#define __WORDSIZE_TIME64_COMPAT32	0
+#define __WORDSIZE 64
+#define __WORDSIZE_TIME64_COMPAT32 0

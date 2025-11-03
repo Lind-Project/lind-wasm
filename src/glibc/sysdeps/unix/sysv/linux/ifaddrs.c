@@ -36,22 +36,20 @@
 
 #include "netlinkaccess.h"
 
-
 /* There is a problem with this type.  The address length for
    Infiniband sockets is much longer than the 8 bytes allocated in the
    sockaddr_ll definition.  Hence we use here a special
    definition.  */
 struct sockaddr_ll_max
-  {
-    unsigned short int sll_family;
-    unsigned short int sll_protocol;
-    int sll_ifindex;
-    unsigned short int sll_hatype;
-    unsigned char sll_pkttype;
-    unsigned char sll_halen;
-    unsigned char sll_addr[24];
-  };
-
+{
+  unsigned short int sll_family;
+  unsigned short int sll_protocol;
+  int sll_ifindex;
+  unsigned short int sll_hatype;
+  unsigned char sll_pkttype;
+  unsigned char sll_halen;
+  unsigned char sll_addr[24];
+};
 
 /* struct to hold the data for one ifaddrs entry, so we can allocate
    everything at once.  */
@@ -69,7 +67,6 @@ struct ifaddrs_storage
   } addr, netmask, broadaddr;
   char name[IF_NAMESIZE + 1];
 };
-
 
 void
 __netlink_free_handle (struct netlink_handle *h)
@@ -89,7 +86,6 @@ __netlink_free_handle (struct netlink_handle *h)
 
   __set_errno (saved_errno);
 }
-
 
 static int
 __netlink_sendreq (struct netlink_handle *h, int type)
@@ -122,7 +118,6 @@ __netlink_sendreq (struct netlink_handle *h, int type)
 				       sizeof (nladdr)));
 }
 
-
 int
 __netlink_request (struct netlink_handle *h, int type)
 {
@@ -146,18 +141,15 @@ __netlink_request (struct netlink_handle *h, int type)
   if (__netlink_sendreq (h, type) < 0)
     goto out_fail;
 
-  while (! done)
+  while (!done)
     {
-      struct msghdr msg =
-	{
-	  .msg_name = (void *) &nladdr,
-	  .msg_namelen =  sizeof (nladdr),
-	  .msg_iov = &iov,
-	  .msg_iovlen = 1,
-	  .msg_control = NULL,
-	  .msg_controllen = 0,
-	  .msg_flags = 0
-	};
+      struct msghdr msg = { .msg_name = (void *) &nladdr,
+			    .msg_namelen = sizeof (nladdr),
+			    .msg_iov = &iov,
+			    .msg_iovlen = 1,
+			    .msg_control = NULL,
+			    .msg_controllen = 0,
+			    .msg_flags = 0 };
 
       read_len = TEMP_FAILURE_RETRY (__recvmsg (h->fd, &msg, 0));
       __netlink_assert_response (h->fd, read_len);
@@ -172,12 +164,10 @@ __netlink_request (struct netlink_handle *h, int type)
 
       size_t count = 0;
       size_t remaining_len = read_len;
-      for (nlmh = (struct nlmsghdr *) buf;
-	   NLMSG_OK (nlmh, remaining_len);
+      for (nlmh = (struct nlmsghdr *) buf; NLMSG_OK (nlmh, remaining_len);
 	   nlmh = (struct nlmsghdr *) NLMSG_NEXT (nlmh, remaining_len))
 	{
-	  if ((pid_t) nlmh->nlmsg_pid != h->pid
-	      || nlmh->nlmsg_seq != h->seq)
+	  if ((pid_t) nlmh->nlmsg_pid != h->pid || nlmh->nlmsg_seq != h->seq)
 	    continue;
 
 	  ++count;
@@ -218,14 +208,13 @@ __netlink_request (struct netlink_handle *h, int type)
       h->end_ptr = nlm_next;
     }
 
-  free(buf);
+  free (buf);
   return 0;
 
 out_fail:
-  free(buf);
+  free (buf);
   return -1;
 }
-
 
 void
 __netlink_close (struct netlink_handle *h)
@@ -233,7 +222,6 @@ __netlink_close (struct netlink_handle *h)
   /* Don't modify errno.  */
   INTERNAL_SYSCALL_CALL (close, h->fd);
 }
-
 
 /* Open a NETLINK socket.  */
 int
@@ -263,7 +251,6 @@ __netlink_open (struct netlink_handle *h)
   h->pid = nladdr.nl_pid;
   return 0;
 }
-
 
 /* We know the number of RTM_NEWLINK entries, so we reserve the first
    # of entries for this type. All RTM_NEWADDR entries have an index
@@ -295,7 +282,6 @@ map_newlink (int index, struct ifaddrs_storage *ifas, int *map, int max)
   return -1;
 }
 
-
 /* Create a linked list of `struct ifaddrs' structures, one for each
    network interface on the host machine.  If successful, store the
    list in *IFAP and return 0.  On errors, return -1 and set `errno'.  */
@@ -307,9 +293,9 @@ getifaddrs_internal (struct ifaddrs **ifap)
   struct ifaddrs_storage *ifas;
   unsigned int i, newlink, newaddr, newaddr_idx;
   int *map_newlink_data;
-  size_t ifa_data_size = 0;  /* Size to allocate for all ifa_data.  */
-  char *ifa_data_ptr;	/* Pointer to the unused part of memory for
-				ifa_data.  */
+  size_t ifa_data_size = 0; /* Size to allocate for all ifa_data.  */
+  char *ifa_data_ptr;	    /* Pointer to the unused part of memory for
+				    ifa_data.  */
   int result = 0;
   struct scratch_buffer buf;
   scratch_buffer_init (&buf);
@@ -367,7 +353,7 @@ getifaddrs_internal (struct ifaddrs **ifap)
 	    }
 
 	  if (nlh->nlmsg_type == NLMSG_DONE)
-	    break;		/* ok */
+	    break; /* ok */
 
 	  if (nlh->nlmsg_type == RTM_NEWLINK)
 	    {
@@ -403,10 +389,9 @@ getifaddrs_internal (struct ifaddrs **ifap)
 
   /* Allocate memory for all entries we have and initialize next
      pointer.  */
-  ifas = (struct ifaddrs_storage *) calloc (1,
-					    (newlink + newaddr)
-					    * sizeof (struct ifaddrs_storage)
-					    + ifa_data_size);
+  ifas = (struct ifaddrs_storage *) calloc (
+      1,
+      (newlink + newaddr) * sizeof (struct ifaddrs_storage) + ifa_data_size);
   if (ifas == NULL)
     {
       result = -1;
@@ -423,7 +408,7 @@ getifaddrs_internal (struct ifaddrs **ifap)
   memset (map_newlink_data, '\xff', newlink * sizeof (int));
 
   ifa_data_ptr = (char *) &ifas[newlink + newaddr];
-  newaddr_idx = 0;		/* Counter for newaddr index.  */
+  newaddr_idx = 0; /* Counter for newaddr index.  */
 
   /* Walk through the list of data we got from the kernel.  */
   for (nlp = nh.nlm_list; nlp; nlp = nlp->next)
@@ -447,7 +432,7 @@ getifaddrs_internal (struct ifaddrs **ifap)
 	    continue;
 
 	  if (nlh->nlmsg_type == NLMSG_DONE)
-	    break;		/* ok */
+	    break; /* ok */
 
 	  if (nlh->nlmsg_type == RTM_NEWLINK)
 	    {
@@ -486,11 +471,11 @@ getifaddrs_internal (struct ifaddrs **ifap)
 				  (char *) rta_data, rta_payload);
 			  ifas[ifa_index].addr.sl.sll_halen = rta_payload;
 			  ifas[ifa_index].addr.sl.sll_ifindex
-			    = ifim->ifi_index;
+			      = ifim->ifi_index;
 			  ifas[ifa_index].addr.sl.sll_hatype = ifim->ifi_type;
 
 			  ifas[ifa_index].ifa.ifa_addr
-			    = &ifas[ifa_index].addr.sa;
+			      = &ifas[ifa_index].addr.sa;
 			}
 		      break;
 
@@ -502,25 +487,26 @@ getifaddrs_internal (struct ifaddrs **ifap)
 				  (char *) rta_data, rta_payload);
 			  ifas[ifa_index].broadaddr.sl.sll_halen = rta_payload;
 			  ifas[ifa_index].broadaddr.sl.sll_ifindex
-			    = ifim->ifi_index;
+			      = ifim->ifi_index;
 			  ifas[ifa_index].broadaddr.sl.sll_hatype
-			    = ifim->ifi_type;
+			      = ifim->ifi_type;
 
 			  ifas[ifa_index].ifa.ifa_broadaddr
-			    = &ifas[ifa_index].broadaddr.sa;
+			      = &ifas[ifa_index].broadaddr.sa;
 			}
 		      break;
 
-		    case IFLA_IFNAME:	/* Name of Interface */
+		    case IFLA_IFNAME: /* Name of Interface */
 		      if ((rta_payload + 1) <= sizeof (ifas[ifa_index].name))
 			{
 			  ifas[ifa_index].ifa.ifa_name = ifas[ifa_index].name;
 			  *(char *) __mempcpy (ifas[ifa_index].name, rta_data,
-					       rta_payload) = '\0';
+					       rta_payload)
+			      = '\0';
 			}
 		      break;
 
-		    case IFLA_STATS:	/* Statistics of Interface */
+		    case IFLA_STATS: /* Statistics of Interface */
 		      ifas[ifa_index].ifa.ifa_data = ifa_data_ptr;
 		      ifa_data_ptr += rta_payload;
 		      memcpy (ifas[ifa_index].ifa.ifa_data, rta_data,
@@ -582,13 +568,13 @@ getifaddrs_internal (struct ifaddrs **ifap)
 			       are stored in an union, so it doesn't matter
 			       which name we use.  */
 			    ifas[ifa_index].ifa.ifa_broadaddr
-			      = &ifas[ifa_index].broadaddr.sa;
+				= &ifas[ifa_index].broadaddr.sa;
 			    sa = &ifas[ifa_index].broadaddr.sa;
 			  }
 			else
 			  {
 			    ifas[ifa_index].ifa.ifa_addr
-			      = &ifas[ifa_index].addr.sa;
+				= &ifas[ifa_index].addr.sa;
 			    sa = &ifas[ifa_index].addr.sa;
 			  }
 
@@ -607,12 +593,13 @@ getifaddrs_internal (struct ifaddrs **ifap)
 			    /* Size must match that of an address for IPv6.  */
 			    if (rta_payload == 16)
 			      {
-				memcpy (&((struct sockaddr_in6 *) sa)->sin6_addr,
-					rta_data, rta_payload);
+				memcpy (
+				    &((struct sockaddr_in6 *) sa)->sin6_addr,
+				    rta_data, rta_payload);
 				if (IN6_IS_ADDR_LINKLOCAL (rta_data)
 				    || IN6_IS_ADDR_MC_LINKLOCAL (rta_data))
 				  ((struct sockaddr_in6 *) sa)->sin6_scope_id
-				    = ifam->ifa_index;
+				      = ifam->ifa_index;
 			      }
 			    break;
 
@@ -632,14 +619,14 @@ getifaddrs_internal (struct ifaddrs **ifap)
 			     Move address to correct field.  */
 			  ifas[ifa_index].broadaddr = ifas[ifa_index].addr;
 			  ifas[ifa_index].ifa.ifa_broadaddr
-			    = &ifas[ifa_index].broadaddr.sa;
+			      = &ifas[ifa_index].broadaddr.sa;
 			  memset (&ifas[ifa_index].addr, '\0',
 				  sizeof (ifas[ifa_index].addr));
 			}
 
 		      ifas[ifa_index].ifa.ifa_addr = &ifas[ifa_index].addr.sa;
 		      ifas[ifa_index].ifa.ifa_addr->sa_family
-			= ifam->ifa_family;
+			  = ifam->ifa_family;
 
 		      switch (ifam->ifa_family)
 			{
@@ -647,7 +634,7 @@ getifaddrs_internal (struct ifaddrs **ifap)
 			  /* Size must match that of an address for IPv4.  */
 			  if (rta_payload == 4)
 			    memcpy (&ifas[ifa_index].addr.s4.sin_addr,
-				  rta_data, rta_payload);
+				    rta_data, rta_payload);
 			  break;
 
 			case AF_INET6:
@@ -658,15 +645,15 @@ getifaddrs_internal (struct ifaddrs **ifap)
 				      rta_data, rta_payload);
 			      if (IN6_IS_ADDR_LINKLOCAL (rta_data)
 				  || IN6_IS_ADDR_MC_LINKLOCAL (rta_data))
-				ifas[ifa_index].addr.s6.sin6_scope_id =
-				  ifam->ifa_index;
+				ifas[ifa_index].addr.s6.sin6_scope_id
+				    = ifam->ifa_index;
 			    }
 			  break;
 
 			default:
 			  if (rta_payload <= sizeof (ifas[ifa_index].addr))
-			    memcpy (ifas[ifa_index].addr.sa.sa_data,
-				    rta_data, rta_payload);
+			    memcpy (ifas[ifa_index].addr.sa.sa_data, rta_data,
+				    rta_payload);
 			  break;
 			}
 		      break;
@@ -678,9 +665,9 @@ getifaddrs_internal (struct ifaddrs **ifap)
 				sizeof (ifas[ifa_index].broadaddr));
 
 		      ifas[ifa_index].ifa.ifa_broadaddr
-			= &ifas[ifa_index].broadaddr.sa;
+			  = &ifas[ifa_index].broadaddr.sa;
 		      ifas[ifa_index].ifa.ifa_broadaddr->sa_family
-			= ifam->ifa_family;
+			  = ifam->ifa_family;
 
 		      switch (ifam->ifa_family)
 			{
@@ -700,7 +687,7 @@ getifaddrs_internal (struct ifaddrs **ifap)
 			      if (IN6_IS_ADDR_LINKLOCAL (rta_data)
 				  || IN6_IS_ADDR_MC_LINKLOCAL (rta_data))
 				ifas[ifa_index].broadaddr.s6.sin6_scope_id
-				  = ifam->ifa_index;
+				    = ifam->ifa_index;
 			    }
 			  break;
 
@@ -717,7 +704,8 @@ getifaddrs_internal (struct ifaddrs **ifap)
 			{
 			  ifas[ifa_index].ifa.ifa_name = ifas[ifa_index].name;
 			  *(char *) __mempcpy (ifas[ifa_index].name, rta_data,
-					       rta_payload) = '\0';
+					       rta_payload)
+			      = '\0';
 			}
 		      else
 			abort ();
@@ -754,7 +742,7 @@ getifaddrs_internal (struct ifaddrs **ifap)
 		  char *cp = NULL;
 
 		  ifas[ifa_index].ifa.ifa_netmask
-		    = &ifas[ifa_index].netmask.sa;
+		      = &ifas[ifa_index].netmask.sa;
 
 		  switch (ifas[ifa_index].ifa.ifa_addr->sa_family)
 		    {
@@ -770,7 +758,7 @@ getifaddrs_internal (struct ifaddrs **ifap)
 		    }
 
 		  ifas[ifa_index].ifa.ifa_netmask->sa_family
-		    = ifas[ifa_index].ifa.ifa_addr->sa_family;
+		      = ifas[ifa_index].ifa.ifa_addr->sa_family;
 
 		  if (cp != NULL)
 		    {
@@ -811,14 +799,13 @@ getifaddrs_internal (struct ifaddrs **ifap)
 
   *ifap = &ifas[0].ifa;
 
- exit_free:
+exit_free:
   __netlink_free_handle (&nh);
   __netlink_close (&nh);
   scratch_buffer_free (&buf);
 
   return result;
 }
-
 
 /* Create a linked list of `struct ifaddrs' structures, one for each
    network interface on the host machine.  If successful, store the
@@ -834,16 +821,12 @@ __getifaddrs (struct ifaddrs **ifap)
 
   return res;
 }
-weak_alias (__getifaddrs, getifaddrs)
-libc_hidden_def (__getifaddrs)
-libc_hidden_weak (getifaddrs)
+weak_alias (__getifaddrs, getifaddrs) libc_hidden_def (__getifaddrs)
+    libc_hidden_weak (getifaddrs)
 
-
-void
-__freeifaddrs (struct ifaddrs *ifa)
+	void __freeifaddrs (struct ifaddrs *ifa)
 {
   free (ifa);
 }
-weak_alias (__freeifaddrs, freeifaddrs)
-libc_hidden_def (__freeifaddrs)
-libc_hidden_weak (freeifaddrs)
+weak_alias (__freeifaddrs, freeifaddrs) libc_hidden_def (__freeifaddrs)
+    libc_hidden_weak (freeifaddrs)

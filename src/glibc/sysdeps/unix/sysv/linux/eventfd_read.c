@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <sys/eventfd.h>
 
-
 int
 eventfd_read (int fd, eventfd_t *value)
 {

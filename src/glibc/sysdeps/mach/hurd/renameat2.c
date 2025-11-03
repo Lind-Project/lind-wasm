@@ -23,14 +23,15 @@
 /* Rename the file OLD relative to OLDFD to NEW relative to NEWFD.  */
 int
 __renameat2 (int oldfd, const char *old, int newfd, const char *new,
-             unsigned int flags)
+	     unsigned int flags)
 {
   error_t err;
   file_t olddir, newdir;
   const char *oldname, *newname;
   int excl = 0;
 
-  if ((flags & (RENAME_EXCHANGE | RENAME_NOREPLACE)) == (RENAME_EXCHANGE | RENAME_NOREPLACE))
+  if ((flags & (RENAME_EXCHANGE | RENAME_NOREPLACE))
+      == (RENAME_EXCHANGE | RENAME_NOREPLACE))
     return __hurd_fail (EINVAL);
   if (flags & (RENAME_EXCHANGE | RENAME_WHITEOUT))
     return __hurd_fail (ENOSYS);
@@ -43,7 +44,7 @@ __renameat2 (int oldfd, const char *old, int newfd, const char *new,
   newdir = __directory_name_split_at (newfd, new, (char **) &newname);
   if (newdir == MACH_PORT_NULL)
     {
-       __mach_port_deallocate (__mach_task_self (), olddir);
+      __mach_port_deallocate (__mach_task_self (), olddir);
       return -1;
     }
 
@@ -54,5 +55,4 @@ __renameat2 (int oldfd, const char *old, int newfd, const char *new,
     return __hurd_fail (err);
   return 0;
 }
-libc_hidden_def (__renameat2)
-weak_alias (__renameat2, renameat2)
+libc_hidden_def (__renameat2) weak_alias (__renameat2, renameat2)

@@ -26,7 +26,6 @@
 #include <support/check.h>
 #include <support/timespec.h>
 
-
 #define NOT_A_VALID_CLOCK 123456
 
 static int

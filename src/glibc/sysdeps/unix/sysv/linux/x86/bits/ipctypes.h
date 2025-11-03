@@ -17,17 +17,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_IPC_H
-# error "Never use <bits/ipctypes.h> directly; include <sys/ipc.h> instead."
+#  error "Never use <bits/ipctypes.h> directly; include <sys/ipc.h> instead."
 #endif
 
 #ifndef _BITS_IPCTYPES_H
-#define _BITS_IPCTYPES_H	1
+#  define _BITS_IPCTYPES_H 1
 
 /* Used in `struct shmid_ds'.  */
-# ifdef __x86_64__
+#  ifdef __x86_64__
 typedef int __ipc_pid_t;
-# else
+#  else
 typedef unsigned short int __ipc_pid_t;
-# endif
+#  endif
 
 #endif /* bits/ipctypes.h */

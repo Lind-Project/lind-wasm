@@ -26,13 +26,11 @@ static int getlogin_r_fd0 (char *name, size_t namesize);
 #include <sysdeps/unix/getlogin_r.c>
 #undef __getlogin_r
 
-
 /* Try to determine login name from /proc/self/loginuid and return 0
    if successful.  If /proc/self/loginuid cannot be read return -1.
    Otherwise return the error number.  */
 
-int
-attribute_hidden
+int attribute_hidden
 __getlogin_r_loginuid (char *name, size_t namesize)
 {
   int fd = __open_nocancel ("/proc/self/loginuid", O_RDONLY);
@@ -42,16 +40,14 @@ __getlogin_r_loginuid (char *name, size_t namesize)
   /* We are reading a 32-bit number.  12 bytes are enough for the text
      representation.  If not, something is wrong.  */
   char uidbuf[12];
-  ssize_t n = TEMP_FAILURE_RETRY (__read_nocancel (fd, uidbuf,
-						   sizeof (uidbuf)));
+  ssize_t n
+      = TEMP_FAILURE_RETRY (__read_nocancel (fd, uidbuf, sizeof (uidbuf)));
   __close_nocancel_nostatus (fd);
 
   uid_t uid;
   char *endp;
-  if (n <= 0
-      || n == sizeof (uidbuf)
-      || (uidbuf[n] = '\0',
-	  uid = strtoul (uidbuf, &endp, 10),
+  if (n <= 0 || n == sizeof (uidbuf)
+      || (uidbuf[n] = '\0', uid = strtoul (uidbuf, &endp, 10),
 	  endp == uidbuf || *endp != '\0'))
     return -1;
 
@@ -68,8 +64,8 @@ __getlogin_r_loginuid (char *name, size_t namesize)
   struct scratch_buffer tmpbuf;
   scratch_buffer_init (&tmpbuf);
 
-  while ((res =  __getpwuid_r (uid, &pwd,
-			       tmpbuf.data, tmpbuf.length, &tpwd)) == ERANGE)
+  while ((res = __getpwuid_r (uid, &pwd, tmpbuf.data, tmpbuf.length, &tpwd))
+	 == ERANGE)
     {
       if (!scratch_buffer_grow (&tmpbuf))
 	{
@@ -94,11 +90,10 @@ __getlogin_r_loginuid (char *name, size_t namesize)
 
   memcpy (name, pwd.pw_name, needed);
 
- out:
+out:
   scratch_buffer_free (&tmpbuf);
   return result;
 }
-
 
 /* Return at most NAME_LEN characters of the login name of the user in NAME.
    If it cannot be determined or some other error occurred, return the error
@@ -113,6 +108,5 @@ __getlogin_r (char *name, size_t namesize)
 
   return getlogin_r_fd0 (name, namesize);
 }
-libc_hidden_def (__getlogin_r)
-weak_alias (__getlogin_r, getlogin_r)
-libc_hidden_weak (getlogin_r)
+libc_hidden_def (__getlogin_r) weak_alias (__getlogin_r, getlogin_r)
+    libc_hidden_weak (getlogin_r)

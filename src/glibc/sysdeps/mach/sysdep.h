@@ -18,23 +18,23 @@
 #ifdef __ASSEMBLER__
 
 /* Get the Mach definitions of ENTRY and kernel_trap.  */
-#include <mach/machine/syscall_sw.h>
+#  include <mach/machine/syscall_sw.h>
 
 /* The Mach definitions assume underscores should be prepended to
    symbol names.  Redefine them to do so only when appropriate.  */
-#undef EXT
-#undef LEXT
-#define EXT(x) C_SYMBOL_NAME(x)
-#define LEXT(x) C_SYMBOL_NAME(x##:)
+#  undef EXT
+#  undef LEXT
+#  define EXT(x) C_SYMBOL_NAME (x)
+#  define LEXT(x) C_SYMBOL_NAME (x## :)
 
 /* For ELF we need to add the `.type' directive to make shared libraries
    work right.  */
-#undef ENTRY
-#undef ENTRY2
-#define ENTRY(name) \
-  .globl name; \
-  .align ALIGN; \
-  .type name,@function; \
+#  undef ENTRY
+#  undef ENTRY2
+#  define ENTRY(name)                                                         \
+    .globl name;                                                              \
+    .align ALIGN;                                                             \
+    .type name, @function;                                                    \
   name:
 
 #endif
@@ -44,15 +44,16 @@
    bogons arriving on it don't foul up future RPCs.  */
 
 #ifndef __ASSEMBLER__
-#define FATAL_PREPARE_INCLUDE <mach/mig_support.h>
-#define FATAL_PREPARE __mig_dealloc_reply_port (__mig_get_reply_port ())
+#  define FATAL_PREPARE_INCLUDE <mach/mig_support.h>
+#  define FATAL_PREPARE __mig_dealloc_reply_port (__mig_get_reply_port ())
 #endif
 
 /* sysdeps/mach/MACHINE/sysdep.h should define the following macros.  */
 
 /* Produce a text assembler label for the C global symbol NAME.  */
 #ifndef ENTRY
-#define ENTRY(name) .error ENTRY not defined by sysdeps/mach/MACHINE/sysdep.h
+#  define ENTRY(name)                                                         \
+    .error ENTRY not defined by sysdeps / mach / MACHINE / sysdep.h
 /* This is not used on all machines.  */
 #endif
 
@@ -60,13 +61,17 @@
    similar which will cause the process to die in a characteristic
    way suggesting a bug.  */
 #ifndef LOSE
-#define	LOSE	({ volatile int zero = 0; zero / zero; })
+#  define LOSE                                                                \
+    ({                                                                        \
+      volatile int zero = 0;                                                  \
+      zero / zero;                                                            \
+    })
 #endif
 
 /* One of these should be defined to specify the stack direction.  */
-#if !defined (STACK_GROWTH_UP) && !defined (STACK_GROWTH_DOWN)
-#error stack direction unspecified
+#if !defined(STACK_GROWTH_UP) && !defined(STACK_GROWTH_DOWN)
+#  error stack direction unspecified
 #endif
 
 /* Used by some assembly code.  */
-#define C_SYMBOL_NAME(name)	name
+#define C_SYMBOL_NAME(name) name

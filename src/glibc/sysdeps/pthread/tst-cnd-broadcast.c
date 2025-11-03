@@ -34,7 +34,7 @@ static unsigned int waiting_threads;
 
 /* Code executed by each thread.  */
 static int
-child_wait (void* data)
+child_wait (void *data)
 {
   /* Wait until parent thread sends broadcast here.  */
   mtx_lock (&mutex);
@@ -74,7 +74,7 @@ do_test (void)
       mtx_unlock (&mutex);
       if (done_waiting)
 	break;
-      thrd_sleep (&((struct timespec){.tv_nsec = 100 * 1000 * 1000}), NULL);
+      thrd_sleep (&((struct timespec) { .tv_nsec = 100 * 1000 * 1000 }), NULL);
     }
 
   mtx_lock (&mutex);

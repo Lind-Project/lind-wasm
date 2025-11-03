@@ -20,7 +20,6 @@
 #include <unistd.h>
 #include <hurd.h>
 
-
 /* Remove the link named NAME.  */
 int
 __unlink (const char *name)

@@ -28,19 +28,14 @@
 
 /* XXX should be __getsockopt ? */
 int
-getsockopt (int fd,
-	    int level,
-	    int optname,
-	    void *optval,
-	    socklen_t *optlen)
+getsockopt (int fd, int level, int optname, void *optval, socklen_t *optlen)
 {
   error_t err;
   char *buf = optval;
   mach_msg_type_number_t buflen = *optlen;
 
-  if (err = HURD_DPORT_USE (fd, __socket_getopt (port,
-						 level, optname,
-						 &buf, &buflen)))
+  if (err = HURD_DPORT_USE (
+	  fd, __socket_getopt (port, level, optname, &buf, &buflen)))
     return __hurd_dfail (fd, err);
 
   if (*optlen > buflen)

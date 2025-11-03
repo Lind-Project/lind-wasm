@@ -85,8 +85,8 @@ do_test_call (void)
   do_test_call_varg (stdout, L"%.10La, %.10a", ld, d);
 
   /* Test positional parameters.  */
-  do_test_call_varg (stdout, L"%3$Lf, %2$Lf, %1$f",
-		     (double) 1, (long double) 2, (long double) 3);
+  do_test_call_varg (stdout, L"%3$Lf, %2$Lf, %1$f", (double) 1,
+		     (long double) 2, (long double) 3);
 }
 
 static int
@@ -96,22 +96,22 @@ do_test (void)
   result = support_capture_subprocess ((void *) &do_test_call, NULL);
 
   /* Compare against the expected output.  */
-  const char *expected =
-    "     fwprintf: -1.0000000000, -1.0000000000\n"
-    "     swprintf: -1.0000000000, -1.0000000000\n"
-    "      wprintf: -1.0000000000, -1.0000000000\n"
-    "    vfwprintf: -1.0000000000, -1.0000000000\n"
-    "    vswprintf: -1.0000000000, -1.0000000000\n"
-    "     vwprintf: -1.0000000000, -1.0000000000\n"
-    "     fwprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     swprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "      wprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    vfwprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    vswprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     vwprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    vfwprintf: 3.000000, 2.000000, 1.000000\n"
-    "    vswprintf: 3.000000, 2.000000, 1.000000\n"
-    "     vwprintf: 3.000000, 2.000000, 1.000000\n";
+  const char *expected
+      = "     fwprintf: -1.0000000000, -1.0000000000\n"
+	"     swprintf: -1.0000000000, -1.0000000000\n"
+	"      wprintf: -1.0000000000, -1.0000000000\n"
+	"    vfwprintf: -1.0000000000, -1.0000000000\n"
+	"    vswprintf: -1.0000000000, -1.0000000000\n"
+	"     vwprintf: -1.0000000000, -1.0000000000\n"
+	"     fwprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     swprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"      wprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    vfwprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    vswprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     vwprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    vfwprintf: 3.000000, 2.000000, 1.000000\n"
+	"    vswprintf: 3.000000, 2.000000, 1.000000\n"
+	"     vwprintf: 3.000000, 2.000000, 1.000000\n";
   TEST_COMPARE_STRING (expected, result.out.buffer);
 
   return 0;

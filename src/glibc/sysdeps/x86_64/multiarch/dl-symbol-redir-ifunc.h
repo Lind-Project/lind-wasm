@@ -21,26 +21,25 @@
 
 #ifndef SHARED
 
-#include <isa-level.h>
+#  include <isa-level.h>
 
-#if MINIMUM_X86_ISA_LEVEL >= 4
-# define HAVE_MEMSET_IFUNC_GENERIC "__memset_evex_unaligned"
-#elif MINIMUM_X86_ISA_LEVEL == 3
-# define HAVE_MEMSET_IFUNC_GENERIC "__memset_avx2_unaligned"
-#else
-# define HAVE_MEMSET_IFUNC_GENERIC "__memset_sse2_unaligned"
-#endif
+#  if MINIMUM_X86_ISA_LEVEL >= 4
+#    define HAVE_MEMSET_IFUNC_GENERIC "__memset_evex_unaligned"
+#  elif MINIMUM_X86_ISA_LEVEL == 3
+#    define HAVE_MEMSET_IFUNC_GENERIC "__memset_avx2_unaligned"
+#  else
+#    define HAVE_MEMSET_IFUNC_GENERIC "__memset_sse2_unaligned"
+#  endif
 
 asm ("memset = " HAVE_MEMSET_IFUNC_GENERIC);
 
-
-#if MINIMUM_X86_ISA_LEVEL >= 4
-# define HAVE_MEMCMP_IFUNC_GENERIC "__memcmp_evex_movbe"
-#elif MINIMUM_X86_ISA_LEVEL == 3
-# define HAVE_MEMCMP_IFUNC_GENERIC "__memcmp_avx2_movbe"
-#else
-# define HAVE_MEMCMP_IFUNC_GENERIC "__memcmp_sse2"
-#endif
+#  if MINIMUM_X86_ISA_LEVEL >= 4
+#    define HAVE_MEMCMP_IFUNC_GENERIC "__memcmp_evex_movbe"
+#  elif MINIMUM_X86_ISA_LEVEL == 3
+#    define HAVE_MEMCMP_IFUNC_GENERIC "__memcmp_avx2_movbe"
+#  else
+#    define HAVE_MEMCMP_IFUNC_GENERIC "__memcmp_sse2"
+#  endif
 
 asm ("memcmp = " HAVE_MEMCMP_IFUNC_GENERIC);
 

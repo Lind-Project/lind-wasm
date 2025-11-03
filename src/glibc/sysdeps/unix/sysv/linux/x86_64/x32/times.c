@@ -20,16 +20,16 @@
 
 /* Linux times system call returns 64-bit integer.  */
 #undef internal_syscall1
-#define internal_syscall1(number, arg1)				\
-({									\
-    unsigned long long int resultvar;					\
-    TYPEFY (arg1, __arg1) = ARGIFY (arg1);			 	\
-    register TYPEFY (arg1, _a1) = __arg1;			\
-    (long long int) resultvar;						\
-})
+#define internal_syscall1(number, arg1)                                       \
+  ({                                                                          \
+    unsigned long long int resultvar;                                         \
+    TYPEFY (arg1, __arg1) = ARGIFY (arg1);                                    \
+    register TYPEFY (arg1, _a1) = __arg1;                                     \
+    (long long int) resultvar;                                                \
+  })
 
 #undef INTERNAL_SYSCALL_ERROR_P
-#define INTERNAL_SYSCALL_ERROR_P(val) \
+#define INTERNAL_SYSCALL_ERROR_P(val)                                         \
   ((unsigned long long int) (val) >= -4095LL)
 
 #include <sysdeps/unix/sysv/linux/times.c>

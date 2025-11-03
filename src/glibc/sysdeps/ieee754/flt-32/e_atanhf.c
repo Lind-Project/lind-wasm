@@ -15,7 +15,6 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-
 /* __ieee754_atanh(x)
    Method :
       1.Reduced x to positive by atanh(-x) = -atanh(x)

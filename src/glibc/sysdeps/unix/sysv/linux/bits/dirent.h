@@ -16,44 +16,44 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DIRENT_H
-# error "Never use <bits/dirent.h> directly; include <dirent.h> instead."
+#  error "Never use <bits/dirent.h> directly; include <dirent.h> instead."
 #endif
 
 struct dirent
-  {
+{
 #ifndef __USE_FILE_OFFSET64
-    __ino_t d_ino;
-    __off_t d_off;
+  __ino_t d_ino;
+  __off_t d_off;
 #else
-    __ino64_t d_ino;
-    __off64_t d_off;
+  __ino64_t d_ino;
+  __off64_t d_off;
 #endif
-    unsigned short int d_reclen;
-    unsigned char d_type;
-    char d_name[256];		/* We must not include limits.h! */
-  };
+  unsigned short int d_reclen;
+  unsigned char d_type;
+  char d_name[256]; /* We must not include limits.h! */
+};
 
 #ifdef __USE_LARGEFILE64
 struct dirent64
-  {
-    __ino64_t d_ino;
-    __off64_t d_off;
-    unsigned short int d_reclen;
-    unsigned char d_type;
-    char d_name[256];		/* We must not include limits.h! */
-  };
+{
+  __ino64_t d_ino;
+  __off64_t d_off;
+  unsigned short int d_reclen;
+  unsigned char d_type;
+  char d_name[256]; /* We must not include limits.h! */
+};
 #endif
 
-#define d_fileno	d_ino	/* Backwards compatibility.  */
+#define d_fileno d_ino /* Backwards compatibility.  */
 
-#undef  _DIRENT_HAVE_D_NAMLEN
+#undef _DIRENT_HAVE_D_NAMLEN
 #define _DIRENT_HAVE_D_RECLEN
 #define _DIRENT_HAVE_D_OFF
 #define _DIRENT_HAVE_D_TYPE
 
 #if defined __OFF_T_MATCHES_OFF64_T && defined __INO_T_MATCHES_INO64_T
 /* Inform libc code that these two types are effectively identical.  */
-# define _DIRENT_MATCHES_DIRENT64	1
+#  define _DIRENT_MATCHES_DIRENT64 1
 #else
-# define _DIRENT_MATCHES_DIRENT64	0
+#  define _DIRENT_MATCHES_DIRENT64 0
 #endif

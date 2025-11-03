@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MACHINE_LOCK_H
-#define	_MACHINE_LOCK_H
+#define _MACHINE_LOCK_H
 
 /* The type of a spin lock variable.  */
 
@@ -25,11 +25,10 @@ typedef volatile int __spin_lock_t;
 
 /* Value to initialize `__spin_lock_t' variables to.  */
 
-#define	__SPIN_LOCK_INITIALIZER	0
-
+#define __SPIN_LOCK_INITIALIZER 0
 
 #ifndef _EXTERN_INLINE
-#define _EXTERN_INLINE __extern_inline
+#  define _EXTERN_INLINE __extern_inline
 #endif
 
 /* Unlock LOCK.  */
@@ -40,10 +39,11 @@ extern void __spin_unlock (__spin_lock_t *__lock);
 _EXTERN_INLINE void
 __spin_unlock (__spin_lock_t *__lock)
 {
-   register int __unlocked;
-   __asm__ __volatile ("xchgl %0, %1"
-		       : "=&r" (__unlocked), "=m" (*__lock) : "0" (0)
-		       : "memory");
+  register int __unlocked;
+  __asm__ __volatile ("xchgl %0, %1"
+		      : "=&r"(__unlocked), "=m"(*__lock)
+		      : "0"(0)
+		      : "memory");
 }
 #endif
 
@@ -57,7 +57,8 @@ __spin_try_lock (__spin_lock_t *__lock)
 {
   register int __locked;
   __asm__ __volatile ("xchgl %0, %1"
-		      : "=&r" (__locked), "=m" (*__lock) : "0" (1)
+		      : "=&r"(__locked), "=m"(*__lock)
+		      : "0"(1)
 		      : "memory");
   return !__locked;
 }
@@ -74,6 +75,5 @@ __spin_lock_locked (__spin_lock_t *__lock)
   return *__lock != 0;
 }
 #endif
-
 
 #endif /* machine-lock.h */

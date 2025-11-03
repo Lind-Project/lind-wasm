@@ -19,16 +19,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
-
 
 static void
 cl (void *p)
 {
   pthread_mutex_unlock (&m);
 }
-
 
 static void *
 tf (void *arg)
@@ -41,7 +38,6 @@ tf (void *arg)
 
   exit (0);
 }
-
 
 static int
 do_test (void)
@@ -74,7 +70,6 @@ do_test (void)
 
   pthread_exit (NULL);
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

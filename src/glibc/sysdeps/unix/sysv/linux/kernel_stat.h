@@ -17,6 +17,6 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* The default Linux ABI assumes only LFS support.  */
-#define XSTAT_IS_XSTAT64     1
-#define STATFS_IS_STATFS64   __STATFS_MATCHES_STATFS64
-#define STAT_IS_KERNEL_STAT  1
+#define XSTAT_IS_XSTAT64 1
+#define STATFS_IS_STATFS64 __STATFS_MATCHES_STATFS64
+#define STAT_IS_KERNEL_STAT 1

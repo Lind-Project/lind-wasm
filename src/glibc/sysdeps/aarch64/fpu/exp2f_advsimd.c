@@ -41,9 +41,9 @@ static const struct data
 
 #if WANT_SIMD_EXCEPT
 
-# define TinyBound v_u32 (0x20000000)	  /* asuint (0x1p-63).  */
-# define BigBound v_u32 (0x42800000)	  /* asuint (0x1p6).  */
-# define SpecialBound v_u32 (0x22800000) /* BigBound - TinyBound.  */
+#  define TinyBound v_u32 (0x20000000)	  /* asuint (0x1p-63).  */
+#  define BigBound v_u32 (0x42800000)	  /* asuint (0x1p6).  */
+#  define SpecialBound v_u32 (0x22800000) /* BigBound - TinyBound.  */
 
 static float32x4_t VPCS_ATTR NOINLINE
 special_case (float32x4_t x, float32x4_t y, uint32x4_t cmp)
@@ -55,8 +55,8 @@ special_case (float32x4_t x, float32x4_t y, uint32x4_t cmp)
 
 #else
 
-# define SpecialOffset v_u32 (0x82000000)
-# define SpecialBias v_u32 (0x7f000000)
+#  define SpecialOffset v_u32 (0x82000000)
+#  define SpecialBias v_u32 (0x7f000000)
 
 static float32x4_t VPCS_ATTR NOINLINE
 special_case (float32x4_t poly, float32x4_t n, uint32x4_t e, uint32x4_t cmp1,
@@ -77,7 +77,8 @@ special_case (float32x4_t poly, float32x4_t n, uint32x4_t e, uint32x4_t cmp1,
 
 #endif
 
-float32x4_t VPCS_ATTR NOINLINE V_NAME_F1 (exp2) (float32x4_t x)
+float32x4_t VPCS_ATTR NOINLINE
+V_NAME_F1 (exp2) (float32x4_t x)
 {
   const struct data *d = ptr_barrier (&data);
   float32x4_t n, r, r2, scale, p, q, poly;
@@ -95,8 +96,8 @@ float32x4_t VPCS_ATTR NOINLINE V_NAME_F1 (exp2) (float32x4_t x)
     x = vbslq_f32 (cmp, v_f32 (1), x);
 #endif
 
-    /* exp2(x) = 2^n (1 + poly(r)), with 1 + poly(r) in [1/sqrt(2),sqrt(2)]
-       x = n + r, with r in [-1/2, 1/2].  */
+  /* exp2(x) = 2^n (1 + poly(r)), with 1 + poly(r) in [1/sqrt(2),sqrt(2)]
+     x = n + r, with r in [-1/2, 1/2].  */
   n = vrndaq_f32 (x);
   r = vsubq_f32 (x, n);
   e = vshlq_n_u32 (vreinterpretq_u32_s32 (vcvtaq_s32_f32 (x)), 23);
@@ -122,5 +123,4 @@ float32x4_t VPCS_ATTR NOINLINE V_NAME_F1 (exp2) (float32x4_t x)
 
   return vfmaq_f32 (scale, poly, scale);
 }
-libmvec_hidden_def (V_NAME_F1 (exp2))
-HALF_WIDTH_ALIAS_F1 (exp2)
+libmvec_hidden_def (V_NAME_F1 (exp2)) HALF_WIDTH_ALIAS_F1 (exp2)

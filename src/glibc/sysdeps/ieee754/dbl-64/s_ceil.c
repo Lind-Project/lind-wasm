@@ -48,7 +48,7 @@ __ceil (double x)
 	{
 	  i = INT64_C (0x000fffffffffffff) >> j0;
 	  if ((i0 & i) == 0)
-	    return x;			/* x is integral  */
+	    return x; /* x is integral  */
 	  if (i0 > 0)
 	    i0 += UINT64_C (0x0010000000000000) >> j0;
 	  i0 &= ~i;
@@ -57,9 +57,9 @@ __ceil (double x)
   else
     {
       if (j0 == 0x400)
-	return x + x;			/* inf or NaN  */
+	return x + x; /* inf or NaN  */
       else
-	return x;			/* x is integral  */
+	return x; /* x is integral  */
     }
   INSERT_WORDS64 (x, i0);
   return x;

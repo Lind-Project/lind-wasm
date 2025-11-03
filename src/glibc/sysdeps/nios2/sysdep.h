@@ -18,48 +18,47 @@
 
 #include <sysdeps/generic/sysdep.h>
 
-#ifdef	__ASSEMBLER__
+#ifdef __ASSEMBLER__
 
 /* Syntactic details of assembler.  */
 
-#define ASM_SIZE_DIRECTIVE(name) .size name,.-name
+#  define ASM_SIZE_DIRECTIVE(name) .size name, .- name
 
-#define ENTRY(name)						 \
-  .globl C_SYMBOL_NAME(name);					 \
-  .type C_SYMBOL_NAME(name),%function;				 \
-  C_LABEL(name)							 \
-  cfi_startproc;						 \
-  CALL_MCOUNT;
+#  define ENTRY(name)                                                         \
+    .globl C_SYMBOL_NAME (name);                                              \
+    .type C_SYMBOL_NAME (name), % function;                                   \
+    C_LABEL (name)                                                            \
+    cfi_startproc;                                                            \
+    CALL_MCOUNT;
 
-#undef  END
-#define END(name)				\
-  cfi_endproc;					\
-  ASM_SIZE_DIRECTIVE(name)
+#  undef END
+#  define END(name)                                                           \
+    cfi_endproc;                                                              \
+    ASM_SIZE_DIRECTIVE (name)
 
-#ifdef PROF
+#  ifdef PROF
 
-# ifdef __PIC__
-#  define CALL_MCOUNT				\
-  mov r8, ra;					\
-  nextpc r2;					\
-1:						\
-  movhi r3, %hiadj(_gp_got - 1b);		\
-  addi r3, r3, %lo(_gp_got - 1b);		\
-  add r2, r2, r3;				\
-  ldw r2, %call(_mcount)(r2);			\
-  callr r2;					\
-  mov ra, r8;					\
-  ret;
-# else
-#  define CALL_MCOUNT				\
-  mov r8, ra;					\
-  call _mount;					\
-  mov ra, r8;					\
-  ret;
-# endif
+#    ifdef __PIC__
+#      define CALL_MCOUNT                                                     \
+	mov r8, ra;                                                           \
+	nextpc r2;                                                            \
+	1 : movhi r3, % hiadj (_gp_got - 1b);                                 \
+	addi r3, r3, % lo (_gp_got - 1b);                                     \
+	add r2, r2, r3;                                                       \
+	ldw r2, % call (_mcount) (r2);                                        \
+	callr r2;                                                             \
+	mov ra, r8;                                                           \
+	ret;
+#    else
+#      define CALL_MCOUNT                                                     \
+	mov r8, ra;                                                           \
+	call _mount;                                                          \
+	mov ra, r8;                                                           \
+	ret;
+#    endif
 
-#else
-# define CALL_MCOUNT		/* Do nothing.  */
-#endif
+#  else
+#    define CALL_MCOUNT /* Do nothing.  */
+#  endif
 
-#endif	/* __ASSEMBLER__ */
+#endif /* __ASSEMBLER__ */

@@ -18,34 +18,30 @@
 
 #include <ifunc-memcmp.h>
 #if HAVE_MEMCMP_IFUNC
-# define memcmp __redirect_memcmp
-# include <string.h>
-# undef memcmp
-# include <ifunc-resolve.h>
+#  define memcmp __redirect_memcmp
+#  include <string.h>
+#  undef memcmp
+#  include <ifunc-resolve.h>
 
-# if HAVE_MEMCMP_Z900_G5
+#  if HAVE_MEMCMP_Z900_G5
 extern __typeof (__redirect_memcmp) MEMCMP_Z900_G5 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMCMP_Z10
+#  if HAVE_MEMCMP_Z10
 extern __typeof (__redirect_memcmp) MEMCMP_Z10 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMCMP_Z196
+#  if HAVE_MEMCMP_Z196
 extern __typeof (__redirect_memcmp) MEMCMP_Z196 attribute_hidden;
-# endif
+#  endif
 
-s390_libc_ifunc_expr (__redirect_memcmp, memcmp,
-		      ({
+s390_libc_ifunc_expr (__redirect_memcmp, memcmp, ({
 			s390_libc_ifunc_expr_stfle_init ();
 			(HAVE_MEMCMP_Z196 && S390_IS_Z196 (stfle_bits))
-			  ? MEMCMP_Z196
-			  : (HAVE_MEMCMP_Z10 && S390_IS_Z10 (stfle_bits))
-			  ? MEMCMP_Z10
-			  : MEMCMP_DEFAULT;
-		      })
-		      )
-weak_alias (memcmp, bcmp);
-strong_alias (memcmp, __memcmpeq)
-libc_hidden_def (__memcmpeq)
+			    ? MEMCMP_Z196
+			: (HAVE_MEMCMP_Z10 && S390_IS_Z10 (stfle_bits))
+			    ? MEMCMP_Z10
+			    : MEMCMP_DEFAULT;
+		      })) weak_alias (memcmp, bcmp);
+strong_alias (memcmp, __memcmpeq) libc_hidden_def (__memcmpeq)
 #endif

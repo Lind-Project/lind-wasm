@@ -38,14 +38,12 @@ __mprotect (void *addr, size_t len, int prot)
   if (prot & PROT_EXEC)
     vmprot |= VM_PROT_EXECUTE;
 
-  if (err = __vm_protect (__mach_task_self (),
-			  (vm_address_t) addr, (vm_size_t) len,
-			  0, vmprot))
+  if (err = __vm_protect (__mach_task_self (), (vm_address_t) addr,
+			  (vm_size_t) len, 0, vmprot))
     {
       errno = err;
       return -1;
     }
   return 0;
 }
-libc_hidden_def (__mprotect)
-weak_alias (__mprotect, mprotect)
+libc_hidden_def (__mprotect) weak_alias (__mprotect, mprotect)

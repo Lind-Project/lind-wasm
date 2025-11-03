@@ -110,7 +110,7 @@ la_preinit (uintptr_t *cookie)
 }
 
 unsigned int
-la_objclose  (uintptr_t *cookie)
+la_objclose (uintptr_t *cookie)
 {
   printf ("objclose\n");
   return 0;
@@ -120,28 +120,25 @@ uintptr_t
 la_symbind32 (Elf32_Sym *sym, unsigned int ndx, uintptr_t *refcook,
 	      uintptr_t *defcook, unsigned int *flags, const char *symname)
 {
-  printf ("symbind32: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n",
-	  symname, (long int) sym->st_value, ndx, *flags);
+  printf ("symbind32: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n", symname,
+	  (long int) sym->st_value, ndx, *flags);
 
   return sym->st_value;
 }
 
 #include "tst-audit.h"
 
-ElfW(Addr)
-pltenter (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
-	  uintptr_t *defcook, La_regs *regs, unsigned int *flags,
-	  const char *symname, long int *framesizep)
+ElfW (Addr) pltenter (ElfW (Sym) * sym, unsigned int ndx, uintptr_t *refcook,
+		      uintptr_t *defcook, La_regs *regs, unsigned int *flags,
+		      const char *symname, long int *framesizep)
 {
-  printf ("pltenter: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n",
-	  symname, (long int) sym->st_value, ndx, *flags);
+  printf ("pltenter: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n", symname,
+	  (long int) sym->st_value, ndx, *flags);
 
   if (strcmp (symname, "audit1_test") == 0
       || strcmp (symname, "audit2_test") == 0)
     {
-      if (regs->lr_eax != 1
-	  || regs->lr_edx != 2
-	  || regs->lr_ecx != 3)
+      if (regs->lr_eax != 1 || regs->lr_edx != 2 || regs->lr_ecx != 3)
 	abort ();
 
       *framesizep = 200;
@@ -151,20 +148,17 @@ pltenter (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
 }
 
 unsigned int
-pltexit (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
+pltexit (ElfW (Sym) * sym, unsigned int ndx, uintptr_t *refcook,
 	 uintptr_t *defcook, const La_regs *inregs, La_retval *outregs,
 	 const char *symname)
 {
-  printf ("pltexit: symname=%s, st_value=%#lx, ndx=%u, retval=%tu\n",
-	  symname, (long int) sym->st_value, ndx,
-	  (ptrdiff_t) outregs->int_retval);
+  printf ("pltexit: symname=%s, st_value=%#lx, ndx=%u, retval=%tu\n", symname,
+	  (long int) sym->st_value, ndx, (ptrdiff_t) outregs->int_retval);
 
   if (strcmp (symname, "audit1_test") == 0
       || strcmp (symname, "audit2_test") == 0)
     {
-      if (inregs->lr_eax != 1
-	  || inregs->lr_edx != 2
-	  || inregs->lr_ecx != 3)
+      if (inregs->lr_eax != 1 || inregs->lr_edx != 2 || inregs->lr_ecx != 3)
 	abort ();
 
       if (strcmp (symname, "audit1_test") == 0)

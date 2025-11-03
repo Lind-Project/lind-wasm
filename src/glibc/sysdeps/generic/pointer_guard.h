@@ -22,8 +22,8 @@
 /* Assembler code depends on PTR_MANGLE not being defined for
    optimization purposes.  */
 #ifndef __ASSEMBLER__
-# define PTR_MANGLE(x) (void) (x)
-# define PTR_DEMANGLE(x) (void) (x)
+#  define PTR_MANGLE(x) (void) (x)
+#  define PTR_DEMANGLE(x) (void) (x)
 #endif
 
 #endif /* POINTER_GUARD_H */

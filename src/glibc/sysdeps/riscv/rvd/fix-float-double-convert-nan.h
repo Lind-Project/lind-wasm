@@ -27,10 +27,10 @@ static inline double
 keep_sign_conversion (float flt)
 {
   if (__glibc_unlikely (isnan (flt)))
-  {
-    float x = copysignf (1.f, flt);
-    return copysign ((double) flt, (double) x);
-  }
+    {
+      float x = copysignf (1.f, flt);
+      return copysign ((double) flt, (double) x);
+    }
   return flt;
 }
 

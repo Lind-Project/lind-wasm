@@ -49,10 +49,14 @@
 #include <stdint.h>
 #include <libm-alias-finite.h>
 
-static const double two54 = 1.80143985094819840000e+16;		/* 0x4350000000000000 */
-static const double ivln10 = 4.34294481903251816668e-01;	/* 0x3FDBCB7B1526E50E */
-static const double log10_2hi = 3.01029995663611771306e-01;	/* 0x3FD34413509F6000 */
-static const double log10_2lo = 3.69423907715893078616e-13;	/* 0x3D59FEF311F12B36 */
+static const double two54
+    = 1.80143985094819840000e+16; /* 0x4350000000000000 */
+static const double ivln10
+    = 4.34294481903251816668e-01; /* 0x3FDBCB7B1526E50E */
+static const double log10_2hi
+    = 3.01029995663611771306e-01; /* 0x3FD34413509F6000 */
+static const double log10_2lo
+    = 3.69423907715893078616e-13; /* 0x3D59FEF311F12B36 */
 
 double
 __ieee754_log10 (double x)
@@ -64,22 +68,22 @@ __ieee754_log10 (double x)
   EXTRACT_WORDS64 (hx, x);
 
   k = 0;
-  if (hx < INT64_C(0x0010000000000000))
-    {				/* x < 2**-1022  */
-      if (__glibc_unlikely ((hx & UINT64_C(0x7fffffffffffffff)) == 0))
-	return -two54 / fabs (x);	/* log(+-0)=-inf */
+  if (hx < INT64_C (0x0010000000000000))
+    { /* x < 2**-1022  */
+      if (__glibc_unlikely ((hx & UINT64_C (0x7fffffffffffffff)) == 0))
+	return -two54 / fabs (x); /* log(+-0)=-inf */
       if (__glibc_unlikely (hx < 0))
-	return (x - x) / (x - x);	/* log(-#) = NaN */
+	return (x - x) / (x - x); /* log(-#) = NaN */
       k -= 54;
-      x *= two54;		/* subnormal number, scale up x */
+      x *= two54; /* subnormal number, scale up x */
       EXTRACT_WORDS64 (hx, x);
     }
   /* scale up resulted in a NaN number  */
-  if (__glibc_unlikely (hx >= UINT64_C(0x7ff0000000000000)))
+  if (__glibc_unlikely (hx >= UINT64_C (0x7ff0000000000000)))
     return x + x;
   k += (hx >> 52) - 1023;
-  i = ((uint64_t) k & UINT64_C(0x8000000000000000)) >> 63;
-  hx = (hx & UINT64_C(0x000fffffffffffff)) | ((0x3ff - i) << 52);
+  i = ((uint64_t) k & UINT64_C (0x8000000000000000)) >> 63;
+  hx = (hx & UINT64_C (0x000fffffffffffff)) | ((0x3ff - i) << 52);
   y = (double) (k + i);
   if (FIX_INT_FP_CONVERT_ZERO && y == 0.0)
     y = 0.0;

@@ -20,8 +20,8 @@
 
 /* Await a connection on socket FD.
    When a connection arrives, open a new socket to communicate with it,
-   set *ADDRARG (which is *ADDR_LEN bytes long) to the address of the connecting
-   peer and *ADDR_LEN to the address's actual length, and return the
+   set *ADDRARG (which is *ADDR_LEN bytes long) to the address of the
+   connecting peer and *ADDR_LEN to the address's actual length, and return the
    new socket's descriptor, or -1 for errors.  */
 int
 accept (int fd, __SOCKADDR_ARG addrarg, socklen_t *addr_len)

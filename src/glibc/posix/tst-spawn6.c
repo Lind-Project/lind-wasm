@@ -35,7 +35,7 @@
 #include <tst-spawn.h>
 
 #ifndef PATH_MAX
-# define PATH_MAX 1024
+#  define PATH_MAX 1024
 #endif
 static char ptmxpath[PATH_MAX];
 
@@ -75,8 +75,7 @@ handle_restart (const char *argv1, const char *argv2)
 }
 
 static int restart;
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 
 static void
 run_subprogram (int argc, char *argv[], const posix_spawnattr_t *attr,

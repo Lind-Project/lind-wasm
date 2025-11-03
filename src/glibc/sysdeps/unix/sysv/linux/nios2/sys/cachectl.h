@@ -17,16 +17,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_CACHECTL_H
-#define _SYS_CACHECTL_H 1
+#  define _SYS_CACHECTL_H 1
 
-#include <features.h>
+#  include <features.h>
 
 __BEGIN_DECLS
 
-#ifdef __USE_MISC
-extern int cacheflush (void *__addr, const int __nbytes, const int __op) __THROW;
-#endif
-extern int _flush_cache (char *__addr, const int __nbytes, const int __op) __THROW;
+#  ifdef __USE_MISC
+extern int cacheflush (void *__addr, const int __nbytes,
+		       const int __op) __THROW;
+#  endif
+extern int _flush_cache (char *__addr, const int __nbytes,
+			 const int __op) __THROW;
 
 __END_DECLS
 

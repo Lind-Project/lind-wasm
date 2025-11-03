@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _PT_MACHDEP_H
-#define _PT_MACHDEP_H	1
+#  define _PT_MACHDEP_H 1
 
 struct pthread_mcontext
 {

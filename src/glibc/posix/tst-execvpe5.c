@@ -23,13 +23,10 @@
 #include <unistd.h>
 #include <wait.h>
 
-
 /* Nonzero if the program gets called via `exec'.  */
 static int restart;
 
-
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 
 /* Prototype for our test function.  */
 extern void do_prepare (int argc, char *argv[]);
@@ -37,9 +34,8 @@ extern int do_test (int argc, char *argv[]);
 
 #include "../test-skeleton.c"
 
-#define EXECVPE_KEY    "EXECVPE_ENV"
-#define EXECVPE_VALUE  "execvpe_test"
-
+#define EXECVPE_KEY "EXECVPE_ENV"
+#define EXECVPE_VALUE "execvpe_test"
 
 static int
 handle_restart (void)
@@ -74,7 +70,6 @@ handle_restart (void)
 
   return 0;
 }
-
 
 int
 do_test (int argc, char *argv[])
@@ -119,17 +114,22 @@ do_test (int argc, char *argv[])
 
       /* We cast here to char* because the test itself does not modify neither
 	 the argument nor the environment list.  */
-      char *envs[] = { (char*)(EXECVPE_KEY "=" EXECVPE_VALUE), NULL };
+      char *envs[] = { (char *) (EXECVPE_KEY "=" EXECVPE_VALUE), NULL };
       if (argc == 5)
 	{
-	  char *args[] = { argv[1], argv[2], argv[3], argv[4],
-			   (char *) "--direct", (char *) "--restart", NULL };
+	  char *args[] = { argv[1],
+			   argv[2],
+			   argv[3],
+			   argv[4],
+			   (char *) "--direct",
+			   (char *) "--restart",
+			   NULL };
 	  execvpe (args[0], args, envs);
 	}
       else
 	{
-	  char *args[] = { argv[0],
-			   (char *) "--direct", (char *) "--restart", NULL };
+	  char *args[]
+	      = { argv[0], (char *) "--direct", (char *) "--restart", NULL };
 	  execvpe (args[0], args, envs);
 	}
 

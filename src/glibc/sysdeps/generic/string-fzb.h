@@ -17,10 +17,10 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_FZB_H
-#define _STRING_FZB_H 1
+#  define _STRING_FZB_H 1
 
-#include <endian.h>
-#include <string-fza.h>
+#  include <endian.h>
+#  include <string-fza.h>
 
 /* Determine if any byte within X is zero.  This is a pure boolean test.  */
 

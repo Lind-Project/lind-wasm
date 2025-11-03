@@ -20,7 +20,6 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-
 static int do_test (void);
 
 #define TEST_FUNCTION do_test ()
@@ -39,7 +38,6 @@ tf (void *a)
 
   return a;
 }
-
 
 int
 do_test (void)

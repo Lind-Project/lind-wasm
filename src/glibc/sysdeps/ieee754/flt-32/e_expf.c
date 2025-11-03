@@ -17,8 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef __expf
-# undef libm_hidden_proto
-# define libm_hidden_proto(ignored)
+#  undef libm_hidden_proto
+#  define libm_hidden_proto(ignored)
 #endif
 
 #include <math.h>
@@ -86,7 +86,7 @@ __expf (float x)
   kd = roundtoint (z);
   ki = converttoint (z);
 #else
-# define SHIFT __exp2f_data.shift
+#  define SHIFT __exp2f_data.shift
   kd = math_narrow_eval ((double) (z + SHIFT)); /* Needs to be double.  */
   ki = asuint64 (kd);
   kd -= SHIFT;
@@ -106,9 +106,8 @@ __expf (float x)
 }
 
 #ifndef __expf
-hidden_def (__expf)
-strong_alias (__expf, __ieee754_expf)
-libm_alias_finite (__ieee754_expf, __expf)
-versioned_symbol (libm, __expf, expf, GLIBC_2_27);
+hidden_def (__expf) strong_alias (__expf, __ieee754_expf)
+    libm_alias_finite (__ieee754_expf, __expf)
+	versioned_symbol (libm, __expf, expf, GLIBC_2_27);
 libm_alias_float_other (__exp, exp)
 #endif

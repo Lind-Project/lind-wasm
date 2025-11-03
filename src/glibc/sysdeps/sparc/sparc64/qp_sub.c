@@ -20,23 +20,26 @@
 #include "soft-fp.h"
 #include "quad.h"
 
-void _Qp_sub(long double *c, const long double *a, const long double *b)
+void
+_Qp_sub (long double *c, const long double *a, const long double *b)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A); FP_DECL_Q(B); FP_DECL_Q(C);
+  FP_DECL_Q (A);
+  FP_DECL_Q (B);
+  FP_DECL_Q (C);
 
   FP_INIT_ROUNDMODE;
-  FP_UNPACK_SEMIRAW_QP(A, a);
-  FP_UNPACK_SEMIRAW_QP(B, b);
-  FP_SUB_Q(C, A, B);
-  FP_PACK_SEMIRAW_QP(c, C);
-  QP_HANDLE_EXCEPTIONS(__asm (
-"	ldd [%1], %%f52\n"
-"	ldd [%1+8], %%f54\n"
-"	ldd [%2], %%f56\n"
-"	ldd [%2+8], %%f58\n"
-"	fsubq %%f52, %%f56, %%f60\n"
-"	std %%f60, [%0]\n"
-"	std %%f62, [%0+8]\n"
-"	" : : "r" (c), "r" (a), "r" (b) : QP_CLOBBER));
+  FP_UNPACK_SEMIRAW_QP (A, a);
+  FP_UNPACK_SEMIRAW_QP (B, b);
+  FP_SUB_Q (C, A, B);
+  FP_PACK_SEMIRAW_QP (c, C);
+  QP_HANDLE_EXCEPTIONS (__asm ("	ldd [%1], %%f52\n"
+			       "	ldd [%1+8], %%f54\n"
+			       "	ldd [%2], %%f56\n"
+			       "	ldd [%2+8], %%f58\n"
+			       "	fsubq %%f52, %%f56, %%f60\n"
+			       "	std %%f60, [%0]\n"
+			       "	std %%f62, [%0+8]\n"
+			       "	" : : "r"(c),
+			       "r"(a), "r"(b) : QP_CLOBBER));
 }

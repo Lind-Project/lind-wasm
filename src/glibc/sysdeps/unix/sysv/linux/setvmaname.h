@@ -22,12 +22,13 @@
 /* Set the NAME to the anonymous memory map START with size of LEN.
    It assumes well-formatted input.  */
 #if IS_IN(libc) || IS_IN(rtld)
-void __set_vma_name (void *start, size_t len, const char *name)
-  attribute_hidden;
+void __set_vma_name (void *start, size_t len,
+		     const char *name) attribute_hidden;
 #else
-#include <sys/prctl.h>
+#  include <sys/prctl.h>
 
-static inline void __set_vma_name (void *start, size_t len, const char *name)
+static inline void
+__set_vma_name (void *start, size_t len, const char *name)
 {
   prctl (PR_SET_VMA, PR_SET_VMA_ANON_NAME, start, len, name);
 }

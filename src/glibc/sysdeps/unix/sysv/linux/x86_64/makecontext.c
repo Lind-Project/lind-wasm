@@ -21,10 +21,10 @@
 #include <stdint.h>
 #include <ucontext.h>
 #if SHSTK_ENABLED
-# include <pthread.h>
-# include <libc-pointer-arith.h>
-# include <sys/prctl.h>
-# include <allocate-shadow-stack.h>
+#  include <pthread.h>
+#  include <libc-pointer-arith.h>
+#  include <sys/prctl.h>
+#  include <allocate-shadow-stack.h>
 #endif
 
 #include "ucontext_i.h"
@@ -33,10 +33,10 @@
    normal integer parameters.
    makecontext sets up a stack and the registers for the
    user context. The stack looks like this:
-               +-----------------------+
-               | next context          |
-               +-----------------------+
-               | parameter 7-n         |
+	       +-----------------------+
+	       | next context          |
+	       +-----------------------+
+	       | parameter 7-n         |
 	       +-----------------------+
 	       | trampoline address    |
     %rsp ->    +-----------------------+
@@ -52,21 +52,18 @@
    to be changed to long and also the stdlib/tst-setcontext.c file needs
    to be changed to pass long arguments to makecontext.  */
 
-
 void
 __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
 {
   extern void __start_context (void) attribute_hidden;
-  extern void __push___start_context (ucontext_t *)
-    attribute_hidden;
+  extern void __push___start_context (ucontext_t *) attribute_hidden;
   greg_t *sp;
   unsigned int idx_uc_link;
   va_list ap;
   int i;
 
   /* Generate room on stack for parameter if needed and uc_link.  */
-  sp = (greg_t *) ((uintptr_t) ucp->uc_stack.ss_sp
-		   + ucp->uc_stack.ss_size);
+  sp = (greg_t *) ((uintptr_t) ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
   sp -= (argc > 6 ? argc - 6 : 0) + 1;
   /* Align stack and make space for trampoline address.  */
   sp = (greg_t *) ((((uintptr_t) sp) & -16L) - 8);
@@ -89,15 +86,13 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
   if ((feature_1 & X86_FEATURE_1_SHSTK) != 0)
     {
       /* Shadow stack is enabled.  We need to allocate a new shadow
-         stack.  NB:
+	 stack.  NB:
 	   ucp->__ssp[0]: The new shadow stack pointer.
 	   ucp->__ssp[1]: The base address of the new shadow stack.
 	   ucp->__ssp[2]: The size of the new shadow stack.
        */
-      long int ret
-	= __allocate_shadow_stack (((uintptr_t) sp
-				    - (uintptr_t) ucp->uc_stack.ss_sp),
-				   &ucp->__ssp[1]);
+      long int ret = __allocate_shadow_stack (
+	  ((uintptr_t) sp - (uintptr_t) ucp->uc_stack.ss_sp), &ucp->__ssp[1]);
       if (ret != 0)
 	{
 	  /* FIXME: What should we do?  */
@@ -151,8 +146,6 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
 	break;
       }
   va_end (ap);
-
 }
-
 
 weak_alias (__makecontext, makecontext)

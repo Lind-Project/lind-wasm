@@ -19,8 +19,8 @@
 #ifndef __SETVMANAME_H
 #define __SETVMANAME_H
 
-static inline
-void __set_vma_name (void *start, size_t len, const char *name)
+static inline void
+__set_vma_name (void *start, size_t len, const char *name)
 {
 }
 

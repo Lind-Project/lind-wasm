@@ -20,8 +20,7 @@
 
 /* Set signal mask for the new process in ATTR to SIGMASK.  */
 int
-__posix_spawnattr_setsigmask (posix_spawnattr_t *attr,
-			    const sigset_t *sigmask)
+__posix_spawnattr_setsigmask (posix_spawnattr_t *attr, const sigset_t *sigmask)
 {
   /* Copy the sigset_t data to the user buffer.  */
   memcpy (&attr->__ss, sigmask, sizeof (sigset_t));

@@ -28,19 +28,19 @@
 ssize_t
 sendfile (int out_fd, int in_fd, off_t *offset, size_t count)
 {
-# ifdef __NR_sendfile
+#  ifdef __NR_sendfile
   return INLINE_SYSCALL_CALL (sendfile, out_fd, in_fd, offset, count);
-# else
+#  else
   __off64_t off64;
   int rc;
 
   if (offset != NULL)
     {
       if (*offset < 0 || (off_t) (*offset + count) < 0)
-        {
-          __set_errno (EINVAL);
-          return -1;
-        }
+	{
+	  __set_errno (EINVAL);
+	  return -1;
+	}
       off64 = *offset;
     }
 
@@ -49,7 +49,7 @@ sendfile (int out_fd, int in_fd, off_t *offset, size_t count)
   if (offset)
     *offset = off64;
   return rc;
-# endif
+#  endif
 }
 
 #endif

@@ -23,7 +23,7 @@ long long int
 __llroundf (float x)
 {
   int64_t res;
-  asm ("fcvt.l.s %0, %1, rmm" : "=r" (res) : "f" (x));
+  asm ("fcvt.l.s %0, %1, rmm" : "=r"(res) : "f"(x));
   return res;
 }
 

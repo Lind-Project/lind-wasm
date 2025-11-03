@@ -31,7 +31,7 @@ __dup2 (int fd, int fd2)
 #ifdef OPEN_MAX
       || fd2 >= OPEN_MAX
 #endif
-)
+  )
     {
       __set_errno (EBADF);
       return -1;
@@ -52,5 +52,4 @@ __dup2 (int fd, int fd2)
 
   return fcntl (fd, F_DUPFD, fd2);
 }
-libc_hidden_def (__dup2)
-weak_alias (__dup2, dup2)
+libc_hidden_def (__dup2) weak_alias (__dup2, dup2)

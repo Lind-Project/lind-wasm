@@ -18,18 +18,17 @@
 
 #include <shlib-compat.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_1)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_1)
 
-#include <time.h>
-#include <string.h>
-#include <time.h>
-#include <sys/time.h>
+#  include <time.h>
+#  include <string.h>
+#  include <time.h>
+#  include <sys/time.h>
 
 /* Get the current time of day and timezone information putting it
    into *TV and *TZ.  */
 
-int
-attribute_compat_text_section
+int attribute_compat_text_section
 __gettimeofday_tv32 (struct __timeval32 *restrict tv32, void *restrict tz)
 {
   if (__glibc_unlikely (tz != 0))

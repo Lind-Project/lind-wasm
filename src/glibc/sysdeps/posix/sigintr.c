@@ -26,8 +26,8 @@
 int
 siginterrupt (int sig, int interrupt)
 {
-#ifdef	SA_RESTART
-  extern sigset_t _sigintr attribute_hidden;	/* Defined in signal.c.  */
+#ifdef SA_RESTART
+  extern sigset_t _sigintr attribute_hidden; /* Defined in signal.c.  */
   struct sigaction action;
 
   if (__sigaction (sig, (struct sigaction *) NULL, &action) < 0)

@@ -39,7 +39,5 @@ __libc_pwrite64 (int fd, const void *buf, size_t nbytes, off64_t offset)
   __set_errno (ENOSYS);
   return -1;
 }
-strong_alias (__libc_pwrite64, __pwrite64)
-libc_hidden_def (__pwrite64)
-weak_alias (__libc_pwrite64, pwrite64)
-stub_warning (pwrite64)
+strong_alias (__libc_pwrite64, __pwrite64) libc_hidden_def (__pwrite64)
+    weak_alias (__libc_pwrite64, pwrite64) stub_warning (pwrite64)

@@ -45,10 +45,9 @@ __readdir64 (DIR *dirp)
 	  error_t err;
 
 	  if (err = HURD_FD_PORT_USE (dirp->__fd,
-				      __dir_readdir (port,
-						     &data, &data_size,
-						     dirp->__entry_ptr,
-						     -1, 0, &nentries)))
+				      __dir_readdir (port, &data, &data_size,
+						     dirp->__entry_ptr, -1, 0,
+						     &nentries)))
 	    {
 	      __hurd_fail (err);
 	      dp = NULL;
@@ -94,12 +93,12 @@ __readdir64 (DIR *dirp)
       ++dirp->__entry_ptr;
 
       /* Loop to ignore deleted files.  */
-    } while (dp->d_fileno == 0);
+    }
+  while (dp->d_fileno == 0);
 
   __libc_lock_unlock (dirp->__lock);
 
   return dp;
 }
 
-libc_hidden_def (__readdir64)
-weak_alias (__readdir64, readdir64)
+libc_hidden_def (__readdir64) weak_alias (__readdir64, readdir64)

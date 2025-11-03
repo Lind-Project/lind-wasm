@@ -18,8 +18,7 @@
 
 #include "nldbl-compat.h"
 
-intmax_t
-attribute_hidden
+intmax_t attribute_hidden
 fromfpl (double x, int round, unsigned int width)
 {
   return fromfp (x, round, width);

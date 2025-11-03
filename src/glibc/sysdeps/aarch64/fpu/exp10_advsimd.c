@@ -53,9 +53,9 @@ const static struct data
 
 #if WANT_SIMD_EXCEPT
 
-# define TinyBound v_u64 (0x2000000000000000) /* asuint64 (0x1p-511).  */
-# define BigBound v_u64 (0x4070000000000000)  /* asuint64 (0x1p8).  */
-# define Thres v_u64 (0x2070000000000000)     /* BigBound - TinyBound.  */
+#  define TinyBound v_u64 (0x2000000000000000) /* asuint64 (0x1p-511).  */
+#  define BigBound v_u64 (0x4070000000000000)  /* asuint64 (0x1p8).  */
+#  define Thres v_u64 (0x2070000000000000)     /* BigBound - TinyBound.  */
 
 static float64x2_t VPCS_ATTR NOINLINE
 special_case (float64x2_t x, float64x2_t y, uint64x2_t cmp)
@@ -67,10 +67,10 @@ special_case (float64x2_t x, float64x2_t y, uint64x2_t cmp)
 
 #else
 
-# define SpecialOffset v_u64 (0x6000000000000000) /* 0x1p513.  */
+#  define SpecialOffset v_u64 (0x6000000000000000) /* 0x1p513.  */
 /* SpecialBias1 + SpecialBias1 = asuint(1.0).  */
-# define SpecialBias1 v_u64 (0x7000000000000000)  /* 0x1p769.  */
-# define SpecialBias2 v_u64 (0x3010000000000000)  /* 0x1p-254.  */
+#  define SpecialBias1 v_u64 (0x7000000000000000)  /* 0x1p769.  */
+#  define SpecialBias2 v_u64 (0x3010000000000000)  /* 0x1p-254.  */
 
 static inline float64x2_t VPCS_ATTR
 special_case (float64x2_t s, float64x2_t y, float64x2_t n,
@@ -93,7 +93,8 @@ special_case (float64x2_t s, float64x2_t y, float64x2_t n,
    Maximum measured error is 1.64 ulp.
    _ZGVnN2v_exp10(0x1.ccd1c9d82cc8cp+0) got 0x1.f8dab6d7fed0cp+5
 				       want 0x1.f8dab6d7fed0ap+5.  */
-float64x2_t VPCS_ATTR V_NAME_D1 (exp10) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (exp10) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
   uint64x2_t cmp;

@@ -32,7 +32,7 @@ test_sigtimedwait_timeout (bool zero_tmo)
   /* We wait for half a second.  */
   struct timespec ts;
   xclock_gettime (CLOCK_REALTIME, &ts);
-  struct timespec timeout = make_timespec (0, zero_tmo ? 0 : TIMESPEC_HZ/2);
+  struct timespec timeout = make_timespec (0, zero_tmo ? 0 : TIMESPEC_HZ / 2);
   ts = timespec_add (ts, timeout);
 
   /* Set sigset to just wait for timeout.  */

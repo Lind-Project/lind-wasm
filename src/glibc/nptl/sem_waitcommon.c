@@ -28,7 +28,6 @@
 #include <shlib-compat.h>
 #include <atomic.h>
 
-
 /* The semaphore provides two main operations: sem_post adds a token to the
    semaphore; sem_wait grabs a token from the semaphore, potentially waiting
    until there is a token available.  A sem_wait needs to synchronize with
@@ -78,8 +77,7 @@
    is still executing.  */
 
 #if !__HAVE_64B_ATOMICS
-static void
-__sem_wait_32_finish (struct new_sem *sem);
+static void __sem_wait_32_finish (struct new_sem *sem);
 #endif
 
 static void
@@ -100,18 +98,16 @@ __sem_wait_cleanup (void *arg)
    puts the call site into an exception region, and thus the
    cleanups get properly run.  TODO still necessary?  Other futex_wait
    users don't seem to need it.  */
-static int
-__attribute__ ((noinline))
+static int __attribute__ ((noinline))
 do_futex_wait (struct new_sem *sem, clockid_t clockid,
 	       const struct __timespec64 *abstime)
 {
   int err;
 
 #if __HAVE_64B_ATOMICS
-  err = __futex_abstimed_wait_cancelable64 (
-      (unsigned int *) &sem->data + SEM_VALUE_OFFSET, 0,
-      clockid, abstime,
-      sem->private);
+  err = __futex_abstimed_wait_cancelable64 ((unsigned int *) &sem->data
+						+ SEM_VALUE_OFFSET,
+					    0, clockid, abstime, sem->private);
 #else
   err = __futex_abstimed_wait_cancelable64 (&sem->value, SEM_NWAITERS_MASK,
 					    clockid, abstime, sem->private);
@@ -149,8 +145,8 @@ __new_sem_wait_fast (struct new_sem *sem, int definitive_result)
     {
       if ((v >> SEM_VALUE_SHIFT) == 0)
 	break;
-      if (atomic_compare_exchange_weak_acquire (&sem->value,
-	  &v, v - (1 << SEM_VALUE_SHIFT)))
+      if (atomic_compare_exchange_weak_acquire (&sem->value, &v,
+						v - (1 << SEM_VALUE_SHIFT)))
 	return 0;
     }
   while (definitive_result);
@@ -159,8 +155,7 @@ __new_sem_wait_fast (struct new_sem *sem, int definitive_result)
 }
 
 /* Slow path that blocks.  */
-static int
-__attribute__ ((noinline))
+static int __attribute__ ((noinline))
 __new_sem_wait_slow64 (struct new_sem *sem, clockid_t clockid,
 		       const struct __timespec64 *abstime)
 {
@@ -170,7 +165,7 @@ __new_sem_wait_slow64 (struct new_sem *sem, clockid_t clockid,
   /* Add a waiter.  Relaxed MO is sufficient because we can rely on the
      ordering provided by the RMW operations we use.  */
   uint64_t d = atomic_fetch_add_relaxed (&sem->data,
-      (uint64_t) 1 << SEM_NWAITERS_SHIFT);
+					 (uint64_t) 1 << SEM_NWAITERS_SHIFT);
 
   pthread_cleanup_push (__sem_wait_cleanup, sem);
 
@@ -196,7 +191,7 @@ __new_sem_wait_slow64 (struct new_sem *sem, clockid_t clockid,
 	      err = -1;
 	      /* Stop being registered as a waiter.  */
 	      atomic_fetch_add_relaxed (&sem->data,
-		  -((uint64_t) 1 << SEM_NWAITERS_SHIFT));
+					-((uint64_t) 1 << SEM_NWAITERS_SHIFT));
 	      break;
 	    }
 	  /* Relaxed MO is sufficient; see below.  */
@@ -211,8 +206,9 @@ __new_sem_wait_slow64 (struct new_sem *sem, clockid_t clockid,
 	     relaxed MO is sufficient because we only eventually need the
 	     up-to-date value; the futex_wait or the CAS perform the real
 	     work.  */
-	  if (atomic_compare_exchange_weak_acquire (&sem->data,
-	      &d, d - 1 - ((uint64_t) 1 << SEM_NWAITERS_SHIFT)))
+	  if (atomic_compare_exchange_weak_acquire (
+		  &sem->data, &d,
+		  d - 1 - ((uint64_t) 1 << SEM_NWAITERS_SHIFT)))
 	    {
 	      err = 0;
 	      break;
@@ -275,8 +271,8 @@ __new_sem_wait_slow64 (struct new_sem *sem, clockid_t clockid,
 	      if ((v & SEM_NWAITERS_MASK) != 0)
 		break;
 	    }
-	  while (!atomic_compare_exchange_weak_release (&sem->value,
-	      &v, v | SEM_NWAITERS_MASK));
+	  while (!atomic_compare_exchange_weak_release (
+	      &sem->value, &v, v | SEM_NWAITERS_MASK));
 	  /* If there is no token, wait.  */
 	  if ((v >> SEM_VALUE_SHIFT) == 0)
 	    {
@@ -300,8 +296,8 @@ __new_sem_wait_slow64 (struct new_sem *sem, clockid_t clockid,
   /* Try to grab a token.  We need acquire MO so this synchronizes with
      all token providers (i.e., the RMW operation we read from or all those
      before it in modification order; also see sem_post).  */
-  while (!atomic_compare_exchange_weak_acquire (&sem->value,
-      &v, v - (1 << SEM_VALUE_SHIFT)));
+  while (!atomic_compare_exchange_weak_acquire (&sem->value, &v,
+						v - (1 << SEM_VALUE_SHIFT)));
 
 error:
   pthread_cleanup_pop (0);
@@ -340,16 +336,16 @@ __sem_wait_32_finish (struct new_sem *sem)
   if (wfinal > 1 && wguess == 1)
     {
       /* We guessed wrong, and so need to clean up after the mistake and
-         unblock any waiters that could have not been woken.  There is no
-         additional ordering that we need to set up, so relaxed MO is
-         sufficient.  */
-      unsigned int v = atomic_fetch_or_relaxed (&sem->value,
-						SEM_NWAITERS_MASK);
+	 unblock any waiters that could have not been woken.  There is no
+	 additional ordering that we need to set up, so relaxed MO is
+	 sufficient.  */
+      unsigned int v
+	  = atomic_fetch_or_relaxed (&sem->value, SEM_NWAITERS_MASK);
       /* If there are available tokens, then wake as many waiters.  If there
-         aren't any, then there is no need to wake anyone because there is
-         none to grab for another waiter.  If tokens become available
-         subsequently, then the respective sem_post calls will do the wake-up
-         due to us having set the nwaiters bit again.  */
+	 aren't any, then there is no need to wake anyone because there is
+	 none to grab for another waiter.  If tokens become available
+	 subsequently, then the respective sem_post calls will do the wake-up
+	 due to us having set the nwaiters bit again.  */
       v >>= SEM_VALUE_SHIFT;
       if (v > 0)
 	futex_wake (&sem->value, v, sem->private);

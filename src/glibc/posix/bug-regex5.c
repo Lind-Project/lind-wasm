@@ -26,7 +26,7 @@ main (void)
   nrules = u.word;
   if (nrules == 0)
     {
-      printf("No rule\n");
+      printf ("No rule\n");
       return 1;
     }
 

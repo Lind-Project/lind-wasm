@@ -27,8 +27,7 @@
 #include <assert.h>
 #include <libc-internal.h>
 
-
-#define MAX_PC_SAMPLES	512	/* XXX ought to be exported in kernel hdr */
+#define MAX_PC_SAMPLES 512 /* XXX ought to be exported in kernel hdr */
 
 static thread_t profile_thread = MACH_PORT_NULL;
 static u_short *samples;
@@ -68,16 +67,16 @@ update_waiter (u_short *sample_buffer, size_t size, size_t offset, u_int scale)
 	profil_reply_port = __mach_reply_port ();
       /* Set up the profiling collector thread.  */
       err = __thread_create (__mach_task_self (), &profile_thread);
-      if (! err)
+      if (!err)
 	err = __mach_setup_thread_call (__mach_task_self (), profile_thread,
 					&profile_waiter, NULL, NULL);
-      if (! err)
-	err = __mach_setup_tls(profile_thread);
+      if (!err)
+	err = __mach_setup_tls (profile_thread);
     }
   else
     err = 0;
 
-  if (! err)
+  if (!err)
     {
       err = __task_enable_pc_sampling (__mach_task_self (), &profile_tick,
 				       SAMPLED_PC_PERIODIC);
@@ -85,7 +84,7 @@ update_waiter (u_short *sample_buffer, size_t size, size_t offset, u_int scale)
 	/* Profiling was not turned on, so the collector thread was
 	   suspended.  Resume it.  */
 	err = __thread_resume (profile_thread);
-      if (! err)
+      if (!err)
 	{
 	  samples = sample_buffer;
 	  maxsamples = size / sizeof *sample_buffer;
@@ -109,8 +108,8 @@ __profile_frequency (void)
 }
 libc_hidden_def (__profile_frequency)
 
-int
-__profil (u_short *sample_buffer, size_t size, size_t offset, u_int scale)
+    int __profil (u_short *sample_buffer, size_t size, size_t offset,
+		  u_int scale)
 {
   error_t err;
 
@@ -141,7 +140,7 @@ __profil (u_short *sample_buffer, size_t size, size_t offset, u_int scale)
 }
 weak_alias (__profil, profil)
 
-static volatile error_t special_profil_failure;
+    static volatile error_t special_profil_failure;
 
 /* Fetch PC samples.  This function must be very careful not to depend
    on Hurd TLS variables.  We arrange that by using a special
@@ -155,8 +154,8 @@ fetch_samples (void)
 
   nsamples = MAX_PC_SAMPLES;
 
-  err = profil_task_get_sampled_pcs (__mach_task_self (), &seqno,
-				     pc_samples, &nsamples);
+  err = profil_task_get_sampled_pcs (__mach_task_self (), &seqno, pc_samples,
+				     &nsamples);
   if (err)
     {
       static volatile int a, b;
@@ -178,7 +177,6 @@ fetch_samples (void)
     }
 }
 
-
 /* This function must be very careful not to depend on Hurd TLS
    variables.  We arrange that by using special stubs arranged for at the
    end of this file. */
@@ -198,11 +196,11 @@ profile_waiter (void)
 
       __spin_unlock (&lock);
 
-      __mach_msg (&msg, MACH_RCV_MSG|MACH_RCV_TIMEOUT, 0, sizeof msg,
+      __mach_msg (&msg, MACH_RCV_MSG | MACH_RCV_TIMEOUT, 0, sizeof msg,
 		  timeout_reply_port, collector_timeout, MACH_PORT_NULL);
     }
 }
-
+
 /* Fork interaction */
 
 /* Before fork, lock the interlock so that we are in a clean state. */
@@ -255,9 +253,6 @@ fork_profil_child (void)
 }
 text_set_element (_hurd_fork_child_hook, fork_profil_child);
 
-
-
-
 /* Special RPC stubs for profile_waiter are made by including the normal
    source code, with special CPP state to prevent it from doing the
    usual thing. */
@@ -279,7 +274,7 @@ text_set_element (_hurd_fork_child_hook, fork_profil_child);
 
 /* Turn off the attempt to generate ld aliasing records. */
 #undef weak_alias
-#define weak_alias(a,b)
+#define weak_alias(a, b)
 
 /* And change their names to avoid confusing disasters. */
 #define __vm_deallocate_rpc profil_vm_deallocate

@@ -23,14 +23,18 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-
 static pthread_barrier_t b3, b4;
 static uid_t prev_ruid, prev_euid, prev_suid, nobody_uid;
 static gid_t prev_rgid, prev_egid, prev_sgid, nobody_gid;
-enum ACTION { PREPARE, SET, CHECK_BEFORE, CHECK_AFTER };
+enum ACTION
+{
+  PREPARE,
+  SET,
+  CHECK_BEFORE,
+  CHECK_AFTER
+};
 #define TESTNO(arg) ((long int) (arg) & 0xff)
 #define THREADNO(arg) ((long int) (arg) >> 8)
-
 
 static void
 check_prev_uid (int tno)
@@ -44,12 +48,11 @@ check_prev_uid (int tno)
 
   if (ruid != prev_ruid || euid != prev_euid || suid != prev_suid)
     {
-      printf ("uids before in %d (%d %d %d) != (%d %d %d)\n", tno,
-	      ruid, euid, suid, prev_ruid, prev_euid, prev_suid);
+      printf ("uids before in %d (%d %d %d) != (%d %d %d)\n", tno, ruid, euid,
+	      suid, prev_ruid, prev_euid, prev_suid);
       exit (1);
     }
 }
-
 
 static void
 check_prev_gid (int tno)
@@ -63,12 +66,11 @@ check_prev_gid (int tno)
 
   if (rgid != prev_rgid || egid != prev_egid || sgid != prev_sgid)
     {
-      printf ("gids before in %d (%d %d %d) != (%d %d %d)\n", tno,
-	      rgid, egid, sgid, prev_rgid, prev_egid, prev_sgid);
+      printf ("gids before in %d (%d %d %d) != (%d %d %d)\n", tno, rgid, egid,
+	      sgid, prev_rgid, prev_egid, prev_sgid);
       exit (1);
     }
 }
-
 
 static void
 test_setuid1 (enum ACTION action, int tno)
@@ -81,8 +83,8 @@ test_setuid1 (enum ACTION action, int tno)
 
   if (action == SET && setuid (nobody_uid) < 0)
     {
-       printf ("setuid failed: %m\n");
-       exit (1);
+      printf ("setuid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -96,13 +98,12 @@ test_setuid1 (enum ACTION action, int tno)
 
       if (ruid != nobody_uid || euid != nobody_uid || suid != nobody_uid)
 	{
-	  printf ("after setuid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  ruid, euid, suid, nobody_uid, nobody_uid, nobody_uid);
+	  printf ("after setuid %d (%d %d %d) != (%d %d %d)\n", tno, ruid,
+		  euid, suid, nobody_uid, nobody_uid, nobody_uid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setuid2 (enum ACTION action, int tno)
@@ -140,13 +141,12 @@ test_setuid2 (enum ACTION action, int tno)
 
       if (ruid != nobody_uid || euid != prev_suid || suid != prev_suid)
 	{
-	  printf ("after setuid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  ruid, euid, suid, nobody_uid, prev_suid, prev_suid);
+	  printf ("after setuid %d (%d %d %d) != (%d %d %d)\n", tno, ruid,
+		  euid, suid, nobody_uid, prev_suid, prev_suid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_seteuid1 (enum ACTION action, int tno)
@@ -159,8 +159,8 @@ test_seteuid1 (enum ACTION action, int tno)
 
   if (action == SET && seteuid (nobody_uid) < 0)
     {
-       printf ("seteuid failed: %m\n");
-       exit (1);
+      printf ("seteuid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -174,13 +174,12 @@ test_seteuid1 (enum ACTION action, int tno)
 
       if (ruid != prev_ruid || euid != nobody_uid || suid != prev_suid)
 	{
-	  printf ("after seteuid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  ruid, euid, suid, prev_ruid, nobody_uid, prev_suid);
+	  printf ("after seteuid %d (%d %d %d) != (%d %d %d)\n", tno, ruid,
+		  euid, suid, prev_ruid, nobody_uid, prev_suid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_seteuid2 (enum ACTION action, int tno)
@@ -202,7 +201,6 @@ test_seteuid2 (enum ACTION action, int tno)
   test_seteuid1 (action, tno);
 }
 
-
 static void
 test_setreuid1 (enum ACTION action, int tno)
 {
@@ -214,8 +212,8 @@ test_setreuid1 (enum ACTION action, int tno)
 
   if (action == SET && setreuid (-1, nobody_uid) < 0)
     {
-       printf ("setreuid failed: %m\n");
-       exit (1);
+      printf ("setreuid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -234,13 +232,12 @@ test_setreuid1 (enum ACTION action, int tno)
 
       if (ruid != prev_ruid || euid != nobody_uid || suid != esuid)
 	{
-	  printf ("after setreuid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  ruid, euid, suid, prev_ruid, nobody_uid, esuid);
+	  printf ("after setreuid %d (%d %d %d) != (%d %d %d)\n", tno, ruid,
+		  euid, suid, prev_ruid, nobody_uid, esuid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setreuid2 (enum ACTION action, int tno)
@@ -253,8 +250,8 @@ test_setreuid2 (enum ACTION action, int tno)
 
   if (action == SET && setreuid (nobody_uid, -1) < 0)
     {
-       printf ("setreuid failed: %m\n");
-       exit (1);
+      printf ("setreuid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -268,13 +265,12 @@ test_setreuid2 (enum ACTION action, int tno)
 
       if (ruid != nobody_uid || euid != prev_euid || suid != prev_euid)
 	{
-	  printf ("after setreuid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  ruid, euid, suid, nobody_uid, prev_euid, prev_euid);
+	  printf ("after setreuid %d (%d %d %d) != (%d %d %d)\n", tno, ruid,
+		  euid, suid, nobody_uid, prev_euid, prev_euid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setreuid3 (enum ACTION action, int tno)
@@ -287,8 +283,8 @@ test_setreuid3 (enum ACTION action, int tno)
 
   if (action == SET && setreuid (nobody_uid, nobody_uid) < 0)
     {
-       printf ("setreuid failed: %m\n");
-       exit (1);
+      printf ("setreuid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -302,13 +298,12 @@ test_setreuid3 (enum ACTION action, int tno)
 
       if (ruid != nobody_uid || euid != nobody_uid || suid != nobody_uid)
 	{
-	  printf ("after setreuid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  ruid, euid, suid, nobody_uid, nobody_uid, nobody_uid);
+	  printf ("after setreuid %d (%d %d %d) != (%d %d %d)\n", tno, ruid,
+		  euid, suid, nobody_uid, nobody_uid, nobody_uid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setreuid4 (enum ACTION action, int tno)
@@ -330,7 +325,6 @@ test_setreuid4 (enum ACTION action, int tno)
   test_setreuid1 (action, tno);
 }
 
-
 static void
 test_setresuid1 (enum ACTION action, int tno)
 {
@@ -342,8 +336,8 @@ test_setresuid1 (enum ACTION action, int tno)
 
   if (action == SET && setresuid (-1, nobody_uid, -1) < 0)
     {
-       printf ("setresuid failed: %m\n");
-       exit (1);
+      printf ("setresuid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -357,13 +351,12 @@ test_setresuid1 (enum ACTION action, int tno)
 
       if (ruid != prev_ruid || euid != nobody_uid || suid != prev_suid)
 	{
-	  printf ("after setresuid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  ruid, euid, suid, prev_ruid, nobody_uid, prev_suid);
+	  printf ("after setresuid %d (%d %d %d) != (%d %d %d)\n", tno, ruid,
+		  euid, suid, prev_ruid, nobody_uid, prev_suid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setresuid2 (enum ACTION action, int tno)
@@ -376,8 +369,8 @@ test_setresuid2 (enum ACTION action, int tno)
 
   if (action == SET && setresuid (prev_euid, nobody_uid, nobody_uid) < 0)
     {
-       printf ("setresuid failed: %m\n");
-       exit (1);
+      printf ("setresuid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -391,13 +384,12 @@ test_setresuid2 (enum ACTION action, int tno)
 
       if (ruid != prev_euid || euid != nobody_uid || suid != nobody_uid)
 	{
-	  printf ("after setresuid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  ruid, euid, suid, prev_euid, nobody_uid, nobody_uid);
+	  printf ("after setresuid %d (%d %d %d) != (%d %d %d)\n", tno, ruid,
+		  euid, suid, prev_euid, nobody_uid, nobody_uid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setresuid3 (enum ACTION action, int tno)
@@ -410,8 +402,8 @@ test_setresuid3 (enum ACTION action, int tno)
 
   if (action == SET && setresuid (nobody_uid, nobody_uid, nobody_uid) < 0)
     {
-       printf ("setresuid failed: %m\n");
-       exit (1);
+      printf ("setresuid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -425,13 +417,12 @@ test_setresuid3 (enum ACTION action, int tno)
 
       if (ruid != nobody_uid || euid != nobody_uid || suid != nobody_uid)
 	{
-	  printf ("after setresuid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  ruid, euid, suid, nobody_uid, nobody_uid, nobody_uid);
+	  printf ("after setresuid %d (%d %d %d) != (%d %d %d)\n", tno, ruid,
+		  euid, suid, nobody_uid, nobody_uid, nobody_uid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setresuid4 (enum ACTION action, int tno)
@@ -453,7 +444,6 @@ test_setresuid4 (enum ACTION action, int tno)
   test_setresuid1 (action, tno);
 }
 
-
 static void
 test_setgid1 (enum ACTION action, int tno)
 {
@@ -465,8 +455,8 @@ test_setgid1 (enum ACTION action, int tno)
 
   if (action == SET && setgid (nobody_gid) < 0)
     {
-       printf ("setgid failed: %m\n");
-       exit (1);
+      printf ("setgid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -480,13 +470,12 @@ test_setgid1 (enum ACTION action, int tno)
 
       if (rgid != nobody_gid || egid != nobody_gid || sgid != nobody_gid)
 	{
-	  printf ("after setgid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  rgid, egid, sgid, nobody_gid, nobody_gid, nobody_gid);
+	  printf ("after setgid %d (%d %d %d) != (%d %d %d)\n", tno, rgid,
+		  egid, sgid, nobody_gid, nobody_gid, nobody_gid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setgid2 (enum ACTION action, int tno)
@@ -533,13 +522,12 @@ test_setgid2 (enum ACTION action, int tno)
 
       if (rgid != nobody_gid || egid != prev_sgid || sgid != prev_sgid)
 	{
-	  printf ("after setgid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  rgid, egid, sgid, nobody_gid, prev_sgid, prev_sgid);
+	  printf ("after setgid %d (%d %d %d) != (%d %d %d)\n", tno, rgid,
+		  egid, sgid, nobody_gid, prev_sgid, prev_sgid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setegid1 (enum ACTION action, int tno)
@@ -552,8 +540,8 @@ test_setegid1 (enum ACTION action, int tno)
 
   if (action == SET && setegid (nobody_gid) < 0)
     {
-       printf ("setegid failed: %m\n");
-       exit (1);
+      printf ("setegid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -567,13 +555,12 @@ test_setegid1 (enum ACTION action, int tno)
 
       if (rgid != prev_rgid || egid != nobody_gid || sgid != prev_sgid)
 	{
-	  printf ("after setegid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  rgid, egid, sgid, prev_rgid, nobody_gid, prev_sgid);
+	  printf ("after setegid %d (%d %d %d) != (%d %d %d)\n", tno, rgid,
+		  egid, sgid, prev_rgid, nobody_gid, prev_sgid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setegid2 (enum ACTION action, int tno)
@@ -595,7 +582,6 @@ test_setegid2 (enum ACTION action, int tno)
   test_setegid1 (action, tno);
 }
 
-
 static void
 test_setregid1 (enum ACTION action, int tno)
 {
@@ -607,8 +593,8 @@ test_setregid1 (enum ACTION action, int tno)
 
   if (action == SET && setregid (-1, nobody_gid) < 0)
     {
-       printf ("setregid failed: %m\n");
-       exit (1);
+      printf ("setregid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -627,13 +613,12 @@ test_setregid1 (enum ACTION action, int tno)
 
       if (rgid != prev_rgid || egid != nobody_gid || sgid != esgid)
 	{
-	  printf ("after setregid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  rgid, egid, sgid, prev_rgid, nobody_gid, esgid);
+	  printf ("after setregid %d (%d %d %d) != (%d %d %d)\n", tno, rgid,
+		  egid, sgid, prev_rgid, nobody_gid, esgid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setregid2 (enum ACTION action, int tno)
@@ -646,8 +631,8 @@ test_setregid2 (enum ACTION action, int tno)
 
   if (action == SET && setregid (nobody_gid, -1) < 0)
     {
-       printf ("setregid failed: %m\n");
-       exit (1);
+      printf ("setregid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -661,13 +646,12 @@ test_setregid2 (enum ACTION action, int tno)
 
       if (rgid != nobody_gid || egid != prev_egid || sgid != prev_egid)
 	{
-	  printf ("after setregid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  rgid, egid, sgid, nobody_gid, prev_egid, prev_egid);
+	  printf ("after setregid %d (%d %d %d) != (%d %d %d)\n", tno, rgid,
+		  egid, sgid, nobody_gid, prev_egid, prev_egid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setregid3 (enum ACTION action, int tno)
@@ -680,8 +664,8 @@ test_setregid3 (enum ACTION action, int tno)
 
   if (action == SET && setregid (nobody_gid, nobody_gid) < 0)
     {
-       printf ("setregid failed: %m\n");
-       exit (1);
+      printf ("setregid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -695,13 +679,12 @@ test_setregid3 (enum ACTION action, int tno)
 
       if (rgid != nobody_gid || egid != nobody_gid || sgid != nobody_gid)
 	{
-	  printf ("after setregid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  rgid, egid, sgid, nobody_gid, nobody_gid, nobody_gid);
+	  printf ("after setregid %d (%d %d %d) != (%d %d %d)\n", tno, rgid,
+		  egid, sgid, nobody_gid, nobody_gid, nobody_gid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setregid4 (enum ACTION action, int tno)
@@ -723,7 +706,6 @@ test_setregid4 (enum ACTION action, int tno)
   test_setregid1 (action, tno);
 }
 
-
 static void
 test_setresgid1 (enum ACTION action, int tno)
 {
@@ -735,8 +717,8 @@ test_setresgid1 (enum ACTION action, int tno)
 
   if (action == SET && setresgid (-1, nobody_gid, -1) < 0)
     {
-       printf ("setresgid failed: %m\n");
-       exit (1);
+      printf ("setresgid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -750,13 +732,12 @@ test_setresgid1 (enum ACTION action, int tno)
 
       if (rgid != prev_rgid || egid != nobody_gid || sgid != prev_sgid)
 	{
-	  printf ("after setresgid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  rgid, egid, sgid, prev_rgid, nobody_gid, prev_sgid);
+	  printf ("after setresgid %d (%d %d %d) != (%d %d %d)\n", tno, rgid,
+		  egid, sgid, prev_rgid, nobody_gid, prev_sgid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setresgid2 (enum ACTION action, int tno)
@@ -769,8 +750,8 @@ test_setresgid2 (enum ACTION action, int tno)
 
   if (action == SET && setresgid (prev_egid, nobody_gid, nobody_gid) < 0)
     {
-       printf ("setresgid failed: %m\n");
-       exit (1);
+      printf ("setresgid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -784,13 +765,12 @@ test_setresgid2 (enum ACTION action, int tno)
 
       if (rgid != prev_egid || egid != nobody_gid || sgid != nobody_gid)
 	{
-	  printf ("after setresgid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  rgid, egid, sgid, prev_egid, nobody_gid, nobody_gid);
+	  printf ("after setresgid %d (%d %d %d) != (%d %d %d)\n", tno, rgid,
+		  egid, sgid, prev_egid, nobody_gid, nobody_gid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setresgid3 (enum ACTION action, int tno)
@@ -803,8 +783,8 @@ test_setresgid3 (enum ACTION action, int tno)
 
   if (action == SET && setresgid (nobody_gid, nobody_gid, nobody_gid) < 0)
     {
-       printf ("setresgid failed: %m\n");
-       exit (1);
+      printf ("setresgid failed: %m\n");
+      exit (1);
     }
 
   if (action != CHECK_BEFORE)
@@ -818,13 +798,12 @@ test_setresgid3 (enum ACTION action, int tno)
 
       if (rgid != nobody_gid || egid != nobody_gid || sgid != nobody_gid)
 	{
-	  printf ("after setresgid %d (%d %d %d) != (%d %d %d)\n", tno,
-		  rgid, egid, sgid, nobody_gid, nobody_gid, nobody_gid);
+	  printf ("after setresgid %d (%d %d %d) != (%d %d %d)\n", tno, rgid,
+		  egid, sgid, nobody_gid, nobody_gid, nobody_gid);
 	  exit (1);
 	}
     }
 }
-
 
 static void
 test_setresgid4 (enum ACTION action, int tno)
@@ -846,39 +825,23 @@ test_setresgid4 (enum ACTION action, int tno)
   test_setresgid1 (action, tno);
 }
 
-
 static struct setuid_test
 {
   const char *name;
   void (*test) (enum ACTION, int tno);
-} setuid_tests[] =
-{
-  { "setuid1", test_setuid1 },
-  { "setuid2", test_setuid2 },
-  { "seteuid1", test_seteuid1 },
-  { "seteuid2", test_seteuid2 },
-  { "setreuid1", test_setreuid1 },
-  { "setreuid2", test_setreuid2 },
-  { "setreuid3", test_setreuid3 },
-  { "setreuid4", test_setreuid4 },
-  { "setresuid1", test_setresuid1 },
-  { "setresuid2", test_setresuid2 },
-  { "setresuid3", test_setresuid3 },
-  { "setresuid4", test_setresuid4 },
-  { "setgid1", test_setgid1 },
-  { "setgid2", test_setgid2 },
-  { "setegid1", test_setegid1 },
-  { "setegid2", test_setegid2 },
-  { "setregid1", test_setregid1 },
-  { "setregid2", test_setregid2 },
-  { "setregid3", test_setregid3 },
-  { "setregid4", test_setregid4 },
-  { "setresgid1", test_setresgid1 },
-  { "setresgid2", test_setresgid2 },
-  { "setresgid3", test_setresgid3 },
-  { "setresgid4", test_setresgid4 }
-};
-
+} setuid_tests[]
+    = { { "setuid1", test_setuid1 },	   { "setuid2", test_setuid2 },
+	{ "seteuid1", test_seteuid1 },	   { "seteuid2", test_seteuid2 },
+	{ "setreuid1", test_setreuid1 },   { "setreuid2", test_setreuid2 },
+	{ "setreuid3", test_setreuid3 },   { "setreuid4", test_setreuid4 },
+	{ "setresuid1", test_setresuid1 }, { "setresuid2", test_setresuid2 },
+	{ "setresuid3", test_setresuid3 }, { "setresuid4", test_setresuid4 },
+	{ "setgid1", test_setgid1 },	   { "setgid2", test_setgid2 },
+	{ "setegid1", test_setegid1 },	   { "setegid2", test_setegid2 },
+	{ "setregid1", test_setregid1 },   { "setregid2", test_setregid2 },
+	{ "setregid3", test_setregid3 },   { "setregid4", test_setregid4 },
+	{ "setresgid1", test_setresgid1 }, { "setresgid2", test_setresgid2 },
+	{ "setresgid3", test_setresgid3 }, { "setresgid4", test_setresgid4 } };
 
 static void *
 tf2 (void *arg)
@@ -894,7 +857,6 @@ tf2 (void *arg)
   return NULL;
 }
 
-
 static void *
 tf (void *arg)
 {
@@ -909,7 +871,6 @@ tf (void *arg)
 
   return tf2 (arg);
 }
-
 
 static int
 do_one_test (long int testno)
@@ -1021,7 +982,6 @@ do_one_test (long int testno)
   return 0;
 }
 
-
 static int
 do_test (void)
 {
@@ -1073,8 +1033,7 @@ do_test (void)
     }
 
   for (unsigned long int testno = 0;
-       testno < sizeof (setuid_tests) / sizeof (setuid_tests[0]);
-       ++testno)
+       testno < sizeof (setuid_tests) / sizeof (setuid_tests[0]); ++testno)
     do_one_test (testno);
   return 0;
 }

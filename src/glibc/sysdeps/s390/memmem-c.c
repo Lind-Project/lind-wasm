@@ -19,29 +19,30 @@
 #include <ifunc-memmem.h>
 
 #if HAVE_MEMMEM_C
-# if HAVE_MEMMEM_IFUNC
-#  include <string.h>
+#  if HAVE_MEMMEM_IFUNC
+#    include <string.h>
 
-#  ifndef _LIBC
-#   define memmem MEMMEM_C
-#  else
-#   define __memmem MEMMEM_C
+#    ifndef _LIBC
+#      define memmem MEMMEM_C
+#    else
+#      define __memmem MEMMEM_C
+#    endif
+
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_def
+#      define libc_hidden_def(name)                                           \
+	strong_alias (__memmem_c, __memmem_c_1);                              \
+	__hidden_ver1 (__memmem_c, __GI___memmem, __memmem_c);
+
+#      undef libc_hidden_weak
+#      define libc_hidden_weak(name)                                          \
+	__hidden_ver1 (__memmem_c_1, __GI_memmem, __memmem_c_1)               \
+	    __attribute__ ((weak));
+#    endif
+
+#    undef weak_alias
+#    define weak_alias(a, b)
 #  endif
 
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_def
-#   define libc_hidden_def(name)				\
-  strong_alias (__memmem_c, __memmem_c_1);			\
-  __hidden_ver1 (__memmem_c, __GI___memmem, __memmem_c);
-
-#   undef libc_hidden_weak
-#   define libc_hidden_weak(name)					\
-  __hidden_ver1 (__memmem_c_1, __GI_memmem, __memmem_c_1) __attribute__((weak));
-#  endif
-
-#  undef weak_alias
-#  define weak_alias(a, b)
-# endif
-
-# include <string/memmem.c>
+#  include <string/memmem.c>
 #endif

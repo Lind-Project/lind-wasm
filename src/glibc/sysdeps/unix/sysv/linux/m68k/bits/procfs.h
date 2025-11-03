@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
+#  error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
 #endif
 
 /* Type for a general-purpose register.  */

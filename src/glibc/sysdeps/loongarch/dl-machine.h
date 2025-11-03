@@ -30,32 +30,32 @@
 #include <dl-machine-rel.h>
 
 #ifndef _RTLD_PROLOGUE
-# define _RTLD_PROLOGUE(entry)					\
-	".globl\t" __STRING (entry) "\n\t"			\
-	".type\t" __STRING (entry) ", @function\n\t"		\
-	CFI_STARTPROC "\n"					\
-	__STRING (entry) ":\n"
+#  define _RTLD_PROLOGUE(entry)                                               \
+    ".globl\t" __STRING (entry) "\n\t"                                        \
+				".type\t" __STRING (                          \
+				    entry) ", @function\n\t" CFI_STARTPROC    \
+					   "\n" __STRING (entry) ":\n"
 #endif
 
 #ifndef _RTLD_EPILOGUE
-# define _RTLD_EPILOGUE(entry)					\
-	CFI_ENDPROC "\n\t"					\
-	".size\t" __STRING (entry) ", . - " __STRING (entry) "\n"
+#  define _RTLD_EPILOGUE(entry)                                               \
+    CFI_ENDPROC "\n\t"                                                        \
+		".size\t" __STRING (entry) ", . - " __STRING (entry) "\n"
 #endif
 
 #define ELF_MACHINE_JMP_SLOT R_LARCH_JUMP_SLOT
 #define ELF_MACHINE_IRELATIVE R_LARCH_IRELATIVE
 
-#define elf_machine_type_class(type)				\
-  ((ELF_RTYPE_CLASS_PLT *((type) == ELF_MACHINE_JMP_SLOT))	\
-   | (ELF_RTYPE_CLASS_COPY *((type) == R_LARCH_COPY)))
+#define elf_machine_type_class(type)                                          \
+  ((ELF_RTYPE_CLASS_PLT * ((type) == ELF_MACHINE_JMP_SLOT))                   \
+   | (ELF_RTYPE_CLASS_COPY * ((type) == R_LARCH_COPY)))
 
 #define ELF_MACHINE_NO_REL 1
 #define ELF_MACHINE_NO_RELA 0
 
 /* Return nonzero iff ELF header is compatible with the running host.  */
 static inline int
-elf_machine_matches_host (const ElfW (Ehdr) *ehdr)
+elf_machine_matches_host (const ElfW (Ehdr) * ehdr)
 {
   /* We can only run LoongArch binaries.  */
   if (ehdr->e_machine != EM_LOONGARCH)
@@ -67,23 +67,23 @@ elf_machine_matches_host (const ElfW (Ehdr) *ehdr)
 /* Return the run-time load address of the shared object.  */
 static inline ElfW (Addr) elf_machine_load_address (void)
 {
-  extern const ElfW(Ehdr) __ehdr_start attribute_hidden;
-  return (ElfW(Addr)) &__ehdr_start;
+  extern const ElfW (Ehdr) __ehdr_start attribute_hidden;
+  return (ElfW (Addr)) & __ehdr_start;
 }
 
 /* Return the link-time address of _DYNAMIC.  */
 static inline ElfW (Addr) elf_machine_dynamic (void)
 {
-  extern ElfW(Dyn) _DYNAMIC[] attribute_hidden;
-  return (ElfW(Addr)) _DYNAMIC - elf_machine_load_address ();
+  extern ElfW (Dyn) _DYNAMIC[] attribute_hidden;
+  return (ElfW (Addr)) _DYNAMIC - elf_machine_load_address ();
 }
 
 /* Initial entry point code for the dynamic linker.
    The C function `_dl_start' is the real entry point;
    its return value is the user program's entry point.  */
 
-#define RTLD_START asm (\
-	".text\n\
+#define RTLD_START                                                            \
+  asm (".text\n\
 	" _RTLD_PROLOGUE (ENTRY_POINT) "\
 	.cfi_label .Ldummy   \n\
 	" CFI_UNDEFINED (1) "   \n\
@@ -124,10 +124,10 @@ static inline ElfW (Addr) elf_machine_dynamic (void)
 #define elf_machine_plt_value(map, reloc, value) (value)
 
 static inline ElfW (Addr)
-elf_machine_fixup_plt (struct link_map *map, lookup_t t,
-			 const ElfW (Sym) *refsym, const ElfW (Sym) *sym,
-			 const ElfW (Rela) *reloc, ElfW (Addr) *reloc_addr,
-			 ElfW (Addr) value)
+    elf_machine_fixup_plt (struct link_map *map, lookup_t t,
+			   const ElfW (Sym) * refsym, const ElfW (Sym) * sym,
+			   const ElfW (Rela) * reloc, ElfW (Addr) * reloc_addr,
+			   ElfW (Addr) value)
 {
   return *reloc_addr = value;
 }
@@ -142,8 +142,7 @@ elf_machine_fixup_plt (struct link_map *map, lookup_t t,
 
 static inline void __attribute__ ((always_inline))
 elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
-		  const ElfW (Rela) *reloc,
-		  const ElfW (Sym) *sym,
+		  const ElfW (Rela) * reloc, const ElfW (Sym) * sym,
 		  const struct r_found_version *version,
 		  void *const reloc_addr, int skip_ifunc)
 {
@@ -160,13 +159,14 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
       && __glibc_unlikely (ELFW (ST_TYPE) (sym->st_info) == STT_GNU_IFUNC)
       && __glibc_likely (sym->st_shndx != SHN_UNDEF)
       && __glibc_likely (!skip_ifunc))
-    value = ((ElfW (Addr) (*) (int)) value) (GLRO (dl_hwcap));
+    value = ((ElfW (Addr) (*) (int) ) value) (GLRO (dl_hwcap));
 
   switch (r_type)
     {
 
     case R_LARCH_JUMP_SLOT:
-    case __WORDSIZE == 64 ? R_LARCH_64 : R_LARCH_32:
+    case __WORDSIZE == 64 ? R_LARCH_64:
+    R_LARCH_32:
       *addr_field = value;
       break;
 
@@ -174,40 +174,43 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
       break;
 
 #ifndef RTLD_BOOTSTRAP
-    case __WORDSIZE == 64 ? R_LARCH_TLS_DTPMOD64 : R_LARCH_TLS_DTPMOD32:
+    case __WORDSIZE == 64 ? R_LARCH_TLS_DTPMOD64:
+    R_LARCH_TLS_DTPMOD32:
       *addr_field = sym_map->l_tls_modid;
       break;
 
-    case __WORDSIZE == 64 ? R_LARCH_TLS_DTPREL64 : R_LARCH_TLS_DTPREL32:
+    case __WORDSIZE == 64 ? R_LARCH_TLS_DTPREL64:
+    R_LARCH_TLS_DTPREL32:
       *addr_field = TLS_DTPREL_VALUE (sym) + reloc->r_addend;
       break;
 
-    case __WORDSIZE == 64 ? R_LARCH_TLS_TPREL64 : R_LARCH_TLS_TPREL32:
+    case __WORDSIZE == 64 ? R_LARCH_TLS_TPREL64:
+    R_LARCH_TLS_TPREL32:
       CHECK_STATIC_TLS (map, sym_map);
       *addr_field = TLS_TPREL_VALUE (sym_map, sym) + reloc->r_addend;
       break;
 
     case R_LARCH_COPY:
       {
-	  if (sym == NULL)
-	    /* This can happen in trace mode if an object could not be
-	       found.  */
-	    break;
-	  if (__glibc_unlikely (sym->st_size > refsym->st_size)
-	      || (__glibc_unlikely (sym->st_size < refsym->st_size)
-		&& GLRO(dl_verbose)))
+	if (sym == NULL)
+	  /* This can happen in trace mode if an object could not be
+	     found.  */
+	  break;
+	if (__glibc_unlikely (sym->st_size > refsym->st_size)
+	    || (__glibc_unlikely (sym->st_size < refsym->st_size)
+		&& GLRO (dl_verbose)))
 	  {
 	    const char *strtab;
 
 	    strtab = (const char *) D_PTR (map, l_info[DT_STRTAB]);
 	    _dl_error_printf ("\
 %s: Symbol `%s' has different size in shared object, consider re-linking\n",
-	    rtld_progname ?: "<program name unknown>",
-	    strtab + refsym->st_name);
+			      rtld_progname ?: "<program name unknown>",
+			      strtab + refsym->st_name);
 	  }
-	  memcpy (reloc_addr, (void *) value,
-		  MIN (sym->st_size, refsym->st_size));
-	    break;
+	memcpy (reloc_addr, (void *) value,
+		MIN (sym->st_size, refsym->st_size));
+	break;
       }
 
     case R_LARCH_RELATIVE:
@@ -217,7 +220,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
     case R_LARCH_IRELATIVE:
       value = map->l_addr + reloc->r_addend;
       if (__glibc_likely (!skip_ifunc))
-	value = ((ElfW (Addr) (*) (void)) value) ();
+	value = ((ElfW (Addr) (*) (void) ) value) ();
       *addr_field = value;
       break;
 
@@ -230,7 +233,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 }
 
 static inline void __attribute__ ((always_inline))
-elf_machine_rela_relative (ElfW (Addr) l_addr, const ElfW (Rela) *reloc,
+elf_machine_rela_relative (ElfW (Addr) l_addr, const ElfW (Rela) * reloc,
 			   void *const reloc_addr)
 {
   *(ElfW (Addr) *) reloc_addr = l_addr + reloc->r_addend;
@@ -238,8 +241,8 @@ elf_machine_rela_relative (ElfW (Addr) l_addr, const ElfW (Rela) *reloc,
 
 static inline void __attribute__ ((always_inline))
 elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
-		      ElfW (Addr) l_addr,
-		      const ElfW (Rela) *reloc, int skip_ifunc)
+		      ElfW (Addr) l_addr, const ElfW (Rela) * reloc,
+		      int skip_ifunc)
 {
   ElfW (Addr) *const reloc_addr = (void *) (l_addr + reloc->r_offset);
   const unsigned int r_type = ELFW (R_TYPE) (reloc->r_info);
@@ -270,12 +273,12 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
   /* If using PLTs, fill in the first two entries of .got.plt.  */
   if (l->l_info[DT_JMPREL])
     {
-#if !defined __loongarch_soft_float
+#  if !defined __loongarch_soft_float
       extern void _dl_runtime_resolve_lasx (void) attribute_hidden;
       extern void _dl_runtime_resolve_lsx (void) attribute_hidden;
       extern void _dl_runtime_profile_lasx (void) attribute_hidden;
       extern void _dl_runtime_profile_lsx (void) attribute_hidden;
-#endif
+#  endif
       extern void _dl_runtime_resolve (void) attribute_hidden;
       extern void _dl_runtime_profile (void) attribute_hidden;
 
@@ -287,38 +290,38 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
 	 to intercept the calls to collect information.  In this case we
 	 don't store the address in the GOT so that all future calls also
 	 end in this function.  */
-#ifdef SHARED
+#  ifdef SHARED
       if (profile != 0)
 	{
-# if !defined __loongarch_soft_float
+#    if !defined __loongarch_soft_float
 	  if (SUPPORT_LASX)
-	    gotplt[0] = (ElfW(Addr)) &_dl_runtime_profile_lasx;
+	    gotplt[0] = (ElfW (Addr)) & _dl_runtime_profile_lasx;
 	  else if (SUPPORT_LSX)
-	    gotplt[0] = (ElfW(Addr)) &_dl_runtime_profile_lsx;
+	    gotplt[0] = (ElfW (Addr)) & _dl_runtime_profile_lsx;
 	  else
-# endif
-	    gotplt[0] = (ElfW(Addr)) &_dl_runtime_profile;
+#    endif
+	    gotplt[0] = (ElfW (Addr)) & _dl_runtime_profile;
 
-	  if (GLRO(dl_profile) != NULL
-	      && _dl_name_match_p (GLRO(dl_profile), l))
+	  if (GLRO (dl_profile) != NULL
+	      && _dl_name_match_p (GLRO (dl_profile), l))
 	    /* Say that we really want profiling and the timers are
 	       started.  */
-	    GL(dl_profile_map) = l;
+	    GL (dl_profile_map) = l;
 	}
       else
-#endif
+#  endif
 	{
 	  /* This function will get called to fix up the GOT entry
 	     indicated by the offset on the stack, and then jump to
 	     the resolved address.  */
-#if !defined __loongarch_soft_float
+#  if !defined __loongarch_soft_float
 	  if (SUPPORT_LASX)
-	    gotplt[0] = (ElfW(Addr)) &_dl_runtime_resolve_lasx;
+	    gotplt[0] = (ElfW (Addr)) & _dl_runtime_resolve_lasx;
 	  else if (SUPPORT_LSX)
-	    gotplt[0] = (ElfW(Addr)) &_dl_runtime_resolve_lsx;
+	    gotplt[0] = (ElfW (Addr)) & _dl_runtime_resolve_lsx;
 	  else
-#endif
-	    gotplt[0] = (ElfW(Addr)) &_dl_runtime_resolve;
+#  endif
+	    gotplt[0] = (ElfW (Addr)) & _dl_runtime_resolve;
 	}
       gotplt[1] = (ElfW (Addr)) l;
     }

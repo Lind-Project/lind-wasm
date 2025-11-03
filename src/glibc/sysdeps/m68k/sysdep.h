@@ -25,50 +25,50 @@
    There is currently a bug in gdb which prevents us from specifying
    incomplete stabs information.  Fake some entries here which specify
    the current source file.  */
-# define ENTRY(name)							      \
-  .globl C_SYMBOL_NAME(name);						      \
-  .type C_SYMBOL_NAME(name),@function;					      \
-  .p2align 2;								      \
-  C_LABEL(name)								      \
-  cfi_startproc;							      \
-  CALL_MCOUNT
+#  define ENTRY(name)                                                         \
+    .globl C_SYMBOL_NAME (name);                                              \
+    .type C_SYMBOL_NAME (name), @function;                                    \
+    .p2align 2;                                                               \
+    C_LABEL (name)                                                            \
+    cfi_startproc;                                                            \
+    CALL_MCOUNT
 
-# undef END
-# define END(name)							      \
-  cfi_endproc;								      \
-  .size name,.-name
-
+#  undef END
+#  define END(name)                                                           \
+    cfi_endproc;                                                              \
+    .size name, .- name
 
 /* If compiled for profiling, call `_mcount' at the start of each function.  */
-# ifdef	PROF
+#  ifdef PROF
 /* The mcount code relies on a normal frame pointer being on the stack
    to locate our caller, so push one just for its benefit.  */
-#  define CALL_MCOUNT \
-  move.l %fp, -(%sp);							      \
-  cfi_adjust_cfa_offset (4);  cfi_rel_offset (%a6, 0);			      \
-  move.l %sp, %fp;							      \
-  jbsr JUMPTARGET (_mcount);						      \
-  move.l (%sp)+, %fp;							      \
-  cfi_adjust_cfa_offset (-4); cfi_restore (%a6);
-# else
-#  define CALL_MCOUNT		/* Do nothing.  */
-# endif
+#    define CALL_MCOUNT                                                       \
+      move.l % fp, -(% sp);                                                   \
+      cfi_adjust_cfa_offset (4);                                              \
+      cfi_rel_offset (% a6, 0);                                               \
+      move.l % sp, % fp;                                                      \
+      jbsr JUMPTARGET (_mcount);                                              \
+      move.l (% sp) +, % fp;                                                  \
+      cfi_adjust_cfa_offset (-4);                                             \
+      cfi_restore (% a6);
+#  else
+#    define CALL_MCOUNT /* Do nothing.  */
+#  endif
 
-# define PSEUDO(name, syscall_name, args)				      \
-  .globl __syscall_error;						      \
-  ENTRY (name)								      \
-    DO_CALL (syscall_name, args);					      \
-    jcc JUMPTARGET(__syscall_error)
+#  define PSEUDO(name, syscall_name, args)                                    \
+    .globl __syscall_error;                                                   \
+    ENTRY (name)                                                              \
+    DO_CALL (syscall_name, args);                                             \
+    jcc JUMPTARGET (__syscall_error)
 
-# undef PSEUDO_END
-# define PSEUDO_END(name)						      \
-  END (name)
+#  undef PSEUDO_END
+#  define PSEUDO_END(name) END (name)
 
-# undef JUMPTARGET
-# ifdef PIC
-#  define JUMPTARGET(name)	name##@PLTPC
-# else
-#  define JUMPTARGET(name)	name
-# endif
+#  undef JUMPTARGET
+#  ifdef PIC
+#    define JUMPTARGET(name) name##@PLTPC
+#  else
+#    define JUMPTARGET(name) name
+#  endif
 
-#endif	/* __ASSEMBLER__ */
+#endif /* __ASSEMBLER__ */

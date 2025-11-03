@@ -17,21 +17,20 @@ static int
 do_test (void)
 {
 #if defined _POSIX_CPUTIME && _POSIX_CPUTIME >= 0
-# if _POSIX_CPUTIME == 0
+#  if _POSIX_CPUTIME == 0
   if (sysconf (_SC_CPUTIME) < 0)
     use_clock = 0;
   else
-# endif
+#  endif
     /* See whether we can use the CPU clock.  */
     use_clock = clock_getcpuclockid (0, &cl) == 0;
 #endif
 
-  static const char *pat[] = {
-    ".?.?.?.?.?.?.?Log\\.13",
-    "(.?)(.?)(.?)(.?)(.?)(.?)(.?)Log\\.13",
-    "((((((((((.?))))))))))((((((((((.?))))))))))((((((((((.?))))))))))"
-    "((((((((((.?))))))))))((((((((((.?))))))))))((((((((((.?))))))))))"
-    "((((((((((.?))))))))))Log\\.13" };
+  static const char *pat[]
+      = { ".?.?.?.?.?.?.?Log\\.13", "(.?)(.?)(.?)(.?)(.?)(.?)(.?)Log\\.13",
+	  "((((((((((.?))))))))))((((((((((.?))))))))))((((((((((.?))))))))))"
+	  "((((((((((.?))))))))))((((((((((.?))))))))))((((((((((.?))))))))))"
+	  "((((((((((.?))))))))))Log\\.13" };
 
   int fd = open ("../ChangeLog.old/ChangeLog.14", O_RDONLY);
   if (fd < 0)
@@ -104,8 +103,8 @@ do_test (void)
 			   | (testno == 3 ? RE_NO_SUB : 0));
 
 	    memset (&rpbuf, 0, sizeof (rpbuf));
-	    const char *s = re_compile_pattern (pat[i], strlen (pat[i]),
-						&rpbuf);
+	    const char *s
+		= re_compile_pattern (pat[i], strlen (pat[i]), &rpbuf);
 	    if (s != NULL)
 	      {
 		printf ("\n%s\n", s);
@@ -118,128 +117,126 @@ do_test (void)
 	  }
 
 #if defined _POSIX_CPUTIME && _POSIX_CPUTIME >= 0
-      struct timespec start, stop;
-      if (use_clock)
-	use_clock = clock_gettime (cl, &start) == 0;
+	struct timespec start, stop;
+	if (use_clock)
+	  use_clock = clock_gettime (cl, &start) == 0;
 #endif
 
-      if (testno < 2)
-	{
-	  regmatch_t pmatch[71];
-	  err = regexec (&rbuf, string, 71, pmatch, 0);
-	  if (err == REG_NOMATCH)
-	    {
-	      puts ("\nregexec failed");
-	      return 1;
-	    }
+	if (testno < 2)
+	  {
+	    regmatch_t pmatch[71];
+	    err = regexec (&rbuf, string, 71, pmatch, 0);
+	    if (err == REG_NOMATCH)
+	      {
+		puts ("\nregexec failed");
+		return 1;
+	      }
 
-	  if (testno == 0)
-	    {
-	      if (pmatch[0].rm_eo != pmatch[0].rm_so + 13
-		  || pmatch[0].rm_eo > len
-		  || pmatch[0].rm_so < len - 100
-		  || strncmp (string + pmatch[0].rm_so,
-			      " ChangeLog.13 for earlier changes",
-			      sizeof " ChangeLog.13 for earlier changes" - 1)
-		     != 0)
-		{
-		  puts ("\nregexec without REG_NOSUB did not find the correct match");
-		  return 1;
-		}
+	    if (testno == 0)
+	      {
+		if (pmatch[0].rm_eo != pmatch[0].rm_so + 13
+		    || pmatch[0].rm_eo > len || pmatch[0].rm_so < len - 100
+		    || strncmp (string + pmatch[0].rm_so,
+				" ChangeLog.13 for earlier changes",
+				sizeof " ChangeLog.13 for earlier changes" - 1)
+			   != 0)
+		  {
+		    puts ("\nregexec without REG_NOSUB did not find the "
+			  "correct match");
+		    return 1;
+		  }
 
-	      if (i > 0)
-		for (int j = 0, l = 1; j < 7; ++j)
-		  for (int k = 0; k < (i == 1 ? 1 : 10); ++k, ++l)
-		    if (pmatch[l].rm_so != pmatch[0].rm_so + j
-			|| pmatch[l].rm_eo != pmatch[l].rm_so + 1)
-		      {
-			printf ("\npmatch[%d] incorrect\n", l);
-			return 1;
-		      }
-	    }
-	}
-      else
-	{
-	  struct re_registers regs;
+		if (i > 0)
+		  for (int j = 0, l = 1; j < 7; ++j)
+		    for (int k = 0; k < (i == 1 ? 1 : 10); ++k, ++l)
+		      if (pmatch[l].rm_so != pmatch[0].rm_so + j
+			  || pmatch[l].rm_eo != pmatch[l].rm_so + 1)
+			{
+			  printf ("\npmatch[%d] incorrect\n", l);
+			  return 1;
+			}
+	      }
+	  }
+	else
+	  {
+	    struct re_registers regs;
 
-	  memset (&regs, 0, sizeof (regs));
-	  int match = re_search (&rpbuf, string, len, 0, len,
-				 &regs);
-	  if (match < 0)
-	    {
-	      puts ("\nre_search failed");
-	      return 1;
-	    }
+	    memset (&regs, 0, sizeof (regs));
+	    int match = re_search (&rpbuf, string, len, 0, len, &regs);
+	    if (match < 0)
+	      {
+		puts ("\nre_search failed");
+		return 1;
+	      }
 
-	  if (match + 13 > len
-	      || match < len - 100
-	      || strncmp (string + match,
-			  " ChangeLog.13 for earlier changes",
-			  sizeof " ChangeLog.13 for earlier changes" - 1)
-		  != 0)
-	    {
-	      puts ("\nre_search did not find the correct match");
-	      return 1;
-	    }
+	    if (match + 13 > len || match < len - 100
+		|| strncmp (string + match,
+			    " ChangeLog.13 for earlier changes",
+			    sizeof " ChangeLog.13 for earlier changes" - 1)
+		       != 0)
+	      {
+		puts ("\nre_search did not find the correct match");
+		return 1;
+	      }
 
-	  if (testno == 2)
-	    {
-	      if (regs.num_regs != 2 + (i == 0 ? 0 : i == 1 ? 7 : 70))
-		{
-		  printf ("\nincorrect num_regs %d\n", regs.num_regs);
-		  return 1;
-		}
+	    if (testno == 2)
+	      {
+		if (regs.num_regs != 2 + (i == 0 ? 0 : i == 1 ? 7 : 70))
+		  {
+		    printf ("\nincorrect num_regs %d\n", regs.num_regs);
+		    return 1;
+		  }
 
-	      if (regs.start[0] != match || regs.end[0] != match + 13)
-		{
-		  printf ("\nincorrect regs.{start,end}[0] = { %d, %d}\n",
-			  regs.start[0], regs.end[0]);
-		  return 1;
-		}
+		if (regs.start[0] != match || regs.end[0] != match + 13)
+		  {
+		    printf ("\nincorrect regs.{start,end}[0] = { %d, %d}\n",
+			    regs.start[0], regs.end[0]);
+		    return 1;
+		  }
 
-	      if (regs.start[regs.num_regs - 1] != -1
-		  || regs.end[regs.num_regs - 1] != -1)
-		{
-		  puts ("\nincorrect regs.{start,end}[num_regs - 1]");
-		  return 1;
-		}
+		if (regs.start[regs.num_regs - 1] != -1
+		    || regs.end[regs.num_regs - 1] != -1)
+		  {
+		    puts ("\nincorrect regs.{start,end}[num_regs - 1]");
+		    return 1;
+		  }
 
-	      if (i > 0)
-		for (int j = 0, l = 1; j < 7; ++j)
-		  for (int k = 0; k < (i == 1 ? 1 : 10); ++k, ++l)
-		    if (regs.start[l] != match + j
-			|| regs.end[l] != regs.start[l] + 1)
-		      {
-			printf ("\nregs.{start,end}[%d] incorrect\n", l);
-			return 1;
-		      }
-	    }
-	}
+		if (i > 0)
+		  for (int j = 0, l = 1; j < 7; ++j)
+		    for (int k = 0; k < (i == 1 ? 1 : 10); ++k, ++l)
+		      if (regs.start[l] != match + j
+			  || regs.end[l] != regs.start[l] + 1)
+			{
+			  printf ("\nregs.{start,end}[%d] incorrect\n", l);
+			  return 1;
+			}
+	      }
+	  }
 
 #if defined _POSIX_CPUTIME && _POSIX_CPUTIME >= 0
-      if (use_clock)
-	use_clock = clock_gettime (cl, &stop) == 0;
-      if (use_clock)
-	{
-	  stop.tv_sec -= start.tv_sec;
-	  if (stop.tv_nsec < start.tv_nsec)
-	    {
-	      stop.tv_sec--;
-	      stop.tv_nsec += 1000000000 - start.tv_nsec;
-	    }
-	  else
-	    stop.tv_nsec -= start.tv_nsec;
-	  printf (": %ld.%09lds\n", (long) stop.tv_sec, (long) stop.tv_nsec);
-	}
-      else
+	if (use_clock)
+	  use_clock = clock_gettime (cl, &stop) == 0;
+	if (use_clock)
+	  {
+	    stop.tv_sec -= start.tv_sec;
+	    if (stop.tv_nsec < start.tv_nsec)
+	      {
+		stop.tv_sec--;
+		stop.tv_nsec += 1000000000 - start.tv_nsec;
+	      }
+	    else
+	      stop.tv_nsec -= start.tv_nsec;
+	    printf (": %ld.%09lds\n", (long) stop.tv_sec, (long) stop.tv_nsec);
+	  }
+	else
 #endif
-	putchar ('\n');
+	  putchar ('\n');
 
-      if (testno < 2)
-	regfree (&rbuf);
-      else
-	regfree (&rpbuf);
-    }
+	if (testno < 2)
+	  regfree (&rbuf);
+	else
+	  regfree (&rpbuf);
+      }
 
   return 0;
 }

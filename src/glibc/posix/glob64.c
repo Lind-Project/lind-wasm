@@ -21,7 +21,7 @@
 #include <errno.h>
 
 #ifdef GLOB_ATTRIBUTE
-# define GLOB_ATTRIBUTE
+#  define GLOB_ATTRIBUTE
 #endif
 
 /* Do glob searching for PATTERN, placing results in PGLOB.
@@ -32,10 +32,9 @@
    `glob' returns GLOB_ABORTED; if it returns zero, the error is ignored.
    If memory cannot be allocated for PGLOB, GLOB_NOSPACE is returned.
    Otherwise, `glob' returns zero.  */
-int
-GLOB_ATTRIBUTE
-glob64 (const char *pattern, int flags,
-	int (*errfunc) (const char *, int), glob64_t *pglob)
+int GLOB_ATTRIBUTE
+glob64 (const char *pattern, int flags, int (*errfunc) (const char *, int),
+	glob64_t *pglob)
 {
   if (pattern == NULL || pglob == NULL || (flags & ~__GLOB_FLAGS) != 0)
     {
@@ -48,4 +47,4 @@ glob64 (const char *pattern, int flags,
 }
 libc_hidden_def (glob64)
 
-stub_warning (glob64)
+    stub_warning (glob64)

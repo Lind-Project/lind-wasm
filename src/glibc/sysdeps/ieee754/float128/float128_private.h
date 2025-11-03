@@ -40,30 +40,30 @@
 #undef SET_LDOUBLE_LSW64
 #undef SET_LDOUBLE_MSW64
 #undef SET_LDOUBLE_WORDS64
-#define GET_LDOUBLE_LSW64(x,y) GET_FLOAT128_LSW64 (x, y)
-#define GET_LDOUBLE_MSW64(x,y) GET_FLOAT128_MSW64 (x, y)
-#define GET_LDOUBLE_WORDS64(x,y,z) GET_FLOAT128_WORDS64 (x, y, z)
-#define SET_LDOUBLE_LSW64(x,y) SET_FLOAT128_LSW64 (x, y)
-#define SET_LDOUBLE_MSW64(x,y) SET_FLOAT128_MSW64 (x, y)
-#define SET_LDOUBLE_WORDS64(x,y,z) SET_FLOAT128_WORDS64 (x, y, z)
+#define GET_LDOUBLE_LSW64(x, y) GET_FLOAT128_LSW64 (x, y)
+#define GET_LDOUBLE_MSW64(x, y) GET_FLOAT128_MSW64 (x, y)
+#define GET_LDOUBLE_WORDS64(x, y, z) GET_FLOAT128_WORDS64 (x, y, z)
+#define SET_LDOUBLE_LSW64(x, y) SET_FLOAT128_LSW64 (x, y)
+#define SET_LDOUBLE_MSW64(x, y) SET_FLOAT128_MSW64 (x, y)
+#define SET_LDOUBLE_WORDS64(x, y, z) SET_FLOAT128_WORDS64 (x, y, z)
 
 #undef IEEE854_LONG_DOUBLE_BIAS
 #define IEEE854_LONG_DOUBLE_BIAS IEEE854_FLOAT128_BIAS
 
 #ifdef SET_RESTORE_ROUNDF128
-# undef SET_RESTORE_ROUNDL
-# define SET_RESTORE_ROUNDL(RM) SET_RESTORE_ROUNDF128 (RM)
+#  undef SET_RESTORE_ROUNDL
+#  define SET_RESTORE_ROUNDL(RM) SET_RESTORE_ROUNDF128 (RM)
 #endif
 
 #ifdef libc_feholdexcept_setroundf128
-# undef libc_feholdexcept_setroundl
-# define libc_feholdexcept_setroundl(ENV, RM)	\
-  libc_feholdexcept_setroundf128 (ENV, RM)
+#  undef libc_feholdexcept_setroundl
+#  define libc_feholdexcept_setroundl(ENV, RM)                                \
+    libc_feholdexcept_setroundf128 (ENV, RM)
 #endif
 
 #ifdef libc_feupdateenv_testf128
-# undef libc_feupdateenv_testl
-# define libc_feupdateenv_testl(ENV, EX) libc_feupdateenv_testf128 (ENV, EX)
+#  undef libc_feupdateenv_testl
+#  define libc_feupdateenv_testl(ENV, EX) libc_feupdateenv_testf128 (ENV, EX)
 #endif
 
 /* misc macros from the header below.  */
@@ -72,7 +72,6 @@
 #undef FIX_LDBL_LLONG_CONVERT_OVERFLOW
 #define FIX_LDBL_LONG_CONVERT_OVERFLOW FIX_FLT128_LONG_CONVERT_OVERFLOW
 #define FIX_LDBL_LLONG_CONVERT_OVERFLOW FIX_FLT128_LLONG_CONVERT_OVERFLOW
-
 
 /* float.h constants.  */
 #include <float.h>
@@ -96,7 +95,6 @@
 #define LDBL_MIN_10_EXP FLT128_MIN_10_EXP
 #define LDBL_MIN_EXP FLT128_MIN_EXP
 #define LDBL_TRUE_MIN FLT128_TRUE_MIN
-
 
 /* math.h GNU constants.  */
 #undef M_El
@@ -126,12 +124,10 @@
 #define M_SQRT2l M_SQRT2f128
 #define M_SQRT1_2l M_SQRT1_2f128
 
-
 #include <libm-alias-ldouble.h>
 #include <libm-alias-float128.h>
 #undef libm_alias_ldouble_r
 #define libm_alias_ldouble_r(from, to, r) libm_alias_float128_r (from, to, r)
-
 
 #include <math/math-narrow.h>
 #undef libm_alias_float_ldouble
@@ -139,7 +135,7 @@
 #undef libm_alias_double_ldouble
 #define libm_alias_double_ldouble(func) libm_alias_float64_float128 (func)
 #undef libm_alias_ldouble_narrow
-#define libm_alias_ldouble_narrow(from, to)	\
+#define libm_alias_ldouble_narrow(from, to)                                   \
   libm_alias_float128_narrow (from, to)
 
 #include <math-use-builtins.h>
@@ -200,7 +196,6 @@
 #define __ieee754_y1l __ieee754_y1f128
 #define __ieee754_ynl __ieee754_ynf128
 
-
 /* finite math entry points.  */
 #define __acoshl_finite __acoshf128_finite
 #define __acosl_finite __acosf128_finite
@@ -228,7 +223,6 @@
 #define __y0l_finite __y0f128_finite
 #define __y1l_finite __y1f128_finite
 #define __ynl_finite __ynf128_finite
-
 
 /* internal function names.  */
 #define __asinhl __asinhf128
@@ -330,7 +324,6 @@
 #define __nexttowardl __nexttowardf128_do_not_use
 #define nexttowardl nexttowardf128_do_not_use
 
-
 /* public entry points.  */
 #define asinhl asinhf128
 #define atanl atanf128
@@ -381,7 +374,6 @@
 #define totalordermagl totalordermagf128
 #define truncl truncf128
 
-
 /* misc internal renames.  */
 #define __builtin_fmal __builtin_fmaf128
 #define __expl_table __expf128_table
@@ -425,10 +417,10 @@ mul_splitf128 (_Float128 *hi, _Float128 *lo, _Float128 x, _Float128 y)
 #else
   /* Apply Dekker's algorithm.  */
   *hi = x * y;
-# define C ((1LL << (FLT128_MANT_DIG + 1) / 2) + 1)
+#  define C ((1LL << (FLT128_MANT_DIG + 1) / 2) + 1)
   _Float128 x1 = x * C;
   _Float128 y1 = y * C;
-# undef C
+#  undef C
   x1 = (x - x1) + x1;
   y1 = (y - y1) + y1;
   _Float128 x2 = x - x1;

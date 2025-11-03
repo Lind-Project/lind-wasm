@@ -34,40 +34,26 @@
 #include <wchar.h>
 
 /* Locales to test.  */
-static const char locales[][17] =
-  {
-    "C",
-    "C.UTF-8",
-    "en_US.UTF-8",
-    "de_DE.ISO-8859-1",
-  };
+static const char locales[][17] = {
+  "C",
+  "C.UTF-8",
+  "en_US.UTF-8",
+  "de_DE.ISO-8859-1",
+};
 
 /* Syntax options.  Will be combined with other flags.  */
-static const reg_syntax_t syntaxes[] =
-  {
-    RE_SYNTAX_EMACS,
-    RE_SYNTAX_AWK,
-    RE_SYNTAX_GNU_AWK,
-    RE_SYNTAX_POSIX_AWK,
-    RE_SYNTAX_GREP,
-    RE_SYNTAX_EGREP,
-    RE_SYNTAX_POSIX_EGREP,
-    RE_SYNTAX_POSIX_BASIC,
-    RE_SYNTAX_POSIX_EXTENDED,
-    RE_SYNTAX_POSIX_MINIMAL_EXTENDED,
-  };
+static const reg_syntax_t syntaxes[] = {
+  RE_SYNTAX_EMACS,	    RE_SYNTAX_AWK,
+  RE_SYNTAX_GNU_AWK,	    RE_SYNTAX_POSIX_AWK,
+  RE_SYNTAX_GREP,	    RE_SYNTAX_EGREP,
+  RE_SYNTAX_POSIX_EGREP,    RE_SYNTAX_POSIX_BASIC,
+  RE_SYNTAX_POSIX_EXTENDED, RE_SYNTAX_POSIX_MINIMAL_EXTENDED,
+};
 
 /* Trailing characters placed after the initial character.  */
-static const char trailing_strings[][4] =
-  {
-    "",
-    "[",
-    "\\",
-    "[\\",
-    "(",
-    "(\\",
-    "\\(",
-  };
+static const char trailing_strings[][4] = {
+  "", "[", "\\", "[\\", "(", "(\\", "\\(",
+};
 
 static int
 do_test (void)
@@ -78,7 +64,7 @@ do_test (void)
   /* Allocation used to detect over-reading by the regular expression
      compiler.  */
   struct support_next_to_fault ntf
-    = support_next_to_fault_allocate (sizeof (buffer));
+      = support_next_to_fault_allocate (sizeof (buffer));
 
   /* Arbitrary Unicode codepoint at which we stop generating
      characters.  We do not probe the whole range because that would
@@ -87,101 +73,100 @@ do_test (void)
   static const wchar_t last_character = 0xfff;
 
   for (size_t locale_idx = 0; locale_idx < array_length (locales);
-       ++ locale_idx)
+       ++locale_idx)
     {
       if (setlocale (LC_ALL, locales[locale_idx]) == NULL)
-        {
-          support_record_failure ();
-          printf ("error: setlocale (\"%s\"): %m", locales[locale_idx]);
-          continue;
-        }
+	{
+	  support_record_failure ();
+	  printf ("error: setlocale (\"%s\"): %m", locales[locale_idx]);
+	  continue;
+	}
       if (test_verbose > 0)
-        printf ("info: testing locale \"%s\"\n", locales[locale_idx]);
+	printf ("info: testing locale \"%s\"\n", locales[locale_idx]);
 
       for (wchar_t wc = 0; wc <= last_character; ++wc)
-        {
-          char *after_wc;
-          if (wc == 0)
-            {
-              /* wcrtomb treats L'\0' in a special way.  */
-              *buffer = '\0';
-              after_wc = &buffer[1];
-            }
-          else
-            {
-              mbstate_t ps = { };
-              size_t ret = wcrtomb (buffer, wc, &ps);
-              if (ret == (size_t) -1)
-                {
-                  /* EILSEQ means that the target character set
-                     cannot encode the character.  */
-                  if (errno != EILSEQ)
-                    {
-                      support_record_failure ();
-                      printf ("error: wcrtomb (0x%x) failed: %m\n",
-                              (unsigned) wc);
-                    }
-                  continue;
-                }
-              TEST_VERIFY_EXIT (ret != 0);
-              after_wc = &buffer[ret];
-            }
+	{
+	  char *after_wc;
+	  if (wc == 0)
+	    {
+	      /* wcrtomb treats L'\0' in a special way.  */
+	      *buffer = '\0';
+	      after_wc = &buffer[1];
+	    }
+	  else
+	    {
+	      mbstate_t ps = {};
+	      size_t ret = wcrtomb (buffer, wc, &ps);
+	      if (ret == (size_t) -1)
+		{
+		  /* EILSEQ means that the target character set
+		     cannot encode the character.  */
+		  if (errno != EILSEQ)
+		    {
+		      support_record_failure ();
+		      printf ("error: wcrtomb (0x%x) failed: %m\n",
+			      (unsigned) wc);
+		    }
+		  continue;
+		}
+	      TEST_VERIFY_EXIT (ret != 0);
+	      after_wc = &buffer[ret];
+	    }
 
-          for (size_t trailing_idx = 0;
-               trailing_idx < array_length (trailing_strings);
-               ++trailing_idx)
-            {
-              char *after_trailing
-                = stpcpy (after_wc, trailing_strings[trailing_idx]);
+	  for (size_t trailing_idx = 0;
+	       trailing_idx < array_length (trailing_strings); ++trailing_idx)
+	    {
+	      char *after_trailing
+		  = stpcpy (after_wc, trailing_strings[trailing_idx]);
 
-              for (int do_nul = 0; do_nul < 2; ++do_nul)
-                {
-                  char *after_nul;
-                  if (do_nul)
-                    {
-                      *after_trailing = '\0';
-                      after_nul = &after_trailing[1];
-                    }
-                  else
-                    after_nul = after_trailing;
+	      for (int do_nul = 0; do_nul < 2; ++do_nul)
+		{
+		  char *after_nul;
+		  if (do_nul)
+		    {
+		      *after_trailing = '\0';
+		      after_nul = &after_trailing[1];
+		    }
+		  else
+		    after_nul = after_trailing;
 
-                  size_t length = after_nul - buffer;
+		  size_t length = after_nul - buffer;
 
-                  /* Make sure that the faulting region starts
-                     after the used portion of the buffer.  */
-                  char *ntf_start = ntf.buffer + sizeof (buffer) - length;
-                  memcpy (ntf_start, buffer, length);
+		  /* Make sure that the faulting region starts
+		     after the used portion of the buffer.  */
+		  char *ntf_start = ntf.buffer + sizeof (buffer) - length;
+		  memcpy (ntf_start, buffer, length);
 
-                  for (const reg_syntax_t *psyntax = syntaxes;
-                       psyntax < array_end (syntaxes); ++psyntax)
-                    for (int do_icase = 0; do_icase < 2; ++do_icase)
-                      {
-                        re_syntax_options = *psyntax;
-                        if (do_icase)
-                          re_syntax_options |= RE_ICASE;
+		  for (const reg_syntax_t *psyntax = syntaxes;
+		       psyntax < array_end (syntaxes); ++psyntax)
+		    for (int do_icase = 0; do_icase < 2; ++do_icase)
+		      {
+			re_syntax_options = *psyntax;
+			if (do_icase)
+			  re_syntax_options |= RE_ICASE;
 
-                        regex_t reg;
-                        memset (&reg, 0, sizeof (reg));
-                        const char *msg = re_compile_pattern
-                          (ntf_start, length, &reg);
-                        if (msg != NULL)
-                          {
-                            if (test_verbose > 0)
-                              {
-                                char *quoted = support_quote_blob
-                                  (buffer, length);
-                                printf ("info: compilation failed for pattern"
-                                        " \"%s\", syntax 0x%lx: %s\n",
-                                        quoted, re_syntax_options, msg);
-                                free (quoted);
-                              }
-                          }
-                        else
-                          regfree (&reg);
-                      }
-                }
-            }
-        }
+			regex_t reg;
+			memset (&reg, 0, sizeof (reg));
+			const char *msg
+			    = re_compile_pattern (ntf_start, length, &reg);
+			if (msg != NULL)
+			  {
+			    if (test_verbose > 0)
+			      {
+				char *quoted
+				    = support_quote_blob (buffer, length);
+				printf ("info: compilation failed for pattern"
+					" \"%s\", syntax 0x%lx: %s\n",
+					quoted, re_syntax_options, msg);
+				free (quoted);
+			      }
+			  }
+			else
+			  regfree (&reg);
+		      }
+		}
+	    }
+	}
     }
 
   support_next_to_fault_free (&ntf);

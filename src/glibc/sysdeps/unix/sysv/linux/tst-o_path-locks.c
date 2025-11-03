@@ -38,7 +38,9 @@ static void
 subprocess (void *closure)
 {
   int fd = xopen (path, O_RDWR, 0);
-  struct flock64 lock = { .l_type = F_WRLCK, };
+  struct flock64 lock = {
+    .l_type = F_WRLCK,
+  };
   int ret = fcntl64 (fd, F_SETLK, &lock);
   if (ret == 0)
     *shared_errno = 0;
@@ -75,7 +77,9 @@ do_test (void)
   /* The file is not locked initially.  */
   TEST_VERIFY (!probe_lock ());
 
-  struct flock64 lock = { .l_type = F_WRLCK, };
+  struct flock64 lock = {
+    .l_type = F_WRLCK,
+  };
   TEST_COMPARE (fcntl64 (fd, F_SETLK, &lock), 0);
 
   /* The lock has been acquired.  */

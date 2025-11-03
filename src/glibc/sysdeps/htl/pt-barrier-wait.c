@@ -36,15 +36,14 @@ pthread_barrier_wait (pthread_barrier_t *barrier)
 	  struct __pthread *wakeup;
 	  unsigned n = 0;
 
-	  __pthread_queue_iterate (barrier->__queue, wakeup)
-	    n++;
+	  __pthread_queue_iterate (barrier->__queue, wakeup) n++;
 
 	  {
 	    struct __pthread *wakeups[n];
 	    unsigned i = 0;
 
-	    __pthread_dequeuing_iterate (barrier->__queue, wakeup)
-	      wakeups[i++] = wakeup;
+	    __pthread_dequeuing_iterate (barrier->__queue, wakeup) wakeups[i++]
+		= wakeup;
 
 	    barrier->__queue = NULL;
 	    __pthread_spin_unlock (&barrier->__lock);

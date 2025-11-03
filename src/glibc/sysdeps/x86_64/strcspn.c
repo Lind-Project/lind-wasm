@@ -19,9 +19,9 @@
 #include <isa-level.h>
 
 #if MINIMUM_X86_ISA_LEVEL == 1
-#include <string/strcspn.c>
+#  include <string/strcspn.c>
 #else
-#define STRCSPN	strcspn
-#include "multiarch/strcspn-sse4.c"
+#  define STRCSPN strcspn
+#  include "multiarch/strcspn-sse4.c"
 libc_hidden_builtin_def (strcspn)
 #endif

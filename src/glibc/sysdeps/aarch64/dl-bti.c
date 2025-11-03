@@ -23,7 +23,7 @@
 
 /* See elf/dl-load.h.  */
 #ifndef MAP_COPY
-# define MAP_COPY (MAP_PRIVATE | MAP_DENYWRITE)
+#  define MAP_COPY (MAP_PRIVATE | MAP_DENYWRITE)
 #endif
 
 /* Enable BTI protection for MAP.  */
@@ -31,8 +31,8 @@
 void
 _dl_bti_protect (struct link_map *map, int fd)
 {
-  const size_t pagesz = GLRO(dl_pagesize);
-  const ElfW(Phdr) *phdr;
+  const size_t pagesz = GLRO (dl_pagesize);
+  const ElfW (Phdr) * phdr;
 
   for (phdr = map->l_phdr; phdr < &map->l_phdr[map->l_phnum]; ++phdr)
     if (phdr->p_type == PT_LOAD && (phdr->p_flags & PF_X))
@@ -53,32 +53,31 @@ _dl_bti_protect (struct link_map *map, int fd)
 	  /* Ignore failures for kernel mapped binaries.  */
 	  __mprotect (start, len, prot);
 	else
-	  map->l_mach.bti_fail = __mmap (start, len, prot,
-					 MAP_FIXED|MAP_COPY|MAP_FILE,
-					 fd, off) == MAP_FAILED;
+	  map->l_mach.bti_fail
+	      = __mmap (start, len, prot, MAP_FIXED | MAP_COPY | MAP_FILE, fd,
+			off)
+		== MAP_FAILED;
       }
 }
-
 
 static void
 bti_failed (struct link_map *l, const char *program)
 {
   if (program)
-    _dl_fatal_printf ("%s: %s: failed to turn on BTI protection\n",
-		      program, l->l_name);
+    _dl_fatal_printf ("%s: %s: failed to turn on BTI protection\n", program,
+		      l->l_name);
   else
     /* Note: the errno value is not available any more.  */
     _dl_signal_error (0, l->l_name, "dlopen",
-		      N_("failed to turn on BTI protection"));
+		      N_ ("failed to turn on BTI protection"));
 }
-
 
 /* Enable BTI for L and its dependencies.  */
 
 void
 _dl_bti_check (struct link_map *l, const char *program)
 {
-  if (!GLRO(dl_aarch64_cpu_features).bti)
+  if (!GLRO (dl_aarch64_cpu_features).bti)
     return;
 
   if (l->l_mach.bti_fail)

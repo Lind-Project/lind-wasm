@@ -17,22 +17,22 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _AARCH64_LIBC_MTAG_H
-#define _AARCH64_LIBC_MTAG_H 1
+#  define _AARCH64_LIBC_MTAG_H 1
 
-#ifndef USE_MTAG
+#  ifndef USE_MTAG
 /* Generic bindings for systems that do not support memory tagging.  */
-#include_next "libc-mtag.h"
-#else
+#    include_next "libc-mtag.h"
+#  else
 
 /* Used to ensure additional alignment when objects need to have distinct
    tags.  */
-#define __MTAG_GRANULE_SIZE 16
+#    define __MTAG_GRANULE_SIZE 16
 
 /* Non-zero if memory obtained via morecore (sbrk) is not tagged.  */
-#define __MTAG_SBRK_UNTAGGED 1
+#    define __MTAG_SBRK_UNTAGGED 1
 
 /* Extra flags to pass to mmap to get tagged pages.  */
-#define __MTAG_MMAP_FLAGS PROT_MTE
+#    define __MTAG_MMAP_FLAGS PROT_MTE
 
 /* Set the tags for a region of memory, which must have size and alignment
    that are multiples of __MTAG_GRANULE_SIZE.  Size cannot be zero.  */
@@ -47,7 +47,7 @@ static __always_inline void *
 __libc_mtag_address_get_tag (void *p)
 {
   register void *x0 asm ("x0") = p;
-  asm (".inst 0xd9600000 /* ldg x0, [x0] */" : "+r" (x0));
+  asm (".inst 0xd9600000 /* ldg x0, [x0] */" : "+r"(x0));
   return x0;
 }
 
@@ -60,10 +60,11 @@ __libc_mtag_new_tag (void *p)
   register unsigned long x1 asm ("x1");
   /* Guarantee that the new tag is not the same as now.  */
   asm (".inst 0x9adf1401 /* gmi x1, x0, xzr */\n"
-       ".inst 0x9ac11000 /* irg x0, x0, x1 */" : "+r" (x0), "=r" (x1));
+       ".inst 0x9ac11000 /* irg x0, x0, x1 */"
+       : "+r"(x0), "=r"(x1));
   return x0;
 }
 
-#endif /* USE_MTAG */
+#  endif /* USE_MTAG */
 
 #endif /* _AARCH64_LIBC_MTAG_H */

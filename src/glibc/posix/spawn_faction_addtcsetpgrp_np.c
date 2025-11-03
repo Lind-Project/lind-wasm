@@ -22,8 +22,8 @@
 #include <spawn_int.h>
 
 int
-__posix_spawn_file_actions_addtcsetpgrp_np (posix_spawn_file_actions_t
-					    *file_actions, int tcfd)
+__posix_spawn_file_actions_addtcsetpgrp_np (
+    posix_spawn_file_actions_t *file_actions, int tcfd)
 {
   struct __spawn_action *rec;
 

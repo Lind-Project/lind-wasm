@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef __asm_reassociation_barrier
-# error "__asm_reassociation_barrier should never already be defined."
+#  error "__asm_reassociation_barrier should never already be defined."
 #endif
 
 #define __asm_reassociation_barrier __asm__

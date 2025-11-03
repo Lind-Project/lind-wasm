@@ -36,7 +36,7 @@ static pthread_cond_t cond;
 static pthread_t threads[THREADS_NUM];
 static int pending = 0;
 
-typedef void * (*threadfunc) (void *);
+typedef void *(*threadfunc) (void *);
 
 void *
 thread_fun_timed (void *arg)
@@ -50,7 +50,7 @@ thread_fun_timed (void *arg)
     {
       rv = pthread_mutex_lock (&mutex);
       if (rv)
-        {
+	{
 	  printf ("pthread_mutex_lock: %s(%d)\n", strerror (rv), rv);
 	  *ret = 1;
 	  goto out;
@@ -59,13 +59,13 @@ thread_fun_timed (void *arg)
       while (!pending)
 	{
 	  struct timespec ts;
-	  clock_gettime(CLOCK_REALTIME, &ts);
+	  clock_gettime (CLOCK_REALTIME, &ts);
 	  ts.tv_sec += 20;
 	  rv = pthread_cond_timedwait (&cond, &mutex, &ts);
 
 	  /* There should be no timeout either.  */
 	  if (rv)
-            {
+	    {
 	      printf ("pthread_cond_wait: %s(%d)\n", strerror (rv), rv);
 	      *ret = 1;
 	      goto out;
@@ -76,7 +76,7 @@ thread_fun_timed (void *arg)
 
       rv = pthread_mutex_unlock (&mutex);
       if (rv)
-        {
+	{
 	  printf ("pthread_mutex_unlock: %s(%d)\n", strerror (rv), rv);
 	  *ret = 1;
 	  goto out;
@@ -101,7 +101,7 @@ thread_fun (void *arg)
     {
       rv = pthread_mutex_lock (&mutex);
       if (rv)
-        {
+	{
 	  printf ("pthread_mutex_lock: %s(%d)\n", strerror (rv), rv);
 	  *ret = 1;
 	  goto out;
@@ -112,7 +112,7 @@ thread_fun (void *arg)
 	  rv = pthread_cond_wait (&cond, &mutex);
 
 	  if (rv)
-            {
+	    {
 	      printf ("pthread_cond_wait: %s(%d)\n", strerror (rv), rv);
 	      *ret = 1;
 	      goto out;
@@ -123,7 +123,7 @@ thread_fun (void *arg)
 
       rv = pthread_mutex_unlock (&mutex);
       if (rv)
-        {
+	{
 	  printf ("pthread_mutex_unlock: %s(%d)\n", strerror (rv), rv);
 	  *ret = 1;
 	  goto out;
@@ -179,20 +179,20 @@ do_test_wait (threadfunc f)
       retval[i] = i;
       rv = pthread_create (&threads[i], NULL, f, &retval[i]);
       if (rv)
-        {
-          printf ("pthread_create: %s(%d)\n", strerror (rv), rv);
-          return 1;
-        }
+	{
+	  printf ("pthread_create: %s(%d)\n", strerror (rv), rv);
+	  return 1;
+	}
     }
 
   for (; counter < MAXITER; counter++)
     {
       rv = pthread_mutex_lock (&mutex);
       if (rv)
-        {
-          printf ("pthread_mutex_lock: %s(%d)\n", strerror (rv), rv);
-          return 1;
-        }
+	{
+	  printf ("pthread_mutex_lock: %s(%d)\n", strerror (rv), rv);
+	  return 1;
+	}
 
       if (!(counter % 100))
 	printf ("counter: %d\n", counter);
@@ -200,17 +200,17 @@ do_test_wait (threadfunc f)
 
       rv = pthread_cond_signal (&cond);
       if (rv)
-        {
-          printf ("pthread_cond_signal: %s(%d)\n", strerror (rv), rv);
-          return 1;
-        }
+	{
+	  printf ("pthread_cond_signal: %s(%d)\n", strerror (rv), rv);
+	  return 1;
+	}
 
       rv = pthread_mutex_unlock (&mutex);
       if (rv)
-        {
-          printf ("pthread_mutex_unlock: %s(%d)\n", strerror (rv), rv);
-          return 1;
-        }
+	{
+	  printf ("pthread_mutex_unlock: %s(%d)\n", strerror (rv), rv);
+	  return 1;
+	}
     }
 
   for (i = 0; i < THREADS_NUM; i++)
@@ -218,12 +218,12 @@ do_test_wait (threadfunc f)
       void *ret;
       rv = pthread_join (threads[i], &ret);
       if (rv)
-        {
-          printf ("pthread_join: %s(%d)\n", strerror (rv), rv);
-          return 1;
-        }
-      if (ret && *(int *)ret)
-        {
+	{
+	  printf ("pthread_join: %s(%d)\n", strerror (rv), rv);
+	  return 1;
+	}
+      if (ret && *(int *) ret)
+	{
 	  printf ("Thread %d returned with an error\n", i);
 	  return 1;
 	}

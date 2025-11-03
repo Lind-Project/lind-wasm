@@ -16,9 +16,9 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# include <string.h>
-# define strcasecmp __strcasecmp_ppc
+#if IS_IN(libc)
+#  include <string.h>
+#  define strcasecmp __strcasecmp_ppc
 
 extern __typeof (__strcasecmp) __strcasecmp_ppc attribute_hidden;
 extern __typeof (__strcasecmp) __strcasecmp_power7 attribute_hidden;
@@ -27,15 +27,14 @@ extern __typeof (__strcasecmp) __strcasecmp_power7 attribute_hidden;
 #include <string/strcasecmp.c>
 #undef strcasecmp
 
-#if IS_IN (libc)
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if IS_IN(libc)
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (__strcasecmp) __libc_strcasecmp;
-libc_ifunc (__libc_strcasecmp,
-	    (hwcap & PPC_FEATURE_HAS_VSX)
-            ? __strcasecmp_power7
-            : __strcasecmp_ppc);
+libc_ifunc (__libc_strcasecmp, (hwcap & PPC_FEATURE_HAS_VSX)
+				   ? __strcasecmp_power7
+				   : __strcasecmp_ppc);
 
 weak_alias (__libc_strcasecmp, strcasecmp)
 #endif

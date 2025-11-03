@@ -19,25 +19,23 @@
 #include <ifunc-stpncpy.h>
 
 #if HAVE_STPNCPY_IFUNC
-# define stpncpy __redirect_stpncpy
-# define __stpncpy __redirect___stpncpy
-# include <string.h>
-# undef stpncpy
-# undef __stpncpy
-# include <ifunc-resolve.h>
+#  define stpncpy __redirect_stpncpy
+#  define __stpncpy __redirect___stpncpy
+#  include <string.h>
+#  undef stpncpy
+#  undef __stpncpy
+#  include <ifunc-resolve.h>
 
-# if HAVE_STPNCPY_C
+#  if HAVE_STPNCPY_C
 extern __typeof (__redirect_stpncpy) STPNCPY_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_STPNCPY_Z13
+#  if HAVE_STPNCPY_Z13
 extern __typeof (__redirect_stpncpy) STPNCPY_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect___stpncpy, __stpncpy,
 		      (HAVE_STPNCPY_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? STPNCPY_Z13
-		      : STPNCPY_DEFAULT
-		      )
-weak_alias (__stpncpy, stpncpy)
+			  ? STPNCPY_Z13
+			  : STPNCPY_DEFAULT) weak_alias (__stpncpy, stpncpy)
 #endif

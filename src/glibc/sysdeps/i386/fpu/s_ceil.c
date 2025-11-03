@@ -44,7 +44,7 @@ __ceilf (float x)
 	{
 	  i = (0x007fffff) >> j0;
 	  if ((i0 & i) == 0)
-	    return x;		/* x is integral  */
+	    return x; /* x is integral  */
 	  if (i0 > 0)
 	    i0 += (0x00800000) >> j0;
 	  i0 &= (~i);
@@ -53,9 +53,9 @@ __ceilf (float x)
   else
     {
       if (__glibc_unlikely (j0 == 0x80))
-	return x + x;		/* inf or NaN  */
+	return x + x; /* inf or NaN  */
       else
-	return x;		/* x is integral  */
+	return x; /* x is integral  */
     }
   SET_FLOAT_WORD (x, i0);
   return x;
@@ -64,4 +64,3 @@ __ceilf (float x)
 #ifndef __ceilf
 libm_alias_float (__ceil, ceil)
 #endif
-

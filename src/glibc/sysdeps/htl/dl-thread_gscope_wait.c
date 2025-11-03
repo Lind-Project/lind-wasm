@@ -28,7 +28,7 @@ thread_gscope_flag (struct __pthread *t)
 #elif TLS_DTV_AT_TP
   return &((tcbprehead_t *) t->tcb - 1)->gscope_flag;
 #else
-# error "Either TLS_TCB_AT_TP or TLS_DTV_AT_TP must be defined"
+#  error "Either TLS_TCB_AT_TP or TLS_DTV_AT_TP must be defined"
 #endif
 }
 
@@ -46,20 +46,19 @@ __thread_gscope_wait (void)
     {
       t = GL (dl_pthread_threads[i]);
       if (t == NULL || *thread_gscope_flag (t) == THREAD_GSCOPE_FLAG_UNUSED)
-        continue;
+	continue;
 
       gscope_flagp = thread_gscope_flag (t);
 
       /* We have to wait until this thread is done with the global
-         scope.  First tell the thread that we are waiting and
-         possibly have to be woken.  */
-      if (atomic_compare_and_exchange_bool_acq (gscope_flagp,
-                                                THREAD_GSCOPE_FLAG_WAIT,
-                                                THREAD_GSCOPE_FLAG_USED))
-        continue;
+	 scope.  First tell the thread that we are waiting and
+	 possibly have to be woken.  */
+      if (atomic_compare_and_exchange_bool_acq (
+	      gscope_flagp, THREAD_GSCOPE_FLAG_WAIT, THREAD_GSCOPE_FLAG_USED))
+	continue;
 
       do
-        lll_wait (gscope_flagp, THREAD_GSCOPE_FLAG_WAIT, LLL_PRIVATE);
+	lll_wait (gscope_flagp, THREAD_GSCOPE_FLAG_WAIT, LLL_PRIVATE);
       while (*gscope_flagp == THREAD_GSCOPE_FLAG_WAIT);
     }
 

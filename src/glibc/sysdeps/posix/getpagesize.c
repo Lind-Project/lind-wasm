@@ -23,5 +23,4 @@ __getpagesize (void)
 {
   return __sysconf (_SC_PAGESIZE);
 }
-libc_hidden_def (__getpagesize)
-weak_alias (__getpagesize, getpagesize)
+libc_hidden_def (__getpagesize) weak_alias (__getpagesize, getpagesize)

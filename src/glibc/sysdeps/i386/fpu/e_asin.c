@@ -38,132 +38,218 @@
 #include <libm-alias-finite.h>
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
 /* asin with max ULP of ~0.516 based on random sampling.  */
-double
-SECTION
-__ieee754_asin(double x){
-  double x2,xx,res1,p,t,res,r,cor,cc,y,c,z;
-  mynumber u,v;
-  int4 k,m,n;
+double SECTION
+__ieee754_asin (double x)
+{
+  double x2, xx, res1, p, t, res, r, cor, cc, y, c, z;
+  mynumber u, v;
+  int4 k, m, n;
 
   u.x = x;
   m = u.i[HIGH_HALF];
-  k = 0x7fffffff&m;              /* no sign */
+  k = 0x7fffffff & m; /* no sign */
 
   if (k < 0x3e500000)
     {
       math_check_force_underflow (x);
-      return x;  /* for x->0 => sin(x)=x */
+      return x; /* for x->0 => sin(x)=x */
     }
   /*----------------------2^-26 <= |x| < 2^ -3    -----------------*/
-  else
-  if (k < 0x3fc00000) {
-    x2 = x*x;
-    t = (((((f6*x2 + f5)*x2 + f4)*x2 + f3)*x2 + f2)*x2 + f1)*(x2*x);
-    res = x+t;         /*  res=arcsin(x) according to Taylor series  */
-    /* Max ULP is 0.513.  */
-    return res;
-  }
+  else if (k < 0x3fc00000)
+    {
+      x2 = x * x;
+      t = (((((f6 * x2 + f5) * x2 + f4) * x2 + f3) * x2 + f2) * x2 + f1)
+	  * (x2 * x);
+      res = x + t; /*  res=arcsin(x) according to Taylor series  */
+      /* Max ULP is 0.513.  */
+      return res;
+    }
   /*---------------------0.125 <= |x| < 0.5 -----------------------------*/
-  else if (k < 0x3fe00000) {
-    if (k<0x3fd00000) n = 11*((k&0x000fffff)>>15);
-    else n = 11*((k&0x000fffff)>>14)+352;
-    if (m>0) xx = x - asncs.x[n];
-    else xx = -x - asncs.x[n];
-    t = asncs.x[n+1]*xx;
-    p=xx*xx*(asncs.x[n+2]+xx*(asncs.x[n+3]+xx*(asncs.x[n+4]+xx*(asncs.x[n+5]
-     +xx*asncs.x[n+6]))))+asncs.x[n+7];
-    t+=p;
-    res =asncs.x[n+8] +t;
-    /* Max ULP is 0.524.  */
-    return (m>0)?res:-res;
-  }    /*   else  if (k < 0x3fe00000)    */
+  else if (k < 0x3fe00000)
+    {
+      if (k < 0x3fd00000)
+	n = 11 * ((k & 0x000fffff) >> 15);
+      else
+	n = 11 * ((k & 0x000fffff) >> 14) + 352;
+      if (m > 0)
+	xx = x - asncs.x[n];
+      else
+	xx = -x - asncs.x[n];
+      t = asncs.x[n + 1] * xx;
+      p = xx * xx
+	      * (asncs.x[n + 2]
+		 + xx
+		       * (asncs.x[n + 3]
+			  + xx
+				* (asncs.x[n + 4]
+				   + xx
+					 * (asncs.x[n + 5]
+					    + xx * asncs.x[n + 6]))))
+	  + asncs.x[n + 7];
+      t += p;
+      res = asncs.x[n + 8] + t;
+      /* Max ULP is 0.524.  */
+      return (m > 0) ? res : -res;
+    } /*   else  if (k < 0x3fe00000)    */
   /*-------------------- 0.5 <= |x| < 0.75 -----------------------------*/
-  else
-  if (k < 0x3fe80000) {
-    n = 1056+((k&0x000fe000)>>11)*3;
-    if (m>0) xx = x - asncs.x[n];
-    else xx = -x - asncs.x[n];
-    t = asncs.x[n+1]*xx;
-    p=xx*xx*(asncs.x[n+2]+xx*(asncs.x[n+3]+xx*(asncs.x[n+4]+xx*(asncs.x[n+5]
-	   +xx*(asncs.x[n+6]+xx*asncs.x[n+7])))))+asncs.x[n+8];
-    t+=p;
-    res =asncs.x[n+9] +t;
-    /* Max ULP is 0.505.  */
-    return (m>0)?res:-res;
-  }    /*   else  if (k < 0x3fe80000)    */
+  else if (k < 0x3fe80000)
+    {
+      n = 1056 + ((k & 0x000fe000) >> 11) * 3;
+      if (m > 0)
+	xx = x - asncs.x[n];
+      else
+	xx = -x - asncs.x[n];
+      t = asncs.x[n + 1] * xx;
+      p = xx * xx
+	      * (asncs.x[n + 2]
+		 + xx
+		       * (asncs.x[n + 3]
+			  + xx
+				* (asncs.x[n + 4]
+				   + xx
+					 * (asncs.x[n + 5]
+					    + xx
+						  * (asncs.x[n + 6]
+						     + xx * asncs.x[n + 7])))))
+	  + asncs.x[n + 8];
+      t += p;
+      res = asncs.x[n + 9] + t;
+      /* Max ULP is 0.505.  */
+      return (m > 0) ? res : -res;
+    } /*   else  if (k < 0x3fe80000)    */
   /*--------------------- 0.75 <= |x|< 0.921875 ----------------------*/
-  else
-  if (k < 0x3fed8000) {
-    n = 992+((k&0x000fe000)>>13)*13;
-    if (m>0) xx = x - asncs.x[n];
-    else xx = -x - asncs.x[n];
-    t = asncs.x[n+1]*xx;
-    p=xx*xx*(asncs.x[n+2]+xx*(asncs.x[n+3]+xx*(asncs.x[n+4]+xx*(asncs.x[n+5]
-     +xx*(asncs.x[n+6]+xx*(asncs.x[n+7]+xx*asncs.x[n+8]))))))+asncs.x[n+9];
-    t+=p;
-    res =asncs.x[n+10] +t;
-    /* Max ULP is 0.505.  */
-    return (m>0)?res:-res;
-  }    /*   else  if (k < 0x3fed8000)    */
+  else if (k < 0x3fed8000)
+    {
+      n = 992 + ((k & 0x000fe000) >> 13) * 13;
+      if (m > 0)
+	xx = x - asncs.x[n];
+      else
+	xx = -x - asncs.x[n];
+      t = asncs.x[n + 1] * xx;
+      p = xx * xx
+	      * (asncs.x[n + 2]
+		 + xx
+		       * (asncs.x[n + 3]
+			  + xx
+				* (asncs.x[n + 4]
+				   + xx
+					 * (asncs.x[n + 5]
+					    + xx
+						  * (asncs.x[n + 6]
+						     + xx
+							   * (asncs.x[n + 7]
+							      + xx
+								    * asncs.x
+									  [n
+									   + 8]))))))
+	  + asncs.x[n + 9];
+      t += p;
+      res = asncs.x[n + 10] + t;
+      /* Max ULP is 0.505.  */
+      return (m > 0) ? res : -res;
+    } /*   else  if (k < 0x3fed8000)    */
   /*-------------------0.921875 <= |x| < 0.953125 ------------------------*/
-  else
-  if (k < 0x3fee8000) {
-    n = 884+((k&0x000fe000)>>13)*14;
-    if (m>0) xx = x - asncs.x[n];
-    else xx = -x - asncs.x[n];
-    t = asncs.x[n+1]*xx;
-    p=xx*xx*(asncs.x[n+2]+xx*(asncs.x[n+3]+xx*(asncs.x[n+4]+
-		      xx*(asncs.x[n+5]+xx*(asncs.x[n+6]
-		      +xx*(asncs.x[n+7]+xx*(asncs.x[n+8]+
-		      xx*asncs.x[n+9])))))))+asncs.x[n+10];
-    t+=p;
-    res =asncs.x[n+11] +t;
-    /* Max ULP is 0.505.  */
-    return (m>0)?res:-res;
-  }    /*   else  if (k < 0x3fee8000)    */
+  else if (k < 0x3fee8000)
+    {
+      n = 884 + ((k & 0x000fe000) >> 13) * 14;
+      if (m > 0)
+	xx = x - asncs.x[n];
+      else
+	xx = -x - asncs.x[n];
+      t = asncs.x[n + 1] * xx;
+      p = xx * xx
+	      * (asncs.x[n + 2]
+		 + xx
+		       * (asncs.x[n + 3]
+			  + xx
+				* (asncs.x[n + 4]
+				   + xx
+					 * (asncs.x[n + 5]
+					    + xx
+						  * (asncs.x[n + 6]
+						     + xx
+							   * (asncs.x[n + 7]
+							      + xx
+								    * (asncs.x
+									   [n
+									    + 8]
+								       + xx
+									     * asncs
+										   .x[n
+										      + 9])))))))
+	  + asncs.x[n + 10];
+      t += p;
+      res = asncs.x[n + 11] + t;
+      /* Max ULP is 0.505.  */
+      return (m > 0) ? res : -res;
+    } /*   else  if (k < 0x3fee8000)    */
 
   /*--------------------0.953125 <= |x| < 0.96875 ------------------------*/
-  else
-  if (k < 0x3fef0000) {
-    n = 768+((k&0x000fe000)>>13)*15;
-    if (m>0) xx = x - asncs.x[n];
-    else xx = -x - asncs.x[n];
-    t = asncs.x[n+1]*xx;
-    p=xx*xx*(asncs.x[n+2]+xx*(asncs.x[n+3]+xx*(asncs.x[n+4]+
-			 xx*(asncs.x[n+5]+xx*(asncs.x[n+6]
-			 +xx*(asncs.x[n+7]+xx*(asncs.x[n+8]+
-		    xx*(asncs.x[n+9]+xx*asncs.x[n+10]))))))))+asncs.x[n+11];
-    t+=p;
-    res =asncs.x[n+12] +t;
-    /* Max ULP is 0.505.  */
-    return (m>0)?res:-res;
-  }    /*   else  if (k < 0x3fef0000)    */
+  else if (k < 0x3fef0000)
+    {
+      n = 768 + ((k & 0x000fe000) >> 13) * 15;
+      if (m > 0)
+	xx = x - asncs.x[n];
+      else
+	xx = -x - asncs.x[n];
+      t = asncs.x[n + 1] * xx;
+      p = xx * xx
+	      * (asncs.x[n + 2]
+		 + xx
+		       * (asncs.x[n + 3]
+			  + xx
+				* (asncs.x[n + 4]
+				   + xx
+					 * (asncs.x[n + 5]
+					    + xx
+						  * (asncs.x[n + 6]
+						     + xx
+							   * (asncs.x[n + 7]
+							      + xx
+								    * (asncs.x
+									   [n
+									    + 8]
+								       + xx
+									     * (asncs
+										    .x[n
+										       + 9]
+										+ xx
+										      * asncs
+											    .x[n
+											       + 10]))))))))
+	  + asncs.x[n + 11];
+      t += p;
+      res = asncs.x[n + 12] + t;
+      /* Max ULP is 0.505.  */
+      return (m > 0) ? res : -res;
+    } /*   else  if (k < 0x3fef0000)    */
   /*--------------------0.96875 <= |x| < 1 --------------------------------*/
-  else
-  if (k<0x3ff00000)  {
-    z = 0.5*((m>0)?(1.0-x):(1.0+x));
-    v.x=z;
-    k=v.i[HIGH_HALF];
-    t=inroot[(k&0x001fffff)>>14]*powtwo[511-(k>>21)];
-    r=1.0-t*t*z;
-    t = t*(rt0+r*(rt1+r*(rt2+r*rt3)));
-    c=t*z;
-    t=c*(1.5-0.5*t*c);
-    y=(c+t24)-t24;
-    cc = (z-y*y)/(t+y);
-    p=(((((f6*z+f5)*z+f4)*z+f3)*z+f2)*z+f1)*z;
-    cor = (hp1.x - 2.0*cc)-2.0*(y+cc)*p;
-    res1 = hp0.x - 2.0*y;
-    res =res1 + cor;
-    /* Max ULP is 0.5015.  */
-    return (m>0)?res:-res;
-  }    /*   else  if (k < 0x3ff00000)    */
+  else if (k < 0x3ff00000)
+    {
+      z = 0.5 * ((m > 0) ? (1.0 - x) : (1.0 + x));
+      v.x = z;
+      k = v.i[HIGH_HALF];
+      t = inroot[(k & 0x001fffff) >> 14] * powtwo[511 - (k >> 21)];
+      r = 1.0 - t * t * z;
+      t = t * (rt0 + r * (rt1 + r * (rt2 + r * rt3)));
+      c = t * z;
+      t = c * (1.5 - 0.5 * t * c);
+      y = (c + t24) - t24;
+      cc = (z - y * y) / (t + y);
+      p = (((((f6 * z + f5) * z + f4) * z + f3) * z + f2) * z + f1) * z;
+      cor = (hp1.x - 2.0 * cc) - 2.0 * (y + cc) * p;
+      res1 = hp0.x - 2.0 * y;
+      res = res1 + cor;
+      /* Max ULP is 0.5015.  */
+      return (m > 0) ? res : -res;
+    } /*   else  if (k < 0x3ff00000)    */
   /*---------------------------- |x|>=1 -------------------------------*/
-  else if (k==0x3ff00000 && u.i[LOW_HALF]==0) return (m>0)?hp0.x:-hp0.x;
+  else if (k == 0x3ff00000 && u.i[LOW_HALF] == 0)
+    return (m > 0) ? hp0.x : -hp0.x;
   else
     return (x - x) / (x - x);
 }
@@ -171,9 +257,8 @@ __ieee754_asin(double x){
 libm_alias_finite (__ieee754_asin, __asin)
 #endif
 
-/*******************************************************************/
-/*                                                                 */
-/*         End of arcsine,  below is arccosine                     */
-/*                                                                 */
-/*******************************************************************/
-
+    /*******************************************************************/
+    /*                                                                 */
+    /*         End of arcsine,  below is arccosine                     */
+    /*                                                                 */
+    /*******************************************************************/

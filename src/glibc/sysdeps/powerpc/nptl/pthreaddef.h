@@ -16,18 +16,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Default stack size.  */
-#define ARCH_STACK_DEFAULT_SIZE	(4 * 1024 * 1024)
+#define ARCH_STACK_DEFAULT_SIZE (4 * 1024 * 1024)
 
 /* Minimum guard size.  */
 #define ARCH_MIN_GUARD_SIZE 0
 
 /* Required stack pointer alignment at beginning.  The ABI requires 16
    bytes (for both 32-bit and 64-bit PowerPC).  */
-#define STACK_ALIGN		16
+#define STACK_ALIGN 16
 
 /* Minimal stack size after allocating thread descriptor and guard size.  */
-#define MINIMAL_REST_STACK	4096
-
+#define MINIMAL_REST_STACK 4096
 
 /* Location of current stack frame.  */
-#define CURRENT_STACK_FRAME	__builtin_frame_address (0)
+#define CURRENT_STACK_FRAME __builtin_frame_address (0)

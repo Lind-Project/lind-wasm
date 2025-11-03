@@ -19,7 +19,7 @@
 #include <ucontext.h>
 
 /* Number of arguments that go in registers.  */
-#define NREG_ARGS  4
+#define NREG_ARGS 4
 
 /* Take a context previously prepared via getcontext() and set to
    call func() with the given int only args.  */

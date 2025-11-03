@@ -21,35 +21,29 @@
 
 extern __typeof (REDIRECT_NAME) OPTIMIZE (erms) attribute_hidden;
 
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx512_unaligned)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx512_unaligned_erms)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx512_no_vzeroupper)
-  attribute_hidden;
+extern __typeof (REDIRECT_NAME) OPTIMIZE (avx512_unaligned) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (avx512_unaligned_erms) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (avx512_no_vzeroupper) attribute_hidden;
 
-extern __typeof (REDIRECT_NAME) OPTIMIZE (evex_unaligned)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (evex_unaligned_erms)
-  attribute_hidden;
+extern __typeof (REDIRECT_NAME) OPTIMIZE (evex_unaligned) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (evex_unaligned_erms) attribute_hidden;
 
 extern __typeof (REDIRECT_NAME) OPTIMIZE (avx_unaligned) attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx_unaligned_erms)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx_unaligned_rtm)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx_unaligned_erms_rtm)
-  attribute_hidden;
+extern __typeof (REDIRECT_NAME) OPTIMIZE (avx_unaligned_erms) attribute_hidden;
+extern __typeof (REDIRECT_NAME) OPTIMIZE (avx_unaligned_rtm) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (avx_unaligned_erms_rtm) attribute_hidden;
 
 extern __typeof (REDIRECT_NAME) OPTIMIZE (ssse3) attribute_hidden;
 
-extern __typeof (REDIRECT_NAME) OPTIMIZE (sse2_unaligned)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (sse2_unaligned_erms)
-  attribute_hidden;
+extern __typeof (REDIRECT_NAME) OPTIMIZE (sse2_unaligned) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (sse2_unaligned_erms) attribute_hidden;
 
-static inline void *
-inhibit_stack_protector
+static inline void *inhibit_stack_protector
 IFUNC_SELECTOR (void)
 {
   const struct cpu_features *cpu_features = __get_cpu_features ();
@@ -72,8 +66,7 @@ IFUNC_SELECTOR (void)
       return OPTIMIZE (avx512_no_vzeroupper);
     }
 
-  if (X86_ISA_CPU_FEATURES_ARCH_P (cpu_features,
-				   AVX_Fast_Unaligned_Load, ))
+  if (X86_ISA_CPU_FEATURES_ARCH_P (cpu_features, AVX_Fast_Unaligned_Load, ))
     {
       if (X86_ISA_CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
 	{
@@ -91,8 +84,7 @@ IFUNC_SELECTOR (void)
 	  return OPTIMIZE (avx_unaligned_rtm);
 	}
 
-      if (X86_ISA_CPU_FEATURES_ARCH_P (cpu_features,
-				       Prefer_No_VZEROUPPER, !))
+      if (X86_ISA_CPU_FEATURES_ARCH_P (cpu_features, Prefer_No_VZEROUPPER, !))
 	{
 	  if (CPU_FEATURE_USABLE_P (cpu_features, ERMS))
 	    return OPTIMIZE (avx_unaligned_erms);
@@ -103,9 +95,9 @@ IFUNC_SELECTOR (void)
 
   if (X86_ISA_CPU_FEATURE_USABLE_P (cpu_features, SSSE3)
       /* Leave this as runtime check.  The SSSE3 is optimized almost
-         exclusively for avoiding unaligned memory access during the
-         copy and by and large is not better than the sse2
-         implementation as a general purpose memmove.  */
+	 exclusively for avoiding unaligned memory access during the
+	 copy and by and large is not better than the sse2
+	 implementation as a general purpose memmove.  */
       && !CPU_FEATURES_ARCH_P (cpu_features, Fast_Unaligned_Copy))
     {
       return OPTIMIZE (ssse3);

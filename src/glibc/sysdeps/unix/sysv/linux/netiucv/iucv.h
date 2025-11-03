@@ -16,33 +16,33 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef __NETIUCV_IUCV_H
-#define __NETIUCV_IUCV_H	1
+#  define __NETIUCV_IUCV_H 1
 
-#include <features.h>
-#include <bits/sockaddr.h>
+#  include <features.h>
+#  include <bits/sockaddr.h>
 
 __BEGIN_DECLS
 
 struct sockaddr_iucv
-  {
-    __SOCKADDR_COMMON (siucv_);
-    unsigned short	siucv_port;		/* Reserved */
-    unsigned int	siucv_addr;		/* Reserved */
-    char		siucv_nodeid[8];	/* Reserved */
-    char		siucv_user_id[8];	/* Guest User Id */
-    char		siucv_name[8];		/* Application Name */
-  };
+{
+  __SOCKADDR_COMMON (siucv_);
+  unsigned short siucv_port; /* Reserved */
+  unsigned int siucv_addr;   /* Reserved */
+  char siucv_nodeid[8];	     /* Reserved */
+  char siucv_user_id[8];     /* Guest User Id */
+  char siucv_name[8];	     /* Application Name */
+};
 
 __END_DECLS
 
-#define SOL_IUCV        277			/* IUCV level */
+#  define SOL_IUCV 277 /* IUCV level */
 
 /* IUCV socket options (SOL_IUCV) */
-#define SO_IPRMDATA_MSG	0x0080			/* Send/recv IPRM_DATA msgs */
-#define SO_MSGLIMIT	0x1000			/* Get/set IUCV MSGLIMIT */
-#define SO_MSGSIZE	0x0800			/* Get maximum msgsize */
+#  define SO_IPRMDATA_MSG 0x0080 /* Send/recv IPRM_DATA msgs */
+#  define SO_MSGLIMIT 0x1000	 /* Get/set IUCV MSGLIMIT */
+#  define SO_MSGSIZE 0x0800	 /* Get maximum msgsize */
 
 /* IUCV related control messages (scm) */
-#define SCM_IUCV_TRGCLS	0x0001			/* Target class control message */
+#  define SCM_IUCV_TRGCLS 0x0001 /* Target class control message */
 
 #endif

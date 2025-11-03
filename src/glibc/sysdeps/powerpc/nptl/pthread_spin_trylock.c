@@ -30,11 +30,10 @@ __pthread_spin_trylock (pthread_spinlock_t *lock)
        "	bne	2f\n"
        "	stwcx.	%3,0,%2\n"
        "	bne-	1b\n"
-       "	li	%1,0\n"
-                __ARCH_ACQ_INSTR "\n"
+       "	li	%1,0\n" __ARCH_ACQ_INSTR "\n"
        "2:	"
-       : "=&r" (old), "=&r" (err)
-       : "r" (lock), "r" (1), "1" (err)
+       : "=&r"(old), "=&r"(err)
+       : "r"(lock), "r"(1), "1"(err)
        : "cr0", "memory");
 
   return err;
@@ -42,7 +41,7 @@ __pthread_spin_trylock (pthread_spinlock_t *lock)
 versioned_symbol (libc, __pthread_spin_trylock, pthread_spin_trylock,
 		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_spin_trylock, pthread_spin_trylock,
 	       GLIBC_2_2);
 #endif

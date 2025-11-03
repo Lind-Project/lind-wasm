@@ -43,10 +43,9 @@ create_wakeupmsg (struct __pthread *thread)
   thread->wakeupmsg.msgh_seqno = 0;
   thread->wakeupmsg.msgh_id = 0;
 
-  err = __mach_port_insert_right (__mach_task_self (),
-				  thread->wakeupmsg.msgh_remote_port,
-				  thread->wakeupmsg.msgh_remote_port,
-				  MACH_MSG_TYPE_MAKE_SEND);
+  err = __mach_port_insert_right (
+      __mach_task_self (), thread->wakeupmsg.msgh_remote_port,
+      thread->wakeupmsg.msgh_remote_port, MACH_MSG_TYPE_MAKE_SEND);
   if (err)
     {
       __mach_port_destroy (__mach_task_self (),

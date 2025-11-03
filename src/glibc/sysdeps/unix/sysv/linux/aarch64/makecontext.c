@@ -22,15 +22,14 @@
 #include <stdint.h>
 #include <ucontext.h>
 
-
 /* makecontext sets up a stack and the registers for the
    user context.  The stack looks like this:
 
-               +-----------------------+
+	       +-----------------------+
 	       | padding as required   |
-               +-----------------------+
+	       +-----------------------+
     sp ->      | parameter 7-n         |
-               +-----------------------+
+	       +-----------------------+
 
    The registers are set up like this:
      %x0 .. %x7: parameter 1 to 8
@@ -46,8 +45,7 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
   va_list ap;
   int i;
 
-  sp = (uint64_t *)
-    ((uintptr_t) ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
+  sp = (uint64_t *) ((uintptr_t) ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
 
   /* Allocate stack arguments.  */
   sp -= argc < 8 ? 0 : argc - 8;

@@ -20,8 +20,8 @@
 
 extern long __libc_alpha_cache_shape[4];
 
-#define DL_PLATFORM_AUXV					\
-  __libc_alpha_cache_shape[0] = auxv_values[AT_L1I_CACHESHAPE]; \
-  __libc_alpha_cache_shape[1] = auxv_values[AT_L1D_CACHESHAPE]; \
-  __libc_alpha_cache_shape[2] = auxv_values[AT_L2_CACHESHAPE];	\
+#define DL_PLATFORM_AUXV                                                      \
+  __libc_alpha_cache_shape[0] = auxv_values[AT_L1I_CACHESHAPE];               \
+  __libc_alpha_cache_shape[1] = auxv_values[AT_L1D_CACHESHAPE];               \
+  __libc_alpha_cache_shape[2] = auxv_values[AT_L2_CACHESHAPE];                \
   __libc_alpha_cache_shape[3] = auxv_values[AT_L3_CACHESHAPE];

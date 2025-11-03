@@ -17,19 +17,19 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ARM_ARM_FEATURES_H
-#define _ARM_ARM_FEATURES_H 1
+#  define _ARM_ARM_FEATURES_H 1
 
 /* An OS-specific arm-features.h file should define ARM_HAVE_VFP to
    an appropriate expression for testing at runtime whether the VFP
    hardware is present.  We'll then redefine it to a constant if we
    know at compile time that we can assume VFP.  */
 
-#ifndef __SOFTFP__
+#  ifndef __SOFTFP__
 /* The compiler is generating VFP instructions, so we're already
    assuming the hardware exists.  */
-# undef ARM_HAVE_VFP
-# define ARM_HAVE_VFP	1
-#endif
+#    undef ARM_HAVE_VFP
+#    define ARM_HAVE_VFP 1
+#  endif
 
 /* An OS-specific arm-features.h file may define ARM_ASSUME_NO_IWMMXT
    to indicate at compile time that iWMMXt hardware is never present
@@ -49,11 +49,11 @@
    always have a fixed size of four bytes), or for Thumb-mode code that is
    specifically aligning all the related branch targets to match (since
    Thumb instructions might be either two or four bytes).  */
-#ifndef ARM_BX_ALIGN_LOG2
-# define ARM_BX_ALIGN_LOG2	2
-#endif
+#  ifndef ARM_BX_ALIGN_LOG2
+#    define ARM_BX_ALIGN_LOG2 2
+#  endif
 
 /* An OS-specific arm-features.h file may define ARM_NO_INDEX_REGISTER to
    indicate that the two-register addressing modes must never be used.  */
 
-#endif  /* arm-features.h */
+#endif /* arm-features.h */

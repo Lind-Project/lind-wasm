@@ -23,27 +23,31 @@
 
 int
 __thrd_sleep64 (const struct __timespec64 *time_point,
-                struct __timespec64 *remaining)
+		struct __timespec64 *remaining)
 {
-  int ret = __clock_nanosleep_time64 (CLOCK_REALTIME, 0, time_point,
-                                      remaining);
+  int ret
+      = __clock_nanosleep_time64 (CLOCK_REALTIME, 0, time_point, remaining);
   /* C11 states thrd_sleep function returns -1 if it has been interrupted
      by a signal, or a negative value if it fails.  */
   switch (ret)
-  {
-     case 0:      return 0;
-     case EINTR:  return -1;
-     default:     return -2;
-  }
+    {
+    case 0:
+      return 0;
+    case EINTR:
+      return -1;
+    default:
+      return -2;
+    }
 }
 
 #if __TIMESIZE != 64
 libc_hidden_def (__thrd_sleep64)
 
-int
-__thrd_sleep (const struct timespec *time_point, struct timespec *remaining)
+    int __thrd_sleep (const struct timespec *time_point,
+		      struct timespec *remaining)
 {
-  const struct __timespec64 treq64 = valid_timespec_to_timespec64 (*time_point);
+  const struct __timespec64 treq64
+      = valid_timespec_to_timespec64 (*time_point);
   struct __timespec64 trem64;
 
   int ret = __thrd_sleep64 (&treq64, remaining != NULL ? &trem64 : NULL);

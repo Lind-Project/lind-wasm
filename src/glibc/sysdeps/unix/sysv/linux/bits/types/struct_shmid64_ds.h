@@ -17,14 +17,15 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SHM_H
-# error "Never include <bits/types/struct_shmid_ds.h> directly; use <sys/shm.h> instead."
+#  error                                                                       \
+      "Never include <bits/types/struct_shmid_ds.h> directly; use <sys/shm.h> instead."
 #endif
 
 #if __TIMESIZE == 64
-# define __shmid64_ds shmid_ds
+#  define __shmid64_ds shmid_ds
 #else
 struct __shmid64_ds
 {
-# include <bits/types/struct_shmid64_ds_helper.h>
+#  include <bits/types/struct_shmid64_ds_helper.h>
 };
 #endif

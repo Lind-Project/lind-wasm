@@ -24,5 +24,4 @@ __getpagesize (void)
 {
   return __vm_page_size;
 }
-libc_hidden_def (__getpagesize)
-weak_alias (__getpagesize, getpagesize)
+libc_hidden_def (__getpagesize) weak_alias (__getpagesize, getpagesize)

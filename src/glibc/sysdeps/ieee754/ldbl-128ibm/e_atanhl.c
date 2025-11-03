@@ -39,35 +39,41 @@ static const long double one = 1.0L, huge = 1e300L;
 static const long double zero = 0.0L;
 
 long double
-__ieee754_atanhl(long double x)
+__ieee754_atanhl (long double x)
 {
-	long double t;
-	int64_t hx,ix;
-	double xhi;
+  long double t;
+  int64_t hx, ix;
+  double xhi;
 
-	xhi = ldbl_high (x);
-	EXTRACT_WORDS64 (hx, xhi);
-	ix = hx&0x7fffffffffffffffLL;
-	if (ix >= 0x3ff0000000000000LL) { /* |x|>=1 */
-	    if (ix > 0x3ff0000000000000LL)
-		return (x-x)/(x-x);
-	    t = fabsl (x);
-	    if (t > one)
-		return (x-x)/(x-x);
-	    if (t == one)
-		return x/zero;
-	}
-	if(ix<0x3c70000000000000LL&&(huge+x)>zero)	/* x<2**-56 */
-	  {
-	    math_check_force_underflow (x);
-	    return x;
-	  }
-	x = fabsl (x);
-	if(ix<0x3fe0000000000000LL) {		/* x < 0.5 */
-	    t = x+x;
-	    t = 0.5*__log1pl(t+t*x/(one-x));
-	} else
-	    t = 0.5*__log1pl((x+x)/(one-x));
-	if(hx>=0) return t; else return -t;
+  xhi = ldbl_high (x);
+  EXTRACT_WORDS64 (hx, xhi);
+  ix = hx & 0x7fffffffffffffffLL;
+  if (ix >= 0x3ff0000000000000LL)
+    { /* |x|>=1 */
+      if (ix > 0x3ff0000000000000LL)
+	return (x - x) / (x - x);
+      t = fabsl (x);
+      if (t > one)
+	return (x - x) / (x - x);
+      if (t == one)
+	return x / zero;
+    }
+  if (ix < 0x3c70000000000000LL && (huge + x) > zero) /* x<2**-56 */
+    {
+      math_check_force_underflow (x);
+      return x;
+    }
+  x = fabsl (x);
+  if (ix < 0x3fe0000000000000LL)
+    { /* x < 0.5 */
+      t = x + x;
+      t = 0.5 * __log1pl (t + t * x / (one - x));
+    }
+  else
+    t = 0.5 * __log1pl ((x + x) / (one - x));
+  if (hx >= 0)
+    return t;
+  else
+    return -t;
 }
 libm_alias_finite (__ieee754_atanhl, __atanhl)

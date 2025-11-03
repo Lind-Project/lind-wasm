@@ -36,8 +36,7 @@ __sigaltstack (const stack_t *argss, stack_t *oss)
   s = _hurd_self_sigstate ();
   __spin_lock (&s->lock);
 
-  if (argss != NULL
-      && (ss.ss_flags & SS_DISABLE)
+  if (argss != NULL && (ss.ss_flags & SS_DISABLE)
       && (s->sigaltstack.ss_flags & SS_ONSTACK))
     {
       /* Can't disable a stack that is in use.  */
@@ -57,5 +56,4 @@ __sigaltstack (const stack_t *argss, stack_t *oss)
 
   return 0;
 }
-libc_hidden_def (__sigaltstack)
-weak_alias (__sigaltstack, sigaltstack)
+libc_hidden_def (__sigaltstack) weak_alias (__sigaltstack, sigaltstack)

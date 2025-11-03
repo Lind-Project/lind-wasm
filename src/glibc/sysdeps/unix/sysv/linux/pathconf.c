@@ -33,7 +33,6 @@ static long int posix_pathconf (const char *file, int name);
 #define __pathconf static posix_pathconf
 #include <sysdeps/posix/pathconf.c>
 
-
 /* Get file-specific information about FILE.  */
 long int
 __pathconf (const char *file, int name)
@@ -59,7 +58,6 @@ __pathconf (const char *file, int name)
     }
 }
 
-
 static long int
 distinguish_extX (const struct statfs *fsbuf, const char *file, int fd)
 {
@@ -67,8 +65,8 @@ distinguish_extX (const struct statfs *fsbuf, const char *file, int fd)
   char path[PATH_MAX];
   struct __stat64_t64 st;
 
-  if ((file == NULL ? __fstat64_time64 (fd, &st)
-		    : __stat64_time64 (file, &st)) != 0)
+  if ((file == NULL ? __fstat64_time64 (fd, &st) : __stat64_time64 (file, &st))
+      != 0)
     /* Strange.  The statfd call worked, but stat fails.  Default to
        the more pessimistic value.  */
     return EXT2_LINK_MAX;
@@ -126,7 +124,6 @@ distinguish_extX (const struct statfs *fsbuf, const char *file, int fd)
 
   return result;
 }
-
 
 /* Used like: return statfs_link_max (__statfs (name, &buf), &buf); */
 long int
@@ -191,7 +188,6 @@ __statfs_link_max (int result, const struct statfs *fsbuf, const char *file,
     }
 }
 
-
 /* Used like: return statfs_filesize_max (__statfs (name, &buf), &buf); */
 long int
 __statfs_filesize_max (int result, const struct statfs *fsbuf)
@@ -240,7 +236,6 @@ __statfs_filesize_max (int result, const struct statfs *fsbuf)
     }
 }
 
-
 /* Used like: return statfs_link_max (__statfs (name, &buf), &buf); */
 long int
 __statfs_symlinks (int result, const struct statfs *fsbuf)
@@ -274,7 +269,6 @@ __statfs_symlinks (int result, const struct statfs *fsbuf)
       return 1;
     }
 }
-
 
 /* Used like: return __statfs_chown_restricted (__statfs (name, &buf), &buf);*/
 long int

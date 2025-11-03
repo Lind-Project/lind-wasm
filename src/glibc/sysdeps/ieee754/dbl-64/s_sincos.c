@@ -25,14 +25,13 @@
 #include <libm-alias-double.h>
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
 #define IN_SINCOS
 #include "s_sin.c"
 
-void
-SECTION
+void SECTION
 __sincos (double x, double *sinx, double *cosx)
 {
   mynumber u;

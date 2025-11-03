@@ -43,8 +43,7 @@ __settimeofday64 (const struct __timeval64 *tv, const struct timezone *tz)
 #if __TIMESIZE != 64
 libc_hidden_def (__settimeofday64)
 
-int
-__settimeofday (const struct timeval *tv, const struct timezone *tz)
+    int __settimeofday (const struct timeval *tv, const struct timezone *tz)
 {
   if (__glibc_unlikely (tv == NULL))
     return __settimeofday64 (NULL, tz);

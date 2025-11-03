@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef fsubl
 
-float
-attribute_hidden
+float attribute_hidden
 fsubl (double x, double y)
 {
   return fsub (x, y);

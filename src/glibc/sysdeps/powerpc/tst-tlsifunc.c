@@ -23,7 +23,8 @@
 #include <libc-symbols.h>
 
 __thread int bar;
-extern __thread int bar_gd asm ("bar") __attribute__ ((tls_model("global-dynamic")));
+extern __thread int bar_gd asm ("bar")
+    __attribute__ ((tls_model ("global-dynamic")));
 static int *bar_ptr = NULL;
 
 static uint32_t resolver_platform = 0;
@@ -34,11 +35,11 @@ int tcb_test (void);
 
 /* Offsets copied from tcb-offsets.h.  */
 #ifdef __powerpc64__
-# define __TPREG     "r13"
-# define __ATPLATOFF -28764
+#  define __TPREG "r13"
+#  define __ATPLATOFF -28764
 #else
-# define __TPREG     "r2"
-# define __ATPLATOFF -28724
+#  define __TPREG "r2"
+#  define __ATPLATOFF -28724
 #endif
 
 uint32_t
@@ -47,9 +48,7 @@ get_platform (void)
   register unsigned long tp __asm__ (__TPREG);
   uint32_t tmp;
 
-  __asm__  ("lwz %0,%1(%2)\n"
-	    : "=r" (tmp)
-	    : "n" (__ATPLATOFF), "b" (tp));
+  __asm__ ("lwz %0,%1(%2)\n" : "=r"(tmp) : "n"(__ATPLATOFF), "b"(tp));
 
   return tmp;
 }
@@ -78,8 +77,8 @@ init_tcb_test (void)
 int
 my_tcb_test (void)
 {
-  printf ("resolver_platform = 0x%"PRIx32
-	  " and current platform = 0x%"PRIx32".\n",
+  printf ("resolver_platform = 0x%" PRIx32 " and current platform = 0x%" PRIx32
+	  ".\n",
 	  resolver_platform, get_platform ());
   return resolver_platform != 0;
 }
@@ -101,7 +100,7 @@ do_test (void)
 
   if (&bar == bar_ptr)
     printf ("PASS: bar address read from IFUNC resolver is correct.\n");
-#if !defined TST_TLSIFUNC_STATIC || !defined PIC \
+#if !defined TST_TLSIFUNC_STATIC || !defined PIC                              \
     || defined HIDDEN_VAR_NEEDS_DYNAMIC_RELOC
   else
     {

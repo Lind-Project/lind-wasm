@@ -23,8 +23,7 @@ IMPL (strncasecmp, 1)
 
 typedef int (*proto_t) (const char *, const char *, size_t);
 
-static int
-__attribute__ ((noinline, noclone))
+static int __attribute__ ((noinline, noclone))
 do_strncasecmp (parameter_t a, parameter_t b)
 {
   return CALL (&b, a.p, b.p, a.len);
@@ -47,8 +46,8 @@ test_main (void)
       int res = do_strncasecmp (dest, src);
       if (res)
 	{
-	  error (0, 0, "Wrong result in function %s: %i != 0",
-		 impl->name, res);
+	  error (0, 0, "Wrong result in function %s: %i != 0", impl->name,
+		 res);
 	  ret = 1;
 	}
     }

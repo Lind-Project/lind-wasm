@@ -21,7 +21,6 @@
 #include <errno.h>
 #include <sys/param.h>
 
-
 /* Make the process sleep for SECONDS seconds, or until a signal arrives
    and is not ignored.  The function returns the number of seconds less
    than SECONDS which it actually slept (zero if it slept the full time).
@@ -35,27 +34,27 @@ __sleep (unsigned int seconds)
   int save_errno = errno;
 
   const unsigned int max
-    = (unsigned int) (((unsigned long int) (~((time_t) 0))) >> 1);
+      = (unsigned int) (((unsigned long int) (~((time_t) 0))) >> 1);
   struct timespec ts = { 0, 0 };
   do
     {
       if (sizeof (ts.tv_sec) <= sizeof (seconds))
-        {
-          /* Since SECONDS is unsigned assigning the value to .tv_sec can
-             overflow it.  In this case we have to wait in steps.  */
-          ts.tv_sec += MIN (seconds, max);
-          seconds -= (unsigned int) ts.tv_sec;
-        }
+	{
+	  /* Since SECONDS is unsigned assigning the value to .tv_sec can
+	     overflow it.  In this case we have to wait in steps.  */
+	  ts.tv_sec += MIN (seconds, max);
+	  seconds -= (unsigned int) ts.tv_sec;
+	}
       else
-        {
-          ts.tv_sec = (time_t) seconds;
-          seconds = 0;
-        }
+	{
+	  ts.tv_sec = (time_t) seconds;
+	  seconds = 0;
+	}
 
       if (__nanosleep (&ts, &ts) < 0)
-        /* We were interrupted.
-           Return the number of (whole) seconds we have not yet slept.  */
-        return seconds + ts.tv_sec;
+	/* We were interrupted.
+	   Return the number of (whole) seconds we have not yet slept.  */
+	return seconds + ts.tv_sec;
     }
   while (seconds > 0);
 

@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SPAWN_H
-# error "Never include <bits/spawn-ext.h> directly; use <spawn.h> instead."
+#  error "Never include <bits/spawn-ext.h> directly; use <spawn.h> instead."
 #endif
 
 __BEGIN_DECLS
@@ -25,15 +25,14 @@ __BEGIN_DECLS
 #ifdef __USE_MISC
 
 /* Get the cgroupsv2 the attribute structure.  */
-extern int posix_spawnattr_getcgroup_np (const posix_spawnattr_t *
-					 __restrict __attr,
-					 int *__restrict __cgroup)
-     __THROW __nonnull ((1, 2));
+extern int
+posix_spawnattr_getcgroup_np (const posix_spawnattr_t *__restrict __attr,
+			      int *__restrict __cgroup) __THROW
+    __nonnull ((1, 2));
 
 /* Sore the cgroupsv2 the attribute structure.  */
 extern int posix_spawnattr_setcgroup_np (posix_spawnattr_t *__attr,
-					 int __cgroup)
-     __THROW __nonnull ((1));
+					 int __cgroup) __THROW __nonnull ((1));
 
 /* Spawn a new process executing PATH with the attributes describes in *ATTRP.
    Before running the process perform the actions described in FACTS.  Return
@@ -42,13 +41,11 @@ extern int posix_spawnattr_setcgroup_np (posix_spawnattr_t *__attr,
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int pidfd_spawn (int *__restrict __pidfd,
-			const char *__restrict __path,
+extern int pidfd_spawn (int *__restrict __pidfd, const char *__restrict __path,
 			const posix_spawn_file_actions_t *__restrict __facts,
 			const posix_spawnattr_t *__restrict __attrp,
 			char *const __argv[__restrict_arr],
-			char *const __envp[__restrict_arr])
-    __nonnull ((2, 5));
+			char *const __envp[__restrict_arr]) __nonnull ((2, 5));
 
 /* Similar to `pidfd_spawn' but search for FILE in the PATH.
 

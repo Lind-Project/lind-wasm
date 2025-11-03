@@ -21,30 +21,31 @@
 #include <ifunc-resolve.h>
 
 #undef FROM_LOOP
-#define FROM_LOOP	__from_utf8_loop
+#define FROM_LOOP __from_utf8_loop
 #undef TO_LOOP
-#define TO_LOOP		__to_utf8_loop
+#define TO_LOOP __to_utf8_loop
 
 #define _SINGLE_NAME(NAME) NAME##_single
-#define SINGLE_NAME(NAME) _SINGLE_NAME(NAME)
+#define SINGLE_NAME(NAME) _SINGLE_NAME (NAME)
 strong_alias (SINGLE_NAME (FROM_LOOP_DEFAULT), SINGLE_NAME (FROM_LOOP))
-strong_alias (SINGLE_NAME (TO_LOOP_DEFAULT), SINGLE_NAME (TO_LOOP))
+    strong_alias (SINGLE_NAME (TO_LOOP_DEFAULT), SINGLE_NAME (TO_LOOP))
 
-/* Generate ifunc'ed loop functions for FROM/TO_LOOP.  */
-s390_libc_ifunc_expr (FROM_LOOP_DEFAULT, FROM_LOOP,
-		      (HAVE_FROM_VX && (hwcap & HWCAP_S390_VX))
-		      ? FROM_LOOP_VX
-		      : (HAVE_FROM_CU && (hwcap & HWCAP_S390_ZARCH
-					  && hwcap & HWCAP_S390_HIGH_GPRS
-					  && hwcap & HWCAP_S390_ETF3EH))
-			? FROM_LOOP_CU
-			: FROM_LOOP_DEFAULT);
+    /* Generate ifunc'ed loop functions for FROM/TO_LOOP.  */
+    s390_libc_ifunc_expr (FROM_LOOP_DEFAULT, FROM_LOOP,
+			  (HAVE_FROM_VX && (hwcap & HWCAP_S390_VX))
+			      ? FROM_LOOP_VX
+			  : (HAVE_FROM_CU
+			     && (hwcap & HWCAP_S390_ZARCH
+				 && hwcap & HWCAP_S390_HIGH_GPRS
+				 && hwcap & HWCAP_S390_ETF3EH))
+			      ? FROM_LOOP_CU
+			      : FROM_LOOP_DEFAULT);
 
 s390_libc_ifunc_expr (TO_LOOP_DEFAULT, TO_LOOP,
 		      (HAVE_TO_VX_CU && (hwcap & HWCAP_S390_VXE))
-		      ? TO_LOOP_VX_CU
+			  ? TO_LOOP_VX_CU
 		      : (HAVE_TO_VX && (hwcap & HWCAP_S390_VX))
-			? TO_LOOP_VX
-			: TO_LOOP_DEFAULT);
+			  ? TO_LOOP_VX
+			  : TO_LOOP_DEFAULT);
 
 #include <iconv/skeleton.c>

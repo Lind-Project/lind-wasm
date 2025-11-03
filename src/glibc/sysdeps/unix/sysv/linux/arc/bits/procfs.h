@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
+#  error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
 #endif
 
 #include <sys/ucontext.h>
@@ -32,4 +32,6 @@ typedef unsigned long int elf_greg_t;
 typedef unsigned long int elf_gregset_t[ELF_NGREG];
 
 /* There's no separate floating point reg file in ARCv2.  */
-typedef struct { } elf_fpregset_t;
+typedef struct
+{
+} elf_fpregset_t;

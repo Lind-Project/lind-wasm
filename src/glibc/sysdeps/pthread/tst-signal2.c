@@ -30,7 +30,6 @@
 static sigset_t ss;
 static pthread_barrier_t *b;
 
-
 static void *
 tf (void *arg)
 {
@@ -43,8 +42,8 @@ tf (void *arg)
   err = sigwait (&ss, &sig);
   if (err != 0)
     {
-      printf ("sigwait returned unsuccessfully: %s (%d)\n",
-	      strerror (err), err);
+      printf ("sigwait returned unsuccessfully: %s (%d)\n", strerror (err),
+	      err);
       _exit (1);
     }
 
@@ -60,7 +59,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static void
 receiver (void)
@@ -94,7 +92,6 @@ receiver (void)
 
   _exit (0);
 }
-
 
 static int
 do_test (void)

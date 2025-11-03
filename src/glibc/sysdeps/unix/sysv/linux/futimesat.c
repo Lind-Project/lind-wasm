@@ -37,8 +37,7 @@ __futimesat64 (int fd, const char *file, const struct __timeval64 tvp64[2])
 #if __TIMESIZE != 64
 libc_hidden_def (__futimesat64)
 
-int
-__futimesat (int fd, const char *file, const struct timeval tvp[2])
+    int __futimesat (int fd, const char *file, const struct timeval tvp[2])
 {
   struct __timeval64 tv64[2];
 

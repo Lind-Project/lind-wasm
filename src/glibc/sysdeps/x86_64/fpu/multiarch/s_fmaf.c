@@ -24,26 +24,24 @@
 
 extern float __fmaf_sse2 (float x, float y, float z) attribute_hidden;
 
-
 static float
 __fmaf_fma3 (float x, float y, float z)
 {
-  asm ("vfmadd213ss %3, %2, %0" : "=x" (x) : "0" (x), "x" (y), "xm" (z));
+  asm ("vfmadd213ss %3, %2, %0" : "=x"(x) : "0"(x), "x"(y), "xm"(z));
   return x;
 }
-
 
 static float
 __fmaf_fma4 (float x, float y, float z)
 {
-  asm ("vfmaddss %3, %2, %1, %0" : "=x" (x) : "x" (x), "x" (y), "x" (z));
+  asm ("vfmaddss %3, %2, %1, %0" : "=x"(x) : "x"(x), "x"(y), "x"(z));
   return x;
 }
 
-
-libm_ifunc (__fmaf, CPU_FEATURE_USABLE (FMA)
-	    ? __fmaf_fma3 : (CPU_FEATURE_USABLE (FMA4)
-			     ? __fmaf_fma4 : __fmaf_sse2));
+libm_ifunc (__fmaf,
+	    CPU_FEATURE_USABLE (FMA)
+		? __fmaf_fma3
+		: (CPU_FEATURE_USABLE (FMA4) ? __fmaf_fma4 : __fmaf_sse2));
 libm_alias_float (__fma, fma)
 
 #define __fmaf __fmaf_sse2

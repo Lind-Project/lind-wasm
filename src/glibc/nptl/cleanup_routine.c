@@ -25,9 +25,9 @@ ___pthread_cleanup_routine (struct __pthread_cleanup_frame *f)
     f->__cancel_routine (f->__cancel_arg);
 }
 versioned_symbol (libc, ___pthread_cleanup_routine, __pthread_cleanup_routine,
-                  GLIBC_2_34);
+		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_3_3, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_3_3, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_cleanup_routine,
-               __pthread_cleanup_routine, GLIBC_2_3_3);
+	       __pthread_cleanup_routine, GLIBC_2_3_3);
 #endif

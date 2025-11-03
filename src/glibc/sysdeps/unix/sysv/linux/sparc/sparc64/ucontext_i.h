@@ -18,9 +18,9 @@
 /* Constants shared between setcontext() and getcontext().  Don't
    install this header file.  */
 
-#define UC_LINK		0
-#define __UC_SIGMASK	16
-#define UC_M_PC		40
-#define UC_M_NPC	48
-#define UC_SIGMASK	536
-#define SIGMASK_WORDS	16
+#define UC_LINK 0
+#define __UC_SIGMASK 16
+#define UC_M_PC 40
+#define UC_M_NPC 48
+#define UC_SIGMASK 536
+#define SIGMASK_WORDS 16

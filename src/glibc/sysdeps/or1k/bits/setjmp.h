@@ -17,16 +17,15 @@
    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
    02111-1307 USA.  */
 
-
 #ifndef _OR1K_BITS_SETJMP_H
-#define _OR1K_BITS_SETJMP_H  1
+#  define _OR1K_BITS_SETJMP_H 1
 
-#if !defined _SETJMP_H && !defined _PTHREAD_H
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
-#endif
+#  if !defined _SETJMP_H && !defined _PTHREAD_H
+#    error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  endif
 
-#ifndef _ASM
+#  ifndef _ASM
 typedef long int __jmp_buf[13];
-#endif
+#  endif
 
 #endif /* _OR1K_BITS_SETJMP_H */

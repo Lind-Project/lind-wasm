@@ -15,23 +15,22 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_FANOTIFY_H
-#define	_SYS_FANOTIFY_H	1
+#ifndef _SYS_FANOTIFY_H
+#  define _SYS_FANOTIFY_H 1
 
-#include <stdint.h>
-#include <linux/fanotify.h>
-
+#  include <stdint.h>
+#  include <linux/fanotify.h>
 
 __BEGIN_DECLS
 
 /* Create and initialize fanotify group.  */
-extern int fanotify_init (unsigned int __flags, unsigned int __event_f_flags)
-  __THROW;
+extern int fanotify_init (unsigned int __flags,
+			  unsigned int __event_f_flags) __THROW;
 
 /* Add, remove, or modify an fanotify mark on a filesystem object.  */
 extern int fanotify_mark (int __fanotify_fd, unsigned int __flags,
-			  uint64_t __mask, int __dfd, const char *__pathname)
-     __THROW;
+			  uint64_t __mask, int __dfd,
+			  const char *__pathname) __THROW;
 
 __END_DECLS
 

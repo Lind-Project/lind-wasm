@@ -41,7 +41,7 @@ main (void)
 	  ret = 1;
 	}
 
-      if (! re_exec ("This is a test."))
+      if (!re_exec ("This is a test."))
 	{
 	  printf ("re_exec failed\n");
 	  ret = 1;

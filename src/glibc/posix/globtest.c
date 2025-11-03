@@ -32,7 +32,7 @@ main (int argc, char *argv[])
   g.gl_offs = 0;
 
   while ((i = getopt (argc, argv, "bcdeEgmopqstT")) != -1)
-    switch(i)
+    switch (i)
       {
       case 'b':
 	glob_flags |= GLOB_BRACE;
@@ -79,19 +79,20 @@ main (int argc, char *argv[])
       }
 
   if (optind >= argc || chdir (argv[optind]))
-    exit(1);
+    exit (1);
 
   j = optind + 1;
   if (optind + 1 >= argc)
     exit (1);
 
   /* Do a glob on each remaining argument.  */
-  for (j = optind + 1; j < argc; j++) {
-    i = glob (argv[j], glob_flags, NULL, &g);
-    if (i != 0)
-      break;
-    glob_flags |= GLOB_APPEND;
-  }
+  for (j = optind + 1; j < argc; j++)
+    {
+      i = glob (argv[j], glob_flags, NULL, &g);
+      if (i != 0)
+	break;
+      glob_flags |= GLOB_APPEND;
+    }
 
   /* Was there an error? */
   if (i == GLOB_NOSPACE)
@@ -110,9 +111,8 @@ main (int argc, char *argv[])
   if (g.gl_pathv)
     {
       for (i = 0; i < g.gl_offs + g.gl_pathc; ++i)
-        printf ("%s%s%s\n", quotes ? "`" : "",
-		g.gl_pathv[i] ? g.gl_pathv[i] : "(null)",
-		quotes ? "'" : "");
+	printf ("%s%s%s\n", quotes ? "`" : "",
+		g.gl_pathv[i] ? g.gl_pathv[i] : "(null)", quotes ? "'" : "");
     }
   return 0;
 }

@@ -16,7 +16,7 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include <lowlevellock.h>	/* lll_futex* used by the old code.  */
+#include <lowlevellock.h> /* lll_futex* used by the old code.  */
 #include "semaphoreP.h"
 #include "sem_waitcommon.c"
 
@@ -31,7 +31,8 @@ __new_sem_wait (sem_t *sem)
      "Thread Cancellation Overview" [1] and austin group issue #1076 [2]
      for thoughs on why this may be a suboptimal design.
 
-     [1] http://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xsh_chap02.html
+     [1]
+     http://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xsh_chap02.html
      [2] http://austingroupbugs.net/view.php?id=1076 for thoughts on why this
    */
   __pthread_testcancel ();
@@ -39,18 +40,17 @@ __new_sem_wait (sem_t *sem)
   if (__new_sem_wait_fast ((struct new_sem *) sem, 0) == 0)
     return 0;
   else
-    return __new_sem_wait_slow64 ((struct new_sem *) sem,
-				  CLOCK_REALTIME, NULL);
+    return __new_sem_wait_slow64 ((struct new_sem *) sem, CLOCK_REALTIME,
+				  NULL);
 }
 versioned_symbol (libc, __new_sem_wait, sem_wait, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __new_sem_wait, sem_wait, GLIBC_2_1);
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_1)
-int
-attribute_compat_text_section
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_1)
+int attribute_compat_text_section
 __old_sem_wait (sem_t *sem)
 {
   int *futex = (int *) sem;
@@ -85,11 +85,11 @@ __new_sem_trywait (sem_t *sem)
 }
 versioned_symbol (libc, __new_sem_trywait, sem_trywait, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __new_sem_trywait, sem_trywait, GLIBC_2_1);
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_1)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_1)
 int
 __old_sem_trywait (sem_t *sem)
 {

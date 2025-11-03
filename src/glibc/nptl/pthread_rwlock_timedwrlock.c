@@ -28,22 +28,21 @@ ___pthread_rwlock_timedwrlock64 (pthread_rwlock_t *rwlock,
 
 #if __TIMESIZE == 64
 strong_alias (___pthread_rwlock_timedwrlock64, ___pthread_rwlock_timedwrlock)
-#else /* __TIMESPEC64 != 64 */
+#else  /* __TIMESPEC64 != 64 */
 strong_alias (___pthread_rwlock_timedwrlock64, __pthread_rwlock_timedwrlock64)
-libc_hidden_def (__pthread_rwlock_timedwrlock64)
+    libc_hidden_def (__pthread_rwlock_timedwrlock64)
 
-int
-___pthread_rwlock_timedwrlock (pthread_rwlock_t *rwlock,
-			       const struct timespec *abstime)
+	int ___pthread_rwlock_timedwrlock (pthread_rwlock_t *rwlock,
+					   const struct timespec *abstime)
 {
   struct __timespec64 ts64 = valid_timespec_to_timespec64 (*abstime);
 
   return __pthread_rwlock_timedwrlock64 (rwlock, &ts64);
 }
 #endif /* __TIMESPEC64 != 64 */
-versioned_symbol (libc, ___pthread_rwlock_timedwrlock,
-		  pthread_rwlock_timedwrlock, GLIBC_2_34);
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+    versioned_symbol (libc, ___pthread_rwlock_timedwrlock,
+		      pthread_rwlock_timedwrlock, GLIBC_2_34);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_rwlock_timedwrlock,
 	       pthread_rwlock_timedwrlock, GLIBC_2_2);
 #endif

@@ -31,9 +31,8 @@
 #include <support/xthread.h>
 
 #ifdef ENABLE_PP
-#include "tst-tpp.h"
+#  include "tst-tpp.h"
 #endif
-
 
 /* A bogus clock value that tells run_test to use pthread_mutex_timedlock
    rather than pthread_mutex_clocklock.  */
@@ -42,8 +41,8 @@
 static void
 do_test_clock (clockid_t clockid, int tmo_result)
 {
-  const clockid_t clockid_for_get =
-    (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
+  const clockid_t clockid_for_get
+      = (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
   size_t ps = sysconf (_SC_PAGESIZE);
   char tmpfname[] = "/tmp/tst-mutex9.XXXXXX";
   char data[ps];
@@ -55,7 +54,7 @@ do_test_clock (clockid_t clockid, int tmo_result)
 
   fd = mkstemp (tmpfname);
   if (fd == -1)
-      FAIL_EXIT1 ("cannot open temporary file: %m\n");
+    FAIL_EXIT1 ("cannot open temporary file: %m\n");
 
   /* Make sure it is always removed.  */
   unlink (tmpfname);
@@ -89,7 +88,7 @@ do_test_clock (clockid_t clockid, int tmo_result)
     {
 #ifdef ENABLE_PI
       if (e == ENOTSUP)
-        FAIL_UNSUPPORTED ("PI mutexes unsupported");
+	FAIL_UNSUPPORTED ("PI mutexes unsupported");
 #endif
       FAIL_EXIT1 ("mutex_init failed");
     }
@@ -103,18 +102,18 @@ do_test_clock (clockid_t clockid, int tmo_result)
   if (pid == 0)
     {
       if (pthread_mutex_trylock (m) == 0)
-        FAIL_EXIT1 ("child: mutex_trylock succeeded");
+	FAIL_EXIT1 ("child: mutex_trylock succeeded");
 
       if (pthread_mutex_unlock (m) == 0)
-        FAIL_EXIT1 ("child: mutex_unlock succeeded");
+	FAIL_EXIT1 ("child: mutex_unlock succeeded");
 
       const struct timespec ts = timespec_add (xclock_now (clockid_for_get),
-                                               make_timespec (0, 500000000));
+					       make_timespec (0, 500000000));
 
       if (clockid == CLOCK_USE_TIMEDLOCK)
-        TEST_COMPARE (pthread_mutex_timedlock (m, &ts), tmo_result);
+	TEST_COMPARE (pthread_mutex_timedlock (m, &ts), tmo_result);
       else
-        TEST_COMPARE (pthread_mutex_clocklock (m, clockid, &ts), tmo_result);
+	TEST_COMPARE (pthread_mutex_clocklock (m, clockid, &ts), tmo_result);
 
       alarm (1);
 
@@ -130,7 +129,7 @@ do_test_clock (clockid_t clockid, int tmo_result)
   int status;
   if (TEMP_FAILURE_RETRY (waitpid (pid, &status, 0)) != pid)
     FAIL_EXIT1 ("waitpid failed");
-  if (! WIFSIGNALED (status))
+  if (!WIFSIGNALED (status))
     FAIL_EXIT1 ("child not killed by signal");
   TEST_COMPARE (WTERMSIG (status), SIGALRM);
 }
@@ -144,9 +143,9 @@ do_test (void)
 
   int monotonic_result =
 #ifdef ENABLE_PI
-    support_mutex_pi_monotonic () ? ETIMEDOUT : EINVAL;
+      support_mutex_pi_monotonic () ? ETIMEDOUT : EINVAL;
 #else
-    ETIMEDOUT;
+      ETIMEDOUT;
 #endif
 
   do_test_clock (CLOCK_USE_TIMEDLOCK, ETIMEDOUT);

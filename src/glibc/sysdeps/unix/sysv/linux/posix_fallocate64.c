@@ -24,13 +24,12 @@ libc_hidden_proto (__posix_fallocate64_l64)
 #include <sysdeps/posix/posix_fallocate64.c>
 #undef __posix_fallocate64_l64
 
-/* Reserve storage for the data of the file associated with FD.  */
-int
-__posix_fallocate64_l64 (int fd, __off64_t offset, __off64_t len)
+    /* Reserve storage for the data of the file associated with FD.  */
+    int __posix_fallocate64_l64 (int fd, __off64_t offset, __off64_t len)
 {
-  int res = INTERNAL_SYSCALL_CALL (fallocate, fd, 0,
-				   SYSCALL_LL64 (offset), SYSCALL_LL64 (len));
-  if (! INTERNAL_SYSCALL_ERROR_P (res))
+  int res = INTERNAL_SYSCALL_CALL (fallocate, fd, 0, SYSCALL_LL64 (offset),
+				   SYSCALL_LL64 (len));
+  if (!INTERNAL_SYSCALL_ERROR_P (res))
     return 0;
   if (INTERNAL_SYSCALL_ERRNO (res) != EOPNOTSUPP)
     return INTERNAL_SYSCALL_ERRNO (res);

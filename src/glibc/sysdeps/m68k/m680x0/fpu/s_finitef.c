@@ -1,2 +1,2 @@
-#define	FUNC	finitef
+#define FUNC finitef
 #include <s_isinff.c>

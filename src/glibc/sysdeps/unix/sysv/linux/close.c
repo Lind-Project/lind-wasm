@@ -28,9 +28,9 @@
 int
 __close (int fd)
 {
-  return MAKE_SYSCALL(CLOSE_SYSCALL, "syscall|close", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (CLOSE_SYSCALL, "syscall|close", (uint64_t) fd, NOTUSED,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
   // return SYSCALL_CANCEL (close, fd);
 }
-libc_hidden_def (__close)
-strong_alias (__close, __libc_close)
-weak_alias (__close, close)
+libc_hidden_def (__close) strong_alias (__close, __libc_close)
+    weak_alias (__close, close)

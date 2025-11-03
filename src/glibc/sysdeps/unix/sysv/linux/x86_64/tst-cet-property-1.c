@@ -29,9 +29,9 @@ do_test (void)
 {
   unsigned int feature_1;
 #ifdef __x86_64__
-# define SEG_REG "fs"
+#  define SEG_REG "fs"
 #else
-# define SEG_REG "gs"
+#  define SEG_REG "gs"
 #endif
   if ((feature_1 & GNU_PROPERTY_X86_FEATURE_1_IBT) != 0)
     printf ("IBT\n");

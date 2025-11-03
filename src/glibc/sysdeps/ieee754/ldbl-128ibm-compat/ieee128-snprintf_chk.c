@@ -21,7 +21,7 @@
 
 extern int
 ___ieee128___snprintf_chk (char *s, size_t maxlen, int flag, size_t slen,
-			const char *format, ...)
+			   const char *format, ...)
 {
   va_list ap;
   int done;

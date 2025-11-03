@@ -15,15 +15,16 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_INOTIFY_H
-# error "Never use <bits/inotify.h> directly; include <sys/inotify.h> instead."
+#ifndef _SYS_INOTIFY_H
+#  error                                                                       \
+      "Never use <bits/inotify.h> directly; include <sys/inotify.h> instead."
 #endif
 
 /* Flags for the parameter of inotify_init1.  */
 enum
-  {
-    IN_CLOEXEC = 02000000,
+{
+  IN_CLOEXEC = 02000000,
 #define IN_CLOEXEC IN_CLOEXEC
-    IN_NONBLOCK = 00000200
+  IN_NONBLOCK = 00000200
 #define IN_NONBLOCK IN_NONBLOCK
-  };
+};

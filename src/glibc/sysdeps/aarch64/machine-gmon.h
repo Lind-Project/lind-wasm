@@ -22,8 +22,8 @@
 
 #include <sysdep.h>
 
-#define _MCOUNT_DECL(frompc, selfpc) \
-void __mcount_internal (u_long frompc, u_long selfpc)
+#define _MCOUNT_DECL(frompc, selfpc)                                          \
+  void __mcount_internal (u_long frompc, u_long selfpc)
 
 /* Implemented by __mcount.S.  */
 #define MCOUNT

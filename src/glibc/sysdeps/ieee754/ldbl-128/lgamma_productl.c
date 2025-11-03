@@ -44,8 +44,8 @@ __lgamma_productl (_Float128 t, _Float128 x, _Float128 x_eps, int n)
       _Float128 rpq_eps = (ret - rpq) + quot;
       _Float128 nret = rpq + rhi;
       _Float128 nret_eps = (rpq - nret) + rhi;
-      ret_eps += (rpq_eps + nret_eps + rlo + ret_eps * quot
-		  + quot_lo + quot_lo * (ret + ret_eps));
+      ret_eps += (rpq_eps + nret_eps + rlo + ret_eps * quot + quot_lo
+		  + quot_lo * (ret + ret_eps));
       ret = nret;
     }
   return ret + ret_eps;

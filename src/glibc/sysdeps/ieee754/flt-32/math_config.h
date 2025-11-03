@@ -26,35 +26,33 @@
 
 #ifndef WANT_ROUNDING
 /* Correct special case results in non-nearest rounding modes.  */
-# define WANT_ROUNDING 1
+#  define WANT_ROUNDING 1
 #endif
 #ifndef WANT_ERRNO
 /* Set errno according to ISO C with (math_errhandling & MATH_ERRNO) != 0.  */
-# define WANT_ERRNO 1
+#  define WANT_ERRNO 1
 #endif
 #ifndef WANT_ERRNO_UFLOW
 /* Set errno to ERANGE if result underflows to 0 (in all rounding modes).  */
-# define WANT_ERRNO_UFLOW (WANT_ROUNDING && WANT_ERRNO)
+#  define WANT_ERRNO_UFLOW (WANT_ROUNDING && WANT_ERRNO)
 #endif
 
 #ifndef TOINT_INTRINSICS
 /* When set, the roundtoint and converttoint functions are provided with
    the semantics documented below.  */
-# define TOINT_INTRINSICS 0
+#  define TOINT_INTRINSICS 0
 #endif
 
 #if TOINT_INTRINSICS
 /* Round x to nearest int in all rounding modes, ties have to be rounded
    consistently with converttoint so the results match.  If the result
    would be outside of [-2^31, 2^31-1] then the semantics is unspecified.  */
-static inline double_t
-roundtoint (double_t x);
+static inline double_t roundtoint (double_t x);
 
 /* Convert x to nearest int in all rounding modes, ties have to be rounded
    consistently with roundtoint.  If the result is not representible in an
    int32_t then the semantics is unspecified.  */
-static inline int32_t
-converttoint (double_t x);
+static inline int32_t converttoint (double_t x);
 #endif
 
 static inline uint32_t
@@ -64,7 +62,7 @@ asuint (float f)
   {
     float f;
     uint32_t i;
-  } u = {f};
+  } u = { f };
   return u.i;
 }
 
@@ -75,7 +73,7 @@ asfloat (uint32_t i)
   {
     uint32_t i;
     float f;
-  } u = {i};
+  } u = { i };
   return u.f;
 }
 
@@ -86,7 +84,7 @@ asuint64 (double f)
   {
     double f;
     uint64_t i;
-  } u = {f};
+  } u = { f };
   return u.i;
 }
 
@@ -97,7 +95,7 @@ asdouble (uint64_t i)
   {
     uint64_t i;
     double f;
-  } u = {i};
+  } u = { i };
   return u.f;
 }
 
@@ -110,14 +108,14 @@ issignalingf_inline (float x)
   return 2 * (ix ^ 0x00400000) > 2 * 0x7fc00000UL;
 }
 
-#define BIT_WIDTH       32
-#define MANTISSA_WIDTH  23
-#define EXPONENT_WIDTH  8
-#define MANTISSA_MASK   0x007fffff
-#define EXPONENT_MASK   0x7f800000
-#define EXP_MANT_MASK   0x7fffffff
-#define QUIET_NAN_MASK  0x00400000
-#define SIGN_MASK       0x80000000
+#define BIT_WIDTH 32
+#define MANTISSA_WIDTH 23
+#define EXPONENT_WIDTH 8
+#define MANTISSA_MASK 0x007fffff
+#define EXPONENT_MASK 0x7f800000
+#define EXP_MANT_MASK 0x7fffffff
+#define QUIET_NAN_MASK 0x00400000
+#define SIGN_MASK 0x80000000
 
 static inline bool
 is_nan (uint32_t x)
@@ -197,9 +195,9 @@ extern const struct log2f_data
 #define POWF_LOG2_TABLE_BITS 4
 #define POWF_LOG2_POLY_ORDER 5
 #if TOINT_INTRINSICS
-# define POWF_SCALE_BITS EXP2F_TABLE_BITS
+#  define POWF_SCALE_BITS EXP2F_TABLE_BITS
 #else
-# define POWF_SCALE_BITS 0
+#  define POWF_SCALE_BITS 0
 #endif
 #define POWF_SCALE ((double) (1 << POWF_SCALE_BITS))
 extern const struct powf_log2_data

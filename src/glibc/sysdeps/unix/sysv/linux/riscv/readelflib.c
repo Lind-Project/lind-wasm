@@ -16,12 +16,11 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-
-int process_elf32_file (const char *file_name, const char *lib,
-			int *flag, unsigned int *isa_level, char **soname,
+int process_elf32_file (const char *file_name, const char *lib, int *flag,
+			unsigned int *isa_level, char **soname,
 			void *file_contents, size_t file_length);
-int process_elf64_file (const char *file_name, const char *lib,
-			int *flag, unsigned int *isa_level, char **soname,
+int process_elf64_file (const char *file_name, const char *lib, int *flag,
+			unsigned int *isa_level, char **soname,
 			void *file_contents, size_t file_length);
 
 /* The ELF flags supported by our current glibc port:
@@ -41,7 +40,7 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
 		  unsigned int *isa_level, char **soname, void *file_contents,
 		  size_t file_length)
 {
-  ElfW(Ehdr) *elf_header = (ElfW(Ehdr) *) file_contents;
+  ElfW (Ehdr) *elf_header = (ElfW (Ehdr) *) file_contents;
   Elf32_Ehdr *elf32_header = (Elf32_Ehdr *) elf_header;
   Elf64_Ehdr *elf64_header = (Elf64_Ehdr *) elf_header;
   int ret;
@@ -50,7 +49,7 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
   /* RISC-V libraries are always libc.so.6+.  */
   *flag = FLAG_ELF_LIBC6;
 
-  if (elf_header->e_ident [EI_CLASS] == ELFCLASS32)
+  if (elf_header->e_ident[EI_CLASS] == ELFCLASS32)
     {
       ret = process_elf32_file (file_name, lib, flag, isa_level, soname,
 				file_contents, file_length);
@@ -63,17 +62,18 @@ process_elf_file (const char *file_name, const char *lib, int *flag,
       flags = elf64_header->e_flags;
     }
 
-  /* RISC-V linkers encode the floating point ABI as part of the ELF headers.  */
+  /* RISC-V linkers encode the floating point ABI as part of the ELF headers.
+   */
   switch (flags & EF_RISCV_FLOAT_ABI)
     {
-      case EF_RISCV_FLOAT_ABI_SOFT:
-        *flag |= FLAG_RISCV_FLOAT_ABI_SOFT;
-	break;
-      case EF_RISCV_FLOAT_ABI_DOUBLE:
-        *flag |= FLAG_RISCV_FLOAT_ABI_DOUBLE;
-	break;
-      default:
-        return 1;
+    case EF_RISCV_FLOAT_ABI_SOFT:
+      *flag |= FLAG_RISCV_FLOAT_ABI_SOFT;
+      break;
+    case EF_RISCV_FLOAT_ABI_DOUBLE:
+      *flag |= FLAG_RISCV_FLOAT_ABI_DOUBLE;
+      break;
+    default:
+      return 1;
     }
 
   /* If there are any other ELF flags set then glibc doesn't support this

@@ -20,18 +20,18 @@
 #include <stddef.h>
 #include <shlib-compat.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_32)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_32)
 int attribute_compat_text_section
-___sysctl (int *name, int nlen, void *oldval, size_t *oldlenp,
-           void *newval, size_t newlen)
+___sysctl (int *name, int nlen, void *oldval, size_t *oldlenp, void *newval,
+	   size_t newlen)
 {
   __set_errno (ENOSYS);
   return -1;
 }
 compat_symbol (libc, ___sysctl, sysctl, GLIBC_2_0);
 
-# if SHLIB_COMPAT (libc, GLIBC_2_2, GLIBC_2_17)
+#  if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_17)
 strong_alias (___sysctl, ___sysctl2)
-compat_symbol (libc, ___sysctl2, __sysctl, GLIBC_2_2);
-# endif
+    compat_symbol (libc, ___sysctl2, __sysctl, GLIBC_2_2);
+#  endif
 #endif

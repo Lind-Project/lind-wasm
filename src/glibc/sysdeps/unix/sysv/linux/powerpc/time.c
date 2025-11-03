@@ -17,6 +17,6 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef __powerpc64__
-# define USE_IFUNC_TIME
+#  define USE_IFUNC_TIME
 #endif
 #include <sysdeps/unix/sysv/linux/time.c>

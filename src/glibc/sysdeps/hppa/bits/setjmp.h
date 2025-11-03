@@ -17,13 +17,13 @@
 
 /* Define the machine-dependent type `jmp_buf'.  HPPA version.  */
 #ifndef _BITS_SETJMP_H
-#define _BITS_SETJMP_H	1
+#  define _BITS_SETJMP_H 1
 
-#if !defined _SETJMP_H && !defined _PTHREAD_H
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
-#endif
+#  if !defined _SETJMP_H && !defined _PTHREAD_H
+#    error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  endif
 
-#ifndef	_ASM
+#  ifndef _ASM
 /* The entire jump buffer must be 168 bytes long and laid
    out in exactly as follows for ABI consistency.
    * 20 x 32-bit gprs, with 8-bytes of padding, arranged so:
@@ -39,22 +39,22 @@
      - fr12-fr21 (callee saves)
    Note: We have 8 bytes of free space for future uses.  */
 typedef union __jmp_buf_internal_tag
+{
+  struct
   {
-    struct
-      {
-	int __r3;
-	int __pad0;
-	int __r4_r18[15];
-	int __r19;
-	int __r27;
-	int __sp;
-	int __rp;
-	int __pad1;
-	double __fr12_fr21[10];
-      } __jmp_buf;
-    /* Legacy definition. Ensures double alignment for fpsrs.  */
-    double __align[21];
-  } __jmp_buf[1];
-#endif
+    int __r3;
+    int __pad0;
+    int __r4_r18[15];
+    int __r19;
+    int __r27;
+    int __sp;
+    int __rp;
+    int __pad1;
+    double __fr12_fr21[10];
+  } __jmp_buf;
+  /* Legacy definition. Ensures double alignment for fpsrs.  */
+  double __align[21];
+} __jmp_buf[1];
+#  endif
 
-#endif	/* bits/setjmp.h */
+#endif /* bits/setjmp.h */

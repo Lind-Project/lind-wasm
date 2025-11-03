@@ -29,7 +29,7 @@ __llrintf (float x)
   uint32_t i, s;
   long long int result;
 
-  x = __m81_u(__rintf) (x);
+  x = __m81_u (__rintf) (x);
 
   GET_FLOAT_WORD (i, x);
 

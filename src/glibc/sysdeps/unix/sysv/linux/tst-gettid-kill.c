@@ -88,7 +88,7 @@ thread_read_signal (void *closure)
   else
     {
       /* The signal was delivered while blocked in the read system
-         call.  */
+	 call.  */
       TEST_COMPARE (ret, -1);
       TEST_COMPARE (errno, EINTR);
     }
@@ -110,7 +110,7 @@ do_test (void)
   xpthread_barrier_init (&barrier, NULL, 3);
 
   pthread_t target_thread
-    = xpthread_create (NULL, thread_pause_noreturn, NULL);
+      = xpthread_create (NULL, thread_pause_noreturn, NULL);
   signal_thread = xpthread_create (NULL, thread_read_signal, NULL);
   xpthread_barrier_wait (&barrier);
 

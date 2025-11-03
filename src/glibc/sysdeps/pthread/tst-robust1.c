@@ -20,16 +20,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static pthread_mutex_t m1;
 static pthread_mutex_t m2;
 static pthread_barrier_t b;
 
-
 #ifndef LOCK
-# define LOCK(m) pthread_mutex_lock (m)
+#  define LOCK(m) pthread_mutex_lock (m)
 #endif
-
 
 static void *
 tf (void *arg)
@@ -75,7 +72,6 @@ tf (void *arg)
   printf ("%ld: testcancel returned\n", round);
   exit (1);
 }
-
 
 static int
 do_test (void)
@@ -142,12 +138,12 @@ do_test (void)
   for (long int round = 1; round < 5; ++round)
     {
 #ifdef NOT_CONSISTENT
-      if (pthread_mutex_init (&m1 , &a) != 0)
+      if (pthread_mutex_init (&m1, &a) != 0)
 	{
 	  puts ("mutex_init m1 failed");
 	  return 1;
 	}
-      if (pthread_mutex_init (&m2 , &a) != 0)
+      if (pthread_mutex_init (&m2, &a) != 0)
 	{
 	  puts ("mutex_init m2 failed");
 	  return 1;

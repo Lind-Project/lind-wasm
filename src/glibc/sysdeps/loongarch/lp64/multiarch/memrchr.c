@@ -18,16 +18,15 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define memrchr __redirect_memrchr
-# include <string.h>
-# undef memrchr
+#if IS_IN(libc)
+#  define memrchr __redirect_memrchr
+#  include <string.h>
+#  undef memrchr
 
-# define SYMBOL_NAME memrchr
-# include "ifunc-memrchr.h"
+#  define SYMBOL_NAME memrchr
+#  include "ifunc-memrchr.h"
 
 libc_ifunc_redirected (__redirect_memrchr, __memrchr, IFUNC_SELECTOR ());
-libc_hidden_def (__memrchr)
-weak_alias (__memrchr, memrchr)
+libc_hidden_def (__memrchr) weak_alias (__memrchr, memrchr)
 
 #endif

@@ -60,22 +60,22 @@ __tanh (double x)
   if (ix >= 0x7ff00000)
     {
       if (jx >= 0)
-	return one / x + one;               /* tanh(+-inf)=+-1 */
+	return one / x + one; /* tanh(+-inf)=+-1 */
       else
-	return one / x - one;               /* tanh(NaN) = NaN */
+	return one / x - one; /* tanh(NaN) = NaN */
     }
 
   /* |x| < 22 */
-  if (ix < 0x40360000)                  /* |x|<22 */
+  if (ix < 0x40360000) /* |x|<22 */
     {
       if ((ix | lx) == 0)
-	return x;                       /* x == +-0 */
-      if (ix < 0x3c800000)              /* |x|<2**-55 */
+	return x;	   /* x == +-0 */
+      if (ix < 0x3c800000) /* |x|<2**-55 */
 	{
 	  math_check_force_underflow (x);
-	  return x * (one + x);           /* tanh(small) = small */
+	  return x * (one + x); /* tanh(small) = small */
 	}
-      if (ix >= 0x3ff00000)             /* |x|>=1  */
+      if (ix >= 0x3ff00000) /* |x|>=1  */
 	{
 	  t = __expm1 (two * fabs (x));
 	  z = one - two / (t + two);
@@ -89,7 +89,7 @@ __tanh (double x)
     }
   else
     {
-      z = one - tiny;                   /* raised inexact flag */
+      z = one - tiny; /* raised inexact flag */
     }
   return (jx >= 0) ? z : -z;
 }

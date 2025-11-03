@@ -44,9 +44,9 @@ __pthread_spin_unlock (pthread_spinlock_t *lock)
   return 0;
 }
 versioned_symbol (libc, __pthread_spin_unlock, pthread_spin_unlock,
-                  GLIBC_2_34);
+		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_spin_unlock, pthread_spin_unlock,
-               GLIBC_2_2);
+	       GLIBC_2_2);
 #endif

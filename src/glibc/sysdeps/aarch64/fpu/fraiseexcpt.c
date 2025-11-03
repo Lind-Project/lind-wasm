@@ -42,52 +42,51 @@ __feraiseexcept (int excepts)
      exception to be raised immediately.  */
 
   if (FE_INVALID & excepts)
-    __asm__ __volatile__ (
-			  "ldr	s0, %1\n\t"
+    __asm__ __volatile__ ("ldr	s0, %1\n\t"
 			  "fdiv	s0, s0, s0\n\t"
-			  "mrs	%0, fpsr" : "=r" (fpsr)
-			  : "m" (fp_zero)
+			  "mrs	%0, fpsr"
+			  : "=r"(fpsr)
+			  : "m"(fp_zero)
 			  : "d0");
 
   if (FE_DIVBYZERO & excepts)
-    __asm__ __volatile__ (
-			  "ldr	s0, %1\n\t"
+    __asm__ __volatile__ ("ldr	s0, %1\n\t"
 			  "ldr	s1, %2\n\t"
 			  "fdiv	s0, s0, s1\n\t"
-			  "mrs	%0, fpsr" : "=r" (fpsr)
-			  : "m" (fp_one), "m" (fp_zero)
+			  "mrs	%0, fpsr"
+			  : "=r"(fpsr)
+			  : "m"(fp_one), "m"(fp_zero)
 			  : "d0", "d1");
 
   if (FE_OVERFLOW & excepts)
     /* There's no way to raise overflow without also raising inexact.  */
-    __asm__ __volatile__ (
-			  "ldr	s0, %1\n\t"
+    __asm__ __volatile__ ("ldr	s0, %1\n\t"
 			  "ldr	s1, %2\n\t"
 			  "fadd s0, s0, s1\n\t"
-			  "mrs	%0, fpsr" : "=r" (fpsr)
-			  : "m" (fp_max), "m" (fp_1e32)
+			  "mrs	%0, fpsr"
+			  : "=r"(fpsr)
+			  : "m"(fp_max), "m"(fp_1e32)
 			  : "d0", "d1");
 
   if (FE_UNDERFLOW & excepts)
-    __asm__ __volatile__ (
-			  "ldr	s0, %1\n\t"
+    __asm__ __volatile__ ("ldr	s0, %1\n\t"
 			  "ldr	s1, %2\n\t"
 			  "fdiv s0, s0, s1\n\t"
-			  "mrs	%0, fpsr" : "=r" (fpsr)
-			  : "m" (fp_min), "m" (fp_three)
+			  "mrs	%0, fpsr"
+			  : "=r"(fpsr)
+			  : "m"(fp_min), "m"(fp_three)
 			  : "d0", "d1");
 
   if (FE_INEXACT & excepts)
-    __asm__ __volatile__ (
-			  "ldr	s0, %1\n\t"
+    __asm__ __volatile__ ("ldr	s0, %1\n\t"
 			  "ldr	s1, %2\n\t"
 			  "fdiv s0, s0, s1\n\t"
-			  "mrs	%0, fpsr" : "=r" (fpsr)
-			  : "m" (fp_two), "m" (fp_three)
+			  "mrs	%0, fpsr"
+			  : "=r"(fpsr)
+			  : "m"(fp_two), "m"(fp_three)
 			  : "d0", "d1");
 
   return 0;
 }
-libm_hidden_def (__feraiseexcept)
-weak_alias (__feraiseexcept, feraiseexcept)
-libm_hidden_weak (feraiseexcept)
+libm_hidden_def (__feraiseexcept) weak_alias (__feraiseexcept, feraiseexcept)
+    libm_hidden_weak (feraiseexcept)

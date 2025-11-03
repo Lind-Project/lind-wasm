@@ -1,7 +1,6 @@
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 __isoc99_swscanf (const wchar_t *s, const wchar_t *fmt, ...)
 {
   va_list arg;

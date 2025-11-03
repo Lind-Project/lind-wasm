@@ -21,7 +21,7 @@
 double
 __rint (double x)
 {
-  asm ("fint.d %1,%0" : "=f" (x) : "fm" (x));
+  asm ("fint.d %1,%0" : "=f"(x) : "fm"(x));
   return x;
 }
 libm_alias_double (__rint, rint)

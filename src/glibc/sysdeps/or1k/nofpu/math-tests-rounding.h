@@ -18,11 +18,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef OR1K_NOFPU_MATH_TESTS_ROUNDING_H
-#define OR1K_NOFPU_MATH_TESTS_ROUNDING_H 1
+#  define OR1K_NOFPU_MATH_TESTS_ROUNDING_H 1
 
 /* On soft-float targets we only support the "to nearest" rounding mode.  */
-#define ROUNDING_TESTS_float(MODE)		((MODE) == FE_TONEAREST)
-#define ROUNDING_TESTS_double(MODE)		((MODE) == FE_TONEAREST)
-#define ROUNDING_TESTS_long_double(MODE)	((MODE) == FE_TONEAREST)
+#  define ROUNDING_TESTS_float(MODE) ((MODE) == FE_TONEAREST)
+#  define ROUNDING_TESTS_double(MODE) ((MODE) == FE_TONEAREST)
+#  define ROUNDING_TESTS_long_double(MODE) ((MODE) == FE_TONEAREST)
 
 #endif /* math-tests-rounding.h.  */

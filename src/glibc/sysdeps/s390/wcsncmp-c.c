@@ -19,9 +19,9 @@
 #include <ifunc-wcsncmp.h>
 
 #if HAVE_WCSNCMP_C
-# if HAVE_WCSNCMP_IFUNC
-#  define WCSNCMP WCSNCMP_C
-# endif
+#  if HAVE_WCSNCMP_IFUNC
+#    define WCSNCMP WCSNCMP_C
+#  endif
 
-# include <wcsmbs/wcsncmp.c>
+#  include <wcsmbs/wcsncmp.c>
 #endif

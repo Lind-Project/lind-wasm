@@ -26,16 +26,16 @@
 #include <support/test-driver.h>
 
 #ifdef __powerpc64__
-  typedef uint64_t ppr_t;
-# define MFPPR "mfppr"
-  /* The thread priority value is obtained from bits 11:13.  */
-# define EXTRACT_THREAD_PRIORITY(x) ((x >> 50) & 7)
+typedef uint64_t ppr_t;
+#  define MFPPR "mfppr"
+/* The thread priority value is obtained from bits 11:13.  */
+#  define EXTRACT_THREAD_PRIORITY(x) ((x >> 50) & 7)
 #else
-  typedef uint32_t ppr_t;
-# define MFPPR "mfppr32"
-  /* For 32-bit, the upper 32 bits of the Program Priority Register (PPR)
-     are used, so the thread priority value is obtained from bits 43:46.  */
-# define EXTRACT_THREAD_PRIORITY(x) ((x >> 18) & 7)
+typedef uint32_t ppr_t;
+#  define MFPPR "mfppr32"
+/* For 32-bit, the upper 32 bits of the Program Priority Register (PPR)
+   are used, so the thread priority value is obtained from bits 43:46.  */
+#  define EXTRACT_THREAD_PRIORITY(x) ((x >> 18) & 7)
 #endif /* !__powerpc64__ */
 
 /* Read the thread priority value set in the PPR.  */
@@ -44,7 +44,7 @@ get_thread_priority (void)
 {
   /* Read the PPR.  */
   ppr_t ppr;
-  asm volatile (".machine push; .machine power7; "MFPPR" %0; .machine pop"
+  asm volatile (".machine push; .machine power7; " MFPPR " %0; .machine pop"
 		: "=r"(ppr));
   /* Return the thread priority value.  */
   return EXTRACT_THREAD_PRIORITY (ppr);
@@ -58,11 +58,11 @@ check_thread_priority (uint8_t expected)
 
   if (actual != expected)
     {
-      printf ("FAIL: Expected %"PRIu8" got %"PRIuMAX".\n", expected,
+      printf ("FAIL: Expected %" PRIu8 " got %" PRIuMAX ".\n", expected,
 	      (uintmax_t) actual);
       return 1;
     }
-  printf ("PASS: Thread priority set to %"PRIu8" correctly.\n", expected);
+  printf ("PASS: Thread priority set to %" PRIu8 " correctly.\n", expected);
   return 0;
 }
 
@@ -77,7 +77,7 @@ do_test (void)
   if ((getauxval (AT_HWCAP) & PPC_FEATURE_ARCH_2_06) == 0)
     {
       printf ("Requires an environment that implements the Power ISA version"
-              " 2.06 or greater.\n");
+	      " 2.06 or greater.\n");
       return EXIT_UNSUPPORTED;
     }
 

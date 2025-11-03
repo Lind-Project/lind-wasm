@@ -48,21 +48,21 @@ __pthread_rwlock_timedrdlock_internal (struct __pthread_rwlock *rwlock,
     }
   else
     /* Lock is held, but is held by a reader?  */
-  if (rwlock->__readers > 0)
-    /* Just add ourself to number of readers.  */
-    {
-      assert (rwlock->__readerqueue == 0);
-      rwlock->__readers++;
-      __pthread_spin_unlock (&rwlock->__lock);
-      return 0;
-    }
+    if (rwlock->__readers > 0)
+      /* Just add ourself to number of readers.  */
+      {
+	assert (rwlock->__readerqueue == 0);
+	rwlock->__readers++;
+	__pthread_spin_unlock (&rwlock->__lock);
+	return 0;
+      }
 
   /* The lock is busy.  */
 
   /* Better be blocked by a writer.  */
   assert (rwlock->__readers == 0);
 
-  if (abstime != NULL && ! valid_nanoseconds (abstime->tv_nsec))
+  if (abstime != NULL && !valid_nanoseconds (abstime->tv_nsec))
     {
       __pthread_spin_unlock (&rwlock->__lock);
       return EINVAL;
@@ -93,7 +93,7 @@ __pthread_rwlock_timedrdlock_internal (struct __pthread_rwlock *rwlock,
   else
     {
       /* We're still in the queue.  No one attempted to wake us up, i.e. we
-         timed out.  */
+	 timed out.  */
       __pthread_dequeue (self);
       drain = 0;
     }
@@ -120,14 +120,14 @@ int
 __pthread_rwlock_timedrdlock (struct __pthread_rwlock *rwlock,
 			      const struct timespec *abstime)
 {
-  return __pthread_rwlock_timedrdlock_internal (rwlock, CLOCK_REALTIME, abstime);
+  return __pthread_rwlock_timedrdlock_internal (rwlock, CLOCK_REALTIME,
+						abstime);
 }
 weak_alias (__pthread_rwlock_timedrdlock, pthread_rwlock_timedrdlock)
 
-int
-__pthread_rwlock_clockrdlock (struct __pthread_rwlock *rwlock,
-			      clockid_t clockid,
-			      const struct timespec *abstime)
+    int __pthread_rwlock_clockrdlock (struct __pthread_rwlock *rwlock,
+				      clockid_t clockid,
+				      const struct timespec *abstime)
 {
   return __pthread_rwlock_timedrdlock_internal (rwlock, clockid, abstime);
 }

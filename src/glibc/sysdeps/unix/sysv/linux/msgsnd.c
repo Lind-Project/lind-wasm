@@ -24,8 +24,7 @@ __libc_msgsnd (int msqid, const void *msgp, size_t msgsz, int msgflg)
 #ifdef __ASSUME_DIRECT_SYSVIPC_SYSCALLS
   return SYSCALL_CANCEL (msgsnd, msqid, msgp, msgsz, msgflg);
 #else
-  return SYSCALL_CANCEL (ipc, IPCOP_msgsnd, msqid, msgsz, msgflg,
-			 msgp);
+  return SYSCALL_CANCEL (ipc, IPCOP_msgsnd, msqid, msgsz, msgflg, msgp);
 #endif
 }
 weak_alias (__libc_msgsnd, msgsnd)

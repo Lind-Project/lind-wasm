@@ -17,7 +17,6 @@
 
 #include <sys/stat.h>
 
-
 /* Create a new FIFO with permission bits MODE.  But interpret
    relative PATH names relative to the directory associated with FD.  */
 int

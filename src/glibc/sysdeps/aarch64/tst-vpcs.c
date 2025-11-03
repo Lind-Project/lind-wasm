@@ -23,7 +23,8 @@
 struct regs
 {
   uint64_t x[32];
-  union {
+  union
+  {
     long double q[32];
     uint64_t u[64];
   } v;
@@ -41,7 +42,7 @@ do_test (void)
   struct regs before, after;
   int err = 0;
 
-  unsigned char *p = (unsigned char *)&before;
+  unsigned char *p = (unsigned char *) &before;
   for (int i = 0; i < sizeof before; i++)
     p[i] = i & 0xff;
 
@@ -54,21 +55,19 @@ do_test (void)
 	  /* Variant PCS allows clobbering x16 and x17.  */
 	  continue;
 	err++;
-	printf ("x%d: before: 0x%016llx after: 0x%016llx\n",
-	  i,
-	  (unsigned long long)before.x[i],
-	  (unsigned long long)after.x[i]);
+	printf ("x%d: before: 0x%016llx after: 0x%016llx\n", i,
+		(unsigned long long) before.x[i],
+		(unsigned long long) after.x[i]);
       }
   for (int i = 0; i < 64; i++)
     if (before.v.u[i] != after.v.u[i])
       {
 	err++;
 	printf ("v%d: before: 0x%016llx %016llx after: 0x%016llx %016llx\n",
-	  i/2,
-	  (unsigned long long)before.v.u[2*(i/2)+1],
-	  (unsigned long long)before.v.u[2*(i/2)],
-	  (unsigned long long)after.v.u[2*(i/2)+1],
-	  (unsigned long long)after.v.u[2*(i/2)]);
+		i / 2, (unsigned long long) before.v.u[2 * (i / 2) + 1],
+		(unsigned long long) before.v.u[2 * (i / 2)],
+		(unsigned long long) after.v.u[2 * (i / 2) + 1],
+		(unsigned long long) after.v.u[2 * (i / 2)]);
       }
   if (err)
     FAIL_EXIT1 ("The variant PCS call clobbered %d registers.\n", err);

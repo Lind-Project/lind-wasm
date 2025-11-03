@@ -23,20 +23,18 @@
 #include <time.h>
 #include <unistd.h>
 
-
 #define NWRITERS 15
 #define WRITETRIES 10
 #define NREADERS 15
 #define READTRIES 15
 
-#define DELAY   1000000
+#define DELAY 1000000
 
 #ifndef KIND
-# define KIND PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
+#  define KIND PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
 #endif
 
 static pthread_rwlock_t lock;
-
 
 static void *
 writer_thread (void *nr)
@@ -73,7 +71,6 @@ writer_thread (void *nr)
   return NULL;
 }
 
-
 static void *
 reader_thread (void *nr)
 {
@@ -109,7 +106,6 @@ reader_thread (void *nr)
   return NULL;
 }
 
-
 static int
 do_test (void)
 {
@@ -144,16 +140,16 @@ do_test (void)
   setvbuf (stdout, NULL, _IONBF, 0);
 
   for (n = 0; n < NWRITERS; ++n)
-    if (pthread_create (&thwr[n], NULL, writer_thread,
-			(void *) (long int) n) != 0)
+    if (pthread_create (&thwr[n], NULL, writer_thread, (void *) (long int) n)
+	!= 0)
       {
 	puts ("writer create failed");
 	exit (1);
       }
 
   for (n = 0; n < NREADERS; ++n)
-    if (pthread_create (&thrd[n], NULL, reader_thread,
-			(void *) (long int) n) != 0)
+    if (pthread_create (&thrd[n], NULL, reader_thread, (void *) (long int) n)
+	!= 0)
       {
 	puts ("reader create failed");
 	exit (1);

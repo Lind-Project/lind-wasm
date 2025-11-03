@@ -17,7 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SOCKET_H
-# error "Never include <bits/socket-constants.h> directly; use <sys/socket.h> instead."
+#  error                                                                       \
+      "Never include <bits/socket-constants.h> directly; use <sys/socket.h> instead."
 #endif
 
 #define SOL_SOCKET 65535

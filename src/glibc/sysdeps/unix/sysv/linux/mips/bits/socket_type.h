@@ -17,39 +17,40 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SOCKET_H
-# error "Never include <bits/socket_type.h> directly; use <sys/socket.h> instead."
+#  error                                                                       \
+      "Never include <bits/socket_type.h> directly; use <sys/socket.h> instead."
 #endif
 
 /* Types of sockets.  */
 enum __socket_type
 {
-  SOCK_DGRAM = 1,		/* Connectionless, unreliable datagrams
-				   of fixed maximum length.  */
+  SOCK_DGRAM = 1, /* Connectionless, unreliable datagrams
+		     of fixed maximum length.  */
 #define SOCK_DGRAM SOCK_DGRAM
-  SOCK_STREAM = 2,		/* Sequenced, reliable, connection-based
-				   byte streams.  */
+  SOCK_STREAM = 2, /* Sequenced, reliable, connection-based
+		      byte streams.  */
 #define SOCK_STREAM SOCK_STREAM
-  SOCK_RAW = 3,			/* Raw protocol interface.  */
+  SOCK_RAW = 3, /* Raw protocol interface.  */
 #define SOCK_RAW SOCK_RAW
-  SOCK_RDM = 4,			/* Reliably-delivered messages.  */
+  SOCK_RDM = 4, /* Reliably-delivered messages.  */
 #define SOCK_RDM SOCK_RDM
-  SOCK_SEQPACKET = 5,		/* Sequenced, reliable, connection-based,
-				   datagrams of fixed maximum length.  */
+  SOCK_SEQPACKET = 5, /* Sequenced, reliable, connection-based,
+			 datagrams of fixed maximum length.  */
 #define SOCK_SEQPACKET SOCK_SEQPACKET
   SOCK_DCCP = 6,
-#define SOCK_DCCP SOCK_DCCP	/* Datagram Congestion Control Protocol.  */
-  SOCK_PACKET = 10,		/* Linux specific way of getting packets
-				   at the dev level.  For writing rarp and
-				   other similar things on the user level. */
+#define SOCK_DCCP SOCK_DCCP /* Datagram Congestion Control Protocol.  */
+  SOCK_PACKET = 10,	    /* Linux specific way of getting packets
+			       at the dev level.  For writing rarp and
+			       other similar things on the user level. */
 #define SOCK_PACKET SOCK_PACKET
 
   /* Flags to be ORed into the type parameter of socket and socketpair and
      used for the flags parameter of paccept.  */
 
-  SOCK_CLOEXEC = 02000000,	/* Atomically set close-on-exec flag for the
-				   new descriptor(s).  */
+  SOCK_CLOEXEC = 02000000, /* Atomically set close-on-exec flag for the
+			      new descriptor(s).  */
 #define SOCK_CLOEXEC SOCK_CLOEXEC
-  SOCK_NONBLOCK = 00000200	/* Atomically mark descriptor(s) as
-				   non-blocking.  */
+  SOCK_NONBLOCK = 00000200 /* Atomically mark descriptor(s) as
+			      non-blocking.  */
 #define SOCK_NONBLOCK SOCK_NONBLOCK
 };

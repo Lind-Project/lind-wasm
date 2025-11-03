@@ -35,7 +35,7 @@ do_test (void)
   TEST_COMPARE_STRING (gai_strerror (1), "Unknown error");
   TEST_COMPARE_STRING (gai_strerror (0), "Success");
   TEST_COMPARE_STRING (gai_strerror (EAI_OVERFLOW),
-                       "Result too large for supplied buffer");
+		       "Result too large for supplied buffer");
 
   return 0;
 }

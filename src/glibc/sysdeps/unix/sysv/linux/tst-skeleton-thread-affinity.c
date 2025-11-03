@@ -54,8 +54,8 @@ thread_burn_one_cpu (void *closure)
       int current = sched_getcpu ();
       if (sched_getcpu () != cpu)
 	{
-	  printf ("error: Pinned thread %d ran on impossible cpu %d\n",
-		  cpu, current);
+	  printf ("error: Pinned thread %d ran on impossible cpu %d\n", cpu,
+		  current);
 	  __atomic_store_n (&failed, 1, __ATOMIC_RELAXED);
 	  /* Terminate early.  */
 	  __atomic_store_n (&still_running, 1, __ATOMIC_RELAXED);
@@ -121,7 +121,8 @@ stop_and_join_threads (struct conf *conf, cpu_set_t *set,
       int ret = pthread_join (*p, NULL);
       if (ret != 0)
 	{
-	  printf ("error: Failed to join thread %d: %s\n", cpu, strerror (ret));
+	  printf ("error: Failed to join thread %d: %s\n", cpu,
+		  strerror (ret));
 	  fflush (stdout);
 	  /* Cannot shut down cleanly with threads still running.  */
 	  abort ();
@@ -137,7 +138,8 @@ stop_and_join_threads (struct conf *conf, cpu_set_t *set,
       int ret = pthread_join (p->self, NULL);
       if (ret != 0)
 	{
-	  printf ("error: Failed to join thread %d: %s\n", cpu, strerror (ret));
+	  printf ("error: Failed to join thread %d: %s\n", cpu,
+		  strerror (ret));
 	  fflush (stdout);
 	  /* Cannot shut down cleanly with threads still running.  */
 	  abort ();
@@ -151,14 +153,14 @@ static bool
 early_test (struct conf *conf)
 {
   pthread_t *pinned_threads
-    = calloc (conf->last_cpu + 1, sizeof (*pinned_threads));
+      = calloc (conf->last_cpu + 1, sizeof (*pinned_threads));
   struct burn_thread *other_threads
-    = calloc (conf->last_cpu + 1, sizeof (*other_threads));
+      = calloc (conf->last_cpu + 1, sizeof (*other_threads));
   cpu_set_t *initial_set = CPU_ALLOC (conf->set_size);
   cpu_set_t *scratch_set = CPU_ALLOC (conf->set_size);
 
-  if (pinned_threads == NULL || other_threads == NULL
-      || initial_set == NULL || scratch_set == NULL)
+  if (pinned_threads == NULL || other_threads == NULL || initial_set == NULL
+      || scratch_set == NULL)
     {
       puts ("error: Memory allocation failure");
       return false;
@@ -201,26 +203,24 @@ early_test (struct conf *conf)
 	continue;
       CPU_ZERO_S (CPU_ALLOC_SIZE (conf->set_size), scratch_set);
       CPU_SET_S (cpu, CPU_ALLOC_SIZE (conf->set_size), scratch_set);
-      ret = pthread_attr_setaffinity_np
-	(&attr, CPU_ALLOC_SIZE (conf->set_size), scratch_set);
+      ret = pthread_attr_setaffinity_np (
+	  &attr, CPU_ALLOC_SIZE (conf->set_size), scratch_set);
       if (ret != 0)
 	{
 	  printf ("error: pthread_attr_setaffinity_np for CPU %d failed: %s\n",
 		  cpu, strerror (ret));
-	  stop_and_join_threads (conf, initial_set,
-				 pinned_threads, pinned_threads + cpu,
-				 NULL, NULL);
+	  stop_and_join_threads (conf, initial_set, pinned_threads,
+				 pinned_threads + cpu, NULL, NULL);
 	  return false;
 	}
-      ret = pthread_create (pinned_threads + cpu, &attr,
-			    thread_burn_one_cpu, (void *) (uintptr_t) cpu);
+      ret = pthread_create (pinned_threads + cpu, &attr, thread_burn_one_cpu,
+			    (void *) (uintptr_t) cpu);
       if (ret != 0)
 	{
-	  printf ("error: pthread_create for CPU %d failed: %s\n",
-		  cpu, strerror (ret));
-	  stop_and_join_threads (conf, initial_set,
-				 pinned_threads, pinned_threads + cpu,
-				 NULL, NULL);
+	  printf ("error: pthread_create for CPU %d failed: %s\n", cpu,
+		  strerror (ret));
+	  stop_and_join_threads (conf, initial_set, pinned_threads,
+				 pinned_threads + cpu, NULL, NULL);
 	  return false;
 	}
     }
@@ -235,10 +235,9 @@ early_test (struct conf *conf)
 			    thread_burn_any_cpu, other_threads + cpu);
       if (ret != 0)
 	{
-	  printf ("error: pthread_create for thread %d failed: %s\n",
-		  cpu, strerror (ret));
-	  stop_and_join_threads (conf, initial_set,
-				 pinned_threads,
+	  printf ("error: pthread_create for thread %d failed: %s\n", cpu,
+		  strerror (ret));
+	  stop_and_join_threads (conf, initial_set, pinned_threads,
 				 pinned_threads + conf->last_cpu + 1,
 				 other_threads, other_threads + cpu);
 	  return false;
@@ -253,10 +252,9 @@ early_test (struct conf *conf)
   main_thread.thread = -1;
   CPU_ZERO_S (CPU_ALLOC_SIZE (conf->set_size), main_thread.seen_set);
   thread_burn_any_cpu (&main_thread);
-  stop_and_join_threads (conf, initial_set,
-			 pinned_threads,
-			 pinned_threads + conf->last_cpu + 1,
-			 other_threads, other_threads + conf->last_cpu + 1);
+  stop_and_join_threads (conf, initial_set, pinned_threads,
+			 pinned_threads + conf->last_cpu + 1, other_threads,
+			 other_threads + conf->last_cpu + 1);
 
   printf ("info: Main thread ran on %d CPU(s) of %d available CPU(s)\n",
 	  CPU_COUNT_S (CPU_ALLOC_SIZE (conf->set_size), scratch_set),
@@ -266,13 +264,13 @@ early_test (struct conf *conf)
     {
       if (!CPU_ISSET_S (cpu, CPU_ALLOC_SIZE (conf->set_size), initial_set))
 	continue;
-      CPU_OR_S (CPU_ALLOC_SIZE (conf->set_size),
-		scratch_set, scratch_set, other_threads[cpu].seen_set);
+      CPU_OR_S (CPU_ALLOC_SIZE (conf->set_size), scratch_set, scratch_set,
+		other_threads[cpu].seen_set);
       CPU_FREE (other_threads[cpu].seen_set);
     }
   printf ("info: Other threads ran on %d CPU(s)\n",
-	  CPU_COUNT_S (CPU_ALLOC_SIZE (conf->set_size), scratch_set));;
-
+	  CPU_COUNT_S (CPU_ALLOC_SIZE (conf->set_size), scratch_set));
+  ;
 
   pthread_attr_destroy (&attr);
   CPU_FREE (scratch_set);

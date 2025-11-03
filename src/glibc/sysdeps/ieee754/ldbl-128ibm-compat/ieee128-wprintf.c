@@ -26,8 +26,7 @@ ___ieee128_wprintf (const wchar_t *format, ...)
   int done;
 
   va_start (ap, format);
-  done = __vfwprintf_internal (stdout, format, ap,
-			       PRINTF_LDBL_USES_FLOAT128);
+  done = __vfwprintf_internal (stdout, format, ap, PRINTF_LDBL_USES_FLOAT128);
   va_end (ap);
 
   return done;

@@ -60,7 +60,7 @@ run_loop (void *arg)
 	 that readers block (and eventually are susceptable to
 	 stalling).
 
-         If we are a writer, take the write lock, and then unlock.
+	 If we are a writer, take the write lock, and then unlock.
 	 If we are a reader, try the lock, then lock, then unlock.  */
       if ((i % 8) != 0)
 	{

@@ -35,12 +35,13 @@ __pthread_attr_setstackaddr (pthread_attr_t *attr, void *stackaddr)
 
   return 0;
 }
-versioned_symbol (libc, __pthread_attr_setstackaddr,
-                  pthread_attr_setstackaddr, GLIBC_2_34);
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+versioned_symbol (libc, __pthread_attr_setstackaddr, pthread_attr_setstackaddr,
+		  GLIBC_2_34);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_attr_setstackaddr,
-               pthread_attr_setstackaddr, GLIBC_2_1);
+	       pthread_attr_setstackaddr, GLIBC_2_1);
 #endif
 
 link_warning (pthread_attr_setstackaddr,
-              "the use of `pthread_attr_setstackaddr' is deprecated, use `pthread_attr_setstack'")
+	      "the use of `pthread_attr_setstackaddr' is deprecated, use "
+	      "`pthread_attr_setstack'")

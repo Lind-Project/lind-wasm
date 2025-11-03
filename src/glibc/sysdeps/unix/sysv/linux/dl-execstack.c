@@ -33,24 +33,24 @@ static int
 make_main_stack_executable (void **stack_endp)
 {
   /* This gives us the highest/lowest page that needs to be changed.  */
-  uintptr_t page = ((uintptr_t) *stack_endp
-		    & -(intptr_t) GLRO(dl_pagesize));
+  uintptr_t page = ((uintptr_t) *stack_endp & -(intptr_t) GLRO (dl_pagesize));
   int result = 0;
 
-  if (__builtin_expect (__mprotect ((void *) page, GLRO(dl_pagesize),
-				    __stack_prot) == 0, 1))
+  if (__builtin_expect (
+	  __mprotect ((void *) page, GLRO (dl_pagesize), __stack_prot) == 0,
+	  1))
     goto return_success;
   result = errno;
   goto out;
 
- return_success:
+return_success:
   /* Clear the address.  */
   *stack_endp = NULL;
 
   /* Remember that we changed the permission.  */
-  GL(dl_stack_flags) |= PF_X;
+  GL (dl_stack_flags) |= PF_X;
 
- out:
+out:
 #ifdef check_consistency
   check_consistency ();
 #endif
@@ -82,8 +82,8 @@ _dl_make_stacks_executable (void **stack_endp)
   if (err == 0)
     list_for_each (runp, &GL (dl_stack_cache))
       {
-	err = __nptl_change_stack_perm (list_entry (runp, struct pthread,
-						    list));
+	err = __nptl_change_stack_perm (
+	    list_entry (runp, struct pthread, list));
 	if (err != 0)
 	  break;
       }
@@ -103,7 +103,7 @@ __nptl_change_stack_perm (struct pthread *pd)
   void *stack = pd->stackblock;
   size_t len = (uintptr_t) pd - pd->guardsize - (uintptr_t) pd->stackblock;
 #else
-# error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
+#  error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
 #endif
   if (__mprotect (stack, len, PROT_READ | PROT_WRITE | PROT_EXEC) != 0)
     return errno;

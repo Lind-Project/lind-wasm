@@ -27,19 +27,20 @@ __pthread_mutexattr_getrobust (const pthread_mutexattr_t *attr,
   iattr = (const struct pthread_mutexattr *) attr;
 
   *robustness = ((iattr->mutexkind & PTHREAD_MUTEXATTR_FLAG_ROBUST) != 0
-		 ? PTHREAD_MUTEX_ROBUST_NP : PTHREAD_MUTEX_STALLED_NP);
+		     ? PTHREAD_MUTEX_ROBUST_NP
+		     : PTHREAD_MUTEX_STALLED_NP);
 
   return 0;
 }
 versioned_symbol (libc, __pthread_mutexattr_getrobust,
 		  pthread_mutexattr_getrobust, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_4, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_4, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_mutexattr_getrobust,
-               pthread_mutexattr_getrobust_np, GLIBC_2_4);
+	       pthread_mutexattr_getrobust_np, GLIBC_2_4);
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_12, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_12, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_mutexattr_getrobust,
-               pthread_mutexattr_getrobust, GLIBC_2_12);
+	       pthread_mutexattr_getrobust, GLIBC_2_12);
 #endif

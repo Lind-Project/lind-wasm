@@ -30,11 +30,10 @@ long int
 __lrint (double x)
 {
   long long int ret;
-  __asm__ ("fctiw %0, %1" : "=d" (ret) : "d" (x));
+  __asm__ ("fctiw %0, %1" : "=d"(ret) : "d"(x));
   return ret;
 }
 #ifndef __lrint
-libm_alias_double (__lrint, lrint)
-strong_alias (__lrint, __lrintf)
-libm_alias_float (__lrint, lrint)
+libm_alias_double (__lrint, lrint) strong_alias (__lrint, __lrintf)
+    libm_alias_float (__lrint, lrint)
 #endif

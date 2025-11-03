@@ -56,7 +56,7 @@ PWRITEV (int fd, const struct iovec *vector, int count, OFF_T offset)
      2. it would make the implementation more complex, and 3. it will require
      another syscall (fcntl).  */
   void *buffer = __mmap (NULL, bytes, PROT_READ | PROT_WRITE,
-		         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+			 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (__glibc_unlikely (buffer == MAP_FAILED))
     return -1;
 

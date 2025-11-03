@@ -26,5 +26,4 @@
 void
 __setfpucw (fpu_control_t set)
 {
-  
 }

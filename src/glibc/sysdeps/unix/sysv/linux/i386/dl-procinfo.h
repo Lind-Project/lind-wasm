@@ -17,12 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_I386_PROCINFO_H
-#define _DL_I386_PROCINFO_H	1
-#include <sysdeps/x86/dl-procinfo.h>
+#  define _DL_I386_PROCINFO_H 1
+#  include <sysdeps/x86/dl-procinfo.h>
 
-#undef _dl_procinfo
-static inline int
-__attribute__ ((unused))
+#  undef _dl_procinfo
+static inline int __attribute__ ((unused))
 _dl_procinfo (unsigned int type, unsigned long int word)
 {
   /* This table should match the information from arch/i386/kernel/setup.c
@@ -37,7 +36,7 @@ _dl_procinfo (unsigned int type, unsigned long int word)
 
   for (i = 0; i < 32; ++i)
     if (word & (1 << i))
-      _dl_printf (" %s", GLRO(dl_x86_cap_flags)[i]);
+      _dl_printf (" %s", GLRO (dl_x86_cap_flags)[i]);
 
   _dl_printf ("\n");
 

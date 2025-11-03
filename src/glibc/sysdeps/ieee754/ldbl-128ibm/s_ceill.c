@@ -27,7 +27,6 @@
 double ceil (double);
 // double ceil (double) asm ("__ceil");
 
-
 long double
 __ceill (long double x)
 {
@@ -36,9 +35,10 @@ __ceill (long double x)
   ldbl_unpack (x, &xh, &xl);
 
   /* Return Inf, Nan, +/-0 unchanged.  */
-  if (__builtin_expect (xh != 0.0
-			&& __builtin_isless (__builtin_fabs (xh),
-					     __builtin_inf ()), 1))
+  if (__builtin_expect (
+	  xh != 0.0
+	      && __builtin_isless (__builtin_fabs (xh), __builtin_inf ()),
+	  1))
     {
       hi = ceil (xh);
       if (hi != xh)

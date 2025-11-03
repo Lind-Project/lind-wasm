@@ -25,16 +25,15 @@
 #include <dl-minsigstacksize.h>
 #include <dl-hwcap2.h>
 
-extern void TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *)
-  attribute_hidden;
+extern void TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *) attribute_hidden;
 
 #if defined SHARED
 extern void _dl_tlsdesc_dynamic_fxsave (void) attribute_hidden;
 extern void _dl_tlsdesc_dynamic_xsave (void) attribute_hidden;
 extern void _dl_tlsdesc_dynamic_xsavec (void) attribute_hidden;
 
-# ifdef __x86_64__
-#  include <dl-plt-rewrite.h>
+#  ifdef __x86_64__
+#    include <dl-plt-rewrite.h>
 
 static void
 TUNABLE_CALLBACK (set_plt_rewrite) (tunable_val_t *valp)
@@ -53,9 +52,9 @@ TUNABLE_CALLBACK (set_plt_rewrite) (tunable_val_t *valp)
 		 : plt_rewrite_jmp);
     }
 }
-# else
+#  else
 extern void _dl_tlsdesc_dynamic_fnsave (void) attribute_hidden;
-# endif
+#  endif
 #endif
 
 #ifdef __x86_64__
@@ -69,18 +68,17 @@ static void
 TUNABLE_CALLBACK (set_prefer_map_32bit_exec) (tunable_val_t *valp)
 {
   if (valp->numval)
-    GLRO(dl_x86_cpu_features).preferred[index_arch_Prefer_MAP_32BIT_EXEC]
-      |= bit_arch_Prefer_MAP_32BIT_EXEC;
+    GLRO (dl_x86_cpu_features).preferred[index_arch_Prefer_MAP_32BIT_EXEC]
+	|= bit_arch_Prefer_MAP_32BIT_EXEC;
 }
 #endif
 
 #if CET_ENABLED
-extern void TUNABLE_CALLBACK (set_x86_ibt) (tunable_val_t *)
-  attribute_hidden;
-extern void TUNABLE_CALLBACK (set_x86_shstk) (tunable_val_t *)
-  attribute_hidden;
+extern void TUNABLE_CALLBACK (set_x86_ibt) (tunable_val_t *) attribute_hidden;
+extern void
+    TUNABLE_CALLBACK (set_x86_shstk) (tunable_val_t *) attribute_hidden;
 
-# include <dl-cet.h>
+#  include <dl-cet.h>
 #endif
 
 static void
@@ -157,7 +155,8 @@ update_active (struct cpu_features *cpu_features)
     os_xmm = 1,
     os_ymm = 2,
     os_zmm = 4
-  } os_vector_size = os_xmm;
+  } os_vector_size
+      = os_xmm;
   /* Can we call xgetbv?  */
   if (CPU_FEATURES_CPU_P (cpu_features, OSXSAVE))
     {
@@ -182,7 +181,7 @@ update_active (struct cpu_features *cpu_features)
 		  /* Unaligned load with 256-bit AVX registers are faster
 		     on Intel/AMD processors with AVX2.  */
 		  cpu_features->preferred[index_arch_AVX_Fast_Unaligned_Load]
-		    |= bit_arch_AVX_Fast_Unaligned_Load;
+		      |= bit_arch_AVX_Fast_Unaligned_Load;
 		}
 	      /* Determine if AVX-IFMA is usable.  */
 	      CPU_FEATURE_SET_ACTIVE (cpu_features, AVX_IFMA);
@@ -206,8 +205,8 @@ update_active (struct cpu_features *cpu_features)
 
 	  /* Check if OPMASK state, upper 256-bit of ZMM0-ZMM15 and
 	     ZMM16-ZMM31 state are enabled.  */
-	  if ((xcrlow & (bit_Opmask_state | bit_ZMM0_15_state
-			 | bit_ZMM16_31_state))
+	  if ((xcrlow
+	       & (bit_Opmask_state | bit_ZMM0_15_state | bit_ZMM16_31_state))
 	      == (bit_Opmask_state | bit_ZMM0_15_state | bit_ZMM16_31_state))
 	    {
 	      os_vector_size |= os_zmm;
@@ -242,11 +241,9 @@ update_active (struct cpu_features *cpu_features)
 		  /* Determine if is AVX512_VNNI usable.  */
 		  CPU_FEATURE_SET_ACTIVE (cpu_features, AVX512_VNNI);
 		  /* Determine if AVX512_VPOPCNTDQ is usable.  */
-		  CPU_FEATURE_SET_ACTIVE (cpu_features,
-					  AVX512_VPOPCNTDQ);
+		  CPU_FEATURE_SET_ACTIVE (cpu_features, AVX512_VPOPCNTDQ);
 		  /* Determine if AVX512_VP2INTERSECT is usable.  */
-		  CPU_FEATURE_SET_ACTIVE (cpu_features,
-					  AVX512_VP2INTERSECT);
+		  CPU_FEATURE_SET_ACTIVE (cpu_features, AVX512_VP2INTERSECT);
 		  /* Determine if AVX512_BF16 is usable.  */
 		  CPU_FEATURE_SET_ACTIVE (cpu_features, AVX512_BF16);
 		  /* Determine if AVX512_FP16 is usable.  */
@@ -310,12 +307,10 @@ update_active (struct cpu_features *cpu_features)
 	      /* NB: On AMX capable processors, ebx always includes AMX
 		 states.  */
 	      unsigned int xsave_state_full_size
-		= ALIGN_UP (ebx + TLSDESC_CALL_REGISTER_SAVE_AREA, 64);
+		  = ALIGN_UP (ebx + TLSDESC_CALL_REGISTER_SAVE_AREA, 64);
 
-	      cpu_features->xsave_state_size
-		= xsave_state_full_size;
-	      cpu_features->xsave_state_full_size
-		= xsave_state_full_size;
+	      cpu_features->xsave_state_size = xsave_state_full_size;
+	      cpu_features->xsave_state_full_size = xsave_state_full_size;
 
 	      /* Check if XSAVEC is available.  */
 	      if (CPU_FEATURES_CPU_P (cpu_features, XSAVEC))
@@ -374,45 +369,40 @@ update_active (struct cpu_features *cpu_features)
 		      if (i > 2)
 			{
 			  xstate_comp_offsets[i]
-			    = (xstate_comp_offsets[i - 1]
-			       + xstate_comp_sizes[i -1]);
+			      = (xstate_comp_offsets[i - 1]
+				 + xstate_comp_sizes[i - 1]);
 			  if ((ecx & (1 << 1)) != 0)
 			    xstate_comp_offsets[i]
-			      = ALIGN_UP (xstate_comp_offsets[i], 64);
+				= ALIGN_UP (xstate_comp_offsets[i], 64);
 #ifdef __x86_64__
 			  xstate_amx_comp_offsets[i]
-			    = (xstate_amx_comp_offsets[i - 1]
-			       + xstate_amx_comp_sizes[i - 1]);
+			      = (xstate_amx_comp_offsets[i - 1]
+				 + xstate_amx_comp_sizes[i - 1]);
 			  if ((amx_ecx & (1 << 1)) != 0)
 			    xstate_amx_comp_offsets[i]
-			      = ALIGN_UP (xstate_amx_comp_offsets[i],
-					  64);
+				= ALIGN_UP (xstate_amx_comp_offsets[i], 64);
 #endif
 			}
 		    }
 
 		  /* Use XSAVEC.  */
 		  unsigned int size
-		    = xstate_comp_offsets[31] + xstate_comp_sizes[31];
+		      = xstate_comp_offsets[31] + xstate_comp_sizes[31];
 		  if (size)
 		    {
 #ifdef __x86_64__
-		      unsigned int amx_size
-			= (xstate_amx_comp_offsets[31]
-			   + xstate_amx_comp_sizes[31]);
-		      amx_size
-			= ALIGN_UP ((amx_size
-				     + TLSDESC_CALL_REGISTER_SAVE_AREA),
-				    64);
+		      unsigned int amx_size = (xstate_amx_comp_offsets[31]
+					       + xstate_amx_comp_sizes[31]);
+		      amx_size = ALIGN_UP (
+			  (amx_size + TLSDESC_CALL_REGISTER_SAVE_AREA), 64);
 		      /* Set xsave_state_full_size to the compact AMX
 			 state size for XSAVEC.  NB: xsave_state_full_size
 			 is only used in _dl_tlsdesc_dynamic_xsave and
 			 _dl_tlsdesc_dynamic_xsavec.  */
 		      cpu_features->xsave_state_full_size = amx_size;
 #endif
-		      cpu_features->xsave_state_size
-			= ALIGN_UP (size + TLSDESC_CALL_REGISTER_SAVE_AREA,
-				    64);
+		      cpu_features->xsave_state_size = ALIGN_UP (
+			  size + TLSDESC_CALL_REGISTER_SAVE_AREA, 64);
 		      CPU_FEATURE_SET (cpu_features, XSAVEC);
 		    }
 		}
@@ -463,15 +453,14 @@ get_extended_indices (struct cpu_features *cpu_features)
 }
 
 static void
-get_common_indices (struct cpu_features *cpu_features,
-		    unsigned int *family, unsigned int *model,
-		    unsigned int *extended_model, unsigned int *stepping)
+get_common_indices (struct cpu_features *cpu_features, unsigned int *family,
+		    unsigned int *model, unsigned int *extended_model,
+		    unsigned int *stepping)
 {
   if (family)
     {
       unsigned int eax;
-      __cpuid (1, eax,
-	       cpu_features->features[CPUID_INDEX_1].cpuid.ebx,
+      __cpuid (1, eax, cpu_features->features[CPUID_INDEX_1].cpuid.ebx,
 	       cpu_features->features[CPUID_INDEX_1].cpuid.ecx,
 	       cpu_features->features[CPUID_INDEX_1].cpuid.edx);
       cpu_features->features[CPUID_INDEX_1].cpuid.eax = eax;
@@ -488,8 +477,7 @@ get_common_indices (struct cpu_features *cpu_features,
 
   if (cpu_features->basic.max_cpuid >= 7)
     {
-      __cpuid_count (7, 0,
-		     cpu_features->features[CPUID_INDEX_7].cpuid.eax,
+      __cpuid_count (7, 0, cpu_features->features[CPUID_INDEX_7].cpuid.eax,
 		     cpu_features->features[CPUID_INDEX_7].cpuid.ebx,
 		     cpu_features->features[CPUID_INDEX_7].cpuid.ecx,
 		     cpu_features->features[CPUID_INDEX_7].cpuid.edx);
@@ -515,8 +503,7 @@ get_common_indices (struct cpu_features *cpu_features,
 		   cpu_features->features[CPUID_INDEX_14_ECX_0].cpuid.edx);
 
   if (cpu_features->basic.max_cpuid >= 0x19)
-    __cpuid_count (0x19, 0,
-		   cpu_features->features[CPUID_INDEX_19].cpuid.eax,
+    __cpuid_count (0x19, 0, cpu_features->features[CPUID_INDEX_19].cpuid.eax,
 		   cpu_features->features[CPUID_INDEX_19].cpuid.ebx,
 		   cpu_features->features[CPUID_INDEX_19].cpuid.ecx,
 		   cpu_features->features[CPUID_INDEX_19].cpuid.edx);
@@ -524,18 +511,14 @@ get_common_indices (struct cpu_features *cpu_features,
   dl_check_minsigstacksize (cpu_features);
 }
 
-_Static_assert (((index_arch_Fast_Unaligned_Load
-		  == index_arch_Fast_Unaligned_Copy)
-		 && (index_arch_Fast_Unaligned_Load
-		     == index_arch_Prefer_PMINUB_for_stringop)
-		 && (index_arch_Fast_Unaligned_Load
-		     == index_arch_Slow_SSE4_2)
-		 && (index_arch_Fast_Unaligned_Load
-		     == index_arch_Fast_Rep_String)
-		 && (index_arch_Fast_Unaligned_Load
-		     == index_arch_Fast_Copy_Backward)),
-		"Incorrect index_arch_Fast_Unaligned_Load");
-
+_Static_assert (
+    ((index_arch_Fast_Unaligned_Load == index_arch_Fast_Unaligned_Copy)
+     && (index_arch_Fast_Unaligned_Load
+	 == index_arch_Prefer_PMINUB_for_stringop)
+     && (index_arch_Fast_Unaligned_Load == index_arch_Slow_SSE4_2)
+     && (index_arch_Fast_Unaligned_Load == index_arch_Fast_Rep_String)
+     && (index_arch_Fast_Unaligned_Load == index_arch_Fast_Copy_Backward)),
+    "Incorrect index_arch_Fast_Unaligned_Load");
 
 /* Intel Family-6 microarch list.  */
 enum
@@ -601,7 +584,7 @@ intel_get_fam6_microarch (unsigned int model,
     case 0x35:
     case 0x36:
       /* Really Saltwell, but Saltwell is just a die shrink of Bonnell
-         (microarchitecturally identical).  */
+	 (microarchitecturally identical).  */
       return INTEL_ATOM_BONNELL;
     case 0x37:
     case 0x4A:
@@ -661,46 +644,46 @@ intel_get_fam6_microarch (unsigned int model,
     case 0x5E:
       return INTEL_BIGCORE_SKYLAKE;
     case 0x8E:
-    /*
-     Stepping = {9}
-        -> Amberlake
-     Stepping = {10}
-        -> Coffeelake
-     Stepping = {11, 12}
-        -> Whiskeylake
-     else
-        -> Kabylake
+      /*
+       Stepping = {9}
+	  -> Amberlake
+       Stepping = {10}
+	  -> Coffeelake
+       Stepping = {11, 12}
+	  -> Whiskeylake
+       else
+	  -> Kabylake
 
-     All of these are derivatives of Kabylake (Skylake client).
-     */
-	  return INTEL_BIGCORE_KABYLAKE;
+       All of these are derivatives of Kabylake (Skylake client).
+       */
+      return INTEL_BIGCORE_KABYLAKE;
     case 0x9E:
-    /*
-     Stepping = {10, 11, 12, 13}
-        -> Coffeelake
-     else
-        -> Kabylake
+      /*
+       Stepping = {10, 11, 12, 13}
+	  -> Coffeelake
+       else
+	  -> Kabylake
 
-     Coffeelake is a derivatives of Kabylake (Skylake client).
-     */
-	  return INTEL_BIGCORE_KABYLAKE;
+       Coffeelake is a derivatives of Kabylake (Skylake client).
+       */
+      return INTEL_BIGCORE_KABYLAKE;
     case 0xA5:
     case 0xA6:
       return INTEL_BIGCORE_COMETLAKE;
     case 0x66:
       return INTEL_BIGCORE_CANNONLAKE;
     case 0x55:
-    /*
-     Stepping = {6, 7}
-        -> Cascadelake
-     Stepping = {11}
-        -> Cooperlake
-     else
-        -> Skylake-avx512
+      /*
+       Stepping = {6, 7}
+	  -> Cascadelake
+       Stepping = {11}
+	  -> Cooperlake
+       else
+	  -> Skylake-avx512
 
-     These are all microarchitecturally identical, so use
-     Skylake-avx512 for all of them.
-     */
+       These are all microarchitecturally identical, so use
+       Skylake-avx512 for all of them.
+       */
       return INTEL_BIGCORE_SKYLAKE_AVX512;
     case 0x6A:
     case 0x6C:
@@ -783,8 +766,7 @@ init_cpu_features (struct cpu_features *cpu_features)
       if (family == 0x06)
 	{
 	  model += extended_model;
-	  unsigned int microarch
-	      = intel_get_fam6_microarch (model, stepping);
+	  unsigned int microarch = intel_get_fam6_microarch (model, stepping);
 
 	  switch (microarch)
 	    {
@@ -802,7 +784,7 @@ init_cpu_features (struct cpu_features *cpu_features)
 	    case INTEL_ATOM_GOLDMONT:
 	    case INTEL_ATOM_GOLDMONT_PLUS:
 
-          /* Knights Landing.  Enable Silvermont optimizations.  */
+	      /* Knights Landing.  Enable Silvermont optimizations.  */
 	    case INTEL_KNIGHTS_LANDING:
 
 	      cpu_features->preferred[index_arch_Fast_Unaligned_Load]
@@ -816,23 +798,22 @@ init_cpu_features (struct cpu_features *cpu_features)
 	      /* Enable rep string instructions, unaligned load, unaligned
 		 copy, pminub and avoid SSE 4.2 on Tremont.  */
 	      cpu_features->preferred[index_arch_Fast_Rep_String]
-		  |= (bit_arch_Fast_Rep_String
-		      | bit_arch_Fast_Unaligned_Load
+		  |= (bit_arch_Fast_Rep_String | bit_arch_Fast_Unaligned_Load
 		      | bit_arch_Fast_Unaligned_Copy
 		      | bit_arch_Prefer_PMINUB_for_stringop
 		      | bit_arch_Slow_SSE4_2);
 	      break;
 
-	   /*
-	    Default tuned Knights microarch.
-	    case INTEL_KNIGHTS_MILL:
-        */
-
-	   /*
-	    Default tuned atom microarch.
-	    case INTEL_ATOM_SIERRAFOREST:
-	    case INTEL_ATOM_GRANDRIDGE:
+	      /*
+	       Default tuned Knights microarch.
+	       case INTEL_KNIGHTS_MILL:
 	   */
+
+	      /*
+	       Default tuned atom microarch.
+	       case INTEL_ATOM_SIERRAFOREST:
+	       case INTEL_ATOM_GRANDRIDGE:
+	      */
 
 	      /* Bigcore/Default Tuning.  */
 	    default:
@@ -846,8 +827,7 @@ init_cpu_features (struct cpu_features *cpu_features)
 	      /* Rep string instructions, unaligned load, unaligned copy,
 		 and pminub are fast on Intel Core i3, i5 and i7.  */
 	      cpu_features->preferred[index_arch_Fast_Rep_String]
-		  |= (bit_arch_Fast_Rep_String
-		      | bit_arch_Fast_Unaligned_Load
+		  |= (bit_arch_Fast_Rep_String | bit_arch_Fast_Unaligned_Load
 		      | bit_arch_Fast_Unaligned_Copy
 		      | bit_arch_Prefer_PMINUB_for_stringop);
 	      break;
@@ -894,9 +874,9 @@ init_cpu_features (struct cpu_features *cpu_features)
 	      goto default_tuning;
 	    }
 
-	      /* Disable TSX on some processors to avoid TSX on kernels that
-		 weren't updated with the latest microcode package (which
-		 disables broken feature by default).  */
+	  /* Disable TSX on some processors to avoid TSX on kernels that
+	     weren't updated with the latest microcode package (which
+	     disables broken feature by default).  */
 	  switch (microarch)
 	    {
 	    case INTEL_BIGCORE_SKYLAKE_AVX512:
@@ -908,63 +888,62 @@ init_cpu_features (struct cpu_features *cpu_features)
 	    case INTEL_BIGCORE_KABYLAKE:
 	      /* NB: Although the errata documents that for model == 0x8e
 		     (kabylake skylake client), only 0xb stepping or lower are
-		     impacted, the intention of the errata was to disable TSX on
-		     all client processors on all steppings.  Include 0xc
+		     impacted, the intention of the errata was to disable TSX
+		 on all client processors on all steppings.  Include 0xc
 		     stepping which is an Intel Core i7-8665U, a client mobile
 		     processor.  */
 	      if (stepping > 0xc)
 		break;
 	      /* Fall through.  */
 	    case INTEL_BIGCORE_SKYLAKE:
-		/* Disable Intel TSX and enable RTM_ALWAYS_ABORT for
-		   processors listed in:
+	      /* Disable Intel TSX and enable RTM_ALWAYS_ABORT for
+		 processors listed in:
 
 https://www.intel.com/content/www/us/en/support/articles/000059422/processors.html
-		 */
+	       */
 	    disable_tsx:
-		CPU_FEATURE_UNSET (cpu_features, HLE);
-		CPU_FEATURE_UNSET (cpu_features, RTM);
-		CPU_FEATURE_SET (cpu_features, RTM_ALWAYS_ABORT);
-		break;
+	      CPU_FEATURE_UNSET (cpu_features, HLE);
+	      CPU_FEATURE_UNSET (cpu_features, RTM);
+	      CPU_FEATURE_SET (cpu_features, RTM_ALWAYS_ABORT);
+	      break;
 
 	    case INTEL_BIGCORE_HASWELL:
-		/* Xeon E7 v3 (model == 0x3f) with stepping >= 4 has working
-		   TSX.  Haswell also include other model numbers that have
-		   working TSX.  */
-		if (model == 0x3f && stepping >= 4)
+	      /* Xeon E7 v3 (model == 0x3f) with stepping >= 4 has working
+		 TSX.  Haswell also include other model numbers that have
+		 working TSX.  */
+	      if (model == 0x3f && stepping >= 4)
 		break;
 
-		CPU_FEATURE_UNSET (cpu_features, RTM);
-		break;
+	      CPU_FEATURE_UNSET (cpu_features, RTM);
+	      break;
 	    }
 	}
 
-
       /* Since AVX512ER is unique to Xeon Phi, set Prefer_No_VZEROUPPER
-         if AVX512ER is available.  Don't use AVX512 to avoid lower CPU
+	 if AVX512ER is available.  Don't use AVX512 to avoid lower CPU
 	 frequency if AVX512ER isn't available.  */
       if (CPU_FEATURES_CPU_P (cpu_features, AVX512ER))
 	cpu_features->preferred[index_arch_Prefer_No_VZEROUPPER]
-	  |= bit_arch_Prefer_No_VZEROUPPER;
+	    |= bit_arch_Prefer_No_VZEROUPPER;
       else
 	{
 	  /* Processors with AVX512 and AVX-VNNI won't lower CPU frequency
 	     when ZMM load and store instructions are used.  */
 	  if (!CPU_FEATURES_CPU_P (cpu_features, AVX_VNNI))
 	    cpu_features->preferred[index_arch_Prefer_No_AVX512]
-	      |= bit_arch_Prefer_No_AVX512;
+		|= bit_arch_Prefer_No_AVX512;
 
 	  /* Avoid RTM abort triggered by VZEROUPPER inside a
 	     transactionally executing RTM region.  */
 	  if (CPU_FEATURE_USABLE_P (cpu_features, RTM))
 	    cpu_features->preferred[index_arch_Prefer_No_VZEROUPPER]
-	      |= bit_arch_Prefer_No_VZEROUPPER;
+		|= bit_arch_Prefer_No_VZEROUPPER;
 	}
 
       /* Avoid avoid short distance REP MOVSB on processor with FSRM.  */
       if (CPU_FEATURES_CPU_P (cpu_features, FSRM))
 	cpu_features->preferred[index_arch_Avoid_Short_Distance_REP_MOVSB]
-	  |= bit_arch_Avoid_Short_Distance_REP_MOVSB;
+	    |= bit_arch_Avoid_Short_Distance_REP_MOVSB;
     }
   /* This spells out "AuthenticAMD" or "HygonGenuine".  */
   else if ((ebx == 0x68747541 && ecx == 0x444d4163 && edx == 0x69746e65)
@@ -994,15 +973,15 @@ https://www.intel.com/content/www/us/en/support/articles/000059422/processors.ht
 	{
 	  /* "Excavator"   */
 	  if (model >= 0x60 && model <= 0x7f)
-	  {
-	    cpu_features->preferred[index_arch_Fast_Unaligned_Load]
-	      |= (bit_arch_Fast_Unaligned_Load
-		  | bit_arch_Fast_Copy_Backward);
+	    {
+	      cpu_features->preferred[index_arch_Fast_Unaligned_Load]
+		  |= (bit_arch_Fast_Unaligned_Load
+		      | bit_arch_Fast_Copy_Backward);
 
-	    /* Unaligned AVX loads are slower.*/
-	    cpu_features->preferred[index_arch_AVX_Fast_Unaligned_Load]
-	      &= ~bit_arch_AVX_Fast_Unaligned_Load;
-	  }
+	      /* Unaligned AVX loads are slower.*/
+	      cpu_features->preferred[index_arch_AVX_Fast_Unaligned_Load]
+		  &= ~bit_arch_AVX_Fast_Unaligned_Load;
+	    }
 	}
     }
   /* This spells out "CentaurHauls" or " Shanghai ".  */
@@ -1022,31 +1001,31 @@ https://www.intel.com/content/www/us/en/support/articles/000059422/processors.ht
 
       model += extended_model;
       if (family == 0x6)
-        {
-          if (model == 0xf || model == 0x19)
-            {
+	{
+	  if (model == 0xf || model == 0x19)
+	    {
 	      CPU_FEATURE_UNSET (cpu_features, AVX);
 	      CPU_FEATURE_UNSET (cpu_features, AVX2);
 
-              cpu_features->preferred[index_arch_Slow_SSE4_2]
-                |= bit_arch_Slow_SSE4_2;
+	      cpu_features->preferred[index_arch_Slow_SSE4_2]
+		  |= bit_arch_Slow_SSE4_2;
 
 	      cpu_features->preferred[index_arch_AVX_Fast_Unaligned_Load]
-		&= ~bit_arch_AVX_Fast_Unaligned_Load;
-            }
-        }
+		  &= ~bit_arch_AVX_Fast_Unaligned_Load;
+	    }
+	}
       else if (family == 0x7)
-        {
+	{
 	  if (model == 0x1b)
 	    {
 	      CPU_FEATURE_UNSET (cpu_features, AVX);
 	      CPU_FEATURE_UNSET (cpu_features, AVX2);
 
 	      cpu_features->preferred[index_arch_Slow_SSE4_2]
-		|= bit_arch_Slow_SSE4_2;
+		  |= bit_arch_Slow_SSE4_2;
 
 	      cpu_features->preferred[index_arch_AVX_Fast_Unaligned_Load]
-		&= ~bit_arch_AVX_Fast_Unaligned_Load;
+		  &= ~bit_arch_AVX_Fast_Unaligned_Load;
 	    }
 	  else if (model == 0x3b)
 	    {
@@ -1054,7 +1033,7 @@ https://www.intel.com/content/www/us/en/support/articles/000059422/processors.ht
 	      CPU_FEATURE_UNSET (cpu_features, AVX2);
 
 	      cpu_features->preferred[index_arch_AVX_Fast_Unaligned_Load]
-		&= ~bit_arch_AVX_Fast_Unaligned_Load;
+		  &= ~bit_arch_AVX_Fast_Unaligned_Load;
 	    }
 	}
     }
@@ -1146,7 +1125,7 @@ no_cpuid:
     }
 
 #ifdef __x86_64__
-  GLRO(dl_hwcap) = HWCAP_X86_64;
+  GLRO (dl_hwcap) = HWCAP_X86_64;
   if (cpu_features->basic.kind == arch_kind_intel)
     {
       const char *platform = NULL;
@@ -1163,12 +1142,11 @@ no_cpuid:
 	      if (CPU_FEATURE_USABLE_P (cpu_features, AVX512BW)
 		  && CPU_FEATURE_USABLE_P (cpu_features, AVX512DQ)
 		  && CPU_FEATURE_USABLE_P (cpu_features, AVX512VL))
-		GLRO(dl_hwcap) |= HWCAP_X86_AVX512_1;
+		GLRO (dl_hwcap) |= HWCAP_X86_AVX512_1;
 	    }
 	}
 
-      if (platform == NULL
-	  && CPU_FEATURE_USABLE_P (cpu_features, AVX2)
+      if (platform == NULL && CPU_FEATURE_USABLE_P (cpu_features, AVX2)
 	  && CPU_FEATURE_USABLE_P (cpu_features, FMA)
 	  && CPU_FEATURE_USABLE_P (cpu_features, BMI1)
 	  && CPU_FEATURE_USABLE_P (cpu_features, BMI2)
@@ -1178,70 +1156,68 @@ no_cpuid:
 	platform = "haswell";
 
       if (platform != NULL)
-	GLRO(dl_platform) = platform;
+	GLRO (dl_platform) = platform;
     }
 #else
-  GLRO(dl_hwcap) = 0;
+  GLRO (dl_hwcap) = 0;
   if (CPU_FEATURE_USABLE_P (cpu_features, SSE2))
-    GLRO(dl_hwcap) |= HWCAP_X86_SSE2;
+    GLRO (dl_hwcap) |= HWCAP_X86_SSE2;
 
   if (CPU_FEATURES_ARCH_P (cpu_features, I686))
-    GLRO(dl_platform) = "i686";
+    GLRO (dl_platform) = "i686";
   else if (CPU_FEATURES_ARCH_P (cpu_features, I586))
-    GLRO(dl_platform) = "i586";
+    GLRO (dl_platform) = "i586";
 #endif
 
 #if CET_ENABLED
-  TUNABLE_GET (x86_ibt, tunable_val_t *,
-	       TUNABLE_CALLBACK (set_x86_ibt));
-  TUNABLE_GET (x86_shstk, tunable_val_t *,
-	       TUNABLE_CALLBACK (set_x86_shstk));
+  TUNABLE_GET (x86_ibt, tunable_val_t *, TUNABLE_CALLBACK (set_x86_ibt));
+  TUNABLE_GET (x86_shstk, tunable_val_t *, TUNABLE_CALLBACK (set_x86_shstk));
 #endif
 
   if (MINIMUM_X86_ISA_LEVEL >= AVX_X86_ISA_LEVEL
-      || (GLRO(dl_x86_cpu_features).xsave_state_size != 0))
+      || (GLRO (dl_x86_cpu_features).xsave_state_size != 0))
     {
       if (CPU_FEATURE_USABLE_P (cpu_features, XSAVEC))
 	{
 #ifdef __x86_64__
-	  GLRO(dl_x86_64_runtime_resolve) = _dl_runtime_resolve_xsavec;
+	  GLRO (dl_x86_64_runtime_resolve) = _dl_runtime_resolve_xsavec;
 #endif
 #ifdef SHARED
-	  GLRO(dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_xsavec;
+	  GLRO (dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_xsavec;
 #endif
 	}
       else
 	{
 #ifdef __x86_64__
-	  GLRO(dl_x86_64_runtime_resolve) = _dl_runtime_resolve_xsave;
+	  GLRO (dl_x86_64_runtime_resolve) = _dl_runtime_resolve_xsave;
 #endif
 #ifdef SHARED
-	  GLRO(dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_xsave;
+	  GLRO (dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_xsave;
 #endif
 	}
     }
   else
     {
 #ifdef __x86_64__
-      GLRO(dl_x86_64_runtime_resolve) = _dl_runtime_resolve_fxsave;
-# ifdef SHARED
-      GLRO(dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_fxsave;
-# endif
+      GLRO (dl_x86_64_runtime_resolve) = _dl_runtime_resolve_fxsave;
+#  ifdef SHARED
+      GLRO (dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_fxsave;
+#  endif
 #else
-# ifdef SHARED
+#  ifdef SHARED
       if (CPU_FEATURE_USABLE_P (cpu_features, FXSR))
-	GLRO(dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_fxsave;
+	GLRO (dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_fxsave;
       else
-	GLRO(dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_fnsave;
-# endif
+	GLRO (dl_x86_tlsdesc_dynamic) = _dl_tlsdesc_dynamic_fnsave;
+#  endif
 #endif
     }
 
 #ifdef SHARED
-# ifdef __x86_64__
+#  ifdef __x86_64__
   TUNABLE_GET (plt_rewrite, tunable_val_t *,
 	       TUNABLE_CALLBACK (set_plt_rewrite));
-# endif
+#  endif
 #else
   /* NB: In libc.a, call init_cacheinfo.  */
   init_cacheinfo ();

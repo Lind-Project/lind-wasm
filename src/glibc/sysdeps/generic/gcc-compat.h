@@ -20,23 +20,22 @@
    can define GCC_COMPAT_VERSION and then #include_next this file.  */
 
 #ifndef _GENERIC_GCC_COMPAT_H
-#define _GENERIC_GCC_COMPAT_H 1
+#  define _GENERIC_GCC_COMPAT_H 1
 
 /* This is the macro that gets used in #if tests in code: true iff
    the library we build must be compatible with user code built by
    GCC version MAJOR.MINOR.  */
-#define GCC_COMPAT(major, minor)        \
-  (GCC_COMPAT_VERSION <= GCC_VERSION (major, minor))
+#  define GCC_COMPAT(major, minor)                                            \
+    (GCC_COMPAT_VERSION <= GCC_VERSION (major, minor))
 
 /* This is how we compose an integer from major and minor version
    numbers, for comparison.  */
-#define GCC_VERSION(major, minor)       \
-  (((major) << 16) + (minor))
+#  define GCC_VERSION(major, minor) (((major) << 16) + (minor))
 
-#ifndef GCC_COMPAT_VERSION
+#  ifndef GCC_COMPAT_VERSION
 /* GCC 2.7.2 was current at the time of the glibc-2.0 release.
    We assume nothing before that ever mattered.  */
-# define GCC_COMPAT_VERSION     GCC_VERSION (2, 7)
-#endif
+#    define GCC_COMPAT_VERSION GCC_VERSION (2, 7)
+#  endif
 
 #endif

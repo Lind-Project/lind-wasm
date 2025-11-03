@@ -19,15 +19,14 @@
 #include <string.h>
 #include "pthreadP.h"
 
-
 int
 __pthread_attr_setschedparam (pthread_attr_t *attr,
 			      const struct sched_param *param)
 {
   struct pthread_attr *iattr = (struct pthread_attr *) attr;
 
-  int ret = check_sched_priority_attr (param->sched_priority,
-				       iattr->schedpolicy);
+  int ret
+      = check_sched_priority_attr (param->sched_priority, iattr->schedpolicy);
   if (ret)
     return ret;
 

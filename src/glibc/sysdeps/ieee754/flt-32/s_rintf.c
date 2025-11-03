@@ -25,10 +25,9 @@ __rintf (float x)
   return __builtin_rintf (x);
 #else
   /* Use generic implementation.  */
-  static const float
-    TWO23[2] = {
-		8.3886080000e+06, /* 0x4b000000 */
-		-8.3886080000e+06, /* 0xcb000000 */
+  static const float TWO23[2] = {
+    8.3886080000e+06,  /* 0x4b000000 */
+    -8.3886080000e+06, /* 0xcb000000 */
   };
   int32_t i0, j0, sx;
   float w, t;
@@ -37,10 +36,10 @@ __rintf (float x)
   j0 = ((i0 >> 23) & 0xff) - 0x7f;
   if (j0 < 23)
     {
-      if(j0 < 0)
+      if (j0 < 0)
 	{
 	  w = TWO23[sx] + x;
-	  t =  w - TWO23[sx];
+	  t = w - TWO23[sx];
 	  GET_FLOAT_WORD (i0, t);
 	  SET_FLOAT_WORD (t, (i0 & 0x7fffffff) | (sx << 31));
 	  return t;
@@ -49,9 +48,9 @@ __rintf (float x)
   else
     {
       if (j0 == 0x80)
-	return x + x;		/* inf or NaN  */
+	return x + x; /* inf or NaN  */
       else
-	return x;		/* x is integral  */
+	return x; /* x is integral  */
     }
   w = TWO23[sx] + x;
   return w - TWO23[sx];

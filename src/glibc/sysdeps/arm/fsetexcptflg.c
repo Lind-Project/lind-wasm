@@ -20,7 +20,6 @@
 #include <fpu_control.h>
 #include <arm-features.h>
 
-
 int
 fesetexceptflag (const fexcept_t *flagp, int excepts)
 {

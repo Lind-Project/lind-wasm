@@ -23,8 +23,7 @@ IMPL (memcpy, 1)
 
 typedef void *(*proto_t) (void *, const void *, size_t);
 
-static void *
-__attribute__ ((noinline, noclone))
+static void *__attribute__ ((noinline, noclone))
 do_memcpy (parameter_t a, parameter_t b)
 {
   return CALL (&b, a.p, b.p, a.len);
@@ -46,8 +45,8 @@ test_main (void)
       int res = memcmp (dest.p, src.p, dest.len);
       if (res)
 	{
-	  error (0, 0, "Wrong result in function %s: %i != 0",
-		 impl->name, res);
+	  error (0, 0, "Wrong result in function %s: %i != 0", impl->name,
+		 res);
 	  ret = 1;
 	}
     }

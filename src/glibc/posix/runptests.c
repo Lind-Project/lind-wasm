@@ -29,11 +29,9 @@ struct test
   const char *reg;
   const char *str;
   int options;
-} tests[] =
-{
+} tests[] = {
 #include "ptestcases.h"
 };
-
 
 int
 main (int argc, char *argv[])
@@ -44,12 +42,11 @@ main (int argc, char *argv[])
   for (cnt = 0; cnt < sizeof (tests) / sizeof (tests[0]); ++cnt)
     if (tests[cnt].str == NULL)
       {
-	printf ("\n%s\n%.*s\n", tests[cnt].reg,
-		(int) strlen (tests[cnt].reg),
+	printf ("\n%s\n%.*s\n", tests[cnt].reg, (int) strlen (tests[cnt].reg),
 		"-----------------------------------------------------");
       }
     else if (tests[cnt].reg == NULL)
-	printf ("!!! %s\n", tests[cnt].str);
+      printf ("!!! %s\n", tests[cnt].str);
     else
       {
 	regex_t re;
@@ -105,8 +102,8 @@ main (int argc, char *argv[])
 	      puts ("match, OK");
 	    else
 	      {
-		printf ("wrong match (%d to %d): FAIL\n",
-			match[0].rm_so, match[0].rm_eo);
+		printf ("wrong match (%d to %d): FAIL\n", match[0].rm_so,
+			match[0].rm_eo);
 		++errors;
 	      }
 	  }

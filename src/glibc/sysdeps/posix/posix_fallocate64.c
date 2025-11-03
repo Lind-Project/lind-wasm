@@ -52,7 +52,7 @@ __posix_fallocate64_l64 (int fd, __off64_t offset, __off64_t len)
     return EBADF;
   if (S_ISFIFO (st.st_mode))
     return ESPIPE;
-  if (! S_ISREG (st.st_mode))
+  if (!S_ISREG (st.st_mode))
     return ENODEV;
 
   if (len == 0)
@@ -127,8 +127,7 @@ __posix_fallocate64_l64 (int fd, __off64_t offset, __off64_t len)
 
 #if __WORDSIZE == 32 && SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_3_3)
 
-int
-attribute_compat_text_section
+int attribute_compat_text_section
 __posix_fallocate64_l32 (int fd, off64_t offset, size_t len)
 {
   return __posix_fallocate64_l64 (fd, offset, len);

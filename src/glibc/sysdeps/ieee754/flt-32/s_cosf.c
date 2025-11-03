@@ -24,13 +24,13 @@
 #include "s_sincosf.h"
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
 #ifndef COSF
-# define COSF_FUNC __cosf
+#  define COSF_FUNC __cosf
 #else
-# define COSF_FUNC COSF
+#  define COSF_FUNC COSF
 #endif
 
 /* Fast cosf implementation.  Worst-case ULP is 0.5607, maximum relative
@@ -38,8 +38,7 @@
    small values.  Large inputs have their range reduced using fast integer
    arithmetic.
 */
-float
-SECTION
+float SECTION
 COSF_FUNC (float y)
 {
   double x = y;

@@ -18,18 +18,17 @@
 
 #include <sysdep.h>
 
-#define _MCOUNT_DECL(frompc, selfpc)					\
-static void								\
-__mcount_internal (unsigned long int frompc, unsigned long int selfpc)
+#define _MCOUNT_DECL(frompc, selfpc)                                          \
+  static void __mcount_internal (unsigned long int frompc,                    \
+				 unsigned long int selfpc)
 
 /* This is very simple as gcc does all the heavy lifting at _mcount call site
     - sets up caller's blink in r0, so frompc is setup correctly
     - preserve argument registers for original call.  */
 
-#define MCOUNT								\
-void									\
-_mcount (void *frompc)							\
-{									\
-  __mcount_internal ((unsigned long int) frompc,			\
-		     (unsigned long int) __builtin_return_address (0));	\
-}
+#define MCOUNT                                                                \
+  void _mcount (void *frompc)                                                 \
+  {                                                                           \
+    __mcount_internal ((unsigned long int) frompc,                            \
+		       (unsigned long int) __builtin_return_address (0));     \
+  }

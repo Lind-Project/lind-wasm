@@ -34,8 +34,8 @@ handler (int sig)
 {
 }
 
-typedef int (*epoll_wait_check_t) (int, struct epoll_event *, int,
-				   int, const sigset_t *);
+typedef int (*epoll_wait_check_t) (int, struct epoll_event *, int, int,
+				   const sigset_t *);
 
 static void
 test_epoll_basic (epoll_wait_check_t epoll_wait_check)
@@ -79,7 +79,7 @@ test_epoll_basic (epoll_wait_check_t epoll_wait_check)
       do
 	{
 	  if (getppid () != parent)
-	    FAIL_EXIT1 ("getppid()=%d != parent=%d", getppid(), parent);
+	    FAIL_EXIT1 ("getppid()=%d != parent=%d", getppid (), parent);
 
 	  errno = 0;
 	  e = epoll_wait_check (efd, &event, 1, 500, &ss);
@@ -109,7 +109,6 @@ test_epoll_basic (epoll_wait_check_t epoll_wait_check)
   xclose (fds[1][0]);
   xclose (efd);
 }
-
 
 static void
 test_epoll_large_timeout (epoll_wait_check_t epoll_wait_check)
@@ -148,7 +147,6 @@ test_epoll_large_timeout (epoll_wait_check_t epoll_wait_check)
   xclose (fds[1]);
   xclose (efd);
 }
-
 
 static int
 epoll_wait_check (int epfd, struct epoll_event *ev, int maxev, int tmo,

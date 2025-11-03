@@ -23,13 +23,17 @@
 // Check if long double is greater in precision than double
 #if LDBL_MANT_DIG == 53
 // If so, use double precision cbrt which is usually present
-long double __cbrtl(long double x) {
-    return (long double)cbrt((double)x);
+long double
+__cbrtl (long double x)
+{
+  return (long double) cbrt ((double) x);
 }
 #else
 // Use the dedicated long double version if available
-long double __cbrtl(long double x) {
-    return cbrtl(x);
+long double
+__cbrtl (long double x)
+{
+  return cbrtl (x);
 }
 #endif
 

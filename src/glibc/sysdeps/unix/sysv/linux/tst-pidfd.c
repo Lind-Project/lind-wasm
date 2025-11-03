@@ -172,14 +172,11 @@ do_test (void)
   /* Wait for second sigtimedwait.  */
   support_process_state_wait (pid, support_process_state_sleeping);
   {
-    siginfo_t info =
-      {
-	.si_signo = SIGUSR2,
-	.si_errno = EAGAIN,
-	.si_code = -10,
-	.si_pid = ppid,
-	.si_uid = puid
-      };
+    siginfo_t info = { .si_signo = SIGUSR2,
+		       .si_errno = EAGAIN,
+		       .si_code = -10,
+		       .si_pid = ppid,
+		       .si_uid = puid };
     TEST_COMPARE (pidfd_send_signal (pidfd, SIGUSR2, &info, 0), 0);
   }
 

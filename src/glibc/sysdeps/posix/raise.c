@@ -31,5 +31,4 @@ raise (int sig)
     }
   return ret;
 }
-libc_hidden_def (raise)
-weak_alias (raise, gsignal)
+libc_hidden_def (raise) weak_alias (raise, gsignal)

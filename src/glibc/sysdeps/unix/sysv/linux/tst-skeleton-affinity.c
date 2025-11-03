@@ -42,7 +42,7 @@
 /* CPU set configuration determined.  Can be used from early_test.  */
 struct conf
 {
-  int set_size;			/* in bits */
+  int set_size; /* in bits */
   int last_cpu;
 };
 
@@ -104,7 +104,7 @@ find_last_cpu (const cpu_set_t *set, size_t size)
 static void
 setup_conf (struct conf *conf)
 {
-  *conf = (struct conf) {-1, -1};
+  *conf = (struct conf) { -1, -1 };
   conf->set_size = find_set_size ();
   if (conf->set_size > 0)
     {
@@ -167,8 +167,8 @@ test_size (const struct conf *conf, size_t size)
       int active_cpu = sched_getcpu ();
       if (last_active_cpu >= 0 && last_active_cpu != active_cpu)
 	{
-	  printf ("error: Unexpected CPU %d, expected %d\n",
-		  active_cpu, last_active_cpu);
+	  printf ("error: Unexpected CPU %d, expected %d\n", active_cpu,
+		  last_active_cpu);
 	  return false;
 	}
 
@@ -197,8 +197,8 @@ test_size (const struct conf *conf, size_t size)
 	}
       if ((unsigned int) active_cpu != numa_cpu)
 	{
-	  printf ("error: Unexpected CPU %d, expected %d\n",
-		  active_cpu, numa_cpu);
+	  printf ("error: Unexpected CPU %d, expected %d\n", active_cpu,
+		  numa_cpu);
 	  return false;
 	}
       if (getaffinity (kernel_size, set2) < 0)

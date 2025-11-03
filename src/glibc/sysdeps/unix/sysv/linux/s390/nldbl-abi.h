@@ -4,5 +4,5 @@
    long double == double was replaced with proper long double
    for libm *l functions and libc functions using long double.  */
 
-#define NLDBL_VERSION			GLIBC_2.4
-#define LONG_DOUBLE_COMPAT_VERSION	GLIBC_2_4
+#define NLDBL_VERSION GLIBC_2.4
+#define LONG_DOUBLE_COMPAT_VERSION GLIBC_2_4

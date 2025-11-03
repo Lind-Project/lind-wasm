@@ -46,28 +46,20 @@ __tcb_parse_hwcap_and_convert_at_platform (void)
      and fills the previous supported ones.  */
 
   if (h2 & PPC_FEATURE2_ARCH_2_07)
-    h1 |= PPC_FEATURE_ARCH_2_06
-       | PPC_FEATURE_ARCH_2_05
-       | PPC_FEATURE_POWER5_PLUS
-       | PPC_FEATURE_POWER5
-       | PPC_FEATURE_POWER4;
+    h1 |= PPC_FEATURE_ARCH_2_06 | PPC_FEATURE_ARCH_2_05
+	  | PPC_FEATURE_POWER5_PLUS | PPC_FEATURE_POWER5 | PPC_FEATURE_POWER4;
   else if (h1 & PPC_FEATURE_ARCH_2_06)
-    h1 |= PPC_FEATURE_ARCH_2_05
-       | PPC_FEATURE_POWER5_PLUS
-       | PPC_FEATURE_POWER5
-       | PPC_FEATURE_POWER4;
+    h1 |= PPC_FEATURE_ARCH_2_05 | PPC_FEATURE_POWER5_PLUS | PPC_FEATURE_POWER5
+	  | PPC_FEATURE_POWER4;
   else if (h1 & PPC_FEATURE_ARCH_2_05)
-    h1 |= PPC_FEATURE_POWER5_PLUS
-       | PPC_FEATURE_POWER5
-       | PPC_FEATURE_POWER4;
+    h1 |= PPC_FEATURE_POWER5_PLUS | PPC_FEATURE_POWER5 | PPC_FEATURE_POWER4;
   else if (h1 & PPC_FEATURE_POWER5_PLUS)
-    h1 |= PPC_FEATURE_POWER5
-       | PPC_FEATURE_POWER4;
+    h1 |= PPC_FEATURE_POWER5 | PPC_FEATURE_POWER4;
   else if (h1 & PPC_FEATURE_POWER5)
     h1 |= PPC_FEATURE_POWER4;
 
   uint64_t array_hwcaps[] = { h1, h2, h3, h4 };
-  init_cpu_features (&GLRO(dl_powerpc_cpu_features), array_hwcaps);
+  init_cpu_features (&GLRO (dl_powerpc_cpu_features), array_hwcaps);
 
   /* Consolidate both HWCAP and HWCAP2 into a single doubleword so that
      we can read both in a single load later.  */
@@ -76,12 +68,11 @@ __tcb_parse_hwcap_and_convert_at_platform (void)
   /* Consolidate both HWCAP3 and HWCAP4 into a single doubleword so that
      we can read both in a single load later.  */
   __tcb.hwcap_extn = (h3 << 32) | (h4 & 0xffffffff);
-
 }
-#if IS_IN (rtld)
-versioned_symbol (ld, __tcb_parse_hwcap_and_convert_at_platform, \
+#if IS_IN(rtld)
+versioned_symbol (ld, __tcb_parse_hwcap_and_convert_at_platform,
 		  __parse_hwcap_and_convert_at_platform, GLIBC_2_23);
-versioned_symbol (ld, __tcb_parse_hwcap_and_convert_at_platform, \
+versioned_symbol (ld, __tcb_parse_hwcap_and_convert_at_platform,
 		  __parse_hwcap_3_4_and_convert_at_platform, GLIBC_2_39);
 #endif
 
@@ -89,8 +80,8 @@ versioned_symbol (ld, __tcb_parse_hwcap_and_convert_at_platform, \
    GCC to make sure that the HWCAP/Platform bits are stored in the TCB when
    using __builtin_cpu_is()/__builtin_cpu_supports() in the static case.  */
 #ifndef SHARED
-weak_alias (__tcb_parse_hwcap_and_convert_at_platform, \
+weak_alias (__tcb_parse_hwcap_and_convert_at_platform,
 	    __parse_hwcap_and_convert_at_platform);
-weak_alias (__tcb_parse_hwcap_and_convert_at_platform, \
+weak_alias (__tcb_parse_hwcap_and_convert_at_platform,
 	    __parse_hwcap_3_4_and_convert_at_platform);
 #endif

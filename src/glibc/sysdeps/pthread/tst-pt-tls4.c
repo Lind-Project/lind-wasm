@@ -92,7 +92,7 @@ do_test (void)
 {
   pthread_t th[2];
   const char *modules[N]
-    = { "tst-tls4moda.so", "tst-tls4moda.so", "tst-tls4modb.so" };
+      = { "tst-tls4moda.so", "tst-tls4moda.so", "tst-tls4modb.so" };
 
   if (pthread_barrier_init (&b2, NULL, 2) != 0)
     {

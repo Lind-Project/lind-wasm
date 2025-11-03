@@ -19,7 +19,6 @@
 #include <sched.h>
 #include <sys/types.h>
 
-
 /* Retrieve scheduling algorithm for a particular purpose.  */
 int
 __sched_getscheduler (pid_t pid)
@@ -27,7 +26,6 @@ __sched_getscheduler (pid_t pid)
   __set_errno (ENOSYS);
   return -1;
 }
-libc_hidden_def (__sched_getscheduler)
-stub_warning (sched_getscheduler)
+libc_hidden_def (__sched_getscheduler) stub_warning (sched_getscheduler)
 
-weak_alias (__sched_getscheduler, sched_getscheduler)
+    weak_alias (__sched_getscheduler, sched_getscheduler)

@@ -62,6 +62,5 @@ __fma (double x, double y, double z)
 #endif /* ! USE_FMA_BUILTIN  */
 }
 #ifndef __fma
-libm_alias_double (__fma, fma)
-libm_alias_double_narrow (__fma, fma)
+libm_alias_double (__fma, fma) libm_alias_double_narrow (__fma, fma)
 #endif

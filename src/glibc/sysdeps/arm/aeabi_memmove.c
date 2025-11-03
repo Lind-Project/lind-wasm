@@ -28,4 +28,4 @@ __aeabi_memmove (void *dest, const void *src, size_t n)
 
 /* Versions of the above which may assume memory alignment.  */
 strong_alias (__aeabi_memmove, __aeabi_memmove4)
-strong_alias (__aeabi_memmove, __aeabi_memmove8)
+    strong_alias (__aeabi_memmove, __aeabi_memmove8)

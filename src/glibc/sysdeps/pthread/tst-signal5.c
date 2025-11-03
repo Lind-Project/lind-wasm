@@ -25,9 +25,7 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
-
 static sigset_t ss;
-
 
 static void *
 tf (void *arg)
@@ -41,12 +39,12 @@ tf (void *arg)
 
   int i;
   for (i = 1; i < 32; ++i)
-    if (sigismember (&ss, i) && ! sigismember (&ss2, i))
+    if (sigismember (&ss, i) && !sigismember (&ss2, i))
       {
 	printf ("signal %d set in parent mask, but not in child\n", i);
 	exit (1);
       }
-    else if (! sigismember (&ss, i) && sigismember (&ss2, i))
+    else if (!sigismember (&ss, i) && sigismember (&ss2, i))
       {
 	printf ("signal %d set in child mask, but not in parent\n", i);
 	exit (1);
@@ -54,7 +52,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)

@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _UNISTD_H
-# error "Never include this file directly.  Use <unistd.h> instead"
+#  error "Never include this file directly.  Use <unistd.h> instead"
 #endif
 
 #include <bits/wordsize.h>
@@ -53,25 +53,25 @@
 
 /* We also have no use (for now) for an environment with bigger pointers
    and offsets.  */
-# define _POSIX_V7_LPBIG_OFFBIG	-1
-# define _POSIX_V6_LPBIG_OFFBIG	-1
-# define _XBS5_LPBIG_OFFBIG	-1
+#  define _POSIX_V7_LPBIG_OFFBIG -1
+#  define _POSIX_V6_LPBIG_OFFBIG -1
+#  define _XBS5_LPBIG_OFFBIG -1
 
 /* By default we have 64-bit wide `long int', pointers and `off_t'.  */
-# define _POSIX_V7_LP64_OFF64	1
-# define _POSIX_V6_LP64_OFF64	1
-# define _XBS5_LP64_OFF64	1
+#  define _POSIX_V7_LP64_OFF64 1
+#  define _POSIX_V6_LP64_OFF64 1
+#  define _XBS5_LP64_OFF64 1
 
 #else /* __WORDSIZE == 32 */
 
 /* By default we have 32-bit wide `int', `long int', pointers and `off_t'
    and all platforms support LFS.  */
-# define _POSIX_V7_ILP32_OFF32	1
-# define _POSIX_V7_ILP32_OFFBIG	1
-# define _POSIX_V6_ILP32_OFF32	1
-# define _POSIX_V6_ILP32_OFFBIG	1
-# define _XBS5_ILP32_OFF32	1
-# define _XBS5_ILP32_OFFBIG	1
+#  define _POSIX_V7_ILP32_OFF32 1
+#  define _POSIX_V7_ILP32_OFFBIG 1
+#  define _POSIX_V6_ILP32_OFF32 1
+#  define _POSIX_V6_ILP32_OFFBIG 1
+#  define _XBS5_ILP32_OFF32 1
+#  define _XBS5_ILP32_OFFBIG 1
 
 /* We optionally provide an environment with the above size but an 64-bit
    side `off_t'.  Therefore we don't define _POSIX_V7_ILP32_OFFBIG.  */
@@ -88,9 +88,9 @@
 
 #endif /* __WORDSIZE == 32 */
 
-#define __ILP32_OFF32_CFLAGS	"-m32"
-#define __ILP32_OFFBIG_CFLAGS	"-m32 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
-#define __ILP32_OFF32_LDFLAGS	"-m32"
-#define __ILP32_OFFBIG_LDFLAGS	"-m32"
-#define __LP64_OFF64_CFLAGS	"-m64"
-#define __LP64_OFF64_LDFLAGS	"-m64"
+#define __ILP32_OFF32_CFLAGS "-m32"
+#define __ILP32_OFFBIG_CFLAGS "-m32 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
+#define __ILP32_OFF32_LDFLAGS "-m32"
+#define __ILP32_OFFBIG_LDFLAGS "-m32"
+#define __LP64_OFF64_CFLAGS "-m64"
+#define __LP64_OFF64_LDFLAGS "-m64"

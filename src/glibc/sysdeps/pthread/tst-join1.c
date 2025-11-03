@@ -19,9 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-
 
 static void *
 tf (void *arg)
@@ -49,7 +47,6 @@ tf (void *arg)
 
   exit (0);
 }
-
 
 static int
 do_test (void)

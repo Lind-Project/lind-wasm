@@ -17,12 +17,11 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_FZC_H
-#define _STRING_FZC_H 1
+#  define _STRING_FZC_H 1
 
-#include <endian.h>
-#include <string-fza.h>
-#include <string-fzi.h>
-
+#  include <endian.h>
+#  include <string-fza.h>
+#  include <string-fzi.h>
 
 /* Given a word X that is known to contain a zero byte, return the index of
    the first such within the word in memory order.  */

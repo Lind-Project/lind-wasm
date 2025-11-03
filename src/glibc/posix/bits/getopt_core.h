@@ -18,7 +18,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _GETOPT_CORE_H
-#define _GETOPT_CORE_H 1
+#  define _GETOPT_CORE_H 1
 
 /* This header should not be used directly; include getopt.h or
    unistd.h instead.  Unlike most bits headers, it does not have
@@ -88,8 +88,8 @@ extern int optopt;
    enabled, the argv array (not the strings it points to) must be
    writable.  */
 
-extern int getopt (int ___argc, char *const *___argv, const char *__shortopts)
-       __THROW __nonnull ((2, 3));
+extern int getopt (int ___argc, char *const *___argv,
+		   const char *__shortopts) __THROW __nonnull ((2, 3));
 
 __END_DECLS
 

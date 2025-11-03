@@ -22,13 +22,13 @@
 
 // BUG: disable the hardware lock - Dennis
 int
-__lll_unlock_elision(int *lock, int private)
+__lll_unlock_elision (int *lock, int private)
 {
   /* When the lock was free we're in a transaction.
      When you crash here you unlocked a free lock.  */
   if (*lock == 0)
     return 0;
-    // _xend();
+  // _xend();
   else
     lll_unlock ((*lock), private);
   return 0;

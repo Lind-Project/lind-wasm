@@ -46,10 +46,9 @@ __readdir64_r (DIR *dirp, struct dirent64 *entry, struct dirent64 **result)
 	  int nentries;
 
 	  if (err = HURD_FD_PORT_USE (dirp->__fd,
-				      __dir_readdir (port,
-						     &data, &data_size,
-						     dirp->__entry_ptr,
-						     -1, 0, &nentries)))
+				      __dir_readdir (port, &data, &data_size,
+						     dirp->__entry_ptr, -1, 0,
+						     &nentries)))
 	    {
 	      __hurd_fail (err);
 	      dp = NULL;
@@ -91,7 +90,8 @@ __readdir64_r (DIR *dirp, struct dirent64 *entry, struct dirent64 **result)
       ++dirp->__entry_ptr;
 
       /* Loop to ignore deleted files.  */
-    } while (dp->d_fileno == 0);
+    }
+  while (dp->d_fileno == 0);
 
   if (dp)
     {

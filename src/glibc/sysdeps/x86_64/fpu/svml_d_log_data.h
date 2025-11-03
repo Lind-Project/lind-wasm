@@ -19,36 +19,30 @@
 #ifndef D_LOG_DATA_H
 #define D_LOG_DATA_H
 
-#define _LogRcp_lookup                 -4218816
-#define _Log_HA_table                 	0
-#define _Log_LA_table                 	8256
-#define _poly_coeff_1                 	12416
-#define _poly_coeff_2                 	12480
-#define _poly_coeff_3                 	12544
-#define _poly_coeff_4                 	12608
-#define _ExpMask                      	12672
-#define _Two10                        	12736
-#define _MinNorm                      	12800
-#define _MaxNorm                      	12864
-#define _HalfMask                     	12928
-#define _One                          	12992
-#define _L2H                          	13056
-#define _L2L                          	13120
-#define _Threshold                    	13184
-#define _Bias                         	13248
-#define _Bias1                        	13312
-#define _L2                           	13376
-#define _dInfs                        	13440
-#define _dOnes                        	13504
-#define _dZeros                       	13568
+#define _LogRcp_lookup -4218816
+#define _Log_HA_table 0
+#define _Log_LA_table 8256
+#define _poly_coeff_1 12416
+#define _poly_coeff_2 12480
+#define _poly_coeff_3 12544
+#define _poly_coeff_4 12608
+#define _ExpMask 12672
+#define _Two10 12736
+#define _MinNorm 12800
+#define _MaxNorm 12864
+#define _HalfMask 12928
+#define _One 12992
+#define _L2H 13056
+#define _L2L 13120
+#define _Threshold 13184
+#define _Bias 13248
+#define _Bias1 13312
+#define _L2 13376
+#define _dInfs 13440
+#define _dOnes 13504
+#define _dZeros 13568
 
-.macro double_vector offset value
-.if .-__svml_dlog_data != \offset
-.err
-.endif
-.rept 8
-.quad \value
-.endr
-.endm
+.macro double_vector offset value.if.- __svml_dlog_data
+    != \offset.err.endif.rept 8 .quad \value.endr.endm
 
 #endif

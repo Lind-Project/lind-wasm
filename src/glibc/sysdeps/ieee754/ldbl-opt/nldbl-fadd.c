@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef faddl
 
-float
-attribute_hidden
+float attribute_hidden
 faddl (double x, double y)
 {
   return fadd (x, y);

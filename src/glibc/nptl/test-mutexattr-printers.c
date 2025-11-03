@@ -31,10 +31,10 @@
 #define SET_TYPE(attr, type) pthread_mutexattr_settype (attr, type)
 #define SET_ROBUST(attr, robust) pthread_mutexattr_setrobust (attr, robust)
 #define SET_SHARED(attr, shared) pthread_mutexattr_setpshared (attr, shared)
-#define SET_PROTOCOL(attr, protocol) \
-	pthread_mutexattr_setprotocol (attr, protocol)
-#define SET_PRIOCEILING(mutex, prioceiling, old_ceiling) \
-	pthread_mutex_setprioceiling (mutex, prioceiling, old_ceiling)
+#define SET_PROTOCOL(attr, protocol)                                          \
+  pthread_mutexattr_setprotocol (attr, protocol)
+#define SET_PRIOCEILING(mutex, prioceiling, old_ceiling)                      \
+  pthread_mutex_setprioceiling (mutex, prioceiling, old_ceiling)
 
 static int mutex_reinit (pthread_mutex_t *mutex,
 			 const pthread_mutexattr_t *attr);
@@ -135,7 +135,7 @@ test_setprotocol (pthread_mutex_t *mutex, pthread_mutexattr_t *attr)
       && mutex_reinit (mutex, attr) == 0
       && SET_PROTOCOL (attr, PTHREAD_PRIO_PROTECT) == 0
       && mutex_reinit (mutex, attr) == 0
-      && SET_PRIOCEILING(mutex, PRIOCEILING, &old_prioceiling) == 0
+      && SET_PRIOCEILING (mutex, PRIOCEILING, &old_prioceiling) == 0
       && SET_PROTOCOL (attr, PTHREAD_PRIO_NONE) == 0
       && mutex_reinit (mutex, attr) == 0)
     result = PASS;

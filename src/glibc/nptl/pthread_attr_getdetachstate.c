@@ -17,7 +17,6 @@
 
 #include "pthreadP.h"
 
-
 int
 __pthread_attr_getdetachstate (const pthread_attr_t *attr, int *detachstate)
 {
@@ -25,8 +24,9 @@ __pthread_attr_getdetachstate (const pthread_attr_t *attr, int *detachstate)
 
   iattr = (struct pthread_attr *) attr;
 
-  *detachstate = (iattr->flags & ATTR_FLAG_DETACHSTATE
-		  ? PTHREAD_CREATE_DETACHED : PTHREAD_CREATE_JOINABLE);
+  *detachstate
+      = (iattr->flags & ATTR_FLAG_DETACHSTATE ? PTHREAD_CREATE_DETACHED
+					      : PTHREAD_CREATE_JOINABLE);
 
   return 0;
 }

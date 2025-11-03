@@ -39,18 +39,17 @@ __feraiseexcept (int excepts)
      left of the latter) and then loading the longword at (%sp) into an
      FP register.  */
 
-  inline void
-  raise_one_exception (int mask)
+  inline void raise_one_exception (int mask)
   {
     if (excepts & mask)
       {
 	int fpsr;
 	double unused;
 
-	asm volatile ("fmove%.l %/fpsr,%0" : "=d" (fpsr));
+	asm volatile ("fmove%.l %/fpsr,%0" : "=d"(fpsr));
 	fpsr |= (mask << 6) | mask;
-	asm volatile ("fmove%.l %0,%/fpsr" :: "d" (fpsr));
-	asm volatile ("fmove%.l (%%sp),%0" : "=f" (unused));
+	asm volatile ("fmove%.l %0,%/fpsr" ::"d"(fpsr));
+	asm volatile ("fmove%.l (%%sp),%0" : "=f"(unused));
       }
   }
 
@@ -63,6 +62,5 @@ __feraiseexcept (int excepts)
   /* Success.  */
   return 0;
 }
-libm_hidden_def (__feraiseexcept)
-weak_alias (__feraiseexcept, feraiseexcept)
-libm_hidden_weak (feraiseexcept)
+libm_hidden_def (__feraiseexcept) weak_alias (__feraiseexcept, feraiseexcept)
+    libm_hidden_weak (feraiseexcept)

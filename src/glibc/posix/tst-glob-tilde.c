@@ -58,19 +58,19 @@ one_test (const char *prefix, const char *middle, const char *suffix)
 }
 
 enum
-  {
-    /* The largest base being tested.  */
-    largest_base_size = 500000,
+{
+  /* The largest base being tested.  */
+  largest_base_size = 500000,
 
-    /* The actual size is the base size plus a variable whose absolute
-       value is not greater than this.  This helps malloc to trigger
-       overflows.  */
-    max_size_skew = 16,
+  /* The actual size is the base size plus a variable whose absolute
+     value is not greater than this.  This helps malloc to trigger
+     overflows.  */
+  max_size_skew = 16,
 
-    /* The maximum string length supported by repeating_string
-       below.  */
-    repeat_size = largest_base_size + max_size_skew,
-  };
+  /* The maximum string length supported by repeating_string
+     below.  */
+  repeat_size = largest_base_size + max_size_skew,
+};
 
 /* Used to construct strings which repeat a single character 'x'.  */
 static char *repeat;

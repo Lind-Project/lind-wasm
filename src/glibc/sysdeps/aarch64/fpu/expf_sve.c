@@ -51,7 +51,8 @@ special_case (svfloat32_t x, svfloat32_t y, svbool_t special)
    Worst-case error is 1.04 ulp:
    SV_NAME_F1 (exp)(0x1.a8eda4p+1) got 0x1.ba74bcp+4
 				  want 0x1.ba74bap+4.  */
-svfloat32_t SV_NAME_F1 (exp) (svfloat32_t x, const svbool_t pg)
+svfloat32_t
+SV_NAME_F1 (exp) (svfloat32_t x, const svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
 

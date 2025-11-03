@@ -19,9 +19,9 @@
 #include <ifunc-wmemcmp.h>
 
 #if HAVE_WMEMCMP_C
-# if HAVE_WMEMCMP_IFUNC
-#  define WMEMCMP WMEMCMP_C
-# endif
+#  if HAVE_WMEMCMP_IFUNC
+#    define WMEMCMP WMEMCMP_C
+#  endif
 
-# include <wcsmbs/wmemcmp.c>
+#  include <wcsmbs/wmemcmp.c>
 #endif

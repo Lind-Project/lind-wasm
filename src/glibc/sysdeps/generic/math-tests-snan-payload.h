@@ -17,12 +17,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_TESTS_SNAN_PAYLOAD_H
-#define _MATH_TESTS_SNAN_PAYLOAD_H 1
+#  define _MATH_TESTS_SNAN_PAYLOAD_H 1
 
 /* Indicate whether operations on signaling NaNs preserve the payload
    (if possible; it is not possible with a zero payload if the high
    bit is set for signaling NaNs) when generating a quiet NaN, and
    this should be tested.  */
-#define SNAN_TESTS_PRESERVE_PAYLOAD	1
+#  define SNAN_TESTS_PRESERVE_PAYLOAD 1
 
 #endif /* math-tests-snan-payload.h.  */

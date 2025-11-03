@@ -22,7 +22,6 @@
 #include <sys/types.h>
 #include <regex.h>
 
-
 int
 main (int argc, char *argv[])
 {
@@ -31,9 +30,9 @@ main (int argc, char *argv[])
   int i, j, ret = 0;
   const char *locales[] = { "C", "C.UTF-8", "de_DE.UTF-8" };
   const char *string = "http://www.regex.com/pattern/matching.html#intro";
-  regmatch_t expect[10] = {
-    { 0, 48 }, { 0, 5 }, { 0, 4 }, { 5, 20 }, { 7, 20 }, { 20, 42 },
-    { -1, -1 }, { -1, -1 }, { 42, 48 }, { 43, 48 } };
+  regmatch_t expect[10]
+      = { { 0, 48 },  { 0, 5 },	  { 0, 4 },   { 5, 20 },  { 7, 20 },
+	  { 20, 42 }, { -1, -1 }, { -1, -1 }, { 42, 48 }, { 43, 48 } };
 
   for (i = 0; i < sizeof (locales) / sizeof (locales[0]); ++i)
     {
@@ -43,8 +42,10 @@ main (int argc, char *argv[])
 	  ret = 1;
 	}
       else if (regcomp (&re,
-			"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\\?([^#]*))?(#(.*))?",
-			REG_EXTENDED) != REG_NOERROR)
+			"^(([^:/?#]+):)?(//([^/"
+			"?#]*))?([^?#]*)(\\?([^#]*))?(#(.*))?",
+			REG_EXTENDED)
+	       != REG_NOERROR)
 	{
 	  puts ("cannot compile the regular expression");
 	  ret = 1;
@@ -56,7 +57,7 @@ main (int argc, char *argv[])
 	}
       else
 	{
-	  if (! memcmp (mat, expect, sizeof (mat)))
+	  if (!memcmp (mat, expect, sizeof (mat)))
 	    printf ("matching ok for %s locale\n", locales[i]);
 	  else
 	    {

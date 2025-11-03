@@ -25,14 +25,15 @@ long double
 __ieee754_sqrtl (const long double a)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A); FP_DECL_Q(C);
+  FP_DECL_Q (A);
+  FP_DECL_Q (C);
   long double c;
-  long _round = 4;	/* dynamic rounding */
+  long _round = 4; /* dynamic rounding */
 
   FP_INIT_ROUNDMODE;
-  FP_UNPACK_Q(A, a);
-  FP_SQRT_Q(C, A);
-  FP_PACK_Q(c, C);
+  FP_UNPACK_Q (A, a);
+  FP_SQRT_Q (C, A);
+  FP_PACK_Q (c, C);
   FP_HANDLE_EXCEPTIONS;
   return c;
 }
@@ -40,6 +41,6 @@ __ieee754_sqrtl (const long double a)
 /* ??? We forgot to add this symbol in 2.15.  Getting this into 2.18 isn't as
    straight-forward as just adding the alias, since a generic Versions file
    includes the 2.15 version and the linker uses the first one it sees.  */
-#if SHLIB_COMPAT (libm, GLIBC_2_15, GLIBC_2_18)
+#if SHLIB_COMPAT(libm, GLIBC_2_15, GLIBC_2_18)
 compat_symbol (libm, __ieee754_sqrtl, __sqrtl_finite, GLIBC_2_18);
 #endif

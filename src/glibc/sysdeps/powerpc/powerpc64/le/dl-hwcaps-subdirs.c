@@ -20,7 +20,10 @@
 #include <ldsodefs.h>
 
 const char _dl_hwcaps_subdirs[] = "power10:power9";
-enum { subdirs_count = 2 }; /* Number of components in _dl_hwcaps_subdirs.  */
+enum
+{
+  subdirs_count = 2
+}; /* Number of components in _dl_hwcaps_subdirs.  */
 
 uint32_t
 _dl_hwcaps_subdirs_active (void)

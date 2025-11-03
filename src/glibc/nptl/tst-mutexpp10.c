@@ -54,8 +54,8 @@ do_test (void)
 
   if (prioceiling < fifo_min || prioceiling > fifo_max)
     {
-      printf ("prioceiling %d not in %d..%d range\n",
-	      prioceiling, fifo_min, fifo_max);
+      printf ("prioceiling %d not in %d..%d range\n", prioceiling, fifo_min,
+	      fifo_max);
       return 1;
     }
 
@@ -101,8 +101,7 @@ do_test (void)
 
   if (prioceiling != 6)
     {
-      printf ("mutexattr_getprioceiling returned %d != 6\n",
-	      prioceiling);
+      printf ("mutexattr_getprioceiling returned %d != 6\n", prioceiling);
       return 1;
     }
 

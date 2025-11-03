@@ -18,11 +18,11 @@
 
 #if defined __NO_FPRS__ && !defined _SOFT_FLOAT
 
-# include <fenv_libc.h>
+#  include <fenv_libc.h>
 
 #else
 
-# include <fenv.h>
+#  include <fenv.h>
 
 typedef union
 {
@@ -48,15 +48,15 @@ libc_hidden_tls_proto (__sim_round_mode_thread, tls_model ("local-exec"));
 #if SIM_GLOBAL_COMPAT
 extern int __sim_exceptions_global;
 libc_hidden_proto (__sim_exceptions_global);
-extern int __sim_disabled_exceptions_global ;
+extern int __sim_disabled_exceptions_global;
 libc_hidden_proto (__sim_disabled_exceptions_global);
 extern int __sim_round_mode_global;
 libc_hidden_proto (__sim_round_mode_global);
-# define SIM_COMPAT_SYMBOL(GLOBAL_NAME, NAME) \
-  compat_symbol (libc, GLOBAL_NAME, NAME, GLIBC_2_3_2)
-# define SIM_SET_GLOBAL(GLOBAL_VAR, THREAD_VAR) ((GLOBAL_VAR) = (THREAD_VAR))
+#  define SIM_COMPAT_SYMBOL(GLOBAL_NAME, NAME)                                \
+    compat_symbol (libc, GLOBAL_NAME, NAME, GLIBC_2_3_2)
+#  define SIM_SET_GLOBAL(GLOBAL_VAR, THREAD_VAR) ((GLOBAL_VAR) = (THREAD_VAR))
 #else
-# define SIM_SET_GLOBAL(GLOBAL_VAR, THREAD_VAR) ((void) 0)
+#  define SIM_SET_GLOBAL(GLOBAL_VAR, THREAD_VAR) ((void) 0)
 #endif
 
 extern void __simulate_exceptions (int x) attribute_hidden;

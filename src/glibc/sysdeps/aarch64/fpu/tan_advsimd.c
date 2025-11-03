@@ -57,7 +57,8 @@ special_case (float64x2_t x)
    Maximum measured error is 3.48 ULP:
    _ZGVnN2v_tan(0x1.4457047ef78d8p+20) got -0x1.f6ccd8ecf7dedp+37
 				      want -0x1.f6ccd8ecf7deap+37.  */
-float64x2_t VPCS_ATTR V_NAME_D1 (tan) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (tan) (float64x2_t x)
 {
   const struct data *dat = ptr_barrier (&data);
   /* Our argument reduction cannot calculate q with sufficient accuracy for

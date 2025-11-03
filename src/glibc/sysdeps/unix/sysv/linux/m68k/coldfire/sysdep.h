@@ -16,14 +16,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LINUX_M68K_COLDFIRE_SYSDEP_H
-#define _LINUX_M68K_COLDFIRE_SYSDEP_H 1
+#  define _LINUX_M68K_COLDFIRE_SYSDEP_H 1
 
-#include <sysdeps/unix/sysdep.h>
-#include <sysdeps/m68k/coldfire/sysdep.h>
-#include <sysdeps/unix/sysv/linux/m68k/sysdep.h>
+#  include <sysdeps/unix/sysdep.h>
+#  include <sysdeps/m68k/coldfire/sysdep.h>
+#  include <sysdeps/unix/sysv/linux/m68k/sysdep.h>
 
-#define SYSCALL_ERROR_LOAD_GOT(reg)					      \
-    move.l &_GLOBAL_OFFSET_TABLE_@GOTPC, reg;				      \
-    lea (-6, %pc, reg), reg
+#  define SYSCALL_ERROR_LOAD_GOT(reg)                                         \
+    move.l &_GLOBAL_OFFSET_TABLE_ @GOTPC, reg;                                \
+    lea (-6, % pc, reg), reg
 
 #endif

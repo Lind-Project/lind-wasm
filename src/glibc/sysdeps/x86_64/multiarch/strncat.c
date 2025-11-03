@@ -18,18 +18,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define strncat __redirect_strncat
-# include <string.h>
-# undef strncat
+#if IS_IN(libc)
+#  define strncat __redirect_strncat
+#  include <string.h>
+#  undef strncat
 
-# define SYMBOL_NAME strncat
-# include "ifunc-strncpy.h"
+#  define SYMBOL_NAME strncat
+#  include "ifunc-strncpy.h"
 
 libc_ifunc_redirected (__redirect_strncat, strncat, IFUNC_SELECTOR ());
 strong_alias (strncat, __strncat);
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (strncat, __GI___strncat, __redirect_strncat)
-  __attribute__((visibility ("hidden"))) __attribute_copy__ (strncat);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (strncat);
+#  endif
 #endif

@@ -64,12 +64,9 @@
 #include <math-underflow.h>
 #include <libm-alias-finite.h>
 
-static const _Float128
-  invsqrtpi = L(5.6418958354775628694807945156077258584405E-1),
-  two = 2,
-  one = 1,
-  zero = 0;
-
+static const _Float128 invsqrtpi
+    = L (5.6418958354775628694807945156077258584405E-1),
+    two = 2, one = 1, zero = 0;
 
 _Float128
 __ieee754_jnl (int n, _Float128 x)
@@ -79,7 +76,6 @@ __ieee754_jnl (int n, _Float128 x)
   _Float128 a, b, temp, di, ret;
   _Float128 z, w;
   ieee854_long_double_shape_type u;
-
 
   /* J(-n,x) = (-1)^n * J(n, x), J(n, -x) = (-1)^n * J(n, x)
    * Thus, J(-n,x) = J(n,-x)
@@ -106,18 +102,18 @@ __ieee754_jnl (int n, _Float128 x)
     return (__ieee754_j0l (x));
   if (n == 1)
     return (__ieee754_j1l (x));
-  sgn = (n & 1) & (se >> 31);	/* even n -- 0, odd n -- sign(x) */
+  sgn = (n & 1) & (se >> 31); /* even n -- 0, odd n -- sign(x) */
   x = fabsl (x);
 
   {
     SET_RESTORE_ROUNDL (FE_TONEAREST);
-    if (x == 0 || ix >= 0x7fff0000)	/* if x is 0 or inf */
+    if (x == 0 || ix >= 0x7fff0000) /* if x is 0 or inf */
       return sgn == 1 ? -zero : zero;
     else if ((_Float128) n <= x)
       {
 	/* Safe to use J(n+1,x)=2n/x *J(n,x)-J(n-1,x) */
 	if (ix >= 0x412D0000)
-	  {			/* x > 2**302 */
+	  { /* x > 2**302 */
 
 	    /* ??? Could use an expansion for large x here.  */
 
@@ -163,7 +159,7 @@ __ieee754_jnl (int n, _Float128 x)
 	    for (i = 1; i < n; i++)
 	      {
 		temp = b;
-		b = b * ((_Float128) (i + i) / x) - a;	/* avoid underflow */
+		b = b * ((_Float128) (i + i) / x) - a; /* avoid underflow */
 		a = temp;
 	      }
 	  }
@@ -171,11 +167,11 @@ __ieee754_jnl (int n, _Float128 x)
     else
       {
 	if (ix < 0x3fc60000)
-	  {			/* x < 2**-57 */
+	  { /* x < 2**-57 */
 	    /* x is tiny, return the first Taylor expansion of J(n,x)
 	     * J(n,x) = 1/n!*(x/2)^n  - ...
 	     */
-	    if (n >= 400)		/* underflow, result < 10^-4952 */
+	    if (n >= 400) /* underflow, result < 10^-4952 */
 	      b = zero;
 	    else
 	      {
@@ -183,8 +179,8 @@ __ieee754_jnl (int n, _Float128 x)
 		b = temp;
 		for (a = one, i = 2; i <= n; i++)
 		  {
-		    a *= (_Float128) i;	/* a = n! */
-		    b *= temp;	/* b = (x/2)^n */
+		    a *= (_Float128) i; /* a = n! */
+		    b *= temp;		/* b = (x/2)^n */
 		  }
 		b = b / a;
 	      }
@@ -229,7 +225,7 @@ __ieee754_jnl (int n, _Float128 x)
 	    z = w + h;
 	    q1 = w * z - 1;
 	    k = 1;
-	    while (q1 < L(1.0e17))
+	    while (q1 < L (1.0e17))
 	      {
 		k += 1;
 		z += h;
@@ -254,7 +250,7 @@ __ieee754_jnl (int n, _Float128 x)
 	    v = two / x;
 	    tmp = tmp * __ieee754_logl (fabsl (v * tmp));
 
-	    if (tmp < L(1.1356523406294143949491931077970765006170e+04))
+	    if (tmp < L (1.1356523406294143949491931077970765006170e+04))
 	      {
 		for (i = n - 1, di = (_Float128) (i + i); i > 0; i--)
 		  {
@@ -275,7 +271,7 @@ __ieee754_jnl (int n, _Float128 x)
 		    a = temp;
 		    di -= two;
 		    /* scale b to avoid spurious overflow */
-		    if (b > L(1e100))
+		    if (b > L (1e100))
 		      {
 			a /= b;
 			t /= b;
@@ -311,8 +307,7 @@ __ieee754_jnl (int n, _Float128 x)
 }
 libm_alias_finite (__ieee754_jnl, __jnl)
 
-_Float128
-__ieee754_ynl (int n, _Float128 x)
+    _Float128 __ieee754_ynl (int n, _Float128 x)
 {
   uint32_t se;
   int32_t i, ix;
@@ -333,7 +328,7 @@ __ieee754_ynl (int n, _Float128 x)
   if (x <= 0)
     {
       if (x == 0)
-	return ((n < 0 && (n & 1) != 0) ? 1 : -1) / L(0.0);
+	return ((n < 0 && (n & 1) != 0) ? 1 : -1) / L (0.0);
       if (se & 0x80000000)
 	return zero / (zero * x);
     }
@@ -355,7 +350,7 @@ __ieee754_ynl (int n, _Float128 x)
     if (ix >= 0x7fff0000)
       return zero;
     if (ix >= 0x412D0000)
-      {				/* x > 2**302 */
+      { /* x > 2**302 */
 
 	/* ??? See comment above on the possible futility of this.  */
 
@@ -411,14 +406,14 @@ __ieee754_ynl (int n, _Float128 x)
 	  }
       }
     /* If B is +-Inf, set up errno accordingly.  */
-    if (! isfinite (b))
+    if (!isfinite (b))
       __set_errno (ERANGE);
     if (sign > 0)
       ret = b;
     else
       ret = -b;
   }
- out:
+out:
   if (isinf (ret))
     ret = copysignl (LDBL_MAX, ret) * LDBL_MAX;
   return ret;

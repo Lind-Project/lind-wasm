@@ -34,9 +34,7 @@ extern int nsigs;
 
 extern sem_t s;
 
-
 static __thread void (*fp) (void);
-
 
 #define THE_SIG SIGUSR1
 void
@@ -56,7 +54,6 @@ handler (int sig)
       _exit (1);
     }
 }
-
 
 void *
 tf (void *arg)

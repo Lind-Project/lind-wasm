@@ -17,6 +17,6 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef __x86_64__
-# define USE_IFUNC_GETTIMEOFDAY
+#  define USE_IFUNC_GETTIMEOFDAY
 #endif
 #include <sysdeps/unix/sysv/linux/gettimeofday.c>

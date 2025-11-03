@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef POWERPC_MATH_TESTS_SNAN_CAST_H
-#define POWERPC_MATH_TESTS_SNAN_CAST_H 1
+#  define POWERPC_MATH_TESTS_SNAN_CAST_H 1
 
 /* On PowerPC, in versions of GCC up to at least 4.7.2, a type cast --
    which is a IEEE 754-2008 general-computational convertFormat
@@ -25,6 +25,6 @@
    qNaN (whilst raising an INVALID exception), which is contrary to
    IEEE 754-2008 5.1 and 7.2.  This renders certain tests infeasible
    in this scenario.  <https://gcc.gnu.org/PR56828>.  */
-#define SNAN_TESTS_TYPE_CAST	0
+#  define SNAN_TESTS_TYPE_CAST 0
 
 #endif /* math-tests-snan-cast.h.  */

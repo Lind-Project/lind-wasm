@@ -50,8 +50,9 @@ prepare (void)
      executed and thus will not be executed during the corresponding
      fork.  */
   TEST_VERIFY_EXIT (pthread_atfork (second_atfork_handler,
-                                    second_atfork_handler,
-                                    second_atfork_handler) == 0);
+				    second_atfork_handler,
+				    second_atfork_handler)
+		    == 0);
 
   /* This will de-register the atfork handlers registered by the dlopen'd
      library and so they will not be executed.  */
@@ -103,11 +104,10 @@ do_test (void)
       int childstat;
 
       xwaitpid (-1, &childstat, 0);
-      TEST_VERIFY_EXIT (WIFEXITED (childstat)
-                        && WEXITSTATUS (childstat) == 0);
+      TEST_VERIFY_EXIT (WIFEXITED (childstat) && WEXITSTATUS (childstat) == 0);
 
       /* This time, the second set of atfork handlers should also be called
-         since the handlers are already in place before fork is called.  */
+	 since the handlers are already in place before fork is called.  */
 
       pid = xfork ();
 
@@ -115,11 +115,11 @@ do_test (void)
       TEST_VERIFY_EXIT (second_atfork_handler_runcount == 2);
 
       if (pid > 0)
-        {
-          xwaitpid (-1, &childstat, 0);
-          TEST_VERIFY_EXIT (WIFEXITED (childstat)
-                            && WEXITSTATUS (childstat) == 0);
-        }
+	{
+	  xwaitpid (-1, &childstat, 0);
+	  TEST_VERIFY_EXIT (WIFEXITED (childstat)
+			    && WEXITSTATUS (childstat) == 0);
+	}
     }
 
   return 0;

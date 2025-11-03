@@ -40,7 +40,7 @@ _dl_setup_stack_chk_guard (void *dl_random)
 #elif BYTE_ORDER == BIG_ENDIAN
   ret.num &= ~((uintptr_t) 0xff << (8 * (sizeof (ret) - 1)));
 #else
-# error "BYTE_ORDER unknown"
+#  error "BYTE_ORDER unknown"
 #endif
   return ret.num;
 }

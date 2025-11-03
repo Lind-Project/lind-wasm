@@ -21,21 +21,22 @@
 #include "double.h"
 #include "quad.h"
 
-long double _Q_dtoq(const double a)
+long double
+_Q_dtoq (const double a)
 {
   FP_DECL_EX;
-  FP_DECL_D(A);
-  FP_DECL_Q(C);
+  FP_DECL_D (A);
+  FP_DECL_Q (C);
   long double c;
 
   FP_INIT_ROUNDMODE;
-  FP_UNPACK_RAW_D(A, a);
+  FP_UNPACK_RAW_D (A, a);
 #if _FP_W_TYPE_SIZE < 64
-  FP_EXTEND(Q,D,4,2,C,A);
+  FP_EXTEND (Q, D, 4, 2, C, A);
 #else
-  FP_EXTEND(Q,D,2,1,C,A);
+  FP_EXTEND (Q, D, 2, 1, C, A);
 #endif
-  FP_PACK_RAW_Q(c, C);
+  FP_PACK_RAW_Q (c, C);
   FP_HANDLE_EXCEPTIONS;
   return c;
 }

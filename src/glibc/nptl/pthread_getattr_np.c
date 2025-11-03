@@ -27,7 +27,6 @@
 #include <lowlevellock.h>
 #include <ldsodefs.h>
 
-
 int
 __pthread_getattr_np (pthread_t thread_id, pthread_attr_t *attr)
 {
@@ -65,8 +64,7 @@ __pthread_getattr_np (pthread_t thread_id, pthread_attr_t *attr)
 	 guard size.  */
       iattr->stacksize = thread->stackblock_size - thread->guardsize;
 #if _STACK_GROWS_DOWN
-      iattr->stackaddr = (char *) thread->stackblock
-			 + thread->stackblock_size;
+      iattr->stackaddr = (char *) thread->stackblock + thread->stackblock_size;
 #else
       iattr->stackaddr = (char *) thread->stackblock;
 #endif
@@ -93,16 +91,16 @@ __pthread_getattr_np (pthread_t thread_id, pthread_attr_t *attr)
 	  else
 	    {
 	      /* We consider the main process stack to have ended with
-	         the page containing __libc_stack_end.  There is stuff below
+		 the page containing __libc_stack_end.  There is stuff below
 		 it in the stack too, like the program arguments, environment
 		 variables and auxv info, but we ignore those pages when
 		 returning size so that the output is consistent when the
 		 stack is marked executable due to a loaded DSO requiring
 		 it.  */
 	      void *stack_end = (void *) ((uintptr_t) __libc_stack_end
-					  & -(uintptr_t) GLRO(dl_pagesize));
+					  & -(uintptr_t) GLRO (dl_pagesize));
 #if _STACK_GROWS_DOWN
-	      stack_end += GLRO(dl_pagesize);
+	      stack_end += GLRO (dl_pagesize);
 #endif
 	      /* We need no locking.  */
 	      __fsetlocking (fp, FSETLOCKING_BYCALLER);
@@ -117,7 +115,7 @@ __pthread_getattr_np (pthread_t thread_id, pthread_attr_t *attr)
 	      uintptr_t last_to = 0;
 #endif
 
-	      while (! feof_unlocked (fp))
+	      while (!feof_unlocked (fp))
 		{
 		  if (__getline (&line, &linelen, fp) <= 0)
 		    break;
@@ -131,14 +129,15 @@ __pthread_getattr_np (pthread_t thread_id, pthread_attr_t *attr)
 		    {
 		      /* Found the entry.  Now we have the info we need.  */
 		      iattr->stackaddr = stack_end;
-		      iattr->stacksize =
-		        rl.rlim_cur - (size_t) (to - (uintptr_t) stack_end);
+		      iattr->stacksize
+			  = rl.rlim_cur
+			    - (size_t) (to - (uintptr_t) stack_end);
 
-		      /* Cut it down to align it to page size since otherwise we
-		         risk going beyond rlimit when the kernel rounds up the
-		         stack extension request.  */
+		      /* Cut it down to align it to page size since otherwise
+			 we risk going beyond rlimit when the kernel rounds up
+			 the stack extension request.  */
 		      iattr->stacksize = (iattr->stacksize
-					  & -(intptr_t) GLRO(dl_pagesize));
+					  & -(intptr_t) GLRO (dl_pagesize));
 #if _STACK_GROWS_DOWN
 		      /* The limit might be too high.  */
 		      if ((size_t) iattr->stacksize
@@ -207,8 +206,8 @@ __pthread_getattr_np (pthread_t thread_id, pthread_attr_t *attr)
 }
 versioned_symbol (libc, __pthread_getattr_np, pthread_getattr_np, GLIBC_2_32);
 
-#if SHLIB_COMPAT (libc, GLIBC_2_2_3, GLIBC_2_32)
+#if SHLIB_COMPAT(libc, GLIBC_2_2_3, GLIBC_2_32)
 strong_alias (__pthread_getattr_np, __pthread_getattr_np_alias)
-compat_symbol (libc, __pthread_getattr_np_alias,
-	       pthread_getattr_np, GLIBC_2_2_3);
+    compat_symbol (libc, __pthread_getattr_np_alias, pthread_getattr_np,
+		   GLIBC_2_2_3);
 #endif

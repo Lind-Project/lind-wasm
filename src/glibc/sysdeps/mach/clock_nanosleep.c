@@ -32,17 +32,16 @@ nanosleep_call (const struct timespec *req, struct timespec *rem)
   error_t err;
 
   const mach_msg_timeout_t ms
-    = req->tv_sec * 1000
-    + (req->tv_nsec + 999999) / 1000000;
+      = req->tv_sec * 1000 + (req->tv_nsec + 999999) / 1000000;
 
   recv = __mach_reply_port ();
 
   if (rem != NULL)
     __clock_gettime (CLOCK_REALTIME, &before);
 
-  int cancel_oldtype = LIBC_CANCEL_ASYNC();
-  err = __mach_msg (NULL, MACH_RCV_MSG|MACH_RCV_TIMEOUT|MACH_RCV_INTERRUPT,
-                    0, 0, recv, ms, MACH_PORT_NULL);
+  int cancel_oldtype = LIBC_CANCEL_ASYNC ();
+  err = __mach_msg (NULL, MACH_RCV_MSG | MACH_RCV_TIMEOUT | MACH_RCV_INTERRUPT,
+		    0, 0, recv, ms, MACH_PORT_NULL);
   LIBC_CANCEL_RESET (cancel_oldtype);
 
   __mach_port_destroy (mach_task_self (), recv);
@@ -67,8 +66,7 @@ int
 __clock_nanosleep (clockid_t clock_id, int flags, const struct timespec *req,
 		   struct timespec *rem)
 {
-  if (clock_id != CLOCK_REALTIME
-      || !valid_nanoseconds (req->tv_nsec)
+  if (clock_id != CLOCK_REALTIME || !valid_nanoseconds (req->tv_nsec)
       || (flags != 0 && flags != TIMER_ABSTIME))
     return EINVAL;
 
@@ -107,10 +105,10 @@ __clock_nanosleep (clockid_t clock_id, int flags, const struct timespec *req,
   return nanosleep_call (req, rem);
 }
 libc_hidden_def (__clock_nanosleep)
-versioned_symbol (libc, __clock_nanosleep, clock_nanosleep, GLIBC_2_17);
+    versioned_symbol (libc, __clock_nanosleep, clock_nanosleep, GLIBC_2_17);
 /* clock_nanosleep moved to libc in version 2.17;
    old binaries may expect the symbol version it had in librt.  */
-#if SHLIB_COMPAT (libc, GLIBC_2_2, GLIBC_2_17)
+#if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_17)
 strong_alias (__clock_nanosleep, __clock_nanosleep_2);
 compat_symbol (libc, __clock_nanosleep_2, clock_nanosleep, GLIBC_2_2);
 #endif

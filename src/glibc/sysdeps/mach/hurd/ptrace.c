@@ -35,7 +35,7 @@
      pid_t PID, void *ADDR, int DATA, void *ADDR2
    after PID.  */
 int
-ptrace (enum __ptrace_request request, ... )
+ptrace (enum __ptrace_request request, ...)
 {
   pid_t pid;
   void *addr, *addr2;
@@ -43,53 +43,52 @@ ptrace (enum __ptrace_request request, ... )
   va_list ap;
 
   /* Read data from PID's address space, from ADDR for DATA bytes.  */
-  error_t read_data (task_t task, vm_address_t *ourpage, vm_size_t *size)
-    {
-      /* Read the pages containing the addressed range.  */
-      error_t err;
-      mach_msg_type_number_t nread;
-      *size = round_page (addr + data) - trunc_page (addr);
-      err = __vm_read (task, trunc_page (addr), *size, ourpage, &nread);
-      if (!err)
-	*size = nread;
-      return err;
-    }
+  error_t read_data (task_t task, vm_address_t * ourpage, vm_size_t * size)
+  {
+    /* Read the pages containing the addressed range.  */
+    error_t err;
+    mach_msg_type_number_t nread;
+    *size = round_page (addr + data) - trunc_page (addr);
+    err = __vm_read (task, trunc_page (addr), *size, ourpage, &nread);
+    if (!err)
+      *size = nread;
+    return err;
+  }
 
   /* Fetch the thread port for PID's user thread.  */
-  error_t fetch_user_thread (task_t task, thread_t *thread)
-    {
-      thread_t threadbuf[3], *threads = threadbuf;
-      mach_msg_type_number_t nthreads = 3, i;
-      error_t err = __task_threads (task, &threads, &nthreads);
-      if (err)
-	return err;
-      if (nthreads == 0)
-	return EINVAL;
-      *thread = threads[0];	/* Assume user thread is first.  */
-      for (i = 1; i < nthreads; ++i)
-	__mach_port_deallocate (__mach_task_self (), threads[i]);
-      if (threads != threadbuf)
-	__vm_deallocate (__mach_task_self (),
-			 (vm_address_t) threads, nthreads * sizeof threads[0]);
-      return 0;
-    }
+  error_t fetch_user_thread (task_t task, thread_t * thread)
+  {
+    thread_t threadbuf[3], *threads = threadbuf;
+    mach_msg_type_number_t nthreads = 3, i;
+    error_t err = __task_threads (task, &threads, &nthreads);
+    if (err)
+      return err;
+    if (nthreads == 0)
+      return EINVAL;
+    *thread = threads[0]; /* Assume user thread is first.  */
+    for (i = 1; i < nthreads; ++i)
+      __mach_port_deallocate (__mach_task_self (), threads[i]);
+    if (threads != threadbuf)
+      __vm_deallocate (__mach_task_self (), (vm_address_t) threads,
+		       nthreads * sizeof threads[0]);
+    return 0;
+  }
 
   /* Fetch a thread state structure from PID and store it at ADDR.  */
   int get_regs (int flavor, mach_msg_type_number_t count)
-    {
-      error_t err;
-      task_t task = __pid2task (pid);
-      thread_t thread;
-      if (task == MACH_PORT_NULL)
-	return -1;
-      err = fetch_user_thread (task, &thread);
-      __mach_port_deallocate (__mach_task_self (), task);
-      if (!err)
-	err = __thread_get_state (thread, flavor, addr, &count);
-      __mach_port_deallocate (__mach_task_self (), thread);
-      return err ? __hurd_fail (err) : 0;
-    }
-
+  {
+    error_t err;
+    task_t task = __pid2task (pid);
+    thread_t thread;
+    if (task == MACH_PORT_NULL)
+      return -1;
+    err = fetch_user_thread (task, &thread);
+    __mach_port_deallocate (__mach_task_self (), task);
+    if (!err)
+      err = __thread_get_state (thread, flavor, addr, &count);
+    __mach_port_deallocate (__mach_task_self (), thread);
+    return err ? __hurd_fail (err) : 0;
+  }
 
   switch (request)
     {
@@ -135,18 +134,17 @@ ptrace (enum __ptrace_request request, ... )
 						  MACHINE_THREAD_STATE_FLAVOR,
 						  (natural_t *) &state, count);
 		      }
-
 		  }
 		__mach_port_deallocate (__mach_task_self (), thread);
 	      }
 	    else
 	      err = 0;
 
-	    if (! err)
+	    if (!err)
 	      /* Tell the process to take the signal (or just resume if 0).  */
-	      err = HURD_MSGPORT_RPC
-		(__USEPORT (PROC, __proc_getmsgport (port, pid, &msgport)),
-		 0, 0, __msg_sig_post_untraced (msgport, data, 0, task));
+	      err = HURD_MSGPORT_RPC (
+		  __USEPORT (PROC, __proc_getmsgport (port, pid, &msgport)), 0,
+		  0, __msg_sig_post_untraced (msgport, data, 0, task));
 	  }
 	__mach_port_deallocate (__mach_task_self (), task);
 	return err ? __hurd_fail (err) : 0;
@@ -178,12 +176,12 @@ ptrace (enum __ptrace_request request, ... )
 	if (task == MACH_PORT_NULL)
 	  return -1;
 	err = __USEPORT (PROC, __proc_getmsgport (port, pid, &msgport));
-	if (! err)
+	if (!err)
 	  {
-	    err = __msg_set_init_int (msgport, task, INIT_TRACEMASK,
-				      request == PTRACE_DETACH ? 0
-				      : ~(sigset_t) 0);
-	    if (! err)
+	    err = __msg_set_init_int (
+		msgport, task, INIT_TRACEMASK,
+		request == PTRACE_DETACH ? 0 : ~(sigset_t) 0);
+	    if (!err)
 	      {
 		if (request == PTRACE_ATTACH)
 		  /* Now stop the process.  */
@@ -291,8 +289,8 @@ ptrace (enum __ptrace_request request, ... )
 	if (!err)
 	  {
 	    /* Now modify the specified word and write the page back.  */
-	    *(natural_t *) ((vm_address_t) addr - trunc_page (addr)
-			    + ourpage) = data;
+	    *(natural_t *) ((vm_address_t) addr - trunc_page (addr) + ourpage)
+		= data;
 	    err = __vm_write (task, trunc_page (addr), ourpage, size);
 	    __vm_deallocate (__mach_task_self (), ourpage, size);
 	  }
@@ -367,10 +365,9 @@ ptrace (enum __ptrace_request request, ... )
 	    size = 0;
 	    err = read_data (task, &ourpage, &size);
 	    if (!err)
-	      memcpy ((void *) ((vm_address_t) addr - trunc_page (addr)
-				+ ourpage),
-		      addr2,
-		      data);
+	      memcpy (
+		  (void *) ((vm_address_t) addr - trunc_page (addr) + ourpage),
+		  addr2, data);
 	  }
 	if (!err)
 	  /* Write back the modified pages.  */

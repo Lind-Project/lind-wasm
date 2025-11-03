@@ -30,7 +30,7 @@ __issignalingl (_Float128 x)
      having it set (sNaN) already makes the significand different from that
      used to designate infinity.  */
   return ((hxi & UINT64_C (0x7fff800000000000))
-          == UINT64_C (0x7fff800000000000));
+	  == UINT64_C (0x7fff800000000000));
 #else
   /* To keep the following comparison simple, toggle the quiet/signaling bit,
      so that it is set for sNaNs.  This is inverse to IEEE 754-2008 (as well as

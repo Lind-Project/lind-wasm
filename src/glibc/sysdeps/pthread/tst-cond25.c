@@ -38,7 +38,8 @@ typedef void *(*thr_func) (void *);
 pthread_mutex_t mutex;
 pthread_cond_t cond;
 
-void cleanup (void *u)
+void
+cleanup (void *u)
 {
   /* pthread_cond_wait should always return with the mutex locked.  The
      pthread_mutex_unlock implementation does not actually check whether we
@@ -62,20 +63,20 @@ signaller (void *u)
   for (i = 0; i < ITERS; i++)
     {
       if ((ret = pthread_mutex_lock (&mutex)) != 0)
-        {
-	  tret = (void *)1;
+	{
+	  tret = (void *) 1;
 	  printf ("signaller:mutex_lock failed: %s\n", strerror (ret));
 	  goto out;
 	}
       if ((ret = pthread_cond_signal (&cond)) != 0)
-        {
-	  tret = (void *)1;
+	{
+	  tret = (void *) 1;
 	  printf ("signaller:signal failed: %s\n", strerror (ret));
 	  goto unlock_out;
 	}
       if ((ret = pthread_mutex_unlock (&mutex)) != 0)
-        {
-	  tret = (void *)1;
+	{
+	  tret = (void *) 1;
 	  printf ("signaller:mutex_unlock failed: %s\n", strerror (ret));
 	  goto out;
 	}
@@ -101,7 +102,7 @@ waiter (void *u)
   for (i = 0; i < ITERS / NUM; i++)
     {
       if ((ret = pthread_mutex_lock (&mutex)) != 0)
-        {
+	{
 	  tret = (void *) (uintptr_t) 1;
 	  printf ("waiter[%u]:mutex_lock failed: %s\n", seq, strerror (ret));
 	  goto out;
@@ -109,14 +110,14 @@ waiter (void *u)
       pthread_cleanup_push (cleanup, NULL);
 
       if ((ret = pthread_cond_wait (&cond, &mutex)) != 0)
-        {
+	{
 	  tret = (void *) (uintptr_t) 1;
 	  printf ("waiter[%u]:wait failed: %s\n", seq, strerror (ret));
 	  goto unlock_out;
 	}
 
       if ((ret = pthread_mutex_unlock (&mutex)) != 0)
-        {
+	{
 	  tret = (void *) (uintptr_t) 1;
 	  printf ("waiter[%u]:mutex_unlock failed: %s\n", seq, strerror (ret));
 	  goto out;
@@ -145,8 +146,8 @@ timed_waiter (void *u)
     {
       struct timespec ts;
 
-      if ((ret = clock_gettime(CLOCK_REALTIME, &ts)) != 0)
-        {
+      if ((ret = clock_gettime (CLOCK_REALTIME, &ts)) != 0)
+	{
 	  tret = (void *) (uintptr_t) 1;
 	  printf ("%u:clock_gettime failed: %s\n", seq, strerror (errno));
 	  goto out;
@@ -154,7 +155,7 @@ timed_waiter (void *u)
       ts.tv_sec += 20;
 
       if ((ret = pthread_mutex_lock (&mutex)) != 0)
-        {
+	{
 	  tret = (void *) (uintptr_t) 1;
 	  printf ("waiter[%u]:mutex_lock failed: %s\n", seq, strerror (ret));
 	  goto out;
@@ -163,13 +164,13 @@ timed_waiter (void *u)
 
       /* We should not time out either.  */
       if ((ret = pthread_cond_timedwait (&cond, &mutex, &ts)) != 0)
-        {
+	{
 	  tret = (void *) (uintptr_t) 1;
 	  printf ("waiter[%u]:timedwait failed: %s\n", seq, strerror (ret));
 	  goto unlock_out;
 	}
       if ((ret = pthread_mutex_unlock (&mutex)) != 0)
-        {
+	{
 	  tret = (void *) (uintptr_t) 1;
 	  printf ("waiter[%u]:mutex_unlock failed: %s\n", seq, strerror (ret));
 	  goto out;
@@ -199,75 +200,75 @@ do_test_wait (thr_func f)
   for (i = 0; i < COUNT; i++)
     {
       if ((ret = pthread_mutexattr_init (&attr)) != 0)
-        {
+	{
 	  printf ("mutexattr_init failed: %s\n", strerror (ret));
 	  goto out;
 	}
 
-      if ((ret = pthread_mutexattr_setprotocol (&attr,
-                                                PTHREAD_PRIO_INHERIT)) != 0)
-        {
+      if ((ret = pthread_mutexattr_setprotocol (&attr, PTHREAD_PRIO_INHERIT))
+	  != 0)
+	{
 	  printf ("mutexattr_setprotocol failed: %s\n", strerror (ret));
 	  goto out;
 	}
 
       if ((ret = pthread_cond_init (&cond, NULL)) != 0)
-        {
+	{
 	  printf ("cond_init failed: %s\n", strerror (ret));
 	  goto out;
 	}
 
       if ((ret = pthread_mutex_init (&mutex, &attr)) != 0)
-        {
+	{
 	  printf ("mutex_init failed: %s\n", strerror (ret));
 	  goto out;
 	}
 
       for (j = 0; j < NUM; j++)
-        if ((ret = pthread_create (&w[j], NULL,
-                                   f, (void *) (uintptr_t) j)) != 0)
+	if ((ret = pthread_create (&w[j], NULL, f, (void *) (uintptr_t) j))
+	    != 0)
 	  {
 	    printf ("waiter[%d]: create failed: %s\n", j, strerror (ret));
 	    goto out;
 	  }
 
       if ((ret = pthread_create (&s, NULL, signaller, NULL)) != 0)
-        {
+	{
 	  printf ("signaller: create failed: %s\n", strerror (ret));
 	  goto out;
 	}
 
       for (j = 0; j < NUM; j++)
-        {
-          pthread_cancel (w[j]);
+	{
+	  pthread_cancel (w[j]);
 
-          if ((ret = pthread_join (w[j], &thr_ret)) != 0)
+	  if ((ret = pthread_join (w[j], &thr_ret)) != 0)
 	    {
 	      printf ("waiter[%d]: join failed: %s\n", j, strerror (ret));
 	      goto out;
 	    }
 
-          if (thr_ret != NULL && thr_ret != PTHREAD_CANCELED)
+	  if (thr_ret != NULL && thr_ret != PTHREAD_CANCELED)
 	    {
 	      ret = 1;
 	      goto out;
 	    }
-        }
+	}
 
       /* The signalling thread could have ended before it was cancelled.  */
       pthread_cancel (s);
 
       if ((ret = pthread_join (s, &thr_ret)) != 0)
-        {
+	{
 	  printf ("signaller: join failed: %s\n", strerror (ret));
 	  goto out;
 	}
 
       if (thr_ret != NULL && thr_ret != PTHREAD_CANCELED)
-        {
-          ret = 1;
-          goto out;
-        }
+	{
+	  ret = 1;
+	  goto out;
+	}
     }
 
 out:

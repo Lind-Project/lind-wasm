@@ -19,7 +19,7 @@
 #include <dirent.h>
 
 #if !_DIRENT_MATCHES_DIRENT64
-#include <dirstream.h>
+#  include <dirstream.h>
 
 /* Read a directory entry from DIRP.  */
 struct dirent *
@@ -63,13 +63,13 @@ __readdir (DIR *dirp)
 {
   struct dirent *dp;
 
-#if IS_IN (libc)
+#  if IS_IN(libc)
   __libc_lock_lock (dirp->lock);
-#endif
+#  endif
   dp = __readdir_unlocked (dirp);
-#if IS_IN (libc)
+#  if IS_IN(libc)
   __libc_lock_unlock (dirp->lock);
-#endif
+#  endif
 
   return dp;
 }

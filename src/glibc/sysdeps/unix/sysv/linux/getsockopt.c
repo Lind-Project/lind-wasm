@@ -27,13 +27,14 @@ static int
 getsockopt_syscall (int fd, int level, int optname, void *optval,
 		    socklen_t *len)
 {
-  return MAKE_SYSCALL5(GETSOCKOPT_SYSCALL, "syscall|getsockopt", (uint64_t)fd, (uint64_t)level, (uint64_t)optname, (uint64_t)optval, (uint64_t)len);
+  return MAKE_SYSCALL5 (GETSOCKOPT_SYSCALL, "syscall|getsockopt",
+			(uint64_t) fd, (uint64_t) level, (uint64_t) optname,
+			(uint64_t) optval, (uint64_t) len);
 }
 
 #ifndef __ASSUME_TIME64_SYSCALLS
 static int
-getsockopt32 (int fd, int level, int optname, void *optval,
-	      socklen_t *len)
+getsockopt32 (int fd, int level, int optname, void *optval, socklen_t *len)
 {
   int r = -1;
 
@@ -96,9 +97,9 @@ __getsockopt (int fd, int level, int optname, void *optval, socklen_t *len)
     r = getsockopt32 (fd, level, optname, optval, len);
 #endif
 
- return r;
+  return r;
 }
 weak_alias (__getsockopt, getsockopt)
 #if __TIMESIZE != 64
-weak_alias (__getsockopt, __getsockopt64)
+    weak_alias (__getsockopt, __getsockopt64)
 #endif

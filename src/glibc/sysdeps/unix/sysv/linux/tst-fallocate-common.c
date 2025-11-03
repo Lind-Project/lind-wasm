@@ -29,8 +29,8 @@
 #include <support/check.h>
 #include <support/temp_file.h>
 
-#define XSTR(s) STR(S)
-#define STR(s)  #s
+#define XSTR(s) STR (S)
+#define STR(s) #s
 
 static char *temp_filename;
 static int temp_fd;
@@ -74,7 +74,7 @@ do_test_with_offset (off_t offset)
 
   if (finfo.st_size < (offset + BLK_SIZE))
     FAIL_EXIT1 ("size of first fallocate less than expected (%llu)",
-		(long long unsigned int)offset + BLK_SIZE);
+		(long long unsigned int) offset + BLK_SIZE);
 
   if (lseek (temp_fd, offset, SEEK_SET) == (off_t) -1)
     FAIL_EXIT1 ("fseek (0, SEEK_SET) failed");

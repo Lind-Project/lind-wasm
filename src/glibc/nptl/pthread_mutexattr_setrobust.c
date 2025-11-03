@@ -38,14 +38,14 @@ __pthread_mutexattr_setrobust (pthread_mutexattr_t *attr, int robustness)
   return 0;
 }
 versioned_symbol (libc, __pthread_mutexattr_setrobust,
-                  pthread_mutexattr_setrobust, GLIBC_2_34);
+		  pthread_mutexattr_setrobust, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_4, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_4, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_mutexattr_setrobust,
-               pthread_mutexattr_setrobust_np, GLIBC_2_4);
+	       pthread_mutexattr_setrobust_np, GLIBC_2_4);
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_12, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_12, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_mutexattr_setrobust,
-               pthread_mutexattr_setrobust, GLIBC_2_12);
+	       pthread_mutexattr_setrobust, GLIBC_2_12);
 #endif

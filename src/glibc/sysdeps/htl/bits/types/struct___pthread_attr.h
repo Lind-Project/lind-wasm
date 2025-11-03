@@ -17,16 +17,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES_STRUCT___PTHREAD_ATTR
-#define _BITS_TYPES_STRUCT___PTHREAD_ATTR	1
+#  define _BITS_TYPES_STRUCT___PTHREAD_ATTR 1
 
-#define __need_size_t
-#include <stddef.h>
+#  define __need_size_t
+#  include <stddef.h>
 
 enum __pthread_detachstate;
 enum __pthread_inheritsched;
 enum __pthread_contentionscope;
 
-struct __sched_param {
+struct __sched_param
+{
   int __sched_priority;
 };
 

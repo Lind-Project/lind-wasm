@@ -25,18 +25,13 @@
    to *OPTVAL (which is OPTLEN bytes long).
    Returns 0 on success, -1 for errors.  */
 int
-__setsockopt (int fd,
-	      int level,
-	      int optname,
-	      const void *optval,
+__setsockopt (int fd, int level, int optname, const void *optval,
 	      socklen_t optlen)
 {
-  error_t err = HURD_DPORT_USE (fd, __socket_setopt (port,
-						     level, optname,
-						     optval, optlen));
+  error_t err = HURD_DPORT_USE (
+      fd, __socket_setopt (port, level, optname, optval, optlen));
   if (err)
     return __hurd_dfail (fd, err);
   return 0;
 }
-libc_hidden_def (__setsockopt)
-weak_alias (__setsockopt, setsockopt)
+libc_hidden_def (__setsockopt) weak_alias (__setsockopt, setsockopt)

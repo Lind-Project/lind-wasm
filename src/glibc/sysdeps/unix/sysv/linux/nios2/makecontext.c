@@ -24,11 +24,11 @@
 /* makecontext sets up a stack and the registers for the
    user context.  The stack looks like this:
 
-               +-----------------------+
+	       +-----------------------+
 	       | padding as required   |
-               +-----------------------+
+	       +-----------------------+
     sp ->      | parameters 5 to n     |
-               +-----------------------+
+	       +-----------------------+
 
    The registers are set up like this:
      r4--r7 : parameter 1 to 4
@@ -44,14 +44,14 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
   va_list ap;
   int i;
 
-  sp = (unsigned long *)
-    ((uintptr_t) ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
+  sp = (unsigned long *) ((uintptr_t) ucp->uc_stack.ss_sp
+			  + ucp->uc_stack.ss_size);
 
   /* Allocate stack arguments.  */
   sp -= argc < 4 ? 0 : argc - 4;
 
   /* Keep the stack aligned.  */
-  sp = (unsigned long*) (((uintptr_t) sp) & -4L);
+  sp = (unsigned long *) (((uintptr_t) sp) & -4L);
 
   /* Init version field.  */
   ucp->uc_mcontext.version = 2;

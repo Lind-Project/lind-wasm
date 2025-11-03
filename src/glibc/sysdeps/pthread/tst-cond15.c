@@ -23,7 +23,6 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t mut = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 static pthread_mutex_t mut2 = PTHREAD_MUTEX_INITIALIZER;
@@ -87,7 +86,6 @@ tf (void *p)
   return NULL;
 }
 
-
 static int
 do_test (void)
 {
@@ -130,7 +128,6 @@ do_test (void)
       return 1;
     }
 
-
   puts ("parent: create 2nd child");
 
   err = pthread_create (&th, NULL, tf, (void *) 1l);
@@ -151,7 +148,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

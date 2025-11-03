@@ -16,60 +16,60 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SGIDEFS_H
-#define _SGIDEFS_H	1
+#  define _SGIDEFS_H 1
 
 /*
  * A crude hack to stop <asm/sgidefs.h>
  */
-#undef __ASM_SGIDEFS_H
-#define __ASM_SGIDEFS_H
+#  undef __ASM_SGIDEFS_H
+#  define __ASM_SGIDEFS_H
 
 /*
  * And remove any damage it might have already done
  */
-#undef _MIPS_ISA_MIPS1
-#undef _MIPS_ISA_MIPS2
-#undef _MIPS_ISA_MIPS3
-#undef _MIPS_ISA_MIPS4
-#undef _MIPS_ISA_MIPS5
-#undef _MIPS_ISA_MIPS32
-#undef _MIPS_ISA_MIPS64
+#  undef _MIPS_ISA_MIPS1
+#  undef _MIPS_ISA_MIPS2
+#  undef _MIPS_ISA_MIPS3
+#  undef _MIPS_ISA_MIPS4
+#  undef _MIPS_ISA_MIPS5
+#  undef _MIPS_ISA_MIPS32
+#  undef _MIPS_ISA_MIPS64
 
-#undef _MIPS_SIM_ABI32
-#undef _MIPS_SIM_NABI32
-#undef _MIPS_SIM_ABI64
+#  undef _MIPS_SIM_ABI32
+#  undef _MIPS_SIM_NABI32
+#  undef _MIPS_SIM_ABI64
 
 /*
  * Definitions for the ISA level
  */
-#define _MIPS_ISA_MIPS1 1
-#define _MIPS_ISA_MIPS2 2
-#define _MIPS_ISA_MIPS3 3
-#define _MIPS_ISA_MIPS4 4
-#define _MIPS_ISA_MIPS5 5
-#define _MIPS_ISA_MIPS32 6
-#define _MIPS_ISA_MIPS64 7
+#  define _MIPS_ISA_MIPS1 1
+#  define _MIPS_ISA_MIPS2 2
+#  define _MIPS_ISA_MIPS3 3
+#  define _MIPS_ISA_MIPS4 4
+#  define _MIPS_ISA_MIPS5 5
+#  define _MIPS_ISA_MIPS32 6
+#  define _MIPS_ISA_MIPS64 7
 
 /*
  * Subprogram calling convention
  */
-#ifndef _ABIO32
-# define _ABIO32		1
-#endif
-#define _MIPS_SIM_ABI32		_ABIO32
+#  ifndef _ABIO32
+#    define _ABIO32 1
+#  endif
+#  define _MIPS_SIM_ABI32 _ABIO32
 
-#ifndef _ABIN32
-# define _ABIN32		2
-#endif
-#define _MIPS_SIM_NABI32	_ABIN32
+#  ifndef _ABIN32
+#    define _ABIN32 2
+#  endif
+#  define _MIPS_SIM_NABI32 _ABIN32
 
-#ifndef _ABI64
-# define _ABI64			3
-#endif
-#define _MIPS_SIM_ABI64		_ABI64
+#  ifndef _ABI64
+#    define _ABI64 3
+#  endif
+#  define _MIPS_SIM_ABI64 _ABI64
 
-#ifndef _ABIO64
-# define _ABIO64		4
-#endif
+#  ifndef _ABIO64
+#    define _ABIO64 4
+#  endif
 
 #endif /* sgidefs.h */

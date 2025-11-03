@@ -27,8 +27,7 @@
 #include <pt-internal.h>
 
 #if !__HAVE_64B_ATOMICS
-static void
-__sem_wait_32_finish (struct new_sem *isem);
+static void __sem_wait_32_finish (struct new_sem *isem);
 #endif
 
 static void
@@ -37,15 +36,15 @@ __sem_wait_cleanup (void *arg)
   struct new_sem *isem = arg;
 
 #if __HAVE_64B_ATOMICS
-  atomic_fetch_add_relaxed (&isem->data, -((uint64_t) 1 << SEM_NWAITERS_SHIFT));
+  atomic_fetch_add_relaxed (&isem->data,
+			    -((uint64_t) 1 << SEM_NWAITERS_SHIFT));
 #else
   __sem_wait_32_finish (isem);
 #endif
 }
 
 int
-__sem_timedwait_internal (sem_t *restrict sem,
-			  clockid_t clock_id,
+__sem_timedwait_internal (sem_t *restrict sem, clockid_t clock_id,
 			  const struct timespec *restrict timeout)
 {
   struct new_sem *isem = (struct new_sem *) sem;
@@ -57,11 +56,11 @@ __sem_timedwait_internal (sem_t *restrict sem,
   if (__sem_waitfast (isem, 0) == 0)
     return 0;
 
-  int cancel_oldtype = LIBC_CANCEL_ASYNC();
+  int cancel_oldtype = LIBC_CANCEL_ASYNC ();
 
 #if __HAVE_64B_ATOMICS
   uint64_t d = atomic_fetch_add_relaxed (&isem->data,
-		 (uint64_t) 1 << SEM_NWAITERS_SHIFT);
+					 (uint64_t) 1 << SEM_NWAITERS_SHIFT);
 
   pthread_cleanup_push (__sem_wait_cleanup, isem);
 
@@ -71,13 +70,12 @@ __sem_timedwait_internal (sem_t *restrict sem,
 	{
 	  /* No token, sleep.  */
 	  if (timeout)
-	    err = __lll_abstimed_wait_intr (
-		      ((unsigned int *) &isem->data) + SEM_VALUE_OFFSET,
-		      0, timeout, flags, clock_id);
+	    err = __lll_abstimed_wait_intr (((unsigned int *) &isem->data)
+						+ SEM_VALUE_OFFSET,
+					    0, timeout, flags, clock_id);
 	  else
 	    err = __lll_wait_intr (
-		      ((unsigned int *) &isem->data) + SEM_VALUE_OFFSET,
-		      0, flags);
+		((unsigned int *) &isem->data) + SEM_VALUE_OFFSET, 0, flags);
 
 	  if (err != 0 && err != KERN_INVALID_ARGUMENT)
 	    {
@@ -97,8 +95,9 @@ __sem_timedwait_internal (sem_t *restrict sem,
       else
 	{
 	  /* Try to acquire and dequeue.  */
-	  if (atomic_compare_exchange_weak_acquire (&isem->data,
-	      &d, d - 1 - ((uint64_t) 1 << SEM_NWAITERS_SHIFT)))
+	  if (atomic_compare_exchange_weak_acquire (
+		  &isem->data, &d,
+		  d - 1 - ((uint64_t) 1 << SEM_NWAITERS_SHIFT)))
 	    {
 	      /* Success */
 	      ret = 0;
@@ -125,18 +124,17 @@ __sem_timedwait_internal (sem_t *restrict sem,
 	      if ((v & SEM_NWAITERS_MASK) != 0)
 		break;
 	    }
-	  while (!atomic_compare_exchange_weak_release (&isem->value,
-	      &v, v | SEM_NWAITERS_MASK));
+	  while (!atomic_compare_exchange_weak_release (
+	      &isem->value, &v, v | SEM_NWAITERS_MASK));
 
 	  if ((v >> SEM_VALUE_SHIFT) == 0)
 	    {
 	      /* No token, sleep.  */
 	      if (timeout)
-		err = __lll_abstimed_wait_intr (&isem->value,
-			  SEM_NWAITERS_MASK, timeout, flags, clock_id);
+		err = __lll_abstimed_wait_intr (
+		    &isem->value, SEM_NWAITERS_MASK, timeout, flags, clock_id);
 	      else
-		err = __lll_wait_intr (&isem->value,
-			  SEM_NWAITERS_MASK, flags);
+		err = __lll_wait_intr (&isem->value, SEM_NWAITERS_MASK, flags);
 
 	      if (err != 0 && err != KERN_INVALID_ARGUMENT)
 		{
@@ -155,8 +153,8 @@ __sem_timedwait_internal (sem_t *restrict sem,
 	}
       while ((v >> SEM_VALUE_SHIFT) == 0);
     }
-  while (!atomic_compare_exchange_weak_acquire (&isem->value,
-	  &v, v - (1 << SEM_VALUE_SHIFT)));
+  while (!atomic_compare_exchange_weak_acquire (&isem->value, &v,
+						v - (1 << SEM_VALUE_SHIFT)));
 
 error:
   pthread_cleanup_pop (0);
@@ -181,8 +179,8 @@ __sem_wait_32_finish (struct new_sem *isem)
   unsigned int wfinal = atomic_fetch_add_release (&isem->nwaiters, -1);
   if (wfinal > 1 && wguess == 1)
     {
-      unsigned int v = atomic_fetch_or_relaxed (&isem->value,
-						SEM_NWAITERS_MASK);
+      unsigned int v
+	  = atomic_fetch_or_relaxed (&isem->value, SEM_NWAITERS_MASK);
       v >>= SEM_VALUE_SHIFT;
       while (v--)
 	__lll_wake (&isem->value, isem->pshared ? GSYNC_SHARED : 0);

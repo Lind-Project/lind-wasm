@@ -36,11 +36,11 @@ do_test (void)
   off_t offset = UINT32_MAX + 2048LL;
   if (posix_fadvise (temp_fd, 0, offset, POSIX_FADV_NORMAL) != 0)
     FAIL_EXIT1 ("posix_fadvise failed (offset = 0, len = %zd) failed",
-		(ssize_t)offset);
+		(ssize_t) offset);
 
   if (posix_fadvise (temp_fd, offset, 0, POSIX_FADV_NORMAL) != 0)
     FAIL_EXIT1 ("posix_fadvise failed (offset = %zd, len = 0) failed",
-		(ssize_t)offset);
+		(ssize_t) offset);
 
   return 0;
 }

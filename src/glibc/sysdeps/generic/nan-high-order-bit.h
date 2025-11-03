@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef NAN_HIGH_ORDER_BIT_H
-#define NAN_HIGH_ORDER_BIT_H	1
+#  define NAN_HIGH_ORDER_BIT_H 1
 
 /* Define this macro to 1 if the high-order bit of a NaN's mantissa is
    set for signaling NaNs and clear for quiet NaNs, 0 otherwise (the
    preferred IEEE convention).  */
-#define HIGH_ORDER_BIT_IS_SET_FOR_SNAN 0
+#  define HIGH_ORDER_BIT_IS_SET_FOR_SNAN 0
 
 #endif /* nan-high-order-bit.h */

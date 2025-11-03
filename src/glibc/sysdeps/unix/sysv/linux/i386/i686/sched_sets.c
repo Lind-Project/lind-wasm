@@ -7,4 +7,3 @@ __sched_setscheduler (pid_t pid, int policy, const struct sched_param *param)
 {
   return -1;
 }
-

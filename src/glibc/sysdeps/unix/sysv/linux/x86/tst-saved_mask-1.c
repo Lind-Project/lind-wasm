@@ -30,7 +30,7 @@ do_test (void)
 {
   sigjmp_buf sj;
   struct support_next_to_fault sigset_t_buf
-    = support_next_to_fault_allocate (SIZEOF_SIGSET_T);
+      = support_next_to_fault_allocate (SIZEOF_SIGSET_T);
   sigset_t *m_p = (sigset_t *) sigset_t_buf.buffer;
   sigset_t m;
 

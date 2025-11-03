@@ -4,6 +4,6 @@
 #ifndef _SYS_REBOOT_H
 #define _SYS_REBOOT_H
 
-#define RB_AUTOBOOT	0
+#define RB_AUTOBOOT 0
 
-#endif	/* <sys/reboot.h> */
+#endif /* <sys/reboot.h> */

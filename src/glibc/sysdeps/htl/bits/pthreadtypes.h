@@ -17,20 +17,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 #if !defined _BITS_TYPES_H && !defined _PTHREAD_H
-# error "Never include <bits/pthreadtypes.h> directly; use <sys/types.h> instead."
+#  error                                                                       \
+      "Never include <bits/pthreadtypes.h> directly; use <sys/types.h> instead."
 #endif
 
 #ifndef _BITS_PTHREADTYPES_H
-#define _BITS_PTHREADTYPES_H    1
+#  define _BITS_PTHREADTYPES_H 1
 
-#include <bits/thread-shared-types.h>
+#  include <bits/thread-shared-types.h>
 
-#include <features.h>
+#  include <features.h>
 
-#include <bits/types.h>
+#  include <bits/types.h>
 
 __BEGIN_DECLS
-#include <bits/pthread.h>
+#  include <bits/pthread.h>
 typedef __pthread_t pthread_t;
 
 /* Possible values for the process shared attribute.  */
@@ -61,7 +62,7 @@ enum __pthread_detachstate
   __PTHREAD_CREATE_DETACHED
 };
 
-#include <bits/types/struct___pthread_attr.h>
+#  include <bits/types/struct___pthread_attr.h>
 typedef struct __pthread_attr pthread_attr_t;
 
 enum __pthread_mutex_protocol
@@ -84,47 +85,47 @@ enum __pthread_mutex_robustness
   __PTHREAD_MUTEX_ROBUST = 0x100
 };
 
-#include <bits/types/struct___pthread_mutexattr.h>
+#  include <bits/types/struct___pthread_mutexattr.h>
 typedef struct __pthread_mutexattr pthread_mutexattr_t;
 
-#include <bits/types/struct___pthread_mutex.h>
+#  include <bits/types/struct___pthread_mutex.h>
 typedef struct __pthread_mutex pthread_mutex_t;
 
-#include <bits/types/struct___pthread_condattr.h>
+#  include <bits/types/struct___pthread_condattr.h>
 typedef struct __pthread_condattr pthread_condattr_t;
 
-#include <bits/types/struct___pthread_cond.h>
+#  include <bits/types/struct___pthread_cond.h>
 typedef struct __pthread_cond pthread_cond_t;
 
-#ifdef __USE_XOPEN2K
-# include <bits/types/__pthread_spinlock_t.h>
+#  ifdef __USE_XOPEN2K
+#    include <bits/types/__pthread_spinlock_t.h>
 typedef __pthread_spinlock_t pthread_spinlock_t;
-#endif /* XPG6.  */
+#  endif /* XPG6.  */
 
-#if defined __USE_UNIX98 || defined __USE_XOPEN2K
+#  if defined __USE_UNIX98 || defined __USE_XOPEN2K
 
-# include <bits/types/struct___pthread_rwlockattr.h>
+#    include <bits/types/struct___pthread_rwlockattr.h>
 typedef struct __pthread_rwlockattr pthread_rwlockattr_t;
 
-# include <bits/types/struct___pthread_rwlock.h>
+#    include <bits/types/struct___pthread_rwlock.h>
 typedef struct __pthread_rwlock pthread_rwlock_t;
 
-#endif /* __USE_UNIX98 || __USE_XOPEN2K */
+#  endif /* __USE_UNIX98 || __USE_XOPEN2K */
 
-#ifdef __USE_XOPEN2K
+#  ifdef __USE_XOPEN2K
 
-# include <bits/types/struct___pthread_barrierattr.h>
+#    include <bits/types/struct___pthread_barrierattr.h>
 typedef struct __pthread_barrierattr pthread_barrierattr_t;
 
-# include <bits/types/struct___pthread_barrier.h>
+#    include <bits/types/struct___pthread_barrier.h>
 typedef struct __pthread_barrier pthread_barrier_t;
 
-#endif /* __USE_XOPEN2K */
+#  endif /* __USE_XOPEN2K */
 
-#include <bits/types/__pthread_key.h>
+#  include <bits/types/__pthread_key.h>
 typedef __pthread_key pthread_key_t;
 
-#include <bits/types/struct___pthread_once.h>
+#  include <bits/types/struct___pthread_once.h>
 typedef struct __pthread_once pthread_once_t;
 
 __END_DECLS

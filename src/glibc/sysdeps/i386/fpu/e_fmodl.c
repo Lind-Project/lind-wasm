@@ -16,7 +16,9 @@ __ieee754_fmodl (long double x, long double y)
        "sahf\n"
        "jp      1b\n"
        "fstp    %%st(1)"
-       : "=t" (res) : "0" (x), "u" (y) : "ax", "st(1)");
+       : "=t"(res)
+       : "0"(x), "u"(y)
+       : "ax", "st(1)");
   return res;
 }
 libm_alias_finite (__ieee754_fmodl, __fmodl)

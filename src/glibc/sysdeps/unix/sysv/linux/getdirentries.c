@@ -18,7 +18,7 @@
 #include <dirent.h>
 
 #if !_DIRENT_MATCHES_DIRENT64
-# include <unistd.h>
+#  include <unistd.h>
 
 ssize_t
 getdirentries (int fd, char *buf, size_t nbytes, off_t *basep)

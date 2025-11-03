@@ -42,6 +42,4 @@ __uname (struct utsname *uname)
 
   return 0;
 }
-weak_alias (__uname, uname)
-libc_hidden_def (__uname)
-libc_hidden_def (uname)
+weak_alias (__uname, uname) libc_hidden_def (__uname) libc_hidden_def (uname)

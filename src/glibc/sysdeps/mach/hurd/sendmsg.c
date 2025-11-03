@@ -59,7 +59,7 @@ __libc_sendmsg (int fd, const struct msghdr *message, int flags)
       if (message->msg_iov[i].iov_len > 0)
 	{
 	  /* As an optimization, if we only have a single non-empty
-             iovec, we set DATA and LEN from it.  */
+	     iovec, we set DATA and LEN from it.  */
 	  if (len == 0)
 	    data.ptr = message->msg_iov[i].iov_base;
 	  else
@@ -75,9 +75,9 @@ __libc_sendmsg (int fd, const struct msghdr *message, int flags)
       char *buf;
 
       /* Allocate a temporary buffer to hold the data.  For small
-         amounts of data, we allocate a buffer on the stack.  Larger
-         amounts of data are stored in a page-aligned buffer.  The
-         limit of 2048 bytes is inspired by the MiG stubs.  */
+	 amounts of data, we allocate a buffer on the stack.  Larger
+	 amounts of data are stored in a page-aligned buffer.  The
+	 limit of 2048 bytes is inspired by the MiG stubs.  */
       if (len > 2048)
 	{
 	  err = __vm_allocate (__mach_task_self (), &data.addr, len, 1);
@@ -93,7 +93,7 @@ __libc_sendmsg (int fd, const struct msghdr *message, int flags)
       buf = data.ptr;
       for (i = 0; i < len; i++)
 	{
-#define	min(a, b)	((a) > (b) ? (b) : (a))
+#define min(a, b) ((a) > (b) ? (b) : (a))
 	  size_t copy = min (message->msg_iov[i].iov_len, to_copy);
 
 	  buf = __mempcpy (buf, message->msg_iov[i].iov_base, copy);
@@ -115,8 +115,7 @@ __libc_sendmsg (int fd, const struct msghdr *message, int flags)
     ports = __alloca (nports * sizeof (mach_port_t));
 
   nports = 0;
-  for (cmsg = CMSG_FIRSTHDR (message);
-       cmsg;
+  for (cmsg = CMSG_FIRSTHDR (message); cmsg;
        cmsg = CMSG_NXTHDR ((struct msghdr *) message, cmsg))
     {
       if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
@@ -128,17 +127,16 @@ __libc_sendmsg (int fd, const struct msghdr *message, int flags)
 
 	  for (i = 0; i < nfds; i++)
 	    {
-	      err = HURD_DPORT_USE
-		(fds[i],
-		 ({
-		   err = __io_restrict_auth (port, &ports[nports],
-					     0, 0, 0, 0);
-		   if (! err)
-		     nports++;
-		   /* We do not currently have flags to pass.  */
-		   fds[i] = 0;
-		   err;
-		 }));
+	      err = HURD_DPORT_USE (fds[i], ({
+				      err = __io_restrict_auth (
+					  port, &ports[nports], 0, 0, 0, 0);
+				      if (!err)
+					nports++;
+				      /* We do not currently have flags to
+				       * pass.  */
+				      fds[i] = 0;
+				      err;
+				    }));
 
 	      if (err)
 		goto out;
@@ -171,36 +169,28 @@ __libc_sendmsg (int fd, const struct msghdr *message, int flags)
 	err = EIEIO;
     }
 
-  err = HURD_DPORT_USE_CANCEL (fd,
-			({
-			  if (err)
-			    err = __socket_create_address (port,
-							   addr->sun_family,
-							   (char *) addr,
-							   addr_len,
-							   &aport);
-			  if (! err)
-			    {
-			      /* Send the data.  */
-			      int cancel_oldtype = LIBC_CANCEL_ASYNC();
-			      err = __socket_send (port, aport,
-						   flags, data.ptr, len,
-						   ports,
-						   MACH_MSG_TYPE_COPY_SEND,
-						   nports,
-						   message->msg_control,
-						   message->msg_controllen,
-						   &amount);
-			      LIBC_CANCEL_RESET (cancel_oldtype);
-			      if (MACH_PORT_VALID (aport))
-				__mach_port_deallocate (__mach_task_self (),
-							aport);
-			    }
-			  err;
-			}));
+  err = HURD_DPORT_USE_CANCEL (
+      fd, ({
+	if (err)
+	  err = __socket_create_address (port, addr->sun_family, (char *) addr,
+					 addr_len, &aport);
+	if (!err)
+	  {
+	    /* Send the data.  */
+	    int cancel_oldtype = LIBC_CANCEL_ASYNC ();
+	    err = __socket_send (port, aport, flags, data.ptr, len, ports,
+				 MACH_MSG_TYPE_COPY_SEND, nports,
+				 message->msg_control, message->msg_controllen,
+				 &amount);
+	    LIBC_CANCEL_RESET (cancel_oldtype);
+	    if (MACH_PORT_VALID (aport))
+	      __mach_port_deallocate (__mach_task_self (), aport);
+	  }
+	err;
+      }));
   socketrpc = 1;
 
- out:
+out:
   for (i = 0; i < nports; i++)
     __mach_port_deallocate (__mach_task_self (), ports[i]);
 
@@ -213,5 +203,4 @@ __libc_sendmsg (int fd, const struct msghdr *message, int flags)
     return __hurd_fail (err);
 }
 
-weak_alias (__libc_sendmsg, sendmsg)
-weak_alias (__libc_sendmsg, __sendmsg)
+weak_alias (__libc_sendmsg, sendmsg) weak_alias (__libc_sendmsg, __sendmsg)

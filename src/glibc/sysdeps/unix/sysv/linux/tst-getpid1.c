@@ -8,7 +8,7 @@
 #include <stackinfo.h>
 
 #ifndef TEST_CLONE_FLAGS
-#define TEST_CLONE_FLAGS 0
+#  define TEST_CLONE_FLAGS 0
 #endif
 
 static int sig;
@@ -24,7 +24,6 @@ f (void *a)
     return 1;
   return 0;
 }
-
 
 static int
 do_test (void)
@@ -42,16 +41,16 @@ do_test (void)
     }
 
   char st[128 * 1024] __attribute__ ((aligned));
-# if _STACK_GROWS_DOWN
+#if _STACK_GROWS_DOWN
   pid_t p = clone (f, st + sizeof (st), TEST_CLONE_FLAGS, 0);
-# elif _STACK_GROWS_UP
+#elif _STACK_GROWS_UP
   pid_t p = clone (f, st, TEST_CLONE_FLAGS, 0);
-# else
+#else
 #  error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
-# endif
+#endif
   if (p == -1)
     {
-      printf("clone failed: %m\n");
+      printf ("clone failed: %m\n");
       return 1;
     }
   printf ("new thread: %d\n", (int) p);
@@ -60,11 +59,11 @@ do_test (void)
   do
     if (sigwaitinfo (&ss, &si) < 0)
       {
-	printf("sigwaitinfo failed: %m\n");
+	printf ("sigwaitinfo failed: %m\n");
 	kill (p, SIGKILL);
 	return 1;
       }
-  while  (si.si_signo != sig || si.si_code != SI_QUEUE);
+  while (si.si_signo != sig || si.si_code != SI_QUEUE);
 
   int e;
   if (waitpid (p, &e, __WCLONE) != p)

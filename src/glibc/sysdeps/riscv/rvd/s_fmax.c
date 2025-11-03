@@ -28,7 +28,7 @@ __fmax (double x, double y)
   if (__glibc_unlikely ((_FCLASS (x) | _FCLASS (y)) & _FCLASS_SNAN))
     return x + y;
   else
-    asm ("fmax.d %0, %1, %2" : "=f" (res) : "f" (x), "f" (y));
+    asm ("fmax.d %0, %1, %2" : "=f"(res) : "f"(x), "f"(y));
 
   return res;
 }

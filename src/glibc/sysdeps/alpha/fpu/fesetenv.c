@@ -34,9 +34,9 @@ __fesetenv (const fenv_t *envp)
 
   /* Reset the rounding mode with the hardware fpcr.  Note that the following
      system call is an implied trap barrier for our modification.  */
-  __asm__ __volatile__ ("excb; mf_fpcr %0" : "=f" (fpcr));
+  __asm__ __volatile__ ("excb; mf_fpcr %0" : "=f"(fpcr));
   fpcr = (fpcr & ~FPCR_ROUND_MASK) | (env & FPCR_ROUND_MASK);
-  __asm__ __volatile__ ("mt_fpcr %0" : : "f" (fpcr));
+  __asm__ __volatile__ ("mt_fpcr %0" : : "f"(fpcr));
 
   /* Reset the exception status and mask with the kernel's FP code.  */
   __ieee_set_fp_control (env & SWCR_ALL_MASK);
@@ -46,11 +46,10 @@ __fesetenv (const fenv_t *envp)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__fesetenv, __old_fesetenv)
-compat_symbol (libm, __old_fesetenv, fesetenv, GLIBC_2_1);
+    compat_symbol (libm, __old_fesetenv, fesetenv, GLIBC_2_1);
 #endif
 
-libm_hidden_def (__fesetenv)
-libm_hidden_ver (__fesetenv, fesetenv)
-versioned_symbol (libm, __fesetenv, fesetenv, GLIBC_2_2);
+libm_hidden_def (__fesetenv) libm_hidden_ver (__fesetenv, fesetenv)
+    versioned_symbol (libm, __fesetenv, fesetenv, GLIBC_2_2);

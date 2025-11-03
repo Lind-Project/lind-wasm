@@ -37,7 +37,7 @@ exception2signal (struct hurd_signal_detail *detail, int *signo, int posix)
 
     case EXC_BAD_ACCESS:
       switch (detail->exc_code)
-        {
+	{
 	case KERN_INVALID_ADDRESS:
 	case KERN_MEMORY_FAILURE:
 	  *signo = SIGSEGV;
@@ -61,7 +61,7 @@ exception2signal (struct hurd_signal_detail *detail, int *signo, int posix)
     case EXC_BAD_INSTRUCTION:
       *signo = SIGILL;
       switch (detail->exc_code)
-        {
+	{
 	case EXC_I386_INVOP:
 	  detail->code = posix ? ILL_ILLOPC : ILL_INVOPR_FAULT;
 	  break;
@@ -80,11 +80,11 @@ exception2signal (struct hurd_signal_detail *detail, int *signo, int posix)
       *signo = SIGFPE;
       switch (detail->exc_code)
 	{
-	case EXC_I386_DIV:	/* integer divide by zero */
+	case EXC_I386_DIV: /* integer divide by zero */
 	  detail->code = posix ? FPE_INTDIV : FPE_INTDIV_FAULT;
 	  break;
 
-	case EXC_I386_INTO:	/* integer overflow */
+	case EXC_I386_INTO: /* integer overflow */
 	  detail->code = posix ? FPE_INTOVF : FPE_INTOVF_TRAP;
 	  break;
 
@@ -165,7 +165,7 @@ exception2signal (struct hurd_signal_detail *detail, int *signo, int posix)
     case EXC_BREAKPOINT:
       *signo = SIGTRAP;
       switch (detail->exc_code)
-        {
+	{
 	case EXC_I386_SGL:
 	  detail->code = posix ? TRAP_BRKPT : DBG_SINGLE_TRAP;
 	  break;
@@ -183,8 +183,7 @@ exception2signal (struct hurd_signal_detail *detail, int *signo, int posix)
 }
 libc_hidden_def (_hurd_exception2signal)
 
-void
-_hurd_exception2signal (struct hurd_signal_detail *detail, int *signo)
+    void _hurd_exception2signal (struct hurd_signal_detail *detail, int *signo)
 {
   exception2signal (detail, signo, 1);
 }

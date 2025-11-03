@@ -32,13 +32,13 @@ struct __pthread_rwlock_arch_t
   int __cur_writer;
   int __shared;
   signed char __rwelision;
-# ifdef  __ILP32__
+#  ifdef __ILP32__
   unsigned char __pad1[3];
-#  define __PTHREAD_RWLOCK_ELISION_EXTRA 0, { 0, 0, 0 }
-# else
+#    define __PTHREAD_RWLOCK_ELISION_EXTRA 0, { 0, 0, 0 }
+#  else
   unsigned char __pad1[7];
-#  define __PTHREAD_RWLOCK_ELISION_EXTRA 0, { 0, 0, 0, 0, 0, 0, 0 }
-# endif
+#    define __PTHREAD_RWLOCK_ELISION_EXTRA 0, { 0, 0, 0, 0, 0, 0, 0 }
+#  endif
   unsigned long int __pad2;
   /* FLAGS must stay at this position in the structure to maintain
      binary compatibility.  */
@@ -55,11 +55,11 @@ struct __pthread_rwlock_arch_t
 };
 
 #ifdef __x86_64__
-# define __PTHREAD_RWLOCK_INITIALIZER(__flags) \
-  0, 0, 0, 0, 0, 0, 0, 0, __PTHREAD_RWLOCK_ELISION_EXTRA, 0, __flags
+#  define __PTHREAD_RWLOCK_INITIALIZER(__flags)                               \
+    0, 0, 0, 0, 0, 0, 0, 0, __PTHREAD_RWLOCK_ELISION_EXTRA, 0, __flags
 #else
-# define __PTHREAD_RWLOCK_INITIALIZER(__flags) \
-  0, 0, 0, 0, 0, 0, __flags, 0, 0, 0, 0
+#  define __PTHREAD_RWLOCK_INITIALIZER(__flags)                               \
+    0, 0, 0, 0, 0, 0, __flags, 0, 0, 0, 0
 #endif
 
 #endif

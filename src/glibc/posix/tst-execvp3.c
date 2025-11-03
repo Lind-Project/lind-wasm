@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-
 static void do_prepare (void);
 #define PREPARE(argc, argv) do_prepare ()
 static int do_test (void);
@@ -13,7 +12,7 @@ static int do_test (void);
 #include "../test-skeleton.c"
 
 #ifndef EXECVP
-# define EXECVP(file, argv)  execvp (file, argv)
+#  define EXECVP(file, argv) execvp (file, argv)
 #endif
 
 static char *fname;
@@ -27,11 +26,10 @@ do_prepare (void)
   close (fd);
 }
 
-
 static int
 do_test (void)
 {
-  if  (setenv ("PATH", test_dir, 1) != 0)
+  if (setenv ("PATH", test_dir, 1) != 0)
     {
       puts ("setenv failed");
       return 1;

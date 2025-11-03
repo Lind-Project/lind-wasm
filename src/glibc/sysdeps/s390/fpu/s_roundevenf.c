@@ -18,9 +18,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# define NO_MATH_REDIRECT
-# include <math.h>
-# include <libm-alias-float.h>
+#  define NO_MATH_REDIRECT
+#  include <math.h>
+#  include <libm-alias-float.h>
 
 float
 __roundevenf (float x)
@@ -29,11 +29,11 @@ __roundevenf (float x)
   /* The z196 zarch "load fp integer" (fiebra) instruction is rounding
      x to the nearest integer with "ties to even" rounding mode
      (M3-field: 4) where inexact exceptions are suppressed (M4-field: 4).  */
-  __asm__ ("fiebra %0,4,%1,4" : "=f" (y) : "f" (x));
+  __asm__ ("fiebra %0,4,%1,4" : "=f"(y) : "f"(x));
   return y;
 }
 libm_alias_float (__roundeven, roundeven)
 
 #else
-# include <sysdeps/ieee754/flt-32/s_roundevenf.c>
+#  include <sysdeps/ieee754/flt-32/s_roundevenf.c>
 #endif

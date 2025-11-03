@@ -17,11 +17,11 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_MISC_H
-#define _STRING_MISC_H 1
+#  define _STRING_MISC_H 1
 
-#include <limits.h>
-#include <endian.h>
-#include <string-optype.h>
+#  include <limits.h>
+#  include <endian.h>
+#  include <string-optype.h>
 
 /* Extract the byte at index IDX from word X, with index 0 being the
    least significant byte.  */
@@ -39,7 +39,7 @@ extractbyte (op_t x, unsigned int idx)
 static __always_inline op_t
 repeat_bytes (unsigned char c_in)
 {
-  return ((op_t)-1 / 0xff) * c_in;
+  return ((op_t) -1 / 0xff) * c_in;
 }
 
 #endif /* _STRING_MISC_H */

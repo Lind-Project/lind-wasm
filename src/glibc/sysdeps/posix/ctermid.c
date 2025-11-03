@@ -18,7 +18,6 @@
 #include <stdio.h>
 #include <string.h>
 
-
 /* Return the name of the controlling terminal.  If S is not NULL, the
    name is copied into it (it should be at least L_ctermid bytes
    long), otherwise we return a pointer to a non-const but read-only

@@ -28,12 +28,10 @@
 
 #include <stap-probe.h>
 
-static const struct pthread_mutexattr default_mutexattr =
-  {
-    /* Default is a normal mutex, not shared between processes.  */
-    .mutexkind = PTHREAD_MUTEX_NORMAL
-  };
-
+static const struct pthread_mutexattr default_mutexattr = {
+  /* Default is a normal mutex, not shared between processes.  */
+  .mutexkind = PTHREAD_MUTEX_NORMAL
+};
 
 static bool
 prio_inherit_missing (void)
@@ -41,7 +39,7 @@ prio_inherit_missing (void)
   static int tpi_supported;
   if (__glibc_unlikely (atomic_load_relaxed (&tpi_supported) == 0))
     {
-      int e = futex_unlock_pi (&(unsigned int){0}, 0);
+      int e = futex_unlock_pi (&(unsigned int) { 0 }, 0);
       atomic_store_relaxed (&tpi_supported, e == ENOSYS ? -1 : 1);
     }
   return __glibc_unlikely (tpi_supported < 0);
@@ -49,7 +47,7 @@ prio_inherit_missing (void)
 
 int
 ___pthread_mutex_init (pthread_mutex_t *mutex,
-		      const pthread_mutexattr_t *mutexattr)
+		       const pthread_mutexattr_t *mutexattr)
 {
   const struct pthread_mutexattr *imutexattr;
 
@@ -61,14 +59,13 @@ ___pthread_mutex_init (pthread_mutex_t *mutex,
 				  __PTHREAD_MUTEX_KIND_OFFSET);
   ASSERT_PTHREAD_INTERNAL_MEMBER_SIZE (pthread_mutex_t, __data.__kind, int);
 
-  imutexattr = ((const struct pthread_mutexattr *) mutexattr
-		?: &default_mutexattr);
+  imutexattr
+      = ((const struct pthread_mutexattr *) mutexattr ?: &default_mutexattr);
 
   /* Sanity checks.  */
-  switch (__builtin_expect (imutexattr->mutexkind
-			    & PTHREAD_MUTEXATTR_PROTOCOL_MASK,
-			    PTHREAD_PRIO_NONE
-			    << PTHREAD_MUTEXATTR_PROTOCOL_SHIFT))
+  switch (__builtin_expect (
+      imutexattr->mutexkind & PTHREAD_MUTEXATTR_PROTOCOL_MASK,
+      PTHREAD_PRIO_NONE << PTHREAD_MUTEXATTR_PROTOCOL_SHIFT))
     {
     case PTHREAD_PRIO_NONE << PTHREAD_MUTEXATTR_PROTOCOL_SHIFT:
       break;
@@ -111,10 +108,10 @@ ___pthread_mutex_init (pthread_mutex_t *mutex,
     case PTHREAD_PRIO_PROTECT << PTHREAD_MUTEXATTR_PROTOCOL_SHIFT:
       mutex_kind |= PTHREAD_MUTEX_PRIO_PROTECT_NP;
 
-      int ceiling = (imutexattr->mutexkind
-		     & PTHREAD_MUTEXATTR_PRIO_CEILING_MASK)
-		    >> PTHREAD_MUTEXATTR_PRIO_CEILING_SHIFT;
-      if (! ceiling)
+      int ceiling
+	  = (imutexattr->mutexkind & PTHREAD_MUTEXATTR_PRIO_CEILING_MASK)
+	    >> PTHREAD_MUTEXATTR_PRIO_CEILING_SHIFT;
+      if (!ceiling)
 	{
 	  /* See __init_sched_fifo_prio.  */
 	  if (atomic_load_relaxed (&__sched_fifo_min_prio) == -1)
@@ -131,8 +128,9 @@ ___pthread_mutex_init (pthread_mutex_t *mutex,
 
   /* The kernel when waking robust mutexes on exit never uses
      FUTEX_PRIVATE_FLAG FUTEX_WAKE.  */
-  if ((imutexattr->mutexkind & (PTHREAD_MUTEXATTR_FLAG_PSHARED
-				| PTHREAD_MUTEXATTR_FLAG_ROBUST)) != 0)
+  if ((imutexattr->mutexkind
+       & (PTHREAD_MUTEXATTR_FLAG_PSHARED | PTHREAD_MUTEXATTR_FLAG_ROBUST))
+      != 0)
     mutex_kind |= PTHREAD_MUTEX_PSHARED_BIT;
 
   /* See concurrency notes regarding __kind in struct __pthread_mutex_s
@@ -154,10 +152,10 @@ versioned_symbol (libpthread, ___pthread_mutex_init, pthread_mutex_init,
 		  GLIBC_2_0);
 libc_hidden_ver (___pthread_mutex_init, __pthread_mutex_init)
 #ifndef SHARED
-strong_alias (___pthread_mutex_init, __pthread_mutex_init)
+    strong_alias (___pthread_mutex_init, __pthread_mutex_init)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_mutex_init, __pthread_mutex_init,
-	       GLIBC_2_0);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_mutex_init, __pthread_mutex_init,
+		       GLIBC_2_0);
 #endif

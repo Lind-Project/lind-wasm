@@ -25,14 +25,14 @@
    return that to the caller.  The caller will continue on to call
    _dl_fixup with the relocation offset.  */
 
-ElfW(Word) __attribute ((noinline)) DL_ARCH_FIXUP_ATTRIBUTE
-_dl_fix_reloc_arg (struct fdesc *fptr, struct link_map *l)
+ElfW (Word) __attribute ((noinline)) DL_ARCH_FIXUP_ATTRIBUTE
+    _dl_fix_reloc_arg (struct fdesc *fptr, struct link_map *l)
 {
   Elf32_Addr l_addr, iplt, jmprel, end_jmprel, r_type;
   const Elf32_Rela *reloc;
 
   l_addr = l->l_addr;
-  jmprel = D_PTR(l, l_info[DT_JMPREL]);
+  jmprel = D_PTR (l, l_info[DT_JMPREL]);
   end_jmprel = jmprel + l->l_info[DT_PLTRELSZ]->d_un.d_val;
 
   /* Look for the entry...  */

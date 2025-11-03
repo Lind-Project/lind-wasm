@@ -23,50 +23,53 @@
    sustained rate of 2 instructions/clock, or asymptotically 480
    Mbytes/second at 60Mhz.  */
 
-#undef	WORD_COPY_FWD
-#define WORD_COPY_FWD(dst_bp, src_bp, nbytes_left, nbytes)          \
-  do                                                                \
-    {                                                               \
-      size_t __nbytes = (nbytes);                                   \
-      char *dst = (char *)(dst_bp);                                 \
-      const char *src = (const char *)(src_bp);                     \
-      while (__nbytes >= 32) {                                      \
-        *(long *)(dst + 0) = *(const long *)(src + 0);              \
-        *(long *)(dst + 4) = *(const long *)(src + 4);              \
-        *(long *)(dst + 8) = *(const long *)(src + 8);              \
-        *(long *)(dst + 12) = *(const long *)(src + 12);            \
-        *(long *)(dst + 16) = *(const long *)(src + 16);            \
-        *(long *)(dst + 20) = *(const long *)(src + 20);            \
-        *(long *)(dst + 24) = *(const long *)(src + 24);            \
-        *(long *)(dst + 28) = *(const long *)(src + 28);            \
-        src += 32;                                                  \
-        dst += 32;                                                  \
-        __nbytes -= 32;                                             \
-      }                                                             \
-      nbytes_left = __nbytes;                                       \
-    } while (0)
+#undef WORD_COPY_FWD
+#define WORD_COPY_FWD(dst_bp, src_bp, nbytes_left, nbytes)                    \
+  do                                                                          \
+    {                                                                         \
+      size_t __nbytes = (nbytes);                                             \
+      char *dst = (char *) (dst_bp);                                          \
+      const char *src = (const char *) (src_bp);                              \
+      while (__nbytes >= 32)                                                  \
+	{                                                                     \
+	  *(long *) (dst + 0) = *(const long *) (src + 0);                    \
+	  *(long *) (dst + 4) = *(const long *) (src + 4);                    \
+	  *(long *) (dst + 8) = *(const long *) (src + 8);                    \
+	  *(long *) (dst + 12) = *(const long *) (src + 12);                  \
+	  *(long *) (dst + 16) = *(const long *) (src + 16);                  \
+	  *(long *) (dst + 20) = *(const long *) (src + 20);                  \
+	  *(long *) (dst + 24) = *(const long *) (src + 24);                  \
+	  *(long *) (dst + 28) = *(const long *) (src + 28);                  \
+	  src += 32;                                                          \
+	  dst += 32;                                                          \
+	  __nbytes -= 32;                                                     \
+	}                                                                     \
+      nbytes_left = __nbytes;                                                 \
+    }                                                                         \
+  while (0)
 
-
-#undef	WORD_COPY_BWD
-#define WORD_COPY_BWD(dst_ep, src_ep, nbytes_left, nbytes)          \
-  do                                                                \
-    {                                                               \
-      size_t __nbytes = (nbytes);                                   \
-      char *dst = (char *)(dst_ep);                                 \
-      const char *src = (const char *)(src_ep);                     \
-      dst -= 32;                                                    \
-      src -= 32;                                                    \
-      while (__nbytes >= 32) {                                      \
-        *(long *)(dst + 24) = *(const long *)(src + 24);            \
-        *(long *)(dst + 20) = *(const long *)(src + 20);            \
-        *(long *)(dst + 16) = *(const long *)(src + 16);            \
-        *(long *)(dst + 12) = *(const long *)(src + 12);            \
-        *(long *)(dst + 8) = *(const long *)(src + 8);              \
-        *(long *)(dst + 4) = *(const long *)(src + 4);              \
-        *(long *)(dst + 0) = *(const long *)(src + 0);              \
-        src -= 32;                                                  \
-        dst -= 32;                                                  \
-        __nbytes -= 32;                                             \
-      }                                                             \
-      nbytes_left = __nbytes;                                       \
-    } while (0)
+#undef WORD_COPY_BWD
+#define WORD_COPY_BWD(dst_ep, src_ep, nbytes_left, nbytes)                    \
+  do                                                                          \
+    {                                                                         \
+      size_t __nbytes = (nbytes);                                             \
+      char *dst = (char *) (dst_ep);                                          \
+      const char *src = (const char *) (src_ep);                              \
+      dst -= 32;                                                              \
+      src -= 32;                                                              \
+      while (__nbytes >= 32)                                                  \
+	{                                                                     \
+	  *(long *) (dst + 24) = *(const long *) (src + 24);                  \
+	  *(long *) (dst + 20) = *(const long *) (src + 20);                  \
+	  *(long *) (dst + 16) = *(const long *) (src + 16);                  \
+	  *(long *) (dst + 12) = *(const long *) (src + 12);                  \
+	  *(long *) (dst + 8) = *(const long *) (src + 8);                    \
+	  *(long *) (dst + 4) = *(const long *) (src + 4);                    \
+	  *(long *) (dst + 0) = *(const long *) (src + 0);                    \
+	  src -= 32;                                                          \
+	  dst -= 32;                                                          \
+	  __nbytes -= 32;                                                     \
+	}                                                                     \
+      nbytes_left = __nbytes;                                                 \
+    }                                                                         \
+  while (0)

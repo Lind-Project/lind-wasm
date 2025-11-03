@@ -19,25 +19,23 @@
 #include <ifunc-strchr.h>
 
 #if HAVE_STRCHR_IFUNC
-# define strchr __redirect_strchr
+#  define strchr __redirect_strchr
 /* Omit the strchr inline definitions because it would redefine strchr.  */
-# define __NO_STRING_INLINES
-# include <string.h>
-# undef strchr
-# include <ifunc-resolve.h>
+#  define __NO_STRING_INLINES
+#  include <string.h>
+#  undef strchr
+#  include <ifunc-resolve.h>
 
-# if HAVE_STRCHR_C
+#  if HAVE_STRCHR_C
 extern __typeof (__redirect_strchr) STRCHR_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_STRCHR_Z13
+#  if HAVE_STRCHR_Z13
 extern __typeof (__redirect_strchr) STRCHR_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect_strchr, strchr,
 		      (HAVE_STRCHR_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? STRCHR_Z13
-		      : STRCHR_DEFAULT
-		      )
-weak_alias (strchr, index)
+			  ? STRCHR_Z13
+			  : STRCHR_DEFAULT) weak_alias (strchr, index)
 #endif /* HAVE_STRCHR_IFUNC  */

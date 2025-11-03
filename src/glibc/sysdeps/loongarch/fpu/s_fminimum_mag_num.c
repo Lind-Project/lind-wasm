@@ -26,22 +26,23 @@ __fminimum_mag_num (double x, double y)
 {
   int x_cond;
   int y_cond;
-  asm volatile ("fclass.d \t%0, %1" : "=f" (x_cond) : "f" (x));
-  asm volatile ("fclass.d \t%0, %1" : "=f" (y_cond) : "f" (y));
+  asm volatile ("fclass.d \t%0, %1" : "=f"(x_cond) : "f"(x));
+  asm volatile ("fclass.d \t%0, %1" : "=f"(y_cond) : "f"(y));
 
-  if (__glibc_unlikely((x_cond & _FCLASS_NAN) && !(y_cond & _FCLASS_NAN)))
+  if (__glibc_unlikely ((x_cond & _FCLASS_NAN) && !(y_cond & _FCLASS_NAN)))
     {
-      asm volatile ("fmina.d \t%0, %1, %2" : "=f" (x) : "f" (x), "f" (y));
+      asm volatile ("fmina.d \t%0, %1, %2" : "=f"(x) : "f"(x), "f"(y));
       return y;
     }
-  else if (__glibc_unlikely(!(x_cond & _FCLASS_NAN) && (y_cond & _FCLASS_NAN)))
+  else if (__glibc_unlikely (!(x_cond & _FCLASS_NAN)
+			     && (y_cond & _FCLASS_NAN)))
     {
-      asm volatile ("fmina.d \t%0, %1, %2" : "=f" (y) : "f" (x), "f" (y));
+      asm volatile ("fmina.d \t%0, %1, %2" : "=f"(y) : "f"(x), "f"(y));
       return x;
     }
   else
     {
-      asm volatile ("fmina.d \t%0, %1, %2" : "=f" (x) : "f" (x), "f" (y));
+      asm volatile ("fmina.d \t%0, %1, %2" : "=f"(x) : "f"(x), "f"(y));
       return x;
     }
 }

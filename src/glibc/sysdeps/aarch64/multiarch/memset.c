@@ -18,13 +18,13 @@
 
 /* Define multiple versions only for the definition in libc.  */
 
-#if IS_IN (libc)
+#if IS_IN(libc)
 /* Redefine memset so that the compiler won't complain about the type
    mismatch with the IFUNC selector in strong_alias, below.  */
-# undef memset
-# define memset __redirect_memset
-# include <string.h>
-# include <init-arch.h>
+#  undef memset
+#  define memset __redirect_memset
+#  include <string.h>
+#  include <init-arch.h>
 
 extern __typeof (__redirect_memset) __libc_memset;
 
@@ -63,6 +63,6 @@ select_memset_ifunc (void)
 
 libc_ifunc (__libc_memset, select_memset_ifunc ());
 
-# undef memset
+#  undef memset
 strong_alias (__libc_memset, memset);
 #endif

@@ -55,16 +55,16 @@ __fesetexceptflag (const fexcept_t *flagp, int excepts)
 
   /* Deal with FE_INVALID_SOFTWARE not being implemented on some chips.  */
   if (flag & FE_INVALID)
-    feraiseexcept(FE_INVALID);
+    feraiseexcept (FE_INVALID);
 
   /* Success.  */
   return 0;
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__fesetexceptflag, __old_fesetexceptflag)
-compat_symbol (libm, __old_fesetexceptflag, fesetexceptflag, GLIBC_2_1);
+    compat_symbol (libm, __old_fesetexceptflag, fesetexceptflag, GLIBC_2_1);
 #endif
 
 versioned_symbol (libm, __fesetexceptflag, fesetexceptflag, GLIBC_2_2);

@@ -27,59 +27,50 @@
    with the existing version of these functions the caller has to be
    aware that the contents of this buffer will change with subsequent
    calls.  */
-#define ALLOCATE_UTMP32_OUT(OUT)			\
-  static struct utmp32 *OUT = NULL;			\
-							\
-  if (OUT == NULL)					\
-    {							\
-      OUT = malloc (sizeof (struct utmp32));		\
-      if (OUT == NULL)					\
-	return NULL;					\
+#define ALLOCATE_UTMP32_OUT(OUT)                                              \
+  static struct utmp32 *OUT = NULL;                                           \
+                                                                              \
+  if (OUT == NULL)                                                            \
+    {                                                                         \
+      OUT = malloc (sizeof (struct utmp32));                                  \
+      if (OUT == NULL)                                                        \
+	return NULL;                                                          \
     }
 
 /* Perform a lookup for a utmp entry matching FIELD using function
    FUNC.  FIELD is converted to a 64 bit utmp and the result is
    converted back to 32 bit utmp.  */
-#define ACCESS_UTMP_ENTRY(FUNC, FIELD)			\
-  struct utmp in64;					\
-  struct utmp *out64;					\
-  ALLOCATE_UTMP32_OUT (out32);				\
-							\
-  utmp_convert32to64 (FIELD, &in64);			\
-  out64 = FUNC (&in64);					\
-							\
-  if (out64 == NULL)					\
-    return NULL;					\
-							\
-  utmp_convert64to32 (out64, out32);			\
-							\
+#define ACCESS_UTMP_ENTRY(FUNC, FIELD)                                        \
+  struct utmp in64;                                                           \
+  struct utmp *out64;                                                         \
+  ALLOCATE_UTMP32_OUT (out32);                                                \
+                                                                              \
+  utmp_convert32to64 (FIELD, &in64);                                          \
+  out64 = FUNC (&in64);                                                       \
+                                                                              \
+  if (out64 == NULL)                                                          \
+    return NULL;                                                              \
+                                                                              \
+  utmp_convert64to32 (out64, out32);                                          \
+                                                                              \
   return out32;
 
 /* Search forward from the current point in the utmp file until the
    next entry with a ut_type matching ID->ut_type.  */
-struct utmp32 *
-getutid32 (const struct utmp32 *id)
-{
+struct utmp32 *getutid32 (const struct utmp32 *id){
   ACCESS_UTMP_ENTRY (__getutid, id)
-}
-symbol_version (getutid32, getutid, GLIBC_2.0);
+} symbol_version (getutid32, getutid, GLIBC_2.0);
 
 /* Search forward from the current point in the utmp file until the
    next entry with a ut_line matching LINE->ut_line.  */
-struct utmp32 *
-getutline32 (const struct utmp32 *line)
-{
+struct utmp32 *getutline32 (const struct utmp32 *line){
   ACCESS_UTMP_ENTRY (__getutline, line)
-}
-symbol_version (getutline32, getutline, GLIBC_2.0);
+} symbol_version (getutline32, getutline, GLIBC_2.0);
 
 /* Write out entry pointed to by UTMP_PTR into the utmp file.  */
-struct utmp32 *
-pututline32 (const struct utmp32 *utmp_ptr)
-{
+struct utmp32 *pututline32 (const struct utmp32 *utmp_ptr){
   ACCESS_UTMP_ENTRY (__pututline, utmp_ptr)
-}
-symbol_version (pututline32, pututline, GLIBC_2.0);
+} symbol_version (pututline32, pututline, GLIBC_2.0);
 
 /* Read next entry from a utmp-like file.  */
 struct utmp32 *
@@ -122,7 +113,7 @@ symbol_version (getutent32_r, getutent_r, GLIBC_2.0);
 
 int
 getutid32_r (const struct utmp32 *id, struct utmp32 *buffer,
-	       struct utmp32 **result)
+	     struct utmp32 **result)
 {
   struct utmp in64;
   struct utmp out64;
@@ -146,8 +137,8 @@ getutid32_r (const struct utmp32 *id, struct utmp32 *buffer,
 symbol_version (getutid32_r, getutid_r, GLIBC_2.0);
 
 int
-getutline32_r (const struct utmp32 *line,
-		 struct utmp32 *buffer, struct utmp32 **result)
+getutline32_r (const struct utmp32 *line, struct utmp32 *buffer,
+	       struct utmp32 **result)
 {
   struct utmp in64;
   struct utmp out64;
@@ -167,7 +158,6 @@ getutline32_r (const struct utmp32 *line,
   *result = buffer;
 
   return 0;
-
 }
 symbol_version (getutline32_r, getutline_r, GLIBC_2.0);
 

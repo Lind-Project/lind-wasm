@@ -16,7 +16,6 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-
 /* Everything else is called `thread_state', but CMU's header file is
    called `thread_status'.  Oh boy.  */
 #include <mach/thread_status.h>
@@ -25,38 +24,38 @@
    macros, or just define PC and SP to the register names.  */
 
 #ifndef MACHINE_THREAD_STATE_SET_PC
-#define MACHINE_THREAD_STATE_SET_PC(ts, pc) \
-  ((ts)->PC = (unsigned long int) (pc))
+#  define MACHINE_THREAD_STATE_SET_PC(ts, pc)                                 \
+    ((ts)->PC = (unsigned long int) (pc))
 #endif
 #ifndef MACHINE_THREAD_STATE_SET_SP
-#ifdef STACK_GROWTH_UP
-#define MACHINE_THREAD_STATE_SET_SP(ts, stack, size) \
-  ((ts)->SP = (unsigned long int) (stack))
-#else
-#define MACHINE_THREAD_STATE_SET_SP(ts, stack, size) \
-  ((ts)->SP = (unsigned long int) (stack) + (size))
-#endif
+#  ifdef STACK_GROWTH_UP
+#    define MACHINE_THREAD_STATE_SET_SP(ts, stack, size)                      \
+      ((ts)->SP = (unsigned long int) (stack))
+#  else
+#    define MACHINE_THREAD_STATE_SET_SP(ts, stack, size)                      \
+      ((ts)->SP = (unsigned long int) (stack) + (size))
+#  endif
 #endif
 
 /* Set up the thread state to call the given function on the given state.
    Dependning on architecture, this may imply more than just setting PC
    and SP.  */
 #ifndef MACHINE_THREAD_STATE_SETUP_CALL
-#define MACHINE_THREAD_STATE_SETUP_CALL(ts, stack, size, func) \
-  (MACHINE_THREAD_STATE_SET_PC (ts, func), \
-   MACHINE_THREAD_STATE_SET_SP (ts, stack, size))
+#  define MACHINE_THREAD_STATE_SETUP_CALL(ts, stack, size, func)              \
+    (MACHINE_THREAD_STATE_SET_PC (ts, func),                                  \
+     MACHINE_THREAD_STATE_SET_SP (ts, stack, size))
 #endif
 
 /* This copies architecture-specific bits from the current thread to the new
    thread state.  */
 #ifndef MACHINE_THREAD_STATE_FIX_NEW
-# define MACHINE_THREAD_STATE_FIX_NEW(ts)
+#  define MACHINE_THREAD_STATE_FIX_NEW(ts)
 #endif
 
 /* These functions are of use in machine-dependent signal trampoline
    implementations.  */
 
-#include <string.h>		/* size_t, memcpy */
+#include <string.h>		 /* size_t, memcpy */
 #include <mach/mach_interface.h> /* __thread_get_state */
 
 static __inline int
@@ -74,8 +73,9 @@ machine_get_state (thread_t thread, struct machine_thread_all_state *state,
       /* No one asked about this flavor of state before; fetch the state
 	 directly from the kernel into the sigcontext.  */
       mach_msg_type_number_t got = (size / sizeof (int));
-      return (! __thread_get_state (thread, flavor, (thread_state_t) scpptr, &got)
-	      && got == (size / sizeof (int)));
+      return (
+	  !__thread_get_state (thread, flavor, (thread_state_t) scpptr, &got)
+	  && got == (size / sizeof (int)));
     }
 }
 
@@ -90,11 +90,11 @@ machine_get_basic_state (thread_t thread,
 
   count = MACHINE_THREAD_STATE_COUNT;
   if (__thread_get_state (thread, MACHINE_THREAD_STATE_FLAVOR,
-			  (natural_t *) &state->basic,
-			  &count) != KERN_SUCCESS
+			  (natural_t *) &state->basic, &count)
+	  != KERN_SUCCESS
       || count != MACHINE_THREAD_STATE_COUNT)
     /* What kind of thread?? */
-    return 0;			/* XXX */
+    return 0; /* XXX */
 
   state->set |= 1 << MACHINE_THREAD_STATE_FLAVOR;
   return 1;

@@ -19,25 +19,23 @@
 #include <ifunc-wmemset.h>
 
 #if HAVE_WMEMSET_IFUNC
-# define wmemset __redirect_wmemset
-# define __wmemset __redirect___wmemset
-# include <wchar.h>
-# undef wmemset
-# undef __wmemset
-# include <ifunc-resolve.h>
+#  define wmemset __redirect_wmemset
+#  define __wmemset __redirect___wmemset
+#  include <wchar.h>
+#  undef wmemset
+#  undef __wmemset
+#  include <ifunc-resolve.h>
 
-# if HAVE_WMEMSET_C
+#  if HAVE_WMEMSET_C
 extern __typeof (__redirect___wmemset) WMEMSET_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WMEMSET_Z13
+#  if HAVE_WMEMSET_Z13
 extern __typeof (__redirect___wmemset) WMEMSET_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect___wmemset, __wmemset,
 		      (HAVE_WMEMSET_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WMEMSET_Z13
-		      : WMEMSET_DEFAULT
-		      )
-weak_alias (__wmemset, wmemset)
+			  ? WMEMSET_Z13
+			  : WMEMSET_DEFAULT) weak_alias (__wmemset, wmemset)
 #endif

@@ -19,15 +19,15 @@
 #ifndef SHARED
 
 /* Mark symbols hidden in static PIE for early self relocation to work.  */
-# if BUILD_PIE_DEFAULT
-#  pragma GCC visibility push(hidden)
-# endif
-# include <ldsodefs.h>
-# include <cpu-features.c>
+#  if BUILD_PIE_DEFAULT
+#    pragma GCC visibility push(hidden)
+#  endif
+#  include <ldsodefs.h>
+#  include <cpu-features.c>
 
 extern struct cpu_features _dl_s390_cpu_features;
 
-# define ARCH_INIT_CPU_FEATURES() init_cpu_features (&_dl_s390_cpu_features)
+#  define ARCH_INIT_CPU_FEATURES() init_cpu_features (&_dl_s390_cpu_features)
 
 #endif
 #include <csu/libc-start.c>

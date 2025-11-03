@@ -24,9 +24,9 @@ __pthread_getconcurrency (void)
   return __concurrency_level;
 }
 versioned_symbol (libc, __pthread_getconcurrency, pthread_getconcurrency,
-                  GLIBC_2_34);
+		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_getconcurrency, pthread_getconcurrency,
-               GLIBC_2_1);
+	       GLIBC_2_1);
 #endif

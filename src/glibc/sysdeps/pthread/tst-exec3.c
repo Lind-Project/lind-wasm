@@ -28,7 +28,6 @@
 #include <sys/wait.h>
 #include <support/xsignal.h>
 
-
 static void *
 tf (void *arg)
 {
@@ -37,7 +36,6 @@ tf (void *arg)
   puts ("execl failed");
   exit (1);
 }
-
 
 static int
 do_test (void)

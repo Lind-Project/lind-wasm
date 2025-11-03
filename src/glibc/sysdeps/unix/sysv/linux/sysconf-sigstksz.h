@@ -21,7 +21,7 @@
 static long int
 sysconf_sigstksz (void)
 {
-  long int minsigstacksize = GLRO(dl_minsigstacksize);
+  long int minsigstacksize = GLRO (dl_minsigstacksize);
   assert (minsigstacksize != 0);
   _Static_assert (__builtin_constant_p (MINSIGSTKSZ),
 		  "MINSIGSTKSZ is constant");
@@ -30,8 +30,7 @@ sysconf_sigstksz (void)
   /* MAX (MINSIGSTKSZ, sysconf (_SC_MINSIGSTKSZ)) * 4.  */
   long int sigstacksize = minsigstacksize * 4;
   /* Return MAX (SIGSTKSZ, sigstacksize).  */
-  _Static_assert (__builtin_constant_p (SIGSTKSZ),
-		  "SIGSTKSZ is constant");
+  _Static_assert (__builtin_constant_p (SIGSTKSZ), "SIGSTKSZ is constant");
   if (sigstacksize < SIGSTKSZ)
     sigstacksize = SIGSTKSZ;
   return sigstacksize;

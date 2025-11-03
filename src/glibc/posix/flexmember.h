@@ -18,7 +18,6 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-
 #include <stddef.h>
 
 /* Nonzero multiple of alignment of TYPE, suitable for FLEXSIZEOF below.
@@ -27,9 +26,9 @@
    On newer platforms, use _Alignof to get a tighter bound.  */
 
 #if !defined __STDC_VERSION__ || __STDC_VERSION__ < 201112
-# define FLEXALIGNOF(type) (sizeof (type) & ~ (sizeof (type) - 1))
+#  define FLEXALIGNOF(type) (sizeof (type) & ~(sizeof (type) - 1))
 #else
-# define FLEXALIGNOF(type) _Alignof (type)
+#  define FLEXALIGNOF(type) _Alignof (type)
 #endif
 
 /* Yield a properly aligned upper bound on the size of a struct of
@@ -54,6 +53,6 @@
 
    Yield a value less than N if and only if arithmetic overflow occurs.  */
 
-#define FLEXSIZEOF(type, member, n) \
-   ((offsetof (type, member) + FLEXALIGNOF (type) - 1 + (n)) \
-    & ~ (FLEXALIGNOF (type) - 1))
+#define FLEXSIZEOF(type, member, n)                                           \
+  ((offsetof (type, member) + FLEXALIGNOF (type) - 1 + (n))                   \
+   & ~(FLEXALIGNOF (type) - 1))

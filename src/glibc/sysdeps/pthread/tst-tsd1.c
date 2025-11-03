@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <string.h>
 
-
 static int
 do_test (void)
 {
@@ -91,7 +90,6 @@ do_test (void)
       printf ("key_delete failed: %s\n", strerror (err));
       result = 1;
     }
-
 
   err = pthread_key_create (&key2, NULL);
   if (err != 0)

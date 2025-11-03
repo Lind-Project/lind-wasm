@@ -22,9 +22,9 @@
 #include <unistd.h>
 
 static void do_prepare (void);
-#define PREPARE(argc, argv)     do_prepare ()
+#define PREPARE(argc, argv) do_prepare ()
 static int do_test (void);
-#define TEST_FUNCTION           do_test ()
+#define TEST_FUNCTION do_test ()
 
 #include <test-skeleton.c>
 
@@ -42,8 +42,13 @@ do_prepare (void)
     }
 }
 
-#define FAIL(str) \
-  do { printf ("error: %s (line %d)\n", str, __LINE__); return 1; } while (0)
+#define FAIL(str)                                                             \
+  do                                                                          \
+    {                                                                         \
+      printf ("error: %s (line %d)\n", str, __LINE__);                        \
+      return 1;                                                               \
+    }                                                                         \
+  while (0)
 
 static int
 do_test_with_offset (off_t offset)

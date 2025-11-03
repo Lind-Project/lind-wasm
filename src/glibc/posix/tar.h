@@ -16,11 +16,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_TAR_H
-#define	_TAR_H	1
+#ifndef _TAR_H
+#  define _TAR_H 1
 
-#include <features.h>
-
+#  include <features.h>
 
 /* A tar archive consists of 512-byte blocks.
    Each file in the archive has a header block followed by 0+ data blocks.
@@ -70,42 +69,42 @@
    length can not be stored in a tar archive.  */
 
 /* The bits in mode: */
-#define TSUID	04000
-#define TSGID	02000
-#if defined __USE_XOPEN || !defined __USE_XOPEN2K
-# define TSVTX	01000
-#endif
-#define TUREAD	00400
-#define TUWRITE	00200
-#define TUEXEC	00100
-#define TGREAD	00040
-#define TGWRITE	00020
-#define TGEXEC	00010
-#define TOREAD	00004
-#define TOWRITE	00002
-#define TOEXEC	00001
+#  define TSUID 04000
+#  define TSGID 02000
+#  if defined __USE_XOPEN || !defined __USE_XOPEN2K
+#    define TSVTX 01000
+#  endif
+#  define TUREAD 00400
+#  define TUWRITE 00200
+#  define TUEXEC 00100
+#  define TGREAD 00040
+#  define TGWRITE 00020
+#  define TGEXEC 00010
+#  define TOREAD 00004
+#  define TOWRITE 00002
+#  define TOEXEC 00001
 
 /* The values for typeflag:
    Values 'A'-'Z' are reserved for custom implementations.
    All other values are reserved for future POSIX.1 revisions.  */
 
-#define REGTYPE		'0'	/* Regular file (preferred code).  */
-#define AREGTYPE	'\0'	/* Regular file (alternate code).  */
-#define LNKTYPE		'1'	/* Hard link.  */
-#define SYMTYPE		'2'	/* Symbolic link (hard if not supported).  */
-#define CHRTYPE		'3'	/* Character special.  */
-#define BLKTYPE		'4'	/* Block special.  */
-#define DIRTYPE		'5'	/* Directory.  */
-#define FIFOTYPE	'6'	/* Named pipe.  */
-#define CONTTYPE	'7'	/* Contiguous file */
- /* (regular file if not supported).  */
+#  define REGTYPE '0'	/* Regular file (preferred code).  */
+#  define AREGTYPE '\0' /* Regular file (alternate code).  */
+#  define LNKTYPE '1'	/* Hard link.  */
+#  define SYMTYPE '2'	/* Symbolic link (hard if not supported).  */
+#  define CHRTYPE '3'	/* Character special.  */
+#  define BLKTYPE '4'	/* Block special.  */
+#  define DIRTYPE '5'	/* Directory.  */
+#  define FIFOTYPE '6'	/* Named pipe.  */
+#  define CONTTYPE '7'	/* Contiguous file */
+			/* (regular file if not supported).  */
 
 /* Contents of magic field and its length.  */
-#define TMAGIC	"ustar"
-#define TMAGLEN	6
+#  define TMAGIC "ustar"
+#  define TMAGLEN 6
 
 /* Contents of the version field and its length.  */
-#define TVERSION	"00"
-#define TVERSLEN	2
+#  define TVERSION "00"
+#  define TVERSLEN 2
 
 #endif /* tar.h */

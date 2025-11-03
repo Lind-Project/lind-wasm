@@ -22,9 +22,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-
 static pid_t initial_pid;
-
 
 static void *
 tf (void *arg)
@@ -38,7 +36,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 int
 main (void)
@@ -66,7 +63,7 @@ main (void)
       if (pthread_join (th, &result) != 0)
 	{
 	  puts ("pthread_join failed");
-	  exit  (1);
+	  exit (1);
 	}
 
       exit (result == NULL ? 0 : 1);

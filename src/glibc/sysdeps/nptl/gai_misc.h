@@ -25,53 +25,57 @@
 #include <pthreadP.h>
 #include <futex-internal.h>
 
-#define DONT_NEED_GAI_MISC_COND	1
+#define DONT_NEED_GAI_MISC_COND 1
 
-#define GAI_MISC_NOTIFY(waitlist) \
-  do {									      \
-    if (*waitlist->counterp > 0 && --*waitlist->counterp == 0)		      \
-      futex_wake ((unsigned int *) waitlist->counterp, 1, FUTEX_PRIVATE);     \
-  } while (0)
+#define GAI_MISC_NOTIFY(waitlist)                                             \
+  do                                                                          \
+    {                                                                         \
+      if (*waitlist->counterp > 0 && --*waitlist->counterp == 0)              \
+	futex_wake ((unsigned int *) waitlist->counterp, 1, FUTEX_PRIVATE);   \
+    }                                                                         \
+  while (0)
 
-#define GAI_MISC_WAIT(result, futex, timeout, cancel) \
-  do {									      \
-    volatile unsigned int *futexaddr = &futex;				      \
-    unsigned int oldval = futex;					      \
-									      \
-    if (oldval != 0)							      \
-      {									      \
-	__pthread_mutex_unlock (&__gai_requests_mutex);			      \
-									      \
-	int status;							      \
-	do								      \
-	  {								      \
-	    if (cancel)							      \
-	      status = __futex_abstimed_wait_cancelable64 (		      \
-		(unsigned int *) futexaddr, oldval, CLOCK_MONOTONIC, timeout, \
-		FUTEX_PRIVATE);						      \
-	    else							      \
-	      status = __futex_abstimed_wait64 ((unsigned int *) futexaddr,   \
-		oldval, CLOCK_REALTIME, timeout, FUTEX_PRIVATE);	      \
-	    if (status != EAGAIN)					      \
-	      break;							      \
-									      \
-	    oldval = *futexaddr;					      \
-	  }								      \
-	while (oldval != 0);						      \
-									      \
-	if (status == EINTR)						      \
-	  result = EINTR;						      \
-	else if (status == ETIMEDOUT)					      \
-	  result = EAGAIN;						      \
-	else if (status == EOVERFLOW)					      \
-	  result = EOVERFLOW;						      \
-	else								      \
-	  assert (status == 0 || status == EAGAIN);			      \
-									      \
-	__pthread_mutex_lock (&__gai_requests_mutex);			      \
-      }									      \
-  } while (0)
-
+#define GAI_MISC_WAIT(result, futex, timeout, cancel)                         \
+  do                                                                          \
+    {                                                                         \
+      volatile unsigned int *futexaddr = &futex;                              \
+      unsigned int oldval = futex;                                            \
+                                                                              \
+      if (oldval != 0)                                                        \
+	{                                                                     \
+	  __pthread_mutex_unlock (&__gai_requests_mutex);                     \
+                                                                              \
+	  int status;                                                         \
+	  do                                                                  \
+	    {                                                                 \
+	      if (cancel)                                                     \
+		status = __futex_abstimed_wait_cancelable64 (                 \
+		    (unsigned int *) futexaddr, oldval, CLOCK_MONOTONIC,      \
+		    timeout, FUTEX_PRIVATE);                                  \
+	      else                                                            \
+		status = __futex_abstimed_wait64 ((unsigned int *) futexaddr, \
+						  oldval, CLOCK_REALTIME,     \
+						  timeout, FUTEX_PRIVATE);    \
+	      if (status != EAGAIN)                                           \
+		break;                                                        \
+                                                                              \
+	      oldval = *futexaddr;                                            \
+	    }                                                                 \
+	  while (oldval != 0);                                                \
+                                                                              \
+	  if (status == EINTR)                                                \
+	    result = EINTR;                                                   \
+	  else if (status == ETIMEDOUT)                                       \
+	    result = EAGAIN;                                                  \
+	  else if (status == EOVERFLOW)                                       \
+	    result = EOVERFLOW;                                               \
+	  else                                                                \
+	    assert (status == 0 || status == EAGAIN);                         \
+                                                                              \
+	  __pthread_mutex_lock (&__gai_requests_mutex);                       \
+	}                                                                     \
+    }                                                                         \
+  while (0)
 
 #define gai_start_notify_thread __gai_start_notify_thread
 #define gai_create_helper_thread __gai_create_helper_thread
@@ -95,9 +99,8 @@ __gai_create_helper_thread (pthread_t *threadp, void *(*tf) (void *),
   __pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
 
   /* The helper thread needs only very little resources.  */
-  (void) __pthread_attr_setstacksize (&attr,
-				      __pthread_get_minstack (&attr)
-				      + 4 * PTHREAD_STACK_MIN);
+  (void) __pthread_attr_setstacksize (&attr, __pthread_get_minstack (&attr)
+						 + 4 * PTHREAD_STACK_MIN);
 
   /* Block all signals in the helper thread.  To do this thoroughly we
      temporarily have to block all signals here.  */

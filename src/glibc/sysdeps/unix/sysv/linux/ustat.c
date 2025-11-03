@@ -21,24 +21,24 @@
 /* This deprecated syscall is no longer used (replaced with {f}statfs).  */
 #if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_28)
 
-# include <sysdep.h>
-# include <sys/types.h>
+#  include <sysdep.h>
+#  include <sys/types.h>
 
-# ifndef DEV_TO_KDEV
-#  define DEV_TO_KDEV(__dev)					\
-  ({								\
-    unsigned long long int k_dev;				\
-    k_dev = dev & ((1ULL << 32) - 1);				\
-    if (k_dev != dev)						\
-     return INLINE_SYSCALL_ERROR_RETURN_VALUE (EINVAL);		\
-    (unsigned int) k_dev;					\
-  })
-# endif
+#  ifndef DEV_TO_KDEV
+#    define DEV_TO_KDEV(__dev)                                                \
+      ({                                                                      \
+	unsigned long long int k_dev;                                         \
+	k_dev = dev & ((1ULL << 32) - 1);                                     \
+	if (k_dev != dev)                                                     \
+	  return INLINE_SYSCALL_ERROR_RETURN_VALUE (EINVAL);                  \
+	(unsigned int) k_dev;                                                 \
+      })
+#  endif
 
 struct ustat
 {
-  __daddr_t f_tfree;         /* Number of free blocks.  */
-  __ino_t f_tinode;          /* Number of free inodes.  */
+  __daddr_t f_tfree; /* Number of free blocks.  */
+  __ino_t f_tinode;  /* Number of free inodes.  */
   char f_fname[6];
   char f_fpack[6];
 };
@@ -46,11 +46,11 @@ struct ustat
 int
 __old_ustat (dev_t dev, struct ustat *ubuf)
 {
-# ifdef __NR_ustat
+#  ifdef __NR_ustat
   return INLINE_SYSCALL_CALL (ustat, DEV_TO_KDEV (dev), ubuf);
-# else
+#  else
   return INLINE_SYSCALL_ERROR_RETURN_VALUE (ENOSYS);
-# endif
+#  endif
 }
 compat_symbol (libc, __old_ustat, ustat, GLIBC_2_0);
 #endif /* SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_28)  */

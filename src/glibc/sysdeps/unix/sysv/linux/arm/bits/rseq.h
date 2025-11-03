@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_RSEQ_H
-# error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
+#  error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
 #endif
 
 /*
@@ -77,7 +77,7 @@
    instruction (.inst) in assembler.  */
 
 #ifdef __ARMEB__
-# define RSEQ_SIG    0xf3def5e7      /* udf    #24035    ; 0x5de3 (ARMv6+) */
+#  define RSEQ_SIG 0xf3def5e7 /* udf    #24035    ; 0x5de3 (ARMv6+) */
 #else
-# define RSEQ_SIG    0xe7f5def3      /* udf    #24035    ; 0x5de3 */
+#  define RSEQ_SIG 0xe7f5def3 /* udf    #24035    ; 0x5de3 */
 #endif

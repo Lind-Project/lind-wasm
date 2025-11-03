@@ -23,7 +23,6 @@
 #include <hurd.h>
 #include <hurd/fd.h>
 
-
 /* Remove the link named NAME.  */
 int
 __unlinkat (int fd, const char *name, int flag)
@@ -32,7 +31,7 @@ __unlinkat (int fd, const char *name, int flag)
   file_t dir;
   const char *file;
 
-  if ((flag &~ AT_REMOVEDIR) != 0)
+  if ((flag & ~AT_REMOVEDIR) != 0)
     return __hurd_fail (EINVAL);
 
   dir = __directory_name_split_at (fd, name, (char **) &file);

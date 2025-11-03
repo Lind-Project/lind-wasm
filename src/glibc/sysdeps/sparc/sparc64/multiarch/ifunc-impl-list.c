@@ -33,47 +33,52 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
   size_t i = max;
   int hwcap;
 
-  hwcap = GLRO(dl_hwcap);
+  hwcap = GLRO (dl_hwcap);
 
-  IFUNC_IMPL (i, name, memcpy,
-	      IFUNC_IMPL_ADD (array, i, memcpy, hwcap & HWCAP_SPARC_ADP,
-			      __memcpy_niagara7)
-	      IFUNC_IMPL_ADD (array, i, memcpy, hwcap & HWCAP_SPARC_CRYPTO,
-			      __memcpy_niagara4)
-	      IFUNC_IMPL_ADD (array, i, memcpy, hwcap & HWCAP_SPARC_N2,
-			      __memcpy_niagara2)
+  IFUNC_IMPL (
+      i, name, memcpy,
+      IFUNC_IMPL_ADD (
+	  array, i, memcpy, hwcap & HWCAP_SPARC_ADP,
+	  __memcpy_niagara7) IFUNC_IMPL_ADD (array, i, memcpy,
+					     hwcap & HWCAP_SPARC_CRYPTO,
+					     __memcpy_niagara4)
+	  IFUNC_IMPL_ADD (array, i, memcpy, hwcap & HWCAP_SPARC_N2,
+			  __memcpy_niagara2)
 	      IFUNC_IMPL_ADD (array, i, memcpy, hwcap & HWCAP_SPARC_BLKINIT,
 			      __memcpy_niagara1)
-	      IFUNC_IMPL_ADD (array, i, memcpy, hwcap & HWCAP_SPARC_ULTRA3,
-			      __memcpy_ultra3)
-	      IFUNC_IMPL_ADD (array, i, memcpy, 1, __memcpy_ultra1));
+		  IFUNC_IMPL_ADD (array, i, memcpy, hwcap & HWCAP_SPARC_ULTRA3,
+				  __memcpy_ultra3)
+		      IFUNC_IMPL_ADD (array, i, memcpy, 1, __memcpy_ultra1));
 
-  IFUNC_IMPL (i, name, mempcpy,
-	      IFUNC_IMPL_ADD (array, i, mempcpy, hwcap & HWCAP_SPARC_ADP,
-			      __mempcpy_niagara7)
-	      IFUNC_IMPL_ADD (array, i, mempcpy, hwcap & HWCAP_SPARC_CRYPTO,
-			      __mempcpy_niagara4)
-	      IFUNC_IMPL_ADD (array, i, mempcpy, hwcap & HWCAP_SPARC_N2,
-			      __mempcpy_niagara2)
+  IFUNC_IMPL (
+      i, name, mempcpy,
+      IFUNC_IMPL_ADD (
+	  array, i, mempcpy, hwcap & HWCAP_SPARC_ADP,
+	  __mempcpy_niagara7) IFUNC_IMPL_ADD (array, i, mempcpy,
+					      hwcap & HWCAP_SPARC_CRYPTO,
+					      __mempcpy_niagara4)
+	  IFUNC_IMPL_ADD (array, i, mempcpy, hwcap & HWCAP_SPARC_N2,
+			  __mempcpy_niagara2)
 	      IFUNC_IMPL_ADD (array, i, mempcpy, hwcap & HWCAP_SPARC_BLKINIT,
 			      __mempcpy_niagara1)
-	      IFUNC_IMPL_ADD (array, i, mempcpy, hwcap & HWCAP_SPARC_ULTRA3,
-			      __mempcpy_ultra3)
-	      IFUNC_IMPL_ADD (array, i, mempcpy, 1, __mempcpy_ultra1));
+		  IFUNC_IMPL_ADD (array, i, mempcpy,
+				  hwcap & HWCAP_SPARC_ULTRA3, __mempcpy_ultra3)
+		      IFUNC_IMPL_ADD (array, i, mempcpy, 1, __mempcpy_ultra1));
 
-  IFUNC_IMPL (i, name, memset,
-	      IFUNC_IMPL_ADD (array, i, memset, hwcap & HWCAP_SPARC_ADP,
-			      __memset_niagara7)
-	      IFUNC_IMPL_ADD (array, i, memset, hwcap & HWCAP_SPARC_CRYPTO,
-			      __memset_niagara4)
+  IFUNC_IMPL (
+      i, name, memset,
+      IFUNC_IMPL_ADD (array, i, memset, hwcap & HWCAP_SPARC_ADP,
+		      __memset_niagara7)
+	  IFUNC_IMPL_ADD (array, i, memset, hwcap & HWCAP_SPARC_CRYPTO,
+			  __memset_niagara4)
 	      IFUNC_IMPL_ADD (array, i, memset, hwcap & HWCAP_SPARC_BLKINIT,
 			      __memset_niagara1)
-	      IFUNC_IMPL_ADD (array, i, memset, 1, __memset_ultra1));
+		  IFUNC_IMPL_ADD (array, i, memset, 1, __memset_ultra1));
 
   IFUNC_IMPL (i, name, memmove,
 	      IFUNC_IMPL_ADD (array, i, memmove, hwcap & HWCAP_SPARC_ADP,
 			      __memmove_niagara7)
-	      IFUNC_IMPL_ADD (array, i, memmove, 1, __memmove_ultra1));
+		  IFUNC_IMPL_ADD (array, i, memmove, 1, __memmove_ultra1));
 
   return 0;
 }

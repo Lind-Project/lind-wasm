@@ -27,16 +27,16 @@ ___mq_timedsend_time64 (mqd_t mqdes, const char *msg_ptr, size_t msg_len,
 			unsigned int msg_prio,
 			const struct __timespec64 *abs_timeout)
 {
-# ifndef __NR_mq_timedsend_time64
+#ifndef __NR_mq_timedsend_time64
 #  define __NR_mq_timedsend_time64 __NR_mq_timedsend
-# endif
+#endif
 
 #ifdef __ASSUME_TIME64_SYSCALLS
   return SYSCALL_CANCEL (mq_timedsend_time64, mqdes, msg_ptr, msg_len,
 			 msg_prio, abs_timeout);
 #else
-  bool need_time64 = abs_timeout != NULL
-		     && !in_int32_t_range (abs_timeout->tv_sec);
+  bool need_time64
+      = abs_timeout != NULL && !in_int32_t_range (abs_timeout->tv_sec);
   if (need_time64)
     {
       int r = SYSCALL_CANCEL (mq_timedsend_time64, mqdes, msg_ptr, msg_len,
@@ -62,36 +62,37 @@ ___mq_timedsend_time64 (mqd_t mqdes, const char *msg_ptr, size_t msg_len,
 #if __TIMESIZE == 64
 versioned_symbol (libc, ___mq_timedsend_time64, mq_timedsend, GLIBC_2_34);
 libc_hidden_ver (___mq_timedsend_time64, __mq_timedsend)
-# ifndef SHARED
-strong_alias (___mq_timedsend_time64, __mq_timedsend)
-# endif
-# if OTHER_SHLIB_COMPAT (librt, GLIBC_2_3_4, GLIBC_2_34)
-compat_symbol (librt, ___mq_timedsend_time64, mq_timedsend, GLIBC_2_3_4);
-# endif
+#  ifndef SHARED
+    strong_alias (___mq_timedsend_time64, __mq_timedsend)
+#  endif
+#  if OTHER_SHLIB_COMPAT(librt, GLIBC_2_3_4, GLIBC_2_34)
+	compat_symbol (librt, ___mq_timedsend_time64, mq_timedsend,
+		       GLIBC_2_3_4);
+#  endif
 
 #else /* __TIMESIZE != 64 */
 libc_hidden_ver (___mq_timedsend_time64, __mq_timedsend_time64)
-versioned_symbol (libc, ___mq_timedsend_time64, __mq_timedsend_time64,
-		  GLIBC_2_34);
+    versioned_symbol (libc, ___mq_timedsend_time64, __mq_timedsend_time64,
+		      GLIBC_2_34);
 
 int
 ___mq_timedsend (mqd_t mqdes, const char *msg_ptr, size_t msg_len,
-                unsigned int msg_prio, const struct timespec *abs_timeout)
+		 unsigned int msg_prio, const struct timespec *abs_timeout)
 {
   struct __timespec64 ts64;
   if (abs_timeout != NULL)
     ts64 = valid_timespec_to_timespec64 (*abs_timeout);
 
   return __mq_timedsend_time64 (mqdes, msg_ptr, msg_len, msg_prio,
-                                abs_timeout != NULL ? &ts64 : NULL);
+				abs_timeout != NULL ? &ts64 : NULL);
 }
 versioned_symbol (libc, ___mq_timedsend, mq_timedsend, GLIBC_2_34);
 libc_hidden_ver (___mq_timedsend, __mq_timedsend)
-# ifndef SHARED
-strong_alias (___mq_timedsend, __mq_timedsend)
-# endif
-# if OTHER_SHLIB_COMPAT (librt, GLIBC_2_3_4, GLIBC_2_34)
-compat_symbol (librt, ___mq_timedsend, mq_timedsend, GLIBC_2_3_4);
-# endif
+#  ifndef SHARED
+    strong_alias (___mq_timedsend, __mq_timedsend)
+#  endif
+#  if OTHER_SHLIB_COMPAT(librt, GLIBC_2_3_4, GLIBC_2_34)
+	compat_symbol (librt, ___mq_timedsend, mq_timedsend, GLIBC_2_3_4);
+#  endif
 
 #endif /* __TIMESIZE != 64 */

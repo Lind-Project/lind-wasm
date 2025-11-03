@@ -19,10 +19,10 @@
 /* ISA 2.07 provides fast GPR to FP instruction (mfvsr{d,wz}) which make
    generic implementation faster.  */
 #if defined(_ARCH_PWR8) || !defined(_ARCH_PWR7)
-# include <sysdeps/ieee754/flt-32/s_logbf.c>
+#  include <sysdeps/ieee754/flt-32/s_logbf.c>
 #else
-# include <math.h>
-# include <libm-alias-float.h>
+#  include <math.h>
+#  include <libm-alias-float.h>
 /* This implementation avoids FP to INT conversions by using VSX
    bitwise instructions over FP values.  */
 float
@@ -39,7 +39,7 @@ __logbf (float x)
   asm ("xxland %x0,%x1,%x2\n"
        "fcfid  %0,%0"
        : "=d"(ret)
-       : "d" (x), "d" (0x7ff0000000000000ULL));
+       : "d"(x), "d"(0x7ff0000000000000ULL));
   /* ret = (ret >> 52) - 1023.0, since ret is double.  */
   ret = (ret * 0x1p-52) - 1023.0;
   if (ret > 127.0)
@@ -50,7 +50,7 @@ __logbf (float x)
      The test is to avoid logb_downward (0.0) == -0.0.  */
   return ret == -0.0 ? 0.0 : ret;
 }
-# ifndef __logbf
+#  ifndef __logbf
 libm_alias_float (__logb, logb)
-# endif
+#  endif
 #endif

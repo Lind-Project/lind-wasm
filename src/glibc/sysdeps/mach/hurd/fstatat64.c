@@ -27,7 +27,8 @@
 
 /* Get information about the file descriptor FD in BUF.  */
 int
-__fstatat64_common (int fd, const char *filename, struct stat64 *buf, int at_flags, int flags)
+__fstatat64_common (int fd, const char *filename, struct stat64 *buf,
+		    int at_flags, int flags)
 {
   error_t err;
   io_t port;
@@ -47,5 +48,4 @@ __fstatat64 (int fd, const char *filename, struct stat64 *buf, int at_flags)
 {
   return __fstatat64_common (fd, filename, buf, at_flags, 0);
 }
-libc_hidden_def (__fstatat64)
-weak_alias (__fstatat64, fstatat64)
+libc_hidden_def (__fstatat64) weak_alias (__fstatat64, fstatat64)

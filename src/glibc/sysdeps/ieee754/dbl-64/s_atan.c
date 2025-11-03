@@ -38,9 +38,9 @@
 #include <fenv_private.h>
 #include <math-underflow.h>
 
-#define  TWO52     0x1.0p52
+#define TWO52 0x1.0p52
 
-  /* Fix the sign of y and return */
+/* Fix the sign of y and return */
 static double
 __signArctan (double x, double y)
 {
@@ -51,8 +51,7 @@ __signArctan (double x, double y)
 double
 __atan (double x)
 {
-  double cor, t1, t2, t3, u,
-	 v, w, ww, y, yy, z;
+  double cor, t1, t2, t3, u, v, w, ww, y, yy, z;
   int i, ux, dx;
   mynumber num;
 
@@ -78,7 +77,7 @@ __atan (double x)
 	      return x;
 	    }
 	  else
-	    {			/* A <= u < B */
+	    { /* A <= u < B */
 	      v = x * x;
 	      yy = d11.d + v * d13.d;
 	      yy = d9.d + v * yy;
@@ -93,7 +92,7 @@ __atan (double x)
 	    }
 	}
       else
-	{			/* B <= u < C */
+	{ /* B <= u < C */
 	  i = (TWO52 + 256 * u) - TWO52;
 	  i -= 16;
 	  z = u - cij[i][0].d;
@@ -112,7 +111,7 @@ __atan (double x)
   else
     {
       if (u < D)
-	{			/* C <= u < D */
+	{ /* C <= u < D */
 	  w = 1 / u;
 	  EMULV (w, u, t1, t2);
 	  ww = w * ((1 - t1) - t2);
@@ -134,7 +133,7 @@ __atan (double x)
       else
 	{
 	  if (u < E)
-	    {                   /* D <= u < E */
+	    { /* D <= u < E */
 	      w = 1 / u;
 	      v = w * w;
 	      EMULV (w, u, t1, t2);

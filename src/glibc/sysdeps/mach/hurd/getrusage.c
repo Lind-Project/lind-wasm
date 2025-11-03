@@ -46,7 +46,7 @@ __getrusage (enum __rusage_who who, struct rusage *usage)
       count = TASK_EVENTS_INFO_COUNT;
       err = __task_info (__mach_task_self (), TASK_EVENTS_INFO,
 			 (task_info_t) &ei, &count);
-      if (err == KERN_INVALID_ARGUMENT)	/* microkernel doesn't implement it */
+      if (err == KERN_INVALID_ARGUMENT) /* microkernel doesn't implement it */
 	memset (&ei, 0, sizeof ei);
       else if (err)
 	return __hurd_fail (err);
@@ -70,7 +70,7 @@ __getrusage (enum __rusage_who who, struct rusage *usage)
       /* These statistics map only approximately.  */
       usage->ru_majflt = ei.pageins;
       usage->ru_minflt = ei.faults - ei.pageins;
-      usage->ru_msgsnd = ei.messages_sent; /* Mach IPC, not SysV IPC */
+      usage->ru_msgsnd = ei.messages_sent;     /* Mach IPC, not SysV IPC */
       usage->ru_msgrcv = ei.messages_received; /* Mach IPC, not SysV IPC */
       break;
 

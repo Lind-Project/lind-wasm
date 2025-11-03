@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SIGNAL_H
-# error "Never include <bits/signal_ext.h> directly; use <signal.h> instead."
+#  error "Never include <bits/signal_ext.h> directly; use <signal.h> instead."
 #endif
 
 #ifdef __USE_GNU

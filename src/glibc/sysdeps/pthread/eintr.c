@@ -22,9 +22,7 @@
 #include <support/xsignal.h>
 #include <support/xthread.h>
 
-
 static int the_sig;
-
 
 static void
 eintr_handler (int sig)
@@ -32,13 +30,16 @@ eintr_handler (int sig)
   if (sig != the_sig)
     {
       /* empty if statement avoids warn unused result */
-      if (write (STDOUT_FILENO,
-		 "eintr_handler: signal number wrong\n", 35) < 35) {};
+      if (write (STDOUT_FILENO, "eintr_handler: signal number wrong\n", 35)
+	  < 35)
+	{
+	};
       _exit (1);
     }
-  if (write (STDOUT_FILENO, ".", 1)) {/* Avoid warn unused result */};
+  if (write (STDOUT_FILENO, ".", 1))
+    { /* Avoid warn unused result */
+    };
 }
-
 
 static void *
 eintr_source (void *arg)
@@ -66,7 +67,6 @@ eintr_source (void *arg)
   /* NOTREACHED */
   return NULL;
 }
-
 
 static void
 setup_eintr (int sig, pthread_t *thp)

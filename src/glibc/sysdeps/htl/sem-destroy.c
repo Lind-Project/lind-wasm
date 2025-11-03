@@ -30,10 +30,9 @@ __sem_destroy (sem_t *sem)
 #if __HAVE_64B_ATOMICS
       atomic_load_relaxed (&isem->data) >> SEM_NWAITERS_SHIFT
 #else
-      atomic_load_relaxed (&isem->value) & SEM_NWAITERS_MASK
-      || isem->nwaiters
+      atomic_load_relaxed (&isem->value) & SEM_NWAITERS_MASK || isem->nwaiters
 #endif
-      )
+  )
     /* There are threads waiting on *SEM.  */
     return __hurd_fail (EBUSY);
 

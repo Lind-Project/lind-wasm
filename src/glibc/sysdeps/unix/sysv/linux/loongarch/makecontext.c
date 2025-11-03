@@ -30,12 +30,13 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, long int a0,
   extern void __start_context (void) attribute_hidden;
   unsigned long int *sp;
 
-  _Static_assert(LARCH_REG_NARGS == 8,
-		 "__makecontext assumes 8 argument registers");
+  _Static_assert (LARCH_REG_NARGS == 8,
+		  "__makecontext assumes 8 argument registers");
 
   /* Set up the stack.  */
-  sp = (unsigned long int *)
-       (((uintptr_t) ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size) & ALMASK);
+  sp = (unsigned long int *) (((uintptr_t) ucp->uc_stack.ss_sp
+			       + ucp->uc_stack.ss_size)
+			      & ALMASK);
 
   /* Set up the register context.
      ra = s0 = 0, terminating the stack for backtracing purposes.
@@ -62,13 +63,15 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, long int a0,
 
       long int reg_args = argc < LARCH_REG_NARGS ? argc : LARCH_REG_NARGS;
       for (long int i = 5; i < reg_args; i++)
-	ucp->uc_mcontext.__gregs[LARCH_REG_A0 + i] = va_arg (vl, unsigned long int);
+	ucp->uc_mcontext.__gregs[LARCH_REG_A0 + i]
+	    = va_arg (vl, unsigned long int);
 
       long int stack_args = argc - reg_args;
       if (stack_args > 0)
 	{
-	  sp = (unsigned long int *)
-	       (((uintptr_t) sp - stack_args * sizeof (long int)) & ALMASK);
+	  sp = (unsigned long int *) (((uintptr_t) sp
+				       - stack_args * sizeof (long int))
+				      & ALMASK);
 	  ucp->uc_mcontext.__gregs[LARCH_REG_SP] = (uintptr_t) sp;
 	  for (long int i = 0; i < stack_args; i++)
 	    sp[i] = va_arg (vl, unsigned long int);

@@ -42,7 +42,7 @@ __libc_open (const char *file, int oflag, ...)
   else
     mode = 0;
 
-  cancel_oldtype = LIBC_CANCEL_ASYNC();
+  cancel_oldtype = LIBC_CANCEL_ASYNC ();
   port = __file_name_lookup (file, oflag, mode);
   LIBC_CANCEL_RESET (cancel_oldtype);
 
@@ -52,14 +52,9 @@ __libc_open (const char *file, int oflag, ...)
   return _hurd_intern_fd (port, oflag, 1);
 }
 
-libc_hidden_def (__libc_open)
-weak_alias (__libc_open, __open)
-libc_hidden_weak (__open)
-weak_alias (__libc_open, open)
+libc_hidden_def (__libc_open) weak_alias (__libc_open, __open)
+    libc_hidden_weak (__open) weak_alias (__libc_open, open)
 
-
-/* open64 is just the same as open for us.  */
-weak_alias (__libc_open, __libc_open64)
-weak_alias (__libc_open, __open64)
-libc_hidden_weak (__open64)
-weak_alias (__libc_open, open64)
+    /* open64 is just the same as open for us.  */
+    weak_alias (__libc_open, __libc_open64) weak_alias (__libc_open, __open64)
+	libc_hidden_weak (__open64) weak_alias (__libc_open, open64)

@@ -32,22 +32,22 @@ __getdents64 (int fd, void *buf, size_t nbytes)
   if (nbytes > INT_MAX)
     nbytes = INT_MAX;
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-	return MAKE_SYSCALL(GETDENTS_SYSCALL, "syscall|getdents", (uint64_t) fd, (uint64_t) buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (GETDENTS_SYSCALL, "syscall|getdents", (uint64_t) fd,
+		       (uint64_t) buf, (uint64_t) nbytes, NOTUSED, NOTUSED,
+		       NOTUSED);
 }
-libc_hidden_def (__getdents64)
-weak_alias (__getdents64, getdents64)
+libc_hidden_def (__getdents64) weak_alias (__getdents64, getdents64)
 
 #if _DIRENT_MATCHES_DIRENT64
-strong_alias (__getdents64, __getdents)
+    strong_alias (__getdents64, __getdents)
 #else
-# include <shlib-compat.h>
+#  include <shlib-compat.h>
 
-# if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
-#  include <olddirent.h>
-#  include <unistd.h>
+#  if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
+#    include <olddirent.h>
+#    include <unistd.h>
 
-static ssize_t
-handle_overflow (int fd, __off64_t offset, ssize_t count)
+    static ssize_t handle_overflow (int fd, __off64_t offset, ssize_t count)
 {
   /* If this is the first entry in the buffer, we can report the
      error.  */
@@ -71,10 +71,10 @@ __old_getdents64 (int fd, char *buf, size_t nbytes)
      possible if the target type (struct __old_dirent64) is smaller
      than the source type.  */
   _Static_assert (offsetof (struct __old_dirent64, d_name)
-		  <= offsetof (struct dirent64, d_name),
+		      <= offsetof (struct dirent64, d_name),
 		  "__old_dirent64 is larger than dirent64");
   _Static_assert (__alignof__ (struct __old_dirent64)
-		  <= __alignof__ (struct dirent64),
+		      <= __alignof__ (struct dirent64),
 		  "alignment of __old_dirent64 is larger than dirent64");
 
   ssize_t retval = INLINE_SYSCALL_CALL (getdents64, fd, buf, nbytes);
@@ -128,8 +128,8 @@ __old_getdents64 (int fd, char *buf, size_t nbytes)
 	  p += reclen;
 	  previous_offset = offset;
 	}
-     }
+    }
   return retval;
 }
-# endif /* SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)  */
-#endif /* _DIRENT_MATCHES_DIRENT64  */
+#  endif /* SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)  */
+#endif	 /* _DIRENT_MATCHES_DIRENT64  */

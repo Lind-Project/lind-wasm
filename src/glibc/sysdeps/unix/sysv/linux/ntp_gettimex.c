@@ -19,7 +19,7 @@
 #include <sys/timex.h>
 
 #ifndef MOD_OFFSET
-# define modes mode
+#  define modes mode
 #endif
 
 /* clock_adjtime64 with CLOCK_REALTIME does not trigger EINVAL,
@@ -47,8 +47,7 @@ __ntp_gettimex64 (struct __ntptimeval64 *ntv)
 #if __TIMESIZE != 64
 libc_hidden_def (__ntp_gettimex64)
 
-int
-__ntp_gettimex (struct ntptimeval *ntv)
+    int __ntp_gettimex (struct ntptimeval *ntv)
 {
   struct __ntptimeval64 ntv64;
   int result;

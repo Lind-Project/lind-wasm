@@ -20,16 +20,15 @@
 #include <stdarg.h>
 #include <libio/libioP.h>
 
-#define VA(call)							\
-{									\
-  va_list ap;								\
-  va_start (ap, format);						\
-  IEEE128_CALL (call);							\
-  va_end (ap);								\
-}
+#define VA(call)                                                              \
+  {                                                                           \
+    va_list ap;                                                               \
+    va_start (ap, format);                                                    \
+    IEEE128_CALL (call);                                                      \
+    va_end (ap);                                                              \
+  }
 
-#define IEEE128_ALIAS(name) \
-  strong_alias (___ieee128_##name, __##name##ieee128)
+#define IEEE128_ALIAS(name) strong_alias (___ieee128_##name, __##name##ieee128)
 
 #define IEEE128_DECL(name) ___ieee128_##name
 #define IEEE128_CALL(name) ___ieee128_##name
@@ -49,21 +48,15 @@ IEEE128_DECL (vwarnx) (const char *format, __gnuc_va_list ap)
 IEEE128_ALIAS (vwarnx)
 
 void
-IEEE128_DECL (warn) (const char *format, ...)
-{
-  VA (vwarn (format, ap))
-}
-IEEE128_ALIAS (warn)
+IEEE128_DECL (warn) (const char *format,
+		     ...){ VA (vwarn (format, ap)) } IEEE128_ALIAS (warn)
 
-void
-IEEE128_DECL (warnx) (const char *format, ...)
-{
-  VA (vwarnx (format, ap))
-}
-IEEE128_ALIAS (warnx)
+    void IEEE128_DECL (warnx) (const char *format, ...){
+      VA (vwarnx (format, ap))
+    } IEEE128_ALIAS (warnx)
 
-void
-IEEE128_DECL (verr) (int status, const char *format, __gnuc_va_list ap)
+	void IEEE128_DECL (verr) (int status, const char *format,
+				  __gnuc_va_list ap)
 {
   IEEE128_CALL (vwarn) (format, ap);
   exit (status);
@@ -79,22 +72,13 @@ IEEE128_DECL (verrx) (int status, const char *format, __gnuc_va_list ap)
 IEEE128_ALIAS (verrx)
 
 void
-IEEE128_DECL (err) (int status, const char *format, ...)
-{
-  VA (verr (status, format, ap))
-}
-IEEE128_ALIAS (err)
+IEEE128_DECL (err) (int status, const char *format,
+		    ...){ VA (verr (status, format, ap)) } IEEE128_ALIAS (err)
 
-void
-IEEE128_DECL (errx) (int status, const char *format, ...)
-{
-  VA (verrx (status, format, ap))
-}
-IEEE128_ALIAS (errx)
+    void IEEE128_DECL (errx) (int status, const char *format, ...){
+      VA (verrx (status, format, ap))
+    } IEEE128_ALIAS (errx)
 
-hidden_def (___ieee128_warn)
-hidden_def (___ieee128_warnx)
-hidden_def (___ieee128_vwarn)
-hidden_def (___ieee128_vwarnx)
-hidden_def (___ieee128_verr)
-hidden_def (___ieee128_verrx)
+	hidden_def (___ieee128_warn) hidden_def (___ieee128_warnx)
+	    hidden_def (___ieee128_vwarn) hidden_def (___ieee128_vwarnx)
+		hidden_def (___ieee128_verr) hidden_def (___ieee128_verrx)

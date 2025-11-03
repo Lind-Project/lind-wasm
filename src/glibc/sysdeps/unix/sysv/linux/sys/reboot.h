@@ -19,30 +19,30 @@
    bits in the argument to the `reboot' system call.  */
 
 #ifndef _SYS_REBOOT_H
-#define _SYS_REBOOT_H	1
+#  define _SYS_REBOOT_H 1
 
-#include <features.h>
+#  include <features.h>
 
 /* Perform a hard reset now.  */
-#define RB_AUTOBOOT	0x01234567
+#  define RB_AUTOBOOT 0x01234567
 
 /* Halt the system.  */
-#define RB_HALT_SYSTEM	0xcdef0123
+#  define RB_HALT_SYSTEM 0xcdef0123
 
 /* Enable reboot using Ctrl-Alt-Delete keystroke.  */
-#define RB_ENABLE_CAD	0x89abcdef
+#  define RB_ENABLE_CAD 0x89abcdef
 
 /* Disable reboot using Ctrl-Alt-Delete keystroke.  */
-#define RB_DISABLE_CAD	0
+#  define RB_DISABLE_CAD 0
 
 /* Stop system and switch power off if possible.  */
-#define RB_POWER_OFF	0x4321fedc
+#  define RB_POWER_OFF 0x4321fedc
 
 /* Suspend system using software suspend.  */
-#define RB_SW_SUSPEND	0xd000fce2
+#  define RB_SW_SUSPEND 0xd000fce2
 
 /* Reboot system into new kernel.  */
-#define RB_KEXEC	0x45584543
+#  define RB_KEXEC 0x45584543
 
 __BEGIN_DECLS
 
@@ -51,4 +51,4 @@ extern int reboot (int __howto) __THROW;
 
 __END_DECLS
 
-#endif	/* _SYS_REBOOT_H */
+#endif /* _SYS_REBOOT_H */

@@ -25,7 +25,7 @@ M_DECL_FUNC (__modf) (FLOAT x, FLOAT *iptr)
   FLOAT x_int, result;
   unsigned long x_cond;
 
-  __asm ("fintrz%.x %1, %0" : "=f" (x_int) : "f" (x));
+  __asm ("fintrz%.x %1, %0" : "=f"(x_int) : "f"(x));
   *iptr = x_int;
   x_cond = __m81_test (x);
   if (x_cond & __M81_COND_INF)

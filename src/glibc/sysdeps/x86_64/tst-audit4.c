@@ -30,7 +30,7 @@ avx_enabled (void)
     return 0;
 
   /* Check the OS has AVX and SSE saving enabled.  */
-  asm ("xgetbv" : "=a" (eax), "=d" (edx) : "c" (0));
+  asm ("xgetbv" : "=a"(eax), "=d"(edx) : "c"(0));
 
   return (eax & 6) == 6;
 }

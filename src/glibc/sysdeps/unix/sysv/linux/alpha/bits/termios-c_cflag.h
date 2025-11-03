@@ -17,23 +17,24 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TERMIOS_H
-# error "Never include <bits/termios-c_cflag.h> directly; use <termios.h> instead."
+#  error                                                                       \
+      "Never include <bits/termios-c_cflag.h> directly; use <termios.h> instead."
 #endif
 
-#define CSIZE	00001400
-#define   CS5	00000000
-#define   CS6	00000400
-#define   CS7	00001000
-#define   CS8	00001400
+#define CSIZE 00001400
+#define CS5 00000000
+#define CS6 00000400
+#define CS7 00001000
+#define CS8 00001400
 
-#define CSTOPB	00002000
-#define CREAD	00004000
-#define PARENB	00010000
-#define PARODD	00020000
-#define HUPCL	00040000
+#define CSTOPB 00002000
+#define CREAD 00004000
+#define PARENB 00010000
+#define PARODD 00020000
+#define HUPCL 00040000
 
-#define CLOCAL	00100000
+#define CLOCAL 00100000
 
 #ifdef __USE_MISC
-# define ADDRB 04000000000
+#  define ADDRB 04000000000
 #endif

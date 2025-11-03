@@ -59,7 +59,7 @@ canceled_thread_function (void *unused)
       FD_SET (pipe_fds[0], &rfs);
 
       /* If the cancellation request is recognized early, the thread
-         begins exiting while the cancellation signal arrives.  */
+	 begins exiting while the cancellation signal arrives.  */
       select (FD_SETSIZE, &rfs, &wfs, &efs, NULL);
     }
   return NULL;
@@ -69,7 +69,8 @@ static int
 do_test (void)
 {
   xpipe (pipe_fds);
-  pthread_t thr_timeout = xpthread_create (NULL, timeout_thread_function, NULL);
+  pthread_t thr_timeout
+      = xpthread_create (NULL, timeout_thread_function, NULL);
 
   while (!__atomic_load_n (&timeout, __ATOMIC_RELAXED))
     {

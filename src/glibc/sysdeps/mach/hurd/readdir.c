@@ -38,25 +38,25 @@ __readdir (DIR *dirp)
      both structures.  */
   assert (offsetof (struct dirent, d_ino) == 0);
   assert (offsetof (struct dirent64, d_ino) == 0);
-# define MATCH(memb)							      \
-  assert (offsetof (struct dirent64, memb) - sizeof (entry64->d_ino)	      \
+#define MATCH(memb)                                                           \
+  assert (offsetof (struct dirent64, memb) - sizeof (entry64->d_ino)          \
 	  == offsetof (struct dirent, memb) - sizeof (ino_t))
   MATCH (d_reclen);
   MATCH (d_type);
   MATCH (d_namlen);
-# undef MATCH
+#undef MATCH
 
   if (entry64 == NULL)
     return NULL;
 
-  struct dirent *const entry = ((void *) (&entry64->d_ino + 1)
-				- sizeof entry->d_ino);
+  struct dirent *const entry
+      = ((void *) (&entry64->d_ino + 1) - sizeof entry->d_ino);
   const ino_t d_ino = entry64->d_ino;
   if (d_ino != entry64->d_ino)
     return __hurd_fail (EOVERFLOW), NULL;
-# if BYTE_ORDER != BIG_ENDIAN	/* We just skipped over the zero high word.  */
-  entry->d_ino = d_ino;	/* ... or the nonzero low word, swap it.  */
-# endif
+#if BYTE_ORDER != BIG_ENDIAN /* We just skipped over the zero high word.  */
+  entry->d_ino = d_ino;	     /* ... or the nonzero low word, swap it.  */
+#endif
   entry->d_reclen -= sizeof entry64->d_ino - sizeof entry->d_ino;
   return entry;
 }

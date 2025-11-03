@@ -22,12 +22,10 @@
 #include <time.h>
 #include <sys/time.h>
 
-
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t mut = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP;
 
 static pthread_barrier_t bar;
-
 
 static void
 ch (void *arg)
@@ -53,7 +51,6 @@ ch (void *arg)
 
   puts ("ch done");
 }
-
 
 static void *
 tf1 (void *p)
@@ -93,7 +90,6 @@ tf1 (void *p)
 
   return NULL;
 }
-
 
 static void *
 tf2 (void *p)
@@ -141,7 +137,6 @@ tf2 (void *p)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -212,8 +207,6 @@ do_test (void)
       exit (1);
     }
 
-
-
   puts ("parent: create 2nd child");
 
   err = pthread_create (&th, NULL, tf2, NULL);
@@ -269,7 +262,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

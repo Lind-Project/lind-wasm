@@ -17,52 +17,51 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef SYSDEP_VDSO_LINUX_H
-# define SYSDEP_VDSO_LINUX_H
+#define SYSDEP_VDSO_LINUX_H
 
 #include <ldsodefs.h>
 
 #ifndef INTERNAL_VSYSCALL_CALL
-# define INTERNAL_VSYSCALL_CALL(funcptr, nr, args...)		      	      \
-     funcptr (args)
+#  define INTERNAL_VSYSCALL_CALL(funcptr, nr, args...) funcptr (args)
 #endif
 
-#define INLINE_VSYSCALL(name, nr, args...)				      \
-  ({									      \
-    __label__ out;							      \
-    __label__ iserr;							      \
-    long int sc_ret;							      \
-									      \
-    __typeof (GLRO(dl_vdso_##name)) vdsop = GLRO(dl_vdso_##name);	      \
-    if (vdsop != NULL)							      \
-      {									      \
-	sc_ret = INTERNAL_VSYSCALL_CALL (vdsop, nr, ##args);	      	      \
-	if (!INTERNAL_SYSCALL_ERROR_P (sc_ret))			      	      \
-	  goto out;							      \
-	if (INTERNAL_SYSCALL_ERRNO (sc_ret) != ENOSYS)		      	      \
-	  goto iserr;							      \
-      }									      \
-									      \
-    sc_ret = INTERNAL_SYSCALL_CALL (name, ##args);		      	      \
-    if (INTERNAL_SYSCALL_ERROR_P (sc_ret))			      	      \
-      {									      \
-      iserr:								      \
-        __set_errno (INTERNAL_SYSCALL_ERRNO (sc_ret));		      	      \
-        sc_ret = -1L;							      \
-      }									      \
-  out:									      \
-    sc_ret;								      \
+#define INLINE_VSYSCALL(name, nr, args...)                                    \
+  ({                                                                          \
+    __label__ out;                                                            \
+    __label__ iserr;                                                          \
+    long int sc_ret;                                                          \
+                                                                              \
+    __typeof (GLRO (dl_vdso_##name)) vdsop = GLRO (dl_vdso_##name);           \
+    if (vdsop != NULL)                                                        \
+      {                                                                       \
+	sc_ret = INTERNAL_VSYSCALL_CALL (vdsop, nr, ##args);                  \
+	if (!INTERNAL_SYSCALL_ERROR_P (sc_ret))                               \
+	  goto out;                                                           \
+	if (INTERNAL_SYSCALL_ERRNO (sc_ret) != ENOSYS)                        \
+	  goto iserr;                                                         \
+      }                                                                       \
+                                                                              \
+    sc_ret = INTERNAL_SYSCALL_CALL (name, ##args);                            \
+    if (INTERNAL_SYSCALL_ERROR_P (sc_ret))                                    \
+      {                                                                       \
+      iserr:                                                                  \
+	__set_errno (INTERNAL_SYSCALL_ERRNO (sc_ret));                        \
+	sc_ret = -1L;                                                         \
+      }                                                                       \
+  out:                                                                        \
+    sc_ret;                                                                   \
   })
 
-#define INTERNAL_VSYSCALL(name, nr, args...)				      \
-  ({									      \
-    long int sc_ret = -ENOSYS;						      \
-									      \
-    __typeof (GLRO(dl_vdso_##name)) vdsop = GLRO(dl_vdso_##name);	      \
-    if (vdsop != NULL)							      \
-	sc_ret = INTERNAL_VSYSCALL_CALL (vdsop, nr, ##args);		      \
-    if (sc_ret == -ENOSYS)						      \
-	sc_ret = INTERNAL_SYSCALL_CALL (name, ##args);			      \
-    sc_ret;								      \
+#define INTERNAL_VSYSCALL(name, nr, args...)                                  \
+  ({                                                                          \
+    long int sc_ret = -ENOSYS;                                                \
+                                                                              \
+    __typeof (GLRO (dl_vdso_##name)) vdsop = GLRO (dl_vdso_##name);           \
+    if (vdsop != NULL)                                                        \
+      sc_ret = INTERNAL_VSYSCALL_CALL (vdsop, nr, ##args);                    \
+    if (sc_ret == -ENOSYS)                                                    \
+      sc_ret = INTERNAL_SYSCALL_CALL (name, ##args);                          \
+    sc_ret;                                                                   \
   })
 
 #endif /* SYSDEP_VDSO_LINUX_H  */

@@ -22,8 +22,8 @@
    of two 4byte registers instead of a 8byte register which is produced by the
    instruction.
    Note: On s390 this instruction would only be used if build with -mzarch.  */
-# include <math.h>
-# include <libm-alias-float.h>
+#  include <math.h>
+#  include <libm-alias-float.h>
 
 long long int
 __llrintf (float x)
@@ -40,11 +40,13 @@ __llrintf (float x)
 	   "jo 1f \n\t"
 	   "cgebra %0,0,%1,0 \n\t"
 	   "1:"
-	   : "=&d" (y) : "f" (x) : "cc");
+	   : "=&d"(y)
+	   : "f"(x)
+	   : "cc");
   return y;
 }
 libm_alias_float (__llrint, llrint)
 
 #else
-# include <sysdeps/ieee754/flt-32/s_llrintf.c>
+#  include <sysdeps/ieee754/flt-32/s_llrintf.c>
 #endif

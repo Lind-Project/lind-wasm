@@ -18,18 +18,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define strpbrk __redirect_strpbrk
-# include <string.h>
-# undef strpbrk
+#if IS_IN(libc)
+#  define strpbrk __redirect_strpbrk
+#  include <string.h>
+#  undef strpbrk
 
-# define SYMBOL_NAME strpbrk
-# include "ifunc-sse4_2.h"
+#  define SYMBOL_NAME strpbrk
+#  include "ifunc-sse4_2.h"
 
 libc_ifunc_redirected (__redirect_strpbrk, strpbrk, IFUNC_SELECTOR ());
 
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (strpbrk, __GI_strpbrk, __redirect_strpbrk)
-  __attribute__ ((visibility ("hidden"))) __attribute_copy__ (strpbrk);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (strpbrk);
+#  endif
 #endif

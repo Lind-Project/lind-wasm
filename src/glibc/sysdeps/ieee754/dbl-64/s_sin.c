@@ -32,7 +32,6 @@
 /*                                                                          */
 /****************************************************************************/
 
-
 #include <errno.h>
 #include <float.h>
 #include "endian.h"
@@ -57,24 +56,24 @@
 
    The constants s1, s2, s3, etc. are pre-computed values of 1/3!, 1/5! and so
    on.  The result is returned to LHS.  */
-#define TAYLOR_SIN(xx, x, dx) \
-({									      \
-  double t = ((POLYNOMIAL (xx)  * (x) - 0.5 * (dx))  * (xx) + (dx));	      \
-  double res = (x) + t;							      \
-  res;									      \
-})
+#define TAYLOR_SIN(xx, x, dx)                                                 \
+  ({                                                                          \
+    double t = ((POLYNOMIAL (xx) * (x) - 0.5 * (dx)) * (xx) + (dx));          \
+    double res = (x) + t;                                                     \
+    res;                                                                      \
+  })
 
-#define SINCOS_TABLE_LOOKUP(u, sn, ssn, cs, ccs) \
-({									      \
-  int4 k = u.i[LOW_HALF] << 2;						      \
-  sn = __sincostab.x[k];						      \
-  ssn = __sincostab.x[k + 1];						      \
-  cs = __sincostab.x[k + 2];						      \
-  ccs = __sincostab.x[k + 3];						      \
-})
+#define SINCOS_TABLE_LOOKUP(u, sn, ssn, cs, ccs)                              \
+  ({                                                                          \
+    int4 k = u.i[LOW_HALF] << 2;                                              \
+    sn = __sincostab.x[k];                                                    \
+    ssn = __sincostab.x[k + 1];                                               \
+    cs = __sincostab.x[k + 2];                                                \
+    ccs = __sincostab.x[k + 3];                                               \
+  })
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
 extern const union
@@ -83,12 +82,11 @@ extern const union
   double x[440];
 } __sincostab attribute_hidden;
 
-static const double
-  sn3 = -1.66666666666664880952546298448555E-01,
-  sn5 = 8.33333214285722277379541354343671E-03,
-  cs2 = 4.99999999999999999999950396842453E-01,
-  cs4 = -4.16666666666664434524222570944589E-02,
-  cs6 = 1.38888874007937613028114285595617E-03;
+static const double sn3 = -1.66666666666664880952546298448555E-01,
+		    sn5 = 8.33333214285722277379541354343671E-03,
+		    cs2 = 4.99999999999999999999950396842453E-01,
+		    cs4 = -4.16666666666664434524222570944589E-02,
+		    cs6 = 1.38888874007937613028114285595617E-03;
 
 int __branred (double x, double *a, double *aa);
 
@@ -189,14 +187,12 @@ do_sincos (double a, double da, int4 n)
   return (n & 2) ? -retval : retval;
 }
 
-
 /*******************************************************************/
 /* An ultimate sin routine. Given an IEEE double machine number x  */
 /* it computes the rounded value of sin(x).			   */
 /*******************************************************************/
 #ifndef IN_SINCOS
-double
-SECTION
+double SECTION
 __sin (double x)
 {
   double t, a, da;
@@ -208,41 +204,41 @@ __sin (double x)
 
   u.x = x;
   m = u.i[HIGH_HALF];
-  k = 0x7fffffff & m;		/* no sign           */
-  if (k < 0x3e500000)		/* if x->0 =>sin(x)=x */
+  k = 0x7fffffff & m; /* no sign           */
+  if (k < 0x3e500000) /* if x->0 =>sin(x)=x */
     {
       math_check_force_underflow (x);
       retval = x;
     }
-/*--------------------------- 2^-26<|x|< 0.855469---------------------- */
+  /*--------------------------- 2^-26<|x|< 0.855469---------------------- */
   else if (k < 0x3feb6000)
     {
       /* Max ULP is 0.548.  */
       retval = do_sin (x, 0);
-    }				/*   else  if (k < 0x3feb6000)    */
+    } /*   else  if (k < 0x3feb6000)    */
 
-/*----------------------- 0.855469  <|x|<2.426265  ----------------------*/
+  /*----------------------- 0.855469  <|x|<2.426265  ----------------------*/
   else if (k < 0x400368fd)
     {
       t = hp0 - fabs (x);
       /* Max ULP is 0.51.  */
       retval = copysign (do_cos (t, hp1), x);
-    }				/*   else  if (k < 0x400368fd)    */
+    } /*   else  if (k < 0x400368fd)    */
 
-/*-------------------------- 2.426265<|x|< 105414350 ----------------------*/
+  /*-------------------------- 2.426265<|x|< 105414350 ----------------------*/
   else if (k < 0x419921FB)
     {
       n = reduce_sincos (x, &a, &da);
       retval = do_sincos (a, da, n);
-    }				/*   else  if (k <  0x419921FB )    */
+    } /*   else  if (k <  0x419921FB )    */
 
-/* --------------------105414350 <|x| <2^1024------------------------------*/
+  /* --------------------105414350 <|x| <2^1024------------------------------*/
   else if (k < 0x7ff00000)
     {
       n = __branred (x, &a, &da);
       retval = do_sincos (a, da, n);
     }
-/*--------------------- |x| > 2^1024 ----------------------------------*/
+  /*--------------------- |x| > 2^1024 ----------------------------------*/
   else
     {
       if (k == 0x7ff00000 && u.i[LOW_HALF] == 0)
@@ -253,14 +249,12 @@ __sin (double x)
   return retval;
 }
 
-
 /*******************************************************************/
 /* An ultimate cos routine. Given an IEEE double machine number x  */
 /* it computes the rounded value of cos(x).			   */
 /*******************************************************************/
 
-double
-SECTION
+double SECTION
 __cos (double x)
 {
   double y, a, da;
@@ -280,26 +274,27 @@ __cos (double x)
     retval = 1.0;
 
   else if (k < 0x3feb6000)
-    {				/* 2^-27 < |x| < 0.855469 */
+    { /* 2^-27 < |x| < 0.855469 */
       /* Max ULP is 0.51.  */
       retval = do_cos (x, 0);
-    }				/*   else  if (k < 0x3feb6000)    */
+    } /*   else  if (k < 0x3feb6000)    */
 
   else if (k < 0x400368fd)
-    { /* 0.855469  <|x|<2.426265  */ ;
+    { /* 0.855469  <|x|<2.426265  */
+      ;
       y = hp0 - fabs (x);
       a = y + hp1;
       da = (y - a) + hp1;
       /* Max ULP is 0.501 if xx < 0.01588 or 0.518 otherwise.
 	 Range reduction uses 106 bits here which is sufficient.  */
       retval = do_sin (a, da);
-    }				/*   else  if (k < 0x400368fd)    */
+    } /*   else  if (k < 0x400368fd)    */
 
   else if (k < 0x419921FB)
-    {				/* 2.426265<|x|< 105414350 */
+    { /* 2.426265<|x|< 105414350 */
       n = reduce_sincos (x, &a, &da);
       retval = do_sincos (a, da, n + 1);
-    }				/*   else  if (k <  0x419921FB )    */
+    } /*   else  if (k <  0x419921FB )    */
 
   /* 105414350 <|x| <2^1024 */
   else if (k < 0x7ff00000)
@@ -312,17 +307,17 @@ __cos (double x)
     {
       if (k == 0x7ff00000 && u.i[LOW_HALF] == 0)
 	__set_errno (EDOM);
-      retval = x / x;		/* |x| > 2^1024 */
+      retval = x / x; /* |x| > 2^1024 */
     }
 
   return retval;
 }
 
-#ifndef __cos
+#  ifndef __cos
 libm_alias_double (__cos, cos)
-#endif
-#ifndef __sin
-libm_alias_double (__sin, sin)
-#endif
+#  endif
+#  ifndef __sin
+    libm_alias_double (__sin, sin)
+#  endif
 
 #endif

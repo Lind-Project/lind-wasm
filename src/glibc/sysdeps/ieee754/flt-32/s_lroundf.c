@@ -24,7 +24,6 @@
 #include <libm-alias-float.h>
 #include <fix-fp-int-convert-overflow.h>
 
-
 long int
 __lroundf (float x)
 {

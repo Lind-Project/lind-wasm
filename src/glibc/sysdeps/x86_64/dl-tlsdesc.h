@@ -20,7 +20,7 @@
 #include <stdint.h>
 
 #ifndef _X86_64_DL_TLSDESC_H
-# define _X86_64_DL_TLSDESC_H 1
+#  define _X86_64_DL_TLSDESC_H 1
 
 /* Type used to represent a TLS descriptor in the GOT.  */
 struct tlsdesc
@@ -28,15 +28,15 @@ struct tlsdesc
   /* Anonymous union is used here to ensure that GOT entry slot is always
      8 bytes for both x32 and x86-64.  */
   union
-    {
-      ptrdiff_t (*entry) (struct tlsdesc *on_rax);
-      uint64_t entry_slot;
-    };
+  {
+    ptrdiff_t (*entry) (struct tlsdesc *on_rax);
+    uint64_t entry_slot;
+  };
   union
-    {
-      void *arg;
-      uint64_t arg_slot;
-    };
+  {
+    void *arg;
+    uint64_t arg_slot;
+  };
 };
 
 typedef struct dl_tls_index
@@ -53,16 +53,14 @@ struct tlsdesc_dynamic_arg
   size_t gen_count;
 };
 
-extern ptrdiff_t attribute_hidden
-  _dl_tlsdesc_return(struct tlsdesc *on_rax),
-  _dl_tlsdesc_undefweak(struct tlsdesc *on_rax);
+extern ptrdiff_t attribute_hidden _dl_tlsdesc_return (struct tlsdesc *on_rax),
+    _dl_tlsdesc_undefweak (struct tlsdesc *on_rax);
 
-# ifdef SHARED
+#  ifdef SHARED
 extern void *_dl_make_tlsdesc_dynamic (struct link_map *map,
-				       size_t ti_offset)
-  attribute_hidden;
+				       size_t ti_offset) attribute_hidden;
 
-extern ptrdiff_t attribute_hidden _dl_tlsdesc_dynamic(struct tlsdesc *);
-# endif
+extern ptrdiff_t attribute_hidden _dl_tlsdesc_dynamic (struct tlsdesc *);
+#  endif
 
 #endif

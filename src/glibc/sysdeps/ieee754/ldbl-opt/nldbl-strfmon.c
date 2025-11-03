@@ -1,7 +1,6 @@
 #include "nldbl-compat.h"
 
-ssize_t
-attribute_hidden
+ssize_t attribute_hidden
 strfmon (char *s, size_t maxsize, const char *format, ...)
 {
   va_list ap;

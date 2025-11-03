@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Ugly kludge to avoid declarations.  */
-#define __isnanf	not___isnanf
-#define isnanf		not_isnanf
-#define __GI___isnanf	not__GI___isnanf
+#define __isnanf not___isnanf
+#define isnanf not_isnanf
+#define __GI___isnanf not__GI___isnanf
 
 #include <math.h>
 #include <math_private.h>
@@ -37,23 +37,20 @@ __isnan (double x)
   return ix * 2 > 0xffe0000000000000ul;
 }
 
-hidden_def (__isnan)
-weak_alias (__isnan, isnan)
+hidden_def (__isnan) weak_alias (__isnan, isnan)
 
-/* It turns out that the 'double' version will also always work for
-   single-precision.  */
-strong_alias (__isnan, __isnanf)
-weak_alias (__isnan, isnanf)
+    /* It turns out that the 'double' version will also always work for
+       single-precision.  */
+    strong_alias (__isnan, __isnanf) weak_alias (__isnan, isnanf)
 
-/* ??? GCC 4.8 fails to look through chains of aliases with asm names
-   attached.  Work around this for now.  */
-hidden_ver (__isnan, __isnanf)
+    /* ??? GCC 4.8 fails to look through chains of aliases with asm names
+       attached.  Work around this for now.  */
+    hidden_ver (__isnan, __isnanf)
 
 #ifdef NO_LONG_DOUBLE
-strong_alias (__isnan, __isnanl)
-weak_alias (__isnan, isnanl)
+	strong_alias (__isnan, __isnanl) weak_alias (__isnan, isnanl)
 #endif
 #if LONG_DOUBLE_COMPAT(libc, GLIBC_2_0)
-compat_symbol (libc, __isnan, __isnanl, GLIBC_2_0);
+	    compat_symbol (libc, __isnan, __isnanl, GLIBC_2_0);
 compat_symbol (libc, isnan, isnanl, GLIBC_2_0);
 #endif

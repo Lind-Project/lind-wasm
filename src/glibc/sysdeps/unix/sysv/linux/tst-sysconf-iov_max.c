@@ -19,7 +19,6 @@
 /* Defined in tst-sysconf-iov_max-uapi.c.  */
 long uio_maxiov_value (void);
 
-
 #include <limits.h>
 #include <support/check.h>
 #include <sys/uio.h>

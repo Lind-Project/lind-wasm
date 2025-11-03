@@ -19,24 +19,23 @@
 #include <ifunc-strcspn.h>
 
 #if HAVE_STRCSPN_IFUNC
-# define strcspn __redirect_strcspn
+#  define strcspn __redirect_strcspn
 /* Omit the strcspn inline definitions because it would redefine strcspn.  */
-# define __NO_STRING_INLINES
-# include <string.h>
-# undef strcspn
-# include <ifunc-resolve.h>
+#  define __NO_STRING_INLINES
+#  include <string.h>
+#  undef strcspn
+#  include <ifunc-resolve.h>
 
-# if HAVE_STRCSPN_C
+#  if HAVE_STRCSPN_C
 extern __typeof (__redirect_strcspn) STRCSPN_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_STRCSPN_Z13
+#  if HAVE_STRCSPN_Z13
 extern __typeof (__redirect_strcspn) STRCSPN_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect_strcspn, strcspn,
 		      (HAVE_STRCSPN_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? STRCSPN_Z13
-		      : STRCSPN_DEFAULT
-		      )
+			  ? STRCSPN_Z13
+			  : STRCSPN_DEFAULT)
 #endif /* HAVE_STRCSPN_IFUNC  */

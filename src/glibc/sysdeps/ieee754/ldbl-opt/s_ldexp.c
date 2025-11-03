@@ -20,7 +20,7 @@
 #include <math-type-macros-double.h>
 #include <s_ldexp_template.c>
 
-#if IS_IN (libc) && LONG_DOUBLE_COMPAT (libc, GLIBC_2_0)
+#if IS_IN(libc) && LONG_DOUBLE_COMPAT(libc, GLIBC_2_0)
 compat_symbol (libc, __ldexp, ldexpl, GLIBC_2_0);
 compat_symbol (libc, __wrap_scalbn, scalbnl, GLIBC_2_0);
 #endif

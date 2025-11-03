@@ -19,11 +19,11 @@
 /* The constants and polynomials for sine and cosine.  */
 typedef struct
 {
-  double sign[4];		/* Sign of sine in quadrants 0..3.  */
-  double hpi_inv;		/* 2 / PI ( * 2^24 if !TOINT_INTRINSICS).  */
-  double hpi;			/* PI / 2.  */
-  double c0, c1, c2, c3, c4;	/* Cosine polynomial.  */
-  double s1, s2, s3;		/* Sine polynomial.  */
+  double sign[4];	     /* Sign of sine in quadrants 0..3.  */
+  double hpi_inv;	     /* 2 / PI ( * 2^24 if !TOINT_INTRINSICS).  */
+  double hpi;		     /* PI / 2.  */
+  double c0, c1, c2, c3, c4; /* Cosine polynomial.  */
+  double s1, s2, s3;	     /* Sine polynomial.  */
 } sincos_t;
 
 /* Compute the sine and cosine of inputs X and X2 (X squared), using the

@@ -19,8 +19,8 @@
 #include <libio/libioP.h>
 
 extern int
-___ieee128__obstack_vprintf_chk  (struct obstack *obstack, int flag,
-				  const char *format, va_list ap)
+___ieee128__obstack_vprintf_chk (struct obstack *obstack, int flag,
+				 const char *format, va_list ap)
 {
   unsigned int mode = PRINTF_LDBL_USES_FLOAT128;
   if (flag > 0)

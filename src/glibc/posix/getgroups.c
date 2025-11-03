@@ -21,14 +21,13 @@
 #include <sys/types.h>
 #include <limits.h>
 
-
 /* If SIZE is zero, return the number of supplementary groups
    the calling process is in.  Otherwise, fill in the group IDs
    of its supplementary groups in LIST and return the number written.  */
 int
 __getgroups (int size, gid_t *list)
 {
-#if defined (NGROUPS_MAX) && NGROUPS_MAX == 0
+#if defined(NGROUPS_MAX) && NGROUPS_MAX == 0
   /* The system has no supplementary groups.  */
   return 0;
 #endif
@@ -37,7 +36,7 @@ __getgroups (int size, gid_t *list)
   return -1;
 }
 
-#if !(defined (NGROUPS_MAX) && NGROUPS_MAX == 0)
+#if !(defined(NGROUPS_MAX) && NGROUPS_MAX == 0)
 stub_warning (getgroups);
 #endif
 

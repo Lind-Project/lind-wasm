@@ -24,7 +24,6 @@
 #include <float.h>
 #include <ieee754.h>
 
-
 long
 __lrintl (long double x)
 {
@@ -39,16 +38,15 @@ __lrintl (long double x)
      raises FE_INVALID.  */
   if (
 #if __LONG_MAX__ == 2147483647
-      __builtin_expect
-      ((__builtin_fabs (xh) <= (double) __LONG_MAX__ + 2), 1)
+      __builtin_expect ((__builtin_fabs (xh) <= (double) __LONG_MAX__ + 2), 1)
 #else
-      __builtin_expect
-      ((__builtin_fabs (xh) <= -(double) (-__LONG_MAX__ - 1)), 1)
+      __builtin_expect ((__builtin_fabs (xh) <= -(double) (-__LONG_MAX__ - 1)),
+			1)
 #endif
-#if !defined (FE_INVALID)
+#if !defined(FE_INVALID)
       || 1
 #endif
-    )
+  )
     {
       save_round = fegetround ();
 
@@ -83,8 +81,8 @@ __lrintl (long double x)
       lo = (long) xh;
 
       /* Peg at max/min values, assuming that the above conversions do so.
-         Strictly speaking, we can return anything for values that overflow,
-         but this is more useful.  */
+	 Strictly speaking, we can return anything for values that overflow,
+	 but this is more useful.  */
       res = (long int) ((unsigned long int) hi + (unsigned long int) lo);
 
       /* This is just sign(hi) == sign(lo) && sign(res) != sign(hi).  */
@@ -100,8 +98,7 @@ __lrintl (long double x)
 	case FE_TONEAREST:
 	  if (fabs (xh) < 0.5
 	      || (fabs (xh) == 0.5
-		  && ((xh > 0.0 && xl < 0.0)
-		      || (xh < 0.0 && xl > 0.0)
+		  && ((xh > 0.0 && xl < 0.0) || (xh < 0.0 && xl > 0.0)
 		      || (xl == 0.0 && (res & 1) == 0))))
 	    return res;
 

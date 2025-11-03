@@ -32,78 +32,77 @@ __nptl_deallocate_tsd (void)
 
       round = 0;
       do
-        {
-          size_t idx;
+	{
+	  size_t idx;
 
-          /* So far no new nonzero data entry.  */
-          THREAD_SETMEM (self, specific_used, false);
+	  /* So far no new nonzero data entry.  */
+	  THREAD_SETMEM (self, specific_used, false);
 
-          for (cnt = idx = 0; cnt < PTHREAD_KEY_1STLEVEL_SIZE; ++cnt)
-            {
-              struct pthread_key_data *level2;
+	  for (cnt = idx = 0; cnt < PTHREAD_KEY_1STLEVEL_SIZE; ++cnt)
+	    {
+	      struct pthread_key_data *level2;
 
-              level2 = THREAD_GETMEM_NC (self, specific, cnt);
+	      level2 = THREAD_GETMEM_NC (self, specific, cnt);
 
-              if (level2 != NULL)
-                {
-                  size_t inner;
+	      if (level2 != NULL)
+		{
+		  size_t inner;
 
-                  for (inner = 0; inner < PTHREAD_KEY_2NDLEVEL_SIZE;
-                       ++inner, ++idx)
-                    {
-                      void *data = level2[inner].data;
+		  for (inner = 0; inner < PTHREAD_KEY_2NDLEVEL_SIZE;
+		       ++inner, ++idx)
+		    {
+		      void *data = level2[inner].data;
 
-                      if (data != NULL)
-                        {
-                          /* Always clear the data.  */
-                          level2[inner].data = NULL;
+		      if (data != NULL)
+			{
+			  /* Always clear the data.  */
+			  level2[inner].data = NULL;
 
-                          /* Make sure the data corresponds to a valid
-                             key.  This test fails if the key was
-                             deallocated and also if it was
-                             re-allocated.  It is the user's
-                             responsibility to free the memory in this
-                             case.  */
-                          if (level2[inner].seq
-                              == __pthread_keys[idx].seq
-                              /* It is not necessary to register a destructor
-                                 function.  */
-                              && __pthread_keys[idx].destr != NULL)
-                            /* Call the user-provided destructor.  */
-                            __pthread_keys[idx].destr (data);
-                        }
-                    }
-                }
-              else
-                idx += PTHREAD_KEY_1STLEVEL_SIZE;
-            }
+			  /* Make sure the data corresponds to a valid
+			     key.  This test fails if the key was
+			     deallocated and also if it was
+			     re-allocated.  It is the user's
+			     responsibility to free the memory in this
+			     case.  */
+			  if (level2[inner].seq == __pthread_keys[idx].seq
+			      /* It is not necessary to register a destructor
+				 function.  */
+			      && __pthread_keys[idx].destr != NULL)
+			    /* Call the user-provided destructor.  */
+			    __pthread_keys[idx].destr (data);
+			}
+		    }
+		}
+	      else
+		idx += PTHREAD_KEY_1STLEVEL_SIZE;
+	    }
 
-          if (THREAD_GETMEM (self, specific_used) == 0)
-            /* No data has been modified.  */
-            goto just_free;
-        }
+	  if (THREAD_GETMEM (self, specific_used) == 0)
+	    /* No data has been modified.  */
+	    goto just_free;
+	}
       /* We only repeat the process a fixed number of times.  */
       while (__builtin_expect (++round < PTHREAD_DESTRUCTOR_ITERATIONS, 0));
 
       /* Just clear the memory of the first block for reuse.  */
       memset (&THREAD_SELF->specific_1stblock, '\0',
-              sizeof (self->specific_1stblock));
+	      sizeof (self->specific_1stblock));
 
     just_free:
       /* Free the memory for the other blocks.  */
       for (cnt = 1; cnt < PTHREAD_KEY_1STLEVEL_SIZE; ++cnt)
-        {
-          struct pthread_key_data *level2;
+	{
+	  struct pthread_key_data *level2;
 
-          level2 = THREAD_GETMEM_NC (self, specific, cnt);
-          if (level2 != NULL)
-            {
-              /* The first block is allocated as part of the thread
-                 descriptor.  */
-              free (level2);
-              THREAD_SETMEM_NC (self, specific, cnt, NULL);
-            }
-        }
+	  level2 = THREAD_GETMEM_NC (self, specific, cnt);
+	  if (level2 != NULL)
+	    {
+	      /* The first block is allocated as part of the thread
+		 descriptor.  */
+	      free (level2);
+	      THREAD_SETMEM_NC (self, specific, cnt, NULL);
+	    }
+	}
 
       THREAD_SETMEM (self, specific_used, false);
     }

@@ -19,15 +19,15 @@
 #include <ifunc-stpncpy.h>
 
 #if HAVE_STPNCPY_C
-# if HAVE_STPNCPY_IFUNC
-#  define STPNCPY STPNCPY_C
+#  if HAVE_STPNCPY_IFUNC
+#    define STPNCPY STPNCPY_C
 
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_def
-#   define libc_hidden_def(name)				\
-  __hidden_ver1 (__stpncpy_c, __GI___stpncpy, __stpncpy_c);
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_def
+#      define libc_hidden_def(name)                                           \
+	__hidden_ver1 (__stpncpy_c, __GI___stpncpy, __stpncpy_c);
+#    endif
 #  endif
-# endif
 
-# include <string/stpncpy.c>
+#  include <string/stpncpy.c>
 #endif

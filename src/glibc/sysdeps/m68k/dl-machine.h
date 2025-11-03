@@ -34,7 +34,6 @@ elf_machine_matches_host (const Elf32_Ehdr *ehdr)
   return ehdr->e_machine == EM_68K;
 }
 
-
 /* Return the link-time address of _DYNAMIC.
    This must be inlined in a function which uses global data.  */
 static inline Elf32_Addr
@@ -42,11 +41,9 @@ elf_machine_dynamic (void)
 {
   Elf32_Addr addr;
 
-  asm ("move.l _DYNAMIC@GOT.w(%%a5), %0"
-       : "=a" (addr));
+  asm ("move.l _DYNAMIC@GOT.w(%%a5), %0" : "=a"(addr));
   return addr;
 }
-
 
 /* Return the run-time load address of the shared object.  */
 static inline Elf32_Addr
@@ -54,17 +51,18 @@ elf_machine_load_address (void)
 {
   Elf32_Addr addr;
 #ifdef SHARED
-  asm (PCREL_OP ("lea", "_dl_start", "%0", "%0", "%%pc") "\n\t"
-       "sub.l _dl_start@GOT.w(%%a5), %0"
-       : "=a" (addr));
+  asm (PCREL_OP ("lea", "_dl_start", "%0", "%0",
+		 "%%pc") "\n\t"
+			 "sub.l _dl_start@GOT.w(%%a5), %0"
+       : "=a"(addr));
 #else
-  asm (PCREL_OP ("lea", "_dl_relocate_static_pie", "%0", "%0", "%%pc") "\n\t"
-       "sub.l _dl_relocate_static_pie@GOT.w(%%a5), %0"
-       : "=a" (addr));
+  asm (PCREL_OP ("lea", "_dl_relocate_static_pie", "%0", "%0",
+		 "%%pc") "\n\t"
+			 "sub.l _dl_relocate_static_pie@GOT.w(%%a5), %0"
+       : "=a"(addr));
 #endif
   return addr;
 }
-
 
 /* Set up the loaded object described by L so its unrelocated PLT
    entries will jump to the on-demand fixup code in dl-runtime.c.  */
@@ -84,7 +82,7 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
 	 _GLOBAL_OFFSET_TABLE_[1], and then jump to
 	 _GLOBAL_OFFSET_TABLE_[2].  */
       got = (Elf32_Addr *) D_PTR (l, l_info[DT_PLTGOT]);
-      got[1] = (Elf32_Addr) l;	/* Identify this shared object.  */
+      got[1] = (Elf32_Addr) l; /* Identify this shared object.  */
 
       /* The got[2] entry contains the address of a function which gets
 	 called to get the address of a so far unresolved function and
@@ -98,12 +96,12 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
 	{
 	  got[2] = (Elf32_Addr) &_dl_runtime_profile;
 
-	  if (GLRO(dl_profile) != NULL
-	      && _dl_name_match_p (GLRO(dl_profile), l))
+	  if (GLRO (dl_profile) != NULL
+	      && _dl_name_match_p (GLRO (dl_profile), l))
 	    {
 	      /* This is the object we are looking for.  Say that we really
 		 want profiling and the timers are started.  */
-	      GL(dl_profile_map) = l;
+	      GL (dl_profile_map) = l;
 	    }
 	}
       else
@@ -119,16 +117,16 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
 #define ELF_MACHINE_RUNTIME_FIXUP_ARGS long int save_a0, long int save_a1
 #define ELF_MACHINE_RUNTIME_FIXUP_PARAMS save_a0, save_a1
 
-
 /* Mask identifying addresses reserved for the user program,
    where the dynamic linker should not map anything.  */
-#define ELF_MACHINE_USER_ADDRESS_MASK	0x80000000UL
+#define ELF_MACHINE_USER_ADDRESS_MASK 0x80000000UL
 
 /* Initial entry point code for the dynamic linker.
    The C function `_dl_start' is the real entry point;
    its return value is the user program's entry point.  */
 
-#define RTLD_START asm ("\
+#define RTLD_START                                                            \
+  asm ("\
 	.text\n\
 	.globl _start\n\
 	.type _start,@function\n\
@@ -168,21 +166,20 @@ _dl_start_user:\n\
    define the value.
    ELF_RTYPE_CLASS_COPY iff TYPE should not be allowed to resolve to one
    of the main executable's symbols, as for a COPY reloc.  */
-#define elf_machine_type_class(type) \
-  ((((type) == R_68K_JMP_SLOT	     \
-     || (type) == R_68K_TLS_DTPMOD32 \
-     || (type) == R_68K_TLS_DTPREL32 \
-     || (type) == R_68K_TLS_TPREL32) * ELF_RTYPE_CLASS_PLT)	\
+#define elf_machine_type_class(type)                                          \
+  ((((type) == R_68K_JMP_SLOT || (type) == R_68K_TLS_DTPMOD32                 \
+     || (type) == R_68K_TLS_DTPREL32 || (type) == R_68K_TLS_TPREL32)          \
+    * ELF_RTYPE_CLASS_PLT)                                                    \
    | (((type) == R_68K_COPY) * ELF_RTYPE_CLASS_COPY))
 
 /* A reloc type used for ld.so cmdline arg lookups to reject PLT entries.  */
-#define ELF_MACHINE_JMP_SLOT	R_68K_JMP_SLOT
+#define ELF_MACHINE_JMP_SLOT R_68K_JMP_SLOT
 
 static inline Elf32_Addr
 elf_machine_fixup_plt (struct link_map *map, lookup_t t,
-		       const ElfW(Sym) *refsym, const ElfW(Sym) *sym,
-		       const Elf32_Rela *reloc,
-		       Elf32_Addr *reloc_addr, Elf32_Addr value)
+		       const ElfW (Sym) * refsym, const ElfW (Sym) * sym,
+		       const Elf32_Rela *reloc, Elf32_Addr *reloc_addr,
+		       Elf32_Addr value)
 {
   return *reloc_addr = value;
 }
@@ -221,8 +218,8 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
   else
     {
       const Elf32_Sym *const refsym = sym;
-      struct link_map *sym_map = RESOLVE_MAP (map, scope, &sym, version,
-					      r_type);
+      struct link_map *sym_map
+	  = RESOLVE_MAP (map, scope, &sym, version, r_type);
       Elf32_Addr value = SYMBOL_ADDRESS (sym_map, sym, true);
 
       switch (r_type)
@@ -238,7 +235,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	       found.  */
 	    break;
 	  if (sym->st_size > refsym->st_size
-	      || (sym->st_size < refsym->st_size && GLRO(dl_verbose)))
+	      || (sym->st_size < refsym->st_size && GLRO (dl_verbose)))
 	    {
 	      const char *strtab;
 
@@ -261,11 +258,11 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	  break;
 	case R_68K_PC8:
 	  *(char *) reloc_addr
-	    = value + reloc->r_addend - (Elf32_Addr) reloc_addr;
+	      = value + reloc->r_addend - (Elf32_Addr) reloc_addr;
 	  break;
 	case R_68K_PC16:
 	  *(short *) reloc_addr
-	    = value + reloc->r_addend - (Elf32_Addr) reloc_addr;
+	      = value + reloc->r_addend - (Elf32_Addr) reloc_addr;
 	  break;
 	case R_68K_PC32:
 	  *reloc_addr = value + reloc->r_addend - (Elf32_Addr) reloc_addr;
@@ -287,7 +284,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	      *reloc_addr = TLS_TPREL_VALUE (sym_map, sym, reloc);
 	    }
 	  break;
-	case R_68K_NONE:		/* Alright, Wilbur.  */
+	case R_68K_NONE: /* Alright, Wilbur.  */
 	  break;
 #endif /* !RTLD_BOOTSTRAP */
 	default:

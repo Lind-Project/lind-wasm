@@ -23,7 +23,8 @@
    in with standard 64-bit syscalls but return them through APIs that
    only expose the low 32 bits of some fields.  */
 
-static inline off_t lseek_overflow (loff_t res)
+static inline off_t
+lseek_overflow (loff_t res)
 {
   off_t retval = (off_t) res;
   if (retval == res)
@@ -33,7 +34,8 @@ static inline off_t lseek_overflow (loff_t res)
   return (off_t) -1;
 }
 
-static inline int stat_overflow (struct stat *buf)
+static inline int
+stat_overflow (struct stat *buf)
 {
 #if defined __INO_T_MATCHES_INO64_T || !STAT_IS_KERNEL_STAT
   return 0;
@@ -48,7 +50,8 @@ static inline int stat_overflow (struct stat *buf)
 }
 
 /* Note that f_files and f_ffree may validly be a sign-extended -1.  */
-static inline int statfs_overflow (struct statfs *buf)
+static inline int
+statfs_overflow (struct statfs *buf)
 {
 #if __STATFS_MATCHES_STATFS64 || !STAT_IS_KERNEL_STAT
   return 0;

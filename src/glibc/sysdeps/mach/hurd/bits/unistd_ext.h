@@ -17,12 +17,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _UNISTD_H
-# error "Never include <bits/unistd_ext.h> directly; use <unistd.h> instead."
+#  error "Never include <bits/unistd_ext.h> directly; use <unistd.h> instead."
 #endif
 
 #ifdef __USE_GNU
 
 /* Set the FD_CLOEXEC bit instead of closing the file descriptor.  */
-#define CLOSE_RANGE_CLOEXEC (1U << 2)
+#  define CLOSE_RANGE_CLOEXEC (1U << 2)
 
 #endif /* __USE_GNU  */

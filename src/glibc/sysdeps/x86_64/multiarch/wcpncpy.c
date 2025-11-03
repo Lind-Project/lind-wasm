@@ -18,20 +18,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define __wcpncpy __redirect_wcpncpy
-# include <wchar.h>
-# undef __wcpncpy
+#if IS_IN(libc)
+#  define __wcpncpy __redirect_wcpncpy
+#  include <wchar.h>
+#  undef __wcpncpy
 
-# define SYMBOL_NAME wcpncpy
-# include <init-arch.h>
+#  define SYMBOL_NAME wcpncpy
+#  include <init-arch.h>
 
-# include "ifunc-wcs.h"
+#  include "ifunc-wcs.h"
 
 libc_ifunc_redirected (__redirect_wcpncpy, __wcpncpy, IFUNC_SELECTOR ());
 weak_alias (__wcpncpy, wcpncpy)
-# ifdef SHARED
-__hidden_ver1 (__wcpncpy, __GI___wcpncpy, __redirect_wcpncpy)
-  __attribute__((visibility ("hidden"))) __attribute_copy__ (wcpncpy);
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (__wcpncpy, __GI___wcpncpy, __redirect_wcpncpy)
+	__attribute__ ((visibility ("hidden"))) __attribute_copy__ (wcpncpy);
+#  endif
 #endif

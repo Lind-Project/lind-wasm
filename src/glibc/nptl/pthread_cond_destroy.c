@@ -58,5 +58,5 @@ __pthread_cond_destroy (pthread_cond_t *cond)
   return 0;
 }
 libc_hidden_def (__pthread_cond_destroy)
-versioned_symbol (libc, __pthread_cond_destroy,
-		  pthread_cond_destroy, GLIBC_2_3_2);
+    versioned_symbol (libc, __pthread_cond_destroy, pthread_cond_destroy,
+		      GLIBC_2_3_2);

@@ -19,27 +19,21 @@
 #ifndef S_EXPF_DATA_H
 #define S_EXPF_DATA_H
 
-#define __sInvLn2                     	0
-#define __sShifter                    	64
-#define __sLn2hi                      	128
-#define __sLn2lo                      	192
-#define __iBias                       	256
-#define __sPC0                        	320
-#define __sPC1                        	384
-#define __sPC2                        	448
-#define __sPC3                        	512
-#define __sPC4                        	576
-#define __sPC5                        	640
-#define __iAbsMask                    	704
-#define __iDomainRange                	768
+#define __sInvLn2 0
+#define __sShifter 64
+#define __sLn2hi 128
+#define __sLn2lo 192
+#define __iBias 256
+#define __sPC0 320
+#define __sPC1 384
+#define __sPC2 448
+#define __sPC3 512
+#define __sPC4 576
+#define __sPC5 640
+#define __iAbsMask 704
+#define __iDomainRange 768
 
-.macro float_vector offset value
-.if .-__svml_sexp_data != \offset
-.err
-.endif
-.rept 16
-.long \value
-.endr
-.endm
+.macro float_vector offset value.if.- __svml_sexp_data
+    != \offset.err.endif.rept 16 .long \value.endr.endm
 
 #endif

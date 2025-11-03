@@ -23,20 +23,20 @@
 
 #include <pt-internal.h>
 
-extern int __pthread_hurd_cond_timedwait_internal (pthread_cond_t *cond,
-						   pthread_mutex_t *mutex,
-						   const struct timespec
-						   *abstime);
+extern int
+__pthread_hurd_cond_timedwait_internal (pthread_cond_t *cond,
+					pthread_mutex_t *mutex,
+					const struct timespec *abstime);
 
 int
-__pthread_hurd_cond_timedwait_np (pthread_cond_t *cond,
-				  pthread_mutex_t *mutex,
+__pthread_hurd_cond_timedwait_np (pthread_cond_t *cond, pthread_mutex_t *mutex,
 				  const struct timespec *abstime)
 {
   return __pthread_hurd_cond_timedwait_internal (cond, mutex, abstime);
 }
 
-strong_alias (__pthread_hurd_cond_timedwait_np, pthread_hurd_cond_timedwait_np);
+strong_alias (__pthread_hurd_cond_timedwait_np,
+	      pthread_hurd_cond_timedwait_np);
 
 int
 __pthread_hurd_cond_timedwait_internal (pthread_cond_t *cond,
@@ -68,9 +68,9 @@ __pthread_hurd_cond_timedwait_internal (pthread_cond_t *cond,
       __pthread_wakeup (self);
   }
 
-  assert (ss->intr_port == MACH_PORT_NULL);	/* Sanity check for signal bugs. */
+  assert (ss->intr_port == MACH_PORT_NULL); /* Sanity check for signal bugs. */
 
-  if (abstime != NULL && ! valid_nanoseconds (abstime->tv_nsec))
+  if (abstime != NULL && !valid_nanoseconds (abstime->tv_nsec))
     return EINVAL;
 
   err = __pthread_mutex_checklocked (mutex);
@@ -93,7 +93,7 @@ __pthread_hurd_cond_timedwait_internal (pthread_cond_t *cond,
   else
     {
       /* Put us on the queue so that pthread_cond_broadcast will know to wake
-         us up.  */
+	 us up.  */
       __pthread_enqueue (&cond->__queue, self);
       if (cond->__attr)
 	clock_id = cond->__attr->__clock;
@@ -131,7 +131,7 @@ __pthread_hurd_cond_timedwait_internal (pthread_cond_t *cond,
 	}
 
       /* As it was done when enqueueing, prevent hurd_thread_cancel from
-         suspending us while the condition lock is held.  */
+	 suspending us while the condition lock is held.  */
       __spin_lock (&ss->lock);
       __pthread_spin_wait (&cond->__lock);
       if (self->prevp == NULL)

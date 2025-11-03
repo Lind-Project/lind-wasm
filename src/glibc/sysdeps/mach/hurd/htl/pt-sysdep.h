@@ -17,46 +17,47 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _PT_SYSDEP_H
-#define _PT_SYSDEP_H	1
+#  define _PT_SYSDEP_H 1
 
-#include <stddef.h>
-#include <mach.h>
+#  include <stddef.h>
+#  include <mach.h>
 
 /* XXX */
-#define _POSIX_THREAD_THREADS_MAX	64
+#  define _POSIX_THREAD_THREADS_MAX 64
 
 /* The default stack size.  */
-#define PTHREAD_STACK_DEFAULT	(8 * 1024 * 1024)
+#  define PTHREAD_STACK_DEFAULT (8 * 1024 * 1024)
 
-#define PTHREAD_SYSDEP_MEMBERS \
-  thread_t kernel_thread;      \
-  mach_msg_header_t wakeupmsg;
+#  define PTHREAD_SYSDEP_MEMBERS                                              \
+    thread_t kernel_thread;                                                   \
+    mach_msg_header_t wakeupmsg;
 
 extern __thread struct __pthread *___pthread_self;
 libc_hidden_tls_proto (___pthread_self)
 
-#ifdef DEBUG
-#define _pthread_self()                                            \
-	({                                                         \
-	  struct __pthread *thread;                                \
-	                                                           \
-	  assert (GL (dl_pthread_threads));                        \
-	  thread = ___pthread_self;                                \
-	                                                           \
-	  assert (thread);                                         \
-	  assert (({ mach_port_t ktid = __mach_thread_self ();     \
-                     int ok = thread->kernel_thread == ktid;       \
-                     __mach_port_deallocate (__mach_task_self (), ktid);\
-                     ok; }));                                      \
-          thread;                                                  \
-         })
-#else
-#define _pthread_self() ___pthread_self
-#endif
+#  ifdef DEBUG
+#    define _pthread_self()                                                   \
+      ({                                                                      \
+	struct __pthread *thread;                                             \
+                                                                              \
+	assert (GL (dl_pthread_threads));                                     \
+	thread = ___pthread_self;                                             \
+                                                                              \
+	assert (thread);                                                      \
+	assert (({                                                            \
+	  mach_port_t ktid = __mach_thread_self ();                           \
+	  int ok = thread->kernel_thread == ktid;                             \
+	  __mach_port_deallocate (__mach_task_self (), ktid);                 \
+	  ok;                                                                 \
+	}));                                                                  \
+	thread;                                                               \
+      })
+#  else
+#    define _pthread_self() ___pthread_self
+#  endif
 
-extern inline void
-__attribute__ ((__always_inline__))
-__pthread_stack_dealloc (void *stackaddr, size_t stacksize)
+    extern inline void __attribute__ ((__always_inline__))
+    __pthread_stack_dealloc (void *stackaddr, size_t stacksize)
 {
   __vm_deallocate (__mach_task_self (), (vm_offset_t) stackaddr, stacksize);
 }
@@ -64,9 +65,7 @@ __pthread_stack_dealloc (void *stackaddr, size_t stacksize)
 /* Change thread THREAD's program counter to PC if SET_PC is true,
    its stack pointer to SP if SET_IP is true, and its thread pointer
    to TP if SET_TP is true.  */
-extern int __thread_set_pcsptp (thread_t thread,
-				int set_pc, void *pc,
+extern int __thread_set_pcsptp (thread_t thread, int set_pc, void *pc,
 				int set_sp, void *sp, int set_tp, void *tp);
-
 
 #endif /* pt-sysdep.h */

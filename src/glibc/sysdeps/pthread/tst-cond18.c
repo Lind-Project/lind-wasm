@@ -30,7 +30,10 @@ pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 bool exiting;
 int fd, spins, nn;
-enum { count = 8 };		/* Number of worker threads.  */
+enum
+{
+  count = 8
+}; /* Number of worker threads.  */
 
 void *
 tf (void *id)
@@ -91,7 +94,7 @@ do_test (void)
   sz = sysconf (_SC_PAGESIZE);
 #ifdef PTHREAD_STACK_MIN
   if (sz < PTHREAD_STACK_MIN)
-	  sz = PTHREAD_STACK_MIN;
+    sz = PTHREAD_STACK_MIN;
 #endif
   pthread_attr_setstacksize (&attr, sz);
 
@@ -104,7 +107,8 @@ do_test (void)
       }
 
   struct timespec ts = { .tv_sec = 20, .tv_nsec = 0 };
-  while (nanosleep (&ts, &ts) != 0);
+  while (nanosleep (&ts, &ts) != 0)
+    ;
 
   pthread_mutex_lock (&lock);
   exiting = true;

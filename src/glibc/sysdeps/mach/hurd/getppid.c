@@ -20,7 +20,6 @@
 #include <sys/types.h>
 #include <hurd.h>
 
-
 /* Get the parent process ID of the calling process.  */
 pid_t
 __getppid (void)

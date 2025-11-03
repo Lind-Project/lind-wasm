@@ -26,24 +26,28 @@
 // ssize_t
 // __libc_pread (int fd, void *buf, size_t count, off_t offset)
 // {
-//   return MAKE_SYSCALL(21, "syscall|mmap", (uint64_t)(uintptr_t) addr, (uint64_t) len, (uint64_t) prot, (uint64_t) flags, (uint64_t) fd, (uint64_t) offset);
-//   // return SYSCALL_CANCEL (pread64, fd, buf, count, SYSCALL_LL_PRW (offset));
+//   return MAKE_SYSCALL(21, "syscall|mmap", (uint64_t)(uintptr_t) addr,
+//   (uint64_t) len, (uint64_t) prot, (uint64_t) flags, (uint64_t) fd,
+//   (uint64_t) offset);
+//   // return SYSCALL_CANCEL (pread64, fd, buf, count, SYSCALL_LL_PRW
+//   (offset));
 // }
 
 // Edit: Dennis
 ssize_t
 __libc_pread (int fd, void *buf, size_t count, off_t offset)
 {
-  return MAKE_SYSCALL(PREAD_SYSCALL, "syscall|pread", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (PREAD_SYSCALL, "syscall|pread", (uint64_t) fd,
+		       (uint64_t) (uintptr_t) buf, (uint64_t) count,
+		       (uint64_t) offset, NOTUSED, NOTUSED);
   // return SYSCALL_CANCEL (pread64, fd, buf, count, SYSCALL_LL_PRW (offset));
 }
 
-strong_alias (__libc_pread, __pread)
-libc_hidden_weak (__pread)
-weak_alias (__libc_pread, pread)
+strong_alias (__libc_pread, __pread) libc_hidden_weak (__pread)
+    weak_alias (__libc_pread, pread)
 
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_2)
-compat_symbol (libc, __libc_pread, pread, GLIBC_2_2);
-#endif
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_2)
+	compat_symbol (libc, __libc_pread, pread, GLIBC_2_2);
+#  endif
 
 #endif

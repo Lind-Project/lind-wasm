@@ -21,7 +21,6 @@
 #include <hurd/pfinet.h>
 #include <sys/mman.h>
 
-
 void
 __ifreq (struct ifreq **ifreqs, int *num_ifs, int sockfd)
 {
@@ -60,5 +59,4 @@ __ifreq (struct ifreq **ifreqs, int *num_ifs, int sockfd)
       *num_ifs = len / sizeof (struct ifreq);
       *ifreqs = (struct ifreq *) data;
     }
-
 }

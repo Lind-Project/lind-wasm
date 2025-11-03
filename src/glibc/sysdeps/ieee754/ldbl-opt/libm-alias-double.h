@@ -25,29 +25,29 @@
 #include <ldbl-compat-choose.h>
 
 #if __HAVE_FLOAT64 && !__HAVE_DISTINCT_FLOAT64
-# define libm_alias_double_other_r_f64(from, to, r)	\
-  weak_alias (from ## r, to ## f64 ## r)
+#  define libm_alias_double_other_r_f64(from, to, r)                          \
+    weak_alias (from##r, to##f64##r)
 #else
-# define libm_alias_double_other_r_f64(from, to, r)
+#  define libm_alias_double_other_r_f64(from, to, r)
 #endif
 
 #if __HAVE_FLOAT32X && !__HAVE_DISTINCT_FLOAT32X
-# define libm_alias_double_other_r_f32x(from, to, r)	\
-  weak_alias (from ## r, to ## f32x ## r)
+#  define libm_alias_double_other_r_f32x(from, to, r)                         \
+    weak_alias (from##r, to##f32x##r)
 #else
-# define libm_alias_double_other_r_f32x(from, to, r)
+#  define libm_alias_double_other_r_f32x(from, to, r)
 #endif
 
 /* Define _FloatN / _FloatNx aliases for a double libm function that
    has internal name FROM ## R and public names TO ## suffix ## R for
    each suffix of a supported _FloatN / _FloatNx floating-point type
    with the same format as double.  */
-#define libm_alias_double_other_r(from, to, r)	\
-  libm_alias_double_other_r_f64 (from, to, r);	\
+#define libm_alias_double_other_r(from, to, r)                                \
+  libm_alias_double_other_r_f64 (from, to, r);                                \
   libm_alias_double_other_r_f32x (from, to, r)
 
 /* Likewise, but without the R suffix.  */
-#define libm_alias_double_other(from, to)	\
+#define libm_alias_double_other(from, to)                                     \
   libm_alias_double_other_r (from, to, )
 
 /* Define aliases for a double libm function that has internal name
@@ -57,13 +57,11 @@
    _FloatN types, not for implementation-namespace exported names
    (where there is one name per format, not per type) or for
    obsolescent functions not provided for _FloatN types.  */
-#define libm_alias_double_r(from, to, r)			\
-  weak_alias (from ## r, to ## r);				\
-  LONG_DOUBLE_COMPAT_CHOOSE_libm_ ## to ## l ## r		\
-    (compat_symbol (libm,					\
-		    from ## r,					\
-		    to ## l ## r,				\
-		    FIRST_VERSION_libm_ ## to ## l ## r), );	\
+#define libm_alias_double_r(from, to, r)                                      \
+  weak_alias (from##r, to##r);                                                \
+  LONG_DOUBLE_COMPAT_CHOOSE_libm_##to##l##r (                                 \
+      compat_symbol (libm, from##r, to##l##r,                                 \
+		     FIRST_VERSION_libm_##to##l##r), );                       \
   libm_alias_double_other_r (from, to, r)
 
 /* Likewise, but without the R suffix.  */

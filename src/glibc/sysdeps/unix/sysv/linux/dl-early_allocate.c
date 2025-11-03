@@ -18,7 +18,7 @@
 
 /* Mark symbols hidden in static PIE for early self relocation to work.  */
 #if BUILD_PIE_DEFAULT
-# pragma GCC visibility push(hidden)
+#  pragma GCC visibility push(hidden)
 #endif
 #include <startup.h>
 
@@ -45,18 +45,18 @@ _dl_early_allocate (size_t size)
     {
       result = __sbrk (size);
       if (result == (void *) -1)
-        result = NULL;
+	result = NULL;
     }
   else
     {
       /* If brk has not been invoked, there is no need to update
-         __curbrk.  The first call to brk will take care of that.  */
+	 __curbrk.  The first call to brk will take care of that.  */
       void *previous = __brk_call (0);
       result = __brk_call (previous + size);
       if (result == previous)
-        result = NULL;
+	result = NULL;
       else
-        result = previous;
+	result = previous;
     }
 
   /* If brk fails, fall back to mmap.  This can happen due to
@@ -73,9 +73,9 @@ _dl_early_allocate (size_t size)
       ret = MMAP_CALL_INTERNAL (mmap, 0, size, prot, flags, -1, 0);
 #endif
       if (INTERNAL_SYSCALL_ERROR_P (ret))
-        result = NULL;
+	result = NULL;
       else
-        result = (void *) ret;
+	result = (void *) ret;
     }
 
   return result;

@@ -16,9 +16,9 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SETJMPP_H
-#define	_SETJMPP_H	1
+#ifndef _SETJMPP_H
+#  define _SETJMPP_H 1
 
-#include <setjmp.h>
+#  include <setjmp.h>
 
 #endif /* setjmpP.h  */

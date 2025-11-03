@@ -16,7 +16,6 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-
 /* Type used for the representation of TLS information in the GOT.  */
 typedef struct
 {

@@ -1,6 +1,6 @@
 #include <math_ldbl_opt.h>
 #undef weak_alias
-#define weak_alias(n,a)
+#define weak_alias(n, a)
 #define USE_AS_COMPAT 1
 #include <math/lgamma-compat.h>
 #undef LGAMMA_OLD_VER

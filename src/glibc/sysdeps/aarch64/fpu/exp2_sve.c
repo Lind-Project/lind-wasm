@@ -78,7 +78,8 @@ special_case (svbool_t pg, svfloat64_t s, svfloat64_t y, svfloat64_t n,
    Maximum measured error is 1.65 ulp.
    _ZGVsMxv_exp2(-0x1.4c264ab5b559bp-6) got 0x1.f8db0d4df721fp-1
 				       want 0x1.f8db0d4df721dp-1.  */
-svfloat64_t SV_NAME_D1 (exp2) (svfloat64_t x, svbool_t pg)
+svfloat64_t
+SV_NAME_D1 (exp2) (svfloat64_t x, svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
   svbool_t no_big_scale = svacle (pg, x, d->big_bound);

@@ -25,7 +25,7 @@
 static inline uintptr_t
 reloc_offset (uintptr_t plt0, uintptr_t pltn)
 {
-  return pltn * sizeof (ElfW(Rela));
+  return pltn * sizeof (ElfW (Rela));
 }
 
 static inline uintptr_t

@@ -29,11 +29,11 @@ __prlimit64 (pid_t pid, enum __rlimit_resource resource,
 			      old_rlimit);
 }
 #ifdef VERSION_prlimit64
-# include <shlib-compat.h>
+#  include <shlib-compat.h>
 versioned_symbol (libc, __prlimit64, prlimit64, VERSION_prlimit64);
 #else
 strong_alias (__prlimit64, prlimit64)
-# if __RLIM_T_MATCHES_RLIM64_T
-strong_alias (prlimit64, prlimit)
-# endif
+#  if __RLIM_T_MATCHES_RLIM64_T
+    strong_alias (prlimit64, prlimit)
+#  endif
 #endif

@@ -16,26 +16,30 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ATOMIC_MACHINE_H
-#define _ATOMIC_MACHINE_H	1
+#  define _ATOMIC_MACHINE_H 1
 
 /* We have by default no support for atomic operations.  So define
    them non-atomic.  If this is a problem somebody will have to come
    up with real definitions.  */
 
 /* The only basic operation needed is compare and exchange.  */
-#define atomic_compare_and_exchange_val_acq(mem, newval, oldval) \
-  ({ __typeof (mem) __gmemp = (mem);				      \
-     __typeof (*mem) __gret = *__gmemp;				      \
-     __typeof (*mem) __gnewval = (newval);			      \
-								      \
-     if (__gret == (oldval))					      \
-       *__gmemp = __gnewval;					      \
-     __gret; })
+#  define atomic_compare_and_exchange_val_acq(mem, newval, oldval)            \
+    ({                                                                        \
+      __typeof (mem) __gmemp = (mem);                                         \
+      __typeof (*mem) __gret = *__gmemp;                                      \
+      __typeof (*mem) __gnewval = (newval);                                   \
+                                                                              \
+      if (__gret == (oldval))                                                 \
+	*__gmemp = __gnewval;                                                 \
+      __gret;                                                                 \
+    })
 
-#define atomic_compare_and_exchange_bool_acq(mem, newval, oldval) \
-  ({ __typeof (mem) __gmemp = (mem);				      \
-     __typeof (*mem) __gnewval = (newval);			      \
-								      \
-     *__gmemp == (oldval) ? (*__gmemp = __gnewval, 0) : 1; })
+#  define atomic_compare_and_exchange_bool_acq(mem, newval, oldval)           \
+    ({                                                                        \
+      __typeof (mem) __gmemp = (mem);                                         \
+      __typeof (*mem) __gnewval = (newval);                                   \
+                                                                              \
+      *__gmemp == (oldval) ? (*__gmemp = __gnewval, 0) : 1;                   \
+    })
 
-#endif	/* atomic-machine.h */
+#endif /* atomic-machine.h */

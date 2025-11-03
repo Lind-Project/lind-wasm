@@ -19,13 +19,13 @@
 #define _SCSI_IOCTL_H
 
 /* IOCTLs for SCSI.  */
-#define SCSI_IOCTL_SEND_COMMAND		1	/* Send a command to the SCSI host.  */
-#define SCSI_IOCTL_TEST_UNIT_READY	2	/* Test if unit is ready.  */
-#define SCSI_IOCTL_BENCHMARK_COMMAND	3
-#define SCSI_IOCTL_SYNC			4	/* Request synchronous parameters.  */
-#define SCSI_IOCTL_START_UNIT		5
-#define SCSI_IOCTL_STOP_UNIT		6
-#define SCSI_IOCTL_DOORLOCK		0x5380	/* Lock the eject mechanism.  */
-#define SCSI_IOCTL_DOORUNLOCK		0x5381	/* Unlock the mechanism.  */
+#define SCSI_IOCTL_SEND_COMMAND 1    /* Send a command to the SCSI host.  */
+#define SCSI_IOCTL_TEST_UNIT_READY 2 /* Test if unit is ready.  */
+#define SCSI_IOCTL_BENCHMARK_COMMAND 3
+#define SCSI_IOCTL_SYNC 4 /* Request synchronous parameters.  */
+#define SCSI_IOCTL_START_UNIT 5
+#define SCSI_IOCTL_STOP_UNIT 6
+#define SCSI_IOCTL_DOORLOCK 0x5380   /* Lock the eject mechanism.  */
+#define SCSI_IOCTL_DOORUNLOCK 0x5381 /* Unlock the mechanism.  */
 
 #endif

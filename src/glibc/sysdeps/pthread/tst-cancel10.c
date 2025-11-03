@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 static void
 cleanup (void *arg)
 {
@@ -34,7 +33,6 @@ cleanup (void *arg)
   printf ("cleanup for %ld\n", (long int) arg);
 }
 
-
 static void *
 tf (void *arg)
 {
@@ -42,9 +40,10 @@ tf (void *arg)
 
   pthread_cleanup_push (cleanup, arg);
 
-  if (pthread_setcanceltype ((n & 1) == 0
-			     ? PTHREAD_CANCEL_DEFERRED
-			     : PTHREAD_CANCEL_ASYNCHRONOUS, NULL) != 0)
+  if (pthread_setcanceltype ((n & 1) == 0 ? PTHREAD_CANCEL_DEFERRED
+					  : PTHREAD_CANCEL_ASYNCHRONOUS,
+			     NULL)
+      != 0)
     {
       puts ("setcanceltype failed");
       exit (1);
@@ -64,7 +63,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -118,7 +116,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

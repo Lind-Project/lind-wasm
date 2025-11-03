@@ -16,38 +16,38 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WCSCPY_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WCSCPY_IFUNC 1
 #else
-# define HAVE_WCSCPY_IFUNC	0
+#  define HAVE_WCSCPY_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WCSCPY_IFUNC_AND_VX_SUPPORT HAVE_WCSCPY_IFUNC
+#  define HAVE_WCSCPY_IFUNC_AND_VX_SUPPORT HAVE_WCSCPY_IFUNC
 #else
-# define HAVE_WCSCPY_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WCSCPY_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WCSCPY_DEFAULT		WCSCPY_Z13
+#  define WCSCPY_DEFAULT WCSCPY_Z13
 /* The z13 ifunc variant is using the common code variant as fallback!  */
-# define HAVE_WCSCPY_C		1
-# define HAVE_WCSCPY_Z13	1
+#  define HAVE_WCSCPY_C 1
+#  define HAVE_WCSCPY_Z13 1
 #else
-# define WCSCPY_DEFAULT		WCSCPY_C
-# define HAVE_WCSCPY_C		1
-# define HAVE_WCSCPY_Z13	HAVE_WCSCPY_IFUNC_AND_VX_SUPPORT
+#  define WCSCPY_DEFAULT WCSCPY_C
+#  define HAVE_WCSCPY_C 1
+#  define HAVE_WCSCPY_Z13 HAVE_WCSCPY_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WCSCPY_C
-# define WCSCPY_C		__wcscpy_c
+#  define WCSCPY_C __wcscpy_c
 #else
-# define WCSCPY_C		NULL
+#  define WCSCPY_C NULL
 #endif
 
 #if HAVE_WCSCPY_Z13
-# define WCSCPY_Z13		__wcscpy_vx
+#  define WCSCPY_Z13 __wcscpy_vx
 #else
-# define WCSCPY_Z13		NULL
+#  define WCSCPY_Z13 NULL
 #endif

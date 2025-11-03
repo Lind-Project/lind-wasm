@@ -27,7 +27,7 @@
    environment ENVP.  ARGV and ENVP are terminated by NULL pointers.  */
 int
 __execveat (int dirfd, const char *file_name, char *const argv[],
-            char *const envp[], int flags)
+	    char *const envp[], int flags)
 {
   error_t err;
   char *concat_name = NULL;
@@ -57,9 +57,10 @@ __execveat (int dirfd, const char *file_name, char *const argv[],
 	}
       else
 	{
-	  err = HURD_DPORT_USE (dirfd,
-	    (cwd = __hurd_canonicalize_directory_name_internal (port, NULL, 0),
-	     cwd == NULL ? errno : 0));
+	  err = HURD_DPORT_USE (
+	      dirfd, (cwd = __hurd_canonicalize_directory_name_internal (
+			  port, NULL, 0),
+		      cwd == NULL ? errno : 0));
 	  if (err)
 	    {
 	      __mach_port_deallocate (__mach_task_self (), file);
@@ -79,8 +80,8 @@ __execveat (int dirfd, const char *file_name, char *const argv[],
     }
 
   /* Hopefully this will not return.  */
-  err = _hurd_exec_paths (__mach_task_self (), file,
-			  file_name, abs_path, argv, envp);
+  err = _hurd_exec_paths (__mach_task_self (), file, file_name, abs_path, argv,
+			  envp);
 
   /* Oh well.  Might as well be tidy.  */
   __mach_port_deallocate (__mach_task_self (), file);

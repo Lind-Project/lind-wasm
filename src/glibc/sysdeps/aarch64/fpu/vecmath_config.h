@@ -31,7 +31,7 @@
 #define ptr_barrier(ptr)                                                      \
   ({                                                                          \
     __typeof (ptr) __ptr = (ptr);                                             \
-    __asm("" : "+r"(__ptr));                                                  \
+    __asm ("" : "+r"(__ptr));                                                 \
     __ptr;                                                                    \
   })
 

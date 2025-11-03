@@ -27,8 +27,8 @@
 
 #include <sys/mman.h>
 
-#undef	__madvise
-#define __madvise(addr, len, advice)	\
+#undef __madvise
+#define __madvise(addr, len, advice)                                          \
   ((void) (addr), (void) (len), (void) (advice))
 
 #include <sysdeps/generic/malloc-machine.h>

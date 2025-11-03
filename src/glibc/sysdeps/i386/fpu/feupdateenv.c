@@ -28,11 +28,11 @@ __feupdateenv (const fenv_t *envp)
   unsigned int xtemp = 0;
 
   /* Save current exceptions.  */
-  __asm__ ("fnstsw %0" : "=m" (*&temp));
+  __asm__ ("fnstsw %0" : "=m"(*&temp));
 
   /* If the CPU supports SSE we test the MXCSR as well.  */
   if (CPU_FEATURE_USABLE (SSE))
-    __asm__ ("stmxcsr %0" : "=m" (*&xtemp));
+    __asm__ ("stmxcsr %0" : "=m"(*&xtemp));
 
   temp = (temp | xtemp) & FE_ALL_EXCEPT;
 
@@ -49,11 +49,10 @@ __feupdateenv (const fenv_t *envp)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__feupdateenv, __old_feupdateenv)
-compat_symbol (libm, __old_feupdateenv, feupdateenv, GLIBC_2_1);
+    compat_symbol (libm, __old_feupdateenv, feupdateenv, GLIBC_2_1);
 #endif
 
-libm_hidden_def (__feupdateenv)
-libm_hidden_ver (__feupdateenv, feupdateenv)
-versioned_symbol (libm, __feupdateenv, feupdateenv, GLIBC_2_2);
+libm_hidden_def (__feupdateenv) libm_hidden_ver (__feupdateenv, feupdateenv)
+    versioned_symbol (libm, __feupdateenv, feupdateenv, GLIBC_2_2);

@@ -37,20 +37,18 @@ __libc_cleanup_push_defer (struct _pthread_cleanup_buffer *buffer)
 	  newval = cancelhandling & ~CANCELTYPE_BITMASK;
 	}
       while (!atomic_compare_exchange_weak_acquire (&self->cancelhandling,
-						    &cancelhandling,
-						    newval));
+						    &cancelhandling, newval));
     }
 
-  buffer->__canceltype = (cancelhandling & CANCELTYPE_BITMASK
-			  ? PTHREAD_CANCEL_ASYNCHRONOUS
-			  : PTHREAD_CANCEL_DEFERRED);
+  buffer->__canceltype
+      = (cancelhandling & CANCELTYPE_BITMASK ? PTHREAD_CANCEL_ASYNCHRONOUS
+					     : PTHREAD_CANCEL_DEFERRED);
 
   THREAD_SETMEM (self, cleanup, buffer);
 }
 libc_hidden_def (__libc_cleanup_push_defer)
 
-void
-__libc_cleanup_pop_restore (struct _pthread_cleanup_buffer *buffer)
+    void __libc_cleanup_pop_restore (struct _pthread_cleanup_buffer *buffer)
 {
   struct pthread *self = THREAD_SELF;
 

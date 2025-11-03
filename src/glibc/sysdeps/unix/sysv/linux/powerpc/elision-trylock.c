@@ -45,7 +45,7 @@ __lll_trylock_elision (int *futex, short *adapt_count)
 	return 0;
 
       /* Lock was busy.  This is never a nested transaction.
-         End it, and set the adapt count.  */
+	 End it, and set the adapt count.  */
       __libc_tend (0);
 
       if (aconf.skip_lock_busy > 0)
@@ -60,7 +60,7 @@ __lll_trylock_elision (int *futex, short *adapt_count)
 	     for the next couple of calls.  */
 	  if (aconf.skip_trylock_internal_abort > 0)
 	    atomic_store_relaxed (adapt_count,
-				aconf.skip_trylock_internal_abort);
+				  aconf.skip_trylock_internal_abort);
 	}
     }
 

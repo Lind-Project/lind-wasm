@@ -27,7 +27,6 @@
 double floor (double);
 // double floor (double) asm ("__floor");
 
-
 long double
 __floorl (long double x)
 {
@@ -36,9 +35,10 @@ __floorl (long double x)
   ldbl_unpack (x, &xh, &xl);
 
   /* Return Inf, Nan, +/-0 unchanged.  */
-  if (__builtin_expect (xh != 0.0
-			&& __builtin_isless (__builtin_fabs (xh),
-					     __builtin_inf ()), 1))
+  if (__builtin_expect (
+	  xh != 0.0
+	      && __builtin_isless (__builtin_fabs (xh), __builtin_inf ()),
+	  1))
     {
       hi = floor (xh);
       if (hi != xh)

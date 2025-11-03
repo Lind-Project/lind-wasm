@@ -23,25 +23,22 @@
 #include <sys/types.h>
 #include <shlib-compat.h>
 
-
 extern int __sched_setaffinity_new (pid_t, size_t, const cpu_set_t *);
 libc_hidden_proto (__sched_setaffinity_new)
 
-int
-__sched_setaffinity_new (pid_t pid, size_t cpusetsize, const cpu_set_t *cpuset)
+    int __sched_setaffinity_new (pid_t pid, size_t cpusetsize,
+				 const cpu_set_t *cpuset)
 {
   int result = INLINE_SYSCALL (sched_setaffinity, 3, pid, cpusetsize, cpuset);
 
   return result;
 }
 libc_hidden_def (__sched_setaffinity_new)
-versioned_symbol (libc, __sched_setaffinity_new, sched_setaffinity,
-		  GLIBC_2_3_4);
+    versioned_symbol (libc, __sched_setaffinity_new, sched_setaffinity,
+		      GLIBC_2_3_4);
 
-
-#if SHLIB_COMPAT (libc, GLIBC_2_3_3, GLIBC_2_3_4)
-int
-attribute_compat_text_section
+#if SHLIB_COMPAT(libc, GLIBC_2_3_3, GLIBC_2_3_4)
+int attribute_compat_text_section
 __sched_setaffinity_old (pid_t pid, const cpu_set_t *cpuset)
 {
   /* The old interface by default assumed a 1024 processor bitmap.  */

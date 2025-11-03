@@ -23,26 +23,24 @@ __pthread_spin_lock (pthread_spinlock_t *lock)
 {
   unsigned int __tmp;
 
-  asm volatile (
-       "1:	lwarx	%0,0,%1" MUTEX_HINT_ACQ "\n"
-       "	cmpwi	0,%0,0\n"
-       "	bne-	2f\n"
-       "	stwcx.	%2,0,%1\n"
-       "	bne-	2f\n"
-                __ARCH_ACQ_INSTR "\n"
-       "	.subsection 1\n"
-       "2:	lwzx	%0,0,%1\n"
-       "	cmpwi	0,%0,0\n"
-       "	bne	2b\n"
-       "	b	1b\n"
-       "	.previous"
-       : "=&r" (__tmp)
-       : "r" (lock), "r" (1)
-       : "cr0", "memory");
+  asm volatile ("1:	lwarx	%0,0,%1" MUTEX_HINT_ACQ "\n"
+		"	cmpwi	0,%0,0\n"
+		"	bne-	2f\n"
+		"	stwcx.	%2,0,%1\n"
+		"	bne-	2f\n" __ARCH_ACQ_INSTR "\n"
+		"	.subsection 1\n"
+		"2:	lwzx	%0,0,%1\n"
+		"	cmpwi	0,%0,0\n"
+		"	bne	2b\n"
+		"	b	1b\n"
+		"	.previous"
+		: "=&r"(__tmp)
+		: "r"(lock), "r"(1)
+		: "cr0", "memory");
   return 0;
 }
 versioned_symbol (libc, __pthread_spin_lock, pthread_spin_lock, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_spin_lock, pthread_spin_lock, GLIBC_2_2);
 #endif

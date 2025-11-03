@@ -19,24 +19,23 @@
 #include <ifunc-strncpy.h>
 
 #if HAVE_STRNCPY_IFUNC
-# define strncpy __redirect_strncpy
+#  define strncpy __redirect_strncpy
 /* Omit the strncpy inline definitions because it would redefine strncpy.  */
-# define __NO_STRING_INLINES
-# include <string.h>
-# undef strncpy
-# include <ifunc-resolve.h>
+#  define __NO_STRING_INLINES
+#  include <string.h>
+#  undef strncpy
+#  include <ifunc-resolve.h>
 
-# if HAVE_STRNCPY_Z900_G5
+#  if HAVE_STRNCPY_Z900_G5
 extern __typeof (__redirect_strncpy) STRNCPY_Z900_G5 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_STRNCPY_Z13
+#  if HAVE_STRNCPY_Z13
 extern __typeof (__redirect_strncpy) STRNCPY_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect_strncpy, strncpy,
 		      (HAVE_STRNCPY_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? STRNCPY_Z13
-		      : STRNCPY_DEFAULT
-		      )
+			  ? STRNCPY_Z13
+			  : STRNCPY_DEFAULT)
 #endif

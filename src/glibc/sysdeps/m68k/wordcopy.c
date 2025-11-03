@@ -17,5 +17,5 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef __mc68020__
-# include <string/wordcopy.c>
+#  include <string/wordcopy.c>
 #endif

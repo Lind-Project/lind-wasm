@@ -21,9 +21,9 @@
 static inline long int
 __get_pthread_stack_min (void)
 {
-#ifdef	PTHREAD_STACK_MIN
-      return PTHREAD_STACK_MIN;
+#ifdef PTHREAD_STACK_MIN
+  return PTHREAD_STACK_MIN;
 #else
-      return -1;
+  return -1;
 #endif
 }

@@ -25,6 +25,6 @@ M_DECL_FUNC (__tan) (FLOAT x)
 {
   if (__m81_test (x) & __M81_COND_INF)
     __set_errno (EDOM);
-  return __m81_u(M_SUF (__tan)) (x);
+  return __m81_u (M_SUF (__tan)) (x);
 }
 declare_mgen_alias (__tan, tan)

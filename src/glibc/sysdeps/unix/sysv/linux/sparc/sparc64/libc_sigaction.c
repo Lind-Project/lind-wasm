@@ -23,8 +23,7 @@
 /* Defined on sigreturn_stub.S.  */
 void __rt_sigreturn_stub (void);
 
-#define STUB(act, sigsetsize) \
-  (((unsigned long) &__rt_sigreturn_stub) - 8),	\
-  (sigsetsize)
+#define STUB(act, sigsetsize)                                                 \
+  (((unsigned long) &__rt_sigreturn_stub) - 8), (sigsetsize)
 
 #include <sysdeps/unix/sysv/linux/libc_sigaction.c>

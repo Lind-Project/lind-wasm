@@ -27,7 +27,6 @@
 #include <fix-fp-int-convert-overflow.h>
 #include <math-use-builtins.h>
 
-
 long int
 __lrintf (float x)
 {
@@ -35,10 +34,9 @@ __lrintf (float x)
   return __builtin_lrintf (x);
 #else
   /* Use generic implementation.  */
-  static const float two23[2] =
-  {
-    8.3886080000e+06, /* 0x4B000000 */
-   -8.3886080000e+06, /* 0xCB000000 */
+  static const float two23[2] = {
+    8.3886080000e+06,  /* 0x4B000000 */
+    -8.3886080000e+06, /* 0xCB000000 */
   };
 
   int32_t j0;
@@ -73,7 +71,7 @@ __lrintf (float x)
     }
   else
     {
-#ifdef FE_INVALID
+#  ifdef FE_INVALID
       /* The number is too large.  Unless it rounds to LONG_MIN,
 	 FE_INVALID must be raised and the return value is
 	 unspecified.  */
@@ -82,7 +80,7 @@ __lrintf (float x)
 	  feraiseexcept (FE_INVALID);
 	  return sx == 0 ? LONG_MAX : LONG_MIN;
 	}
-#endif
+#  endif
       return (long int) x;
     }
 

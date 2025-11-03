@@ -17,21 +17,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_PROCINFO_H
-#define _DL_PROCINFO_H	1
-#include <ldsodefs.h>
-#include <dl-hwcap.h>
+#  define _DL_PROCINFO_H 1
+#  include <ldsodefs.h>
+#  include <dl-hwcap.h>
 
-#define _DL_HWCAP_COUNT		HWCAP_COUNT
-#define _DL_PLATFORMS_COUNT	HWCAP_PLATFORMS_COUNT
+#  define _DL_HWCAP_COUNT HWCAP_COUNT
+#  define _DL_PLATFORMS_COUNT HWCAP_PLATFORMS_COUNT
 
 /* Start at 48 to reserve spaces for hardware capabilities.  */
-#define _DL_FIRST_PLATFORM	48
+#  define _DL_FIRST_PLATFORM 48
 /* Mask to filter out platforms.  */
-#define _DL_HWCAP_PLATFORM	(((1ULL << _DL_PLATFORMS_COUNT) - 1) \
-				 << _DL_FIRST_PLATFORM)
+#  define _DL_HWCAP_PLATFORM                                                  \
+    (((1ULL << _DL_PLATFORMS_COUNT) - 1) << _DL_FIRST_PLATFORM)
 
-static inline int
-__attribute__ ((unused, always_inline))
+static inline int __attribute__ ((unused, always_inline))
 _dl_string_platform (const char *str)
 {
   int i;
@@ -39,7 +38,7 @@ _dl_string_platform (const char *str)
   if (str != NULL)
     for (i = HWCAP_PLATFORMS_START; i < HWCAP_PLATFORMS_COUNT; ++i)
       {
-	if (strcmp (str, GLRO(dl_x86_platforms)[i]) == 0)
+	if (strcmp (str, GLRO (dl_x86_platforms)[i]) == 0)
 	  return _DL_FIRST_PLATFORM + i;
       }
   return -1;

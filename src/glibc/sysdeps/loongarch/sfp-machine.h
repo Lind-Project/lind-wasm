@@ -26,19 +26,19 @@
 #define _FP_I_TYPE long long
 
 #define _FP_MUL_MEAT_S(R, X, Y) _FP_MUL_MEAT_1_imm (_FP_WFRACBITS_S, R, X, Y)
-#define _FP_MUL_MEAT_D(R, X, Y) \
+#define _FP_MUL_MEAT_D(R, X, Y)                                               \
   _FP_MUL_MEAT_1_wide (_FP_WFRACBITS_D, R, X, Y, umul_ppmm)
-#define _FP_MUL_MEAT_Q(R, X, Y) \
+#define _FP_MUL_MEAT_Q(R, X, Y)                                               \
   _FP_MUL_MEAT_2_wide_3mul (_FP_WFRACBITS_Q, R, X, Y, umul_ppmm)
 
-#define _FP_MUL_MEAT_DW_S(R, X, Y) \
+#define _FP_MUL_MEAT_DW_S(R, X, Y)                                            \
   _FP_MUL_MEAT_DW_1_imm (_FP_WFRACBITS_S, R, X, Y)
-#define _FP_MUL_MEAT_DW_D(R, X, Y) \
+#define _FP_MUL_MEAT_DW_D(R, X, Y)                                            \
   _FP_MUL_MEAT_DW_1_wide (_FP_WFRACBITS_D, R, X, Y, umul_ppmm)
-#define _FP_MUL_MEAT_DW_Q(R, X, Y) \
+#define _FP_MUL_MEAT_DW_Q(R, X, Y)                                            \
   _FP_MUL_MEAT_DW_2_wide_3mul (_FP_WFRACBITS_Q, R, X, Y, umul_ppmm)
 
-#define _FP_DIV_MEAT_S(R, X, Y) \
+#define _FP_DIV_MEAT_S(R, X, Y)                                               \
   _FP_DIV_MEAT_1_imm (S, R, X, Y, _FP_DIV_HELP_imm)
 #define _FP_DIV_MEAT_D(R, X, Y) _FP_DIV_MEAT_1_udiv_norm (D, R, X, Y)
 #define _FP_DIV_MEAT_Q(R, X, Y) _FP_DIV_MEAT_2_udiv (Q, R, X, Y)
@@ -55,13 +55,13 @@
 #define _FP_QNANNEGATEDP 0
 
 /* NaN payloads should be preserved for NAN2008.  */
-#define _FP_CHOOSENAN(fs, wc, R, X, Y, OP) \
-  do \
-    { \
-      R##_s = X##_s; \
-      _FP_FRAC_COPY_##wc (R, X); \
-      R##_c = FP_CLS_NAN; \
-    } \
+#define _FP_CHOOSENAN(fs, wc, R, X, Y, OP)                                    \
+  do                                                                          \
+    {                                                                         \
+      R##_s = X##_s;                                                          \
+      _FP_FRAC_COPY_##wc (R, X);                                              \
+      R##_c = FP_CLS_NAN;                                                     \
+    }                                                                         \
   while (0)
 
 #define _FP_DECL_EX fpu_control_t _fcw
@@ -82,21 +82,21 @@
 #define _FP_TININESS_AFTER_ROUNDING 1
 
 #ifdef __loongarch_hard_float
-#define FP_INIT_ROUNDMODE \
-  do \
-    { \
-      _FPU_GETCW (_fcw); \
-    } \
-  while (0)
+#  define FP_INIT_ROUNDMODE                                                   \
+    do                                                                        \
+      {                                                                       \
+	_FPU_GETCW (_fcw);                                                    \
+      }                                                                       \
+    while (0)
 
-#define FP_HANDLE_EXCEPTIONS \
-  do \
-    { \
-      if (__glibc_unlikely (_fex)) \
-	_FPU_SETCW (_fcw | _fex | (_fex << 8)); \
-    } \
-  while (0)
-#define FP_TRAPPING_EXCEPTIONS ((_fcw << 16) & 0x1f0000)
+#  define FP_HANDLE_EXCEPTIONS                                                \
+    do                                                                        \
+      {                                                                       \
+	if (__glibc_unlikely (_fex))                                          \
+	  _FPU_SETCW (_fcw | _fex | (_fex << 8));                             \
+      }                                                                       \
+    while (0)
+#  define FP_TRAPPING_EXCEPTIONS ((_fcw << 16) & 0x1f0000)
 #else
-#define FP_INIT_ROUNDMODE _fcw = FP_RND_NEAREST
+#  define FP_INIT_ROUNDMODE _fcw = FP_RND_NEAREST
 #endif

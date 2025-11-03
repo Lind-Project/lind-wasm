@@ -18,7 +18,6 @@
 #include <errno.h>
 #include <unistd.h>
 
-
 /* Suspend the process until a signal arrives.
    This is supposed to always return -1 and set errno to EINTR,
    but rules were meant to be broken.  */

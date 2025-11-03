@@ -28,15 +28,10 @@
 /* Coefficients B_2k / 2k(2k-1) of x^-(2k-1) inside exp in Stirling's
    approximation to gamma function.  */
 
-static const double gamma_coeff[] =
-  {
-    0x1.5555555555555p-4,
-    -0xb.60b60b60b60b8p-12,
-    0x3.4034034034034p-12,
-    -0x2.7027027027028p-12,
-    0x3.72a3c5631fe46p-12,
-    -0x7.daac36664f1f4p-12,
-  };
+static const double gamma_coeff[] = {
+  0x1.5555555555555p-4,	  -0xb.60b60b60b60b8p-12, 0x3.4034034034034p-12,
+  -0x2.7027027027028p-12, 0x3.72a3c5631fe46p-12,  -0x7.daac36664f1f4p-12,
+};
 
 #define NCOEFF (sizeof (gamma_coeff) / sizeof (gamma_coeff[0]))
 
@@ -66,8 +61,8 @@ gamma_positive (double x, int *exp2_adj)
       double x_adj = x - n;
       double eps;
       double prod = __gamma_product (x_adj, 0, n, &eps);
-      return (__ieee754_exp (__ieee754_lgamma_r (x_adj, &local_signgam))
-	      * prod * (1.0 + eps));
+      return (__ieee754_exp (__ieee754_lgamma_r (x_adj, &local_signgam)) * prod
+	      * (1.0 + eps));
     }
   else
     {
@@ -100,7 +95,7 @@ gamma_positive (double x, int *exp2_adj)
       *exp2_adj = x_adj_log2 * (int) x_adj_int;
       double h1, l1, h2, l2;
       mul_split (&h1, &l1, __ieee754_pow (x_adj_mant, x_adj),
-			   __ieee754_exp2 (x_adj_log2 * x_adj_frac));
+		 __ieee754_exp2 (x_adj_log2 * x_adj_frac));
       mul_split (&h2, &l2, __ieee754_exp (-x_adj), sqrt (2 * M_PI / x_adj));
       mul_expansion (&h1, &l1, h1, l1, h2, l2);
       /* Divide by prod * (1 + eps).  */
@@ -132,8 +127,8 @@ __ieee754_gamma_r (double x, int *signgamp)
       *signgamp = 0;
       return 1.0 / x;
     }
-  if (__builtin_expect (hx < 0, 0)
-      && (uint32_t) hx < 0xfff00000 && rint (x) == x)
+  if (__builtin_expect (hx < 0, 0) && (uint32_t) hx < 0xfff00000
+      && rint (x) == x)
     {
       /* Return value for integer x < 0 is NaN with invalid exception.  */
       *signgamp = 0;
@@ -187,9 +182,8 @@ __ieee754_gamma_r (double x, int *signgamp)
 	      double frac = tx - x;
 	      if (frac > 0.5)
 		frac = 1.0 - frac;
-	      double sinpix = (frac <= 0.25
-			       ? __sin (M_PI * frac)
-			       : __cos (M_PI * (0.5 - frac)));
+	      double sinpix = (frac <= 0.25 ? __sin (M_PI * frac)
+					    : __cos (M_PI * (0.5 - frac)));
 	      int exp2_adj;
 	      double h1, l1, h2, l2;
 	      h2 = gamma_positive (-x, &exp2_adj);
@@ -200,7 +194,7 @@ __ieee754_gamma_r (double x, int *signgamp)
 	      /* (h1 + l1) * x = h1*x + l1*x = h2 + l2 + l1*x */
 	      l2 += l1 * x;
 	      /* x*sinpix*gamma_positive(.) ~ h2 + l2 */
-	      h1 = 0x3.243f6a8885a3p+0;   /* binary64 approximation of Pi */
+	      h1 = 0x3.243f6a8885a3p+0;	  /* binary64 approximation of Pi */
 	      l1 = 0x8.d313198a2e038p-56; /* |h1+l1-Pi| < 3e-33 */
 	      /* Now we divide h1 + l1 by h2 + l2.  */
 	      div_expansion (&h1, &l1, h1, l1, h2, l2);

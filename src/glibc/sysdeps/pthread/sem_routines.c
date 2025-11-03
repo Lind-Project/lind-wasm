@@ -64,7 +64,6 @@ static void *sem_mappings;
 /* Lock to protect the search tree.  */
 static int sem_mappings_lock = LLL_LOCK_INITIALIZER;
 
-
 /* Search for existing mapping and if possible add the one provided.  */
 sem_t *
 __sem_check_add_mapping (const char *name, int fd, sem_t *existing)

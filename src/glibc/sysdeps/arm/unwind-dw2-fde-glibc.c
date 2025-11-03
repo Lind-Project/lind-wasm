@@ -30,43 +30,51 @@
 /* These may be called from startup code, but don't need to do
    anything.  */
 
-void __register_frame_info_bases (void *a1, struct object *a2,
-				  void *a3, void *a4)
+void
+__register_frame_info_bases (void *a1, struct object *a2, void *a3, void *a4)
 {
 }
 
-void __register_frame_info (void *a1, struct object *a2)
+void
+__register_frame_info (void *a1, struct object *a2)
 {
 }
 
-void __register_frame (void *a1)
+void
+__register_frame (void *a1)
 {
 }
 
-void __register_frame_info_table_bases (void *a1, struct object *a2,
-					void *a3, void *a4)
+void
+__register_frame_info_table_bases (void *a1, struct object *a2, void *a3,
+				   void *a4)
 {
 }
 
-void __register_frame_info_table (void *a1, struct object *a2)
+void
+__register_frame_info_table (void *a1, struct object *a2)
 {
 }
 
-void __register_frame_table (void *a1)
+void
+__register_frame_table (void *a1)
 {
 }
 
-void *__deregister_frame_info (void *a1)
+void *
+__deregister_frame_info (void *a1)
 {
   return NULL;
 }
 
-void *__deregister_frame_info_bases (void *a1)
+void *
+__deregister_frame_info_bases (void *a1)
 {
   return NULL;
 }
 
-void __deregister_frame (void *a1)
+void
+__deregister_frame (void *a1)
 {
 }
 

@@ -25,14 +25,13 @@
 
 /* LinuxThreads pthread_cleanup_{push,pop} helpers.  */
 extern void _pthread_cleanup_push (struct _pthread_cleanup_buffer *__buffer,
-                                   void (*__routine) (void *),
-                                   void *__arg);
+				   void (*__routine) (void *), void *__arg);
 compat_symbol_reference (libpthread, _pthread_cleanup_push,
-                         _pthread_cleanup_push, GLIBC_2_0);
+			 _pthread_cleanup_push, GLIBC_2_0);
 extern void _pthread_cleanup_pop (struct _pthread_cleanup_buffer *__buffer,
-                                  int __execute);
+				  int __execute);
 compat_symbol_reference (libpthread, _pthread_cleanup_pop,
-                         _pthread_cleanup_pop, GLIBC_2_0);
+			 _pthread_cleanup_pop, GLIBC_2_0);
 
 static int fds[2];
 static pthread_barrier_t b2;
@@ -54,8 +53,7 @@ clh (void *arg)
   global += val;
 }
 
-
-static __attribute__((noinline)) void
+static __attribute__ ((noinline)) void
 fn_read (void)
 {
   int r = pthread_barrier_wait (&b2);
@@ -69,8 +67,7 @@ fn_read (void)
   xread (fds[0], &c, 1);
 }
 
-
-__attribute__((noinline)) void
+__attribute__ ((noinline)) void
 fn0 (void)
 {
   pthread_cleanup_push (clh, (void *) 1l);
@@ -80,8 +77,7 @@ fn0 (void)
   pthread_cleanup_pop (1);
 }
 
-
-__attribute__((noinline)) void
+__attribute__ ((noinline)) void
 fn1 (void)
 {
   /* This is the old LinuxThreads pthread_cleanup_{push,pop}.  */
@@ -93,8 +89,7 @@ fn1 (void)
   _pthread_cleanup_pop (&b, 1);
 }
 
-
-static __attribute__((noinline)) void
+static __attribute__ ((noinline)) void
 fn2 (void)
 {
   pthread_cleanup_push (clh, (void *) 3l);
@@ -103,7 +98,6 @@ fn2 (void)
 
   pthread_cleanup_pop (1);
 }
-
 
 static void *
 tf (void *a)
@@ -127,7 +121,6 @@ tf (void *a)
   return NULL;
 }
 
-
 int
 do_test (void)
 {
@@ -145,13 +138,12 @@ do_test (void)
       exit (1);
     }
 
-  const int expect[] =
-    {
-      15,	/* 1 2 3 */
-      276,	/* 1 4 5 6 */
-      120,	/* 1 7 8 */
-      460	/* 1 2 9 10 */
-    };
+  const int expect[] = {
+    15,	 /* 1 2 3 */
+    276, /* 1 4 5 6 */
+    120, /* 1 7 8 */
+    460	 /* 1 2 9 10 */
+  };
 
   long i;
   for (i = 0; i < 4; ++i)

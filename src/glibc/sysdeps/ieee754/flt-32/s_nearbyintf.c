@@ -12,7 +12,6 @@
  * ====================================================
  */
 
-
 #include <fenv.h>
 #include <math.h>
 #include <math-barriers.h>
@@ -28,10 +27,9 @@ __nearbyintf (float x)
   return __builtin_nearbyintf (x);
 #else
   /* Use generic implementation.  */
-  static const float
-    TWO23[2] = {
-		8.3886080000e+06, /* 0x4b000000 */
-		-8.3886080000e+06, /* 0xcb000000 */
+  static const float TWO23[2] = {
+    8.3886080000e+06,  /* 0x4b000000 */
+    -8.3886080000e+06, /* 0xcb000000 */
   };
   fenv_t env;
   int32_t i0, j0, sx;
@@ -45,7 +43,7 @@ __nearbyintf (float x)
 	{
 	  libc_feholdexceptf (&env);
 	  w = TWO23[sx] + math_opt_barrier (x);
-	  t =  w - TWO23[sx];
+	  t = w - TWO23[sx];
 	  math_force_eval (t);
 	  libc_fesetenvf (&env);
 	  GET_FLOAT_WORD (i0, t);
@@ -56,10 +54,10 @@ __nearbyintf (float x)
   else
     {
       if (__glibc_unlikely (j0 == 0x80))
-	return x + x;		/* inf or NaN  */
+	return x + x; /* inf or NaN  */
       else
-	return x;		/* x is integral  */
-  }
+	return x; /* x is integral  */
+    }
   libc_feholdexceptf (&env);
   w = TWO23[sx] + math_opt_barrier (x);
   t = w - TWO23[sx];

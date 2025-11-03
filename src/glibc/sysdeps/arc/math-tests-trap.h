@@ -18,10 +18,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef ARC_MATH_TESTS_TRAP_H
-#define ARC_MATH_TESTS_TRAP_H 1
+#  define ARC_MATH_TESTS_TRAP_H 1
 
 /* Trapping exceptions are optional on ARC
    and not supported in Linux kernel just yet.  */
-#define EXCEPTION_ENABLE_SUPPORTED(EXCEPT)	((EXCEPT) == 0)
+#  define EXCEPTION_ENABLE_SUPPORTED(EXCEPT) ((EXCEPT) == 0)
 
 #endif /* math-tests-trap.h.  */

@@ -31,10 +31,18 @@ replace_special_chars (char *str)
   for (; (str = strpbrk (str, "NTSZ")) != NULL; ++str)
     switch (*str)
       {
-      case 'N': *str = '\n'; break;
-      case 'T': *str = '\t'; break;
-      case 'S': *str = ' '; break;
-      case 'Z': *str = '\0'; break;
+      case 'N':
+	*str = '\n';
+	break;
+      case 'T':
+	*str = '\t';
+	break;
+      case 'S':
+	*str = ' ';
+	break;
+      case 'Z':
+	*str = '\0';
+	break;
       }
 }
 
@@ -44,14 +52,14 @@ glibc_re_syntax (char *str)
   char *p, *end = strchr (str, '\0') + 1;
 
   /* Replace [[:<:]] with \< and [[:>:]] with \>.  */
-  for (p = str; (p = strstr (p, "[[:")) != NULL; )
+  for (p = str; (p = strstr (p, "[[:")) != NULL;)
     if ((p[3] == '<' || p[3] == '>') && strncmp (p + 4, ":]]", 3) == 0)
       {
-        p[0] = '\\';
-        p[1] = p[3];
-        memmove (p + 2, p + 7, end - p - 7);
-        end -= 5;
-        p += 2;
+	p[0] = '\\';
+	p[1] = p[3];
+	memmove (p + 2, p + 7, end - p - 7);
+	end -= 5;
+	p += 2;
       }
     else
       p += 3;
@@ -169,8 +177,8 @@ mb_frob_pattern (const char *str, const char *letters)
 }
 
 static int
-check_match (regmatch_t *rm, int idx, const char *string,
-	     const char *match, const char *fail)
+check_match (regmatch_t *rm, int idx, const char *string, const char *match,
+	     const char *fail)
 {
   if (match[0] == '-' && match[1] == '\0')
     {
@@ -227,12 +235,16 @@ test (const char *pattern, int cflags, const char *string, int eflags,
       char buf[500];
       if (eflags == -1)
 	{
-	  static struct { reg_errcode_t code; const char *name; } codes []
+	  static struct
+	  {
+	    reg_errcode_t code;
+	    const char *name;
+	  } codes[]
 #define C(x) { REG_##x, #x }
-	    = { C(NOERROR), C(NOMATCH), C(BADPAT), C(ECOLLATE),
-		C(ECTYPE), C(EESCAPE), C(ESUBREG), C(EBRACK),
-		C(EPAREN), C(EBRACE), C(BADBR), C(ERANGE),
-		C(ESPACE), C(BADRPT) };
+	      = { C (NOERROR), C (NOMATCH), C (BADPAT),	 C (ECOLLATE),
+		  C (ECTYPE),  C (EESCAPE), C (ESUBREG), C (EBRACK),
+		  C (EPAREN),  C (EBRACE),  C (BADBR),	 C (ERANGE),
+		  C (ESPACE),  C (BADRPT) };
 
 	  for (int i = 0; i < sizeof (codes) / sizeof (codes[0]); ++i)
 	    if (n == codes[i].code)
@@ -243,7 +255,7 @@ test (const char *pattern, int cflags, const char *string, int eflags,
 			    fail, codes[i].name, string);
 		    return 1;
 		  }
-	        return 0;
+		return 0;
 	      }
 
 	  printf ("%s regcomp return value REG_%d\n", fail, n);
@@ -324,20 +336,20 @@ mb_test (const char *pattern, int cflags, const char *string, int eflags,
 {
   char *pattern_mb = mb_frob_pattern (pattern, letters);
   const char *string_mb
-    = eflags == -1 ? string : mb_frob_string (string, letters);
+      = eflags == -1 ? string : mb_frob_string (string, letters);
   char *expect_mb = mb_frob_string (expect, letters);
   char *matches_mb = mb_frob_string (matches, letters);
   int ret = 0;
 
-  if (!pattern_mb || !string_mb
-      || (expect && !expect_mb) || (matches && !matches_mb))
+  if (!pattern_mb || !string_mb || (expect && !expect_mb)
+      || (matches && !matches_mb))
     {
       printf ("%s %m", fail);
       ret = 1;
     }
   else
-    ret = test (pattern_mb, cflags, string_mb, eflags, expect_mb,
-		matches_mb, fail);
+    ret = test (pattern_mb, cflags, string_mb, eflags, expect_mb, matches_mb,
+		fail);
 
   free (matches_mb);
   free (expect_mb);
@@ -412,15 +424,13 @@ main (int argc, char **argv)
   ssize_t len;
   FILE *f;
   static int test_utf8 = 0;
-  static const struct option options[] =
-    {
-      {"utf8",	no_argument,	&test_utf8,	1},
-      {NULL,	0,		NULL,		0 }
-    };
+  static const struct option options[]
+      = { { "utf8", no_argument, &test_utf8, 1 }, { NULL, 0, NULL, 0 } };
 
   mtrace ();
 
-  while (getopt_long (argc, argv, "", options, NULL) >= 0);
+  while (getopt_long (argc, argv, "", options, NULL) >= 0)
+    ;
 
   if (optind + 1 != argc)
     {
@@ -441,7 +451,7 @@ main (int argc, char **argv)
       int cflags = REG_EXTENDED, eflags = 0, try_bre_ere = 0;
 
       if (line[len - 1] == '\n')
-        line[len - 1] = '\0';
+	line[len - 1] = '\0';
 
       /* Skip comments and empty lines.  */
       if (*line == '#' || *line == '\0')
@@ -452,18 +462,18 @@ main (int argc, char **argv)
 
       pattern = strtok (line, "\t");
       if (pattern == NULL)
-        continue;
+	continue;
 
       if (strcmp (pattern, "\"\"") == 0)
 	pattern += 2;
 
       flagstr = strtok (NULL, "\t");
       if (flagstr == NULL)
-        continue;
+	continue;
 
       string = strtok (NULL, "\t");
       if (string == NULL)
-        continue;
+	continue;
 
       if (strcmp (string, "\"\"") == 0)
 	string += 2;
@@ -511,17 +521,17 @@ main (int argc, char **argv)
       replace_special_chars (pattern);
       glibc_re_syntax (pattern);
       if (eflags != -1)
-        replace_special_chars (string);
+	replace_special_chars (string);
 
       expect = strtok (NULL, "\t");
       matches = NULL;
       if (expect != NULL)
-        {
+	{
 	  replace_special_chars (expect);
 	  matches = strtok (NULL, "\t");
 	  if (matches != NULL)
 	    replace_special_chars (matches);
-        }
+	}
 
       if (setlocale (LC_ALL, "C") == NULL)
 	{
@@ -530,8 +540,8 @@ main (int argc, char **argv)
 	}
       if (test (pattern, cflags, string, eflags, expect, matches, "FAIL")
 	  || (try_bre_ere
-	      && test (pattern, cflags & ~REG_EXTENDED, string, eflags,
-		       expect, matches, "FAIL")))
+	      && test (pattern, cflags & ~REG_EXTENDED, string, eflags, expect,
+		       matches, "FAIL")))
 	ret = 1;
       else if (test_utf8)
 	{

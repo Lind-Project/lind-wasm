@@ -28,24 +28,25 @@
 
 #define __longjmp ____longjmp_chk
 
-#define CHECK_SP(env, guard) \
-  do									\
-    {									\
-      uintptr_t cur_sp;							\
-      uintptr_t new_sp = env->__gregs[9];				\
-      new_sp ^= guard;							\
-      if (new_sp < cur_sp)						\
-	{								\
-	  stack_t oss;							\
-	  int res = INTERNAL_SYSCALL_CALL (sigaltstack, NULL, &oss);	\
-	  if (!INTERNAL_SYSCALL_ERROR_P (res))				\
-	    {								\
-	      if ((oss.ss_flags & SS_ONSTACK) == 0			\
-		  || ((uintptr_t) (oss.ss_sp + oss.ss_size) - new_sp	\
-		      < oss.ss_size))					\
-		__fortify_fail ("longjmp causes uninitialized stack frame");\
-	    }								\
-	}								\
-    } while (0)
+#define CHECK_SP(env, guard)                                                  \
+  do                                                                          \
+    {                                                                         \
+      uintptr_t cur_sp;                                                       \
+      uintptr_t new_sp = env->__gregs[9];                                     \
+      new_sp ^= guard;                                                        \
+      if (new_sp < cur_sp)                                                    \
+	{                                                                     \
+	  stack_t oss;                                                        \
+	  int res = INTERNAL_SYSCALL_CALL (sigaltstack, NULL, &oss);          \
+	  if (!INTERNAL_SYSCALL_ERROR_P (res))                                \
+	    {                                                                 \
+	      if ((oss.ss_flags & SS_ONSTACK) == 0                            \
+		  || ((uintptr_t) (oss.ss_sp + oss.ss_size) - new_sp          \
+		      < oss.ss_size))                                         \
+		__fortify_fail ("longjmp causes uninitialized stack frame");  \
+	    }                                                                 \
+	}                                                                     \
+    }                                                                         \
+  while (0)
 
 #include "__longjmp.c"

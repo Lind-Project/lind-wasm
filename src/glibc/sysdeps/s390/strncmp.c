@@ -19,24 +19,23 @@
 #include <ifunc-strncmp.h>
 
 #if HAVE_STRNCMP_IFUNC
-# define strncmp __redirect_strncmp
+#  define strncmp __redirect_strncmp
 /* Omit the strncmp inline definitions because it would redefine strncmp.  */
-# define __NO_STRING_INLINES
-# include <string.h>
-# undef strncmp
-# include <ifunc-resolve.h>
+#  define __NO_STRING_INLINES
+#  include <string.h>
+#  undef strncmp
+#  include <ifunc-resolve.h>
 
-# if HAVE_STRNCMP_C
+#  if HAVE_STRNCMP_C
 extern __typeof (__redirect_strncmp) STRNCMP_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_STRNCMP_Z13
+#  if HAVE_STRNCMP_Z13
 extern __typeof (__redirect_strncmp) STRNCMP_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect_strncmp, strncmp,
 		      (HAVE_STRNCMP_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? STRNCMP_Z13
-		      : STRNCMP_DEFAULT
-		      )
+			  ? STRNCMP_Z13
+			  : STRNCMP_DEFAULT)
 #endif /* HAVE_STRNCMP_IFUNC  */

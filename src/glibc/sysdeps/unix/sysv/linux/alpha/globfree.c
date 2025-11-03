@@ -21,8 +21,7 @@
 #include <glob.h>
 #include <shlib-compat.h>
 
-#define globfree(pglob) \
-  __new_globfree (pglob)
+#define globfree(pglob) __new_globfree (pglob)
 
 extern void __new_globfree (glob_t *__pglob);
 
@@ -33,5 +32,5 @@ extern void __new_globfree (glob_t *__pglob);
 versioned_symbol (libc, __new_globfree, globfree, GLIBC_2_1);
 libc_hidden_ver (__new_globfree, globfree)
 
-weak_alias (__new_globfree, globfree64)
-libc_hidden_ver (__new_globfree, globfree64)
+    weak_alias (__new_globfree, globfree64)
+	libc_hidden_ver (__new_globfree, globfree64)

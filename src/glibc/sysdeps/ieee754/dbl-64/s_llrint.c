@@ -27,7 +27,6 @@
 #include <fix-fp-int-convert-overflow.h>
 #include <math-use-builtins.h>
 
-
 long long int
 __llrint (double x)
 {
@@ -35,10 +34,9 @@ __llrint (double x)
   return __builtin_llrint (x);
 #else
   /* Use generic implementation.  */
-  static const double two52[2] =
-  {
-    4.50359962737049600000e+15, /* 0x43300000, 0x00000000 */
-   -4.50359962737049600000e+15, /* 0xC3300000, 0x00000000 */
+  static const double two52[2] = {
+    4.50359962737049600000e+15,	 /* 0x43300000, 0x00000000 */
+    -4.50359962737049600000e+15, /* 0xC3300000, 0x00000000 */
   };
 
   int32_t j0;
@@ -86,7 +84,7 @@ __llrint (double x)
     }
   else
     {
-#ifdef FE_INVALID
+#  ifdef FE_INVALID
       /* The number is too large.  Unless it rounds to LLONG_MIN,
 	 FE_INVALID must be raised and the return value is
 	 unspecified.  */
@@ -95,7 +93,7 @@ __llrint (double x)
 	  feraiseexcept (FE_INVALID);
 	  return sx == 0 ? LLONG_MAX : LLONG_MIN;
 	}
-#endif
+#  endif
       return (long long int) x;
     }
 

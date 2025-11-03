@@ -16,78 +16,79 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_INCLUDE_SYS_TIMEX_H
-#define	_INCLUDE_SYS_TIMEX_H	1
+#ifndef _INCLUDE_SYS_TIMEX_H
+#  define _INCLUDE_SYS_TIMEX_H 1
 
-#include_next <sys/timex.h>
+#  include_next <sys/timex.h>
 
-# ifndef _ISOMAC
+#  ifndef _ISOMAC
 
 extern int __adjtimex (struct timex *__ntx) __nonnull ((1));
 libc_hidden_proto (__adjtimex)
 
-#  include <time.h>
-#  include <struct___timeval64.h>
+#    include <time.h>
+#    include <struct___timeval64.h>
 /* Local definition of 64 bit time supporting timex struct */
-#  if __TIMESIZE == 64
-#   define __timex64 timex
-#   define __clock_adjtime64 __clock_adjtime
-#   define ___adjtimex64 ___adjtimex
-#   define __ntptimeval64 ntptimeval
-#   define __ntp_gettime64 __ntp_gettime
-#   define __ntp_gettimex64 __ntp_gettimex
-#  else
+#    if __TIMESIZE == 64
+#      define __timex64 timex
+#      define __clock_adjtime64 __clock_adjtime
+#      define ___adjtimex64 ___adjtimex
+#      define __ntptimeval64 ntptimeval
+#      define __ntp_gettime64 __ntp_gettime
+#      define __ntp_gettimex64 __ntp_gettimex
+#    else
 
-struct __timex64
+    struct __timex64
 {
-  unsigned int modes;          /* mode selector */
-  int :32;                     /* pad */
-  long long int offset;            /* time offset (usec) */
-  long long int freq;              /* frequency offset (scaled ppm) */
-  long long int maxerror;          /* maximum error (usec) */
-  long long int esterror;          /* estimated error (usec) */
-  int status;                  /* clock command/status */
-  int :32;                     /* pad */
-  long long int constant;          /* pll time constant */
-  long long int precision;         /* clock precision (usec) (read only) */
-  long long int tolerance;         /* clock frequency tolerance (ppm) (ro) */
-  struct __timeval64 time;     /* (read only, except for ADJ_SETOFFSET) */
-  long long int tick;              /* (modified) usecs between clock ticks */
-  long long int ppsfreq;           /* pps frequency (scaled ppm) (ro) */
-  long long int jitter;            /* pps jitter (us) (ro) */
-  int shift;                   /* interval duration (s) (shift) (ro) */
-  int :32;                     /* pad */
-  long long int stabil;            /* pps stability (scaled ppm) (ro) */
-  long long int jitcnt;            /* jitter limit exceeded (ro) */
-  long long int calcnt;            /* calibration intervals (ro) */
-  long long int errcnt;            /* calibration errors (ro) */
-  long long int stbcnt;            /* stability limit exceeded (ro) */
+  unsigned int modes;	   /* mode selector */
+  int : 32;		   /* pad */
+  long long int offset;	   /* time offset (usec) */
+  long long int freq;	   /* frequency offset (scaled ppm) */
+  long long int maxerror;  /* maximum error (usec) */
+  long long int esterror;  /* estimated error (usec) */
+  int status;		   /* clock command/status */
+  int : 32;		   /* pad */
+  long long int constant;  /* pll time constant */
+  long long int precision; /* clock precision (usec) (read only) */
+  long long int tolerance; /* clock frequency tolerance (ppm) (ro) */
+  struct __timeval64 time; /* (read only, except for ADJ_SETOFFSET) */
+  long long int tick;	   /* (modified) usecs between clock ticks */
+  long long int ppsfreq;   /* pps frequency (scaled ppm) (ro) */
+  long long int jitter;	   /* pps jitter (us) (ro) */
+  int shift;		   /* interval duration (s) (shift) (ro) */
+  int : 32;		   /* pad */
+  long long int stabil;	   /* pps stability (scaled ppm) (ro) */
+  long long int jitcnt;	   /* jitter limit exceeded (ro) */
+  long long int calcnt;	   /* calibration intervals (ro) */
+  long long int errcnt;	   /* calibration errors (ro) */
+  long long int stbcnt;	   /* stability limit exceeded (ro) */
 
-  int tai;                     /* TAI offset (ro) */
+  int tai; /* TAI offset (ro) */
 
-  int  :32;
-  int  :32;
-  int  :32;
-  int  :32;
-  int  :32;
-  int  :32;
-  int  :32;
-  int  :32;
-  int  :32;
-  int  :32;
-  int  :32;
+  int : 32;
+  int : 32;
+  int : 32;
+  int : 32;
+  int : 32;
+  int : 32;
+  int : 32;
+  int : 32;
+  int : 32;
+  int : 32;
+  int : 32;
 };
-extern int __clock_adjtime64 (const clockid_t clock_id, struct __timex64 *tx64) __nonnull((2));
+extern int __clock_adjtime64 (const clockid_t clock_id, struct __timex64 *tx64)
+    __nonnull ((2));
 libc_hidden_proto (__clock_adjtime64);
 extern int ___adjtimex64 (struct __timex64 *tx64) __nonnull ((1));
 libc_hidden_proto (___adjtimex64)
 
-struct __ntptimeval64
+    struct __ntptimeval64
 {
-  struct __timeval64 time;	/* current time (ro) */
-  long int maxerror;	/* maximum error (us) (ro) */
-  long int esterror;	/* estimated error (us) (ro) */
-  long int tai;		/* TAI offset (ro) */
+  struct __timeval64 time; /* current time (ro) */
+  long int maxerror;	   /* maximum error (us) (ro) */
+  long int esterror;	   /* estimated error (us) (ro) */
+  long int tai;		   /* TAI offset (ro) */
 
   long int __glibc_reserved1;
   long int __glibc_reserved2;
@@ -95,15 +96,15 @@ struct __ntptimeval64
   long int __glibc_reserved4;
 };
 extern int __ntp_gettime64 (struct __ntptimeval64 *ntv) __nonnull ((1));
-libc_hidden_proto (__ntp_gettime64)
-extern int __ntp_gettimex64 (struct __ntptimeval64 *ntv) __nonnull ((1));
+libc_hidden_proto (__ntp_gettime64) extern int __ntp_gettimex64 (
+    struct __ntptimeval64 *ntv) __nonnull ((1));
 libc_hidden_proto (__ntp_gettimex64)
 
-#  endif
+#    endif
 
-/* Convert a known valid struct timex into a struct __timex64.  */
-static inline struct __timex64
-valid_timex_to_timex64 (const struct timex tx)
+    /* Convert a known valid struct timex into a struct __timex64.  */
+    static inline struct __timex64
+    valid_timex_to_timex64 (const struct timex tx)
 {
   struct __timex64 tx64;
 
@@ -196,5 +197,5 @@ valid_ntptimeval64_to_ntptimeval (const struct __ntptimeval64 ntp64)
 
   return ntp;
 }
-# endif /* _ISOMAC */
-#endif /* sys/timex.h */
+#  endif /* _ISOMAC */
+#endif	 /* sys/timex.h */

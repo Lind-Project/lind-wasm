@@ -28,7 +28,7 @@ int
 __lstat (const char *file, struct stat *buf)
 {
   struct stat64 buf64;
-  return __fstatat64_common (AT_FDCWD, file, &buf64, 0, O_NOLINK) ?:
-                             stat64_conv (buf, &buf64);
+  return __fstatat64_common (AT_FDCWD, file, &buf64, 0, O_NOLINK)
+	     ?: stat64_conv (buf, &buf64);
 }
 weak_alias (__lstat, lstat)

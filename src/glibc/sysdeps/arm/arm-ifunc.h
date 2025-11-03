@@ -21,5 +21,5 @@
 
 #define INIT_ARCH()
 
-#define arm_libc_ifunc_redirected(redirected_name, name, expr)	\
-  __ifunc (redirected_name, name, expr(hwcap), int hwcap, INIT_ARCH)
+#define arm_libc_ifunc_redirected(redirected_name, name, expr)                \
+  __ifunc (redirected_name, name, expr (hwcap), int hwcap, INIT_ARCH)

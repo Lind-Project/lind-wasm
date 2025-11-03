@@ -18,7 +18,6 @@
 #include <errno.h>
 #include <unistd.h>
 
-
 /* Create a new session with the calling process as its leader.
    The process group IDs of the session and the calling process
    are set to the process ID of the calling process, which is returned.  */
@@ -30,4 +29,4 @@ __setsid (void)
 }
 stub_warning (setsid)
 
-weak_alias (__setsid, setsid)
+    weak_alias (__setsid, setsid)

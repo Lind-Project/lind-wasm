@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES___THRD_T_H
-#define _BITS_TYPES___THRD_T_H	1
+#  define _BITS_TYPES___THRD_T_H 1
 
 typedef int __thrd_t;
 

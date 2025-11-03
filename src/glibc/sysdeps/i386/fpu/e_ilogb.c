@@ -36,18 +36,18 @@ __ieee754_ilogb (double x)
     {
       GET_LOW_WORD (lx, x);
       if ((hx | lx) == 0)
-	return FP_ILOGB0;               /* ilogb(0) = FP_ILOGB0 */
-      else                              /* subnormal x */
-      if (hx == 0)
-	{
-	  for (ix = -1043; lx > 0; lx <<= 1)
-	    ix -= 1;
-	}
-      else
-	{
-	  for (ix = -1022, hx <<= 11; hx > 0; hx <<= 1)
-	    ix -= 1;
-	}
+	return FP_ILOGB0; /* ilogb(0) = FP_ILOGB0 */
+      else		  /* subnormal x */
+	if (hx == 0)
+	  {
+	    for (ix = -1043; lx > 0; lx <<= 1)
+	      ix -= 1;
+	  }
+	else
+	  {
+	    for (ix = -1022, hx <<= 11; hx > 0; hx <<= 1)
+	      ix -= 1;
+	  }
       return ix;
     }
   else if (hx < 0x7ff00000)

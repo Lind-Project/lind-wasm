@@ -52,8 +52,7 @@ __posix_fadvise64_l64 (int fd, off64_t offset, off64_t len, int advise)
 
 #if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_3_3)
 
-int
-attribute_compat_text_section
+int attribute_compat_text_section
 __posix_fadvise64_l32 (int fd, off64_t offset, size_t len, int advise)
 {
   return __posix_fadvise64_l64 (fd, offset, len, advise);

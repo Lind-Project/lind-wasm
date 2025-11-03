@@ -23,13 +23,15 @@
 #include <lind_syscall_num.h>
 
 int
-__kill (__pid_t a,  int b)
+__kill (__pid_t a, int b)
 {
-   return MAKE_SYSCALL(KILL_SYSCALL, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (KILL_SYSCALL, "syscall|kill", (uint64_t) a,
+		       (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 int
-kill (__pid_t a,  int b)
+kill (__pid_t a, int b)
 {
-   return MAKE_SYSCALL(KILL_SYSCALL, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (KILL_SYSCALL, "syscall|kill", (uint64_t) a,
+		       (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }

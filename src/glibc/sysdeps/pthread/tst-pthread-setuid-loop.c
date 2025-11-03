@@ -21,11 +21,17 @@
 #include <unistd.h>
 
 /* How many threads to launch during each iteration.  */
-enum { threads = 4 };
+enum
+{
+  threads = 4
+};
 
 /* How many iterations to perform.  This value seems to reproduce
    bug 28361 in a bout one in three runs.  */
-enum { iterations = 5000 };
+enum
+{
+  iterations = 5000
+};
 
 /* Cache of the real user ID used by setuid_thread.  */
 static uid_t uid;
@@ -50,9 +56,9 @@ do_test (void)
     {
       pthread_t thread_ids[threads];
       for (int j = 0; j < threads; ++j)
-        thread_ids[j] = xpthread_create (NULL, setuid_thread, NULL);
+	thread_ids[j] = xpthread_create (NULL, setuid_thread, NULL);
       for (int j = 0; j < threads; ++j)
-        xpthread_join (thread_ids[j]);
+	xpthread_join (thread_ids[j]);
     }
 
   return 0;

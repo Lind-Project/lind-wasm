@@ -23,5 +23,5 @@ statvfs64 (const char *file, struct statvfs64 *buf)
 {
   /* `struct statvfs64' is in fact identical to `struct statfs64' so
      we can simply call statfs64.  */
-  return __statfs64 (file, (struct statfs64 *)buf);
+  return __statfs64 (file, (struct statfs64 *) buf);
 }

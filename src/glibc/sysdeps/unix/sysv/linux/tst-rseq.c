@@ -24,14 +24,14 @@
 #include <unistd.h>
 
 #ifdef RSEQ_SIG
-# include <errno.h>
-# include <error.h>
-# include <stdlib.h>
-# include <string.h>
-# include <syscall.h>
-# include <thread_pointer.h>
-# include <tls.h>
-# include "tst-rseq.h"
+#  include <errno.h>
+#  include <error.h>
+#  include <stdlib.h>
+#  include <string.h>
+#  include <syscall.h>
+#  include <thread_pointer.h>
+#  include <tls.h>
+#  include "tst-rseq.h"
 
 static void
 do_rseq_main_test (void)
@@ -41,7 +41,7 @@ do_rseq_main_test (void)
   TEST_VERIFY_EXIT (rseq_thread_registered ());
   TEST_COMPARE (__rseq_flags, 0);
   TEST_VERIFY ((char *) __thread_pointer () + __rseq_offset
-               == (char *) &pd->rseq_area);
+	       == (char *) &pd->rseq_area);
   TEST_COMPARE (__rseq_size, sizeof (pd->rseq_area));
 }
 
@@ -54,7 +54,7 @@ do_rseq_test (void)
     }
   do_rseq_main_test ();
 }
-#else /* RSEQ_SIG */
+#else  /* RSEQ_SIG */
 static void
 do_rseq_test (void)
 {

@@ -18,25 +18,23 @@
 
 #ifndef __LDSODEFS_H
 
-#include <elf.h>
+#  include <elf.h>
 
 struct La_alpha_regs;
 struct La_alpha_retval;
 
-#define ARCH_PLTENTER_MEMBERS						\
-    Elf64_Addr (*alpha_gnu_pltenter) (Elf64_Sym *, unsigned int,	\
-				     uintptr_t *, uintptr_t *,		\
-				     struct La_alpha_regs *,		\
-				     unsigned int *, const char *name,  \
-				     long int *framesizep);
+#  define ARCH_PLTENTER_MEMBERS                                               \
+    Elf64_Addr (*alpha_gnu_pltenter) (Elf64_Sym *, unsigned int, uintptr_t *, \
+				      uintptr_t *, struct La_alpha_regs *,    \
+				      unsigned int *, const char *name,       \
+				      long int *framesizep);
 
-#define ARCH_PLTEXIT_MEMBERS						\
-    unsigned int (*alpha_gnu_pltexit) (Elf64_Sym *, unsigned int,	\
-				      uintptr_t *, uintptr_t *,		\
-				      const struct La_alpha_regs *,	\
-				      struct La_alpha_retval *,		\
-				      const char *);
+#  define ARCH_PLTEXIT_MEMBERS                                                \
+    unsigned int (*alpha_gnu_pltexit) (                                       \
+	Elf64_Sym *, unsigned int, uintptr_t *, uintptr_t *,                  \
+	const struct La_alpha_regs *, struct La_alpha_retval *,               \
+	const char *);
 
-#include_next <ldsodefs.h>
+#  include_next <ldsodefs.h>
 
 #endif

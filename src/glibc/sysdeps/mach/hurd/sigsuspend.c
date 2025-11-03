@@ -62,16 +62,16 @@ __sigsuspend (const sigset_t *set)
 
   /* Wait for the signal thread's message.  */
 
-  cancel_oldtype = LIBC_CANCEL_ASYNC();
-  __mach_msg (&msg, MACH_RCV_MSG, 0, sizeof (msg), wait,
-	      MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+  cancel_oldtype = LIBC_CANCEL_ASYNC ();
+  __mach_msg (&msg, MACH_RCV_MSG, 0, sizeof (msg), wait, MACH_MSG_TIMEOUT_NONE,
+	      MACH_PORT_NULL);
   LIBC_CANCEL_RESET (cancel_oldtype);
   __mach_port_destroy (__mach_task_self (), wait);
 
   /* Restore the old mask and check for pending signals again.  */
   _hurd_sigstate_lock (ss);
   ss->blocked = oldmask;
-  pending = _hurd_sigstate_pending(ss) & ~ss->blocked;
+  pending = _hurd_sigstate_pending (ss) & ~ss->blocked;
   _hurd_sigstate_unlock (ss);
 
   if (pending)
@@ -83,5 +83,4 @@ __sigsuspend (const sigset_t *set)
      That's right; this function always returns an error.  */
   return __hurd_fail (EINTR);
 }
-libc_hidden_def (__sigsuspend)
-weak_alias (__sigsuspend, sigsuspend)
+libc_hidden_def (__sigsuspend) weak_alias (__sigsuspend, sigsuspend)

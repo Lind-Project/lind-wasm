@@ -32,14 +32,14 @@ int
 test_vector_abi (void)
 {
   int i;
-  for(i = 0; i < N; i++)
+  for (i = 0; i < N; i++)
     {
       c[i] = i / 3;
       s[i] = c[i];
     }
 
 #pragma omp simd
-  for(i = 0; i < N; i++)
+  for (i = 0; i < N; i++)
     x[i] = LIBMVEC_FUNC (s[i], c[i]);
 
   return 0;

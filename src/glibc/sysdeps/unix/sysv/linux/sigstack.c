@@ -20,7 +20,6 @@
 #include <stddef.h>
 #include <sys/syscall.h>
 
-
 int
 sigstack (struct sigstack *ss, struct sigstack *oss)
 {
@@ -58,4 +57,5 @@ sigstack (struct sigstack *ss, struct sigstack *oss)
   return result;
 }
 
-link_warning (sigstack, "the `sigstack' function is dangerous.  `sigaltstack' should be used instead.")
+link_warning (sigstack, "the `sigstack' function is dangerous.  `sigaltstack' "
+			"should be used instead.")

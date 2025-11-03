@@ -22,16 +22,13 @@
 #include <string.h>
 #include <unistd.h>
 
-
 static pthread_barrier_t b;
-
 
 static void
 cleanup (void *arg)
 {
   fputs ("in cleanup\n", stdout);
 }
-
 
 static void *
 tf (void *arg)
@@ -66,7 +63,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -118,7 +114,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

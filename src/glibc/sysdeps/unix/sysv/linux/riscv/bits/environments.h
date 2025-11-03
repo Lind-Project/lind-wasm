@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _UNISTD_H
-# error "Never include this file directly.  Use <unistd.h> instead"
+#  error "Never include this file directly.  Use <unistd.h> instead"
 #endif
 
 #include <bits/wordsize.h>
@@ -42,40 +42,40 @@
 #if __WORDSIZE == 64
 
 /* We can never provide environments with 32-bit wide pointers.  */
-# define _POSIX_V7_ILP32_OFF32	-1
-# define _POSIX_V7_ILP32_OFFBIG	-1
-# define _POSIX_V6_ILP32_OFF32	-1
-# define _POSIX_V6_ILP32_OFFBIG	-1
-# define _XBS5_ILP32_OFF32	-1
-# define _XBS5_ILP32_OFFBIG	-1
+#  define _POSIX_V7_ILP32_OFF32 -1
+#  define _POSIX_V7_ILP32_OFFBIG -1
+#  define _POSIX_V6_ILP32_OFF32 -1
+#  define _POSIX_V6_ILP32_OFFBIG -1
+#  define _XBS5_ILP32_OFF32 -1
+#  define _XBS5_ILP32_OFFBIG -1
 /* We also have no use (for now) for an environment with bigger pointers
    and offsets.  */
-# define _POSIX_V7_LPBIG_OFFBIG	-1
-# define _POSIX_V6_LPBIG_OFFBIG	-1
-# define _XBS5_LPBIG_OFFBIG	-1
+#  define _POSIX_V7_LPBIG_OFFBIG -1
+#  define _POSIX_V6_LPBIG_OFFBIG -1
+#  define _XBS5_LPBIG_OFFBIG -1
 
 /* By default we have 64-bit wide `long int', pointers and `off_t'.  */
-# define _POSIX_V7_LP64_OFF64	1
-# define _POSIX_V6_LP64_OFF64	1
-# define _XBS5_LP64_OFF64	1
+#  define _POSIX_V7_LP64_OFF64 1
+#  define _POSIX_V6_LP64_OFF64 1
+#  define _XBS5_LP64_OFF64 1
 
 #else /* __WORDSIZE == 32 */
 
 /* RISC-V requires 64-bit off_t */
-# define _POSIX_V7_ILP32_OFF32 -1
-# define _POSIX_V6_ILP32_OFF32 -1
-# define _XBS5_ILP32_OFF32 -1
+#  define _POSIX_V7_ILP32_OFF32 -1
+#  define _POSIX_V6_ILP32_OFF32 -1
+#  define _XBS5_ILP32_OFF32 -1
 
-# define _POSIX_V7_ILP32_OFFBIG	1
-# define _POSIX_V6_ILP32_OFFBIG	1
-# define _XBS5_ILP32_OFFBIG	1
+#  define _POSIX_V7_ILP32_OFFBIG 1
+#  define _POSIX_V6_ILP32_OFFBIG 1
+#  define _XBS5_ILP32_OFFBIG 1
 
 /* We can never provide environments with 64-bit wide pointers.  */
-# define _POSIX_V7_LP64_OFF64	-1
-# define _POSIX_V7_LPBIG_OFFBIG	-1
-# define _POSIX_V6_LP64_OFF64	-1
-# define _POSIX_V6_LPBIG_OFFBIG	-1
-# define _XBS5_LP64_OFF64	-1
-# define _XBS5_LPBIG_OFFBIG	-1
+#  define _POSIX_V7_LP64_OFF64 -1
+#  define _POSIX_V7_LPBIG_OFFBIG -1
+#  define _POSIX_V6_LP64_OFF64 -1
+#  define _POSIX_V6_LPBIG_OFFBIG -1
+#  define _XBS5_LP64_OFF64 -1
+#  define _XBS5_LPBIG_OFFBIG -1
 
 #endif /* __WORDSIZE == 32 */

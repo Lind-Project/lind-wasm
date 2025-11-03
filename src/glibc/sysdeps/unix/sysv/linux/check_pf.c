@@ -39,12 +39,11 @@
 #include "netlinkaccess.h"
 
 #ifndef IFA_F_HOMEADDRESS
-# define IFA_F_HOMEADDRESS 0
+#  define IFA_F_HOMEADDRESS 0
 #endif
 #ifndef IFA_F_OPTIMISTIC
-# define IFA_F_OPTIMISTIC 0
+#  define IFA_F_OPTIMISTIC 0
 #endif
-
 
 struct cached_data
 {
@@ -56,15 +55,12 @@ struct cached_data
   struct in6addrinfo in6ai[0];
 };
 
-static struct cached_data noai6ai_cached =
-  {
-    .usecnt = 1,	/* Make sure we never try to delete this entry.  */
-    .in6ailen = 0
-  };
+static struct cached_data noai6ai_cached
+    = { .usecnt = 1, /* Make sure we never try to delete this entry.  */
+	.in6ailen = 0 };
 
 static struct cached_data *cache;
 __libc_lock_define_initialized (static, lock);
-
 
 static inline uint32_t
 get_nl_timestamp (void)
@@ -86,7 +82,6 @@ cache_valid_p (void)
     }
   return false;
 }
-
 
 static struct cached_data *
 make_request (int fd, pid_t pid)
@@ -131,7 +126,8 @@ make_request (int fd, pid_t pid)
 
   if (TEMP_FAILURE_RETRY (__sendto (fd, (void *) &req, sizeof (req), 0,
 				    (struct sockaddr *) &nladdr,
-				    sizeof (nladdr))) < 0)
+				    sizeof (nladdr)))
+      < 0)
     goto out_fail;
 
   bool done = false;
@@ -141,16 +137,13 @@ make_request (int fd, pid_t pid)
 
   do
     {
-      struct msghdr msg =
-	{
-	  .msg_name = (void *) &nladdr,
-	  .msg_namelen =  sizeof (nladdr),
-	  .msg_iov = &iov,
-	  .msg_iovlen = 1,
-	  .msg_control = NULL,
-	  .msg_controllen = 0,
-	  .msg_flags = 0
-	};
+      struct msghdr msg = { .msg_name = (void *) &nladdr,
+			    .msg_namelen = sizeof (nladdr),
+			    .msg_iov = &iov,
+			    .msg_iovlen = 1,
+			    .msg_control = NULL,
+			    .msg_controllen = 0,
+			    .msg_flags = 0 };
 
       ssize_t read_len = TEMP_FAILURE_RETRY (__recvmsg (fd, &msg, 0));
       __netlink_assert_response (fd, read_len);
@@ -161,8 +154,7 @@ make_request (int fd, pid_t pid)
 	goto out_fail;
 
       struct nlmsghdr *nlmh;
-      for (nlmh = (struct nlmsghdr *) buf;
-	   NLMSG_OK (nlmh, (size_t) read_len);
+      for (nlmh = (struct nlmsghdr *) buf; NLMSG_OK (nlmh, (size_t) read_len);
 	   nlmh = (struct nlmsghdr *) NLMSG_NEXT (nlmh, read_len))
 	{
 	  if (nladdr.nl_pid != 0 || (pid_t) nlmh->nlmsg_pid != pid
@@ -175,8 +167,7 @@ make_request (int fd, pid_t pid)
 	      struct rtattr *rta = IFA_RTA (ifam);
 	      size_t len = nlmh->nlmsg_len - NLMSG_LENGTH (sizeof (*ifam));
 
-	      if (ifam->ifa_family != AF_INET
-		  && ifam->ifa_family != AF_INET6)
+	      if (ifam->ifa_family != AF_INET && ifam->ifa_family != AF_INET6)
 		continue;
 
 	      const void *local = NULL;
@@ -217,9 +208,9 @@ make_request (int fd, pid_t pid)
 	      if (result_len == 0 || result_len == result_cap)
 		{
 		  result_cap = 2 * result_cap;
-		  result = realloc (result, sizeof (*result)
-				    + result_cap
-				      * sizeof (struct in6addrinfo));
+		  result = realloc (
+		      result, sizeof (*result)
+				  + result_cap * sizeof (struct in6addrinfo));
 		}
 
 	      if (!result)
@@ -227,11 +218,13 @@ make_request (int fd, pid_t pid)
 
 	      struct in6addrinfo *info = &result->in6ai[result_len++];
 
-	      info->flags = (((ifam->ifa_flags
-			       & (IFA_F_DEPRECATED | IFA_F_OPTIMISTIC))
-			      ? in6ai_deprecated : 0)
-			     | ((ifam->ifa_flags & IFA_F_HOMEADDRESS)
-			         ? in6ai_homeaddress : 0));
+	      info->flags
+		  = (((ifam->ifa_flags & (IFA_F_DEPRECATED | IFA_F_OPTIMISTIC))
+			  ? in6ai_deprecated
+			  : 0)
+		     | ((ifam->ifa_flags & IFA_F_HOMEADDRESS)
+			    ? in6ai_homeaddress
+			    : 0));
 	      info->prefixlen = ifam->ifa_prefixlen;
 	      info->index = ifam->ifa_index;
 	      if (ifam->ifa_family == AF_INET)
@@ -249,7 +242,7 @@ make_request (int fd, pid_t pid)
 	    done = true;
 	}
     }
-  while (! done);
+  while (!done);
 
   if (seen_ipv6 && result != NULL)
     {
@@ -271,7 +264,7 @@ make_request (int fd, pid_t pid)
 
   return result;
 
- out_fail:
+out_fail:
 
   free (result);
   return NULL;
@@ -279,17 +272,16 @@ make_request (int fd, pid_t pid)
 
 #ifdef __EXCEPTIONS
 static void
-cancel_handler (void *arg __attribute__((unused)))
+cancel_handler (void *arg __attribute__ ((unused)))
 {
   /* Release the lock.  */
   __libc_lock_unlock (lock);
 }
 #endif
 
-void
-attribute_hidden
-__check_pf (bool *seen_ipv4, bool *seen_ipv6,
-	    struct in6addrinfo **in6ai, size_t *in6ailen)
+void attribute_hidden
+__check_pf (bool *seen_ipv4, bool *seen_ipv6, struct in6addrinfo **in6ai,
+	    size_t *in6ailen)
 {
   *in6ai = NULL;
   *in6ailen = 0;
@@ -321,8 +313,8 @@ __check_pf (bool *seen_ipv4, bool *seen_ipv6,
 	  socklen_t addr_len = sizeof (nladdr);
 
 	  if (__bind (fd, (struct sockaddr *) &nladdr, sizeof (nladdr)) == 0
-	      && __getsockname (fd, (struct sockaddr *) &nladdr,
-				&addr_len) == 0)
+	      && __getsockname (fd, (struct sockaddr *) &nladdr, &addr_len)
+		     == 0)
 	    data = make_request (fd, nladdr.nl_pid);
 
 	  __close_nocancel_nostatus (fd);
@@ -374,9 +366,9 @@ __free_in6ai (struct in6addrinfo *ai)
 {
   if (ai != NULL)
     {
-      struct cached_data *data =
-	(struct cached_data *) ((char *) ai
-				- offsetof (struct cached_data, in6ai));
+      struct cached_data *data
+	  = (struct cached_data *) ((char *) ai
+				    - offsetof (struct cached_data, in6ai));
 
       if (atomic_fetch_add_relaxed (&data->usecnt, -1) == 1)
 	{

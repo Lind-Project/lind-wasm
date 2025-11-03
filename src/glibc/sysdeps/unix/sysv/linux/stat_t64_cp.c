@@ -26,9 +26,9 @@ int
 __cp_stat64_t64_stat64 (const struct __stat64_t64 *st64_t64,
 			struct stat64 *st64)
 {
-  if (! in_time_t_range (st64_t64->st_atim.tv_sec)
-      || ! in_time_t_range (st64_t64->st_mtim.tv_sec)
-      || ! in_time_t_range (st64_t64->st_ctim.tv_sec))
+  if (!in_time_t_range (st64_t64->st_atim.tv_sec)
+      || !in_time_t_range (st64_t64->st_mtim.tv_sec)
+      || !in_time_t_range (st64_t64->st_ctim.tv_sec))
     {
       __set_errno (EOVERFLOW);
       return -1;
@@ -37,8 +37,7 @@ __cp_stat64_t64_stat64 (const struct __stat64_t64 *st64_t64,
   /* Clear both pad and reserved fields.  */
   memset (st64, 0, sizeof (*st64));
 
-  st64->st_dev = st64_t64->st_dev,
-  st64->st_ino = st64_t64->st_ino;
+  st64->st_dev = st64_t64->st_dev, st64->st_ino = st64_t64->st_ino;
   st64->st_mode = st64_t64->st_mode;
   st64->st_nlink = st64_t64->st_nlink;
   st64->st_uid = st64_t64->st_uid;
@@ -46,7 +45,7 @@ __cp_stat64_t64_stat64 (const struct __stat64_t64 *st64_t64,
   st64->st_rdev = st64_t64->st_rdev;
   st64->st_size = st64_t64->st_size;
   st64->st_blksize = st64_t64->st_blksize;
-  st64->st_blocks  = st64_t64->st_blocks;
+  st64->st_blocks = st64_t64->st_blocks;
   st64->st_atim = valid_timespec64_to_timespec (st64_t64->st_atim);
   st64->st_mtim = valid_timespec64_to_timespec (st64_t64->st_mtim);
   st64->st_ctim = valid_timespec64_to_timespec (st64_t64->st_ctim);

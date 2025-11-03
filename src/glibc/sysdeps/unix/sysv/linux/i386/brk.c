@@ -18,7 +18,7 @@
 
 #if BUILD_PIE_DEFAULT
 /* Can't use "call *%gs:SYSINFO_OFFSET" during startup in static PIE.  */
-# define I386_USE_SYSENTER 0
+#  define I386_USE_SYSENTER 0
 #endif
 
 #include <sysdeps/unix/sysv/linux/brk.c>

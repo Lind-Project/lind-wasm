@@ -18,7 +18,7 @@
 #include <sysdeps/unix/sysdep.h>
 #include <bits/wordsize.h>
 #if __WORDSIZE == 64
-#include <sysdeps/powerpc/powerpc64/sysdep.h>
+#  include <sysdeps/powerpc/powerpc64/sysdep.h>
 #else
-#include <sysdeps/powerpc/powerpc32/sysdep.h>
+#  include <sysdeps/powerpc/powerpc32/sysdep.h>
 #endif

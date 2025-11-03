@@ -47,8 +47,8 @@ main (void)
       match[2] = re_search_2 (&regex, "xya", 3, "bd", 2, 2, 3, NULL, 5);
       if (match[0] != 2 || match[1] != 0 || match[2] != 2)
 	{
-	  printf ("re_search_2 returned %d,%d,%d, expected 2,0,2\n",
-		  match[0], match[1], match[2]);
+	  printf ("re_search_2 returned %d,%d,%d, expected 2,0,2\n", match[0],
+		  match[1], match[2]);
 	  result = 1;
 	}
       else
@@ -71,8 +71,8 @@ main (void)
       match[2] = re_search_2 (&regex, "xya", 3, "bd", 2, 2, 3, NULL, 5);
       if (match[0] != 2 || match[1] != 0 || match[2] != 2)
 	{
-	  printf ("re_search_2 returned %d,%d,%d, expected 2,0,2\n",
-		  match[0], match[1], match[2]);
+	  printf ("re_search_2 returned %d,%d,%d, expected 2,0,2\n", match[0],
+		  match[1], match[2]);
 	  result = 1;
 	}
       else

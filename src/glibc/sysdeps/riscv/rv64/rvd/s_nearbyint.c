@@ -36,8 +36,8 @@ __nearbyint (double x)
       int64_t i;
       double new_x;
 
-      asm volatile ("fcvt.l.d %0, %1" : "=r" (i) : "f" (x));
-      asm volatile ("fcvt.d.l %0, %1" : "=f" (new_x) : "r" (i));
+      asm volatile ("fcvt.l.d %0, %1" : "=r"(i) : "f"(x));
+      asm volatile ("fcvt.d.l %0, %1" : "=f"(new_x) : "r"(i));
 
       /* nearbyint(-0) == -0, and in general we'll always have the same
 	 sign as our input.  */

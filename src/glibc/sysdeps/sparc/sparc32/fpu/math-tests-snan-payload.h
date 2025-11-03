@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef SPARC_MATH_TESTS_SNAN_PAYLOAD_H
-#define SPARC_MATH_TESTS_SNAN_PAYLOAD_H 1
+#  define SPARC_MATH_TESTS_SNAN_PAYLOAD_H 1
 
 /* LEON floating-point instructions do not preserve sNaN
    payloads.  */
-#if defined (__leon__)
-# define SNAN_TESTS_PRESERVE_PAYLOAD	0
-#else
-# define SNAN_TESTS_PRESERVE_PAYLOAD	1
-#endif
+#  if defined(__leon__)
+#    define SNAN_TESTS_PRESERVE_PAYLOAD 0
+#  else
+#    define SNAN_TESTS_PRESERVE_PAYLOAD 1
+#  endif
 
 #endif /* math-tests-snan-payload.h.  */

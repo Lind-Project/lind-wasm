@@ -4,11 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static const struct option opts[] =
-  {
-    { "alpha",    optional_argument, NULL, 'a' },
-    { NULL,       0,                 NULL, 0 }
-  };
+static const struct option opts[]
+    = { { "alpha", optional_argument, NULL, 'a' }, { NULL, 0, NULL, 0 } };
 
 static int
 one_test (const char *fmt, int argc, char *argv[], int n, int expected[n])
@@ -34,8 +31,9 @@ one_test (const char *fmt, int argc, char *argv[], int n, int expected[n])
 	}
       else if (optarg != NULL)
 	{
-	  printf ("%s: format '%s' test %d failed: optarg is \"%s\", not NULL\n",
-		  argv[0], fmt, i, optarg);
+	  printf (
+	      "%s: format '%s' test %d failed: optarg is \"%s\", not NULL\n",
+	      argv[0], fmt, i, optarg);
 	  res = 1;
 	}
       if (ftell (stderr) != 0)
@@ -48,7 +46,6 @@ one_test (const char *fmt, int argc, char *argv[], int n, int expected[n])
 
   return res;
 }
-
 
 static int
 do_test (void)
@@ -72,12 +69,12 @@ do_test (void)
 
   int ret = one_test ("W;", 2,
 		      (char *[2]) { (char *) "bug-getopt4a", (char *) "--a" },
-		      1, (int [1]) { 'a' });
+		      1, (int[1]) { 'a' });
 
-  ret |= one_test ("W;", 3,
-		   (char *[3]) { (char *) "bug-getopt4b", (char *) "-W",
-				 (char *) "a" },
-		   1, (int [1]) { 'a' });
+  ret |= one_test (
+      "W;", 3,
+      (char *[3]) { (char *) "bug-getopt4b", (char *) "-W", (char *) "a" }, 1,
+      (int[1]) { 'a' });
 
   if (ret == 0)
     puts ("all OK");

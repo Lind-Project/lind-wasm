@@ -21,7 +21,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 #define N 10
 #define ROUNDS 100
 
@@ -29,7 +28,6 @@ static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 static pthread_barrier_t bN1;
 static pthread_barrier_t b2;
-
 
 static void *
 tf (void *p)
@@ -68,7 +66,6 @@ tf (void *p)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -165,7 +162,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

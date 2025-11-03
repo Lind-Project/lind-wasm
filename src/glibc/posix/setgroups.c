@@ -28,4 +28,4 @@ setgroups (size_t n, const gid_t *groups)
 }
 libc_hidden_def (setgroups)
 
-stub_warning (setgroups)
+    stub_warning (setgroups)

@@ -28,16 +28,14 @@
 
 #include "eintr.c"
 
-
 static pthread_mutex_t m1 = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t m2 = PTHREAD_MUTEX_INITIALIZER;
-
 
 static void *
 tf1 (void *arg)
 {
-  struct timespec ts = timespec_add (xclock_now (CLOCK_REALTIME),
-                                     make_timespec (10000, 0));
+  struct timespec ts
+      = timespec_add (xclock_now (CLOCK_REALTIME), make_timespec (10000, 0));
 
   /* This call must never return.  */
   int e = pthread_mutex_timedlock (&m1, &ts);
@@ -47,7 +45,6 @@ tf1 (void *arg)
 
   exit (1);
 }
-
 
 static void *
 tf2 (void *arg)
@@ -62,7 +59,6 @@ tf2 (void *arg)
     }
   return NULL;
 }
-
 
 static int
 do_test (void)

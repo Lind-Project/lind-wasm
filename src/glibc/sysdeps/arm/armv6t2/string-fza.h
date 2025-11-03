@@ -17,10 +17,10 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_FZA_H
-#define _STRING_FZA_H 1
+#  define _STRING_FZA_H 1
 
-#include <string-misc.h>
-#include <string-optype.h>
+#  include <string-misc.h>
+#  include <string-optype.h>
 
 /* The functions return a byte mask.  */
 typedef op_t find_t;
@@ -62,8 +62,8 @@ find_zero_ne_all (op_t x1, op_t x2)
 }
 
 /* Define the "inexact" versions in terms of the exact versions.  */
-#define find_zero_low		find_zero_all
-#define find_eq_low		find_eq_all
-#define find_zero_eq_low	find_zero_eq_all
+#  define find_zero_low find_zero_all
+#  define find_eq_low find_eq_all
+#  define find_zero_eq_low find_zero_eq_all
 
 #endif /* _STRING_FZA_H */

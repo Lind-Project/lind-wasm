@@ -23,7 +23,6 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-
 /* Put the 1 minute, 5 minute and 15 minute load averages
    into the first NELEM elements of LOADAVG.
    Return the number written (never more than 3, but may be less than NELEM),
@@ -37,8 +36,8 @@ getloadavg (double loadavg[], int nelem)
   error_t err;
   int i;
 
-  err = __host_info (__mach_host_self (), HOST_LOAD_INFO,
-		     (host_info_t) &info, &size);
+  err = __host_info (__mach_host_self (), HOST_LOAD_INFO, (host_info_t) &info,
+		     &size);
   if (err)
     return __hurd_fail (err);
   if (size < HOST_LOAD_INFO_COUNT)

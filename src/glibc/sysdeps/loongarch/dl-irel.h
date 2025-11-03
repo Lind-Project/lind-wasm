@@ -28,16 +28,15 @@
 static inline ElfW (Addr) __attribute ((always_inline))
 elf_ifunc_invoke (ElfW (Addr) addr)
 {
-  __ifunc_arg_t arg =
-  {
+  __ifunc_arg_t arg = {
     ._size = sizeof (__ifunc_arg_t),
-    ._hwcap = GLRO(dl_hwcap),
+    ._hwcap = GLRO (dl_hwcap),
   };
-  return ((ElfW(Addr) (*) (const __ifunc_arg_t *)) (addr)) (&arg);
+  return ((ElfW (Addr) (*) (const __ifunc_arg_t *) ) (addr)) (&arg);
 }
 
 static inline void __attribute ((always_inline))
-elf_irela (const ElfW (Rela) *reloc)
+elf_irela (const ElfW (Rela) * reloc)
 {
   ElfW (Addr) *const reloc_addr = (void *) reloc->r_offset;
   const unsigned long int r_type = ELFW (R_TYPE) (reloc->r_info);

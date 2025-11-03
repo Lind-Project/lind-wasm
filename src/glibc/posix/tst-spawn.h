@@ -17,20 +17,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef PID_T_TYPE
-# define PID_T_TYPE pid_t
+#  define PID_T_TYPE pid_t
 #endif
 
 #ifndef POSIX_SPAWN
-# define POSIX_SPAWN(__child, __path, __actions, __attr, __argv, __envp) \
-  posix_spawn (__child, __path, __actions, __attr, __argv, __envp)
+#  define POSIX_SPAWN(__child, __path, __actions, __attr, __argv, __envp)     \
+    posix_spawn (__child, __path, __actions, __attr, __argv, __envp)
 #endif
 
 #ifndef POSIX_SPAWNP
-# define POSIX_SPAWNP(__child, __path, __actions, __attr, __argv, __envp) \
-  posix_spawnp (__child, __path, __actions, __attr, __argv, __envp)
+#  define POSIX_SPAWNP(__child, __path, __actions, __attr, __argv, __envp)    \
+    posix_spawnp (__child, __path, __actions, __attr, __argv, __envp)
 #endif
 
 #ifndef WAITID
-# define WAITID(__idtype, __id, __info, __opts) \
-  waitid (__idtype, __id, __info, __opts)
+#  define WAITID(__idtype, __id, __info, __opts)                              \
+    waitid (__idtype, __id, __info, __opts)
 #endif

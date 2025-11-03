@@ -26,15 +26,13 @@
 #include <hurd/fd.h>
 #include "dirstream.h"
 
-
 /* Read a directory entry from DIRP.  */
 int
 __readdir_r (DIR *dirp, struct dirent *entry, struct dirent **result)
 {
   if (sizeof (struct dirent64) == sizeof (struct dirent))
     /* We should in fact just be an alias to readdir64_r on this machine.  */
-    return __readdir64_r (dirp,
-			  (struct dirent64 *) entry,
+    return __readdir64_r (dirp, (struct dirent64 *) entry,
 			  (struct dirent64 **) result);
 
   struct dirent64 *result64;

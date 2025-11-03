@@ -21,21 +21,23 @@
 
 #include <tcb-offsets.h>
 
-#if IS_IN (rtld)
+#if IS_IN(rtld)
 /* We cannot use the thread descriptor because in ld.so we use setjmp
    earlier than the descriptor is initialized.  Using a global variable
    is too complicated here since we have no PC-relative addressing mode.  */
-# include <sysdeps/generic/pointer_guard.h>
+#  include <sysdeps/generic/pointer_guard.h>
 #else
-# ifdef __ASSEMBLER__
-#  define PTR_MANGLE(reg)       xorl %gs:POINTER_GUARD, reg;                  \
-                                roll $9, reg
-#  define PTR_DEMANGLE(reg)     rorl $9, reg;                                 \
-                                xorl %gs:POINTER_GUARD, reg
-# else
-#  define PTR_MANGLE(var)       
-#  define PTR_DEMANGLE(var)    
-# endif
+#  ifdef __ASSEMBLER__
+#    define PTR_MANGLE(reg)                                                   \
+      xorl % gs : POINTER_GUARD, reg;                                         \
+      roll $9, reg
+#    define PTR_DEMANGLE(reg)                                                 \
+      rorl $9, reg;                                                           \
+      xorl % gs : POINTER_GUARD, reg
+#  else
+#    define PTR_MANGLE(var)
+#    define PTR_DEMANGLE(var)
+#  endif
 #endif
 
 #endif /* POINTER_GUARD_H */

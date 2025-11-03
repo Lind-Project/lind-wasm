@@ -38,11 +38,10 @@ __getrusage64 (enum __rusage_who who, struct __rusage64 *usage)
 }
 
 #if __TIMESIZE != 64
-libc_hidden_def (__getrusage64)
-int
-__getrusage (enum __rusage_who who, struct rusage *usage)
+libc_hidden_def (__getrusage64) int __getrusage (enum __rusage_who who,
+						 struct rusage *usage)
 {
-  int ret ;
+  int ret;
   struct __rusage64 usage64;
 
   ret = __getrusage64 (who, &usage64);

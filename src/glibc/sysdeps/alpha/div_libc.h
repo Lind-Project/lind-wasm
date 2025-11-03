@@ -19,19 +19,19 @@
 
 #include <sysdep.h>
 #ifdef __linux__
-# include <asm/gentrap.h>
-# include <asm/pal.h>
+#  include <asm/gentrap.h>
+#  include <asm/pal.h>
 #else
-# include <machine/pal.h>
+#  include <machine/pal.h>
 #endif
 
 /* These are not normal C functions.  Argument registers are t10 and t11;
    the result goes in t12; the return address is in t9.  Only t12 and AT
    may be clobbered.  */
-#define X	t10
-#define Y	t11
-#define RV	t12
-#define RA	t9
+#define X t10
+#define Y t11
+#define RV t12
+#define RA t9
 
 /* The secureplt format does not allow the division routines to be called
    via plt; there aren't enough registers free to be clobbered.  Avoid
@@ -40,7 +40,7 @@
 #define funcnoplt notype
 
 /* None of these functions should use implicit anything.  */
-	.set	nomacro
+.set	nomacro
 	.set	noat
 
 /* Code fragment to invoke _mcount for profiling.  This should be invoked
@@ -76,7 +76,7 @@
 
 /* In order to make the below work, all top-level divide routines must
    use the same frame size.  */
-#define FRAME	64
+#define FRAME 64
 
 /* Code fragment to generate an integer divide-by-zero fault.  When
    building libc.so, we arrange for there to be one copy of this code
@@ -86,14 +86,14 @@
 
 .macro DO_DIVBYZERO
 #ifdef PIC
-#define DIVBYZERO	__divbyzero
+#  define DIVBYZERO __divbyzero
 	.section .gnu.linkonce.t.divbyzero, "ax", @progbits
 	.globl	__divbyzero
 	.type	__divbyzero, @function
 	.usepv	__divbyzero, no
 	.hidden	__divbyzero
 #else
-#define DIVBYZERO	$divbyzero
+#  define DIVBYZERO $divbyzero
 #endif
 
 	.align	4

@@ -37,4 +37,4 @@ __times (struct tms *buffer)
 }
 stub_warning (times)
 
-weak_alias (__times, times)
+    weak_alias (__times, times)

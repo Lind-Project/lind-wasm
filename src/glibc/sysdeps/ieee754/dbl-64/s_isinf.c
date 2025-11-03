@@ -16,17 +16,16 @@ int
 __isinf (double x)
 {
   int64_t ix;
-  EXTRACT_WORDS64 (ix,x);
+  EXTRACT_WORDS64 (ix, x);
   int64_t t = ix & UINT64_C (0x7fffffffffffffff);
   t ^= UINT64_C (0x7ff0000000000000);
   t |= -t;
   return ~(t >> 63) & (ix >> 62);
 }
-hidden_def (__isinf)
-weak_alias (__isinf, isinf)
+hidden_def (__isinf) weak_alias (__isinf, isinf)
 #ifdef NO_LONG_DOUBLE
-# if LDBL_CLASSIFY_COMPAT && SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_23)
-compat_symbol (libc, __isinf, __isinfl, GLIBC_2_0);
-# endif
+#  if LDBL_CLASSIFY_COMPAT && SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_23)
+    compat_symbol (libc, __isinf, __isinfl, GLIBC_2_0);
+#  endif
 weak_alias (__isinf, isinfl)
 #endif

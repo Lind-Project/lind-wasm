@@ -35,7 +35,7 @@ __xstat64 (int vers, const char *name, struct stat64 *buf)
 
     default:
       {
-        struct kernel_stat kbuf;
+	struct kernel_stat kbuf;
 	int r = INTERNAL_SYSCALL_CALL (stat, name, &kbuf);
 	if (r == 0)
 	  return __xstat_conv (vers, &kbuf, buf);

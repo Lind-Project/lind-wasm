@@ -26,17 +26,12 @@
 /* Coefficients B_2k / 2k(2k-1) of x^-(2k-1) inside exp in Stirling's
    approximation to gamma function.  */
 
-static const long double gamma_coeff[] =
-  {
-    0x1.5555555555555556p-4L,
-    -0xb.60b60b60b60b60bp-12L,
-    0x3.4034034034034034p-12L,
-    -0x2.7027027027027028p-12L,
-    0x3.72a3c5631fe46aep-12L,
-    -0x7.daac36664f1f208p-12L,
-    0x1.a41a41a41a41a41ap-8L,
-    -0x7.90a1b2c3d4e5f708p-8L,
-  };
+static const long double gamma_coeff[] = {
+  0x1.5555555555555556p-4L,  -0xb.60b60b60b60b60bp-12L,
+  0x3.4034034034034034p-12L, -0x2.7027027027027028p-12L,
+  0x3.72a3c5631fe46aep-12L,  -0x7.daac36664f1f208p-12L,
+  0x1.a41a41a41a41a41ap-8L,  -0x7.90a1b2c3d4e5f708p-8L,
+};
 
 #define NCOEFF (sizeof (gamma_coeff) / sizeof (gamma_coeff[0]))
 
@@ -99,11 +94,10 @@ gammal_positive (long double x, int *exp2_adj)
 	  x_adj_mant *= 2.0L;
 	}
       *exp2_adj = x_adj_log2 * (int) x_adj_int;
-      long double ret = (__ieee754_powl (x_adj_mant, x_adj)
-			 * __ieee754_exp2l (x_adj_log2 * x_adj_frac)
-			 * __ieee754_expl (-x_adj)
-			 * sqrtl (2 * M_PIl / x_adj)
-			 / prod);
+      long double ret
+	  = (__ieee754_powl (x_adj_mant, x_adj)
+	     * __ieee754_exp2l (x_adj_log2 * x_adj_frac)
+	     * __ieee754_expl (-x_adj) * sqrtl (2 * M_PIl / x_adj) / prod);
       exp_adj += x_eps * __ieee754_logl (x_adj);
       long double bsum = gamma_coeff[NCOEFF - 1];
       long double x_adj2 = x_adj * x_adj;
@@ -181,12 +175,11 @@ __ieee754_gammal_r (long double x, int *signgamp)
 	      long double frac = tx - x;
 	      if (frac > 0.5L)
 		frac = 1.0L - frac;
-	      long double sinpix = (frac <= 0.25L
-				    ? __sinl (M_PIl * frac)
-				    : __cosl (M_PIl * (0.5L - frac)));
+	      long double sinpix
+		  = (frac <= 0.25L ? __sinl (M_PIl * frac)
+				   : __cosl (M_PIl * (0.5L - frac)));
 	      int exp2_adj;
-	      ret = M_PIl / (-x * sinpix
-			     * gammal_positive (-x, &exp2_adj));
+	      ret = M_PIl / (-x * sinpix * gammal_positive (-x, &exp2_adj));
 	      ret = __scalbnl (ret, -exp2_adj);
 	      math_check_force_underflow_nonneg (ret);
 	    }

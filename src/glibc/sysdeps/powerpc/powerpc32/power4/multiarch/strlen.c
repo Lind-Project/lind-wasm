@@ -16,18 +16,17 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined SHARED && IS_IN (libc)
-# define strlen __redirect_strlen
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if defined SHARED && IS_IN(libc)
+#  define strlen __redirect_strlen
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (strlen) __strlen_ppc attribute_hidden;
 extern __typeof (strlen) __strlen_power7 attribute_hidden;
-# undef strlen
+#  undef strlen
 
 libc_ifunc_redirected (__redirect_strlen, strlen,
-		       (hwcap & PPC_FEATURE_HAS_VSX)
-		       ? __strlen_power7
-		       : __strlen_ppc);
+		       (hwcap & PPC_FEATURE_HAS_VSX) ? __strlen_power7
+						     : __strlen_ppc);
 #endif

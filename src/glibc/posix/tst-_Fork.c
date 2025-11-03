@@ -32,9 +32,15 @@ static int
 singlethread_test (void)
 {
   const char testdata1[] = "abcdefghijklmnopqrtuvwxz";
-  enum { testdatalen1 = array_length (testdata1) };
+  enum
+  {
+    testdatalen1 = array_length (testdata1)
+  };
   const char testdata2[] = "01234567890";
-  enum { testdatalen2 = array_length (testdata2) };
+  enum
+  {
+    testdatalen2 = array_length (testdata2)
+  };
 
   pid_t ppid = getpid ();
 
@@ -51,7 +57,7 @@ singlethread_test (void)
   if (pid == 0)
     {
       TEST_VERIFY_EXIT (getpid () != ppid);
-      TEST_COMPARE (getppid(), ppid);
+      TEST_COMPARE (getppid (), ppid);
 
       TEST_COMPARE (xlseek (tempfd, 0, SEEK_CUR), testdatalen1);
 
@@ -83,7 +89,6 @@ singlethread_test (void)
 
   return 0;
 }
-
 
 #define SIG_PID_EXIT_CODE 20
 
@@ -139,7 +144,6 @@ multithread_atfork_test (void)
 
   return 0;
 }
-
 
 static int
 do_test (void)

@@ -15,13 +15,13 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_EPOLL_H
-# error "Never use <bits/epoll.h> directly; include <sys/epoll.h> instead."
+#ifndef _SYS_EPOLL_H
+#  error "Never use <bits/epoll.h> directly; include <sys/epoll.h> instead."
 #endif
 
 /* Flags to be passed to epoll_create1.  */
 enum
-  {
-    EPOLL_CLOEXEC = 010000000
+{
+  EPOLL_CLOEXEC = 010000000
 #define EPOLL_CLOEXEC EPOLL_CLOEXEC
-  };
+};

@@ -27,6 +27,6 @@ __fstatat (int fd, const char *filename, struct stat *buf, int flag)
 {
   struct stat64 buf64;
   return (__fstatat64 (fd, filename, &buf64, flag)
-	  ?: stat64_conv (buf, &buf64));
+	      ?: stat64_conv (buf, &buf64));
 }
 weak_alias (__fstatat, fstatat)

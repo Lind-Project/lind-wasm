@@ -18,7 +18,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TININESS_H
-#define _TININESS_H	1
+#  define _TININESS_H 1
 
 /* Under IEEE 754, an architecture may determine tininess of
    floating-point results either "before rounding" or "after
@@ -28,6 +28,6 @@
    architectures.  The test stdlib/tst-tininess will fail if the
    definition is incorrect.  */
 
-#define TININESS_AFTER_ROUNDING	0
+#  define TININESS_AFTER_ROUNDING 0
 
 #endif /* tininess.h */

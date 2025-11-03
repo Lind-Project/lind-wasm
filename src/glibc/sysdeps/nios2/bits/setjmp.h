@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _NIOS2_BITS_SETJMP_H
-#define _NIOS2_BITS_SETJMP_H 1
+#  define _NIOS2_BITS_SETJMP_H 1
 
-#if !defined(_SETJMP_H) && !defined(_PTHREAD_H)
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
-#endif
+#  if !defined(_SETJMP_H) && !defined(_PTHREAD_H)
+#    error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  endif
 
 /* Saves r16-r22 (callee-saved, including GOT pointer), fp (frame pointer),
    ra (return address), and sp (stack pointer).  */

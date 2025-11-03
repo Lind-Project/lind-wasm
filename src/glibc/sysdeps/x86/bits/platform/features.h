@@ -17,7 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PLATFORM_X86_H
-# error "Never include <bits/platform/features.h> directly; use <sys/platform/x86.h> instead."
+#  error                                                                       \
+      "Never include <bits/platform/features.h> directly; use <sys/platform/x86.h> instead."
 #endif
 
 static __inline__ _Bool

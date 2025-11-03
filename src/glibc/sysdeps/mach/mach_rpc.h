@@ -19,9 +19,17 @@
 #include <mach/message.h>
 
 /* Macro used by MIG to cleanly check the type.  */
-#define BAD_TYPECHECK(type, check) __glibc_unlikely (({	\
-  union { mach_msg_type_t t; uintptr_t w; } _t, _c;	\
-  _t.t = *(type); _c.t = *(check);_t.w != _c.w; }))
+#define BAD_TYPECHECK(type, check)                                            \
+  __glibc_unlikely (({                                                        \
+    union                                                                     \
+    {                                                                         \
+      mach_msg_type_t t;                                                      \
+      uintptr_t w;                                                            \
+    } _t, _c;                                                                 \
+    _t.t = *(type);                                                           \
+    _c.t = *(check);                                                          \
+    _t.w != _c.w;                                                             \
+  }))
 
 _Static_assert (sizeof (uintptr_t) == sizeof (mach_msg_type_t),
-                "mach_msg_type_t needs to be the same size as uintptr_t");
+		"mach_msg_type_t needs to be the same size as uintptr_t");

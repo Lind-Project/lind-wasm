@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef STRPBRK
-# define STRPBRK __strpbrk_sse42
+#  define STRPBRK __strpbrk_sse42
 #endif
 
 #define USE_AS_STRPBRK

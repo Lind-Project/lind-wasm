@@ -28,14 +28,13 @@ __feholdexcept (fenv_t *envp)
   __asm__ ("fnstenv %0\n\t"
 	   "stmxcsr %1\n\t"
 	   "fnclex"
-	   : "=m" (*envp), "=m" (envp->__mxcsr));
+	   : "=m"(*envp), "=m"(envp->__mxcsr));
 
   /* Set the SSE MXCSR register.  */
   mxcsr = (envp->__mxcsr | 0x1f80) & ~0x3f;
-  __asm__ ("ldmxcsr %0" : : "m" (*&mxcsr));
+  __asm__ ("ldmxcsr %0" : : "m"(*&mxcsr));
 
   return 0;
 }
-libm_hidden_def (__feholdexcept)
-weak_alias (__feholdexcept, feholdexcept)
-libm_hidden_weak (feholdexcept)
+libm_hidden_def (__feholdexcept) weak_alias (__feholdexcept, feholdexcept)
+    libm_hidden_weak (feholdexcept)

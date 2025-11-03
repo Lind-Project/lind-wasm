@@ -23,7 +23,7 @@ long long int
 __llrintf (float x)
 {
   int64_t res;
-  asm ("fcvt.l.s %0, %1" : "=r" (res) : "f" (x));
+  asm ("fcvt.l.s %0, %1" : "=r"(res) : "f"(x));
   return res;
 }
 

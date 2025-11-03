@@ -29,6 +29,5 @@ __fegetround (void)
 
   return cw & __FE_ROUND_MASK;
 }
-libm_hidden_def (__fegetround)
-weak_alias (__fegetround, fegetround)
-libm_hidden_weak (fegetround)
+libm_hidden_def (__fegetround) weak_alias (__fegetround, fegetround)
+    libm_hidden_weak (fegetround)

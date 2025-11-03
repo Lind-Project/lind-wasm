@@ -23,7 +23,8 @@ static char rcsid[] = "$NetBSD: s_fabsf.c,v 1.4 1995/05/10 20:47:15 jtc Exp $";
 #include <math.h>
 #include <libm-alias-float.h>
 
-float __fabsf(float x)
+float
+__fabsf (float x)
 {
   return __builtin_fabsf (x);
 }

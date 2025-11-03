@@ -17,18 +17,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _CSKY_BITS_SETJMP_H
-#define _CSKY_BITS_SETJMP_H 1
+#  define _CSKY_BITS_SETJMP_H 1
 
 typedef struct __jmp_buf_str
-  {
-    /* Stack pointer.  */
-    int __sp;
-    int __lr;
-    /* The actual core defines which registers should be saved.  The
-       buffer contains 32 words, keep space for future growth.
-       Callee-saved registers:
-       r4 ~ r11, r16 ~ r17, r26 ~r31 for abiv2; r8 ~ r14 for abiv1.  */
-    int __regs[32];
-  } __jmp_buf[1];
+{
+  /* Stack pointer.  */
+  int __sp;
+  int __lr;
+  /* The actual core defines which registers should be saved.  The
+     buffer contains 32 words, keep space for future growth.
+     Callee-saved registers:
+     r4 ~ r11, r16 ~ r17, r26 ~r31 for abiv2; r8 ~ r14 for abiv1.  */
+  int __regs[32];
+} __jmp_buf[1];
 
 #endif

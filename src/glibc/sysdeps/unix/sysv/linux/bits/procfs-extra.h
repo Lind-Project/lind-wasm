@@ -18,5 +18,6 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs-extra.h> directly; use <sys/procfs.h> instead."
+#  error                                                                       \
+      "Never include <bits/procfs-extra.h> directly; use <sys/procfs.h> instead."
 #endif

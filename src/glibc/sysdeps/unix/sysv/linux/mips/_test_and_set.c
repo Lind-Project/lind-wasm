@@ -22,7 +22,7 @@
 
 #define _EXTERN_INLINE
 #ifndef __USE_EXTERN_INLINES
-# define __USE_EXTERN_INLINES 1
+#  define __USE_EXTERN_INLINES 1
 #endif
 
 #include "sys/tas.h"

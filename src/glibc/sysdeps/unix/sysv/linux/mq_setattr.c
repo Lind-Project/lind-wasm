@@ -22,12 +22,12 @@
 
 int
 __mq_setattr (mqd_t mqdes, const struct mq_attr *mqstat,
-              struct mq_attr * omqstat)
+	      struct mq_attr *omqstat)
 {
   return INLINE_SYSCALL_CALL (mq_getsetattr, mqdes, mqstat, omqstat);
 }
 versioned_symbol (libc, __mq_setattr, mq_setattr, GLIBC_2_34);
 libc_hidden_ver (__mq_setattr, mq_setattr)
-#if OTHER_SHLIB_COMPAT (librt, GLIBC_2_3_4, GLIBC_2_34)
-compat_symbol (librt, __mq_setattr, mq_setattr, GLIBC_2_3_4);
+#if OTHER_SHLIB_COMPAT(librt, GLIBC_2_3_4, GLIBC_2_34)
+    compat_symbol (librt, __mq_setattr, mq_setattr, GLIBC_2_3_4);
 #endif

@@ -28,9 +28,8 @@ la_or1k_gnu_pltenter (Elf32_Sym *sym __attribute__ ((unused)),
 		      La_or1k_regs *regs, unsigned int *flags,
 		      const char *symname, long int *framesizep)
 {
-  print_enter (refcook, defcook, symname,
-	       regs->lr_reg[0], regs->lr_reg[1], regs->lr_reg[2],
-	       *flags);
+  print_enter (refcook, defcook, symname, regs->lr_reg[0], regs->lr_reg[1],
+	       regs->lr_reg[2], *flags);
 
   /* No need to copy anything, we will not need the parameters in any case.  */
   *framesizep = 0;
@@ -40,10 +39,8 @@ la_or1k_gnu_pltenter (Elf32_Sym *sym __attribute__ ((unused)),
 
 unsigned int
 la_or1k_gnu_pltexit (Elf32_Sym *sym, unsigned int ndx, uintptr_t *refcook,
-		     uintptr_t *defcook,
-		     const struct La_or1k_regs *inregs,
-		     struct La_or1k_retval *outregs,
-		     const char *symname)
+		     uintptr_t *defcook, const struct La_or1k_regs *inregs,
+		     struct La_or1k_retval *outregs, const char *symname)
 {
   print_exit (refcook, defcook, symname, outregs->lrv_reg[0]);
 

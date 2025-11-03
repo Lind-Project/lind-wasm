@@ -16,38 +16,38 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WCSCHR_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WCSCHR_IFUNC 1
 #else
-# define HAVE_WCSCHR_IFUNC	0
+#  define HAVE_WCSCHR_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WCSCHR_IFUNC_AND_VX_SUPPORT HAVE_WCSCHR_IFUNC
+#  define HAVE_WCSCHR_IFUNC_AND_VX_SUPPORT HAVE_WCSCHR_IFUNC
 #else
-# define HAVE_WCSCHR_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WCSCHR_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WCSCHR_DEFAULT		WCSCHR_Z13
+#  define WCSCHR_DEFAULT WCSCHR_Z13
 /* The z13 ifunc variant is using the common code variant as fallback!  */
-# define HAVE_WCSCHR_C		1
-# define HAVE_WCSCHR_Z13	1
+#  define HAVE_WCSCHR_C 1
+#  define HAVE_WCSCHR_Z13 1
 #else
-# define WCSCHR_DEFAULT		WCSCHR_C
-# define HAVE_WCSCHR_C		1
-# define HAVE_WCSCHR_Z13	HAVE_WCSCHR_IFUNC_AND_VX_SUPPORT
+#  define WCSCHR_DEFAULT WCSCHR_C
+#  define HAVE_WCSCHR_C 1
+#  define HAVE_WCSCHR_Z13 HAVE_WCSCHR_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WCSCHR_C
-# define WCSCHR_C		__wcschr_c
+#  define WCSCHR_C __wcschr_c
 #else
-# define WCSCHR_C		NULL
+#  define WCSCHR_C NULL
 #endif
 
 #if HAVE_WCSCHR_Z13
-# define WCSCHR_Z13		__wcschr_vx
+#  define WCSCHR_Z13 __wcschr_vx
 #else
-# define WCSCHR_Z13		NULL
+#  define WCSCHR_Z13 NULL
 #endif

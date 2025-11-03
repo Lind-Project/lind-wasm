@@ -1,1 +1,1 @@
-#define	CS_PATH	"/bin:/usr/bin"
+#define CS_PATH "/bin:/usr/bin"

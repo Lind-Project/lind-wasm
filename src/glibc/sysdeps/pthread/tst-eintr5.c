@@ -29,22 +29,19 @@
 
 #include "eintr.c"
 
-
 static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t c = PTHREAD_COND_INITIALIZER;
-
 
 static void *
 tf (void *arg)
 {
-  struct timespec ts = timespec_add (xclock_now (CLOCK_REALTIME),
-                                     make_timespec (10000, 0));
+  struct timespec ts
+      = timespec_add (xclock_now (CLOCK_REALTIME), make_timespec (10000, 0));
 
   /* This call must never return.  */
   TEST_COMPARE (pthread_cond_timedwait (&c, &m, &ts), 0);
   FAIL_EXIT1 ("pthread_cond_timedwait returned unexpectedly\n");
 }
-
 
 static int
 do_test (void)

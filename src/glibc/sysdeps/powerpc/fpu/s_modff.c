@@ -19,10 +19,10 @@
    generic implementation faster.  Also disables for old ISAs that do not
    have ceil/floor instructions.  */
 #if defined(_ARCH_PWR8) || !defined(_ARCH_PWR5X)
-# include <sysdeps/ieee754/flt-32/s_modff.c>
+#  include <sysdeps/ieee754/flt-32/s_modff.c>
 #else
-# include <math.h>
-# include <libm-alias-float.h>
+#  include <math.h>
+#  include <libm-alias-float.h>
 
 float
 __modff (float x, float *iptr)
@@ -49,7 +49,7 @@ __modff (float x, float *iptr)
       return copysignf (x - *iptr, x);
     }
 }
-# ifndef __modff
+#  ifndef __modff
 libm_alias_float (__modf, modf)
-# endif
+#  endif
 #endif

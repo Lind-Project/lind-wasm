@@ -23,7 +23,7 @@
 double
 __roundeven (double x)
 {
-  asm volatile ("frintn \t%d0, %d1" : "=w" (x) : "w" (x));
+  asm volatile ("frintn \t%d0, %d1" : "=w"(x) : "w"(x));
   return x;
 }
 libm_alias_double (__roundeven, roundeven)

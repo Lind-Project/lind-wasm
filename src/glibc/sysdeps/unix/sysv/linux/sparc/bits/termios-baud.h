@@ -17,28 +17,29 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TERMIOS_H
-# error "Never include <bits/termios-baud.h> directly; use <termios.h> instead."
+#  error                                                                       \
+      "Never include <bits/termios-baud.h> directly; use <termios.h> instead."
 #endif
 
 #ifdef __USE_MISC
-# define CBAUD   0x0000100f
-# define CBAUDEX 0x00001000
-# define CIBAUD	 0x100f0000	/* input baud rate (not used) */
-# define CMSPAR  0x40000000	/* mark or space (stick) parity */
-# define CRTSCTS 0x80000000	/* flow control */
+#  define CBAUD 0x0000100f
+#  define CBAUDEX 0x00001000
+#  define CIBAUD 0x100f0000  /* input baud rate (not used) */
+#  define CMSPAR 0x40000000  /* mark or space (stick) parity */
+#  define CRTSCTS 0x80000000 /* flow control */
 #endif
 
-#define  B57600  0x00001001
-#define  B115200 0x00001002
-#define  B230400 0x00001003
-#define  B460800 0x00001004
-#define  B76800  0x00001005
-#define  B153600 0x00001006
-#define  B307200 0x00001007
-#define  B614400 0x00001008
-#define  B921600 0x00001009
-#define  B500000 0x0000100a
-#define  B576000 0x0000100b
+#define B57600 0x00001001
+#define B115200 0x00001002
+#define B230400 0x00001003
+#define B460800 0x00001004
+#define B76800 0x00001005
+#define B153600 0x00001006
+#define B307200 0x00001007
+#define B614400 0x00001008
+#define B921600 0x00001009
+#define B500000 0x0000100a
+#define B576000 0x0000100b
 #define B1000000 0x0000100c
 #define B1152000 0x0000100d
 #define B1500000 0x0000100e

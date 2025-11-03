@@ -44,19 +44,19 @@ reduce_aux (float x, int *n, double alpha)
   else
     {
       h += piover2 / 2;
-      (*n) --;
+      (*n)--;
     }
   /* Subtract alpha and reduce if needed mod pi/2.  */
   h -= alpha;
   if (h > piover2)
     {
       h -= piover2;
-      (*n) ++;
+      (*n)++;
     }
   else if (h < -piover2)
     {
       h += piover2;
-      (*n) --;
+      (*n)--;
     }
   return h;
 }

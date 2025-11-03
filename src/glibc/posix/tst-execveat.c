@@ -32,7 +32,7 @@
 
 int
 call_execveat (int fd, const char *pathname, int flags, int expected_fail,
-               int num)
+	       int num)
 {
   char *envp[] = { (char *) "FOO=3", NULL };
   char *argv[] = { (char *) "sh", (char *) "-c", (char *) "exit $FOO", NULL };
@@ -49,13 +49,13 @@ call_execveat (int fd, const char *pathname, int flags, int expected_fail,
       if (errno == ENOSYS)
 	exit (EXIT_UNSUPPORTED);
       else if (errno == expected_fail)
-        {
-          if (test_verbose > 0)
-            printf ("expected fail: errno %d\n", errno);
-          _exit (0);
-        }
+	{
+	  if (test_verbose > 0)
+	    printf ("expected fail: errno %d\n", errno);
+	  _exit (0);
+	}
       else
-        FAIL_EXIT1 ("execveat failed: %m (%d)", errno);
+	FAIL_EXIT1 ("execveat failed: %m (%d)", errno);
     }
   xwaitpid (pid, &status, 0);
 
@@ -65,11 +65,11 @@ call_execveat (int fd, const char *pathname, int flags, int expected_fail,
   if (WIFEXITED (status))
     {
       if (WEXITSTATUS (status) == EXIT_UNSUPPORTED)
-        FAIL_UNSUPPORTED ("execveat is unimplemented");
+	FAIL_UNSUPPORTED ("execveat is unimplemented");
       else if (expected_fail != 0)
-        TEST_COMPARE (WEXITSTATUS (status), 0);
+	TEST_COMPARE (WEXITSTATUS (status), 0);
       else
-        TEST_COMPARE (WEXITSTATUS (status), 3);
+	TEST_COMPARE (WEXITSTATUS (status), 3);
     }
   return 0;
 }
@@ -141,7 +141,8 @@ do_test (void)
   /* Same check for an empty pathname, but with AT_EMPTY_PATH flag.
      Quoting open(2):
      If oldpath is an empty string, create a link to the file referenced
-     by olddirfd (which may have been obtained using the open(2) O_PATH flag. */
+     by olddirfd (which may have been obtained using the open(2) O_PATH flag.
+   */
   call_execveat (fd, "", AT_EMPTY_PATH, 0, __LINE__);
   call_execveat (fd, "", AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, 0, __LINE__);
   xclose (fd);
@@ -163,11 +164,10 @@ do_test (void)
   xclose (fd_out);
   fd_out = xopen (symlink_name, O_PATH, 0);
 
- /* Check the empty pathname. Dirfd is a symbolic link.  */
+  /* Check the empty pathname. Dirfd is a symbolic link.  */
   call_execveat (fd_out, "", 0, ENOENT, __LINE__);
   call_execveat (fd_out, "", AT_EMPTY_PATH, 0, __LINE__);
-  call_execveat (fd_out, "", AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, 0,
-                 __LINE__);
+  call_execveat (fd_out, "", AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW, 0, __LINE__);
   xclose (fd_out);
   free (symlink_name);
   free (tmp_sh);
@@ -176,8 +176,8 @@ do_test (void)
 
   /* Call execveat with closed fd, we expect this to fail with EBADF.  */
   call_execveat (fd, "sh", 0, EBADF, __LINE__);
-  /* Call execveat with closed fd, we expect this to pass because the pathname is
-     absolute.  */
+  /* Call execveat with closed fd, we expect this to pass because the pathname
+     is absolute.  */
   call_execveat (fd, "/bin/sh", 0, 0, __LINE__);
 
   return 0;

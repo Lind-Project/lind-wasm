@@ -22,13 +22,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static void
 remove_sem (int status, void *arg)
 {
   sem_unlink (arg);
 }
-
 
 static int
 do_test (void)

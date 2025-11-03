@@ -80,7 +80,7 @@ subprocess (void)
     {
       ret = sendmmsg (sockets[1], &mmhdr, 1, 0);
       if (ret >= 0)
-        ret = mmhdr.msg_len;
+	ret = mmhdr.msg_len;
     }
   else
     ret = sendmsg (sockets[1], &mmhdr.msg_hdr, 0);
@@ -104,11 +104,8 @@ one_test (void)
     subprocess ();
 
   char data_storage[sizeof (DATA) + 1];
-  struct iovec iov =
-    {
-      .iov_base = data_storage,
-      .iov_len = sizeof (data_storage)
-    };
+  struct iovec iov
+      = { .iov_base = data_storage, .iov_len = sizeof (data_storage) };
   union
   {
     struct cmsghdr header;
@@ -138,7 +135,7 @@ one_test (void)
     {
       ret = recvmmsg (sockets[0], &mmhdr, 1, 0, NULL);
       if (ret >= 0)
-        ret = mmhdr.msg_len;
+	ret = mmhdr.msg_len;
     }
   else
     ret = recvmsg (sockets[0], &mmhdr.msg_hdr, 0);
@@ -148,7 +145,7 @@ one_test (void)
   /* Extract the file descriptor.  */
   TEST_VERIFY (CMSG_FIRSTHDR (&mmhdr.msg_hdr) != NULL);
   TEST_COMPARE (CMSG_FIRSTHDR (&mmhdr.msg_hdr)->cmsg_len,
-                CMSG_LEN (sizeof (int)));
+		CMSG_LEN (sizeof (int)));
   TEST_VERIFY (&cmsg_storage.header == CMSG_FIRSTHDR (&mmhdr.msg_hdr));
   int fd;
   memcpy (&fd, CMSG_DATA (CMSG_FIRSTHDR (&mmhdr.msg_hdr)), sizeof (fd));

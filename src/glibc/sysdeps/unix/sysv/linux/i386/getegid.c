@@ -5,5 +5,3 @@ __getegid (void)
 {
   return -1;
 }
-
-

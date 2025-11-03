@@ -16,10 +16,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _RE_COMP_H
-#define _RE_COMP_H	1
+#  define _RE_COMP_H 1
 
 /* This is only a wrapper around the <regex.h> file.  XPG4.2 mentions
    this name.  */
-#include <regex.h>
+#  include <regex.h>
 
 #endif /* re_comp.h */

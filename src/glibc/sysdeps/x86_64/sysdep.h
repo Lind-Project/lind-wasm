@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _X86_64_SYSDEP_H
-#define _X86_64_SYSDEP_H 1
+#  define _X86_64_SYSDEP_H 1
 
-#include <sysdeps/x86/sysdep.h>
-#include <x86-lp_size.h>
+#  include <sysdeps/x86/sysdep.h>
+#  include <x86-lp_size.h>
 
 /* __CET__ is defined by GCC with Control-Flow Protection values:
 
@@ -35,172 +35,171 @@ enum cf_protection_level
 */
 
 /* Set if CF_BRANCH (IBT) is enabled.  */
-#define X86_FEATURE_1_IBT	(1U << 0)
+#  define X86_FEATURE_1_IBT (1U << 0)
 /* Set if CF_RETURN (SHSTK) is enabled.  */
-#define X86_FEATURE_1_SHSTK	(1U << 1)
+#  define X86_FEATURE_1_SHSTK (1U << 1)
 
-#ifdef __CET__
-# define CET_ENABLED	1
-# define SHSTK_ENABLED	(__CET__ & X86_FEATURE_1_SHSTK)
-#else
-# define CET_ENABLED	0
-# define SHSTK_ENABLED	0
-#endif
+#  ifdef __CET__
+#    define CET_ENABLED 1
+#    define SHSTK_ENABLED (__CET__ & X86_FEATURE_1_SHSTK)
+#  else
+#    define CET_ENABLED 0
+#    define SHSTK_ENABLED 0
+#  endif
 
-#ifdef	__ASSEMBLER__
+#  ifdef __ASSEMBLER__
 
 /* Syntactic details of assembler.  */
 
-#ifdef _CET_ENDBR
-# define _CET_NOTRACK notrack
-#else
-# define _CET_ENDBR
-# define _CET_NOTRACK
-#endif
+#    ifdef _CET_ENDBR
+#      define _CET_NOTRACK notrack
+#    else
+#      define _CET_ENDBR
+#      define _CET_NOTRACK
+#    endif
 
 /* Define an entry point visible from C.  */
-#define	ENTRY_P2ALIGN(name, alignment)					      \
-  .globl C_SYMBOL_NAME(name);						      \
-  .type C_SYMBOL_NAME(name),@function;					      \
-  .align ALIGNARG(alignment);						      \
-  C_LABEL(name)								      \
-  cfi_startproc;							      \
-  _CET_ENDBR;								      \
-  CALL_MCOUNT
+#    define ENTRY_P2ALIGN(name, alignment)                                    \
+      .globl C_SYMBOL_NAME (name);                                            \
+      .type C_SYMBOL_NAME (name), @function;                                  \
+      .align ALIGNARG (alignment);                                            \
+      C_LABEL (name)                                                          \
+      cfi_startproc;                                                          \
+      _CET_ENDBR;                                                             \
+      CALL_MCOUNT
 
 /* This macro is for setting proper CFI with DW_CFA_expression describing
    the register as saved relative to %rsp instead of relative to the CFA.
    Expression is DW_OP_drop, DW_OP_breg7 (%rsp is register 7), sleb128 offset
    from %rsp.  */
-#define cfi_offset_rel_rsp(regn, off)	.cfi_escape 0x10, regn, 0x4, 0x13, \
-					0x77, off & 0x7F | 0x80, off >> 7
+#    define cfi_offset_rel_rsp(regn, off)                                     \
+      .cfi_escape 0x10, regn, 0x4, 0x13, 0x77, off & 0x7F | 0x80, off >> 7
 
 /* If compiled for profiling, call `mcount' at the start of each function.  */
-#ifdef	PROF
+#    ifdef PROF
 /* The mcount code relies on a normal frame pointer being on the stack
    to locate our caller, so push one just for its benefit.  */
-#define CALL_MCOUNT                                                          \
-  pushq %rbp;                                                                \
-  cfi_adjust_cfa_offset(8);                                                  \
-  movq %rsp, %rbp;                                                           \
-  cfi_def_cfa_register(%rbp);                                                \
-  call JUMPTARGET(mcount);                                                   \
-  popq %rbp;                                                                 \
-  cfi_def_cfa(rsp,8);
-#else
-#define CALL_MCOUNT		/* Do nothing.  */
-#endif
+#      define CALL_MCOUNT                                                     \
+	pushq % rbp;                                                          \
+	cfi_adjust_cfa_offset (8);                                            \
+	movq % rsp, % rbp;                                                    \
+	cfi_def_cfa_register (% rbp);                                         \
+	call JUMPTARGET (mcount);                                             \
+	popq % rbp;                                                           \
+	cfi_def_cfa (rsp, 8);
+#    else
+#      define CALL_MCOUNT /* Do nothing.  */
+#    endif
 
-#define	PSEUDO(name, syscall_name, args)				      \
-lose:									      \
-  jmp JUMPTARGET(syscall_error)						      \
-  .globl syscall_error;							      \
-  ENTRY (name)								      \
-  DO_CALL (syscall_name, args);						      \
-  jb lose
+#    define PSEUDO(name, syscall_name, args)                                  \
+    lose:                                                                     \
+      jmp JUMPTARGET (syscall_error).globl syscall_error;                     \
+      ENTRY (name)                                                            \
+      DO_CALL (syscall_name, args);                                           \
+      jb lose
 
-#undef JUMPTARGET
-#ifdef SHARED
-# ifdef BIND_NOW
-#  define JUMPTARGET(name)	*name##@GOTPCREL(%rip)
-# else
-#  define JUMPTARGET(name)	name##@PLT
-# endif
-#else
+#    undef JUMPTARGET
+#    ifdef SHARED
+#      ifdef BIND_NOW
+#	define JUMPTARGET(name) *name##@GOTPCREL (% rip)
+#      else
+#	define JUMPTARGET(name) name##@PLT
+#      endif
+#    else
 /* For static archives, branch to target directly.  */
-# define JUMPTARGET(name)	name
-#endif
+#      define JUMPTARGET(name) name
+#    endif
 
 /* Instruction to operate on long and pointer.  */
-#define LP_OP(insn) insn##q
+#    define LP_OP(insn) insn##q
 
 /* Assembler address directive. */
-#define ASM_ADDR .quad
+#    define ASM_ADDR .quad
 
 /* Registers to hold long and pointer.  */
-#define RAX_LP	rax
-#define RBP_LP	rbp
-#define RBX_LP	rbx
-#define RCX_LP	rcx
-#define RDI_LP	rdi
-#define RDX_LP	rdx
-#define RSI_LP	rsi
-#define RSP_LP	rsp
-#define R8_LP	r8
-#define R9_LP	r9
-#define R10_LP	r10
-#define R11_LP	r11
-#define R12_LP	r12
-#define R13_LP	r13
-#define R14_LP	r14
-#define R15_LP	r15
+#    define RAX_LP rax
+#    define RBP_LP rbp
+#    define RBX_LP rbx
+#    define RCX_LP rcx
+#    define RDI_LP rdi
+#    define RDX_LP rdx
+#    define RSI_LP rsi
+#    define RSP_LP rsp
+#    define R8_LP r8
+#    define R9_LP r9
+#    define R10_LP r10
+#    define R11_LP r11
+#    define R12_LP r12
+#    define R13_LP r13
+#    define R14_LP r14
+#    define R15_LP r15
 
 /* Zero upper vector registers and return with xtest.  NB: Use VZEROALL
    to avoid RTM abort triggered by VZEROUPPER inside transactionally.  */
-#define ZERO_UPPER_VEC_REGISTERS_RETURN_XTEST \
-	xtest;							\
-	jnz	1f;						\
-	vzeroupper;						\
-	ret;							\
-1:								\
-	vzeroall;						\
-	ret
+#    define ZERO_UPPER_VEC_REGISTERS_RETURN_XTEST                             \
+      xtest;                                                                  \
+      jnz 1f;                                                                 \
+      vzeroupper;                                                             \
+      ret;                                                                    \
+      1 : vzeroall;                                                           \
+      ret
 
 /* Can be used to replace vzeroupper that is not directly before a
    return.  This is useful when hoisting a vzeroupper from multiple
    return paths to decrease the total number of vzerouppers and code
    size.  */
-#define COND_VZEROUPPER_XTEST							\
-    xtest;							\
-    jz 1f;							\
-    vzeroall;							\
-    jmp 2f;							\
-1:							\
-    vzeroupper;							\
-2:
+#    define COND_VZEROUPPER_XTEST                                             \
+      xtest;                                                                  \
+      jz 1f;                                                                  \
+      vzeroall;                                                               \
+      jmp 2f;                                                                 \
+      1 : vzeroupper;                                                         \
+      2:
 
 /* In RTM define this as COND_VZEROUPPER_XTEST.  */
-#ifndef COND_VZEROUPPER
-# define COND_VZEROUPPER vzeroupper
-#endif
+#    ifndef COND_VZEROUPPER
+#      define COND_VZEROUPPER vzeroupper
+#    endif
 
 /* Zero upper vector registers and return.  */
-#ifndef ZERO_UPPER_VEC_REGISTERS_RETURN
-# define ZERO_UPPER_VEC_REGISTERS_RETURN \
-	VZEROUPPER;						\
+#    ifndef ZERO_UPPER_VEC_REGISTERS_RETURN
+#      define ZERO_UPPER_VEC_REGISTERS_RETURN                                 \
+	VZEROUPPER;                                                           \
 	ret
-#endif
+#    endif
 
-#ifndef VZEROUPPER_RETURN
-# define VZEROUPPER_RETURN	VZEROUPPER; ret
-#endif
+#    ifndef VZEROUPPER_RETURN
+#      define VZEROUPPER_RETURN                                               \
+	VZEROUPPER;                                                           \
+	ret
+#    endif
 
-#else	/* __ASSEMBLER__ */
+#  else /* __ASSEMBLER__ */
 
 /* Instruction to operate on long and pointer.  */
-#define LP_OP(insn) #insn "q"
+#    define LP_OP(insn) #insn "q"
 
 /* Assembler address directive. */
-#define ASM_ADDR ".quad"
+#    define ASM_ADDR ".quad"
 
 /* Registers to hold long and pointer.  */
-#define RAX_LP	"rax"
-#define RBP_LP	"rbp"
-#define RBX_LP	"rbx"
-#define RCX_LP	"rcx"
-#define RDI_LP	"rdi"
-#define RDX_LP	"rdx"
-#define RSI_LP	"rsi"
-#define RSP_LP	"rsp"
-#define R8_LP	"r8"
-#define R9_LP	"r9"
-#define R10_LP	"r10"
-#define R11_LP	"r11"
-#define R12_LP	"r12"
-#define R13_LP	"r13"
-#define R14_LP	"r14"
-#define R15_LP	"r15"
+#    define RAX_LP "rax"
+#    define RBP_LP "rbp"
+#    define RBX_LP "rbx"
+#    define RCX_LP "rcx"
+#    define RDI_LP "rdi"
+#    define RDX_LP "rdx"
+#    define RSI_LP "rsi"
+#    define RSP_LP "rsp"
+#    define R8_LP "r8"
+#    define R9_LP "r9"
+#    define R10_LP "r10"
+#    define R11_LP "r11"
+#    define R12_LP "r12"
+#    define R13_LP "r13"
+#    define R14_LP "r14"
+#    define R15_LP "r15"
 
-#endif	/* __ASSEMBLER__ */
+#  endif /* __ASSEMBLER__ */
 
-#endif	/* _X86_64_SYSDEP_H */
+#endif /* _X86_64_SYSDEP_H */

@@ -37,15 +37,15 @@ __logbl (_Float128 x)
   int64_t lx, hx, ex;
 
   GET_LDOUBLE_WORDS64 (hx, lx, x);
-  hx &= 0x7fffffffffffffffLL;	/* high |x| */
+  hx &= 0x7fffffffffffffffLL; /* high |x| */
   if ((hx | lx) == 0)
     return -1.0 / fabsl (x);
   if (hx >= 0x7fff000000000000LL)
     return x * x;
-  if ((ex = hx >> 48) == 0)	/* IEEE 754 logb */
+  if ((ex = hx >> 48) == 0) /* IEEE 754 logb */
     {
       /* POSIX specifies that denormal number is treated as
-         though it were normalized.  */
+	 though it were normalized.  */
       int ma;
       if (hx == 0)
 	ma = __builtin_clzll (lx) + 64;

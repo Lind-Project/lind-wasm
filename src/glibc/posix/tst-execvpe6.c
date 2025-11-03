@@ -118,7 +118,7 @@ check_output (const char *expected)
 static int
 do_test (void)
 {
-  if  (setenv ("PATH", test_dir, 1) != 0)
+  if (setenv ("PATH", test_dir, 1) != 0)
     {
       puts ("setenv failed");
       return 1;
@@ -126,8 +126,8 @@ do_test (void)
 
   /* First check resulting script run with some arguments results in correct
      output file.  */
-  char *args1[] = { fname1, (char*) "1", (char *) "2", (char *) "3", NULL };
-  if (run_script (fname1,args1))
+  char *args1[] = { fname1, (char *) "1", (char *) "2", (char *) "3", NULL };
+  if (run_script (fname1, args1))
     return 1;
   if (check_output ("foo 1 2 3\n"))
     return 1;

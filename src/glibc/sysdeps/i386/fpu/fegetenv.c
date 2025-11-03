@@ -24,25 +24,24 @@
 int
 __fegetenv (fenv_t *envp)
 {
-  __asm__ ("fnstenv %0" : "=m" (*envp));
+  __asm__ ("fnstenv %0" : "=m"(*envp));
   /* And load it right back since the processor changes the mask.
      Intel thought this opcode to be used in interrupt handlers which
      would block all exceptions.  */
-  __asm__ ("fldenv %0" : : "m" (*envp));
+  __asm__ ("fldenv %0" : : "m"(*envp));
 
   if (CPU_FEATURE_USABLE (SSE))
-    __asm__ ("stmxcsr %0" : "=m" (envp->__eip));
+    __asm__ ("stmxcsr %0" : "=m"(envp->__eip));
 
   /* Success.  */
   return 0;
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__fegetenv, __old_fegetenv)
-compat_symbol (libm, __old_fegetenv, fegetenv, GLIBC_2_1);
+    compat_symbol (libm, __old_fegetenv, fegetenv, GLIBC_2_1);
 #endif
 
-libm_hidden_def (__fegetenv)
-libm_hidden_ver (__fegetenv, fegetenv)
-versioned_symbol (libm, __fegetenv, fegetenv, GLIBC_2_2);
+libm_hidden_def (__fegetenv) libm_hidden_ver (__fegetenv, fegetenv)
+    versioned_symbol (libm, __fegetenv, fegetenv, GLIBC_2_2);

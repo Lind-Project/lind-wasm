@@ -27,9 +27,10 @@ do_bz18036 (void)
   const char p[] = "**(!()";
   const int pagesize = getpagesize ();
 
-  char *pattern = mmap (0, 2 * pagesize, PROT_READ|PROT_WRITE,
-                        MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-  if (pattern == MAP_FAILED) return 1;
+  char *pattern = mmap (0, 2 * pagesize, PROT_READ | PROT_WRITE,
+			MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (pattern == MAP_FAILED)
+    return 1;
 
   mprotect (pattern + pagesize, pagesize, PROT_NONE);
   memset (pattern, ' ', pagesize);

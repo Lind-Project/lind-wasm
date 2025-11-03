@@ -17,25 +17,26 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_SIGEVENT_CONSTS_H
-#define _BITS_SIGEVENT_CONSTS_H 1
+#  define _BITS_SIGEVENT_CONSTS_H 1
 
-#if !defined _SIGNAL_H && !defined _AIO_H
-#error "Don't include <bits/sigevent-consts.h> directly; use <signal.h> instead."
-#endif
+#  if !defined _SIGNAL_H && !defined _AIO_H
+#    error                                                                     \
+	"Don't include <bits/sigevent-consts.h> directly; use <signal.h> instead."
+#  endif
 
 /* `sigev_notify' values.  */
 enum
 {
-  SIGEV_SIGNAL = 0,		/* Notify via signal.  */
-# define SIGEV_SIGNAL	SIGEV_SIGNAL
-  SIGEV_NONE,			/* Other notification: meaningless.  */
-# define SIGEV_NONE	SIGEV_NONE
-  SIGEV_THREAD,			/* Deliver via thread creation.  */
-# define SIGEV_THREAD	SIGEV_THREAD
+  SIGEV_SIGNAL = 0, /* Notify via signal.  */
+#  define SIGEV_SIGNAL SIGEV_SIGNAL
+  SIGEV_NONE, /* Other notification: meaningless.  */
+#  define SIGEV_NONE SIGEV_NONE
+  SIGEV_THREAD, /* Deliver via thread creation.  */
+#  define SIGEV_THREAD SIGEV_THREAD
 
-  SIGEV_THREAD_ID = 4		/* Send signal to specific thread.
-				   This is a Linux extension.  */
-#define SIGEV_THREAD_ID	SIGEV_THREAD_ID
+  SIGEV_THREAD_ID = 4 /* Send signal to specific thread.
+			 This is a Linux extension.  */
+#  define SIGEV_THREAD_ID SIGEV_THREAD_ID
 };
 
 #endif

@@ -21,18 +21,18 @@
 #include <tst-string-rtm.h>
 
 #ifdef WIDE
-# define CHAR wchar_t
-# define MEMSET wmemset
-# define STRCMP wcscmp
-# define TEST_NAME "wcscmp"
+#  define CHAR wchar_t
+#  define MEMSET wmemset
+#  define STRCMP wcscmp
+#  define TEST_NAME "wcscmp"
 #else /* !WIDE */
-# define CHAR char
-# define MEMSET memset
+#  define CHAR char
+#  define MEMSET memset
 
-# ifndef STRCMP
-#  define STRCMP strcmp
-#  define TEST_NAME "strcmp"
-# endif
+#  ifndef STRCMP
+#    define STRCMP strcmp
+#    define TEST_NAME "strcmp"
+#  endif
 #endif
 
 #define LOOP 3000
@@ -40,8 +40,7 @@
 CHAR string1[STRING_SIZE];
 CHAR string2[STRING_SIZE];
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 prepare (void)
 {
   MEMSET (string1, 'a', STRING_SIZE - 1);
@@ -52,8 +51,7 @@ prepare (void)
     return EXIT_FAILURE;
 }
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 function (void)
 {
   if (STRCMP (string1, string2) == 0)
@@ -61,7 +59,6 @@ function (void)
   else
     return 1;
 }
-
 
 static int
 do_test (void)

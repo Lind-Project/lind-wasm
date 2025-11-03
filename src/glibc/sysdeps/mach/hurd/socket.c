@@ -61,7 +61,7 @@ __socket (int domain, int type, int protocol)
       || err == MIG_BAD_ID || err == EOPNOTSUPP)
     err = EAFNOSUPPORT;
 
-  if (! err)
+  if (!err)
     {
       if (flags & O_NONBLOCK)
 	err = __io_set_some_openmodes (sock, O_NONBLOCK);
@@ -74,5 +74,4 @@ __socket (int domain, int type, int protocol)
   return _hurd_intern_fd (sock, O_IGNORE_CTTY | flags, 1);
 }
 
-libc_hidden_def (__socket)
-weak_alias (__socket, socket)
+libc_hidden_def (__socket) weak_alias (__socket, socket)

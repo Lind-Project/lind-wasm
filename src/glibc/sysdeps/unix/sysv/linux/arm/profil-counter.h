@@ -27,11 +27,10 @@ __profil_counter (int signo, siginfo_t *_si, void *scp)
   /* This is a hack to prevent the compiler from implementing the
      above function call as a sibcall.  The sibcall would overwrite
      the signal context.  */
-
 }
 #ifndef __profil_counter
-# include <shlib-compat.h>
-# if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_31)
+#  include <shlib-compat.h>
+#  if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_31)
 compat_symbol (libc, __profil_counter, profil_counter, GLIBC_2_0);
-# endif
+#  endif
 #endif

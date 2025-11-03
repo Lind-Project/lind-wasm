@@ -17,17 +17,17 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define memset __redirect_memset
-# include <string.h>
-# undef memset
+#if IS_IN(libc)
+#  define memset __redirect_memset
+#  include <string.h>
+#  undef memset
 
-# include <sparc-ifunc.h>
+#  include <sparc-ifunc.h>
 
-# define SYMBOL_NAME memset
-# include "ifunc-memset.h"
+#  define SYMBOL_NAME memset
+#  include "ifunc-memset.h"
 
 sparc_libc_ifunc_redirected (__redirect_memset, memset, IFUNC_SELECTOR)
-sparc_ifunc_redirected_hidden_def (__redirect_memset, memset)
+    sparc_ifunc_redirected_hidden_def (__redirect_memset, memset)
 
 #endif

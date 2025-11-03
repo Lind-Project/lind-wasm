@@ -22,7 +22,6 @@
 extern __typeof (mpn_submul_1) __mpn_submul_1_vis3 attribute_hidden;
 extern __typeof (mpn_submul_1) __mpn_submul_1_generic attribute_hidden;
 
-sparc_libm_ifunc (__mpn_submul_1,
-		  hwcap & HWCAP_SPARC_VIS3
-		  ? __mpn_submul_1_vis3
-		  : __mpn_submul_1_generic)
+sparc_libm_ifunc (__mpn_submul_1, hwcap &HWCAP_SPARC_VIS3
+				      ? __mpn_submul_1_vis3
+				      : __mpn_submul_1_generic)

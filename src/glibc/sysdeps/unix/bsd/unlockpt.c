@@ -21,7 +21,6 @@
 #include <unistd.h>
 #include <errno.h>
 
-
 /* Unlock the slave pseudo terminal associated with the master pseudo
    terminal specified by FD.  */
 int

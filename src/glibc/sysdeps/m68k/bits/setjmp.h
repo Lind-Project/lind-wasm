@@ -17,30 +17,30 @@
 
 /* Define the machine-dependent type `jmp_buf'.  m68k version.  */
 #ifndef _BITS_SETJMP_H
-#define _BITS_SETJMP_H	1
+#  define _BITS_SETJMP_H 1
 
-#if !defined _SETJMP_H && !defined _PTHREAD_H
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
-#endif
+#  if !defined _SETJMP_H && !defined _PTHREAD_H
+#    error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  endif
 
 typedef struct __jmp_buf_internal_tag
-  {
-    /* There are eight 4-byte data registers, but D0 is not saved.  */
-    long int __dregs[7];
+{
+  /* There are eight 4-byte data registers, but D0 is not saved.  */
+  long int __dregs[7];
 
-    /* There are six 4-byte address registers, plus the FP and SP.  */
-    int *__aregs[6];
-    int *__fp;
-    int *__sp;
+  /* There are six 4-byte address registers, plus the FP and SP.  */
+  int *__aregs[6];
+  int *__fp;
+  int *__sp;
 
-#if defined __HAVE_68881__ || defined __HAVE_FPU__
-    /* There are eight floating point registers which
-       are saved in IEEE 96-bit extended format.  */
-    char __fpregs[8 * (96 / 8)];
-#elif defined __mcffpu__
-    char __fpregs[8 * (64 / 8)];
-#endif
+#  if defined __HAVE_68881__ || defined __HAVE_FPU__
+  /* There are eight floating point registers which
+     are saved in IEEE 96-bit extended format.  */
+  char __fpregs[8 * (96 / 8)];
+#  elif defined __mcffpu__
+  char __fpregs[8 * (64 / 8)];
+#  endif
 
-  } __jmp_buf[1];
+} __jmp_buf[1];
 
-#endif	/* bits/setjmp.h */
+#endif /* bits/setjmp.h */

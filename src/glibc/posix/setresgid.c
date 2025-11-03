@@ -27,7 +27,6 @@ __setresgid (gid_t rgid, gid_t egid, gid_t sgid)
   __set_errno (ENOSYS);
   return -1;
 }
-libc_hidden_def (__setresgid)
-stub_warning (setresgid)
+libc_hidden_def (__setresgid) stub_warning (setresgid)
 
-weak_alias (__setresgid, setresgid)
+    weak_alias (__setresgid, setresgid)

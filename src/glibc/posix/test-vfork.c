@@ -7,7 +7,7 @@
 
 void __attribute_noinline__ noop (void);
 
-#define NR	2	/* Exit code of the child.  */
+#define NR 2 /* Exit code of the child.  */
 
 int
 main (void)
@@ -29,8 +29,8 @@ main (void)
   else if (pid < 0)
     error (1, errno, "vfork");
   printf ("After vfork (parent)\n");
-  if (waitpid (0, &status, 0) != pid
-      || !WIFEXITED (status) || WEXITSTATUS (status) != NR)
+  if (waitpid (0, &status, 0) != pid || !WIFEXITED (status)
+      || WEXITSTATUS (status) != NR)
     exit (1);
 
   return 0;

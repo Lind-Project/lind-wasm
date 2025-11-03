@@ -24,7 +24,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-void *tf (void *resp)
+void *
+tf (void *resp)
 {
   if (resp == &_res || resp == __res_state ())
     abort ();
@@ -32,7 +33,8 @@ void *tf (void *resp)
   return NULL;
 }
 
-void do_test (struct __res_state *resp)
+void
+do_test (struct __res_state *resp)
 {
   if (resp != &_res || resp != __res_state ())
     abort ();
@@ -40,7 +42,8 @@ void do_test (struct __res_state *resp)
     abort ();
 }
 
-int main (void)
+int
+main (void)
 {
 #undef _res
   extern struct __res_state _res;

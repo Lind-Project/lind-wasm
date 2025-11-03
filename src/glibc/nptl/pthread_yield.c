@@ -19,7 +19,7 @@
 #include <sched.h>
 #include <shlib-compat.h>
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 int attribute_compat_text_section
 __pthread_yield (void)
 {

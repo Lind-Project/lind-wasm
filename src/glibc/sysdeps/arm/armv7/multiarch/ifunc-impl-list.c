@@ -33,29 +33,29 @@ __libc_ifunc_impl_list (const char *name, struct libc_ifunc_impl *array,
 
   bool use_neon = true;
 #ifdef __ARM_NEON__
-# define __memcpy_neon	memcpy
-# define __memchr_neon	memchr
+#  define __memcpy_neon memcpy
+#  define __memchr_neon memchr
 #else
-  use_neon = (GLRO(dl_hwcap) & HWCAP_ARM_NEON) != 0;
+  use_neon = (GLRO (dl_hwcap) & HWCAP_ARM_NEON) != 0;
 #endif
 
 #ifndef __ARM_NEON__
   bool use_vfp = true;
-# ifdef __SOFTFP__
-  use_vfp = (GLRO(dl_hwcap) & HWCAP_ARM_VFP) != 0;
-# endif
+#  ifdef __SOFTFP__
+  use_vfp = (GLRO (dl_hwcap) & HWCAP_ARM_VFP) != 0;
+#  endif
 #endif
 
   IFUNC_IMPL (i, name, memcpy,
 	      IFUNC_IMPL_ADD (array, i, memcpy, use_neon, __memcpy_neon)
 #ifndef __ARM_NEON__
-	      IFUNC_IMPL_ADD (array, i, memcpy, use_vfp, __memcpy_vfp)
+		  IFUNC_IMPL_ADD (array, i, memcpy, use_vfp, __memcpy_vfp)
 #endif
-	      IFUNC_IMPL_ADD (array, i, memcpy, 1, __memcpy_arm));
+		      IFUNC_IMPL_ADD (array, i, memcpy, 1, __memcpy_arm));
 
   IFUNC_IMPL (i, name, memchr,
 	      IFUNC_IMPL_ADD (array, i, memchr, use_neon, __memchr_neon)
-	      IFUNC_IMPL_ADD (array, i, memchr, 1, __memchr_noneon));
+		  IFUNC_IMPL_ADD (array, i, memchr, 1, __memchr_noneon));
 
   return 0;
 }

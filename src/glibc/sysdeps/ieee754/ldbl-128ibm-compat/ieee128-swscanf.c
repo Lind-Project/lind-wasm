@@ -31,8 +31,7 @@ ___ieee128_swscanf (const wchar_t *string, const wchar_t *format, ...)
   FILE *fp = _IO_strfile_readw (&sf, &wd, string);
 
   va_start (ap, format);
-  done = __vfwscanf_internal (fp, format, ap,
-			      SCANF_LDBL_USES_FLOAT128);
+  done = __vfwscanf_internal (fp, format, ap, SCANF_LDBL_USES_FLOAT128);
   va_end (ap);
 
   return done;

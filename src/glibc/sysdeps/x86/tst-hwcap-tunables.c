@@ -30,23 +30,16 @@
 #include <support/capture_subprocess.h>
 
 /* Nonzero if the program gets called via `exec'.  */
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 static int restart;
 
 /* Disable everything.  */
-static const char *test_1[] =
-{
-  "__memcpy_avx512_no_vzeroupper",
-  "__memcpy_avx512_unaligned",
-  "__memcpy_avx512_unaligned_erms",
-  "__memcpy_evex_unaligned",
-  "__memcpy_evex_unaligned_erms",
-  "__memcpy_avx_unaligned",
-  "__memcpy_avx_unaligned_erms",
-  "__memcpy_avx_unaligned_rtm",
-  "__memcpy_avx_unaligned_erms_rtm",
-  "__memcpy_ssse3",
+static const char *test_1[] = {
+  "__memcpy_avx512_no_vzeroupper",   "__memcpy_avx512_unaligned",
+  "__memcpy_avx512_unaligned_erms",  "__memcpy_evex_unaligned",
+  "__memcpy_evex_unaligned_erms",    "__memcpy_avx_unaligned",
+  "__memcpy_avx_unaligned_erms",     "__memcpy_avx_unaligned_rtm",
+  "__memcpy_avx_unaligned_erms_rtm", "__memcpy_ssse3",
 };
 
 static const struct test_t
@@ -54,25 +47,16 @@ static const struct test_t
   const char *env;
   const char *const *funcs;
   size_t nfuncs;
-} tests[] =
-{
-  {
-    /* Disable everything.  */
-    "-Prefer_ERMS,-Prefer_FSRM,-AVX,-AVX2,-AVX512F,-AVX512VL,"
-    "-SSE4_1,-SSE4_2,-SSSE3,-Fast_Unaligned_Load,-ERMS,"
-    "-AVX_Fast_Unaligned_Load",
-    test_1,
-    array_length (test_1)
-  },
-  {
-    /* Same as before, but with some empty suboptions.  */
-    ",-,-Prefer_ERMS,-Prefer_FSRM,-AVX,-AVX2,-AVX512F,-AVX512VL,"
-    "-SSE4_1,-SSE4_2,-SSSE3,-Fast_Unaligned_Load,,-,"
-    "-ERMS,-AVX_Fast_Unaligned_Load,-,",
-    test_1,
-    array_length (test_1)
-  }
-};
+} tests[] = { { /* Disable everything.  */
+		"-Prefer_ERMS,-Prefer_FSRM,-AVX,-AVX2,-AVX512F,-AVX512VL,"
+		"-SSE4_1,-SSE4_2,-SSSE3,-Fast_Unaligned_Load,-ERMS,"
+		"-AVX_Fast_Unaligned_Load",
+		test_1, array_length (test_1) },
+	      { /* Same as before, but with some empty suboptions.  */
+		",-,-Prefer_ERMS,-Prefer_FSRM,-AVX,-AVX2,-AVX512F,-AVX512VL,"
+		"-SSE4_1,-SSE4_2,-SSSE3,-Fast_Unaligned_Load,,-,"
+		"-ERMS,-AVX_Fast_Unaligned_Load,-,",
+		test_1, array_length (test_1) } };
 
 /* Called on process re-execution.  */
 _Noreturn static void
@@ -133,7 +117,7 @@ do_test (int argc, char *argv[])
       setenv ("GLIBC_TUNABLES", tunable, 1);
 
       struct support_capture_subprocess result
-	= support_capture_subprogram (spargv[0], spargv);
+	  = support_capture_subprogram (spargv[0], spargv);
       support_capture_subprocess_check (&result, "tst-tunables", 0,
 					sc_allow_stderr);
       support_capture_subprocess_free (&result);

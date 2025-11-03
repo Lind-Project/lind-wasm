@@ -19,7 +19,6 @@
 #include <shlib-compat.h>
 #include "semaphoreP.h"
 
-
 int
 __new_sem_destroy (sem_t *sem)
 {
@@ -31,7 +30,7 @@ __new_sem_destroy (sem_t *sem)
 versioned_symbol (libc, __new_sem_destroy, sem_destroy, GLIBC_2_34);
 #if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_1)
 strong_alias (__new_sem_destroy, __old_sem_destroy)
-compat_symbol (libpthread, __old_sem_destroy, sem_destroy, GLIBC_2_0);
+    compat_symbol (libpthread, __old_sem_destroy, sem_destroy, GLIBC_2_0);
 #endif
 #if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __new_sem_destroy, sem_destroy, GLIBC_2_1);

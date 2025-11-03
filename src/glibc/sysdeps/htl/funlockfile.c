@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <libc-lockP.h>
 
-
 void
 __funlockfile (FILE *stream)
 {
@@ -28,4 +27,4 @@ __funlockfile (FILE *stream)
 #endif
 }
 weak_alias (__funlockfile, _IO_funlockfile)
-weak_alias (__funlockfile, funlockfile)
+    weak_alias (__funlockfile, funlockfile)

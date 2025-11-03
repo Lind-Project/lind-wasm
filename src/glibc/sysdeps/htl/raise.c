@@ -27,7 +27,7 @@
 #pragma weak __pthread_threads
 
 #ifndef SHARED
-#pragma weak _dl_pthread_threads
+#  pragma weak _dl_pthread_threads
 #endif
 
 int
@@ -52,5 +52,4 @@ raise (int signo)
     return __kill (__getpid (), signo);
 }
 
-libc_hidden_def (raise)
-weak_alias (raise, gsignal)
+libc_hidden_def (raise) weak_alias (raise, gsignal)

@@ -96,18 +96,16 @@ threadfunc (void *closure)
   TEST_COMPARE (signals_delivered, 1);
 
   support_isolate_in_subprocess (subprocess_no_tid_match,
-                                 &(struct pid_and_tid)
-                                 {
-                                   .pid = getpid (),
-                                   .tid = gettid (),
-                                 });
+				 &(struct pid_and_tid) {
+				     .pid = getpid (),
+				     .tid = gettid (),
+				 });
 
   support_isolate_in_subprocess (subprocess_no_tid_match,
-                                 &(struct pid_and_tid)
-                                 {
-                                   .pid = getpid (),
-                                   .tid = getpid (),
-                                 });
+				 &(struct pid_and_tid) {
+				     .pid = getpid (),
+				     .tid = getpid (),
+				 });
 
   return NULL;
 }

@@ -9,7 +9,6 @@
 static pthread_key_t keys[NKEYS];
 static pthread_barrier_t b;
 
-
 static void *
 tf (void *arg)
 {
@@ -29,7 +28,6 @@ tf (void *arg)
     }
   return res;
 }
-
 
 static int
 do_test (void)
@@ -84,7 +82,6 @@ do_test (void)
 
   return !WIFEXITED (s) ? 2 : WEXITSTATUS (s);
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

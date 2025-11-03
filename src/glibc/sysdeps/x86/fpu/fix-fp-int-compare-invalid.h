@@ -18,15 +18,15 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef FIX_FP_INT_COMPARE_INVALID_H
-#define FIX_FP_INT_COMPARE_INVALID_H	1
+#  define FIX_FP_INT_COMPARE_INVALID_H 1
 
 /* Before GCC 8, both x87 and SSE comparisons use unordered comparison
    instructions when they should use ordered comparisons
    <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52451>.  */
-#if __GNUC_PREREQ (8, 0)
-# define FIX_COMPARE_INVALID 0
-#else
-# define FIX_COMPARE_INVALID 1
-#endif
+#  if __GNUC_PREREQ(8, 0)
+#    define FIX_COMPARE_INVALID 0
+#  else
+#    define FIX_COMPARE_INVALID 1
+#  endif
 
 #endif /* fix-fp-int-compare-invalid.h */

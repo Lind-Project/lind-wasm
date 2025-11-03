@@ -4,9 +4,7 @@ static int do_test (void);
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"
 
-
 static char *fname;
-
 
 static void
 do_prepare (void)
@@ -18,17 +16,11 @@ do_prepare (void)
     }
 }
 
-
-static const struct option opts[] =
-  {
-    { "one", no_argument, NULL, '1' },
-    { "two", no_argument, NULL, '2' },
-    { "one-one", no_argument, NULL, '3' },
-    { "four", no_argument, NULL, '4' },
-    { "onto", no_argument, NULL, '5' },
-    { NULL, 0, NULL, 0 }
-  };
-
+static const struct option opts[] = {
+  { "one", no_argument, NULL, '1' },	 { "two", no_argument, NULL, '2' },
+  { "one-one", no_argument, NULL, '3' }, { "four", no_argument, NULL, '4' },
+  { "onto", no_argument, NULL, '5' },	 { NULL, 0, NULL, 0 }
+};
 
 static int
 do_test (void)

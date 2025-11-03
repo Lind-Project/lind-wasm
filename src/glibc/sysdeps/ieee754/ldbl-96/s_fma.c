@@ -101,6 +101,5 @@ __fma (double x, double y, double z)
   return u.d;
 }
 #ifndef __fma
-libm_alias_double (__fma, fma)
-libm_alias_double_narrow (__fma, fma)
+libm_alias_double (__fma, fma) libm_alias_double_narrow (__fma, fma)
 #endif

@@ -24,10 +24,8 @@
 #include <support/xthread.h>
 #include <support/xtime.h>
 
-
 static pthread_barrier_t b;
 static pthread_rwlock_t r = PTHREAD_RWLOCK_INITIALIZER;
-
 
 static void *
 tf (void *arg)
@@ -44,7 +42,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)

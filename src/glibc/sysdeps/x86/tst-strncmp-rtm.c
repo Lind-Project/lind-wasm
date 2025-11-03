@@ -20,28 +20,25 @@
 #include <tst-string-rtm.h>
 
 #ifdef WIDE
-# define CHAR wchar_t
-# define MEMSET wmemset
-# define STRNCMP wcsncmp
-# define TEST_NAME "wcsncmp"
+#  define CHAR wchar_t
+#  define MEMSET wmemset
+#  define STRNCMP wcsncmp
+#  define TEST_NAME "wcsncmp"
 #else /* !WIDE */
-# define CHAR char
-# define MEMSET memset
-# ifndef STRNCMP
-#  define STRNCMP strncmp
-#  define TEST_NAME "strncmp"
-# endif
+#  define CHAR char
+#  define MEMSET memset
+#  ifndef STRNCMP
+#    define STRNCMP strncmp
+#    define TEST_NAME "strncmp"
+#  endif
 #endif /* !WIDE */
-
-
 
 #define LOOP 3000
 #define STRING_SIZE 1024
 CHAR string1[STRING_SIZE];
 CHAR string2[STRING_SIZE];
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 prepare (void)
 {
   MEMSET (string1, 'a', STRING_SIZE - 1);
@@ -52,8 +49,7 @@ prepare (void)
     return EXIT_FAILURE;
 }
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 function (void)
 {
   if (STRNCMP (string1, string2, STRING_SIZE) == 0)
@@ -62,8 +58,7 @@ function (void)
     return 1;
 }
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 function_overflow (void)
 {
   if (STRNCMP (string1, string2, SIZE_MAX) == 0)
@@ -72,8 +67,7 @@ function_overflow (void)
     return 1;
 }
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 function_overflow2 (void)
 {
   if (STRNCMP (string1, string2, SIZE_MAX >> 4) == 0)

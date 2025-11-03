@@ -25,7 +25,8 @@ M_DECL_FUNC (__remquo) (FLOAT x, FLOAT y, int *quo)
   int cquo, fpsr;
 
   __asm ("frem%.x %2,%0\n\tfmove%.l %/fpsr,%1"
-	 : "=f" (result), "=dm" (fpsr) : "f" (y), "0" (x));
+	 : "=f"(result), "=dm"(fpsr)
+	 : "f"(y), "0"(x));
   cquo = (fpsr >> 16) & 0x7f;
   if (fpsr & (1 << 23))
     cquo = -cquo;

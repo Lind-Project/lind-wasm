@@ -16,7 +16,7 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define WAIT_CALL(__pid, __wstatus, __options, __rusage) \
-   wait4 (__pid, __wstatus, __options, __rusage)
+#define WAIT_CALL(__pid, __wstatus, __options, __rusage)                      \
+  wait4 (__pid, __wstatus, __options, __rusage)
 
 #include "tst-wait-skeleton.c"

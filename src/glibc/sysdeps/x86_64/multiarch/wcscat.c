@@ -18,20 +18,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define __wcscat __redirect_wcscat
-# include <wchar.h>
-# undef __wcscat
+#if IS_IN(libc)
+#  define __wcscat __redirect_wcscat
+#  include <wchar.h>
+#  undef __wcscat
 
-# define SYMBOL_NAME wcscat
-# include <init-arch.h>
+#  define SYMBOL_NAME wcscat
+#  include <init-arch.h>
 
-# include "ifunc-wcs.h"
+#  include "ifunc-wcs.h"
 
 libc_ifunc_redirected (__redirect_wcscat, __wcscat, IFUNC_SELECTOR ());
 weak_alias (__wcscat, wcscat)
-# ifdef SHARED
-__hidden_ver1 (__wcscat, __GI___wcscat, __redirect_wcscat)
-  __attribute__((visibility ("hidden"))) __attribute_copy__ (wcscat);
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (__wcscat, __GI___wcscat, __redirect_wcscat)
+	__attribute__ ((visibility ("hidden"))) __attribute_copy__ (wcscat);
+#  endif
 #endif

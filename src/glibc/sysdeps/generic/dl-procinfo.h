@@ -17,23 +17,23 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_PROCINFO_H
-#define _DL_PROCINFO_H	1
+#  define _DL_PROCINFO_H 1
 
 /* We cannot provide a general printing function.  */
-#define _dl_procinfo(type, word) -1
+#  define _dl_procinfo(type, word) -1
 
 /* There are no hardware capabilities defined.  */
-#define _dl_hwcap_string(idx) ""
+#  define _dl_hwcap_string(idx) ""
 
 /* By default there is no important hardware capability.  */
-#define HWCAP_IMPORTANT (0)
+#  define HWCAP_IMPORTANT (0)
 
 /* There're no platforms to filter out.  */
-#define _DL_HWCAP_PLATFORM 0
+#  define _DL_HWCAP_PLATFORM 0
 
 /* We don't have any hardware capabilities.  */
-#define _DL_HWCAP_COUNT 0
+#  define _DL_HWCAP_COUNT 0
 
-#define _dl_string_platform(str) (-1)
+#  define _dl_string_platform(str) (-1)
 
 #endif /* dl-procinfo.h */

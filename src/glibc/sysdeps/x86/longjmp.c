@@ -21,7 +21,7 @@
 #undef __libc_longjmp
 
 extern void __longjmp_cancel (__jmp_buf __env, int __val)
-     __attribute__ ((__noreturn__)) attribute_hidden;
+    __attribute__ ((__noreturn__)) attribute_hidden;
 
 /* Since __libc_longjmp is a private interface for cancellation
    implementation in libpthread, there is no need to restore shadow
@@ -35,8 +35,7 @@ __libc_longjmp (sigjmp_buf env, int val)
 
   if (env[0].__mask_was_saved)
     /* Restore the saved signal mask.  */
-    (void) __sigprocmask (SIG_SETMASK,
-			  (sigset_t *) &env[0].__saved_mask,
+    (void) __sigprocmask (SIG_SETMASK, (sigset_t *) &env[0].__saved_mask,
 			  (sigset_t *) NULL);
 
   /* Call the machine-dependent function to restore machine state

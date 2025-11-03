@@ -16,37 +16,35 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SEM_H
-# error "Never include <bits/sem.h> directly; use <sys/sem.h> instead."
+#  error "Never include <bits/sem.h> directly; use <sys/sem.h> instead."
 #endif
 
 #include <sys/types.h>
 
 /* Flags for `semop'.  */
-#define SEM_UNDO	0x1000		/* undo the operation on exit */
+#define SEM_UNDO 0x1000 /* undo the operation on exit */
 
 /* Commands for `semctl'.  */
-#define GETPID		11		/* get sempid */
-#define GETVAL		12		/* get semval */
-#define GETALL		13		/* get all semval's */
-#define GETNCNT		14		/* get semncnt */
-#define GETZCNT		15		/* get semzcnt */
-#define SETVAL		16		/* set semval */
-#define SETALL		17		/* set all semval's */
-
+#define GETPID 11  /* get sempid */
+#define GETVAL 12  /* get semval */
+#define GETALL 13  /* get all semval's */
+#define GETNCNT 14 /* get semncnt */
+#define GETZCNT 15 /* get semzcnt */
+#define SETVAL 16  /* set semval */
+#define SETALL 17  /* set all semval's */
 
 /* Data structure describing a set of semaphores.  */
 struct semid_ds
 {
-  struct ipc_perm sem_perm;		/* operation permission struct */
-  __time_t sem_otime;			/* last semop() time */
-  __time_t sem_ctime;			/* last time changed by semctl() */
-  struct sem *__sembase;		/* ptr to first semaphore in array */
-  struct __sem_queue *__sem_pending;	/* pending operations */
-  struct __sem_queue *__sem_pending_last;/* last pending operation */
-  struct __sem_undo *__undo;		/* ondo requests on this array */
-  unsigned short int sem_nsems;		/* number of semaphores in set */
+  struct ipc_perm sem_perm;		  /* operation permission struct */
+  __time_t sem_otime;			  /* last semop() time */
+  __time_t sem_ctime;			  /* last time changed by semctl() */
+  struct sem *__sembase;		  /* ptr to first semaphore in array */
+  struct __sem_queue *__sem_pending;	  /* pending operations */
+  struct __sem_queue *__sem_pending_last; /* last pending operation */
+  struct __sem_undo *__undo;		  /* ondo requests on this array */
+  unsigned short int sem_nsems;		  /* number of semaphores in set */
 };
-
 
 /* The user should define a union like the following to use it for arguments
    for `semctl'.
@@ -62,15 +60,15 @@ struct semid_ds
    Previous versions of this file used to define this union but this is
    incorrect.  One can test the macro _SEM_SEMUN_UNDEFINED to see whether
    one must define the union or not.  */
-#define _SEM_SEMUN_UNDEFINED	1
+#define _SEM_SEMUN_UNDEFINED 1
 
 #ifdef __USE_MISC
 
 /* ipcs ctl cmds */
-# define SEM_STAT 18
-# define SEM_INFO 19
+#  define SEM_STAT 18
+#  define SEM_INFO 19
 
-struct  seminfo
+struct seminfo
 {
   int semmap;
   int semmni;

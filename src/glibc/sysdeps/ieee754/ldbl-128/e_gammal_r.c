@@ -26,23 +26,22 @@
 /* Coefficients B_2k / 2k(2k-1) of x^-(2k-1) inside exp in Stirling's
    approximation to gamma function.  */
 
-static const _Float128 gamma_coeff[] =
-  {
-    L(0x1.5555555555555555555555555555p-4),
-    L(-0xb.60b60b60b60b60b60b60b60b60b8p-12),
-    L(0x3.4034034034034034034034034034p-12),
-    L(-0x2.7027027027027027027027027028p-12),
-    L(0x3.72a3c5631fe46ae1d4e700dca8f2p-12),
-    L(-0x7.daac36664f1f207daac36664f1f4p-12),
-    L(0x1.a41a41a41a41a41a41a41a41a41ap-8),
-    L(-0x7.90a1b2c3d4e5f708192a3b4c5d7p-8),
-    L(0x2.dfd2c703c0cfff430edfd2c703cp-4),
-    L(-0x1.6476701181f39edbdb9ce625987dp+0),
-    L(0xd.672219167002d3a7a9c886459cp+0),
-    L(-0x9.cd9292e6660d55b3f712eb9e07c8p+4),
-    L(0x8.911a740da740da740da740da741p+8),
-    L(-0x8.d0cc570e255bf59ff6eec24b49p+12),
-  };
+static const _Float128 gamma_coeff[] = {
+  L (0x1.5555555555555555555555555555p-4),
+  L (-0xb.60b60b60b60b60b60b60b60b60b8p-12),
+  L (0x3.4034034034034034034034034034p-12),
+  L (-0x2.7027027027027027027027027028p-12),
+  L (0x3.72a3c5631fe46ae1d4e700dca8f2p-12),
+  L (-0x7.daac36664f1f207daac36664f1f4p-12),
+  L (0x1.a41a41a41a41a41a41a41a41a41ap-8),
+  L (-0x7.90a1b2c3d4e5f708192a3b4c5d7p-8),
+  L (0x2.dfd2c703c0cfff430edfd2c703cp-4),
+  L (-0x1.6476701181f39edbdb9ce625987dp+0),
+  L (0xd.672219167002d3a7a9c886459cp+0),
+  L (-0x9.cd9292e6660d55b3f712eb9e07c8p+4),
+  L (0x8.911a740da740da740da740da741p+8),
+  L (-0x8.d0cc570e255bf59ff6eec24b49p+12),
+};
 
 #define NCOEFF (sizeof (gamma_coeff) / sizeof (gamma_coeff[0]))
 
@@ -54,21 +53,21 @@ static _Float128
 gammal_positive (_Float128 x, int *exp2_adj)
 {
   int local_signgam;
-  if (x < L(0.5))
+  if (x < L (0.5))
     {
       *exp2_adj = 0;
       return __ieee754_expl (__ieee754_lgammal_r (x + 1, &local_signgam)) / x;
     }
-  else if (x <= L(1.5))
+  else if (x <= L (1.5))
     {
       *exp2_adj = 0;
       return __ieee754_expl (__ieee754_lgammal_r (x, &local_signgam));
     }
-  else if (x < L(12.5))
+  else if (x < L (12.5))
     {
       /* Adjust into the range for using exp (lgamma).  */
       *exp2_adj = 0;
-      _Float128 n = ceill (x - L(1.5));
+      _Float128 n = ceill (x - L (1.5));
       _Float128 x_adj = x - n;
       _Float128 eps;
       _Float128 prod = __gamma_productl (x_adj, 0, n, &eps);
@@ -105,11 +104,10 @@ gammal_positive (_Float128 x, int *exp2_adj)
 	  x_adj_mant *= 2;
 	}
       *exp2_adj = x_adj_log2 * (int) x_adj_int;
-      _Float128 ret = (__ieee754_powl (x_adj_mant, x_adj)
-		       * __ieee754_exp2l (x_adj_log2 * x_adj_frac)
-		       * __ieee754_expl (-x_adj)
-		       * sqrtl (2 * M_PIl / x_adj)
-		       / prod);
+      _Float128 ret
+	  = (__ieee754_powl (x_adj_mant, x_adj)
+	     * __ieee754_exp2l (x_adj_log2 * x_adj_frac)
+	     * __ieee754_expl (-x_adj) * sqrtl (2 * M_PIl / x_adj) / prod);
       exp_adj += x_eps * __ieee754_logl (x_adj);
       _Float128 bsum = gamma_coeff[NCOEFF - 1];
       _Float128 x_adj2 = x_adj * x_adj;
@@ -186,14 +184,13 @@ __ieee754_gammal_r (_Float128 x, int *signgamp)
 	  else
 	    {
 	      _Float128 frac = tx - x;
-	      if (frac > L(0.5))
+	      if (frac > L (0.5))
 		frac = 1 - frac;
-	      _Float128 sinpix = (frac <= L(0.25)
-				  ? __sinl (M_PIl * frac)
-				  : __cosl (M_PIl * (L(0.5) - frac)));
+	      _Float128 sinpix
+		  = (frac <= L (0.25) ? __sinl (M_PIl * frac)
+				      : __cosl (M_PIl * (L (0.5) - frac)));
 	      int exp2_adj;
-	      ret = M_PIl / (-x * sinpix
-			     * gammal_positive (-x, &exp2_adj));
+	      ret = M_PIl / (-x * sinpix * gammal_positive (-x, &exp2_adj));
 	      ret = __scalbnl (ret, -exp2_adj);
 	      math_check_force_underflow_nonneg (ret);
 	    }

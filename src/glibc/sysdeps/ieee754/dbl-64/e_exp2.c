@@ -122,7 +122,7 @@ __exp2 (double x)
   /* x = k/N + r, with int k and r in [-1/2N, 1/2N].  */
   kd = math_narrow_eval (x + Shift);
   ki = asuint64 (kd); /* k.  */
-  kd -= Shift; /* k/N for int k.  */
+  kd -= Shift;	      /* k/N for int k.  */
   r = x - kd;
   /* 2^(k/N) ~= scale * (1 + tail).  */
   idx = 2 * (ki % N);
@@ -145,11 +145,11 @@ __exp2 (double x)
 }
 #ifndef __exp2
 strong_alias (__exp2, __ieee754_exp2)
-libm_alias_finite (__ieee754_exp2, __exp2)
-# if LIBM_SVID_COMPAT
-versioned_symbol (libm, __exp2, exp2, GLIBC_2_29);
+    libm_alias_finite (__ieee754_exp2, __exp2)
+#  if LIBM_SVID_COMPAT
+	versioned_symbol (libm, __exp2, exp2, GLIBC_2_29);
 libm_alias_double_other (__exp2, exp2)
-# else
-libm_alias_double (__exp2, exp2)
-# endif
+#  else
+	libm_alias_double (__exp2, exp2)
+#  endif
 #endif

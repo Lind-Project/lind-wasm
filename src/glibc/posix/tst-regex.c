@@ -34,7 +34,6 @@
 #include <regex.h>
 #include <support/support.h>
 
-
 #if defined _POSIX_CPUTIME && _POSIX_CPUTIME >= 0
 static clockid_t cl;
 static int use_clock;
@@ -51,7 +50,6 @@ static int run_test (const char *expr, const char *mem, size_t memlen,
 		     int icase, int expected);
 static int run_test_backwards (const char *expr, const char *mem,
 			       size_t memlen, int icase, int expected);
-
 
 static int
 do_test (void)
@@ -109,11 +107,11 @@ do_test (void)
   umem[umemlen] = '\0';
 
 #if defined _POSIX_CPUTIME && _POSIX_CPUTIME >= 0
-# if _POSIX_CPUTIME == 0
+#  if _POSIX_CPUTIME == 0
   if (sysconf (_SC_CPUTIME) < 0)
     use_clock = 0;
   else
-# endif
+#  endif
     /* See whether we can use the CPU clock.  */
     use_clock = clock_getcpuclockid (0, &cl) == 0;
 #endif
@@ -139,7 +137,6 @@ do_test (void)
 
   return result;
 }
-
 
 static int
 test_expr (const char *expr, int expected, int expectedicase)
@@ -205,7 +202,6 @@ test_expr (const char *expr, int expected, int expectedicase)
 
   return result;
 }
-
 
 static int
 run_test (const char *expr, const char *mem, size_t memlen, int icase,
@@ -286,8 +282,8 @@ run_test (const char *expr, const char *mem, size_t memlen, int icase,
 	      finish.tv_sec -= start.tv_sec;
 	    }
 
-	  printf ("elapsed time: %jd.%09jd sec\n",
-		  (intmax_t) finish.tv_sec, (intmax_t) finish.tv_nsec);
+	  printf ("elapsed time: %jd.%09jd sec\n", (intmax_t) finish.tv_sec,
+		  (intmax_t) finish.tv_nsec);
 	}
     }
 
@@ -339,8 +335,8 @@ run_test (const char *expr, const char *mem, size_t memlen, int icase,
 		mintime = finish;
 	    }
 	}
-      printf ("elapsed time: %jd.%09jd sec\n",
-	      (intmax_t) mintime.tv_sec, (intmax_t) mintime.tv_nsec);
+      printf ("elapsed time: %jd.%09jd sec\n", (intmax_t) mintime.tv_sec,
+	      (intmax_t) mintime.tv_nsec);
     }
 #endif
 
@@ -348,7 +344,6 @@ run_test (const char *expr, const char *mem, size_t memlen, int icase,
      expect.  */
   return cnt != expected;
 }
-
 
 static int
 run_test_backwards (const char *expr, const char *mem, size_t memlen,
@@ -369,8 +364,7 @@ run_test_backwards (const char *expr, const char *mem, size_t memlen,
 #endif
 
   re_set_syntax ((RE_SYNTAX_POSIX_BASIC & ~RE_DOT_NEWLINE)
-		 | RE_HAT_LISTS_NOT_NEWLINE
-		 | (icase ? RE_ICASE : 0));
+		 | RE_HAT_LISTS_NOT_NEWLINE | (icase ? RE_ICASE : 0));
 
   memset (&re, 0, sizeof (re));
   re.fastmap = malloc (256);
@@ -432,8 +426,8 @@ run_test_backwards (const char *expr, const char *mem, size_t memlen,
 	      finish.tv_sec -= start.tv_sec;
 	    }
 
-	  printf ("elapsed time: %jd.%09jd sec\n",
-		  (intmax_t) finish.tv_sec, (intmax_t) finish.tv_nsec);
+	  printf ("elapsed time: %jd.%09jd sec\n", (intmax_t) finish.tv_sec,
+		  (intmax_t) finish.tv_nsec);
 	}
     }
 
@@ -501,8 +495,8 @@ run_test_backwards (const char *expr, const char *mem, size_t memlen,
 		mintime = finish;
 	    }
 	}
-      printf ("elapsed time: %jd.%09jd sec\n",
-	      (intmax_t) mintime.tv_sec, (intmax_t) mintime.tv_nsec);
+      printf ("elapsed time: %jd.%09jd sec\n", (intmax_t) mintime.tv_sec,
+	      (intmax_t) mintime.tv_nsec);
     }
 #endif
 
@@ -513,7 +507,6 @@ run_test_backwards (const char *expr, const char *mem, size_t memlen,
 
 /* If --timing is used we will need a larger timeout.  */
 #define TIMEOUT 50
-#define CMDLINE_OPTIONS \
-   {"timing", no_argument, &timing, 1 },
+#define CMDLINE_OPTIONS { "timing", no_argument, &timing, 1 },
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

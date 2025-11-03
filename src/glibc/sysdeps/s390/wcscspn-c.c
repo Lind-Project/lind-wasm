@@ -19,9 +19,9 @@
 #include <ifunc-wcscspn.h>
 
 #if HAVE_WCSCSPN_C
-# if HAVE_WCSCSPN_IFUNC || HAVE_WCSCSPN_Z13
-#  define WCSCSPN WCSCSPN_C
-# endif
+#  if HAVE_WCSCSPN_IFUNC || HAVE_WCSCSPN_Z13
+#    define WCSCSPN WCSCSPN_C
+#  endif
 
-# include <wcsmbs/wcscspn.c>
+#  include <wcsmbs/wcscspn.c>
 #endif

@@ -18,18 +18,18 @@
 #include <sysdeps/unix/sysdep.h>
 #include <sysdeps/i386/sysdep.h>
 
-#ifdef	__ASSEMBLER__
+#ifdef __ASSEMBLER__
 
 /* This is defined as a separate macro so that other sysdep.h files
    can include this one and then redefine DO_CALL.  */
 
-#define DO_CALL(syscall_name, args)					      \
-  lea SYS_ify (syscall_name), %eax;					      \
-  lcall $7, $0
+#  define DO_CALL(syscall_name, args)                                         \
+    lea SYS_ify (syscall_name), % eax;                                        \
+    lcall $7, $0
 
-#define	r0		%eax	/* Normal return-value register.  */
-#define	r1		%edx	/* Secondary return-value register.  */
-#define scratch 	%ecx	/* Call-clobbered register for random use.  */
-#define MOVE(x,y)	movl x, y
+#  define r0 % eax	/* Normal return-value register.  */
+#  define r1 % edx	/* Secondary return-value register.  */
+#  define scratch % ecx /* Call-clobbered register for random use.  */
+#  define MOVE(x, y) movl x, y
 
-#endif	/* __ASSEMBLER__ */
+#endif /* __ASSEMBLER__ */

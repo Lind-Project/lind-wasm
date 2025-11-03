@@ -93,13 +93,13 @@ exp2_inline (double_t xd, uint32_t sign_bias)
   double_t kd, z, r, r2, y, s;
 
 #if TOINT_INTRINSICS
-# define C __exp2f_data.poly_scaled
+#  define C __exp2f_data.poly_scaled
   /* N*x = k + r with r in [-1/2, 1/2] */
   kd = roundtoint (xd); /* k */
   ki = converttoint (xd);
 #else
-# define C __exp2f_data.poly
-# define SHIFT __exp2f_data.shift_scaled
+#  define C __exp2f_data.poly
+#  define SHIFT __exp2f_data.shift_scaled
   /* x = k/N + r with r in [-1/(2N), 1/(2N)] */
   kd = (double) (xd + SHIFT); /* Rounding to double precision is required.  */
   ki = asuint64 (kd);
@@ -218,7 +218,7 @@ __powf (float x, float y)
 	     && math_narrow_eval (1.0f + math_opt_barrier (0x1p-25f)) != 1.0f)
 	    || (sign_bias
 		&& math_narrow_eval (-1.0f - math_opt_barrier (0x1p-25f))
-		     != -1.0f))
+		       != -1.0f))
 	  return __math_oflowf (sign_bias);
       if (ylogx <= -150.0 * POWF_SCALE)
 	return __math_uflowf (sign_bias);
@@ -231,7 +231,7 @@ __powf (float x, float y)
 }
 #ifndef __powf
 strong_alias (__powf, __ieee754_powf)
-libm_alias_finite (__ieee754_powf, __powf)
-versioned_symbol (libm, __powf, powf, GLIBC_2_27);
+    libm_alias_finite (__ieee754_powf, __powf)
+	versioned_symbol (libm, __powf, powf, GLIBC_2_27);
 libm_alias_float_other (__pow, pow)
 #endif

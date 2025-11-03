@@ -19,13 +19,12 @@
 #include <atomic.h>
 #include <errno.h>
 #include <sysdep.h>
-#include <lowlevellock.h>	/* lll_futex* used by the old code.  */
+#include <lowlevellock.h> /* lll_futex* used by the old code.  */
 #include <futex-internal.h>
 #include <internaltypes.h>
 #include <semaphore.h>
 
 #include <shlib-compat.h>
-
 
 /* See sem_wait for an explanation of the algorithm.  */
 int
@@ -65,8 +64,8 @@ __new_sem_post (sem_t *sem)
 	  return -1;
 	}
     }
-  while (!atomic_compare_exchange_weak_release
-	 (&isem->value, &v, v + (1 << SEM_VALUE_SHIFT)));
+  while (!atomic_compare_exchange_weak_release (&isem->value, &v,
+						v + (1 << SEM_VALUE_SHIFT)));
 
   /* If there is any potentially blocked waiter, wake one of them.  */
   if ((v & SEM_NWAITERS_MASK) != 0)
@@ -77,13 +76,12 @@ __new_sem_post (sem_t *sem)
 }
 versioned_symbol (libpthread, __new_sem_post, sem_post, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __new_sem_post, sem_post, GLIBC_2_1);
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_1)
-int
-attribute_compat_text_section
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_1)
+int attribute_compat_text_section
 __old_sem_post (sem_t *sem)
 {
   unsigned int *futex = (unsigned int *) sem;

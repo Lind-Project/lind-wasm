@@ -22,7 +22,10 @@
 #include <get-isa-level.h>
 
 const char _dl_hwcaps_subdirs[] = "x86-64-v4:x86-64-v3:x86-64-v2";
-enum { subdirs_count = 3 }; /* Number of components in _dl_hwcaps_subdirs.  */
+enum
+{
+  subdirs_count = 3
+}; /* Number of components in _dl_hwcaps_subdirs.  */
 
 uint32_t
 _dl_hwcaps_subdirs_active (void)

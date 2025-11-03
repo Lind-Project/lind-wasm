@@ -17,7 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TERMIOS_H
-# error "Never include <bits/termios-c_cc.h> directly; use <termios.h> instead."
+#  error                                                                       \
+      "Never include <bits/termios-c_cc.h> directly; use <termios.h> instead."
 #endif
 
 /* c_cc characters */

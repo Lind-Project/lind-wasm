@@ -18,8 +18,7 @@
 
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 canonicalizel (double *cx, double *x)
 {
   return canonicalize (cx, x);

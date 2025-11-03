@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _PTHREAD_MUTEX_CONF_H
-#define _PTHREAD_MUTEX_CONF_H 1
+#  define _PTHREAD_MUTEX_CONF_H 1
 
 static inline void
 __pthread_tunables_init (void)

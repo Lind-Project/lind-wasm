@@ -22,7 +22,6 @@
 #include <unistd.h>
 #include "tst-cancel-self-cleanup.c"
 
-
 static int
 do_test (void)
 {
@@ -43,7 +42,8 @@ do_test (void)
     }
 
   /* Wait to be canceled. Don't give any cancellation points to play with.  */
-  while (1);
+  while (1)
+    ;
   pthread_cleanup_pop (0);
 
   return 1;

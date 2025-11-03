@@ -21,7 +21,6 @@
 extern int
 ___ieee128_vfwscanf (FILE *fp, const wchar_t *format, va_list ap)
 {
-  return __vfwscanf_internal (fp, format, ap,
-			      SCANF_LDBL_USES_FLOAT128);
+  return __vfwscanf_internal (fp, format, ap, SCANF_LDBL_USES_FLOAT128);
 }
 strong_alias (___ieee128_vfwscanf, __vfwscanfieee128)

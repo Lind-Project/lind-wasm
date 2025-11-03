@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FPU_CONTROL_H
-#define _FPU_CONTROL_H	1
+#  define _FPU_CONTROL_H 1
 
 /* Note that this file sets on x86-64 only the x87 FPU, it does not
    touch the SSE unit.  */
@@ -54,37 +54,36 @@
  * The hardware default is 0x037f which we use.
  */
 
-#include <features.h>
+#  include <features.h>
 
 /* masking of interrupts */
-#define _FPU_MASK_IM  0x01
-#define _FPU_MASK_DM  0x02
-#define _FPU_MASK_ZM  0x04
-#define _FPU_MASK_OM  0x08
-#define _FPU_MASK_UM  0x10
-#define _FPU_MASK_PM  0x20
+#  define _FPU_MASK_IM 0x01
+#  define _FPU_MASK_DM 0x02
+#  define _FPU_MASK_ZM 0x04
+#  define _FPU_MASK_OM 0x08
+#  define _FPU_MASK_UM 0x10
+#  define _FPU_MASK_PM 0x20
 
 /* precision control */
-#define _FPU_EXTENDED 0x300	/* libm requires double extended precision.  */
-#define _FPU_DOUBLE   0x200
-#define _FPU_SINGLE   0x0
+#  define _FPU_EXTENDED 0x300 /* libm requires double extended precision.  */
+#  define _FPU_DOUBLE 0x200
+#  define _FPU_SINGLE 0x0
 
 /* rounding control */
-#define _FPU_RC_NEAREST 0x0    /* RECOMMENDED */
-#define _FPU_RC_DOWN    0x400
-#define _FPU_RC_UP      0x800
-#define _FPU_RC_ZERO    0xC00
+#  define _FPU_RC_NEAREST 0x0 /* RECOMMENDED */
+#  define _FPU_RC_DOWN 0x400
+#  define _FPU_RC_UP 0x800
+#  define _FPU_RC_ZERO 0xC00
 
-#define _FPU_RESERVED 0xF0C0  /* Reserved bits in cw */
-
+#  define _FPU_RESERVED 0xF0C0 /* Reserved bits in cw */
 
 /* The fdlibm code requires strict IEEE double precision arithmetic,
    and no interrupts for exceptions, rounding to nearest.  */
 
-#define _FPU_DEFAULT  0x037f
+#  define _FPU_DEFAULT 0x037f
 
 /* IEEE:  same as above.  */
-#define _FPU_IEEE     0x037f
+#  define _FPU_IEEE 0x037f
 
 /* Type of the control word.  */
 typedef unsigned int fpu_control_t __attribute__ ((__mode__ (__HI__)));
@@ -99,10 +98,10 @@ typedef unsigned int fpu_control_t __attribute__ ((__mode__ (__HI__)));
    recent hardware nor on x86-64.  Some floating point operations are
    executed in the SSE/SSE2 engines which have their own control and
    status register.  */
-#define _FPU_GETCW(cw) 
-#define _FPU_SETCW(cw) 
+#  define _FPU_GETCW(cw)
+#  define _FPU_SETCW(cw)
 
 /* Default control word set at startup.  */
 extern fpu_control_t __fpu_control;
 
-#endif	/* fpu_control.h */
+#endif /* fpu_control.h */

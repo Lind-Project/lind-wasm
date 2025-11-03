@@ -21,6 +21,7 @@
 int
 execv (const char *path, char *const argv[])
 {
-  // in crt1.c, environ is directly declared as "environ" instead of "__environ"
-  return __execve(path, argv, environ);
+  // in crt1.c, environ is directly declared as "environ" instead of
+  // "__environ"
+  return __execve (path, argv, environ);
 }

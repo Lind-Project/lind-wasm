@@ -29,9 +29,9 @@
 
 #include <posix-conf-vars-def.h>
 
-#define CONF_DEF_UNDEFINED	1
-#define CONF_DEF_DEFINED_SET	2
-#define CONF_DEF_DEFINED_UNSET	3
+#define CONF_DEF_UNDEFINED 1
+#define CONF_DEF_DEFINED_SET 2
+#define CONF_DEF_DEFINED_UNSET 3
 
 /* The configuration variable is not defined.  */
 #define CONF_IS_UNDEFINED(conf) (CONF_DEF##conf == CONF_DEF_UNDEFINED)

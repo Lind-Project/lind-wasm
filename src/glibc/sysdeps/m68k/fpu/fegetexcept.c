@@ -24,7 +24,7 @@ fegetexcept (void)
   unsigned int exc;
 
   /* Get the current control register contents.  */
-  __asm__ ("fmove%.l %!,%0" : "=dm" (exc));
+  __asm__ ("fmove%.l %!,%0" : "=dm"(exc));
 
   return (exc >> 6) & FE_ALL_EXCEPT;
 }

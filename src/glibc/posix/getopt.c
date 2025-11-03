@@ -16,9 +16,9 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-
+
 #ifndef _LIBC
-# include <config.h>
+#  include <config.h>
 #endif
 
 #include "getopt.h"
@@ -36,24 +36,24 @@
    functions in the "user namespace" related to stdio locking.
    Finally, it must use glibc's internal message translation so that
    the messages are looked up in the proper text domain.  */
-# include <libintl.h>
-# define fprintf __fxprintf_nocancel
-# define flockfile(fp) _IO_flockfile (fp)
-# define funlockfile(fp) _IO_funlockfile (fp)
+#  include <libintl.h>
+#  define fprintf __fxprintf_nocancel
+#  define flockfile(fp) _IO_flockfile (fp)
+#  define funlockfile(fp) _IO_funlockfile (fp)
 #else
-# include "gettext.h"
-# define _(msgid) gettext (msgid)
+#  include "gettext.h"
+#  define _(msgid) gettext (msgid)
 /* When used standalone, flockfile and funlockfile might not be
    available.  */
-# if (!defined _POSIX_THREAD_SAFE_FUNCTIONS \
-      || (defined _WIN32 && ! defined __CYGWIN__))
-#  define flockfile(fp) /* nop */
-#  define funlockfile(fp) /* nop */
-# endif
+#  if (!defined _POSIX_THREAD_SAFE_FUNCTIONS                                  \
+       || (defined _WIN32 && !defined __CYGWIN__))
+#    define flockfile(fp)   /* nop */
+#    define funlockfile(fp) /* nop */
+#  endif
 /* When used standalone, do not attempt to use alloca.  */
-# define __libc_use_alloca(size) 0
-# undef alloca
-# define alloca(size) (abort (), (void *)0)
+#  define __libc_use_alloca(size) 0
+#  undef alloca
+#  define alloca(size) (abort (), (void *) 0)
 #endif
 
 /* This implementation of 'getopt' has three modes for handling
@@ -117,7 +117,7 @@ int optopt = '?';
 /* Keep a global copy of all internal members of getopt_data.  */
 
 static struct _getopt_data getopt_data;
-
+
 /* Exchange two adjacent subsequences of ARGV.
    One subsequence is elements [first_nonopt,last_nonopt)
    which contains all the non-options that have been skipped so far.
@@ -193,8 +193,8 @@ exchange (char **argv, struct _getopt_data *d)
 static int
 process_long_option (int argc, char **argv, const char *optstring,
 		     const struct option *longopts, int *longind,
-		     int long_only, struct _getopt_data *d,
-		     int print_errors, const char *prefix)
+		     int long_only, struct _getopt_data *d, int print_errors,
+		     const char *prefix)
 {
   char *nameend;
   size_t namelen;
@@ -204,7 +204,7 @@ process_long_option (int argc, char **argv, const char *optstring,
   int option_index;
 
   for (nameend = d->__nextchar; *nameend && *nameend != '='; nameend++)
-    /* Do nothing.  */ ;
+    /* Do nothing.  */;
   namelen = nameend - d->__nextchar;
 
   /* First look for an exact match, counting the options as a side
@@ -236,10 +236,8 @@ process_long_option (int argc, char **argv, const char *optstring,
 		pfound = p;
 		indfound = option_index;
 	      }
-	    else if (long_only
-		     || pfound->has_arg != p->has_arg
-		     || pfound->flag != p->flag
-		     || pfound->val != p->val)
+	    else if (long_only || pfound->has_arg != p->has_arg
+		     || pfound->flag != p->flag || pfound->val != p->val)
 	      {
 		/* Second or later nonexact match found.  */
 		if (!ambig_fallback)
@@ -275,19 +273,21 @@ process_long_option (int argc, char **argv, const char *optstring,
 	  if (print_errors)
 	    {
 	      if (ambig_fallback)
-		fprintf (stderr, _("%s: option '%s%s' is ambiguous\n"),
+		fprintf (stderr, _ ("%s: option '%s%s' is ambiguous\n"),
 			 argv[0], prefix, d->__nextchar);
 	      else
 		{
 		  flockfile (stderr);
-		  fprintf (stderr,
-			   _("%s: option '%s%s' is ambiguous; possibilities:"),
-			   argv[0], prefix, d->__nextchar);
+		  fprintf (
+		      stderr,
+		      _ ("%s: option '%s%s' is ambiguous; possibilities:"),
+		      argv[0], prefix, d->__nextchar);
 
-		  for (option_index = 0; option_index < n_options; option_index++)
+		  for (option_index = 0; option_index < n_options;
+		       option_index++)
 		    if (ambig_set[option_index])
-		      fprintf (stderr, " '%s%s'",
-			       prefix, longopts[option_index].name);
+		      fprintf (stderr, " '%s%s'", prefix,
+			       longopts[option_index].name);
 
 		  /* This must use 'fprintf' even though it's only
 		     printing a single character, so that it goes through
@@ -316,8 +316,8 @@ process_long_option (int argc, char **argv, const char *optstring,
 	  || strchr (optstring, *d->__nextchar) == NULL)
 	{
 	  if (print_errors)
-	    fprintf (stderr, _("%s: unrecognized option '%s%s'\n"),
-		     argv[0], prefix, d->__nextchar);
+	    fprintf (stderr, _ ("%s: unrecognized option '%s%s'\n"), argv[0],
+		     prefix, d->__nextchar);
 
 	  d->__nextchar = NULL;
 	  d->optind++;
@@ -342,7 +342,7 @@ process_long_option (int argc, char **argv, const char *optstring,
 	{
 	  if (print_errors)
 	    fprintf (stderr,
-		     _("%s: option '%s%s' doesn't allow an argument\n"),
+		     _ ("%s: option '%s%s' doesn't allow an argument\n"),
 		     argv[0], prefix, pfound->name);
 
 	  d->optopt = pfound->val;
@@ -356,8 +356,7 @@ process_long_option (int argc, char **argv, const char *optstring,
       else
 	{
 	  if (print_errors)
-	    fprintf (stderr,
-		     _("%s: option '%s%s' requires an argument\n"),
+	    fprintf (stderr, _ ("%s: option '%s%s' requires an argument\n"),
 		     argv[0], prefix, pfound->name);
 
 	  d->optopt = pfound->val;
@@ -378,9 +377,9 @@ process_long_option (int argc, char **argv, const char *optstring,
 /* Initialize internal data upon the first call to getopt.  */
 
 static const char *
-_getopt_initialize (_GL_UNUSED int argc,
-		    _GL_UNUSED char **argv, const char *optstring,
-		    struct _getopt_data *d, int posixly_correct)
+_getopt_initialize (_GL_UNUSED int argc, _GL_UNUSED char **argv,
+		    const char *optstring, struct _getopt_data *d,
+		    int posixly_correct)
 {
   /* Start processing options with ARGV-element 1 (since ARGV-element 0
      is the program name); the sequence of previously skipped
@@ -410,7 +409,7 @@ _getopt_initialize (_GL_UNUSED int argc,
   d->__initialized = 1;
   return optstring;
 }
-
+
 /* Scan elements of ARGV (whose length is ARGC) for option characters
    given in OPTSTRING.
 
@@ -469,8 +468,8 @@ _getopt_initialize (_GL_UNUSED int argc,
 
 int
 _getopt_internal_r (int argc, char **argv, const char *optstring,
-		    const struct option *longopts, int *longind,
-		    int long_only, struct _getopt_data *d, int posixly_correct)
+		    const struct option *longopts, int *longind, int long_only,
+		    struct _getopt_data *d, int posixly_correct)
 {
   int print_errors = d->opterr;
 
@@ -572,8 +571,8 @@ _getopt_internal_r (int argc, char **argv, const char *optstring,
 		 "--" was handled above.  */
 	      d->__nextchar = argv[d->optind] + 2;
 	      return process_long_option (argc, argv, optstring, longopts,
-					  longind, long_only, d,
-					  print_errors, "--");
+					  longind, long_only, d, print_errors,
+					  "--");
 	    }
 
 	  /* If long_only and the ARGV-element has the form "-f",
@@ -588,14 +587,15 @@ _getopt_internal_r (int argc, char **argv, const char *optstring,
 	     not "-f" with arg "u".
 
 	     This distinction seems to be the most useful approach.  */
-	  if (long_only && (argv[d->optind][2]
-			    || !strchr (optstring, argv[d->optind][1])))
+	  if (long_only
+	      && (argv[d->optind][2]
+		  || !strchr (optstring, argv[d->optind][1])))
 	    {
 	      int code;
 	      d->__nextchar = argv[d->optind] + 1;
 	      code = process_long_option (argc, argv, optstring, longopts,
-					  longind, long_only, d,
-					  print_errors, "-");
+					  longind, long_only, d, print_errors,
+					  "-");
 	      if (code != -1)
 		return code;
 	    }
@@ -618,7 +618,7 @@ _getopt_internal_r (int argc, char **argv, const char *optstring,
     if (temp == NULL || c == ':' || c == ';')
       {
 	if (print_errors)
-	  fprintf (stderr, _("%s: invalid option -- '%c'\n"), argv[0], c);
+	  fprintf (stderr, _ ("%s: invalid option -- '%c'\n"), argv[0], c);
 	d->optopt = c;
 	return '?';
       }
@@ -632,8 +632,7 @@ _getopt_internal_r (int argc, char **argv, const char *optstring,
 	else if (d->optind == argc)
 	  {
 	    if (print_errors)
-	      fprintf (stderr,
-		       _("%s: option requires an argument -- '%c'\n"),
+	      fprintf (stderr, _ ("%s: option requires an argument -- '%c'\n"),
 		       argv[0], c);
 
 	    d->optopt = c;
@@ -679,7 +678,7 @@ _getopt_internal_r (int argc, char **argv, const char *optstring,
 	      {
 		if (print_errors)
 		  fprintf (stderr,
-			   _("%s: option requires an argument -- '%c'\n"),
+			   _ ("%s: option requires an argument -- '%c'\n"),
 			   argv[0], c);
 
 		d->optopt = c;
@@ -709,9 +708,8 @@ _getopt_internal (int argc, char **argv, const char *optstring,
   getopt_data.optind = optind;
   getopt_data.opterr = opterr;
 
-  result = _getopt_internal_r (argc, argv, optstring, longopts,
-			       longind, long_only, &getopt_data,
-			       posixly_correct);
+  result = _getopt_internal_r (argc, argv, optstring, longopts, longind,
+			       long_only, &getopt_data, posixly_correct);
 
   optind = getopt_data.optind;
   optarg = getopt_data.optarg;
@@ -724,22 +722,20 @@ _getopt_internal (int argc, char **argv, const char *optstring,
    Standalone applications just get a POSIX-compliant getopt.
    POSIX and LSB both require these functions to take 'char *const *argv'
    even though this is incorrect (because of the permutation).  */
-#define GETOPT_ENTRY(NAME, POSIXLY_CORRECT)			\
-  int								\
-  NAME (int argc, char *const *argv, const char *optstring)	\
-  {								\
-    return _getopt_internal (argc, (char **)argv, optstring,	\
-			     0, 0, 0, POSIXLY_CORRECT);		\
+#define GETOPT_ENTRY(NAME, POSIXLY_CORRECT)                                   \
+  int NAME (int argc, char *const *argv, const char *optstring)               \
+  {                                                                           \
+    return _getopt_internal (argc, (char **) argv, optstring, 0, 0, 0,        \
+			     POSIXLY_CORRECT);                                \
   }
 
 #ifdef _LIBC
-GETOPT_ENTRY(getopt, 0)
-GETOPT_ENTRY(__posix_getopt, 1)
+GETOPT_ENTRY (getopt, 0)
+GETOPT_ENTRY (__posix_getopt, 1)
 #else
-GETOPT_ENTRY(getopt, 1)
+GETOPT_ENTRY (getopt, 1)
 #endif
 
-
 #ifdef TEST
 
 /* Compile with -DTEST to make an executable for use in testing

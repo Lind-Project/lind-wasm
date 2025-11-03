@@ -56,7 +56,7 @@ __getlogin_r (char *name, size_t name_len)
   if (result != 0)
     return result;
 
-  real_tty_path += 5;		/* Remove "/dev/".  */
+  real_tty_path += 5; /* Remove "/dev/".  */
   strncpy (line.ut_line, real_tty_path, sizeof line.ut_line);
 
   /* We don't use the normal entry points __setutent et al, because we
@@ -97,7 +97,6 @@ __getlogin_r (char *name, size_t name_len)
   return result;
 }
 #ifndef STATIC
-libc_hidden_def (__getlogin_r)
-weak_alias (__getlogin_r, getlogin_r)
-libc_hidden_weak (getlogin_r)
+libc_hidden_def (__getlogin_r) weak_alias (__getlogin_r, getlogin_r)
+    libc_hidden_weak (getlogin_r)
 #endif

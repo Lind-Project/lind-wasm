@@ -19,7 +19,7 @@
 #include <math.h>
 
 #undef weak_alias
-#define weak_alias(a,b)
+#define weak_alias(a, b)
 
 #define __modff __modff_ppc64
 

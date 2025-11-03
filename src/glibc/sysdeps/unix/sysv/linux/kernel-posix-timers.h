@@ -20,7 +20,6 @@
 #include <signal.h>
 #include <sys/types.h>
 
-
 /* Nonzero if the system calls are not available.  */
 extern int __no_posix_timers attribute_hidden;
 
@@ -44,14 +43,14 @@ extern struct timer *__timer_active_sigev_thread attribute_hidden;
 extern pthread_mutex_t __timer_active_sigev_thread_lock attribute_hidden;
 
 extern __typeof (timer_create) __timer_create;
-libc_hidden_proto (__timer_create)
-extern __typeof (timer_delete) __timer_delete;
-libc_hidden_proto (__timer_delete)
-extern __typeof (timer_getoverrun) __timer_getoverrun;
+libc_hidden_proto (__timer_create) extern __typeof (timer_delete)
+    __timer_delete;
+libc_hidden_proto (__timer_delete) extern __typeof (timer_getoverrun)
+    __timer_getoverrun;
 libc_hidden_proto (__timer_getoverrun)
 
-/* Type of timers in the kernel.  */
-typedef int kernel_timer_t;
+    /* Type of timers in the kernel.  */
+    typedef int kernel_timer_t;
 
 /* Internal representation of SIGEV_THREAD timer.  */
 struct timer
@@ -65,7 +64,6 @@ struct timer
   /* Next element in list of active SIGEV_THREAD timers.  */
   struct timer *next;
 };
-
 
 /* For !SIGEV_THREAD, the resulting 'timer_t' is the returned kernel timer
    identifier (kernel_timer_t), while for SIGEV_THREAD it uses the fact malloc
@@ -94,7 +92,7 @@ timer_is_sigev_thread (timer_t timerid)
 static inline struct timer *
 timerid_to_timer (timer_t timerid)
 {
-  return (struct timer *)((uintptr_t) timerid << 1);
+  return (struct timer *) ((uintptr_t) timerid << 1);
 }
 
 static inline kernel_timer_t
@@ -111,6 +109,6 @@ timerid_to_kernel_timer (timer_t timerid)
 #include <timer_t_was_int_compat.h>
 
 #if TIMER_T_WAS_INT_COMPAT
-# define OLD_TIMER_MAX 256
+#  define OLD_TIMER_MAX 256
 extern timer_t __timer_compat_list[OLD_TIMER_MAX];
 #endif

@@ -24,10 +24,9 @@
 int
 __getpid (void)
 {
-  return MAKE_SYSCALL(GETPID_SYSCALL, "syscall|getpid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (GETPID_SYSCALL, "syscall|getpid", NOTUSED, NOTUSED,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__getpid)
-stub_warning (getpid)
+libc_hidden_def (__getpid) stub_warning (getpid)
 
-weak_alias (__getpid, getpid)
-libc_hidden_weak (getpid)
+    weak_alias (__getpid, getpid) libc_hidden_weak (getpid)

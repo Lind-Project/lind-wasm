@@ -22,7 +22,6 @@
 #include <unistd.h>
 #include "tst-cancel-self-cleanup.c"
 
-
 static int
 do_test (void)
 {
@@ -42,7 +41,6 @@ do_test (void)
 
   return 1;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

@@ -56,7 +56,7 @@ __mpn_construct_long_double (mp_srcptr frac_ptr, int expt, int sign)
   hi = (frac_ptr[0] >> 53) & (((mp_limb_t) 1 << 11) - 1);
   hi |= (frac_ptr[1] << 11);
 #else
-  #error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
+#  error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
 #endif
 
   if ((hi & (1LL << 52)) == 0 && (hi | lo) != 0)

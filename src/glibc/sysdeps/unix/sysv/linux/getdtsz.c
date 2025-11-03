@@ -16,6 +16,6 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* This comes from the Linux kernel header.  */
-#define OPEN_MAX	256
+#define OPEN_MAX 256
 
-#include  <sysdeps/posix/getdtsz.c>
+#include <sysdeps/posix/getdtsz.c>

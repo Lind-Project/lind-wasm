@@ -51,7 +51,8 @@ static const struct data
    The largest observed error in this region is 1.32 ulps,
    _ZGVsMxv_acosf (0x1.15ba56p-1) got 0x1.feb33p-1
 				 want 0x1.feb32ep-1.  */
-svfloat32_t SV_NAME_F1 (acos) (svfloat32_t x, const svbool_t pg)
+svfloat32_t
+SV_NAME_F1 (acos) (svfloat32_t x, const svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
 

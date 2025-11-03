@@ -35,20 +35,21 @@
 int
 ___xstat64 (int vers, const char *name, struct stat64 *buf)
 {
-   return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers, (uint64_t) name, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers,
+		       (uint64_t) name, (uint64_t) buf, NOTUSED, NOTUSED,
+		       NOTUSED);
 }
 
-#if XSTAT_IS_XSTAT64
+#  if XSTAT_IS_XSTAT64
 strong_alias (___xstat64, __xstat)
-#endif
+#  endif
 
-#if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
-versioned_symbol (libc, ___xstat64, __xstat64, GLIBC_2_2);
+#  if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
+    versioned_symbol (libc, ___xstat64, __xstat64, GLIBC_2_2);
 strong_alias (___xstat64, __old__xstat64)
-compat_symbol (libc, __old__xstat64, __xstat64, GLIBC_2_1);
-#else
+    compat_symbol (libc, __old__xstat64, __xstat64, GLIBC_2_1);
+#  else
 strong_alias (___xstat64, __xstat64)
-#endif
-
+#  endif
 
 #endif /* LIB_COMPAT  */

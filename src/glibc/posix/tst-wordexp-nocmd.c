@@ -68,41 +68,40 @@ run_tests (void)
 {
   /* Integer overflow in division.  */
   {
-    static const char *const numbers[] = {
-      "0",
-      "1",
-      "65536",
-      "2147483648",
-      "4294967296"
-      "9223372036854775808",
-      "18446744073709551616",
-      "170141183460469231731687303715884105728",
-      "340282366920938463463374607431768211456",
-      NULL
-    };
+    static const char *const numbers[]
+	= { "0",
+	    "1",
+	    "65536",
+	    "2147483648",
+	    "4294967296"
+	    "9223372036854775808",
+	    "18446744073709551616",
+	    "170141183460469231731687303715884105728",
+	    "340282366920938463463374607431768211456",
+	    NULL };
 
     for (const char *const *num = numbers; *num != NULL; ++num)
       {
-        wordexp_t w;
-        char pattern[256];
-        snprintf (pattern, sizeof (pattern), "$[(-%s)/(-1)]", *num);
-        int ret = wordexp (pattern, &w, WRDE_NOCMD);
-        if (ret == 0)
-          {
-            /* If the call is successful, the result must match the
-               original number.  */
-            TEST_COMPARE (w.we_wordc, 1);
-            TEST_COMPARE_STRING (w.we_wordv[0], *num);
-            TEST_COMPARE_STRING (w.we_wordv[1], NULL);
-            wordfree (&w);
-          }
-        else
-          /* Otherwise, the test must fail with a syntax error.  */
-          TEST_COMPARE (ret, WRDE_SYNTAX);
+	wordexp_t w;
+	char pattern[256];
+	snprintf (pattern, sizeof (pattern), "$[(-%s)/(-1)]", *num);
+	int ret = wordexp (pattern, &w, WRDE_NOCMD);
+	if (ret == 0)
+	  {
+	    /* If the call is successful, the result must match the
+	       original number.  */
+	    TEST_COMPARE (w.we_wordc, 1);
+	    TEST_COMPARE_STRING (w.we_wordv[0], *num);
+	    TEST_COMPARE_STRING (w.we_wordv[1], NULL);
+	    wordfree (&w);
+	  }
+	else
+	  /* Otherwise, the test must fail with a syntax error.  */
+	  TEST_COMPARE (ret, WRDE_SYNTAX);
 
-        /* In both cases, command execution is not permitted.  */
-        if (pid_tests_supported)
-          TEST_COMPARE (expected_pid++, next_pid ());
+	/* In both cases, command execution is not permitted.  */
+	if (pid_tests_supported)
+	  TEST_COMPARE (expected_pid++, next_pid ());
       }
   }
 
@@ -140,10 +139,10 @@ subprocess (void *closure)
 
       pid_t n = next_pid ();
       printf ("info: self-test resulted in PID %d (processes created: %d)\n",
-              (int) n, (int) (n - expected_pid));
+	      (int) n, (int) (n - expected_pid));
       TEST_VERIFY (n > expected_pid);
       expected_pid = n + 1;
-  }
+    }
 
   puts ("info: testing without IFS");
   unsetenv ("IFS");
@@ -162,12 +161,12 @@ do_test (void)
 #ifdef CLONE_NEWPID
   if (unshare (CLONE_NEWPID) != 0)
     printf ("warning: unshare (CLONE_NEWPID) failed: %m\n"
-            "warning: This leads to reduced test coverage.\n");
+	    "warning: This leads to reduced test coverage.\n");
   else
     pid_tests_supported = true;
 #else
   printf ("warning: CLONE_NEWPID not available.\n"
-          "warning: This leads to reduced test coverage.\n");
+	  "warning: This leads to reduced test coverage.\n");
 #endif
 
   /* CLONE_NEWPID only has an effect after fork.  */

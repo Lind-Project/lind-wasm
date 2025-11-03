@@ -16,37 +16,37 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_STPNCPY_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_STPNCPY_IFUNC 1
 #else
-# define HAVE_STPNCPY_IFUNC	0
+#  define HAVE_STPNCPY_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_STPNCPY_IFUNC_AND_VX_SUPPORT HAVE_STPNCPY_IFUNC
+#  define HAVE_STPNCPY_IFUNC_AND_VX_SUPPORT HAVE_STPNCPY_IFUNC
 #else
-# define HAVE_STPNCPY_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_STPNCPY_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define STPNCPY_DEFAULT	STPNCPY_Z13
-# define HAVE_STPNCPY_C		0
-# define HAVE_STPNCPY_Z13	1
+#  define STPNCPY_DEFAULT STPNCPY_Z13
+#  define HAVE_STPNCPY_C 0
+#  define HAVE_STPNCPY_Z13 1
 #else
-# define STPNCPY_DEFAULT	STPNCPY_C
-# define HAVE_STPNCPY_C		1
-# define HAVE_STPNCPY_Z13	HAVE_STPNCPY_IFUNC_AND_VX_SUPPORT
+#  define STPNCPY_DEFAULT STPNCPY_C
+#  define HAVE_STPNCPY_C 1
+#  define HAVE_STPNCPY_Z13 HAVE_STPNCPY_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_STPNCPY_C
-# define STPNCPY_C		__stpncpy_c
+#  define STPNCPY_C __stpncpy_c
 #else
-# define STPNCPY_C		NULL
+#  define STPNCPY_C NULL
 #endif
 
 #if HAVE_STPNCPY_Z13
-# define STPNCPY_Z13		__stpncpy_vx
+#  define STPNCPY_Z13 __stpncpy_vx
 #else
-# define STPNCPY_Z13		NULL
+#  define STPNCPY_Z13 NULL
 #endif

@@ -24,23 +24,32 @@
 #include <math.h>
 #include <float.h>
 
-double __ieee754_exp2(double x) {
-    // Check if the input x is NaN or infinity
-    if (isnan(x) || isinf(x)) {
-        if (x < 0) {
-            // If x is negative infinity, exp2(x) should return 0
-            return 0.0;
-        } else {
-            // If x is positive infinity, exp2(x) should return positive infinity
-            return INFINITY;
-        }
+double
+__ieee754_exp2 (double x)
+{
+  // Check if the input x is NaN or infinity
+  if (isnan (x) || isinf (x))
+    {
+      if (x < 0)
+	{
+	  // If x is negative infinity, exp2(x) should return 0
+	  return 0.0;
+	}
+      else
+	{
+	  // If x is positive infinity, exp2(x) should return positive infinity
+	  return INFINITY;
+	}
     }
 
-    // Calculation for normal cases
-    double int_part;
-    double fract_part = modf(x, &int_part); // Split x into integer and fractional parts
-    double exp2_fract = exp2(fract_part);   // 2 raised to the fractional part
-    return ldexp(exp2_fract, (int)int_part);  // Scale the result by 2 raised to the integer part
+  // Calculation for normal cases
+  double int_part;
+  double fract_part
+      = modf (x, &int_part); // Split x into integer and fractional parts
+  double exp2_fract = exp2 (fract_part); // 2 raised to the fractional part
+  return ldexp (
+      exp2_fract,
+      (int) int_part); // Scale the result by 2 raised to the integer part
 }
 
 libm_alias_finite (__ieee754_exp2, __exp2)

@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <setxid.h>
 
-
 int
 __setregid (gid_t rgid, gid_t egid)
 {

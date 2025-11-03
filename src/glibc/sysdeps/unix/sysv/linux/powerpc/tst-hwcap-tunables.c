@@ -30,8 +30,7 @@
 #include <sys/wait.h>
 
 /* Nonzero if the program gets called via `exec'.  */
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 static int restart;
 
 /* Hold the four initial argument used to respawn the process, plus the extra
@@ -51,13 +50,14 @@ handle_restart (int argc, char *argv[])
   if (cnt == 0)
     _exit (EXIT_SUCCESS);
   TEST_VERIFY_EXIT (cnt >= 1);
-  for (int i = 0; i < cnt; i++) {
-    if (strcmp (impls[i].name, funcname) == 0)
-      {
-	TEST_COMPARE (impls[i].usable, false);
-	break;
-      }
-  }
+  for (int i = 0; i < cnt; i++)
+    {
+      if (strcmp (impls[i].name, funcname) == 0)
+	{
+	  TEST_COMPARE (impls[i].usable, false);
+	  break;
+	}
+    }
 
   _exit (EXIT_SUCCESS);
 }
@@ -65,10 +65,11 @@ handle_restart (int argc, char *argv[])
 static void
 run_test (const char *filter, const char *funcname)
 {
-  printf ("info: checking filter %s (expect %s ifunc selection to be removed)\n",
-	  filter, funcname);
+  printf (
+      "info: checking filter %s (expect %s ifunc selection to be removed)\n",
+      filter, funcname);
   char *tunable = xasprintf ("GLIBC_TUNABLES=glibc.cpu.hwcaps=%s", filter);
-  char *const newenvs[] = { (char*) tunable, NULL };
+  char *const newenvs[] = { (char *) tunable, NULL };
   spargs[fc] = (char *) funcname;
 
   pid_t pid;
@@ -109,7 +110,7 @@ do_test (int argc, char *argv[])
       if (hwcap & PPC_FEATURE_ARCH_2_06)
 	run_test ("-arch_2_06", "__memcpy_power7");
       if (hwcap & PPC_FEATURE_ARCH_2_05)
-	run_test ("-arch_2_06,-arch_2_05","__memcpy_power6");
+	run_test ("-arch_2_06,-arch_2_05", "__memcpy_power6");
       run_test ("-arch_2_06,-arch_2_05,-power5+,-power5,-power4",
 		"__memcpy_power4");
       /* Also run with valid, but empty settings.  */

@@ -16,21 +16,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Default stack size.  */
-#define ARCH_STACK_DEFAULT_SIZE	(8 * 1024 * 1024)
+#define ARCH_STACK_DEFAULT_SIZE (8 * 1024 * 1024)
 
 /* Minimum guard size.  */
 #define ARCH_MIN_GUARD_SIZE 0
 
 /* Required stack pointer alignment at beginning.  */
-#define STACK_ALIGN		64
+#define STACK_ALIGN 64
 
 /* Minimal stack size after allocating thread descriptor and guard size.  */
-#define MINIMAL_REST_STACK	2048
+#define MINIMAL_REST_STACK 2048
 
-/* Alignment requirement for TCB, note that this must be larger than STACK_ALIGN  */
-#define TCB_ALIGNMENT		STACK_ALIGN
-
+/* Alignment requirement for TCB, note that this must be larger than
+ * STACK_ALIGN  */
+#define TCB_ALIGNMENT STACK_ALIGN
 
 /* Location of current stack frame.  */
-#define CURRENT_STACK_FRAME  stack_pointer
-register char * stack_pointer __asm__ ("%r30");
+#define CURRENT_STACK_FRAME stack_pointer
+register char *stack_pointer __asm__ ("%r30");

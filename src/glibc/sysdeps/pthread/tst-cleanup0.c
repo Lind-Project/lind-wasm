@@ -20,9 +20,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static int global;
-
 
 static void
 ch (void *arg)
@@ -35,14 +33,12 @@ ch (void *arg)
   global += val;
 }
 
-
 static void
 endfct (void)
 {
   /* We force exit right here.  */
   _exit (global);
 }
-
 
 static int
 do_test (void)
@@ -67,7 +63,6 @@ do_test (void)
 
   return 100;
 }
-
 
 #define EXPECTED_STATUS 9
 #include <support/test-driver.c>

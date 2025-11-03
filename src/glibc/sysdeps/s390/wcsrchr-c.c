@@ -19,9 +19,9 @@
 #include <ifunc-wcsrchr.h>
 
 #if HAVE_WCSRCHR_C
-# if HAVE_WCSRCHR_IFUNC || HAVE_WCSRCHR_Z13
-#  define WCSRCHR WCSRCHR_C
-# endif
+#  if HAVE_WCSRCHR_IFUNC || HAVE_WCSRCHR_Z13
+#    define WCSRCHR WCSRCHR_C
+#  endif
 
-# include <wcsmbs/wcsrchr.c>
+#  include <wcsmbs/wcsrchr.c>
 #endif

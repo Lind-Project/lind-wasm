@@ -30,5 +30,4 @@ __renameat (int oldfd, const char *old, int newfd, const char *new)
   return INLINE_SYSCALL_CALL (renameat2, oldfd, old, newfd, new, 0);
 #endif
 }
-libc_hidden_def (__renameat)
-weak_alias (__renameat, renameat)
+libc_hidden_def (__renameat) weak_alias (__renameat, renameat)

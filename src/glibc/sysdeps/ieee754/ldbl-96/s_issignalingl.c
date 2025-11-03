@@ -33,7 +33,7 @@ __issignalingl (long double x)
   int ret = is_pseudo_signaling (exi, hxi);
 
 #if HIGH_ORDER_BIT_IS_SET_FOR_SNAN
-# error not implemented
+#  error not implemented
 #else
   /* To keep the following comparison simple, toggle the quiet/signaling bit,
      so that it is set for sNaNs.  This is inverse to IEEE 754-2008 (as well as

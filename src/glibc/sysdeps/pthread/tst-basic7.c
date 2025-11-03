@@ -20,7 +20,7 @@ use_stack (size_t needed)
   memset (buf, '\0', sz);
 
   if (needed > sz)
-    use_stack_ptr (needed  - sz);
+    use_stack_ptr (needed - sz);
 }
 
 static void

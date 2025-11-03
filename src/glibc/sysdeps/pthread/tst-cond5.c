@@ -23,10 +23,8 @@
 #include <time.h>
 #include <sys/time.h>
 
-
 static pthread_mutex_t mut;
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
-
 
 static int
 do_test (void)
@@ -98,7 +96,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

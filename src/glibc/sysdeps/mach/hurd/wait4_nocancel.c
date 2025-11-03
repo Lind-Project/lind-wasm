@@ -31,12 +31,11 @@ __wait4_nocancel (pid_t pid, int *stat_loc, int options, struct rusage *usage)
   int sigcode;
   int dummy;
 
-  err = __USEPORT (PROC, __proc_wait (port, pid, options,
-				      stat_loc ?: &dummy, &sigcode,
-				      usage ?: &ignored, &dead));
+  err = __USEPORT (PROC, __proc_wait (port, pid, options, stat_loc ?: &dummy,
+				      &sigcode, usage ?: &ignored, &dead));
   switch (err)
     {
-    case 0:			/* Got a child.  */
+    case 0: /* Got a child.  */
       return dead;
     case EAGAIN:
       /* The RPC returns this error when the WNOHANG flag is set and no

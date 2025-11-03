@@ -16,11 +16,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _AIO_MISC_H
-#define _AIO_MISC_H	1
+#  define _AIO_MISC_H 1
 
-#include <aio.h>
-#include <pthread.h>
-
+#  include <aio.h>
+#  include <pthread.h>
 
 /* Extend the operation enum.  */
 enum
@@ -31,31 +30,28 @@ enum
   LIO_WRITE64 = LIO_WRITE | 128
 };
 
-
 /* Union of the two request types.  */
 typedef union
-  {
-    struct aiocb aiocb;
-    struct aiocb64 aiocb64;
-  } aiocb_union;
-
+{
+  struct aiocb aiocb;
+  struct aiocb64 aiocb64;
+} aiocb_union;
 
 /* Used to synchronize.  */
 struct waitlist
-  {
-    struct waitlist *next;
+{
+  struct waitlist *next;
 
-    /* The next two fields is used in synchronous `lio_listio' operations.  */
-#ifndef DONT_NEED_AIO_MISC_COND
-    pthread_cond_t *cond;
-#endif
-    int *result;
+  /* The next two fields is used in synchronous `lio_listio' operations.  */
+#  ifndef DONT_NEED_AIO_MISC_COND
+  pthread_cond_t *cond;
+#  endif
+  int *result;
 
-    volatile unsigned int *counterp;
-    /* The next field is used in asynchronous `lio_listio' operations.  */
-    struct sigevent *sigevp;
-  };
-
+  volatile unsigned int *counterp;
+  /* The next field is used in asynchronous `lio_listio' operations.  */
+  struct sigevent *sigevp;
+};
 
 /* Status of a request.  */
 enum
@@ -67,33 +63,29 @@ enum
   done
 };
 
-
 /* Used to queue requests..  */
 struct requestlist
-  {
-    int running;
+{
+  int running;
 
-    struct requestlist *last_fd;
-    struct requestlist *next_fd;
-    struct requestlist *next_prio;
-    struct requestlist *next_run;
+  struct requestlist *last_fd;
+  struct requestlist *next_fd;
+  struct requestlist *next_prio;
+  struct requestlist *next_run;
 
-    /* Pointer to the actual data.  */
-    aiocb_union *aiocbp;
+  /* Pointer to the actual data.  */
+  aiocb_union *aiocbp;
 
-    /* List of waiting processes.  */
-    struct waitlist *waiting;
-  };
-
+  /* List of waiting processes.  */
+  struct waitlist *waiting;
+};
 
 /* Lock for global I/O list of requests.  */
 extern pthread_mutex_t __aio_requests_mutex attribute_hidden;
 
-
 /* Enqueue request.  */
-extern struct requestlist *__aio_enqueue_request (aiocb_union *aiocbp,
-						  int operation)
-  attribute_hidden;
+extern struct requestlist *
+__aio_enqueue_request (aiocb_union *aiocbp, int operation) attribute_hidden;
 
 /* Find request entry for given AIO control block.  */
 extern struct requestlist *__aio_find_req (aiocb_union *elem) attribute_hidden;
@@ -103,8 +95,8 @@ extern struct requestlist *__aio_find_req_fd (int fildes) attribute_hidden;
 
 /* Remove request from the list.  */
 extern void __aio_remove_request (struct requestlist *last,
-				  struct requestlist *req, int all)
-  attribute_hidden;
+				  struct requestlist *req,
+				  int all) attribute_hidden;
 
 /* Release the entry for the request.  */
 extern void __aio_free_request (struct requestlist *req) attribute_hidden;
@@ -116,7 +108,7 @@ extern void __aio_notify (struct requestlist *req) attribute_hidden;
 extern int __aio_notify_only (struct sigevent *sigev) attribute_hidden;
 
 /* Send the signal.  */
-extern int __aio_sigqueue (int sig, const union sigval val, pid_t caller_pid)
-  attribute_hidden;
+extern int __aio_sigqueue (int sig, const union sigval val,
+			   pid_t caller_pid) attribute_hidden;
 
 #endif /* aio_misc.h */

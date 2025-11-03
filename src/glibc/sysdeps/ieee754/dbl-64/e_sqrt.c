@@ -54,11 +54,10 @@ __ieee754_sqrt (double x)
   return __builtin_sqrt (x);
 #else
   /* Use generic implementation.  */
-  static const double
-    rt0 = 9.99999999859990725855365213134618E-01,
-    rt1 = 4.99999999495955425917856814202739E-01,
-    rt2 = 3.75017500867345182581453026130850E-01,
-    rt3 = 3.12523626554518656309172508769531E-01;
+  static const double rt0 = 9.99999999859990725855365213134618E-01,
+		      rt1 = 4.99999999495955425917856814202739E-01,
+		      rt2 = 3.75017500867345182581453026130850E-01,
+		      rt3 = 3.12523626554518656309172508769531E-01;
   static const double big = 134217728.0;
   double y, t, del, res, res1, hy, z, zz, s;
   mynumber a, c = { { 0, 0 } };
@@ -89,8 +88,7 @@ __ieee754_sqrt (double x)
 	{
 	  res1 = res + 1.5 * ((y - res) + del);
 	  EMULV (res, res1, z, zz); /* (z+zz)=res*res1 */
-	  res = ((((z - s) + zz) < 0) ? max (res, res1) :
-					min (res, res1));
+	  res = ((((z - s) + zz) < 0) ? max (res, res1) : min (res, res1));
 	  ret = res * c.x;
 	}
       math_force_eval (ret);
@@ -105,31 +103,31 @@ __ieee754_sqrt (double x)
 	     modes.  */
 	  switch (rm)
 	    {
-#ifdef FE_UPWARD
+#  ifdef FE_UPWARD
 	    case FE_UPWARD:
 	      if (dret > ret)
 		ret = (res + 0x1p-1022) * c.x;
 	      break;
-#endif
+#  endif
 
-#ifdef FE_DOWNWARD
+#  ifdef FE_DOWNWARD
 	    case FE_DOWNWARD:
-#endif
-#ifdef FE_TOWARDZERO
+#  endif
+#  ifdef FE_TOWARDZERO
 	    case FE_TOWARDZERO:
-#endif
-#if defined FE_DOWNWARD || defined FE_TOWARDZERO
+#  endif
+#  if defined FE_DOWNWARD || defined FE_TOWARDZERO
 	      if (dret < ret)
 		ret = (res - 0x1p-1022) * c.x;
 	      break;
-#endif
+#  endif
 
 	    default:
 	      break;
 	    }
 	}
       /* Otherwise (x / ret == ret), either the square root was exact or
-         the division was inexact.  */
+	 the division was inexact.  */
       return ret;
     }
   else
@@ -137,7 +135,7 @@ __ieee754_sqrt (double x)
       if ((k & 0x7ff00000) == 0x7ff00000)
 	return x * x + x; /* sqrt(NaN)=NaN, sqrt(+inf)=+inf, sqrt(-inf)=sNaN */
       if (x == 0)
-	return x;       /* sqrt(+0)=+0, sqrt(-0)=-0 */
+	return x; /* sqrt(+0)=+0, sqrt(-0)=-0 */
       if (k < 0)
 	return (x - x) / (x - x); /* sqrt(-ve)=sNaN */
       return 0x1p-256 * __ieee754_sqrt (x * 0x1p512);

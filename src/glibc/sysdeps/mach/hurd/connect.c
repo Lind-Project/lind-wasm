@@ -43,7 +43,7 @@ __connect (int fd, __CONST_SOCKADDR_ARG addrarg, socklen_t len)
       /* For the local domain, we must look up the name as a file and talk
 	 to it with the ifsock protocol.  */
       file_t file;
-      cancel_oldtype = LIBC_CANCEL_ASYNC();
+      cancel_oldtype = LIBC_CANCEL_ASYNC ();
       file = __file_name_lookup (name, 0, 0);
       LIBC_CANCEL_RESET (cancel_oldtype);
       if (file == MACH_PORT_NULL)
@@ -59,26 +59,22 @@ __connect (int fd, __CONST_SOCKADDR_ARG addrarg, socklen_t len)
   else
     err = EIEIO;
 
-  err = HURD_DPORT_USE_CANCEL (fd,
-			({
-			  if (err)
-			    err = __socket_create_address (port,
-							   addr->sun_family,
-							   (char *) addr, len,
-							   &aport);
-			  if (! err)
-			    {
-			      cancel_oldtype = LIBC_CANCEL_ASYNC();
-			      err = __socket_connect (port, aport);
-			      LIBC_CANCEL_RESET (cancel_oldtype);
-			      __mach_port_deallocate (__mach_task_self (),
-						      aport);
-			    }
-			  err;
-			}));
+  err = HURD_DPORT_USE_CANCEL (
+      fd, ({
+	if (err)
+	  err = __socket_create_address (port, addr->sun_family, (char *) addr,
+					 len, &aport);
+	if (!err)
+	  {
+	    cancel_oldtype = LIBC_CANCEL_ASYNC ();
+	    err = __socket_connect (port, aport);
+	    LIBC_CANCEL_RESET (cancel_oldtype);
+	    __mach_port_deallocate (__mach_task_self (), aport);
+	  }
+	err;
+      }));
 
   return err ? __hurd_dfail (fd, err) : 0;
 }
 
-libc_hidden_def (__connect)
-weak_alias (__connect, connect)
+libc_hidden_def (__connect) weak_alias (__connect, connect)

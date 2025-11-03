@@ -15,11 +15,11 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_DIRSTREAM_H
+#ifndef _DIRSTREAM_H
 
-#define	_DIRSTREAM_H	1
+#  define _DIRSTREAM_H 1
 
-#include <libc-lock.h>
+#  include <libc-lock.h>
 
 /* Directory stream type.
 
@@ -27,15 +27,15 @@
    returns a pointer into the buffer we read directory data into.  */
 
 struct __dirstream
-  {
-    void *__fd;			/* `struct hurd_fd' pointer for descriptor.  */
-    char *__data;		/* Directory block.  */
-    int __entry_data;		/* Entry number `__data' corresponds to.  */
-    char *__ptr;		/* Current pointer into the block.  */
-    int __entry_ptr;		/* Entry number `__ptr' corresponds to.  */
-    size_t __allocation;	/* Space allocated for the block.  */
-    size_t __size;		/* Total valid data in the block.  */
-    __libc_lock_define (, __lock) /* Mutex lock for this structure.  */
-  };
+{
+  void *__fd;			/* `struct hurd_fd' pointer for descriptor.  */
+  char *__data;			/* Directory block.  */
+  int __entry_data;		/* Entry number `__data' corresponds to.  */
+  char *__ptr;			/* Current pointer into the block.  */
+  int __entry_ptr;		/* Entry number `__ptr' corresponds to.  */
+  size_t __allocation;		/* Space allocated for the block.  */
+  size_t __size;		/* Total valid data in the block.  */
+  __libc_lock_define (, __lock) /* Mutex lock for this structure.  */
+};
 
-#endif	/* dirstream.h */
+#endif /* dirstream.h */

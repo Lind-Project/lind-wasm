@@ -27,8 +27,7 @@
 /* Change the access time of FILE to TSP[0] and
    the modification time of FILE to TSP[1].  */
 int
-utimensat (int fd, const char *file, const struct timespec tsp[2],
-	   int flags)
+utimensat (int fd, const char *file, const struct timespec tsp[2], int flags)
 {
   error_t err;
   file_t port;

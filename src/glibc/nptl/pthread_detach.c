@@ -55,9 +55,9 @@ ___pthread_detach (pthread_t th)
 versioned_symbol (libc, ___pthread_detach, pthread_detach, GLIBC_2_34);
 libc_hidden_ver (___pthread_detach, __pthread_detach)
 #ifndef SHARED
-strong_alias (___pthread_detach, __pthread_detach)
+    strong_alias (___pthread_detach, __pthread_detach)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
-compat_symbol (libc, ___pthread_detach, pthread_detach, GLIBC_2_0);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34)
+	compat_symbol (libc, ___pthread_detach, pthread_detach, GLIBC_2_0);
 #endif

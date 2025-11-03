@@ -23,7 +23,6 @@
 #include <libm-alias-float.h>
 #include <math-use-builtins.h>
 
-
 float
 __truncf (float x)
 {

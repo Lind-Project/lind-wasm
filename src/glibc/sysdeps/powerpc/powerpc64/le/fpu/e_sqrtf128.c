@@ -33,8 +33,8 @@
 /* Unavoidable hacks since TFmode is assumed to be binary128 when
    -mabi=ibmlongdouble is used.  */
 #if __HAVE_FLOAT128_UNLIKE_LDBL
-# define TFtype KFtype
-# define TF KF
+#  define TFtype KFtype
+#  define TF KF
 #endif
 
 #include <soft-fp.h>
@@ -56,7 +56,7 @@ __ieee754_sqrtf128 (__float128 a)
   FP_PACK_Q (r, R);
   FP_HANDLE_EXCEPTIONS;
 #else
-  asm ("xssqrtqp %0,%1" : "=v" (r) : "v" (a));
+  asm ("xssqrtqp %0,%1" : "=v"(r) : "v"(a));
 #endif
   return r;
 }

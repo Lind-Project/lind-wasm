@@ -20,14 +20,13 @@
 #include <math_ldbl_opt.h>
 #include <libm-alias-double.h>
 
-
 double
 __rint (double x)
 {
   if (isnan (x))
     return x + x;
 
-  if (isless (fabs (x), 9007199254740992.0))	/* 1 << DBL_MANT_DIG */
+  if (isless (fabs (x), 9007199254740992.0)) /* 1 << DBL_MANT_DIG */
     {
       double tmp1, new_x;
       __asm ("cvttq/svid %2,%1\n\t"
@@ -37,7 +36,7 @@ __rint (double x)
 
       /* rint(-0.1) == -0, and in general we'll always have the same
 	 sign as our input.  */
-      x = copysign(new_x, x);
+      x = copysign (new_x, x);
     }
   return x;
 }

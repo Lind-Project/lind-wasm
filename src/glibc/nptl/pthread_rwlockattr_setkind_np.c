@@ -26,7 +26,7 @@ __pthread_rwlockattr_setkind_np (pthread_rwlockattr_t *attr, int pref)
 
   if (pref != PTHREAD_RWLOCK_PREFER_READER_NP
       && pref != PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
-      && __builtin_expect  (pref != PTHREAD_RWLOCK_PREFER_WRITER_NP, 0))
+      && __builtin_expect (pref != PTHREAD_RWLOCK_PREFER_WRITER_NP, 0))
     return EINVAL;
 
   iattr = (struct pthread_rwlockattr *) attr;
@@ -36,9 +36,9 @@ __pthread_rwlockattr_setkind_np (pthread_rwlockattr_t *attr, int pref)
   return 0;
 }
 versioned_symbol (libc, __pthread_rwlockattr_setkind_np,
-                  pthread_rwlockattr_setkind_np, GLIBC_2_34);
+		  pthread_rwlockattr_setkind_np, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_rwlockattr_setkind_np,
-               pthread_rwlockattr_setkind_np, GLIBC_2_1);
+	       pthread_rwlockattr_setkind_np, GLIBC_2_1);
 #endif

@@ -39,7 +39,6 @@
 
 static long int posix_sysconf (int name);
 
-
 /* Get the value of the system variable NAME.  */
 long int
 __sysconf (int name)
@@ -55,15 +54,15 @@ __sysconf (int name)
 
     case _SC_ARG_MAX:
       {
-        struct rlimit rlimit;
-        /* Use getrlimit to get the stack limit.  */
-        if (__getrlimit (RLIMIT_STACK, &rlimit) == 0)
+	struct rlimit rlimit;
+	/* Use getrlimit to get the stack limit.  */
+	if (__getrlimit (RLIMIT_STACK, &rlimit) == 0)
 	  {
 	    const long int limit = MAX (legacy_ARG_MAX, rlimit.rlim_cur / 4);
 	    return MIN (limit, maximum_ARG_MAX);
 	  }
 
-        return legacy_ARG_MAX;
+	return legacy_ARG_MAX;
       }
 
     case _SC_NGROUPS_MAX:
@@ -74,18 +73,18 @@ __sysconf (int name)
 
     case _SC_SIGQUEUE_MAX:
       {
-        struct rlimit rlimit;
-        if (__getrlimit (RLIMIT_SIGPENDING, &rlimit) == 0)
+	struct rlimit rlimit;
+	if (__getrlimit (RLIMIT_SIGPENDING, &rlimit) == 0)
 	  return rlimit.rlim_cur;
 
-        /* The /proc/sys/kernel/rtsig-max file contains the answer.  */
-        procfname = "/proc/sys/kernel/rtsig-max";
+	/* The /proc/sys/kernel/rtsig-max file contains the answer.  */
+	procfname = "/proc/sys/kernel/rtsig-max";
       }
       break;
 
     case _SC_MINSIGSTKSZ:
-      assert (GLRO(dl_minsigstacksize) != 0);
-      return GLRO(dl_minsigstacksize);
+      assert (GLRO (dl_minsigstacksize) != 0);
+      return GLRO (dl_minsigstacksize);
 
     case _SC_SIGSTKSZ:
       return sysconf_sigstksz ();

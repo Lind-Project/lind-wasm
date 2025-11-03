@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _UTMPX32_H
-#define _UTMPX32_H 1
+#  define _UTMPX32_H 1
 
-#include <paths.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <bits/wordsize.h>
-#include <utmpx.h>
+#  include <paths.h>
+#  include <sys/time.h>
+#  include <sys/types.h>
+#  include <bits/wordsize.h>
+#  include <utmpx.h>
 
 /* The structure describing an entry in the user accounting database.  */
 struct utmpx32
@@ -34,17 +34,17 @@ struct utmpx32
   char ut_id[4];		/* Inittab ID. */
   char ut_user[__UT_NAMESIZE];	/* Username.  */
   char ut_host[__UT_HOSTSIZE];	/* Hostname for remote login.  */
-  struct __exit_status ut_exit;	/* Exit status of a process marked
+  struct __exit_status ut_exit; /* Exit status of a process marked
 				   as DEAD_PROCESS.  */
   __int64_t ut_session;		/* Session ID, used for windowing.  */
   struct
   {
-    __int64_t tv_sec;		/* Seconds.  */
-    __int64_t tv_usec;		/* Microseconds.  */
-  } ut_tv;			/* Time entry was made.  */
+    __int64_t tv_sec;  /* Seconds.  */
+    __int64_t tv_usec; /* Microseconds.  */
+  } ut_tv;	       /* Time entry was made.  */
 
-  __int32_t ut_addr_v6[4];	/* Internet address of remote host.  */
-  char __glibc_reserved[20];		/* Reserved for future use.  */
+  __int32_t ut_addr_v6[4];   /* Internet address of remote host.  */
+  char __glibc_reserved[20]; /* Reserved for future use.  */
 };
 
 /* The internal interface needed by the compat wrapper functions.  */

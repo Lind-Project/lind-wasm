@@ -20,9 +20,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-
 static int fd[2];
-
 
 static void *
 tf (void *arg)
@@ -37,7 +35,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)

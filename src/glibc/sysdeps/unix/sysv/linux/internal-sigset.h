@@ -31,7 +31,7 @@ internal_sigset_from_sigset (internal_sigset_t *iset, const sigset_t *set)
 {
   int cnt = __NSIG_WORDS;
   while (--cnt >= 0)
-   iset->__val[cnt] = set->__val[cnt];
+    iset->__val[cnt] = set->__val[cnt];
 }
 
 static inline void
@@ -39,7 +39,7 @@ internal_sigemptyset (internal_sigset_t *set)
 {
   int cnt = __NSIG_WORDS;
   while (--cnt >= 0)
-   set->__val[cnt] = 0;
+    set->__val[cnt] = 0;
 }
 
 static inline void
@@ -47,7 +47,7 @@ internal_sigfillset (internal_sigset_t *set)
 {
   int cnt = __NSIG_WORDS;
   while (--cnt >= 0)
-   set->__val[cnt] = ~0UL;
+    set->__val[cnt] = ~0UL;
 }
 
 static inline int

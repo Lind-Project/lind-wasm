@@ -25,9 +25,7 @@
 extern __typeof (__lrint) __lrint_ppc32 attribute_hidden;
 extern __typeof (__lrint) __lrint_power6x attribute_hidden;
 
-libc_ifunc (__lrint,
-	    (hwcap & PPC_FEATURE_POWER6_EXT) ?
-	      __lrint_power6x
-            : __lrint_ppc32);
+libc_ifunc (__lrint, (hwcap & PPC_FEATURE_POWER6_EXT) ? __lrint_power6x
+						      : __lrint_ppc32);
 
 libm_alias_double (__lrint, lrint)

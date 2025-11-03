@@ -23,20 +23,17 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-
 static struct
 {
   int (*fp) (const char *, mode_t);
   const char *name;
   bool is_fd;
-} fcts[] =
-{
+} fcts[] = {
   { creat, "creat", true },
   { mkdir, "mkdir", false },
   { mkfifo, "mkfifo", false },
 };
 #define nfcts (sizeof (fcts) / sizeof (fcts[0]))
-
 
 static int
 work (const char *fname, int mask)
@@ -63,8 +60,8 @@ work (const char *fname, int mask)
 
       if ((st.st_mode & mask) != 0)
 	{
-	  printf ("mask not successful after %s: %x still set\n",
-		  fcts[i].name, (unsigned int) (st.st_mode & mask));
+	  printf ("mask not successful after %s: %x still set\n", fcts[i].name,
+		  (unsigned int) (st.st_mode & mask));
 	  result = 1;
 	}
     }
@@ -72,9 +69,7 @@ work (const char *fname, int mask)
   return result;
 }
 
-
 static pthread_barrier_t bar;
-
 
 static void *
 tf (void *arg)
@@ -89,7 +84,6 @@ tf (void *arg)
 
   return (work (arg, 0) | result) ? (void *) -1l : NULL;
 }
-
 
 static int
 do_test (const char *fname)

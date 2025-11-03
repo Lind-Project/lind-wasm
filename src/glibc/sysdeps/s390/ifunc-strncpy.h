@@ -16,37 +16,37 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_STRNCPY_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_STRNCPY_IFUNC 1
 #else
-# define HAVE_STRNCPY_IFUNC	0
+#  define HAVE_STRNCPY_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_STRNCPY_IFUNC_AND_VX_SUPPORT HAVE_STRNCPY_IFUNC
+#  define HAVE_STRNCPY_IFUNC_AND_VX_SUPPORT HAVE_STRNCPY_IFUNC
 #else
-# define HAVE_STRNCPY_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_STRNCPY_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define STRNCPY_DEFAULT	STRNCPY_Z13
-# define HAVE_STRNCPY_Z900_G5	0
-# define HAVE_STRNCPY_Z13	1
+#  define STRNCPY_DEFAULT STRNCPY_Z13
+#  define HAVE_STRNCPY_Z900_G5 0
+#  define HAVE_STRNCPY_Z13 1
 #else
-# define STRNCPY_DEFAULT	STRNCPY_Z900_G5
-# define HAVE_STRNCPY_Z900_G5	1
-# define HAVE_STRNCPY_Z13	HAVE_STRNCPY_IFUNC_AND_VX_SUPPORT
+#  define STRNCPY_DEFAULT STRNCPY_Z900_G5
+#  define HAVE_STRNCPY_Z900_G5 1
+#  define HAVE_STRNCPY_Z13 HAVE_STRNCPY_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_STRNCPY_Z900_G5
-# define STRNCPY_Z900_G5	__strncpy_default
+#  define STRNCPY_Z900_G5 __strncpy_default
 #else
-# define STRNCPY_Z900_G5	NULL
+#  define STRNCPY_Z900_G5 NULL
 #endif
 
 #if HAVE_STRNCPY_Z13
-# define STRNCPY_Z13		__strncpy_vx
+#  define STRNCPY_Z13 __strncpy_vx
 #else
-# define STRNCPY_Z13		NULL
+#  define STRNCPY_Z13 NULL
 #endif

@@ -65,7 +65,8 @@ special_case (float64x2_t x, float64x2_t y, uint64x2_t special)
    The maximum error observed error is 2.18 ULP:
    _ZGVnN2v_expm1 (0x1.634ba0c237d7bp-2) got 0x1.a8b9ea8d66e22p-2
 					want 0x1.a8b9ea8d66e2p-2.  */
-float64x2_t VPCS_ATTR V_NAME_D1 (expm1) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (expm1) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
 

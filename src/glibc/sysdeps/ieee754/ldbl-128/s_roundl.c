@@ -23,7 +23,6 @@
 #include <libm-alias-ldouble.h>
 #include <math-use-builtins.h>
 
-
 _Float128
 __roundl (_Float128 x)
 {

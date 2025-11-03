@@ -26,14 +26,17 @@ struct object
   void *pc_begin;
   void *tbase;
   void *dbase;
-  union {
+  union
+  {
     struct dwarf_fde *single;
     struct dwarf_fde **array;
     struct fde_vector *sort;
   } u;
 
-  union {
-    struct {
+  union
+  {
+    struct
+    {
       unsigned long sorted : 1;
       unsigned long from_array : 1;
       unsigned long mixed_encoding : 1;

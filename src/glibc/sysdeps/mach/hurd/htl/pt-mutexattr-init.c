@@ -23,12 +23,11 @@
 #include "pt-mutex.h"
 #include <hurdlock.h>
 
-static const pthread_mutexattr_t dfl_attr = {
-  .__prioceiling = 0,
-  .__protocol = PTHREAD_PRIO_NONE,
-  .__pshared = PTHREAD_PROCESS_PRIVATE,
-  .__mutex_type = __PTHREAD_MUTEX_TIMED
-};
+static const pthread_mutexattr_t dfl_attr
+    = { .__prioceiling = 0,
+	.__protocol = PTHREAD_PRIO_NONE,
+	.__pshared = PTHREAD_PROCESS_PRIVATE,
+	.__mutex_type = __PTHREAD_MUTEX_TIMED };
 
 int
 __pthread_mutexattr_init (pthread_mutexattr_t *attrp)

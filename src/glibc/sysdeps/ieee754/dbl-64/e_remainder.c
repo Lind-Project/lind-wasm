@@ -50,7 +50,7 @@ __ieee754_remainder (double x, double y)
   u.x = x;
   t.x = y;
   kx = u.i[HIGH_HALF] & 0x7fffffff; /* no sign  for x*/
-  t.i[HIGH_HALF] &= 0x7fffffff;   /*no sign for y */
+  t.i[HIGH_HALF] &= 0x7fffffff;	    /*no sign for y */
   ky = t.i[HIGH_HALF];
   /*------ |x| < 2^1023  and   2^-970 < |y| < 2^1024 ------------------*/
   if (kx < 0x7fe00000 && ky < 0x7ff00000 && ky >= 0x03500000)
@@ -102,13 +102,13 @@ __ieee754_remainder (double x, double y)
 	  u.x = (u.x - d * w.x) - d * ww.x;
 	  if (fabs (u.x) < 0.5 * t.x)
 	    return (u.x != 0) ? u.x : ((x > 0) ? ZERO.x : nZERO.x);
-	  else
-	  if (fabs (u.x) > 0.5 * t.x)
+	  else if (fabs (u.x) > 0.5 * t.x)
 	    return (d > z) ? u.x + t.x : u.x - t.x;
 	  else
 	    {
-	      z = u.x / t.x; d = (z + big.x) - big.x;
-              return ((u.x - d * w.x) - d * ww.x);
+	      z = u.x / t.x;
+	      d = (z + big.x) - big.x;
+	      return ((u.x - d * w.x) - d * ww.x);
 	    }
 	}
     } /*   (kx<0x7fe00000&&ky<0x7ff00000&&ky>=0x03500000)     */
@@ -123,8 +123,8 @@ __ieee754_remainder (double x, double y)
 	}
       else
 	{
-	  if ((kx & 0x7ff00000) == 0x7fe00000 && ky < 0x7ff00000 &&
-              (ky > 0 || t.i[LOW_HALF] != 0))
+	  if ((kx & 0x7ff00000) == 0x7fe00000 && ky < 0x7ff00000
+	      && (ky > 0 || t.i[LOW_HALF] != 0))
 	    {
 	      y = fabs (y);
 	      z = 2.0 * __ieee754_remainder (0.5 * x, y);
@@ -140,8 +140,8 @@ __ieee754_remainder (double x, double y)
 	    {
 	      if (ky == 0 && t.i[LOW_HALF] == 0) /* y = 0 */
 		return (x * y) / (x * y);
-	      else if (kx >= 0x7ff00000         /* x not finite */
-		       || (ky > 0x7ff00000      /* y is NaN */
+	      else if (kx >= 0x7ff00000	   /* x not finite */
+		       || (ky > 0x7ff00000 /* y is NaN */
 			   || (ky == 0x7ff00000 && t.i[LOW_HALF] != 0)))
 		return (x * y) / (x * y);
 	      else

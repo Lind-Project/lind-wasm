@@ -17,7 +17,7 @@
 
 #include <string/string-inlines.c>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_1_1, GLIBC_2_26)
+#if SHLIB_COMPAT(libc, GLIBC_2_1_1, GLIBC_2_26)
 /* Additional compatibility shims for the former
    sysdeps/x86/bits/string.h.  */
 void *

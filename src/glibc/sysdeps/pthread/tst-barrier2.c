@@ -26,7 +26,6 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
-
 static int
 do_test (void)
 {
@@ -142,7 +141,8 @@ do_test (void)
 	++serials;
       else if (e != 0)
 	{
-	  printf ("%s: barrier_wait returned value %d != 0 and PTHREAD_BARRIER_SERIAL_THREAD\n",
+	  printf ("%s: barrier_wait returned value %d != 0 and "
+		  "PTHREAD_BARRIER_SERIAL_THREAD\n",
 		  pid == 0 ? "child" : "parent", e);
 	  return 1;
 	}

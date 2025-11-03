@@ -19,22 +19,22 @@
 #include <ifunc-stpcpy.h>
 
 #if HAVE_STPCPY_C
-# if HAVE_STPCPY_IFUNC
-#  define STPCPY STPCPY_C
+#  if HAVE_STPCPY_IFUNC
+#    define STPCPY STPCPY_C
 
-#  undef weak_alias
-#  define weak_alias(a, b)
+#    undef weak_alias
+#    define weak_alias(a, b)
 
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_def
-#   define libc_hidden_def(name)				\
-  __hidden_ver1 (__stpcpy_c, __GI___stpcpy, __stpcpy_c);
-#   undef libc_hidden_builtin_def
-#   define libc_hidden_builtin_def(name)			\
-  strong_alias (__stpcpy_c, __stpcpy_c_1);			\
-  __hidden_ver1 (__stpcpy_c_1, __GI_stpcpy, __stpcpy_c_1);
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_def
+#      define libc_hidden_def(name)                                           \
+	__hidden_ver1 (__stpcpy_c, __GI___stpcpy, __stpcpy_c);
+#      undef libc_hidden_builtin_def
+#      define libc_hidden_builtin_def(name)                                   \
+	strong_alias (__stpcpy_c, __stpcpy_c_1);                              \
+	__hidden_ver1 (__stpcpy_c_1, __GI_stpcpy, __stpcpy_c_1);
+#    endif
 #  endif
-# endif
 
-# include <string/stpcpy.c>
+#  include <string/stpcpy.c>
 #endif

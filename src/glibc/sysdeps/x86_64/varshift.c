@@ -18,9 +18,8 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-
 #include <isa-level.h>
 
 #if MINIMUM_X86_ISA_LEVEL >= 2
-# include "multiarch/varshift.c"
+#  include "multiarch/varshift.c"
 #endif

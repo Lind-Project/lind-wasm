@@ -19,7 +19,7 @@
 
 #include <sysdeps/ieee754/dbl-64/e_sqrt.c>
 
-#if SHLIB_COMPAT (libm, GLIBC_2_18, GLIBC_2_31)
+#if SHLIB_COMPAT(libm, GLIBC_2_18, GLIBC_2_31)
 strong_alias (__ieee754_sqrt, __sqrt_finite_2_18)
-compat_symbol (libm, __sqrt_finite_2_18, __sqrt_finite, GLIBC_2_18);
+    compat_symbol (libm, __sqrt_finite_2_18, __sqrt_finite, GLIBC_2_18);
 #endif

@@ -17,10 +17,10 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_FZA_H
-#define _STRING_FZA_H 1
+#  define _STRING_FZA_H 1
 
-#include <string-misc.h>
-#include <string-optype.h>
+#  include <string-misc.h>
+#  include <string-optype.h>
 
 /* The function return a byte mask.  */
 typedef op_t find_t;

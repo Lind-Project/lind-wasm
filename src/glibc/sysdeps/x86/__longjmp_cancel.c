@@ -19,6 +19,7 @@
 /* Don't restore shadow stack register for __longjmp_cancel.  */
 // #define DO_NOT_RESTORE_SHADOW_STACK
 
-void __longjmp_cancel (void) {
-
+void
+__longjmp_cancel (void)
+{
 }

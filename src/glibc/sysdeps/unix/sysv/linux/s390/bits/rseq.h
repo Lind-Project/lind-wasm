@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_RSEQ_H
-# error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
+#  error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
 #endif
 
 /* RSEQ_SIG is a signature required before each abort handler code.
@@ -34,4 +34,4 @@
    is and will stay 0).  The instruction pattern is
        b2 ff 0f ff        trap4   4095(%r0)  */
 
-#define RSEQ_SIG        0xB2FF0FFF
+#define RSEQ_SIG 0xB2FF0FFF

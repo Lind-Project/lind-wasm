@@ -36,7 +36,8 @@
 pid_t
 __waitpid (pid_t pid, int *stat_loc, int options)
 {
-   return MAKE_SYSCALL(WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) pid, (uint64_t) stat_loc, (uint64_t) options, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) pid,
+		       (uint64_t) stat_loc, (uint64_t) options, NOTUSED,
+		       NOTUSED, NOTUSED);
 }
-libc_hidden_def (__waitpid)
-weak_alias (__waitpid, waitpid)
+libc_hidden_def (__waitpid) weak_alias (__waitpid, waitpid)

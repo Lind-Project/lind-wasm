@@ -47,7 +47,8 @@ special_case (svfloat32_t x, svfloat32_t y, svbool_t oob)
    Maximum measured error: 2.06 ULPs.
    SV_NAME_F1 (cos)(0x1.dea2f2p+19) got 0x1.fffe7ap-6
 				   want 0x1.fffe76p-6.  */
-svfloat32_t SV_NAME_F1 (cos) (svfloat32_t x, const svbool_t pg)
+svfloat32_t
+SV_NAME_F1 (cos) (svfloat32_t x, const svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
 

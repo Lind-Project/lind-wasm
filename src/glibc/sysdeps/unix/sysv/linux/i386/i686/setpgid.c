@@ -11,4 +11,3 @@ setpgid (int pid, int pgid)
 {
   return -1;
 }
-

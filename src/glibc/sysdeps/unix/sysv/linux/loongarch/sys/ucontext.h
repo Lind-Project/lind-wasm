@@ -20,35 +20,35 @@
 /* Don't rely on this, the interface is currently messed up and may need to
    be broken to be fixed.  */
 #ifndef _SYS_UCONTEXT_H
-#define _SYS_UCONTEXT_H 1
+#  define _SYS_UCONTEXT_H 1
 
-#include <features.h>
+#  include <features.h>
 
-#include <bits/types/sigset_t.h>
-#include <bits/types/stack_t.h>
+#  include <bits/types/sigset_t.h>
+#  include <bits/types/stack_t.h>
 
-#ifdef __USE_MISC
-#define LARCH_NGREG 32
+#  ifdef __USE_MISC
+#    define LARCH_NGREG 32
 
-#define LARCH_REG_RA 1
-#define LARCH_REG_SP 3
-#define LARCH_REG_S0 23
-#define LARCH_REG_S1 24
-#define LARCH_REG_A0 4
-#define LARCH_REG_S2 25
-#define LARCH_REG_NARGS 8
+#    define LARCH_REG_RA 1
+#    define LARCH_REG_SP 3
+#    define LARCH_REG_S0 23
+#    define LARCH_REG_S1 24
+#    define LARCH_REG_A0 4
+#    define LARCH_REG_S2 25
+#    define LARCH_REG_NARGS 8
 
 typedef unsigned long int greg_t;
 /* Container for all general registers.  */
 typedef greg_t gregset_t[32];
-#endif
+#  endif
 
 typedef struct mcontext_t
 {
   unsigned long long __pc;
   unsigned long long __gregs[32];
   unsigned int __flags;
-  unsigned long long __extcontext[0] __attribute__((__aligned__(16)));
+  unsigned long long __extcontext[0] __attribute__ ((__aligned__ (16)));
 } mcontext_t;
 
 /* Userlevel context.  */

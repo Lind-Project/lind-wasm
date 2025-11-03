@@ -25,12 +25,10 @@ __feupdateenv (const fenv_t *envp)
   libc_feupdateenv_riscv (envp);
   return 0;
 }
-libm_hidden_def (__feupdateenv)
-weak_alias (__feupdateenv, feupdateenv)
-/* clang warns that the alias will be always resolve to __GI___feupdateenv
-   even if weak definition of __GI_feupdateenv is overridden, which is really
-   the intention.  */
-DIAG_PUSH_NEEDS_COMMENT_CLANG;
+libm_hidden_def (__feupdateenv) weak_alias (__feupdateenv, feupdateenv)
+    /* clang warns that the alias will be always resolve to __GI___feupdateenv
+       even if weak definition of __GI_feupdateenv is overridden, which is
+       really the intention.  */
+    DIAG_PUSH_NEEDS_COMMENT_CLANG;
 DIAG_IGNORE_NEEDS_COMMENT_CLANG (16, "-Wignored-attributes");
-libm_hidden_weak (feupdateenv)
-DIAG_POP_NEEDS_COMMENT_CLANG;
+libm_hidden_weak (feupdateenv) DIAG_POP_NEEDS_COMMENT_CLANG;

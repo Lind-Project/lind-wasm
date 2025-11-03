@@ -23,10 +23,10 @@
 #include <signal.h>
 #include <execinfo.h>
 
-extern int
-_identify_sighandler (unsigned long fp, unsigned long pc,
-                      unsigned long *pprev_fp, unsigned long *pprev_pc,
-                      unsigned long *retaddr);
+extern int _identify_sighandler (unsigned long fp, unsigned long pc,
+				 unsigned long *pprev_fp,
+				 unsigned long *pprev_pc,
+				 unsigned long *retaddr);
 
 static inline long
 get_frame_size (unsigned long instr)
@@ -51,14 +51,14 @@ find_frame_creation (unsigned long *pc)
       instr = *pc;
 
       /* Is the instruction of the form
-         addik r1, r1, foo ? */
+	 addik r1, r1, foo ? */
       if ((instr & 0xFFFF0000) != 0x30210000)
-        continue;
+	continue;
 
       frame_size = get_frame_size (instr);
 
       if ((frame_size < 8) || (frame_size & 3))
-        return NULL;
+	return NULL;
 
       return pc;
     }
@@ -67,39 +67,39 @@ find_frame_creation (unsigned long *pc)
 
 static int
 lookup_prev_stack_frame (unsigned long fp, unsigned long pc,
-                         unsigned long *pprev_fp, unsigned long *pprev_pc,
-                         unsigned long *retaddr)
+			 unsigned long *pprev_fp, unsigned long *pprev_pc,
+			 unsigned long *retaddr)
 {
   unsigned long *prologue = NULL;
 
-  int is_signalhandler = _identify_sighandler (fp, pc, pprev_fp,
-                                               pprev_pc, retaddr);
+  int is_signalhandler
+      = _identify_sighandler (fp, pc, pprev_fp, pprev_pc, retaddr);
 
   if (!is_signalhandler)
     {
       prologue = find_frame_creation ((unsigned long *) pc);
 
       if (prologue)
-        {
-          long frame_size = get_frame_size (*prologue);
-          *pprev_fp = fp + frame_size;
-          if (*retaddr != 0)
-            *pprev_pc = *retaddr;
-          else
-            *pprev_pc = *(unsigned long *) fp;
+	{
+	  long frame_size = get_frame_size (*prologue);
+	  *pprev_fp = fp + frame_size;
+	  if (*retaddr != 0)
+	    *pprev_pc = *retaddr;
+	  else
+	    *pprev_pc = *(unsigned long *) fp;
 
-          *retaddr = 0;
-          if (!*pprev_pc || (*pprev_pc & 3))
-            prologue=0;
-        }
+	  *retaddr = 0;
+	  if (!*pprev_pc || (*pprev_pc & 3))
+	    prologue = 0;
+	}
       else
-        {
-          *pprev_pc = 0;
-          *pprev_fp = fp;
-          *retaddr = 0;
-        }
+	{
+	  *pprev_pc = 0;
+	  *pprev_fp = fp;
+	  *retaddr = 0;
+	}
     }
-    return (!*pprev_pc || (*pprev_pc & 3)) ? -1 : 0;
+  return (!*pprev_pc || (*pprev_pc & 3)) ? -1 : 0;
 }
 
 int
@@ -118,11 +118,9 @@ __backtrace (void **array, int size)
   if (size <= 0)
     return 0;
 
-  __asm__ __volatile__ ("mfs %0, rpc"
-                        : "=r"(pc));
+  __asm__ __volatile__ ("mfs %0, rpc" : "=r"(pc));
 
-  __asm__ __volatile__ ("add %0, r1, r0"
-                        : "=r"(fp));
+  __asm__ __volatile__ ("add %0, r1, r0" : "=r"(fp));
 
   array[0] = (void *) pc;
   retaddr = 0;
@@ -134,10 +132,9 @@ __backtrace (void **array, int size)
       pc = ppc;
       array[count] = (void *) pc;
       if (rc)
-        return count;
+	return count;
     }
   return count;
 }
 
-weak_alias (__backtrace, backtrace)
-libc_hidden_def (__backtrace)
+weak_alias (__backtrace, backtrace) libc_hidden_def (__backtrace)

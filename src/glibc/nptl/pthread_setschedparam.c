@@ -21,7 +21,6 @@
 #include "pthreadP.h"
 #include <lowlevellock.h>
 
-
 int
 __pthread_setschedparam (pthread_t threadid, int policy,
 			 const struct sched_param *param)
@@ -52,8 +51,8 @@ __pthread_setschedparam (pthread_t threadid, int policy,
     }
 
   /* Try to set the scheduler information.  */
-  if (__builtin_expect (__sched_setscheduler (pd->tid, policy,
-					      param) == -1, 0))
+  if (__builtin_expect (__sched_setscheduler (pd->tid, policy, param) == -1,
+			0))
     result = errno;
   else
     {

@@ -17,25 +17,24 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _HPPA_LDSODEFS_H
-#define _HPPA_LDSODEFS_H 1
+#  define _HPPA_LDSODEFS_H 1
 
-#include <elf.h>
+#  include <elf.h>
 
 struct La_hppa_regs;
 struct La_hppa_retval;
 
-#define ARCH_PLTENTER_MEMBERS \
-    Elf32_Addr (*hppa_gnu_pltenter) (Elf32_Sym *, unsigned int, uintptr_t *,	\
-				     uintptr_t *, struct La_hppa_regs *,	\
-				     unsigned int *, const char *name,		\
+#  define ARCH_PLTENTER_MEMBERS                                               \
+    Elf32_Addr (*hppa_gnu_pltenter) (Elf32_Sym *, unsigned int, uintptr_t *,  \
+				     uintptr_t *, struct La_hppa_regs *,      \
+				     unsigned int *, const char *name,        \
 				     long int *framesizep);
 
-#define ARCH_PLTEXIT_MEMBERS \
-    unsigned int (*hppa_gnu_pltexit) (Elf32_Sym *, unsigned int, uintptr_t *,	\
-				      uintptr_t *,				\
-				      const struct La_hppa_regs *,		\
-				      struct La_hppa_retval *, const char *);
+#  define ARCH_PLTEXIT_MEMBERS                                                \
+    unsigned int (*hppa_gnu_pltexit) (                                        \
+	Elf32_Sym *, unsigned int, uintptr_t *, uintptr_t *,                  \
+	const struct La_hppa_regs *, struct La_hppa_retval *, const char *);
 
-#include_next <ldsodefs.h>
+#  include_next <ldsodefs.h>
 
 #endif

@@ -74,13 +74,12 @@ struct __spawn_action
   } action;
 };
 
-#define SPAWN_XFLAGS_USE_PATH	0x1
-#define SPAWN_XFLAGS_TRY_SHELL	0x2
-#define SPAWN_XFLAGS_RET_PIDFD  0x4
+#define SPAWN_XFLAGS_USE_PATH 0x1
+#define SPAWN_XFLAGS_TRY_SHELL 0x2
+#define SPAWN_XFLAGS_RET_PIDFD 0x4
 
-extern int __posix_spawn_file_actions_realloc (posix_spawn_file_actions_t *
-					       file_actions)
-     attribute_hidden;
+extern int __posix_spawn_file_actions_realloc (
+    posix_spawn_file_actions_t *file_actions) attribute_hidden;
 
 extern int __spawni (int *pid, const char *path,
 		     const posix_spawn_file_actions_t *file_actions,

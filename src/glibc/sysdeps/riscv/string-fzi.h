@@ -17,14 +17,14 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_RISCV_FZI_H
-#define _STRING_RISCV_FZI_H 1
+#  define _STRING_RISCV_FZI_H 1
 
-#if defined __riscv_zbb || defined __riscv_xtheadbb
-# include <sysdeps/generic/string-fzi.h>
-#else
+#  if defined __riscv_zbb || defined __riscv_xtheadbb
+#    include <sysdeps/generic/string-fzi.h>
+#  else
 /* Without bitmap clz/ctz extensions, it is faster to direct test the bits
    instead of calling compiler auxiliary functions.  */
-# include <string-optype.h>
+#    include <string-optype.h>
 
 static __always_inline unsigned int
 index_first (find_t c)
@@ -72,6 +72,6 @@ index_last (find_t c)
     return 1;
   return 0;
 }
-#endif
+#  endif
 
 #endif /* STRING_FZI_H */

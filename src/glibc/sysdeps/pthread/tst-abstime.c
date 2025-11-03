@@ -40,13 +40,13 @@ th (void *arg)
   TEST_COMPARE (pthread_rwlock_timedrdlock (&rw1, &t), ETIMEDOUT);
   TEST_COMPARE (pthread_rwlock_timedwrlock (&rw2, &t), ETIMEDOUT);
   TEST_COMPARE (pthread_rwlock_clockrdlock (&rw1, CLOCK_REALTIME, &t),
-                ETIMEDOUT);
+		ETIMEDOUT);
   TEST_COMPARE (pthread_rwlock_clockwrlock (&rw2, CLOCK_REALTIME, &t),
-                ETIMEDOUT);
+		ETIMEDOUT);
   TEST_COMPARE (pthread_rwlock_clockrdlock (&rw1, CLOCK_MONOTONIC, &t),
-                ETIMEDOUT);
+		ETIMEDOUT);
   TEST_COMPARE (pthread_rwlock_clockwrlock (&rw2, CLOCK_MONOTONIC, &t),
-                ETIMEDOUT);
+		ETIMEDOUT);
   return NULL;
 }
 

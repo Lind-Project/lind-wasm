@@ -64,7 +64,7 @@ __pthread_setschedprio (pthread_t threadid, int prio)
 versioned_symbol (libc, __pthread_setschedprio, pthread_setschedprio,
 		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_3_4, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_3_4, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_setschedprio, pthread_setschedprio,
 	       GLIBC_2_3_4);
 #endif

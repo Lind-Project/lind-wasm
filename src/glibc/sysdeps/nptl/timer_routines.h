@@ -17,10 +17,10 @@
    not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TIMER_ROUTINES_H
-#define _TIMER_ROUTINES_H	1
+#  define _TIMER_ROUTINES_H 1
 
-#include <internaltypes.h>
-#include <string.h>
+#  include <internaltypes.h>
+#  include <string.h>
 
 /* Compare two pthread_attr_t thread attributes for exact equality.
    Returns 1 if they are equal, otherwise zero if they are not equal
@@ -43,8 +43,8 @@ thread_attr_compare (const pthread_attr_t *left, const pthread_attr_t *right)
 	  && ((ileft->cpuset == NULL && iright->cpuset == NULL)
 	      || (ileft->cpuset != NULL && iright->cpuset != NULL
 		  && ileft->cpusetsize == iright->cpusetsize
-		  && memcmp (ileft->cpuset, iright->cpuset,
-			     ileft->cpusetsize) == 0)));
+		  && memcmp (ileft->cpuset, iright->cpuset, ileft->cpusetsize)
+			 == 0)));
 }
 
-#endif	/* timer_routines.h */
+#endif /* timer_routines.h */

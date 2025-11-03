@@ -17,21 +17,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef WIDE
-# define TEST_NAME "wcslen"
+#  define TEST_NAME "wcslen"
 #else
-# define TEST_NAME "strlen"
+#  define TEST_NAME "strlen"
 #endif /* WIDE */
 
 #define TEST_MAIN
 #include <string/test-string.h>
 
 #ifdef WIDE
-# include <wchar.h>
-# define STRLEN wcslen
-# define CHAR wchar_t
+#  include <wchar.h>
+#  define STRLEN wcslen
+#  define CHAR wchar_t
 #else
-# define STRLEN strlen
-# define CHAR char
+#  define STRLEN strlen
+#  define CHAR char
 #endif /* WIDE */
 
 IMPL (STRLEN, 1)
@@ -43,8 +43,7 @@ typedef struct
   void (*fn) (void);
 } parameter_t;
 
-size_t
-__attribute__ ((weak, noinline)) __attribute_noclone__
+size_t __attribute__ ((weak, noinline)) __attribute_noclone__
 do_strlen (parameter_t *a, int zero, const CHAR *str)
 {
   return CALL (a, str);
@@ -69,8 +68,8 @@ test_main (void)
       size_t res = do_strlen (&a, 0, buf);
       if (res != size)
 	{
-	  error (0, 0, "Wrong result in function %s: %zu != %zu",
-		 impl->name, res, size);
+	  error (0, 0, "Wrong result in function %s: %zu != %zu", impl->name,
+		 res, size);
 	  ret = 1;
 	}
     }

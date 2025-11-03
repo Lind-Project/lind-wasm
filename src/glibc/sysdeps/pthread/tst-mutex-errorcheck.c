@@ -31,8 +31,8 @@ do_test (void)
   int ret = 0;
 
   TEST_COMPARE (pthread_mutexattr_init (&mutexattr), 0);
-  TEST_COMPARE (pthread_mutexattr_settype (&mutexattr,
-                                           PTHREAD_MUTEX_ERRORCHECK), 0);
+  TEST_COMPARE (
+      pthread_mutexattr_settype (&mutexattr, PTHREAD_MUTEX_ERRORCHECK), 0);
 
   TEST_COMPARE (pthread_mutex_init (&mutex, &mutexattr), 0);
   TEST_COMPARE (pthread_mutexattr_destroy (&mutexattr), 0);

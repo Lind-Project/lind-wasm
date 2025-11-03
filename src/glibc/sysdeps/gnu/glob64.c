@@ -14,10 +14,10 @@
 #undef __stat
 #define __stat(file, buf) __stat64 (file, buf)
 
-#define COMPILE_GLOB64	1
+#define COMPILE_GLOB64 1
 
 #include <posix/glob.c>
 
 libc_hidden_def (__glob64)
-versioned_symbol (libc, __glob64, glob64, GLIBC_2_27);
+    versioned_symbol (libc, __glob64, glob64, GLIBC_2_27);
 libc_hidden_ver (__glob64, glob64)

@@ -22,7 +22,7 @@ static int
 do_test (void)
 {
   pthread_exit (NULL);
-  return 1;                     /* Not reached.  */
+  return 1; /* Not reached.  */
 }
 
 #include <support/test-driver.c>

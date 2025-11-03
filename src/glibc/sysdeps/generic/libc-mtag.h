@@ -17,19 +17,19 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _GENERIC_LIBC_MTAG_H
-#define _GENERIC_LIBC_MTAG_H 1
+#  define _GENERIC_LIBC_MTAG_H 1
 
 /* Generic bindings for systems that do not support memory tagging.  */
 
 /* Used to ensure additional alignment when objects need to have distinct
    tags.  */
-#define __MTAG_GRANULE_SIZE 1
+#  define __MTAG_GRANULE_SIZE 1
 
 /* Non-zero if memory obtained via morecore (sbrk) is not tagged.  */
-#define __MTAG_SBRK_UNTAGGED 0
+#  define __MTAG_SBRK_UNTAGGED 0
 
 /* Extra flags to pass to mmap() to request a tagged region of memory.  */
-#define __MTAG_MMAP_FLAGS 0
+#  define __MTAG_MMAP_FLAGS 0
 
 /* Memory tagging target hooks are only called when memory tagging is
    enabled at runtime.  The generic definitions here must not be used.  */

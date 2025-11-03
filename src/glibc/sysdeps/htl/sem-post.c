@@ -51,8 +51,8 @@ __sem_post (sem_t *sem)
       if ((v >> SEM_VALUE_SHIFT) == SEM_VALUE_MAX)
 	return __hurd_fail (EOVERFLOW);
     }
-  while (!atomic_compare_exchange_weak_release
-	  (&isem->value, &v, v + (1 << SEM_VALUE_SHIFT)));
+  while (!atomic_compare_exchange_weak_release (&isem->value, &v,
+						v + (1 << SEM_VALUE_SHIFT)));
 
   if ((v & SEM_NWAITERS_MASK) != 0)
     /* Wake one waiter.  */
@@ -61,5 +61,4 @@ __sem_post (sem_t *sem)
 
   return 0;
 }
-libpthread_hidden_def (__sem_post)
-strong_alias (__sem_post, sem_post);
+libpthread_hidden_def (__sem_post) strong_alias (__sem_post, sem_post);

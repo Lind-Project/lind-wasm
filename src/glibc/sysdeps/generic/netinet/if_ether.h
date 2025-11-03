@@ -16,12 +16,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef __NETINET_IF_ETHER_H
-#define __NETINET_IF_ETHER_H	1
+#  define __NETINET_IF_ETHER_H 1
 
-#include <sys/types.h>
-#include <stdint.h>
+#  include <sys/types.h>
+#  include <stdint.h>
 
-#define ETH_ALEN	6	/* Octets in one ethernet address.  */
+#  define ETH_ALEN 6 /* Octets in one ethernet address.  */
 
 /* This is a name for the 48 bit ethernet address available on many
    systems.  */

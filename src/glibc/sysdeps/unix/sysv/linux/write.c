@@ -25,11 +25,11 @@ ssize_t
 __libc_write (int fd, const void *buf, size_t nbytes)
 {
   // Dennis Edit
-  return MAKE_SYSCALL(WRITE_SYSCALL, "syscall|write", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (WRITE_SYSCALL, "syscall|write", (uint64_t) fd,
+		       (uint64_t) (uintptr_t) buf, (uint64_t) nbytes, NOTUSED,
+		       NOTUSED, NOTUSED);
 }
 libc_hidden_def (__libc_write)
 
-weak_alias (__libc_write, __write)
-libc_hidden_weak (__write)
-weak_alias (__libc_write, write)
-libc_hidden_weak (write)
+    weak_alias (__libc_write, __write) libc_hidden_weak (__write)
+	weak_alias (__libc_write, write) libc_hidden_weak (write)

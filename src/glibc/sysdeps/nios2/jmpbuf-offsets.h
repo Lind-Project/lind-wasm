@@ -24,15 +24,15 @@
 #define JB_R20 4
 #define JB_R21 5
 #define JB_R22 6
-#define JB_FP  7
-#define JB_RA  8
-#define JB_SP  9
+#define JB_FP 7
+#define JB_RA 8
+#define JB_SP 9
 
-#ifndef  __ASSEMBLER__
-#include <setjmp.h>
-#include <stdint.h>
-#include <sysdep.h>
-#include <pointer_guard.h>
+#ifndef __ASSEMBLER__
+#  include <setjmp.h>
+#  include <stdint.h>
+#  include <sysdep.h>
+#  include <pointer_guard.h>
 
 static inline uintptr_t __attribute__ ((unused))
 _jmpbuf_sp (__jmp_buf jmpbuf)

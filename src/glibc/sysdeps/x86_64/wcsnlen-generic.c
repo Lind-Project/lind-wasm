@@ -25,5 +25,5 @@
 #include <isa-level.h>
 
 #if MINIMUM_X86_ISA_LEVEL <= 1
-# include "wcsmbs/wcsnlen.c"
+#  include "wcsmbs/wcsnlen.c"
 #endif

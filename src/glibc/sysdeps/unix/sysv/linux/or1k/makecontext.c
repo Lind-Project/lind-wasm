@@ -44,8 +44,8 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
   va_list ap;
   int i;
 
-  sp = (unsigned long int *)
-    ((uintptr_t) ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
+  sp = (unsigned long int *) ((uintptr_t) ucp->uc_stack.ss_sp
+			      + ucp->uc_stack.ss_size);
 
   /* Allocate stack arguments.  */
   sp -= argc < 6 ? 0 : argc - 6;

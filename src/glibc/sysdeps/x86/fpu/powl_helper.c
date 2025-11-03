@@ -24,22 +24,34 @@
 /* High parts and low parts of -log (k/16), for integer k from 12 to
    24.  */
 
-static const long double powl_log_table[] =
-  {
-    0x4.9a58844d36e49e1p-4L, -0x1.0522624fd558f574p-68L,
-    0x3.527da7915b3c6de4p-4L, 0x1.7d4ef4b901b99b9ep-68L,
-    0x2.22f1d044fc8f7bc8p-4L, -0x1.8e97c071a42fc388p-68L,
-    0x1.08598b59e3a0688ap-4L, 0x3.fd9bf503372c12fcp-72L,
-    -0x0p+0L, 0x0p+0L,
-    -0xf.85186008b15330cp-8L, 0x1.9b47488a6687672cp-72L,
-    -0x1.e27076e2af2e5e9ep-4L, -0xa.87ffe1fe9e155dcp-72L,
-    -0x2.bfe60e14f27a791p-4L, 0x1.83bebf1bdb88a032p-68L,
-    -0x3.91fef8f353443584p-4L, -0xb.b03de5ff734495cp-72L,
-    -0x4.59d72aeae98380e8p-4L, 0xc.e0aa3be4747dc1p-72L,
-    -0x5.1862f08717b09f4p-4L, -0x2.decdeccf1cd10578p-68L,
-    -0x5.ce75fdaef401a738p-4L, -0x9.314feb4fbde5aaep-72L,
-    -0x6.7cc8fb2fe612fcbp-4L, 0x2.5ca2642feb779f98p-68L,
-  };
+static const long double powl_log_table[] = {
+  0x4.9a58844d36e49e1p-4L,
+  -0x1.0522624fd558f574p-68L,
+  0x3.527da7915b3c6de4p-4L,
+  0x1.7d4ef4b901b99b9ep-68L,
+  0x2.22f1d044fc8f7bc8p-4L,
+  -0x1.8e97c071a42fc388p-68L,
+  0x1.08598b59e3a0688ap-4L,
+  0x3.fd9bf503372c12fcp-72L,
+  -0x0p+0L,
+  0x0p+0L,
+  -0xf.85186008b15330cp-8L,
+  0x1.9b47488a6687672cp-72L,
+  -0x1.e27076e2af2e5e9ep-4L,
+  -0xa.87ffe1fe9e155dcp-72L,
+  -0x2.bfe60e14f27a791p-4L,
+  0x1.83bebf1bdb88a032p-68L,
+  -0x3.91fef8f353443584p-4L,
+  -0xb.b03de5ff734495cp-72L,
+  -0x4.59d72aeae98380e8p-4L,
+  0xc.e0aa3be4747dc1p-72L,
+  -0x5.1862f08717b09f4p-4L,
+  -0x2.decdeccf1cd10578p-68L,
+  -0x5.ce75fdaef401a738p-4L,
+  -0x9.314feb4fbde5aaep-72L,
+  -0x6.7cc8fb2fe612fcbp-4L,
+  0x2.5ca2642feb779f98p-68L,
+};
 
 /* High 32 bits of log2 (e), and remainder rounded to 64 bits.  */
 static const long double log2e_hi = 0x1.71547652p+0L;
@@ -65,12 +77,11 @@ acc_split (long double *rhi, long double *rlo, long double hi, long double lo,
 extern long double __powl_helper (long double x, long double y);
 libm_hidden_proto (__powl_helper)
 
-/* Given X a value that is finite and nonzero, or a NaN, and Y a
-   finite nonzero value with 0x1p-79 <= |Y| <= 0x1p78, compute X to
-   the power Y.  */
+    /* Given X a value that is finite and nonzero, or a NaN, and Y a
+       finite nonzero value with 0x1p-79 <= |Y| <= 0x1p78, compute X to
+       the power Y.  */
 
-long double
-__powl_helper (long double x, long double y)
+    long double __powl_helper (long double x, long double y)
 {
   if (isnan (x))
     return __ieee754_expl (y * __ieee754_logl (x));
@@ -177,7 +188,7 @@ __powl_helper (long double x, long double y)
   log_x_frac_lo64 = (log_x_frac_hi - log_x_frac_hi32) + log_x_frac_lo;
   long double log2_x_frac_hi1 = log_x_frac_hi32 * log2e_hi;
   long double log2_x_frac_lo1
-    = log_x_frac_lo64 * log2e_hi + log_x_frac_hi * log2e_lo;
+      = log_x_frac_lo64 * log2e_hi + log_x_frac_hi * log2e_lo;
   log2_x_frac_hi = log2_x_frac_hi1 + log2_x_frac_lo1;
   log2_x_frac_lo = (log2_x_frac_hi1 - log2_x_frac_hi) + log2_x_frac_lo1;
 

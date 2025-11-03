@@ -28,16 +28,14 @@
    bits (106 for long double) and an integral power of two (MPN
    frexpl). */
 
-
 /* When signs differ, the actual value is the difference between the
    significant double and the less significant double.  Sometimes a
    bit can be lost when we borrow from the significant mantissa.  */
 #define EXTRA_INTERNAL_PRECISION (7)
 
 mp_size_t
-__mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size,
-			   int *expt, int *is_neg,
-			   long double value)
+__mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size, int *expt,
+			   int *is_neg, long double value)
 {
   union ibm_extended_long_double u;
   unsigned long long hi, lo;
@@ -80,8 +78,7 @@ __mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size,
      difference between the long double and the rounded high double
      value.  This is indicated by a difference between the signs of the
      high and low doubles.  */
-  if (u.d[0].ieee.negative != u.d[1].ieee.negative
-      && lo != 0)
+  if (u.d[0].ieee.negative != u.d[1].ieee.negative && lo != 0)
     {
       lo = (1ULL << (53 + EXTRA_INTERNAL_PRECISION)) - lo;
       if (hi == 0)
@@ -100,25 +97,25 @@ __mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size,
   res_ptr[1] = (hi << (53 - 32)) | (lo >> (32 + EXTRA_INTERNAL_PRECISION));
   res_ptr[2] = hi >> 11;
   res_ptr[3] = hi >> (32 + 11);
-  #define N 4
+#  define N 4
 #elif BITS_PER_MP_LIMB == 64
   /* Combine the two mantissas to be contiguous.  */
   res_ptr[0] = (hi << 53) | (lo >> EXTRA_INTERNAL_PRECISION);
   res_ptr[1] = hi >> 11;
-  #define N 2
+#  define N 2
 #else
-  #error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
+#  error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
 #endif
 /* The format does not fill the last limb.  There are some zeros.  */
-#define NUM_LEADING_ZEROS (BITS_PER_MP_LIMB \
-			   - (LDBL_MANT_DIG - ((N - 1) * BITS_PER_MP_LIMB)))
+#define NUM_LEADING_ZEROS                                                     \
+  (BITS_PER_MP_LIMB - (LDBL_MANT_DIG - ((N - 1) * BITS_PER_MP_LIMB)))
 
   if (u.d[0].ieee.exponent == 0)
     {
       /* A biased exponent of zero is a special case.
 	 Either it is a zero or it is a denormal number.  */
-      if (res_ptr[0] == 0 && res_ptr[1] == 0
-	  && res_ptr[N - 2] == 0 && res_ptr[N - 1] == 0) /* Assumes N<=4.  */
+      if (res_ptr[0] == 0 && res_ptr[1] == 0 && res_ptr[N - 2] == 0
+	  && res_ptr[N - 1] == 0) /* Assumes N<=4.  */
 	/* It's zero.  */
 	*expt = 0;
       else
@@ -153,8 +150,8 @@ __mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size,
 		  res_ptr[N - 1] = res_ptr[0] >> (NUM_LEADING_ZEROS - cnt);
 		  res_ptr[0] <<= BITS_PER_MP_LIMB - (NUM_LEADING_ZEROS - cnt);
 		}
-	      *expt = DBL_MIN_EXP - 1
-		- (BITS_PER_MP_LIMB - NUM_LEADING_ZEROS) - cnt;
+	      *expt = DBL_MIN_EXP - 1 - (BITS_PER_MP_LIMB - NUM_LEADING_ZEROS)
+		      - cnt;
 	    }
 #else
 	  int j, k, l;
@@ -173,12 +170,12 @@ __mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size,
 	    }
 	  if (!cnt)
 	    for (k = N - 1; k >= l; k--)
-	      res_ptr[k] = res_ptr[k-l];
+	      res_ptr[k] = res_ptr[k - l];
 	  else
 	    {
 	      for (k = N - 1; k > l; k--)
-		res_ptr[k] = res_ptr[k-l] << cnt
-			     | res_ptr[k-l-1] >> (BITS_PER_MP_LIMB - cnt);
+		res_ptr[k] = res_ptr[k - l] << cnt
+			     | res_ptr[k - l - 1] >> (BITS_PER_MP_LIMB - cnt);
 	      res_ptr[k--] = res_ptr[0] << cnt;
 	    }
 
@@ -190,8 +187,8 @@ __mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size,
     }
   else
     /* Add the implicit leading one bit for a normalized number.  */
-    res_ptr[N - 1] |= (mp_limb_t) 1 << (LDBL_MANT_DIG - 1
-					- ((N - 1) * BITS_PER_MP_LIMB));
+    res_ptr[N - 1] |= (mp_limb_t) 1
+		      << (LDBL_MANT_DIG - 1 - ((N - 1) * BITS_PER_MP_LIMB));
 
   return N;
 }

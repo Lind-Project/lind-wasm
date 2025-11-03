@@ -22,59 +22,59 @@
 #if defined __ASSEMBLER__ || defined REQUEST_ASSEMBLER_MACROS
 
 /* Make use of .size directive.  */
-#define ASM_SIZE_DIRECTIVE(name) .size name,.-name;
+#  define ASM_SIZE_DIRECTIVE(name) .size name, .- name;
 
 /* Define an entry point visible from C.  */
-#define ENTRY(name)                                                           \
-  .globl C_SYMBOL_NAME(name);                                                 \
-  .type C_SYMBOL_NAME(name),@function;                                        \
-  .align 4;                                                                   \
-  C_LABEL(name)                                                               \
-  cfi_startproc;                                                              \
-  CALL_MCOUNT
+#  define ENTRY(name)                                                         \
+    .globl C_SYMBOL_NAME (name);                                              \
+    .type C_SYMBOL_NAME (name), @function;                                    \
+    .align 4;                                                                 \
+    C_LABEL (name)                                                            \
+    cfi_startproc;                                                            \
+    CALL_MCOUNT
 
-#undef  END
-#define END(name)                                                             \
-  cfi_endproc;                                                                \
-  ASM_SIZE_DIRECTIVE(name)
+#  undef END
+#  define END(name)                                                           \
+    cfi_endproc;                                                              \
+    ASM_SIZE_DIRECTIVE (name)
 
 /* Since C identifiers are not normally prefixed with an underscore
    on this system, the asm identifier `syscall_error' intrudes on the
    C name space.  Make sure we use an innocuous name.  */
-#define syscall_error   __syscall_error
+#  define syscall_error __syscall_error
 
 /* If compiled for profiling, call `mcount' at the start of each function.  */
-#ifdef  PROF
-# ifdef __PIC__
-#  define CALL_MCOUNT						\
-	l.addi	r1, r1, -8;					\
-	l.sw	0(r1), r9;					\
-	l.sw	4(r1), r3;					\
-	l.ori	r3, r9, 0;					\
-	l.j	plt(_mcount);					\
-	 l.nop;							\
-	l.lwz	r9, 0(r1);					\
-	l.lwz	r3, 4(r1);					\
-	l.addi	r1, r1, 8;
-# else
-#  define CALL_MCOUNT						\
-	l.addi	r1, r1, -8;					\
-	l.sw	0(r1), r9;					\
-	l.sw	4(r1), r3;					\
-	l.ori	r3, r9, 0;					\
-	l.movhi r15, hi(_mcount);				\
-	l.ori	r15, r15, lo(_mcount);				\
-	l.jr	r15;						\
-	 l.nop;							\
-	l.lwz	r9, 0(r1);					\
-	l.lwz	r3, 4(r1);					\
-	l.addi	r1, r1, 8;
-# endif
-#else
-# define CALL_MCOUNT             /* Do nothing.  */
-#endif
+#  ifdef PROF
+#    ifdef __PIC__
+#      define CALL_MCOUNT                                                     \
+	l.addi r1, r1, -8;                                                    \
+	l.sw 0(r1), r9;                                                       \
+	l.sw 4(r1), r3;                                                       \
+	l.ori r3, r9, 0;                                                      \
+	l.j plt (_mcount);                                                    \
+	l.nop;                                                                \
+	l.lwz r9, 0(r1);                                                      \
+	l.lwz r3, 4(r1);                                                      \
+	l.addi r1, r1, 8;
+#    else
+#      define CALL_MCOUNT                                                     \
+	l.addi r1, r1, -8;                                                    \
+	l.sw 0(r1), r9;                                                       \
+	l.sw 4(r1), r3;                                                       \
+	l.ori r3, r9, 0;                                                      \
+	l.movhi r15, hi (_mcount);                                            \
+	l.ori r15, r15, lo (_mcount);                                         \
+	l.jr r15;                                                             \
+	l.nop;                                                                \
+	l.lwz r9, 0(r1);                                                      \
+	l.lwz r3, 4(r1);                                                      \
+	l.addi r1, r1, 8;
+#    endif
+#  else
+#    define CALL_MCOUNT /* Do nothing.  */
+#  endif
 
 /* Local label name for asm code.  */
-#define L(name)         .L##name
+#  define L(name) .L##name
 
 #endif /* __ASSEMBLER__ */

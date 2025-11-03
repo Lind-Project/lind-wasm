@@ -22,26 +22,21 @@
 
 static int resources[] = {
   /* The following 7 limits are part of POSIX and must exist.  */
-  RLIMIT_CORE,
-  RLIMIT_CPU,
-  RLIMIT_DATA,
-  RLIMIT_FSIZE,
-  RLIMIT_NOFILE,
-  RLIMIT_STACK,
-  RLIMIT_AS
+  RLIMIT_CORE,	 RLIMIT_CPU,   RLIMIT_DATA, RLIMIT_FSIZE,
+  RLIMIT_NOFILE, RLIMIT_STACK, RLIMIT_AS
 };
 
 #define nresources (sizeof (resources) / sizeof (resources[0]))
 
 /* Assume that the prlimit64 function calls the prlimit64 syscall without
    mangling the arguments.  */
-#define PRLIMIT64_INFINITY	((rlim64_t) -1)
+#define PRLIMIT64_INFINITY ((rlim64_t) - 1)
 
 /* As we don't know which limit will be modified, use a sufficiently high
    value to not shoot ourself in the foot.  Use a 32-bit value to test
    both the 32- and 64-bit versions, and keep the highest bit clear to
    avoid sign extension.  */
-#define PRLIMIT64_TESTVAL	((rlim64_t) 0x42420000)
+#define PRLIMIT64_TESTVAL ((rlim64_t) 0x42420000)
 
 static void
 test_getrlimit (int resource, rlim_t exp_cur, rlim_t exp_max)
@@ -126,8 +121,8 @@ do_test (void)
     }
 
   if (resource == -1)
-    FAIL_UNSUPPORTED
-      ("Could not find and limit with hard limit set to infinity.");
+    FAIL_UNSUPPORTED (
+	"Could not find and limit with hard limit set to infinity.");
 
   /* First check that the get functions work correctly with the test value.  */
   test_prlimit64_set (resource, PRLIMIT64_TESTVAL, PRLIMIT64_INFINITY);

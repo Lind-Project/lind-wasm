@@ -20,13 +20,14 @@
 #define _DL_PLT_H
 
 /* Some SPARC opcodes we need to use for self-modifying code.  */
-#define OPCODE_NOP	0x01000000 /* nop */
-#define OPCODE_CALL	0x40000000 /* call ?; add PC-rel word address */
-#define OPCODE_SETHI_G1	0x03000000 /* sethi ?, %g1; add value>>10 */
-#define OPCODE_JMP_G1	0x81c06000 /* jmp %g1+?; add lo 10 bits of value */
-#define OPCODE_SAVE_SP	0x9de3bfa8 /* save %sp, -(16+6)*4, %sp */
-#define OPCODE_BA	0x30800000 /* b,a ?; add PC-rel word address */
-#define OPCODE_BA_PT	0x30480000 /* ba,a,pt %icc, ?; add PC-rel word address */
+#define OPCODE_NOP 0x01000000	   /* nop */
+#define OPCODE_CALL 0x40000000	   /* call ?; add PC-rel word address */
+#define OPCODE_SETHI_G1 0x03000000 /* sethi ?, %g1; add value>>10 */
+#define OPCODE_JMP_G1 0x81c06000   /* jmp %g1+?; add lo 10 bits of value */
+#define OPCODE_SAVE_SP 0x9de3bfa8  /* save %sp, -(16+6)*4, %sp */
+#define OPCODE_BA 0x30800000	   /* b,a ?; add PC-rel word address */
+#define OPCODE_BA_PT 0x30480000 /* ba,a,pt %icc, ?; add PC-rel word address   \
+				 */
 
 static inline __attribute__ ((always_inline)) Elf32_Addr
 sparc_fixup_plt (const Elf32_Rela *reloc, Elf32_Addr *reloc_addr,

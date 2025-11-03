@@ -20,12 +20,13 @@
 #include <pthreadP.h>
 
 _Noreturn static void
-__libc_start_call_main (int (*main) (int, char **, char ** MAIN_AUXVEC_DECL),
-                        int argc, char **argv
+__libc_start_call_main (int (*main) (int, char **, char **MAIN_AUXVEC_DECL),
+			int argc, char **argv
 #ifdef LIBC_START_MAIN_AUXVEC_ARG
-                            , ElfW(auxv_t) *auxvec
+			,
+			ElfW (auxv_t) * auxvec
 #endif
-                        )
+)
 {
   int result;
 
@@ -34,7 +35,7 @@ __libc_start_call_main (int (*main) (int, char **, char ** MAIN_AUXVEC_DECL),
 
   int not_first_call;
   DIAG_PUSH_NEEDS_COMMENT;
-#if __GNUC_PREREQ (7, 0)
+#if __GNUC_PREREQ(7, 0)
   /* This call results in a -Wstringop-overflow warning because struct
      pthread_unwind_buf is smaller than jmp_buf.  setjmp and longjmp
      do not use anything beyond the common prefix (they never access
@@ -43,7 +44,7 @@ __libc_start_call_main (int (*main) (int, char **, char ** MAIN_AUXVEC_DECL),
 #endif
   not_first_call = setjmp ((struct __jmp_buf_tag *) unwind_buf.cancel_jmp_buf);
   DIAG_POP_NEEDS_COMMENT;
-  if (__glibc_likely (! not_first_call))
+  if (__glibc_likely (!not_first_call))
     {
       struct pthread *self = THREAD_SELF;
 
@@ -63,10 +64,10 @@ __libc_start_call_main (int (*main) (int, char **, char ** MAIN_AUXVEC_DECL),
       __nptl_deallocate_tsd ();
 
       /* One less thread.  Decrement the counter.  If it is zero we
-         terminate the entire process.  */
+	 terminate the entire process.  */
       result = 0;
       if (atomic_fetch_add_relaxed (&__nptl_nthreads, -1) != 1)
-        /* Not much left to do but to exit the thread, not the process.  */
+	/* Not much left to do but to exit the thread, not the process.  */
 	while (1)
 	  INTERNAL_SYSCALL_CALL (exit, 0);
     }

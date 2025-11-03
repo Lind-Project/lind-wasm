@@ -19,14 +19,12 @@
 #include <sys/times.h>
 #include <sysdep.h>
 
-
 clock_t
 __times (struct tms *buf)
 {
   clock_t ret = INTERNAL_SYSCALL_CALL (times, buf);
   if (INTERNAL_SYSCALL_ERROR_P (ret)
-      && __glibc_unlikely (INTERNAL_SYSCALL_ERRNO (ret) == EFAULT)
-      && buf)
+      && __glibc_unlikely (INTERNAL_SYSCALL_ERRNO (ret) == EFAULT) && buf)
     {
       /* This might be an error or not.  For architectures which have no
 	 separate return value and error indicators we cannot
@@ -35,11 +33,13 @@ __times (struct tms *buf)
 	 -supplied structure on a return of (clock_t) -14.  This will crash
 	 applications which pass in an invalid non-NULL BUF pointer.
 	 Note that Linux allows BUF to be NULL in which case we skip this.  */
-#define touch(v) \
-      do {								      \
-	clock_t temp = v;						      \
-	v = temp;							      \
-      } while (0)
+#define touch(v)                                                              \
+  do                                                                          \
+    {                                                                         \
+      clock_t temp = v;                                                       \
+      v = temp;                                                               \
+    }                                                                         \
+  while (0)
       touch (buf->tms_utime);
       touch (buf->tms_stime);
       touch (buf->tms_cutime);

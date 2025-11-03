@@ -24,9 +24,7 @@
 extern __typeof (__ceil) __ceil_ppc64 attribute_hidden;
 extern __typeof (__ceil) __ceil_power5plus attribute_hidden;
 
-libc_ifunc (__ceil,
-	    (hwcap & PPC_FEATURE_POWER5_PLUS)
-	    ? __ceil_power5plus
-            : __ceil_ppc64);
+libc_ifunc (__ceil, (hwcap & PPC_FEATURE_POWER5_PLUS) ? __ceil_power5plus
+						      : __ceil_ppc64);
 
 libm_alias_double (__ceil, ceil)

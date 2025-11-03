@@ -28,5 +28,4 @@ __waitid (idtype_t idtype, id_t id, siginfo_t *infop, int options)
      pass if we were using waitid to simulate wait3/wait4.  */
   return SYSCALL_CANCEL (waitid, idtype, id, infop, options, NULL);
 }
-weak_alias (__waitid, waitid)
-strong_alias (__waitid, __libc_waitid)
+weak_alias (__waitid, waitid) strong_alias (__waitid, __libc_waitid)

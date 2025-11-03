@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES_STRUCT___PTHREAD_COND_H
-#define _BITS_TYPES_STRUCT___PTHREAD_COND_H	1
+#  define _BITS_TYPES_STRUCT___PTHREAD_COND_H 1
 
-#include <bits/types/__pthread_spinlock_t.h>
+#  include <bits/types/__pthread_spinlock_t.h>
 
 /* User visible part of a condition variable.  */
 struct __pthread_cond
@@ -32,7 +32,7 @@ struct __pthread_cond
 };
 
 /* Initializer for a condition variable.  */
-#define __PTHREAD_COND_INITIALIZER \
-  { __PTHREAD_SPIN_LOCK_INITIALIZER, NULL, NULL, 0, NULL }
+#  define __PTHREAD_COND_INITIALIZER                                          \
+    { __PTHREAD_SPIN_LOCK_INITIALIZER, NULL, NULL, 0, NULL }
 
 #endif /* bits/types/struct___pthread_cond.h */

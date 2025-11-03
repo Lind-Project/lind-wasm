@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
+#  error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
 #endif
 
 #include <sgidefs.h>
 
 /* ELF register definitions */
-#define ELF_NGREG	45
-#define ELF_NFPREG	33
+#define ELF_NGREG 45
+#define ELF_NFPREG 33
 
 #if _MIPS_SIM == _ABIN32
 __extension__ typedef unsigned long long elf_greg_t;

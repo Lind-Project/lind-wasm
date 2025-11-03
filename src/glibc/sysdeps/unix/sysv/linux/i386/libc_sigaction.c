@@ -23,11 +23,13 @@
 
 #define SA_RESTORER 0x04000000
 
-extern void restore_rt (void) {
-
+extern void
+restore_rt (void)
+{
 }
-extern void restore (void) {
-  
+extern void
+restore (void)
+{
 }
 
 // #define SET_SA_RESTORER(kact, act)				\
@@ -85,15 +87,17 @@ extern void restore (void) {
 // RESTORE (restore, __NR_sigreturn)
 
 // entry point of epoch callback in glibc, invoked by wasmtime
-__attribute__((export_name("signal_callback")))
-void signal_callback(__sighandler_t callback, int signal) {
+__attribute__ ((export_name ("signal_callback"))) void
+signal_callback (__sighandler_t callback, int signal)
+{
   // directly call into user's custom signal handler
-  if(callback != 0)
-    callback(signal);
+  if (callback != 0)
+    callback (signal);
 }
 
 // rawposix sigaction struct
-struct rawposix_sigaction {
+struct rawposix_sigaction
+{
   __sighandler_t handler;
   unsigned long long sa_mask;
   int sa_flags;
@@ -102,24 +106,28 @@ struct rawposix_sigaction {
 int
 __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
 {
-  // we do the manual translation between glibc sigaction struct and rawposix sigaction struct here
+  // we do the manual translation between glibc sigaction struct and rawposix
+  // sigaction struct here
   struct rawposix_sigaction rawposix_act, rawposix_oact;
   // check for NULL pointer
   if (act)
-  {
-    rawposix_act.handler = act->sa_handler;
-    rawposix_act.sa_mask = act->sa_mask.__val[0];
-    rawposix_act.sa_flags = act->sa_flags;
-  }
-  int retval = MAKE_SYSCALL(SIGACTION_SYSCALL, "syscall|sigaction", (uint64_t) sig, (uint64_t) (act ? &rawposix_act : NULL), (uint64_t) (oact ? &rawposix_oact : NULL), NOTUSED, NOTUSED, NOTUSED);
+    {
+      rawposix_act.handler = act->sa_handler;
+      rawposix_act.sa_mask = act->sa_mask.__val[0];
+      rawposix_act.sa_flags = act->sa_flags;
+    }
+  int retval = MAKE_SYSCALL (
+      SIGACTION_SYSCALL, "syscall|sigaction", (uint64_t) sig,
+      (uint64_t) (act ? &rawposix_act : NULL),
+      (uint64_t) (oact ? &rawposix_oact : NULL), NOTUSED, NOTUSED, NOTUSED);
 
   // check for NULL pointer
   if (oact)
-  {
-    oact->sa_handler = rawposix_oact.handler;
-    oact->sa_mask.__val[0] = rawposix_oact.sa_mask;
-    oact->sa_flags = rawposix_oact.sa_flags;
-  }
+    {
+      oact->sa_handler = rawposix_oact.handler;
+      oact->sa_mask.__val[0] = rawposix_oact.sa_mask;
+      oact->sa_flags = rawposix_oact.sa_flags;
+    }
 
   return retval;
 }

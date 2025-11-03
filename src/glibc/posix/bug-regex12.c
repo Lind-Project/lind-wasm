@@ -28,12 +28,10 @@ struct
   const char *pattern;
   const char *string;
   int flags, nmatch;
-} tests[] = {
-  { "^<\\([^~]*\\)\\([^~]\\)[^~]*~\\1\\(.\\).*|=.*\\3.*\\2",
-    "<,.8~2,~so-|=-~.0,123456789<><", REG_NOSUB, 0 },
-  /* In ERE, all carets must be treated as anchors.  */
-  { "a^b", "a^b", REG_EXTENDED, 0 }
-};
+} tests[] = { { "^<\\([^~]*\\)\\([^~]\\)[^~]*~\\1\\(.\\).*|=.*\\3.*\\2",
+		"<,.8~2,~so-|=-~.0,123456789<><", REG_NOSUB, 0 },
+	      /* In ERE, all carets must be treated as anchors.  */
+	      { "a^b", "a^b", REG_EXTENDED, 0 } };
 
 int
 main (void)
@@ -57,8 +55,8 @@ main (void)
 	  continue;
 	}
 
-      if (! regexec (&re, tests[i].string, tests[i].nmatch,
-		     tests[i].nmatch ? rm : NULL, 0))
+      if (!regexec (&re, tests[i].string, tests[i].nmatch,
+		    tests[i].nmatch ? rm : NULL, 0))
 	{
 	  printf ("regexec %zd incorrectly matched\n", i);
 	  ret = 1;

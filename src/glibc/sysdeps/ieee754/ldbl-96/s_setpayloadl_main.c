@@ -36,16 +36,15 @@ FUNC (long double *x, long double payload)
   /* Test if argument is (a) negative or too large; (b) too small,
      except for 0 when allowed; (c) not an integer.  */
   if (exponent >= BIAS + PAYLOAD_DIG
-      || (exponent < BIAS && !(SET_HIGH_BIT
-			       && exponent == 0 && hx == 0 && lx == 0)))
+      || (exponent < BIAS
+	  && !(SET_HIGH_BIT && exponent == 0 && hx == 0 && lx == 0)))
     {
       SET_LDOUBLE_WORDS (*x, 0, 0, 0);
       return 1;
     }
   int shift = BIAS + EXPLICIT_MANT_DIG - exponent;
-  if (shift < 32
-      ? (lx & ((1U << shift) - 1)) != 0
-      : (lx != 0 || (hx & ((1U << (shift - 32)) - 1)) != 0))
+  if (shift < 32 ? (lx & ((1U << shift) - 1)) != 0
+		 : (lx != 0 || (hx & ((1U << (shift - 32)) - 1)) != 0))
     {
       SET_LDOUBLE_WORDS (*x, 0, 0, 0);
       return 1;

@@ -20,122 +20,122 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _HTM_H
-#define _HTM_H 1
+#  define _HTM_H 1
 
-#ifdef __ASSEMBLER__
+#  ifdef __ASSEMBLER__
 
 /* tbegin.  */
-.macro TBEGIN
-	.long 0x7c00051d
-.endm
+.macro TBEGIN.long 0x7c00051d
+    .endm
 
-/* tend. 0  */
-.macro TEND
-	.long 0x7c00055d
-.endm
+    /* tend. 0  */
+    .macro TEND.long 0x7c00055d
+    .endm
 
-/* tabort. code  */
-.macro TABORT code
-	.byte 0x7c
-	.byte \code
-	.byte 0x07
-	.byte 0x1d
-.endm
+    /* tabort. code  */
+    .macro TABORT code.byte 0x7c .byte \code.byte 0x07 .byte 0x1d
+    .endm
 
-/*"TEXASR - Transaction EXception And Summary Register"
-   mfspr %dst,130  */
-.macro TEXASR dst
-	mfspr \dst,130
-.endm
+    /*"TEXASR - Transaction EXception And Summary Register"
+       mfspr %dst,130  */
+    .macro TEXASR dst mfspr \dst,
+    130 .endm
 
-#else
+#  else
 
-#include <bits/endian.h>
+#    include <bits/endian.h>
 
 /* Official HTM intrinsics interface matching GCC, but works
    on older GCC compatible compilers and binutils.
    We should somehow detect if the compiler supports it, because
    it may be able to generate slightly better code.  */
 
-#define TBEGIN ".long 0x7c00051d"
-#define TEND   ".long 0x7c00055d"
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-# define TABORT ".byte 0x1d,0x07,%1,0x7c"
-#else
-# define TABORT ".byte 0x7c,%1,0x07,0x1d"
-#endif
+#    define TBEGIN ".long 0x7c00051d"
+#    define TEND ".long 0x7c00055d"
+#    if __BYTE_ORDER == __LITTLE_ENDIAN
+#      define TABORT ".byte 0x1d,0x07,%1,0x7c"
+#    else
+#      define TABORT ".byte 0x7c,%1,0x07,0x1d"
+#    endif
 
-#define __force_inline        inline __attribute__((__always_inline__))
+#    define __force_inline inline __attribute__ ((__always_inline__))
 
-#ifndef __HTM__
+#    ifndef __HTM__
 
-#define _TEXASRU_EXTRACT_BITS(TEXASR,BITNUM,SIZE) \
-  (((TEXASR) >> (31-(BITNUM))) & ((1<<(SIZE))-1))
-#define _TEXASRU_FAILURE_PERSISTENT(TEXASRU) \
-  _TEXASRU_EXTRACT_BITS(TEXASRU, 7, 1)
+#      define _TEXASRU_EXTRACT_BITS(TEXASR, BITNUM, SIZE)                     \
+	(((TEXASR) >> (31 - (BITNUM))) & ((1 << (SIZE)) - 1))
+#      define _TEXASRU_FAILURE_PERSISTENT(TEXASRU)                            \
+	_TEXASRU_EXTRACT_BITS (TEXASRU, 7, 1)
 
-#define _tbegin()			\
-  ({ unsigned int __ret;		\
-     __ret;				\
-  })
+#      define _tbegin()                                                       \
+	({                                                                    \
+	  unsigned int __ret;                                                 \
+	  __ret;                                                              \
+	})
 
-#define _tend()				\
-  ({ unsigned int __ret;		\
-     __ret;				\
-  })
+#      define _tend()                                                         \
+	({                                                                    \
+	  unsigned int __ret;                                                 \
+	  __ret;                                                              \
+	})
 
-#define _tabort(__code)			\
-  ({ unsigned int __ret;		\
-     __ret;				\
-  })
+#      define _tabort(__code)                                                 \
+	({                                                                    \
+	  unsigned int __ret;                                                 \
+	  __ret;                                                              \
+	})
 
-#define _texasru()			\
-  ({ unsigned long __ret;		\
-     __ret;				\
-  })
+#      define _texasru()                                                      \
+	({                                                                    \
+	  unsigned long __ret;                                                \
+	  __ret;                                                              \
+	})
 
-#define __libc_tbegin(tdb)       _tbegin ()
-#define __libc_tend(nested)      _tend ()
-#define __libc_tabort(abortcode) _tabort (abortcode)
-#define __builtin_get_texasru()  _texasru ()
+#      define __libc_tbegin(tdb) _tbegin ()
+#      define __libc_tend(nested) _tend ()
+#      define __libc_tabort(abortcode) _tabort (abortcode)
+#      define __builtin_get_texasru() _texasru ()
 
-#else
-# include <htmintrin.h>
+#    else
+#      include <htmintrin.h>
 
-# ifdef __TM_FENCE__
-   /* New GCC behavior.  */
-#  define __libc_tbegin(R)  __builtin_tbegin (R)
-#  define __libc_tend(R)    __builtin_tend (R)
-#  define __libc_tabort(R)  __builtin_tabort (R)
-# else
-   /* Workaround an old GCC behavior. Earlier releases of GCC 4.9 and 5.0,
-      didn't use to treat __builtin_tbegin, __builtin_tend and
-      __builtin_tabort as compiler barriers, moving instructions into and
-      out the transaction.
-      Remove this when glibc drops support for GCC 5.0.  */
-#  define __libc_tbegin(R)			\
-   ({ unsigned int __ret = __builtin_tbegin (R);	\
-     __ret;					\
-   })
-#  define __libc_tabort(R)			\
-  ({unsigned int __ret = __builtin_tabort (R);	\
-    __ret;					\
-  })
-#  define __libc_tend(R)			\
-   ({unsigned int __ret = __builtin_tend (R);	\
-     __ret;					\
-   })
-# endif /* __TM_FENCE__  */
-#endif /* __HTM__  */
+#      ifdef __TM_FENCE__
+/* New GCC behavior.  */
+#	define __libc_tbegin(R) __builtin_tbegin (R)
+#	define __libc_tend(R) __builtin_tend (R)
+#	define __libc_tabort(R) __builtin_tabort (R)
+#      else
+/* Workaround an old GCC behavior. Earlier releases of GCC 4.9 and 5.0,
+   didn't use to treat __builtin_tbegin, __builtin_tend and
+   __builtin_tabort as compiler barriers, moving instructions into and
+   out the transaction.
+   Remove this when glibc drops support for GCC 5.0.  */
+#	define __libc_tbegin(R)                                              \
+	  ({                                                                  \
+	    unsigned int __ret = __builtin_tbegin (R);                        \
+	    __ret;                                                            \
+	  })
+#	define __libc_tabort(R)                                              \
+	  ({                                                                  \
+	    unsigned int __ret = __builtin_tabort (R);                        \
+	    __ret;                                                            \
+	  })
+#	define __libc_tend(R)                                                \
+	  ({                                                                  \
+	    unsigned int __ret = __builtin_tend (R);                          \
+	    __ret;                                                            \
+	  })
+#      endif /* __TM_FENCE__  */
+#    endif   /* __HTM__  */
 
-#endif /* __ASSEMBLER__ */
+#  endif /* __ASSEMBLER__ */
 
 /* Definitions used for TEXASR Failure code (bits 0:7).  If the failure
    should be persistent, the abort code must be odd.  0xd0 through 0xff
    are reserved for the kernel and potential hypervisor.  */
-#define _ABORT_PERSISTENT      0x01   /* An unspecified persistent abort.  */
-#define _ABORT_LOCK_BUSY       0x34   /* Busy lock, not persistent.  */
-#define _ABORT_NESTED_TRYLOCK  (0x32 | _ABORT_PERSISTENT)
-#define _ABORT_SYSCALL         (0x30 | _ABORT_PERSISTENT)
+#  define _ABORT_PERSISTENT 0x01 /* An unspecified persistent abort.  */
+#  define _ABORT_LOCK_BUSY 0x34	 /* Busy lock, not persistent.  */
+#  define _ABORT_NESTED_TRYLOCK (0x32 | _ABORT_PERSISTENT)
+#  define _ABORT_SYSCALL (0x30 | _ABORT_PERSISTENT)
 
 #endif

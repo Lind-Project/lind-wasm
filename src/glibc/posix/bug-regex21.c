@@ -20,7 +20,8 @@
 #include <regex.h>
 #include <stdio.h>
 
-int main (void)
+int
+main (void)
 {
   regex_t re;
   int i;
@@ -31,7 +32,8 @@ int main (void)
   for (i = 0; i < 32; ++i)
     {
       if (regcomp (&re, "X-.+:.+Y=\".*\\.(A|B|C|D|E|F|G|H|I",
-		   REG_EXTENDED | REG_ICASE) == 0)
+		   REG_EXTENDED | REG_ICASE)
+	  == 0)
 	{
 	  puts ("regcomp unexpectedly succeeded");
 	  ret = 1;

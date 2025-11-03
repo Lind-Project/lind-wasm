@@ -21,18 +21,16 @@
 #include <string.h>
 #include <unistd.h>
 
-
 static char *p;
 
 static pthread_barrier_t b;
-#define BT \
-  e = pthread_barrier_wait (&b);					      \
-  if (e != 0 && e != PTHREAD_BARRIER_SERIAL_THREAD)			      \
-    {									      \
-      puts ("barrier_wait failed");					      \
-      exit (1);								      \
+#define BT                                                                    \
+  e = pthread_barrier_wait (&b);                                              \
+  if (e != 0 && e != PTHREAD_BARRIER_SERIAL_THREAD)                           \
+    {                                                                         \
+      puts ("barrier_wait failed");                                           \
+      exit (1);                                                               \
     }
-
 
 static void *
 tf (void *a)
@@ -72,7 +70,6 @@ tf (void *a)
 
   return a;
 }
-
 
 int
 do_test (void)
@@ -124,7 +121,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

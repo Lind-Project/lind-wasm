@@ -16,22 +16,21 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define memrchr __redirect_memrchr
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if IS_IN(libc)
+#  define memrchr __redirect_memrchr
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (__memrchr) __memrchr_ppc attribute_hidden;
 extern __typeof (__memrchr) __memrchr_power7 attribute_hidden;
-# undef memrchr
+#  undef memrchr
 
 /* Avoid DWARF definition DIE on ifunc symbol so that GDB can handle
    ifunc symbol properly.  */
 libc_ifunc_redirected (__redirect_memrchr, memrchr,
-		       (hwcap & PPC_FEATURE_HAS_VSX)
-		       ? __memrchr_power7
-		       : __memrchr_ppc);
+		       (hwcap & PPC_FEATURE_HAS_VSX) ? __memrchr_power7
+						     : __memrchr_ppc);
 #else
-#include <string/memrchr.c>
+#  include <string/memrchr.c>
 #endif

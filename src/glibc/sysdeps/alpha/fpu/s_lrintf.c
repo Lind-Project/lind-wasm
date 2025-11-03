@@ -15,8 +15,8 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define __llrintf	not___llrintf
-#define llrintf		not_llrintf
+#define __llrintf not___llrintf
+#define llrintf not_llrintf
 #include <math.h>
 #include <libm-alias-float.h>
 #undef __llrintf
@@ -28,12 +28,10 @@ __lrintf (float x)
   double tmp;
   long ret;
 
-  __asm ("cvtst/s %2,%1\n\tcvttq/svd %1,%0"
-	 : "=&f"(ret), "=&f"(tmp) : "f"(x));
+  __asm ("cvtst/s %2,%1\n\tcvttq/svd %1,%0" : "=&f"(ret), "=&f"(tmp) : "f"(x));
 
   return ret;
 }
 
-strong_alias (__lrintf, __llrintf)
-libm_alias_float (__lrint, lrint)
-libm_alias_float (__llrint, llrint)
+strong_alias (__lrintf, __llrintf) libm_alias_float (__lrint, lrint)
+    libm_alias_float (__llrint, llrint)

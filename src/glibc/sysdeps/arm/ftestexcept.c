@@ -19,7 +19,6 @@
 #include <fenv_private.h>
 #include <arm-features.h>
 
-
 int
 fetestexcept (int excepts)
 {

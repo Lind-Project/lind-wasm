@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_MSG_H
-# error "Never use <bits/msq.h> directly; include <sys/msg.h> instead."
+#  error "Never use <bits/msq.h> directly; include <sys/msg.h> instead."
 #endif
 
 #if __TIMESIZE == 64
-# define __msqid64_ds msqid_ds
+#  define __msqid64_ds msqid_ds
 #else
 struct __msqid64_ds
 {
-# include <bits/types/struct_msqid64_ds_helper.h>
+#  include <bits/types/struct_msqid64_ds_helper.h>
 };
 #endif

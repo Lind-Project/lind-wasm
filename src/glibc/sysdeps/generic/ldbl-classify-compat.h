@@ -18,7 +18,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LDBL_CLASSIFY_COMPAT_H
-#define _LDBL_CLASSIFY_COMPAT_H	1
+#  define _LDBL_CLASSIFY_COMPAT_H 1
 
 /* If defined to 1, enable __finitel, __isinfl, and __isnanl function
    aliases for binary compatibility when built without long double
@@ -28,6 +28,6 @@
    implementation-namespace functions should only have one exported
    name per floating-point format, not one per floating-point
    type.  */
-#define LDBL_CLASSIFY_COMPAT 0
+#  define LDBL_CLASSIFY_COMPAT 0
 
 #endif /* ldbl-classify-compat.h */

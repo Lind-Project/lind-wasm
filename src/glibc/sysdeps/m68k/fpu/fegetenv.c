@@ -22,11 +22,11 @@ int
 __fegetenv (fenv_t *envp)
 {
 #ifdef __mcoldfire__
-  __asm__ ("fmove%.l %/fpcr,%0" : "=dm" (envp->__control_register));
-  __asm__ ("fmove%.l %/fpsr,%0" : "=dm" (envp->__status_register));
-  __asm__ ("fmove%.l %/fpiar,%0" : "=dm" (envp->__instruction_address));
+  __asm__ ("fmove%.l %/fpcr,%0" : "=dm"(envp->__control_register));
+  __asm__ ("fmove%.l %/fpsr,%0" : "=dm"(envp->__status_register));
+  __asm__ ("fmove%.l %/fpiar,%0" : "=dm"(envp->__instruction_address));
 #else
-  __asm__ ("fmovem%.l %/fpcr/%/fpsr/%/fpiar,%0" : "=m" (*envp));
+  __asm__ ("fmovem%.l %/fpcr/%/fpsr/%/fpiar,%0" : "=m"(*envp));
 #endif
 
   /* Success.  */
@@ -34,11 +34,10 @@ __fegetenv (fenv_t *envp)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__fegetenv, __old_fegetenv)
-compat_symbol (libm, __old_fegetenv, fegetenv, GLIBC_2_1);
+    compat_symbol (libm, __old_fegetenv, fegetenv, GLIBC_2_1);
 #endif
 
-libm_hidden_def (__fegetenv)
-libm_hidden_ver (__fegetenv, fegetenv)
-versioned_symbol (libm, __fegetenv, fegetenv, GLIBC_2_2);
+libm_hidden_def (__fegetenv) libm_hidden_ver (__fegetenv, fegetenv)
+    versioned_symbol (libm, __fegetenv, fegetenv, GLIBC_2_2);

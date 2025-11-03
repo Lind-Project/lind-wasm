@@ -18,11 +18,11 @@
 
 #include <isa-level.h>
 #if MINIMUM_X86_ISA_LEVEL == 1 || MINIMUM_X86_ISA_LEVEL == 2
-# define DEFAULT_STRCHR	__strchr_sse2
+#  define DEFAULT_STRCHR __strchr_sse2
 #elif MINIMUM_X86_ISA_LEVEL == 3
-# define DEFAULT_STRCHR	__strchr_avx2
+#  define DEFAULT_STRCHR __strchr_avx2
 #elif MINIMUM_X86_ISA_LEVEL == 4
-# define DEFAULT_STRCHR	__strchr_evex
+#  define DEFAULT_STRCHR __strchr_evex
 #else
-# error "Unknown default strchr implementation"
+#  error "Unknown default strchr implementation"
 #endif

@@ -25,7 +25,6 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
-
 int
 do_test (void)
 {

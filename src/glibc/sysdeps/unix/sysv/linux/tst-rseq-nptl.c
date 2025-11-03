@@ -29,19 +29,19 @@
 #include <unistd.h>
 
 #ifdef RSEQ_SIG
-# include <array_length.h>
-# include <errno.h>
-# include <error.h>
-# include <pthread.h>
-# include <signal.h>
-# include <stdlib.h>
-# include <string.h>
-# include <support/namespace.h>
-# include <support/xsignal.h>
-# include <syscall.h>
-# include <sys/types.h>
-# include <sys/wait.h>
-# include "tst-rseq.h"
+#  include <array_length.h>
+#  include <errno.h>
+#  include <error.h>
+#  include <pthread.h>
+#  include <signal.h>
+#  include <stdlib.h>
+#  include <string.h>
+#  include <support/namespace.h>
+#  include <support/xsignal.h>
+#  include <syscall.h>
+#  include <sys/types.h>
+#  include <sys/wait.h>
+#  include "tst-rseq.h"
 
 static pthread_key_t rseq_test_key;
 
@@ -100,7 +100,8 @@ do_rseq_main_test (void)
 {
   TEST_COMPARE (atexit (atexit_handler), 0);
   rseq_test_key = xpthread_key_create (rseq_key_destructor);
-  TEST_COMPARE (pthread_atfork (atfork_prepare, atfork_parent, atfork_child), 0);
+  TEST_COMPARE (pthread_atfork (atfork_prepare, atfork_parent, atfork_child),
+		0);
   xraise (SIGUSR1);
   TEST_COMPARE (pthread_setspecific (rseq_test_key, &one), 0);
   TEST_VERIFY_EXIT (rseq_thread_registered ());
@@ -131,7 +132,7 @@ test_cancel_thread (void)
 }
 
 static void *
-thread_function (void * arg)
+thread_function (void *arg)
 {
   int i = (int) (intptr_t) arg;
 
@@ -174,8 +175,7 @@ do_rseq_threads_test (int nr_threads)
   xpthread_barrier_init (&cancel_thread_barrier, NULL, 2);
 
   for (i = 0; i < nr_threads; ++i)
-    th[i] = xpthread_create (NULL, thread_function,
-                             (void *) (intptr_t) i);
+    th[i] = xpthread_create (NULL, thread_function, (void *) (intptr_t) i);
 
   (void) xpthread_barrier_wait (&cancel_thread_barrier);
 
@@ -187,15 +187,17 @@ do_rseq_threads_test (int nr_threads)
 
       v = xpthread_join (th[i]);
       if (i != 0 && v != NULL)
-        {
-          printf ("error: join %d successful, but child failed\n", i);
-          result = 1;
-        }
+	{
+	  printf ("error: join %d successful, but child failed\n", i);
+	  result = 1;
+	}
       else if (i == 0 && v == NULL)
-        {
-          printf ("error: join %d successful, child did not fail as expected\n", i);
-          result = 1;
-        }
+	{
+	  printf (
+	      "error: join %d successful, child did not fail as expected\n",
+	      i);
+	  result = 1;
+	}
     }
 
   xpthread_barrier_destroy (&cancel_thread_barrier);
@@ -242,7 +244,7 @@ do_rseq_destructor_test (void)
   xpthread_key_delete (rseq_test_key);
 }
 
-#else /* RSEQ_SIG */
+#else  /* RSEQ_SIG */
 static int
 do_rseq_test (void)
 {

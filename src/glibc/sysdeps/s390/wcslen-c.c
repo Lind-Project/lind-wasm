@@ -19,9 +19,9 @@
 #include <ifunc-wcslen.h>
 
 #if HAVE_WCSLEN_C
-# if HAVE_WCSLEN_IFUNC || HAVE_WCSLEN_Z13
-#  define WCSLEN WCSLEN_C
-# endif
+#  if HAVE_WCSLEN_IFUNC || HAVE_WCSLEN_Z13
+#    define WCSLEN WCSLEN_C
+#  endif
 
-# include <wcsmbs/wcslen.c>
+#  include <wcsmbs/wcslen.c>
 #endif

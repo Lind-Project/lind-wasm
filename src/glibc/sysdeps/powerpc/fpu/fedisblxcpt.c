@@ -29,7 +29,7 @@ fedisableexcept (int excepts)
   result = fenv_reg_to_exceptions (fe.l);
 
   if ((excepts & FE_ALL_INVALID) == FE_ALL_INVALID)
-    excepts = (excepts | FE_INVALID) & ~ FE_ALL_INVALID;
+    excepts = (excepts | FE_INVALID) & ~FE_ALL_INVALID;
 
   new = fenv_exceptions_to_reg (excepts);
 

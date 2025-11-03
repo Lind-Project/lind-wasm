@@ -23,7 +23,6 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-
 static int
 do_test (void)
 {
@@ -62,8 +61,7 @@ do_test (void)
     }
   if (errno != ETIMEDOUT)
     {
-      printf ("sem_timedwait return errno = %d instead of ETIMEDOUT\n",
-	      errno);
+      printf ("sem_timedwait return errno = %d instead of ETIMEDOUT\n", errno);
       return 1;
     }
 

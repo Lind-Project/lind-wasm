@@ -56,8 +56,7 @@ run_script (const char *script, char *const argv[])
 	    FAIL_EXIT1 ("%s failed with status %d\n", script,
 			WEXITSTATUS (status));
 	  else
-	    FAIL_EXIT1 ("%s killed by signal %d\n", script,
-			WTERMSIG (status));
+	    FAIL_EXIT1 ("%s killed by signal %d\n", script, WTERMSIG (status));
 	}
     }
 }
@@ -83,7 +82,7 @@ do_test (void)
   char *argv00[] = { NULL };
   run_script ("script0.sh", argv00);
 
-  char *argv01[] = { (char*) "script0.sh", NULL };
+  char *argv01[] = { (char *) "script0.sh", NULL };
   run_script ("script0.sh", argv01);
 
   char *argv1[] = { (char *) "script1.sh", (char *) "1", NULL };
@@ -130,8 +129,7 @@ static void
 create_script (const char *script, const char *contents, size_t size)
 {
   int fd = open (script, O_WRONLY | O_CREAT, 0700);
-  if (fd < 0
-      || TEMP_FAILURE_RETRY (write (fd, contents, size)) != size
+  if (fd < 0 || TEMP_FAILURE_RETRY (write (fd, contents, size)) != size
       || fchmod (fd, S_IRUSR | S_IXUSR) < 0)
     FAIL_EXIT1 ("could not write %s\n", script);
   close (fd);

@@ -65,9 +65,8 @@ ___pthread_setspecific (pthread_key_t key, const void *value)
 	       be NULL.  We can save the memory allocation.  */
 	    return 0;
 
-	  level2
-	    = (struct pthread_key_data *) calloc (PTHREAD_KEY_2NDLEVEL_SIZE,
-						  sizeof (*level2));
+	  level2 = (struct pthread_key_data *) calloc (
+	      PTHREAD_KEY_2NDLEVEL_SIZE, sizeof (*level2));
 	  if (level2 == NULL)
 	    return ENOMEM;
 
@@ -92,12 +91,12 @@ versioned_symbol (libc, ___pthread_setspecific, pthread_setspecific,
 		  GLIBC_2_34);
 libc_hidden_ver (___pthread_setspecific, __pthread_setspecific)
 #ifndef SHARED
-strong_alias (___pthread_setspecific, __pthread_setspecific)
+    strong_alias (___pthread_setspecific, __pthread_setspecific)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_setspecific, __pthread_setspecific,
-	       GLIBC_2_0);
+#if OTHER_SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_setspecific,
+		       __pthread_setspecific, GLIBC_2_0);
 compat_symbol (libpthread, ___pthread_setspecific, pthread_setspecific,
 	       GLIBC_2_0);
 #endif

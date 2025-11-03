@@ -17,14 +17,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_S390_PROCINFO_H
-#define _DL_S390_PROCINFO_H	1
-#include <sysdeps/s390/dl-procinfo.h>
-#include <ldsodefs.h>
+#  define _DL_S390_PROCINFO_H 1
+#  include <sysdeps/s390/dl-procinfo.h>
+#  include <ldsodefs.h>
 
-
-#undef _dl_procinfo
-static inline int
-__attribute__ ((unused))
+#  undef _dl_procinfo
+static inline int __attribute__ ((unused))
 _dl_procinfo (unsigned int type, unsigned long int word)
 {
   /* This table should match the information from arch/s390/kernel/setup.c

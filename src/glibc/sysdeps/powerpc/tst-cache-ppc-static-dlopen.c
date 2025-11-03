@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <errno.h>
 
-int test_cache(int *);
+int test_cache (int *);
 
 static int
 do_test (void)
@@ -43,7 +43,7 @@ do_test (void)
       return 1;
     }
 
-  ret = test_cache(&errno);
+  ret = test_cache (&errno);
 
   test_cache = NULL;
   dlclose (handle);

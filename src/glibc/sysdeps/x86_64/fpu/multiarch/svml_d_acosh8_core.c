@@ -23,5 +23,5 @@ libc_ifunc_redirected (REDIRECT_NAME, SYMBOL_NAME, IFUNC_SELECTOR ());
 
 #ifdef SHARED
 __hidden_ver1 (_ZGVeN8v_acosh, __GI__ZGVeN8v_acosh, __redirect__ZGVeN8v_acosh)
-  __attribute__ ((visibility ("hidden")));
+    __attribute__ ((visibility ("hidden")));
 #endif

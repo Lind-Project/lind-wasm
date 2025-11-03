@@ -18,21 +18,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _EVEX256_VECS_H
-#define _EVEX256_VECS_H			1
+#  define _EVEX256_VECS_H 1
 
-#ifdef VEC_SIZE
-# error "Multiple VEC configs included!"
-#endif
+#  ifdef VEC_SIZE
+#    error "Multiple VEC configs included!"
+#  endif
 
-#define VEC_SIZE			32
-#include "x86-evex-vecs-common.h"
+#  define VEC_SIZE 32
+#  include "x86-evex-vecs-common.h"
 
-#define USE_WITH_EVEX256	1
+#  define USE_WITH_EVEX256 1
 
-#ifndef SECTION
-# define SECTION(p)			p##.evex
-#endif
+#  ifndef SECTION
+#    define SECTION(p) p##.evex
+#  endif
 
-#define VMM					VMM_256
-#define VMM_lo				VMM_any_ymm
+#  define VMM VMM_256
+#  define VMM_lo VMM_any_ymm
 #endif

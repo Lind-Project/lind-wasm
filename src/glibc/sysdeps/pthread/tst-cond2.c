@@ -20,12 +20,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 static pthread_barrier_t bar;
-
 
 static void *
 tf (void *a)
@@ -65,9 +63,7 @@ tf (void *a)
   return NULL;
 }
 
-
 #define N 10
-
 
 static int
 do_test (void)
@@ -155,7 +151,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

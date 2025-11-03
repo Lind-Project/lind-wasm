@@ -17,21 +17,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_VDSO_H
-#define _DL_VDSO_H	1
+#  define _DL_VDSO_H 1
 
-#include <ldsodefs.h>
-#include <dl-hash.h>
+#  include <ldsodefs.h>
+#  include <dl-hash.h>
 
 /* If the architecture support vDSO it should define which is the expected
    kernel version and hash value through both VDSO_NAME and VDSO_HASH
    (usually defined at architecture sysdep.h).  */
 
-#ifndef VDSO_NAME
-# define VDSO_NAME "LINUX_0.0"
-#endif
-#ifndef VDSO_HASH
-# define VDSO_HASH 0
-#endif
+#  ifndef VDSO_NAME
+#    define VDSO_NAME "LINUX_0.0"
+#  endif
+#  ifndef VDSO_HASH
+#    define VDSO_HASH 0
+#  endif
 
 /* Functions for resolving symbols in the VDSO link map.  */
 static inline void *
@@ -49,9 +49,8 @@ dl_vdso_vsym (const char *name)
 
   /* Search the scope of the vdso map.  */
   const ElfW (Sym) *ref = &wsym;
-  lookup_t result = GLRO (dl_lookup_symbol_x) (name, map, &ref,
-					       map->l_local_scope,
-					       &rfv, 0, 0, NULL);
+  lookup_t result = GLRO (dl_lookup_symbol_x) (
+      name, map, &ref, map->l_local_scope, &rfv, 0, 0, NULL);
   return ref != NULL ? DL_SYMBOL_ADDRESS (result, ref) : NULL;
 }
 

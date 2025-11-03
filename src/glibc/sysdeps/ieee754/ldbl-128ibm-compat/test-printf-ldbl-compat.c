@@ -134,8 +134,8 @@ do_test_call (void)
   do_test_call_varg (stdout, "%.10La, %.10a", ld, d);
 
   /* Test positional parameters.  */
-  do_test_call_varg (stdout, "%3$Lf, %2$Lf, %1$f",
-		     (double) 1, (long double) 2, (long double) 3);
+  do_test_call_varg (stdout, "%3$Lf, %2$Lf, %1$f", (double) 1, (long double) 2,
+		     (long double) 3);
 }
 
 static int
@@ -145,37 +145,37 @@ do_test (void)
   result = support_capture_subprocess ((void *) &do_test_call, NULL);
 
   /* Compare against the expected output.  */
-  const char *expected =
-    "     asprintf: -1.0000000000, -1.0000000000\n"
-    "      dprintf: -1.0000000000, -1.0000000000\n"
-    "      fprintf: -1.0000000000, -1.0000000000\n"
-    "       printf: -1.0000000000, -1.0000000000\n"
-    "     snprintf: -1.0000000000, -1.0000000000\n"
-    "      sprintf: -1.0000000000, -1.0000000000\n"
-    "    vasprintf: -1.0000000000, -1.0000000000\n"
-    "     vdprintf: -1.0000000000, -1.0000000000\n"
-    "     vfprintf: -1.0000000000, -1.0000000000\n"
-    "      vprintf: -1.0000000000, -1.0000000000\n"
-    "    vsnprintf: -1.0000000000, -1.0000000000\n"
-    "     vsprintf: -1.0000000000, -1.0000000000\n"
-    "     asprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "      dprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "      fprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "       printf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     snprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "      sprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    vasprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     vdprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     vfprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "      vprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    vsnprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     vsprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    vasprintf: 3.000000, 2.000000, 1.000000\n"
-    "     vdprintf: 3.000000, 2.000000, 1.000000\n"
-    "     vfprintf: 3.000000, 2.000000, 1.000000\n"
-    "      vprintf: 3.000000, 2.000000, 1.000000\n"
-    "    vsnprintf: 3.000000, 2.000000, 1.000000\n"
-    "     vsprintf: 3.000000, 2.000000, 1.000000\n";
+  const char *expected
+      = "     asprintf: -1.0000000000, -1.0000000000\n"
+	"      dprintf: -1.0000000000, -1.0000000000\n"
+	"      fprintf: -1.0000000000, -1.0000000000\n"
+	"       printf: -1.0000000000, -1.0000000000\n"
+	"     snprintf: -1.0000000000, -1.0000000000\n"
+	"      sprintf: -1.0000000000, -1.0000000000\n"
+	"    vasprintf: -1.0000000000, -1.0000000000\n"
+	"     vdprintf: -1.0000000000, -1.0000000000\n"
+	"     vfprintf: -1.0000000000, -1.0000000000\n"
+	"      vprintf: -1.0000000000, -1.0000000000\n"
+	"    vsnprintf: -1.0000000000, -1.0000000000\n"
+	"     vsprintf: -1.0000000000, -1.0000000000\n"
+	"     asprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"      dprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"      fprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"       printf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     snprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"      sprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    vasprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     vdprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     vfprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"      vprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    vsnprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     vsprintf: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    vasprintf: 3.000000, 2.000000, 1.000000\n"
+	"     vdprintf: 3.000000, 2.000000, 1.000000\n"
+	"     vfprintf: 3.000000, 2.000000, 1.000000\n"
+	"      vprintf: 3.000000, 2.000000, 1.000000\n"
+	"    vsnprintf: 3.000000, 2.000000, 1.000000\n"
+	"     vsprintf: 3.000000, 2.000000, 1.000000\n";
   TEST_COMPARE_STRING (expected, result.out.buffer);
 
   return 0;

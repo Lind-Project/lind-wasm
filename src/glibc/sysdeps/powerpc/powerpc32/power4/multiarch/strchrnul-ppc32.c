@@ -18,14 +18,14 @@
 
 #include <string.h>
 
-#define STRCHRNUL  __strchrnul_ppc
+#define STRCHRNUL __strchrnul_ppc
 extern __typeof (strchrnul) __strchrnul_ppc attribute_hidden;
 
 #include <string/strchrnul.c>
 #undef __strchrnul
 weak_alias (__strchrnul_ppc, __strchrnul)
 #ifdef SHARED
-__hidden_ver1 (__strchrnul_ppc, __GI___strchrnul, __strchrnul_ppc);
+    __hidden_ver1 (__strchrnul_ppc, __GI___strchrnul, __strchrnul_ppc);
 #else
-weak_alias (__strchrnul_ppc, strchrnul)
+    weak_alias (__strchrnul_ppc, strchrnul)
 #endif

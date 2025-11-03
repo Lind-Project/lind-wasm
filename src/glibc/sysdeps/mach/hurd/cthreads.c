@@ -22,8 +22,7 @@
 #include <pthreadP.h>
 
 /* Placeholder for key creation routine from Hurd cthreads library.  */
-int
-weak_function
+int weak_function
 __cthread_keycreate (__cthread_key_t *key)
 {
   *key = -1;
@@ -31,8 +30,7 @@ __cthread_keycreate (__cthread_key_t *key)
 }
 
 /* Placeholder for key retrieval routine from Hurd cthreads library.  */
-int
-weak_function
+int weak_function
 __cthread_getspecific (__cthread_key_t key, void **pval)
 {
   *pval = NULL;
@@ -40,8 +38,7 @@ __cthread_getspecific (__cthread_key_t key, void **pval)
 }
 
 /* Placeholder for key setting routine from Hurd cthreads library.  */
-int
-weak_function
+int weak_function
 __cthread_setspecific (__cthread_key_t key, void *val)
 {
   return __hurd_fail (ENOSYS);

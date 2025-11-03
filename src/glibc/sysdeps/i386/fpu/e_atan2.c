@@ -40,13 +40,13 @@
 #include <libm-alias-finite.h>
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
-#define  TWO52     0x1.0p52
-#define  TWOM1022  0x1.0p-1022
+#define TWO52 0x1.0p52
+#define TWOM1022 0x1.0p-1022
 
-  /* Fix the sign and return after stage 1 or stage 2 */
+/* Fix the sign and return after stage 1 or stage 2 */
 static double
 signArctan2 (double y, double z)
 {
@@ -54,17 +54,15 @@ signArctan2 (double y, double z)
 }
 
 /* atan2 with max ULP of ~0.524 based on random sampling.  */
-double
-SECTION
+double SECTION
 __ieee754_atan2 (double y, double x)
 {
   int i, de, ux, dx, uy, dy;
-  double ax, ay, u, du, v, vv, dv, t1, t2, t3,
-	 z, zz, cor;
+  double ax, ay, u, du, v, vv, dv, t1, t2, t3, z, zz, cor;
   mynumber num;
 
-  static const int ep = 59768832,      /*  57*16**5   */
-		   em = -59768832;      /* -57*16**5   */
+  static const int ep = 59768832, /*  57*16**5   */
+      em = -59768832;		  /* -57*16**5   */
 
   /* x=NaN or y=NaN */
   num.d = x;
@@ -242,12 +240,18 @@ __ieee754_atan2 (double y, double x)
 	    {
 	      v = u * u;
 
-	      zz = du + u * v * (d3.d
-				 + v * (d5.d
-					+ v * (d7.d
-					       + v * (d9.d
-						      + v * (d11.d
-							     + v * d13.d)))));
+	      zz = du
+		   + u * v
+			 * (d3.d
+			    + v
+				  * (d5.d
+				     + v
+					   * (d7.d
+					      + v
+						    * (d9.d
+						       + v
+							     * (d11.d
+								+ v * d13.d)))));
 
 	      z = u + zz;
 	      /* Max ULP is 0.504.  */
@@ -260,11 +264,13 @@ __ieee754_atan2 (double y, double x)
 	  EADD (t3, du, v, dv);
 	  t1 = cij[i][1].d;
 	  t2 = cij[i][2].d;
-	  zz = v * t2 + (dv * t2
-			 + v * v * (cij[i][3].d
-				    + v * (cij[i][4].d
-					   + v * (cij[i][5].d
-						  + v * cij[i][6].d))));
+	  zz = v * t2
+	       + (dv * t2
+		  + v * v
+			* (cij[i][3].d
+			   + v
+				 * (cij[i][4].d
+				    + v * (cij[i][5].d + v * cij[i][6].d))));
 	  z = t1 + zz;
 	  /* Max ULP is 0.56.  */
 	  return signArctan2 (y, z);
@@ -274,12 +280,13 @@ __ieee754_atan2 (double y, double x)
       if (u < inv16.d)
 	{
 	  v = u * u;
-	  zz = u * v * (d3.d
-			+ v * (d5.d
-			       + v * (d7.d
-				      + v * (d9.d
-					     + v * (d11.d
-						    + v * d13.d)))));
+	  zz = u * v
+	       * (d3.d
+		  + v
+			* (d5.d
+			   + v
+				 * (d7.d
+				    + v * (d9.d + v * (d11.d + v * d13.d)))));
 	  ESUB (hpi.d, u, t2, cor);
 	  t3 = ((hpi1.d + cor) - du) - zz;
 	  z = t2 + t3;
@@ -291,11 +298,14 @@ __ieee754_atan2 (double y, double x)
       i -= 16;
       v = (u - cij[i][0].d) + du;
 
-      zz = hpi1.d - v * (cij[i][2].d
-			 + v * (cij[i][3].d
-				+ v * (cij[i][4].d
-				       + v * (cij[i][5].d
-					      + v * cij[i][6].d))));
+      zz = hpi1.d
+	   - v
+		 * (cij[i][2].d
+		    + v
+			  * (cij[i][3].d
+			     + v
+				   * (cij[i][4].d
+				      + v * (cij[i][5].d + v * cij[i][6].d))));
       t1 = hpi.d - cij[i][1].d;
       z = t1 + zz;
       /* Max ULP is 0.503.  */
@@ -308,11 +318,13 @@ __ieee754_atan2 (double y, double x)
       if (u < inv16.d)
 	{
 	  v = u * u;
-	  zz = u * v * (d3.d
-			+ v * (d5.d
-			       + v * (d7.d
-				      + v * (d9.d
-					     + v * (d11.d + v * d13.d)))));
+	  zz = u * v
+	       * (d3.d
+		  + v
+			* (d5.d
+			   + v
+				 * (d7.d
+				    + v * (d9.d + v * (d11.d + v * d13.d)))));
 	  EADD (hpi.d, u, t2, cor);
 	  t3 = ((hpi1.d + cor) + du) + zz;
 	  z = t2 + t3;
@@ -323,11 +335,14 @@ __ieee754_atan2 (double y, double x)
       i = (TWO52 + 256 * u) - TWO52;
       i -= 16;
       v = (u - cij[i][0].d) + du;
-      zz = hpi1.d + v * (cij[i][2].d
-			 + v * (cij[i][3].d
-				+ v * (cij[i][4].d
-				       + v * (cij[i][5].d
-					      + v * cij[i][6].d))));
+      zz = hpi1.d
+	   + v
+		 * (cij[i][2].d
+		    + v
+			  * (cij[i][3].d
+			     + v
+				   * (cij[i][4].d
+				      + v * (cij[i][5].d + v * cij[i][6].d))));
       t1 = hpi.d + cij[i][1].d;
       z = t1 + zz;
       /* Max ULP is 0.503.  */
@@ -338,10 +353,11 @@ __ieee754_atan2 (double y, double x)
   if (u < inv16.d)
     {
       v = u * u;
-      zz = u * v * (d3.d
-		    + v * (d5.d
-			   + v * (d7.d
-				  + v * (d9.d + v * (d11.d + v * d13.d)))));
+      zz = u * v
+	   * (d3.d
+	      + v
+		    * (d5.d
+		       + v * (d7.d + v * (d9.d + v * (d11.d + v * d13.d)))));
       ESUB (opi.d, u, t2, cor);
       t3 = ((opi1.d + cor) - du) - zz;
       z = t2 + t3;
@@ -352,10 +368,14 @@ __ieee754_atan2 (double y, double x)
   i = (TWO52 + 256 * u) - TWO52;
   i -= 16;
   v = (u - cij[i][0].d) + du;
-  zz = opi1.d - v * (cij[i][2].d
-		     + v * (cij[i][3].d
-			    + v * (cij[i][4].d
-				   + v * (cij[i][5].d + v * cij[i][6].d))));
+  zz = opi1.d
+       - v
+	     * (cij[i][2].d
+		+ v
+		      * (cij[i][3].d
+			 + v
+			       * (cij[i][4].d
+				  + v * (cij[i][5].d + v * cij[i][6].d))));
   t1 = opi.d - cij[i][1].d;
   z = t1 + zz;
   /* Max ULP is 0.502.  */

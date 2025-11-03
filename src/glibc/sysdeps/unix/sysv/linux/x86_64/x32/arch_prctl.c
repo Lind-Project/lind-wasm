@@ -48,7 +48,7 @@ __arch_prctl (int code, uintptr_t *addr)
       {
       case ARCH_GET_FS:
       case ARCH_GET_GS:
-	 /* Check for a large value that overflows.  */
+	/* Check for a large value that overflows.  */
 	if ((uintptr_t) addr64 != addr64)
 	  {
 	    __set_errno (EOVERFLOW);

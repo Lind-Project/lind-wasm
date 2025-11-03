@@ -29,12 +29,12 @@ __feholdexcept (fenv_t *envp)
   envp->__fp_control_register = cw;
 
   /* Clear all exception enable bits and flags.  */
-  cw &= ~(_FPU_MASK_V|_FPU_MASK_Z|_FPU_MASK_O|_FPU_MASK_U|_FPU_MASK_I|FE_ALL_EXCEPT);
+  cw &= ~(_FPU_MASK_V | _FPU_MASK_Z | _FPU_MASK_O | _FPU_MASK_U | _FPU_MASK_I
+	  | FE_ALL_EXCEPT);
   _FPU_SETCW (cw);
 
   return 0;
 }
 
-libm_hidden_def (__feholdexcept)
-weak_alias (__feholdexcept, feholdexcept)
-libm_hidden_weak (feholdexcept)
+libm_hidden_def (__feholdexcept) weak_alias (__feholdexcept, feholdexcept)
+    libm_hidden_weak (feholdexcept)

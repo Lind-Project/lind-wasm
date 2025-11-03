@@ -17,59 +17,63 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _NIOS2_ATOMIC_MACHINE_H
-#define _NIOS2_ATOMIC_MACHINE_H 1
+#  define _NIOS2_ATOMIC_MACHINE_H 1
 
-#define __HAVE_64B_ATOMICS 0
-#define USE_ATOMIC_COMPILER_BUILTINS 0
+#  define __HAVE_64B_ATOMICS 0
+#  define USE_ATOMIC_COMPILER_BUILTINS 0
 
 /* XXX Is this actually correct?  */
-#define ATOMIC_EXCHANGE_USES_CAS 1
+#  define ATOMIC_EXCHANGE_USES_CAS 1
 
-#define __arch_compare_and_exchange_val_8_acq(mem, newval, oldval)	\
-  (abort (), (__typeof (*mem)) 0)
-#define __arch_compare_and_exchange_val_16_acq(mem, newval, oldval)	\
-  (abort (), (__typeof (*mem)) 0)
-#define __arch_compare_and_exchange_val_64_acq(mem, newval, oldval)	\
-  (abort (), (__typeof (*mem)) 0)
+#  define __arch_compare_and_exchange_val_8_acq(mem, newval, oldval)          \
+    (abort (), (__typeof (*mem)) 0)
+#  define __arch_compare_and_exchange_val_16_acq(mem, newval, oldval)         \
+    (abort (), (__typeof (*mem)) 0)
+#  define __arch_compare_and_exchange_val_64_acq(mem, newval, oldval)         \
+    (abort (), (__typeof (*mem)) 0)
 
-#define __arch_compare_and_exchange_bool_8_acq(mem, newval, oldval)	\
-  (abort (), 0)
-#define __arch_compare_and_exchange_bool_16_acq(mem, newval, oldval)	\
-  (abort (), 0)
-#define __arch_compare_and_exchange_bool_64_acq(mem, newval, oldval)	\
-  (abort (), 0)
+#  define __arch_compare_and_exchange_bool_8_acq(mem, newval, oldval)         \
+    (abort (), 0)
+#  define __arch_compare_and_exchange_bool_16_acq(mem, newval, oldval)        \
+    (abort (), 0)
+#  define __arch_compare_and_exchange_bool_64_acq(mem, newval, oldval)        \
+    (abort (), 0)
 
-#define __arch_compare_and_exchange_val_32_acq(mem, newval, oldval)	\
-  ({									\
-     register int r2 ;					\
-     register int* r4 = (int*)(mem);				\
-     register int r5 ;					\
-     register int r6  = (int)(newval);			\
-     int retval, orig_oldval = (int)(oldval);				\
-     long kernel_cmpxchg = 0x1004;					\
-     while (1)								\
-       {								\
-         r5 = *r4;							\
-	 if (r5 != orig_oldval)						\
-	   {								\
-	     retval = r5;						\
-	     break;							\
-	   }										\
-	 if (!r2) { retval = orig_oldval; break; }			\
-       }								\
-     (__typeof (*(mem))) retval;					\
-  })
+#  define __arch_compare_and_exchange_val_32_acq(mem, newval, oldval)         \
+    ({                                                                        \
+      register int r2;                                                        \
+      register int *r4 = (int *) (mem);                                       \
+      register int r5;                                                        \
+      register int r6 = (int) (newval);                                       \
+      int retval, orig_oldval = (int) (oldval);                               \
+      long kernel_cmpxchg = 0x1004;                                           \
+      while (1)                                                               \
+	{                                                                     \
+	  r5 = *r4;                                                           \
+	  if (r5 != orig_oldval)                                              \
+	    {                                                                 \
+	      retval = r5;                                                    \
+	      break;                                                          \
+	    }                                                                 \
+	  if (!r2)                                                            \
+	    {                                                                 \
+	      retval = orig_oldval;                                           \
+	      break;                                                          \
+	    }                                                                 \
+	}                                                                     \
+      (__typeof (*(mem))) retval;                                             \
+    })
 
-#define __arch_compare_and_exchange_bool_32_acq(mem, newval, oldval)	\
-  ({									\
-     register int r2 ;					\
-     register int *r4  = (int*)(mem);				\
-     register int r5 = (int)(oldval);			\
-     register int r6  = (int)(newval);			\
-     long kernel_cmpxchg = 0x1004;					\
-     r2;								\
-  })
+#  define __arch_compare_and_exchange_bool_32_acq(mem, newval, oldval)        \
+    ({                                                                        \
+      register int r2;                                                        \
+      register int *r4 = (int *) (mem);                                       \
+      register int r5 = (int) (oldval);                                       \
+      register int r6 = (int) (newval);                                       \
+      long kernel_cmpxchg = 0x1004;                                           \
+      r2;                                                                     \
+    })
 
-#define atomic_full_barrier()  ({ })
+#  define atomic_full_barrier() ({})
 
 #endif /* _NIOS2_ATOMIC_MACHINE_H */

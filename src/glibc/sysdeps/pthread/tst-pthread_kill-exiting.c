@@ -56,16 +56,16 @@ sender_thread_function (void *unused)
   while (true)
     {
       /* Wait until target_thread has been initialized.  The target
-         thread and main thread participate in this barrier.  */
+	 thread and main thread participate in this barrier.  */
       xpthread_barrier_wait (&barrier_1);
 
       if (exiting)
-        break;
+	break;
 
       xpthread_kill (target_thread, SIGUSR1);
 
       /* Communicate that the signal has been sent.  The main thread
-         participates in this barrier.  */
+	 participates in this barrier.  */
       xpthread_barrier_wait (&barrier_2);
     }
   return NULL;
@@ -84,7 +84,8 @@ do_test (void)
 {
   xsignal (SIGUSR1, SIG_IGN);
 
-  pthread_t thr_timeout = xpthread_create (NULL, timeout_thread_function, NULL);
+  pthread_t thr_timeout
+      = xpthread_create (NULL, timeout_thread_function, NULL);
 
   pthread_t threads[4];
   xpthread_barrier_init (&barrier_1, NULL, array_length (threads) + 2);
@@ -98,7 +99,7 @@ do_test (void)
       xpthread_create (NULL, target_thread_function, NULL);
 
       /* Wait for the target thread to be set up and signal sending to
-         start.  */
+	 start.  */
       xpthread_barrier_wait (&barrier_1);
 
       /* Wait for signal sending to complete.  */

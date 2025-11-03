@@ -16,11 +16,11 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define __MSUF_X(x, suffix) x ## suffix
+#define __MSUF_X(x, suffix) x##suffix
 #define __MSUF_S(...) __MSUF_X (__VA_ARGS__)
 #define __MSUF(x) __MSUF_S (x, _MSUF_)
 
-#define __MSUF_R_X(x, suffix) x ## suffix ## _r
+#define __MSUF_R_X(x, suffix) x##suffix##_r
 #define __MSUF_R_S(...) __MSUF_R_X (__VA_ARGS__)
 #define __MSUF_R(x) __MSUF_R_S (x, _MSUF_)
 
@@ -65,13 +65,13 @@ extern _Mdouble_ __MSUF (__kernel_cos) (_Mdouble_, _Mdouble_);
 extern _Mdouble_ __MSUF (__kernel_tan) (_Mdouble_, _Mdouble_, int);
 
 #if defined __MATH_DECLARING_LONG_DOUBLE || defined __MATH_DECLARING_FLOATN
-extern void __MSUF (__kernel_sincos) (_Mdouble_, _Mdouble_,
-				      _Mdouble_ *, _Mdouble_ *, int);
+extern void __MSUF (__kernel_sincos) (_Mdouble_, _Mdouble_, _Mdouble_ *,
+				      _Mdouble_ *, int);
 #endif
 
 #if !defined __MATH_DECLARING_LONG_DOUBLE || defined __MATH_DECLARING_FLOATN
-extern int __MSUF (__kernel_rem_pio2) (_Mdouble_ *, _Mdouble_ *, int,
-				       int, int, const int32_t *);
+extern int __MSUF (__kernel_rem_pio2) (_Mdouble_ *, _Mdouble_ *, int, int, int,
+				       const int32_t *);
 #endif
 
 /* Internal functions.  */
@@ -88,8 +88,8 @@ extern _Mdouble_ __MSUF (__x2y2m1) (_Mdouble_ x, _Mdouble_ y);
    values X + 1, ..., X + N - 1 are exactly representable, and X_EPS /
    X is small enough that factors quadratic in it can be
    neglected.  */
-extern _Mdouble_ __MSUF (__gamma_product) (_Mdouble_ x, _Mdouble_ x_eps,
-					   int n, _Mdouble_ *eps);
+extern _Mdouble_ __MSUF (__gamma_product) (_Mdouble_ x, _Mdouble_ x_eps, int n,
+					   _Mdouble_ *eps);
 
 /* Compute lgamma of a negative argument X, if it is in a range
    (depending on the floating-point format) for which expansion around

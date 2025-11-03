@@ -50,11 +50,10 @@ elf_machine_load_address (void)
   extern Elf32_Addr __dl_start (void *) asm ("_dl_start");
   Elf32_Addr got_addr = (Elf32_Addr) &__dl_start;
   Elf32_Addr pcrel_addr;
-  asm  ("grs %0,_dl_start\n" : "=r" (pcrel_addr));
+  asm ("grs %0,_dl_start\n" : "=r"(pcrel_addr));
 
   return pcrel_addr - got_addr;
 }
-
 
 /* Set up the loaded object described by L so its unrelocated PLT
    entries will jump to the on-demand fixup code in dl-runtime.c.  */
@@ -85,7 +84,7 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
 	 to intercept the calls to collect information.  In this case we
 	 don't store the address in the GOT so that all future calls also
 	 end in this function.  */
-	got[2] = (Elf32_Addr) &_dl_runtime_resolve;
+      got[2] = (Elf32_Addr) &_dl_runtime_resolve;
     }
   return lazy;
 }
@@ -97,7 +96,8 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
 /* Initial entry point code for the dynamic linker.
    The C function `_dl_start' is the real entry point;
    its return value is the user program's entry point.  */
-#define RTLD_START asm ("\
+#define RTLD_START                                                            \
+  asm ("\
 .text\n\
 .globl _start\n\
 .type _start, @function\n\
@@ -143,13 +143,13 @@ _dl_start_user:\n\
    ELF_RTYPE_CLASS_NOCOPY iff TYPE should not be allowed to resolve to one
    of the main executable's symbols, as for a COPY reloc.  */
 #ifndef RTLD_BOOTSTRAP
-# define elf_machine_type_class(type) \
-  ((((type) == R_CKCORE_JUMP_SLOT || (type) == R_CKCORE_TLS_DTPMOD32	   \
-     || (type) == R_CKCORE_TLS_DTPOFF32 || (type) == R_CKCORE_TLS_TPOFF32) \
-    * ELF_RTYPE_CLASS_PLT)						   \
-   | (((type) == R_CKCORE_COPY) * ELF_RTYPE_CLASS_COPY))
+#  define elf_machine_type_class(type)                                        \
+    ((((type) == R_CKCORE_JUMP_SLOT || (type) == R_CKCORE_TLS_DTPMOD32        \
+       || (type) == R_CKCORE_TLS_DTPOFF32 || (type) == R_CKCORE_TLS_TPOFF32)  \
+      * ELF_RTYPE_CLASS_PLT)                                                  \
+     | (((type) == R_CKCORE_COPY) * ELF_RTYPE_CLASS_COPY))
 #else
-# define elf_machine_type_class(type) \
+#  define elf_machine_type_class(type)                                        \
   ((((type) == R_CKCORE_JUMP_SLOT     \
    | (((type) == R_CKCORE_COPY) * ELF_RTYPE_CLASS_COPY))
 #endif
@@ -164,16 +164,16 @@ _dl_start_user:\n\
 static inline void __attribute__ ((unused))
 dl_platform_init (void)
 {
-  if (GLRO(dl_platform) != NULL && *GLRO(dl_platform) == '\0')
+  if (GLRO (dl_platform) != NULL && *GLRO (dl_platform) == '\0')
     /* Avoid an empty string which would disturb us.  */
-    GLRO(dl_platform) = NULL;
+    GLRO (dl_platform) = NULL;
 }
 
 static inline Elf32_Addr
 elf_machine_fixup_plt (struct link_map *map, lookup_t t,
-		       const ElfW(Sym) *refsym, const ElfW(Sym) *sym,
-		       const Elf32_Rela *reloc,
-		       Elf32_Addr *reloc_addr, Elf32_Addr value)
+		       const ElfW (Sym) * refsym, const ElfW (Sym) * sym,
+		       const Elf32_Rela *reloc, Elf32_Addr *reloc_addr,
+		       Elf32_Addr value)
 {
   return *reloc_addr = value;
 }
@@ -205,7 +205,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 {
   Elf32_Addr *const reloc_addr = reloc_addr_arg;
   const unsigned int r_type = ELF32_R_TYPE (reloc->r_info);
-  unsigned short __attribute__ ((unused)) *opcode16_addr;
+  unsigned short __attribute__ ((unused)) * opcode16_addr;
   Elf32_Addr __attribute__ ((unused)) insn_opcode = 0x0;
 
   if (__builtin_expect (r_type == R_CKCORE_RELATIVE, 0))
@@ -213,10 +213,10 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
   else
     {
       const Elf32_Sym *const refsym = sym;
-      struct link_map *sym_map = RESOLVE_MAP (map, scope, &sym, version,
-					      r_type);
-      ElfW(Addr) value = SYMBOL_ADDRESS (sym_map, sym, true);
-      opcode16_addr = (unsigned short *)reloc_addr;
+      struct link_map *sym_map
+	  = RESOLVE_MAP (map, scope, &sym, version, r_type);
+      ElfW (Addr) value = SYMBOL_ADDRESS (sym_map, sym, true);
+      opcode16_addr = (unsigned short *) reloc_addr;
 
       switch (r_type)
 	{
@@ -226,7 +226,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	       found.  */
 	    break;
 	  if (sym->st_size > refsym->st_size
-	      || (sym->st_size < refsym->st_size && GLRO(dl_verbose)))
+	      || (sym->st_size < refsym->st_size && GLRO (dl_verbose)))
 	    {
 	      const char *strtab;
 
@@ -253,57 +253,58 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	case R_CKCORE_ADDR_HI16:
 	  insn_opcode = (*opcode16_addr << 16) | (*(opcode16_addr + 1));
 	  insn_opcode = (insn_opcode & 0xffff0000)
-			    | (((value + reloc->r_addend) >> 16) & 0xffff);
-	  *(opcode16_addr++) = (unsigned short)(insn_opcode >> 16);
-	  *opcode16_addr = (unsigned short)(insn_opcode & 0xffff);
+			| (((value + reloc->r_addend) >> 16) & 0xffff);
+	  *(opcode16_addr++) = (unsigned short) (insn_opcode >> 16);
+	  *opcode16_addr = (unsigned short) (insn_opcode & 0xffff);
 	  break;
 	case R_CKCORE_ADDR_LO16:
 	  insn_opcode = (*opcode16_addr << 16) | (*(opcode16_addr + 1));
 	  insn_opcode = (insn_opcode & 0xffff0000)
-			    | ((value + reloc->r_addend) & 0xffff);
-	   *(opcode16_addr++) = (unsigned short)(insn_opcode >> 16);
-	   *opcode16_addr = (unsigned short)(insn_opcode & 0xffff);
-	   break;
+			| ((value + reloc->r_addend) & 0xffff);
+	  *(opcode16_addr++) = (unsigned short) (insn_opcode >> 16);
+	  *opcode16_addr = (unsigned short) (insn_opcode & 0xffff);
+	  break;
 	case R_CKCORE_PCREL_IMM26BY2:
-	{
-	  unsigned int offset = ((value + reloc->r_addend
-				  - (unsigned int)reloc_addr) >> 1);
-	  insn_opcode = (*opcode16_addr << 16) | (*(opcode16_addr + 1));
-	  if (offset > 0x3ffffff){
-	    const char *strtab;
-	    strtab = (const void *) D_PTR (map, l_info[DT_STRTAB]);
+	  {
+	    unsigned int offset
+		= ((value + reloc->r_addend - (unsigned int) reloc_addr) >> 1);
+	    insn_opcode = (*opcode16_addr << 16) | (*(opcode16_addr + 1));
+	    if (offset > 0x3ffffff)
+	      {
+		const char *strtab;
+		strtab = (const void *) D_PTR (map, l_info[DT_STRTAB]);
 
-	    _dl_error_printf ("\
+		_dl_error_printf ("\
 %s:The reloc R_CKCORE_PCREL_IMM26BY2 cannot reach the symbol '%s'.\n",
-	      rtld_progname ?: "<program name unknown>",
-	      strtab + refsym->st_name);
+				  rtld_progname ?: "<program name unknown>",
+				  strtab + refsym->st_name);
+		break;
+	      }
+	    insn_opcode = (insn_opcode & ~0x3ffffff) | offset;
+	    *(opcode16_addr++) = (unsigned short) (insn_opcode >> 16);
+	    *opcode16_addr = (unsigned short) (insn_opcode & 0xffff);
 	    break;
 	  }
-	  insn_opcode = (insn_opcode & ~0x3ffffff) | offset;
-	  *(opcode16_addr++) = (unsigned short)(insn_opcode >> 16);
-	  *opcode16_addr = (unsigned short)(insn_opcode & 0xffff);
-	  break;
-	}
 	case R_CKCORE_PCREL_JSR_IMM26BY2:
 	  break;
 #endif
 #ifndef RTLD_BOOTSTRAP
 	case R_CKCORE_TLS_DTPMOD32:
-	/* Get the information from the link map returned by the
-	   resolv function.  */
+	  /* Get the information from the link map returned by the
+	     resolv function.  */
 	  if (sym_map != NULL)
 	    *reloc_addr = sym_map->l_tls_modid;
 	  break;
 	case R_CKCORE_TLS_DTPOFF32:
 	  if (sym != NULL)
-	    *reloc_addr =(sym == NULL ? 0 : sym->st_value) + reloc->r_addend;
+	    *reloc_addr = (sym == NULL ? 0 : sym->st_value) + reloc->r_addend;
 	  break;
 	case R_CKCORE_TLS_TPOFF32:
 	  if (sym != NULL)
 	    {
 	      CHECK_STATIC_TLS (map, sym_map);
-	      *reloc_addr = (sym->st_value + sym_map->l_tls_offset
-			     + reloc->r_addend);
+	      *reloc_addr
+		  = (sym->st_value + sym_map->l_tls_offset + reloc->r_addend);
 	    }
 	  break;
 #endif /* !RTLD_BOOTSTRAP */

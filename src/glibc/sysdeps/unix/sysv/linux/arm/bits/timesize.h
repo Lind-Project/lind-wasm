@@ -17,4 +17,4 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Size in bits of the 'time_t' type of the default ABI.  */
-#define __TIMESIZE	32
+#define __TIMESIZE 32

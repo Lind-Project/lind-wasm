@@ -20,7 +20,7 @@
 #define _SYS_IFUNC_H
 
 /* A second argument is passed to the ifunc resolver.  */
-#define _IFUNC_ARG_HWCAP	(1ULL << 62)
+#define _IFUNC_ARG_HWCAP (1ULL << 62)
 
 /* The prototype of a gnu indirect function resolver on AArch64 is
 

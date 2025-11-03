@@ -20,17 +20,20 @@
 #include "soft-fp.h"
 #include "quad.h"
 
-long double _Q_div(const long double a, const long double b)
+long double
+_Q_div (const long double a, const long double b)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A); FP_DECL_Q(B); FP_DECL_Q(C);
+  FP_DECL_Q (A);
+  FP_DECL_Q (B);
+  FP_DECL_Q (C);
   long double c;
 
   FP_INIT_ROUNDMODE;
-  FP_UNPACK_Q(A, a);
-  FP_UNPACK_Q(B, b);
-  FP_DIV_Q(C, A, B);
-  FP_PACK_Q(c, C);
+  FP_UNPACK_Q (A, a);
+  FP_UNPACK_Q (B, b);
+  FP_DIV_Q (C, A, B);
+  FP_PACK_Q (c, C);
   FP_HANDLE_EXCEPTIONS;
   return c;
 }

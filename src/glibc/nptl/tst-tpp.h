@@ -25,32 +25,31 @@
 #include <sys/syscall.h>
 
 /* This test is Linux specific.  */
-#define CHECK_TPP_PRIORITY(normal, boosted) \
-  do								\
-    {								\
-      pid_t tid = syscall (__NR_gettid);			\
-								\
-      struct sched_param cep_sp;				\
-      int cep_policy;						\
-      if (pthread_getschedparam (pthread_self (), &cep_policy,	\
-				 &cep_sp) != 0)			\
-	{							\
-	  puts ("getschedparam failed");			\
-	  ret = 1;						\
-	}							\
-      else if (cep_sp.sched_priority != (normal))		\
-	{							\
-	  printf ("unexpected priority %d != %d\n",		\
-		  cep_sp.sched_priority, (normal));		\
-	}							\
-      if (syscall (__NR_sched_getparam, tid, &cep_sp) == 0	\
-	  && cep_sp.sched_priority != (boosted))		\
-	{							\
-	  printf ("unexpected boosted priority %d != %d\n",	\
-		  cep_sp.sched_priority, (boosted));		\
-	  ret = 1;						\
-	}							\
-    }								\
+#define CHECK_TPP_PRIORITY(normal, boosted)                                   \
+  do                                                                          \
+    {                                                                         \
+      pid_t tid = syscall (__NR_gettid);                                      \
+                                                                              \
+      struct sched_param cep_sp;                                              \
+      int cep_policy;                                                         \
+      if (pthread_getschedparam (pthread_self (), &cep_policy, &cep_sp) != 0) \
+	{                                                                     \
+	  puts ("getschedparam failed");                                      \
+	  ret = 1;                                                            \
+	}                                                                     \
+      else if (cep_sp.sched_priority != (normal))                             \
+	{                                                                     \
+	  printf ("unexpected priority %d != %d\n", cep_sp.sched_priority,    \
+		  (normal));                                                  \
+	}                                                                     \
+      if (syscall (__NR_sched_getparam, tid, &cep_sp) == 0                    \
+	  && cep_sp.sched_priority != (boosted))                              \
+	{                                                                     \
+	  printf ("unexpected boosted priority %d != %d\n",                   \
+		  cep_sp.sched_priority, (boosted));                          \
+	  ret = 1;                                                            \
+	}                                                                     \
+    }                                                                         \
   while (0)
 
 int fifo_min, fifo_max;
@@ -74,8 +73,9 @@ init_tpp_test (void)
 
   if (fifo_min > 4 || fifo_max < 10)
     {
-      printf ("%d..%d SCHED_FIFO priority interval not suitable for this test\n",
-	      fifo_min, fifo_max);
+      printf (
+	  "%d..%d SCHED_FIFO priority interval not suitable for this test\n",
+	  fifo_min, fifo_max);
       exit (0);
     }
 

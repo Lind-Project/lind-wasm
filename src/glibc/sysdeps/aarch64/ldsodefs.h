@@ -17,33 +17,25 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _AARCH64_LDSODEFS_H
-#define _AARCH64_LDSODEFS_H 1
+#  define _AARCH64_LDSODEFS_H 1
 
-#include <elf.h>
-#include <cpu-features.h>
+#  include <elf.h>
+#  include <cpu-features.h>
 
 struct La_aarch64_regs;
 struct La_aarch64_retval;
 
-#define ARCH_PLTENTER_MEMBERS \
-    ElfW(Addr) (*aarch64_gnu_pltenter) (ElfW(Sym) *,                    \
-					unsigned int,			\
-                                        uintptr_t *,			\
-					uintptr_t *,                    \
-					struct La_aarch64_regs *,	\
-					unsigned int *,			\
-					const char *,			\
-					long int *)
+#  define ARCH_PLTENTER_MEMBERS                                               \
+    ElfW (Addr) (*aarch64_gnu_pltenter) (                                     \
+	ElfW (Sym) *, unsigned int, uintptr_t *, uintptr_t *,                 \
+	struct La_aarch64_regs *, unsigned int *, const char *, long int *)
 
-#define ARCH_PLTEXIT_MEMBERS \
-    ElfW(Addr) (*aarch64_gnu_pltexit) (ElfW(Sym) *,                     \
-				       unsigned int,                    \
-				       uintptr_t *,			\
-				       uintptr_t *,			\
-				       const struct La_aarch64_regs *,	\
-				       struct La_aarch64_retval *,	\
-				       const char *)
+#  define ARCH_PLTEXIT_MEMBERS                                                \
+    ElfW (Addr) (*aarch64_gnu_pltexit) (                                      \
+	ElfW (Sym) *, unsigned int, uintptr_t *, uintptr_t *,                 \
+	const struct La_aarch64_regs *, struct La_aarch64_retval *,           \
+	const char *)
 
-#include_next <ldsodefs.h>
+#  include_next <ldsodefs.h>
 
 #endif

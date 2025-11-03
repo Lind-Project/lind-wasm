@@ -17,8 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #undef ALIGN
-#define ALIGN(log) .align 1<<log
+#define ALIGN(log) .align 1 << log
 
-#define R_(r) %##r
-#define R(r) R_(r)
+#define R_(r) % ##r
+#define R(r) R_ (r)
 #define L(label) .##label

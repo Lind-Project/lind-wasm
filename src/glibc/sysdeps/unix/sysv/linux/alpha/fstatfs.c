@@ -26,5 +26,4 @@ __fstatfs (int fd, struct statfs *buf)
 {
   return INLINE_SYSCALL_CALL (fstatfs, fd, buf);
 }
-libc_hidden_def (__fstatfs)
-weak_alias (__fstatfs, fstatfs)
+libc_hidden_def (__fstatfs) weak_alias (__fstatfs, fstatfs)

@@ -24,7 +24,7 @@ fetestexcept (int excepts)
   unsigned long tmp;
 
   /* Get current exceptions.  */
-  tmp = __ieee_get_fp_control();
+  tmp = __ieee_get_fp_control ();
 
   return tmp & excepts & SWCR_STATUS_MASK;
 }

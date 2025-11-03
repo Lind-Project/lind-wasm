@@ -16,11 +16,11 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-//#include <libm-alias-ldouble.h>
-#include <math.h>  // Include the math library for truncl()
+// #include <libm-alias-ldouble.h>
+#include <math.h> // Include the math library for truncl()
 
-long double Mytruncl(long double x) {
-    return truncl(x);  // Use the standard library function truncl()
+long double
+Mytruncl (long double x)
+{
+  return truncl (x); // Use the standard library function truncl()
 }
-
-

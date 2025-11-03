@@ -16,13 +16,11 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-
 /* Type used for the representation of TLS information in the GOT.  */
 typedef struct dl_tls_index
 {
   unsigned long int ti_module;
   unsigned long int ti_offset;
 } tls_index;
-
 
 extern void *__tls_get_addr (tls_index *ti);

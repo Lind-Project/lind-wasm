@@ -48,39 +48,47 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-_Float128 __sinl(_Float128 x)
+_Float128
+__sinl (_Float128 x)
 {
-	_Float128 y[2],z=0;
-	int64_t n, ix;
+  _Float128 y[2], z = 0;
+  int64_t n, ix;
 
-    /* High word of x. */
-	GET_LDOUBLE_MSW64(ix,x);
+  /* High word of x. */
+  GET_LDOUBLE_MSW64 (ix, x);
 
-    /* |x| ~< pi/4 */
-	ix &= 0x7fffffffffffffffLL;
-	if(ix <= 0x3ffe921fb54442d1LL)
-	  return __kernel_sinl(x,z,0);
+  /* |x| ~< pi/4 */
+  ix &= 0x7fffffffffffffffLL;
+  if (ix <= 0x3ffe921fb54442d1LL)
+    return __kernel_sinl (x, z, 0);
 
-    /* sin(Inf or NaN) is NaN */
-	else if (ix>=0x7fff000000000000LL) {
-	    if (ix == 0x7fff000000000000LL) {
-		GET_LDOUBLE_LSW64(n,x);
-		if (n == 0)
-		    __set_errno (EDOM);
-	    }
-	    return x-x;
+  /* sin(Inf or NaN) is NaN */
+  else if (ix >= 0x7fff000000000000LL)
+    {
+      if (ix == 0x7fff000000000000LL)
+	{
+	  GET_LDOUBLE_LSW64 (n, x);
+	  if (n == 0)
+	    __set_errno (EDOM);
 	}
+      return x - x;
+    }
 
-    /* argument reduction needed */
-	else {
-	    n = __ieee754_rem_pio2l(x,y);
-	    switch(n&3) {
-		case 0: return  __kernel_sinl(y[0],y[1],1);
-		case 1: return  __kernel_cosl(y[0],y[1]);
-		case 2: return -__kernel_sinl(y[0],y[1],1);
-		default:
-			return -__kernel_cosl(y[0],y[1]);
-	    }
+  /* argument reduction needed */
+  else
+    {
+      n = __ieee754_rem_pio2l (x, y);
+      switch (n & 3)
+	{
+	case 0:
+	  return __kernel_sinl (y[0], y[1], 1);
+	case 1:
+	  return __kernel_cosl (y[0], y[1]);
+	case 2:
+	  return -__kernel_sinl (y[0], y[1], 1);
+	default:
+	  return -__kernel_cosl (y[0], y[1]);
 	}
+    }
 }
 libm_alias_ldouble (__sin, sin)

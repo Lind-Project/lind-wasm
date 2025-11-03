@@ -33,7 +33,7 @@ __totalordermagl (const long double *x, const long double *y)
   ldbl_unpack (*y, &yhi, &ylo);
   EXTRACT_WORDS64 (hy, yhi);
 #if HIGH_ORDER_BIT_IS_SET_FOR_SNAN
-# error not implemented
+#  error not implemented
 #endif
   uint64_t x_sign = hx & 0x8000000000000000ULL;
   uint64_t y_sign = hy & 0x8000000000000000ULL;
@@ -64,9 +64,8 @@ __totalordermagl (const long double *x, const long double *y)
   return lx <= ly;
 }
 versioned_symbol (libm, __totalordermagl, totalordermagl, GLIBC_2_31);
-#if SHLIB_COMPAT (libm, GLIBC_2_25, GLIBC_2_31)
-int
-attribute_compat_text_section
+#if SHLIB_COMPAT(libm, GLIBC_2_25, GLIBC_2_31)
+int attribute_compat_text_section
 __totalordermag_compatl (long double x, long double y)
 {
   return __totalordermagl (&x, &y);

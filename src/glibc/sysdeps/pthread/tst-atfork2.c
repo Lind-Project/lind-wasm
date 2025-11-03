@@ -24,7 +24,6 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-
 /* Must be exported.  */
 int val;
 
@@ -45,7 +44,6 @@ child (void)
 {
   val += 8;
 }
-
 
 static int
 do_test (void)

@@ -17,18 +17,18 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-libmvec_hidden_proto (V_NAME_F1(acos));
-libmvec_hidden_proto (V_NAME_F1(asin));
-libmvec_hidden_proto (V_NAME_F1(atan));
-libmvec_hidden_proto (V_NAME_F1(cos));
-libmvec_hidden_proto (V_NAME_F1(exp10));
-libmvec_hidden_proto (V_NAME_F1(exp2));
-libmvec_hidden_proto (V_NAME_F1(exp));
-libmvec_hidden_proto (V_NAME_F1(expm1));
-libmvec_hidden_proto (V_NAME_F1(log10));
-libmvec_hidden_proto (V_NAME_F1(log1p));
-libmvec_hidden_proto (V_NAME_F1(log2));
-libmvec_hidden_proto (V_NAME_F1(log));
-libmvec_hidden_proto (V_NAME_F1(sin));
-libmvec_hidden_proto (V_NAME_F1(tan));
-libmvec_hidden_proto (V_NAME_F2(atan2));
+libmvec_hidden_proto (V_NAME_F1 (acos));
+libmvec_hidden_proto (V_NAME_F1 (asin));
+libmvec_hidden_proto (V_NAME_F1 (atan));
+libmvec_hidden_proto (V_NAME_F1 (cos));
+libmvec_hidden_proto (V_NAME_F1 (exp10));
+libmvec_hidden_proto (V_NAME_F1 (exp2));
+libmvec_hidden_proto (V_NAME_F1 (exp));
+libmvec_hidden_proto (V_NAME_F1 (expm1));
+libmvec_hidden_proto (V_NAME_F1 (log10));
+libmvec_hidden_proto (V_NAME_F1 (log1p));
+libmvec_hidden_proto (V_NAME_F1 (log2));
+libmvec_hidden_proto (V_NAME_F1 (log));
+libmvec_hidden_proto (V_NAME_F1 (sin));
+libmvec_hidden_proto (V_NAME_F1 (tan));
+libmvec_hidden_proto (V_NAME_F2 (atan2));

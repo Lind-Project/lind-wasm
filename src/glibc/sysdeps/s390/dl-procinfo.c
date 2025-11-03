@@ -39,23 +39,23 @@
   */
 
 #ifndef PROCINFO_CLASS
-# define PROCINFO_CLASS
+#  define PROCINFO_CLASS
 #endif
 
-#if !IS_IN (ldconfig)
-# if !defined PROCINFO_DECL && defined SHARED
-  ._dl_s390_cpu_features
-# else
+#if !IS_IN(ldconfig)
+#  if !defined PROCINFO_DECL && defined SHARED
+._dl_s390_cpu_features
+#  else
 PROCINFO_CLASS struct cpu_features _dl_s390_cpu_features
-# endif
-# ifndef PROCINFO_DECL
-= { }
-# endif
-# if !defined SHARED || defined PROCINFO_DECL
+#  endif
+#  ifndef PROCINFO_DECL
+    = {}
+#  endif
+#  if !defined SHARED || defined PROCINFO_DECL
 ;
-# else
-,
-# endif
+#  else
+    ,
+#  endif
 #endif
 
 #undef PROCINFO_DECL

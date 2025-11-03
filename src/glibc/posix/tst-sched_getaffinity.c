@@ -26,7 +26,8 @@ static int
 do_test (void)
 {
   /* The values are larger than the default cpu_set_t.  */
-  const int bufsize[] = { 1<<11, 1<<12, 1<<13, 1<<14, 1<<15, 1<<16, 1<<17 };
+  const int bufsize[]
+      = { 1 << 11, 1 << 12, 1 << 13, 1 << 14, 1 << 15, 1 << 16, 1 << 17 };
   int cpucount[array_length (bufsize)];
 
   for (int i = 0; i < array_length (bufsize); i++)

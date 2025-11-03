@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef ARM_NOFPU_MATH_TESTS_EXCEPTIONS_H
-#define ARM_NOFPU_MATH_TESTS_EXCEPTIONS_H 1
+#  define ARM_NOFPU_MATH_TESTS_EXCEPTIONS_H 1
 
 /* On systems with VFP support, but where glibc is built for
    soft-float, the libgcc functions used in libc and libm do not
    support exceptions.  */
-#define EXCEPTION_TESTS_float	0
-#define EXCEPTION_TESTS_double	0
-#define EXCEPTION_TESTS_long_double	0
+#  define EXCEPTION_TESTS_float 0
+#  define EXCEPTION_TESTS_double 0
+#  define EXCEPTION_TESTS_long_double 0
 
 #endif /* math-tests-exceptions.h.  */

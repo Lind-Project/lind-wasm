@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef ddivl
 
-double
-attribute_hidden
+double attribute_hidden
 ddivl (double x, double y)
 {
   return __nldbl_ddivl (x, y);

@@ -10,7 +10,7 @@
    sem_clockwait.  */
 #define CLOCK_USE_TIMEDWAIT (-1)
 
-typedef int (*waitfn_t)(sem_t *, struct timespec *);
+typedef int (*waitfn_t) (sem_t *, struct timespec *);
 
 static void
 do_test_wait (waitfn_t waitfn, const char *fnname)
@@ -25,7 +25,7 @@ do_test_wait (waitfn_t waitfn, const char *fnname)
 
   TEST_COMPARE (sem_init (&u.s, 0, 0), 0);
 
-  struct timespec ts = { 0, 1000000001 };	/* Invalid.  */
+  struct timespec ts = { 0, 1000000001 }; /* Invalid.  */
   errno = 0;
   TEST_VERIFY_EXIT (waitfn (&u.s, &ts) < 0);
   TEST_COMPARE (errno, EINVAL);
@@ -50,29 +50,30 @@ do_test_wait (waitfn_t waitfn, const char *fnname)
   TEST_COMPARE (nwaiters, 0);
 }
 
-int test_sem_timedwait (sem_t *sem, struct timespec *ts)
+int
+test_sem_timedwait (sem_t *sem, struct timespec *ts)
 {
   return sem_timedwait (sem, ts);
 }
 
-int test_sem_clockwait_monotonic (sem_t *sem, struct timespec *ts)
+int
+test_sem_clockwait_monotonic (sem_t *sem, struct timespec *ts)
 {
   return sem_clockwait (sem, CLOCK_MONOTONIC, ts);
 }
 
-int test_sem_clockwait_realtime (sem_t *sem, struct timespec *ts)
+int
+test_sem_clockwait_realtime (sem_t *sem, struct timespec *ts)
 {
   return sem_clockwait (sem, CLOCK_REALTIME, ts);
 }
 
-static int do_test (void)
+static int
+do_test (void)
 {
-  do_test_wait (&test_sem_timedwait,
-                "sem_timedwait");
-  do_test_wait (&test_sem_clockwait_monotonic,
-                "sem_clockwait(monotonic)");
-  do_test_wait (&test_sem_clockwait_realtime,
-                "sem_clockwait(realtime)");
+  do_test_wait (&test_sem_timedwait, "sem_timedwait");
+  do_test_wait (&test_sem_clockwait_monotonic, "sem_clockwait(monotonic)");
+  do_test_wait (&test_sem_clockwait_realtime, "sem_clockwait(realtime)");
   return 0;
 }
 

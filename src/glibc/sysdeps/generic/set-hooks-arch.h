@@ -21,8 +21,8 @@
 #define _SET_HOOKS_ARCH_H
 
 /* Define SET_RELHOOK to a variant of text_set_element that records a relative
-   offset rather than an absolute address. See sysdeps/mach/hurd/x86/set-hooks-arch.h
-   for an example.
+   offset rather than an absolute address. See
+sysdeps/mach/hurd/x86/set-hooks-arch.h for an example.
 
 #define SET_RELHOOK(NAME, HOOK) ...
 

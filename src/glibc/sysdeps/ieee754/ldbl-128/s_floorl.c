@@ -59,7 +59,7 @@ __floorl (_Float128 x)
 	{
 	  i = (0x0000ffffffffffffULL) >> j0;
 	  if (((i0 & i) | i1) == 0)
-	    return x;		/* x is integral  */
+	    return x; /* x is integral  */
 	  if (i0 < 0)
 	    i0 += (0x0001000000000000LL) >> j0;
 	  i0 &= (~i);
@@ -69,15 +69,15 @@ __floorl (_Float128 x)
   else if (j0 > 111)
     {
       if (j0 == 0x4000)
-	return x + x;		/* inf or NaN  */
+	return x + x; /* inf or NaN  */
       else
-	return x;		/* x is integral  */
+	return x; /* x is integral  */
     }
   else
     {
       i = -1ULL >> (j0 - 48);
       if ((i1 & i) == 0)
-	return x;		/* x is integral  */
+	return x; /* x is integral  */
       if (i0 < 0)
 	{
 	  if (j0 == 48)
@@ -86,7 +86,7 @@ __floorl (_Float128 x)
 	    {
 	      j = i1 + (1LL << (112 - j0));
 	      if (j < i1)
-		i0 += 1 ;	/* got a carry */
+		i0 += 1; /* got a carry */
 	      i1 = j;
 	    }
 	}

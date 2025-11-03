@@ -28,19 +28,19 @@ __ieee754_sqrtf (float x)
 #if USE_SQRTF_BUILTIN
   return __builtin_sqrtf (x);
 #else
-/* The method is based on a description in
-   Computation of elementary functions on the IBM RISC System/6000 processor,
-   P. W. Markstein, IBM J. Res. Develop, 34(1) 1990.
-   Basically, it consists of two interleaved Newton-Raphson approximations,
-   one to find the actual square root, and one to find its reciprocal
-   without the expense of a division operation.   The tricky bit here
-   is the use of the POWER/PowerPC multiply-add operation to get the
-   required accuracy with high speed.
+  /* The method is based on a description in
+     Computation of elementary functions on the IBM RISC System/6000 processor,
+     P. W. Markstein, IBM J. Res. Develop, 34(1) 1990.
+     Basically, it consists of two interleaved Newton-Raphson approximations,
+     one to find the actual square root, and one to find its reciprocal
+     without the expense of a division operation.   The tricky bit here
+     is the use of the POWER/PowerPC multiply-add operation to get the
+     required accuracy with high speed.
 
-   The argument reduction works by a combination of table lookup to
-   obtain the initial guesses, and some careful modification of the
-   generated guesses (which mostly runs on the integer unit, while the
-   Newton-Raphson is running on the FPU).  */
+     The argument reduction works by a combination of table lookup to
+     obtain the initial guesses, and some careful modification of the
+     generated guesses (which mostly runs on the integer unit, while the
+     Newton-Raphson is running on the FPU).  */
 
   extern const float __t_sqrt[1024];
 
@@ -53,18 +53,18 @@ __ieee754_sqrtf (float x)
 	     1.41... > sg >= 0.70.., 0.70.. >= sy > 0.35... .
 	     Variables named ending with 'i' are integer versions of
 	     floating-point values.  */
-	  float sx;		/* The value of which we're trying to find the square
-				   root.  */
-	  float sg, g;		/* Guess of the square root of x.  */
-	  float sd, d;		/* Difference between the square of the guess and x.  */
-	  float sy;		/* Estimate of 1/2g (overestimated by 1ulp).  */
-	  float sy2;		/* 2*sy */
-	  float e;		/* Difference between y*g and 1/2 (note that e==se).  */
-	  float shx;		/* == sx * fsg */
-	  float fsg;		/* sg*fsg == g.  */
-	  fenv_t fe;		/* Saved floating-point environment (stores rounding
-				   mode and whether the inexact exception is
-				   enabled).  */
+	  float sx;    /* The value of which we're trying to find the square
+			  root.  */
+	  float sg, g; /* Guess of the square root of x.  */
+	  float sd, d; /* Difference between the square of the guess and x.  */
+	  float sy;    /* Estimate of 1/2g (overestimated by 1ulp).  */
+	  float sy2;   /* 2*sy */
+	  float e;     /* Difference between y*g and 1/2 (note that e==se).  */
+	  float shx;   /* == sx * fsg */
+	  float fsg;   /* sg*fsg == g.  */
+	  fenv_t fe;   /* Saved floating-point environment (stores rounding
+			  mode and whether the inexact exception is
+			  enabled).  */
 	  uint32_t xi, sxi, fsgi;
 	  const float *t_sqrt;
 
@@ -83,8 +83,8 @@ __ieee754_sqrtf (float x)
 	  sd = -__builtin_fmaf (sg, sg, -sx);
 	  fsgi = (xi + 0x40000000) >> 1 & 0x7f800000;
 	  sy2 = sy + sy;
-	  sg = __builtin_fmaf (sy, sd, sg);	/* 16-bit approximation to
-						   sqrt(sx). */
+	  sg = __builtin_fmaf (sy, sd, sg); /* 16-bit approximation to
+					       sqrt(sx). */
 	  e = -__builtin_fmaf (sy, sg, -0x1.0000020365653p-1);
 	  SET_FLOAT_WORD (fsg, fsgi);
 	  sd = -__builtin_fmaf (sg, sg, -sx);
@@ -92,9 +92,9 @@ __ieee754_sqrtf (float x)
 	  if ((xi & 0x7f800000) == 0)
 	    goto denorm;
 	  shx = sx * fsg;
-	  sg = __builtin_fmaf (sy, sd, sg);	/* 32-bit approximation to
-						   sqrt(sx), but perhaps
-						   rounded incorrectly.  */
+	  sg = __builtin_fmaf (sy, sd, sg); /* 32-bit approximation to
+					       sqrt(sx), but perhaps
+					       rounded incorrectly.  */
 	  sy2 = sy + sy;
 	  g = sg * fsg;
 	  e = -__builtin_fmaf (sy, sg, -0x1.0000020365653p-1);
@@ -113,12 +113,12 @@ __ieee754_sqrtf (float x)
     {
       /* For some reason, some PowerPC32 processors don't implement
 	 FE_INVALID_SQRT.  */
-# ifdef FE_INVALID_SQRT
+#  ifdef FE_INVALID_SQRT
       feraiseexcept (FE_INVALID_SQRT);
 
       fenv_union_t u = { .fenv = fegetenv_register () };
       if ((u.l & FE_INVALID) == 0)
-# endif
+#  endif
 	feraiseexcept (FE_INVALID);
       x = NAN;
     }

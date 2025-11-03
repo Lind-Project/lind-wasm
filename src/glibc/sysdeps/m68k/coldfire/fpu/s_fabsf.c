@@ -20,7 +20,7 @@
 float
 __fabsf (float x)
 {
-  asm ("fsabs.s %1,%0" : "=f" (x) : "dm" (x));
+  asm ("fsabs.s %1,%0" : "=f"(x) : "dm"(x));
   return x;
 }
 libm_alias_float (__fabs, fabs)

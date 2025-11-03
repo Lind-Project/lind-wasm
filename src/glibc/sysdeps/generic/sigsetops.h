@@ -17,60 +17,59 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SIGSETOPS_H
-#define _SIGSETOPS_H 1
+#  define _SIGSETOPS_H 1
 
-#include <signal.h>
+#  include <signal.h>
 
 /* Return a mask that includes SIG only.  The cast to `sigset_t' avoids
    overflow if `sigset_t' is wider than `int'.  */
-# define __sigmask(sig) (((__sigset_t) 1) << ((sig) - 1))
+#  define __sigmask(sig) (((__sigset_t) 1) << ((sig) - 1))
 
-#define __sigemptyset(set)			\
-  (__extension__ ({				\
-    *(set) = (__sigset_t) 0;			\
-    0;						\
-  }))
-#define __sigfillset(set)			\
-  (__extension__ ({				\
-    *(set) = ~(__sigset_t) 0;			\
-    0;						\
-  }))
+#  define __sigemptyset(set)                                                  \
+    (__extension__ ({                                                         \
+      *(set) = (__sigset_t) 0;                                                \
+      0;                                                                      \
+    }))
+#  define __sigfillset(set)                                                   \
+    (__extension__ ({                                                         \
+      *(set) = ~(__sigset_t) 0;                                               \
+      0;                                                                      \
+    }))
 
-# define __sigisemptyset(set)			\
-  (*(set) == (__sigset_t) 0)
+#  define __sigisemptyset(set) (*(set) == (__sigset_t) 0)
 
-# define __sigandset(dest, left, right)		\
-  (__extension__ ({				\
-    *(dest) = *(left) & *(right);		\
-    0;						\
-  }))
+#  define __sigandset(dest, left, right)                                      \
+    (__extension__ ({                                                         \
+      *(dest) = *(left) & *(right);                                           \
+      0;                                                                      \
+    }))
 
-# define __sigorset(dest, left, right)		\
-  (__extension__ ({				\
-    *(dest) = *(left) | *(right);		\
-    0;						\
-  }))
+#  define __sigorset(dest, left, right)                                       \
+    (__extension__ ({                                                         \
+      *(dest) = *(left) | *(right);                                           \
+      0;                                                                      \
+    }))
 
 /* These macros needn't check for a bogus signal number;
    checking is done in the non-__ versions.  */
-# define __sigismember(set, sig)		\
-  (__extension__ ({				\
-    __sigset_t __mask = __sigmask (sig);	\
-    *(set) & __mask ? 1 : 0;			\
-  }))
+#  define __sigismember(set, sig)                                             \
+    (__extension__ ({                                                         \
+      __sigset_t __mask = __sigmask (sig);                                    \
+      *(set) & __mask ? 1 : 0;                                                \
+    }))
 
-# define __sigaddset(set, sig)			\
-  (__extension__ ({				\
-    __sigset_t __mask = __sigmask (sig);	\
-    *(set) |= __mask;				\
-    0;						\
-  }))
+#  define __sigaddset(set, sig)                                               \
+    (__extension__ ({                                                         \
+      __sigset_t __mask = __sigmask (sig);                                    \
+      *(set) |= __mask;                                                       \
+      0;                                                                      \
+    }))
 
-# define __sigdelset(set, sig)			\
-  (__extension__ ({				\
-    __sigset_t __mask = __sigmask (sig);	\
-    *(set) &= ~__mask;				\
-    0;						\
-  }))
+#  define __sigdelset(set, sig)                                               \
+    (__extension__ ({                                                         \
+      __sigset_t __mask = __sigmask (sig);                                    \
+      *(set) &= ~__mask;                                                      \
+      0;                                                                      \
+    }))
 
 #endif

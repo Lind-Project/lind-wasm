@@ -26,8 +26,6 @@ extern __typeof (__logb) __logb_ppc64 attribute_hidden;
 extern __typeof (__logb) __logb_power7 attribute_hidden;
 
 libc_ifunc (__logb,
-	    (hwcap & PPC_FEATURE_ARCH_2_06)
-	    ? __logb_power7
-            : __logb_ppc64);
+	    (hwcap & PPC_FEATURE_ARCH_2_06) ? __logb_power7 : __logb_ppc64);
 
 libm_alias_double (__logb, logb)

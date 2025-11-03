@@ -17,7 +17,6 @@
 
 #include <unistd.h>
 
-
 /* Execute FILE, searching in the `PATH' environment variable if it contains
    no slashes, with arguments ARGV and environment from `environ'.  */
 int

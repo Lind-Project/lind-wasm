@@ -38,7 +38,7 @@ fesetmode (const femode_t *modep)
   if (CPU_FEATURE_USABLE (SSE))
     {
       unsigned int mxcsr;
-      __asm__ ("stmxcsr %0" : "=m" (mxcsr));
+      __asm__ ("stmxcsr %0" : "=m"(mxcsr));
       /* Preserve SSE exception flags but restore other state in
 	 MXCSR.  */
       mxcsr &= FE_ALL_EXCEPT_X86;
@@ -48,7 +48,7 @@ fesetmode (const femode_t *modep)
 	mxcsr |= FE_ALL_EXCEPT_X86 << 7;
       else
 	mxcsr |= modep->__mxcsr & ~FE_ALL_EXCEPT_X86;
-      __asm__ ("ldmxcsr %0" : : "m" (mxcsr));
+      __asm__ ("ldmxcsr %0" : : "m"(mxcsr));
     }
   return 0;
 }

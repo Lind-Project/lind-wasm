@@ -26,9 +26,9 @@
 int
 posix_fallocate (int fd, __off_t offset, __off_t len)
 {
-  int res = INTERNAL_SYSCALL_CALL (fallocate, fd, 0,
-				   SYSCALL_LL (offset), SYSCALL_LL (len));
-  if (! INTERNAL_SYSCALL_ERROR_P (res))
+  int res = INTERNAL_SYSCALL_CALL (fallocate, fd, 0, SYSCALL_LL (offset),
+				   SYSCALL_LL (len));
+  if (!INTERNAL_SYSCALL_ERROR_P (res))
     return 0;
   if (INTERNAL_SYSCALL_ERRNO (res) != EOPNOTSUPP)
     return INTERNAL_SYSCALL_ERRNO (res);

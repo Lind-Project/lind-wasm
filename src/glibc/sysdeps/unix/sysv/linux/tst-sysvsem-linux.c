@@ -52,7 +52,7 @@ union semun
 {
   int val;
   struct semid_ds *buf;
-  unsigned short  *array;
+  unsigned short *array;
   struct seminfo *__buf;
 };
 
@@ -80,14 +80,12 @@ read_sem_stat (struct test_seminfo *tseminfo)
     FAIL_UNSUPPORTED ("/proc is not mounted or /proc/sys/kernel/sem is not "
 		      "available");
 
-  int r = fscanf (f, "%d %d %d %d",
-		  &tseminfo->semmsl, &tseminfo->semmns, &tseminfo->semopm,
-		  &tseminfo->semmni);
+  int r = fscanf (f, "%d %d %d %d", &tseminfo->semmsl, &tseminfo->semmns,
+		  &tseminfo->semopm, &tseminfo->semmni);
   TEST_VERIFY_EXIT (r == 4);
 
   fclose (f);
 }
-
 
 /* Check if the semaphore with IDX (index into the kernel's internal array)
    matches the one with KEY.  The CMD is either SEM_STAT or SEM_STAT_ANY.  */

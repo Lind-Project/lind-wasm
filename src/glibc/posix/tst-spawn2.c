@@ -35,7 +35,7 @@ do_test (void)
      by trying to spawn an invalid binary.  */
 
   const char *program = "/path/to/invalid/binary";
-  char * const args[] = { 0 };
+  char *const args[] = { 0 };
   PID_T_TYPE pid = -1;
 
   int ret = POSIX_SPAWN (&pid, program, 0, 0, args, environ);
@@ -56,7 +56,7 @@ do_test (void)
   TEST_COMPARE (errno, ECHILD);
 
   /* Same as before, but with posix_spawnp.  */
-  char *args2[] = { (char*) program, 0 };
+  char *args2[] = { (char *) program, 0 };
 
   ret = POSIX_SPAWNP (&pid, args2[0], 0, 0, args2, environ);
   if (ret != ENOENT)

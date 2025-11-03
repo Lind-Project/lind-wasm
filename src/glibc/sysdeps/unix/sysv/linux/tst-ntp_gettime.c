@@ -23,7 +23,7 @@
 #include <support/xtime.h>
 
 #ifndef NTP_GETTIME_SYSCALL
-# define NTP_GETTIME_SYSCALL ntp_gettime
+#  define NTP_GETTIME_SYSCALL ntp_gettime
 #endif
 
 #define STR(__s) #__s
@@ -43,7 +43,7 @@ do_test (void)
 
       int ret = NTP_GETTIME_SYSCALL (&ntv);
       if (ret == -1)
-        FAIL_EXIT1 (STR(NTP_GETTIME_SYSCALL)" failed: %m\n");
+	FAIL_EXIT1 (STR (NTP_GETTIME_SYSCALL) " failed: %m\n");
 
       tv_after_ntp = xclock_now (CLOCK_REALTIME);
     }

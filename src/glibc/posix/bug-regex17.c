@@ -35,27 +35,35 @@ struct
      U+00D6	\xc3\x96	LATIN CAPITAL LETTER O WITH DIAERESIS
      U+00E4	\xc3\xa4	LATIN SMALL LETTER A WITH DIAERESIS
      U+00F6	\xc3\xb6	LATIN SMALL LETTER O WITH DIAERESIS  */
-  { "\xc3\x84\xc3\x96*\xc3\xb6$", "aB\xc3\xa4\xc3\xb6\xc3\xb6\xc3\x96", REG_ICASE, 2,
+  { "\xc3\x84\xc3\x96*\xc3\xb6$",
+    "aB\xc3\xa4\xc3\xb6\xc3\xb6\xc3\x96",
+    REG_ICASE,
+    2,
     { { 2, 10 }, { -1, -1 } } },
-  { "[\xc3\x84x]\xc3\x96*\xc3\xb6$", "aB\xc3\x84\xc3\xb6\xc3\xb6\xc3\x96", REG_ICASE, 2,
+  { "[\xc3\x84x]\xc3\x96*\xc3\xb6$",
+    "aB\xc3\x84\xc3\xb6\xc3\xb6\xc3\x96",
+    REG_ICASE,
+    2,
     { { 2, 10 }, { -1, -1 } } },
-  { "[\xc3\x84x]\xc3\x96*\xc3\xb6$", "aB\xc3\xa4\xc3\xb6\xc3\xb6\xc3\x96", REG_ICASE, 2,
+  { "[\xc3\x84x]\xc3\x96*\xc3\xb6$",
+    "aB\xc3\xa4\xc3\xb6\xc3\xb6\xc3\x96",
+    REG_ICASE,
+    2,
     { { 2, 10 }, { -1, -1 } } },
-  { "[^x]\xc3\x96*\xc3\xb6$", "aB\xc3\xa4\xc3\xb6\xc3\xb6\xc3\x96", REG_ICASE, 2,
+  { "[^x]\xc3\x96*\xc3\xb6$",
+    "aB\xc3\xa4\xc3\xb6\xc3\xb6\xc3\x96",
+    REG_ICASE,
+    2,
     { { 2, 10 }, { -1, -1 } } },
 
   /* Tests for bug 9697:
      U+00DF	\xc3\x9f	LATIN SMALL LETTER SHARP S
      U+02DA	\xcb\x9a	RING ABOVE
      U+02E2	\xcb\xa2	MODIFIER LETTER SMALL S  */
-  { "[a-z]|[^a-z]", "\xcb\xa2", REG_EXTENDED, 2,
-    { { 0, 2 }, { -1, -1 } } },
-  { "[a-z]", "\xc3\x9f", REG_EXTENDED, 2,
-    { { 0, 2 }, { -1, -1 } } },
-  { "[^a-z]", "\xcb\x9a", REG_EXTENDED, 2,
-    { { 0, 2 }, { -1, -1 } } },
+  { "[a-z]|[^a-z]", "\xcb\xa2", REG_EXTENDED, 2, { { 0, 2 }, { -1, -1 } } },
+  { "[a-z]", "\xc3\x9f", REG_EXTENDED, 2, { { 0, 2 }, { -1, -1 } } },
+  { "[^a-z]", "\xcb\x9a", REG_EXTENDED, 2, { { 0, 2 }, { -1, -1 } } },
 };
-
 
 static int
 do_test (void)
@@ -88,12 +96,12 @@ do_test (void)
 
       for (n = 0; n < tests[i].nmatch; ++n)
 	if (rm[n].rm_so != tests[i].rm[n].rm_so
-              || rm[n].rm_eo != tests[i].rm[n].rm_eo)
+	    || rm[n].rm_eo != tests[i].rm[n].rm_eo)
 	  {
 	    if (tests[i].rm[n].rm_so == -1 && tests[i].rm[n].rm_eo == -1)
 	      break;
-	    printf ("regexec match failure rm[%d] %d..%d\n",
-		    n, rm[n].rm_so, rm[n].rm_eo);
+	    printf ("regexec match failure rm[%d] %d..%d\n", n, rm[n].rm_so,
+		    rm[n].rm_eo);
 	    ret = 1;
 	    break;
 	  }

@@ -17,20 +17,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_IPC_H
-# error "Never use <bits/ipc-perm.h> directly; include <sys/ipc.h> instead."
+#  error "Never use <bits/ipc-perm.h> directly; include <sys/ipc.h> instead."
 #endif
 
 /* Data structure used to pass permission information to IPC operations.  */
 struct ipc_perm
-  {
-    __key_t __key;			/* Key.  */
-    __uid_t uid;			/* Owner's user ID.  */
-    __gid_t gid;			/* Owner's group ID.  */
-    __uid_t cuid;			/* Creator's user ID.  */
-    __gid_t cgid;			/* Creator's group ID.  */
-    __mode_t mode;			/* Read/write permission.  */
-    unsigned short int __pad1;
-    unsigned short int __seq;		/* Sequence number.  */
-    __extension__ unsigned long long int __glibc_reserved1;
-    __extension__ unsigned long long int __glibc_reserved2;
-  };
+{
+  __key_t __key; /* Key.  */
+  __uid_t uid;	 /* Owner's user ID.  */
+  __gid_t gid;	 /* Owner's group ID.  */
+  __uid_t cuid;	 /* Creator's user ID.  */
+  __gid_t cgid;	 /* Creator's group ID.  */
+  __mode_t mode; /* Read/write permission.  */
+  unsigned short int __pad1;
+  unsigned short int __seq; /* Sequence number.  */
+  __extension__ unsigned long long int __glibc_reserved1;
+  __extension__ unsigned long long int __glibc_reserved2;
+};

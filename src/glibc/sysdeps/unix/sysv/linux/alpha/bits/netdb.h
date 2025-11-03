@@ -16,19 +16,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _NETDB_H
-# error "Never include <bits/netdb.h> directly; use <netdb.h> instead."
+#  error "Never include <bits/netdb.h> directly; use <netdb.h> instead."
 #endif
-
 
 /* Description of data base entry for a single network.  NOTE: here a
    poor assumption is made.  The network number is expected to fit
    into an unsigned long int variable.  */
 struct netent
 {
-  char *n_name;			/* Official name of network.  */
-  char **n_aliases;		/* Alias list.  */
-  int n_addrtype;		/* Net address type.  */
+  char *n_name;	    /* Official name of network.  */
+  char **n_aliases; /* Alias list.  */
+  int n_addrtype;   /* Net address type.  */
   /* XXX We should probably use uint32_t for the field and ensure
      compatibility by adding appropriate padding.  */
-  unsigned long	int n_net;	/* Network number.  */
+  unsigned long int n_net; /* Network number.  */
 };

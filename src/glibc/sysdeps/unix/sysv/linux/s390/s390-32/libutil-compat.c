@@ -19,5 +19,5 @@
 #include "utmp-compat.h"
 #include <login/libutil-compat.c>
 
-symbol_version (__libutil_version_placeholder_1,
-                __libutil_version_placeholder, UTMP_COMPAT_BASE);
+symbol_version (__libutil_version_placeholder_1, __libutil_version_placeholder,
+		UTMP_COMPAT_BASE);

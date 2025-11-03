@@ -64,7 +64,7 @@ __pthread_mutex_unlock (pthread_mutex_t *mtxp)
     case PT_MTX_ERRORCHECK | PTHREAD_MUTEX_ROBUST:
       self = _pthread_self ();
       if (mtxp->__owner_id == NOTRECOVERABLE_ID)
-	;			/* Nothing to do. */
+	; /* Nothing to do. */
       else if (mtxp->__owner_id != self->thread
 	       || (int) (mtxp->__lock & LLL_OWNER_MASK) != __getpid ())
 	ret = EPERM;
@@ -72,8 +72,8 @@ __pthread_mutex_unlock (pthread_mutex_t *mtxp)
 	{
 	  /* Release the lock. If it's in an inconsistent
 	   * state, mark it as irrecoverable. */
-	  mtxp->__owner_id = ((mtxp->__lock & LLL_DEAD_OWNER)
-			      ? NOTRECOVERABLE_ID : 0);
+	  mtxp->__owner_id
+	      = ((mtxp->__lock & LLL_DEAD_OWNER) ? NOTRECOVERABLE_ID : 0);
 	  lll_robust_unlock (mtxp->__lock, flags);
 	}
 
@@ -88,5 +88,5 @@ __pthread_mutex_unlock (pthread_mutex_t *mtxp)
 }
 
 hidden_def (__pthread_mutex_unlock)
-strong_alias (__pthread_mutex_unlock, _pthread_mutex_unlock)
-weak_alias (__pthread_mutex_unlock, pthread_mutex_unlock)
+    strong_alias (__pthread_mutex_unlock, _pthread_mutex_unlock)
+	weak_alias (__pthread_mutex_unlock, pthread_mutex_unlock)

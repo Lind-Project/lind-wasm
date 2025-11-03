@@ -19,14 +19,14 @@
 #include <ifunc-strncmp.h>
 
 #if HAVE_STRNCMP_C
-# if HAVE_STRNCMP_IFUNC
-#  define STRNCMP STRNCMP_C
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_builtin_def
-#   define libc_hidden_builtin_def(name)			\
-  __hidden_ver1 (__strncmp_c, __GI_strncmp, __strncmp_c);
+#  if HAVE_STRNCMP_IFUNC
+#    define STRNCMP STRNCMP_C
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_builtin_def
+#      define libc_hidden_builtin_def(name)                                   \
+	__hidden_ver1 (__strncmp_c, __GI_strncmp, __strncmp_c);
+#    endif
 #  endif
-# endif
 
-# include <string/strncmp.c>
+#  include <string/strncmp.c>
 #endif

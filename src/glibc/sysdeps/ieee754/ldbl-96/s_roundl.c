@@ -22,7 +22,6 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-
 long double
 __roundl (long double x)
 {

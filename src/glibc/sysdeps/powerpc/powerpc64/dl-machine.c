@@ -23,10 +23,8 @@
 #include <dl-machine.h>
 
 void
-_dl_reloc_overflow (struct link_map *map,
-		    const char *name,
-		    Elf64_Addr *const reloc_addr,
-		    const Elf64_Sym *refsym)
+_dl_reloc_overflow (struct link_map *map, const char *name,
+		    Elf64_Addr *const reloc_addr, const Elf64_Sym *refsym)
 {
   char buffer[1024];
   char *t;

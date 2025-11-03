@@ -18,10 +18,10 @@
 
 /* This file exists so that it can be replaced by sysdeps variants.
    It must define these macros with string values:
-        UNAME_SYSNAME
-        UNAME_RELEASE
-        UNAME_VERSION
-        UNAME_MACHINE
+	UNAME_SYSNAME
+	UNAME_RELEASE
+	UNAME_VERSION
+	UNAME_MACHINE
    If there is no sysdeps file, this file will just proxy to the file
    created by posix/Makefile.  */
 

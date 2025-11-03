@@ -19,8 +19,7 @@
 
 /* Get scheduling policy from the attribute structure.  */
 int
-posix_spawnattr_getcgroup_np (const posix_spawnattr_t *attr,
-			      int *cgroup)
+posix_spawnattr_getcgroup_np (const posix_spawnattr_t *attr, int *cgroup)
 {
   *cgroup = attr->__cgroup;
 

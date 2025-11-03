@@ -21,13 +21,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static int do_test (void);
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"
 
-static void *tf (void *a)
+static void *
+tf (void *a)
 {
   puts ("start tf");
 
@@ -50,7 +50,6 @@ static void *tf (void *a)
 
   return a;
 }
-
 
 int
 do_test (void)

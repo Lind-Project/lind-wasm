@@ -16,57 +16,57 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include <sys/ipc.h>  /* For __key_t  */
+#include <sys/ipc.h> /* For __key_t  */
 #include <kernel-features.h>
 
 #ifdef __ASSUME_SYSVIPC_DEFAULT_IPC_64
-# define __IPC_64      0x0
+#  define __IPC_64 0x0
 #else
-# define __IPC_64      0x100
+#  define __IPC_64 0x100
 #endif
 
 #ifndef __OLD_IPC_ID_TYPE
-# define __OLD_IPC_ID_TYPE unsigned short int
+#  define __OLD_IPC_ID_TYPE unsigned short int
 #endif
 #ifndef __OLD_IPC_MODE_TYPE
-# define __OLD_IPC_MODE_TYPE unsigned short int
+#  define __OLD_IPC_MODE_TYPE unsigned short int
 #endif
 
 struct __old_ipc_perm
 {
-  __key_t __key;			/* Key.  */
-  __OLD_IPC_ID_TYPE uid;		/* Owner's user ID.  */
-  __OLD_IPC_ID_TYPE gid;		/* Owner's group ID.  */
-  __OLD_IPC_ID_TYPE cuid;		/* Creator's user ID.  */
-  __OLD_IPC_ID_TYPE cgid;		/* Creator's group ID.  */
-  __OLD_IPC_MODE_TYPE mode;		/* Read/write permission.  */
-  unsigned short int __seq;		/* Sequence number.  */
+  __key_t __key;	    /* Key.  */
+  __OLD_IPC_ID_TYPE uid;    /* Owner's user ID.  */
+  __OLD_IPC_ID_TYPE gid;    /* Owner's group ID.  */
+  __OLD_IPC_ID_TYPE cuid;   /* Creator's user ID.  */
+  __OLD_IPC_ID_TYPE cgid;   /* Creator's group ID.  */
+  __OLD_IPC_MODE_TYPE mode; /* Read/write permission.  */
+  unsigned short int __seq; /* Sequence number.  */
 };
 
 #define SEMCTL_ARG_ADDRESS(__arg) &__arg.array
 
-#define MSGRCV_ARGS(__msgp, __msgtyp) \
-  ((long int []){ (long int) __msgp, __msgtyp })
+#define MSGRCV_ARGS(__msgp, __msgtyp)                                         \
+  ((long int[]) { (long int) __msgp, __msgtyp })
 
 /* This macro is required to handle the s390 variants, which passes the
    arguments in a different order than default.  */
-#define SEMTIMEDOP_IPC_ARGS(__nsops, __sops, __timeout) \
+#define SEMTIMEDOP_IPC_ARGS(__nsops, __sops, __timeout)                       \
   (__nsops), 0, (__sops), (__timeout)
 
 /* Linux SysV ipc does not provide new syscalls for 64-bit time support on
    32-bit architectures, but rather split the timestamp into high and low;
    storing the high value in previously unused fields.  */
-#if (__WORDSIZE == 32 \
+#if (__WORDSIZE == 32                                                         \
      && (!defined __SYSCALL_WORDSIZE || __SYSCALL_WORDSIZE == 32))
-# define __IPC_TIME64 1
+#  define __IPC_TIME64 1
 #else
-# define __IPC_TIME64 0
+#  define __IPC_TIME64 0
 #endif
 
 #if __IPC_TIME64 || defined __ASSUME_SYSVIPC_BROKEN_MODE_T
-# define IPC_CTL_NEED_TRANSLATION 1
+#  define IPC_CTL_NEED_TRANSLATION 1
 #else
-# define IPC_CTL_NEED_TRANSLATION 0
+#  define IPC_CTL_NEED_TRANSLATION 0
 #endif
 
 #include <ipc_ops.h>

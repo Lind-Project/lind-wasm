@@ -25,21 +25,20 @@
 #include "s_sincosf.h"
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
 #ifndef SINCOSF
-# define SINCOSF_FUNC __sincosf
+#  define SINCOSF_FUNC __sincosf
 #else
-# define SINCOSF_FUNC SINCOSF
+#  define SINCOSF_FUNC SINCOSF
 #endif
 
 /* Fast sincosf implementation.  Worst-case ULP is 0.5607, maximum relative
    error is 0.5303 * 2^-23.  A single-step range reduction is used for
    small values.  Large inputs have their range reduced using fast integer
    arithmetic.  */
-void
-SECTION
+void SECTION
 SINCOSF_FUNC (float y, float *sinp, float *cosp)
 {
   double x = y;
@@ -52,14 +51,14 @@ SINCOSF_FUNC (float y, float *sinp, float *cosp)
       double x2 = x * x;
 
       if (__glibc_unlikely (abstop12 (y) < abstop12 (0x1p-12f)))
-      {
-	/* Force underflow for tiny y.  */
-	if (__glibc_unlikely (abstop12 (y) < abstop12 (0x1p-126f)))
-	  math_force_eval ((float)x2);
-	*sinp = y;
-	*cosp = 1.0f;
-	return;
-      }
+	{
+	  /* Force underflow for tiny y.  */
+	  if (__glibc_unlikely (abstop12 (y) < abstop12 (0x1p-126f)))
+	    math_force_eval ((float) x2);
+	  *sinp = y;
+	  *cosp = 1.0f;
+	  return;
+	}
 
       sincosf_poly (x, x2, p, 0, sinp, cosp);
     }

@@ -31,5 +31,4 @@ __dup2 (int fd, int fd2)
 
   return __dup3 (fd, fd2, flags);
 }
-libc_hidden_def (__dup2)
-weak_alias (__dup2, dup2)
+libc_hidden_def (__dup2) weak_alias (__dup2, dup2)

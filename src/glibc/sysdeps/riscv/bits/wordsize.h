@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #if __riscv_xlen == (__SIZEOF_POINTER__ * 8)
-# define __WORDSIZE __riscv_xlen
+#  define __WORDSIZE __riscv_xlen
 #else
-# error unsupported ABI
+#  error unsupported ABI
 #endif
 
-#define __WORDSIZE_TIME64_COMPAT32  1
+#define __WORDSIZE_TIME64_COMPAT32 1
 
 #if __WORDSIZE == 32
-# define __WORDSIZE32_SIZE_ULONG    0
-# define __WORDSIZE32_PTRDIFF_LONG  0
+#  define __WORDSIZE32_SIZE_ULONG 0
+#  define __WORDSIZE32_PTRDIFF_LONG 0
 #endif

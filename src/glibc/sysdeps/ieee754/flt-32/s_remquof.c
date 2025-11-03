@@ -20,15 +20,13 @@
 
 #include <math_private.h>
 
-
 static const float zero = 0.0;
 #include <libm-alias-float.h>
-
 
 float
 __remquof (float x, float y, int *quo)
 {
-  int32_t hx,hy;
+  int32_t hx, hy;
   uint32_t sx;
   int cquo, qs;
 
@@ -41,13 +39,13 @@ __remquof (float x, float y, int *quo)
 
   /* Purge off exception values.  */
   if (hy == 0)
-    return (x * y) / (x * y); 			/* y = 0 */
-  if ((hx >= 0x7f800000)			/* x not finite */
-      || (hy > 0x7f800000))			/* y is NaN */
+    return (x * y) / (x * y); /* y = 0 */
+  if ((hx >= 0x7f800000)      /* x not finite */
+      || (hy > 0x7f800000))   /* y is NaN */
     return (x * y) / (x * y);
 
   if (hy <= 0x7dffffff)
-    x = __ieee754_fmodf (x, 8 * y);		/* now x < 8y */
+    x = __ieee754_fmodf (x, 8 * y); /* now x < 8y */
 
   if ((hx - hy) == 0)
     {
@@ -55,8 +53,8 @@ __remquof (float x, float y, int *quo)
       return zero * x;
     }
 
-  x  = fabsf (x);
-  y  = fabsf (y);
+  x = fabsf (x);
+  y = fabsf (y);
   cquo = 0;
 
   if (hy <= 0x7e7fffff && x >= 4 * y)

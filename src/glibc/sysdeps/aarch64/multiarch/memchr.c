@@ -18,24 +18,21 @@
 
 /* Define multiple versions only for the definition in libc.  */
 
-#if IS_IN (libc)
+#if IS_IN(libc)
 /* Redefine memchr so that the compiler won't complain about the type
    mismatch with the IFUNC selector in strong_alias, below.  */
-# undef memchr
-# define memchr __redirect_memchr
-# include <string.h>
-# include <init-arch.h>
+#  undef memchr
+#  define memchr __redirect_memchr
+#  include <string.h>
+#  include <init-arch.h>
 
 extern __typeof (__redirect_memchr) __memchr;
 
 extern __typeof (__redirect_memchr) __memchr_generic attribute_hidden;
 extern __typeof (__redirect_memchr) __memchr_nosimd attribute_hidden;
 
-libc_ifunc (__memchr,
-	    ((IS_EMAG (midr)
-	       ? __memchr_nosimd
-	       : __memchr_generic)));
+libc_ifunc (__memchr, ((IS_EMAG (midr) ? __memchr_nosimd : __memchr_generic)));
 
-# undef memchr
+#  undef memchr
 strong_alias (__memchr, memchr);
 #endif

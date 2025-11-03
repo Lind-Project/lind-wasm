@@ -5,7 +5,7 @@
 __uid_t
 __getuid (void)
 {
-  return MAKE_SYSCALL0(GETUID_SYSCALL, "syscall|getuid");
+  return MAKE_SYSCALL0 (GETUID_SYSCALL, "syscall|getuid");
 }
 
-weak_alias(__getuid, getuid)
+weak_alias (__getuid, getuid)

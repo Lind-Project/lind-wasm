@@ -38,8 +38,8 @@ static const struct data
 };
 
 #if WANT_SIMD_EXCEPT
-# define TinyBound v_u32 (0x21000000) /* asuint32(0x1p-61f).  */
-# define Thresh v_u32 (0x28800000)    /* RangeVal - TinyBound.  */
+#  define TinyBound v_u32 (0x21000000) /* asuint32(0x1p-61f).  */
+#  define Thresh v_u32 (0x28800000)    /* RangeVal - TinyBound.  */
 #endif
 
 #define C(i) d->poly[i]
@@ -52,7 +52,8 @@ special_case (float32x4_t x, float32x4_t y, uint32x4_t odd, uint32x4_t cmp)
   return v_call_f32 (sinf, x, y, cmp);
 }
 
-float32x4_t VPCS_ATTR NOINLINE V_NAME_F1 (sin) (float32x4_t x)
+float32x4_t VPCS_ATTR NOINLINE
+V_NAME_F1 (sin) (float32x4_t x)
 {
   const struct data *d = ptr_barrier (&data);
   float32x4_t n, r, r2, y;
@@ -91,5 +92,4 @@ float32x4_t VPCS_ATTR NOINLINE V_NAME_F1 (sin) (float32x4_t x)
     return special_case (x, y, odd, cmp);
   return vreinterpretq_f32_u32 (veorq_u32 (vreinterpretq_u32_f32 (y), odd));
 }
-libmvec_hidden_def (V_NAME_F1 (sin))
-HALF_WIDTH_ALIAS_F1 (sin)
+libmvec_hidden_def (V_NAME_F1 (sin)) HALF_WIDTH_ALIAS_F1 (sin)

@@ -18,7 +18,6 @@
 #include <errno.h>
 #include <signal.h>
 
-
 /* Send SIG to all processes in process group PGRP.
    If PGRP is zero, send SIG to all processes in
    the current process's process group.  */
@@ -31,5 +30,5 @@ killpg (__pid_t pgrp, int sig)
       return -1;
     }
 
-  return __kill (- pgrp, sig);
+  return __kill (-pgrp, sig);
 }

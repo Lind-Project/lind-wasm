@@ -29,7 +29,7 @@ __llrint (double x)
 #ifdef _ARCH_PWR4
   /* Assume powerpc64 instructions availability.  */
   long long int ret;
-  __asm__ ("fctid %0, %1" : "=d" (ret) : "d" (x));
+  __asm__ ("fctid %0, %1" : "=d"(ret) : "d"(x));
   return ret;
 #else
   double rx = rint (x);
@@ -47,7 +47,7 @@ __llrint (double x)
       if (exponent < 63)
 	{
 	  unsigned long long int mant
-	    = (i0 & ((1ULL << 52) - 1)) | (1ULL << 52);
+	      = (i0 & ((1ULL << 52) - 1)) | (1ULL << 52);
 	  if (exponent < 52)
 	    mant >>= 52 - exponent;
 	  else

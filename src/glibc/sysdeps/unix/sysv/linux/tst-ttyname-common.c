@@ -37,20 +37,21 @@
 
 /* generic utilities */
 
-#define VERIFY(expr)                                                    \
-  do {                                                                  \
-    if (!(expr))                                                        \
-      {                                                                 \
-        printf ("error: %s:%d: %s: %m\n",                               \
-                __FILE__, __LINE__, #expr);                             \
-        exit (1);                                                       \
-      }                                                                 \
-  } while (0)
+#define VERIFY(expr)                                                          \
+  do                                                                          \
+    {                                                                         \
+      if (!(expr))                                                            \
+	{                                                                     \
+	  printf ("error: %s:%d: %s: %m\n", __FILE__, __LINE__, #expr);       \
+	  exit (1);                                                           \
+	}                                                                     \
+    }                                                                         \
+  while (0)
 
 static void
 touch (const char *path, mode_t mode)
 {
-  xclose (xopen (path, O_WRONLY|O_CREAT|O_NOCTTY, mode));
+  xclose (xopen (path, O_WRONLY | O_CREAT | O_NOCTTY, mode));
 }
 
 static size_t
@@ -69,7 +70,7 @@ trim_prefix (char *str, size_t str_len, const char *prefix)
 static char *
 proc_fd_readlink (const char *linkname)
 {
-  static char target[PATH_MAX+1];
+  static char target[PATH_MAX + 1];
   ssize_t target_len = readlink (linkname, target, PATH_MAX);
   VERIFY (target_len > 0);
   target_len = trim_prefix (target, target_len, "(unreachable)");
@@ -101,17 +102,16 @@ eq_ttyname (struct result actual, struct result expected)
 {
   char *actual_name, *expected_name;
 
-  if ((actual.err == expected.err)
-      && (!actual.name == !expected.name)
+  if ((actual.err == expected.err) && (!actual.name == !expected.name)
       && (actual.name ? strcmp (actual.name, expected.name) == 0 : true))
     {
       if (expected.name)
-        expected_name = xasprintf ("\"%s\"", expected.name);
+	expected_name = xasprintf ("\"%s\"", expected.name);
       else
 	expected_name = xstrdup ("NULL");
 
-      printf ("info:      ttyname: PASS {name=%s, errno=%d}\n",
-	      expected_name, expected.err);
+      printf ("info:      ttyname: PASS {name=%s, errno=%d}\n", expected_name,
+	      expected.err);
 
       free (expected_name);
       return true;
@@ -127,9 +127,9 @@ eq_ttyname (struct result actual, struct result expected)
   else
     expected_name = xstrdup ("NULL");
 
-  printf ("error:     ttyname: actual {name=%s, errno=%d} != expected {name=%s, errno=%d}\n",
-	  actual_name, actual.err,
-	  expected_name, expected.err);
+  printf ("error:     ttyname: actual {name=%s, errno=%d} != expected "
+	  "{name=%s, errno=%d}\n",
+	  actual_name, actual.err, expected_name, expected.err);
 
   free (actual_name);
   free (expected_name);
@@ -167,18 +167,17 @@ eq_ttyname_r (struct result_r actual, struct result_r expected)
 {
   char *actual_name, *expected_name;
 
-  if ((actual.err == expected.err)
-      && (actual.ret == expected.ret)
+  if ((actual.err == expected.err) && (actual.ret == expected.ret)
       && (!actual.name == !expected.name)
       && (actual.name ? strcmp (actual.name, expected.name) == 0 : true))
     {
       if (expected.name)
-        expected_name = xasprintf ("\"%s\"", expected.name);
+	expected_name = xasprintf ("\"%s\"", expected.name);
       else
-        expected_name = xstrdup ("NULL");
+	expected_name = xstrdup ("NULL");
 
       printf ("info:      ttyname_r: PASS {name=%s, ret=%d, errno=%d}\n",
-              expected_name, expected.ret, expected.err);
+	      expected_name, expected.ret, expected.err);
 
       free (expected_name);
       return true;
@@ -194,9 +193,10 @@ eq_ttyname_r (struct result_r actual, struct result_r expected)
   else
     expected_name = xstrdup ("NULL");
 
-  printf ("error:     ttyname_r: actual {name=%s, ret=%d, errno=%d} != expected {name=%s, ret=%d, errno=%d}\n",
-	  actual_name, actual.ret, actual.err,
-	  expected_name, expected.ret, expected.err);
+  printf ("error:     ttyname_r: actual {name=%s, ret=%d, errno=%d} != "
+	  "expected {name=%s, ret=%d, errno=%d}\n",
+	  actual_name, actual.ret, actual.err, expected_name, expected.ret,
+	  expected.err);
 
   free (actual_name);
   free (expected_name);
@@ -208,7 +208,7 @@ eq_ttyname_r (struct result_r actual, struct result_r expected)
 static bool
 doit (int fd, const char *testname, struct result_r expected_r)
 {
-  struct result expected = {.name=expected_r.name, .err=expected_r.ret};
+  struct result expected = { .name = expected_r.name, .err = expected_r.ret };
   bool ret = true;
 
   printf ("info:    testcase: %s\n", testname);
@@ -282,12 +282,14 @@ run_chroot_tests (const char *slavename, int slave)
      instances.  */
   {
     VERIFY (stat (slavename, &st) < 0); /* sanity check */
-    if (!doit (slave, "no conflict, no match",
-               (struct result_r){.name=NULL, .ret=ENODEV, .err=ENODEV}))
+    if (!doit (
+	    slave, "no conflict, no match",
+	    (struct result_r) { .name = NULL, .ret = ENODEV, .err = ENODEV }))
       ok = false;
     VERIFY (mount ("/console", "/dev/console", NULL, MS_BIND, NULL) == 0);
-    if (!doit (slave, "no conflict, console",
-               (struct result_r){.name="/dev/console", .ret=0, .err=0}))
+    if (!doit (
+	    slave, "no conflict, console",
+	    (struct result_r) { .name = "/dev/console", .ret = 0, .err = 0 }))
       ok = false;
     VERIFY (umount ("/dev/console") == 0);
 
@@ -296,22 +298,25 @@ run_chroot_tests (const char *slavename, int slave)
       {
 	if (stat (slavename, &st) == 0)
 	  break;
-	if (posix_openpt (O_RDWR|O_NOCTTY|O_NONBLOCK) < 0)
+	if (posix_openpt (O_RDWR | O_NOCTTY | O_NONBLOCK) < 0)
 	  {
 	    if (errno == ENOSPC || errno == EMFILE || errno == ENFILE)
 	      FAIL_UNSUPPORTED ("cannot re-create PTY \"%s\" in chroot: %m"
-				" (consider increasing limits)", slavename);
+				" (consider increasing limits)",
+				slavename);
 	    else
 	      FAIL_EXIT1 ("cannot re-create PTY \"%s\" chroot: %m", slavename);
 	  }
       }
 
-    if (!doit (slave, "conflict, no match",
-               (struct result_r){.name=NULL, .ret=ENODEV, .err=ENODEV}))
+    if (!doit (
+	    slave, "conflict, no match",
+	    (struct result_r) { .name = NULL, .ret = ENODEV, .err = ENODEV }))
       ok = false;
     VERIFY (mount ("/console", "/dev/console", NULL, MS_BIND, NULL) == 0);
-    if (!doit (slave, "conflict, console",
-               (struct result_r){.name="/dev/console", .ret=0, .err=0}))
+    if (!doit (
+	    slave, "conflict, console",
+	    (struct result_r) { .name = "/dev/console", .ret = 0, .err = 0 }))
       ok = false;
     VERIFY (umount ("/dev/console") == 0);
   }
@@ -333,29 +338,31 @@ run_chroot_tests (const char *slavename, int slave)
        necessary.  */
     if (stat (target, &st) < 0)
       {
-        VERIFY (errno == ENOENT);
-        touch (target, 0);
+	VERIFY (errno == ENOENT);
+	touch (target, 0);
       }
 
     VERIFY (mount ("/console", "/dev/console", NULL, MS_BIND, NULL) == 0);
     VERIFY (mount ("/console", target, NULL, MS_BIND, NULL) == 0);
     if (!doit (slave, "with readlink target",
-               (struct result_r){.name=target, .ret=0, .err=0}))
+	       (struct result_r) { .name = target, .ret = 0, .err = 0 }))
       ok = false;
     VERIFY (umount (target) == 0);
     VERIFY (umount ("/dev/console") == 0);
 
     VERIFY (mount ("/console", "/dev/console", NULL, MS_BIND, NULL) == 0);
     VERIFY (mount (slavename, target, NULL, MS_BIND, NULL) == 0);
-    if (!doit (slave, "with readlink trap; fallback",
-               (struct result_r){.name="/dev/console", .ret=0, .err=0}))
+    if (!doit (
+	    slave, "with readlink trap; fallback",
+	    (struct result_r) { .name = "/dev/console", .ret = 0, .err = 0 }))
       ok = false;
     VERIFY (umount (target) == 0);
     VERIFY (umount ("/dev/console") == 0);
 
     VERIFY (mount (slavename, target, NULL, MS_BIND, NULL) == 0);
-    if (!doit (slave, "with readlink trap; no fallback",
-               (struct result_r){.name=NULL, .ret=ENODEV, .err=ENODEV}))
+    if (!doit (
+	    slave, "with readlink trap; no fallback",
+	    (struct result_r) { .name = NULL, .ret = ENODEV, .err = ENODEV }))
       ok = false;
     VERIFY (umount (target) == 0);
   }
@@ -387,11 +394,10 @@ run_chroot_tests (const char *slavename, int slave)
     struct dirent *d;
     while ((d = readdir (dirstream)) != NULL && ci < 3)
       {
-        if (strcmp (d->d_name, "console1")
-            && strcmp (d->d_name, "console2")
-            && strcmp (d->d_name, "console3") )
-          continue;
-        c[ci++] = xasprintf ("/dev/%s", d->d_name);
+	if (strcmp (d->d_name, "console1") && strcmp (d->d_name, "console2")
+	    && strcmp (d->d_name, "console3"))
+	  continue;
+	c[ci++] = xasprintf ("/dev/%s", d->d_name);
       }
     VERIFY (ci == 3);
     VERIFY (closedir (dirstream) == 0);
@@ -401,13 +407,13 @@ run_chroot_tests (const char *slavename, int slave)
     VERIFY (mount (slavename, c[2], NULL, MS_BIND, NULL) == 0);
     VERIFY (umount2 ("/dev/pts", MNT_DETACH) == 0);
     if (!doit (slave, "with search-path trap",
-               (struct result_r){.name=c[1], .ret=0, .err=0}))
+	       (struct result_r) { .name = c[1], .ret = 0, .err = 0 }))
       ok = false;
     for (int i = 0; i < 3; i++)
       {
-        VERIFY (umount (c[i]) == 0);
-        VERIFY (unlink (c[i]) == 0);
-        free (c[i]);
+	VERIFY (umount (c[i]) == 0);
+	VERIFY (unlink (c[i]) == 0);
+	free (c[i]);
       }
   }
 

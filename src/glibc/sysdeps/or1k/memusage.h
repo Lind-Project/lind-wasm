@@ -16,6 +16,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define GETSP() ({ register uintptr_t stack_ptr asm ("r1"); stack_ptr; })
+#define GETSP()                                                               \
+  ({                                                                          \
+    register uintptr_t stack_ptr asm ("r1");                                  \
+    stack_ptr;                                                                \
+  })
 
 #include <sysdeps/generic/memusage.h>

@@ -17,41 +17,43 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_TYPE_MACROS_FLOAT128_PPC64_MULTI
-#define _MATH_TYPE_MACROS_FLOAT128_PPC64_MULTI 1
+#  define _MATH_TYPE_MACROS_FLOAT128_PPC64_MULTI 1
 
-#include_next <math-type-macros-float128.h>
+#  include_next <math-type-macros-float128.h>
 
-#ifdef _F128_ENABLE_IFUNC
+#  ifdef _F128_ENABLE_IFUNC
 
 /* Include fenv.h now before turning off PLT bypass.  At
    minimum fereaiseexcept is used today.  */
-#include <fenv.h>
+#    include <fenv.h>
 
-#include <float128-ifunc-macros.h>
+#    include <float128-ifunc-macros.h>
 
 /* Ensure local redirects are always disabled by including
    math.h in the following manner.  */
-#undef NO_MATH_REDIRECT
-#define NO_MATH_REDIRECT
-#include <math.h>
-#undef NO_MATH_REDIRECT
+#    undef NO_MATH_REDIRECT
+#    define NO_MATH_REDIRECT
+#    include <math.h>
+#    undef NO_MATH_REDIRECT
 
 /* Include complex prototypes now to enable redirecting of
    complex functions.  */
-#include <complex.h>
+#    include <complex.h>
 
 /* Declare redirects for a function f which has a complex
    analogue.  That is, __ ## f ## f128 and __c ## f ## f128.  */
-#define F128_C_REDIR(f) F128_REDIR (__c ## f ## f128); \
-			F128_REDIR (__ ## f ## f128); \
+#    define F128_C_REDIR(f)                                                   \
+      F128_REDIR (__c##f##f128);                                              \
+      F128_REDIR (__##f##f128);
 
 /* Similar to F128_C_REDIR, declare the set of implementation
    redirects for the trigonometric family f for {a,}f{,h}
    and {a,}cf{,h} complex variants where f is sin/cos/tan.  */
-#define F128_TRIG_REDIR(f) F128_C_REDIR (a ## f); \
-			   F128_C_REDIR (a ## f ## h); \
-			   F128_C_REDIR (f); \
-			   F128_C_REDIR (f ## h);
+#    define F128_TRIG_REDIR(f)                                                \
+      F128_C_REDIR (a##f);                                                    \
+      F128_C_REDIR (a##f##h);                                                 \
+      F128_C_REDIR (f);                                                       \
+      F128_C_REDIR (f##h);
 
 F128_TRIG_REDIR (cos)
 F128_TRIG_REDIR (sin)
@@ -113,8 +115,8 @@ F128_REDIR (__w_scalblnf128);
 F128_REDIR (__w_log1pf128);
 
 /* Include the redirects shared with math_private.h users.  */
-#include <float128-ifunc-redirects.h>
+#    include <float128-ifunc-redirects.h>
 
-#endif /* _F128_ENABLE_IFUNC */
+#  endif /* _F128_ENABLE_IFUNC */
 
 #endif /*_MATH_TYPE_MACROS_FLOAT128_PPC64_MULTI */

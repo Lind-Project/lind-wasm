@@ -33,12 +33,12 @@ do_test (void)
   unsigned int isa_level = get_isa_level (cpu_features);
   bool has_isa_baseline = ((isa_level & GNU_PROPERTY_X86_ISA_1_BASELINE)
 			   == GNU_PROPERTY_X86_ISA_1_BASELINE);
-  bool has_isa_v2 = ((isa_level & GNU_PROPERTY_X86_ISA_1_V2)
-			   == GNU_PROPERTY_X86_ISA_1_V2);
-  bool has_isa_v3 = ((isa_level & GNU_PROPERTY_X86_ISA_1_V3)
-			   == GNU_PROPERTY_X86_ISA_1_V3);
-  bool has_isa_v4 = ((isa_level & GNU_PROPERTY_X86_ISA_1_V4)
-			   == GNU_PROPERTY_X86_ISA_1_V4);
+  bool has_isa_v2
+      = ((isa_level & GNU_PROPERTY_X86_ISA_1_V2) == GNU_PROPERTY_X86_ISA_1_V2);
+  bool has_isa_v3
+      = ((isa_level & GNU_PROPERTY_X86_ISA_1_V3) == GNU_PROPERTY_X86_ISA_1_V3);
+  bool has_isa_v4
+      = ((isa_level & GNU_PROPERTY_X86_ISA_1_V4) == GNU_PROPERTY_X86_ISA_1_V4);
 
   if (!has_isa_baseline)
     return EXIT_FAILURE;

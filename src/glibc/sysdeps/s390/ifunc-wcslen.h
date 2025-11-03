@@ -16,38 +16,38 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WCSLEN_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WCSLEN_IFUNC 1
 #else
-# define HAVE_WCSLEN_IFUNC	0
+#  define HAVE_WCSLEN_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WCSLEN_IFUNC_AND_VX_SUPPORT HAVE_WCSLEN_IFUNC
+#  define HAVE_WCSLEN_IFUNC_AND_VX_SUPPORT HAVE_WCSLEN_IFUNC
 #else
-# define HAVE_WCSLEN_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WCSLEN_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WCSLEN_DEFAULT		WCSLEN_Z13
+#  define WCSLEN_DEFAULT WCSLEN_Z13
 /* The z13 ifunc variant is using the common code variant as fallback!  */
-# define HAVE_WCSLEN_C		1
-# define HAVE_WCSLEN_Z13	1
+#  define HAVE_WCSLEN_C 1
+#  define HAVE_WCSLEN_Z13 1
 #else
-# define WCSLEN_DEFAULT		WCSLEN_C
-# define HAVE_WCSLEN_C		1
-# define HAVE_WCSLEN_Z13	HAVE_WCSLEN_IFUNC_AND_VX_SUPPORT
+#  define WCSLEN_DEFAULT WCSLEN_C
+#  define HAVE_WCSLEN_C 1
+#  define HAVE_WCSLEN_Z13 HAVE_WCSLEN_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WCSLEN_C
-# define WCSLEN_C		__wcslen_c
+#  define WCSLEN_C __wcslen_c
 #else
-# define WCSLEN_C		NULL
+#  define WCSLEN_C NULL
 #endif
 
 #if HAVE_WCSLEN_Z13
-# define WCSLEN_Z13		__wcslen_vx
+#  define WCSLEN_Z13 __wcslen_vx
 #else
-# define WCSLEN_Z13		NULL
+#  define WCSLEN_Z13 NULL
 #endif

@@ -23,8 +23,7 @@ int
 __finite (double x)
 {
   int x_cond;
-  asm volatile ("fclass.d \t%0, %1" : "=f" (x_cond) : "f" (x));
-  return  x_cond & ~(_FCLASS_INF | _FCLASS_NAN);
+  asm volatile ("fclass.d \t%0, %1" : "=f"(x_cond) : "f"(x));
+  return x_cond & ~(_FCLASS_INF | _FCLASS_NAN);
 }
-hidden_def (__finite)
-weak_alias (__finite, finite)
+hidden_def (__finite) weak_alias (__finite, finite)

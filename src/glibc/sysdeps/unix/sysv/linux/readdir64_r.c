@@ -20,7 +20,7 @@
    'readdir'.  However the function signatures are not equal due
    different return types, so we need to suppress {__}readdir so weak
    and strong alias do not throw conflicting types errors.  */
-#define readdir_r   __no_readdir_r_decl
+#define readdir_r __no_readdir_r_decl
 #define __readdir_r __no___readdir_r_decl
 #include <dirent.h>
 #undef __readdir_r
@@ -117,21 +117,18 @@ __readdir64_r (DIR *dirp, struct dirent64 *entry, struct dirent64 **result)
   return ret;
 }
 
-
 #if _DIRENT_MATCHES_DIRENT64
-strong_alias (__readdir64_r, __readdir_r)
-weak_alias (__readdir64_r, readdir_r)
-weak_alias (__readdir64_r, readdir64_r)
+strong_alias (__readdir64_r, __readdir_r) weak_alias (__readdir64_r, readdir_r)
+    weak_alias (__readdir64_r, readdir64_r)
 #else
 /* The compat code expects the 'struct direct' with d_ino being a __ino_t
    instead of __ino64_t.  */
-# include <shlib-compat.h>
+#  include <shlib-compat.h>
 versioned_symbol (libc, __readdir64_r, readdir64_r, GLIBC_2_2);
-# if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
-#  include <olddirent.h>
+#  if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
+#    include <olddirent.h>
 
-int
-attribute_compat_text_section
+int attribute_compat_text_section
 __old_readdir64_r (DIR *dirp, struct __old_dirent64 *entry,
 		   struct __old_dirent64 **result)
 {
@@ -223,5 +220,5 @@ __old_readdir64_r (DIR *dirp, struct __old_dirent64 *entry,
 }
 
 compat_symbol (libc, __old_readdir64_r, readdir64_r, GLIBC_2_1);
-# endif /* SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)  */
-#endif /* _DIRENT_MATCHES_DIRENT64  */
+#  endif /* SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)  */
+#endif	 /* _DIRENT_MATCHES_DIRENT64  */

@@ -20,9 +20,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-
 static int fd[2];
-
 
 static void *
 tf (void *arg)
@@ -31,11 +29,11 @@ tf (void *arg)
      write blocks.  */
   char buf[100000];
 
-  while (write (fd[1], buf, sizeof (buf)) > 0);
+  while (write (fd[1], buf, sizeof (buf)) > 0)
+    ;
 
   return (void *) 42l;
 }
-
 
 static int
 do_test (void)

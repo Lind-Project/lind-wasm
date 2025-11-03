@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_VDSO_H
-#define _DL_VDSO_H	1
+#  define _DL_VDSO_H 1
 
 /* Function for resolving symbols in the VDSO link map.  Return the
    address of the vdso symbol NAME. */

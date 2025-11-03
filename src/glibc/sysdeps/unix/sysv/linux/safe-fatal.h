@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SAFE_FATAL_H
-#define _SAFE_FATAL_H   1
+#  define _SAFE_FATAL_H 1
 
-#include <sysdep.h>
-#include <unistd.h>
+#  include <sysdep.h>
+#  include <unistd.h>
 
 static inline void
 __safe_fatal (void)
@@ -29,4 +29,4 @@ __safe_fatal (void)
   INTERNAL_SYSCALL_CALL (kill, self, SIGKILL);
 }
 
-#endif  /* safe-fatal.h */
+#endif /* safe-fatal.h */

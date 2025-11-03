@@ -21,33 +21,28 @@
 
 extern __typeof (REDIRECT_NAME) OPTIMIZE (erms) attribute_hidden;
 
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx512_unaligned)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx512_unaligned_erms)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx512_no_vzeroupper)
-  attribute_hidden;
+extern __typeof (REDIRECT_NAME) OPTIMIZE (avx512_unaligned) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (avx512_unaligned_erms) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (avx512_no_vzeroupper) attribute_hidden;
 
-extern __typeof (REDIRECT_NAME) OPTIMIZE (evex_unaligned)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (evex_unaligned_erms)
-  attribute_hidden;
+extern __typeof (REDIRECT_NAME) OPTIMIZE (evex_unaligned) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (evex_unaligned_erms) attribute_hidden;
 
 extern __typeof (REDIRECT_NAME) OPTIMIZE (avx2_unaligned) attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx2_unaligned_erms)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx2_unaligned_rtm)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (avx2_unaligned_erms_rtm)
-  attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (avx2_unaligned_erms) attribute_hidden;
+extern __typeof (REDIRECT_NAME) OPTIMIZE (avx2_unaligned_rtm) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (avx2_unaligned_erms_rtm) attribute_hidden;
 
-extern __typeof (REDIRECT_NAME) OPTIMIZE (sse2_unaligned)
-  attribute_hidden;
-extern __typeof (REDIRECT_NAME) OPTIMIZE (sse2_unaligned_erms)
-  attribute_hidden;
+extern __typeof (REDIRECT_NAME) OPTIMIZE (sse2_unaligned) attribute_hidden;
+extern __typeof (REDIRECT_NAME)
+    OPTIMIZE (sse2_unaligned_erms) attribute_hidden;
 
-static inline void *
-inhibit_stack_protector
+static inline void *inhibit_stack_protector
 IFUNC_SELECTOR (void)
 {
   const struct cpu_features *cpu_features = __get_cpu_features ();
@@ -91,8 +86,7 @@ IFUNC_SELECTOR (void)
 	  return OPTIMIZE (avx2_unaligned_rtm);
 	}
 
-      if (X86_ISA_CPU_FEATURES_ARCH_P (cpu_features,
-				       Prefer_No_VZEROUPPER, !))
+      if (X86_ISA_CPU_FEATURES_ARCH_P (cpu_features, Prefer_No_VZEROUPPER, !))
 	{
 	  if (CPU_FEATURE_USABLE_P (cpu_features, ERMS))
 	    return OPTIMIZE (avx2_unaligned_erms);

@@ -19,7 +19,6 @@
 #include <stddef.h>
 #include <unistd.h>
 
-
 /* Get file-specific information about descriptor FD.  */
 long int
 __fpathconf (int fd, int name)
@@ -55,4 +54,4 @@ __fpathconf (int fd, int name)
 
 weak_alias (__fpathconf, fpathconf)
 
-stub_warning (fpathconf)
+    stub_warning (fpathconf)

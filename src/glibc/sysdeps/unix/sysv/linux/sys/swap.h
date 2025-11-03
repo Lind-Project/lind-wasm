@@ -18,16 +18,16 @@
 
 #ifndef _SYS_SWAP_H
 
-#define _SYS_SWAP_H	1
-#include <features.h>
+#  define _SYS_SWAP_H 1
+#  include <features.h>
 
 /* The swap priority is encoded as:
    (prio << SWAP_FLAG_PRIO_SHIFT) & SWAP_FLAG_PRIO_MASK
 */
-#define	SWAP_FLAG_PREFER	0x8000	/* Set if swap priority is specified. */
-#define	SWAP_FLAG_PRIO_MASK	0x7fff
-#define	SWAP_FLAG_PRIO_SHIFT	0
-#define SWAP_FLAG_DISCARD	0x10000	/* Discard swap cluster after use.  */
+#  define SWAP_FLAG_PREFER 0x8000 /* Set if swap priority is specified. */
+#  define SWAP_FLAG_PRIO_MASK 0x7fff
+#  define SWAP_FLAG_PRIO_SHIFT 0
+#  define SWAP_FLAG_DISCARD 0x10000 /* Discard swap cluster after use.  */
 
 __BEGIN_DECLS
 

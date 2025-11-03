@@ -25,5 +25,5 @@ fegetexcept (void)
   fexcept_t exc;
 
   _FPU_GETCW (exc);
-  return ((exc & FPC_EXCEPTION_MASK) >>  FPC_EXCEPTION_MASK_SHIFT);
+  return ((exc & FPC_EXCEPTION_MASK) >> FPC_EXCEPTION_MASK_SHIFT);
 }

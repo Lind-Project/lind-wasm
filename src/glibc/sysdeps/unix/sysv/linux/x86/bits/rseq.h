@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_RSEQ_H
-# error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
+#  error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
 #endif
 
 /* RSEQ_SIG is a signature required before each abort handler code.
@@ -27,4 +27,4 @@
    x86-32:    0f b9 3d 53 30 05 53      ud1    0x53053053,%edi
    x86-64:    0f b9 3d 53 30 05 53      ud1    0x53053053(%rip),%edi  */
 
-#define RSEQ_SIG        0x53053053
+#define RSEQ_SIG 0x53053053

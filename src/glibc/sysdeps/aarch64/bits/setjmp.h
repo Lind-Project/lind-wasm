@@ -17,17 +17,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_SETJMP_H
-#define _BITS_SETJMP_H 1
+#  define _BITS_SETJMP_H 1
 
-#if !defined _SETJMP_H && !defined _PTHREAD_H
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
-#endif
+#  if !defined _SETJMP_H && !defined _PTHREAD_H
+#    error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  endif
 
-#ifndef _ASM
+#  ifndef _ASM
 /* Jump buffer contains:
    x19-x28, x29(fp), x30(lr), (x31)sp, d8-d15.  Other registers are not
    saved.  */
-__extension__ typedef unsigned long long __jmp_buf [22];
+__extension__ typedef unsigned long long __jmp_buf[22];
 
-#endif
+#  endif
 #endif

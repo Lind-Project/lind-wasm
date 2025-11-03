@@ -56,7 +56,7 @@ unwind_arch_adjustment (void *prev, void *addr)
 
      24021061 li v0, 0x1061 (rt_sigreturn)
      0000000c syscall
-        or
+	or
      24021017 li v0, 0x1017 (sigreturn)
      0000000c syscall  */
   if (pc[1] != 0x0000000c)

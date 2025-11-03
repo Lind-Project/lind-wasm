@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LINUX_ARM_FEATURES_H
-#define _LINUX_ARM_FEATURES_H 1
+#  define _LINUX_ARM_FEATURES_H 1
 
-#ifndef __ASSEMBLER__
-# include <ldsodefs.h>
+#  ifndef __ASSEMBLER__
+#    include <ldsodefs.h>
 
-# define ARM_HAVE_VFP	(GLRO (dl_hwcap) & HWCAP_ARM_VFP)
-#endif
+#    define ARM_HAVE_VFP (GLRO (dl_hwcap) & HWCAP_ARM_VFP)
+#  endif
 
-#include_next <arm-features.h>
+#  include_next <arm-features.h>
 
-#endif  /* arm-features.h */
+#endif /* arm-features.h */

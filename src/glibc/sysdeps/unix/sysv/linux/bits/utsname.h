@@ -16,7 +16,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_UTSNAME_H
-# error "Never include <bits/utsname.h> directly; use <sys/utsname.h> instead."
+#  error                                                                       \
+      "Never include <bits/utsname.h> directly; use <sys/utsname.h> instead."
 #endif
 
 /* Length of the entries in `struct utsname' is 65.  */

@@ -16,6 +16,6 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define STAT_IS_KERNEL_STAT  1
-#define XSTAT_IS_XSTAT64     0
-#define STATFS_IS_STATFS64   0
+#define STAT_IS_KERNEL_STAT 1
+#define XSTAT_IS_XSTAT64 0
+#define STATFS_IS_STATFS64 0

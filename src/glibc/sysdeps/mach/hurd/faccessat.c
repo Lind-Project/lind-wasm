@@ -41,7 +41,7 @@ hurd_fail_noerrno (error_t err)
 
 static int
 __faccessat_common (int fd, const char *file, int type, int at_flags,
-                    int (*errfunc) (error_t))
+		    int (*errfunc) (error_t))
 {
   error_t err;
   file_t rcrdir, rcwdir, io;
@@ -50,84 +50,80 @@ __faccessat_common (int fd, const char *file, int type, int at_flags,
   if ((at_flags & AT_EACCESS) == AT_EACCESS)
     {
       /* Use effective permissions.  */
-      io = __file_name_lookup_at (fd, at_flags &~ AT_EACCESS, file, 0, 0);
+      io = __file_name_lookup_at (fd, at_flags & ~AT_EACCESS, file, 0, 0);
       if (io == MACH_PORT_NULL)
 	return -1;
     }
   else
     {
       /* We have to use real permissions instead of the
-         usual effective permissions.  */
+	 usual effective permissions.  */
 
       int hurd_flags = 0;
       err = __hurd_at_flags (&at_flags, &hurd_flags);
       if (err)
 	return errfunc (err);
 
-      error_t reauthenticate_cwdir_at (file_t *result)
-	{
-	  /* Get a port to the FD directory, authenticated with the real IDs.  */
-	  error_t err;
-	  mach_port_t ref;
-	  ref = __mach_reply_port ();
-	  err = HURD_DPORT_USE
-	    (fd,
-	     ({
-	       err = __io_reauthenticate (port, ref, MACH_MSG_TYPE_MAKE_SEND);
-	       if (!err)
-		 err = __auth_user_authenticate (_hurd_id.rid_auth,
-						 ref, MACH_MSG_TYPE_MAKE_SEND,
-						 result);
-	       err;
-	     }));
-	  __mach_port_destroy (__mach_task_self (), ref);
-	  return err;
-	}
+      error_t reauthenticate_cwdir_at (file_t * result)
+      {
+	/* Get a port to the FD directory, authenticated with the real IDs.  */
+	error_t err;
+	mach_port_t ref;
+	ref = __mach_reply_port ();
+	err = HURD_DPORT_USE (
+	    fd, ({
+	      err = __io_reauthenticate (port, ref, MACH_MSG_TYPE_MAKE_SEND);
+	      if (!err)
+		err = __auth_user_authenticate (
+		    _hurd_id.rid_auth, ref, MACH_MSG_TYPE_MAKE_SEND, result);
+	      err;
+	    }));
+	__mach_port_destroy (__mach_task_self (), ref);
+	return err;
+      }
 
       error_t reauthenticate (int which, file_t *result)
-	{
-	  /* Get a port to our root directory, authenticated with the real IDs.  */
-	  error_t err;
-	  mach_port_t ref;
-	  ref = __mach_reply_port ();
-	  err = HURD_PORT_USE
-	    (&_hurd_ports[which],
-	     ({
-	       err = __io_reauthenticate (port, ref, MACH_MSG_TYPE_MAKE_SEND);
-	       if (!err)
-		 err = __auth_user_authenticate (_hurd_id.rid_auth,
-						 ref, MACH_MSG_TYPE_MAKE_SEND,
-						 result);
-	       err;
-	     }));
-	  __mach_port_destroy (__mach_task_self (), ref);
-	  return err;
-	}
+      {
+	/* Get a port to our root directory, authenticated with the real IDs.
+	 */
+	error_t err;
+	mach_port_t ref;
+	ref = __mach_reply_port ();
+	err = HURD_PORT_USE (&_hurd_ports[which], ({
+	  err = __io_reauthenticate (port, ref, MACH_MSG_TYPE_MAKE_SEND);
+	  if (!err)
+	    err = __auth_user_authenticate (_hurd_id.rid_auth, ref,
+					    MACH_MSG_TYPE_MAKE_SEND, result);
+	  err;
+	}));
+	__mach_port_destroy (__mach_task_self (), ref);
+	return err;
+      }
 
       error_t init_port (int which, error_t (*operate) (mach_port_t))
-	{
-	  switch (which)
-	    {
-	    case INIT_PORT_AUTH:
-	      return (*operate) (_hurd_id.rid_auth);
-	    case INIT_PORT_CRDIR:
-	      return (reauthenticate (INIT_PORT_CRDIR, &rcrdir) ?:
-		      (*operate) (rcrdir));
-	    case INIT_PORT_CWDIR:
-	      if (fd == AT_FDCWD || file[0] == '/')
-		return (reauthenticate (INIT_PORT_CWDIR, &rcwdir) ?:
-			(*operate) (rcwdir));
-	      else
-		return (reauthenticate_cwdir_at (&rcwdir) ?:
-			(*operate) (rcwdir));
-	    default:
-	      return _hurd_ports_use (which, operate);
-	    }
-	}
+      {
+	switch (which)
+	  {
+	  case INIT_PORT_AUTH:
+	    return (*operate) (_hurd_id.rid_auth);
+	  case INIT_PORT_CRDIR:
+	    return (reauthenticate (INIT_PORT_CRDIR, &rcrdir)
+			?: (*operate) (rcrdir));
+	  case INIT_PORT_CWDIR:
+	    if (fd == AT_FDCWD || file[0] == '/')
+	      return (reauthenticate (INIT_PORT_CWDIR, &rcwdir)
+			  ?: (*operate) (rcwdir));
+	    else
+	      return (reauthenticate_cwdir_at (&rcwdir)
+			  ?: (*operate) (rcwdir));
+	  default:
+	    return _hurd_ports_use (which, operate);
+	  }
+      }
 
       rcrdir = rcwdir = MACH_PORT_NULL;
 
-     retry:
+    retry:
       HURD_CRITICAL_BEGIN;
 
       __mutex_lock (&_hurd_id.lock);
@@ -150,31 +146,29 @@ __faccessat_common (int fd, const char *file, int type, int at_flags,
 
 	  /* Create a new auth port using our real UID and GID (the first
 	     auxiliary UID and GID) as the only effective IDs.  */
-	  if (err = __USEPORT (AUTH,
-			       __auth_makeauth (port,
-						NULL, MACH_MSG_TYPE_COPY_SEND, 0,
-						_hurd_id.aux.uids, 1,
-						_hurd_id.aux.uids,
-						_hurd_id.aux.nuids,
-						_hurd_id.aux.gids, 1,
-						_hurd_id.aux.gids,
-						_hurd_id.aux.ngids,
-						&_hurd_id.rid_auth)))
+	  if (err = __USEPORT (
+		  AUTH,
+		  __auth_makeauth (port, NULL, MACH_MSG_TYPE_COPY_SEND, 0,
+				   _hurd_id.aux.uids, 1, _hurd_id.aux.uids,
+				   _hurd_id.aux.nuids, _hurd_id.aux.gids, 1,
+				   _hurd_id.aux.gids, _hurd_id.aux.ngids,
+				   &_hurd_id.rid_auth)))
 	    goto lose;
 	}
 
       if (!err)
 	/* Look up the file name using the modified init ports.  */
-	err = __hurd_file_name_lookup (&init_port, &__getdport, 0,
-				       file, hurd_flags, 0, &io);
+	err = __hurd_file_name_lookup (&init_port, &__getdport, 0, file,
+				       hurd_flags, 0, &io);
 
       /* We are done with _hurd_id.rid_auth now.  */
-     lose:
+    lose:
       __mutex_unlock (&_hurd_id.lock);
 
       HURD_CRITICAL_END;
       if (err == EINTR)
-	/* Got a signal while inside an RPC of the critical section, retry again */
+	/* Got a signal while inside an RPC of the critical section, retry
+	 * again */
 	goto retry;
 
       if (rcrdir != MACH_PORT_NULL)

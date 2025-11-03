@@ -19,36 +19,33 @@
 #include <ifunc-memcpy.h>
 
 #if HAVE_MEMCPY_IFUNC
-# define mempcpy __redirect_mempcpy
-# define __mempcpy __redirect___mempcpy
-# define __NO_STRING_INLINES
-# define NO_MEMPCPY_STPCPY_REDIRECT
-# include <string.h>
-# undef mempcpy
-# undef __mempcpy
-# include <ifunc-resolve.h>
+#  define mempcpy __redirect_mempcpy
+#  define __mempcpy __redirect___mempcpy
+#  define __NO_STRING_INLINES
+#  define NO_MEMPCPY_STPCPY_REDIRECT
+#  include <string.h>
+#  undef mempcpy
+#  undef __mempcpy
+#  include <ifunc-resolve.h>
 
-# if HAVE_MEMCPY_Z900_G5
+#  if HAVE_MEMCPY_Z900_G5
 extern __typeof (__redirect___mempcpy) MEMPCPY_Z900_G5 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMCPY_Z10
+#  if HAVE_MEMCPY_Z10
 extern __typeof (__redirect___mempcpy) MEMPCPY_Z10 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMCPY_Z196
+#  if HAVE_MEMCPY_Z196
 extern __typeof (__redirect___mempcpy) MEMPCPY_Z196 attribute_hidden;
-# endif
+#  endif
 
-s390_libc_ifunc_expr (__redirect___mempcpy, __mempcpy,
-		      ({
+s390_libc_ifunc_expr (__redirect___mempcpy, __mempcpy, ({
 			s390_libc_ifunc_expr_stfle_init ();
 			(HAVE_MEMCPY_Z196 && S390_IS_Z196 (stfle_bits))
-			  ? MEMPCPY_Z196
-			  : (HAVE_MEMCPY_Z10 && S390_IS_Z10 (stfle_bits))
-			  ? MEMPCPY_Z10
-			  : MEMPCPY_DEFAULT;
-		      })
-		      )
-weak_alias (__mempcpy, mempcpy);
+			    ? MEMPCPY_Z196
+			: (HAVE_MEMCPY_Z10 && S390_IS_Z10 (stfle_bits))
+			    ? MEMPCPY_Z10
+			    : MEMPCPY_DEFAULT;
+		      })) weak_alias (__mempcpy, mempcpy);
 #endif

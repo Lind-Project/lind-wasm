@@ -23,8 +23,6 @@
 extern __typeof (llrintf) __llrintf_vis3 attribute_hidden;
 extern __typeof (llrintf) __llrintf_generic attribute_hidden;
 
-sparc_libm_ifunc (__llrintf,
-		  hwcap & HWCAP_SPARC_VIS3
-		  ? __llrintf_vis3
-		  : __llrintf_generic);
+sparc_libm_ifunc (__llrintf, hwcap &HWCAP_SPARC_VIS3 ? __llrintf_vis3
+						     : __llrintf_generic);
 libm_alias_float (__llrint, llrint)

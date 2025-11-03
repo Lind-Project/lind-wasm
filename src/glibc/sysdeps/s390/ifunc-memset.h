@@ -16,50 +16,50 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)	\
-  && ! defined HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# define HAVE_MEMSET_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
+#  define HAVE_MEMSET_IFUNC 1
 #else
-# define HAVE_MEMSET_IFUNC	0
+#  define HAVE_MEMSET_IFUNC 0
 #endif
 
 #if defined HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# define MEMSET_DEFAULT		MEMSET_Z196
-# define HAVE_MEMSET_Z900_G5	0
-# define HAVE_MEMSET_Z10	0
-# define HAVE_MEMSET_Z196	1
+#  define MEMSET_DEFAULT MEMSET_Z196
+#  define HAVE_MEMSET_Z900_G5 0
+#  define HAVE_MEMSET_Z10 0
+#  define HAVE_MEMSET_Z196 1
 #elif defined HAVE_S390_MIN_Z10_ZARCH_ASM_SUPPORT
-# define MEMSET_DEFAULT		MEMSET_Z10
-# define HAVE_MEMSET_Z900_G5	0
-# define HAVE_MEMSET_Z10	1
-# define HAVE_MEMSET_Z196	HAVE_MEMSET_IFUNC
+#  define MEMSET_DEFAULT MEMSET_Z10
+#  define HAVE_MEMSET_Z900_G5 0
+#  define HAVE_MEMSET_Z10 1
+#  define HAVE_MEMSET_Z196 HAVE_MEMSET_IFUNC
 #else
-# define MEMSET_DEFAULT		MEMSET_Z900_G5
-# define HAVE_MEMSET_Z900_G5	1
-# define HAVE_MEMSET_Z10	HAVE_MEMSET_IFUNC
-# define HAVE_MEMSET_Z196	HAVE_MEMSET_IFUNC
+#  define MEMSET_DEFAULT MEMSET_Z900_G5
+#  define HAVE_MEMSET_Z900_G5 1
+#  define HAVE_MEMSET_Z10 HAVE_MEMSET_IFUNC
+#  define HAVE_MEMSET_Z196 HAVE_MEMSET_IFUNC
 #endif
 
 #if HAVE_MEMSET_Z10 || HAVE_MEMSET_Z196
-# define HAVE_MEMSET_MVCLE	1
+#  define HAVE_MEMSET_MVCLE 1
 #else
-# define HAVE_MEMSET_MVCLE	0
+#  define HAVE_MEMSET_MVCLE 0
 #endif
 
 #if HAVE_MEMSET_Z900_G5
-# define MEMSET_Z900_G5		__memset_default
+#  define MEMSET_Z900_G5 __memset_default
 #else
-# define MEMSET_Z900_G5		NULL
+#  define MEMSET_Z900_G5 NULL
 #endif
 
 #if HAVE_MEMSET_Z10
-# define MEMSET_Z10		__memset_z10
+#  define MEMSET_Z10 __memset_z10
 #else
-# define MEMSET_Z10		NULL
+#  define MEMSET_Z10 NULL
 #endif
 
 #if HAVE_MEMSET_Z196
-# define MEMSET_Z196		__memset_z196
+#  define MEMSET_Z196 __memset_z196
 #else
-# define MEMSET_Z196		NULL
+#  define MEMSET_Z196 NULL
 #endif

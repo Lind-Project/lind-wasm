@@ -4,5 +4,5 @@
    long double == ibm128 was replaced with long double == _Float128
    for libm *l functions and libc functions using long double.  */
 
-#define LDBL_IBM128_VERSION		GLIBC_2.32
-#define LDBL_IBM128_COMPAT_VERSION	GLIBC_2_32
+#define LDBL_IBM128_VERSION GLIBC_2.32
+#define LDBL_IBM128_COMPAT_VERSION GLIBC_2_32

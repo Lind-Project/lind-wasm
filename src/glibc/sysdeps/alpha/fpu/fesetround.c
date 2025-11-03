@@ -27,17 +27,16 @@ __fesetround (int round)
     return 1;
 
   /* Get the current state.  */
-  __asm__ __volatile__("excb; mf_fpcr %0" : "=f"(fpcr));
+  __asm__ __volatile__ ("excb; mf_fpcr %0" : "=f"(fpcr));
 
   /* Set the relevant bits.  */
   fpcr = ((fpcr & ~FPCR_ROUND_MASK)
-	  | ((unsigned long)round << FPCR_ROUND_SHIFT));
+	  | ((unsigned long) round << FPCR_ROUND_SHIFT));
 
   /* Put the new state in effect.  */
-  __asm__ __volatile__("mt_fpcr %0; excb" : : "f"(fpcr));
+  __asm__ __volatile__ ("mt_fpcr %0; excb" : : "f"(fpcr));
 
   return 0;
 }
-libm_hidden_def (__fesetround)
-weak_alias (__fesetround, fesetround)
-libm_hidden_weak (fesetround)
+libm_hidden_def (__fesetround) weak_alias (__fesetround, fesetround)
+    libm_hidden_weak (fesetround)

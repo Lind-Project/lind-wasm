@@ -27,9 +27,9 @@
 #define MANT_DIG 53
 
 #if UNSIGNED
-# define RET_TYPE uintmax_t
+#  define RET_TYPE uintmax_t
 #else
-# define RET_TYPE intmax_t
+#  define RET_TYPE intmax_t
 #endif
 
 #include <fromfp.h>

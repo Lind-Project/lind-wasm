@@ -16,7 +16,6 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-
 #include <fenv_private.h>
 
 int
@@ -28,6 +27,5 @@ __feupdateenv (const fenv_t *envp)
   /* Success.  */
   return 0;
 }
-libm_hidden_def (__feupdateenv)
-weak_alias (__feupdateenv, feupdateenv)
-libm_hidden_weak (feupdateenv)
+libm_hidden_def (__feupdateenv) weak_alias (__feupdateenv, feupdateenv)
+    libm_hidden_weak (feupdateenv)

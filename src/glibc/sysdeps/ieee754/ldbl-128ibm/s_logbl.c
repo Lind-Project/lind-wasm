@@ -32,7 +32,7 @@ __logbl (long double x)
   ldbl_unpack (x, &xhi, &xlo);
   EXTRACT_WORDS64 (hx, xhi);
   hxs = hx;
-  hx &= 0x7fffffffffffffffLL;	/* high |x| */
+  hx &= 0x7fffffffffffffffLL; /* high |x| */
   if (hx == 0)
     return -1.0 / fabs (x);
   if (hx >= 0x7ff0000000000000LL)
@@ -40,7 +40,7 @@ __logbl (long double x)
   if (__glibc_unlikely ((rhx = hx >> 52) == 0))
     {
       /* POSIX specifies that denormal number is treated as
-         though it were normalized.  */
+	 though it were normalized.  */
       rhx -= __builtin_clzll (hx) - 12;
     }
   else if ((hx & 0x000fffffffffffffLL) == 0)

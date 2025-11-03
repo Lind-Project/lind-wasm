@@ -26,5 +26,4 @@ __rewinddir (DIR *dirp)
 {
   __seekdir (dirp, (off_t) 0L);
 }
-libc_hidden_def (__rewinddir)
-weak_alias (__rewinddir, rewinddir)
+libc_hidden_def (__rewinddir) weak_alias (__rewinddir, rewinddir)

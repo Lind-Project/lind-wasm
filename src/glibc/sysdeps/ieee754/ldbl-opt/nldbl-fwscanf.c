@@ -5,8 +5,7 @@
 
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 fwscanf (FILE *stream, const wchar_t *fmt, ...)
 {
   va_list arg;

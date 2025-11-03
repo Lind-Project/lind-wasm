@@ -21,24 +21,24 @@
 #include <libm-alias-finite.h>
 
 #ifndef SUFF
-#define SUFF
+#  define SUFF
 #endif
 #ifndef float_type
-#define float_type double
+#  define float_type double
 #endif
 
-#define CONCATX(a,b) __CONCAT(a,b)
-#define s(name) CONCATX(name,SUFF)
-#define m81(func) __m81_u(s(func))
+#define CONCATX(a, b) __CONCAT (a, b)
+#define s(name) CONCATX (name, SUFF)
+#define m81(func) __m81_u (s (func))
 
 float_type
-s(__ieee754_atan2) (float_type y, float_type x)
+s (__ieee754_atan2) (float_type y, float_type x)
 {
   float_type pi, pi_2, z;
   unsigned long y_cond, x_cond;
 
-  __asm ("fmovecr%.x %#0, %0" : "=f" (pi));
-  __asm ("fscale%.w %#-1, %0" : "=f" (pi_2) : "0" (pi));
+  __asm ("fmovecr%.x %#0, %0" : "=f"(pi));
+  __asm ("fscale%.w %#-1, %0" : "=f"(pi_2) : "0"(pi));
   y_cond = __m81_test (y);
   x_cond = __m81_test (x);
 
@@ -56,7 +56,7 @@ s(__ieee754_atan2) (float_type y, float_type x)
       if (y_cond & __M81_COND_INF)
 	{
 	  float_type pi_4;
-	  __asm ("fscale%.w %#-2, %0" : "=f" (pi_4) : "0" (pi));
+	  __asm ("fscale%.w %#-2, %0" : "=f"(pi_4) : "0"(pi));
 	  z = x_cond & __M81_COND_NEG ? 3 * pi_4 : pi_4;
 	}
       else
@@ -71,16 +71,16 @@ s(__ieee754_atan2) (float_type y, float_type x)
       if (y_cond & __M81_COND_NEG)
 	{
 	  if (-x > -y)
-	    z = -pi + m81(__atan) (y / x);
+	    z = -pi + m81 (__atan) (y / x);
 	  else
-	    z = -pi_2 - m81(__atan) (x / y);
+	    z = -pi_2 - m81 (__atan) (x / y);
 	}
       else
 	{
 	  if (-x > y)
-	    z = pi + m81(__atan) (y / x);
+	    z = pi + m81 (__atan) (y / x);
 	  else
-	    z = pi_2 - m81(__atan) (x / y);
+	    z = pi_2 - m81 (__atan) (x / y);
 	}
     }
   else
@@ -88,18 +88,18 @@ s(__ieee754_atan2) (float_type y, float_type x)
       if (y_cond & __M81_COND_NEG)
 	{
 	  if (x > -y)
-	    z = m81(__atan) (y / x);
+	    z = m81 (__atan) (y / x);
 	  else
-	    z = -pi_2 - m81(__atan) (x / y);
+	    z = -pi_2 - m81 (__atan) (x / y);
 	}
       else
 	{
 	  if (x > y)
-	    z = m81(__atan) (y / x);
+	    z = m81 (__atan) (y / x);
 	  else
-	    z = pi_2 - m81(__atan) (x / y);
+	    z = pi_2 - m81 (__atan) (x / y);
 	}
     }
   return z;
 }
-libm_alias_finite (s(__ieee754_atan2), s (__atan2))
+libm_alias_finite (s (__ieee754_atan2), s (__atan2))

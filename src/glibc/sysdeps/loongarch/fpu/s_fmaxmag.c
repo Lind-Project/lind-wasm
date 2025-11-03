@@ -23,7 +23,7 @@
 double
 __fmaxmag (double x, double y)
 {
-  asm volatile ("fmaxa.d \t%0, %1, %2" : "=f" (x) : "f" (x), "f" (y));
+  asm volatile ("fmaxa.d \t%0, %1, %2" : "=f"(x) : "f"(x), "f"(y));
   return x;
 }
 libm_alias_double (__fmaxmag, fmaxmag)

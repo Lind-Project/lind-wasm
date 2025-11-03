@@ -59,8 +59,8 @@ int
 do_test (void)
 {
   xpthread_rwlockattr_init (&mylock_attr);
-  xpthread_rwlockattr_setkind_np (&mylock_attr,
-				  PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+  xpthread_rwlockattr_setkind_np (
+      &mylock_attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
   xpthread_rwlock_init (&mylock, &mylock_attr);
 
   for (int n = 0; n < LOOPS; n++)

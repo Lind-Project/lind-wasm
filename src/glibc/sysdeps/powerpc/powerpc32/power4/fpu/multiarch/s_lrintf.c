@@ -24,9 +24,7 @@
 extern __typeof (__lrintf) __lrint_ppc32 attribute_hidden;
 extern __typeof (__lrintf) __lrint_power6x attribute_hidden;
 
-libc_ifunc (__lrintf,
-	    (hwcap & PPC_FEATURE_POWER6_EXT) ?
-	      __lrint_power6x
-            : __lrint_ppc32);
+libc_ifunc (__lrintf, (hwcap & PPC_FEATURE_POWER6_EXT) ? __lrint_power6x
+						       : __lrint_ppc32);
 
 libm_alias_float (__lrint, lrint)

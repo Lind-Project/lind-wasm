@@ -1,5 +1,6 @@
 /* Machine-dependent signal context structure for Linux.  RISC-V version.
-   Copyright (C) 1996-2024 Free Software Foundation, Inc.  This file is part of the GNU C Library.
+   Copyright (C) 1996-2024 Free Software Foundation, Inc.  This file is part of
+   the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -16,13 +17,15 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_SIGCONTEXT_H
-#define _BITS_SIGCONTEXT_H 1
+#  define _BITS_SIGCONTEXT_H 1
 
-#if !defined _SIGNAL_H && !defined _SYS_UCONTEXT_H
-# error "Never use <bits/sigcontext.h> directly; include <signal.h> instead."
-#endif
+#  if !defined _SIGNAL_H && !defined _SYS_UCONTEXT_H
+#    error                                                                     \
+	"Never use <bits/sigcontext.h> directly; include <signal.h> instead."
+#  endif
 
-struct sigcontext {
+struct sigcontext
+{
   /* gregs[0] holds the program counter.  */
   unsigned long int gregs[32];
   unsigned long long int fpregs[66] __attribute__ ((__aligned__ (16)));

@@ -20,7 +20,7 @@
 #include <pt-internal.h>
 
 int
-__pthread_attr_getstacksize (const pthread_attr_t *attr, size_t * stacksize)
+__pthread_attr_getstacksize (const pthread_attr_t *attr, size_t *stacksize)
 {
   *stacksize = attr->__stacksize;
   return 0;

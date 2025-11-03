@@ -18,9 +18,9 @@
 
 #ifndef _ARCH_UNWIND_LINK_H
 
-#include <sysdeps/m68k/unwind-arch.h>
+#  include <sysdeps/m68k/unwind-arch.h>
 
-#undef UNWIND_LINK_FRAME_STATE_FOR
-#define UNWIND_LINK_FRAME_STATE_FOR 1
+#  undef UNWIND_LINK_FRAME_STATE_FOR
+#  define UNWIND_LINK_FRAME_STATE_FOR 1
 
 #endif /* _ARCH_UNWIND_LINK_H */

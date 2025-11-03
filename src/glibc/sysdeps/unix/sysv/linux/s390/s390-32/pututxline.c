@@ -21,7 +21,7 @@
 #include "utmp-compat.h"
 
 #undef weak_alias
-#define weak_alias(n,a)
+#define weak_alias(n, a)
 #define pututxline __pututxline
 #include "login/pututxline.c"
 #undef pututxline

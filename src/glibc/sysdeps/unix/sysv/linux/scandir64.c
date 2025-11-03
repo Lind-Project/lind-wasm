@@ -21,22 +21,21 @@
 
 int
 __scandir64 (const char *dir, struct dirent64 ***namelist,
-	   int (*select) (const struct dirent64 *),
-	   int (*cmp) (const struct dirent64 **, const struct dirent64 **))
+	     int (*select) (const struct dirent64 *),
+	     int (*cmp) (const struct dirent64 **, const struct dirent64 **))
 {
   return __scandir64_tail (__opendir (dir), namelist, select, cmp);
 }
 
 #if _DIRENT_MATCHES_DIRENT64
-weak_alias (__scandir64, scandir64)
-weak_alias (__scandir64, scandir)
+weak_alias (__scandir64, scandir64) weak_alias (__scandir64, scandir)
 #else
-# include <shlib-compat.h>
+#  include <shlib-compat.h>
 versioned_symbol (libc, __scandir64, scandir64, GLIBC_2_2);
-# if SHLIB_COMPAT (libc, GLIBC_2_1, GLIBC_2_2)
-#  include <string.h>
-#  include <errno.h>
-#  include "olddirent.h"
+#  if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
+#    include <string.h>
+#    include <errno.h>
+#    include "olddirent.h"
 
 int
 __old_scandir64 (const char *dir, struct __old_dirent64 ***namelist,
@@ -66,7 +65,7 @@ __old_scandir64 (const char *dir, struct __old_dirent64 ***namelist,
     {
       int use_it = select == NULL;
 
-      if (! use_it)
+      if (!use_it)
 	{
 	  use_it = select (d);
 	  /* The select function might have changed errno.  It was
@@ -135,5 +134,5 @@ __old_scandir64 (const char *dir, struct __old_dirent64 ***namelist,
 }
 compat_symbol (libc, __old_scandir64, scandir64, GLIBC_2_1);
 
-# endif /* SHLIB_COMPAT (libc, GLIBC_2_1, GLIBC_2_2)  */
-#endif /* _DIRENT_MATCHES_DIRENT64  */
+#  endif /* SHLIB_COMPAT (libc, GLIBC_2_1, GLIBC_2_2)  */
+#endif	 /* _DIRENT_MATCHES_DIRENT64  */

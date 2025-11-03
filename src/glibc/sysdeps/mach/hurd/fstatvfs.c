@@ -23,6 +23,6 @@ fstatvfs (int fd, struct statvfs *buf)
 {
   /* `struct statvfs' is in fact identical to `struct statfs' so we
      can simply call fstatfs.  */
-  return __fstatfs (fd, (struct statfs *)buf);
+  return __fstatfs (fd, (struct statfs *) buf);
 }
 libc_hidden_def (fstatvfs)

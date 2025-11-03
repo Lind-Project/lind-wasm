@@ -16,20 +16,20 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define MEMRCHR  __memrchr_ppc
-# include <string.h>
+#if IS_IN(libc)
+#  define MEMRCHR __memrchr_ppc
+#  include <string.h>
 extern void *__memrchr_ppc (const void *, int, size_t);
 #endif
 
 #include <string/memrchr.c>
-# if IS_IN (libc)
-# undef __memrchr
-# ifdef SHARED
+#if IS_IN(libc)
+#  undef __memrchr
+#  ifdef SHARED
 __hidden_ver1 (__memrchr_ppc, __GI___memrchr, __memrchr_ppc);
 strong_alias (__memrchr_ppc, __memrchr_ppc1);
 __hidden_ver1 (__memrchr_ppc1, __memrchr, __memrchr_ppc1);
-# else
+#  else
 strong_alias (__memrchr_ppc, __memrchr)
-# endif
+#  endif
 #endif

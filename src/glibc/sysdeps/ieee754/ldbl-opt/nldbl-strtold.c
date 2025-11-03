@@ -2,8 +2,7 @@
 #include "nldbl-compat.h"
 #undef strtold
 
-double
-attribute_hidden
+double attribute_hidden
 strtold (const char *nptr, char **endptr)
 {
   return strtod (nptr, endptr);

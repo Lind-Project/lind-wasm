@@ -82,7 +82,9 @@ do_test (void)
 	      buffer_length, thread_count * byte_count);
 
   /* Verify that each thread written its unique character byte_count times.  */
-  size_t counts[thread_count] = { 0, };
+  size_t counts[thread_count] = {
+    0,
+  };
   for (size_t i = 0; i < buffer_length; ++i)
     {
       if (buffer[i] < 'A' || buffer[i] >= 'A' + thread_count)

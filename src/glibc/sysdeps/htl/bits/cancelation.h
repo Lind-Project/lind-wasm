@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_CANCELATION_H
-#define _BITS_CANCELATION_H	1
+#  define _BITS_CANCELATION_H 1
 
 struct __pthread_cancelation_handler
 {
@@ -29,22 +29,18 @@ struct __pthread_cancelation_handler
 /* Returns the thread local location of the cleanup handler stack.  */
 struct __pthread_cancelation_handler **__pthread_get_cleanup_stack (void);
 
-#define __pthread_cleanup_push(rt, rtarg) \
-	{ \
-	  struct __pthread_cancelation_handler **__handlers \
-	    = __pthread_get_cleanup_stack (); \
-	  struct __pthread_cancelation_handler __handler = \
-	    { \
-	      (rt), \
-	      (rtarg), \
-	      *__handlers \
-	    }; \
-	  *__handlers = &__handler;
+#  define __pthread_cleanup_push(rt, rtarg)                                   \
+    {                                                                         \
+      struct __pthread_cancelation_handler **__handlers                       \
+	  = __pthread_get_cleanup_stack ();                                   \
+      struct __pthread_cancelation_handler __handler                          \
+	  = { (rt), (rtarg), *__handlers };                                   \
+      *__handlers = &__handler;
 
-#define __pthread_cleanup_pop(execute) \
-	  if (execute) \
-	    __handler.__handler (__handler.__arg); \
-	  *__handlers = __handler.__next; \
-	}
+#  define __pthread_cleanup_pop(execute)                                      \
+    if (execute)                                                              \
+      __handler.__handler (__handler.__arg);                                  \
+    *__handlers = __handler.__next;                                           \
+    }
 
 #endif /* _BITS_CANCELATION_H */

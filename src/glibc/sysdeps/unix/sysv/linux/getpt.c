@@ -31,11 +31,8 @@ __posix_openpt (int oflag)
 }
 weak_alias (__posix_openpt, posix_openpt)
 
-
-int
-__getpt (void)
+    int __getpt (void)
 {
   return __posix_openpt (O_RDWR);
 }
-libc_hidden_def (__getpt)
-weak_alias (__getpt, getpt)
+libc_hidden_def (__getpt) weak_alias (__getpt, getpt)

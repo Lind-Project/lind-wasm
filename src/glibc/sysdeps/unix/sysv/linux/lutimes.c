@@ -32,14 +32,13 @@ __lutimes64 (const char *file, const struct __timeval64 tvp64[2])
     }
 
   return __utimensat64_helper (AT_FDCWD, file, tvp64 ? &ts64[0] : NULL,
-                               AT_SYMLINK_NOFOLLOW);
+			       AT_SYMLINK_NOFOLLOW);
 }
 
 #if __TIMESIZE != 64
 libc_hidden_def (__lutimes64)
 
-int
-__lutimes (const char *file, const struct timeval tvp[2])
+    int __lutimes (const char *file, const struct timeval tvp[2])
 {
   struct __timeval64 tv64[2];
 

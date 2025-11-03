@@ -20,7 +20,7 @@
    and the interrupted PC is easily findable in the `struct sigcontext'.  */
 
 #ifdef SA_SIGINFO
-#include <sigcontextinfo.h>
+#  include <sigcontextinfo.h>
 
 static void
 __profil_counter (int signr, siginfo_t *info, void *ctx)

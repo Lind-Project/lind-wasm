@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_NEW_HASH_H
-#define _DL_NEW_HASH_H 1
+#  define _DL_NEW_HASH_H 1
 
-#include <stdint.h>
+#  include <stdint.h>
 /* For __always_inline and __glibc_unlikely.  */
-#include <sys/cdefs.h>
+#  include <sys/cdefs.h>
 
 /* The simplest implementation of _dl_new_hash is:
 
@@ -29,7 +29,7 @@
    {
       uint32_t h = 5381;
       for (unsigned char c = *s; c != '\0'; c = *++s)
-        h = h * 33 + c;
+	h = h * 33 + c;
       return h;
    }
 
@@ -57,13 +57,11 @@
    __asm_reassociation_barrier defined to __asm__ like it is in x86.
 */
 
+#  ifndef __asm_reassociation_barrier
+#    define __asm_reassociation_barrier(...)
+#  endif
 
-#ifndef __asm_reassociation_barrier
-# define __asm_reassociation_barrier(...)
-#endif
-
-static __always_inline uint32_t
-__attribute__ ((unused))
+static __always_inline uint32_t __attribute__ ((unused))
 _dl_new_hash (const char *str)
 {
   const unsigned char *s = (const unsigned char *) str;

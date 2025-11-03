@@ -16,6 +16,6 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define __OLD_IPC_ID_TYPE    int
-#define __OLD_IPC_MODE_TYPE  int
+#define __OLD_IPC_ID_TYPE int
+#define __OLD_IPC_MODE_TYPE int
 #include <sysdeps/unix/sysv/linux/ipc_priv.h>

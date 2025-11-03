@@ -19,7 +19,6 @@
 #include <stdio.h>
 #include <libc-lockP.h>
 
-
 void
 __flockfile (FILE *stream)
 {
@@ -27,5 +26,4 @@ __flockfile (FILE *stream)
   __libc_ptf_call (_IO_flockfile, (stream), 0);
 #endif
 }
-weak_alias (__flockfile, _IO_flockfile)
-weak_alias (__flockfile, flockfile)
+weak_alias (__flockfile, _IO_flockfile) weak_alias (__flockfile, flockfile)

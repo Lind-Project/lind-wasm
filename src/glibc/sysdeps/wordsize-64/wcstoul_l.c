@@ -11,7 +11,6 @@
 #undef wcstoull_l
 #undef __isoc23_wcstoull_l
 strong_alias (____wcstoul_l_internal, ____wcstoull_l_internal)
-weak_alias (__wcstoul_l, __wcstoull_l)
-weak_alias (__wcstoul_l, wcstoull_l)
-weak_alias (__isoc23_wcstoul_l, __isoc23_wcstoull_l)
-libc_hidden_ver (__isoc23_wcstoul_l, __isoc23_wcstoull_l)
+    weak_alias (__wcstoul_l, __wcstoull_l) weak_alias (__wcstoul_l, wcstoull_l)
+	weak_alias (__isoc23_wcstoul_l, __isoc23_wcstoull_l)
+	    libc_hidden_ver (__isoc23_wcstoul_l, __isoc23_wcstoull_l)

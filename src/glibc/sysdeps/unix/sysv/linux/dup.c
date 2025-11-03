@@ -27,10 +27,13 @@
 int
 __dup (int fd)
 {
-   return MAKE_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
-int dup(int fd)
+int
+dup (int fd)
 {
-   return MAKE_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }

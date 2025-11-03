@@ -22,16 +22,14 @@
 
 #include <elf/sotruss-lib.c>
 
-ElfW(Addr)
-la_nios2_gnu_pltenter (ElfW(Sym) *sym __attribute__ ((unused)),
-		       unsigned int ndx __attribute__ ((unused)),
-		       uintptr_t *refcook, uintptr_t *defcook,
-		       La_nios2_regs *regs, unsigned int *flags,
-		       const char *symname, long int *framesizep)
+ElfW (Addr) la_nios2_gnu_pltenter (ElfW (Sym) * sym __attribute__ ((unused)),
+				   unsigned int ndx __attribute__ ((unused)),
+				   uintptr_t *refcook, uintptr_t *defcook,
+				   La_nios2_regs *regs, unsigned int *flags,
+				   const char *symname, long int *framesizep)
 {
-  print_enter (refcook, defcook, symname,
-	       regs->lr_reg[0], regs->lr_reg[1], regs->lr_reg[2],
-	       *flags);
+  print_enter (refcook, defcook, symname, regs->lr_reg[0], regs->lr_reg[1],
+	       regs->lr_reg[2], *flags);
 
   /* No need to copy anything, we will not need the parameters in any case.  */
   *framesizep = 0;
@@ -40,9 +38,8 @@ la_nios2_gnu_pltenter (ElfW(Sym) *sym __attribute__ ((unused)),
 }
 
 unsigned int
-la_nios2_gnu_pltexit (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
-		      uintptr_t *defcook,
-		      const struct La_nios2_regs *inregs,
+la_nios2_gnu_pltexit (ElfW (Sym) * sym, unsigned int ndx, uintptr_t *refcook,
+		      uintptr_t *defcook, const struct La_nios2_regs *inregs,
 		      struct La_nios2_retval *outregs, const char *symname)
 {
   print_exit (refcook, defcook, symname, outregs->lrv_r2);

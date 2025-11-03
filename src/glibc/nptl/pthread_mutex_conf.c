@@ -20,20 +20,18 @@
 #include <pthread_mutex_conf.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <unistd.h>  /* Get STDOUT_FILENO for _dl_printf.  */
+#include <unistd.h> /* Get STDOUT_FILENO for _dl_printf.  */
 #include <elf/dl-tunables.h>
 #include <nptl-stack.h>
 
-struct mutex_config __mutex_aconf =
-{
+struct mutex_config __mutex_aconf = {
   /* The maximum number of times a thread should spin on the lock before
   calling into kernel to block.  */
   .spin_count = DEFAULT_ADAPTIVE_COUNT,
 };
 libc_hidden_data_def (__mutex_aconf)
 
-static void
-TUNABLE_CALLBACK (set_mutex_spin_count) (tunable_val_t *valp)
+    static void TUNABLE_CALLBACK (set_mutex_spin_count) (tunable_val_t *valp)
 {
   __mutex_aconf.spin_count = (int32_t) (valp)->numval;
 }
@@ -54,9 +52,8 @@ void
 __pthread_tunables_init (void)
 {
   TUNABLE_GET (mutex_spin_count, int32_t,
-               TUNABLE_CALLBACK (set_mutex_spin_count));
+	       TUNABLE_CALLBACK (set_mutex_spin_count));
   TUNABLE_GET (stack_cache_size, size_t,
-               TUNABLE_CALLBACK (set_stack_cache_size));
-  TUNABLE_GET (stack_hugetlb, int32_t,
-	       TUNABLE_CALLBACK (set_stack_hugetlb));
+	       TUNABLE_CALLBACK (set_stack_cache_size));
+  TUNABLE_GET (stack_hugetlb, int32_t, TUNABLE_CALLBACK (set_stack_hugetlb));
 }

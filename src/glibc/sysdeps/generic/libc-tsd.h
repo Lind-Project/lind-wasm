@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _GENERIC_LIBC_TSD_H
-#define _GENERIC_LIBC_TSD_H 1
+#  define _GENERIC_LIBC_TSD_H 1
 
 /* This file defines the following macros for accessing a small fixed
    set of thread-specific `void *' data used only internally by libc.
@@ -41,7 +41,7 @@
    Some implementations may not provide any enum at all and instead
    using string pasting in the macros.  */
 
-#include <tls.h>
+#  include <tls.h>
 
 /* When full support for __thread variables is available, this interface is
    just a trivial wrapper for it.  Without TLS, this is the generic/stub
@@ -50,11 +50,11 @@
    We don't define an enum for the possible key values, because the KEYs
    translate directly into variables by macro magic.  */
 
-#define __libc_tsd_define(CLASS, TYPE, KEY)	\
-  CLASS __thread TYPE __libc_tsd_##KEY attribute_tls_model_ie;
+#  define __libc_tsd_define(CLASS, TYPE, KEY)                                 \
+    CLASS __thread TYPE __libc_tsd_##KEY attribute_tls_model_ie;
 
-#define __libc_tsd_address(TYPE, KEY)		(&__libc_tsd_##KEY)
-#define __libc_tsd_get(TYPE, KEY)		(__libc_tsd_##KEY)
-#define __libc_tsd_set(TYPE, KEY, VALUE)	(__libc_tsd_##KEY = (VALUE))
+#  define __libc_tsd_address(TYPE, KEY) (&__libc_tsd_##KEY)
+#  define __libc_tsd_get(TYPE, KEY) (__libc_tsd_##KEY)
+#  define __libc_tsd_set(TYPE, KEY, VALUE) (__libc_tsd_##KEY = (VALUE))
 
-#endif	/* libc-tsd.h */
+#endif /* libc-tsd.h */

@@ -17,9 +17,9 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_FZC_H
-#define _STRING_FZC_H 1
+#  define _STRING_FZC_H 1
 
-#include <string-optype.h>
+#  include <string-optype.h>
 
 _Static_assert (sizeof (op_t) == 4, "64-bit not supported");
 
@@ -38,7 +38,8 @@ index_first_zero (op_t x)
        "ldi 1,%0\n\t"
        "extrw,u,<> %1,7,8,%%r0\n\t"
        "ldi 0,%0"
-       : "=r"(ret) : "r"(x), "0"(3));
+       : "=r"(ret)
+       : "r"(x), "0"(3));
 
   return ret;
 }
@@ -68,7 +69,8 @@ index_first_zero_eq (op_t x1, op_t x2)
        "extrw,u,= %1,7,8,%%r0\n\t"
        "extrw,u,<> %2,7,8,%%r0\n\t"
        "ldi 0,%0"
-       : "=r"(ret) : "r"(x1), "r"(x1 ^ x2), "0"(3));
+       : "=r"(ret)
+       : "r"(x1), "r"(x1 ^ x2), "0"(3));
 
   return ret;
 }
@@ -91,7 +93,8 @@ index_first_zero_ne (op_t x1, op_t x2)
        "extrw,u,<> %2,7,8,%%r0\n\t"
        "extrw,u,<> %1,7,8,%%r0\n\t"
        "ldi 0,%0"
-       : "=r"(ret) : "r"(x1), "r"(x1 ^ x2), "0"(3));
+       : "=r"(ret)
+       : "r"(x1), "r"(x1 ^ x2), "0"(3));
 
   return ret;
 }
@@ -110,7 +113,8 @@ index_last_zero (op_t x)
        "ldi 2,%0\n\t"
        "extrw,u,<> %1,31,8,%%r0\n\t"
        "ldi 3,%0"
-       : "=r"(ret) : "r"(x), "0"(0));
+       : "=r"(ret)
+       : "r"(x), "0"(0));
 
   return ret;
 }

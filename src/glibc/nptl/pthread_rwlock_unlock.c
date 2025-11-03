@@ -37,7 +37,7 @@ ___pthread_rwlock_unlock (pthread_rwlock_t *rwlock)
      recent writer because that writer happens-before us.  */
   if (atomic_load_relaxed (&rwlock->__data.__cur_writer)
       == THREAD_GETMEM (THREAD_SELF, tid))
-      __pthread_rwlock_wrunlock (rwlock);
+    __pthread_rwlock_wrunlock (rwlock);
   else
     __pthread_rwlock_rdunlock (rwlock);
   return 0;
@@ -45,13 +45,13 @@ ___pthread_rwlock_unlock (pthread_rwlock_t *rwlock)
 versioned_symbol (libc, ___pthread_rwlock_unlock, pthread_rwlock_unlock,
 		  GLIBC_2_34);
 strong_alias (___pthread_rwlock_unlock, __pthread_rwlock_unlock)
-libc_hidden_ver (___pthread_rwlock_unlock, __pthread_rwlock_unlock)
+    libc_hidden_ver (___pthread_rwlock_unlock, __pthread_rwlock_unlock)
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_rwlock_unlock, pthread_rwlock_unlock,
-	       GLIBC_2_1);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_rwlock_unlock,
+		       pthread_rwlock_unlock, GLIBC_2_1);
 #endif
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_rwlock_unlock, __pthread_rwlock_unlock,
 	       GLIBC_2_2);
 #endif

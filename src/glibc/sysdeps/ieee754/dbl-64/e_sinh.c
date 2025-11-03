@@ -60,14 +60,15 @@ __ieee754_sinh (double x)
   if (jx < 0)
     h = -h;
   /* |x| in [0,22], return sign(x)*0.5*(E+E/(E+1))) */
-  if (ix < 0x40360000)                  /* |x|<22 */
+  if (ix < 0x40360000) /* |x|<22 */
     {
-      if (__glibc_unlikely (ix < 0x3e300000)) {            /* |x|<2**-28 */
-	math_check_force_underflow (x);
-	if (shuge + x > one)
-	  return x;
-	/* sinh(tiny) = tiny with inexact */
-      }
+      if (__glibc_unlikely (ix < 0x3e300000))
+	{ /* |x|<2**-28 */
+	  math_check_force_underflow (x);
+	  if (shuge + x > one)
+	    return x;
+	  /* sinh(tiny) = tiny with inexact */
+	}
       t = __expm1 (fabs (x));
       if (ix < 0x3ff00000)
 	return h * (2.0 * t - t * t / (t + one));

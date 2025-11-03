@@ -42,6 +42,6 @@ __mq_unlink (const char *name)
   return ret;
 }
 versioned_symbol (libc, __mq_unlink, mq_unlink, GLIBC_2_34);
-#if OTHER_SHLIB_COMPAT (librt, GLIBC_2_3_4, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(librt, GLIBC_2_3_4, GLIBC_2_34)
 compat_symbol (libc, __mq_unlink, mq_unlink, GLIBC_2_3_4);
 #endif

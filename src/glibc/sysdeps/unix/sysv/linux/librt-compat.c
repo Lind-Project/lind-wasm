@@ -22,5 +22,5 @@
 /* GLIBC_2.3.3 symbols were added for the int -> timer_t ABI transition.  */
 #if TIMER_T_WAS_INT_COMPAT
 compat_symbol (librt, __librt_version_placeholder_1,
-               __librt_version_placeholder, GLIBC_2_3_3);
+	       __librt_version_placeholder, GLIBC_2_3_3);
 #endif

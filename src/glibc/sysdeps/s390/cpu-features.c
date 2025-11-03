@@ -24,8 +24,8 @@
 #include <dl-symbol-redir-ifunc.h>
 #include <dl-tunables-parse.h>
 
-#define S390_COPY_CPU_FEATURES(SRC_PTR, DEST_PTR)	\
-  (DEST_PTR)->hwcap = (SRC_PTR)->hwcap;			\
+#define S390_COPY_CPU_FEATURES(SRC_PTR, DEST_PTR)                             \
+  (DEST_PTR)->hwcap = (SRC_PTR)->hwcap;                                       \
   (DEST_PTR)->stfle_bits[0] = (SRC_PTR)->stfle_bits[0];
 
 static void
@@ -46,7 +46,7 @@ TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *valp)
 
   /* Copy the features from dl_s390_cpu_features, which contains the features
      provided by AT_HWCAP and stfle-instruction.  */
-  struct cpu_features *cpu_features = &GLRO(dl_s390_cpu_features);
+  struct cpu_features *cpu_features = &GLRO (dl_s390_cpu_features);
   struct cpu_features cpu_features_orig;
   S390_COPY_CPU_FEATURES (cpu_features, &cpu_features_orig);
   struct cpu_features cpu_features_curr;
@@ -74,8 +74,8 @@ TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *valp)
 	{
 	  reset_features = true;
 	  disable = true;
-	  hwcap_mask = HWCAP_S390_VXRS | HWCAP_S390_VXRS_EXT
-	    | HWCAP_S390_VXRS_EXT2;
+	  hwcap_mask
+	      = HWCAP_S390_VXRS | HWCAP_S390_VXRS_EXT | HWCAP_S390_VXRS_EXT2;
 	  stfle_bits0_mask = S390_STFLE_MASK_ARCH13_MIE3;
 	}
       else if (tunable_str_comma_strcmp_cte (&t, "z13")
@@ -152,35 +152,40 @@ TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *valp)
   /* Copy back the features after checking that no unsupported features were
      enabled by user.  */
   cpu_features->hwcap = cpu_features_curr.hwcap & cpu_features_orig.hwcap;
-  cpu_features->stfle_bits[0] = cpu_features_curr.stfle_bits[0]
-    & cpu_features_orig.stfle_bits[0];
+  cpu_features->stfle_bits[0]
+      = cpu_features_curr.stfle_bits[0] & cpu_features_orig.stfle_bits[0];
 }
 
 static inline void
 init_cpu_features (struct cpu_features *cpu_features)
 {
   /* Fill cpu_features as passed by kernel and machine.  */
-  cpu_features->hwcap = GLRO(dl_hwcap);
+  cpu_features->hwcap = GLRO (dl_hwcap);
 
   /* We want just 1 double word to be returned.  */
   if (__glibc_likely ((cpu_features->hwcap & HWCAP_S390_STFLE)
 		      && (cpu_features->hwcap & HWCAP_S390_ZARCH)
 		      && (cpu_features->hwcap & HWCAP_S390_HIGH_GPRS)))
     {
-      register unsigned long reg0 __asm__("0") = 0;
-      __asm__ __volatile__(".machine push"        "\n\t"
-			   ".machine \"z9-109\""  "\n\t"
-			   ".machinemode \"zarch_nohighgprs\"\n\t"
-			   "stfle %0"             "\n\t"
-			   ".machine pop"         "\n"
-			   : "=QS" (cpu_features->stfle_bits[0]),
-			     "+d" (reg0)
-			   : : "cc");
+      register unsigned long reg0 __asm__ ("0") = 0;
+      __asm__ __volatile__ (".machine push"
+			    "\n\t"
+			    ".machine \"z9-109\""
+			    "\n\t"
+			    ".machinemode \"zarch_nohighgprs\"\n\t"
+			    "stfle %0"
+			    "\n\t"
+			    ".machine pop"
+			    "\n"
+			    : "=QS"(cpu_features->stfle_bits[0]), "+d"(reg0)
+			    :
+			    : "cc");
     }
   else
     {
       cpu_features->stfle_bits[0] = 0ULL;
     }
 
-  TUNABLE_GET (glibc, cpu, hwcaps, tunable_val_t *, TUNABLE_CALLBACK (set_hwcaps));
+  TUNABLE_GET (glibc, cpu, hwcaps, tunable_val_t *,
+	       TUNABLE_CALLBACK (set_hwcaps));
 }

@@ -18,40 +18,40 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _KERNEL_FEATURES_H
-#define _KERNEL_FEATURES_H 1
+#  define _KERNEL_FEATURES_H 1
 
-#include_next <kernel-features.h>
+#  include_next <kernel-features.h>
 
 /* Support for statfs64 was added in 5.1.  */
-#if __LINUX_KERNEL_VERSION < 0x050100
-# undef __ASSUME_STATFS64
-# define __ASSUME_STATFS64 0
-#endif
+#  if __LINUX_KERNEL_VERSION < 0x050100
+#    undef __ASSUME_STATFS64
+#    define __ASSUME_STATFS64 0
+#  endif
 
-#define __ASSUME_RECV_SYSCALL	1
-#define __ASSUME_SEND_SYSCALL	1
+#  define __ASSUME_RECV_SYSCALL 1
+#  define __ASSUME_SEND_SYSCALL 1
 
 /* Support for the renameat2 syscall was added in 3.17.  */
-#if __LINUX_KERNEL_VERSION < 0x031100
-# undef __ASSUME_RENAMEAT2
-#endif
+#  if __LINUX_KERNEL_VERSION < 0x031100
+#    undef __ASSUME_RENAMEAT2
+#  endif
 
 /* Support for the execveat syscall was added in 4.2.  */
-#if __LINUX_KERNEL_VERSION < 0x040200
-# undef __ASSUME_EXECVEAT
-#endif
+#  if __LINUX_KERNEL_VERSION < 0x040200
+#    undef __ASSUME_EXECVEAT
+#  endif
 
 /* Support for copy_file_range, statx was added in kernel 4.13.  */
-#if __LINUX_KERNEL_VERSION < 0x040D00
-# undef __ASSUME_MLOCK2
-# undef __ASSUME_STATX
-#endif
+#  if __LINUX_KERNEL_VERSION < 0x040D00
+#    undef __ASSUME_MLOCK2
+#    undef __ASSUME_STATX
+#  endif
 
 /* Alpha requires old sysvipc even being a 64-bit architecture.  */
-#undef __ASSUME_SYSVIPC_DEFAULT_IPC_64
+#  undef __ASSUME_SYSVIPC_DEFAULT_IPC_64
 
 /* Alpha does not provide clone3.  */
-#undef __ASSUME_CLONE3
-#define __ASSUME_CLONE3 0
+#  undef __ASSUME_CLONE3
+#  define __ASSUME_CLONE3 0
 
 #endif /* _KERNEL_FEATURES_H */

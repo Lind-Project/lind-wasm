@@ -16,10 +16,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_FSUID_H
-#define _SYS_FSUID_H	1
+#  define _SYS_FSUID_H 1
 
-#include <features.h>
-#include <sys/types.h>
+#  include <features.h>
+#  include <sys/types.h>
 
 __BEGIN_DECLS
 

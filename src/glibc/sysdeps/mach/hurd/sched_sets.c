@@ -20,7 +20,6 @@
 #include <sys/types.h>
 #include <hurd.h>
 
-
 /* Set scheduling algorithm and/or parameters for a process.  */
 int
 __sched_setscheduler (pid_t pid, int policy, const struct sched_param *param)
@@ -42,4 +41,4 @@ __sched_setscheduler (pid_t pid, int policy, const struct sched_param *param)
   return 0;
 }
 libc_hidden_def (__sched_setscheduler)
-weak_alias (__sched_setscheduler, sched_setscheduler)
+    weak_alias (__sched_setscheduler, sched_setscheduler)

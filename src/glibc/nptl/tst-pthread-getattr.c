@@ -33,10 +33,10 @@
 /* There is an obscure bug in the kernel due to which RLIMIT_STACK is sometimes
    returned as unlimited when it is not, which may cause this test to fail.
    There is also the other case where RLIMIT_STACK is intentionally set as
-   unlimited or very high, which may result in a vma that is too large and again
-   results in a test case failure.  To avoid these problems, we cap the stack
-   size to one less than 8M.  See the following mailing list threads for more
-   information about this problem:
+   unlimited or very high, which may result in a vma that is too large and
+   again results in a test case failure.  To avoid these problems, we cap the
+   stack size to one less than 8M.  See the following mailing list threads for
+   more information about this problem:
    <https://sourceware.org/ml/libc-alpha/2012-06/msg00599.html>
    <https://sourceware.org/ml/libc-alpha/2012-06/msg00713.html>.  */
 #define MAX_STACK_SIZE (8192 * 1024 - 1)
@@ -112,8 +112,8 @@ check_stack_top (void)
      to verify that pthread_getattr_np returns an aligned stacksize that
      correctly fits into the rlimit.  We don't bother about the case where the
      stack is limited by the vma below it and not by the rlimit because the
-     stacksize returned in that case is computed from the end of that vma and is
-     hence safe.  */
+     stacksize returned in that case is computed from the end of that vma and
+     is hence safe.  */
   stack_limit.rlim_cur = MIN (stacksize - pagesize + 1, MAX_STACK_SIZE);
   printf ("Adjusting RLIMIT_STACK to %zu\n", (size_t) stack_limit.rlim_cur);
   if ((ret = setrlimit (RLIMIT_STACK, &stack_limit)) < 0)
@@ -126,7 +126,7 @@ check_stack_top (void)
     return 1;
 
   printf ("Adjusted rlimit: stacksize=%zu, stackaddr=%p\n", stacksize,
-          stackaddr);
+	  stackaddr);
 
   /* A lot of targets tend to write stuff on top of the user stack during
      context switches, so we cannot possibly safely go up to the very top of
@@ -160,7 +160,6 @@ do_test (void)
   pagesize = sysconf (_SC_PAGESIZE);
   return check_stack_top ();
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

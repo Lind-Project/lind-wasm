@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_UIO_LIM_H
-#define _BITS_UIO_LIM_H 1
+#  define _BITS_UIO_LIM_H 1
 
 /* Maximum length of the 'struct iovec' array in a single call to
    readv or writev.
@@ -27,6 +27,6 @@
    the C library implementation of readv/writev is able to emulate the
    functionality even if the currently running kernel does not support
    this large value the readv/writev call will not fail because of this.  */
-#define __IOV_MAX	1024
+#  define __IOV_MAX 1024
 
 #endif

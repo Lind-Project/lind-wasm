@@ -25,10 +25,10 @@
 static char *ttyname_buf = NULL;
 weak_alias (ttyname_buf, __ttyname_freemem_ptr)
 
-/* Return the pathname of the terminal FD is open on, or NULL on errors.
-   The returned storage is good only until the next call to this function.  */
-char *
-ttyname (int fd)
+    /* Return the pathname of the terminal FD is open on, or NULL on errors.
+       The returned storage is good only until the next call to this function.
+     */
+    char *ttyname (int fd)
 {
   /* isatty check, tcgetattr is used because it sets the correct
      errno (EBADF resp. ENOTTY) on error.  Fast error path to avoid the

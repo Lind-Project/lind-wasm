@@ -17,24 +17,24 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_SPIN_LOCK_INLINE_H
-#define _BITS_SPIN_LOCK_INLINE_H	1
+#  define _BITS_SPIN_LOCK_INLINE_H 1
 
-#include <features.h>
-#include <bits/types/__pthread_spinlock_t.h>
-#include <lock-intern.h>   /* This does all the work.  */
+#  include <features.h>
+#  include <bits/types/__pthread_spinlock_t.h>
+#  include <lock-intern.h> /* This does all the work.  */
 
 __BEGIN_DECLS
 
-#if defined __USE_EXTERN_INLINES || defined _FORCE_INLINES
+#  if defined __USE_EXTERN_INLINES || defined _FORCE_INLINES
 
-# ifndef __EBUSY
-#  include <errno.h>
-#  define __EBUSY EBUSY
-# endif
+#    ifndef __EBUSY
+#      include <errno.h>
+#      define __EBUSY EBUSY
+#    endif
 
-# ifndef __PT_SPIN_INLINE
-#  define __PT_SPIN_INLINE __extern_inline
-# endif
+#    ifndef __PT_SPIN_INLINE
+#      define __PT_SPIN_INLINE __extern_inline
+#    endif
 
 __PT_SPIN_INLINE int __pthread_spin_destroy (__pthread_spinlock_t *__lock);
 
@@ -89,7 +89,7 @@ __pthread_spin_unlock (__pthread_spinlock_t *__lock)
   return 0;
 }
 
-#endif /* Use extern inlines or force inlines.  */
+#  endif /* Use extern inlines or force inlines.  */
 
 __END_DECLS
 

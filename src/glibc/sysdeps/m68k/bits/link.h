@@ -15,10 +15,9 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_LINK_H
-# error "Never include <bits/link.h> directly; use <link.h> instead."
+#ifndef _LINK_H
+#  error "Never include <bits/link.h> directly; use <link.h> instead."
 #endif
-
 
 /* Registers for entry into PLT on M68K.  */
 typedef struct La_m68k_regs
@@ -37,16 +36,13 @@ typedef struct La_m68k_retval
   long double lrv_fp0;
 } La_m68k_retval;
 
-
 __BEGIN_DECLS
 
-extern Elf32_Addr la_m68k_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
-					uintptr_t *__refcook,
-					uintptr_t *__defcook,
-					La_m68k_regs *__regs,
-					unsigned int *__flags,
-					const char *__symname,
-					long int *__framesizep);
+extern Elf32_Addr
+la_m68k_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
+		      uintptr_t *__refcook, uintptr_t *__defcook,
+		      La_m68k_regs *__regs, unsigned int *__flags,
+		      const char *__symname, long int *__framesizep);
 extern unsigned int la_m68k_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx,
 					 uintptr_t *__refcook,
 					 uintptr_t *__defcook,

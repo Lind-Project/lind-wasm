@@ -28,11 +28,11 @@
 #include <support/xthread.h>
 
 #ifdef ENABLE_PP
-#include "tst-tpp.h"
+#  include "tst-tpp.h"
 #endif
 
 #ifndef TYPE
-# define TYPE PTHREAD_MUTEX_NORMAL
+#  define TYPE PTHREAD_MUTEX_NORMAL
 #endif
 
 /* A bogus clock value that tells run_test to use
@@ -44,8 +44,8 @@ do_test_clock (clockid_t clockid, const char *fnname, int tmo_result)
 {
   pthread_mutex_t m;
   pthread_mutexattr_t a;
-  const clockid_t clockid_for_get =
-    (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
+  const clockid_t clockid_for_get
+      = (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
 
   TEST_COMPARE (pthread_mutexattr_init (&a), 0);
   TEST_COMPARE (pthread_mutexattr_settype (&a, TYPE), 0);
@@ -62,7 +62,7 @@ do_test_clock (clockid_t clockid, const char *fnname, int tmo_result)
     {
 #ifdef ENABLE_PI
       if (err == ENOTSUP)
-        FAIL_UNSUPPORTED ("PI mutexes unsupported");
+	FAIL_UNSUPPORTED ("PI mutexes unsupported");
 #endif
       FAIL_EXIT1 ("mutex_init failed");
     }
@@ -73,8 +73,8 @@ do_test_clock (clockid_t clockid, const char *fnname, int tmo_result)
     FAIL_EXIT1 ("mutex_trylock succeeded");
 
   /* Wait 2 seconds.  */
-  struct timespec ts_timeout = timespec_add (xclock_now (clockid_for_get),
-                                             make_timespec (2, 0));
+  struct timespec ts_timeout
+      = timespec_add (xclock_now (clockid_for_get), make_timespec (2, 0));
 
   if (clockid == CLOCK_USE_TIMEDLOCK)
     TEST_COMPARE (pthread_mutex_timedlock (&m, &ts_timeout), tmo_result);
@@ -107,7 +107,7 @@ do_test_clock (clockid_t clockid, const char *fnname, int tmo_result)
 
   /* Check that timedlock didn't delay.  We use a limit of 0.1 secs.  */
   TEST_TIMESPEC_BEFORE (ts_end,
-                        timespec_add (ts_start, make_timespec (0, 100000000)));
+			timespec_add (ts_start, make_timespec (0, 100000000)));
 
   TEST_COMPARE (pthread_mutex_unlock (&m), 0);
   TEST_COMPARE (pthread_mutex_destroy (&m), 0);
@@ -115,7 +115,8 @@ do_test_clock (clockid_t clockid, const char *fnname, int tmo_result)
   return 0;
 }
 
-static int do_test (void)
+static int
+do_test (void)
 {
 #ifdef ENABLE_PP
   init_tpp_test ();
@@ -123,9 +124,9 @@ static int do_test (void)
 
   int monotonic_result =
 #ifdef ENABLE_PI
-    support_mutex_pi_monotonic () ? ETIMEDOUT : EINVAL;
+      support_mutex_pi_monotonic () ? ETIMEDOUT : EINVAL;
 #else
-    ETIMEDOUT;
+      ETIMEDOUT;
 #endif
 
   do_test_clock (CLOCK_USE_TIMEDLOCK, "timedlock", ETIMEDOUT);

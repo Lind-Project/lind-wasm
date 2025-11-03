@@ -23,9 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 
-
 static pthread_barrier_t b;
-
 
 /* Cleanup handling test.  */
 static int cl_called;
@@ -35,7 +33,6 @@ cl (void *arg)
 {
   ++cl_called;
 }
-
 
 static void *
 tf (void *arg)
@@ -60,7 +57,6 @@ tf (void *arg)
   exit (1);
 }
 
-
 static void *
 tf2 (void *arg)
 {
@@ -84,7 +80,6 @@ tf2 (void *arg)
 
   exit (1);
 }
-
 
 static int
 do_test (void)
@@ -128,7 +123,7 @@ do_test (void)
       exit (1);
     }
 
-  struct timespec  ts = { .tv_sec = 0, .tv_nsec = 100000000 };
+  struct timespec ts = { .tv_sec = 0, .tv_nsec = 100000000 };
   while (nanosleep (&ts, &ts) != 0)
     continue;
 
@@ -220,7 +215,6 @@ do_test (void)
       /* If aio_cancel failed, we cannot reuse aiocb a.  */
       ap = &a2;
     }
-
 
   cl_called = 0;
 
@@ -345,7 +339,7 @@ do_test (void)
 	 will be corrupted, which can lead to undefined behaviour like a
 	 segmentation fault.  */
       const struct aiocb *l[1] = { &a };
-      TEMP_FAILURE_RETRY (aio_suspend(l, 1, NULL));
+      TEMP_FAILURE_RETRY (aio_suspend (l, 1, NULL));
     }
 
   return 0;

@@ -28,13 +28,13 @@ ___pthread_getattr_default_np (pthread_attr_t *out)
   return ret;
 }
 versioned_symbol (libc, ___pthread_getattr_default_np,
-                  pthread_getattr_default_np, GLIBC_2_34);
+		  pthread_getattr_default_np, GLIBC_2_34);
 libc_hidden_ver (___pthread_getattr_default_np, __pthread_getattr_default_np)
 #ifndef SHARED
-strong_alias (___pthread_getattr_default_np, __pthread_getattr_default_np)
+    strong_alias (___pthread_getattr_default_np, __pthread_getattr_default_np)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_18, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_getattr_default_np,
-               pthread_getattr_default_np, GLIBC_2_18);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_18, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_getattr_default_np,
+		       pthread_getattr_default_np, GLIBC_2_18);
 #endif

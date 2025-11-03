@@ -19,7 +19,6 @@
 #include "pthreadP.h"
 #include <atomic.h>
 
-
 int
 __pthread_setcanceltype (int type, int *oldtype)
 {
@@ -32,18 +31,18 @@ __pthread_setcanceltype (int type, int *oldtype)
   while (1)
     {
       int newval = (type == PTHREAD_CANCEL_ASYNCHRONOUS
-		    ? oldval | CANCELTYPE_BITMASK
-		    : oldval & ~CANCELTYPE_BITMASK);
+			? oldval | CANCELTYPE_BITMASK
+			: oldval & ~CANCELTYPE_BITMASK);
 
       if (oldtype != NULL)
-	*oldtype = ((oldval & CANCELTYPE_BITMASK)
-		    ? PTHREAD_CANCEL_ASYNCHRONOUS : PTHREAD_CANCEL_DEFERRED);
+	*oldtype = ((oldval & CANCELTYPE_BITMASK) ? PTHREAD_CANCEL_ASYNCHRONOUS
+						  : PTHREAD_CANCEL_DEFERRED);
 
       if (oldval == newval)
 	break;
 
-      if (atomic_compare_exchange_weak_acquire (&self->cancelhandling,
-						&oldval, newval))
+      if (atomic_compare_exchange_weak_acquire (&self->cancelhandling, &oldval,
+						newval))
 	{
 	  if (cancel_enabled_and_canceled_and_async (newval))
 	    {
@@ -58,4 +57,4 @@ __pthread_setcanceltype (int type, int *oldtype)
   return 0;
 }
 libc_hidden_def (__pthread_setcanceltype)
-weak_alias (__pthread_setcanceltype, pthread_setcanceltype)
+    weak_alias (__pthread_setcanceltype, pthread_setcanceltype)

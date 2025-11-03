@@ -24,5 +24,4 @@ __finite (double x)
 {
   return _FCLASS (x) & ~(_FCLASS_INF | _FCLASS_NAN);
 }
-hidden_def (__finite)
-weak_alias (__finite, finite)
+hidden_def (__finite) weak_alias (__finite, finite)

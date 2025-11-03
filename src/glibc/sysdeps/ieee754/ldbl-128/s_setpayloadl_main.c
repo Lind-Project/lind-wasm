@@ -42,9 +42,8 @@ FUNC (_Float128 *x, _Float128 payload)
       return 1;
     }
   int shift = BIAS + EXPLICIT_MANT_DIG - exponent;
-  if (shift < 64
-      ? (lx & ((1ULL << shift) - 1)) != 0
-      : (lx != 0 || (hx & ((1ULL << (shift - 64)) - 1)) != 0))
+  if (shift < 64 ? (lx & ((1ULL << shift) - 1)) != 0
+		 : (lx != 0 || (hx & ((1ULL << (shift - 64)) - 1)) != 0))
     {
       SET_LDOUBLE_WORDS64 (*x, 0, 0);
       return 1;

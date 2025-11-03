@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_TESTS_ROUNDING_H
-#define _MATH_TESTS_ROUNDING_H 1
+#  define _MATH_TESTS_ROUNDING_H 1
 
 /* Indicate whether to run tests involving a given rounding mode for a
    given floating-point type, given that fesetround succeeds for that
    mode.  All are run if fesetround succeeds unless overridden.  */
-#define ROUNDING_TESTS_float(MODE)	1
-#define ROUNDING_TESTS_double(MODE)	1
-#define ROUNDING_TESTS_long_double(MODE)	1
-#define ROUNDING_TESTS_float128(MODE)	1
+#  define ROUNDING_TESTS_float(MODE) 1
+#  define ROUNDING_TESTS_double(MODE) 1
+#  define ROUNDING_TESTS_long_double(MODE) 1
+#  define ROUNDING_TESTS_float128(MODE) 1
 
 #endif /* math-tests-rounding.h.  */

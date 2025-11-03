@@ -5,5 +5,3 @@ __getpgid (pid_t pid)
 {
   return pid;
 }
-
-

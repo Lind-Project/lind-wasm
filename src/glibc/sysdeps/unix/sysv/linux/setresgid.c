@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <setxid.h>
 
-
 int
 __setresgid (gid_t rgid, gid_t egid, gid_t sgid)
 {
@@ -31,5 +30,5 @@ __setresgid (gid_t rgid, gid_t egid, gid_t sgid)
 }
 libc_hidden_def (__setresgid)
 #ifndef __setresgid
-weak_alias (__setresgid, setresgid)
+    weak_alias (__setresgid, setresgid)
 #endif

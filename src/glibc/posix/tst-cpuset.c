@@ -18,14 +18,14 @@ do_test (void)
   CPU_SET (1, &s2);
 
   CPU_AND (&s3, &s1, &s2);
-  if (! CPU_EQUAL (&s3, &s1))
+  if (!CPU_EQUAL (&s3, &s1))
     {
       puts ("result of CPU_AND wrong");
       result = 1;
     }
 
   CPU_OR (&s3, &s1, &s2);
-  if (! CPU_EQUAL (&s3, &s2))
+  if (!CPU_EQUAL (&s3, &s2))
     {
       puts ("result of CPU_OR wrong");
       result = 1;
@@ -51,14 +51,14 @@ do_test (void)
   CPU_SET_S (2047, vssize, vs2);
 
   CPU_AND_S (vssize, vs3, vs1, vs2);
-  if (! CPU_EQUAL_S (vssize, vs3, vs1))
+  if (!CPU_EQUAL_S (vssize, vs3, vs1))
     {
       puts ("result of CPU_AND_S wrong");
       result = 1;
     }
 
   CPU_OR_S (vssize, vs3, vs1, vs2);
-  if (! CPU_EQUAL_S (vssize, vs3, vs2))
+  if (!CPU_EQUAL_S (vssize, vs3, vs2))
     {
       puts ("result of CPU_OR_S wrong");
       result = 1;

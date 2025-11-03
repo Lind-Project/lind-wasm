@@ -18,13 +18,13 @@
 
 #include <string.h>
 
-#define RAWMEMCHR  __rawmemchr_ppc
+#define RAWMEMCHR __rawmemchr_ppc
 #undef weak_alias
 #define weak_alias(a, b)
 #ifdef SHARED
-# undef libc_hidden_def
-# define libc_hidden_def(name)  \
-  __hidden_ver1 (__rawmemchr_ppc, __GI___rawmemchr, __rawmemchr_ppc);
+#  undef libc_hidden_def
+#  define libc_hidden_def(name)                                               \
+    __hidden_ver1 (__rawmemchr_ppc, __GI___rawmemchr, __rawmemchr_ppc);
 #endif
 
 extern __typeof (rawmemchr) __rawmemchr_ppc attribute_hidden;

@@ -26,14 +26,14 @@ int
 __clock_settime64 (clockid_t clock_id, const struct __timespec64 *tp)
 {
   /* Make sure the time cvalue is OK.  */
-  if (! valid_nanoseconds (tp->tv_nsec))
+  if (!valid_nanoseconds (tp->tv_nsec))
     {
       __set_errno (EINVAL);
       return -1;
     }
 
 #ifndef __NR_clock_settime64
-# define __NR_clock_settime64 __NR_clock_settime
+#  define __NR_clock_settime64 __NR_clock_settime
 #endif
   int ret = INLINE_SYSCALL_CALL (clock_settime64, clock_id, tp);
 
@@ -41,7 +41,7 @@ __clock_settime64 (clockid_t clock_id, const struct __timespec64 *tp)
   if (ret == 0 || errno != ENOSYS)
     return ret;
 
-  if (! in_int32_t_range (tp->tv_sec))
+  if (!in_int32_t_range (tp->tv_sec))
     {
       __set_errno (EOVERFLOW);
       return -1;
@@ -57,8 +57,7 @@ __clock_settime64 (clockid_t clock_id, const struct __timespec64 *tp)
 #if __TIMESIZE != 64
 libc_hidden_def (__clock_settime64)
 
-int
-__clock_settime (clockid_t clock_id, const struct timespec *tp)
+    int __clock_settime (clockid_t clock_id, const struct timespec *tp)
 {
   struct __timespec64 ts64 = valid_timespec_to_timespec64 (*tp);
 
@@ -68,10 +67,10 @@ __clock_settime (clockid_t clock_id, const struct timespec *tp)
 
 libc_hidden_def (__clock_settime)
 
-versioned_symbol (libc, __clock_settime, clock_settime, GLIBC_2_17);
+    versioned_symbol (libc, __clock_settime, clock_settime, GLIBC_2_17);
 /* clock_settime moved to libc in version 2.17;
    old binaries may expect the symbol version it had in librt.  */
-#if SHLIB_COMPAT (libc, GLIBC_2_2, GLIBC_2_17)
+#if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_17)
 strong_alias (__clock_settime, __clock_settime_2);
 compat_symbol (libc, __clock_settime_2, clock_settime, GLIBC_2_2);
 #endif

@@ -70,8 +70,8 @@ do_test_common (void)
   ssize_t ret;
 
   if ((ret = write (temp_fd, buffer, BLK_SIZE)) != BLK_SIZE)
-    FAIL_EXIT1 ("write returned %zd different than expected %d",
-		ret, BLK_SIZE);
+    FAIL_EXIT1 ("write returned %zd different than expected %d", ret,
+		BLK_SIZE);
 
   if (fsync (temp_fd) != 0)
     FAIL_EXIT1 ("fsync failed");

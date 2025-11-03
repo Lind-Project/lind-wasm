@@ -29,7 +29,7 @@ __llrint (double x)
   uint32_t h, l, s;
   long long int result;
 
-  x = __m81_u(__rint) (x);
+  x = __m81_u (__rint) (x);
 
   /* We could use __fixxfdi from libgcc, but here we can take advantage of
      the known floating point format.  */

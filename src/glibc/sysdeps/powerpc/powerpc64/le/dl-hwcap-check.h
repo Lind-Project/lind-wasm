@@ -35,9 +35,9 @@ Fatal glibc error: CPU lacks ISA 3.00 support (POWER9 or later required)\n");
     _dl_fatal_printf ("\
 Fatal glibc error: CPU lacks float128 support (POWER 9 or later required)\n");
 #endif
-   /* This check is not actually reached when building for POWER10 and
-      running on POWER9 because there are faulting PCREL instructions
-      before this point.  */
+  /* This check is not actually reached when building for POWER10 and
+     running on POWER9 because there are faulting PCREL instructions
+     before this point.  */
 #if defined GCCMACRO_ARCH_PWR10 || defined GCCMACRO__PCREL__
   if ((GLRO (dl_hwcap2) & PPC_FEATURE2_ARCH_3_1) == 0)
     _dl_fatal_printf ("\

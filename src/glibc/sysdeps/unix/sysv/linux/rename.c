@@ -27,5 +27,6 @@
 int
 rename (const char *old, const char *new)
 {
-   return MAKE_SYSCALL(RENAME_SYSCALL, "syscall|rename", (uint64_t) old, (uint64_t) new, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (RENAME_SYSCALL, "syscall|rename", (uint64_t) old,
+		       (uint64_t) new, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }

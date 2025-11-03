@@ -34,6 +34,5 @@ __fesetround (int round)
       return round; /* A nonzero value.  */
     }
 }
-libm_hidden_def (__fesetround)
-weak_alias (__fesetround, fesetround)
-libm_hidden_weak (fesetround)
+libm_hidden_def (__fesetround) weak_alias (__fesetround, fesetround)
+    libm_hidden_weak (fesetround)

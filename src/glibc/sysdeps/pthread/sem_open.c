@@ -28,8 +28,8 @@
 
 #if !PTHREAD_IN_LIBC
 /* The private names are not exported from libc.  */
-# define __link link
-# define __unlink unlink
+#  define __link link
+#  define __unlink unlink
 #endif
 
 #define SEM_OPEN_FLAGS (O_RDWR | O_NOFOLLOW | O_CLOEXEC)
@@ -56,11 +56,11 @@ __sem_open (const char *name, int oflag, ...)
       return SEM_FAILED;
     }
 
-  /* Disable asynchronous cancellation.  */
+    /* Disable asynchronous cancellation.  */
 #ifdef __libc_ptf_call
   int state;
-  __libc_ptf_call (__pthread_setcancelstate,
-                   (PTHREAD_CANCEL_DISABLE, &state), 0);
+  __libc_ptf_call (__pthread_setcancelstate, (PTHREAD_CANCEL_DISABLE, &state),
+		   0);
 #endif
 
   /* If the semaphore object has to exist simply open it.  */
@@ -159,11 +159,12 @@ __sem_open (const char *name, int oflag, ...)
 	}
 
       if (TEMP_FAILURE_RETRY (write (fd, &sem.initsem, sizeof (sem_t)))
-	  == sizeof (sem_t)
+	      == sizeof (sem_t)
 	  /* Map the sem_t structure from the file.  */
-	  && (result = (sem_t *) __mmap (NULL, sizeof (sem_t),
-					 PROT_READ | PROT_WRITE, MAP_SHARED,
-					 fd, 0)) != MAP_FAILED)
+	  && (result
+	      = (sem_t *) __mmap (NULL, sizeof (sem_t), PROT_READ | PROT_WRITE,
+				  MAP_SHARED, fd, 0))
+		 != MAP_FAILED)
 	{
 	  /* Create the file.  Don't overwrite an existing file.  */
 	  if (__link (tmpfname, dirname.name) != 0)
@@ -221,9 +222,9 @@ out:
 }
 #if PTHREAD_IN_LIBC
 versioned_symbol (libc, __sem_open, sem_open, GLIBC_2_34);
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1_1, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1_1, GLIBC_2_34)
 compat_symbol (libpthread, __sem_open, sem_open, GLIBC_2_1_1);
-# endif
+#  endif
 #else /* !PTHREAD_IN_LIBC */
 strong_alias (__sem_open, sem_open)
 #endif

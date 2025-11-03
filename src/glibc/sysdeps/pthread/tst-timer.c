@@ -32,13 +32,11 @@ notify_func1 (union sigval sigval)
   puts ("notify_func1");
 }
 
-
 static void
 notify_func2 (union sigval sigval)
 {
   puts ("notify_func2");
 }
-
 
 static void
 signal_func (int sig)
@@ -62,18 +60,14 @@ intr_sleep (int sec)
 
 #define ZSIGALRM 14
 
-
 int
 main (void)
 {
   struct timespec ts;
   timer_t timer_sig, timer_thr1, timer_thr2;
   int retval;
-  struct sigevent sigev1 =
-  {
-    .sigev_notify = SIGEV_SIGNAL,
-    .sigev_signo = ZSIGALRM
-  };
+  struct sigevent sigev1
+      = { .sigev_notify = SIGEV_SIGNAL, .sigev_signo = ZSIGALRM };
   struct sigevent sigev2;
   struct itimerspec itimer1 = { { 0, 200000000 }, { 0, 200000000 } };
   struct itimerspec itimer2 = { { 0, 100000000 }, { 0, 500000000 } };
@@ -91,13 +85,13 @@ main (void)
 
   setvbuf (stdout, 0, _IOLBF, 0);
 
-  printf ("clock_gettime returned %d, timespec = { %jd, %jd }\n",
-	  retval, (intmax_t) ts.tv_sec, (intmax_t) ts.tv_nsec);
+  printf ("clock_gettime returned %d, timespec = { %jd, %jd }\n", retval,
+	  (intmax_t) ts.tv_sec, (intmax_t) ts.tv_nsec);
 
   retval = clock_getres (CLOCK_REALTIME, &ts);
 
-  printf ("clock_getres returned %d, timespec = { %jd, %jd }\n",
-	  retval, (intmax_t) ts.tv_sec, (intmax_t) ts.tv_nsec);
+  printf ("clock_getres returned %d, timespec = { %jd, %jd }\n", retval,
+	  (intmax_t) ts.tv_sec, (intmax_t) ts.tv_nsec);
 
   if (timer_create (CLOCK_REALTIME, &sigev1, &timer_sig) != 0)
     {

@@ -23,7 +23,7 @@
    assembler.
    Note: in_divdi3_c is only used to avoid symbol alias on divdi3
    build itself.  */
-#if !defined __ASSEMBLER__ && !defined in_divdi3_c && IS_IN (libc) \
+#if !defined __ASSEMBLER__ && !defined in_divdi3_c && IS_IN(libc)             \
     && defined SHARED && !defined LIBC_NONSHARED
 
 #endif

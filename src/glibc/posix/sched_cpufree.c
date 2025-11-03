@@ -18,7 +18,6 @@
 #include <sched.h>
 #include <stdlib.h>
 
-
 void
 __sched_cpufree (cpu_set_t *set)
 {

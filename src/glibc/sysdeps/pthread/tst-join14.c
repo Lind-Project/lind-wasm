@@ -27,19 +27,16 @@
 #include <support/xthread.h>
 #include <support/xtime.h>
 
-
 #define CLOCK_USE_TIMEDJOIN (-1)
-
 
 static void *
 tf (void *arg)
 {
-  struct timespec ts = make_timespec(0, 100000);
-  nanosleep(&ts, NULL);
+  struct timespec ts = make_timespec (0, 100000);
+  nanosleep (&ts, NULL);
 
   return (void *) 42l;
 }
-
 
 /* Check that pthread_timedjoin_np and pthread_clockjoin_np wait "forever" if
  * passed a timeout parameter of NULL. We can't actually wait forever, but we
@@ -52,8 +49,8 @@ do_test_clock (clockid_t clockid)
 
   void *status;
   int val = (clockid == CLOCK_USE_TIMEDJOIN)
-    ? pthread_timedjoin_np (th, &status, NULL)
-    : pthread_clockjoin_np (th, &status, clockid, NULL);
+		? pthread_timedjoin_np (th, &status, NULL)
+		: pthread_clockjoin_np (th, &status, clockid, NULL);
   TEST_COMPARE (val, 0);
 
   if (status != (void *) 42l)

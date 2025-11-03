@@ -56,7 +56,8 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
   va_list ap;
 
   sp = (unsigned long int *) (((unsigned long int) ucp->uc_stack.ss_sp
-			       + ucp->uc_stack.ss_size) & -8L);
+			       + ucp->uc_stack.ss_size)
+			      & -8L);
 
   /* Set the return address to trampoline.  */
   ucp->uc_mcontext.gregs[14] = (long int) __makecontext_ret;

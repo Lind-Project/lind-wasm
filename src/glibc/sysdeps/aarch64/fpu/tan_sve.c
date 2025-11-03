@@ -47,7 +47,8 @@ special_case (svfloat64_t x, svfloat64_t y, svbool_t special)
    Maximum measured error is 3.48 ULP:
    _ZGVsMxv_tan(0x1.4457047ef78d8p+20) got -0x1.f6ccd8ecf7dedp+37
 				      want -0x1.f6ccd8ecf7deap+37.  */
-svfloat64_t SV_NAME_D1 (tan) (svfloat64_t x, svbool_t pg)
+svfloat64_t
+SV_NAME_D1 (tan) (svfloat64_t x, svbool_t pg)
 {
   const struct data *dat = ptr_barrier (&data);
 
@@ -89,7 +90,7 @@ svfloat64_t SV_NAME_D1 (tan) (svfloat64_t x, svbool_t pg)
      and reciprocity around pi/2:
      tan(x) = 1 / (tan(pi/2 - x))
      to assemble result using change-of-sign and conditional selection of
-     numerator/denominator dependent on odd/even-ness of q (hence quadrant).  */
+     numerator/denominator dependent on odd/even-ness of q (hence quadrant). */
   svbool_t use_recip
       = svcmpeq (pg, svand_x (pg, svreinterpret_u64 (qi), 1), 0);
 

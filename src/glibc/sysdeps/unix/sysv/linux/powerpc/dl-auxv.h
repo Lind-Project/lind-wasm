@@ -16,5 +16,5 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define DL_PLATFORM_AUXV \
-  GLRO(dl_cache_line_size) = auxv_values[AT_DCACHEBSIZE];
+#define DL_PLATFORM_AUXV                                                      \
+  GLRO (dl_cache_line_size) = auxv_values[AT_DCACHEBSIZE];

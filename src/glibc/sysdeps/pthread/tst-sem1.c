@@ -20,7 +20,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-
 static int
 do_test (void)
 {

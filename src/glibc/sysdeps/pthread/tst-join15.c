@@ -33,30 +33,28 @@ tf (void *arg)
   return NULL;
 }
 
-
 static int
 do_test (void)
 {
-  const clockid_t clocks[] = {
-    CLOCK_REALTIME,
-    CLOCK_MONOTONIC,
-    CLOCK_PROCESS_CPUTIME_ID,
-    CLOCK_THREAD_CPUTIME_ID,
-    CLOCK_THREAD_CPUTIME_ID,
-    CLOCK_MONOTONIC_RAW,
-    CLOCK_REALTIME_COARSE,
-    CLOCK_MONOTONIC_COARSE,
+  const clockid_t clocks[] = { CLOCK_REALTIME,
+			       CLOCK_MONOTONIC,
+			       CLOCK_PROCESS_CPUTIME_ID,
+			       CLOCK_THREAD_CPUTIME_ID,
+			       CLOCK_THREAD_CPUTIME_ID,
+			       CLOCK_MONOTONIC_RAW,
+			       CLOCK_REALTIME_COARSE,
+			       CLOCK_MONOTONIC_COARSE,
 #ifdef CLOCK_BOOTTIME
-    CLOCK_BOOTTIME,
+			       CLOCK_BOOTTIME,
 #endif
 #ifdef CLOCK_REALTIME_ALARM
-    CLOCK_REALTIME_ALARM,
+			       CLOCK_REALTIME_ALARM,
 #endif
 #ifdef CLOCK_BOOTTIME_ALARM
-    CLOCK_BOOTTIME_ALARM,
+			       CLOCK_BOOTTIME_ALARM,
 #endif
 #ifdef CLOCK_TAI
-    CLOCK_TAI
+			       CLOCK_TAI
 #endif
   };
 
@@ -74,7 +72,8 @@ do_test (void)
 	tmo = timespec_add (tmo, make_timespec (0, 100000000));
 
       int ret = clocks[t] == CLOCK_REALTIME || clocks[t] == CLOCK_MONOTONIC
-		? ETIMEDOUT : EINVAL;
+		    ? ETIMEDOUT
+		    : EINVAL;
 
       TEST_COMPARE (pthread_clockjoin_np (thr, NULL, clocks[t], &tmo), ret);
     }

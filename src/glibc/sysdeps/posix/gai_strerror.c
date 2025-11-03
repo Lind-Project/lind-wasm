@@ -21,37 +21,31 @@
 #include <stdint.h>
 #include <stdio.h>
 
-
 #define MSGSTRFIELD(line) MSGSTRFIELD1 (line)
 #define MSGSTRFIELD1(line) str##line
 static const union msgstr_t
 {
   struct
   {
-#define _S(n, s) char MSGSTRFIELD(__LINE__)[sizeof (s)];
+#define _S(n, s) char MSGSTRFIELD (__LINE__)[sizeof (s)];
 #include "gai_strerror-strs.h"
 #undef _S
   };
   char str[0];
-} msgstr =
-  {
-    {
+} msgstr = { {
 #define _S(n, s) s,
 #include "gai_strerror-strs.h"
 #undef _S
-    }
-  };
+} };
 static const struct
 {
   int16_t code;
   uint16_t idx;
-} msgidx[] =
-  {
+} msgidx[] = {
 #define _S(n, s) { n, offsetof (union msgstr_t, MSGSTRFIELD (__LINE__)) },
 #include "gai_strerror-strs.h"
 #undef _S
-  };
-
+};
 
 const char *
 gai_strerror (int code)
@@ -64,6 +58,6 @@ gai_strerror (int code)
 	break;
       }
 
-  return _(result);
+  return _ (result);
 }
 libc_hidden_def (gai_strerror)

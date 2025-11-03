@@ -40,24 +40,24 @@ set_fenv_mode (enum round_mode mode)
     fe = fegetenv_register ();
 
   switch (mode)
-  {
-  case CEIL:
-    __fesetround_inline_nocheck (FE_UPWARD);
-    break;
-  case FLOOR:
-    __fesetround_inline_nocheck (FE_DOWNWARD);
-    break;
-  case TRUNC:
-  case ROUND:
-    __fesetround_inline_nocheck (FE_TOWARDZERO);
-    break;
-  case NEARBYINT:
-    /*  Disable FE_INEXACT exception  */
-    reset_fpscr_bit (FPSCR_XE);
-    break;
-  case RINT:
-    break;
-  }
+    {
+    case CEIL:
+      __fesetround_inline_nocheck (FE_UPWARD);
+      break;
+    case FLOOR:
+      __fesetround_inline_nocheck (FE_DOWNWARD);
+      break;
+    case TRUNC:
+    case ROUND:
+      __fesetround_inline_nocheck (FE_TOWARDZERO);
+      break;
+    case NEARBYINT:
+      /*  Disable FE_INEXACT exception  */
+      reset_fpscr_bit (FPSCR_XE);
+      break;
+    case RINT:
+      break;
+    }
   return fe;
 }
 
@@ -65,13 +65,13 @@ static inline void
 reset_fenv_mode (fenv_t fe, enum round_mode mode)
 {
   switch (mode)
-  {
-  default:
-    __builtin_mtfsf (0xff, fe);
-    break;
-  case RINT:
-    break;
-  }
+    {
+    default:
+      __builtin_mtfsf (0xff, fe);
+      break;
+    case RINT:
+      break;
+    }
 }
 
 static inline float

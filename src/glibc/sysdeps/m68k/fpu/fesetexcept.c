@@ -23,9 +23,9 @@ fesetexcept (int excepts)
 {
   fexcept_t fpsr;
 
-  __asm__ ("fmove%.l %/fpsr,%0" : "=dm" (fpsr));
+  __asm__ ("fmove%.l %/fpsr,%0" : "=dm"(fpsr));
   fpsr |= excepts & FE_ALL_EXCEPT;
-  __asm__ __volatile__ ("fmove%.l %0,%/fpsr" : : "dm" (fpsr));
+  __asm__ __volatile__ ("fmove%.l %0,%/fpsr" : : "dm"(fpsr));
 
   return 0;
 }

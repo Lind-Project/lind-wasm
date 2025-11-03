@@ -20,17 +20,14 @@
 #include <pthread-offsets.h>
 #include <shlib-compat.h>
 
-static const struct pthread_rwlockattr default_rwlockattr =
-  {
-    .lockkind = PTHREAD_RWLOCK_DEFAULT_NP,
-    .pshared = PTHREAD_PROCESS_PRIVATE
-  };
-
+static const struct pthread_rwlockattr default_rwlockattr
+    = { .lockkind = PTHREAD_RWLOCK_DEFAULT_NP,
+	.pshared = PTHREAD_PROCESS_PRIVATE };
 
 /* See pthread_rwlock_common.c.  */
 int
 ___pthread_rwlock_init (pthread_rwlock_t *rwlock,
-		       const pthread_rwlockattr_t *attr)
+			const pthread_rwlockattr_t *attr)
 {
   ASSERT_TYPE_SIZE (pthread_rwlock_t, __SIZEOF_PTHREAD_RWLOCK_T);
 
@@ -38,8 +35,7 @@ ___pthread_rwlock_init (pthread_rwlock_t *rwlock,
      avoid ABI breakage with static initializers.  */
   ASSERT_PTHREAD_INTERNAL_OFFSET (pthread_rwlock_t, __data.__flags,
 				  __PTHREAD_RWLOCK_FLAGS_OFFSET);
-  ASSERT_PTHREAD_INTERNAL_MEMBER_SIZE (pthread_rwlock_t, __data.__flags,
-				       int);
+  ASSERT_PTHREAD_INTERNAL_MEMBER_SIZE (pthread_rwlock_t, __data.__flags, int);
 
   const struct pthread_rwlockattr *iattr;
 
@@ -55,17 +51,17 @@ ___pthread_rwlock_init (pthread_rwlock_t *rwlock,
   return 0;
 }
 versioned_symbol (libc, ___pthread_rwlock_init, pthread_rwlock_init,
-                  GLIBC_2_34);
+		  GLIBC_2_34);
 libc_hidden_ver (___pthread_rwlock_init, __pthread_rwlock_init)
 #ifndef SHARED
-strong_alias (___pthread_rwlock_init, __pthread_rwlock_init)
+    strong_alias (___pthread_rwlock_init, __pthread_rwlock_init)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_rwlock_init, pthread_rwlock_init,
-               GLIBC_2_1);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_rwlock_init, pthread_rwlock_init,
+		       GLIBC_2_1);
 #endif
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_rwlock_init, __pthread_rwlock_init,
-               GLIBC_2_2);
+	       GLIBC_2_2);
 #endif

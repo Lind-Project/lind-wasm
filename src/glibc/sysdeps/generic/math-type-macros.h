@@ -51,53 +51,52 @@
       the mantissa MANT.  */
 
 #ifndef M_PFX
-# error "M_PFX must be defined."
+#  error "M_PFX must be defined."
 #endif
 #ifndef M_LIT
-# error "M_LIT must be defined."
+#  error "M_LIT must be defined."
 #endif
 #ifndef M_MLIT
-# error "M_MLIT must be defined."
+#  error "M_MLIT must be defined."
 #endif
 #ifndef M_SUF
-# error "M_SUF must be defined."
+#  error "M_SUF must be defined."
 #endif
 #ifndef FLOAT
-# error "FLOAT must be defined."
+#  error "FLOAT must be defined."
 #endif
 #ifndef CFLOAT
-# error "CFLOAT must be defined."
+#  error "CFLOAT must be defined."
 #endif
 #ifndef declare_mgen_alias
-# error "declare_mgen_alias must be defined."
+#  error "declare_mgen_alias must be defined."
 #endif
 #ifndef declare_mgen_alias_r
-# error "declare_mgen_alias_r must be defined."
+#  error "declare_mgen_alias_r must be defined."
 #endif
 #ifndef declare_mgen_alias_narrow
-# error "declare_mgen_alias_narrow must be defined."
+#  error "declare_mgen_alias_narrow must be defined."
 #endif
 #ifndef SET_NAN_PAYLOAD
-# error "SET_NAN_PAYLOAD must be defined."
+#  error "SET_NAN_PAYLOAD must be defined."
 #endif
 
 #ifndef declare_mgen_finite_alias_x
-#define declare_mgen_finite_alias_x(from, to)   \
-  libm_alias_finite (from, to)
+#  define declare_mgen_finite_alias_x(from, to) libm_alias_finite (from, to)
 #endif
 
 #ifndef declare_mgen_finite_alias_s
-# define declare_mgen_finite_alias_s(from,to)	\
-  declare_mgen_finite_alias_x (from, to)
+#  define declare_mgen_finite_alias_s(from, to)                               \
+    declare_mgen_finite_alias_x (from, to)
 #endif
 
 #ifndef declare_mgen_finite_alias
-# define declare_mgen_finite_alias(from, to)	\
-  declare_mgen_finite_alias_s (M_SUF (from), M_SUF (to))
+#  define declare_mgen_finite_alias(from, to)                                 \
+    declare_mgen_finite_alias_s (M_SUF (from), M_SUF (to))
 #endif
 
-#define __M_CONCAT(a,b) a ## b
-#define __M_CONCATX(a,b) __M_CONCAT(a,b)
+#define __M_CONCAT(a, b) a##b
+#define __M_CONCATX(a, b) __M_CONCAT (a, b)
 
 #define M_NAN M_SUF (__builtin_nan) ("")
 #define M_MIN_EXP __M_CONCATX (M_PFX, _MIN_EXP)
@@ -129,14 +128,14 @@
 /* Use a special epsilon value for IBM long double
    to avoid spurious overflows/underflows.  */
 #if M_MANT_DIG != 106
-# define M_EPSILON __M_CONCATX (M_PFX, _EPSILON)
+#  define M_EPSILON __M_CONCATX (M_PFX, _EPSILON)
 #else
-# define M_EPSILON M_LIT (0x1p-106)
+#  define M_EPSILON M_LIT (0x1p-106)
 #endif
 
 /* Enable overloading of function name to assist reuse.  */
 #ifndef M_DECL_FUNC
-# define M_DECL_FUNC(f) M_SUF (f)
+#  define M_DECL_FUNC(f) M_SUF (f)
 #endif
 
 #endif /* _MATH_TYPE_MACROS */

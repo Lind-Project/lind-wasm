@@ -27,7 +27,6 @@
 // #define __SYSCALL_CONCAT_X(a,b)     a##b
 // #define __SYSCALL_CONCAT(a,b)       __SYSCALL_CONCAT_X (a, b)
 
-
 // #define __INTERNAL_SYSCALL0(name) \
 //   INTERNAL_SYSCALL (name, 0)
 // #define __INTERNAL_SYSCALL1(name, a1) \
@@ -51,7 +50,8 @@
 // #define __INTERNAL_SYSCALL_DISP(b,...) \
 //   __SYSCALL_CONCAT (b,__INTERNAL_SYSCALL_NARGS(__VA_ARGS__))(__VA_ARGS__)
 
-// /* Issue a syscall defined by syscall number plus any other argument required.
+// /* Issue a syscall defined by syscall number plus any other argument
+// required.
 //    It is similar to INTERNAL_SYSCALL macro, but without the need to pass the
 //    expected argument number as second parameter.  */
 // #define INTERNAL_SYSCALL_CALL(...) \
@@ -116,18 +116,18 @@
 // #endif
 
 // Edit: Dennis
-#define SYSCALL_CANCEL(...) \
-  ({									     \
-    long int sc_ret;							     \
-    if (1)					     \
-      sc_ret = INLINE_SYSCALL_CALL (__VA_ARGS__); 			     \
-    else								     \
-      {									     \
-	int sc_cancel_oldtype = LIBC_CANCEL_ASYNC ();			     \
-	sc_ret = INLINE_SYSCALL_CALL (__VA_ARGS__);			     \
-        LIBC_CANCEL_RESET (sc_cancel_oldtype);				     \
-      }									     \
-    sc_ret;								     \
+#define SYSCALL_CANCEL(...)                                                   \
+  ({                                                                          \
+    long int sc_ret;                                                          \
+    if (1)                                                                    \
+      sc_ret = INLINE_SYSCALL_CALL (__VA_ARGS__);                             \
+    else                                                                      \
+      {                                                                       \
+	int sc_cancel_oldtype = LIBC_CANCEL_ASYNC ();                         \
+	sc_ret = INLINE_SYSCALL_CALL (__VA_ARGS__);                           \
+	LIBC_CANCEL_RESET (sc_cancel_oldtype);                                \
+      }                                                                       \
+    sc_ret;                                                                   \
   })
 
 //   #define SYSCALL_CANCEL(...) \
@@ -136,11 +136,11 @@
 //     if (NO_SYSCALL_CANCEL_CHECKING)					     \
 //       sc_ret = INLINE_SYSCALL_CALL (__VA_ARGS__); 			     \
 //     else								     \
-//       {									     \
+//       { \
 // 	int sc_cancel_oldtype = LIBC_CANCEL_ASYNC ();			     \
 // 	sc_ret = INLINE_SYSCALL_CALL (__VA_ARGS__);			     \
-//         LIBC_CANCEL_RESET (sc_cancel_oldtype);				     \
-//       }									     \
+//         LIBC_CANCEL_RESET (sc_cancel_oldtype); \
+//       } \
 //     sc_ret;								     \
 //   })
 
@@ -152,11 +152,11 @@
 //     if (NO_SYSCALL_CANCEL_CHECKING) 					     \
 //       sc_ret = INTERNAL_SYSCALL_CALL (__VA_ARGS__); 			     \
 //     else								     \
-//       {									     \
+//       { \
 // 	int sc_cancel_oldtype = LIBC_CANCEL_ASYNC ();			     \
 // 	sc_ret = INTERNAL_SYSCALL_CALL (__VA_ARGS__);			     \
-//         LIBC_CANCEL_RESET (sc_cancel_oldtype);				     \
-//       }									     \
+//         LIBC_CANCEL_RESET (sc_cancel_oldtype); \
+//       } \
 //     sc_ret;								     \
 //   })
 
@@ -191,38 +191,64 @@
 
 // REPLACE ALL SYSCALL MACROS WITH return 0 for now!
 /* Redefine the syscall macros to be no-ops, returning 0 directly. */
-#define SYSCALL__(name, args) long int __##name() { return 0; }
-#define SYSCALL(name, args) long int name() { return 0; }
+#define SYSCALL__(name, args)                                                 \
+  long int __##name () { return 0; }
+#define SYSCALL(name, args)                                                   \
+  long int name () { return 0; }
 
-#define __INTERNAL_SYSCALL0(name) long int name() { return 0; }
-#define __INTERNAL_SYSCALL1(name, a1) long int name() { return 0; }
-#define __INTERNAL_SYSCALL2(name, a1, a2) long int name() { return 0; }
-#define __INTERNAL_SYSCALL3(name, a1, a2, a3) long int name() { return 0; }
-#define __INTERNAL_SYSCALL4(name, a1, a2, a3, a4) long int name() { return 0; }
-#define __INTERNAL_SYSCALL5(name, a1, a2, a3, a4, a5) long int name() { return 0; }
-#define __INTERNAL_SYSCALL6(name, a1, a2, a3, a4, a5, a6) long int name() { return 0; }
-#define __INTERNAL_SYSCALL7(name, a1, a2, a3, a4, a5, a6, a7) long int name() { return 0; }
+#define __INTERNAL_SYSCALL0(name)                                             \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL1(name, a1)                                         \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL2(name, a1, a2)                                     \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL3(name, a1, a2, a3)                                 \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL4(name, a1, a2, a3, a4)                             \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL5(name, a1, a2, a3, a4, a5)                         \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL6(name, a1, a2, a3, a4, a5, a6)                     \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL7(name, a1, a2, a3, a4, a5, a6, a7)                 \
+  long int name () { return 0; }
 
 #define INTERNAL_SYSCALL_CALL(...) 0
 
-#define __INTERNAL_SYSCALL_NCS0(name) long int name() { return 0; }
-#define __INTERNAL_SYSCALL_NCS1(name, a1) long int name() { return 0; }
-#define __INTERNAL_SYSCALL_NCS2(name, a1, a2) long int name() { return 0; }
-#define __INTERNAL_SYSCALL_NCS3(name, a1, a2, a3) long int name() { return 0; }
-#define __INTERNAL_SYSCALL_NCS4(name, a1, a2, a3, a4) long int name() { return 0; }
-#define __INTERNAL_SYSCALL_NCS5(name, a1, a2, a3, a4, a5) long int name() { return 0; }
-#define __INTERNAL_SYSCALL_NCS6(name, a1, a2, a3, a4, a5, a6) long int name() { return 0; }
-#define __INTERNAL_SYSCALL_NCS7(name, a1, a2, a3, a4, a5, a6, a7) long int name() { return 0; }
+#define __INTERNAL_SYSCALL_NCS0(name)                                         \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL_NCS1(name, a1)                                     \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL_NCS2(name, a1, a2)                                 \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL_NCS3(name, a1, a2, a3)                             \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL_NCS4(name, a1, a2, a3, a4)                         \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL_NCS5(name, a1, a2, a3, a4, a5)                     \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL_NCS6(name, a1, a2, a3, a4, a5, a6)                 \
+  long int name () { return 0; }
+#define __INTERNAL_SYSCALL_NCS7(name, a1, a2, a3, a4, a5, a6, a7)             \
+  long int name () { return 0; }
 
 #define INTERNAL_SYSCALL_NCS_CALL(...) 0
 
-#define __INLINE_SYSCALL0(name) long int name() { return 0; }
-#define __INLINE_SYSCALL1(name, a1) long int name() { return 0; }
-#define __INLINE_SYSCALL2(name, a1, a2) long int name() { return 0; }
-#define __INLINE_SYSCALL3(name, a1, a2, a3) long int name() { return 0; }
-#define __INLINE_SYSCALL4(name, a1, a2, a3, a4) long int name() { return 0; }
-#define __INLINE_SYSCALL5(name, a1, a2, a3, a4, a5) long int name() { return 0; }
-#define __INLINE_SYSCALL6(name, a1, a2, a3, a4, a5, a6) long int name() { return 0; }
-#define __INLINE_SYSCALL7(name, a1, a2, a3, a4, a5, a6, a7) long int name() { return 0; }
+#define __INLINE_SYSCALL0(name)                                               \
+  long int name () { return 0; }
+#define __INLINE_SYSCALL1(name, a1)                                           \
+  long int name () { return 0; }
+#define __INLINE_SYSCALL2(name, a1, a2)                                       \
+  long int name () { return 0; }
+#define __INLINE_SYSCALL3(name, a1, a2, a3)                                   \
+  long int name () { return 0; }
+#define __INLINE_SYSCALL4(name, a1, a2, a3, a4)                               \
+  long int name () { return 0; }
+#define __INLINE_SYSCALL5(name, a1, a2, a3, a4, a5)                           \
+  long int name () { return 0; }
+#define __INLINE_SYSCALL6(name, a1, a2, a3, a4, a5, a6)                       \
+  long int name () { return 0; }
+#define __INLINE_SYSCALL7(name, a1, a2, a3, a4, a5, a6, a7)                   \
+  long int name () { return 0; }
 
 #define INLINE_SYSCALL_CALL(...) 0

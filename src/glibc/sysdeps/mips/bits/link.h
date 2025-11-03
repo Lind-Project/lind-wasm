@@ -15,8 +15,8 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_LINK_H
-# error "Never include <bits/link.h> directly; use <link.h> instead."
+#ifndef _LINK_H
+#  error "Never include <bits/link.h> directly; use <link.h> instead."
 #endif
 
 #include <sgidefs.h>
@@ -66,51 +66,42 @@ __BEGIN_DECLS
 
 #if _MIPS_SIM == _ABIO32
 
-extern Elf32_Addr la_mips_o32_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
-					    uintptr_t *__refcook,
-					    uintptr_t *__defcook,
-					    La_mips_32_regs *__regs,
-					    unsigned int *__flags,
-					    const char *__symname,
-					    long int *__framesizep);
-extern unsigned int la_mips_o32_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx,
-					     uintptr_t *__refcook,
-					     uintptr_t *__defcook,
-					     const La_mips_32_regs *__inregs,
-					     La_mips_32_retval *__outregs,
-					     const char *__symname);
+extern Elf32_Addr
+la_mips_o32_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
+			  uintptr_t *__refcook, uintptr_t *__defcook,
+			  La_mips_32_regs *__regs, unsigned int *__flags,
+			  const char *__symname, long int *__framesizep);
+extern unsigned int
+la_mips_o32_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx,
+			 uintptr_t *__refcook, uintptr_t *__defcook,
+			 const La_mips_32_regs *__inregs,
+			 La_mips_32_retval *__outregs, const char *__symname);
 
 #elif _MIPS_SIM == _ABIN32
 
-extern Elf32_Addr la_mips_n32_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
-					    uintptr_t *__refcook,
-					    uintptr_t *__defcook,
-					    La_mips_64_regs *__regs,
-					    unsigned int *__flags,
-					    const char *__symname,
-					    long int *__framesizep);
-extern unsigned int la_mips_n32_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx,
-					     uintptr_t *__refcook,
-					     uintptr_t *__defcook,
-					     const La_mips_64_regs *__inregs,
-					     La_mips_64_retval *__outregs,
-					     const char *__symname);
+extern Elf32_Addr
+la_mips_n32_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
+			  uintptr_t *__refcook, uintptr_t *__defcook,
+			  La_mips_64_regs *__regs, unsigned int *__flags,
+			  const char *__symname, long int *__framesizep);
+extern unsigned int
+la_mips_n32_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx,
+			 uintptr_t *__refcook, uintptr_t *__defcook,
+			 const La_mips_64_regs *__inregs,
+			 La_mips_64_retval *__outregs, const char *__symname);
 
 #else
 
-extern Elf64_Addr la_mips_n64_gnu_pltenter (Elf64_Sym *__sym, unsigned int __ndx,
-					    uintptr_t *__refcook,
-					    uintptr_t *__defcook,
-					    La_mips_64_regs *__regs,
-					    unsigned int *__flags,
-					    const char *__symname,
-					    long int *__framesizep);
-extern unsigned int la_mips_n64_gnu_pltexit (Elf64_Sym *__sym, unsigned int __ndx,
-					     uintptr_t *__refcook,
-					     uintptr_t *__defcook,
-					     const La_mips_64_regs *__inregs,
-					     La_mips_64_retval *__outregs,
-					     const char *__symname);
+extern Elf64_Addr
+la_mips_n64_gnu_pltenter (Elf64_Sym *__sym, unsigned int __ndx,
+			  uintptr_t *__refcook, uintptr_t *__defcook,
+			  La_mips_64_regs *__regs, unsigned int *__flags,
+			  const char *__symname, long int *__framesizep);
+extern unsigned int
+la_mips_n64_gnu_pltexit (Elf64_Sym *__sym, unsigned int __ndx,
+			 uintptr_t *__refcook, uintptr_t *__defcook,
+			 const La_mips_64_regs *__inregs,
+			 La_mips_64_retval *__outregs, const char *__symname);
 
 #endif
 

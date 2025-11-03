@@ -21,6 +21,6 @@
  */
 
 #ifndef _BITS_PTHREAD_NP_H
-#define _BITS_PTHREAD_NP_H	1
+#  define _BITS_PTHREAD_NP_H 1
 
 #endif /* bits/pthread-np.h */

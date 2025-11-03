@@ -57,8 +57,9 @@
 #include <math-underflow.h>
 #include <libm-alias-finite.h>
 
-static const _Float128 one = 1.0, shuge = L(1.0e4931),
-ovf_thresh = L(1.1357216553474703894801348310092223067821E4);
+static const _Float128 one = 1.0, shuge = L (1.0e4931),
+		       ovf_thresh
+		       = L (1.1357216553474703894801348310092223067821E4);
 
 _Float128
 __ieee754_sinhl (_Float128 x)
@@ -90,7 +91,7 @@ __ieee754_sinhl (_Float128 x)
 	{
 	  math_check_force_underflow (x);
 	  if (shuge + x > one)
-	    return x;		/* sinh(tiny) = tiny with inexact */
+	    return x; /* sinh(tiny) = tiny with inexact */
 	}
       t = __expm1l (u.value);
       if (ix < 0x3fff0000)

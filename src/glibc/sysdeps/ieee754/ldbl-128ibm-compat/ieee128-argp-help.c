@@ -29,9 +29,8 @@ ___ieee128_argp_error (const struct argp_state *state, const char *fmt, ...)
 }
 strong_alias (___ieee128_argp_error, __argp_errorieee128)
 
-void
-___ieee128_argp_failure (const struct argp_state *state, int status,
-			int errnum, const char *fmt, ...)
+    void ___ieee128_argp_failure (const struct argp_state *state, int status,
+				  int errnum, const char *fmt, ...)
 {
   va_list ap;
   va_start (ap, fmt);

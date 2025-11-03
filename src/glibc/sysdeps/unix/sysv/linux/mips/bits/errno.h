@@ -18,35 +18,35 @@
 
 #ifndef _BITS_ERRNO_H
 
-#if !defined _ERRNO_H
-# error "Never include <bits/errno.h> directly; use <errno.h> instead."
-#endif
+#  if !defined _ERRNO_H
+#    error "Never include <bits/errno.h> directly; use <errno.h> instead."
+#  endif
 
-# include <linux/errno.h>
+#  include <linux/errno.h>
 
 /* Older Linux headers do not define these constants.  */
-# ifndef ENOTSUP
-#  define ENOTSUP		EOPNOTSUPP
-# endif
+#  ifndef ENOTSUP
+#    define ENOTSUP EOPNOTSUPP
+#  endif
 
-# ifndef ECANCELED
-#  define ECANCELED		158
-# endif
+#  ifndef ECANCELED
+#    define ECANCELED 158
+#  endif
 
-# ifndef EOWNERDEAD
-#  define EOWNERDEAD		165
-# endif
+#  ifndef EOWNERDEAD
+#    define EOWNERDEAD 165
+#  endif
 
-# ifndef ENOTRECOVERABLE
-#  define ENOTRECOVERABLE	166
-# endif
+#  ifndef ENOTRECOVERABLE
+#    define ENOTRECOVERABLE 166
+#  endif
 
-# ifndef ERFKILL
-#  define ERFKILL		167
-# endif
+#  ifndef ERFKILL
+#    define ERFKILL 167
+#  endif
 
-# ifndef EHWPOISON
-#  define EHWPOISON		168
-# endif
+#  ifndef EHWPOISON
+#    define EHWPOISON 168
+#  endif
 
 #endif /* bits/errno.h.  */

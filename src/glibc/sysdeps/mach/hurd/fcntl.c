@@ -20,11 +20,11 @@
 #include <hurd.h>
 #include <hurd/fd.h>
 #include <stdarg.h>
-#include <sys/file.h>		/* XXX for LOCK_* */
+#include <sys/file.h> /* XXX for LOCK_* */
 #ifdef NOCANCEL
-#include <not-cancel.h>
+#  include <not-cancel.h>
 #else
-#include <sysdep-cancel.h>
+#  include <sysdep-cancel.h>
 #endif
 #include "f_setlk.h"
 
@@ -47,13 +47,13 @@ __libc_fcntl (int fd, int cmd, ...)
     {
       error_t err;
 
-    default:			/* Bad command.  */
+    default: /* Bad command.  */
       result = __hurd_fail (EINVAL);
       break;
 
       /* First the descriptor-based commands, which do no RPCs.  */
 
-    case F_DUPFD:		/* Duplicate the file descriptor.  */
+    case F_DUPFD: /* Duplicate the file descriptor.  */
     case F_DUPFD_CLOEXEC:
       {
 	struct hurd_fd *new;
@@ -108,25 +108,27 @@ __libc_fcntl (int fd, int cmd, ...)
 
       /* Set RESULT by evaluating EXPR with the descriptor locked.
 	 Check for an empty descriptor and return EBADF.  */
-#define LOCKED(expr) do {						      \
-      HURD_CRITICAL_BEGIN;						      \
-      __spin_lock (&d->port.lock);					      \
-      if (d->port.port == MACH_PORT_NULL)				      \
-	result = __hurd_fail (EBADF);					      \
-      else								      \
-	result = (expr);						      \
-      __spin_unlock (&d->port.lock);					      \
-      HURD_CRITICAL_END;						      \
-} while(0)
+#define LOCKED(expr)                                                          \
+  do                                                                          \
+    {                                                                         \
+      HURD_CRITICAL_BEGIN;                                                    \
+      __spin_lock (&d->port.lock);                                            \
+      if (d->port.port == MACH_PORT_NULL)                                     \
+	result = __hurd_fail (EBADF);                                         \
+      else                                                                    \
+	result = (expr);                                                      \
+      __spin_unlock (&d->port.lock);                                          \
+      HURD_CRITICAL_END;                                                      \
+    }                                                                         \
+  while (0)
 
-    case F_GETFD:		/* Get descriptor flags.  */
+    case F_GETFD: /* Get descriptor flags.  */
       LOCKED (d->flags);
       break;
 
-    case F_SETFD:		/* Set descriptor flags.  */
+    case F_SETFD: /* Set descriptor flags.  */
       LOCKED ((d->flags = va_arg (ap, int), 0));
       break;
-
 
       /* Now the real io operations, done by RPCs to io servers.  */
 
@@ -151,27 +153,26 @@ __libc_fcntl (int fd, int cmd, ...)
 	    return __hurd_fail (EINVAL);
 	  }
 
-	struct flock64 fl64 = {
-	  .l_type = fl->l_type,
-	  .l_whence = fl->l_whence,
-	  .l_start = fl->l_start,
-	  .l_len = fl->l_len,
-	  .l_pid = fl->l_pid
-	};
+	struct flock64 fl64 = { .l_type = fl->l_type,
+				.l_whence = fl->l_whence,
+				.l_start = fl->l_start,
+				.l_len = fl->l_len,
+				.l_pid = fl->l_pid };
 
 #ifndef NOCANCEL
 	if (cmd == F_SETLKW64)
 	  {
-	    int cancel_oldtype = LIBC_CANCEL_ASYNC();
-	    err = HURD_FD_PORT_USE_CANCEL (d, __file_record_lock (port, cmd,
-					   &fl64, MACH_PORT_NULL,
-					   MACH_MSG_TYPE_MAKE_SEND));
+	    int cancel_oldtype = LIBC_CANCEL_ASYNC ();
+	    err = HURD_FD_PORT_USE_CANCEL (
+		d, __file_record_lock (port, cmd, &fl64, MACH_PORT_NULL,
+				       MACH_MSG_TYPE_MAKE_SEND));
 	    LIBC_CANCEL_RESET (cancel_oldtype);
 	  }
 	else
 #endif
-	  err = HURD_FD_PORT_USE (d, __file_record_lock (port, cmd, &fl64,
-				  MACH_PORT_NULL, MACH_MSG_TYPE_MAKE_SEND));
+	  err = HURD_FD_PORT_USE (
+	      d, __file_record_lock (port, cmd, &fl64, MACH_PORT_NULL,
+				     MACH_MSG_TYPE_MAKE_SEND));
 
 	/* XXX: To remove once file_record_lock RPC is settled.  */
 	if (err == EMIG_BAD_ID || err == EOPNOTSUPP)
@@ -186,8 +187,8 @@ __libc_fcntl (int fd, int cmd, ...)
 		wait = 1;
 		/* FALLTHROUGH */
 	      case F_SETLK64:
-		return __f_setlk (fd, fl->l_type, fl->l_whence,
-				  fl->l_start, fl->l_len, wait);
+		return __f_setlk (fd, fl->l_type, fl->l_whence, fl->l_start,
+				  fl->l_len, wait);
 	      default:
 		return __hurd_fail (EINVAL);
 	      }
@@ -202,8 +203,8 @@ __libc_fcntl (int fd, int cmd, ...)
 
 	    if ((sizeof fl->l_start != sizeof fl64.l_start
 		 && fl->l_start != fl64.l_start)
-	     || (sizeof fl->l_len != sizeof fl64.l_len
-		 && fl->l_len != fl64.l_len))
+		|| (sizeof fl->l_len != sizeof fl64.l_len
+		    && fl->l_len != fl64.l_len))
 	      return __hurd_fail (EOVERFLOW);
 	  }
 
@@ -220,16 +221,17 @@ __libc_fcntl (int fd, int cmd, ...)
 #ifndef NOCANCEL
 	if (cmd == F_SETLKW64)
 	  {
-	    int cancel_oldtype = LIBC_CANCEL_ASYNC();
-	    err = HURD_FD_PORT_USE_CANCEL (d, __file_record_lock (port, cmd,
-					   fl, MACH_PORT_NULL,
-					   MACH_MSG_TYPE_MAKE_SEND));
+	    int cancel_oldtype = LIBC_CANCEL_ASYNC ();
+	    err = HURD_FD_PORT_USE_CANCEL (
+		d, __file_record_lock (port, cmd, fl, MACH_PORT_NULL,
+				       MACH_MSG_TYPE_MAKE_SEND));
 	    LIBC_CANCEL_RESET (cancel_oldtype);
 	  }
 	else
 #endif
-	  err = HURD_FD_PORT_USE (d, __file_record_lock (port, cmd, fl,
-				  MACH_PORT_NULL, MACH_MSG_TYPE_MAKE_SEND));
+	  err = HURD_FD_PORT_USE (
+	      d, __file_record_lock (port, cmd, fl, MACH_PORT_NULL,
+				     MACH_MSG_TYPE_MAKE_SEND));
 
 	/* XXX: To remove once file_record_lock RPC is settled.  */
 	if (err == EMIG_BAD_ID || err == EOPNOTSUPP)
@@ -244,8 +246,8 @@ __libc_fcntl (int fd, int cmd, ...)
 		wait = 1;
 		/* FALLTHROUGH */
 	      case F_SETLK64:
-		return __f_setlk (fd, fl->l_type, fl->l_whence,
-				  fl->l_start, fl->l_len, wait);
+		return __f_setlk (fd, fl->l_type, fl->l_whence, fl->l_start,
+				  fl->l_len, wait);
 	      default:
 		return __hurd_fail (EINVAL);
 	      }
@@ -255,23 +257,23 @@ __libc_fcntl (int fd, int cmd, ...)
 	break;
       }
 
-    case F_GETFL:		/* Get per-open flags.  */
+    case F_GETFL: /* Get per-open flags.  */
       if (err = HURD_FD_PORT_USE (d, __io_get_openmodes (port, &result)))
 	result = __hurd_dfail (fd, err);
       break;
 
-    case F_SETFL:		/* Set per-open flags.  */
-      err = HURD_FD_PORT_USE (d, __io_set_all_openmodes (port,
-							 va_arg (ap, int)));
+    case F_SETFL: /* Set per-open flags.  */
+      err = HURD_FD_PORT_USE (d,
+			      __io_set_all_openmodes (port, va_arg (ap, int)));
       result = err ? __hurd_dfail (fd, err) : 0;
       break;
 
-    case F_GETOWN:		/* Get owner.  */
+    case F_GETOWN: /* Get owner.  */
       if (err = HURD_FD_PORT_USE (d, __io_get_owner (port, &result)))
 	result = __hurd_dfail (fd, err);
       break;
 
-    case F_SETOWN:		/* Set owner.  */
+    case F_SETOWN: /* Set owner.  */
       err = HURD_FD_PORT_USE (d, __io_mod_owner (port, va_arg (ap, pid_t)));
       result = err ? __hurd_dfail (fd, err) : 0;
       break;
@@ -284,13 +286,12 @@ __libc_fcntl (int fd, int cmd, ...)
 libc_hidden_def (__libc_fcntl)
 
 #ifndef NOCANCEL
-weak_alias (__libc_fcntl, __fcntl)
-libc_hidden_weak (__fcntl)
-weak_alias (__libc_fcntl, fcntl)
+    weak_alias (__libc_fcntl, __fcntl) libc_hidden_weak (__fcntl)
+	weak_alias (__libc_fcntl, fcntl)
 
-strong_alias (__libc_fcntl, __libc_fcntl64)
-libc_hidden_def (__libc_fcntl64)
-weak_alias (__libc_fcntl64, __fcntl64)
-libc_hidden_weak (__fcntl64)
-weak_alias (__fcntl64, fcntl64)
+	    strong_alias (__libc_fcntl, __libc_fcntl64)
+		libc_hidden_def (__libc_fcntl64)
+		    weak_alias (__libc_fcntl64, __fcntl64)
+			libc_hidden_weak (__fcntl64)
+			    weak_alias (__fcntl64, fcntl64)
 #endif

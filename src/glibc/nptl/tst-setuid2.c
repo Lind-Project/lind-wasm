@@ -31,8 +31,13 @@ static pthread_cond_t cond_send;
 static void (*func_sent) (void);
 static pthread_cond_t cond_recv;
 
-#define FAIL(fmt, ...) \
-  do { printf ("FAIL: " fmt "\n", __VA_ARGS__); _exit (1); } while (0)
+#define FAIL(fmt, ...)                                                        \
+  do                                                                          \
+    {                                                                         \
+      printf ("FAIL: " fmt "\n", __VA_ARGS__);                                \
+      _exit (1);                                                              \
+    }                                                                         \
+  while (0)
 
 static void *
 thread_func (void *ctx __attribute__ ((unused)))
@@ -115,8 +120,8 @@ do_test (void)
   /* If we get here, check that the kernel did the right thing. */
   run_on_thread (get_thread_ids);
   if (ruid != 1001 || euid != 1002 || suid != 1003)
-    FAIL ("unexpected UIDs after setuid: %ld, %ld, %ld",
-	  (long) ruid, (long) euid, (long) suid);
+    FAIL ("unexpected UIDs after setuid: %ld, %ld, %ld", (long) ruid,
+	  (long) euid, (long) suid);
   return 0;
 }
 

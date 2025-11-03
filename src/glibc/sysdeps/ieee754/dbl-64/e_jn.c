@@ -45,10 +45,10 @@
 #include <math-underflow.h>
 #include <libm-alias-finite.h>
 
-static const double
-  invsqrtpi = 5.64189583547756279280e-01, /* 0x3FE20DD7, 0x50429B6D */
-  two = 2.00000000000000000000e+00,  /* 0x40000000, 0x00000000 */
-  one = 1.00000000000000000000e+00;  /* 0x3FF00000, 0x00000000 */
+static const double invsqrtpi
+    = 5.64189583547756279280e-01,     /* 0x3FE20DD7, 0x50429B6D */
+    two = 2.00000000000000000000e+00, /* 0x40000000, 0x00000000 */
+    one = 1.00000000000000000000e+00; /* 0x3FF00000, 0x00000000 */
 
 static const double zero = 0.00000000000000000000e+00;
 
@@ -77,7 +77,7 @@ __ieee754_jn (int n, double x)
     return (__ieee754_j0 (x));
   if (n == 1)
     return (__ieee754_j1 (x));
-  sgn = (n & 1) & (hx >> 31);   /* even n -- 0, odd n -- sign(x) */
+  sgn = (n & 1) & (hx >> 31); /* even n -- 0, odd n -- sign(x) */
   x = fabs (x);
   {
     SET_RESTORE_ROUND (FE_TONEAREST);
@@ -87,30 +87,39 @@ __ieee754_jn (int n, double x)
     else if ((double) n <= x)
       {
 	/* Safe to use J(n+1,x)=2n/x *J(n,x)-J(n-1,x) */
-	if (ix >= 0x52D00000)      /* x > 2**302 */
-	  { /* (x >> n**2)
-			 *	    Jn(x) = cos(x-(2n+1)*pi/4)*sqrt(2/x*pi)
-			 *	    Yn(x) = sin(x-(2n+1)*pi/4)*sqrt(2/x*pi)
-			 *	    Let s=sin(x), c=cos(x),
-			 *		xn=x-(2n+1)*pi/4, sqt2 = sqrt(2),then
-			 *
-			 *		   n	sin(xn)*sqt2	cos(xn)*sqt2
-			 *		----------------------------------
-			 *		   0	 s-c		 c+s
-			 *		   1	-s-c		-c+s
-			 *		   2	-s+c		-c-s
-			 *		   3	 s+c		 c-s
-			 */
+	if (ix >= 0x52D00000) /* x > 2**302 */
+	  {		      /* (x >> n**2)
+			       *	    Jn(x) = cos(x-(2n+1)*pi/4)*sqrt(2/x*pi)
+			       *	    Yn(x) = sin(x-(2n+1)*pi/4)*sqrt(2/x*pi)
+			       *	    Let s=sin(x), c=cos(x),
+			       *		xn=x-(2n+1)*pi/4, sqt2 = sqrt(2),then
+			       *
+			       *		   n	sin(xn)*sqt2	cos(xn)*sqt2
+			       *		----------------------------------
+			       *		   0	 s-c		 c+s
+			       *		   1	-s-c		-c+s
+			       *		   2	-s+c		-c-s
+			       *		   3	 s+c		 c-s
+			       */
 	    double s;
 	    double c;
 	    __sincos (x, &s, &c);
 	    switch (n & 3)
 	      {
-	      case 0: temp = c + s; break;
-	      case 1: temp = -c + s; break;
-	      case 2: temp = -c - s; break;
-	      case 3: temp = c - s; break;
-	      default: __builtin_unreachable ();
+	      case 0:
+		temp = c + s;
+		break;
+	      case 1:
+		temp = -c + s;
+		break;
+	      case 2:
+		temp = -c - s;
+		break;
+	      case 3:
+		temp = c - s;
+		break;
+	      default:
+		__builtin_unreachable ();
 	      }
 	    b = invsqrtpi * temp / sqrt (x);
 	  }
@@ -128,19 +137,20 @@ __ieee754_jn (int n, double x)
       }
     else
       {
-	if (ix < 0x3e100000)      /* x < 2**-29 */
+	if (ix < 0x3e100000) /* x < 2**-29 */
 	  { /* x is tiny, return the first Taylor expansion of J(n,x)
-			 * J(n,x) = 1/n!*(x/2)^n  - ...
-			 */
-	    if (n > 33)           /* underflow */
+	     * J(n,x) = 1/n!*(x/2)^n  - ...
+	     */
+	    if (n > 33) /* underflow */
 	      b = zero;
 	    else
 	      {
-		temp = x * 0.5; b = temp;
+		temp = x * 0.5;
+		b = temp;
 		for (a = one, i = 2; i <= n; i++)
 		  {
-		    a *= (double) i;              /* a = n! */
-		    b *= temp;                    /* b = (x/2)^n */
+		    a *= (double) i; /* a = n! */
+		    b *= temp;	     /* b = (x/2)^n */
 		  }
 		b = b / a;
 	      }
@@ -177,12 +187,18 @@ __ieee754_jn (int n, double x)
 	     */
 	    /* determine k */
 	    double t, v;
-	    double q0, q1, h, tmp; int32_t k, m;
-	    w = (n + n) / (double) x; h = 2.0 / (double) x;
-	    q0 = w;  z = w + h; q1 = w * z - 1.0; k = 1;
+	    double q0, q1, h, tmp;
+	    int32_t k, m;
+	    w = (n + n) / (double) x;
+	    h = 2.0 / (double) x;
+	    q0 = w;
+	    z = w + h;
+	    q1 = w * z - 1.0;
+	    k = 1;
 	    while (q1 < 1.0e9)
 	      {
-		k += 1; z += h;
+		k += 1;
+		z += h;
 		tmp = z * q1 - q0;
 		q0 = q1;
 		q1 = tmp;
@@ -261,8 +277,7 @@ __ieee754_jn (int n, double x)
 }
 libm_alias_finite (__ieee754_jn, __jn)
 
-double
-__ieee754_yn (int n, double x)
+    double __ieee754_yn (int n, double x)
 {
   int32_t i, hx, ix, lx;
   int32_t sign;
@@ -295,30 +310,39 @@ __ieee754_yn (int n, double x)
       }
     if (__glibc_unlikely (ix == 0x7ff00000))
       return zero;
-    if (ix >= 0x52D00000)      /* x > 2**302 */
-      { /* (x >> n**2)
-	 *	    Jn(x) = cos(x-(2n+1)*pi/4)*sqrt(2/x*pi)
-	 *	    Yn(x) = sin(x-(2n+1)*pi/4)*sqrt(2/x*pi)
-	 *	    Let s=sin(x), c=cos(x),
-	 *		xn=x-(2n+1)*pi/4, sqt2 = sqrt(2),then
-	 *
-	 *		   n	sin(xn)*sqt2	cos(xn)*sqt2
-	 *		----------------------------------
-	 *		   0	 s-c		 c+s
-	 *		   1	-s-c		-c+s
-	 *		   2	-s+c		-c-s
-	 *		   3	 s+c		 c-s
-	 */
+    if (ix >= 0x52D00000) /* x > 2**302 */
+      {			  /* (x >> n**2)
+			   *	    Jn(x) = cos(x-(2n+1)*pi/4)*sqrt(2/x*pi)
+			   *	    Yn(x) = sin(x-(2n+1)*pi/4)*sqrt(2/x*pi)
+			   *	    Let s=sin(x), c=cos(x),
+			   *		xn=x-(2n+1)*pi/4, sqt2 = sqrt(2),then
+			   *
+			   *		   n	sin(xn)*sqt2	cos(xn)*sqt2
+			   *		----------------------------------
+			   *		   0	 s-c		 c+s
+			   *		   1	-s-c		-c+s
+			   *		   2	-s+c		-c-s
+			   *		   3	 s+c		 c-s
+			   */
 	double c;
 	double s;
 	__sincos (x, &s, &c);
 	switch (n & 3)
 	  {
-	  case 0: temp = s - c; break;
-	  case 1: temp = -s - c; break;
-	  case 2: temp = -s + c; break;
-	  case 3: temp = s + c; break;
-	  default: __builtin_unreachable ();
+	  case 0:
+	    temp = s - c;
+	    break;
+	  case 1:
+	    temp = -s - c;
+	    break;
+	  case 2:
+	    temp = -s + c;
+	    break;
+	  case 3:
+	    temp = s + c;
+	    break;
+	  default:
+	    __builtin_unreachable ();
 	  }
 	b = invsqrtpi * temp / sqrt (x);
       }
@@ -345,7 +369,7 @@ __ieee754_yn (int n, double x)
     else
       ret = -b;
   }
- out:
+out:
   if (isinf (ret))
     ret = copysign (DBL_MAX, ret) * DBL_MAX;
   return ret;

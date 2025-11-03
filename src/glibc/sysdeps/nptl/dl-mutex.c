@@ -36,18 +36,17 @@ __rtld_mutex_init (void)
 
   struct link_map *libc_map = GL (dl_ns)[LM_ID_BASE].libc_map;
 
-  const ElfW(Sym) *sym
-    = _dl_lookup_direct (libc_map, "pthread_mutex_lock",
-                         0x4f152227, /* dl_new_hash output.  */
-                         FIRST_VERSION_libc_pthread_mutex_lock_STRING,
-                         FIRST_VERSION_libc_pthread_mutex_lock_HASH);
+  const ElfW (Sym) *sym = _dl_lookup_direct (
+      libc_map, "pthread_mutex_lock", 0x4f152227, /* dl_new_hash output.  */
+      FIRST_VERSION_libc_pthread_mutex_lock_STRING,
+      FIRST_VERSION_libc_pthread_mutex_lock_HASH);
   assert (sym != NULL);
   ___rtld_mutex_lock = DL_SYMBOL_ADDRESS (libc_map, sym);
 
   sym = _dl_lookup_direct (libc_map, "pthread_mutex_unlock",
-                           0x7dd7aaaa, /* dl_new_hash output.  */
-                           FIRST_VERSION_libc_pthread_mutex_unlock_STRING,
-                           FIRST_VERSION_libc_pthread_mutex_unlock_HASH);
+			   0x7dd7aaaa, /* dl_new_hash output.  */
+			   FIRST_VERSION_libc_pthread_mutex_unlock_STRING,
+			   FIRST_VERSION_libc_pthread_mutex_unlock_HASH);
   assert (sym != NULL);
   ___rtld_mutex_unlock = DL_SYMBOL_ADDRESS (libc_map, sym);
 }

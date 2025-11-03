@@ -39,13 +39,13 @@ pthread_rwlock_tryrdlock (struct __pthread_rwlock *rwlock)
     }
   else
     /* Lock is held, but is held by a reader?  */
-  if (rwlock->__readers > 0)
-    {
-      assert (rwlock->__readerqueue == 0);
-      rwlock->__readers++;
-      __pthread_spin_unlock (&rwlock->__lock);
-      return 0;
-    }
+    if (rwlock->__readers > 0)
+      {
+	assert (rwlock->__readerqueue == 0);
+	rwlock->__readers++;
+	__pthread_spin_unlock (&rwlock->__lock);
+	return 0;
+      }
 
   /* The lock is busy.  */
 

@@ -36,4 +36,4 @@ futex_supports_pshared (int pshared)
     return EINVAL;
 }
 
-#endif  /* futex-internal.h */
+#endif /* futex-internal.h */

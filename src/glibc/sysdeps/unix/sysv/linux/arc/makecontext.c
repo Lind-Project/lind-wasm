@@ -64,7 +64,7 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
       r = (unsigned long int *) sp;
 
       for (i = 0; i < stack_args; i++)
-        *r++ = va_arg (vl, unsigned long int);
+	*r++ = va_arg (vl, unsigned long int);
     }
 
   va_end (vl);

@@ -21,11 +21,10 @@
 extern __typeof (REDIRECT_NAME) OPTIMIZE (sse2) attribute_hidden;
 extern __typeof (REDIRECT_NAME) OPTIMIZE (fma) attribute_hidden;
 
-static inline void *
-inhibit_stack_protector
+static inline void *inhibit_stack_protector
 IFUNC_SELECTOR (void)
 {
-  const struct cpu_features* cpu_features = __get_cpu_features ();
+  const struct cpu_features *cpu_features = __get_cpu_features ();
 
   if (CPU_FEATURE_USABLE_P (cpu_features, FMA)
       && CPU_FEATURE_USABLE_P (cpu_features, AVX2))

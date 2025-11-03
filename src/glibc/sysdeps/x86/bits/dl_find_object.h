@@ -17,13 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DLFCN_H
-# error "Never use <bits/dl_find_object.h> directly; include <dlfcn.h> instead."
+#  error                                                                       \
+      "Never use <bits/dl_find_object.h> directly; include <dlfcn.h> instead."
 #endif
 
 #ifdef __x86_64__
-# define DLFO_STRUCT_HAS_EH_DBASE 0
+#  define DLFO_STRUCT_HAS_EH_DBASE 0
 #else
-# define DLFO_STRUCT_HAS_EH_DBASE 1
+#  define DLFO_STRUCT_HAS_EH_DBASE 1
 #endif
 #define DLFO_STRUCT_HAS_EH_COUNT 0
 #define DLFO_EH_SEGMENT_TYPE PT_GNU_EH_FRAME

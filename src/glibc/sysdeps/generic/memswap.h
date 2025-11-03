@@ -23,7 +23,10 @@ __memswap (void *__restrict p1, void *__restrict p2, size_t n)
 {
   /* Use multiple small memcpys with constant size to enable inlining on most
      targets.  */
-  enum { SWAP_GENERIC_SIZE = 32 };
+  enum
+  {
+    SWAP_GENERIC_SIZE = 32
+  };
   unsigned char tmp[SWAP_GENERIC_SIZE];
   while (n > SWAP_GENERIC_SIZE)
     {
@@ -34,8 +37,8 @@ __memswap (void *__restrict p1, void *__restrict p2, size_t n)
     }
   while (n > 0)
     {
-      unsigned char t = ((unsigned char *)p1)[--n];
-      ((unsigned char *)p1)[n] = ((unsigned char *)p2)[n];
-      ((unsigned char *)p2)[n] = t;
+      unsigned char t = ((unsigned char *) p1)[--n];
+      ((unsigned char *) p1)[n] = ((unsigned char *) p2)[n];
+      ((unsigned char *) p2)[n] = t;
     }
 }

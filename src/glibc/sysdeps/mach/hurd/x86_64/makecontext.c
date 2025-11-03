@@ -27,10 +27,10 @@
    normal integer parameters.
    makecontext sets up a stack and the registers for the
    user context. The stack looks like this:
-               +-----------------------+
-               | next context          |
-               +-----------------------+
-               | parameter 7-n         |
+	       +-----------------------+
+	       | next context          |
+	       +-----------------------+
+	       | parameter 7-n         |
 	       +-----------------------+
 	       | trampoline address    |
     %rsp ->    +-----------------------+
@@ -46,7 +46,6 @@
    to be changed to long and also the stdlib/tst-setcontext.c file needs
    to be changed to pass long arguments to makecontext.  */
 
-
 void
 __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
 {
@@ -57,8 +56,7 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
   int i;
 
   /* Generate room on stack for parameter if needed and uc_link.  */
-  sp = (greg_t *) ((uintptr_t) ucp->uc_stack.ss_sp
-		   + ucp->uc_stack.ss_size);
+  sp = (greg_t *) ((uintptr_t) ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
   sp -= (argc > 6 ? argc - 6 : 0) + 1;
   /* Align stack and make space for trampoline address.  */
   sp = (greg_t *) ((((uintptr_t) sp) & -16L) - 8);
@@ -114,6 +112,5 @@ __makecontext (ucontext_t *ucp, void (*func) (void), int argc, ...)
       }
   va_end (ap);
 }
-
 
 weak_alias (__makecontext, makecontext)

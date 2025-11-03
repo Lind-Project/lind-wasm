@@ -41,7 +41,7 @@ TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *valp)
 
   /* Copy the features from dl_powerpc_cpu_features, which contains the
      features provided by AT_HWCAP and AT_HWCAP2.  */
-  struct cpu_features *cpu_features = &GLRO(dl_powerpc_cpu_features);
+  struct cpu_features *cpu_features = &GLRO (dl_powerpc_cpu_features);
   unsigned long int tcbv_hwcap = cpu_features->hwcap;
   unsigned long int tcbv_hwcap2 = cpu_features->hwcap2;
 
@@ -76,9 +76,11 @@ TUNABLE_CALLBACK (set_hwcaps) (tunable_val_t *valp)
 		  /* Enable the features and also check that no unsupported
 		     features were enabled by user.  */
 		  if (hwcap_tunables[i].id)
-		    cpu_features->hwcap2 |= (tcbv_hwcap2 & hwcap_tunables[i].mask);
+		    cpu_features->hwcap2
+			|= (tcbv_hwcap2 & hwcap_tunables[i].mask);
 		  else
-		    cpu_features->hwcap |= (tcbv_hwcap & hwcap_tunables[i].mask);
+		    cpu_features->hwcap
+			|= (tcbv_hwcap & hwcap_tunables[i].mask);
 		}
 	      break;
 	    }
@@ -99,8 +101,8 @@ init_cpu_features (struct cpu_features *cpu_features, uint64_t hwcaps[])
   /* Default is to use aligned memory access on optimized function unless
      tunables is enable, since for this case user can explicit disable
      unaligned optimizations.  */
-  int32_t cached_memfunc = TUNABLE_GET (glibc, cpu, cached_memopt, int32_t,
-					NULL);
+  int32_t cached_memfunc
+      = TUNABLE_GET (glibc, cpu, cached_memopt, int32_t, NULL);
   cpu_features->use_cached_memopt = (cached_memfunc > 0);
   TUNABLE_GET (glibc, cpu, hwcaps, tunable_val_t *,
 	       TUNABLE_CALLBACK (set_hwcaps));

@@ -30,9 +30,7 @@ try_fexecve (int fd)
 
   if (pid == 0)
     {
-      static const char *const argv[] = {
-	"/bin/sh", "-c", "true", NULL
-      };
+      static const char *const argv[] = { "/bin/sh", "-c", "true", NULL };
       fexecve (fd, (char *const *) argv, environ);
       _exit (errno);
     }
@@ -45,8 +43,8 @@ try_fexecve (int fd)
   if (termpid == -1)
     FAIL_RET ("waitpid failed: %m");
   if (termpid != pid)
-    FAIL_RET ("waitpid returned %ld != %ld",
-	      (long int) termpid, (long int) pid);
+    FAIL_RET ("waitpid returned %ld != %ld", (long int) termpid,
+	      (long int) pid);
   if (!WIFEXITED (status))
     FAIL_RET ("child hasn't exited normally");
 

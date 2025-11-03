@@ -11,7 +11,7 @@
 
 #ifndef _LIND_SYSCALL_NUM_H
 #define _LIND_SYSCALL_NUM_H
- 
+
 #define READ_SYSCALL 0
 #define WRITE_SYSCALL 1
 #define OPEN_SYSCALL 2
@@ -114,4 +114,3 @@
 #define PIPE2_SYSCALL 293
 
 #endif /* _LIND_SYSCALL_NUM_H */
- 

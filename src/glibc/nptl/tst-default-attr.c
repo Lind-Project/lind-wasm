@@ -25,15 +25,15 @@
 #include <errno.h>
 #include <stdbool.h>
 
-#define RETURN_IF_FAIL(f, ...) \
-  ({									      \
-    int ret = f (__VA_ARGS__);						      \
-    if (ret != 0)							      \
-      {									      \
+#define RETURN_IF_FAIL(f, ...)                                                \
+  ({                                                                          \
+    int ret = f (__VA_ARGS__);                                                \
+    if (ret != 0)                                                             \
+      {                                                                       \
 	printf ("%s:%d: %s returned %d (errno = %d)\n", __FILE__, __LINE__,   \
-		#f, ret, errno);					      \
-	return ret;							      \
-      }									      \
+		#f, ret, errno);                                              \
+	return ret;                                                           \
+      }                                                                       \
   })
 
 static int (*verify_result) (pthread_attr_t *);
@@ -188,7 +188,8 @@ do_affinity_test (void)
   cpu_set_t cpuset;
   CPU_ZERO (&cpuset);
   CPU_SET (0, &cpuset);
-  RETURN_IF_FAIL (pthread_attr_setaffinity_np, &attr, sizeof (cpuset), &cpuset);
+  RETURN_IF_FAIL (pthread_attr_setaffinity_np, &attr, sizeof (cpuset),
+		  &cpuset);
 
   int ret = run_threads (&attr);
 
@@ -312,7 +313,8 @@ verify_stacksize_result (pthread_attr_t *attr)
 
   if (stacksize != stack)
     {
-      printf ("failed to set default stacksize (%zu, %zu)\n", stacksize, stack);
+      printf ("failed to set default stacksize (%zu, %zu)\n", stacksize,
+	      stack);
       return 1;
     }
 

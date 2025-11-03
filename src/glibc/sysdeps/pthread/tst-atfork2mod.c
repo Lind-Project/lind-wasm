@@ -20,9 +20,7 @@
 #include <stdlib.h>
 #include <dso_handle.h>
 
-
 extern int val;
-
 
 static void
 prepare (void)
@@ -42,8 +40,7 @@ child (void)
   val *= 8;
 }
 
-static void
-__attribute__ ((constructor))
+static void __attribute__ ((constructor))
 init (void)
 {
   printf ("dsohandle = %p\n", __dso_handle);

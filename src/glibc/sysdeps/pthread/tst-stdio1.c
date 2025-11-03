@@ -25,13 +25,13 @@ static int do_test (void);
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"
 
-static void *tf (void *a)
+static void *
+tf (void *a)
 {
   flockfile (stdout);
   /* This call should never return.  */
   return a;
 }
-
 
 int
 do_test (void)

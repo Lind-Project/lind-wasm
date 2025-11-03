@@ -25,11 +25,10 @@
 #include <sys/uio.h>
 #include <errno.h>
 
-
 static void
 ifree (struct scratch_buffer *sbuf)
 {
-   scratch_buffer_free (sbuf);
+  scratch_buffer_free (sbuf);
 }
 
 /* Write data pointed by the buffers described by VECTOR, which
@@ -85,5 +84,5 @@ __writev (int fd, const struct iovec *vector, int count)
 }
 libc_hidden_def (__writev)
 #ifndef __writev
-weak_alias (__writev, writev)
+    weak_alias (__writev, writev)
 #endif

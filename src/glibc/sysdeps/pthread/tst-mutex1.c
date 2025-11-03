@@ -22,10 +22,9 @@
 #include <libc-diag.h>
 
 #ifndef ATTR
-# define ATTR NULL
-# define ATTR_NULL true
+#  define ATTR NULL
+#  define ATTR_NULL true
 #endif
-
 
 static int
 do_test (void)
@@ -77,6 +76,6 @@ do_test (void)
 }
 
 #ifndef TEST_FUNCTION
-# define TEST_FUNCTION do_test ()
+#  define TEST_FUNCTION do_test ()
 #endif
 #include "../test-skeleton.c"

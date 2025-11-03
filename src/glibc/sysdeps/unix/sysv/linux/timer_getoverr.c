@@ -31,21 +31,21 @@ versioned_symbol (libc, ___timer_getoverrun, timer_getoverrun, GLIBC_2_34);
 libc_hidden_ver (___timer_getoverrun, __timer_getoverrun)
 
 #if TIMER_T_WAS_INT_COMPAT
-# if OTHER_SHLIB_COMPAT (librt, GLIBC_2_3_3, GLIBC_2_34)
-compat_symbol (librt, ___timer_getoverrun, timer_getoverrun, GLIBC_2_3_3);
-# endif
+#  if OTHER_SHLIB_COMPAT(librt, GLIBC_2_3_3, GLIBC_2_34)
+    compat_symbol (librt, ___timer_getoverrun, timer_getoverrun, GLIBC_2_3_3);
+#  endif
 
-# if OTHER_SHLIB_COMPAT (librt, GLIBC_2_2, GLIBC_2_3_3)
+#  if OTHER_SHLIB_COMPAT(librt, GLIBC_2_2, GLIBC_2_3_3)
 int
 __timer_getoverrun_old (int timerid)
 {
   return __timer_getoverrun (__timer_compat_list[timerid]);
 }
 compat_symbol (librt, __timer_getoverrun_old, timer_getoverrun, GLIBC_2_2);
-# endif /* OTHER_SHLIB_COMPAT */
+#  endif /* OTHER_SHLIB_COMPAT */
 
 #else /* !TIMER_T_WAS_INT_COMPAT */
-# if OTHER_SHLIB_COMPAT (librt, GLIBC_2_2, GLIBC_2_34)
-compat_symbol (librt, ___timer_getoverrun, timer_getoverrun, GLIBC_2_2);
-# endif
+#  if OTHER_SHLIB_COMPAT(librt, GLIBC_2_2, GLIBC_2_34)
+    compat_symbol (librt, ___timer_getoverrun, timer_getoverrun, GLIBC_2_2);
+#  endif
 #endif /* !TIMER_T_WAS_INT_COMPAT */

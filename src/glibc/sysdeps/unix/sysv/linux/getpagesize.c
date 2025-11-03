@@ -25,8 +25,7 @@
 int
 __getpagesize (void)
 {
-  assert (GLRO(dl_pagesize) != 0);
-  return GLRO(dl_pagesize);
+  assert (GLRO (dl_pagesize) != 0);
+  return GLRO (dl_pagesize);
 }
-libc_hidden_def (__getpagesize)
-weak_alias (__getpagesize, getpagesize)
+libc_hidden_def (__getpagesize) weak_alias (__getpagesize, getpagesize)

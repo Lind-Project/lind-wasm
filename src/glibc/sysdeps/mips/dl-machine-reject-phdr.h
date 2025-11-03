@@ -17,31 +17,31 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_MACHINE_REJECT_PHDR_H
-#define _DL_MACHINE_REJECT_PHDR_H 1
+#  define _DL_MACHINE_REJECT_PHDR_H 1
 
-#include <unistd.h>
-#include <sys/prctl.h>
+#  include <unistd.h>
+#  include <sys/prctl.h>
 
-#if defined PR_GET_FP_MODE && defined PR_SET_FP_MODE
-# define HAVE_PRCTL_FP_MODE 1
-#else
-# define HAVE_PRCTL_FP_MODE 0
-#endif
+#  if defined PR_GET_FP_MODE && defined PR_SET_FP_MODE
+#    define HAVE_PRCTL_FP_MODE 1
+#  else
+#    define HAVE_PRCTL_FP_MODE 0
+#  endif
 
 /* Reject an object with a debug message.  */
-#define REJECT(str, args...)						      \
-  {									      \
-    if (__glibc_unlikely (GLRO(dl_debug_mask) & DL_DEBUG_LIBS))		      \
-      _dl_debug_printf (str, ##args);					      \
-    return true;							      \
-  }
+#  define REJECT(str, args...)                                                \
+    {                                                                         \
+      if (__glibc_unlikely (GLRO (dl_debug_mask) & DL_DEBUG_LIBS))            \
+	_dl_debug_printf (str, ##args);                                       \
+      return true;                                                            \
+    }
 
 /* Search the program headers for the ABI Flags.  */
 
-static inline const ElfW(Phdr) *
-find_mips_abiflags (const ElfW(Phdr) *phdr, ElfW(Half) phnum)
+static inline const ElfW (Phdr)
+    * find_mips_abiflags (const ElfW (Phdr) * phdr, ElfW (Half) phnum)
 {
-  const ElfW(Phdr) *ph;
+  const ElfW (Phdr) * ph;
 
   for (ph = phdr; ph < &phdr[phnum]; ++ph)
     if (ph->p_type == PT_MIPS_ABIFLAGS)
@@ -56,11 +56,11 @@ cached_fpabi_reject_phdr_p (struct link_map *l)
 {
   if (l->l_mach.fpabi == 0)
     {
-      const ElfW(Phdr) *ph = find_mips_abiflags (l->l_phdr, l->l_phnum);
+      const ElfW (Phdr) *ph = find_mips_abiflags (l->l_phdr, l->l_phnum);
 
       if (ph)
 	{
-	  Elf_MIPS_ABIFlags_v0 * mips_abiflags;
+	  Elf_MIPS_ABIFlags_v0 *mips_abiflags;
 	  if (ph->p_filesz < sizeof (Elf_MIPS_ABIFlags_v0))
 	    REJECT ("   %s: malformed PT_MIPS_ABIFLAGS found\n", l->l_name);
 
@@ -71,8 +71,8 @@ cached_fpabi_reject_phdr_p (struct link_map *l)
 		    mips_abiflags->flags2);
 
 	  l->l_mach.fpabi = mips_abiflags->fp_abi;
-	  l->l_mach.odd_spreg = (mips_abiflags->flags1
-				 & MIPS_AFL_FLAGS1_ODDSPREG) != 0;
+	  l->l_mach.odd_spreg
+	      = (mips_abiflags->flags1 & MIPS_AFL_FLAGS1_ODDSPREG) != 0;
 	}
       else
 	{
@@ -131,15 +131,15 @@ struct abi_req
 
 /* FP ABI requirements for all Val_GNU_MIPS_ABI_FP_* values.  */
 
-static const struct abi_req reqs[Val_GNU_MIPS_ABI_FP_MAX + 1] =
-    {{true,  true,  true,  true,  true},  /* Any */
-     {false, false, true,  false, true},  /* Double-float */
-     {true,  false, false, false, false}, /* Single-float */
-     {false, true,  false, false, false}, /* Soft-float */
-     {false, false, false, false, false}, /* old-FP64 */
-     {false, false, true,  true,  true},  /* FPXX */
-     {false, false, false, true,  false}, /* FP64 */
-     {false, false, false, true,  true}}; /* FP64A */
+static const struct abi_req reqs[Val_GNU_MIPS_ABI_FP_MAX + 1]
+    = { { true, true, true, true, true },      /* Any */
+	{ false, false, true, false, true },   /* Double-float */
+	{ true, false, false, false, false },  /* Single-float */
+	{ false, true, false, false, false },  /* Soft-float */
+	{ false, false, false, false, false }, /* old-FP64 */
+	{ false, false, true, true, true },    /* FPXX */
+	{ false, false, false, true, false },  /* FP64 */
+	{ false, false, false, true, true } }; /* FP64A */
 
 /* FP ABI requirements for objects without a PT_MIPS_ABIFLAGS segment.  */
 
@@ -152,31 +152,31 @@ static const struct abi_req none_req = { true, true, true, false, true };
    impact of dlclose.  */
 
 static bool __attribute_used__
-elf_machine_reject_phdr_p (const ElfW(Phdr) *phdr, unsigned int phnum,
+elf_machine_reject_phdr_p (const ElfW (Phdr) * phdr, unsigned int phnum,
 			   const char *buf, size_t len, struct link_map *map,
 			   int fd)
 {
-  const ElfW(Phdr) *ph = find_mips_abiflags (phdr, phnum);
+  const ElfW (Phdr) *ph = find_mips_abiflags (phdr, phnum);
   struct link_map *l;
   Lmid_t nsid;
   int in_abi = -1;
   struct abi_req in_req;
   Elf_MIPS_ABIFlags_v0 mips_abiflags;
   bool perfect_match = false;
-#if _MIPS_SIM == _ABIO32
+#  if _MIPS_SIM == _ABIO32
   unsigned int cur_mode = -1;
-# if HAVE_PRCTL_FP_MODE
+#    if HAVE_PRCTL_FP_MODE
   bool cannot_mode_switch = false;
 
   /* Get the current hardware mode.  */
   cur_mode = __prctl (PR_GET_FP_MODE);
-# endif
-#endif
+#    endif
+#  endif
 
   /* Read the attributes section.  */
   if (ph != NULL)
     {
-      ElfW(Addr) size = sizeof (Elf_MIPS_ABIFlags_v0);
+      ElfW (Addr) size = sizeof (Elf_MIPS_ABIFlags_v0);
 
       if (ph->p_filesz < size)
 	REJECT ("   contains malformed PT_MIPS_ABIFLAGS\n");
@@ -204,14 +204,14 @@ elf_machine_reject_phdr_p (const ElfW(Phdr) *phdr, unsigned int phnum,
   /* Check that the new requirement does not conflict with any currently
      loaded object.  */
   for (nsid = 0; nsid < DL_NNS; ++nsid)
-    for (l = GL(dl_ns)[nsid]._ns_loaded; l != NULL; l = l->l_next)
+    for (l = GL (dl_ns)[nsid]._ns_loaded; l != NULL; l = l->l_next)
       {
 	struct abi_req existing_req;
 
 	if (cached_fpabi_reject_phdr_p (l))
 	  return true;
 
-#if _MIPS_SIM == _ABIO32
+#  if _MIPS_SIM == _ABIO32
 	/* A special case arises for O32 FP64 and FP64A where the kernel
 	   pre-dates PT_MIPS_ABIFLAGS.  These ABIs will be blindly loaded even
 	   if the hardware mode is unavailable or disabled.  In this
@@ -225,7 +225,7 @@ elf_machine_reject_phdr_p (const ElfW(Phdr) *phdr, unsigned int phnum,
 	    && cur_mode == -1)
 	  REJECT ("   found %s running in the wrong mode\n",
 		  fpabi_string (l->l_mach.fpabi));
-#endif
+#  endif
 
 	/* Found a perfect match, success.  */
 	perfect_match |= (in_abi == l->l_mach.fpabi);
@@ -234,8 +234,8 @@ elf_machine_reject_phdr_p (const ElfW(Phdr) *phdr, unsigned int phnum,
 	if (l->l_mach.fpabi != -1 && l->l_mach.fpabi > Val_GNU_MIPS_ABI_FP_MAX)
 	  REJECT ("   found unknown FP ABI: %u\n", l->l_mach.fpabi);
 
-	existing_req = (l->l_mach.fpabi == -1 ? none_req
-			: reqs[l->l_mach.fpabi]);
+	existing_req
+	    = (l->l_mach.fpabi == -1 ? none_req : reqs[l->l_mach.fpabi]);
 
 	/* Merge requirements.  */
 	in_req.soft &= existing_req.soft;
@@ -249,25 +249,23 @@ elf_machine_reject_phdr_p (const ElfW(Phdr) *phdr, unsigned int phnum,
 	if (in_req.single || in_req.soft || in_req.fr1 || in_req.fr0
 	    || in_req.fre)
 	  {
-#if _MIPS_SIM == _ABIO32 && HAVE_PRCTL_FP_MODE
+#  if _MIPS_SIM == _ABIO32 && HAVE_PRCTL_FP_MODE
 	    /* Account for loaded ABIs which prohibit mode switching.  */
 	    if (l->l_mach.fpabi == Val_GNU_MIPS_ABI_FP_XX)
 	      cannot_mode_switch |= l->l_mach.odd_spreg;
-#endif
+#  endif
 	  }
 	else
-	  REJECT ("   uses %s, already loaded %s\n",
-		  fpabi_string (in_abi),
+	  REJECT ("   uses %s, already loaded %s\n", fpabi_string (in_abi),
 		  fpabi_string (l->l_mach.fpabi));
       }
 
-#if _MIPS_SIM == _ABIO32
+#  if _MIPS_SIM == _ABIO32
   /* At this point we know that the newly loaded object is compatible with all
      existing objects but the hardware mode may not be correct.  */
-  if ((in_req.fr1 || in_req.fre || in_req.fr0)
-      && !perfect_match)
+  if ((in_req.fr1 || in_req.fre || in_req.fr0) && !perfect_match)
     {
-      if (__glibc_unlikely (GLRO(dl_debug_mask) & DL_DEBUG_LIBS))
+      if (__glibc_unlikely (GLRO (dl_debug_mask) & DL_DEBUG_LIBS))
 	_dl_debug_printf ("   needs %s%s mode\n", in_req.fr0 ? "FR0 or " : "",
 			  (in_req.fre && !in_req.fr1) ? "FRE" : "FR1");
 
@@ -277,7 +275,7 @@ elf_machine_reject_phdr_p (const ElfW(Phdr) *phdr, unsigned int phnum,
       if (cur_mode == -1)
 	return !in_req.fr0;
 
-# if HAVE_PRCTL_FP_MODE
+#    if HAVE_PRCTL_FP_MODE
       {
 	unsigned int fr1_mode = PR_FP_MODE_FR;
 
@@ -310,9 +308,9 @@ elf_machine_reject_phdr_p (const ElfW(Phdr) *phdr, unsigned int phnum,
 	    return __prctl (PR_SET_FP_MODE, fr1_mode) != 0;
 	  }
       }
-# endif /* HAVE_PRCTL_FP_MODE */
+#    endif /* HAVE_PRCTL_FP_MODE */
     }
-#endif /* _MIPS_SIM == _ABIO32 */
+#  endif /* _MIPS_SIM == _ABIO32 */
 
   return false;
 }

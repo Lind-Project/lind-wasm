@@ -22,9 +22,8 @@
 #include <string.h>
 #include <ucontext.h>
 
-
 #if !defined __mips__ || _MIPS_SIM != _ABIO32
-# error "MIPS O32 specific test."
+#  error "MIPS O32 specific test."
 #endif
 
 #define SP_REG 29
@@ -45,15 +44,14 @@ do_test (void)
       || ctx.uc_mcontext.gregs[SP_REG] > 0xffffffff)
     {
       printf ("\nError getcontext(): invalid $sp = 0x%llx.\n",
-              ctx.uc_mcontext.gregs[SP_REG]);
+	      ctx.uc_mcontext.gregs[SP_REG]);
       return 1;
     }
 
-  if (ctx.uc_mcontext.pc == 0
-      || ctx.uc_mcontext.pc > 0xffffffff)
+  if (ctx.uc_mcontext.pc == 0 || ctx.uc_mcontext.pc > 0xffffffff)
     {
       printf ("\nError getcontext(): invalid ctx.uc_mcontext.pc = 0x%llx.\n",
-              ctx.uc_mcontext.pc);
+	      ctx.uc_mcontext.pc);
       return 1;
     }
 

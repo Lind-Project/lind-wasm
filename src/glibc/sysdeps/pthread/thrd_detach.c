@@ -29,9 +29,9 @@ __thrd_detach (thrd_t thr)
 }
 #if PTHREAD_IN_LIBC
 versioned_symbol (libc, __thrd_detach, thrd_detach, GLIBC_2_34);
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_28, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_28, GLIBC_2_34)
 compat_symbol (libc, __thrd_detach, thrd_detach, GLIBC_2_28);
-# endif
+#  endif
 #else /* !PTHREAD_IN_LIBC */
 strong_alias (__thrd_detach, thrd_detach)
 #endif

@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES_STRUCT___PTHREAD_CONDATTR
-#define _BITS_TYPES_STRUCT___PTHREAD_CONDATTR	1
+#  define _BITS_TYPES_STRUCT___PTHREAD_CONDATTR 1
 
-#include <bits/types.h>
+#  include <bits/types.h>
 
 enum __pthread_process_shared;
 

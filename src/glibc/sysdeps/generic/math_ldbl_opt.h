@@ -13,5 +13,5 @@
 #define ldbl_hidden_def(local, name) libc_hidden_def (name)
 #define ldbl_strong_alias(name, aliasname) strong_alias (name, aliasname)
 #define ldbl_weak_alias(name, aliasname) weak_alias (name, aliasname)
-#define ldbl_compat_symbol(lib, local, symbol, version) \
+#define ldbl_compat_symbol(lib, local, symbol, version)                       \
   compat_symbol (lib, local, symbol, version)

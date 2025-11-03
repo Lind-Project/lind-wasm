@@ -16,23 +16,23 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FENV_H
-# error "Never use <bits/fenv.h> directly; include <fenv.h> instead."
+#  error "Never use <bits/fenv.h> directly; include <fenv.h> instead."
 #endif
 
 /* The Altera specified Nios II hardware FPU does not support exceptions,
    nor does the software floating-point support.  */
-#define FE_ALL_EXCEPT	0
+#define FE_ALL_EXCEPT 0
 
 /* Nios II supports only round-to-nearest.  The software
    floating-point support also acts this way.  */
 enum
-  {
-    __FE_UNDEFINED = 0,
+{
+  __FE_UNDEFINED = 0,
 
-    FE_TONEAREST =
-#define FE_TONEAREST	1
+  FE_TONEAREST =
+#define FE_TONEAREST 1
       FE_TONEAREST,
-  };
+};
 
 /* Type representing exception flags. */
 typedef unsigned int fexcept_t;
@@ -41,12 +41,12 @@ typedef unsigned int fexcept_t;
 typedef unsigned int fenv_t;
 
 /* If the default argument is used we use this value.  */
-#define FE_DFL_ENV	((const fenv_t *) -1)
+#define FE_DFL_ENV ((const fenv_t *) -1)
 
-#if __GLIBC_USE (IEC_60559_BFP_EXT_C23)
+#if __GLIBC_USE(IEC_60559_BFP_EXT_C23)
 /* Type representing floating-point control modes.  */
 typedef unsigned int femode_t;
 
 /* Default floating-point control modes.  */
-# define FE_DFL_MODE	((const femode_t *) -1L)
+#  define FE_DFL_MODE ((const femode_t *) -1L)
 #endif

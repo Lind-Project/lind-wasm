@@ -19,30 +19,30 @@
 #ifndef _MATH_TYPE_MACROS_FLOAT
 #define _MATH_TYPE_MACROS_FLOAT
 
-#define M_LIT(c) c ## f
+#define M_LIT(c) c##f
 #define M_PFX FLT
-#define M_SUF(c) c ## f
+#define M_SUF(c) c##f
 #define FLOAT float
 #define CFLOAT _Complex float
 #define M_STRTO_NAN __strtof_nan
-#define M_USE_BUILTIN(c) USE_ ##c ##F_BUILTIN
+#define M_USE_BUILTIN(c) USE_##c##F_BUILTIN
 
 /* GNU extension float constant macros.  */
-#define M_MLIT(c) c ## f
+#define M_MLIT(c) c##f
 
 #include <libm-alias-float.h>
 #include <math-nan-payload-float.h>
 
 #ifndef declare_mgen_alias
-# define declare_mgen_alias(from, to) libm_alias_float (from, to)
+#  define declare_mgen_alias(from, to) libm_alias_float (from, to)
 #endif
 
 #ifndef declare_mgen_alias_r
-# define declare_mgen_alias_r(from, to) libm_alias_float_r (from, to, _r)
+#  define declare_mgen_alias_r(from, to) libm_alias_float_r (from, to, _r)
 #endif
 
 #ifndef declare_mgen_alias_narrow
-# define declare_mgen_alias_narrow(from, to)
+#  define declare_mgen_alias_narrow(from, to)
 #endif
 
 /* Supply the generic macros.  */

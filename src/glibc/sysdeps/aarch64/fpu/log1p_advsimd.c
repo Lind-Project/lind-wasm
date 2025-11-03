@@ -61,7 +61,8 @@ special_case (float64x2_t x, float64x2_t y, uint64x2_t special)
    k=0 and no narrowing for f and k. Maximum observed error is 2.45 ULP:
    _ZGVnN2v_log1p(0x1.658f7035c4014p+11) got 0x1.fd61d0727429dp+2
 					want 0x1.fd61d0727429fp+2 .  */
-VPCS_ATTR float64x2_t V_NAME_D1 (log1p) (float64x2_t x)
+VPCS_ATTR float64x2_t
+V_NAME_D1 (log1p) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
   uint64x2_t ix = vreinterpretq_u64_f64 (x);

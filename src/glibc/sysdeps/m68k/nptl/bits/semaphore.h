@@ -16,16 +16,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SEMAPHORE_H
-# error "Never use <bits/semaphore.h> directly; include <semaphore.h> instead."
+#  error                                                                       \
+      "Never use <bits/semaphore.h> directly; include <semaphore.h> instead."
 #endif
 
-
-#define __SIZEOF_SEM_T	16
-
+#define __SIZEOF_SEM_T 16
 
 /* Value returned if `sem_open' failed.  */
-#define SEM_FAILED      ((sem_t *) 0)
-
+#define SEM_FAILED ((sem_t *) 0)
 
 typedef union
 {

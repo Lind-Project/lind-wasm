@@ -15,10 +15,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_IO_H
-#define	_SYS_IO_H	1
+#ifndef _SYS_IO_H
+#  define _SYS_IO_H 1
 
-#include <features.h>
+#  include <features.h>
 
 __BEGIN_DECLS
 
@@ -30,14 +30,14 @@ __BEGIN_DECLS
    platforms based on the PC I/O architecture probably will, however.
    E.g., Linux/Alpha for Alpha PCs supports this.  */
 extern int ioperm (unsigned long int __from, unsigned long int __num,
-                   int __turn_on) __THROW;
+		   int __turn_on) __THROW;
 
 /* Set the I/O privilege level to LEVEL.  If LEVEL>3, permission to
    access any I/O port is granted.  This call requires root
    privileges. */
 extern int iopl (int __level) __THROW;
 
-#if defined __GNUC__ && __GNUC__ >= 2
+#  if defined __GNUC__ && __GNUC__ >= 2
 
 static __inline unsigned char
 inb (unsigned short int __port)
@@ -90,79 +90,67 @@ inl_p (unsigned short int __port)
 static __inline void
 outb (unsigned char __value, unsigned short int __port)
 {
-
 }
 
 static __inline void
 outb_p (unsigned char __value, unsigned short int __port)
 {
-
 }
 
 static __inline void
 outw (unsigned short int __value, unsigned short int __port)
 {
-
 }
 
 static __inline void
 outw_p (unsigned short int __value, unsigned short int __port)
 {
-
 }
 
 static __inline void
 outl (unsigned int __value, unsigned short int __port)
 {
-
 }
 
 static __inline void
 outl_p (unsigned int __value, unsigned short int __port)
 {
-
 }
 
 static __inline void
 insb (unsigned short int __port, void *__addr, unsigned long int __count)
 {
-
 }
 
 static __inline void
 insw (unsigned short int __port, void *__addr, unsigned long int __count)
 {
-
 }
 
 static __inline void
 insl (unsigned short int __port, void *__addr, unsigned long int __count)
 {
-
 }
 
 static __inline void
 outsb (unsigned short int __port, const void *__addr,
        unsigned long int __count)
 {
-
 }
 
 static __inline void
 outsw (unsigned short int __port, const void *__addr,
        unsigned long int __count)
 {
-
 }
 
 static __inline void
 outsl (unsigned short int __port, const void *__addr,
        unsigned long int __count)
 {
-
 }
 
-#endif	/* GNU C */
+#  endif /* GNU C */
 
 __END_DECLS
 #endif /* _SYS_IO_H */

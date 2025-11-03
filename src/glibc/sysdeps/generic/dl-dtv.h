@@ -21,8 +21,8 @@
 
 struct dtv_pointer
 {
-  void *val;                    /* Pointer to data, or TLS_DTV_UNALLOCATED.  */
-  void *to_free;                /* Unaligned pointer, for deallocation.  */
+  void *val;	 /* Pointer to data, or TLS_DTV_UNALLOCATED.  */
+  void *to_free; /* Unaligned pointer, for deallocation.  */
 };
 
 /* Type for the dtv.  */

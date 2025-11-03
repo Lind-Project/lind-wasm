@@ -26,22 +26,22 @@
 #define FLOAT double
 #define CFLOAT _Complex double
 #define M_STRTO_NAN __strtod_nan
-#define M_USE_BUILTIN(c) USE_ ##c ##_BUILTIN
+#define M_USE_BUILTIN(c) USE_##c##_BUILTIN
 
 #include <libm-alias-double.h>
 #include <math-nan-payload-double.h>
 
 #ifndef declare_mgen_alias
-# define declare_mgen_alias(from, to) libm_alias_double (from, to)
+#  define declare_mgen_alias(from, to) libm_alias_double (from, to)
 #endif
 
 #ifndef declare_mgen_alias_r
-# define declare_mgen_alias_r(from, to) libm_alias_double_r (from, to, _r)
+#  define declare_mgen_alias_r(from, to) libm_alias_double_r (from, to, _r)
 #endif
 
 #ifndef declare_mgen_alias_narrow
-# define declare_mgen_alias_narrow(from, to)	\
-  libm_alias_double_narrow (from, to)
+#  define declare_mgen_alias_narrow(from, to)                                 \
+    libm_alias_double_narrow (from, to)
 #endif
 
 /* Supply the generic macros.  */

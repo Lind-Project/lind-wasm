@@ -28,5 +28,4 @@ __getrandom (void *buffer, size_t length, unsigned int flags)
 {
   return SYSCALL_CANCEL (getrandom, buffer, length, flags);
 }
-libc_hidden_def (__getrandom)
-weak_alias (__getrandom, getrandom)
+libc_hidden_def (__getrandom) weak_alias (__getrandom, getrandom)

@@ -20,9 +20,9 @@
 
 extern __typeof (memchr) __memchr_ppc attribute_hidden;
 
-#define MEMCHR  __memchr_ppc
+#define MEMCHR __memchr_ppc
 #include <string/memchr.c>
 
 #ifdef SHARED
-__hidden_ver1(__memchr_ppc, __GI_memchr, __memchr_ppc);
+__hidden_ver1 (__memchr_ppc, __GI_memchr, __memchr_ppc);
 #endif

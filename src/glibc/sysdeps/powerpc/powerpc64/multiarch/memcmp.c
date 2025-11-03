@@ -17,35 +17,33 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for definition in libc.  */
-#if IS_IN (libc)
-# define memcmp __redirect_memcmp
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if IS_IN(libc)
+#  define memcmp __redirect_memcmp
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (memcmp) __memcmp_ppc attribute_hidden;
 extern __typeof (memcmp) __memcmp_power4 attribute_hidden;
 extern __typeof (memcmp) __memcmp_power7 attribute_hidden;
 extern __typeof (memcmp) __memcmp_power8 attribute_hidden;
 extern __typeof (memcmp) __memcmp_power10 attribute_hidden;
-# undef memcmp
+#  undef memcmp
 
 /* Avoid DWARF definition DIE on ifunc symbol so that GDB can handle
    ifunc symbol properly.  */
-libc_ifunc_redirected (__redirect_memcmp, memcmp,
-#ifdef __LITTLE_ENDIAN__
-				(hwcap2 & PPC_FEATURE2_ARCH_3_1
-				 && hwcap & PPC_FEATURE_HAS_VSX)
-				 ? __memcmp_power10 :
-#endif
-		       (hwcap2 & PPC_FEATURE2_ARCH_2_07
-			&& hwcap & PPC_FEATURE_HAS_ALTIVEC)
-		       ? __memcmp_power8 :
-		       (hwcap & PPC_FEATURE_ARCH_2_06)
-		       ? __memcmp_power7
-		       : (hwcap & PPC_FEATURE_POWER4)
-			 ? __memcmp_power4
-			 : __memcmp_ppc);
+libc_ifunc_redirected (
+    __redirect_memcmp, memcmp,
+#  ifdef __LITTLE_ENDIAN__
+    (hwcap2 & PPC_FEATURE2_ARCH_3_1 && hwcap & PPC_FEATURE_HAS_VSX)
+	? __memcmp_power10
+    :
+#  endif
+    (hwcap2 & PPC_FEATURE2_ARCH_2_07 && hwcap & PPC_FEATURE_HAS_ALTIVEC)
+	? __memcmp_power8
+    : (hwcap &PPC_FEATURE_ARCH_2_06) ? __memcmp_power7
+    : (hwcap &PPC_FEATURE_POWER4)    ? __memcmp_power4
+				     : __memcmp_ppc);
 #else
-#include <string/memcmp.c>
+#  include <string/memcmp.c>
 #endif

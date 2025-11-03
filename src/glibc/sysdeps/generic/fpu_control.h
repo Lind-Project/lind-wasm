@@ -19,11 +19,12 @@
 #ifndef _FPU_CONTROL_H
 #define _FPU_CONTROL_H
 
-#define _FPU_RESERVED 0xffffffff    /* These bits are reserved and not changed.  */
+#define _FPU_RESERVED                                                         \
+  0xffffffff /* These bits are reserved and not changed.  */
 
 /* The fdlibm code requires no interrupts for exceptions.  Don't
    change the rounding mode, it would break long double I/O!  */
-#define _FPU_DEFAULT  0x00000000 /* Default value.  */
+#define _FPU_DEFAULT 0x00000000 /* Default value.  */
 
 /* Type of the control word.  */
 typedef unsigned int fpu_control_t;

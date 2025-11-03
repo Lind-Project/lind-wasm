@@ -18,65 +18,68 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* For ELF we need to prefix register names and local labels.  */
-#define R_(r) %##r
-#define R(r) R_(r)
+#define R_(r) % ##r
+#define R(r) R_ (r)
 #define L(label) .##label
 
 #ifdef MIT_SYNTAX
-#define MEM(base)R(base)@
-#define MEM_DISP(base,displacement)R(base)@(displacement)
-#define MEM_INDX(base,idx,size_suffix)R(base)@(R(idx):size_suffix)
-#define MEM_INDX1(base,idx,size_suffix,scale)R(base)@(R(idx):size_suffix:scale)
-#define MEM_PREDEC(memory_base)R(memory_base)@-
-#define MEM_POSTINC(memory_base)R(memory_base)@+
-#define TEXT .text
+#  define MEM(base) R (base) @
+#  define MEM_DISP(base, displacement) R (base) @(displacement)
+#  define MEM_INDX(base, idx, size_suffix) R (base) @(R (idx) : size_suffix)
+#  define MEM_INDX1(base, idx, size_suffix, scale)                            \
+    R (base) @(R (idx) : size_suffix : scale)
+#  define MEM_PREDEC(memory_base) R (memory_base) @-
+#  define MEM_POSTINC(memory_base) R (memory_base) @+
+#  define TEXT .text
 /* Use variable sized opcodes.  */
-#define bcc jcc
-#define bcs jcs
-#define bls jls
-#define beq jeq
-#define bne jne
-#define bra jra
+#  define bcc jcc
+#  define bcs jcs
+#  define bls jls
+#  define beq jeq
+#  define bne jne
+#  define bra jra
 #endif
 
 #ifdef MOTOROLA_SYNTAX
-#define MEM(base)(R(base))
-#define MEM_DISP(base,displacement)(displacement,R(base))
-#define MEM_PREDEC(memory_base)-(R(memory_base))
-#define MEM_POSTINC(memory_base)(R(memory_base))+
-#define MEM_INDX_(base,idx,size_suffix)(R(base),R(idx##.##size_suffix))
-#define MEM_INDX(base,idx,size_suffix)MEM_INDX_(base,idx,size_suffix)
-#define MEM_INDX1_(base,idx,size_suffix,scale)(R(base),R(idx##.##size_suffix*scale))
-#define MEM_INDX1(base,idx,size_suffix,scale)MEM_INDX1_(base,idx,size_suffix,scale)
-#define TEXT .text
-#define bcc jbcc
-#define bcs jbcs
-#define bls jbls
-#define beq jbeq
-#define bne jbne
-#define bra jbra
-#define movel move.l
-#define moveml movem.l
-#define moveql moveq.l
-#define cmpl cmp.l
-#define orl or.l
-#define clrl clr.l
-#define andw and.w
-#define eorw eor.w
-#define andl and.l
-#define lsrl lsr.l
-#define lsll lsl.l
-#define roxrl roxr.l
-#define roxll roxl.l
-#define addl add.l
-#define addxl addx.l
-#define addql addq.l
-#define subl sub.l
-#define subxl subx.l
-#define subqw subq.w
-#define subql subq.l
-#define negl neg.l
-#define mulul mulu.l
-#define tstw tst.w
-#define tstl tst.l
+#  define MEM(base) (R (base))
+#  define MEM_DISP(base, displacement) (displacement, R (base))
+#  define MEM_PREDEC(memory_base) -(R (memory_base))
+#  define MEM_POSTINC(memory_base) (R (memory_base)) +
+#  define MEM_INDX_(base, idx, size_suffix) (R (base), R (idx##.##size_suffix))
+#  define MEM_INDX(base, idx, size_suffix) MEM_INDX_ (base, idx, size_suffix)
+#  define MEM_INDX1_(base, idx, size_suffix, scale)                           \
+    (R (base), R (idx##.##size_suffix * scale))
+#  define MEM_INDX1(base, idx, size_suffix, scale)                            \
+    MEM_INDX1_ (base, idx, size_suffix, scale)
+#  define TEXT .text
+#  define bcc jbcc
+#  define bcs jbcs
+#  define bls jbls
+#  define beq jbeq
+#  define bne jbne
+#  define bra jbra
+#  define movel move.l
+#  define moveml movem.l
+#  define moveql moveq.l
+#  define cmpl cmp.l
+#  define orl or.l
+#  define clrl clr.l
+#  define andw and.w
+#  define eorw eor.w
+#  define andl and.l
+#  define lsrl lsr.l
+#  define lsll lsl.l
+#  define roxrl roxr.l
+#  define roxll roxl.l
+#  define addl add.l
+#  define addxl addx.l
+#  define addql addq.l
+#  define subl sub.l
+#  define subxl subx.l
+#  define subqw subq.w
+#  define subql subq.l
+#  define negl neg.l
+#  define mulul mulu.l
+#  define tstw tst.w
+#  define tstl tst.l
 #endif

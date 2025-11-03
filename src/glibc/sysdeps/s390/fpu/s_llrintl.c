@@ -22,9 +22,9 @@
    of two 4byte registers instead of a 8byte register which is produced by the
    instruction.
    Note: On s390 this instruction would only be used if build with -mzarch.  */
-# include <math.h>
-# include <math_private.h>
-# include <libm-alias-ldouble.h>
+#  include <math.h>
+#  include <math_private.h>
+#  include <libm-alias-ldouble.h>
 
 long long int
 __llrintl (_Float128 x)
@@ -41,11 +41,13 @@ __llrintl (_Float128 x)
 	   "jo 1f \n\t"
 	   "cgxbra %0,0,%1,0 \n\t"
 	   "1:"
-	   : "=&d" (y) : "f" (x) : "cc");
+	   : "=&d"(y)
+	   : "f"(x)
+	   : "cc");
   return y;
 }
 libm_alias_ldouble (__llrint, llrint)
 
 #else
-# include <sysdeps/ieee754/ldbl-128/s_llrintl.c>
+#  include <sysdeps/ieee754/ldbl-128/s_llrintl.c>
 #endif

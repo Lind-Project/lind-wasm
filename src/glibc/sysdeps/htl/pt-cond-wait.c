@@ -26,7 +26,6 @@ extern int __pthread_cond_timedwait_internal (pthread_cond_t *cond,
 					      clockid_t clockid,
 					      const struct timespec *abstime);
 
-
 /* Block on condition variable COND.  MUTEX should be held by the
    calling thread.  On return, MUTEX will be held by the calling
    thread.  */

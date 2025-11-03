@@ -24,17 +24,15 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-static const long double two63[2] =
-{
+static const long double two63[2] = {
   9.223372036854775808000000e+18, /* 0x403E, 0x00000000, 0x00000000 */
- -9.223372036854775808000000e+18  /* 0xC03E, 0x00000000, 0x00000000 */
+  -9.223372036854775808000000e+18 /* 0xC03E, 0x00000000, 0x00000000 */
 };
-
 
 long long int
 __llrintl (long double x)
 {
-  int32_t se,j0;
+  int32_t se, j0;
   uint32_t i0, i1;
   long long int result;
   long double w;

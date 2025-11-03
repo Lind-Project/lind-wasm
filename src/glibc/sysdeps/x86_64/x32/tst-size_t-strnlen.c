@@ -17,28 +17,27 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef WIDE
-# define TEST_NAME "wcsnlen"
+#  define TEST_NAME "wcsnlen"
 #else
-# define TEST_NAME "strnlen"
+#  define TEST_NAME "strnlen"
 #endif /* WIDE */
 
 #include "test-size_t.h"
 
 #ifdef WIDE
-# include <wchar.h>
-# define STRNLEN wcsnlen
-# define CHAR wchar_t
+#  include <wchar.h>
+#  define STRNLEN wcsnlen
+#  define CHAR wchar_t
 #else
-# define STRNLEN strnlen
-# define CHAR char
+#  define STRNLEN strnlen
+#  define CHAR char
 #endif /* WIDE */
 
 IMPL (STRNLEN, 1)
 
 typedef size_t (*proto_t) (const CHAR *, size_t);
 
-static size_t
-__attribute__ ((noinline, noclone))
+static size_t __attribute__ ((noinline, noclone))
 do_strnlen (parameter_t a, parameter_t b)
 {
   return CALL (&a, a.p, b.len);
@@ -60,8 +59,8 @@ test_main (void)
       size_t res = do_strnlen (src, c);
       if (res != size)
 	{
-	  error (0, 0, "Wrong result in function %s: 0x%x != 0x%x",
-		 impl->name, res, size);
+	  error (0, 0, "Wrong result in function %s: 0x%x != 0x%x", impl->name,
+		 res, size);
 	  ret = 1;
 	}
     }

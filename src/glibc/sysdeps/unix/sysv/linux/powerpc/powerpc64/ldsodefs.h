@@ -16,34 +16,33 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_LDSODEFS_H
+#ifndef _LDSODEFS_H
 
 /* Get the real definitions.  */
-#include_next <ldsodefs.h>
+#  include_next <ldsodefs.h>
 
 /* Now define our stuff.  */
 
-#if _CALL_ELF != 2
+#  if _CALL_ELF != 2
 
 static __always_inline bool
-_dl_ppc64_is_opd_sym (const struct link_map *l, const ElfW(Sym) *sym)
+_dl_ppc64_is_opd_sym (const struct link_map *l, const ElfW (Sym) * sym)
 {
-  return (ELFW(ST_TYPE) (sym->st_info) == STT_FUNC
-	  && l->l_addr + sym->st_value >= (ElfW(Addr)) l->l_ld
-	  && l->l_addr + sym->st_value < l->l_map_end
-	  && sym->st_size != 0);
+  return (ELFW (ST_TYPE) (sym->st_info) == STT_FUNC
+	  && l->l_addr + sym->st_value >= (ElfW (Addr)) l->l_ld
+	  && l->l_addr + sym->st_value < l->l_map_end && sym->st_size != 0);
 }
 
 static __always_inline bool
-_dl_ppc64_addr_sym_match (const struct link_map *l, const ElfW(Sym) *sym,
-			  const ElfW(Sym) *matchsym, ElfW(Addr) addr)
+_dl_ppc64_addr_sym_match (const struct link_map *l, const ElfW (Sym) * sym,
+			  const ElfW (Sym) * matchsym, ElfW (Addr) addr)
 {
-  ElfW(Addr) value = l->l_addr + sym->st_value;
+  ElfW (Addr) value = l->l_addr + sym->st_value;
   if (_dl_ppc64_is_opd_sym (l, sym))
     {
       if (addr < value || addr >= value + 24)
 	{
-	  value = *(ElfW(Addr) *) value;
+	  value = *(ElfW (Addr) *) value;
 	  if (addr < value || addr >= value + sym->st_size)
 	    return false;
 	}
@@ -59,10 +58,10 @@ _dl_ppc64_addr_sym_match (const struct link_map *l, const ElfW(Sym) *sym,
   if (matchsym == NULL)
     return true;
 
-  ElfW(Addr) matchvalue = l->l_addr + matchsym->st_value;
+  ElfW (Addr) matchvalue = l->l_addr + matchsym->st_value;
   if (_dl_ppc64_is_opd_sym (l, matchsym)
       && (addr < matchvalue || addr > matchvalue + 24))
-    matchvalue = *(ElfW(Addr) *) matchvalue;
+    matchvalue = *(ElfW (Addr) *) matchvalue;
 
   return matchvalue < value;
 }
@@ -71,10 +70,10 @@ _dl_ppc64_addr_sym_match (const struct link_map *l, const ElfW(Sym) *sym,
    section, then it must be a function descriptor.  Allow these symbols
    to match their associated function code range as well as the
    descriptor addresses.  */
-#undef DL_ADDR_SYM_MATCH
-#define DL_ADDR_SYM_MATCH(L, SYM, MATCHSYM, ADDR) \
-  _dl_ppc64_addr_sym_match (L, SYM, MATCHSYM, ADDR)
+#    undef DL_ADDR_SYM_MATCH
+#    define DL_ADDR_SYM_MATCH(L, SYM, MATCHSYM, ADDR)                         \
+      _dl_ppc64_addr_sym_match (L, SYM, MATCHSYM, ADDR)
 
-#endif
+#  endif
 
 #endif /* ldsodefs.h */

@@ -19,21 +19,19 @@
 #include <ifunc-wcslen.h>
 
 #if HAVE_WCSLEN_IFUNC
-# include <wchar.h>
-# include <ifunc-resolve.h>
+#  include <wchar.h>
+#  include <ifunc-resolve.h>
 
-# if HAVE_WCSLEN_C
+#  if HAVE_WCSLEN_C
 extern __typeof (__wcslen) WCSLEN_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCSLEN_Z13
+#  if HAVE_WCSLEN_Z13
 extern __typeof (__wcslen) WCSLEN_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__wcslen, __wcslen,
 		      (HAVE_WCSLEN_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCSLEN_Z13
-		      : WCSLEN_DEFAULT
-		      )
-weak_alias (__wcslen, wcslen)
+			  ? WCSLEN_Z13
+			  : WCSLEN_DEFAULT) weak_alias (__wcslen, wcslen)
 #endif

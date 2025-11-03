@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES_STRUCT___PTHREAD_ONCE_H
-#define _BITS_TYPES_STRUCT___PTHREAD_ONCE_H	1
+#  define _BITS_TYPES_STRUCT___PTHREAD_ONCE_H 1
 
-#include <bits/types/__pthread_spinlock_t.h>
+#  include <bits/types/__pthread_spinlock_t.h>
 
 struct __pthread_once
 {
@@ -27,7 +27,6 @@ struct __pthread_once
   __pthread_spinlock_t __lock;
 };
 
-#define __PTHREAD_ONCE_INIT \
-	0, __PTHREAD_SPIN_LOCK_INITIALIZER
+#  define __PTHREAD_ONCE_INIT 0, __PTHREAD_SPIN_LOCK_INITIALIZER
 
 #endif /* bits/types/struct___pthread_once.h */

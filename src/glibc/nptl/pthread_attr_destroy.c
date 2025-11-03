@@ -34,13 +34,13 @@ __pthread_attr_destroy (pthread_attr_t *attr)
 #endif
     {
       if (iattr->extension != NULL)
-        {
-          free (iattr->extension->cpuset);
-          free (iattr->extension);
-        }
+	{
+	  free (iattr->extension->cpuset);
+	  free (iattr->extension);
+	}
     }
 
   return 0;
 }
 libc_hidden_def (__pthread_attr_destroy)
-weak_alias (__pthread_attr_destroy, pthread_attr_destroy)
+    weak_alias (__pthread_attr_destroy, pthread_attr_destroy)

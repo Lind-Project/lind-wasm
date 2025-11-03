@@ -19,31 +19,29 @@
 #include <ifunc-memcpy.h>
 
 #if HAVE_MEMCPY_IFUNC
-# define memcpy __redirect_memcpy
-# include <string.h>
-# undef memcpy
-# include <ifunc-resolve.h>
+#  define memcpy __redirect_memcpy
+#  include <string.h>
+#  undef memcpy
+#  include <ifunc-resolve.h>
 
-# if HAVE_MEMCPY_Z900_G5
+#  if HAVE_MEMCPY_Z900_G5
 extern __typeof (__redirect_memcpy) MEMCPY_Z900_G5 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMCPY_Z10
+#  if HAVE_MEMCPY_Z10
 extern __typeof (__redirect_memcpy) MEMCPY_Z10 attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_MEMCPY_Z196
+#  if HAVE_MEMCPY_Z196
 extern __typeof (__redirect_memcpy) MEMCPY_Z196 attribute_hidden;
-# endif
+#  endif
 
-s390_libc_ifunc_expr (__redirect_memcpy, memcpy,
-		      ({
+s390_libc_ifunc_expr (__redirect_memcpy, memcpy, ({
 			s390_libc_ifunc_expr_stfle_init ();
 			(HAVE_MEMCPY_Z196 && S390_IS_Z196 (stfle_bits))
-			  ? MEMCPY_Z196
-			  : (HAVE_MEMCPY_Z10 && S390_IS_Z10 (stfle_bits))
-			  ? MEMCPY_Z10
-			  : MEMCPY_DEFAULT;
-		      })
-		      )
+			    ? MEMCPY_Z196
+			: (HAVE_MEMCPY_Z10 && S390_IS_Z10 (stfle_bits))
+			    ? MEMCPY_Z10
+			    : MEMCPY_DEFAULT;
+		      }))
 #endif

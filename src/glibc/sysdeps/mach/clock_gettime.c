@@ -29,7 +29,8 @@ __clock_gettime (clockid_t clock_id, struct timespec *ts)
   mach_msg_type_number_t count;
   error_t err;
 
-  switch (clock_id) {
+  switch (clock_id)
+    {
 
     case CLOCK_REALTIME:
       {
@@ -55,7 +56,7 @@ __clock_gettime (clockid_t clock_id, struct timespec *ts)
 			   (task_info_t) &bi, &count);
 	if (err)
 	  {
-	    __set_errno(err);
+	    __set_errno (err);
 	    return -1;
 	  }
 	time_value_add (&t, &bi.user_time);
@@ -67,13 +68,13 @@ __clock_gettime (clockid_t clock_id, struct timespec *ts)
 			   (task_info_t) &tti, &count);
 	if (err)
 	  {
-	    __set_errno(err);
+	    __set_errno (err);
 	    return -1;
 	  }
 	time_value_add (&t, &tti.user_time);
 	time_value_add (&t, &tti.system_time);
 
-	TIME_VALUE_TO_TIMESPEC(&t, ts);
+	TIME_VALUE_TO_TIMESPEC (&t, ts);
 	return 0;
       }
 
@@ -83,30 +84,30 @@ __clock_gettime (clockid_t clock_id, struct timespec *ts)
 	mach_port_t self = __mach_thread_self ();
 
 	count = THREAD_BASIC_INFO_COUNT;
-	err = __thread_info (self, THREAD_BASIC_INFO,
-			     (thread_info_t) &bi, &count);
+	err = __thread_info (self, THREAD_BASIC_INFO, (thread_info_t) &bi,
+			     &count);
 	__mach_port_deallocate (__mach_task_self (), self);
 	if (err)
 	  {
-	    __set_errno(err);
+	    __set_errno (err);
 	    return -1;
 	  }
 	time_value_add (&bi.user_time, &bi.system_time);
 
-	TIME_VALUE_TO_TIMESPEC(&bi.user_time, ts);
+	TIME_VALUE_TO_TIMESPEC (&bi.user_time, ts);
 	return 0;
       }
-  }
+    }
 
   errno = EINVAL;
   return -1;
 }
 libc_hidden_def (__clock_gettime)
 
-versioned_symbol (libc, __clock_gettime, clock_gettime, GLIBC_2_17);
+    versioned_symbol (libc, __clock_gettime, clock_gettime, GLIBC_2_17);
 /* clock_gettime moved to libc in version 2.17;
    old binaries may expect the symbol version it had in librt.  */
-#if SHLIB_COMPAT (libc, GLIBC_2_2, GLIBC_2_17)
+#if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_17)
 strong_alias (__clock_gettime, __clock_gettime_2);
 compat_symbol (libc, __clock_gettime_2, clock_gettime, GLIBC_2_2);
 #endif

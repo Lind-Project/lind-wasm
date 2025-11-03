@@ -32,8 +32,7 @@ __sendmmsg (int fd, struct mmsghdr *vmessages, unsigned int vlen, int flags)
   return SOCKETCALL_CANCEL (sendmmsg, fd, vmessages, vlen, flags);
 #endif
 }
-libc_hidden_def (__sendmmsg)
-weak_alias (__sendmmsg, sendmmsg)
+libc_hidden_def (__sendmmsg) weak_alias (__sendmmsg, sendmmsg)
 #if __TIMESIZE != 64
-weak_alias (__sendmmsg, __sendmmsg64)
+    weak_alias (__sendmmsg, __sendmmsg64)
 #endif

@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES_STRUCT___PTHREAD_MUTEX_H
-#define _BITS_TYPES_STRUCT___PTHREAD_MUTEX_H	1
+#  define _BITS_TYPES_STRUCT___PTHREAD_MUTEX_H 1
 
-#include <bits/types/struct___pthread_mutexattr.h>
+#  include <bits/types/struct___pthread_mutexattr.h>
 
 /* User visible part of a mutex.  */
 struct __pthread_mutex
@@ -38,15 +38,18 @@ struct __pthread_mutex
 };
 
 /* Static mutex initializers. */
-#define __PTHREAD_MUTEX_INITIALIZER   \
-  { 0, 0, 0, 0, __PTHREAD_MUTEX_TIMED, 0, { { 0, 0 } } }
+#  define __PTHREAD_MUTEX_INITIALIZER                                         \
+    {                                                                         \
+      0, 0, 0, 0, __PTHREAD_MUTEX_TIMED, 0, {{ 0, 0 } } }
 
 /* The +1 is to maintain binary compatibility with the old
  * libpthread implementation. */
-#define __PTHREAD_ERRORCHECK_MUTEX_INITIALIZER   \
-  { 0, 0, 0, 0, __PTHREAD_MUTEX_ERRORCHECK + 1, 0, { { 0, 0 } } }
+#  define __PTHREAD_ERRORCHECK_MUTEX_INITIALIZER                              \
+    {                                                                         \
+      0, 0, 0, 0, __PTHREAD_MUTEX_ERRORCHECK + 1, 0, {{ 0, 0 } } }
 
-#define __PTHREAD_RECURSIVE_MUTEX_INITIALIZER   \
-  { 0, 0, 0, 0, __PTHREAD_MUTEX_RECURSIVE + 1, 0, { { 0, 0 } } }
+#  define __PTHREAD_RECURSIVE_MUTEX_INITIALIZER                               \
+    {                                                                         \
+      0, 0, 0, 0, __PTHREAD_MUTEX_RECURSIVE + 1, 0, {{ 0, 0 } } }
 
 #endif /* bits/types/struct___pthread_mutex.h */

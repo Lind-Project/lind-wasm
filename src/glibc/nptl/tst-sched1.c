@@ -20,7 +20,6 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-
 static int global;
 
 static void *
@@ -30,7 +29,6 @@ tf (void *a)
 
   return 0;
 }
-
 
 int
 do_test (void)
@@ -90,7 +88,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

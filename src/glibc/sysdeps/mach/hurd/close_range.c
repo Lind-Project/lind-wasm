@@ -23,8 +23,7 @@
    If CLOSE_RANGE_CLOEXEC is set in FLAGS, set the FD_CLOEXEC flag
    instead of closing.  */
 int
-__close_range (unsigned int first, unsigned int last,
-               int flags)
+__close_range (unsigned int first, unsigned int last, int flags)
 {
   int i;
 
@@ -41,17 +40,17 @@ __close_range (unsigned int first, unsigned int last,
       struct hurd_fd *fd = _hurd_dtable[i];
 
       if (fd == NULL || fd->port.port == MACH_PORT_NULL)
-        continue;
+	continue;
 
       __spin_lock (&fd->port.lock);
 
       if (flags & CLOSE_RANGE_CLOEXEC)
-        fd->flags |= FD_CLOEXEC;
+	fd->flags |= FD_CLOEXEC;
       else
-        {
-          _hurd_port_set (&fd->ctty, MACH_PORT_NULL);
-          _hurd_port_locked_set (&fd->port, MACH_PORT_NULL);
-        }
+	{
+	  _hurd_port_set (&fd->ctty, MACH_PORT_NULL);
+	  _hurd_port_locked_set (&fd->port, MACH_PORT_NULL);
+	}
 
       __spin_unlock (&fd->port.lock);
     }
@@ -62,5 +61,4 @@ __close_range (unsigned int first, unsigned int last,
   return 0;
 }
 
-libc_hidden_def (__close_range)
-weak_alias (__close_range, close_range)
+libc_hidden_def (__close_range) weak_alias (__close_range, close_range)

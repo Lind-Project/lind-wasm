@@ -20,7 +20,6 @@
 #include "semaphoreP.h"
 #include <atomic.h>
 
-
 int
 __new_sem_getvalue (sem_t *sem, int *sval)
 {

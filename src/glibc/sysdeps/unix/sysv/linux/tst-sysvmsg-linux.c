@@ -71,13 +71,12 @@ read_proc_file (const char *file)
     FAIL_UNSUPPORTED ("/proc is not mounted or %s is not available", file);
 
   int v;
-  int r = fscanf (f, "%d", & v);
+  int r = fscanf (f, "%d", &v);
   TEST_VERIFY_EXIT (r == 1);
 
   fclose (f);
   return v;
 }
-
 
 /* Check if the message queue with IDX (index into the kernel's internal
    array) matches the one with KEY.  The CMD is either MSG_STAT or

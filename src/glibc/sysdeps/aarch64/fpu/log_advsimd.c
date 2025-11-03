@@ -75,7 +75,8 @@ special_case (float64x2_t x, float64x2_t y, float64x2_t hi, float64x2_t r2,
   return v_call_f64 (log, x, vfmaq_f64 (hi, y, r2), vmovl_u32 (cmp));
 }
 
-float64x2_t VPCS_ATTR V_NAME_D1 (log) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (log) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
   float64x2_t z, r, r2, p, y, kd, hi;

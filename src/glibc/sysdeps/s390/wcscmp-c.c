@@ -19,16 +19,16 @@
 #include <ifunc-wcscmp.h>
 
 #if HAVE_WCSCMP_C
-# if HAVE_WCSCMP_IFUNC
-#  define WCSCMP WCSCMP_C
-#  undef weak_alias
-#  define weak_alias(name, alias)
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_def
-#   define libc_hidden_def(name)				\
-  __hidden_ver1 (__wcscmp_c, __GI___wcscmp, __wcscmp_c);
+#  if HAVE_WCSCMP_IFUNC
+#    define WCSCMP WCSCMP_C
+#    undef weak_alias
+#    define weak_alias(name, alias)
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_def
+#      define libc_hidden_def(name)                                           \
+	__hidden_ver1 (__wcscmp_c, __GI___wcscmp, __wcscmp_c);
+#    endif
 #  endif
-# endif
 
-# include <wcsmbs/wcscmp.c>
+#  include <wcsmbs/wcscmp.c>
 #endif

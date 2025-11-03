@@ -18,17 +18,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# include <math.h>
-# include <libm-alias-float.h>
+#  include <math.h>
+#  include <libm-alias-float.h>
 
 /* The sizeof (long int) differs between s390x (8byte) and s390 (4byte).
    Thus we need different instructions as the target size is encoded there.
    Note: On s390 this instruction is only used if build with -mzarch.  */
-# ifdef __s390x__
-#  define INSN "cgebra"
-# else
-#  define INSN "cfebra"
-# endif
+#  ifdef __s390x__
+#    define INSN "cgebra"
+#  else
+#    define INSN "cfebra"
+#  endif
 
 long int
 __lrintf (float x)
@@ -42,14 +42,15 @@ __lrintf (float x)
      If the resulting value is within the target limits, redo
      without suppressing the inexact exception.  */
   __asm__ (INSN " %0,0,%1,4 \n\t"
-	   "jo 1f \n\t"
-	   INSN " %0,0,%1,0 \n\t"
-	   "1:"
-	   : "=&d" (y) : "f" (x) : "cc");
+		"jo 1f \n\t" INSN " %0,0,%1,0 \n\t"
+		"1:"
+	   : "=&d"(y)
+	   : "f"(x)
+	   : "cc");
   return y;
 }
 libm_alias_float (__lrint, lrint)
 
 #else
-# include <sysdeps/ieee754/flt-32/s_lrintf.c>
+#  include <sysdeps/ieee754/flt-32/s_lrintf.c>
 #endif

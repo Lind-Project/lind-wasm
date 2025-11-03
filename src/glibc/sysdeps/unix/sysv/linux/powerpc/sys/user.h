@@ -17,24 +17,25 @@
 
 #ifndef _SYS_USER_H
 
-#define _SYS_USER_H	1
-#include <stddef.h>
-#include <features.h>
+#  define _SYS_USER_H 1
+#  include <stddef.h>
+#  include <features.h>
 
-#include <asm/ptrace.h>
+#  include <asm/ptrace.h>
 
-struct user {
-	struct pt_regs	regs;			/* entire machine state */
-	size_t		u_tsize;		/* text size (pages) */
-	size_t		u_dsize;		/* data size (pages) */
-	size_t		u_ssize;		/* stack size (pages) */
-	unsigned long	start_code;		/* text starting address */
-	unsigned long	start_data;		/* data starting address */
-	unsigned long	start_stack;		/* stack starting address */
-	long int	signal;			/* signal causing core dump */
-	struct regs *	u_ar0;			/* help gdb find registers */
-	unsigned long	magic;			/* identifies a core file */
-	char		u_comm[32];		/* user command name */
+struct user
+{
+  struct pt_regs regs;	     /* entire machine state */
+  size_t u_tsize;	     /* text size (pages) */
+  size_t u_dsize;	     /* data size (pages) */
+  size_t u_ssize;	     /* stack size (pages) */
+  unsigned long start_code;  /* text starting address */
+  unsigned long start_data;  /* data starting address */
+  unsigned long start_stack; /* stack starting address */
+  long int signal;	     /* signal causing core dump */
+  struct regs *u_ar0;	     /* help gdb find registers */
+  unsigned long magic;	     /* identifies a core file */
+  char u_comm[32];	     /* user command name */
 };
 
-#endif  /* sys/user.h */
+#endif /* sys/user.h */

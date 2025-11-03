@@ -38,43 +38,40 @@ __feraiseexcept (int excepts)
 
   /* First: invalid exception.  */
   if (FE_INVALID & excepts)
-    __asm__ __volatile__("fdiv.s $f0,%0,%0\n\t"
-			 :
-			 : "f"(fp_zero)
-			 : "$f0");
+    __asm__ __volatile__ ("fdiv.s $f0,%0,%0\n\t" : : "f"(fp_zero) : "$f0");
 
   /* Next: division by zero.  */
   if (FE_DIVBYZERO & excepts)
-    __asm__ __volatile__("fdiv.s $f0,%0,%1\n\t"
-			 :
-			 : "f"(fp_one), "f"(fp_zero)
-			 : "$f0");
+    __asm__ __volatile__ ("fdiv.s $f0,%0,%1\n\t"
+			  :
+			  : "f"(fp_one), "f"(fp_zero)
+			  : "$f0");
 
   /* Next: overflow.  */
   if (FE_OVERFLOW & excepts)
     /* There's no way to raise overflow without also raising inexact.  */
-    __asm__ __volatile__("fadd.s $f0,%0,%1\n\t"
-			 :
-			 : "f"(fp_max), "f"(fp_1e32)
-			 : "$f0");
+    __asm__ __volatile__ ("fadd.s $f0,%0,%1\n\t"
+			  :
+			  : "f"(fp_max), "f"(fp_1e32)
+			  : "$f0");
 
   /* Next: underflow.  */
   if (FE_UNDERFLOW & excepts)
-    __asm__ __volatile__("fdiv.s $f0,%0,%1\n\t"
-			 :
-			 : "f"(fp_min), "f"(fp_three)
-			 : "$f0");
+    __asm__ __volatile__ ("fdiv.s $f0,%0,%1\n\t"
+			  :
+			  : "f"(fp_min), "f"(fp_three)
+			  : "$f0");
 
   /* Last: inexact.  */
   if (FE_INEXACT & excepts)
-    __asm__ __volatile__("fdiv.s $f0, %0, %1\n\t"
-			 :
-			 : "f"(fp_two), "f"(fp_three)
-			 : "$f0");
+    __asm__ __volatile__ ("fdiv.s $f0, %0, %1\n\t"
+			  :
+			  : "f"(fp_two), "f"(fp_three)
+			  : "$f0");
 
   /* Success.  */
   return 0;
 }
 
 libm_hidden_def (__feraiseexcept) weak_alias (__feraiseexcept, feraiseexcept)
-libm_hidden_weak (feraiseexcept)
+    libm_hidden_weak (feraiseexcept)

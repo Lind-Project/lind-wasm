@@ -25,12 +25,12 @@
 ssize_t
 __libc_read (int fd, void *buf, size_t nbytes)
 {
-  return MAKE_SYSCALL(READ_SYSCALL, "syscall|read", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
-  //return SYSCALL_CANCEL (read, fd, buf, nbytes);
+  return MAKE_SYSCALL (READ_SYSCALL, "syscall|read", (uint64_t) fd,
+		       (uint64_t) (uintptr_t) buf, (uint64_t) nbytes, NOTUSED,
+		       NOTUSED, NOTUSED);
+  // return SYSCALL_CANCEL (read, fd, buf, nbytes);
 }
 libc_hidden_def (__libc_read)
 
-weak_alias (__libc_read, __read)
-libc_hidden_weak (__read)
-weak_alias (__libc_read, read)
-libc_hidden_weak (read)
+    weak_alias (__libc_read, __read) libc_hidden_weak (__read)
+	weak_alias (__libc_read, read) libc_hidden_weak (read)

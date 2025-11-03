@@ -17,7 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SOCKET_H
-# error "Never include <bits/socket-constants.h> directly; use <sys/socket.h> instead."
+#  error                                                                       \
+      "Never include <bits/socket-constants.h> directly; use <sys/socket.h> instead."
 #endif
 
 #define SOL_SOCKET 65535
@@ -36,35 +37,35 @@
 #define SO_TYPE 4104
 
 #if __TIMESIZE == 64
-# define SO_RCVTIMEO 4102
-# define SO_SNDTIMEO 4101
-# define SO_TIMESTAMP 16402
-# define SO_TIMESTAMPNS 16403
-# define SO_TIMESTAMPING 16416
+#  define SO_RCVTIMEO 4102
+#  define SO_SNDTIMEO 4101
+#  define SO_TIMESTAMP 16402
+#  define SO_TIMESTAMPNS 16403
+#  define SO_TIMESTAMPING 16416
 #else
-# define SO_RCVTIMEO_OLD 4102
-# define SO_SNDTIMEO_OLD 4101
-# define SO_RCVTIMEO_NEW 16448
-# define SO_SNDTIMEO_NEW 16449
+#  define SO_RCVTIMEO_OLD 4102
+#  define SO_SNDTIMEO_OLD 4101
+#  define SO_RCVTIMEO_NEW 16448
+#  define SO_SNDTIMEO_NEW 16449
 
-# define SO_TIMESTAMP_OLD 0x4012
-# define SO_TIMESTAMPNS_OLD 0x4013
-# define SO_TIMESTAMPING_OLD 0x4020
-# define SO_TIMESTAMP_NEW 0x4038
-# define SO_TIMESTAMPNS_NEW 0x4039
-# define SO_TIMESTAMPING_NEW 0x403A
+#  define SO_TIMESTAMP_OLD 0x4012
+#  define SO_TIMESTAMPNS_OLD 0x4013
+#  define SO_TIMESTAMPING_OLD 0x4020
+#  define SO_TIMESTAMP_NEW 0x4038
+#  define SO_TIMESTAMPNS_NEW 0x4039
+#  define SO_TIMESTAMPING_NEW 0x403A
 
-# ifdef __USE_TIME_BITS64
-#  define SO_RCVTIMEO SO_RCVTIMEO_NEW
-#  define SO_SNDTIMEO SO_SNDTIMEO_NEW
-#  define SO_TIMESTAMP SO_TIMESTAMP_NEW
-#  define SO_TIMESTAMPNS SO_TIMESTAMPNS_NEW
-#  define SO_TIMESTAMPING SO_TIMESTAMPING_NEW
-# else
-#  define SO_RCVTIMEO SO_RCVTIMEO_OLD
-#  define SO_SNDTIMEO SO_SNDTIMEO_OLD
-#  define SO_TIMESTAMP SO_TIMESTAMP_OLD
-#  define SO_TIMESTAMPNS SO_TIMESTAMPNS_OLD
-#  define SO_TIMESTAMPING SO_TIMESTAMPING_OLD
-# endif
+#  ifdef __USE_TIME_BITS64
+#    define SO_RCVTIMEO SO_RCVTIMEO_NEW
+#    define SO_SNDTIMEO SO_SNDTIMEO_NEW
+#    define SO_TIMESTAMP SO_TIMESTAMP_NEW
+#    define SO_TIMESTAMPNS SO_TIMESTAMPNS_NEW
+#    define SO_TIMESTAMPING SO_TIMESTAMPING_NEW
+#  else
+#    define SO_RCVTIMEO SO_RCVTIMEO_OLD
+#    define SO_SNDTIMEO SO_SNDTIMEO_OLD
+#    define SO_TIMESTAMP SO_TIMESTAMP_OLD
+#    define SO_TIMESTAMPNS SO_TIMESTAMPNS_OLD
+#    define SO_TIMESTAMPING SO_TIMESTAMPING_OLD
+#  endif
 #endif

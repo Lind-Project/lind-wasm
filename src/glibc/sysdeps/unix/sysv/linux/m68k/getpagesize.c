@@ -29,8 +29,8 @@ __getpagesize (void)
 {
   int result;
 
-  if (GLRO(dl_pagesize) != 0)
-    return GLRO(dl_pagesize);
+  if (GLRO (dl_pagesize) != 0)
+    return GLRO (dl_pagesize);
 
   result = INTERNAL_SYSCALL_CALL (getpagesize);
   /* The only possible error is ENOSYS.  */
@@ -39,5 +39,4 @@ __getpagesize (void)
 
   return 4096;
 }
-libc_hidden_def (__getpagesize)
-weak_alias (__getpagesize, getpagesize)
+libc_hidden_def (__getpagesize) weak_alias (__getpagesize, getpagesize)

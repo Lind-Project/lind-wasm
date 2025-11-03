@@ -3,21 +3,21 @@ struct kernel_msqid64_ds
 {
   struct ipc_perm msg_perm;
 #if __TIMESIZE == 32
-# ifdef __MIPSEL__
+#  ifdef __MIPSEL__
   unsigned long int msg_stime;
   unsigned long int msg_stime_high;
   unsigned long int msg_rtime;
   unsigned long int msg_rtime_high;
   unsigned long int msg_ctime;
   unsigned long int msg_ctime_high;
-# else
+#  else
   unsigned long int msg_stime_high;
   unsigned long int msg_stime;
   unsigned long int msg_rtime_high;
   unsigned long int msg_rtime;
   unsigned long int msg_ctime_high;
   unsigned long int msg_ctime;
-# endif
+#  endif
 #else
   unsigned long int msg_stime;
   unsigned long int msg_rtime;

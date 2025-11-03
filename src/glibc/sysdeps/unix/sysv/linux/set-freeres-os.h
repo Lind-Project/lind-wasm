@@ -17,8 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 extern void __check_pf_freemem (void) attribute_hidden;
-extern char * __ttyname_freemem_ptr attribute_hidden;
+extern char *__ttyname_freemem_ptr attribute_hidden;
 
-#define call_freeres_os_funcs			  \
-  call_function_static_weak (__check_pf_freemem); \
+#define call_freeres_os_funcs                                                 \
+  call_function_static_weak (__check_pf_freemem);                             \
   call_free_static_weak (__ttyname_freemem_ptr)

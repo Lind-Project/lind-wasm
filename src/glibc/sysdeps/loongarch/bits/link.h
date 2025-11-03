@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LINK_H
-#error "Never include <bits/link.h> directly; use <link.h> instead."
+#  error "Never include <bits/link.h> directly; use <link.h> instead."
 #endif
 
 #ifndef __loongarch_soft_float
@@ -57,20 +57,15 @@ typedef struct La_loongarch_retval
 
 __BEGIN_DECLS
 
-extern ElfW (Addr) la_loongarch_gnu_pltenter (ElfW (Sym) *__sym,
-					      unsigned int __ndx,
-					      uintptr_t *__refcook,
-					      uintptr_t *__defcook,
-					      La_loongarch_regs *__regs,
-					      unsigned int *__flags,
-					      const char *__symname,
-					      long int *__framesizep);
-extern unsigned int la_loongarch_gnu_pltexit (ElfW (Sym) *__sym,
-					      unsigned int __ndx,
-					      uintptr_t *__refcook,
-					      uintptr_t *__defcook,
-					      const La_loongarch_regs *__inregs,
-					      La_loongarch_retval *__outregs,
-					      const char *__symname);
+extern ElfW (Addr)
+    la_loongarch_gnu_pltenter (ElfW (Sym) * __sym, unsigned int __ndx,
+			       uintptr_t *__refcook, uintptr_t *__defcook,
+			       La_loongarch_regs *__regs,
+			       unsigned int *__flags, const char *__symname,
+			       long int *__framesizep);
+extern unsigned int la_loongarch_gnu_pltexit (
+    ElfW (Sym) * __sym, unsigned int __ndx, uintptr_t *__refcook,
+    uintptr_t *__defcook, const La_loongarch_regs *__inregs,
+    La_loongarch_retval *__outregs, const char *__symname);
 
 __END_DECLS

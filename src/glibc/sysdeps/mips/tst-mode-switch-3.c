@@ -24,21 +24,18 @@
 #include <sys/prctl.h>
 
 #if __mips_fpr != 0 || _MIPS_SPFPSET != 16
-# error This test requires -mfpxx -mno-odd-spreg
+#  error This test requires -mfpxx -mno-odd-spreg
 #endif
 
 /* This test verifies that mode changes between a setjmp and longjmp do
    not corrupt the state of callee-saved registers.  */
 
-static int mode[6] =
-  {
-    0,
-    PR_FP_MODE_FR,
-    PR_FP_MODE_FR | PR_FP_MODE_FRE,
-    PR_FP_MODE_FR,
-    0,
-    PR_FP_MODE_FR | PR_FP_MODE_FRE
-  };
+static int mode[6] = { 0,
+		       PR_FP_MODE_FR,
+		       PR_FP_MODE_FR | PR_FP_MODE_FRE,
+		       PR_FP_MODE_FR,
+		       0,
+		       PR_FP_MODE_FR | PR_FP_MODE_FRE };
 static jmp_buf env;
 float check1 = 2.0;
 double check2 = 3.0;
@@ -49,7 +46,7 @@ do_test (void)
   int i;
   int result = 0;
 
-  for (i = 0 ; i < 7 ; i++)
+  for (i = 0; i < 7; i++)
     {
       int retval;
       register float test1 __asm ("$f20");
@@ -58,14 +55,14 @@ do_test (void)
       /* Hide what we are doing to $f20 and $f22 from the compiler.  */
       __asm __volatile ("l.s %0,%2\n"
 			"l.d %1,%3\n"
-			: "=f" (test1), "=f" (test2)
-			: "m" (check1), "m" (check2));
+			: "=f"(test1), "=f"(test2)
+			: "m"(check1), "m"(check2));
 
       retval = setjmp (env);
 
       /* Make sure the compiler knows we want to access the variables
-         via the named registers again.  */
-      __asm __volatile ("" : : "f" (test1), "f" (test2));
+	 via the named registers again.  */
+      __asm __volatile ("" : : "f"(test1), "f"(test2));
 
       if (test1 != check1 || test2 != check2)
 	{
@@ -76,8 +73,7 @@ do_test (void)
 
       if (retval == 0)
 	{
-	  if (prctl (PR_SET_FP_MODE, mode[i % 6]) != 0
-	      && errno != ENOTSUP)
+	  if (prctl (PR_SET_FP_MODE, mode[i % 6]) != 0 && errno != ENOTSUP)
 	    {
 	      printf ("prctl PR_SET_FP_MODE failed: %m");
 	      exit (1);

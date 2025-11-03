@@ -26,7 +26,6 @@
 #include <fix-fp-int-convert-overflow.h>
 #include <math-use-builtins.h>
 
-
 long int
 __lrintl (_Float128 x)
 {
@@ -34,14 +33,13 @@ __lrintl (_Float128 x)
   return __builtin_lrintl (x);
 #else
   /* Use generic implementation. */
-  static const _Float128 two112[2] =
-  {
-    L(5.19229685853482762853049632922009600E+33), /* 0x406F000000000000, 0 */
-   L(-5.19229685853482762853049632922009600E+33)  /* 0xC06F000000000000, 0 */
+  static const _Float128 two112[2] = {
+    L (5.19229685853482762853049632922009600E+33), /* 0x406F000000000000, 0 */
+    L (-5.19229685853482762853049632922009600E+33) /* 0xC06F000000000000, 0 */
   };
 
   int32_t j0;
-  uint64_t i0,i1;
+  uint64_t i0, i1;
   _Float128 w;
   _Float128 t;
   long int result;
@@ -57,10 +55,9 @@ __lrintl (_Float128 x)
     {
       if (j0 < 48)
 	{
-#if defined FE_INVALID || defined FE_INEXACT
+#  if defined FE_INVALID || defined FE_INEXACT
 	  /* X < LONG_MAX + 1 implied by J0 < 31.  */
-	  if (sizeof (long int) == 4
-	      && x > (_Float128) LONG_MAX)
+	  if (sizeof (long int) == 4 && x > (_Float128) LONG_MAX)
 	    {
 	      /* In the event of overflow we must raise the "invalid"
 		 exception, but not "inexact".  */
@@ -68,7 +65,7 @@ __lrintl (_Float128 x)
 	      feraiseexcept (t == LONG_MAX ? FE_INEXACT : FE_INVALID);
 	    }
 	  else
-#endif
+#  endif
 	    {
 	      w = two112[sx] + x;
 	      t = w - two112[sx];
@@ -84,10 +81,9 @@ __lrintl (_Float128 x)
 	result = ((long int) i0 << (j0 - 48)) | (i1 << (j0 - 112));
       else
 	{
-#if defined FE_INVALID || defined FE_INEXACT
+#  if defined FE_INVALID || defined FE_INEXACT
 	  /* X < LONG_MAX + 1 implied by J0 < 63.  */
-	  if (sizeof (long int) == 8
-	      && x > (_Float128) LONG_MAX)
+	  if (sizeof (long int) == 8 && x > (_Float128) LONG_MAX)
 	    {
 	      /* In the event of overflow we must raise the "invalid"
 		 exception, but not "inexact".  */
@@ -95,7 +91,7 @@ __lrintl (_Float128 x)
 	      feraiseexcept (t == LONG_MAX ? FE_INEXACT : FE_INVALID);
 	    }
 	  else
-#endif
+#  endif
 	    {
 	      w = two112[sx] + x;
 	      t = w - two112[sx];
@@ -116,9 +112,8 @@ __lrintl (_Float128 x)
       /* The number is too large.  Unless it rounds to LONG_MIN,
 	 FE_INVALID must be raised and the return value is
 	 unspecified.  */
-#if defined FE_INVALID || defined FE_INEXACT
-      if (x < (_Float128) LONG_MIN
-	  && x > (_Float128) LONG_MIN - 1)
+#  if defined FE_INVALID || defined FE_INEXACT
+      if (x < (_Float128) LONG_MIN && x > (_Float128) LONG_MIN - 1)
 	{
 	  /* If truncation produces LONG_MIN, the cast will not raise
 	     the exception, but may raise "inexact".  */
@@ -132,7 +127,7 @@ __lrintl (_Float128 x)
 	  return sx == 0 ? LONG_MAX : LONG_MIN;
 	}
 
-#endif
+#  endif
       return (long int) x;
     }
 

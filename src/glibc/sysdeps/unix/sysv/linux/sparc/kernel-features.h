@@ -22,7 +22,7 @@
 /* 32-bit SPARC kernels do not support
    futex_atomic_cmpxchg_inatomic.  */
 #if !defined __arch64__ && !defined __sparc_v9__
-# undef __ASSUME_SET_ROBUST_LIST
+#  undef __ASSUME_SET_ROBUST_LIST
 #endif
 
 /* These syscalls were added for 32-bit in 4.4 (but present for 64-bit
@@ -32,46 +32,46 @@
    4.4, but only for 32-bit kernels, not in the compat syscall table
    for 64-bit kernels.  */
 #if !defined __arch64__ && __LINUX_KERNEL_VERSION < 0x040400
-# undef __ASSUME_SENDMSG_SYSCALL
-# undef __ASSUME_RECVMSG_SYSCALL
-# undef __ASSUME_ACCEPT_SYSCALL
-# undef __ASSUME_CONNECT_SYSCALL
-# undef __ASSUME_RECVFROM_SYSCALL
-# undef __ASSUME_SENDTO_SYSCALL
-# undef __ASSUME_GETSOCKOPT_SYSCALL
-# undef __ASSUME_SETSOCKOPT_SYSCALL
+#  undef __ASSUME_SENDMSG_SYSCALL
+#  undef __ASSUME_RECVMSG_SYSCALL
+#  undef __ASSUME_ACCEPT_SYSCALL
+#  undef __ASSUME_CONNECT_SYSCALL
+#  undef __ASSUME_RECVFROM_SYSCALL
+#  undef __ASSUME_SENDTO_SYSCALL
+#  undef __ASSUME_GETSOCKOPT_SYSCALL
+#  undef __ASSUME_SETSOCKOPT_SYSCALL
 #endif
 
 /* There syscalls were added for 32-bit in compat syscall table only
    in 4.20 (but present for 64-bit in all supported kernel versions).  */
 #if !defined __arch64__ && __LINUX_KERNEL_VERSION < 0x041400
-# undef __ASSUME_GETSOCKNAME_SYSCALL
-# undef __ASSUME_GETPEERNAME_SYSCALL
+#  undef __ASSUME_GETSOCKNAME_SYSCALL
+#  undef __ASSUME_GETPEERNAME_SYSCALL
 #endif
 
 /* These syscalls were added for both 32-bit and 64-bit in 4.4.  */
 #if __LINUX_KERNEL_VERSION < 0x040400
-# undef __ASSUME_BIND_SYSCALL
-# undef __ASSUME_LISTEN_SYSCALL
+#  undef __ASSUME_BIND_SYSCALL
+#  undef __ASSUME_LISTEN_SYSCALL
 #endif
 
 #ifdef __arch64__
 /* sparc64 defines __NR_pause,  however it is not supported (ENOSYS).
    Undefine so pause.c can use a correct alternative.  */
-# undef __NR_pause
+#  undef __NR_pause
 #endif
 
 /* sparc only supports ipc syscall before 5.1.  */
 #if __LINUX_KERNEL_VERSION < 0x050100
-# undef __ASSUME_DIRECT_SYSVIPC_SYSCALLS
-# if !defined __arch64__
-#  undef __ASSUME_SYSVIPC_DEFAULT_IPC_64
-# endif
+#  undef __ASSUME_DIRECT_SYSVIPC_SYSCALLS
+#  if !defined __arch64__
+#    undef __ASSUME_SYSVIPC_DEFAULT_IPC_64
+#  endif
 #endif
 
 /* Support for the renameat2 syscall was added in 3.16.  */
 #if __LINUX_KERNEL_VERSION < 0x031000
-# undef __ASSUME_RENAMEAT2
+#  undef __ASSUME_RENAMEAT2
 #endif
 
 /* SPARC kernel Kconfig does not define CONFIG_CLONE_BACKWARDS, however it
@@ -86,7 +86,7 @@
    Which required a special macro to correct issue the syscall
    (INLINE_CLONE_SYSCALL).  */
 #undef __ASSUME_CLONE_DEFAULT
-#define __ASSUME_CLONE_BACKWARDS	1
+#define __ASSUME_CLONE_BACKWARDS 1
 
 /* sparc does not provide clone3.  */
 #undef __ASSUME_CLONE3

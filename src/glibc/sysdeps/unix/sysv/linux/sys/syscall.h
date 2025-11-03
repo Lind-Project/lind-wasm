@@ -16,16 +16,16 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYSCALL_H
-#define _SYSCALL_H	1
+#  define _SYSCALL_H 1
 
 /* This file should list the numbers of the system calls the system knows.
    But instead of duplicating this we use the information available
    from the kernel sources.  */
-#include <asm/unistd.h>
+#  include <asm/unistd.h>
 
 /* The Linux kernel header file defines macros __NR_*, but some
    programs expect the traditional form SYS_*.  <bits/syscall.h>
    defines SYS_* macros for __NR_* macros of known names.  */
-#include <bits/syscall.h>
+#  include <bits/syscall.h>
 
 #endif

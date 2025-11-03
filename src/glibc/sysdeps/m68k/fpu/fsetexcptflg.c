@@ -25,23 +25,23 @@ __fesetexceptflag (const fexcept_t *flagp, int excepts)
   fexcept_t fpsr;
 
   /* Get the current status register.  */
-  __asm__ ("fmove%.l %/fpsr,%0" : "=dm" (fpsr));
+  __asm__ ("fmove%.l %/fpsr,%0" : "=dm"(fpsr));
 
   /* Install the new exception bits in the Accrued Exception Byte.  */
   fpsr &= ~(excepts & FE_ALL_EXCEPT);
   fpsr |= *flagp & excepts & FE_ALL_EXCEPT;
 
   /* Store the new status register.  */
-  __asm__ __volatile__ ("fmove%.l %0,%/fpsr" : : "dm" (fpsr));
+  __asm__ __volatile__ ("fmove%.l %0,%/fpsr" : : "dm"(fpsr));
 
   /* Success.  */
   return 0;
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__fesetexceptflag, __old_fesetexceptflag)
-compat_symbol (libm, __old_fesetexceptflag, fesetexceptflag, GLIBC_2_1);
+    compat_symbol (libm, __old_fesetexceptflag, fesetexceptflag, GLIBC_2_1);
 #endif
 
 versioned_symbol (libm, __fesetexceptflag, fesetexceptflag, GLIBC_2_2);

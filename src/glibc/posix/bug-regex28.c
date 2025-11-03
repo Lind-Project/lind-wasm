@@ -56,17 +56,17 @@ do_test (void)
     {
       re_set_syntax (tests[i].syntax);
       memset (&r, 0, sizeof (r));
-      const char *re = re_compile_pattern (tests[i].regex,
-					   strlen (tests[i].regex), &r);
+      const char *re
+	  = re_compile_pattern (tests[i].regex, strlen (tests[i].regex), &r);
       TEST_VERIFY (re == NULL);
       if (re != NULL)
-        continue;
+	continue;
 
       size_t len = strlen (tests[i].string);
       int rv = re_search (&r, tests[i].string, len, 0, len, NULL);
       TEST_VERIFY (rv == tests[i].retval);
       if (test_verbose > 0)
-        printf ("info: i=%zu rv=%d expected=%d\n", i, rv, tests[i].retval);
+	printf ("info: i=%zu rv=%d expected=%d\n", i, rv, tests[i].retval);
 
       regfree (&r);
     }

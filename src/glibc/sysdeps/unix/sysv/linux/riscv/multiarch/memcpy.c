@@ -17,16 +17,16 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
+#if IS_IN(libc)
 /* Redefine memcpy so that the compiler won't complain about the type
    mismatch with the IFUNC selector in strong_alias, below.  */
-# undef memcpy
-# define memcpy __redirect_memcpy
-# include <stdint.h>
-# include <string.h>
-# include <ifunc-init.h>
-# include <riscv-ifunc.h>
-# include <sys/hwprobe.h>
+#  undef memcpy
+#  define memcpy __redirect_memcpy
+#  include <stdint.h>
+#  include <string.h>
+#  include <ifunc-init.h>
+#  include <riscv-ifunc.h>
+#  include <sys/hwprobe.h>
 
 extern __typeof (__redirect_memcpy) __libc_memcpy;
 
@@ -46,12 +46,12 @@ select_memcpy_ifunc (uint64_t dl_hwcap, __riscv_hwprobe_t hwprobe_func)
 
 riscv_libc_ifunc (__libc_memcpy, select_memcpy_ifunc);
 
-# undef memcpy
+#  undef memcpy
 strong_alias (__libc_memcpy, memcpy);
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (memcpy, __GI_memcpy, __redirect_memcpy)
-  __attribute__ ((visibility ("hidden"))) __attribute_copy__ (memcpy);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (memcpy);
+#  endif
 #else
-# include <string/memcpy.c>
+#  include <string/memcpy.c>
 #endif

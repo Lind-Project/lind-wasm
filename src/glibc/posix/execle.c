@@ -42,9 +42,9 @@ execle (const char *path, const char *arg, ...)
 
   /* Avoid dynamic memory allocation due two main issues:
      1. The function should be async-signal-safe and a running on a signal
-        handler with a fail outcome might lead to malloc bad state.
+	handler with a fail outcome might lead to malloc bad state.
      2. It might be used in a vfork/clone(VFORK) scenario where using
-        malloc also might lead to internal bad state.  */
+	malloc also might lead to internal bad state.  */
   ptrdiff_t i;
   char *argv[argc + 1];
   char **envp;

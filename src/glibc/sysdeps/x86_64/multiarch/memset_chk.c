@@ -18,18 +18,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.so. */
-#if IS_IN (libc) && defined SHARED
-# define __memset_chk __redirect_memset_chk
-# include <string.h>
-# undef __memset_chk
+#if IS_IN(libc) && defined SHARED
+#  define __memset_chk __redirect_memset_chk
+#  include <string.h>
+#  undef __memset_chk
 
-# define SYMBOL_NAME memset_chk
-# include "ifunc-memset.h"
+#  define SYMBOL_NAME memset_chk
+#  include "ifunc-memset.h"
 
-libc_ifunc_redirected (__redirect_memset_chk, __memset_chk,
-		       IFUNC_SELECTOR ());
-# ifdef SHARED
+libc_ifunc_redirected (__redirect_memset_chk, __memset_chk, IFUNC_SELECTOR ());
+#  ifdef SHARED
 __hidden_ver1 (__memset_chk, __GI___memset_chk, __redirect_memset_chk)
-  __attribute__ ((visibility ("hidden"))) __attribute_copy__ (__memset_chk);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (__memset_chk);
+#  endif
 #endif

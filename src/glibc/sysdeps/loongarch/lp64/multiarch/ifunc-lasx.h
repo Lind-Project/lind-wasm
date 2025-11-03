@@ -38,7 +38,7 @@ IFUNC_SELECTOR (void)
     return OPTIMIZE (lsx);
   else
 #endif
-  if (SUPPORT_UAL)
+      if (SUPPORT_UAL)
     return OPTIMIZE (unaligned);
   else
     return OPTIMIZE (aligned);

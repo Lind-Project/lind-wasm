@@ -23,7 +23,7 @@
 double
 __fminmag (double x, double y)
 {
-  asm volatile ("fmina.d \t%0, %1, %2" : "=f" (x) : "f" (x), "f" (y));
+  asm volatile ("fmina.d \t%0, %1, %2" : "=f"(x) : "f"(x), "f"(y));
   return x;
 }
 libm_alias_double (__fminmag, fminmag)

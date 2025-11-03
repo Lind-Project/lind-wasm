@@ -27,9 +27,9 @@
 typedef struct
 {
   union
-    {
-      size_t len;
-      void (*fn) (void);
-    };
+  {
+    size_t len;
+    void (*fn) (void);
+  };
   void *p;
 } parameter_t;

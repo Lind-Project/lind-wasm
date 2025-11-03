@@ -40,9 +40,9 @@ v2df_to_sf (v2df_t v2df, float *f0p, float *f1p)
 /* The constants and polynomials for sine and cosine.  */
 typedef struct
 {
-  double sign[4];		/* Sign of sine in quadrants 0..3.  */
-  double hpi_inv;		/* 2 / PI ( * 2^24 if !TOINT_INTRINSICS).  */
-  double hpi;			/* PI / 2.  */
+  double sign[4]; /* Sign of sine in quadrants 0..3.  */
+  double hpi_inv; /* 2 / PI ( * 2^24 if !TOINT_INTRINSICS).  */
+  double hpi;	  /* PI / 2.  */
   /* Cosine polynomial: c0, c1, c2, c3, c4.
      Sine polynomial: s1, s2, s3.  */
   double c0, c1;

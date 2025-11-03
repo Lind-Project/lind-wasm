@@ -61,19 +61,24 @@ run_test (clockid_t attr_clock, clockid_t wait_clock)
 
   struct timespec ts_timeout;
   xclock_gettime (wait_clock == CLOCK_USE_ATTR_CLOCK ? attr_clock : wait_clock,
-                  &ts_timeout);
+		  &ts_timeout);
 
   /* Wait one second.  */
   ++ts_timeout.tv_sec;
 
-  if (wait_clock == CLOCK_USE_ATTR_CLOCK) {
-    TEST_COMPARE (pthread_cond_timedwait (&cond, &mut, &ts_timeout), ETIMEDOUT);
-    TEST_TIMESPEC_BEFORE_NOW (ts_timeout, attr_clock);
-  } else {
-    TEST_COMPARE (pthread_cond_clockwait (&cond, &mut, wait_clock, &ts_timeout),
-                  ETIMEDOUT);
-    TEST_TIMESPEC_BEFORE_NOW (ts_timeout, wait_clock);
-  }
+  if (wait_clock == CLOCK_USE_ATTR_CLOCK)
+    {
+      TEST_COMPARE (pthread_cond_timedwait (&cond, &mut, &ts_timeout),
+		    ETIMEDOUT);
+      TEST_TIMESPEC_BEFORE_NOW (ts_timeout, attr_clock);
+    }
+  else
+    {
+      TEST_COMPARE (
+	  pthread_cond_clockwait (&cond, &mut, wait_clock, &ts_timeout),
+	  ETIMEDOUT);
+      TEST_TIMESPEC_BEFORE_NOW (ts_timeout, wait_clock);
+    }
 
   xpthread_mutex_unlock (&mut);
   xpthread_mutex_destroy (&mut);
@@ -82,7 +87,6 @@ run_test (clockid_t attr_clock, clockid_t wait_clock)
   return 0;
 }
 #endif
-
 
 static int
 do_test (void)
@@ -95,24 +99,24 @@ do_test (void)
 
   run_test (CLOCK_REALTIME, CLOCK_USE_ATTR_CLOCK);
 
-# if defined _POSIX_MONOTONIC_CLOCK && _POSIX_MONOTONIC_CLOCK >= 0
-#  if _POSIX_MONOTONIC_CLOCK == 0
+#  if defined _POSIX_MONOTONIC_CLOCK && _POSIX_MONOTONIC_CLOCK >= 0
+#    if _POSIX_MONOTONIC_CLOCK == 0
   int e = sysconf (_SC_MONOTONIC_CLOCK);
   if (e < 0)
     puts ("CLOCK_MONOTONIC not supported");
   else if (e == 0)
-      FAIL_RET ("sysconf (_SC_MONOTONIC_CLOCK) must not return 0");
+    FAIL_RET ("sysconf (_SC_MONOTONIC_CLOCK) must not return 0");
   else
-#  endif
+#    endif
     {
       run_test (CLOCK_MONOTONIC, CLOCK_USE_ATTR_CLOCK);
       run_test (CLOCK_REALTIME, CLOCK_MONOTONIC);
       run_test (CLOCK_MONOTONIC, CLOCK_MONOTONIC);
       run_test (CLOCK_MONOTONIC, CLOCK_REALTIME);
     }
-# else
+#  else
   puts ("_POSIX_MONOTONIC_CLOCK not defined");
-# endif
+#  endif
 
   return 0;
 #endif

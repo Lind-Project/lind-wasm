@@ -19,10 +19,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LARCH_GET_ROUNDING_MODE_H
-#define _LARCH_GET_ROUNDING_MODE_H	1
+#  define _LARCH_GET_ROUNDING_MODE_H 1
 
-#include <fenv.h>
-#include <fpu_control.h>
+#  include <fenv.h>
+#  include <fpu_control.h>
 
 /* Return the floating-point rounding mode.  */
 

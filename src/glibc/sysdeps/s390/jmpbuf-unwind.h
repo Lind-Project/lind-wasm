@@ -23,19 +23,17 @@
 #include <sysdep.h>
 #include <pointer_guard.h>
 
-
 /* Test if longjmp to JMPBUF would unwind the frame
    containing a local variable at ADDRESS.  */
-#define _JMPBUF_UNWINDS(jmpbuf, address, demangle)			\
+#define _JMPBUF_UNWINDS(jmpbuf, address, demangle)                            \
   ((void *) (address) < (void *) demangle ((jmpbuf)->__gregs[__JB_GPR15]))
-
 
 /* On s390{,x}, CFA is always 96 (resp. 160) bytes above actual
    %r15.  */
-#define _JMPBUF_CFA_UNWINDS_ADJ(_jmpbuf, _context, _adj) \
-  _JMPBUF_UNWINDS_ADJ (_jmpbuf,					\
-		       (void *) (_Unwind_GetCFA (_context)	\
-				 - 32 - 2 * __WORDSIZE), _adj)
+#define _JMPBUF_CFA_UNWINDS_ADJ(_jmpbuf, _context, _adj)                      \
+  _JMPBUF_UNWINDS_ADJ (                                                       \
+      _jmpbuf, (void *) (_Unwind_GetCFA (_context) - 32 - 2 * __WORDSIZE),    \
+      _adj)
 
 static inline uintptr_t __attribute__ ((unused))
 _jmpbuf_sp (__jmp_buf regs)
@@ -45,7 +43,7 @@ _jmpbuf_sp (__jmp_buf regs)
   return (uintptr_t) sp;
 }
 
-#define _JMPBUF_UNWINDS_ADJ(_jmpbuf, _address, _adj) \
+#define _JMPBUF_UNWINDS_ADJ(_jmpbuf, _address, _adj)                          \
   ((uintptr_t) (_address) - (_adj) < _jmpbuf_sp (_jmpbuf) - (_adj))
 
 /* We use the normal longjmp for unwinding.  */

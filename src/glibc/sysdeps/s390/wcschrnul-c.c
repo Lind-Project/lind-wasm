@@ -19,9 +19,9 @@
 #include <ifunc-wcschrnul.h>
 
 #if HAVE_WCSCHRNUL_C
-# if HAVE_WCSCHRNUL_IFUNC || HAVE_WCSCHRNUL_Z13
-#  define WCSCHRNUL WCSCHRNUL_C
-# endif
+#  if HAVE_WCSCHRNUL_IFUNC || HAVE_WCSCHRNUL_Z13
+#    define WCSCHRNUL WCSCHRNUL_C
+#  endif
 
-# include <wcsmbs/wcschrnul.c>
+#  include <wcsmbs/wcschrnul.c>
 #endif

@@ -17,36 +17,37 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_MMAN_H
-# error "Never use <bits/mman-shared.h> directly; include <sys/mman.h> instead."
+#  error                                                                       \
+      "Never use <bits/mman-shared.h> directly; include <sys/mman.h> instead."
 #endif
 
 #ifdef __USE_GNU
 /* Flags for mremap.  */
-# define MREMAP_MAYMOVE	1
-# define MREMAP_FIXED	2
-# define MREMAP_DONTUNMAP 4
+#  define MREMAP_MAYMOVE 1
+#  define MREMAP_FIXED 2
+#  define MREMAP_DONTUNMAP 4
 
 /* Flags for memfd_create.  */
-# ifndef MFD_CLOEXEC
-#  define MFD_CLOEXEC 1U
-#  define MFD_ALLOW_SEALING 2U
-#  define MFD_HUGETLB 4U
-# endif
-# ifndef MFD_NOEXEC_SEAL
-#  define MFD_NOEXEC_SEAL 8U
-#  define MFD_EXEC 0x10U
-# endif
+#  ifndef MFD_CLOEXEC
+#    define MFD_CLOEXEC 1U
+#    define MFD_ALLOW_SEALING 2U
+#    define MFD_HUGETLB 4U
+#  endif
+#  ifndef MFD_NOEXEC_SEAL
+#    define MFD_NOEXEC_SEAL 8U
+#    define MFD_EXEC 0x10U
+#  endif
 
 /* Flags for mlock2.  */
-# ifndef MLOCK_ONFAULT
-#  define MLOCK_ONFAULT 1U
-# endif
+#  ifndef MLOCK_ONFAULT
+#    define MLOCK_ONFAULT 1U
+#  endif
 
 /* Access rights for pkey_alloc.  */
-# ifndef PKEY_DISABLE_ACCESS
-#  define PKEY_DISABLE_ACCESS 0x1
-#  define PKEY_DISABLE_WRITE 0x2
-# endif
+#  ifndef PKEY_DISABLE_ACCESS
+#    define PKEY_DISABLE_ACCESS 0x1
+#    define PKEY_DISABLE_WRITE 0x2
+#  endif
 
 __BEGIN_DECLS
 

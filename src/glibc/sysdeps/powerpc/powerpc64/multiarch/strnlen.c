@@ -16,27 +16,26 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define strnlen __redirect_strnlen
-# define __strnlen __redirect___strnlen
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if IS_IN(libc)
+#  define strnlen __redirect_strnlen
+#  define __strnlen __redirect___strnlen
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (__strnlen) __strnlen_ppc attribute_hidden;
 extern __typeof (__strnlen) __strnlen_power7 attribute_hidden;
 extern __typeof (__strnlen) __strnlen_power8 attribute_hidden;
-# undef strnlen
-# undef __strnlen
+#  undef strnlen
+#  undef __strnlen
 libc_ifunc_redirected (__redirect___strnlen, __strnlen,
 		       (hwcap2 & PPC_FEATURE2_ARCH_2_07
 			&& hwcap & PPC_FEATURE_HAS_ALTIVEC)
-		       ? __strnlen_power8 :
-			 (hwcap & PPC_FEATURE_ARCH_2_06)
-			 ? __strnlen_power7
-			 : __strnlen_ppc);
+			   ? __strnlen_power8
+		       : (hwcap &PPC_FEATURE_ARCH_2_06) ? __strnlen_power7
+							: __strnlen_ppc);
 weak_alias (__strnlen, strnlen)
 
 #else
-#include <string/strnlen.c>
+#  include <string/strnlen.c>
 #endif

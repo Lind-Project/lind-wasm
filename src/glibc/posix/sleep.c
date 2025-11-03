@@ -35,4 +35,4 @@ __sleep (unsigned int seconds)
 }
 weak_alias (__sleep, sleep)
 
-stub_warning (sleep)
+    stub_warning (sleep)

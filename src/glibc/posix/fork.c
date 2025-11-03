@@ -33,9 +33,9 @@ fresetlockfiles (void)
 {
   _IO_ITER i;
 
-  for (i = _IO_iter_begin(); i != _IO_iter_end(); i = _IO_iter_next(i))
+  for (i = _IO_iter_begin (); i != _IO_iter_end (); i = _IO_iter_next (i))
     if ((_IO_iter_file (i)->_flags & _IO_USER_LOCK) == 0)
-      _IO_lock_init (*((_IO_lock_t *) _IO_iter_file(i)->_lock));
+      _IO_lock_init (*((_IO_lock_t *) _IO_iter_file (i)->_lock));
 }
 
 pid_t
@@ -75,10 +75,10 @@ __libc_fork (void)
 
   // directly call clone syscall from wasmtime
   struct clone_args args;
-  memset(&args, 0, sizeof(args));
+  memset (&args, 0, sizeof (args));
   args.flags = 0;
 
-  pid_t pid = __clone_internal(&args, NULL, NULL);
+  pid_t pid = __clone_internal (&args, NULL, NULL);
 
   if (pid == 0)
     {
@@ -105,10 +105,10 @@ __libc_fork (void)
 	}
 
       /* Reset the lock the dynamic loader uses to protect its data.  */
-      __rtld_lock_initialize (GL(dl_load_lock));
+      __rtld_lock_initialize (GL (dl_load_lock));
 
       /* Reset the lock protecting dynamic TLS related data.  */
-      __rtld_lock_initialize (GL(dl_load_tls_lock));
+      __rtld_lock_initialize (GL (dl_load_tls_lock));
 
       reclaim_stacks ();
 
@@ -139,6 +139,5 @@ __libc_fork (void)
 
   return pid;
 }
-weak_alias (__libc_fork, __fork)
-libc_hidden_def (__fork)
-weak_alias (__libc_fork, fork)
+weak_alias (__libc_fork, __fork) libc_hidden_def (__fork)
+    weak_alias (__libc_fork, fork)

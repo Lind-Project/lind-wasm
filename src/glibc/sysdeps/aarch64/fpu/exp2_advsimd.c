@@ -43,13 +43,13 @@ static const struct data
 static inline uint64x2_t
 lookup_sbits (uint64x2_t i)
 {
-  return (uint64x2_t){ __v_exp_data[i[0] & IndexMask],
-		       __v_exp_data[i[1] & IndexMask] };
+  return (uint64x2_t) { __v_exp_data[i[0] & IndexMask],
+			__v_exp_data[i[1] & IndexMask] };
 }
 
 #if WANT_SIMD_EXCEPT
 
-# define Thres 0x2080000000000000     /* asuint64(512.0) - TinyBound.  */
+#  define Thres 0x2080000000000000 /* asuint64(512.0) - TinyBound.  */
 
 /* Call scalar exp2 as a fallback.  */
 static float64x2_t VPCS_ATTR NOINLINE
@@ -60,10 +60,10 @@ special_case (float64x2_t x, float64x2_t y, uint64x2_t is_special)
 
 #else
 
-# define SpecialOffset 0x6000000000000000 /* 0x1p513.  */
+#  define SpecialOffset 0x6000000000000000 /* 0x1p513.  */
 /* SpecialBias1 + SpecialBias1 = asuint(1.0).  */
-# define SpecialBias1 0x7000000000000000 /* 0x1p769.  */
-# define SpecialBias2 0x3010000000000000 /* 0x1p-254.  */
+#  define SpecialBias1 0x7000000000000000  /* 0x1p769.  */
+#  define SpecialBias2 0x3010000000000000  /* 0x1p-254.  */
 
 static inline float64x2_t VPCS_ATTR
 special_case (float64x2_t s, float64x2_t y, float64x2_t n,
@@ -72,8 +72,8 @@ special_case (float64x2_t s, float64x2_t y, float64x2_t n,
   /* 2^(n/N) may overflow, break it up into s1*s2.  */
   uint64x2_t b = vandq_u64 (vclezq_f64 (n), v_u64 (SpecialOffset));
   float64x2_t s1 = vreinterpretq_f64_u64 (vsubq_u64 (v_u64 (SpecialBias1), b));
-  float64x2_t s2 = vreinterpretq_f64_u64 (
-    vaddq_u64 (vsubq_u64 (vreinterpretq_u64_f64 (s), v_u64 (SpecialBias2)), b));
+  float64x2_t s2 = vreinterpretq_f64_u64 (vaddq_u64 (
+      vsubq_u64 (vreinterpretq_u64_f64 (s), v_u64 (SpecialBias2)), b));
   uint64x2_t cmp = vcagtq_f64 (n, d->scale_uoflow_bound);
   float64x2_t r1 = vmulq_f64 (s1, s1);
   float64x2_t r0 = vmulq_f64 (vfmaq_f64 (s2, s2, y), s1);
@@ -87,7 +87,8 @@ special_case (float64x2_t s, float64x2_t y, float64x2_t n,
    _ZGVnN2v_exp2(-0x1.4c264ab5b559bp-6) got 0x1.f8db0d4df721fp-1
 				       want 0x1.f8db0d4df721dp-1.  */
 VPCS_ATTR
-float64x2_t V_NAME_D1 (exp2) (float64x2_t x)
+float64x2_t
+V_NAME_D1 (exp2) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
   uint64x2_t cmp;

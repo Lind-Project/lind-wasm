@@ -23,7 +23,6 @@
 #include <dirstream.h>
 #include <not-cancel.h>
 
-
 /* Close the directory stream DIRP.
    Return 0 if successful, -1 if not.  */
 int
@@ -43,7 +42,7 @@ __closedir (DIR *dirp)
 
   fd = dirp->fd;
 
-#if IS_IN (libc)
+#if IS_IN(libc)
   __libc_lock_fini (dirp->lock);
 #endif
 

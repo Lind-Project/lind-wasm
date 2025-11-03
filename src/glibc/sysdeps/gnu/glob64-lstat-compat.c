@@ -34,12 +34,12 @@
 #undef __stat
 #define __stat(file, buf) __stat64 (file, buf)
 
-#define COMPILE_GLOB64	1
+#define COMPILE_GLOB64 1
 
 #define GLOB_ATTRIBUTE attribute_compat_text_section
 
 /* Avoid calling gl_lstat with GLOB_ALTDIRFUNC.  */
-#define GLOB_LSTAT   gl_stat
+#define GLOB_LSTAT gl_stat
 #define GLOB_LSTAT64 __stat64
 
 #include <posix/glob.c>

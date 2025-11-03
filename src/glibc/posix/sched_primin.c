@@ -18,7 +18,6 @@
 #include <errno.h>
 #include <sched.h>
 
-
 /* Get minimum priority value for a scheduler.  */
 int
 __sched_get_priority_min (int algorithm)
@@ -27,6 +26,6 @@ __sched_get_priority_min (int algorithm)
   return -1;
 }
 libc_hidden_def (__sched_get_priority_min)
-stub_warning (sched_get_priority_min)
+    stub_warning (sched_get_priority_min)
 
-weak_alias (__sched_get_priority_min, sched_get_priority_min)
+	weak_alias (__sched_get_priority_min, sched_get_priority_min)

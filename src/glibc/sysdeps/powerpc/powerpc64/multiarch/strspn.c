@@ -16,9 +16,9 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#include <string.h>
+#include <shlib-compat.h>
+#include "init-arch.h"
 
 #undef strspn
 extern __typeof (strspn) __libc_strspn;
@@ -27,10 +27,8 @@ extern __typeof (strspn) __strspn_ppc attribute_hidden;
 extern __typeof (strspn) __strspn_power8 attribute_hidden;
 
 libc_ifunc (__libc_strspn,
-	    (hwcap2 & PPC_FEATURE2_ARCH_2_07
-	     && hwcap & PPC_FEATURE_HAS_VSX)
-	    ? __strspn_power8
-	    : __strspn_ppc);
+	    (hwcap2 & PPC_FEATURE2_ARCH_2_07 && hwcap & PPC_FEATURE_HAS_VSX)
+		? __strspn_power8
+		: __strspn_ppc);
 
-weak_alias (__libc_strspn, strspn)
-libc_hidden_builtin_def (strspn)
+weak_alias (__libc_strspn, strspn) libc_hidden_builtin_def (strspn)

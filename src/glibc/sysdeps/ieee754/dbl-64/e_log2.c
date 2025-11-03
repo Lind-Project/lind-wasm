@@ -76,8 +76,9 @@ __log2 (double x)
       p = r2 * (B[0] + r * B[1]);
       y = hi + p;
       lo += hi - y + p;
-      lo += r4 * (B[2] + r * B[3] + r2 * (B[4] + r * B[5])
-		  + r4 * (B[6] + r * B[7] + r2 * (B[8] + r * B[9])));
+      lo += r4
+	    * (B[2] + r * B[3] + r2 * (B[4] + r * B[5])
+	       + r4 * (B[6] + r * B[7] + r2 * (B[8] + r * B[9])));
       y += lo;
       return y;
     }
@@ -141,11 +142,11 @@ __log2 (double x)
 }
 #ifndef __log2
 strong_alias (__log2, __ieee754_log2)
-libm_alias_finite (__ieee754_log2, __log2)
-# if LIBM_SVID_COMPAT
-versioned_symbol (libm, __log2, log2, GLIBC_2_29);
+    libm_alias_finite (__ieee754_log2, __log2)
+#  if LIBM_SVID_COMPAT
+	versioned_symbol (libm, __log2, log2, GLIBC_2_29);
 libm_alias_double_other (__log2, log2)
-# else
-libm_alias_double (__log2, log2)
-# endif
+#  else
+	libm_alias_double (__log2, log2)
+#  endif
 #endif

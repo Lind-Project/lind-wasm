@@ -18,13 +18,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define __wcscpy __redirect_wcscpy
-# include <wchar.h>
-# undef __wcscpy
+#if IS_IN(libc)
+#  define __wcscpy __redirect_wcscpy
+#  include <wchar.h>
+#  undef __wcscpy
 
-# define SYMBOL_NAME wcscpy
-# include <init-arch.h>
+#  define SYMBOL_NAME wcscpy
+#  include <init-arch.h>
 
 extern __typeof (REDIRECT_NAME) OPTIMIZE (evex) attribute_hidden;
 
@@ -34,11 +34,10 @@ extern __typeof (REDIRECT_NAME) OPTIMIZE (ssse3) attribute_hidden;
 
 extern __typeof (REDIRECT_NAME) OPTIMIZE (generic) attribute_hidden;
 
-static inline void *
-inhibit_stack_protector
+static inline void *inhibit_stack_protector
 IFUNC_SELECTOR (void)
 {
-  const struct cpu_features* cpu_features = __get_cpu_features ();
+  const struct cpu_features *cpu_features = __get_cpu_features ();
 
   if (X86_ISA_CPU_FEATURE_USABLE_P (cpu_features, AVX2)
       && X86_ISA_CPU_FEATURE_USABLE_P (cpu_features, BMI2)
@@ -60,8 +59,8 @@ IFUNC_SELECTOR (void)
 
 libc_ifunc_redirected (__redirect_wcscpy, __wcscpy, IFUNC_SELECTOR ());
 weak_alias (__wcscpy, wcscpy)
-# ifdef SHARED
-__hidden_ver1 (__wcscpy, __GI___wcscpy, __redirect_wcscpy)
-  __attribute__((visibility ("hidden"))) __attribute_copy__ (wcscpy);
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (__wcscpy, __GI___wcscpy, __redirect_wcscpy)
+	__attribute__ ((visibility ("hidden"))) __attribute_copy__ (wcscpy);
+#  endif
 #endif

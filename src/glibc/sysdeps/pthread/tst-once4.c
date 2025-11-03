@@ -21,7 +21,6 @@
 #include <time.h>
 #include <unistd.h>
 
-
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
@@ -42,7 +41,7 @@ once_handler1 (void)
     }
 
   int r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("once_handler1: barrier_wait failed");
       exit (1);
@@ -53,20 +52,17 @@ once_handler1 (void)
   /* We should never get here.  */
 }
 
-
 static void
 once_handler2 (void)
 {
   global = 1;
 }
 
-
 static void
 cl (void *arg)
 {
   ++cl_called;
 }
-
 
 static void *
 tf1 (void *arg)
@@ -82,14 +78,13 @@ tf1 (void *arg)
   exit (1);
 }
 
-
 static void *
 tf2 (void *arg)
 {
   pthread_cleanup_push (cl, NULL);
 
   int r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("once_handler2: barrier_wait failed");
       exit (1);
@@ -101,7 +96,6 @@ tf2 (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -121,7 +115,7 @@ do_test (void)
     }
 
   int r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("first barrier_wait failed");
       return 1;
@@ -147,7 +141,7 @@ do_test (void)
     }
 
   r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("second barrier_wait failed");
       return 1;

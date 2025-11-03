@@ -5,4 +5,3 @@ __getgroups (int size, gid_t *list)
 {
   return 0;
 }
-

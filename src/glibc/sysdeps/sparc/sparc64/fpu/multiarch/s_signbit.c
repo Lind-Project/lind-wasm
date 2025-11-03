@@ -26,12 +26,11 @@ extern __typeof (__redirect_signbit) __signbit_vis3 attribute_hidden;
 extern __typeof (__redirect_signbit) __signbit_generic attribute_hidden;
 
 sparc_libm_ifunc_redirected (__redirect_signbit, __signbit,
-			     hwcap & HWCAP_SPARC_VIS3
-			     ? __signbit_vis3
-			     : __signbit_generic);
+			     hwcap &HWCAP_SPARC_VIS3 ? __signbit_vis3
+						     : __signbit_generic);
 
 /* On 64-bit the double version will also always work for
    long-double-precision since in both cases the word with the
    sign bit in it is passed always in register %f0.  */
 strong_alias (__signbit, __signbitl)
-sparc_ifunc_redirected_hidden_def (__redirect_signbit, __signbitl)
+    sparc_ifunc_redirected_hidden_def (__redirect_signbit, __signbitl)

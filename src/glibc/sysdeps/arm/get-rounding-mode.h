@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ARM_GET_ROUNDING_MODE_H
-#define _ARM_GET_ROUNDING_MODE_H	1
+#  define _ARM_GET_ROUNDING_MODE_H 1
 
-#include <arm-features.h>
-#include <fenv.h>
-#include <fpu_control.h>
+#  include <arm-features.h>
+#  include <fenv.h>
+#  include <fpu_control.h>
 
 /* Return the floating-point rounding mode.  */
 

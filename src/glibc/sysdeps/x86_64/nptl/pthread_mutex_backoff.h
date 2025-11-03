@@ -16,9 +16,9 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 #ifndef _PTHREAD_MUTEX_BACKOFF_H
-#define _PTHREAD_MUTEX_BACKOFF_H 1
+#  define _PTHREAD_MUTEX_BACKOFF_H 1
 
-#include <fast-jitter.h>
+#  include <fast-jitter.h>
 
 static inline unsigned int
 get_jitter (void)
@@ -26,7 +26,7 @@ get_jitter (void)
   return get_fast_jitter ();
 }
 
-#define MAX_BACKOFF 16
+#  define MAX_BACKOFF 16
 
 static inline int
 get_next_backoff (int backoff)

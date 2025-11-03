@@ -27,7 +27,6 @@
    translate it here.  */
 #include <kernel_termios.h>
 
-
 /* This is a gross hack around a kernel bug.  If the cfsetispeed functions
    is called with the SPEED argument set to zero this means use the same
    speed as for output.  But we don't have independent input and output
@@ -36,8 +35,7 @@
    We use an unused bit in the `c_iflag' field to keep track of this
    use of `cfsetispeed'.  The value here must correspond to the one used
    in `speed.c'.  */
-#define IBAUD0	020000000000
-
+#define IBAUD0 020000000000
 
 /* Set the state of FD to *TERMIOS_P.  */
 int
@@ -77,5 +75,4 @@ __tcsetattr (int fd, int optional_actions, const struct termios *termios_p)
 
   return INLINE_SYSCALL (ioctl, 3, fd, cmd, &k_termios);
 }
-weak_alias (__tcsetattr, tcsetattr)
-libc_hidden_def (tcsetattr)
+weak_alias (__tcsetattr, tcsetattr) libc_hidden_def (tcsetattr)

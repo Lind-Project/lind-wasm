@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PARAM_H
-# error "Never use <bits/param.h> directly; include <sys/param.h> instead."
+#  error "Never use <bits/param.h> directly; include <sys/param.h> instead."
 #endif
 
 #include <bits/mach/param.h>
@@ -58,23 +58,19 @@
  *	@(#)param.h	7.23 (Berkeley) 5/6/91
  */
 
-
 /* What versions of BSD we are compatible with.  */
-#define	BSD	199306		/* System version (year & month). */
-#define BSD4_3	1
-#define BSD4_4	1
+#define BSD 199306 /* System version (year & month). */
+#define BSD4_3 1
+#define BSD4_4 1
 
-#define	GNU	1994100		/* GNU version (year, month, and release).  */
-
+#define GNU 1994100 /* GNU version (year, month, and release).  */
 
 /* BSD names for some <limits.h> values.  We do not define the BSD names
    for the values which are not statically limited, such as NOFILE.  */
 
-
 /* There is nothing quite equivalent in GNU to Unix "mounts", but there is
    no limit on the number of simultaneously attached filesystems.  */
-#define NMOUNT		INT_MAX
-
+#define NMOUNT INT_MAX
 
 /* Scale factor for scaled integers used to count %cpu time and load avgs.
 
@@ -83,5 +79,5 @@
    can be calculated (assuming 32 bits) can be closely approximated using
    the formula (2 ^ (2 * (16 - FSHIFT))) for (FSHIFT < 15).  */
 
-#define	FSHIFT	11		/* Bits to right of fixed binary point.  */
-#define FSCALE	(1<<FSHIFT)
+#define FSHIFT 11 /* Bits to right of fixed binary point.  */
+#define FSCALE (1 << FSHIFT)

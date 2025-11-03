@@ -18,13 +18,13 @@
 /* Test case for x86-64 preserved registers in dynamic linker.  */
 
 #ifdef __AVX512F__
-#include <stdlib.h>
-#include <string.h>
-#include <immintrin.h>
+#  include <stdlib.h>
+#  include <string.h>
+#  include <immintrin.h>
 
 __m512i
-audit_test (__m512i x0, __m512i x1, __m512i x2, __m512i x3,
-	    __m512i x4, __m512i x5, __m512i x6, __m512i x7)
+audit_test (__m512i x0, __m512i x1, __m512i x2, __m512i x3, __m512i x4,
+	    __m512i x5, __m512i x6, __m512i x7)
 {
   __m512i zmm;
 

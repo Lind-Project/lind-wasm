@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef ffmal
 
-float
-attribute_hidden
+float attribute_hidden
 ffmal (double x, double y, double z)
 {
   return ffma (x, y, z);

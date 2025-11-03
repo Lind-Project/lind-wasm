@@ -23,7 +23,7 @@
 float
 __roundevenf (float x)
 {
-  asm volatile ("frintn \t%s0, %s1" : "=w" (x) : "w" (x));
+  asm volatile ("frintn \t%s0, %s1" : "=w"(x) : "w"(x));
   return x;
 }
 libm_alias_float (__roundeven, roundeven)

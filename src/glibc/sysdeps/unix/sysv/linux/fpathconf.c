@@ -25,7 +25,6 @@ static long int posix_fpathconf (int fd, int name);
 #define __fpathconf static posix_fpathconf
 #include <sysdeps/posix/fpathconf.c>
 
-
 /* Get file-specific information about descriptor FD.  */
 long int
 __fpathconf (int fd, int name)

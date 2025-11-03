@@ -17,26 +17,27 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TERMIOS_H
-# error "Never include <bits/termios-c_lflag.h> directly; use <termios.h> instead."
+#  error                                                                       \
+      "Never include <bits/termios-c_lflag.h> directly; use <termios.h> instead."
 #endif
 
 /* c_lflag bits */
-#define ISIG	0x00000080
-#define ICANON	0x00000100
+#define ISIG 0x00000080
+#define ICANON 0x00000100
 #if defined __USE_MISC || (defined __USE_XOPEN && !defined __USE_XOPEN2K)
-# define XCASE	0x00004000
+#  define XCASE 0x00004000
 #endif
-#define ECHO	0x00000008
-#define ECHOE	0x00000002
-#define ECHOK	0x00000004
-#define ECHONL	0x00000010
-#define NOFLSH	0x80000000
-#define TOSTOP	0x00400000
+#define ECHO 0x00000008
+#define ECHOE 0x00000002
+#define ECHOK 0x00000004
+#define ECHONL 0x00000010
+#define NOFLSH 0x80000000
+#define TOSTOP 0x00400000
 #ifdef __USE_MISC
-# define ECHOCTL	0x00000040
-# define ECHOPRT	0x00000020
-# define ECHOKE	0x00000001
-# define FLUSHO	0x00800000
-# define PENDIN	0x20000000
+#  define ECHOCTL 0x00000040
+#  define ECHOPRT 0x00000020
+#  define ECHOKE 0x00000001
+#  define FLUSHO 0x00800000
+#  define PENDIN 0x20000000
 #endif
-#define IEXTEN	0x00000400
+#define IEXTEN 0x00000400

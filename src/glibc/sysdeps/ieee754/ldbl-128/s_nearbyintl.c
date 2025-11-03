@@ -36,10 +36,9 @@ __nearbyintl (_Float128 x)
   return __builtin_nearbyintl (x);
 #else
   /* Use generic implementation.  */
-  static const _Float128
-    TWO112[2] = {
-		 L(5.19229685853482762853049632922009600E+33), /* 0x406F000000000000, 0 */
-		 L(-5.19229685853482762853049632922009600E+33)  /* 0xC06F000000000000, 0 */
+  static const _Float128 TWO112[2] = {
+    L (5.19229685853482762853049632922009600E+33), /* 0x406F000000000000, 0 */
+    L (-5.19229685853482762853049632922009600E+33) /* 0xC06F000000000000, 0 */
   };
   fenv_t env;
   int64_t i0, j0, sx;
@@ -65,9 +64,9 @@ __nearbyintl (_Float128 x)
   else
     {
       if (j0 == 0x4000)
-	return x + x;		/* inf or NaN  */
+	return x + x; /* inf or NaN  */
       else
-	return x;		/* x is integral  */
+	return x; /* x is integral  */
     }
   feholdexcept (&env);
   w = TWO112[sx] + math_opt_barrier (x);

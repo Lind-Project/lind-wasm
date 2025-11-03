@@ -26,7 +26,6 @@ extern __typeof (__redirect_nearbyint) __nearbyint_vis3 attribute_hidden;
 extern __typeof (__redirect_nearbyint) __nearbyint_generic attribute_hidden;
 
 sparc_libm_ifunc_redirected (__redirect_nearbyint, __nearbyint,
-			     hwcap & HWCAP_SPARC_VIS3
-			     ? __nearbyint_vis3
-			     : __nearbyint_generic);
+			     hwcap &HWCAP_SPARC_VIS3 ? __nearbyint_vis3
+						     : __nearbyint_generic);
 libm_alias_double (__nearbyint, nearbyint)

@@ -18,13 +18,13 @@
 
 /* Optimize the function call by setting the PLT directly to vDSO symbol.  */
 #ifdef USE_IFUNC_TIME
-# include <time.h>
-# include <sysdep.h>
-# include <sysdep-vdso.h>
+#  include <time.h>
+#  include <sysdep.h>
+#  include <sysdep-vdso.h>
 
-#ifdef SHARED
-# include <dl-vdso.h>
-# include <libc-vdso.h>
+#  ifdef SHARED
+#    include <dl-vdso.h>
+#    include <libc-vdso.h>
 
 static time_t
 time_syscall (time_t *t)
@@ -32,24 +32,22 @@ time_syscall (time_t *t)
   return INLINE_SYSCALL_CALL (time, t);
 }
 
-# undef INIT_ARCH
-# define INIT_ARCH() \
-  void *vdso_time = dl_vdso_vsym (HAVE_TIME_VSYSCALL);
+#    undef INIT_ARCH
+#    define INIT_ARCH() void *vdso_time = dl_vdso_vsym (HAVE_TIME_VSYSCALL);
 libc_ifunc (time,
-	    vdso_time ? VDSO_IFUNC_RET (vdso_time)
-		      : (void *) time_syscall);
+	    vdso_time ? VDSO_IFUNC_RET (vdso_time) : (void *) time_syscall);
 
-# else
+#  else
 time_t
 time (time_t *t)
 {
   return INLINE_VSYSCALL (time, 1, t);
 }
-# endif /* !SHARED */
-#else /* USE_IFUNC_TIME  */
-# include <time.h>
-# include <time-clockid.h>
-# include <errno.h>
+#  endif /* !SHARED */
+#else	 /* USE_IFUNC_TIME  */
+#  include <time.h>
+#  include <time-clockid.h>
+#  include <errno.h>
 
 /* Return the time now, and store it in *TIMER if not NULL.  */
 
@@ -64,15 +62,14 @@ __time64 (__time64_t *timer)
   return ts.tv_sec;
 }
 
-# if __TIMESIZE != 64
+#  if __TIMESIZE != 64
 libc_hidden_def (__time64)
 
-time_t
-__time (time_t *timer)
+    time_t __time (time_t *timer)
 {
   __time64_t t = __time64 (NULL);
 
-  if (! in_time_t_range (t))
+  if (!in_time_t_range (t))
     {
       __set_errno (EOVERFLOW);
       return -1;
@@ -82,6 +79,6 @@ __time (time_t *timer)
     *timer = t;
   return t;
 }
-# endif
+#  endif
 weak_alias (__time, time)
 #endif

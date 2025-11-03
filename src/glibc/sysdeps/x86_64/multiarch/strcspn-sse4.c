@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <isa-level.h>
-#if IS_IN (libc) || MINIMUM_X86_ISA_LEVEL >= 2
+#if IS_IN(libc) || MINIMUM_X86_ISA_LEVEL >= 2
 
-# include <nmmintrin.h>
-# include <string.h>
-# include "varshift.h"
+#  include <nmmintrin.h>
+#  include <string.h>
+#  include "varshift.h"
 
 /* We use 0x2:
 	_SIDD_SBYTE_OPS
@@ -55,35 +55,34 @@
    when either CFlag or ZFlag is 1.  If CFlag == 1, ECX has the offset
    X for case 1.  */
 
-# ifndef STRCSPN
-#  define STRCSPN __strcspn_sse42
-# endif
-# ifndef STRCSPN_GENERIC
-#  define STRCSPN_GENERIC __strcspn_generic
-# endif
+#  ifndef STRCSPN
+#    define STRCSPN __strcspn_sse42
+#  endif
+#  ifndef STRCSPN_GENERIC
+#    define STRCSPN_GENERIC __strcspn_generic
+#  endif
 
-# ifdef USE_AS_STRPBRK
-#  define RETURN(val1, val2) return val1
-# else
-#  define RETURN(val1, val2) return val2
-# endif
+#  ifdef USE_AS_STRPBRK
+#    define RETURN(val1, val2) return val1
+#  else
+#    define RETURN(val1, val2) return val2
+#  endif
 
 extern
-# ifdef USE_AS_STRPBRK
-char *
-# else
-size_t
-# endif
-STRCSPN_GENERIC (const char *, const char *) attribute_hidden;
+#  ifdef USE_AS_STRPBRK
+    char *
+#  else
+    size_t
+#  endif
+    STRCSPN_GENERIC (const char *, const char *) attribute_hidden;
 
-
-# ifdef USE_AS_STRPBRK
+#  ifdef USE_AS_STRPBRK
 char *
-# else
+#  else
 size_t
-# endif
-__attribute__ ((section (".text.sse4.2")))
-STRCSPN (const char *s, const char *a)
+#  endif
+    __attribute__ ((section (".text.sse4.2")))
+    STRCSPN (const char *s, const char *a)
 {
   if (*a == 0)
     RETURN (NULL, strlen (s));
@@ -103,15 +102,15 @@ STRCSPN (const char *s, const char *a)
       /* Find where the NULL terminator is.  */
       maskz_bits = _mm_movemask_epi8 (maskz) >> offset;
       if (maskz_bits != 0)
-        {
-          mask = __m128i_shift_right (mask0, offset);
-          offset = (unsigned int) ((size_t) s & 15);
-          if (offset)
-            goto start_unaligned;
+	{
+	  mask = __m128i_shift_right (mask0, offset);
+	  offset = (unsigned int) ((size_t) s & 15);
+	  if (offset)
+	    goto start_unaligned;
 
-          aligned = s;
-          goto start_loop;
-        }
+	  aligned = s;
+	  goto start_loop;
+	}
     }
 
   /* A is aligned.  */
@@ -122,9 +121,9 @@ STRCSPN (const char *s, const char *a)
   if (maskz_bits == 0)
     {
       /* There is no NULL terminator.  Don't use SSE4.2 if the length
-         of A > 16.  */
+	 of A > 16.  */
       if (a[16] != 0)
-        return STRCSPN_GENERIC (s, a);
+	return STRCSPN_GENERIC (s, a);
     }
 
   aligned = s;

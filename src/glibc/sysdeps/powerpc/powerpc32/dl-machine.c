@@ -29,38 +29,37 @@
 #define PLT_INITIAL_ENTRY_WORDS 18
 #define PLT_LONGBRANCH_ENTRY_WORDS 0
 #define PLT_TRAMPOLINE_ENTRY_WORDS 6
-#define PLT_DOUBLE_SIZE (1<<13)
-#define PLT_ENTRY_START_WORDS(entry_number) \
-  (PLT_INITIAL_ENTRY_WORDS + (entry_number)*2				\
-   + ((entry_number) > PLT_DOUBLE_SIZE					\
-      ? ((entry_number) - PLT_DOUBLE_SIZE)*2				\
-      : 0))
-#define PLT_DATA_START_WORDS(num_entries) PLT_ENTRY_START_WORDS(num_entries)
+#define PLT_DOUBLE_SIZE (1 << 13)
+#define PLT_ENTRY_START_WORDS(entry_number)                                   \
+  (PLT_INITIAL_ENTRY_WORDS + (entry_number) * 2                               \
+   + ((entry_number) > PLT_DOUBLE_SIZE                                        \
+	  ? ((entry_number) - PLT_DOUBLE_SIZE) * 2                            \
+	  : 0))
+#define PLT_DATA_START_WORDS(num_entries) PLT_ENTRY_START_WORDS (num_entries)
 
 /* Macros to build PowerPC opcode words.  */
-#define OPCODE_ADDI(rd,ra,simm) \
+#define OPCODE_ADDI(rd, ra, simm)                                             \
   (0x38000000 | (rd) << 21 | (ra) << 16 | ((simm) & 0xffff))
-#define OPCODE_ADDIS(rd,ra,simm) \
+#define OPCODE_ADDIS(rd, ra, simm)                                            \
   (0x3c000000 | (rd) << 21 | (ra) << 16 | ((simm) & 0xffff))
-#define OPCODE_ADD(rd,ra,rb) \
+#define OPCODE_ADD(rd, ra, rb)                                                \
   (0x7c000214 | (rd) << 21 | (ra) << 16 | (rb) << 11)
 #define OPCODE_B(target) (0x48000000 | ((target) & 0x03fffffc))
 #define OPCODE_BA(target) (0x48000002 | ((target) & 0x03fffffc))
 #define OPCODE_BCTR() 0x4e800420
-#define OPCODE_LWZ(rd,d,ra) \
+#define OPCODE_LWZ(rd, d, ra)                                                 \
   (0x80000000 | (rd) << 21 | (ra) << 16 | ((d) & 0xffff))
-#define OPCODE_LWZU(rd,d,ra) \
+#define OPCODE_LWZU(rd, d, ra)                                                \
   (0x84000000 | (rd) << 21 | (ra) << 16 | ((d) & 0xffff))
 #define OPCODE_MTCTR(rd) (0x7C0903A6 | (rd) << 21)
-#define OPCODE_RLWINM(ra,rs,sh,mb,me) \
+#define OPCODE_RLWINM(ra, rs, sh, mb, me)                                     \
   (0x54000000 | (rs) << 21 | (ra) << 16 | (sh) << 11 | (mb) << 6 | (me) << 1)
 
-#define OPCODE_LI(rd,simm)    OPCODE_ADDI(rd,0,simm)
-#define OPCODE_ADDIS_HI(rd,ra,value) \
-  OPCODE_ADDIS(rd,ra,((value) + 0x8000) >> 16)
-#define OPCODE_LIS_HI(rd,value) OPCODE_ADDIS_HI(rd,0,value)
-#define OPCODE_SLWI(ra,rs,sh) OPCODE_RLWINM(ra,rs,sh,0,31-sh)
-
+#define OPCODE_LI(rd, simm) OPCODE_ADDI (rd, 0, simm)
+#define OPCODE_ADDIS_HI(rd, ra, value)                                        \
+  OPCODE_ADDIS (rd, ra, ((value) + 0x8000) >> 16)
+#define OPCODE_LIS_HI(rd, value) OPCODE_ADDIS_HI (rd, 0, value)
+#define OPCODE_SLWI(ra, rs, sh) OPCODE_RLWINM (ra, rs, sh, 0, 31 - sh)
 
 #define PPC_DCBST(where) asm volatile ("dcbst 0,%0" : : "r"(where) : "memory")
 #define PPC_SYNC asm volatile ("sync" : : : "memory")
@@ -70,12 +69,24 @@
 
 /* Use this when you've modified some code, but it won't be in the
    instruction fetch queue (or when it doesn't matter if it is). */
-#define MODIFIED_CODE_NOQUEUE(where) \
-     do { PPC_DCBST(where); PPC_SYNC; PPC_ICBI(where); } while (0)
+#define MODIFIED_CODE_NOQUEUE(where)                                          \
+  do                                                                          \
+    {                                                                         \
+      PPC_DCBST (where);                                                      \
+      PPC_SYNC;                                                               \
+      PPC_ICBI (where);                                                       \
+    }                                                                         \
+  while (0)
 /* Use this when it might be in the instruction queue. */
-#define MODIFIED_CODE(where) \
-     do { PPC_DCBST(where); PPC_SYNC; PPC_ICBI(where); PPC_ISYNC; } while (0)
-
+#define MODIFIED_CODE(where)                                                  \
+  do                                                                          \
+    {                                                                         \
+      PPC_DCBST (where);                                                      \
+      PPC_SYNC;                                                               \
+      PPC_ICBI (where);                                                       \
+      PPC_ISYNC;                                                              \
+    }                                                                         \
+  while (0)
 
 /* The idea here is that to conform to the ABI, we are supposed to try
    to load dynamic objects between 0x10000 (we actually use 0x40000 as
@@ -86,11 +97,10 @@
    mmap, so if we get it wrong the worst that happens is that it gets
    mapped somewhere else.  */
 
-ElfW(Addr)
-__elf_preferred_address (struct link_map *loader, size_t maplength,
-			 ElfW(Addr) mapstartpref)
+ElfW (Addr) __elf_preferred_address (struct link_map *loader, size_t maplength,
+				     ElfW (Addr) mapstartpref)
 {
-  ElfW(Addr) low, high;
+  ElfW (Addr) low, high;
   struct link_map *l;
   Lmid_t nsid;
 
@@ -102,21 +112,20 @@ __elf_preferred_address (struct link_map *loader, size_t maplength,
      0x70000000.  0x3FFFF is so that references off NULL pointers will
      cause a segfault, 0x70000000 is just paranoia (it should always
      be superseded by the program's load address).  */
-  low =  0x0003FFFF;
+  low = 0x0003FFFF;
   high = 0x70000000;
   for (nsid = 0; nsid < DL_NNS; ++nsid)
-    for (l = GL(dl_ns)[nsid]._ns_loaded; l; l = l->l_next)
+    for (l = GL (dl_ns)[nsid]._ns_loaded; l; l = l->l_next)
       {
-	ElfW(Addr) mapstart, mapend;
-	mapstart = l->l_map_start & ~(GLRO(dl_pagesize) - 1);
-	mapend = l->l_map_end | (GLRO(dl_pagesize) - 1);
+	ElfW (Addr) mapstart, mapend;
+	mapstart = l->l_map_start & ~(GLRO (dl_pagesize) - 1);
+	mapend = l->l_map_end | (GLRO (dl_pagesize) - 1);
 	assert (mapend > mapstart);
 
 	/* Prefer gaps below the main executable, note that l ==
 	   _dl_loaded does not work for static binaries loading
 	   e.g. libnss_*.so.  */
-	if ((mapend >= high || l->l_type == lt_executable)
-	    && high >= mapstart)
+	if ((mapend >= high || l->l_type == lt_executable) && high >= mapstart)
 	  high = mapstart;
 	else if (mapend >= low && low >= mapstart)
 	  low = mapend;
@@ -130,10 +139,10 @@ __elf_preferred_address (struct link_map *loader, size_t maplength,
       }
 
   high -= 0x10000; /* Allow some room between objects.  */
-  maplength = (maplength | (GLRO(dl_pagesize) - 1)) + 1;
-  if (high <= low || high - low < maplength )
+  maplength = (maplength | (GLRO (dl_pagesize) - 1)) + 1;
+  if (high <= low || high - low < maplength)
     return 0;
-  return high - maplength;  /* Both high and maplength are page-aligned.  */
+  return high - maplength; /* Both high and maplength are page-aligned.  */
 }
 
 /* Set up the loaded object described by L so its unrelocated PLT
@@ -147,7 +156,7 @@ __elf_preferred_address (struct link_map *loader, size_t maplength,
 	absolute branch.  These are set up in __elf_machine_fixup_plt.
 
    (2)	Short lazy entries.  These cover the first 8192 slots in
-        the PLT, and look like (where 'index' goes from 0 to 8191):
+	the PLT, and look like (where 'index' goes from 0 to 8191):
 
 	li %r11, index*4
 	b  &plt[PLT_TRAMPOLINE_ENTRY_WORDS+1]
@@ -202,8 +211,8 @@ __elf_machine_runtime_setup (struct link_map *map, int lazy, int profile)
     {
       Elf32_Word i;
       Elf32_Word *plt = (Elf32_Word *) D_PTR (map, l_info[DT_PLTGOT]);
-      Elf32_Word num_plt_entries = (map->l_info[DT_PLTRELSZ]->d_un.d_val
-				    / sizeof (Elf32_Rela));
+      Elf32_Word num_plt_entries
+	  = (map->l_info[DT_PLTRELSZ]->d_un.d_val / sizeof (Elf32_Rela));
       Elf32_Word rel_offset_words = PLT_DATA_START_WORDS (num_plt_entries);
       Elf32_Word data_words = (Elf32_Word) (plt + rel_offset_words);
       Elf32_Word size_modified;
@@ -227,14 +236,13 @@ __elf_machine_runtime_setup (struct link_map *map, int lazy, int profile)
 	  Elf32_Word offset;
 
 #if !defined PROF && defined SHARED
-	  dlrr = (Elf32_Word) (profile
-			       ? _dl_prof_resolve
-			       : _dl_runtime_resolve);
-	  if (profile && GLRO(dl_profile) != NULL
-	      && _dl_name_match_p (GLRO(dl_profile), map))
+	  dlrr = (Elf32_Word) (profile ? _dl_prof_resolve
+				       : _dl_runtime_resolve);
+	  if (profile && GLRO (dl_profile) != NULL
+	      && _dl_name_match_p (GLRO (dl_profile), map))
 	    /* This is the object we are looking for.  Say that we really
 	       want profiling and the timers are started.  */
-	    GL(dl_profile_map) = map;
+	    GL (dl_profile_map) = map;
 #else
 	  dlrr = (Elf32_Word) _dl_runtime_resolve;
 #endif
@@ -275,21 +283,19 @@ __elf_machine_runtime_setup (struct link_map *map, int lazy, int profile)
 	  i = 0;
 	  while (i < num_plt_entries && i < PLT_DOUBLE_SIZE)
 	    {
-	      plt[offset  ] = OPCODE_LI (11, i * 4);
-	      plt[offset+1] = OPCODE_B ((PLT_TRAMPOLINE_ENTRY_WORDS + 2
-					 - (offset+1))
-					* 4);
+	      plt[offset] = OPCODE_LI (11, i * 4);
+	      plt[offset + 1] = OPCODE_B (
+		  (PLT_TRAMPOLINE_ENTRY_WORDS + 2 - (offset + 1)) * 4);
 	      i++;
 	      offset += 2;
 	    }
 	  while (i < num_plt_entries)
 	    {
-	      plt[offset  ] = OPCODE_LIS_HI (11, i * 4 + data_words);
-	      plt[offset+1] = OPCODE_LWZU (12, i * 4 + data_words, 11);
-	      plt[offset+2] = OPCODE_B ((PLT_TRAMPOLINE_ENTRY_WORDS
-					 - (offset+2))
-					* 4);
-	      plt[offset+3] = OPCODE_BCTR ();
+	      plt[offset] = OPCODE_LIS_HI (11, i * 4 + data_words);
+	      plt[offset + 1] = OPCODE_LWZU (12, i * 4 + data_words, 11);
+	      plt[offset + 2]
+		  = OPCODE_B ((PLT_TRAMPOLINE_ENTRY_WORDS - (offset + 2)) * 4);
+	      plt[offset + 3] = OPCODE_BCTR ();
 	      i++;
 	      offset += 4;
 	    }
@@ -309,18 +315,18 @@ __elf_machine_runtime_setup (struct link_map *map, int lazy, int profile)
       /* Default minimum 4 words per cache line.  */
       int line_size_words = 4;
 
-      if (lazy && GLRO(dl_cache_line_size) != 0)
+      if (lazy && GLRO (dl_cache_line_size) != 0)
 	/* Convert bytes to words.  */
-	line_size_words = GLRO(dl_cache_line_size) / 4;
+	line_size_words = GLRO (dl_cache_line_size) / 4;
 
       size_modified = lazy ? rel_offset_words : 6;
       for (i = 0; i < size_modified; i += line_size_words)
-        PPC_DCBST (plt + i);
+	PPC_DCBST (plt + i);
       PPC_DCBST (plt + size_modified - 1);
       PPC_SYNC;
 
       for (i = 0; i < size_modified; i += line_size_words)
-        PPC_ICBI (plt + i);
+	PPC_ICBI (plt + i);
       PPC_ICBI (plt + size_modified - 1);
       PPC_ISYNC;
     }
@@ -329,8 +335,8 @@ __elf_machine_runtime_setup (struct link_map *map, int lazy, int profile)
 }
 
 Elf32_Addr
-__elf_machine_fixup_plt (struct link_map *map,
-			 Elf32_Addr *reloc_addr, Elf32_Addr finaladdr)
+__elf_machine_fixup_plt (struct link_map *map, Elf32_Addr *reloc_addr,
+			 Elf32_Addr finaladdr)
 {
   Elf32_Sword delta = finaladdr - (Elf32_Word) reloc_addr;
   if (delta << 6 >> 6 == delta)
@@ -342,11 +348,11 @@ __elf_machine_fixup_plt (struct link_map *map,
       Elf32_Word *plt, *data_words;
       Elf32_Word index, offset, num_plt_entries;
 
-      num_plt_entries = (map->l_info[DT_PLTRELSZ]->d_un.d_val
-			 / sizeof (Elf32_Rela));
+      num_plt_entries
+	  = (map->l_info[DT_PLTRELSZ]->d_un.d_val / sizeof (Elf32_Rela));
       plt = (Elf32_Word *) D_PTR (map, l_info[DT_PLTGOT]);
       offset = reloc_addr - plt;
-      index = (offset - PLT_INITIAL_ENTRY_WORDS)/2;
+      index = (offset - PLT_INITIAL_ENTRY_WORDS) / 2;
       data_words = plt + PLT_DATA_START_WORDS (num_plt_entries);
 
       reloc_addr += 1;
@@ -355,12 +361,12 @@ __elf_machine_fixup_plt (struct link_map *map,
 	{
 	  data_words[index] = finaladdr;
 	  PPC_SYNC;
-	  *reloc_addr = OPCODE_B ((PLT_LONGBRANCH_ENTRY_WORDS - (offset+1))
-				  * 4);
+	  *reloc_addr
+	      = OPCODE_B ((PLT_LONGBRANCH_ENTRY_WORDS - (offset + 1)) * 4);
 	}
       else
 	{
-	  index -= (index - PLT_DOUBLE_SIZE)/2;
+	  index -= (index - PLT_DOUBLE_SIZE) / 2;
 
 	  data_words[index] = finaladdr;
 	  PPC_SYNC;
@@ -369,8 +375,8 @@ __elf_machine_fixup_plt (struct link_map *map,
 	  MODIFIED_CODE_NOQUEUE (reloc_addr + 1);
 	  PPC_SYNC;
 
-	  reloc_addr[0] = OPCODE_LWZ (12,
-				      (Elf32_Word) (data_words + index), 11);
+	  reloc_addr[0]
+	      = OPCODE_LWZ (12, (Elf32_Word) (data_words + index), 11);
 	}
     }
   MODIFIED_CODE (reloc_addr);
@@ -378,10 +384,8 @@ __elf_machine_fixup_plt (struct link_map *map,
 }
 
 void
-_dl_reloc_overflow (struct link_map *map,
-		    const char *name,
-		    Elf32_Addr *const reloc_addr,
-		    const Elf32_Sym *refsym)
+_dl_reloc_overflow (struct link_map *map, const char *name,
+		    Elf32_Addr *const reloc_addr, const Elf32_Sym *refsym)
 {
   char buffer[128];
   char *t;
@@ -402,20 +406,16 @@ _dl_reloc_overflow (struct link_map *map,
 }
 
 void
-__process_machine_rela (struct link_map *map,
-			const Elf32_Rela *reloc,
-			struct link_map *sym_map,
-			const Elf32_Sym *sym,
-			const Elf32_Sym *refsym,
-			Elf32_Addr *const reloc_addr,
-			Elf32_Addr const finaladdr,
-			int rinfo, bool skip_ifunc)
+__process_machine_rela (struct link_map *map, const Elf32_Rela *reloc,
+			struct link_map *sym_map, const Elf32_Sym *sym,
+			const Elf32_Sym *refsym, Elf32_Addr *const reloc_addr,
+			Elf32_Addr const finaladdr, int rinfo, bool skip_ifunc)
 {
   union unaligned
-    {
-      uint16_t u2;
-      uint32_t u4;
-    } __attribute__((__packed__));
+  {
+    uint16_t u2;
+    uint32_t u4;
+  } __attribute__ ((__packed__));
 
   switch (rinfo)
     {
@@ -439,51 +439,51 @@ __process_machine_rela (struct link_map *map,
 
     case R_PPC_ADDR24:
       if (__glibc_unlikely (finaladdr > 0x01fffffc && finaladdr < 0xfe000000))
-	_dl_reloc_overflow (map,  "R_PPC_ADDR24", reloc_addr, refsym);
+	_dl_reloc_overflow (map, "R_PPC_ADDR24", reloc_addr, refsym);
       *reloc_addr = (*reloc_addr & 0xfc000003) | (finaladdr & 0x3fffffc);
       break;
 
     case R_PPC_ADDR16:
       if (__glibc_unlikely (finaladdr > 0x7fff && finaladdr < 0xffff8000))
-	_dl_reloc_overflow (map,  "R_PPC_ADDR16", reloc_addr, refsym);
-      *(Elf32_Half*) reloc_addr = finaladdr;
+	_dl_reloc_overflow (map, "R_PPC_ADDR16", reloc_addr, refsym);
+      *(Elf32_Half *) reloc_addr = finaladdr;
       break;
 
     case R_PPC_UADDR16:
       if (__glibc_unlikely (finaladdr > 0x7fff && finaladdr < 0xffff8000))
-	_dl_reloc_overflow (map,  "R_PPC_UADDR16", reloc_addr, refsym);
+	_dl_reloc_overflow (map, "R_PPC_UADDR16", reloc_addr, refsym);
       ((union unaligned *) reloc_addr)->u2 = finaladdr;
       break;
 
     case R_PPC_ADDR16_LO:
-      *(Elf32_Half*) reloc_addr = finaladdr;
+      *(Elf32_Half *) reloc_addr = finaladdr;
       break;
 
     case R_PPC_ADDR16_HI:
-      *(Elf32_Half*) reloc_addr = finaladdr >> 16;
+      *(Elf32_Half *) reloc_addr = finaladdr >> 16;
       break;
 
     case R_PPC_ADDR16_HA:
-      *(Elf32_Half*) reloc_addr = (finaladdr + 0x8000) >> 16;
+      *(Elf32_Half *) reloc_addr = (finaladdr + 0x8000) >> 16;
       break;
 
     case R_PPC_ADDR14:
     case R_PPC_ADDR14_BRTAKEN:
     case R_PPC_ADDR14_BRNTAKEN:
       if (__glibc_unlikely (finaladdr > 0x7fff && finaladdr < 0xffff8000))
-	_dl_reloc_overflow (map,  "R_PPC_ADDR14", reloc_addr, refsym);
+	_dl_reloc_overflow (map, "R_PPC_ADDR14", reloc_addr, refsym);
       *reloc_addr = (*reloc_addr & 0xffff0003) | (finaladdr & 0xfffc);
       if (rinfo != R_PPC_ADDR14)
-	*reloc_addr = ((*reloc_addr & 0xffdfffff)
-		       | ((rinfo == R_PPC_ADDR14_BRTAKEN)
-			  ^ (finaladdr >> 31)) << 21);
+	*reloc_addr
+	    = ((*reloc_addr & 0xffdfffff)
+	       | ((rinfo == R_PPC_ADDR14_BRTAKEN) ^ (finaladdr >> 31)) << 21);
       break;
 
     case R_PPC_REL24:
       {
 	Elf32_Sword delta = finaladdr - (Elf32_Word) reloc_addr;
 	if (delta << 6 >> 6 != delta)
-	  _dl_reloc_overflow (map,  "R_PPC_REL24", reloc_addr, refsym);
+	  _dl_reloc_overflow (map, "R_PPC_REL24", reloc_addr, refsym);
 	*reloc_addr = (*reloc_addr & 0xfc000003) | (delta & 0x3fffffc);
       }
       break;
@@ -494,7 +494,7 @@ __process_machine_rela (struct link_map *map,
 	   found.  */
 	return;
       if (sym->st_size > refsym->st_size
-	  || (GLRO(dl_verbose) && sym->st_size < refsym->st_size))
+	  || (GLRO (dl_verbose) && sym->st_size < refsym->st_size))
 	{
 	  const char *strtab;
 
@@ -503,8 +503,8 @@ __process_machine_rela (struct link_map *map,
 %s: Symbol `%s' has different size in shared object, consider re-linking\n",
 			    RTLD_PROGNAME, strtab + refsym->st_name);
 	}
-      memcpy (reloc_addr, (char *) finaladdr, MIN (sym->st_size,
-						   refsym->st_size));
+      memcpy (reloc_addr, (char *) finaladdr,
+	      MIN (sym->st_size, refsym->st_size));
       return;
 
     case R_PPC_REL32:
@@ -515,7 +515,7 @@ __process_machine_rela (struct link_map *map,
       /* It used to be that elf_machine_fixup_plt was used here,
 	 but that doesn't work when ld.so relocates itself
 	 for the second time.  On the bright side, there's
-         no need to worry about thread-safety here.  */
+	 no need to worry about thread-safety here.  */
       {
 	Elf32_Sword delta = finaladdr - (Elf32_Word) reloc_addr;
 	if (delta << 6 >> 6 == delta)
@@ -530,17 +530,16 @@ __process_machine_rela (struct link_map *map,
 	    plt = (Elf32_Word *) D_PTR (map, l_info[DT_PLTGOT]);
 	    offset = reloc_addr - plt;
 
-	    if (offset < PLT_DOUBLE_SIZE*2 + PLT_INITIAL_ENTRY_WORDS)
+	    if (offset < PLT_DOUBLE_SIZE * 2 + PLT_INITIAL_ENTRY_WORDS)
 	      {
-		index = (offset - PLT_INITIAL_ENTRY_WORDS)/2;
+		index = (offset - PLT_INITIAL_ENTRY_WORDS) / 2;
 		num_plt_entries = (map->l_info[DT_PLTRELSZ]->d_un.d_val
 				   / sizeof (Elf32_Rela));
 		data_words = plt + PLT_DATA_START_WORDS (num_plt_entries);
 		data_words[index] = finaladdr;
 		reloc_addr[0] = OPCODE_LI (11, index * 4);
-		reloc_addr[1] = OPCODE_B ((PLT_LONGBRANCH_ENTRY_WORDS
-					   - (offset+1))
-					  * 4);
+		reloc_addr[1] = OPCODE_B (
+		    (PLT_LONGBRANCH_ENTRY_WORDS - (offset + 1)) * 4);
 		MODIFIED_CODE_NOQUEUE (reloc_addr + 1);
 	      }
 	    else
@@ -555,45 +554,45 @@ __process_machine_rela (struct link_map *map,
       }
       break;
 
-#define DO_TLS_RELOC(suffix)						      \
-    case R_PPC_DTPREL##suffix:						      \
-      /* During relocation all TLS symbols are defined and used.	      \
-	 Therefore the offset is already correct.  */			      \
-      if (sym_map != NULL)						      \
-	do_reloc##suffix ("R_PPC_DTPREL"#suffix,			      \
-			  TLS_DTPREL_VALUE (sym, reloc));		      \
-      break;								      \
-    case R_PPC_TPREL##suffix:						      \
-      if (sym_map != NULL)						      \
-	{								      \
-	  CHECK_STATIC_TLS (map, sym_map);				      \
-	  do_reloc##suffix ("R_PPC_TPREL"#suffix,			      \
-			    TLS_TPREL_VALUE (sym_map, sym, reloc));	      \
-	}								      \
-      break;
+#define DO_TLS_RELOC(suffix)                                                  \
+  case R_PPC_DTPREL##suffix:                                                  \
+    /* During relocation all TLS symbols are defined and used.                \
+       Therefore the offset is already correct.  */                           \
+    if (sym_map != NULL)                                                      \
+      do_reloc##suffix ("R_PPC_DTPREL" #suffix,                               \
+			TLS_DTPREL_VALUE (sym, reloc));                       \
+    break;                                                                    \
+  case R_PPC_TPREL##suffix:                                                   \
+    if (sym_map != NULL)                                                      \
+      {                                                                       \
+	CHECK_STATIC_TLS (map, sym_map);                                      \
+	do_reloc##suffix ("R_PPC_TPREL" #suffix,                              \
+			  TLS_TPREL_VALUE (sym_map, sym, reloc));             \
+      }                                                                       \
+    break;
 
-    inline void do_reloc16 (const char *r_name, Elf32_Addr value)
+      inline void do_reloc16 (const char *r_name, Elf32_Addr value)
       {
 	if (__glibc_unlikely (value > 0x7fff && value < 0xffff8000))
 	  _dl_reloc_overflow (map, r_name, reloc_addr, refsym);
 	*(Elf32_Half *) reloc_addr = value;
       }
-    inline void do_reloc16_LO (const char *r_name, Elf32_Addr value)
+      inline void do_reloc16_LO (const char *r_name, Elf32_Addr value)
       {
 	*(Elf32_Half *) reloc_addr = value;
       }
-    inline void do_reloc16_HI (const char *r_name, Elf32_Addr value)
+      inline void do_reloc16_HI (const char *r_name, Elf32_Addr value)
       {
 	*(Elf32_Half *) reloc_addr = value >> 16;
       }
-    inline void do_reloc16_HA (const char *r_name, Elf32_Addr value)
+      inline void do_reloc16_HA (const char *r_name, Elf32_Addr value)
       {
 	*(Elf32_Half *) reloc_addr = (value + 0x8000) >> 16;
       }
-    DO_TLS_RELOC (16)
-    DO_TLS_RELOC (16_LO)
-    DO_TLS_RELOC (16_HI)
-    DO_TLS_RELOC (16_HA)
+      DO_TLS_RELOC (16)
+      DO_TLS_RELOC (16_LO)
+      DO_TLS_RELOC (16_HI)
+      DO_TLS_RELOC (16_HA)
 
     default:
       _dl_reloc_bad_type (map, rinfo, 0);

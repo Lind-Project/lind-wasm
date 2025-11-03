@@ -60,8 +60,8 @@ tf (void *arg)
       exit (1);
     }
 
-  char *argv[] = { (char *) _PATH_BSHELL, (char *) "-c", (char *) "echo $$",
-		   NULL };
+  char *argv[]
+      = { (char *) _PATH_BSHELL, (char *) "-c", (char *) "echo $$", NULL };
   if (posix_spawn (&pid, _PATH_BSHELL, &a, NULL, argv, NULL) != 0)
     {
       puts ("error: spawn failed");
@@ -70,7 +70,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -139,7 +138,7 @@ do_test (void)
       if (rpid != pid)
 	{
 	  printf ("error: found \"%s\", expected PID %ld\n", buf,
-		 (long int) pid);
+		  (long int) pid);
 	  exit (1);
 	}
 

@@ -63,14 +63,13 @@ xmodify_ldt (int func, const void *ptr, unsigned long bytecount)
 }
 
 static int
-futex (int *uaddr, int futex_op, int val, void *timeout, int *uaddr2,
-	int val3)
+futex (int *uaddr, int futex_op, int val, void *timeout, int *uaddr2, int val3)
 {
   return syscall (SYS_futex, uaddr, futex_op, val, timeout, uaddr2, val3);
 }
 
 static void
-xsethandler (int sig, void (*handler)(int, siginfo_t *, void *), int flags)
+xsethandler (int sig, void (*handler) (int, siginfo_t *, void *), int flags)
 {
   struct sigaction sa = { 0 };
   sa.sa_sigaction = handler;
@@ -108,19 +107,19 @@ setup_counter_page (void)
 static void
 setup_low_user_desc (void)
 {
-  low_user_desc = xmmap (NULL, 2 * sizeof (struct user_desc),
-			 PROT_READ | PROT_WRITE,
-			 MAP_ANONYMOUS | MAP_PRIVATE | MAP_32BIT, -1);
+  low_user_desc
+      = xmmap (NULL, 2 * sizeof (struct user_desc), PROT_READ | PROT_WRITE,
+	       MAP_ANONYMOUS | MAP_PRIVATE | MAP_32BIT, -1);
 
-  low_user_desc->entry_number    = -1;
-  low_user_desc->base_addr       = (unsigned long) &counter_page[1];
-  low_user_desc->limit           = 0xffff;
-  low_user_desc->seg_32bit       = 1;
-  low_user_desc->contents        = 0;
-  low_user_desc->read_exec_only  = 0;
-  low_user_desc->limit_in_pages  = 1;
+  low_user_desc->entry_number = -1;
+  low_user_desc->base_addr = (unsigned long) &counter_page[1];
+  low_user_desc->limit = 0xffff;
+  low_user_desc->seg_32bit = 1;
+  low_user_desc->contents = 0;
+  low_user_desc->read_exec_only = 0;
+  low_user_desc->limit_in_pages = 1;
   low_user_desc->seg_not_present = 0;
-  low_user_desc->useable         = 0;
+  low_user_desc->useable = 0;
 
   xset_thread_area (low_user_desc);
 
@@ -166,7 +165,6 @@ threadproc (void *ctx)
     }
 }
 
-
 /* As described in testcase, for historical reasons x86_32 Linux (and compat
    on x86_64) interprets SA_RESTORER clear with nonzero sa_restorer as a
    request for stack switching if the SS segment is 'funny' (this is default
@@ -196,7 +194,6 @@ do_test (void)
 
   thread = xpthread_create (0, threadproc, 0);
 
-
   for (int i = 0; i < 5; i++)
     {
       if (sigsetjmp (jmpbuf, 1) != 0)
@@ -213,23 +210,21 @@ do_test (void)
       while (atomic_load (&ftx) != 0)
 	;
 
-      struct user_desc desc = {
-	.entry_number       = 0,
-	.base_addr          = 0,
-	.limit              = 0xffff,
-	.seg_32bit          = 1,
-	.contents           = 0,
-	.read_exec_only     = 0,
-	.limit_in_pages     = 1,
-	.seg_not_present    = 0,
-	.useable            = 0
-      };
+      struct user_desc desc = { .entry_number = 0,
+				.base_addr = 0,
+				.limit = 0xffff,
+				.seg_32bit = 1,
+				.contents = 0,
+				.read_exec_only = 0,
+				.limit_in_pages = 1,
+				.seg_not_present = 0,
+				.useable = 0 };
 
       xmodify_ldt (0x11, &desc, sizeof (desc));
 
       /* Arm the thread.  We loop here until we've woken up one thread.  */
       atomic_store (&ftx, 1);
-      while (futex ((int*) &ftx, FUTEX_WAKE, 1, NULL, NULL, 0) < 1)
+      while (futex ((int *) &ftx, FUTEX_WAKE, 1, NULL, NULL, 0) < 1)
 	;
 
       /* Give the thread a chance to get into it's busy loop.  */
@@ -253,7 +248,7 @@ do_test (void)
     }
 
   atomic_store (&ftx, 100);
-  futex ((int*) &ftx, FUTEX_WAKE, 0, NULL, NULL, 0);
+  futex ((int *) &ftx, FUTEX_WAKE, 0, NULL, NULL, 0);
 
   xpthread_join (thread);
 

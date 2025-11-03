@@ -21,15 +21,13 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-
 static const _Float128 zero = 0.0;
-
 
 _Float128
 __remquol (_Float128 x, _Float128 y, int *quo)
 {
-  int64_t hx,hy;
-  uint64_t sx,lx,ly,qs;
+  int64_t hx, hy;
+  uint64_t sx, lx, ly, qs;
   int cquo;
 
   GET_LDOUBLE_WORDS64 (hx, lx, x);
@@ -41,14 +39,14 @@ __remquol (_Float128 x, _Float128 y, int *quo)
 
   /* Purge off exception values.  */
   if ((hy | ly) == 0)
-    return (x * y) / (x * y); 			/* y = 0 */
-  if ((hx >= 0x7fff000000000000LL)		/* x not finite */
-      || ((hy >= 0x7fff000000000000LL)		/* y is NaN */
+    return (x * y) / (x * y);	       /* y = 0 */
+  if ((hx >= 0x7fff000000000000LL)     /* x not finite */
+      || ((hy >= 0x7fff000000000000LL) /* y is NaN */
 	  && (((hy - 0x7fff000000000000LL) | ly) != 0)))
     return (x * y) / (x * y);
 
   if (hy <= 0x7ffbffffffffffffLL)
-    x = __ieee754_fmodl (x, 8 * y);              /* now x < 8y */
+    x = __ieee754_fmodl (x, 8 * y); /* now x < 8y */
 
   if (((hx - hy) | (lx - ly)) == 0)
     {
@@ -56,8 +54,8 @@ __remquol (_Float128 x, _Float128 y, int *quo)
       return zero * x;
     }
 
-  x  = fabsl (x);
-  y  = fabsl (y);
+  x = fabsl (x);
+  y = fabsl (y);
   cquo = 0;
 
   if (hy <= 0x7ffcffffffffffffLL && x >= 4 * y)
@@ -86,7 +84,7 @@ __remquol (_Float128 x, _Float128 y, int *quo)
     }
   else
     {
-      _Float128 y_half = L(0.5) * y;
+      _Float128 y_half = L (0.5) * y;
       if (x > y_half)
 	{
 	  x -= y;

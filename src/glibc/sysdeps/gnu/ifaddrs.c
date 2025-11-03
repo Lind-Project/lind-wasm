@@ -45,7 +45,7 @@ __getifaddrs (struct ifaddrs **ifap)
     return -1;
 
   __ifreq (&ifreqs, &nifs, fd);
-  if (ifreqs == NULL)		/* XXX doesn't distinguish error vs none */
+  if (ifreqs == NULL) /* XXX doesn't distinguish error vs none */
     {
       __close (fd);
       return -1;
@@ -131,8 +131,9 @@ __getifaddrs (struct ifaddrs **ifap)
 	  storage[i].ia.ifa_data = NULL; /* Nothing here for now.  */
 
 	  ifr = __if_nextreq (ifr);
-	} while (++i < nifs);
-      if (i < nifs)		/* Broke out early on error.  */
+	}
+      while (++i < nifs);
+      if (i < nifs) /* Broke out early on error.  */
 	{
 	  __close (fd);
 	  free (storage);
@@ -150,17 +151,14 @@ __getifaddrs (struct ifaddrs **ifap)
 
   return 0;
 }
-weak_alias (__getifaddrs, getifaddrs)
-libc_hidden_def (__getifaddrs)
+weak_alias (__getifaddrs, getifaddrs) libc_hidden_def (__getifaddrs)
 #ifndef getifaddrs
-libc_hidden_weak (getifaddrs)
+    libc_hidden_weak (getifaddrs)
 #endif
 
-void
-__freeifaddrs (struct ifaddrs *ifa)
+	void __freeifaddrs (struct ifaddrs *ifa)
 {
   free (ifa);
 }
-weak_alias (__freeifaddrs, freeifaddrs)
-libc_hidden_def (__freeifaddrs)
-libc_hidden_weak (freeifaddrs)
+weak_alias (__freeifaddrs, freeifaddrs) libc_hidden_def (__freeifaddrs)
+    libc_hidden_weak (freeifaddrs)

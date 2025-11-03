@@ -18,15 +18,14 @@
 
 #include <shlib-compat.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_1)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_1)
 
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/wait.h>
-#include <tv32-compat.h>
+#  include <sys/time.h>
+#  include <sys/resource.h>
+#  include <sys/wait.h>
+#  include <tv32-compat.h>
 
-pid_t
-attribute_compat_text_section
+pid_t attribute_compat_text_section
 __wait4_tv32 (pid_t pid, int *status, int options, struct __rusage32 *usage32)
 {
   struct rusage usage;

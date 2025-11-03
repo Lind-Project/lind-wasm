@@ -21,8 +21,7 @@
 
 static int called = 0;
 
-static void
-__attribute__ ((constructor))
+static void __attribute__ ((constructor))
 init (void)
 {
   called = 1;

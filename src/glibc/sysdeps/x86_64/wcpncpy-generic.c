@@ -26,6 +26,6 @@
 
 #if MINIMUM_X86_ISA_LEVEL <= 2
 
-# include <wcsmbs/wcpncpy.c>
+#  include <wcsmbs/wcpncpy.c>
 
 #endif

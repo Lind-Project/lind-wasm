@@ -40,7 +40,6 @@ __libc_openat (int fd, const char *file, int oflag, ...)
 
   return SYSCALL_CANCEL (openat, fd, file, oflag, mode);
 }
-weak_alias (__libc_openat, __openat)
-libc_hidden_weak (__openat)
-weak_alias (__libc_openat, openat)
+weak_alias (__libc_openat, __openat) libc_hidden_weak (__openat)
+    weak_alias (__libc_openat, openat)
 #endif

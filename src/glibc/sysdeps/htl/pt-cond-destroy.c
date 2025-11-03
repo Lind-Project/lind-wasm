@@ -36,7 +36,7 @@ __pthread_cond_destroy (pthread_cond_t *cond)
   while (wrefs >> 1 != 0)
     {
       __gsync_wait (__mach_task_self (), (vm_offset_t) &cond->__wrefs, wrefs,
-		  0, 0, 0);
+		    0, 0, 0);
       wrefs = atomic_load_acquire (&cond->__wrefs);
     }
   /* The memory the condvar occupies can now be reused.  */

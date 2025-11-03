@@ -17,18 +17,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef THRD_PRIV_H
-# define THRD_PRIV_H
+#define THRD_PRIV_H
 
 #include <features.h>
 #include <threads.h>
 #include <errno.h>
-#include "pthreadP.h"	/* For pthread_{mutex,cond}_t definitions.  */
+#include "pthreadP.h" /* For pthread_{mutex,cond}_t definitions.  */
 
 static __always_inline int
 thrd_err_map (int err_code)
 {
   switch (err_code)
-  {
+    {
     case 0:
       return thrd_success;
     case ENOMEM:
@@ -39,7 +39,7 @@ thrd_err_map (int err_code)
       return thrd_busy;
     default:
       return thrd_error;
-  }
+    }
 }
 
 #endif

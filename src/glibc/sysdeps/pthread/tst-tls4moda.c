@@ -18,8 +18,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-static __thread unsigned char foo [32]
-  __attribute__ ((tls_model ("local-exec"), aligned (sizeof (void *))));
+static __thread unsigned char foo[32]
+    __attribute__ ((tls_model ("local-exec"), aligned (sizeof (void *))));
 
 void
 test1 (void)
@@ -28,9 +28,9 @@ test1 (void)
 
   for (s = 0; s < sizeof (foo); ++s)
     {
-      if (foo [s])
+      if (foo[s])
 	abort ();
-      foo [s] = s;
+      foo[s] = s;
     }
 }
 
@@ -41,8 +41,8 @@ test2 (void)
 
   for (s = 0; s < sizeof (foo); ++s)
     {
-      if (foo [s] != s)
+      if (foo[s] != s)
 	abort ();
-      foo [s] = sizeof (foo) - s;
+      foo[s] = sizeof (foo) - s;
     }
 }

@@ -22,7 +22,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static const char text[] = "This is a test; this is a test";
 
 int

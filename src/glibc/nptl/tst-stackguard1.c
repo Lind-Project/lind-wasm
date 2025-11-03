@@ -150,8 +150,9 @@ do_test (void)
 
       close (fds[1]);
 
-      if (TEMP_FAILURE_RETRY (read (fds[0], &child_stack_chk_guards[i],
-				    sizeof (uintptr_t))) != sizeof (uintptr_t))
+      if (TEMP_FAILURE_RETRY (
+	      read (fds[0], &child_stack_chk_guards[i], sizeof (uintptr_t)))
+	  != sizeof (uintptr_t))
 	{
 	  puts ("could not read stack_chk_guard value from child");
 	  return 1;
@@ -169,8 +170,8 @@ do_test (void)
 	}
       else if (termpid != pid)
 	{
-	  printf ("waitpid returned %ld != %ld\n",
-		  (long int) termpid, (long int) pid);
+	  printf ("waitpid returned %ld != %ld\n", (long int) termpid,
+		  (long int) pid);
 	  return 1;
 	}
       else if (!WIFEXITED (status) || WEXITSTATUS (status))
@@ -198,7 +199,7 @@ do_test (void)
   int ndefaults = 0;
   for (i = 0; i < N; ++i)
     {
-      if (child_stack_chk_guards[i] != child_stack_chk_guards[i+1])
+      if (child_stack_chk_guards[i] != child_stack_chk_guards[i + 1])
 	ndifferences++;
       else if (child_stack_chk_guards[i] == default_guard)
 	ndefaults++;
@@ -216,17 +217,17 @@ do_test (void)
   return 0;
 }
 
-#define OPT_COMMAND	10000
-#define OPT_CHILD	10001
-#define CMDLINE_OPTIONS	\
-  { "command", required_argument, NULL, OPT_COMMAND },  \
-  { "child", no_argument, NULL, OPT_CHILD },
-#define CMDLINE_PROCESS	\
-  case OPT_COMMAND:	\
-    command = optarg;	\
-    break;		\
-  case OPT_CHILD:	\
-    child = true;	\
+#define OPT_COMMAND 10000
+#define OPT_CHILD 10001
+#define CMDLINE_OPTIONS                                                       \
+  { "command", required_argument, NULL, OPT_COMMAND },                        \
+      { "child", no_argument, NULL, OPT_CHILD },
+#define CMDLINE_PROCESS                                                       \
+  case OPT_COMMAND:                                                           \
+    command = optarg;                                                         \
+    break;                                                                    \
+  case OPT_CHILD:                                                             \
+    child = true;                                                             \
     break;
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

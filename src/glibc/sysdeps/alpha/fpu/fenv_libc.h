@@ -17,23 +17,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FENV_LIBC_H
-#define _FENV_LIBC_H	1
+#  define _FENV_LIBC_H 1
 
-#include <fenv.h>
+#  include <fenv.h>
 
-#define FPCR_ROUND_MASK		(3UL << 58)
-#define FPCR_ROUND_SHIFT	58
+#  define FPCR_ROUND_MASK (3UL << 58)
+#  define FPCR_ROUND_SHIFT 58
 
-#define SWCR_MAP_MASK		(3UL << 12)
-#define SWCR_ENABLE_SHIFT	16
-#define SWCR_ENABLE_MASK	(FE_ALL_EXCEPT >> SWCR_ENABLE_SHIFT)
-#define SWCR_STATUS_MASK	(FE_ALL_EXCEPT)
-#define SWCR_ALL_MASK		(SWCR_ENABLE_MASK	\
-				| SWCR_MAP_MASK		\
-				| SWCR_STATUS_MASK)
+#  define SWCR_MAP_MASK (3UL << 12)
+#  define SWCR_ENABLE_SHIFT 16
+#  define SWCR_ENABLE_MASK (FE_ALL_EXCEPT >> SWCR_ENABLE_SHIFT)
+#  define SWCR_STATUS_MASK (FE_ALL_EXCEPT)
+#  define SWCR_ALL_MASK (SWCR_ENABLE_MASK | SWCR_MAP_MASK | SWCR_STATUS_MASK)
 
 /* These are declared for public consumption in <bits/fenv.h>.  */
-libc_hidden_proto(__ieee_set_fp_control)
-libc_hidden_proto(__ieee_get_fp_control)
+libc_hidden_proto (__ieee_set_fp_control)
+    libc_hidden_proto (__ieee_get_fp_control)
 
 #endif /* fenv_libc.h */

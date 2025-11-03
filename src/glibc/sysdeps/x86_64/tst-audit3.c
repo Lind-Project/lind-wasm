@@ -5,8 +5,8 @@
 
 #include <emmintrin.h>
 
-extern __m128i audit_test (__m128i, __m128i, __m128i, __m128i,
-			   __m128i, __m128i, __m128i, __m128i);
+extern __m128i audit_test (__m128i, __m128i, __m128i, __m128i, __m128i,
+			   __m128i, __m128i, __m128i);
 static int
 do_test (void)
 {

@@ -79,5 +79,4 @@ __sigprocmask (int how, const sigset_t *set, sigset_t *oset)
   return 0;
 }
 
-libc_hidden_def (__sigprocmask)
-weak_alias (__sigprocmask, sigprocmask)
+libc_hidden_def (__sigprocmask) weak_alias (__sigprocmask, sigprocmask)

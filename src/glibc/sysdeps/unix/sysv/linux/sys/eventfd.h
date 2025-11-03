@@ -15,17 +15,16 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_EVENTFD_H
-#define	_SYS_EVENTFD_H	1
+#ifndef _SYS_EVENTFD_H
+#  define _SYS_EVENTFD_H 1
 
-#include <stdint.h>
+#  include <stdint.h>
 
 /* Get the platform-dependent flags.  */
-#include <bits/eventfd.h>
+#  include <bits/eventfd.h>
 
 /* Type for event counter.  */
 typedef uint64_t eventfd_t;
-
 
 __BEGIN_DECLS
 

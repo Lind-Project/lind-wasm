@@ -63,16 +63,14 @@ __waitid (idtype_t idtype, id_t id, siginfo_t *infop, int options)
   if (infop == NULL)
     return __hurd_fail (EFAULT);
 
-  cancel_oldtype = LIBC_CANCEL_ASYNC();
+  cancel_oldtype = LIBC_CANCEL_ASYNC ();
 #if HURD_INTERFACE_VERSION >= 20201227
-  err = __USEPORT_CANCEL (PROC, __proc_waitid (port, pid, options,
-					       &status, &sigcode,
-					       &ignored, &child));
+  err = __USEPORT_CANCEL (PROC, __proc_waitid (port, pid, options, &status,
+					       &sigcode, &ignored, &child));
   if (err == MIG_BAD_ID || err == EOPNOTSUPP)
 #endif
-    err = __USEPORT_CANCEL (PROC, __proc_wait (port, pid, options,
-					       &status, &sigcode,
-					       &ignored, &child));
+    err = __USEPORT_CANCEL (PROC, __proc_wait (port, pid, options, &status,
+					       &sigcode, &ignored, &child));
   LIBC_CANCEL_RESET (cancel_oldtype);
 
   if (err == EAGAIN)
@@ -118,5 +116,4 @@ __waitid (idtype_t idtype, id_t id, siginfo_t *infop, int options)
 
   return 0;
 }
-weak_alias (__waitid, waitid)
-strong_alias (__waitid, __libc_waitid)
+weak_alias (__waitid, waitid) strong_alias (__waitid, __libc_waitid)

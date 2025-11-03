@@ -21,10 +21,8 @@
 
 #include <libintl.h>
 
-extern void _dl_cet_check (struct link_map *, const char *)
-    attribute_hidden;
-extern void _dl_cet_open_check (struct link_map *)
-    attribute_hidden;
+extern void _dl_cet_check (struct link_map *, const char *) attribute_hidden;
+extern void _dl_cet_open_check (struct link_map *) attribute_hidden;
 
 static void
 dl_isa_level_check (struct link_map *m, const char *program)
@@ -46,7 +44,7 @@ dl_isa_level_check (struct link_map *m, const char *program)
 #ifdef SHARED
       /* Skip ISA level check for ld.so since ld.so won't run if its ISA
 	 level is higher than CPU.  */
-      if (l == &GL(dl_rtld_map) || l->l_real == &GL(dl_rtld_map))
+      if (l == &GL (dl_rtld_map) || l->l_real == &GL (dl_rtld_map))
 	continue;
 #endif
 
@@ -58,7 +56,7 @@ dl_isa_level_check (struct link_map *m, const char *program)
 			      *l->l_name != '\0' ? l->l_name : program);
 	  else
 	    _dl_signal_error (0, l->l_name, "dlopen",
-			      N_("CPU ISA level is lower than required"));
+			      N_ ("CPU ISA level is lower than required"));
 	}
     }
 }
@@ -87,9 +85,8 @@ _dl_open_check (struct link_map *m)
     1: Continue to check.
  */
 static inline int
-_dl_check_gnu_property (unsigned int type, unsigned int datasz,
-			void *ptr, unsigned int *feature_1_and,
-			unsigned int *needed_1,
+_dl_check_gnu_property (unsigned int type, unsigned int datasz, void *ptr,
+			unsigned int *feature_1_and, unsigned int *needed_1,
 			unsigned int *isa_1_needed)
 {
   if (type == GNU_PROPERTY_X86_FEATURE_1_AND
@@ -104,14 +101,13 @@ _dl_check_gnu_property (unsigned int type, unsigned int datasz,
 
       /* NB: Stop the scan only after seeing all types which
 	 we are searching for.  */
-      _Static_assert (((GNU_PROPERTY_X86_ISA_1_NEEDED
-			> GNU_PROPERTY_X86_FEATURE_1_AND)
-		       && (GNU_PROPERTY_X86_FEATURE_1_AND
-			   > GNU_PROPERTY_1_NEEDED)),
-		      "GNU_PROPERTY_X86_ISA_1_NEEDED > "
-		      "GNU_PROPERTY_X86_FEATURE_1_AND && "
-		      "GNU_PROPERTY_X86_FEATURE_1_AND > "
-		      "GNU_PROPERTY_1_NEEDED");
+      _Static_assert (
+	  ((GNU_PROPERTY_X86_ISA_1_NEEDED > GNU_PROPERTY_X86_FEATURE_1_AND)
+	   && (GNU_PROPERTY_X86_FEATURE_1_AND > GNU_PROPERTY_1_NEEDED)),
+	  "GNU_PROPERTY_X86_ISA_1_NEEDED > "
+	  "GNU_PROPERTY_X86_FEATURE_1_AND && "
+	  "GNU_PROPERTY_X86_FEATURE_1_AND > "
+	  "GNU_PROPERTY_1_NEEDED");
       if (type == GNU_PROPERTY_X86_FEATURE_1_AND)
 	*feature_1_and = *(unsigned int *) ptr;
       else if (type == GNU_PROPERTY_1_NEEDED)
@@ -136,8 +132,8 @@ _dl_check_gnu_property (unsigned int type, unsigned int datasz,
 }
 
 static inline void __attribute__ ((unused))
-_dl_process_property_note (struct link_map *l, const ElfW(Nhdr) *note,
-			   const ElfW(Addr) size, const ElfW(Addr) align)
+_dl_process_property_note (struct link_map *l, const ElfW (Nhdr) * note,
+			   const ElfW (Addr) size, const ElfW (Addr) align)
 {
   /* Skip if we have seen a NT_GNU_PROPERTY_TYPE_0 note before.  */
   if (l->l_property != lc_property_unknown)
@@ -149,18 +145,17 @@ _dl_process_property_note (struct link_map *l, const ElfW(Nhdr) *note,
   if (align != (__ELF_NATIVE_CLASS / 8))
     return;
 
-  const ElfW(Addr) start = (ElfW(Addr)) note;
+  const ElfW (Addr) start = (ElfW (Addr)) note;
 
   unsigned int needed_1 = 0;
   unsigned int feature_1_and = 0;
   unsigned int isa_1_needed = 0;
   unsigned int last_type = 0;
 
-  while ((ElfW(Addr)) (note + 1) - start < size)
+  while ((ElfW (Addr)) (note + 1) - start < size)
     {
       /* Find the NT_GNU_PROPERTY_TYPE_0 note.  */
-      if (note->n_namesz == 4
-	  && note->n_type == NT_GNU_PROPERTY_TYPE_0
+      if (note->n_namesz == 4 && note->n_type == NT_GNU_PROPERTY_TYPE_0
 	  && memcmp (note + 1, "GNU", 4) == 0)
 	{
 	  /* Stop if we see more than one GNU property note which may
@@ -173,7 +168,7 @@ _dl_process_property_note (struct link_map *l, const ElfW(Nhdr) *note,
 
 	  /* Check for invalid property.  */
 	  if (note->n_descsz < 8
-	      || (note->n_descsz % sizeof (ElfW(Addr))) != 0)
+	      || (note->n_descsz % sizeof (ElfW (Addr))) != 0)
 	    return;
 
 	  /* Start and end of property array.  */
@@ -195,17 +190,15 @@ _dl_process_property_note (struct link_map *l, const ElfW(Nhdr) *note,
 
 	      last_type = type;
 
-	      int result = _dl_check_gnu_property (type, datasz, ptr,
-						   &feature_1_and,
-						   &needed_1,
-						   &isa_1_needed);
+	      int result = _dl_check_gnu_property (
+		  type, datasz, ptr, &feature_1_and, &needed_1, &isa_1_needed);
 	      if (result == -1)
-		return;		/* Skip this note.  */
+		return; /* Skip this note.  */
 	      else if (result == 0)
 		break; /* Stop checking.  */
 
 	      /* Check the next property item.  */
-	      ptr += ALIGN_UP (datasz, sizeof (ElfW(Addr)));
+	      ptr += ALIGN_UP (datasz, sizeof (ElfW (Addr)));
 	    }
 	  while ((ptr_end - ptr) >= 8);
 	}
@@ -213,8 +206,7 @@ _dl_process_property_note (struct link_map *l, const ElfW(Nhdr) *note,
       /* NB: Note sections like .note.ABI-tag and .note.gnu.build-id are
 	 aligned to 4 bytes in 64-bit ELF objects.  */
       note = ((const void *) note
-	      + ELF_NOTE_NEXT_OFFSET (note->n_namesz, note->n_descsz,
-				      align));
+	      + ELF_NOTE_NEXT_OFFSET (note->n_namesz, note->n_descsz, align));
     }
 
   /* We get here only if there is one or no GNU property note.  */
@@ -230,9 +222,9 @@ _dl_process_property_note (struct link_map *l, const ElfW(Nhdr) *note,
 }
 
 static inline void __attribute__ ((unused))
-_dl_process_pt_note (struct link_map *l, int fd, const ElfW(Phdr) *ph)
+_dl_process_pt_note (struct link_map *l, int fd, const ElfW (Phdr) * ph)
 {
-  const ElfW(Nhdr) *note = (const void *) (ph->p_vaddr + l->l_addr);
+  const ElfW (Nhdr) *note = (const void *) (ph->p_vaddr + l->l_addr);
   _dl_process_property_note (l, note, ph->p_memsz, ph->p_align);
 }
 
@@ -244,9 +236,8 @@ _dl_process_gnu_property (struct link_map *l, int fd, uint32_t type,
   unsigned int needed_1 = 0;
   unsigned int feature_1_and = 0;
   unsigned int isa_1_needed = 0;
-  int result = _dl_check_gnu_property (type, datasz, data,
-				       &feature_1_and, &needed_1,
-				       &isa_1_needed);
+  int result = _dl_check_gnu_property (type, datasz, data, &feature_1_and,
+				       &needed_1, &isa_1_needed);
   if (needed_1 != 0)
     l->l_1_needed = needed_1;
   if (isa_1_needed != 0)

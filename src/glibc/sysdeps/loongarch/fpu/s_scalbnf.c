@@ -23,7 +23,7 @@ float
 __scalbnf (float x, int fn)
 {
   float tmp;
-  asm volatile ("movgr2fr.w \t%0, %1" : "=f" (tmp) : "r" (fn));
-  asm volatile ("fscaleb.s \t%0, %1, %2" : "=f" (x) : "f" (x), "f" (tmp));
+  asm volatile ("movgr2fr.w \t%0, %1" : "=f"(tmp) : "r"(fn));
+  asm volatile ("fscaleb.s \t%0, %1, %2" : "=f"(x) : "f"(x), "f"(tmp));
   return x;
 }

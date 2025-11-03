@@ -26,9 +26,7 @@
 extern __typeof (__round) __round_ppc32 attribute_hidden;
 extern __typeof (__round) __round_power5plus attribute_hidden;
 
-libc_ifunc (__round,
-	    (hwcap & PPC_FEATURE_POWER5_PLUS)
-	    ? __round_power5plus
-            : __round_ppc32);
+libc_ifunc (__round, (hwcap & PPC_FEATURE_POWER5_PLUS) ? __round_power5plus
+						       : __round_ppc32);
 
 libm_alias_double (__round, round)

@@ -38,13 +38,14 @@ __open64_nocancel (const char *file, int oflag, ...)
       va_end (arg);
     }
 
-    // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-    return MAKE_SYSCALL3(OPEN_SYSCALL, "syscall|open", (uint64_t)file, (uint64_t)oflag, (uint64_t)mode);
+  // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
+  return MAKE_SYSCALL3 (OPEN_SYSCALL, "syscall|open", (uint64_t) file,
+			(uint64_t) oflag, (uint64_t) mode);
 }
 
 hidden_def (__open64_nocancel)
 
 #ifdef __OFF_T_MATCHES_OFF64_T
-strong_alias (__open64_nocancel, __open_nocancel)
-hidden_def (__open_nocancel)
+    strong_alias (__open64_nocancel, __open_nocancel)
+	hidden_def (__open_nocancel)
 #endif

@@ -31,18 +31,18 @@
 #include <shlib-compat.h>
 
 /* Defined in the kernel headers: */
-#define NOTIFY_COOKIE_LEN	32	/* Length of the cookie used.  */
-#define NOTIFY_WOKENUP		1	/* Code for notification.  */
-#define NOTIFY_REMOVED		2	/* Code for closed message queue
-					   of de-notification.  */
-
+#define NOTIFY_COOKIE_LEN 32 /* Length of the cookie used.  */
+#define NOTIFY_WOKENUP 1     /* Code for notification.  */
+#define NOTIFY_REMOVED                                                        \
+  2 /* Code for closed message queue                                          \
+       of de-notification.  */
 
 /* Data structure for the queued notification requests.  */
 union notify_data
 {
   struct
   {
-    void (*fct) (union sigval);	/* The function to run.  */
+    void (*fct) (union sigval); /* The function to run.  */
     union sigval param;		/* The parameter to pass.  */
     pthread_attr_t *attr;	/* Attributes to create the thread with.  */
     /* NB: on 64-bit machines the struct as a size of 24 bytes.  Which means
@@ -51,32 +51,26 @@ union notify_data
   char raw[NOTIFY_COOKIE_LEN];
 };
 
-
 /* Keep track of the initialization.  */
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 
-
 /* The netlink socket.  */
 static int netlink_socket = -1;
-
 
 /* Barrier used to make sure data passed to the new thread is not
    reused by the parent.  */
 static pthread_barrier_t notify_barrier;
 
-
 /* Modify the signal mask.  We move this into a separate function so
    that the stack space needed for sigset_t is not deducted from what
    the thread can use.  */
-static int
-__attribute__ ((noinline))
+static int __attribute__ ((noinline))
 change_sigmask (int how, sigset_t *oss)
 {
   sigset_t ss;
   sigfillset (&ss);
   return __pthread_sigmask (how, &ss, oss);
 }
-
 
 /* The function used for the notification.  */
 static void *
@@ -105,7 +99,6 @@ notification_function (void *arg)
   return NULL;
 }
 
-
 /* Helper thread.  */
 static void *
 helper_thread (void *arg)
@@ -130,7 +123,8 @@ helper_thread (void *arg)
 	       to wait until it is done with it.  */
 	    (void) __pthread_barrier_wait (&notify_barrier);
 	}
-      else if (data.raw[NOTIFY_COOKIE_LEN - 1] == NOTIFY_REMOVED && data.attr != NULL)
+      else if (data.raw[NOTIFY_COOKIE_LEN - 1] == NOTIFY_REMOVED
+	       && data.attr != NULL)
 	{
 	  /* The only state we keep is the copy of the thread attributes.  */
 	  __pthread_attr_destroy (data.attr);
@@ -140,13 +134,11 @@ helper_thread (void *arg)
   return NULL;
 }
 
-
 void
 __mq_notify_fork_subprocess (void)
 {
   once = PTHREAD_ONCE_INIT;
 }
-
 
 static void
 init_mq_netlink (void)
@@ -195,7 +187,6 @@ init_mq_netlink (void)
       netlink_socket = -1;
     }
 }
-
 
 /* Register notification upon message arrival to an empty message queue
    MQDES.  */
@@ -269,6 +260,6 @@ __mq_notify (mqd_t mqdes, const struct sigevent *notification)
 }
 versioned_symbol (libc, __mq_notify, mq_notify, GLIBC_2_34);
 libc_hidden_ver (__mq_notify, mq_notify)
-#if OTHER_SHLIB_COMPAT (librt, GLIBC_2_3_4, GLIBC_2_34)
-compat_symbol (librt, __mq_notify, mq_notify, GLIBC_2_3_4);
+#if OTHER_SHLIB_COMPAT(librt, GLIBC_2_3_4, GLIBC_2_34)
+    compat_symbol (librt, __mq_notify, mq_notify, GLIBC_2_3_4);
 #endif

@@ -48,37 +48,44 @@
 #include <math_private.h>
 #include <math_ldbl_opt.h>
 
-long double __sinl(long double x)
+long double
+__sinl (long double x)
 {
-	long double y[2],z=0.0L;
-	int64_t n, ix;
-	double xhi;
+  long double y[2], z = 0.0L;
+  int64_t n, ix;
+  double xhi;
 
-    /* High word of x. */
-	xhi = ldbl_high (x);
-	EXTRACT_WORDS64 (ix, xhi);
+  /* High word of x. */
+  xhi = ldbl_high (x);
+  EXTRACT_WORDS64 (ix, xhi);
 
-    /* |x| ~< pi/4 */
-	ix &= 0x7fffffffffffffffLL;
-	if(ix <= 0x3fe921fb54442d10LL)
-	  return __kernel_sinl(x,z,0);
+  /* |x| ~< pi/4 */
+  ix &= 0x7fffffffffffffffLL;
+  if (ix <= 0x3fe921fb54442d10LL)
+    return __kernel_sinl (x, z, 0);
 
-    /* sin(Inf or NaN) is NaN */
-	else if (ix>=0x7ff0000000000000LL) {
-	    if (ix == 0x7ff0000000000000LL)
-		__set_errno (EDOM);
-	    return x-x;
+  /* sin(Inf or NaN) is NaN */
+  else if (ix >= 0x7ff0000000000000LL)
+    {
+      if (ix == 0x7ff0000000000000LL)
+	__set_errno (EDOM);
+      return x - x;
+    }
+  /* argument reduction needed */
+  else
+    {
+      n = __ieee754_rem_pio2l (x, y);
+      switch (n & 3)
+	{
+	case 0:
+	  return __kernel_sinl (y[0], y[1], 1);
+	case 1:
+	  return __kernel_cosl (y[0], y[1]);
+	case 2:
+	  return -__kernel_sinl (y[0], y[1], 1);
+	default:
+	  return -__kernel_cosl (y[0], y[1]);
 	}
-    /* argument reduction needed */
-	else {
-	    n = __ieee754_rem_pio2l(x,y);
-	    switch(n&3) {
-		case 0: return  __kernel_sinl(y[0],y[1],1);
-		case 1: return  __kernel_cosl(y[0],y[1]);
-		case 2: return -__kernel_sinl(y[0],y[1],1);
-		default:
-			return -__kernel_cosl(y[0],y[1]);
-	    }
-	}
+    }
 }
 long_double_symbol (libm, __sinl, sinl);

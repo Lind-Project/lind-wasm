@@ -19,8 +19,7 @@
 #include "pthreadP.h"
 #include <shlib-compat.h>
 
-void
-__cleanup_fct_attribute
+void __cleanup_fct_attribute
 ___pthread_register_cancel_defer (__pthread_unwind_buf_t *buf)
 {
   struct pthread_unwind_buf *ibuf = (struct pthread_unwind_buf *) buf;
@@ -39,13 +38,12 @@ ___pthread_register_cancel_defer (__pthread_unwind_buf_t *buf)
 	  newval = cancelhandling & ~CANCELTYPE_BITMASK;
 	}
       while (!atomic_compare_exchange_weak_acquire (&self->cancelhandling,
-						    &cancelhandling,
-						    newval));
+						    &cancelhandling, newval));
     }
 
-  ibuf->priv.data.canceltype = (cancelhandling & CANCELTYPE_BITMASK
-				? PTHREAD_CANCEL_ASYNCHRONOUS
-				: PTHREAD_CANCEL_DEFERRED);
+  ibuf->priv.data.canceltype
+      = (cancelhandling & CANCELTYPE_BITMASK ? PTHREAD_CANCEL_ASYNCHRONOUS
+					     : PTHREAD_CANCEL_DEFERRED);
 
   /* Store the new cleanup handler info.  */
   THREAD_SETMEM (self, cleanup_jmp_buf, (struct pthread_unwind_buf *) buf);
@@ -53,13 +51,12 @@ ___pthread_register_cancel_defer (__pthread_unwind_buf_t *buf)
 versioned_symbol (libc, ___pthread_register_cancel_defer,
 		  __pthread_register_cancel_defer, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_3_3, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_3_3, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_register_cancel_defer,
 	       __pthread_register_cancel_defer, GLIBC_2_3_3);
 #endif
 
-void
-__cleanup_fct_attribute
+void __cleanup_fct_attribute
 ___pthread_unregister_cancel_restore (__pthread_unwind_buf_t *buf)
 {
   struct pthread *self = THREAD_SELF;
@@ -91,7 +88,7 @@ ___pthread_unregister_cancel_restore (__pthread_unwind_buf_t *buf)
 versioned_symbol (libc, ___pthread_unregister_cancel_restore,
 		  __pthread_unregister_cancel_restore, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_3_3, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_3_3, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_unregister_cancel_restore,
 	       __pthread_unregister_cancel_restore, GLIBC_2_3_3);
 #endif

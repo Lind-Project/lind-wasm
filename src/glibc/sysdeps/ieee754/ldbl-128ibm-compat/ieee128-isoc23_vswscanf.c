@@ -26,8 +26,8 @@ ___ieee128_isoc23_vswscanf (wchar_t *string, const wchar_t *format, va_list ap)
   _IO_strfile sf;
   struct _IO_wide_data wd;
   FILE *fp = _IO_strfile_readw (&sf, &wd, string);
-  int mode_flags =
-    SCANF_ISOC99_A | SCANF_ISOC23_BIN_CST | SCANF_LDBL_USES_FLOAT128;
+  int mode_flags
+      = SCANF_ISOC99_A | SCANF_ISOC23_BIN_CST | SCANF_LDBL_USES_FLOAT128;
   return __vfwscanf_internal (fp, format, ap, mode_flags);
 }
 strong_alias (___ieee128_isoc23_vswscanf, __isoc23_vswscanfieee128)

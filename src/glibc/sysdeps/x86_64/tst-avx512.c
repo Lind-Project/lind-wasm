@@ -34,7 +34,7 @@ avx512_enabled (void)
   if (!(ebx & bit_AVX512F))
     return 0;
 
-  asm ("xgetbv" : "=a" (eax), "=d" (edx) : "c" (0));
+  asm ("xgetbv" : "=a"(eax), "=d"(edx) : "c"(0));
 
   /* Verify that ZMM, YMM and XMM states are enabled.  */
   return (eax & 0xe6) == 0xe6;

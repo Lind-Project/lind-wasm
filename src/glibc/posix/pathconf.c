@@ -19,7 +19,6 @@
 #include <stddef.h>
 #include <unistd.h>
 
-
 /* Get file-specific information about PATH.  */
 long int
 __pathconf (const char *path, int name)
@@ -34,4 +33,4 @@ __pathconf (const char *path, int name)
 
 weak_alias (__pathconf, pathconf)
 
-stub_warning (pathconf)
+    stub_warning (pathconf)

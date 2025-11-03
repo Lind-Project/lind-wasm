@@ -29,7 +29,7 @@
 #include <abort-instr.h>
 #ifndef ABORT_INSTRUCTION
 /* No such instruction is available.  */
-# define ABORT_INSTRUCTION
+#  define ABORT_INSTRUCTION
 #endif
 
 static void
@@ -41,9 +41,9 @@ check_one_fd (int fd, int mode)
   if (d == NULL)
     {
       /* This descriptor hasn't been opened.  We try to allocate the
-         descriptor and open /dev/null on it so that the SUID program
-         we are about to start does not accidentally use this
-         descriptor.  */
+	 descriptor and open /dev/null on it so that the SUID program
+	 we are about to start does not accidentally use this
+	 descriptor.  */
       d = _hurd_alloc_fd (NULL, fd);
       if (d != NULL)
 	{
@@ -89,7 +89,6 @@ init_standard_fds (void)
     check_standard_fds ();
 }
 SET_RELHOOK (_hurd_fd_subinit, init_standard_fds);
-
 
 #ifndef SHARED
 void

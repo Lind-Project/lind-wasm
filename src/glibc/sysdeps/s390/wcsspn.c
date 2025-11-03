@@ -19,21 +19,20 @@
 #include <ifunc-wcsspn.h>
 
 #if HAVE_WCSSPN_IFUNC
-# define wcsspn __redirect_wcsspn
-# include <wchar.h>
-# undef wcsspn
-# include <ifunc-resolve.h>
-# if HAVE_WCSSPN_C
+#  define wcsspn __redirect_wcsspn
+#  include <wchar.h>
+#  undef wcsspn
+#  include <ifunc-resolve.h>
+#  if HAVE_WCSSPN_C
 extern __typeof (__redirect_wcsspn) WCSSPN_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCSSPN_Z13
+#  if HAVE_WCSSPN_Z13
 extern __typeof (__redirect_wcsspn) WCSSPN_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect_wcsspn, wcsspn,
 		      (HAVE_WCSSPN_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCSSPN_Z13
-		      : WCSSPN_DEFAULT
-		      )
+			  ? WCSSPN_Z13
+			  : WCSSPN_DEFAULT)
 #endif

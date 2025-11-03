@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef NAN_PSEUDO_NUMBER_H
-#define NAN_PSEUDO_NUMBER_H	1
+#  define NAN_PSEUDO_NUMBER_H 1
 
 /* Default is to assume that pseudo numbers are not signaling.  */
 static inline int

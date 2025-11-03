@@ -88,7 +88,7 @@ __logf (float x)
 }
 #ifndef __logf
 strong_alias (__logf, __ieee754_logf)
-libm_alias_finite (__ieee754_logf, __logf)
-versioned_symbol (libm, __logf, logf, GLIBC_2_27);
+    libm_alias_finite (__ieee754_logf, __logf)
+	versioned_symbol (libm, __logf, logf, GLIBC_2_27);
 libm_alias_float_other (__log, log)
 #endif

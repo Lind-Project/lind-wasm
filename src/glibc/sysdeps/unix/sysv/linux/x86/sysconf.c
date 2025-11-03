@@ -21,10 +21,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static long int linux_sysconf (int name);
 extern long int __cache_sysconf (int) attribute_hidden;
-
 
 /* Get the value of the system variable NAME.  */
 long int

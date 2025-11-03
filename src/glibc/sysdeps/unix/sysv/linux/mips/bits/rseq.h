@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_RSEQ_H
-# error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
+#  error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
 #endif
 
 /* RSEQ_SIG is a signature required before each abort handler code.
@@ -31,32 +31,32 @@
    RSEQ_SIG uses the break instruction.  The instruction pattern is:
 
    On MIPS:
-        0350000d        break     0x350
+	0350000d        break     0x350
 
    On nanoMIPS:
-        00100350        break     0x350
+	00100350        break     0x350
 
    On microMIPS:
-        0000d407        break     0x350
+	0000d407        break     0x350
 
    For nanoMIPS32 and microMIPS, the instruction stream is encoded as
    16-bit halfwords, so the signature halfwords need to be swapped
    accordingly for little-endian.  */
 
-#if defined (__nanomips__)
-# ifdef __MIPSEL__
-#  define RSEQ_SIG      0x03500010
-# else
-#  define RSEQ_SIG      0x00100350
-# endif
-#elif defined (__mips_micromips)
-# ifdef __MIPSEL__
-#  define RSEQ_SIG      0xd4070000
-# else
-#  define RSEQ_SIG      0x0000d407
-# endif
-#elif defined (__mips__)
-# define RSEQ_SIG       0x0350000d
+#if defined(__nanomips__)
+#  ifdef __MIPSEL__
+#    define RSEQ_SIG 0x03500010
+#  else
+#    define RSEQ_SIG 0x00100350
+#  endif
+#elif defined(__mips_micromips)
+#  ifdef __MIPSEL__
+#    define RSEQ_SIG 0xd4070000
+#  else
+#    define RSEQ_SIG 0x0000d407
+#  endif
+#elif defined(__mips__)
+#  define RSEQ_SIG 0x0350000d
 #else
 /* Unknown MIPS architecture.  */
 #endif

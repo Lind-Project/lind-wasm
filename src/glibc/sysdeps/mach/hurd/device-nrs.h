@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DEVICE_NRS_H
-#define _DEVICE_NRS_H	1
+#  define _DEVICE_NRS_H 1
 
-#include <hurd/hurd_types.h>
+#  include <hurd/hurd_types.h>
 
 /* Check whether a given device is a tty.  */
-#define DEV_TTY_P(statp) ((statp)->st_fstype == FSTYPE_TERM)
+#  define DEV_TTY_P(statp) ((statp)->st_fstype == FSTYPE_TERM)
 
-#endif	/* device-nrs.h */
+#endif /* device-nrs.h */

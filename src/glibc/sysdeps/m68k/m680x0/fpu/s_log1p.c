@@ -20,16 +20,16 @@
 #include "mathimpl.h"
 
 #ifndef FUNC
-#define FUNC log1p
+#  define FUNC log1p
 #endif
 #ifndef float_type
-#define float_type double
+#  define float_type double
 #endif
 
-#define __CONCATX(a,b) __CONCAT(a,b)
+#define __CONCATX(a, b) __CONCAT (a, b)
 
 float_type
-__CONCATX(__,FUNC) (float_type x)
+__CONCATX (__, FUNC) (float_type x)
 {
-  return __m81_u(__CONCATX(__,FUNC))(x);
+  return __m81_u (__CONCATX (__, FUNC)) (x);
 }

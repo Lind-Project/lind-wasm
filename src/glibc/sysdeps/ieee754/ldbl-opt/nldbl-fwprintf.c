@@ -1,8 +1,6 @@
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
-weak_function
+int attribute_hidden weak_function
 fwprintf (FILE *stream, const wchar_t *fmt, ...)
 {
   va_list arg;

@@ -18,18 +18,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define __memcmpeq __redirect___memcmpeq
-# include <string.h>
-# undef __memcmpeq
+#if IS_IN(libc)
+#  define __memcmpeq __redirect___memcmpeq
+#  include <string.h>
+#  undef __memcmpeq
 
-# define SYMBOL_NAME __memcmpeq
-# include "ifunc-memcmpeq.h"
+#  define SYMBOL_NAME __memcmpeq
+#  include "ifunc-memcmpeq.h"
 
 libc_ifunc_redirected (__redirect___memcmpeq, __memcmpeq, IFUNC_SELECTOR ());
 
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (__memcmpeq, __GI___memcmpeq, __redirect___memcmpeq)
     __attribute__ ((visibility ("hidden"))) __attribute_copy__ (__memcmpeq);
-# endif
+#  endif
 #endif

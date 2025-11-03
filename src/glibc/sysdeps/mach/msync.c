@@ -26,7 +26,7 @@
    define the VM_SYNC_* bits when we include <mach/mach_types.h>.  */
 
 #ifndef VM_SYNC_SYNCHRONOUS
-# include <misc/msync.c>
+#  include <misc/msync.c>
 #else
 
 /* Synchronize the region starting at ADDR and extending LEN bytes with the
@@ -47,9 +47,9 @@ msync (void *addr, size_t len, int flags)
   if (flags & MS_INVALIDATE)
     sync_flags |= VM_SYNC_INVALIDATE;
 
-  cancel_oldtype = LIBC_CANCEL_ASYNC();
-  err = __vm_msync (__mach_task_self (),
-		    (vm_address_t) addr, (vm_size_t) len, sync_flags);
+  cancel_oldtype = LIBC_CANCEL_ASYNC ();
+  err = __vm_msync (__mach_task_self (), (vm_address_t) addr, (vm_size_t) len,
+		    sync_flags);
   LIBC_CANCEL_RESET (cancel_oldtype);
   if (err)
     {

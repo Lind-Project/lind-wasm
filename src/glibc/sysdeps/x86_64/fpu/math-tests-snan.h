@@ -17,18 +17,18 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef X86_64_MATH_TESTS_SNAN_H
-#define X86_64_MATH_TESTS_SNAN_H 1
+#  define X86_64_MATH_TESTS_SNAN_H 1
 
-#define SNAN_TESTS_float	1
-#define SNAN_TESTS_double	1
-#define SNAN_TESTS_long_double	1
+#  define SNAN_TESTS_float 1
+#  define SNAN_TESTS_double 1
+#  define SNAN_TESTS_long_double 1
 
 /* Before GCC 7, there is no built-in function to provide a __float128
    sNaN, so most sNaN tests for this type cannot work.  */
-#if __GNUC_PREREQ (7, 0)
-# define SNAN_TESTS_float128	1
-#else
-# define SNAN_TESTS_float128	0
-#endif
+#  if __GNUC_PREREQ(7, 0)
+#    define SNAN_TESTS_float128 1
+#  else
+#    define SNAN_TESTS_float128 0
+#  endif
 
 #endif /* math-tests-snan.h.  */

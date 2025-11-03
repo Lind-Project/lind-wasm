@@ -30,13 +30,13 @@ ___pthread_rwlock_wrlock (pthread_rwlock_t *rwlock)
 versioned_symbol (libc, ___pthread_rwlock_wrlock, pthread_rwlock_wrlock,
 		  GLIBC_2_34);
 strong_alias (___pthread_rwlock_wrlock, __pthread_rwlock_wrlock)
-libc_hidden_ver (___pthread_rwlock_wrlock, __pthread_rwlock_wrlock)
+    libc_hidden_ver (___pthread_rwlock_wrlock, __pthread_rwlock_wrlock)
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_rwlock_wrlock, pthread_rwlock_wrlock,
-	       GLIBC_2_1);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_rwlock_wrlock,
+		       pthread_rwlock_wrlock, GLIBC_2_1);
 #endif
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_rwlock_wrlock, __pthread_rwlock_wrlock,
 	       GLIBC_2_2);
 #endif

@@ -34,11 +34,11 @@
 #include <setvmaname.h>
 
 #ifdef FATAL_PREPARE_INCLUDE
-#include FATAL_PREPARE_INCLUDE
+#  include FATAL_PREPARE_INCLUDE
 #endif
 
 #ifndef WRITEV_FOR_FATAL
-# define WRITEV_FOR_FATAL	writev_for_fatal
+#  define WRITEV_FOR_FATAL writev_for_fatal
 static bool
 writev_for_fatal (int fd, const struct iovec *iov, size_t niov, size_t total)
 {
@@ -105,9 +105,8 @@ __libc_message_impl (const char *fmt, ...)
     {
       WRITEV_FOR_FATAL (fd, iov, iovcnt, total);
 
-      total = (total + 1 + GLRO(dl_pagesize) - 1) & ~(GLRO(dl_pagesize) - 1);
-      struct abort_msg_s *buf = __mmap (NULL, total,
-					PROT_READ | PROT_WRITE,
+      total = (total + 1 + GLRO (dl_pagesize) - 1) & ~(GLRO (dl_pagesize) - 1);
+      struct abort_msg_s *buf = __mmap (NULL, total, PROT_READ | PROT_WRITE,
 					MAP_ANON | MAP_PRIVATE, -1, 0);
       if (__glibc_likely (buf != MAP_FAILED))
 	{
@@ -121,8 +120,8 @@ __libc_message_impl (const char *fmt, ...)
 
 	  /* We have to free the old buffer since the application might
 	     catch the SIGABRT signal.  */
-	  struct abort_msg_s *old = atomic_exchange_acquire (&__abort_msg,
-							     buf);
+	  struct abort_msg_s *old
+	      = atomic_exchange_acquire (&__abort_msg, buf);
 	  if (old != NULL)
 	    __munmap (old, old->size);
 	}
@@ -131,7 +130,6 @@ __libc_message_impl (const char *fmt, ...)
   /* Kill the application.  */
   abort ();
 }
-
 
 void
 __libc_fatal (const char *message)

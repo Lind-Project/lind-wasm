@@ -19,21 +19,19 @@
 #include <ifunc-wcpncpy.h>
 
 #if HAVE_WCPNCPY_IFUNC
-# include <wchar.h>
-# include <ifunc-resolve.h>
+#  include <wchar.h>
+#  include <ifunc-resolve.h>
 
-# if HAVE_WCPNCPY_C
+#  if HAVE_WCPNCPY_C
 extern __typeof (__wcpncpy) WCPNCPY_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCPNCPY_Z13
+#  if HAVE_WCPNCPY_Z13
 extern __typeof (__wcpncpy) WCPNCPY_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__wcpncpy, __wcpncpy,
 		      (HAVE_WCPNCPY_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCPNCPY_Z13
-		      : WCPNCPY_DEFAULT
-		      )
-weak_alias (__wcpncpy, wcpncpy)
+			  ? WCPNCPY_Z13
+			  : WCPNCPY_DEFAULT) weak_alias (__wcpncpy, wcpncpy)
 #endif

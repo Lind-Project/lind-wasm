@@ -17,7 +17,6 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-
 struct fde_vector
 {
   void *orig_data;
@@ -26,21 +25,24 @@ struct fde_vector
 };
 
 #ifdef _LIBC
-#include <gccframe.h>
+#  include <gccframe.h>
 #else
 struct object
 {
   void *pc_begin;
   void *tbase;
   void *dbase;
-  union {
+  union
+  {
     struct dwarf_fde *single;
     struct dwarf_fde **array;
     struct fde_vector *sort;
   } u;
 
-  union {
-    struct {
+  union
+  {
+    struct
+    {
       unsigned long sorted : 1;
       unsigned long from_array : 1;
       unsigned long mixed_encoding : 1;
@@ -52,9 +54,9 @@ struct object
     size_t i;
   } s;
 
-#ifdef DWARF2_OBJECT_END_PTR_EXTENSION
+#  ifdef DWARF2_OBJECT_END_PTR_EXTENSION
   char *fde_end;
-#endif
+#  endif
 
   struct object *next;
 };
@@ -81,24 +83,22 @@ struct dwarf_eh_bases
   void *func;
 };
 
-
-extern void __register_frame_info_bases (void *, struct object *,
-					 void *, void *);
+extern void __register_frame_info_bases (void *, struct object *, void *,
+					 void *);
 extern void __register_frame_info (void *, struct object *);
 extern void __register_frame (void *);
-extern void __register_frame_info_table_bases (void *, struct object *,
-					       void *, void *);
+extern void __register_frame_info_table_bases (void *, struct object *, void *,
+					       void *);
 extern void __register_frame_info_table (void *, struct object *);
 extern void __register_frame_table (void *);
 extern void *__deregister_frame_info (void *);
 extern void *__deregister_frame_info_bases (void *);
 extern void __deregister_frame (void *);
 
-
-typedef          int  sword __attribute__ ((mode (SI)));
-typedef unsigned int  uword __attribute__ ((mode (SI)));
-typedef unsigned int  uaddr __attribute__ ((mode (pointer)));
-typedef          int  saddr __attribute__ ((mode (pointer)));
+typedef int sword __attribute__ ((mode (SI)));
+typedef unsigned int uword __attribute__ ((mode (SI)));
+typedef unsigned int uaddr __attribute__ ((mode (pointer)));
+typedef int saddr __attribute__ ((mode (pointer)));
 typedef unsigned char ubyte;
 
 /* Terminology:
@@ -146,7 +146,7 @@ typedef struct dwarf_fde fde;
 static inline struct dwarf_cie *
 get_cie (struct dwarf_fde *f)
 {
-  return (void *)&f->CIE_delta - f->CIE_delta;
+  return (void *) &f->CIE_delta - f->CIE_delta;
 }
 
 static inline fde *
@@ -155,13 +155,13 @@ next_fde (fde *f)
   return (fde *) ((char *) f + f->length + sizeof (f->length));
 }
 
-extern fde * _Unwind_Find_FDE (void *, struct dwarf_eh_bases *);
+extern fde *_Unwind_Find_FDE (void *, struct dwarf_eh_bases *);
 
 static inline int
 last_fde (struct object *obj __attribute__ ((__unused__)), fde *f)
 {
 #ifdef DWARF2_OBJECT_END_PTR_EXTENSION
-  return (char *)f == obj->fde_end || f->length == 0;
+  return (char *) f == obj->fde_end || f->length == 0;
 #else
   return f->length == 0;
 #endif

@@ -18,20 +18,16 @@
 
 #include <unistd.h>
 
-#define START_ENV_GROUP(VERSION)		\
-  /* Empty.  */
+#define START_ENV_GROUP(VERSION) /* Empty.  */
 
-#define END_ENV_GROUP(VERSION)			\
-  /* Empty.  */
+#define END_ENV_GROUP(VERSION) /* Empty.  */
 
-#define KNOWN_ABSENT_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX)	\
-  /* Empty.  */
+#define KNOWN_ABSENT_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX) /* Empty.  */
 
-#define KNOWN_PRESENT_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX)	\
-  @@@PRESENT_##ENV_PREFIX##_##SUFFIX
+#define KNOWN_PRESENT_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX)              \
+  @ @ @PRESENT_##ENV_PREFIX##_##SUFFIX
 
-#define UNKNOWN_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX)	\
-  /* Empty.  */
+#define UNKNOWN_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX) /* Empty.  */
 
 #include "posix-envs.def"
 

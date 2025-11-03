@@ -26,8 +26,7 @@ __nptl_create_event (void)
 }
 libc_hidden_def (__nptl_create_event)
 
-void
-__nptl_death_event (void)
+    void __nptl_death_event (void)
 {
 }
 libc_hidden_def (__nptl_death_event)

@@ -19,7 +19,6 @@
 #include <math.h>
 #include <math-svid-compat.h>
 
-
 #if LIBM_SVID_COMPAT
 /* Handle errors for a libm function as specified by TYPE (see
    comments in k_standard.c for details), with arguments X and Y,

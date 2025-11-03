@@ -28,8 +28,8 @@
 
 /* Await a connection on socket FD.
    When a connection arrives, open a new socket to communicate with it,
-   set *ADDRARG (which is *ADDR_LEN bytes long) to the address of the connecting
-   peer and *ADDR_LEN to the address's actual length, and return the
+   set *ADDRARG (which is *ADDR_LEN bytes long) to the address of the
+   connecting peer and *ADDR_LEN to the address's actual length, and return the
    new socket's descriptor, or -1 for errors.  The operation can be influenced
    by the FLAGS parameter.  */
 int
@@ -49,7 +49,7 @@ __libc_accept4 (int fd, __SOCKADDR_ARG addrarg, socklen_t *addr_len, int flags)
   if (flags & ~(O_CLOEXEC | O_NONBLOCK))
     return __hurd_fail (EINVAL);
 
-  cancel_oldtype = LIBC_CANCEL_ASYNC();
+  cancel_oldtype = LIBC_CANCEL_ASYNC ();
   err = HURD_DPORT_USE_CANCEL (fd, __socket_accept (port, &new, &aport));
   LIBC_CANCEL_RESET (cancel_oldtype);
   if (err)
@@ -63,14 +63,14 @@ __libc_accept4 (int fd, __SOCKADDR_ARG addrarg, socklen_t *addr_len, int flags)
 	/* If the protocol server can't tell us the address, just return a
 	   zero-length one.  */
 	{
-	  buf = (char *)addr;
+	  buf = (char *) addr;
 	  buflen = 0;
 	  err = 0;
 	}
     }
   __mach_port_deallocate (__mach_task_self (), aport);
 
-  if (! err)
+  if (!err)
     {
       if (flags & O_NONBLOCK)
 	err = __io_set_some_openmodes (new, O_NONBLOCK);

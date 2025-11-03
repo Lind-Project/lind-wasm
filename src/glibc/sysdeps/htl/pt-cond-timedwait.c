@@ -28,8 +28,7 @@ extern int __pthread_cond_timedwait_internal (pthread_cond_t *cond,
 					      const struct timespec *abstime);
 
 int
-__pthread_cond_timedwait (pthread_cond_t *cond,
-			  pthread_mutex_t *mutex,
+__pthread_cond_timedwait (pthread_cond_t *cond, pthread_mutex_t *mutex,
 			  const struct timespec *abstime)
 {
   return __pthread_cond_timedwait_internal (cond, mutex, -1, abstime);
@@ -38,10 +37,8 @@ __pthread_cond_timedwait (pthread_cond_t *cond,
 weak_alias (__pthread_cond_timedwait, pthread_cond_timedwait);
 
 int
-__pthread_cond_clockwait (pthread_cond_t *cond,
-			  pthread_mutex_t *mutex,
-			  clockid_t clockid,
-			  const struct timespec *abstime)
+__pthread_cond_clockwait (pthread_cond_t *cond, pthread_mutex_t *mutex,
+			  clockid_t clockid, const struct timespec *abstime)
 {
   return __pthread_cond_timedwait_internal (cond, mutex, clockid, abstime);
 }
@@ -80,8 +77,7 @@ cancel_hook (void *arg)
    calling thread.  */
 int
 __pthread_cond_timedwait_internal (pthread_cond_t *cond,
-				   pthread_mutex_t *mutex,
-				   clockid_t clockid,
+				   pthread_mutex_t *mutex, clockid_t clockid,
 				   const struct timespec *abstime)
 {
   error_t err;
@@ -93,7 +89,7 @@ __pthread_cond_timedwait_internal (pthread_cond_t *cond,
   else
     clock_id = __pthread_default_condattr.__clock;
 
-  if (abstime && ! valid_nanoseconds (abstime->tv_nsec))
+  if (abstime && !valid_nanoseconds (abstime->tv_nsec))
     return EINVAL;
 
   err = __pthread_mutex_checklocked (mutex);
@@ -114,8 +110,8 @@ __pthread_cond_timedwait_internal (pthread_cond_t *cond,
      This function contains inline implementations of pthread_testcancel and
      pthread_setcanceltype to reduce locking overhead.  */
   __pthread_mutex_lock (&self->cancel_lock);
-  cancelled = (self->cancel_state == PTHREAD_CANCEL_ENABLE)
-      && self->cancel_pending;
+  cancelled
+      = (self->cancel_state == PTHREAD_CANCEL_ENABLE) && self->cancel_pending;
 
   if (cancelled)
     {
@@ -164,9 +160,9 @@ __pthread_cond_timedwait_internal (pthread_cond_t *cond,
   if (self->prevp == NULL)
     {
       /* Another thread removed us from the list of waiters, which means a
-         wakeup message has been sent.  It was either consumed while we were
-         blocking, or queued after we timed out and before we acquired the
-         condition lock, in which case the message queue must be drained.  */
+	 wakeup message has been sent.  It was either consumed while we were
+	 blocking, or queued after we timed out and before we acquired the
+	 condition lock, in which case the message queue must be drained.  */
       if (!err)
 	drain = 0;
       else
@@ -178,7 +174,7 @@ __pthread_cond_timedwait_internal (pthread_cond_t *cond,
   else
     {
       /* We're still in the list of waiters.  No one attempted to wake us up,
-         i.e. we timed out.  */
+	 i.e. we timed out.  */
       assert (err == ETIMEDOUT);
       __pthread_dequeue (self);
       drain = 0;
@@ -201,8 +197,8 @@ __pthread_cond_timedwait_internal (pthread_cond_t *cond,
   self->cancel_hook = NULL;
   self->cancel_hook_arg = NULL;
   self->cancel_type = oldtype;
-  cancelled = (self->cancel_state == PTHREAD_CANCEL_ENABLE)
-      && self->cancel_pending;
+  cancelled
+      = (self->cancel_state == PTHREAD_CANCEL_ENABLE) && self->cancel_pending;
   __pthread_mutex_unlock (&self->cancel_lock);
 
   /* Reacquire MUTEX before returning/cancelling.  */

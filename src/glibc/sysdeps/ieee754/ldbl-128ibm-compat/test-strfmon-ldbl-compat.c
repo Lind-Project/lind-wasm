@@ -36,21 +36,20 @@ do_test (void)
   loc = newlocale (LC_MONETARY_MASK, "C", (locale_t) 0);
 
   /* Write to the buffer.  */
-  written = strfmon (bufptr, 32, "%.10i, %.10Li\n",
-                     (double) -2, (long double) -1);
+  written
+      = strfmon (bufptr, 32, "%.10i, %.10Li\n", (double) -2, (long double) -1);
   if (written < 0)
     support_record_failure ();
   else
     bufptr += written;
-  written = strfmon_l (bufptr, 32, loc, "%.10i, %.10Li\n",
-                       (double) -2, (long double) -1);
+  written = strfmon_l (bufptr, 32, loc, "%.10i, %.10Li\n", (double) -2,
+		       (long double) -1);
   if (written < 0)
     support_record_failure ();
 
   /* Compare against the expected output.  */
-  const char *expected =
-    "-2.0000000000, -1.0000000000\n"
-    "-2.0000000000, -1.0000000000\n";
+  const char *expected = "-2.0000000000, -1.0000000000\n"
+			 "-2.0000000000, -1.0000000000\n";
   TEST_COMPARE_STRING (expected, buffer);
 
   return 0;

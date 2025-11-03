@@ -30,7 +30,8 @@ __pthread_mutex_setprioceiling (pthread_mutex_t *mutex, int prioceiling,
   /* See concurrency notes regarding __kind in struct __pthread_mutex_s
      in sysdeps/nptl/bits/thread-shared-types.h.  */
   if ((atomic_load_relaxed (&(mutex->__data.__kind))
-       & PTHREAD_MUTEX_PRIO_PROTECT_NP) == 0)
+       & PTHREAD_MUTEX_PRIO_PROTECT_NP)
+      == 0)
     return EINVAL;
 
   /* See __init_sched_fifo_prio.  */
@@ -61,7 +62,7 @@ __pthread_mutex_setprioceiling (pthread_mutex_t *mutex, int prioceiling,
     }
 
   int oldval = mutex->__data.__lock;
-  if (! locked)
+  if (!locked)
     do
       {
 	/* Need to lock the mutex, but without obeying the priority
@@ -75,10 +76,8 @@ __pthread_mutex_setprioceiling (pthread_mutex_t *mutex, int prioceiling,
 
 	do
 	  {
-	    oldval
-	      = atomic_compare_and_exchange_val_acq (&mutex->__data.__lock,
-						     ceilval | 2,
-						     ceilval | 1);
+	    oldval = atomic_compare_and_exchange_val_acq (
+		&mutex->__data.__lock, ceilval | 2, ceilval | 1);
 
 	    if ((oldval & PTHREAD_MUTEX_PRIO_CEILING_MASK) != ceilval)
 	      break;
@@ -111,11 +110,11 @@ __pthread_mutex_setprioceiling (pthread_mutex_t *mutex, int prioceiling,
   int newlock = 0;
   if (locked)
     newlock = (mutex->__data.__lock & ~PTHREAD_MUTEX_PRIO_CEILING_MASK);
-  mutex->__data.__lock = newlock
-			 | (prioceiling << PTHREAD_MUTEX_PRIO_CEILING_SHIFT);
+  mutex->__data.__lock
+      = newlock | (prioceiling << PTHREAD_MUTEX_PRIO_CEILING_SHIFT);
   atomic_full_barrier ();
 
-  futex_wake ((unsigned int *)&mutex->__data.__lock, INT_MAX,
+  futex_wake ((unsigned int *) &mutex->__data.__lock, INT_MAX,
 	      PTHREAD_MUTEX_PSHARED (mutex));
 
   return 0;
@@ -123,7 +122,7 @@ __pthread_mutex_setprioceiling (pthread_mutex_t *mutex, int prioceiling,
 versioned_symbol (libc, __pthread_mutex_setprioceiling,
 		  pthread_mutex_setprioceiling, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_4, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_4, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_mutex_setprioceiling,
-               pthread_mutex_setprioceiling, GLIBC_2_4);
+	       pthread_mutex_setprioceiling, GLIBC_2_4);
 #endif

@@ -48,7 +48,7 @@ __pthread_rwlock_timedwrlock_internal (struct __pthread_rwlock *rwlock,
 
   /* The lock is busy.  */
 
-  if (abstime != NULL && ! valid_nanoseconds (abstime->tv_nsec))
+  if (abstime != NULL && !valid_nanoseconds (abstime->tv_nsec))
     {
       __pthread_spin_unlock (&rwlock->__lock);
       return EINVAL;
@@ -79,7 +79,7 @@ __pthread_rwlock_timedwrlock_internal (struct __pthread_rwlock *rwlock,
   else
     {
       /* We're still in the queue.  No one attempted to wake us up, i.e. we
-         timed out.  */
+	 timed out.  */
       __pthread_dequeue (self);
       drain = 0;
     }
@@ -103,14 +103,14 @@ int
 __pthread_rwlock_timedwrlock (struct __pthread_rwlock *rwlock,
 			      const struct timespec *abstime)
 {
-  return __pthread_rwlock_timedwrlock_internal (rwlock, CLOCK_REALTIME, abstime);
+  return __pthread_rwlock_timedwrlock_internal (rwlock, CLOCK_REALTIME,
+						abstime);
 }
 weak_alias (__pthread_rwlock_timedwrlock, pthread_rwlock_timedwrlock)
 
-int
-__pthread_rwlock_clockwrlock (struct __pthread_rwlock *rwlock,
-			      clockid_t clockid,
-			      const struct timespec *abstime)
+    int __pthread_rwlock_clockwrlock (struct __pthread_rwlock *rwlock,
+				      clockid_t clockid,
+				      const struct timespec *abstime)
 {
   return __pthread_rwlock_timedwrlock_internal (rwlock, clockid, abstime);
 }

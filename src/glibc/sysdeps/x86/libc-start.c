@@ -18,18 +18,18 @@
 #ifndef SHARED
 
 /* Mark symbols hidden in static PIE for early self relocation to work.  */
-# if BUILD_PIE_DEFAULT
-#  pragma GCC visibility push(hidden)
-# endif
+#  if BUILD_PIE_DEFAULT
+#    pragma GCC visibility push(hidden)
+#  endif
 /* Define I386_USE_SYSENTER to support syscall during startup in static
    PIE.  */
-# include <startup.h>
-# include <ldsodefs.h>
+#  include <startup.h>
+#  include <ldsodefs.h>
 // # include <cpu-features.c>
 
 extern struct cpu_features _dl_x86_cpu_features;
 
-# define ARCH_INIT_CPU_FEATURES()
+#  define ARCH_INIT_CPU_FEATURES()
 
 #endif /* !SHARED */
 #include <csu/libc-start.c>

@@ -23,12 +23,11 @@
 
 extern int arch_prctl (int, ...);
 
-#define X86_XSTATE_TILECFG_ID	17
-#define X86_XSTATE_TILEDATA_ID	18
+#define X86_XSTATE_TILECFG_ID 17
+#define X86_XSTATE_TILEDATA_ID 18
 
 /* Initialize tile config.  */
-__attribute__ ((noinline, noclone))
-static void
+__attribute__ ((noinline, noclone)) static void
 init_tile_config (__tilecfg *tileinfo)
 {
   int i;
@@ -39,10 +38,10 @@ init_tile_config (__tilecfg *tileinfo)
   tileinfo->rows[0] = MAX_ROWS;
 
   for (i = 1; i < 4; ++i)
-  {
-    tileinfo->colsb[i] = MAX_COLS;
-    tileinfo->rows[i] = MAX_ROWS;
-  }
+    {
+      tileinfo->colsb[i] = MAX_COLS;
+      tileinfo->rows[i] = MAX_ROWS;
+    }
 
   _tile_loadconfig (tileinfo);
 }
@@ -77,7 +76,7 @@ clear_tile_register (void)
 }
 
 #define MOD(i) "tst-gnu2-tls2-amx-mod" #i ".so"
-#define IS_SUPPORTED()	enable_amx ()
+#define IS_SUPPORTED() enable_amx ()
 #define PREPARE_MALLOC() clear_tile_register ()
 
 #include <elf/tst-gnu2-tls2.c>

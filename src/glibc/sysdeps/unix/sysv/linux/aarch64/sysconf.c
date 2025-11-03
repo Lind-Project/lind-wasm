@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static long int linux_sysconf (int name);
 
 /* Get the value of the system variable NAME.  */
@@ -39,10 +38,10 @@ __sysconf (int name)
   switch (name)
     {
     case _SC_LEVEL1_ICACHE_LINESIZE:
-      asm("mrs\t%0, ctr_el0" : "=r"(ctr));
+      asm ("mrs\t%0, ctr_el0" : "=r"(ctr));
       return 4 << (ctr & 0xf);
     case _SC_LEVEL1_DCACHE_LINESIZE:
-      asm("mrs\t%0, ctr_el0" : "=r"(ctr));
+      asm ("mrs\t%0, ctr_el0" : "=r"(ctr));
       return 4 << ((ctr >> 16) & 0xf);
     }
 

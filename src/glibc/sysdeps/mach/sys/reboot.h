@@ -88,8 +88,8 @@
  *	@(#)reboot.h	7.5 (Berkeley) 6/27/88
  */
 
-#ifndef	_SYS_REBOOT_H_
-#define	_SYS_REBOOT_H_
+#ifndef _SYS_REBOOT_H_
+#define _SYS_REBOOT_H_
 
 #include <features.h>
 
@@ -98,24 +98,25 @@
  * These are converted to switches, and passed to startup program,
  * and on to init.
  */
-#define	RB_AUTOBOOT	0	/* flags for system auto-booting itself */
+#define RB_AUTOBOOT 0 /* flags for system auto-booting itself */
 
-#define	RB_ASKNAME	0x01	/* -a: ask for file name to reboot from */
-#define	RB_SINGLE	0x02	/* -s: reboot to single user only */
-#define	RB_KDB		0x04	/* -d: kernel debugger symbols loaded */
-#define	RB_HALT		0x08	/* -h: enter KDB at bootup */
-				/*     for host_reboot(): don't reboot,
-				       just halt */
-#define	RB_INITNAME	0x10	/* -i: name given for /etc/init (unused) */
-#define	RB_DFLTROOT	0x20	/*     use compiled-in rootdev */
-#define	RB_NOBOOTRC	0x20	/* -b: don't run /etc/rc.boot */
-#define RB_ALTBOOT	0x40	/*     use /boot.old vs /boot */
-#define	RB_UNIPROC	0x80	/* -u: start only one processor */
+#define RB_ASKNAME 0x01	 /* -a: ask for file name to reboot from */
+#define RB_SINGLE 0x02	 /* -s: reboot to single user only */
+#define RB_KDB 0x04	 /* -d: kernel debugger symbols loaded */
+#define RB_HALT 0x08	 /* -h: enter KDB at bootup */
+			 /*     for host_reboot(): don't reboot,
+				just halt */
+#define RB_INITNAME 0x10 /* -i: name given for /etc/init (unused) */
+#define RB_DFLTROOT 0x20 /*     use compiled-in rootdev */
+#define RB_NOBOOTRC 0x20 /* -b: don't run /etc/rc.boot */
+#define RB_ALTBOOT 0x40	 /*     use /boot.old vs /boot */
+#define RB_UNIPROC 0x80	 /* -u: start only one processor */
 
-#define	RB_SHIFT	8	/* second byte is for ux */
+#define RB_SHIFT 8 /* second byte is for ux */
 
-#define	RB_DEBUGGER	0x1000	/*     for host_reboot(): enter kernel
-				       debugger from user level */
+#define RB_DEBUGGER                                                           \
+  0x1000 /*     for host_reboot(): enter kernel                               \
+		debugger from user level */
 
 /*
  * Constants for converting boot-style device number to type,
@@ -129,35 +130,34 @@
  *	|MA | AD| CT| UN| PART  | TYPE |
  *	--------------------------------
  */
-#define	B_ADAPTORSHIFT		24
-#define	B_ADAPTORMASK		0x0f
-#define	B_ADAPTOR(val)		(((val) >> B_ADAPTORSHIFT) & B_ADAPTORMASK)
-#define B_CONTROLLERSHIFT	20
-#define B_CONTROLLERMASK	0xf
-#define	B_CONTROLLER(val)	(((val)>>B_CONTROLLERSHIFT) & B_CONTROLLERMASK)
-#define B_UNITSHIFT		16
-#define B_UNITMASK		0xf
-#define	B_UNIT(val)		(((val) >> B_UNITSHIFT) & B_UNITMASK)
-#define B_PARTITIONSHIFT	8
-#define B_PARTITIONMASK		0xff
-#define	B_PARTITION(val)	(((val) >> B_PARTITIONSHIFT) & B_PARTITIONMASK)
-#define	B_TYPESHIFT		0
-#define	B_TYPEMASK		0xff
-#define	B_TYPE(val)		(((val) >> B_TYPESHIFT) & B_TYPEMASK)
+#define B_ADAPTORSHIFT 24
+#define B_ADAPTORMASK 0x0f
+#define B_ADAPTOR(val) (((val) >> B_ADAPTORSHIFT) & B_ADAPTORMASK)
+#define B_CONTROLLERSHIFT 20
+#define B_CONTROLLERMASK 0xf
+#define B_CONTROLLER(val) (((val) >> B_CONTROLLERSHIFT) & B_CONTROLLERMASK)
+#define B_UNITSHIFT 16
+#define B_UNITMASK 0xf
+#define B_UNIT(val) (((val) >> B_UNITSHIFT) & B_UNITMASK)
+#define B_PARTITIONSHIFT 8
+#define B_PARTITIONMASK 0xff
+#define B_PARTITION(val) (((val) >> B_PARTITIONSHIFT) & B_PARTITIONMASK)
+#define B_TYPESHIFT 0
+#define B_TYPEMASK 0xff
+#define B_TYPE(val) (((val) >> B_TYPESHIFT) & B_TYPEMASK)
 
-#define	B_MAGICMASK	0xf0000000U
-#define	B_DEVMAGIC	0xa0000000U
+#define B_MAGICMASK 0xf0000000U
+#define B_DEVMAGIC 0xa0000000U
 
-#define MAKEBOOTDEV(type, adaptor, controller, unit, partition) \
-	(((type) << B_TYPESHIFT) | ((adaptor) << B_ADAPTORSHIFT) | \
-	((controller) << B_CONTROLLERSHIFT) | ((unit) << B_UNITSHIFT) | \
-	((partition) << B_PARTITIONSHIFT) | B_DEVMAGIC)
+#define MAKEBOOTDEV(type, adaptor, controller, unit, partition)               \
+  (((type) << B_TYPESHIFT) | ((adaptor) << B_ADAPTORSHIFT)                    \
+   | ((controller) << B_CONTROLLERSHIFT) | ((unit) << B_UNITSHIFT)            \
+   | ((partition) << B_PARTITIONSHIFT) | B_DEVMAGIC)
 
-
-#ifdef	KERNEL
-#ifndef	__ASSEMBLER__
+#ifdef KERNEL
+#  ifndef __ASSEMBLER__
 extern int boothowto;
-#endif	/* __ASSEMBLER__ */
+#  endif /* __ASSEMBLER__ */
 #endif
 
 __BEGIN_DECLS
@@ -167,5 +167,4 @@ extern int reboot (int __howto) __THROW;
 
 __END_DECLS
 
-
-#endif	/* _SYS_REBOOT_H_ */
+#endif /* _SYS_REBOOT_H_ */

@@ -30,13 +30,10 @@ static int do_test (void);
    required that there are no spurious wakeups if only more readers
    are added.  This is a reasonable demand.  */
 
-
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 
-
 #define N 10
-
 
 static void *
 tf (void *arg)
@@ -61,7 +58,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)

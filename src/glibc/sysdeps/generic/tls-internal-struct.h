@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TLS_INTERNAL_STRUCT_H
-#define _TLS_INTERNAL_STRUCT_H 1
+#  define _TLS_INTERNAL_STRUCT_H 1
 
 struct tls_internal_t
 {

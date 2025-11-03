@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ARC_BITS_SETJMP_H
-#define _ARC_BITS_SETJMP_H 1
+#  define _ARC_BITS_SETJMP_H 1
 
 /* Saves r13-r25 (callee-saved), fp (frame pointer), sp (stack pointer),
    blink (branch-n-link).  */

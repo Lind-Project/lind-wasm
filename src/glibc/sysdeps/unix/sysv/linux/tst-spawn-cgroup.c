@@ -34,7 +34,7 @@
 
 #define CGROUPFS "/sys/fs/cgroup/"
 #ifndef CGROUP2_SUPER_MAGIC
-# define CGROUP2_SUPER_MAGIC 0x63677270
+#  define CGROUP2_SUPER_MAGIC 0x63677270
 #endif
 
 #define F_TYPE_EQUAL(a, b) (a == (typeof (a)) b)
@@ -42,8 +42,7 @@
 #define CGROUP_TEST "test-spawn-cgroup"
 
 /* Nonzero if the program gets called via `exec'.  */
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 static int restart;
 
 /* Hold the four initial argument used to respawn the process, plus the extra
@@ -95,7 +94,6 @@ get_cgroup (void)
 
   return cgroup;
 }
-
 
 /* Called on process re-execution.  */
 static void

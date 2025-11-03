@@ -20,7 +20,6 @@
 #include <stap-probe.h>
 #include <string.h>
 
-
 /* See __pthread_cond_wait for details.  */
 int
 __pthread_cond_init (pthread_cond_t *cond, const pthread_condattr_t *cond_attr)
@@ -37,9 +36,10 @@ __pthread_cond_init (pthread_cond_t *cond, const pthread_condattr_t *cond_attr)
   /* Iff not equal to ~0l, this is a PTHREAD_PROCESS_PRIVATE condvar.  */
   if (icond_attr != NULL && (icond_attr->value & 1) != 0)
     cond->__data.__wrefs |= __PTHREAD_COND_SHARED_MASK;
-  int clockid = (icond_attr != NULL
-		 ? ((icond_attr->value >> 1) & ((1 << COND_CLOCK_BITS) - 1))
-		 : CLOCK_REALTIME);
+  int clockid
+      = (icond_attr != NULL
+	     ? ((icond_attr->value >> 1) & ((1 << COND_CLOCK_BITS) - 1))
+	     : CLOCK_REALTIME);
   /* If 0, CLOCK_REALTIME is used; CLOCK_MONOTONIC otherwise.  */
   if (clockid != CLOCK_REALTIME)
     cond->__data.__wrefs |= __PTHREAD_COND_CLOCK_MONOTONIC_MASK;
@@ -49,5 +49,5 @@ __pthread_cond_init (pthread_cond_t *cond, const pthread_condattr_t *cond_attr)
   return 0;
 }
 libc_hidden_def (__pthread_cond_init)
-versioned_symbol (libc, __pthread_cond_init,
-		  pthread_cond_init, GLIBC_2_3_2);
+    versioned_symbol (libc, __pthread_cond_init, pthread_cond_init,
+		      GLIBC_2_3_2);

@@ -24,7 +24,6 @@
 #include <sysdeps/unix/getlogin.c>
 #undef getlogin
 
-
 /* Return the login name of the user, or NULL if it can't be determined.
    The returned pointer, if not NULL, is good only until the next call.  */
 

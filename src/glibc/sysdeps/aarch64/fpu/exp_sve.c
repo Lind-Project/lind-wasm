@@ -57,8 +57,8 @@ special_case (svbool_t pg, svfloat64_t s, svfloat64_t y, svfloat64_t n)
       = svdup_u64_z (p_sign, SpecialOffset); /* Inactive lanes set to 0.  */
 
   /* Set s1 to generate overflow depending on sign of exponent n.  */
-  svfloat64_t s1 = svreinterpret_f64 (
-      svsubr_x (pg, b, SpecialBias1)); /* 0x70...0 - b.  */
+  svfloat64_t s1
+      = svreinterpret_f64 (svsubr_x (pg, b, SpecialBias1)); /* 0x70...0 - b. */
   /* Offset s to avoid overflow in final result if n is below threshold.  */
   svfloat64_t s2 = svreinterpret_f64 (
       svadd_x (pg, svsub_x (pg, svreinterpret_u64 (s), SpecialBias2),
@@ -77,7 +77,8 @@ special_case (svbool_t pg, svfloat64_t s, svfloat64_t y, svfloat64_t n)
 /* SVE exp algorithm. Maximum measured error is 1.01ulps:
    SV_NAME_D1 (exp)(0x1.4619d7b04da41p+6) got 0x1.885d9acc41da7p+117
 					 want 0x1.885d9acc41da6p+117.  */
-svfloat64_t SV_NAME_D1 (exp) (svfloat64_t x, const svbool_t pg)
+svfloat64_t
+SV_NAME_D1 (exp) (svfloat64_t x, const svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
 

@@ -35,5 +35,4 @@ __tcgetattr (int fd, struct termios *termios_p)
   return __ioctl (fd, TIOCGETA, termios_p);
 }
 
-libc_hidden_def (__tcgetattr)
-weak_alias (__tcgetattr, tcgetattr)
+libc_hidden_def (__tcgetattr) weak_alias (__tcgetattr, tcgetattr)

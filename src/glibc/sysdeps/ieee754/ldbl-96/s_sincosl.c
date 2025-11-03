@@ -22,7 +22,6 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-
 void
 __sincosl (long double x, long double *sinx, long double *cosx)
 {

@@ -24,7 +24,6 @@
 
 static pthread_barrier_t b;
 
-
 static void *
 tf (void *arg)
 {
@@ -37,7 +36,6 @@ tf (void *arg)
 
   exit (0);
 }
-
 
 static int
 do_test (void)

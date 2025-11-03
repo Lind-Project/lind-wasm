@@ -57,15 +57,14 @@ tf (void *arg)
   exit (1);
 }
 
-
 static int
 do_test (void)
 {
   if (pthread_barrier_init (&b, NULL, 2) != 0)
-   {
-     puts ("barrier init failed");
-     return 1;
-   }
+    {
+      puts ("barrier init failed");
+      return 1;
+    }
 
   pthread_t th;
   if (pthread_create (&th, NULL, tf, NULL) != 0)

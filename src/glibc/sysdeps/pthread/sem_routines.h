@@ -19,8 +19,8 @@
 #ifndef _SEM_ROUTINES_H
 #define _SEM_ROUTINES_H
 
-sem_t * __sem_check_add_mapping (const char *name, int fd, sem_t *existing)
-  attribute_hidden;
+sem_t *__sem_check_add_mapping (const char *name, int fd,
+				sem_t *existing) attribute_hidden;
 
 bool __sem_remove_mapping (sem_t *sem) attribute_hidden;
 

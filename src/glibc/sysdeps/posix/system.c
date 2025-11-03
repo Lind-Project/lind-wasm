@@ -31,9 +31,8 @@
 #include <not-cancel.h>
 #include <internal-signals.h>
 
-#define	SHELL_PATH	"/bin/sh"	/* Path of the shell.  */
-#define	SHELL_NAME	"sh"		/* Name to give it.  */
-
+#define SHELL_PATH "/bin/sh" /* Path of the shell.  */
+#define SHELL_NAME "sh"	     /* Name to give it.  */
 
 /* This system implementation aims to be thread-safe, which requires to
    restore the signal dispositions for SIGINT and SIGQUIT correctly and to
@@ -52,19 +51,22 @@ static struct sigaction intr, quit;
 static int sa_refcntr;
 __libc_lock_define_initialized (static, lock);
 
-# define DO_LOCK() __libc_lock_lock (lock)
-# define DO_UNLOCK() __libc_lock_unlock (lock)
-# define INIT_LOCK() ({ __libc_lock_init (lock); sa_refcntr = 0; })
-# define ADD_REF() sa_refcntr++
-# define SUB_REF() --sa_refcntr
+#  define DO_LOCK() __libc_lock_lock (lock)
+#  define DO_UNLOCK() __libc_lock_unlock (lock)
+#  define INIT_LOCK()                                                         \
+    ({                                                                        \
+      __libc_lock_init (lock);                                                \
+      sa_refcntr = 0;                                                         \
+    })
+#  define ADD_REF() sa_refcntr++
+#  define SUB_REF() --sa_refcntr
 #else
-# define DO_LOCK()
-# define DO_UNLOCK()
-# define INIT_LOCK()
-# define ADD_REF() 0
-# define SUB_REF() 0
+#  define DO_LOCK()
+#  define DO_UNLOCK()
+#  define INIT_LOCK()
+#  define ADD_REF() 0
+#  define SUB_REF() 0
 #endif
-
 
 #if defined(_LIBC_REENTRANT) && defined(SIGCANCEL)
 struct cancel_handler_args
@@ -130,9 +132,9 @@ do_system (const char *line)
 
   __sigemptyset (&reset);
   if (intr.sa_handler != SIG_IGN)
-    __sigaddset(&reset, SIGINT);
+    __sigaddset (&reset, SIGINT);
   if (quit.sa_handler != SIG_IGN)
-    __sigaddset(&reset, SIGQUIT);
+    __sigaddset (&reset, SIGQUIT);
 
   posix_spawnattr_t spawn_attr;
   /* None of the posix_spawnattr_* function returns an error, including
@@ -145,10 +147,8 @@ do_system (const char *line)
 			      POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK);
 
   ret = __posix_spawn (&pid, SHELL_PATH, 0, &spawn_attr,
-		       (char *const[]){ (char *) SHELL_NAME,
-					(char *) "-c",
-					(char *) "--",
-					(char *) line, NULL },
+		       (char *const[]) { (char *) SHELL_NAME, (char *) "-c",
+					 (char *) "--", (char *) line, NULL },
 		       __environ);
   __posix_spawnattr_destroy (&spawn_attr);
 
@@ -158,12 +158,8 @@ do_system (const char *line)
 	 the block where they were installed, so it is safe to reference
 	 stack variable allocate in the broader scope.  */
 #if defined(_LIBC_REENTRANT) && defined(SIGCANCEL)
-      struct cancel_handler_args cancel_args =
-      {
-	.quit = &quit,
-	.intr = &intr,
-	.pid = pid
-      };
+      struct cancel_handler_args cancel_args
+	  = { .quit = &quit, .intr = &intr, .pid = pid };
       __libc_cleanup_region_start (1, cancel_handler, &cancel_args);
 #endif
       /* Note the system() is a cancellation point.  But since we call
@@ -176,9 +172,9 @@ do_system (const char *line)
 #endif
     }
   else
-   /* POSIX states that failure to execute the shell should return
-      as if the shell had terminated using _exit(127).  */
-   status = W_EXITCODE (127, 0);
+    /* POSIX states that failure to execute the shell should return
+       as if the shell had terminated using _exit(127).  */
+    status = W_EXITCODE (127, 0);
 
   /* sigaction can not fail with SIGINT/SIGQUIT used with old
      disposition.  Same applies for sigprocmask.  */

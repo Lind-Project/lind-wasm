@@ -29,9 +29,8 @@ extern __typeof (finite) __finite_vis3 attribute_hidden;
 extern __typeof (finite) __finite_generic attribute_hidden;
 
 sparc_libm_ifunc_redirected (__redirect___finite, __finite,
-			     hwcap & HWCAP_SPARC_VIS3
-			     ? __finite_vis3
-			     : __finite_generic);
+			     hwcap &HWCAP_SPARC_VIS3 ? __finite_vis3
+						     : __finite_generic);
 
 sparc_ifunc_redirected_hidden_def (__redirect___finite, __finite)
-weak_alias (__finite, finite)
+    weak_alias (__finite, finite)

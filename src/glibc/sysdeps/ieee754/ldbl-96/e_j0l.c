@@ -117,13 +117,13 @@ __ieee754_j0l (long double x)
   if (__glibc_unlikely (ix >= 0x7fff))
     return one / (x * x);
   x = fabsl (x);
-  if (ix >= 0x4000)		/* |x| >= 2.0 */
+  if (ix >= 0x4000) /* |x| >= 2.0 */
     {
       __sincosl (x, &s, &c);
       ss = s - c;
       cc = s + c;
       if (ix < 0x7ffe)
-	{			/* make sure x+x not overflow */
+	{ /* make sure x+x not overflow */
 	  z = -__cosl (x + x);
 	  if ((s * c) < zero)
 	    cc = z / ss;
@@ -134,7 +134,7 @@ __ieee754_j0l (long double x)
        * j0(x) = 1/sqrt(pi) * (P(0,x)*cc - Q(0,x)*ss) / sqrt(x)
        * y0(x) = 1/sqrt(pi) * (P(0,x)*ss + Q(0,x)*cc) / sqrt(x)
        */
-      if (__glibc_unlikely (ix > 0x408e))      	/* 2^143 */
+      if (__glibc_unlikely (ix > 0x408e)) /* 2^143 */
 	z = (invsqrtpi * cc) / sqrtl (x);
       else
 	{
@@ -144,7 +144,7 @@ __ieee754_j0l (long double x)
 	}
       return z;
     }
-  if (__glibc_unlikely (ix < 0x3fef))       /* |x| < 2**-16 */
+  if (__glibc_unlikely (ix < 0x3fef)) /* |x| < 2**-16 */
     {
       /* raise inexact if x != 0 */
       math_force_eval (huge + x);
@@ -157,7 +157,7 @@ __ieee754_j0l (long double x)
   r = z * (R[0] + z * (R[1] + z * (R[2] + z * (R[3] + z * R[4]))));
   s = S[0] + z * (S[1] + z * (S[2] + z * (S[3] + z)));
   if (ix < 0x3fff)
-    {				/* |x| < 1.00 */
+    { /* |x| < 1.00 */
       return (one - 0.25 * z + z * (r / s));
     }
   else
@@ -168,21 +168,19 @@ __ieee754_j0l (long double x)
 }
 libm_alias_finite (__ieee754_j0l, __j0l)
 
-
-/* y0(x) = 2/pi ln(x) J0(x) + U(x^2)/V(x^2)
-   0 < x <= 2
-   peak relative error 1.7e-21 */
-static const long double
-U[6] = {
-  -1.054912306975785573710813351985351350861E10L,
-  2.520192609749295139432773849576523636127E10L,
-  -1.856426071075602001239955451329519093395E9L,
-  4.079209129698891442683267466276785956784E7L,
-  -3.440684087134286610316661166492641011539E5L,
-  1.005524356159130626192144663414848383774E3L,
-};
-static const long double
-V[5] = {
+    /* y0(x) = 2/pi ln(x) J0(x) + U(x^2)/V(x^2)
+       0 < x <= 2
+       peak relative error 1.7e-21 */
+    static const long double U[6]
+    = {
+	-1.054912306975785573710813351985351350861E10L,
+	2.520192609749295139432773849576523636127E10L,
+	-1.856426071075602001239955451329519093395E9L,
+	4.079209129698891442683267466276785956784E7L,
+	-3.440684087134286610316661166492641011539E5L,
+	1.005524356159130626192144663414848383774E3L,
+      };
+static const long double V[5] = {
   1.429337283720789610137291929228082613676E11L,
   2.492593075325119157558811370165695013002E9L,
   2.186077620785925464237324417623665138376E7L,
@@ -206,9 +204,9 @@ __ieee754_y0l (long double x)
   if (__glibc_unlikely (ix >= 0x7fff))
     return one / (x + x * x);
   if (__glibc_unlikely ((i0 | i1) == 0))
-    return -HUGE_VALL + x;  /* -inf and overflow exception.  */
+    return -HUGE_VALL + x; /* -inf and overflow exception.  */
   if (ix >= 0x4000)
-    {				/* |x| >= 2.0 */
+    { /* |x| >= 2.0 */
 
       /* y0(x) = sqrt(2/(pi*x))*(p0(x)*sin(x0)+q0(x)*cos(x0))
        * where x0 = x-pi/4
@@ -229,14 +227,14 @@ __ieee754_y0l (long double x)
        * y0(x) = 1/sqrt(pi) * (P(0,x)*ss + Q(0,x)*cc) / sqrt(x)
        */
       if (ix < 0x7ffe)
-	{			/* make sure x+x not overflow */
+	{ /* make sure x+x not overflow */
 	  z = -__cosl (x + x);
 	  if ((s * c) < zero)
 	    cc = z / ss;
 	  else
 	    ss = z / cc;
 	}
-      if (__glibc_unlikely (ix > 0x408e))      	/* 2^143 */
+      if (__glibc_unlikely (ix > 0x408e)) /* 2^143 */
 	z = (invsqrtpi * ss) / sqrtl (x);
       else
 	{
@@ -246,10 +244,10 @@ __ieee754_y0l (long double x)
 	}
       return z;
     }
-  if (__glibc_unlikely (ix <= 0x3fde))       /* x < 2^-33 */
+  if (__glibc_unlikely (ix <= 0x3fde)) /* x < 2^-33 */
     {
       z = -7.380429510868722527629822444004602747322E-2L
-	+ tpi * __ieee754_logl (x);
+	  + tpi * __ieee754_logl (x);
       return z;
     }
   z = x * x;
@@ -259,22 +257,23 @@ __ieee754_y0l (long double x)
 }
 libm_alias_finite (__ieee754_y0l, __y0l)
 
-/* The asymptotic expansions of pzero is
- *	1 - 9/128 s^2 + 11025/98304 s^4 - ...,	where s = 1/x.
- * For x >= 2, We approximate pzero by
- *	pzero(x) = 1 + s^2 R(s^2) / S(s^2)
- */
-static const long double pR8[7] = {
-  /* 8 <= x <= inf
-     Peak relative error 4.62 */
-  -4.094398895124198016684337960227780260127E-9L,
-  -8.929643669432412640061946338524096893089E-7L,
-  -6.281267456906136703868258380673108109256E-5L,
-  -1.736902783620362966354814353559382399665E-3L,
-  -1.831506216290984960532230842266070146847E-2L,
-  -5.827178869301452892963280214772398135283E-2L,
-  -2.087563267939546435460286895807046616992E-2L,
-};
+    /* The asymptotic expansions of pzero is
+     *	1 - 9/128 s^2 + 11025/98304 s^4 - ...,	where s = 1/x.
+     * For x >= 2, We approximate pzero by
+     *	pzero(x) = 1 + s^2 R(s^2) / S(s^2)
+     */
+    static const long double pR8[7]
+    = {
+	/* 8 <= x <= inf
+	   Peak relative error 4.62 */
+	-4.094398895124198016684337960227780260127E-9L,
+	-8.929643669432412640061946338524096893089E-7L,
+	-6.281267456906136703868258380673108109256E-5L,
+	-1.736902783620362966354814353559382399665E-3L,
+	-1.831506216290984960532230842266070146847E-2L,
+	-5.827178869301452892963280214772398135283E-2L,
+	-2.087563267939546435460286895807046616992E-2L,
+      };
 static const long double pS8[6] = {
   5.823145095287749230197031108839653988393E-8L,
   1.279281986035060320477759999428992730280E-5L,
@@ -363,35 +362,35 @@ pzero (long double x)
     {
       p = pR8;
       q = pS8;
-    }				/* x >= 8 */
+    } /* x >= 8 */
   else
     {
       i1 = (ix << 16) | (i0 >> 16);
-      if (i1 >= 0x40019174)	/* x >= 4.54541015625 */
+      if (i1 >= 0x40019174) /* x >= 4.54541015625 */
 	{
 	  p = pR5;
 	  q = pS5;
 	}
-      else if (i1 >= 0x4000b6db)	/* x >= 2.85711669921875 */
+      else if (i1 >= 0x4000b6db) /* x >= 2.85711669921875 */
 	{
 	  p = pR3;
 	  q = pS3;
 	}
-      else	/* x >= 2 */
+      else /* x >= 2 */
 	{
 	  p = pR2;
 	  q = pS2;
 	}
     }
   z = one / (x * x);
-  r =
-    p[0] + z * (p[1] +
-		z * (p[2] + z * (p[3] + z * (p[4] + z * (p[5] + z * p[6])))));
-  s =
-    q[0] + z * (q[1] + z * (q[2] + z * (q[3] + z * (q[4] + z * (q[5] + z)))));
+  r = p[0]
+      + z
+	    * (p[1]
+	       + z * (p[2] + z * (p[3] + z * (p[4] + z * (p[5] + z * p[6])))));
+  s = q[0]
+      + z * (q[1] + z * (q[2] + z * (q[3] + z * (q[4] + z * (q[5] + z)))));
   return (one + z * r / s);
 }
-
 
 /* For x >= 8, the asymptotic expansions of qzero is
  *	-1/8 s + 75/1024 s^3 - ..., where s = 1/x.
@@ -497,7 +496,7 @@ qzero (long double x)
   GET_LDOUBLE_WORDS (se, i0, i1, x);
   ix = se & 0x7fff;
   /* ix >= 0x4000 for all calls to this function.  */
-  if (ix >= 0x4002)		/* x >= 8 */
+  if (ix >= 0x4002) /* x >= 8 */
     {
       p = qR8;
       q = qS8;
@@ -505,29 +504,34 @@ qzero (long double x)
   else
     {
       i1 = (ix << 16) | (i0 >> 16);
-      if (i1 >= 0x40019174)	/* x >= 4.54541015625 */
+      if (i1 >= 0x40019174) /* x >= 4.54541015625 */
 	{
 	  p = qR5;
 	  q = qS5;
 	}
-      else if (i1 >= 0x4000b6db)	/* x >= 2.85711669921875 */
+      else if (i1 >= 0x4000b6db) /* x >= 2.85711669921875 */
 	{
 	  p = qR3;
 	  q = qS3;
 	}
-      else	/* x >= 2 */
+      else /* x >= 2 */
 	{
 	  p = qR2;
 	  q = qS2;
 	}
     }
   z = one / (x * x);
-  r =
-    p[0] + z * (p[1] +
-		z * (p[2] + z * (p[3] + z * (p[4] + z * (p[5] + z * p[6])))));
-  s =
-    q[0] + z * (q[1] +
-		z * (q[2] +
-		     z * (q[3] + z * (q[4] + z * (q[5] + z * (q[6] + z))))));
+  r = p[0]
+      + z
+	    * (p[1]
+	       + z * (p[2] + z * (p[3] + z * (p[4] + z * (p[5] + z * p[6])))));
+  s = q[0]
+      + z
+	    * (q[1]
+	       + z
+		     * (q[2]
+			+ z
+			      * (q[3]
+				 + z * (q[4] + z * (q[5] + z * (q[6] + z))))));
   return (-.125 + z * r / s) / x;
 }

@@ -23,8 +23,8 @@
    for each one.  I love V9 code models...  */
 static inline void __attribute__ ((always_inline))
 sparc64_fixup_plt (struct link_map *map, const Elf64_Rela *reloc,
-		   Elf64_Addr *reloc_addr, Elf64_Addr value,
-		   Elf64_Addr high, int t)
+		   Elf64_Addr *reloc_addr, Elf64_Addr value, Elf64_Addr high,
+		   int t)
 {
   unsigned int *insns = (unsigned int *) reloc_addr;
   Elf64_Addr plt_vaddr = (Elf64_Addr) reloc_addr;
@@ -56,7 +56,7 @@ sparc64_fixup_plt (struct link_map *map, const Elf64_Rela *reloc,
       if (disp >= -0x100000 && disp < 0x100000)
 	{
 	  /* ba,a,pt %icc */
-	  insn = 0x30480000  | ((disp >> 2) & 0x07ffff);
+	  insn = 0x30480000 | ((disp >> 2) & 0x07ffff);
 	}
 
       /* As this is just one instruction, it is thread safe and so we
@@ -64,7 +64,7 @@ sparc64_fixup_plt (struct link_map *map, const Elf64_Rela *reloc,
 	 entry is 8 instructions long, so we can't run into the 'jmp'
 	 delay slot problems 32-bit PLTs can.  */
       insns[0] = insn;
-      __asm __volatile ("flush %0" : : "r" (insns));
+      __asm __volatile ("flush %0" : : "r"(insns));
     }
   /* 32-bit Sparc style, the target is in the lower 32-bits of
      address space.  */
@@ -74,17 +74,15 @@ sparc64_fixup_plt (struct link_map *map, const Elf64_Rela *reloc,
 	 jmpl	%g1 + %lo(target), %g0  */
 
       insns[1] = 0x81c06000 | (value & 0x3ff);
-      __asm __volatile ("flush %0 + 4" : : "r" (insns));
+      __asm __volatile ("flush %0 + 4" : : "r"(insns));
 
-      insns[0] = 0x03000000 | ((unsigned int)(value >> 10));
-      __asm __volatile ("flush %0" : : "r" (insns));
+      insns[0] = 0x03000000 | ((unsigned int) (value >> 10));
+      __asm __volatile ("flush %0" : : "r"(insns));
     }
   /* We can also get somewhat simple sequences if the distance between
      the target and the PLT entry is within +/- 2GB.  */
-  else if ((plt_vaddr > value
-	    && ((plt_vaddr - value) >> 31) == 0)
-	   || (value > plt_vaddr
-	       && ((value - plt_vaddr) >> 31) == 0))
+  else if ((plt_vaddr > value && ((plt_vaddr - value) >> 31) == 0)
+	   || (value > plt_vaddr && ((value - plt_vaddr) >> 31) == 0))
     {
       unsigned int displacement;
 
@@ -98,13 +96,13 @@ sparc64_fixup_plt (struct link_map *map, const Elf64_Rela *reloc,
 	  mov	%g1, %o7  */
 
       insns[2] = 0x9e100001;
-      __asm __volatile ("flush %0 + 8" : : "r" (insns));
+      __asm __volatile ("flush %0 + 8" : : "r"(insns));
 
       insns[1] = 0x40000000 | (displacement >> 2);
-      __asm __volatile ("flush %0 + 4" : : "r" (insns));
+      __asm __volatile ("flush %0 + 4" : : "r"(insns));
 
       insns[0] = 0x8210000f;
-      __asm __volatile ("flush %0" : : "r" (insns));
+      __asm __volatile ("flush %0" : : "r"(insns));
     }
   /* Worst case, ho hum...  */
   else
@@ -126,13 +124,13 @@ sparc64_fixup_plt (struct link_map *map, const Elf64_Rela *reloc,
 	      nop  */
 
 	  insns[5] = 0x81c04005;
-	  __asm __volatile ("flush %0 + 20" : : "r" (insns));
+	  __asm __volatile ("flush %0 + 20" : : "r"(insns));
 
 	  insns[4] = 0x83287020;
-	  __asm __volatile ("flush %0 + 16" : : "r" (insns));
+	  __asm __volatile ("flush %0 + 16" : : "r"(insns));
 
 	  insns[3] = 0x8a116000 | (low32 & 0x3ff);
-	  __asm __volatile ("flush %0 + 12" : : "r" (insns));
+	  __asm __volatile ("flush %0 + 12" : : "r"(insns));
 
 	  insns[2] = 0x82106000 | (high32 & 0x3ff);
 	}
@@ -146,21 +144,21 @@ sparc64_fixup_plt (struct link_map *map, const Elf64_Rela *reloc,
 	      nop  */
 
 	  insns[4] = 0x81c04005;
-	  __asm __volatile ("flush %0 + 16" : : "r" (insns));
+	  __asm __volatile ("flush %0 + 16" : : "r"(insns));
 
 	  insns[3] = 0x8a116000 | (low32 & 0x3ff);
-	  __asm __volatile ("flush %0 + 12" : : "r" (insns));
+	  __asm __volatile ("flush %0 + 12" : : "r"(insns));
 
 	  insns[2] = 0x83287020;
 	}
 
-      __asm __volatile ("flush %0 + 8" : : "r" (insns));
+      __asm __volatile ("flush %0 + 8" : : "r"(insns));
 
       insns[1] = 0x0b000000 | (low32 >> 10);
-      __asm __volatile ("flush %0 + 4" : : "r" (insns));
+      __asm __volatile ("flush %0 + 4" : : "r"(insns));
 
       insns[0] = 0x03000000 | (high32 >> 10);
-      __asm __volatile ("flush %0" : : "r" (insns));
+      __asm __volatile ("flush %0" : : "r"(insns));
     }
 }
 

@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef __INTERNAL_SIGNALS_H
-# define __INTERNAL_SIGNALS_H
+#define __INTERNAL_SIGNALS_H
 
 #include <internal-sigset.h>
 #include <limits.h>
@@ -28,23 +28,19 @@
 #include <sysdep.h>
 
 /* The signal used for asynchronous cancelation.  */
-#define SIGCANCEL       __SIGRTMIN
-
+#define SIGCANCEL __SIGRTMIN
 
 /* Signal needed for the kernel-supported POSIX timer implementation.
    We can reuse the cancellation signal since we can distinguish
    cancellation from timer expirations.  */
-#define SIGTIMER        SIGCANCEL
-
+#define SIGTIMER SIGCANCEL
 
 /* Signal used to implement the setuid et.al. functions.  */
-#define SIGSETXID       (__SIGRTMIN + 1)
-
+#define SIGSETXID (__SIGRTMIN + 1)
 
 /* How many signal numbers need to be reserved for libpthread's private uses
    (SIGCANCEL and SIGSETXID).  */
-#define RESERVED_SIGRT  2
-
+#define RESERVED_SIGRT 2
 
 /* Return is sig is used internally.  */
 static inline bool
@@ -61,9 +57,8 @@ clear_internal_signals (sigset_t *set)
   __sigdelset (set, SIGSETXID);
 }
 
-static const internal_sigset_t sigall_set = {
-   .__val = {[0 ...  __NSIG_WORDS-1 ] =  -1 }
-};
+static const internal_sigset_t sigall_set
+    = { .__val = { [0 ... __NSIG_WORDS - 1] = -1 } };
 
 /* Obtain and change blocked signals, including internal glibc ones.  */
 static inline int
@@ -86,18 +81,14 @@ internal_signal_block_all (internal_sigset_t *oset)
 static inline void
 internal_signal_restore_set (const internal_sigset_t *set)
 {
-  INTERNAL_SYSCALL_CALL (rt_sigprocmask, SIG_SETMASK, set, NULL,
-			 __NSIG_BYTES);
+  INTERNAL_SYSCALL_CALL (rt_sigprocmask, SIG_SETMASK, set, NULL, __NSIG_BYTES);
 }
-
 
 /* It is used on timer_create code directly on sigwaitinfo call, so it can not
    use the internal_sigset_t definitions.  */
-static const sigset_t sigtimer_set = {
-  .__val = { [0]                      = __sigmask (SIGTIMER),
-             [1 ... _SIGSET_NWORDS-1] = 0
-  }
-};
+static const sigset_t sigtimer_set
+    = { .__val
+	= { [0] = __sigmask (SIGTIMER), [1 ... _SIGSET_NWORDS - 1] = 0 } };
 
 /* Unblock only SIGTIMER.  */
 static inline void

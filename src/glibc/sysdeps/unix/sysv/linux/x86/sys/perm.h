@@ -17,8 +17,8 @@
 
 #ifndef _SYS_PERM_H
 
-#define _SYS_PERM_H	1
-#include <features.h>
+#  define _SYS_PERM_H 1
+#  include <features.h>
 
 __BEGIN_DECLS
 
@@ -26,10 +26,9 @@ __BEGIN_DECLS
 extern int ioperm (unsigned long int __from, unsigned long int __num,
 		   int __turn_on) __THROW;
 
-
 /* Change I/O privilege level.  */
 extern int iopl (int __level) __THROW;
 
 __END_DECLS
 
-#endif	/* _SYS_PERM_H */
+#endif /* _SYS_PERM_H */

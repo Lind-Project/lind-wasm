@@ -32,15 +32,14 @@ rseq_register_current_thread (struct pthread *self, bool do_rseq)
   if (do_rseq)
     {
       int ret = INTERNAL_SYSCALL_CALL (rseq, &self->rseq_area,
-                                       sizeof (self->rseq_area),
-                                       0, RSEQ_SIG);
+				       sizeof (self->rseq_area), 0, RSEQ_SIG);
       if (!INTERNAL_SYSCALL_ERROR_P (ret))
-        return true;
+	return true;
     }
   THREAD_SETMEM (self, rseq_area.cpu_id, RSEQ_CPU_ID_REGISTRATION_FAILED);
   return false;
 }
-#else /* RSEQ_SIG */
+#else  /* RSEQ_SIG */
 static inline bool
 rseq_register_current_thread (struct pthread *self, bool do_rseq)
 {

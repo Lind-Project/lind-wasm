@@ -39,10 +39,10 @@ do_test_1 (const char *name, unsigned int loop, int (*prepare) (void),
   for (i = 0; i < loop; i++)
     {
       failed |= function ();
-      if (_xbegin() == _XBEGIN_STARTED)
+      if (_xbegin () == _XBEGIN_STARTED)
 	{
 	  failed |= function ();
-	  _xend();
+	  _xend ();
 	}
       else
 	{
@@ -60,8 +60,8 @@ do_test_1 (const char *name, unsigned int loop, int (*prepare) (void),
 	 TSX.  */
       double rate = 100 * ((double) naborts) / ((double) loop);
       if (rate > 5)
-	FAIL_EXIT1 ("TSX abort rate: %.2f%% (%d out of %d)",
-		    rate, naborts, loop);
+	FAIL_EXIT1 ("TSX abort rate: %.2f%% (%d out of %d)", rate, naborts,
+		    loop);
     }
 
   return EXIT_SUCCESS;

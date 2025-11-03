@@ -23,10 +23,9 @@
 
 #if !STAT_IS_KERNEL_STAT
 
-#include <string.h>
+#  include <string.h>
 
-
-#if XSTAT_IS_XSTAT64
+#  if XSTAT_IS_XSTAT64
 int
 __xstat_conv (int vers, struct kernel_stat *kbuf, void *ubuf)
 {
@@ -34,8 +33,8 @@ __xstat_conv (int vers, struct kernel_stat *kbuf, void *ubuf)
     {
     case _STAT_VER_KERNEL:
       /* Nothing to do.  The struct is in the form the kernel expects.
-         We should have short-circuted before we got here, but for
-         completeness... */
+	 We should have short-circuted before we got here, but for
+	 completeness... */
       *(struct kernel_stat *) ubuf = *kbuf;
       break;
 
@@ -45,48 +44,48 @@ __xstat_conv (int vers, struct kernel_stat *kbuf, void *ubuf)
 
 	/* Convert to current kernel version of `struct stat'.  */
 	buf->st_dev = kbuf->st_dev;
-#ifdef _HAVE_STAT___PAD1
+#    ifdef _HAVE_STAT___PAD1
 	buf->__pad1 = 0;
-#endif
+#    endif
 	buf->st_ino = kbuf->st_ino;
 	buf->st_mode = kbuf->st_mode;
 	buf->st_nlink = kbuf->st_nlink;
 	buf->st_uid = kbuf->st_uid;
 	buf->st_gid = kbuf->st_gid;
 	buf->st_rdev = kbuf->st_rdev;
-#ifdef _HAVE_STAT___PAD2
+#    ifdef _HAVE_STAT___PAD2
 	buf->__pad2 = 0;
-#endif
+#    endif
 	buf->st_size = kbuf->st_size;
 	buf->st_blksize = kbuf->st_blksize;
 	buf->st_blocks = kbuf->st_blocks;
-#ifdef _HAVE_STAT_NSEC
+#    ifdef _HAVE_STAT_NSEC
 	buf->st_atim.tv_sec = kbuf->st_atim.tv_sec;
 	buf->st_atim.tv_nsec = kbuf->st_atim.tv_nsec;
 	buf->st_mtim.tv_sec = kbuf->st_mtim.tv_sec;
 	buf->st_mtim.tv_nsec = kbuf->st_mtim.tv_nsec;
 	buf->st_ctim.tv_sec = kbuf->st_ctim.tv_sec;
 	buf->st_ctim.tv_nsec = kbuf->st_ctim.tv_nsec;
-#else
+#    else
 	buf->st_atime = kbuf->st_atime;
 	buf->st_mtime = kbuf->st_mtime;
 	buf->st_ctime = kbuf->st_ctime;
-#endif
-#ifdef _HAVE_STAT___UNUSED1
+#    endif
+#    ifdef _HAVE_STAT___UNUSED1
 	buf->__glibc_reserved1 = 0;
-#endif
-#ifdef _HAVE_STAT___UNUSED2
+#    endif
+#    ifdef _HAVE_STAT___UNUSED2
 	buf->__glibc_reserved2 = 0;
-#endif
-#ifdef _HAVE_STAT___UNUSED3
+#    endif
+#    ifdef _HAVE_STAT___UNUSED3
 	buf->__glibc_reserved3 = 0;
-#endif
-#ifdef _HAVE_STAT___UNUSED4
+#    endif
+#    ifdef _HAVE_STAT___UNUSED4
 	buf->__glibc_reserved4 = 0;
-#endif
-#ifdef _HAVE_STAT___UNUSED5
+#    endif
+#    ifdef _HAVE_STAT___UNUSED5
 	buf->__glibc_reserved5 = 0;
-#endif
+#    endif
       }
       break;
 
@@ -96,14 +95,14 @@ __xstat_conv (int vers, struct kernel_stat *kbuf, void *ubuf)
 
   return 0;
 }
-#endif
+#  endif
 
 int
 __xstat64_conv (int vers, struct kernel_stat *kbuf, void *ubuf)
 {
-#if XSTAT_IS_XSTAT64
+#  if XSTAT_IS_XSTAT64
   return __xstat_conv (vers, kbuf, ubuf);
-#else
+#  else
   switch (vers)
     {
     case _STAT_VER_LINUX:
@@ -112,51 +111,51 @@ __xstat64_conv (int vers, struct kernel_stat *kbuf, void *ubuf)
 
 	/* Convert to current kernel version of `struct stat64'.  */
 	buf->st_dev = kbuf->st_dev;
-#ifdef _HAVE_STAT64___PAD1
+#    ifdef _HAVE_STAT64___PAD1
 	buf->__pad1 = 0;
-#endif
+#    endif
 	buf->st_ino = kbuf->st_ino;
-#ifdef _HAVE_STAT64___ST_INO
+#    ifdef _HAVE_STAT64___ST_INO
 	buf->__st_ino = kbuf->st_ino;
-#endif
+#    endif
 	buf->st_mode = kbuf->st_mode;
 	buf->st_nlink = kbuf->st_nlink;
 	buf->st_uid = kbuf->st_uid;
 	buf->st_gid = kbuf->st_gid;
 	buf->st_rdev = kbuf->st_rdev;
-#ifdef _HAVE_STAT64___PAD2
+#    ifdef _HAVE_STAT64___PAD2
 	buf->__pad2 = 0;
-#endif
+#    endif
 	buf->st_size = kbuf->st_size;
 	buf->st_blksize = kbuf->st_blksize;
 	buf->st_blocks = kbuf->st_blocks;
-#ifdef _HAVE_STAT64_NSEC
+#    ifdef _HAVE_STAT64_NSEC
 	buf->st_atim.tv_sec = kbuf->st_atim.tv_sec;
 	buf->st_atim.tv_nsec = kbuf->st_atim.tv_nsec;
 	buf->st_mtim.tv_sec = kbuf->st_mtim.tv_sec;
 	buf->st_mtim.tv_nsec = kbuf->st_mtim.tv_nsec;
 	buf->st_ctim.tv_sec = kbuf->st_ctim.tv_sec;
 	buf->st_ctim.tv_nsec = kbuf->st_ctim.tv_nsec;
-#else
+#    else
 	buf->st_atime = kbuf->st_atime;
 	buf->st_mtime = kbuf->st_mtime;
 	buf->st_ctime = kbuf->st_ctime;
-#endif
-#ifdef _HAVE_STAT64___UNUSED1
+#    endif
+#    ifdef _HAVE_STAT64___UNUSED1
 	buf->__glibc_reserved1 = 0;
-#endif
-#ifdef _HAVE_STAT64___UNUSED2
+#    endif
+#    ifdef _HAVE_STAT64___UNUSED2
 	buf->__glibc_reserved2 = 0;
-#endif
-#ifdef _HAVE_STAT64___UNUSED3
+#    endif
+#    ifdef _HAVE_STAT64___UNUSED3
 	buf->__glibc_reserved3 = 0;
-#endif
-#ifdef _HAVE_STAT64___UNUSED4
+#    endif
+#    ifdef _HAVE_STAT64___UNUSED4
 	buf->__glibc_reserved4 = 0;
-#endif
-#ifdef _HAVE_STAT64___UNUSED5
+#    endif
+#    ifdef _HAVE_STAT64___UNUSED5
 	buf->__glibc_reserved5 = 0;
-#endif
+#    endif
       }
       break;
 
@@ -168,7 +167,7 @@ __xstat64_conv (int vers, struct kernel_stat *kbuf, void *ubuf)
     }
 
   return 0;
-#endif
+#  endif
 }
 
 int
@@ -179,11 +178,11 @@ __xstat32_conv (int vers, struct stat64 *kbuf, struct stat *buf)
     case _STAT_VER_LINUX:
       {
 	/* Convert current kernel version of `struct stat64' to
-           `struct stat'.  */
+	   `struct stat'.  */
 	buf->st_dev = kbuf->st_dev;
-#ifdef _HAVE_STAT___PAD1
+#  ifdef _HAVE_STAT___PAD1
 	buf->__pad1 = 0;
-#endif
+#  endif
 	buf->st_ino = kbuf->st_ino;
 	if (sizeof (buf->st_ino) != sizeof (kbuf->st_ino)
 	    && buf->st_ino != kbuf->st_ino)
@@ -193,9 +192,9 @@ __xstat32_conv (int vers, struct stat64 *kbuf, struct stat *buf)
 	buf->st_uid = kbuf->st_uid;
 	buf->st_gid = kbuf->st_gid;
 	buf->st_rdev = kbuf->st_rdev;
-#ifdef _HAVE_STAT___PAD2
+#  ifdef _HAVE_STAT___PAD2
 	buf->__pad2 = 0;
-#endif
+#  endif
 	buf->st_size = kbuf->st_size;
 	/* Check for overflow.  */
 	if (sizeof (buf->st_size) != sizeof (kbuf->st_size)
@@ -207,34 +206,34 @@ __xstat32_conv (int vers, struct stat64 *kbuf, struct stat *buf)
 	if (sizeof (buf->st_blocks) != sizeof (kbuf->st_blocks)
 	    && buf->st_blocks != kbuf->st_blocks)
 	  return INLINE_SYSCALL_ERROR_RETURN_VALUE (EOVERFLOW);
-#ifdef _HAVE_STAT_NSEC
+#  ifdef _HAVE_STAT_NSEC
 	buf->st_atim.tv_sec = kbuf->st_atim.tv_sec;
 	buf->st_atim.tv_nsec = kbuf->st_atim.tv_nsec;
 	buf->st_mtim.tv_sec = kbuf->st_mtim.tv_sec;
 	buf->st_mtim.tv_nsec = kbuf->st_mtim.tv_nsec;
 	buf->st_ctim.tv_sec = kbuf->st_ctim.tv_sec;
 	buf->st_ctim.tv_nsec = kbuf->st_ctim.tv_nsec;
-#else
+#  else
 	buf->st_atime = kbuf->st_atime;
 	buf->st_mtime = kbuf->st_mtime;
 	buf->st_ctime = kbuf->st_ctime;
-#endif
+#  endif
 
-#ifdef _HAVE_STAT___UNUSED1
+#  ifdef _HAVE_STAT___UNUSED1
 	buf->__glibc_reserved1 = 0;
-#endif
-#ifdef _HAVE_STAT___UNUSED2
+#  endif
+#  ifdef _HAVE_STAT___UNUSED2
 	buf->__glibc_reserved2 = 0;
-#endif
-#ifdef _HAVE_STAT___UNUSED3
+#  endif
+#  ifdef _HAVE_STAT___UNUSED3
 	buf->__glibc_reserved3 = 0;
-#endif
-#ifdef _HAVE_STAT___UNUSED4
+#  endif
+#  ifdef _HAVE_STAT___UNUSED4
 	buf->__glibc_reserved4 = 0;
-#endif
-#ifdef _HAVE_STAT___UNUSED5
+#  endif
+#  ifdef _HAVE_STAT___UNUSED5
 	buf->__glibc_reserved5 = 0;
-#endif
+#  endif
       }
       break;
 

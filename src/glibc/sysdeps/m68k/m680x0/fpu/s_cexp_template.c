@@ -21,24 +21,24 @@
 #include <math.h>
 #include "mathimpl.h"
 
-#define CONCATX(a,b) __CONCAT(a,b)
+#define CONCATX(a, b) __CONCAT (a, b)
 #define s(name) M_SUF (name)
-#define m81(func) __m81_u(s(func))
+#define m81(func) __m81_u (s (func))
 
 CFLOAT
-s(__cexp) (CFLOAT x)
+s (__cexp) (CFLOAT x)
 {
   CFLOAT retval;
   unsigned long ix_cond;
 
   ix_cond = __m81_test (__imag__ x);
 
-  if ((ix_cond & (__M81_COND_NAN|__M81_COND_INF)) == 0)
+  if ((ix_cond & (__M81_COND_NAN | __M81_COND_INF)) == 0)
     {
       /* Imaginary part is finite.  */
       unsigned long rx_cond = __m81_test (__real__ x);
 
-      if ((rx_cond & (__M81_COND_NAN|__M81_COND_INF)) == 0)
+      if ((rx_cond & (__M81_COND_NAN | __M81_COND_INF)) == 0)
 	{
 	  const int t = (int) ((LDBL_MAX_EXP - 1) * M_LN2l);
 	  long double sin_ix, cos_ix, exp_val;
@@ -47,7 +47,7 @@ s(__cexp) (CFLOAT x)
 
 	  if (__real__ x > t)
 	    {
-	      long double exp_t = __m81_u(__ieee754_expl) (t);
+	      long double exp_t = __m81_u (__ieee754_expl) (t);
 	      __real__ x -= t;
 	      sin_ix *= exp_t;
 	      cos_ix *= exp_t;
@@ -59,7 +59,7 @@ s(__cexp) (CFLOAT x)
 		}
 	    }
 
-	  exp_val = __m81_u(__ieee754_expl) (__real__ x);
+	  exp_val = __m81_u (__ieee754_expl) (__real__ x);
 	  __real__ retval = exp_val * cos_ix;
 	  if (ix_cond & __M81_COND_ZERO)
 	    __imag__ retval = __imag__ x;
@@ -72,14 +72,14 @@ s(__cexp) (CFLOAT x)
 	  long double remainder, pi_2;
 	  int quadrant;
 
-	  if ((rx_cond & (__M81_COND_NAN|__M81_COND_NEG)) == __M81_COND_NEG)
+	  if ((rx_cond & (__M81_COND_NAN | __M81_COND_NEG)) == __M81_COND_NEG)
 	    __real__ retval = __imag__ retval = 0.0;
 	  else
 	    __real__ retval = __imag__ retval = __real__ x;
-	  __asm ("fmovecr %#0,%0\n\tfscale%.w %#-1,%0" : "=f" (pi_2));
+	  __asm ("fmovecr %#0,%0\n\tfscale%.w %#-1,%0" : "=f"(pi_2));
 	  __asm ("fmod%.x %2,%0\n\tfmove%.l %/fpsr,%1"
-		 : "=f" (remainder), "=dm" (quadrant)
-		 : "f" (pi_2), "0" (__imag__ x));
+		 : "=f"(remainder), "=dm"(quadrant)
+		 : "f"(pi_2), "0"(__imag__ x));
 	  quadrant = (quadrant >> 16) & 0x83;
 	  if (quadrant & 0x80)
 	    quadrant ^= 0x83;

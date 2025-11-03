@@ -19,7 +19,6 @@
 #include <sys/types.h>
 #include <sched.h>
 
-
 /* Retrieve the CPU affinity mask for a particular process.  */
 int
 sched_setaffinity (pid_t pid, size_t cpusetsize, const cpu_set_t *cpuset)

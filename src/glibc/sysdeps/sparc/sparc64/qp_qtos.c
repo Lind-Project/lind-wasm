@@ -21,27 +21,27 @@
 #include "single.h"
 #include "quad.h"
 
-float _Qp_qtos(const long double *a)
+float
+_Qp_qtos (const long double *a)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A);
-  FP_DECL_S(R);
+  FP_DECL_Q (A);
+  FP_DECL_S (R);
   float r;
 
   FP_INIT_ROUNDMODE;
-  FP_UNPACK_SEMIRAW_QP(A, a);
+  FP_UNPACK_SEMIRAW_QP (A, a);
 #if _FP_W_TYPE_SIZE < 64
-  FP_TRUNC(S,Q,1,4,R,A);
+  FP_TRUNC (S, Q, 1, 4, R, A);
 #else
-  FP_TRUNC(S,Q,1,2,R,A);
+  FP_TRUNC (S, Q, 1, 2, R, A);
 #endif
-  FP_PACK_SEMIRAW_S(r, R);
+  FP_PACK_SEMIRAW_S (r, R);
 
-  QP_HANDLE_EXCEPTIONS(__asm (
-"	ldd [%1], %%f52\n"
-"	ldd [%1+8], %%f54\n"
-"	fqtos %%f52, %0\n"
-"	" : "=&f" (r) : "r" (a) : QP_CLOBBER));
+  QP_HANDLE_EXCEPTIONS (__asm ("	ldd [%1], %%f52\n"
+			       "	ldd [%1+8], %%f54\n"
+			       "	fqtos %%f52, %0\n"
+			       "	" : "=&f"(r) : "r"(a) : QP_CLOBBER));
 
   return r;
 }

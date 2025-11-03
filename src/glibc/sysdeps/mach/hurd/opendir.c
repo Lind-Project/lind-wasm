@@ -31,7 +31,6 @@
 #include <not-cancel.h>
 #include "dirstream.h"
 
-
 /* Open a directory stream on a file descriptor in Hurd internal form.
    We do no checking here on the descriptor.  */
 DIR *
@@ -64,7 +63,6 @@ _hurd_fd_opendir (struct hurd_fd *d)
   return dirp;
 }
 
-
 DIR *
 __opendirat (int dfd, const char *name)
 {
@@ -75,7 +73,7 @@ __opendirat (int dfd, const char *name)
 
   int flags = O_RDONLY | O_NONBLOCK | O_DIRECTORY | O_CLOEXEC;
   int fd;
-#if IS_IN (rtld)
+#if IS_IN(rtld)
   assert (dfd == AT_FDCWD);
   fd = __open_nocancel (name, flags);
 #else
@@ -91,7 +89,6 @@ __opendirat (int dfd, const char *name)
 
   return dirp;
 }
-
 
 /* Open a directory stream on NAME.  */
 DIR *

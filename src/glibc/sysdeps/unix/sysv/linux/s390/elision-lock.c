@@ -24,10 +24,10 @@
 #include <stdint.h>
 
 #ifndef EXTRAARG
-#define EXTRAARG
+#  define EXTRAARG
 #endif
 #ifndef LLL_LOCK
-#define LLL_LOCK(a,b) lll_lock(a,b), 0
+#  define LLL_LOCK(a, b) lll_lock (a, b), 0
 #endif
 
 #define aconf __elision_aconf
@@ -45,7 +45,7 @@ __lll_lock_elision (int *futex, short *adapt_count, EXTRAARG int private)
      we need to use atomic accesses to avoid data races.  However, the
      value of adapt_count is just a hint, so relaxed MO accesses are
      sufficient.  */
-    if (atomic_load_relaxed (adapt_count) <= 0 && aconf.try_tbegin > 0)
+  if (atomic_load_relaxed (adapt_count) <= 0 && aconf.try_tbegin > 0)
     {
       /* Start a transaction and retry it automatically if it aborts with
 	 _HTM_TBEGIN_TRANSIENT.  This macro calls tbegin at most retry_cnt
@@ -99,8 +99,7 @@ __lll_lock_elision (int *futex, short *adapt_count, EXTRAARG int private)
 	     Be careful to avoid writing to the lock.  See above for why
 	     relaxed MO is sufficient.  */
 	  if (aconf.skip_lock_internal_abort > 0)
-	    atomic_store_relaxed (adapt_count,
-				  aconf.skip_lock_internal_abort);
+	    atomic_store_relaxed (adapt_count, aconf.skip_lock_internal_abort);
 	}
       else
 	{

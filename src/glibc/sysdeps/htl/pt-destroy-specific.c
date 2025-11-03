@@ -79,7 +79,7 @@ __pthread_destroy_specific (struct __pthread *thread)
 	      if (__pthread_key_destructors[i])
 		{
 		  seen_one = 1;
-		  __pthread_key_destructors[i] (value);
+		  __pthread_key_destructors[i](value);
 		}
 	    }
 	}
@@ -90,7 +90,7 @@ __pthread_destroy_specific (struct __pthread *thread)
 	break;
 
       /* This may take a very long time.  Let those blocking on
-         pthread_key_create or pthread_key_delete make progress.  */
+	 pthread_key_create or pthread_key_delete make progress.  */
       __sched_yield ();
     }
 

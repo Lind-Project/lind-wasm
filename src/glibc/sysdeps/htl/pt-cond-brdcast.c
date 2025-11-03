@@ -32,7 +32,7 @@ __pthread_cond_broadcast (pthread_cond_t *cond)
       __pthread_dequeue (wakeup);
       __pthread_spin_unlock (&cond->__lock);
       /* Wake it up without spin held, so it may have a chance to really
-         preempt us */
+	 preempt us */
       __pthread_wakeup (wakeup);
       __pthread_spin_wait (&cond->__lock);
     }

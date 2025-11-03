@@ -28,11 +28,11 @@ fetestexcept (int excepts)
   int xtemp = 0;
 
   /* Get current exceptions.  */
-  __asm__ ("fnstsw %0" : "=a" (temp));
+  __asm__ ("fnstsw %0" : "=a"(temp));
 
   /* If the CPU supports SSE we test the MXCSR as well.  */
   if (CPU_FEATURE_USABLE (SSE))
-    __asm__ ("stmxcsr %0" : "=m" (*&xtemp));
+    __asm__ ("stmxcsr %0" : "=m"(*&xtemp));
 
   return (temp | xtemp) & excepts & FE_ALL_EXCEPT;
 }

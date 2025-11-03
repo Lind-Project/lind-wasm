@@ -28,7 +28,6 @@
 #include <sys/wait.h>
 #include <support/xsignal.h>
 
-
 static void *
 tf (void *arg)
 {
@@ -43,7 +42,6 @@ tf (void *arg)
   puts ("join in thread in parent returned!?");
   exit (1);
 }
-
 
 static int
 do_test (void)
@@ -85,8 +83,8 @@ do_test (void)
     }
 
   pid_t pid;
-  char *argv[] = { (char *) _PATH_BSHELL, (char *) "-c", (char *) "echo $$",
-		   NULL };
+  char *argv[]
+      = { (char *) _PATH_BSHELL, (char *) "-c", (char *) "echo $$", NULL };
   if (posix_spawn (&pid, _PATH_BSHELL, &a, NULL, argv, NULL) != 0)
     {
       puts ("spawn failed");

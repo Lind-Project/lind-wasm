@@ -34,10 +34,10 @@ __pthread_rwlockattr_init (pthread_rwlockattr_t *attr)
 
   return 0;
 }
-versioned_symbol (libc, __pthread_rwlockattr_init,
-                  pthread_rwlockattr_init, GLIBC_2_34);
+versioned_symbol (libc, __pthread_rwlockattr_init, pthread_rwlockattr_init,
+		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
-compat_symbol (libpthread, __pthread_rwlockattr_init,
-               pthread_rwlockattr_init, GLIBC_2_1);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
+compat_symbol (libpthread, __pthread_rwlockattr_init, pthread_rwlockattr_init,
+	       GLIBC_2_1);
 #endif

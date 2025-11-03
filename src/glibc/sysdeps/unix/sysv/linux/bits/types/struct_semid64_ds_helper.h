@@ -16,10 +16,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-  /* Content of internal __semid64_ds.  */
-  struct ipc_perm sem_perm;		/* operation permission struct */
-  __time64_t sem_otime;			/* last semop() time */
-  __time64_t sem_ctime;			/* last time changed by semctl() */
-  __syscall_ulong_t sem_nsems;		/* number of semaphores in set */
-  unsigned long int __glibc_reserved3;
-  unsigned long int __glibc_reserved4;
+/* Content of internal __semid64_ds.  */
+struct ipc_perm sem_perm;    /* operation permission struct */
+__time64_t sem_otime;	     /* last semop() time */
+__time64_t sem_ctime;	     /* last time changed by semctl() */
+__syscall_ulong_t sem_nsems; /* number of semaphores in set */
+unsigned long int __glibc_reserved3;
+unsigned long int __glibc_reserved4;

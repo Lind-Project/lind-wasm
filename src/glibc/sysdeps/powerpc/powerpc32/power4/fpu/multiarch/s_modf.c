@@ -25,13 +25,11 @@
 extern __typeof (__modf) __modf_ppc32 attribute_hidden;
 extern __typeof (__modf) __modf_power5plus attribute_hidden;
 
-libc_ifunc (__modf,
-	    (hwcap & PPC_FEATURE_POWER5_PLUS)
-	    ? __modf_power5plus
-            : __modf_ppc32);
+libc_ifunc (__modf, (hwcap & PPC_FEATURE_POWER5_PLUS) ? __modf_power5plus
+						      : __modf_ppc32);
 
 libm_alias_double (__modf, modf)
 
-#if LONG_DOUBLE_COMPAT (libc, GLIBC_2_0)
-compat_symbol (libc, __modf, modfl, GLIBC_2_0);
+#if LONG_DOUBLE_COMPAT(libc, GLIBC_2_0)
+    compat_symbol (libc, __modf, modfl, GLIBC_2_0);
 #endif

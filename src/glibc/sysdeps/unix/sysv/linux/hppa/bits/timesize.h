@@ -19,4 +19,4 @@
 #include <bits/wordsize.h>
 
 /* Size in bits of the 'time_t' type of the default ABI.  */
-#define __TIMESIZE	__WORDSIZE
+#define __TIMESIZE __WORDSIZE

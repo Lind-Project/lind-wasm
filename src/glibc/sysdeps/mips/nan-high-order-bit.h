@@ -17,16 +17,16 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef NAN_HIGH_ORDER_BIT_H
-#define NAN_HIGH_ORDER_BIT_H	1
+#  define NAN_HIGH_ORDER_BIT_H 1
 
-#ifdef __mips_nan2008
+#  ifdef __mips_nan2008
 /* MIPS aligned to IEEE 754-2008.  */
-# define HIGH_ORDER_BIT_IS_SET_FOR_SNAN 0
-#else
+#    define HIGH_ORDER_BIT_IS_SET_FOR_SNAN 0
+#  else
 /* One of the few architectures where the meaning of the
    quiet/signaling bit is inverse to IEEE 754-2008 (as well as common
    practice for IEEE 754-1985).  */
-# define HIGH_ORDER_BIT_IS_SET_FOR_SNAN 1
-#endif
+#    define HIGH_ORDER_BIT_IS_SET_FOR_SNAN 1
+#  endif
 
 #endif /* nan-high-order-bit.h */

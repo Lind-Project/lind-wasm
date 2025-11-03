@@ -26,12 +26,13 @@
 #include <support/support.h>
 #include <stdbool.h>
 
-static int test_ppoll_timeout (bool zero_tmo)
+static int
+test_ppoll_timeout (bool zero_tmo)
 {
   /* We wait for half a second.  */
   struct timespec ts;
   xclock_gettime (CLOCK_REALTIME, &ts);
-  struct timespec timeout = make_timespec (0, zero_tmo ? 0 : TIMESPEC_HZ/2);
+  struct timespec timeout = make_timespec (0, zero_tmo ? 0 : TIMESPEC_HZ / 2);
   ts = timespec_add (ts, timeout);
 
   /* Ignore fds - just wait for timeout.  */

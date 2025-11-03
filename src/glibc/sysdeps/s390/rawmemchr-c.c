@@ -19,16 +19,16 @@
 #include <ifunc-rawmemchr.h>
 
 #if HAVE_RAWMEMCHR_C
-# if HAVE_RAWMEMCHR_IFUNC
-#  define RAWMEMCHR RAWMEMCHR_C
-#  undef weak_alias
-#  define weak_alias(a, b)
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_def
-#   define libc_hidden_def(name)					\
-  __hidden_ver1 (__rawmemchr_c, __GI___rawmemchr, __rawmemchr_c);
+#  if HAVE_RAWMEMCHR_IFUNC
+#    define RAWMEMCHR RAWMEMCHR_C
+#    undef weak_alias
+#    define weak_alias(a, b)
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_def
+#      define libc_hidden_def(name)                                           \
+	__hidden_ver1 (__rawmemchr_c, __GI___rawmemchr, __rawmemchr_c);
+#    endif
 #  endif
-# endif
 
-# include <string/rawmemchr.c>
+#  include <string/rawmemchr.c>
 #endif

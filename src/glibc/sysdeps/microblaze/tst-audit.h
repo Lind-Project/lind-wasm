@@ -18,8 +18,8 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define pltenter   la_microblaze_gnu_pltenter
-#define pltexit    la_microblaze_gnu_pltexit
-#define La_regs    La_microblaze_regs
-#define La_retval  La_microblaze_retval
+#define pltenter la_microblaze_gnu_pltenter
+#define pltexit la_microblaze_gnu_pltexit
+#define La_regs La_microblaze_regs
+#define La_retval La_microblaze_retval
 #define int_retval lrv_r3

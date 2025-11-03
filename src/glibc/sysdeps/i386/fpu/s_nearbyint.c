@@ -1,9 +1,10 @@
-#include <math.h>  // For nearbyint()
-//#include <libm-alias-double.h>
+#include <math.h> // For nearbyint()
+// #include <libm-alias-double.h>
 
-double __nearbyint(double x) {
-    return x;  // Use the standard library function
+double
+__nearbyint (double x)
+{
+  return x; // Use the standard library function
 }
 
-//libm_alias_double(__nearbyint, nearbyint);
-
+// libm_alias_double(__nearbyint, nearbyint);

@@ -16,9 +16,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SYSINFO_H
-#define _SYS_SYSINFO_H	1
+#  define _SYS_SYSINFO_H 1
 
-#include <features.h>
+#  include <features.h>
 
 __BEGIN_DECLS
 
@@ -28,7 +28,6 @@ extern int get_nprocs_conf (void) __THROW;
 /* Return number of available processors.  */
 extern int get_nprocs (void) __THROW;
 
-
 /* Return number of physical pages of memory in the system.  */
 extern long int get_phys_pages (void) __THROW;
 
@@ -37,4 +36,4 @@ extern long int get_avphys_pages (void) __THROW;
 
 __END_DECLS
 
-#endif	/* sys/sysinfo.h */
+#endif /* sys/sysinfo.h */

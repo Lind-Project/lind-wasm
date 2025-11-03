@@ -53,8 +53,9 @@ timerfd_test (void)
     FAIL_EXIT1 ("*** timerfd_gettime failed: %m\n");
 
   /* Check difference between timerfd_gettime calls.  */
-  TEST_COMPARE (support_timespec_check_in_range
-                ((struct timespec) { 1, 0 }, val.it_value, 0.9, 1.0), 1);
+  TEST_COMPARE (support_timespec_check_in_range ((struct timespec) { 1, 0 },
+						 val.it_value, 0.9, 1.0),
+		1);
 
   xclose (fd);
 }

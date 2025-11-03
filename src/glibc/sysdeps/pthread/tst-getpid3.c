@@ -6,7 +6,6 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-
 static pid_t pid;
 
 static void *
@@ -14,8 +13,8 @@ pid_thread (void *arg)
 {
   if (pid != getpid ())
     {
-      printf ("pid wrong in thread: should be %d, is %d\n",
-	      (int) pid, (int) getpid ());
+      printf ("pid wrong in thread: should be %d, is %d\n", (int) pid,
+	      (int) getpid ());
       return (void *) 1L;
     }
 

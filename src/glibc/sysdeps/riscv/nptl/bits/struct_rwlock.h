@@ -39,30 +39,30 @@ struct __pthread_rwlock_arch_t
   unsigned long int __pad2;
   unsigned int __flags;
 #else
-# if __BYTE_ORDER == __BIG_ENDIAN
+#  if __BYTE_ORDER == __BIG_ENDIAN
   unsigned char __pad1;
   unsigned char __pad2;
   unsigned char __shared;
   unsigned char __flags;
-# else
+#  else
   unsigned char __flags;
   unsigned char __shared;
   unsigned char __pad1;
   unsigned char __pad2;
-# endif
+#  endif
   int __cur_writer;
 #endif
 };
 
 #if __WORDSIZE == 64
-# define __PTHREAD_RWLOCK_INITIALIZER(__flags) \
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, __flags
+#  define __PTHREAD_RWLOCK_INITIALIZER(__flags)                               \
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, __flags
 #elif __BYTE_ORDER == __BIG_ENDIAN
-# define __PTHREAD_RWLOCK_INITIALIZER(__flags) \
-  0, 0, 0, 0, 0, 0, 0, 0, 0, __flags, 0
+#  define __PTHREAD_RWLOCK_INITIALIZER(__flags)                               \
+    0, 0, 0, 0, 0, 0, 0, 0, 0, __flags, 0
 #else
-# define __PTHREAD_RWLOCK_INITIALIZER(__flags) \
-  0, 0, 0, 0, 0, 0, __flags, 0, 0, 0, 0
+#  define __PTHREAD_RWLOCK_INITIALIZER(__flags)                               \
+    0, 0, 0, 0, 0, 0, __flags, 0, 0, 0, 0
 #endif
 
 #endif

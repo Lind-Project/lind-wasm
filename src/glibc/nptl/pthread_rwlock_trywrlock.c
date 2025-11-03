@@ -35,16 +35,16 @@ ___pthread_rwlock_trywrlock (pthread_rwlock_t *rwlock)
      further comments) -- and thus must loop until we get a definitive
      observation or state change.  */
   unsigned int r = atomic_load_relaxed (&rwlock->__data.__readers);
-  bool prefer_writer =
-      (rwlock->__data.__flags != PTHREAD_RWLOCK_PREFER_READER_NP);
+  bool prefer_writer
+      = (rwlock->__data.__flags != PTHREAD_RWLOCK_PREFER_READER_NP);
   while (((r & PTHREAD_RWLOCK_WRLOCKED) == 0)
-      && (((r >> PTHREAD_RWLOCK_READER_SHIFT) == 0)
-	  || (prefer_writer && ((r & PTHREAD_RWLOCK_WRPHASE) != 0))))
+	 && (((r >> PTHREAD_RWLOCK_READER_SHIFT) == 0)
+	     || (prefer_writer && ((r & PTHREAD_RWLOCK_WRPHASE) != 0))))
     {
       /* Try to transition to states #7 or #8 (i.e., acquire the lock).  */
-      if (atomic_compare_exchange_weak_acquire (
-	  &rwlock->__data.__readers, &r,
-	  r | PTHREAD_RWLOCK_WRPHASE | PTHREAD_RWLOCK_WRLOCKED))
+      if (atomic_compare_exchange_weak_acquire (&rwlock->__data.__readers, &r,
+						r | PTHREAD_RWLOCK_WRPHASE
+						    | PTHREAD_RWLOCK_WRLOCKED))
 	{
 	  /* We have become the primary writer and we cannot have shared
 	     the PTHREAD_RWLOCK_FUTEX_USED flag with someone else, so we
@@ -56,7 +56,7 @@ ___pthread_rwlock_trywrlock (pthread_rwlock_t *rwlock)
 	  if ((r & PTHREAD_RWLOCK_WRPHASE) == 0)
 	    atomic_store_relaxed (&rwlock->__data.__wrphase_futex, 1);
 	  atomic_store_relaxed (&rwlock->__data.__cur_writer,
-	      THREAD_GETMEM (THREAD_SELF, tid));
+				THREAD_GETMEM (THREAD_SELF, tid));
 	  return 0;
 	}
       /* TODO Back-off.  */
@@ -64,15 +64,15 @@ ___pthread_rwlock_trywrlock (pthread_rwlock_t *rwlock)
     }
   return EBUSY;
 }
-versioned_symbol (libc, ___pthread_rwlock_trywrlock,
-		  pthread_rwlock_trywrlock, GLIBC_2_34);
+versioned_symbol (libc, ___pthread_rwlock_trywrlock, pthread_rwlock_trywrlock,
+		  GLIBC_2_34);
 libc_hidden_ver (___pthread_rwlock_trywrlock, __pthread_rwlock_trywrlock)
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_rwlock_trywrlock,
-	       pthread_rwlock_trywrlock, GLIBC_2_1);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
+    compat_symbol (libpthread, ___pthread_rwlock_trywrlock,
+		   pthread_rwlock_trywrlock, GLIBC_2_1);
 #endif
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_rwlock_trywrlock,
 	       __pthread_rwlock_trywrlock, GLIBC_2_2);
 #endif

@@ -1,4 +1,6 @@
-int __swapcontext (void) {
+int
+__swapcontext (void)
+{
   return 0;
 }
 

@@ -24,11 +24,10 @@
 #include <unistd.h>
 #include <pthreadP.h>
 
-
 #define NREADERS 15
 #define READTRIES 5000
 
-#define DELAY   1000000
+#define DELAY 1000000
 
 static pthread_rwlock_t lock = PTHREAD_RWLOCK_INITIALIZER;
 static int eagain_returned = 0;
@@ -71,7 +70,6 @@ reader_thread (void *nr)
   return NULL;
 }
 
-
 static int
 do_test (void)
 {
@@ -82,12 +80,12 @@ do_test (void)
   /* Set the rwlock so that it's close to a reader overflow.
      PTHREAD_RWLOCK_WRPHASE and PTHREAD_RWLOCK_WRLOCK are zero initially.  */
   unsigned int readers = PTHREAD_RWLOCK_READER_OVERFLOW
-      - ((NREADERS / 3) << PTHREAD_RWLOCK_READER_SHIFT);
+			 - ((NREADERS / 3) << PTHREAD_RWLOCK_READER_SHIFT);
   lock.__data.__readers = readers;
 
   for (n = 0; n < NREADERS; ++n)
-    if (pthread_create (&thrd[n], NULL, reader_thread,
-			(void *) (long int) n) != 0)
+    if (pthread_create (&thrd[n], NULL, reader_thread, (void *) (long int) n)
+	!= 0)
       {
 	puts ("reader create failed");
 	exit (1);

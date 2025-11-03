@@ -33,15 +33,15 @@ setxid_error (struct xid_command *cmdp, int error)
     {
       int olderror = cmdp->error;
       if (olderror == error)
-        break;
+	break;
       if (olderror != -1)
-        {
-          /* Mismatch between current and previous results.  Save the
-             error value to memory so that is not clobbered by the
-             abort function and preserved in coredumps.  */
-          volatile int xid_err __attribute__ ((unused)) = error;
-          abort ();
-        }
+	{
+	  /* Mismatch between current and previous results.  Save the
+	     error value to memory so that is not clobbered by the
+	     abort function and preserved in coredumps.  */
+	  volatile int xid_err __attribute__ ((unused)) = error;
+	  abort ();
+	}
     }
   while (atomic_compare_and_exchange_bool_acq (&cmdp->error, error, -1));
 }
@@ -61,9 +61,7 @@ __nptl_setxid_sighandler (int sig, siginfo_t *si, void *ctx)
      other signals and send a signal from another process.  This is not
      correct and might even be a security problem.  Try to catch as
      many incorrect invocations as possible.  */
-  if (sig != SIGSETXID
-      || si->si_pid != __getpid ()
-      || si->si_code != SI_TKILL)
+  if (sig != SIGSETXID || si->si_pid != __getpid () || si->si_code != SI_TKILL)
     return;
 
   result = INTERNAL_SYSCALL_NCS (xidcmd->syscall_no, 3, xidcmd->id[0],
@@ -93,14 +91,14 @@ __nptl_setxid_sighandler (int sig, siginfo_t *si, void *ctx)
 }
 libc_hidden_def (__nptl_setxid_sighandler)
 
-static void
-setxid_mark_thread (struct xid_command *cmdp, struct pthread *t)
+    static void setxid_mark_thread (struct xid_command *cmdp,
+				    struct pthread *t)
 {
   int ch;
 
   /* Wait until this thread is cloned.  */
   if (t->setxid_futex == -1
-      && ! atomic_compare_and_exchange_bool_acq (&t->setxid_futex, -2, -1))
+      && !atomic_compare_and_exchange_bool_acq (&t->setxid_futex, -2, -1))
     do
       futex_wait_simple (&t->setxid_futex, -2, FUTEX_PRIVATE);
     while (t->setxid_futex == -2);
@@ -114,21 +112,20 @@ setxid_mark_thread (struct xid_command *cmdp, struct pthread *t)
 
       /* If the thread is exiting right now, ignore it.  */
       if ((ch & EXITING_BITMASK) != 0)
-        {
-          /* Release the futex if there is no other setxid in
-             progress.  */
-          if ((ch & SETXID_BITMASK) == 0)
-            {
-              t->setxid_futex = 1;
-              futex_wake (&t->setxid_futex, 1, FUTEX_PRIVATE);
-            }
-          return;
-        }
+	{
+	  /* Release the futex if there is no other setxid in
+	     progress.  */
+	  if ((ch & SETXID_BITMASK) == 0)
+	    {
+	      t->setxid_futex = 1;
+	      futex_wake (&t->setxid_futex, 1, FUTEX_PRIVATE);
+	    }
+	  return;
+	}
     }
   while (atomic_compare_and_exchange_bool_acq (&t->cancelhandling,
-                                               ch | SETXID_BITMASK, ch));
+					       ch | SETXID_BITMASK, ch));
 }
-
 
 static void
 setxid_unmark_thread (struct xid_command *cmdp, struct pthread *t)
@@ -139,16 +136,15 @@ setxid_unmark_thread (struct xid_command *cmdp, struct pthread *t)
     {
       ch = t->cancelhandling;
       if ((ch & SETXID_BITMASK) == 0)
-        return;
+	return;
     }
   while (atomic_compare_and_exchange_bool_acq (&t->cancelhandling,
-                                               ch & ~SETXID_BITMASK, ch));
+					       ch & ~SETXID_BITMASK, ch));
 
   /* Release the futex just in case.  */
   t->setxid_futex = 1;
   futex_wake (&t->setxid_futex, 1, FUTEX_PRIVATE);
 }
-
 
 static int
 setxid_signal_thread (struct xid_command *cmdp, struct pthread *t)
@@ -170,8 +166,7 @@ setxid_signal_thread (struct xid_command *cmdp, struct pthread *t)
     return 0;
 }
 
-int
-attribute_hidden
+int attribute_hidden
 __nptl_setxid (struct xid_command *cmdp)
 {
   int signalled;
@@ -190,7 +185,7 @@ __nptl_setxid (struct xid_command *cmdp)
     {
       struct pthread *t = list_entry (runp, struct pthread, list);
       if (t == self)
-        continue;
+	continue;
 
       setxid_mark_thread (cmdp, t);
     }
@@ -200,7 +195,7 @@ __nptl_setxid (struct xid_command *cmdp)
     {
       struct pthread *t = list_entry (runp, struct pthread, list);
       if (t == self)
-        continue;
+	continue;
 
       setxid_mark_thread (cmdp, t);
     }
@@ -213,30 +208,29 @@ __nptl_setxid (struct xid_command *cmdp)
       signalled = 0;
 
       list_for_each (runp, &GL (dl_stack_used))
-        {
-          struct pthread *t = list_entry (runp, struct pthread, list);
-          if (t == self)
-            continue;
+	{
+	  struct pthread *t = list_entry (runp, struct pthread, list);
+	  if (t == self)
+	    continue;
 
-          signalled += setxid_signal_thread (cmdp, t);
-        }
+	  signalled += setxid_signal_thread (cmdp, t);
+	}
 
       list_for_each (runp, &GL (dl_stack_user))
-        {
-          struct pthread *t = list_entry (runp, struct pthread, list);
-          if (t == self)
-            continue;
+	{
+	  struct pthread *t = list_entry (runp, struct pthread, list);
+	  if (t == self)
+	    continue;
 
-          signalled += setxid_signal_thread (cmdp, t);
-        }
+	  signalled += setxid_signal_thread (cmdp, t);
+	}
 
       int cur = cmdp->cntr;
       while (cur != 0)
-        {
-          futex_wait_simple ((unsigned int *) &cmdp->cntr, cur,
-                             FUTEX_PRIVATE);
-          cur = cmdp->cntr;
-        }
+	{
+	  futex_wait_simple ((unsigned int *) &cmdp->cntr, cur, FUTEX_PRIVATE);
+	  cur = cmdp->cntr;
+	}
     }
   while (signalled != 0);
 
@@ -246,7 +240,7 @@ __nptl_setxid (struct xid_command *cmdp)
     {
       struct pthread *t = list_entry (runp, struct pthread, list);
       if (t == self)
-        continue;
+	continue;
 
       setxid_unmark_thread (cmdp, t);
     }
@@ -255,15 +249,15 @@ __nptl_setxid (struct xid_command *cmdp)
     {
       struct pthread *t = list_entry (runp, struct pthread, list);
       if (t == self)
-        continue;
+	continue;
 
       setxid_unmark_thread (cmdp, t);
     }
 
   /* This must be last, otherwise the current thread might not have
      permissions to send SIGSETXID syscall to the other threads.  */
-  result = INTERNAL_SYSCALL_NCS (cmdp->syscall_no, 3,
-                                 cmdp->id[0], cmdp->id[1], cmdp->id[2]);
+  result = INTERNAL_SYSCALL_NCS (cmdp->syscall_no, 3, cmdp->id[0], cmdp->id[1],
+				 cmdp->id[2]);
   int error = 0;
   if (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (result)))
     {

@@ -22,7 +22,7 @@
 #include <limits.h>
 
 #ifndef NGROUPS_MAX
-#define NGROUPS_MAX	16	/* First guess.  */
+#  define NGROUPS_MAX 16 /* First guess.  */
 #endif
 
 int

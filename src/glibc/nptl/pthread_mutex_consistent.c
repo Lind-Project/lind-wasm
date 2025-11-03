@@ -26,7 +26,8 @@ __pthread_mutex_consistent (pthread_mutex_t *mutex)
      See concurrency notes regarding __kind in struct __pthread_mutex_s
      in sysdeps/nptl/bits/thread-shared-types.h.  */
   if ((atomic_load_relaxed (&(mutex->__data.__kind))
-       & PTHREAD_MUTEX_ROBUST_NORMAL_NP) == 0
+       & PTHREAD_MUTEX_ROBUST_NORMAL_NP)
+	  == 0
       || mutex->__data.__owner != PTHREAD_MUTEX_INCONSISTENT)
     return EINVAL;
 
@@ -35,15 +36,15 @@ __pthread_mutex_consistent (pthread_mutex_t *mutex)
   return 0;
 }
 versioned_symbol (libc, __pthread_mutex_consistent, pthread_mutex_consistent,
-                  GLIBC_2_34);
+		  GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_4, GLIBC_2_34)
-# undef pthread_mutex_consistent_np
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_4, GLIBC_2_34)
+#  undef pthread_mutex_consistent_np
 compat_symbol (libpthread, __pthread_mutex_consistent,
-               pthread_mutex_consistent_np, GLIBC_2_4);
+	       pthread_mutex_consistent_np, GLIBC_2_4);
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_12, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_12, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_mutex_consistent,
-               pthread_mutex_consistent, GLIBC_2_12);
+	       pthread_mutex_consistent, GLIBC_2_12);
 #endif

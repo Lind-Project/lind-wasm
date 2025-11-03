@@ -18,13 +18,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_TESTS_TRAP_FORCE_H
-#define _MATH_TESTS_TRAP_FORCE_H 1
+#  define _MATH_TESTS_TRAP_FORCE_H 1
 
 /* Indicate whether exception traps, if enabled, occur whenever an
    exception flag is set explicitly, so it is not possible to set flag
    bits with traps enabled without causing traps to be taken.  If
    traps cannot be enabled, the value of this macro does not
    matter.  */
-#define EXCEPTION_SET_FORCES_TRAP 0
+#  define EXCEPTION_SET_FORCES_TRAP 0
 
 #endif /* math-tests-trap-force.h.  */

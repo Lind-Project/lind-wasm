@@ -35,12 +35,12 @@ __llroundl (long double x)
   /* Limit the range of values handled by the conversion to long long.
      We do this because we aren't sure whether that conversion properly
      raises FE_INVALID.  */
-  if (__builtin_expect
-      ((__builtin_fabs (xh) <= -(double) (-__LONG_LONG_MAX__ - 1)), 1)
-#if !defined (FE_INVALID)
+  if (__builtin_expect (
+	  (__builtin_fabs (xh) <= -(double) (-__LONG_LONG_MAX__ - 1)), 1)
+#if !defined(FE_INVALID)
       || 1
 #endif
-    )
+  )
     {
       if (__glibc_unlikely ((xh == -(double) (-__LONG_LONG_MAX__ - 1))))
 	{
@@ -64,8 +64,8 @@ __llroundl (long double x)
       lo = (long long) xh;
 
       /* Peg at max/min values, assuming that the above conversions do so.
-         Strictly speaking, we can return anything for values that overflow,
-         but this is more useful.  */
+	 Strictly speaking, we can return anything for values that overflow,
+	 but this is more useful.  */
       if (__glibc_unlikely (__builtin_add_overflow (hi, lo, &res)))
 	goto overflow;
 

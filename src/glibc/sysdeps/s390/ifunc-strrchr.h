@@ -16,37 +16,37 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_STRRCHR_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_STRRCHR_IFUNC 1
 #else
-# define HAVE_STRRCHR_IFUNC	0
+#  define HAVE_STRRCHR_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_STRRCHR_IFUNC_AND_VX_SUPPORT HAVE_STRRCHR_IFUNC
+#  define HAVE_STRRCHR_IFUNC_AND_VX_SUPPORT HAVE_STRRCHR_IFUNC
 #else
-# define HAVE_STRRCHR_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_STRRCHR_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define STRRCHR_DEFAULT	STRRCHR_Z13
-# define HAVE_STRRCHR_C		0
-# define HAVE_STRRCHR_Z13	1
+#  define STRRCHR_DEFAULT STRRCHR_Z13
+#  define HAVE_STRRCHR_C 0
+#  define HAVE_STRRCHR_Z13 1
 #else
-# define STRRCHR_DEFAULT	STRRCHR_C
-# define HAVE_STRRCHR_C		1
-# define HAVE_STRRCHR_Z13	HAVE_STRRCHR_IFUNC_AND_VX_SUPPORT
+#  define STRRCHR_DEFAULT STRRCHR_C
+#  define HAVE_STRRCHR_C 1
+#  define HAVE_STRRCHR_Z13 HAVE_STRRCHR_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_STRRCHR_C
-# define STRRCHR_C		__strrchr_c
+#  define STRRCHR_C __strrchr_c
 #else
-# define STRRCHR_C		NULL
+#  define STRRCHR_C NULL
 #endif
 
 #if HAVE_STRRCHR_Z13
-# define STRRCHR_Z13		__strrchr_vx
+#  define STRRCHR_Z13 __strrchr_vx
 #else
-# define STRRCHR_Z13		NULL
+#  define STRRCHR_Z13 NULL
 #endif

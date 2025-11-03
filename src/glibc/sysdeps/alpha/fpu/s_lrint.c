@@ -15,8 +15,8 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define __llrint	not___llrint
-#define llrint		not_llrint
+#define __llrint not___llrint
+#define llrint not_llrint
 #include <math.h>
 #include <math_ldbl_opt.h>
 #include <libm-alias-double.h>
@@ -33,6 +33,5 @@ __lrint (double x)
   return ret;
 }
 
-strong_alias (__lrint, __llrint)
-libm_alias_double (__lrint, lrint)
-libm_alias_double (__llrint, llrint)
+strong_alias (__lrint, __llrint) libm_alias_double (__lrint, lrint)
+    libm_alias_double (__llrint, llrint)

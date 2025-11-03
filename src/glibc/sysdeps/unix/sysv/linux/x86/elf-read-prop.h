@@ -27,8 +27,8 @@
      true : Stop processing the properties.
  */
 static inline bool __attribute__ ((always_inline))
-read_gnu_property (unsigned int *isal_level, uint32_t type,
-		   uint32_t datasz, void *data)
+read_gnu_property (unsigned int *isal_level, uint32_t type, uint32_t datasz,
+		   void *data)
 {
   /* Property type must be in ascending order.  */
   if (type > GNU_PROPERTY_X86_ISA_1_NEEDED)

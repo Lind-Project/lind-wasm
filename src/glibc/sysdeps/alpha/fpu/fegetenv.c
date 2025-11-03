@@ -27,7 +27,7 @@ __fegetenv (fenv_t *envp)
   /* Get status from software and hardware.  Note that we don't need an
      excb because the callsys is an implied trap barrier.  */
   swcr = __ieee_get_fp_control ();
-  __asm__ __volatile__ ("mf_fpcr %0" : "=f" (fpcr));
+  __asm__ __volatile__ ("mf_fpcr %0" : "=f"(fpcr));
 
   /* Merge the two bits of information.  */
   *envp = ((fpcr & FPCR_ROUND_MASK) | (swcr & SWCR_ALL_MASK));
@@ -37,11 +37,11 @@ __fegetenv (fenv_t *envp)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__fegetenv, __old_fegetenv)
-compat_symbol (libm, __old_fegetenv, fegetenv, GLIBC_2_1);
+    compat_symbol (libm, __old_fegetenv, fegetenv, GLIBC_2_1);
 #endif
 
 libm_hidden_def (__fegetenv)
-versioned_symbol (libm, __fegetenv, fegetenv, GLIBC_2_2);
-libm_hidden_ver(__fegetenv, fegetenv)
+    versioned_symbol (libm, __fegetenv, fegetenv, GLIBC_2_2);
+libm_hidden_ver (__fegetenv, fegetenv)

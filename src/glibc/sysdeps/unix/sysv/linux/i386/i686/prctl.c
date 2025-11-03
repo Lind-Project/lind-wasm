@@ -19,5 +19,4 @@ __prctl_time64 (int option, ...)
   return 0;
 }
 
-weak_alias(__GI___prctl, __prctl)
-
+weak_alias (__GI___prctl, __prctl)

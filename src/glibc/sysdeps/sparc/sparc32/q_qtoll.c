@@ -21,14 +21,15 @@
 #include "soft-fp.h"
 #include "quad.h"
 
-long long _Q_qtoll(const long double a)
+long long
+_Q_qtoll (const long double a)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A);
+  FP_DECL_Q (A);
   unsigned long long r;
 
-  FP_UNPACK_RAW_Q(A, a);
-  FP_TO_INT_Q(r, A, 64, 1);
+  FP_UNPACK_RAW_Q (A, a);
+  FP_TO_INT_Q (r, A, 64, 1);
   FP_HANDLE_EXCEPTIONS;
 
   return r;

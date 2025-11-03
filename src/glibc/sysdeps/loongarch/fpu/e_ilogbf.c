@@ -24,16 +24,16 @@ int
 __ieee754_ilogbf (float x)
 {
   int x_cond;
-  asm volatile ("fclass.s \t%0, %1" : "=f" (x_cond) : "f" (x));
+  asm volatile ("fclass.s \t%0, %1" : "=f"(x_cond) : "f"(x));
 
   if (__glibc_unlikely (x_cond & _FCLASS_ZERO))
-      return FP_ILOGB0;
-  else if (__glibc_unlikely (x_cond & ( _FCLASS_NAN | _FCLASS_INF)))
-      return FP_ILOGBNAN;
+    return FP_ILOGB0;
+  else if (__glibc_unlikely (x_cond & (_FCLASS_NAN | _FCLASS_INF)))
+    return FP_ILOGBNAN;
   else
     {
-      asm volatile ("fabs.s \t%0, %1" : "=f" (x) : "f" (x));
-      asm volatile ("flogb.s \t%0, %1" : "=f" (x) : "f" (x));
+      asm volatile ("fabs.s \t%0, %1" : "=f"(x) : "f"(x));
+      asm volatile ("flogb.s \t%0, %1" : "=f"(x) : "f"(x));
       return x;
     }
 }

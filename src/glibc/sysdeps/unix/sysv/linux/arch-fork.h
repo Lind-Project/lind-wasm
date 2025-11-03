@@ -37,11 +37,11 @@ arch_fork (void *ctid)
   const int flags = CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID | SIGCHLD;
   long int ret;
 #ifdef __ASSUME_CLONE_BACKWARDS
-# ifdef INLINE_CLONE_SYSCALL
+#  ifdef INLINE_CLONE_SYSCALL
   ret = INLINE_CLONE_SYSCALL (flags, 0, NULL, 0, ctid);
-# else
+#  else
   ret = INLINE_SYSCALL_CALL (clone, flags, 0, NULL, 0, ctid);
-# endif
+#  endif
 #elif defined(__ASSUME_CLONE_BACKWARDS2)
   ret = INLINE_SYSCALL_CALL (clone, 0, flags, NULL, ctid, 0);
 #elif defined(__ASSUME_CLONE_BACKWARDS3)
@@ -49,7 +49,7 @@ arch_fork (void *ctid)
 #elif defined(__ASSUME_CLONE_DEFAULT)
   ret = INLINE_SYSCALL_CALL (clone, flags, 0, NULL, ctid, 0);
 #else
-# error "Undefined clone variant"
+#  error "Undefined clone variant"
 #endif
   return ret;
 }

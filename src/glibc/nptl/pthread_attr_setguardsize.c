@@ -33,8 +33,8 @@ __pthread_attr_setguardsize (pthread_attr_t *attr, size_t guardsize)
   return 0;
 }
 versioned_symbol (libpthread, __pthread_attr_setguardsize,
-                  pthread_attr_setguardsize, GLIBC_2_34);
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+		  pthread_attr_setguardsize, GLIBC_2_34);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_attr_setguardsize,
-               pthread_attr_setguardsize, GLIBC_2_1);
+	       pthread_attr_setguardsize, GLIBC_2_1);
 #endif

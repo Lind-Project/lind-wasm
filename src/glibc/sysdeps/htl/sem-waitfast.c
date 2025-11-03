@@ -44,8 +44,8 @@ __sem_waitfast (struct new_sem *isem, int definitive_result)
     {
       if ((v >> SEM_VALUE_SHIFT) == 0)
 	break;
-      if (atomic_compare_exchange_weak_acquire (&isem->value,
-	    &v, v - (1 << SEM_VALUE_SHIFT)))
+      if (atomic_compare_exchange_weak_acquire (&isem->value, &v,
+						v - (1 << SEM_VALUE_SHIFT)))
 	/* Successful down.  */
 	return 0;
     }

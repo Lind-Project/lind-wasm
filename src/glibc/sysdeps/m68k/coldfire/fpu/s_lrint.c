@@ -21,7 +21,7 @@ long int
 __lrint (double x)
 {
   long int result;
-  asm ("fmove.l %1,%0" : "=dm" (result) : "f" (x));
+  asm ("fmove.l %1,%0" : "=dm"(result) : "f"(x));
   return result;
 }
 libm_alias_double (__lrint, lrint)

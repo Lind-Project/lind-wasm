@@ -17,20 +17,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_PTHREAD_H
-#define _BITS_PTHREAD_H	1
+#  define _BITS_PTHREAD_H 1
 
-#include <bits/types/__pthread_t.h>
+#  include <bits/types/__pthread_t.h>
 
 /* Return true if __T1 and __T2 both name the same thread.  Otherwise,
    false.  */
 extern int __pthread_equal (__pthread_t __t1, __pthread_t __t2);
 
-#ifdef __USE_EXTERN_INLINES
+#  ifdef __USE_EXTERN_INLINES
 __extern_inline int
 __pthread_equal (__pthread_t __t1, __pthread_t __t2)
 {
   return __t1 == __t2;
 }
-#endif
+#  endif
 
 #endif /* bits/pthread.h */

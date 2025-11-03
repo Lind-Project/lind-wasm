@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Default stack size.  */
-#define ARCH_STACK_DEFAULT_SIZE	(2 * 1024 * 1024)
+#define ARCH_STACK_DEFAULT_SIZE (2 * 1024 * 1024)
 
 /* Minimum guard size.  */
 #define ARCH_MIN_GUARD_SIZE (64 * 1024)
@@ -29,4 +29,4 @@
 #define MINIMAL_REST_STACK 2048
 
 /* Location of current stack frame.  */
-#define CURRENT_STACK_FRAME	__builtin_frame_address (0)
+#define CURRENT_STACK_FRAME __builtin_frame_address (0)

@@ -33,8 +33,7 @@ __hypot (double x, double y)
 {
   if (!isfinite (x) || !isfinite (y))
     {
-      if ((isinf (x) || isinf (y))
-	  && !issignaling (x) && !issignaling (y))
+      if ((isinf (x) || isinf (y)) && !issignaling (x) && !issignaling (y))
 	return INFINITY;
       return x + y;
     }
@@ -49,9 +48,9 @@ __hypot (double x, double y)
 }
 strong_alias (__hypot, __ieee754_hypot)
 #if LIBM_SVID_COMPAT
-versioned_symbol (libm, __hypot, hypot, GLIBC_2_35);
+    versioned_symbol (libm, __hypot, hypot, GLIBC_2_35);
 libm_alias_finite (__ieee754_hypot, __hypot)
-libm_alias_double_other (__hypot, hypot)
+    libm_alias_double_other (__hypot, hypot)
 #else
-libm_alias_double (__hypot, hypot)
+    libm_alias_double (__hypot, hypot)
 #endif

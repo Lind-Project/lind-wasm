@@ -16,44 +16,44 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)	\
-  && ! defined HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# define HAVE_MEMCMP_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
+#  define HAVE_MEMCMP_IFUNC 1
 #else
-# define HAVE_MEMCMP_IFUNC	0
+#  define HAVE_MEMCMP_IFUNC 0
 #endif
 
 #if defined HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# define MEMCMP_DEFAULT		MEMCMP_Z196
-# define HAVE_MEMCMP_Z900_G5	0
-# define HAVE_MEMCMP_Z10	0
-# define HAVE_MEMCMP_Z196	1
+#  define MEMCMP_DEFAULT MEMCMP_Z196
+#  define HAVE_MEMCMP_Z900_G5 0
+#  define HAVE_MEMCMP_Z10 0
+#  define HAVE_MEMCMP_Z196 1
 #elif defined HAVE_S390_MIN_Z10_ZARCH_ASM_SUPPORT
-# define MEMCMP_DEFAULT		MEMCMP_Z10
-# define HAVE_MEMCMP_Z900_G5	0
-# define HAVE_MEMCMP_Z10	1
-# define HAVE_MEMCMP_Z196	HAVE_MEMCMP_IFUNC
+#  define MEMCMP_DEFAULT MEMCMP_Z10
+#  define HAVE_MEMCMP_Z900_G5 0
+#  define HAVE_MEMCMP_Z10 1
+#  define HAVE_MEMCMP_Z196 HAVE_MEMCMP_IFUNC
 #else
-# define MEMCMP_DEFAULT		MEMCMP_Z900_G5
-# define HAVE_MEMCMP_Z900_G5	1
-# define HAVE_MEMCMP_Z10	HAVE_MEMCMP_IFUNC
-# define HAVE_MEMCMP_Z196	HAVE_MEMCMP_IFUNC
+#  define MEMCMP_DEFAULT MEMCMP_Z900_G5
+#  define HAVE_MEMCMP_Z900_G5 1
+#  define HAVE_MEMCMP_Z10 HAVE_MEMCMP_IFUNC
+#  define HAVE_MEMCMP_Z196 HAVE_MEMCMP_IFUNC
 #endif
 
 #if HAVE_MEMCMP_Z900_G5
-# define MEMCMP_Z900_G5		__memcmp_default
+#  define MEMCMP_Z900_G5 __memcmp_default
 #else
-# define MEMCMP_Z900_G5		NULL
+#  define MEMCMP_Z900_G5 NULL
 #endif
 
 #if HAVE_MEMCMP_Z10
-# define MEMCMP_Z10		__memcmp_z10
+#  define MEMCMP_Z10 __memcmp_z10
 #else
-# define MEMCMP_Z10		NULL
+#  define MEMCMP_Z10 NULL
 #endif
 
 #if HAVE_MEMCMP_Z196
-# define MEMCMP_Z196		__memcmp_z196
+#  define MEMCMP_Z196 __memcmp_z196
 #else
-# define MEMCMP_Z196		NULL
+#  define MEMCMP_Z196 NULL
 #endif

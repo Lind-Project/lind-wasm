@@ -1,7 +1,7 @@
 #include <math.h>
 #include <math_ldbl_opt.h>
 #undef weak_alias
-#define weak_alias(n,a)
+#define weak_alias(n, a)
 #define __fpclassifyl ___fpclassifyl
 #undef libm_hidden_def
 #define libm_hidden_def(a)

@@ -35,21 +35,20 @@ __thread_gscope_wait (void)
     {
       struct pthread *t = list_entry (runp, struct pthread, list);
       if (t == self || t->header.gscope_flag == THREAD_GSCOPE_FLAG_UNUSED)
-        continue;
+	continue;
 
       int *const gscope_flagp = &t->header.gscope_flag;
 
       /* We have to wait until this thread is done with the global
-         scope.  First tell the thread that we are waiting and
-         possibly have to be woken.  */
-      if (atomic_compare_and_exchange_bool_acq (gscope_flagp,
-                                                THREAD_GSCOPE_FLAG_WAIT,
-                                                THREAD_GSCOPE_FLAG_USED))
-        continue;
+	 scope.  First tell the thread that we are waiting and
+	 possibly have to be woken.  */
+      if (atomic_compare_and_exchange_bool_acq (
+	      gscope_flagp, THREAD_GSCOPE_FLAG_WAIT, THREAD_GSCOPE_FLAG_USED))
+	continue;
 
       do
-        futex_wait_simple ((unsigned int *) gscope_flagp,
-                           THREAD_GSCOPE_FLAG_WAIT, FUTEX_PRIVATE);
+	futex_wait_simple ((unsigned int *) gscope_flagp,
+			   THREAD_GSCOPE_FLAG_WAIT, FUTEX_PRIVATE);
       while (*gscope_flagp == THREAD_GSCOPE_FLAG_WAIT);
     }
 
@@ -58,21 +57,20 @@ __thread_gscope_wait (void)
     {
       struct pthread *t = list_entry (runp, struct pthread, list);
       if (t == self || t->header.gscope_flag == THREAD_GSCOPE_FLAG_UNUSED)
-        continue;
+	continue;
 
       int *const gscope_flagp = &t->header.gscope_flag;
 
       /* We have to wait until this thread is done with the global
-         scope.  First tell the thread that we are waiting and
-         possibly have to be woken.  */
-      if (atomic_compare_and_exchange_bool_acq (gscope_flagp,
-                                                THREAD_GSCOPE_FLAG_WAIT,
-                                                THREAD_GSCOPE_FLAG_USED))
-        continue;
+	 scope.  First tell the thread that we are waiting and
+	 possibly have to be woken.  */
+      if (atomic_compare_and_exchange_bool_acq (
+	      gscope_flagp, THREAD_GSCOPE_FLAG_WAIT, THREAD_GSCOPE_FLAG_USED))
+	continue;
 
       do
-        futex_wait_simple ((unsigned int *) gscope_flagp,
-                           THREAD_GSCOPE_FLAG_WAIT, FUTEX_PRIVATE);
+	futex_wait_simple ((unsigned int *) gscope_flagp,
+			   THREAD_GSCOPE_FLAG_WAIT, FUTEX_PRIVATE);
       while (*gscope_flagp == THREAD_GSCOPE_FLAG_WAIT);
     }
 

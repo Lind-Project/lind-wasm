@@ -22,15 +22,14 @@
 
 #include <elf/sotruss-lib.c>
 
-ElfW(Addr)
-la_sh_gnu_pltenter (ElfW(Sym) *sym __attribute__ ((unused)),
-		    unsigned int ndx __attribute__ ((unused)),
-		    uintptr_t *refcook, uintptr_t *defcook,
-		    La_sh_regs *regs, unsigned int *flags,
-		    const char *symname, long int *framesizep)
+ElfW (Addr) la_sh_gnu_pltenter (ElfW (Sym) * sym __attribute__ ((unused)),
+				unsigned int ndx __attribute__ ((unused)),
+				uintptr_t *refcook, uintptr_t *defcook,
+				La_sh_regs *regs, unsigned int *flags,
+				const char *symname, long int *framesizep)
 {
-  print_enter (refcook, defcook, symname,
-	       regs->lr_r4, regs->lr_r5, regs->lr_r6, *flags);
+  print_enter (refcook, defcook, symname, regs->lr_r4, regs->lr_r5,
+	       regs->lr_r6, *flags);
 
   /* No need to copy anything, we will not need the parameters in any case.  */
   *framesizep = 0;
@@ -39,9 +38,8 @@ la_sh_gnu_pltenter (ElfW(Sym) *sym __attribute__ ((unused)),
 }
 
 unsigned int
-la_sh_gnu_pltexit (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
-		   uintptr_t *defcook,
-		   const struct La_sh_regs *inregs,
+la_sh_gnu_pltexit (ElfW (Sym) * sym, unsigned int ndx, uintptr_t *refcook,
+		   uintptr_t *defcook, const struct La_sh_regs *inregs,
 		   struct La_sh_retval *outregs, const char *symname)
 {
   print_exit (refcook, defcook, symname, outregs->lrv_r0);

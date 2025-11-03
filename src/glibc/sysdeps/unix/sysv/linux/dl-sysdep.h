@@ -23,4 +23,4 @@
    machines, we should look at it for unwind information even if
    we aren't making direct use of it.  So enable this across the board.  */
 
-#define NEED_DL_SYSINFO_DSO	1
+#define NEED_DL_SYSINFO_DSO 1

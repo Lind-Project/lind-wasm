@@ -19,17 +19,13 @@
 #include <fpu_control.h>
 #include <fenv_libc.h>
 
-
-#define convert_bit(M, F, T)		\
-    ((T) < (F)				\
-     ? ((M) / ((F) / (T))) & (T)	\
-     : ((M) & (F)) * ((T) / (F)))
-
+#define convert_bit(M, F, T)                                                  \
+  ((T) < (F) ? ((M) / ((F) / (T))) & (T) : ((M) & (F)) * ((T) / (F)))
 
 void
 __setfpucw (fpu_control_t fpu_control)
 {
-  unsigned long fpcr, swcr, fc = (int)fpu_control;
+  unsigned long fpcr, swcr, fc = (int) fpu_control;
 
   /* ??? If this was a real external interface we'd want to read the current
      exception state with __ieee_get_fp_control.  But this is an internal
@@ -39,16 +35,15 @@ __setfpucw (fpu_control_t fpu_control)
      the default __fpu_control variable.  */
 
   /* Convert the rounding mode from fpu_control.h format.  */
-  const unsigned long conv_rnd
-    = (  (FE_TOWARDZERO << (_FPU_RC_ZERO >> 8))
-       | (FE_DOWNWARD << (_FPU_RC_DOWN >> 8))
-       | (FE_TONEAREST << (_FPU_RC_NEAREST >> 8))
-       | (FE_UPWARD << (_FPU_RC_UP >> 8)));
+  const unsigned long conv_rnd = ((FE_TOWARDZERO << (_FPU_RC_ZERO >> 8))
+				  | (FE_DOWNWARD << (_FPU_RC_DOWN >> 8))
+				  | (FE_TONEAREST << (_FPU_RC_NEAREST >> 8))
+				  | (FE_UPWARD << (_FPU_RC_UP >> 8)));
 
   fpcr = ((conv_rnd >> ((fc >> 8) & 3)) & 3) << FPCR_ROUND_SHIFT;
 
   /* Convert the exception mask from fpu_control.h format.  */
-  swcr  = convert_bit (~fc, _FPU_MASK_IM, FE_INVALID >> SWCR_ENABLE_SHIFT);
+  swcr = convert_bit (~fc, _FPU_MASK_IM, FE_INVALID >> SWCR_ENABLE_SHIFT);
   swcr |= convert_bit (~fc, _FPU_MASK_DM, FE_UNDERFLOW >> SWCR_ENABLE_SHIFT);
   swcr |= convert_bit (~fc, _FPU_MASK_ZM, FE_DIVBYZERO >> SWCR_ENABLE_SHIFT);
   swcr |= convert_bit (~fc, _FPU_MASK_OM, FE_OVERFLOW >> SWCR_ENABLE_SHIFT);
@@ -56,5 +51,5 @@ __setfpucw (fpu_control_t fpu_control)
 
   /* Install everything.  */
   __fpu_control = fc;
-  __ieee_set_fp_control(swcr);
+  __ieee_set_fp_control (swcr);
 }

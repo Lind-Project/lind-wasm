@@ -2,8 +2,7 @@
 #include "nldbl-compat.h"
 #undef __wcstold_internal
 
-double
-attribute_hidden
+double attribute_hidden
 __wcstold_internal (const wchar_t *nptr, wchar_t **endptr, int group)
 {
   return __wcstod_internal (nptr, endptr, group);

@@ -18,7 +18,7 @@
 
 #include <math.h>
 
-extern long double _Q_sqrt(const long double a);
+extern long double _Q_sqrt (const long double a);
 
 long double
 __ieee754_sqrtl (long double x)

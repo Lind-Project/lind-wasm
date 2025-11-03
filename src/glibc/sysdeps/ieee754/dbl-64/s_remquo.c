@@ -24,7 +24,6 @@
 
 static const double zero = 0.0;
 
-
 double
 __remquo (double x, double y, int *quo)
 {
@@ -34,20 +33,21 @@ __remquo (double x, double y, int *quo)
 
   EXTRACT_WORDS64 (hx, x);
   EXTRACT_WORDS64 (hy, y);
-  sx = hx & UINT64_C(0x8000000000000000);
-  qs = sx ^ (hy & UINT64_C(0x8000000000000000));
-  hy &= UINT64_C(0x7fffffffffffffff);
-  hx &= UINT64_C(0x7fffffffffffffff);
+  sx = hx & UINT64_C (0x8000000000000000);
+  qs = sx ^ (hy & UINT64_C (0x8000000000000000));
+  hy &= UINT64_C (0x7fffffffffffffff);
+  hx &= UINT64_C (0x7fffffffffffffff);
 
   /* Purge off exception values.  */
   if (__glibc_unlikely (hy == 0))
-    return (x * y) / (x * y);			/* y = 0 */
-  if (__builtin_expect (hx >= UINT64_C(0x7ff0000000000000) /* x not finite */
-			|| hy > UINT64_C(0x7ff0000000000000), 0))/* y is NaN */
+    return (x * y) / (x * y);				    /* y = 0 */
+  if (__builtin_expect (hx >= UINT64_C (0x7ff0000000000000) /* x not finite */
+			    || hy > UINT64_C (0x7ff0000000000000),
+			0)) /* y is NaN */
     return (x * y) / (x * y);
 
-  if (hy <= UINT64_C(0x7fbfffffffffffff))
-    x = __ieee754_fmod (x, 8 * y);		/* now x < 8y */
+  if (hy <= UINT64_C (0x7fbfffffffffffff))
+    x = __ieee754_fmod (x, 8 * y); /* now x < 8y */
 
   if (__glibc_unlikely (hx == hy))
     {
@@ -59,18 +59,18 @@ __remquo (double x, double y, int *quo)
   INSERT_WORDS64 (y, hy);
   cquo = 0;
 
-  if (hy <= UINT64_C(0x7fcfffffffffffff) && x >= 4 * y)
+  if (hy <= UINT64_C (0x7fcfffffffffffff) && x >= 4 * y)
     {
       x -= 4 * y;
       cquo += 4;
     }
-  if (hy <= UINT64_C(0x7fdfffffffffffff) && x >= 2 * y)
+  if (hy <= UINT64_C (0x7fdfffffffffffff) && x >= 2 * y)
     {
       x -= 2 * y;
       cquo += 2;
     }
 
-  if (hy < UINT64_C(0x0020000000000000))
+  if (hy < UINT64_C (0x0020000000000000))
     {
       if (x + x > y)
 	{

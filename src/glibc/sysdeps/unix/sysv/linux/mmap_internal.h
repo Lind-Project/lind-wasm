@@ -17,31 +17,31 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef MMAP_INTERNAL_LINUX_H
-#define MMAP_INTERNAL_LINUX_H 1
+#  define MMAP_INTERNAL_LINUX_H 1
 
-#include <stdint.h>
+#  include <stdint.h>
 
 /* This is the minimum mmap2 unit size accept by the kernel.  An architecture
    with multiple minimum page sizes (such as m68k) might define it as -1 and
    thus it will queried at runtime.  */
-#ifndef MMAP2_PAGE_UNIT
-# define MMAP2_PAGE_UNIT 4096ULL
-#endif
+#  ifndef MMAP2_PAGE_UNIT
+#    define MMAP2_PAGE_UNIT 4096ULL
+#  endif
 
-#if MMAP2_PAGE_UNIT == -1ULL
+#  if MMAP2_PAGE_UNIT == -1ULL
 static uint64_t page_unit;
-# define MMAP_CHECK_PAGE_UNIT()			\
-  if (page_unit == 0)				\
-    page_unit = __getpagesize ();
-# undef MMAP2_PAGE_UNIT
-# define MMAP2_PAGE_UNIT page_unit
-#else
-# define MMAP_CHECK_PAGE_UNIT()
-#endif
+#    define MMAP_CHECK_PAGE_UNIT()                                            \
+      if (page_unit == 0)                                                     \
+	page_unit = __getpagesize ();
+#    undef MMAP2_PAGE_UNIT
+#    define MMAP2_PAGE_UNIT page_unit
+#  else
+#    define MMAP_CHECK_PAGE_UNIT()
+#  endif
 
 /* Do not accept offset not multiple of page size.  */
-#define MMAP_OFF_LOW_MASK  (MMAP2_PAGE_UNIT - 1)
+#  define MMAP_OFF_LOW_MASK (MMAP2_PAGE_UNIT - 1)
 
-#include <mmap_call.h>
+#  include <mmap_call.h>
 
 #endif /* MMAP_INTERNAL_LINUX_H  */

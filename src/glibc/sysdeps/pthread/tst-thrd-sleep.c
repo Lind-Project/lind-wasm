@@ -37,7 +37,7 @@ static int
 do_test (void)
 {
   thrd_t id;
-  struct timespec wait_time = {.tv_sec = 3};
+  struct timespec wait_time = { .tv_sec = 3 };
 
   if (thrd_create (&id, sleep_thrd, (void *) (&wait_time)) != thrd_success)
     FAIL_EXIT1 ("thrd_create failed");

@@ -24,7 +24,6 @@
 #include <float.h>
 #include <ieee754.h>
 
-
 long long
 __llrintl (long double x)
 {
@@ -37,12 +36,12 @@ __llrintl (long double x)
   /* Limit the range of values handled by the conversion to long long.
      We do this because we aren't sure whether that conversion properly
      raises FE_INVALID.  */
-  if (__builtin_expect
-      ((__builtin_fabs (xh) <= -(double) (-__LONG_LONG_MAX__ - 1)), 1)
-#if !defined (FE_INVALID)
+  if (__builtin_expect (
+	  (__builtin_fabs (xh) <= -(double) (-__LONG_LONG_MAX__ - 1)), 1)
+#if !defined(FE_INVALID)
       || 1
 #endif
-    )
+  )
     {
       save_round = fegetround ();
 
@@ -68,8 +67,8 @@ __llrintl (long double x)
       lo = (long long) xh;
 
       /* Peg at max/min values, assuming that the above conversions do so.
-         Strictly speaking, we can return anything for values that overflow,
-         but this is more useful.  */
+	 Strictly speaking, we can return anything for values that overflow,
+	 but this is more useful.  */
       res = hi + lo;
 
       /* This is just sign(hi) == sign(lo) && sign(res) != sign(hi).  */
@@ -85,8 +84,7 @@ __llrintl (long double x)
 	case FE_TONEAREST:
 	  if (fabs (xh) < 0.5
 	      || (fabs (xh) == 0.5
-		  && ((xh > 0.0 && xl < 0.0)
-		      || (xh < 0.0 && xl > 0.0)
+		  && ((xh > 0.0 && xl < 0.0) || (xh < 0.0 && xl > 0.0)
 		      || (xl == 0.0 && (res & 1) == 0))))
 	    return res;
 

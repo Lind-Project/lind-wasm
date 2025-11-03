@@ -47,12 +47,13 @@ tf (void *arg)
   /* Wait indefinitely for cancellation, which only works if asynchronous
      cancellation is enabled.  */
 #if defined SYS_ppoll || defined SYS_ppoll_time64
-# ifndef SYS_ppoll_time64
-#  define SYS_ppoll_time64 SYS_ppoll
-# endif
+#  ifndef SYS_ppoll_time64
+#    define SYS_ppoll_time64 SYS_ppoll
+#  endif
   syscall (SYS_ppoll_time64, NULL, 0, NULL, NULL);
 #else
-  for (;;);
+  for (;;)
+    ;
 #endif
 
   return 0;

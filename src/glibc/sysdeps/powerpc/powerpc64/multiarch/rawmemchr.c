@@ -16,37 +16,37 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define __rawmemchr __redirect___rawmemchr
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if IS_IN(libc)
+#  define __rawmemchr __redirect___rawmemchr
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (__rawmemchr) __rawmemchr_ppc attribute_hidden;
 extern __typeof (__rawmemchr) __rawmemchr_power7 attribute_hidden;
-# ifdef __LITTLE_ENDIAN__
+#  ifdef __LITTLE_ENDIAN__
 extern __typeof (__rawmemchr) __rawmemchr_power9 attribute_hidden;
 extern __typeof (__rawmemchr) __rawmemchr_power10 attribute_hidden;
-# endif
+#  endif
 
-# undef __rawmemchr
+#  undef __rawmemchr
 
 /* Avoid DWARF definition DIE on ifunc symbol so that GDB can handle
    ifunc symbol properly.  */
 libc_ifunc_redirected (__redirect___rawmemchr, __rawmemchr,
-# ifdef __LITTLE_ENDIAN__
-		     (hwcap2 & PPC_FEATURE2_ARCH_3_1)
-		     && (hwcap & PPC_FEATURE_HAS_VSX)
-		     ? __rawmemchr_power10 :
-		       (hwcap2 & PPC_FEATURE2_ARCH_3_00
-			&& hwcap & PPC_FEATURE_HAS_VSX)
-		       ? __rawmemchr_power9 :
-# endif
-		         (hwcap & PPC_FEATURE_ARCH_2_06)
-		         ? __rawmemchr_power7
-		       : __rawmemchr_ppc);
+#  ifdef __LITTLE_ENDIAN__
+		       (hwcap2 & PPC_FEATURE2_ARCH_3_1)
+			       && (hwcap & PPC_FEATURE_HAS_VSX)
+			   ? __rawmemchr_power10
+		       : (hwcap2 & PPC_FEATURE2_ARCH_3_00
+			  && hwcap & PPC_FEATURE_HAS_VSX)
+			   ? __rawmemchr_power9
+		       :
+#  endif
+		       (hwcap & PPC_FEATURE_ARCH_2_06) ? __rawmemchr_power7
+						       : __rawmemchr_ppc);
 
 weak_alias (__rawmemchr, rawmemchr)
 #else
-#include <string/rawmemchr.c>
+#  include <string/rawmemchr.c>
 #endif

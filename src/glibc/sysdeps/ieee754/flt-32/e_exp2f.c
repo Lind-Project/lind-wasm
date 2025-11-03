@@ -90,7 +90,7 @@ __exp2f (float x)
 }
 #ifndef __exp2f
 strong_alias (__exp2f, __ieee754_exp2f)
-libm_alias_finite (__ieee754_exp2f, __exp2f)
-versioned_symbol (libm, __exp2f, exp2f, GLIBC_2_27);
+    libm_alias_finite (__ieee754_exp2f, __exp2f)
+	versioned_symbol (libm, __exp2f, exp2f, GLIBC_2_27);
 libm_alias_float_other (__exp2, exp2)
 #endif

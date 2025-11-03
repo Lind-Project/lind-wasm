@@ -48,31 +48,35 @@
 #include <math_private.h>
 #include <math_ldbl_opt.h>
 
-long double __tanl(long double x)
+long double
+__tanl (long double x)
 {
-	long double y[2],z=0.0L;
-	int64_t n, ix;
-	double xhi;
+  long double y[2], z = 0.0L;
+  int64_t n, ix;
+  double xhi;
 
-    /* High word of x. */
-	xhi = ldbl_high (x);
-	EXTRACT_WORDS64 (ix, xhi);
+  /* High word of x. */
+  xhi = ldbl_high (x);
+  EXTRACT_WORDS64 (ix, xhi);
 
-    /* |x| ~< pi/4 */
-	ix &= 0x7fffffffffffffffLL;
-	if(ix <= 0x3fe921fb54442d10LL) return __kernel_tanl(x,z,1);
+  /* |x| ~< pi/4 */
+  ix &= 0x7fffffffffffffffLL;
+  if (ix <= 0x3fe921fb54442d10LL)
+    return __kernel_tanl (x, z, 1);
 
-    /* tanl(Inf or NaN) is NaN */
-	else if (ix>=0x7ff0000000000000LL) {
-	    if (ix == 0x7ff0000000000000LL)
-		__set_errno (EDOM);
-	    return x-x;		/* NaN */
-	}
-    /* argument reduction needed */
-	else {
-	    n = __ieee754_rem_pio2l(x,y);
-	    return __kernel_tanl(y[0],y[1],1-((n&1)<<1)); /*   1 -- n even
-							-1 -- n odd */
-	}
+  /* tanl(Inf or NaN) is NaN */
+  else if (ix >= 0x7ff0000000000000LL)
+    {
+      if (ix == 0x7ff0000000000000LL)
+	__set_errno (EDOM);
+      return x - x; /* NaN */
+    }
+  /* argument reduction needed */
+  else
+    {
+      n = __ieee754_rem_pio2l (x, y);
+      return __kernel_tanl (y[0], y[1], 1 - ((n & 1) << 1)); /*   1 -- n even
+							   -1 -- n odd */
+    }
 }
 long_double_symbol (libm, __tanl, tanl);

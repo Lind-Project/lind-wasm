@@ -25,7 +25,8 @@ long double
 __ieee754_sqrtl (const long double a)
 {
   FP_DECL_EX;
-  FP_DECL_Q (A); FP_DECL_Q (C);
+  FP_DECL_Q (A);
+  FP_DECL_Q (C);
   long double c;
 
   FP_INIT_ROUNDMODE;

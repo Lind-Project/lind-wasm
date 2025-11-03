@@ -58,7 +58,7 @@
       = z*log(2)/(N*log(10)) + theta5 with |theta5| < 2^-47.215
 
     10^x = 2^(k/N) * 2^(r/N) * 10^theta5
-         =  2^(k/N) * 2^(r/N) * (1 + theta6) with |theta6| < 2^-46.011
+	 =  2^(k/N) * 2^(r/N) * (1 + theta6) with |theta6| < 2^-46.011
 
   - Then 2^(k/N) is approximated by table lookup, the maximal relative error
     is for (k%N) = 5, with
@@ -153,23 +153,23 @@ __exp10f (float x)
     {
       /* |x| >= 38 or x is nan.  */
       if (asuint (x) == asuint (-INFINITY))
-        return 0.0f;
+	return 0.0f;
       if (abstop >= top13 (INFINITY))
-        return x + x;
+	return x + x;
       /* 0x26.8826ap0 is the largest value such that 10^x < 2^128.  */
       if (x > 0x26.8826ap0f)
-        return __math_oflowf (0);
+	return __math_oflowf (0);
       /* -0x2d.278d4p0 is the smallest value such that 10^x > 2^-150.  */
       if (x < -0x2d.278d4p0f)
-        return __math_uflowf (0);
+	return __math_uflowf (0);
 #if WANT_ERRNO_UFLOW
       if (x < -0x2c.da7cfp0)
-        return __math_may_uflowf (0);
+	return __math_may_uflowf (0);
 #endif
       /* the smallest value such that 10^x >= 2^-126 (normal range)
-         is x = -0x25.ee060p0 */
+	 is x = -0x25.ee060p0 */
       /* we go through here for 2014929 values out of 2060451840
-         (not counting NaN and infinities, i.e., about 0.1% */
+	 (not counting NaN and infinities, i.e., about 0.1% */
     }
 
   /* x*N*Ln10/Ln2 = k + r with r in [-1/2, 1/2] and int k.  */
@@ -179,7 +179,7 @@ __exp10f (float x)
   kd = roundtoint (z);
   ki = converttoint (z);
 #else
-# define SHIFT __exp2f_data.shift
+#  define SHIFT __exp2f_data.shift
   kd = math_narrow_eval ((double) (z + SHIFT)); /* Needs to be double.  */
   ki = asuint64 (kd);
   kd -= SHIFT;
@@ -199,14 +199,14 @@ __exp10f (float x)
 }
 #ifndef __exp10f
 strong_alias (__exp10f, __ieee754_exp10f)
-libm_alias_finite (__ieee754_exp10f, __exp10f)
+    libm_alias_finite (__ieee754_exp10f, __exp10f)
 /* For architectures that already provided exp10f without SVID support, there
    is no need to add a new version.  */
-#if !LIBM_SVID_COMPAT
-# define EXP10F_VERSION GLIBC_2_26
-#else
-# define EXP10F_VERSION GLIBC_2_32
-#endif
-versioned_symbol (libm, __exp10f, exp10f, EXP10F_VERSION);
+#  if !LIBM_SVID_COMPAT
+#    define EXP10F_VERSION GLIBC_2_26
+#  else
+#    define EXP10F_VERSION GLIBC_2_32
+#  endif
+	versioned_symbol (libm, __exp10f, exp10f, EXP10F_VERSION);
 libm_alias_float_other (__exp10, exp10)
 #endif

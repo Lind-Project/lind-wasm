@@ -66,7 +66,7 @@ do_test (void)
 	  continue;
 	}
 
-      struct timespec  ts = { .tv_sec = 0, .tv_nsec = 100000000 };
+      struct timespec ts = { .tv_sec = 0, .tv_nsec = 100000000 };
       while (nanosleep (&ts, &ts) != 0)
 	continue;
 

@@ -26,24 +26,24 @@
 
 #define MCONTEXT_FSR (32 * SZFREG + MCONTEXT_FPREGS)
 
-#define SAVE_FP_REG(name, num, base)			\
-  FREG_S name, ((num) * SZFREG + MCONTEXT_FPREGS)(base)
+#define SAVE_FP_REG(name, num, base)                                          \
+  FREG_S name, ((num) * SZFREG + MCONTEXT_FPREGS) (base)
 
-#define RESTORE_FP_REG(name, num, base)			\
-  FREG_L name, ((num) * SZFREG + MCONTEXT_FPREGS)(base)
+#define RESTORE_FP_REG(name, num, base)                                       \
+  FREG_L name, ((num) * SZFREG + MCONTEXT_FPREGS) (base)
 
-#define RESTORE_FP_REG_CFI(name, num, base)		\
-  RESTORE_FP_REG (name, num, base);			\
+#define RESTORE_FP_REG_CFI(name, num, base)                                   \
+  RESTORE_FP_REG (name, num, base);                                           \
   cfi_offset (name, (num) * SZFREG + MCONTEXT_FPREGS)
 
-#define SAVE_INT_REG(name, num, base)			\
-  REG_S name, ((num) * SZREG + MCONTEXT_GREGS)(base)
+#define SAVE_INT_REG(name, num, base)                                         \
+  REG_S name, ((num) * SZREG + MCONTEXT_GREGS) (base)
 
-#define RESTORE_INT_REG(name, num, base)		\
-  REG_L name, ((num) * SZREG + MCONTEXT_GREGS)(base)
+#define RESTORE_INT_REG(name, num, base)                                      \
+  REG_L name, ((num) * SZREG + MCONTEXT_GREGS) (base)
 
-#define RESTORE_INT_REG_CFI(name, num, base)		\
-  RESTORE_INT_REG (name, num, base);			\
+#define RESTORE_INT_REG_CFI(name, num, base)                                  \
+  RESTORE_INT_REG (name, num, base);                                          \
   cfi_offset (name, (num) * SZREG + MCONTEXT_GREGS)
 
 #endif /* _LINUX_RISCV_UCONTEXT_MACROS_H */

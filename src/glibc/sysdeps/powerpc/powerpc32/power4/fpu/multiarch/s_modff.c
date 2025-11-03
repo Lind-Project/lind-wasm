@@ -23,9 +23,7 @@
 extern __typeof (__modff) __modff_ppc32 attribute_hidden;
 extern __typeof (__modff) __modff_power5plus attribute_hidden;
 
-libc_ifunc (__modff,
-	    (hwcap & PPC_FEATURE_POWER5_PLUS)
-	    ? __modff_power5plus
-            : __modff_ppc32);
+libc_ifunc (__modff, (hwcap & PPC_FEATURE_POWER5_PLUS) ? __modff_power5plus
+						       : __modff_ppc32);
 
 libm_alias_float (__modf, modf)

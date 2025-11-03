@@ -16,14 +16,14 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define SET_NAN_PAYLOAD(flt, mant)			\
-  do							\
-    {							\
-      union ieee754_double u;				\
-      u.d = (flt);					\
-      u.ieee_nan.mantissa0 = (mant) >> 32;		\
-      u.ieee_nan.mantissa1 = (mant);			\
-      if ((u.ieee.mantissa0 | u.ieee.mantissa1) != 0)	\
-	(flt) = u.d;					\
-    }							\
+#define SET_NAN_PAYLOAD(flt, mant)                                            \
+  do                                                                          \
+    {                                                                         \
+      union ieee754_double u;                                                 \
+      u.d = (flt);                                                            \
+      u.ieee_nan.mantissa0 = (mant) >> 32;                                    \
+      u.ieee_nan.mantissa1 = (mant);                                          \
+      if ((u.ieee.mantissa0 | u.ieee.mantissa1) != 0)                         \
+	(flt) = u.d;                                                          \
+    }                                                                         \
   while (0)

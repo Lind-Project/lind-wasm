@@ -73,6 +73,5 @@ __fesetenv (const fenv_t *envp)
 
   return 0;
 }
-libm_hidden_def (__fesetenv)
-weak_alias (__fesetenv, fesetenv)
-libm_hidden_weak (fesetenv)
+libm_hidden_def (__fesetenv) weak_alias (__fesetenv, fesetenv)
+    libm_hidden_weak (fesetenv)

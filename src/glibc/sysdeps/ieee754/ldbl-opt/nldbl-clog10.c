@@ -1,8 +1,7 @@
 #include "nldbl-compat.h"
 #include <complex.h>
 
-double _Complex
-attribute_hidden
+double _Complex attribute_hidden
 clog10l (double _Complex x)
 {
   return clog10 (x);

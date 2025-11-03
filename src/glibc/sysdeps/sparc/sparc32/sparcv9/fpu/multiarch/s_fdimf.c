@@ -23,5 +23,6 @@
 extern float __fdimf_vis3 (float, float);
 extern float __fdimf_generic (float, float);
 
-sparc_libm_ifunc(__fdimf, hwcap & HWCAP_SPARC_VIS3 ? __fdimf_vis3 : __fdimf_generic);
+sparc_libm_ifunc (__fdimf,
+		  hwcap &HWCAP_SPARC_VIS3 ? __fdimf_vis3 : __fdimf_generic);
 libm_alias_float (__fdim, fdim)

@@ -49,9 +49,9 @@ test_vfork (void)
   if (proc == 0)
     {
       if (getpid () != gettid ())
-        _exit (1);
+	_exit (1);
       if (gettid () == initial_tid)
-        _exit (2);
+	_exit (2);
       _exit (0);
     }
   int status;

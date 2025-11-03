@@ -54,12 +54,12 @@ do_cleanup (void)
 static void
 send_fd (const int sock, const int fd)
 {
-  struct msghdr msg = {0};
+  struct msghdr msg = { 0 };
   union
-    {
-      struct cmsghdr hdr;
-      char buf[CMSG_SPACE (sizeof (int))];
-    } cmsgbuf = {0};
+  {
+    struct cmsghdr hdr;
+    char buf[CMSG_SPACE (sizeof (int))];
+  } cmsgbuf = { 0 };
   struct cmsghdr *cmsg;
   struct iovec vec;
   char ch = 'A';
@@ -79,7 +79,8 @@ send_fd (const int sock, const int fd)
   msg.msg_iov = &vec;
   msg.msg_iovlen = 1;
 
-  while ((n = sendmsg (sock, &msg, 0)) == -1 && errno == EINTR);
+  while ((n = sendmsg (sock, &msg, 0)) == -1 && errno == EINTR)
+    ;
 
   TEST_VERIFY_EXIT (n == 1);
 }
@@ -87,12 +88,12 @@ send_fd (const int sock, const int fd)
 static int
 recv_fd (const int sock)
 {
-  struct msghdr msg = {0};
+  struct msghdr msg = { 0 };
   union
-    {
-      struct cmsghdr hdr;
-      char buf[CMSG_SPACE(sizeof(int))];
-    } cmsgbuf = {0};
+  {
+    struct cmsghdr hdr;
+    char buf[CMSG_SPACE (sizeof (int))];
+  } cmsgbuf = { 0 };
   struct cmsghdr *cmsg;
   struct iovec vec;
   ssize_t n;
@@ -107,7 +108,8 @@ recv_fd (const int sock)
   msg.msg_control = &cmsgbuf.buf;
   msg.msg_controllen = sizeof (cmsgbuf.buf);
 
-  while ((n = recvmsg (sock, &msg, 0)) == -1 && errno == EINTR);
+  while ((n = recvmsg (sock, &msg, 0)) == -1 && errno == EINTR)
+    ;
   if (n != 1 || ch != 'A')
     return -1;
 
@@ -123,7 +125,7 @@ recv_fd (const int sock)
 }
 
 static int
-child_func (void * const arg)
+child_func (void *const arg)
 {
   xclose (sockfd[0]);
   const int sock = sockfd[1];
@@ -134,8 +136,8 @@ child_func (void * const arg)
 
   if (mount ("/", MOUNT_NAME, NULL, MS_BIND | MS_REC, NULL))
     FAIL_EXIT1 ("mount failed: %m\n");
-  const int fd = xopen ("mpoint",
-			O_RDONLY | O_PATH | O_DIRECTORY | O_NOFOLLOW, 0);
+  const int fd
+      = xopen ("mpoint", O_RDONLY | O_PATH | O_DIRECTORY | O_NOFOLLOW, 0);
 
   send_fd (sock, fd);
   xclose (fd);
@@ -148,7 +150,7 @@ child_func (void * const arg)
 }
 
 static void
-update_map (char * const mapping, const char * const map_file)
+update_map (char *const mapping, const char *const map_file)
 {
   const size_t map_len = strlen (mapping);
 
@@ -158,14 +160,14 @@ update_map (char * const mapping, const char * const map_file)
 }
 
 static void
-proc_setgroups_write (const long child_pid, const char * const str)
+proc_setgroups_write (const long child_pid, const char *const str)
 {
-  const size_t str_len = strlen(str);
+  const size_t str_len = strlen (str);
 
   char setgroups_path[sizeof ("/proc//setgroups") + INT_STRLEN_BOUND (long)];
 
-  snprintf (setgroups_path, sizeof (setgroups_path),
-	    "/proc/%ld/setgroups", child_pid);
+  snprintf (setgroups_path, sizeof (setgroups_path), "/proc/%ld/setgroups",
+	    child_pid);
 
   const int fd = open (setgroups_path, O_WRONLY);
 
@@ -176,7 +178,7 @@ proc_setgroups_write (const long child_pid, const char * const str)
     }
 
   xwrite (fd, str, str_len);
-  xclose(fd);
+  xclose (fd);
 }
 
 static char child_stack[1024 * 1024];
@@ -207,9 +209,9 @@ do_test (void)
   }
 
   TEST_VERIFY_EXIT (socketpair (AF_UNIX, SOCK_STREAM, 0, sockfd) == 0);
-  pid_t child_pid = xclone (child_func, NULL, child_stack,
-			    sizeof (child_stack),
-			    CLONE_NEWUSER | CLONE_NEWNS | SIGCHLD);
+  pid_t child_pid
+      = xclone (child_func, NULL, child_stack, sizeof (child_stack),
+		CLONE_NEWUSER | CLONE_NEWNS | SIGCHLD);
 
   xclose (sockfd[1]);
   const int sock = sockfd[0];
@@ -219,13 +221,13 @@ do_test (void)
 
   snprintf (map_path, sizeof (map_path), "/proc/%ld/uid_map",
 	    (long) child_pid);
-  snprintf (map_buf, sizeof (map_buf), "0 %ld 1", (long) getuid());
+  snprintf (map_buf, sizeof (map_buf), "0 %ld 1", (long) getuid ());
   update_map (map_buf, map_path);
 
   proc_setgroups_write ((long) child_pid, "deny");
   snprintf (map_path, sizeof (map_path), "/proc/%ld/gid_map",
 	    (long) child_pid);
-  snprintf (map_buf, sizeof (map_buf), "0 %ld 1", (long) getgid());
+  snprintf (map_buf, sizeof (map_buf), "0 %ld 1", (long) getgid ());
   update_map (map_buf, map_path);
 
   TEST_VERIFY_EXIT (send (sock, "1", 1, MSG_NOSIGNAL) == 1);
@@ -237,7 +239,7 @@ do_test (void)
   memset (buf, 'A', sizeof (buf));
 
   /* Finally, call getcwd and check if it resulted in a buffer underflow.  */
-  char * cwd = getcwd (buf + sizeof (buf) / 2, 1);
+  char *cwd = getcwd (buf + sizeof (buf) / 2, 1);
   TEST_VERIFY (cwd == NULL);
   TEST_VERIFY (errno == ERANGE);
 

@@ -23,9 +23,8 @@ int
 __isnanf (float x)
 {
   int x_cond;
-  asm volatile ("fclass.s \t%0, %1" : "=f" (x_cond) : "f" (x));
+  asm volatile ("fclass.s \t%0, %1" : "=f"(x_cond) : "f"(x));
 
   return (x_cond & _FCLASS_NAN) != 0;
 }
-hidden_def (__isnanf)
-weak_alias (__isnanf, isnanf)
+hidden_def (__isnanf) weak_alias (__isnanf, isnanf)

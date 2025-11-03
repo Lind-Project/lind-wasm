@@ -20,5 +20,5 @@
 #include "elf/dl-tls.c"
 
 #ifdef SHARED
-strong_alias(__tls_get_addr, __tls_get_addr_opt)
+strong_alias (__tls_get_addr, __tls_get_addr_opt)
 #endif

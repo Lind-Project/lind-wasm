@@ -17,10 +17,10 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_FZB_H
-#define _STRING_FZB_H 1
+#  define _STRING_FZB_H 1
 
-#include <sys/cdefs.h>
-#include <string-optype.h>
+#  include <sys/cdefs.h>
+#  include <string-optype.h>
 
 /* Note that since CMPBGE creates a bit mask rather than a byte mask,
    we cannot simply provide a target-specific string-fza.h.  */

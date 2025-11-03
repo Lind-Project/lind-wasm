@@ -25,7 +25,7 @@
 #include <pointer_guard.h>
 
 #ifndef _JMPBUF_UNWINDS
-#error "<jmpbuf-unwind.h> fails to define _JMPBUF_UNWINDS"
+#  error "<jmpbuf-unwind.h> fails to define _JMPBUF_UNWINDS"
 #endif
 
 static inline uintptr_t
@@ -48,7 +48,7 @@ _longjmp_unwind (jmp_buf env, int val)
   /* All access to SS->active_resources must take place inside a critical
      section where signal handlers cannot run.  */
   __spin_lock (&ss->lock);
-  assert (! __spin_lock_locked (&ss->critical_section_lock));
+  assert (!__spin_lock_locked (&ss->critical_section_lock));
   __spin_lock (&ss->critical_section_lock);
 
   /* Remove local signal preemptors being unwound past.  */

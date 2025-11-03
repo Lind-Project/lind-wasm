@@ -23,10 +23,8 @@
 #include <unistd.h>
 #include <wait.h>
 
-
 static const char testdata[] = "This is a test";
 static const char testdata2[] = "And here we go again";
-
 
 int
 main (void)
@@ -49,13 +47,13 @@ main (void)
   if (name == NULL)
     error (EXIT_FAILURE, errno, "cannot allocate file name");
 
-  mempcpy (mempcpy (name, tmpdir, tmpdirlen),
-	   "/forkXXXXXX", sizeof ("/forkXXXXXX"));
+  mempcpy (mempcpy (name, tmpdir, tmpdirlen), "/forkXXXXXX",
+	   sizeof ("/forkXXXXXX"));
 
   /* Open our test file.   */
   fd = mkstemp (name);
   if (fd == -1)
-     error (EXIT_FAILURE, errno, "cannot open test file `%s'", name);
+    error (EXIT_FAILURE, errno, "cannot open test file `%s'", name);
 
   /* Make sure it gets removed.  */
   unlink (name);

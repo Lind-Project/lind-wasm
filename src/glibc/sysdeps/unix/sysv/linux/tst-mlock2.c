@@ -25,8 +25,8 @@
 static void *
 get_page (void)
 {
-  return xmmap (NULL, 1, PROT_READ | PROT_WRITE,
-                MAP_ANONYMOUS | MAP_PRIVATE, -1);
+  return xmmap (NULL, 1, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE,
+		-1);
 }
 
 static int
@@ -52,11 +52,11 @@ do_test (void)
     {
       TEST_VERIFY (ret == -1);
       if (errno != EINVAL)
-        /* EINVAL means the system does not support the mlock2 system
-           call.  */
-        FAIL_EXIT1 ("mlock2 (0): %m\n");
+	/* EINVAL means the system does not support the mlock2 system
+	   call.  */
+	FAIL_EXIT1 ("mlock2 (0): %m\n");
       else
-        puts ("warning: mlock2 system call not supported");
+	puts ("warning: mlock2 system call not supported");
     }
   xmunmap (page, 1);
 

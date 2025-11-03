@@ -17,7 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_RESOURCE_H
-# error "Never use <bits/resource.h> directly; include <sys/resource.h> instead."
+#  error                                                                       \
+      "Never use <bits/resource.h> directly; include <sys/resource.h> instead."
 #endif
 
 #include <bits/types.h>
@@ -36,26 +37,26 @@ enum __rlimit_resource
 
   /* Largest file that can be created, in bytes.  */
   RLIMIT_FSIZE = 1,
-#define	RLIMIT_FSIZE RLIMIT_FSIZE
+#define RLIMIT_FSIZE RLIMIT_FSIZE
 
   /* Maximum size of data segment, in bytes.  */
   RLIMIT_DATA = 2,
-#define	RLIMIT_DATA RLIMIT_DATA
+#define RLIMIT_DATA RLIMIT_DATA
 
   /* Maximum size of stack segment, in bytes.  */
   RLIMIT_STACK = 3,
-#define	RLIMIT_STACK RLIMIT_STACK
+#define RLIMIT_STACK RLIMIT_STACK
 
   /* Largest core file that can be created, in bytes.  */
   RLIMIT_CORE = 4,
-#define	RLIMIT_CORE RLIMIT_CORE
+#define RLIMIT_CORE RLIMIT_CORE
 
   /* Largest resident set size, in bytes.
      This affects swapping; processes that are exceeding their
      resident set size will be more likely to have physical memory
      taken from them.  */
   __RLIMIT_RSS = 7,
-#define	RLIMIT_RSS __RLIMIT_RSS
+#define RLIMIT_RSS __RLIMIT_RSS
 
   /* Number of open files.  */
   RLIMIT_NOFILE = 5,
@@ -98,8 +99,8 @@ enum __rlimit_resource
   __RLIMIT_RTPRIO = 14,
 #define RLIMIT_RTPRIO __RLIMIT_RTPRIO
 
-  /* Maximum CPU time in microseconds that a process scheduled under a real-time
-     scheduling policy may consume without making a blocking system
+  /* Maximum CPU time in microseconds that a process scheduled under a
+     real-time scheduling policy may consume without making a blocking system
      call before being forcibly descheduled.  */
   __RLIMIT_RTTIME = 15,
 #define RLIMIT_RTTIME __RLIMIT_RTTIME
@@ -113,26 +114,25 @@ enum __rlimit_resource
 /* Value to indicate that there is no limit.  */
 #if _MIPS_SIM == _ABI64
 /* The N64 syscall uses this value.  */
-# define RLIM_INFINITY 0xffffffffffffffffUL
-# ifdef __USE_LARGEFILE64
-#  define RLIM64_INFINITY 0xffffffffffffffffUL
-# endif
+#  define RLIM_INFINITY 0xffffffffffffffffUL
+#  ifdef __USE_LARGEFILE64
+#    define RLIM64_INFINITY 0xffffffffffffffffUL
+#  endif
 #else
 /* The O32 and N32 syscalls use 0x7fffffff.  */
-# ifndef __USE_FILE_OFFSET64
-#  define RLIM_INFINITY ((long int)(~0UL >> 1))
-# else
-#  define RLIM_INFINITY 0xffffffffffffffffULL
-# endif
-# ifdef __USE_LARGEFILE64
-#  define RLIM64_INFINITY 0xffffffffffffffffULL
-# endif
+#  ifndef __USE_FILE_OFFSET64
+#    define RLIM_INFINITY ((long int) (~0UL >> 1))
+#  else
+#    define RLIM_INFINITY 0xffffffffffffffffULL
+#  endif
+#  ifdef __USE_LARGEFILE64
+#    define RLIM64_INFINITY 0xffffffffffffffffULL
+#  endif
 #endif
 
 /* We can represent all limits.  */
-#define RLIM_SAVED_MAX	RLIM_INFINITY
-#define RLIM_SAVED_CUR	RLIM_INFINITY
-
+#define RLIM_SAVED_MAX RLIM_INFINITY
+#define RLIM_SAVED_CUR RLIM_INFINITY
 
 /* Type for resource quantity measurement.  */
 #ifndef __USE_FILE_OFFSET64
@@ -145,21 +145,21 @@ typedef __rlim64_t rlim64_t;
 #endif
 
 struct rlimit
-  {
-    /* The current (soft) limit.  */
-    rlim_t rlim_cur;
-    /* The hard limit.  */
-    rlim_t rlim_max;
-  };
+{
+  /* The current (soft) limit.  */
+  rlim_t rlim_cur;
+  /* The hard limit.  */
+  rlim_t rlim_max;
+};
 
 #ifdef __USE_LARGEFILE64
 struct rlimit64
-  {
-    /* The current (soft) limit.  */
-    rlim64_t rlim_cur;
-    /* The hard limit.  */
-    rlim64_t rlim_max;
- };
+{
+  /* The current (soft) limit.  */
+  rlim64_t rlim_cur;
+  /* The hard limit.  */
+  rlim64_t rlim_max;
+};
 #endif
 
 /* Whose usage statistics do you want?  */
@@ -177,9 +177,9 @@ enum __rusage_who
   ,
   /* The calling thread.  */
   RUSAGE_THREAD = 1
-# define RUSAGE_THREAD RUSAGE_THREAD
-  /* Name for the same functionality on Solaris.  */
-# define RUSAGE_LWP RUSAGE_THREAD
+#  define RUSAGE_THREAD RUSAGE_THREAD
+/* Name for the same functionality on Solaris.  */
+#  define RUSAGE_LWP RUSAGE_THREAD
 #endif
 };
 
@@ -187,45 +187,45 @@ enum __rusage_who
 #include <bits/types/struct_rusage.h>
 
 /* Priority limits.  */
-#define PRIO_MIN	-20	/* Minimum priority a process can have.  */
-#define PRIO_MAX	20	/* Maximum priority a process can have.  */
+#define PRIO_MIN -20 /* Minimum priority a process can have.  */
+#define PRIO_MAX 20  /* Maximum priority a process can have.  */
 
 /* The type of the WHICH argument to `getpriority' and `setpriority',
    indicating what flavor of entity the WHO argument specifies.  */
 enum __priority_which
 {
-  PRIO_PROCESS = 0,		/* WHO is a process ID.  */
+  PRIO_PROCESS = 0, /* WHO is a process ID.  */
 #define PRIO_PROCESS PRIO_PROCESS
-  PRIO_PGRP = 1,		/* WHO is a process group ID.  */
+  PRIO_PGRP = 1, /* WHO is a process group ID.  */
 #define PRIO_PGRP PRIO_PGRP
-  PRIO_USER = 2			/* WHO is a user ID.  */
+  PRIO_USER = 2 /* WHO is a user ID.  */
 #define PRIO_USER PRIO_USER
 };
-
 
 __BEGIN_DECLS
 
 #ifdef __USE_GNU
 /* Modify and return resource limits of a process atomically.  */
-# ifndef __USE_FILE_OFFSET64
+#  ifndef __USE_FILE_OFFSET64
 extern int prlimit (__pid_t __pid, enum __rlimit_resource __resource,
 		    const struct rlimit *__new_limit,
 		    struct rlimit *__old_limit) __THROW;
-# else
-#  ifdef __REDIRECT_NTH
-extern int __REDIRECT_NTH (prlimit, (__pid_t __pid,
-				     enum __rlimit_resource __resource,
-				     const struct rlimit *__new_limit,
-				     struct rlimit *__old_limit), prlimit64);
 #  else
-#   define prlimit prlimit64
+#    ifdef __REDIRECT_NTH
+extern int __REDIRECT_NTH (prlimit,
+			   (__pid_t __pid, enum __rlimit_resource __resource,
+			    const struct rlimit *__new_limit,
+			    struct rlimit *__old_limit),
+			   prlimit64);
+#    else
+#      define prlimit prlimit64
+#    endif
 #  endif
-# endif
-# ifdef __USE_LARGEFILE64
+#  ifdef __USE_LARGEFILE64
 extern int prlimit64 (__pid_t __pid, enum __rlimit_resource __resource,
 		      const struct rlimit64 *__new_limit,
 		      struct rlimit64 *__old_limit) __THROW;
-# endif
+#  endif
 #endif
 
 __END_DECLS

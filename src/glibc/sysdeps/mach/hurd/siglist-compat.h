@@ -21,10 +21,10 @@
 #define _SIGNAL_H
 #include <bits/signum-generic.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_1)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_1)
 DEFINE_COMPAT_SIGLIST (33, GLIBC_2_0)
 #endif
 
-#if SHLIB_COMPAT (libc, GLIBC_2_1, GLIBC_2_32)
+#if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_32)
 DEFINE_COMPAT_SIGLIST (_NSIG, GLIBC_2_1)
 #endif

@@ -22,8 +22,8 @@
    of two 4byte registers instead of a 8byte register which is produced by the
    instruction.
    Note: On s390 this instruction would only be used if build with -mzarch.  */
-# include <math.h>
-# include <libm-alias-float.h>
+#  include <math.h>
+#  include <libm-alias-float.h>
 
 long long int
 __llroundf (float x)
@@ -32,11 +32,11 @@ __llroundf (float x)
   /* The z196 zarch "convert to fixed" (cgebra) instruction is rounding
      x to the nearest integer with "ties away from 0" rounding mode
      (M3-field: 1) where inexact exceptions are suppressed (M4-field: 4).  */
-  __asm__ ("cgebra %0,1,%1,4" : "=d" (y) : "f" (x) : "cc");
+  __asm__ ("cgebra %0,1,%1,4" : "=d"(y) : "f"(x) : "cc");
   return y;
 }
 libm_alias_float (__llround, llround)
 
 #else
-# include <sysdeps/ieee754/flt-32/s_llroundf.c>
+#  include <sysdeps/ieee754/flt-32/s_llroundf.c>
 #endif

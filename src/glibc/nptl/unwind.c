@@ -26,13 +26,13 @@
 #include <shlib-compat.h>
 
 #if _STACK_GROWS_DOWN
-# define FRAME_LEFT(frame, other, adj) \
-  ((uintptr_t) frame - adj >= (uintptr_t) other - adj)
+#  define FRAME_LEFT(frame, other, adj)                                       \
+    ((uintptr_t) frame - adj >= (uintptr_t) other - adj)
 #elif _STACK_GROWS_UP
-# define FRAME_LEFT(frame, other, adj) \
-  ((uintptr_t) frame - adj <= (uintptr_t) other - adj)
+#  define FRAME_LEFT(frame, other, adj)                                       \
+    ((uintptr_t) frame - adj <= (uintptr_t) other - adj)
 #else
-# error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
+#  error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
 #endif
 
 static _Unwind_Reason_Code
@@ -57,8 +57,8 @@ unwind_stop (int version, _Unwind_Action actions,
      of a function is NOT within it's stack frame; it's the SP of the
      previous frame.  */
   if ((actions & _UA_END_OF_STACK)
-      || ! _JMPBUF_CFA_UNWINDS_ADJ (buf->cancel_jmp_buf[0].jmp_buf, context,
-				    adj))
+      || !_JMPBUF_CFA_UNWINDS_ADJ (buf->cancel_jmp_buf[0].jmp_buf, context,
+				   adj))
     do_longjump = 1;
 
   if (__glibc_unlikely (curp != NULL))
@@ -82,8 +82,7 @@ unwind_stop (int version, _Unwind_Action actions,
 	      /* To the next.  */
 	      curp = nextp;
 	    }
-	  while (curp != oldp
-		 && (do_longjump || FRAME_LEFT (cfa, curp, adj)));
+	  while (curp != oldp && (do_longjump || FRAME_LEFT (cfa, curp, adj)));
 
 	  /* Mark the current element as handled.  */
 	  THREAD_SETMEM (self, cleanup, curp);
@@ -91,7 +90,7 @@ unwind_stop (int version, _Unwind_Action actions,
     }
 
   DIAG_PUSH_NEEDS_COMMENT;
-#if __GNUC_PREREQ (7, 0)
+#if __GNUC_PREREQ(7, 0)
   /* This call results in a -Wstringop-overflow warning because struct
      pthread_unwind_buf is smaller than jmp_buf.  setjmp and longjmp
      do not use anything beyond the common prefix (they never access
@@ -105,7 +104,6 @@ unwind_stop (int version, _Unwind_Action actions,
   return _URC_NO_REASON;
 }
 
-
 static void
 unwind_cleanup (_Unwind_Reason_Code reason, struct _Unwind_Exception *exc)
 {
@@ -114,9 +112,7 @@ unwind_cleanup (_Unwind_Reason_Code reason, struct _Unwind_Exception *exc)
   __libc_fatal ("FATAL: exception not rethrown\n");
 }
 
-
-void
-__cleanup_fct_attribute __attribute ((noreturn))
+void __cleanup_fct_attribute __attribute ((noreturn))
 __pthread_unwind (__pthread_unwind_buf_t *buf)
 {
   struct pthread_unwind_buf *ibuf = (struct pthread_unwind_buf *) buf;
@@ -135,9 +131,8 @@ __pthread_unwind (__pthread_unwind_buf_t *buf)
 }
 libc_hidden_def (__pthread_unwind)
 
-void
-__cleanup_fct_attribute __attribute ((noreturn))
-___pthread_unwind_next (__pthread_unwind_buf_t *buf)
+    void __cleanup_fct_attribute __attribute ((noreturn))
+    ___pthread_unwind_next (__pthread_unwind_buf_t *buf)
 {
   struct pthread_unwind_buf *ibuf = (struct pthread_unwind_buf *) buf;
 
@@ -145,7 +140,7 @@ ___pthread_unwind_next (__pthread_unwind_buf_t *buf)
 }
 versioned_symbol (libc, ___pthread_unwind_next, __pthread_unwind_next,
 		  GLIBC_2_34);
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_3_3, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_3_3, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_unwind_next, __pthread_unwind_next,
 	       GLIBC_2_3_3);
 #endif

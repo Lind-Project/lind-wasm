@@ -29,14 +29,14 @@
    to explicitly remount it at "/dev/console".  */
 
 static int
-do_in_chroot_1 (int (*cb)(const char *, int))
+do_in_chroot_1 (int (*cb) (const char *, int))
 {
   printf ("info:  entering chroot 1\n");
 
   /* Open the PTS that we'll be testing on.  */
   int master;
   char *slavename;
-  master = posix_openpt (O_RDWR|O_NOCTTY|O_NONBLOCK);
+  master = posix_openpt (O_RDWR | O_NOCTTY | O_NONBLOCK);
   if (master < 0)
     {
       if (errno == ENOENT)
@@ -48,11 +48,11 @@ do_in_chroot_1 (int (*cb)(const char *, int))
   VERIFY (unlockpt (master) == 0);
   if (strncmp (slavename, "/dev/pts/", 9) != 0)
     FAIL_UNSUPPORTED ("slave pseudo-terminal is not under /dev/pts/: %s",
-                      slavename);
+		      slavename);
   adjust_file_limit (slavename);
   int slave = xopen (slavename, O_RDWR, 0);
   if (!doit (slave, "basic smoketest",
-             (struct result_r){.name=slavename, .ret=0, .err=0}))
+	     (struct result_r) { .name = slavename, .ret = 0, .err = 0 }))
     return 1;
 
   pid_t pid = xfork ();
@@ -70,10 +70,10 @@ do_in_chroot_1 (int (*cb)(const char *, int))
       xmkdir ("dev", 0755);
       xmkdir ("dev/pts", 0755);
 
-      VERIFY (mount ("/proc", "proc", NULL, MS_BIND|MS_REC, NULL) == 0);
-      VERIFY (mount ("devpts", "dev/pts", "devpts",
-                     MS_NOSUID|MS_NOEXEC,
-                     "newinstance,ptmxmode=0666,mode=620") == 0);
+      VERIFY (mount ("/proc", "proc", NULL, MS_BIND | MS_REC, NULL) == 0);
+      VERIFY (mount ("devpts", "dev/pts", "devpts", MS_NOSUID | MS_NOEXEC,
+		     "newinstance,ptmxmode=0666,mode=620")
+	      == 0);
       VERIFY (symlink ("pts/ptmx", "dev/ptmx") == 0);
 
       touch ("console", 0);

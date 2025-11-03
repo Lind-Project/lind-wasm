@@ -24,9 +24,7 @@
 extern __typeof (__roundf) __roundf_ppc64 attribute_hidden;
 extern __typeof (__roundf) __roundf_power5plus attribute_hidden;
 
-libc_ifunc (__roundf,
-	    (hwcap & PPC_FEATURE_POWER5_PLUS)
-	    ? __roundf_power5plus
-            : __roundf_ppc64);
+libc_ifunc (__roundf, (hwcap & PPC_FEATURE_POWER5_PLUS) ? __roundf_power5plus
+							: __roundf_ppc64);
 
 libm_alias_float (__round, round)

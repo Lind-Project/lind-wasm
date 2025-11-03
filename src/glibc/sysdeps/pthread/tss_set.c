@@ -27,9 +27,9 @@ __tss_set (tss_t tss_id, void *val)
 }
 #if PTHREAD_IN_LIBC
 versioned_symbol (libc, __tss_set, tss_set, GLIBC_2_34);
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_28, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_28, GLIBC_2_34)
 compat_symbol (libpthread, __tss_set, tss_set, GLIBC_2_28);
-# endif
+#  endif
 #else /* !PTHREAD_IN_LIBC */
 strong_alias (__tss_set, tss_set)
 #endif

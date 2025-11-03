@@ -23,7 +23,9 @@ static int
 do_test (void)
 {
   TEST_COMPARE (prctl (PR_SET_NAME, "thread name", 0, 0, 0), 0);
-  char buffer[16] = { 0, };
+  char buffer[16] = {
+    0,
+  };
   TEST_COMPARE (prctl (PR_GET_NAME, buffer, 0, 0, 0), 0);
   char expected[16] = "thread name";
   TEST_COMPARE_BLOB (buffer, sizeof (buffer), expected, sizeof (expected));

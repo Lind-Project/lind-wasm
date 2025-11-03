@@ -149,5 +149,4 @@ reclaim_stacks (void)
     list_add (&self->list, &GL (dl_stack_used));
 }
 
-
 #endif

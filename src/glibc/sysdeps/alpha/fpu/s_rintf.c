@@ -19,14 +19,13 @@
 #include <math.h>
 #include <libm-alias-float.h>
 
-
 float
 __rintf (float x)
 {
   if (isnanf (x))
     return x + x;
 
-  if (isless (fabsf (x), 16777216.0f))	/* 1 << FLT_MANT_DIG */
+  if (isless (fabsf (x), 16777216.0f)) /* 1 << FLT_MANT_DIG */
     {
       /* Note that Alpha S_Floating is stored in registers in a
 	 restricted T_Floating format, so we don't even need to
@@ -43,7 +42,7 @@ __rintf (float x)
 
       /* rint(-0.1) == -0, and in general we'll always have the same
 	 sign as our input.  */
-      x = copysignf(new_x, x);
+      x = copysignf (new_x, x);
     }
   return x;
 }

@@ -40,7 +40,6 @@
 #include <sys/uio.h>
 #include <libc-diag.h>
 
-
 /* Since STREAMS are not supported in the standard Linux kernel and
    there we don't advertise STREAMS as supported is no need to test
    the STREAMS related functions.  This affects
@@ -69,14 +68,12 @@
 
 #include "tst-cancel4-common.h"
 
-
 #ifndef IPC_ADDVAL
-# define IPC_ADDVAL 0
+#  define IPC_ADDVAL 0
 #endif
 
-
 static void *
-tf_read  (void *arg)
+tf_read (void *arg)
 {
   int fd;
 
@@ -106,9 +103,8 @@ tf_read  (void *arg)
   FAIL_EXIT1 ("read returns with %zd", s);
 }
 
-
 static void *
-tf_readv  (void *arg)
+tf_readv (void *arg)
 {
   int fd;
 
@@ -139,9 +135,8 @@ tf_readv  (void *arg)
   FAIL_EXIT1 ("readv returns with %zd", s);
 }
 
-
 static void *
-tf_write  (void *arg)
+tf_write (void *arg)
 {
   int fd;
 
@@ -176,9 +171,8 @@ tf_write  (void *arg)
   FAIL_EXIT1 ("write returns with %zd", s);
 }
 
-
 static void *
-tf_writev  (void *arg)
+tf_writev (void *arg)
 {
   int fd;
 
@@ -210,7 +204,6 @@ tf_writev  (void *arg)
   FAIL_EXIT1 ("writev returns with %zd", s);
 }
 
-
 static void *
 tf_sleep (void *arg)
 {
@@ -227,7 +220,6 @@ tf_sleep (void *arg)
 
   FAIL_EXIT1 ("sleep returns");
 }
-
 
 static void *
 tf_usleep (void *arg)
@@ -246,7 +238,6 @@ tf_usleep (void *arg)
   FAIL_EXIT1 ("usleep returns");
 }
 
-
 static void *
 tf_nanosleep (void *arg)
 {
@@ -264,7 +255,6 @@ tf_nanosleep (void *arg)
 
   FAIL_EXIT1 ("nanosleep returns");
 }
-
 
 static void *
 tf_select (void *arg)
@@ -300,7 +290,6 @@ tf_select (void *arg)
   FAIL_EXIT1 ("select returns with %d: %m", s);
 }
 
-
 static void *
 tf_pselect (void *arg)
 {
@@ -335,7 +324,6 @@ tf_pselect (void *arg)
   FAIL_EXIT1 ("pselect returns with %d: %m", s);
 }
 
-
 static void *
 tf_poll (void *arg)
 {
@@ -367,7 +355,6 @@ tf_poll (void *arg)
 
   FAIL_EXIT1 ("poll returns with %d: %m", s);
 }
-
 
 static void *
 tf_ppoll (void *arg)
@@ -401,7 +388,6 @@ tf_ppoll (void *arg)
   FAIL_EXIT1 ("ppoll returns with %d: %m", s);
 }
 
-
 static void *
 tf_wait (void *arg)
 {
@@ -419,7 +405,7 @@ tf_wait (void *arg)
 
   if (arg != NULL)
     {
-      struct timespec  ts = { .tv_sec = 0, .tv_nsec = 100000000 };
+      struct timespec ts = { .tv_sec = 0, .tv_nsec = 100000000 };
       while (nanosleep (&ts, &ts) != 0)
 	continue;
 
@@ -438,7 +424,6 @@ tf_wait (void *arg)
   FAIL_EXIT1 ("wait returns with %d: %m", s);
 }
 
-
 static void *
 tf_waitpid (void *arg)
 {
@@ -456,7 +441,7 @@ tf_waitpid (void *arg)
 
   if (arg != NULL)
     {
-      struct timespec  ts = { .tv_sec = 0, .tv_nsec = 100000000 };
+      struct timespec ts = { .tv_sec = 0, .tv_nsec = 100000000 };
       while (nanosleep (&ts, &ts) != 0)
 	continue;
 
@@ -475,7 +460,6 @@ tf_waitpid (void *arg)
   FAIL_EXIT1 ("waitpid returns with %d: %m", s);
 }
 
-
 static void *
 tf_waitid (void *arg)
 {
@@ -493,7 +477,7 @@ tf_waitid (void *arg)
 
   if (arg != NULL)
     {
-      struct timespec  ts = { .tv_sec = 0, .tv_nsec = 100000000 };
+      struct timespec ts = { .tv_sec = 0, .tv_nsec = 100000000 };
       while (nanosleep (&ts, &ts) != 0)
 	continue;
 
@@ -506,7 +490,7 @@ tf_waitid (void *arg)
   pthread_cleanup_push (cl, NULL);
 
 #ifndef WEXITED
-# define WEXITED 0
+#  define WEXITED 0
 #endif
   siginfo_t si;
   s = waitid (P_PID, pid, &si, WEXITED);
@@ -515,7 +499,6 @@ tf_waitid (void *arg)
 
   FAIL_EXIT1 ("waitid returns with %d: %m", s);
 }
-
 
 static void *
 tf_sigpause (void *arg)
@@ -540,7 +523,6 @@ tf_sigpause (void *arg)
   FAIL_EXIT1 ("sigpause returned");
 }
 
-
 static void *
 tf_sigsuspend (void *arg)
 {
@@ -560,7 +542,6 @@ tf_sigsuspend (void *arg)
 
   FAIL_EXIT1 ("sigsuspend returned");
 }
-
 
 static void *
 tf_sigwait (void *arg)
@@ -586,7 +567,6 @@ tf_sigwait (void *arg)
 
   FAIL_EXIT1 ("sigwait returned with signal %d", sig);
 }
-
 
 static void *
 tf_sigwaitinfo (void *arg)
@@ -620,7 +600,6 @@ tf_sigwaitinfo (void *arg)
 
   FAIL_EXIT1 ("sigwaitinfo returned with signal %d", info.si_signo);
 }
-
 
 static void *
 tf_sigtimedwait (void *arg)
@@ -656,7 +635,6 @@ tf_sigtimedwait (void *arg)
   FAIL_EXIT1 ("sigtimedwait returned with signal %d", info.si_signo);
 }
 
-
 static void *
 tf_pause (void *arg)
 {
@@ -674,7 +652,6 @@ tf_pause (void *arg)
   FAIL_EXIT1 ("pause returned");
 }
 
-
 static void *
 tf_accept (void *arg)
 {
@@ -685,8 +662,8 @@ tf_accept (void *arg)
 
   tempfd = socket (AF_UNIX, pf, 0);
   if (tempfd == -1)
-    FAIL_EXIT1 ("socket (AF_UNIX, %s, 0): %m", arg == NULL ? "SOCK_STREAM"
-					       : "SOCK_DGRAM");
+    FAIL_EXIT1 ("socket (AF_UNIX, %s, 0): %m",
+		arg == NULL ? "SOCK_STREAM" : "SOCK_DGRAM");
 
   int tries = 0;
   do
@@ -699,8 +676,9 @@ tf_accept (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
 
   unlink (sun.sun_path);
 
@@ -722,7 +700,6 @@ tf_accept (void *arg)
   FAIL_EXIT1 ("accept returned");
 }
 
-
 static void *
 tf_send (void *arg)
 {
@@ -743,8 +720,9 @@ tf_send (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
 
   listen (tempfd, 5);
 
@@ -773,13 +751,12 @@ tf_send (void *arg)
      due to the SIGCANCEL, but the thread may still be pending
      cancellation.  */
   pthread_testcancel ();
-  printf("send returned %zd\n", s);
+  printf ("send returned %zd\n", s);
 
   pthread_cleanup_pop (0);
 
   FAIL_EXIT1 ("send returned");
 }
-
 
 static void *
 tf_recv (void *arg)
@@ -801,8 +778,9 @@ tf_recv (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
 
   listen (tempfd, 5);
 
@@ -831,7 +809,6 @@ tf_recv (void *arg)
   FAIL_EXIT1 ("recv returned");
 }
 
-
 static void *
 tf_recvfrom (void *arg)
 {
@@ -852,8 +829,9 @@ tf_recvfrom (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
 
   tempfname = strdup (sun.sun_path);
 
@@ -879,7 +857,6 @@ tf_recvfrom (void *arg)
   FAIL_EXIT1 ("recvfrom returned");
 }
 
-
 static void *
 tf_recvmsg (void *arg)
 {
@@ -900,8 +877,9 @@ tf_recvmsg (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
 
   tempfname = strdup (sun.sun_path);
 
@@ -961,7 +939,6 @@ tf_open (void *arg)
   FAIL_EXIT1 ("open returned");
 }
 
-
 static void *
 tf_close (void *arg)
 {
@@ -988,7 +965,6 @@ tf_close (void *arg)
 
   FAIL_EXIT1 ("close returned");
 }
-
 
 static void *
 tf_pread (void *arg)
@@ -1017,7 +993,6 @@ tf_pread (void *arg)
   FAIL_EXIT1 ("pread returned");
 }
 
-
 static void *
 tf_pwrite (void *arg)
 {
@@ -1039,7 +1014,7 @@ tf_pwrite (void *arg)
   pthread_cleanup_push (cl, NULL);
 
   char mem[10];
-  if (pwrite (tempfd, mem, sizeof (mem), 0) <0)
+  if (pwrite (tempfd, mem, sizeof (mem), 0) < 0)
     FAIL_EXIT1 ("pwrite failed: %m");
 
   pthread_cleanup_pop (0);
@@ -1206,7 +1181,6 @@ tf_fsync (void *arg)
   FAIL_EXIT1 ("fsync returned");
 }
 
-
 static void *
 tf_fdatasync (void *arg)
 {
@@ -1231,7 +1205,6 @@ tf_fdatasync (void *arg)
 
   FAIL_EXIT1 ("fdatasync returned");
 }
-
 
 static void *
 tf_msync (void *arg)
@@ -1260,7 +1233,6 @@ tf_msync (void *arg)
   FAIL_EXIT1 ("msync returned");
 }
 
-
 static void *
 tf_sendto (void *arg)
 {
@@ -1281,8 +1253,9 @@ tf_sendto (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
 
   listen (tempfd, 5);
 
@@ -1313,7 +1286,6 @@ tf_sendto (void *arg)
   FAIL_EXIT1 ("sendto returned");
 }
 
-
 static void *
 tf_sendmsg (void *arg)
 {
@@ -1339,8 +1311,9 @@ tf_sendmsg (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
   tempfname = strdup (sun.sun_path);
 
   tempfd2 = socket (AF_UNIX, SOCK_DGRAM, 0);
@@ -1360,8 +1333,8 @@ tf_sendmsg (void *arg)
 
   struct msghdr m;
   m.msg_name = &sun;
-  m.msg_namelen = (offsetof (struct sockaddr_un, sun_path)
-		   + strlen (sun.sun_path) + 1);
+  m.msg_namelen
+      = (offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path) + 1);
   m.msg_iov = iov;
   m.msg_iovlen = 1;
   m.msg_control = NULL;
@@ -1373,7 +1346,6 @@ tf_sendmsg (void *arg)
 
   FAIL_EXIT1 ("sendmsg returned");
 }
-
 
 static void *
 tf_creat (void *arg)
@@ -1395,7 +1367,6 @@ tf_creat (void *arg)
 
   FAIL_EXIT1 ("creat returned");
 }
-
 
 static void *
 tf_connect (void *arg)
@@ -1422,8 +1393,9 @@ tf_connect (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
   tempfname = strdup (sun.sun_path);
 
   listen (tempfd, 5);
@@ -1445,7 +1417,6 @@ tf_connect (void *arg)
 
   FAIL_EXIT1 ("connect returned");
 }
-
 
 static void *
 tf_tcdrain (void *arg)
@@ -1470,7 +1441,6 @@ tf_tcdrain (void *arg)
 
   FAIL_EXIT1 ("tcdrain returned");
 }
-
 
 static void *
 tf_msgrcv (void *arg)
@@ -1521,7 +1491,6 @@ tf_msgrcv (void *arg)
   FAIL_EXIT1 ("msgrcv returned %zd", s);
 }
 
-
 static void *
 tf_msgsnd (void *arg)
 {
@@ -1567,51 +1536,28 @@ tf_msgsnd (void *arg)
   FAIL_EXIT1 ("msgsnd returned");
 }
 
-
-struct cancel_tests tests[] =
-{
-  ADD_TEST (read, 2, 0),
-  ADD_TEST (readv, 2, 0),
-  ADD_TEST (select, 2, 0),
-  ADD_TEST (pselect, 2, 0),
-  ADD_TEST (poll, 2, 0),
-  ADD_TEST (ppoll, 2, 0),
-  ADD_TEST (write, 2, 0),
-  ADD_TEST (writev, 2, 0),
-  ADD_TEST (sleep, 2, 0),
-  ADD_TEST (usleep, 2, 0),
-  ADD_TEST (nanosleep, 2, 0),
-  ADD_TEST (wait, 2, 0),
-  ADD_TEST (waitid, 2, 0),
-  ADD_TEST (waitpid, 2, 0),
-  ADD_TEST (sigpause, 2, 0),
-  ADD_TEST (sigsuspend, 2, 0),
-  ADD_TEST (sigwait, 2, 0),
-  ADD_TEST (sigwaitinfo, 2, 0),
-  ADD_TEST (sigtimedwait, 2, 0),
-  ADD_TEST (pause, 2, 0),
-  ADD_TEST (accept, 2, 0),
-  ADD_TEST (send, 2, 0),
-  ADD_TEST (recv, 2, 0),
-  ADD_TEST (recvfrom, 2, 0),
-  ADD_TEST (recvmsg, 2, 0),
-  ADD_TEST (preadv, 2, 1),
-  ADD_TEST (preadv2, 2, 1),
-  ADD_TEST (pwritev, 2, 1),
-  ADD_TEST (pwritev2, 2, 1),
-  ADD_TEST (open, 2, 1),
-  ADD_TEST (close, 2, 1),
-  ADD_TEST (pread, 2, 1),
-  ADD_TEST (pwrite, 2, 1),
-  ADD_TEST (fsync, 2, 1),
-  ADD_TEST (fdatasync, 2, 1),
-  ADD_TEST (msync, 2, 1),
-  ADD_TEST (sendto, 2, 1),
-  ADD_TEST (sendmsg, 2, 1),
-  ADD_TEST (creat, 2, 1),
-  ADD_TEST (connect, 2, 1),
-  ADD_TEST (tcdrain, 2, 1),
-  ADD_TEST (msgrcv, 2, 0),
+struct cancel_tests tests[] = {
+  ADD_TEST (read, 2, 0),	 ADD_TEST (readv, 2, 0),
+  ADD_TEST (select, 2, 0),	 ADD_TEST (pselect, 2, 0),
+  ADD_TEST (poll, 2, 0),	 ADD_TEST (ppoll, 2, 0),
+  ADD_TEST (write, 2, 0),	 ADD_TEST (writev, 2, 0),
+  ADD_TEST (sleep, 2, 0),	 ADD_TEST (usleep, 2, 0),
+  ADD_TEST (nanosleep, 2, 0),	 ADD_TEST (wait, 2, 0),
+  ADD_TEST (waitid, 2, 0),	 ADD_TEST (waitpid, 2, 0),
+  ADD_TEST (sigpause, 2, 0),	 ADD_TEST (sigsuspend, 2, 0),
+  ADD_TEST (sigwait, 2, 0),	 ADD_TEST (sigwaitinfo, 2, 0),
+  ADD_TEST (sigtimedwait, 2, 0), ADD_TEST (pause, 2, 0),
+  ADD_TEST (accept, 2, 0),	 ADD_TEST (send, 2, 0),
+  ADD_TEST (recv, 2, 0),	 ADD_TEST (recvfrom, 2, 0),
+  ADD_TEST (recvmsg, 2, 0),	 ADD_TEST (preadv, 2, 1),
+  ADD_TEST (preadv2, 2, 1),	 ADD_TEST (pwritev, 2, 1),
+  ADD_TEST (pwritev2, 2, 1),	 ADD_TEST (open, 2, 1),
+  ADD_TEST (close, 2, 1),	 ADD_TEST (pread, 2, 1),
+  ADD_TEST (pwrite, 2, 1),	 ADD_TEST (fsync, 2, 1),
+  ADD_TEST (fdatasync, 2, 1),	 ADD_TEST (msync, 2, 1),
+  ADD_TEST (sendto, 2, 1),	 ADD_TEST (sendmsg, 2, 1),
+  ADD_TEST (creat, 2, 1),	 ADD_TEST (connect, 2, 1),
+  ADD_TEST (tcdrain, 2, 1),	 ADD_TEST (msgrcv, 2, 0),
   ADD_TEST (msgsnd, 2, 1),
 };
 #define ntest_tf (sizeof (tests) / sizeof (tests[0]))

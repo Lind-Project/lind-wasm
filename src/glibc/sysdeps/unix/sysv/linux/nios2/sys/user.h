@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_USER_H
-#define _SYS_USER_H	1
+#  define _SYS_USER_H 1
 
 /* The whole purpose of this file is for GDB and GDB only.  Don't read
    too much into it.  Don't use it for anything other than GDB unless
@@ -34,25 +34,25 @@ struct user_regs
 
 struct user
 {
-  struct user_regs regs;	/* General registers */
-  int u_fpvalid;		/* True if math co-processor being used. */
+  struct user_regs regs; /* General registers */
+  int u_fpvalid;	 /* True if math co-processor being used. */
 
-  unsigned long int u_tsize;	/* Text segment size (pages). */
-  unsigned long int u_dsize;	/* Data segment size (pages). */
-  unsigned long int u_ssize;	/* Stack segment size (pages). */
+  unsigned long int u_tsize; /* Text segment size (pages). */
+  unsigned long int u_dsize; /* Data segment size (pages). */
+  unsigned long int u_ssize; /* Stack segment size (pages). */
 
-  unsigned long start_code;	/* Starting virtual address of text. */
-  unsigned long start_stack;	/* Starting virtual address of stack. */
+  unsigned long start_code;  /* Starting virtual address of text. */
+  unsigned long start_stack; /* Starting virtual address of stack. */
 
-  long int signal;     		/* Signal that caused the core dump. */
-  int reserved;			/* No longer used */
-  struct user_regs *u_ar0;	/* help gdb to find the general registers. */
+  long int signal;	   /* Signal that caused the core dump. */
+  int reserved;		   /* No longer used */
+  struct user_regs *u_ar0; /* help gdb to find the general registers. */
 
-  unsigned long magic;		/* uniquely identify a core file */
-  char u_comm[32];		/* User command that was responsible */
+  unsigned long magic; /* uniquely identify a core file */
+  char u_comm[32];     /* User command that was responsible */
   int u_debugreg[8];
-  struct user_fpregs u_fp;	/* Floating point registers */
-  struct user_fpregs *u_fp0;	/* help gdb to find the FP registers. */
+  struct user_fpregs u_fp;   /* Floating point registers */
+  struct user_fpregs *u_fp0; /* help gdb to find the FP registers. */
 };
 
-#endif  /* sys/user.h */
+#endif /* sys/user.h */

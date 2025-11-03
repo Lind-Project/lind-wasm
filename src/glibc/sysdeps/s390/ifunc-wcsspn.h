@@ -16,38 +16,38 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WCSSPN_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WCSSPN_IFUNC 1
 #else
-# define HAVE_WCSSPN_IFUNC	0
+#  define HAVE_WCSSPN_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WCSSPN_IFUNC_AND_VX_SUPPORT HAVE_WCSSPN_IFUNC
+#  define HAVE_WCSSPN_IFUNC_AND_VX_SUPPORT HAVE_WCSSPN_IFUNC
 #else
-# define HAVE_WCSSPN_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WCSSPN_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WCSSPN_DEFAULT		WCSSPN_Z13
+#  define WCSSPN_DEFAULT WCSSPN_Z13
 /* The z13 ifunc variant is using the common code variant as fallback!  */
-# define HAVE_WCSSPN_C		1
-# define HAVE_WCSSPN_Z13	1
+#  define HAVE_WCSSPN_C 1
+#  define HAVE_WCSSPN_Z13 1
 #else
-# define WCSSPN_DEFAULT		WCSSPN_C
-# define HAVE_WCSSPN_C		1
-# define HAVE_WCSSPN_Z13	HAVE_WCSSPN_IFUNC_AND_VX_SUPPORT
+#  define WCSSPN_DEFAULT WCSSPN_C
+#  define HAVE_WCSSPN_C 1
+#  define HAVE_WCSSPN_Z13 HAVE_WCSSPN_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WCSSPN_C
-# define WCSSPN_C		__wcsspn_c
+#  define WCSSPN_C __wcsspn_c
 #else
-# define WCSSPN_C		NULL
+#  define WCSSPN_C NULL
 #endif
 
 #if HAVE_WCSSPN_Z13
-# define WCSSPN_Z13		__wcsspn_vx
+#  define WCSSPN_Z13 __wcsspn_vx
 #else
-# define WCSSPN_Z13		NULL
+#  define WCSSPN_Z13 NULL
 #endif

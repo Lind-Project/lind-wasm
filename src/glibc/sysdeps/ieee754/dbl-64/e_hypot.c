@@ -45,10 +45,10 @@
 #include <libm-alias-double.h>
 #include "math_config.h"
 
-#define SCALE     0x1p-600
+#define SCALE 0x1p-600
 #define LARGE_VAL 0x1p+511
-#define TINY_VAL  0x1p-459
-#define EPS       0x1p-54
+#define TINY_VAL 0x1p-459
+#define EPS 0x1p-54
 
 static inline double
 handle_errno (double r)
@@ -96,10 +96,10 @@ kernel (double ax, double ay)
 double
 __hypot (double x, double y)
 {
-  if (!isfinite(x) || !isfinite(y))
+  if (!isfinite (x) || !isfinite (y))
     {
-      if ((isinf (x) || isinf (y))
-	  && !issignaling_inline (x) && !issignaling_inline (y))
+      if ((isinf (x) || isinf (y)) && !issignaling_inline (x)
+	  && !issignaling_inline (y))
 	return INFINITY;
       return x + y;
     }
@@ -116,8 +116,8 @@ __hypot (double x, double y)
       if (__glibc_unlikely (ay <= ax * EPS))
 	return handle_errno (math_narrow_eval (ax + ay));
 
-      return handle_errno (math_narrow_eval (kernel (ax * SCALE, ay * SCALE)
-					     / SCALE));
+      return handle_errno (
+	  math_narrow_eval (kernel (ax * SCALE, ay * SCALE) / SCALE));
     }
 
   /* If ay is tiny, scale both inputs up.  */
@@ -138,10 +138,10 @@ __hypot (double x, double y)
   return kernel (ax, ay);
 }
 strong_alias (__hypot, __ieee754_hypot)
-libm_alias_finite (__ieee754_hypot, __hypot)
+    libm_alias_finite (__ieee754_hypot, __hypot)
 #if LIBM_SVID_COMPAT
-versioned_symbol (libm, __hypot, hypot, GLIBC_2_35);
+	versioned_symbol (libm, __hypot, hypot, GLIBC_2_35);
 libm_alias_double_other (__hypot, hypot)
 #else
-libm_alias_double (__hypot, hypot)
+	libm_alias_double (__hypot, hypot)
 #endif

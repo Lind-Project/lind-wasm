@@ -18,18 +18,18 @@
 
 #include <string.h>
 
-#if defined SHARED && IS_IN (libc)
+#if defined SHARED && IS_IN(libc)
 extern __typeof (memcpy) __memcpy_ppc attribute_hidden;
 extern __typeof (strlen) __strlen_ppc attribute_hidden;
 extern __typeof (strcpy) __strcpy_ppc attribute_hidden;
 
-# define STRCPY __strcpy_ppc
-# define memcpy __memcpy_ppc
-# define strlen __strlen_ppc
+#  define STRCPY __strcpy_ppc
+#  define memcpy __memcpy_ppc
+#  define strlen __strlen_ppc
 
-# undef libc_hidden_builtin_def
-# define libc_hidden_builtin_def(name) \
-  __hidden_ver1 (__strcpy_ppc, __GI_strcpy, __strcpy_ppc);
+#  undef libc_hidden_builtin_def
+#  define libc_hidden_builtin_def(name)                                       \
+    __hidden_ver1 (__strcpy_ppc, __GI_strcpy, __strcpy_ppc);
 #endif
 
 #include <string/strcpy.c>

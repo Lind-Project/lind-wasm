@@ -18,18 +18,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.so. */
-#if IS_IN (libc) && defined SHARED
-# define __memcpy_chk __redirect_memcpy_chk
-# include <string.h>
-# undef __memcpy_chk
+#if IS_IN(libc) && defined SHARED
+#  define __memcpy_chk __redirect_memcpy_chk
+#  include <string.h>
+#  undef __memcpy_chk
 
-# define SYMBOL_NAME memcpy_chk
-# include "ifunc-memmove.h"
+#  define SYMBOL_NAME memcpy_chk
+#  include "ifunc-memmove.h"
 
-libc_ifunc_redirected (__redirect_memcpy_chk, __memcpy_chk,
-		       IFUNC_SELECTOR ());
-# ifdef SHARED
+libc_ifunc_redirected (__redirect_memcpy_chk, __memcpy_chk, IFUNC_SELECTOR ());
+#  ifdef SHARED
 __hidden_ver1 (__memcpy_chk, __GI___memcpy_chk, __redirect_memcpy_chk)
-  __attribute__ ((visibility ("hidden"))) __attribute_copy__ (__memcpy_chk);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (__memcpy_chk);
+#  endif
 #endif

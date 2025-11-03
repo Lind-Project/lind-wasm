@@ -17,32 +17,26 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _GNU_LDSODEFS_H
-#define _GNU_LDSODEFS_H 1
+#  define _GNU_LDSODEFS_H 1
 
-#include <elf.h>
-#include <libc-abis.h>
-#include <string.h>
+#  include <elf.h>
+#  include <libc-abis.h>
+#  include <string.h>
 
 /* Accept binaries which identify the binary as using GNU extensions.  */
-#define VALID_ELF_HEADER(hdr,exp,size)	(memcmp (hdr, exp, size) == 0	\
-					 || memcmp (hdr, expected2, size) == 0)
-#define VALID_ELF_OSABI(osabi)		(osabi == ELFOSABI_SYSV \
-					 || osabi == ELFOSABI_GNU)
-#define VALID_ELF_ABIVERSION(osabi,ver) \
-  (ver == 0 || (osabi == ELFOSABI_GNU && ver < LIBC_ABI_MAX))
-#define MORE_ELF_HEADER_DATA \
-  static const unsigned char expected2[EI_PAD] =	\
-  {							\
-    [EI_MAG0] = ELFMAG0,				\
-    [EI_MAG1] = ELFMAG1,				\
-    [EI_MAG2] = ELFMAG2,				\
-    [EI_MAG3] = ELFMAG3,				\
-    [EI_CLASS] = ELFW(CLASS),				\
-    [EI_DATA] = byteorder,				\
-    [EI_VERSION] = EV_CURRENT,				\
-    [EI_OSABI] = ELFOSABI_GNU				\
-  }
+#  define VALID_ELF_HEADER(hdr, exp, size)                                    \
+    (memcmp (hdr, exp, size) == 0 || memcmp (hdr, expected2, size) == 0)
+#  define VALID_ELF_OSABI(osabi)                                              \
+    (osabi == ELFOSABI_SYSV || osabi == ELFOSABI_GNU)
+#  define VALID_ELF_ABIVERSION(osabi, ver)                                    \
+    (ver == 0 || (osabi == ELFOSABI_GNU && ver < LIBC_ABI_MAX))
+#  define MORE_ELF_HEADER_DATA                                                \
+    static const unsigned char expected2[EI_PAD]                              \
+	= { [EI_MAG0] = ELFMAG0,       [EI_MAG1] = ELFMAG1,                   \
+	    [EI_MAG2] = ELFMAG2,       [EI_MAG3] = ELFMAG3,                   \
+	    [EI_CLASS] = ELFW (CLASS), [EI_DATA] = byteorder,                 \
+	    [EI_VERSION] = EV_CURRENT, [EI_OSABI] = ELFOSABI_GNU }
 
-#include_next <ldsodefs.h>
+#  include_next <ldsodefs.h>
 
 #endif /* _GNU_LDSODEFS_H */

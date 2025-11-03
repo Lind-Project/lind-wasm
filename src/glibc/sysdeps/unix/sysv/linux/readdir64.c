@@ -20,7 +20,7 @@
    'readdir'.  However the function signatures are not equal due
    different return types, so we need to suppress {__}readdir so weak
    and strong alias do not throw conflicting types errors.  */
-#define readdir   __no_readdir_decl
+#define readdir __no_readdir_decl
 #define __readdir __no___readdir_decl
 #include <dirent.h>
 #undef __readdir
@@ -33,7 +33,7 @@ __readdir64 (DIR *dirp)
   struct dirent64 *dp;
   int saved_errno = errno;
 
-#if IS_IN (libc)
+#if IS_IN(libc)
   __libc_lock_lock (dirp->lock);
 #endif
 
@@ -53,7 +53,7 @@ __readdir64 (DIR *dirp)
 	     do not set errno in that case, to indicate success.  */
 	  if (bytes == 0 || errno == ENOENT)
 	    __set_errno (saved_errno);
-#if IS_IN (libc)
+#if IS_IN(libc)
 	  __libc_lock_unlock (dirp->lock);
 #endif
 	  return NULL;
@@ -68,7 +68,7 @@ __readdir64 (DIR *dirp)
   dirp->offset += dp->d_reclen;
   dirp->filepos = dp->d_off;
 
-#if IS_IN (libc)
+#if IS_IN(libc)
   __libc_lock_unlock (dirp->lock);
 #endif
 
@@ -77,31 +77,29 @@ __readdir64 (DIR *dirp)
 libc_hidden_def (__readdir64)
 
 #if _DIRENT_MATCHES_DIRENT64
-strong_alias (__readdir64, __readdir)
-weak_alias (__readdir64, readdir64)
-weak_alias (__readdir64, readdir)
+    strong_alias (__readdir64, __readdir) weak_alias (__readdir64, readdir64)
+	weak_alias (__readdir64, readdir)
 #else
 /* The compat code expects the 'struct direct' with d_ino being a __ino_t
    instead of __ino64_t.  */
-# include <shlib-compat.h>
-# if IS_IN(rtld)
-weak_alias (__readdir64, readdir64)
-# else
-versioned_symbol (libc, __readdir64, readdir64, GLIBC_2_2);
-# endif
-# if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
-#  include <olddirent.h>
+#  include <shlib-compat.h>
+#  if IS_IN(rtld)
+    weak_alias (__readdir64, readdir64)
+#  else
+    versioned_symbol (libc, __readdir64, readdir64, GLIBC_2_2);
+#  endif
+#  if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)
+#    include <olddirent.h>
 
-attribute_compat_text_section
-struct __old_dirent64 *
-__old_readdir64 (DIR *dirp)
+	attribute_compat_text_section
+    struct __old_dirent64 *__old_readdir64 (DIR *dirp)
 {
   struct __old_dirent64 *dp;
   int saved_errno = errno;
 
-#if IS_IN (libc)
+#    if IS_IN(libc)
   __libc_lock_lock (dirp->lock);
-#endif
+#    endif
 
   if (dirp->offset >= dirp->size)
     {
@@ -119,9 +117,9 @@ __old_readdir64 (DIR *dirp)
 	     do not set errno in that case, to indicate success.  */
 	  if (bytes == 0 || errno == ENOENT)
 	    __set_errno (saved_errno);
-#if IS_IN (libc)
+#    if IS_IN(libc)
 	  __libc_lock_unlock (dirp->lock);
-#endif
+#    endif
 	  return NULL;
 	}
       dirp->size = (size_t) bytes;
@@ -134,13 +132,13 @@ __old_readdir64 (DIR *dirp)
   dirp->offset += dp->d_reclen;
   dirp->filepos = dp->d_off;
 
-#if IS_IN (libc)
+#    if IS_IN(libc)
   __libc_lock_unlock (dirp->lock);
-#endif
+#    endif
 
   return dp;
 }
 libc_hidden_def (__old_readdir64)
-compat_symbol (libc, __old_readdir64, readdir64, GLIBC_2_1);
-# endif /* SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)  */
-#endif /* _DIRENT_MATCHES_DIRENT64  */
+    compat_symbol (libc, __old_readdir64, readdir64, GLIBC_2_1);
+#  endif /* SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)  */
+#endif	 /* _DIRENT_MATCHES_DIRENT64  */

@@ -28,11 +28,10 @@ extern __typeof (__redirect_copysign) __copysign_vis3 attribute_hidden;
 extern __typeof (__redirect_copysign) __copysign_generic attribute_hidden;
 
 sparc_libm_ifunc_redirected (__redirect_copysign, __copysign,
-			     hwcap & HWCAP_SPARC_VIS3
-			     ? __copysign_vis3
-			     : __copysign_generic);
+			     hwcap &HWCAP_SPARC_VIS3 ? __copysign_vis3
+						     : __copysign_generic);
 libm_alias_double (__copysign, copysign)
 
-#if LONG_DOUBLE_COMPAT (libc, GLIBC_2_0)
-compat_symbol (libc, __copysign, copysignl, GLIBC_2_0);
+#if LONG_DOUBLE_COMPAT(libc, GLIBC_2_0)
+    compat_symbol (libc, __copysign, copysignl, GLIBC_2_0);
 #endif

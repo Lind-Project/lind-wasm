@@ -22,17 +22,17 @@
 #include <sysdep.h>
 
 #if !XSTAT_IS_XSTAT64
-# include <xstatconv.h>
-# include <xstatover.h>
-# include <shlib-compat.h>
+#  include <xstatconv.h>
+#  include <xstatover.h>
+#  include <shlib-compat.h>
 
-# if LIB_COMPAT(libc, GLIBC_2_4, GLIBC_2_33)
+#  if LIB_COMPAT(libc, GLIBC_2_4, GLIBC_2_33)
 
 /* Get information about the file FD in BUF.  */
 int
 __fxstatat (int vers, int fd, const char *file, struct stat *st, int flag)
 {
-#if STAT_IS_KERNEL_STAT
+#    if STAT_IS_KERNEL_STAT
   /* New kABIs which uses generic pre 64-bit time Linux ABI, e.g.
      csky, nios2  */
   if (vers == _STAT_VER_KERNEL)
@@ -41,15 +41,15 @@ __fxstatat (int vers, int fd, const char *file, struct stat *st, int flag)
       return r ?: stat_overflow (st);
     }
   return INLINE_SYSCALL_ERROR_RETURN_VALUE (EINVAL);
-#else
+#    else
   /* Old kABIs with old non-LFS support, e.g. arm, i386, hppa, m68k, mips32,
      microblaze, s390, sh, powerpc32, and sparc32.  */
   struct stat64 st64;
   int r = INLINE_SYSCALL_CALL (fstatat64, fd, file, &st64, flag);
   return r ?: __xstat32_conv (vers, &st64, st);
-#endif
+#    endif
 }
 
-# endif /* LIB_COMPAT  */
+#  endif /* LIB_COMPAT  */
 
 #endif /* XSTAT_IS_XSTAT64  */

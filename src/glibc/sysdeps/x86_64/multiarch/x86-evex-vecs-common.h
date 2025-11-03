@@ -18,22 +18,22 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _X86_EVEX_VECS_COMMON_H
-#define _X86_EVEX_VECS_COMMON_H			1
+#  define _X86_EVEX_VECS_COMMON_H 1
 
-#include "x86-vec-macros.h"
+#  include "x86-vec-macros.h"
 
 /* 6-byte mov instructions with EVEX.  */
-#define MOV_SIZE			6
+#  define MOV_SIZE 6
 /* No vzeroupper needed.  */
-#define RET_SIZE			1
-#define VZEROUPPER
+#  define RET_SIZE 1
+#  define VZEROUPPER
 
-#define VMOVU				vmovdqu64
-#define VMOVA				vmovdqa64
-#define VMOVNT				vmovntdq
+#  define VMOVU vmovdqu64
+#  define VMOVA vmovdqa64
+#  define VMOVNT vmovntdq
 
-#define VMM_128				VMM_hi_xmm
-#define VMM_256				VMM_hi_ymm
-#define VMM_512				VMM_hi_zmm
+#  define VMM_128 VMM_hi_xmm
+#  define VMM_256 VMM_hi_ymm
+#  define VMM_512 VMM_hi_zmm
 
 #endif

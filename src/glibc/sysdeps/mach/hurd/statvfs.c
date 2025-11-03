@@ -23,6 +23,6 @@ statvfs (const char *file, struct statvfs *buf)
 {
   /* `struct statvfs' is in fact identical to `struct statfs' so we
      can simply call statfs.  */
-  return __statfs (file, (struct statfs *)buf);
+  return __statfs (file, (struct statfs *) buf);
 }
 libc_hidden_def (statvfs)

@@ -18,11 +18,11 @@
 
 #include <shlib-compat.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_1)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_1)
 
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <tv32-compat.h>
+#  include <sys/time.h>
+#  include <sys/resource.h>
+#  include <tv32-compat.h>
 
 int
 __getrusage_tv32 (int who, struct __rusage32 *usage32)

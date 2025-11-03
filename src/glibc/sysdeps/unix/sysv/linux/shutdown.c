@@ -23,6 +23,7 @@
 int
 __shutdown (int fd, int how)
 {
-   return MAKE_SYSCALL(SHUTDOWN_SYSCALL, "syscall|shutdown", (uint64_t) fd, (uint64_t) how, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (SHUTDOWN_SYSCALL, "syscall|shutdown", (uint64_t) fd,
+		       (uint64_t) how, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__shutdown, shutdown)

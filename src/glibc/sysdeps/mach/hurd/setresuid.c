@@ -86,7 +86,7 @@ retry:
 		auxs[0] = _hurd_id.gen.uids[0];
 	      else
 		/* Not even an effective UID.
-                   Fall back to the only UID we have. */
+		   Fall back to the only UID we have. */
 		auxs[0] = suid;
 	    }
 	  if (_hurd_id.aux.nuids <= 1)
@@ -102,12 +102,11 @@ retry:
 	    }
 	}
 
-      err = __USEPORT (AUTH, __auth_makeauth
-		       (port, NULL, MACH_MSG_TYPE_COPY_SEND, 0,
-			newgen, ngen, newaux, naux,
-			_hurd_id.gen.gids, _hurd_id.gen.ngids,
-			_hurd_id.aux.gids, _hurd_id.aux.ngids,
-			&newauth));
+      err = __USEPORT (
+	  AUTH, __auth_makeauth (port, NULL, MACH_MSG_TYPE_COPY_SEND, 0,
+				 newgen, ngen, newaux, naux, _hurd_id.gen.gids,
+				 _hurd_id.gen.ngids, _hurd_id.aux.gids,
+				 _hurd_id.aux.ngids, &newauth));
     }
 
   __mutex_unlock (&_hurd_id.lock);
@@ -124,5 +123,4 @@ retry:
   __mach_port_deallocate (__mach_task_self (), newauth);
   return err;
 }
-libc_hidden_def (__setresuid)
-weak_alias (__setresuid, setresuid)
+libc_hidden_def (__setresuid) weak_alias (__setresuid, setresuid)

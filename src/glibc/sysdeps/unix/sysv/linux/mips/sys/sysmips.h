@@ -16,9 +16,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SYSMIPS_H
-#define _SYS_SYSMIPS_H 1
+#  define _SYS_SYSMIPS_H 1
 
-#include <features.h>
+#  include <features.h>
 
 /*
  * Commands for the sysmips(2) call
@@ -27,11 +27,11 @@
  * We only support the following commands.  Sysmips exists for compatibility
  * purposes only so new software should avoid it.
  */
-#define SETNAME                   1	/* set hostname                  */
-#define FLUSH_CACHE		   3	/* writeback and invalidate caches */
-#define MIPS_FIXADE               7	/* control address error fixing  */
-#define MIPS_RDNVRAM              10	/* read NVRAM			 */
-#define MIPS_ATOMIC_SET		2001	/* atomically set variable       */
+#  define SETNAME 1	       /* set hostname                  */
+#  define FLUSH_CACHE 3	       /* writeback and invalidate caches */
+#  define MIPS_FIXADE 7	       /* control address error fixing  */
+#  define MIPS_RDNVRAM 10      /* read NVRAM			 */
+#  define MIPS_ATOMIC_SET 2001 /* atomically set variable       */
 
 __BEGIN_DECLS
 

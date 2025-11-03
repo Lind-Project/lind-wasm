@@ -36,7 +36,6 @@ pkey_read (void)
 static inline void
 pkey_write (unsigned long int value)
 {
-
 }
 
 /* Number of the largest supported key.  This depends on the width of

@@ -27,7 +27,6 @@
 #include <sys/syscall.h>
 #include <kernel-features.h>
 
-
 /* Execute the file FD refers to, overlaying the running program image.
    ARGV and ENVP are passed to the new program, as for `execve'.  */
 int
@@ -42,10 +41,10 @@ fexecve (int fd, char *const argv[], char *const envp[])
 #ifdef __NR_execveat
   /* Avoid implicit array coercion in syscall macros.  */
   INLINE_SYSCALL (execveat, 5, fd, "", &argv[0], &envp[0], AT_EMPTY_PATH);
-# ifndef __ASSUME_EXECVEAT
+#  ifndef __ASSUME_EXECVEAT
   if (errno != ENOSYS)
     return -1;
-# endif
+#  endif
 #endif
 
 #ifndef __ASSUME_EXECVEAT

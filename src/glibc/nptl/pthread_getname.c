@@ -66,10 +66,9 @@ __pthread_getname_np (pthread_t th, char *buf, size_t len)
 
   return res;
 }
-versioned_symbol (libc, __pthread_getname_np, pthread_getname_np,
-		  GLIBC_2_34);
+versioned_symbol (libc, __pthread_getname_np, pthread_getname_np, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_12, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_12, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_getname_np, pthread_getname_np,
 	       GLIBC_2_12);
 #endif

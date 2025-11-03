@@ -18,11 +18,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef FIX_FP_INT_COMPARE_INVALID_H
-#define FIX_FP_INT_COMPARE_INVALID_H	1
+#  define FIX_FP_INT_COMPARE_INVALID_H 1
 
 /* As of GCC 5, comparisons use unordered comparison instructions when
    they should use ordered comparisons
    <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58684>.  */
-#define FIX_COMPARE_INVALID 1
+#  define FIX_COMPARE_INVALID 1
 
 #endif /* fix-fp-int-compare-invalid.h */

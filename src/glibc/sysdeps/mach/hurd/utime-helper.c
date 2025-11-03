@@ -23,13 +23,13 @@
 
 /* Initializes atime/mtime timespec structures from an array of timeval.  */
 static inline void
-utime_ts_from_tval (const struct timeval tvp[2],
-                    struct timespec *atime, struct timespec *mtime)
+utime_ts_from_tval (const struct timeval tvp[2], struct timespec *atime,
+		    struct timespec *mtime)
 {
   if (tvp == NULL)
     {
       /* Setting the number of nanoseconds to UTIME_NOW tells the
-         underlying filesystems to use the current time.  */
+	 underlying filesystems to use the current time.  */
       atime->tv_sec = 0;
       atime->tv_nsec = UTIME_NOW;
       mtime->tv_sec = 0;
@@ -42,10 +42,10 @@ utime_ts_from_tval (const struct timeval tvp[2],
     }
 }
 
-/* Initializes atime/mtime time_value_t structures from an array of timeval.  */
+/* Initializes atime/mtime time_value_t structures from an array of timeval. */
 static inline void
-utime_tvalue_from_tval (const struct timeval tvp[2],
-                        time_value_t *atime, time_value_t *mtime)
+utime_tvalue_from_tval (const struct timeval tvp[2], time_value_t *atime,
+			time_value_t *mtime)
 {
   if (tvp == NULL)
     /* Setting the number of microseconds to `-1' tells the
@@ -85,13 +85,13 @@ hurd_futimes (const file_t port, const struct timeval tvp[2])
 
 /* Initializes atime/mtime timespec structures from an array of timespec.  */
 static inline void
-utime_ts_from_tspec (const struct timespec tsp[2],
-                     struct timespec *atime, struct timespec *mtime)
+utime_ts_from_tspec (const struct timespec tsp[2], struct timespec *atime,
+		     struct timespec *mtime)
 {
   if (tsp == NULL)
     {
       /* Setting the number of nanoseconds to UTIME_NOW tells the
-         underlying filesystems to use the current time.  */
+	 underlying filesystems to use the current time.  */
       atime->tv_sec = 0;
       atime->tv_nsec = UTIME_NOW;
       mtime->tv_sec = 0;
@@ -104,10 +104,11 @@ utime_ts_from_tspec (const struct timespec tsp[2],
     }
 }
 
-/* Initializes atime/mtime time_value_t structures from an array of timespec.  */
+/* Initializes atime/mtime time_value_t structures from an array of timespec.
+ */
 static inline void
-utime_tvalue_from_tspec (const struct timespec tsp[2],
-                         time_value_t *atime, time_value_t *mtime)
+utime_tvalue_from_tspec (const struct timespec tsp[2], time_value_t *atime,
+			 time_value_t *mtime)
 {
   if (tsp == NULL)
     /* Setting the number of microseconds to `-1' tells the

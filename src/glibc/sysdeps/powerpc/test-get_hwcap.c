@@ -31,24 +31,25 @@
 #include <dl-procinfo.h>
 
 #ifndef STATIC_TST_HWCAP
-#undef PROCINFO_DECL
-#include <dl-procinfo.c>
+#  undef PROCINFO_DECL
+#  include <dl-procinfo.c>
 #endif
 
 /* Offsets copied from tcb-offsets.h.  */
 
 #ifdef __powerpc64__
-# define __TPREG     "r13"
-# define __HWCAPOFF -28776
-# define __ATPLATOFF -28764
+#  define __TPREG "r13"
+#  define __HWCAPOFF -28776
+#  define __ATPLATOFF -28764
 #else
-# define __TPREG     "r2"
-# define __HWCAPOFF -28736
-# define __HWCAP2OFF -28732
-# define __ATPLATOFF -28724
+#  define __TPREG "r2"
+#  define __HWCAPOFF -28736
+#  define __HWCAP2OFF -28732
+#  define __ATPLATOFF -28724
 #endif
 
-uint64_t check_tcbhwcap (long tid)
+uint64_t
+check_tcbhwcap (long tid)
 {
 
   uint32_t tcb_at_platform, at_platform;
@@ -61,18 +62,12 @@ uint64_t check_tcbhwcap (long tid)
   register unsigned long __tp __asm__ (__TPREG);
 
 #ifdef __powerpc64__
-  __asm__  ("ld %0,%1(%2)\n"
-	    : "=r" (tcb_hwcap)
-	    : "n" (__HWCAPOFF), "b" (__tp));
+  __asm__ ("ld %0,%1(%2)\n" : "=r"(tcb_hwcap) : "n"(__HWCAPOFF), "b"(__tp));
 #else
   uint64_t h1, h2;
 
-  __asm__ ("lwz %0,%1(%2)\n"
-      : "=r" (h1)
-      : "n" (__HWCAPOFF), "b" (__tp));
-  __asm__ ("lwz %0,%1(%2)\n"
-      : "=r" (h2)
-      : "n" (__HWCAP2OFF), "b" (__tp));
+  __asm__ ("lwz %0,%1(%2)\n" : "=r"(h1) : "n"(__HWCAPOFF), "b"(__tp));
+  __asm__ ("lwz %0,%1(%2)\n" : "=r"(h2) : "n"(__HWCAP2OFF), "b"(__tp));
   tcb_hwcap = (h1 >> 32) << 32 | (h2 >> 32);
 #endif
 
@@ -85,54 +80,50 @@ uint64_t check_tcbhwcap (long tid)
      the TCB.  */
 
   if (hwcap2 & PPC_FEATURE2_ARCH_2_07)
-    hwcap |= PPC_FEATURE_ARCH_2_06
-	  | PPC_FEATURE_ARCH_2_05
-	  | PPC_FEATURE_POWER5_PLUS
-	  | PPC_FEATURE_POWER5
-	  | PPC_FEATURE_POWER4;
+    hwcap |= PPC_FEATURE_ARCH_2_06 | PPC_FEATURE_ARCH_2_05
+	     | PPC_FEATURE_POWER5_PLUS | PPC_FEATURE_POWER5
+	     | PPC_FEATURE_POWER4;
   else if (hwcap & PPC_FEATURE_ARCH_2_06)
-    hwcap |= PPC_FEATURE_ARCH_2_05
-	  | PPC_FEATURE_POWER5_PLUS
-	  | PPC_FEATURE_POWER5
-	  | PPC_FEATURE_POWER4;
+    hwcap |= PPC_FEATURE_ARCH_2_05 | PPC_FEATURE_POWER5_PLUS
+	     | PPC_FEATURE_POWER5 | PPC_FEATURE_POWER4;
   else if (hwcap & PPC_FEATURE_ARCH_2_05)
-    hwcap |= PPC_FEATURE_POWER5_PLUS
-	  | PPC_FEATURE_POWER5
-	  | PPC_FEATURE_POWER4;
+    hwcap |= PPC_FEATURE_POWER5_PLUS | PPC_FEATURE_POWER5 | PPC_FEATURE_POWER4;
   else if (hwcap & PPC_FEATURE_POWER5_PLUS)
-    hwcap |= PPC_FEATURE_POWER5
-	  | PPC_FEATURE_POWER4;
+    hwcap |= PPC_FEATURE_POWER5 | PPC_FEATURE_POWER4;
   else if (hwcap & PPC_FEATURE_POWER5)
     hwcap |= PPC_FEATURE_POWER4;
 
   hwcap = (hwcap << 32) + hwcap2;
 
-  if ( tcb_hwcap != hwcap )
+  if (tcb_hwcap != hwcap)
     {
-      printf ("FAIL: __ppc_get_hwcap() - HWCAP is %" PRIx64 ". Should be %"
-	      PRIx64 " for thread %ld.\n", tcb_hwcap, hwcap, tid);
+      printf ("FAIL: __ppc_get_hwcap() - HWCAP is %" PRIx64
+	      ". Should be %" PRIx64 " for thread %ld.\n",
+	      tcb_hwcap, hwcap, tid);
       return 1;
     }
 
   /* Same test for the platform number.  */
-  __asm__  ("lwz %0,%1(%2)\n"
-	    : "=r" (tcb_at_platform)
-	    : "n" (__ATPLATOFF), "b" (__tp));
+  __asm__ ("lwz %0,%1(%2)\n"
+	   : "=r"(tcb_at_platform)
+	   : "n"(__ATPLATOFF), "b"(__tp));
 
   at_platform_string = (const char *) getauxval (AT_PLATFORM);
   at_platform = _dl_string_platform (at_platform_string);
 
-  if ( tcb_at_platform != at_platform )
+  if (tcb_at_platform != at_platform)
     {
       printf ("FAIL: __ppc_get_at_platform() - AT_PLATFORM is %x. Should be %x"
-	     " for thread %ld\n", tcb_at_platform, at_platform, tid);
+	      " for thread %ld\n",
+	      tcb_at_platform, at_platform, tid);
       return 1;
     }
 
   return 0;
 }
 
-void *t1 (void *tid)
+void *
+t1 (void *tid)
 {
   if (check_tcbhwcap ((long) tid))
     {
@@ -140,7 +131,6 @@ void *t1 (void *tid)
     }
 
   pthread_exit (NULL);
-
 }
 
 static int
@@ -162,16 +152,16 @@ do_test (void)
 
   /* Check for other thread.  */
   i++;
-  threads[i] = xpthread_create (&attr, t1, (void *)i);
+  threads[i] = xpthread_create (&attr, t1, (void *) i);
 
   pthread_attr_destroy (&attr);
   TEST_VERIFY_EXIT (xpthread_join (threads[i]) == NULL);
 
-  printf("PASS: HWCAP, HWCAP2 and AT_PLATFORM are correctly set in the TCB for"
-	 " all threads.\n");
+  printf (
+      "PASS: HWCAP, HWCAP2 and AT_PLATFORM are correctly set in the TCB for"
+      " all threads.\n");
 
   pthread_exit (NULL);
-
 }
 
 #include <support/test-driver.c>

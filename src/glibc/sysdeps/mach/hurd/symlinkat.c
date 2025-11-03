@@ -25,7 +25,6 @@
 #include <hurd/fd.h>
 #include <string.h>
 
-
 /* Make a link to FROM called TO relative to FD.  */
 int
 __symlinkat (const char *from, int fd, const char *to)
@@ -48,18 +47,17 @@ __symlinkat (const char *from, int fd, const char *to)
   /* Create a new, unlinked node in the target directory.  */
   err = __dir_mkfile (dir, O_WRITE, 0777 & ~_hurd_umask, &node);
 
-  if (! err)
+  if (!err)
     {
       /* Set the node's translator to make it a symlink.  */
-      err = __file_set_translator (node,
-                                   FS_TRANS_EXCL|FS_TRANS_SET,
-                                   FS_TRANS_EXCL|FS_TRANS_SET, 0,
-                                   buf, sizeof (_HURD_SYMLINK) + len,
-                                   MACH_PORT_NULL, MACH_MSG_TYPE_COPY_SEND);
+      err = __file_set_translator (node, FS_TRANS_EXCL | FS_TRANS_SET,
+				   FS_TRANS_EXCL | FS_TRANS_SET, 0, buf,
+				   sizeof (_HURD_SYMLINK) + len,
+				   MACH_PORT_NULL, MACH_MSG_TYPE_COPY_SEND);
 
-      if (! err)
-        /* Link the node, now a valid symlink, into the target directory.  */
-        err = __dir_link (dir, node, name, 1);
+      if (!err)
+	/* Link the node, now a valid symlink, into the target directory.  */
+	err = __dir_link (dir, node, name, 1);
 
       __mach_port_deallocate (__mach_task_self (), node);
     }

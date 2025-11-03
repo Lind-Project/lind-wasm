@@ -29,28 +29,25 @@
 
 extern double __fma_sse2 (double x, double y, double z) attribute_hidden;
 
-
 static double
 __fma_fma3 (double x, double y, double z)
 {
-  asm ("vfmadd213sd %3, %2, %0" : "=x" (x) : "0" (x), "x" (y), "xm" (z));
+  asm ("vfmadd213sd %3, %2, %0" : "=x"(x) : "0"(x), "x"(y), "xm"(z));
   return x;
 }
-
 
 static double
 __fma_fma4 (double x, double y, double z)
 {
-  asm ("vfmaddsd %3, %2, %1, %0" : "=x" (x) : "x" (x), "x" (y), "x" (z));
+  asm ("vfmaddsd %3, %2, %1, %0" : "=x"(x) : "x"(x), "x"(y), "x"(z));
   return x;
 }
 
-
-libm_ifunc (__fma, CPU_FEATURE_USABLE (FMA)
-	    ? __fma_fma3 : (CPU_FEATURE_USABLE (FMA4)
-			    ? __fma_fma4 : __fma_sse2));
-libm_alias_double (__fma, fma)
-libm_alias_double_narrow (__fma, fma)
+libm_ifunc (__fma,
+	    CPU_FEATURE_USABLE (FMA)
+		? __fma_fma3
+		: (CPU_FEATURE_USABLE (FMA4) ? __fma_fma4 : __fma_sse2));
+libm_alias_double (__fma, fma) libm_alias_double_narrow (__fma, fma)
 
 #define __fma __fma_sse2
 

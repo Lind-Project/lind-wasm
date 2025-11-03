@@ -22,6 +22,6 @@
 
 #define INIT_ARCH()
 
-#define riscv_libc_ifunc(name, expr)				\
-  __ifunc_args (name, name, expr(hwcap, hwprobe), INIT_ARCH,	\
-                uint64_t hwcap, __riscv_hwprobe_t hwprobe)
+#define riscv_libc_ifunc(name, expr)                                          \
+  __ifunc_args (name, name, expr (hwcap, hwprobe), INIT_ARCH, uint64_t hwcap, \
+		__riscv_hwprobe_t hwprobe)

@@ -26,7 +26,7 @@ fegetmode (femode_t *modep)
 
   /* As in fegetenv.  */
   swcr = __ieee_get_fp_control ();
-  __asm__ __volatile__ ("mf_fpcr %0" : "=f" (fpcr));
+  __asm__ __volatile__ ("mf_fpcr %0" : "=f"(fpcr));
   *modep = ((fpcr & FPCR_ROUND_MASK) | (swcr & SWCR_ALL_MASK));
 
   return 0;

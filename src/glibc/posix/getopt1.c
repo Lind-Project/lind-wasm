@@ -16,9 +16,9 @@
    You should have received a copy of the GNU Lesser General Public
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
-
+
 #ifndef _LIBC
-# include <config.h>
+#  include <config.h>
 #endif
 
 #include "getopt.h"
@@ -37,8 +37,8 @@ _getopt_long_r (int argc, char **argv, const char *options,
 		const struct option *long_options, int *opt_index,
 		struct _getopt_data *d)
 {
-  return _getopt_internal_r (argc, argv, options, long_options, opt_index,
-			     0, d, 0);
+  return _getopt_internal_r (argc, argv, options, long_options, opt_index, 0,
+			     d, 0);
 }
 
 /* Like getopt_long, but '-' as well as '--' can indicate a long option.
@@ -48,8 +48,8 @@ _getopt_long_r (int argc, char **argv, const char *options,
 
 int
 getopt_long_only (int argc, char *__getopt_argv_const *argv,
-		  const char *options,
-		  const struct option *long_options, int *opt_index)
+		  const char *options, const struct option *long_options,
+		  int *opt_index)
 {
   return _getopt_internal (argc, (char **) argv, options, long_options,
 			   opt_index, 1, 0);
@@ -60,15 +60,14 @@ _getopt_long_only_r (int argc, char **argv, const char *options,
 		     const struct option *long_options, int *opt_index,
 		     struct _getopt_data *d)
 {
-  return _getopt_internal_r (argc, argv, options, long_options, opt_index,
-			     1, d, 0);
+  return _getopt_internal_r (argc, argv, options, long_options, opt_index, 1,
+			     d, 0);
 }
 
-
 #ifdef TEST
 
-#include <stdio.h>
-#include <stdlib.h>
+#  include <stdio.h>
+#  include <stdlib.h>
 
 int
 main (int argc, char **argv)
@@ -80,19 +79,14 @@ main (int argc, char **argv)
     {
       int this_option_optind = optind ? optind : 1;
       int option_index = 0;
-      static const struct option long_options[] =
-      {
-	{"add", 1, 0, 0},
-	{"append", 0, 0, 0},
-	{"delete", 1, 0, 0},
-	{"verbose", 0, 0, 0},
-	{"create", 0, 0, 0},
-	{"file", 1, 0, 0},
-	{0, 0, 0, 0}
-      };
+      static const struct option long_options[]
+	  = { { "add", 1, 0, 0 },    { "append", 0, 0, 0 },
+	      { "delete", 1, 0, 0 }, { "verbose", 0, 0, 0 },
+	      { "create", 0, 0, 0 }, { "file", 1, 0, 0 },
+	      { 0, 0, 0, 0 } };
 
-      c = getopt_long (argc, argv, "abc:d:0123456789",
-		       long_options, &option_index);
+      c = getopt_long (argc, argv, "abc:d:0123456789", long_options,
+		       &option_index);
       if (c == -1)
 	break;
 

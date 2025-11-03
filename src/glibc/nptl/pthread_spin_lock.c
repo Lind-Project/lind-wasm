@@ -36,7 +36,7 @@ __pthread_spin_lock (pthread_spinlock_t *lock)
      We use acquire MO to synchronize-with the release MO store in
      pthread_spin_unlock, and thus ensure that prior critical sections
      happen-before this critical section.  */
-#if ! ATOMIC_EXCHANGE_USES_CAS
+#if !ATOMIC_EXCHANGE_USES_CAS
   /* Try to acquire the lock with an exchange instruction as this architecture
      has such an instruction and we assume it is faster than a CAS.
      The acquisition succeeds if the lock is not in an acquired state.  */
@@ -81,6 +81,6 @@ __pthread_spin_lock (pthread_spinlock_t *lock)
 }
 versioned_symbol (libc, __pthread_spin_lock, pthread_spin_lock, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_spin_lock, pthread_spin_lock, GLIBC_2_2);
 #endif

@@ -17,35 +17,32 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_PROCINFO_H
-#define _DL_PROCINFO_H	1
+#  define _DL_PROCINFO_H 1
 
-#include <ldsodefs.h>
-#include <sysdep.h>
+#  include <ldsodefs.h>
+#  include <sysdep.h>
 
-#define _DL_HWCAP_COUNT 27
+#  define _DL_HWCAP_COUNT 27
 
 /* Low 28 bits are allocated in HWCAP.  */
-#define _DL_HWCAP_LAST		27
+#  define _DL_HWCAP_LAST 27
 
 /* Low 7 bits are allocated in HWCAP2.  */
-#define _DL_HWCAP2_LAST		6
+#  define _DL_HWCAP2_LAST 6
 
 /* The kernel provides platform data but it is not interesting.  */
-#define _DL_HWCAP_PLATFORM	0
+#  define _DL_HWCAP_PLATFORM 0
 
-
-static inline const char *
-__attribute__ ((unused))
+static inline const char *__attribute__ ((unused))
 _dl_hwcap_string (int idx)
 {
-  return GLRO(dl_arm_cap_flags)[idx];
+  return GLRO (dl_arm_cap_flags)[idx];
 };
 
-static inline int
-__attribute__ ((unused))
+static inline int __attribute__ ((unused))
 _dl_procinfo (unsigned int type, unsigned long int word)
 {
-  switch(type)
+  switch (type)
     {
     case AT_HWCAP:
       _dl_printf ("AT_HWCAP:       ");
@@ -73,8 +70,8 @@ _dl_procinfo (unsigned int type, unsigned long int word)
   return 0;
 }
 
-#define HWCAP_IMPORTANT		(HWCAP_ARM_VFP | HWCAP_ARM_NEON)
+#  define HWCAP_IMPORTANT (HWCAP_ARM_VFP | HWCAP_ARM_NEON)
 
-#define _dl_string_platform(str) (-1)
+#  define _dl_string_platform(str) (-1)
 
 #endif /* dl-procinfo.h */

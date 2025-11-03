@@ -28,8 +28,9 @@ __feclearexcept (int excepts)
   u.fenv = fegetenv_register ();
 
   /* Clear the relevant bits.  */
-  n.l = u.l & ~((-(excepts >> (31 - FPSCR_VX) & 1) & FE_ALL_INVALID)
-		| (excepts & FPSCR_STICKY_BITS));
+  n.l = u.l
+	& ~((-(excepts >> (31 - FPSCR_VX) & 1) & FE_ALL_INVALID)
+	    | (excepts & FPSCR_STICKY_BITS));
 
   /* Put the new state in effect.  */
   if (u.l != n.l)
@@ -40,10 +41,10 @@ __feclearexcept (int excepts)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__feclearexcept, __old_feclearexcept)
-compat_symbol (libm, __old_feclearexcept, feclearexcept, GLIBC_2_1);
+    compat_symbol (libm, __old_feclearexcept, feclearexcept, GLIBC_2_1);
 #endif
 
 libm_hidden_ver (__feclearexcept, feclearexcept)
-versioned_symbol (libm, __feclearexcept, feclearexcept, GLIBC_2_2);
+    versioned_symbol (libm, __feclearexcept, feclearexcept, GLIBC_2_2);

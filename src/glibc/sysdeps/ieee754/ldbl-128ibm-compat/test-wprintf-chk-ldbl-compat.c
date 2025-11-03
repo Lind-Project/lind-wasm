@@ -87,8 +87,8 @@ do_test_call (void)
   do_test_call_varg (stdout, L"%.10La, %.10a", ld, d);
 
   /* Test positional parameters.  */
-  do_test_call_varg (stdout, L"%3$Lf, %2$Lf, %1$f",
-		     (double) 1, (long double) 2, (long double) 3);
+  do_test_call_varg (stdout, L"%3$Lf, %2$Lf, %1$f", (double) 1,
+		     (long double) 2, (long double) 3);
 }
 
 static int
@@ -98,22 +98,22 @@ do_test (void)
   result = support_capture_subprocess ((void *) &do_test_call, NULL);
 
   /* Compare against the expected output.  */
-  const char *expected =
-    "    __fwprintf_chk: -1.0000000000, -1.0000000000\n"
-    "    __swprintf_chk: -1.0000000000, -1.0000000000\n"
-    "     __wprintf_chk: -1.0000000000, -1.0000000000\n"
-    "   __vfwprintf_chk: -1.0000000000, -1.0000000000\n"
-    "   __vswprintf_chk: -1.0000000000, -1.0000000000\n"
-    "    __vwprintf_chk: -1.0000000000, -1.0000000000\n"
-    "    __fwprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    __swprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     __wprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "   __vfwprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "   __vswprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    __vwprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "   __vfwprintf_chk: 3.000000, 2.000000, 1.000000\n"
-    "   __vswprintf_chk: 3.000000, 2.000000, 1.000000\n"
-    "    __vwprintf_chk: 3.000000, 2.000000, 1.000000\n";
+  const char *expected
+      = "    __fwprintf_chk: -1.0000000000, -1.0000000000\n"
+	"    __swprintf_chk: -1.0000000000, -1.0000000000\n"
+	"     __wprintf_chk: -1.0000000000, -1.0000000000\n"
+	"   __vfwprintf_chk: -1.0000000000, -1.0000000000\n"
+	"   __vswprintf_chk: -1.0000000000, -1.0000000000\n"
+	"    __vwprintf_chk: -1.0000000000, -1.0000000000\n"
+	"    __fwprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    __swprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     __wprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"   __vfwprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"   __vswprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    __vwprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"   __vfwprintf_chk: 3.000000, 2.000000, 1.000000\n"
+	"   __vswprintf_chk: 3.000000, 2.000000, 1.000000\n"
+	"    __vwprintf_chk: 3.000000, 2.000000, 1.000000\n";
   TEST_COMPARE_STRING (expected, result.out.buffer);
 
   return 0;

@@ -23,8 +23,8 @@ int
 __isinff (float x)
 {
   int x_cond;
-  asm volatile ("fclass.s \t%0, %1" : "=f" (x_cond) : "f" (x));
-  return -((x_cond & _FCLASS_MINF) ? 1 : 0) | ((x_cond & _FCLASS_PINF) ? 1 : 0);
+  asm volatile ("fclass.s \t%0, %1" : "=f"(x_cond) : "f"(x));
+  return -((x_cond & _FCLASS_MINF) ? 1 : 0)
+	 | ((x_cond & _FCLASS_PINF) ? 1 : 0);
 }
-hidden_def (__isinff)
-weak_alias (__isinff, isinff)
+hidden_def (__isinff) weak_alias (__isinff, isinff)

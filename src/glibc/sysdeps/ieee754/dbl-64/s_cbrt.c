@@ -19,19 +19,11 @@
 #include <math.h>
 #include <libm-alias-double.h>
 
+#define CBRT2 1.2599210498948731648	/* 2^(1/3) */
+#define SQR_CBRT2 1.5874010519681994748 /* 2^(2/3) */
 
-#define CBRT2 1.2599210498948731648		/* 2^(1/3) */
-#define SQR_CBRT2 1.5874010519681994748		/* 2^(2/3) */
-
-static const double factor[5] =
-{
-  1.0 / SQR_CBRT2,
-  1.0 / CBRT2,
-  1.0,
-  CBRT2,
-  SQR_CBRT2
-};
-
+static const double factor[5]
+    = { 1.0 / SQR_CBRT2, 1.0 / CBRT2, 1.0, CBRT2, SQR_CBRT2 };
 
 double
 __cbrt (double x)
@@ -55,7 +47,7 @@ __cbrt (double x)
 	       + ((2.44693122563534430
 		   + ((-1.83469277483613086
 		       + (0.784932344976639262 - 0.145263899385486377 * xm)
-	                  * xm)
+			     * xm)
 		      * xm))
 		  * xm))
 	      * xm))

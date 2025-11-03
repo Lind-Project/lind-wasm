@@ -19,8 +19,7 @@
 #include <stddef.h>
 #include <bits/types/locale_t.h>
 
-
-#define	USE_WIDE_CHAR	1
+#define USE_WIDE_CHAR 1
 
 #include <bits/floatn.h>
 

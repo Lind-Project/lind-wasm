@@ -16,4 +16,4 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define JB_SP (76/4)
+#define JB_SP (76 / 4)

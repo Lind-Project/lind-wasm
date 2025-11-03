@@ -15,7 +15,7 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define _GNU_SOURCE	1
+#define _GNU_SOURCE 1
 #include <argp.h>
 #include <error.h>
 #include <errno.h>
@@ -33,34 +33,31 @@
 #include <sys/types.h>
 
 #ifndef MAX_THREADS
-# define MAX_THREADS		100000
+#  define MAX_THREADS 100000
 #endif
 #ifndef DEFAULT_THREADS
-# define DEFAULT_THREADS	50
+#  define DEFAULT_THREADS 50
 #endif
 
+#define OPT_TO_THREAD 300
+#define OPT_TO_PROCESS 301
+#define OPT_SYNC_SIGNAL 302
+#define OPT_SYNC_JOIN 303
+#define OPT_TOPLEVEL 304
 
-#define OPT_TO_THREAD		300
-#define OPT_TO_PROCESS		301
-#define OPT_SYNC_SIGNAL		302
-#define OPT_SYNC_JOIN		303
-#define OPT_TOPLEVEL		304
-
-
-static const struct argp_option options[] =
-  {
-    { NULL, 0, NULL, 0, "\
+static const struct argp_option options[]
+    = { { NULL, 0, NULL, 0, "\
 This is a test for threads so we allow the user to select the number of \
 threads which are used at any one time.  Independently the total number of \
 rounds can be selected.  This is the total number of threads which will have \
 run when the process terminates:" },
-    { "threads", 't', "NUMBER", 0, "Number of threads used at once" },
-    { "starts", 's', "NUMBER", 0, "Total number of working threads" },
-    { "toplevel", OPT_TOPLEVEL, "NUMBER", 0,
-      "Number of toplevel threads which start the other threads; this \
+	{ "threads", 't', "NUMBER", 0, "Number of threads used at once" },
+	{ "starts", 's', "NUMBER", 0, "Total number of working threads" },
+	{ "toplevel", OPT_TOPLEVEL, "NUMBER", 0,
+	  "Number of toplevel threads which start the other threads; this \
 implies --sync-join" },
 
-    { NULL, 0, NULL, 0, "\
+	{ NULL, 0, NULL, 0, "\
 Each thread can do one of two things: sleep or do work.  The latter is 100% \
 CPU bound.  The work load is the probability a thread does work.  All values \
 from zero to 100 (inclusive) are valid.  How often each thread repeats this \
@@ -68,48 +65,44 @@ can be determined by the number of rounds.  The work cost determines how long \
 each work session (not sleeping) takes.  If it is zero a thread would \
 effectively nothing.  By setting the number of rounds to zero the thread \
 does no work at all and pure thread creation times can be measured." },
-    { "workload", 'w', "PERCENT", 0, "Percentage of time spent working" },
-    { "workcost", 'c', "NUMBER", 0,
-      "Factor in the cost of each round of working" },
-    { "rounds", 'r', "NUMBER", 0, "Number of rounds each thread runs" },
+	{ "workload", 'w', "PERCENT", 0, "Percentage of time spent working" },
+	{ "workcost", 'c', "NUMBER", 0,
+	  "Factor in the cost of each round of working" },
+	{ "rounds", 'r', "NUMBER", 0, "Number of rounds each thread runs" },
 
-    { NULL, 0, NULL, 0, "\
+	{ NULL, 0, NULL, 0, "\
 There are a number of different methods how thread creation can be \
 synchronized.  Synchronization is necessary since the number of concurrently \
 running threads is limited." },
-    { "sync-signal", OPT_SYNC_SIGNAL, NULL, 0,
-      "Synchronize using a signal (default)" },
-    { "sync-join", OPT_SYNC_JOIN, NULL, 0, "Synchronize using pthread_join" },
+	{ "sync-signal", OPT_SYNC_SIGNAL, NULL, 0,
+	  "Synchronize using a signal (default)" },
+	{ "sync-join", OPT_SYNC_JOIN, NULL, 0,
+	  "Synchronize using pthread_join" },
 
-    { NULL, 0, NULL, 0, "\
+	{ NULL, 0, NULL, 0, "\
 One parameter for each threads execution is the size of the stack.  If this \
 parameter is not used the system's default stack size is used.  If many \
 threads are used the stack size should be chosen quite small." },
-    { "stacksize", 'S', "BYTES", 0, "Size of threads stack" },
-    { "guardsize", 'g', "BYTES", 0,
-      "Size of stack guard area; must fit into the stack" },
+	{ "stacksize", 'S', "BYTES", 0, "Size of threads stack" },
+	{ "guardsize", 'g', "BYTES", 0,
+	  "Size of stack guard area; must fit into the stack" },
 
-    { NULL, 0, NULL, 0, "Signal options:" },
-    { "to-thread", OPT_TO_THREAD, NULL, 0, "Send signal to main thread" },
-    { "to-process", OPT_TO_PROCESS, NULL, 0,
-      "Send signal to process (default)" },
+	{ NULL, 0, NULL, 0, "Signal options:" },
+	{ "to-thread", OPT_TO_THREAD, NULL, 0, "Send signal to main thread" },
+	{ "to-process", OPT_TO_PROCESS, NULL, 0,
+	  "Send signal to process (default)" },
 
-    { NULL, 0, NULL, 0, "Administrative options:" },
-    { "progress", 'p', NULL, 0, "Show signs of progress" },
-    { "timing", 'T', NULL, 0,
-      "Measure time from startup to the last thread finishing" },
-    { NULL, 0, NULL, 0, NULL }
-  };
+	{ NULL, 0, NULL, 0, "Administrative options:" },
+	{ "progress", 'p', NULL, 0, "Show signs of progress" },
+	{ "timing", 'T', NULL, 0,
+	  "Measure time from startup to the last thread finishing" },
+	{ NULL, 0, NULL, 0, NULL } };
 
 /* Prototype for option handler.  */
 static error_t parse_opt (int key, char *arg, struct argp_state *state);
 
 /* Data structure to communicate with argp functions.  */
-static struct argp argp =
-{
-  options, parse_opt
-};
-
+static struct argp argp = { options, parse_opt };
 
 static unsigned long int threads = DEFAULT_THREADS;
 static unsigned long int workload = 75;
@@ -123,7 +116,6 @@ static bool timing;
 static bool to_thread;
 static unsigned long int toplevel = 1;
 
-
 static long int running;
 static pthread_mutex_t running_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -133,25 +125,16 @@ static pthread_t tmain;
 static clockid_t cl;
 static struct timespec start_time;
 
-
 static pthread_mutex_t sum_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned int sum;
 
-static enum
-  {
-    sync_signal,
-    sync_join
-  }
-sync_method;
-
+static enum { sync_signal, sync_join } sync_method;
 
 /* We use 64bit values for the times.  */
 typedef unsigned long long int hp_timing_t;
 
-
 /* Attributes for all created threads.  */
 static pthread_attr_t attr;
-
 
 static void *
 work (void *arg)
@@ -209,7 +192,6 @@ work (void *arg)
   return NULL;
 }
 
-
 static void *
 thread_function (void *arg)
 {
@@ -264,13 +246,11 @@ thread_function (void *arg)
   return NULL;
 }
 
-
 struct start_info
 {
   unsigned int starts;
   unsigned int threads;
 };
-
 
 static void *
 start_threads (void *arg)
@@ -338,7 +318,6 @@ start_threads (void *arg)
   return NULL;
 }
 
-
 int
 main (int argc, char *argv[])
 {
@@ -370,7 +349,8 @@ main (int argc, char *argv[])
 
   if (toplevel > threads)
     {
-      printf ("resetting number of toplevel threads to %lu to not surpass number to concurrent threads\n",
+      printf ("resetting number of toplevel threads to %lu to not surpass "
+	      "number to concurrent threads\n",
 	      threads);
       toplevel = threads;
     }
@@ -400,12 +380,10 @@ main (int argc, char *argv[])
   pthread_attr_init (&attr);
 
   /* If the user provided a stack size use it.  */
-  if (stacksize != 0
-      && pthread_attr_setstacksize (&attr, stacksize) != 0)
+  if (stacksize != 0 && pthread_attr_setstacksize (&attr, stacksize) != 0)
     puts ("could not set stack size; will use default");
   /* And stack guard size.  */
-  if (guardsize != -1
-      && pthread_attr_setguardsize (&attr, guardsize) != 0)
+  if (guardsize != -1 && pthread_attr_setguardsize (&attr, guardsize) != 0)
     puts ("invalid stack guard size; will use default");
 
   /* All threads are created detached if we are not using pthread_join
@@ -428,7 +406,7 @@ main (int argc, char *argv[])
 
 	  pthread_mutex_unlock (&running_mutex);
 
-	  if (! cont)
+	  if (!cont)
 	    break;
 
 	  if (progress)
@@ -515,7 +493,6 @@ main (int argc, char *argv[])
   /* NOTREACHED */
   return 0;
 }
-
 
 /* Handle program arguments.  */
 static error_t
@@ -614,7 +591,6 @@ number of threads limited to %u; recompile with a higher limit if necessary",
   return 0;
 }
 
-
 static hp_timing_t
 get_clockfreq (void)
 {
@@ -635,7 +611,7 @@ get_clockfreq (void)
   if (__glibc_likely (fd != -1))
     {
       /* XXX AFAIK the /proc filesystem can generate "files" only up
-         to a size of 4096 bytes.  */
+	 to a size of 4096 bytes.  */
       char buf[4096];
       ssize_t n;
 
@@ -681,7 +657,6 @@ get_clockfreq (void)
   return result;
 }
 
-
 int
 clock_getcpuclockid (pid_t pid, clockid_t *clock_id)
 {
@@ -700,16 +675,17 @@ clock_getcpuclockid (pid_t pid, clockid_t *clock_id)
 #endif
 }
 
-
 #ifdef i386
-#define HP_TIMING_NOW(Var)	__asm__ __volatile__ ("rdtsc" : "=A" (Var))
+#  define HP_TIMING_NOW(Var) __asm__ __volatile__ ("rdtsc" : "=A"(Var))
 #elif defined __x86_64__
-# define HP_TIMING_NOW(Var) \
-  ({ unsigned int _hi, _lo; \
-     asm volatile ("rdtsc" : "=a" (_lo), "=d" (_hi)); \
-     (Var) = ((unsigned long long int) _hi << 32) | _lo; })
+#  define HP_TIMING_NOW(Var)                                                  \
+    ({                                                                        \
+      unsigned int _hi, _lo;                                                  \
+      asm volatile ("rdtsc" : "=a"(_lo), "=d"(_hi));                          \
+      (Var) = ((unsigned long long int) _hi << 32) | _lo;                     \
+    })
 #else
-#error "HP_TIMING_NOW missing"
+#  error "HP_TIMING_NOW missing"
 #endif
 
 /* Get current value of CLOCK and store it in TP.  */
@@ -745,7 +721,7 @@ clock_gettime (clockid_t clock_id, struct timespec *tp)
 
 	retval = 0;
       }
-    break;
+      break;
 
     default:
       errno = EINVAL;

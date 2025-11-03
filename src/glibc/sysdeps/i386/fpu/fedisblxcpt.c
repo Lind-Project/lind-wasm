@@ -24,8 +24,8 @@
 int
 fedisableexcept (int excepts)
 {
-  #include <stdlib.h>
+#include <stdlib.h>
   // removed in-line asm
-  exit(EXIT_FAILURE);
+  exit (EXIT_FAILURE);
   return 0;
 }

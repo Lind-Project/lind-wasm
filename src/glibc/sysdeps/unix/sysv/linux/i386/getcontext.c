@@ -1,12 +1,9 @@
 
 #include <unistd.h>
 
+int
+Mygetcontext (void)
+{
 
-int Mygetcontext(void) {
-
-
-    return 0;  // Return 0 for success
+  return 0; // Return 0 for success
 }
-
-
-

@@ -20,7 +20,6 @@
 #include <stddef.h>
 #include <unistd.h>
 
-
 /* Change the set of blocked signals to SET,
    wait until a signal arrives, and restore the set of blocked signals.  */
 int
@@ -38,7 +37,7 @@ __sigsuspend (const sigset_t *set)
   if (sigprocmask (SIG_SETMASK, set, &oset) < 0)
     return -1;
 
-  (void) pause();
+  (void) pause ();
   save = errno;
 
   if (sigprocmask (SIG_SETMASK, &oset, (sigset_t *) NULL) < 0)
@@ -47,5 +46,4 @@ __sigsuspend (const sigset_t *set)
   __set_errno (save);
   return -1;
 }
-libc_hidden_def (__sigsuspend)
-weak_alias (__sigsuspend, sigsuspend)
+libc_hidden_def (__sigsuspend) weak_alias (__sigsuspend, sigsuspend)

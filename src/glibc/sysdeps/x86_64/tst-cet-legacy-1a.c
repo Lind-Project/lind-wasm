@@ -25,8 +25,7 @@
 /* Nonzero if the program gets called via `exec'.  */
 static int restart;
 
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 
 extern int do_test (int argc, char *argv[]);
 
@@ -70,9 +69,9 @@ do_test (int argc, char *argv[])
 
   if (argc == 5)
     execl (argv[1], argv[1], argv[2], argv[3], argv[4], "--direct",
-	   "--restart",  NULL);
+	   "--restart", NULL);
   else
-    execl (argv[1], argv[1], "--direct", "--restart",  NULL);
+    execl (argv[1], argv[1], "--direct", "--restart", NULL);
 
   return -1;
 }

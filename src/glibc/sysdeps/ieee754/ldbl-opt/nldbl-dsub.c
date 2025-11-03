@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef dsubl
 
-double
-attribute_hidden
+double attribute_hidden
 dsubl (double x, double y)
 {
   return __nldbl_dsubl (x, y);

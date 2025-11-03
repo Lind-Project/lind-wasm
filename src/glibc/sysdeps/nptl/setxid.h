@@ -19,24 +19,25 @@
 #include <sys/single_threaded.h>
 #include <sysdep.h>
 
-#define __SETXID_1(cmd, arg1) \
-  cmd.id[0] = (long int) arg1
-#define __SETXID_2(cmd, arg1, arg2) \
-  __SETXID_1 (cmd, arg1); cmd.id[1] = (long int) arg2
-#define __SETXID_3(cmd, arg1, arg2, arg3) \
-  __SETXID_2 (cmd, arg1, arg2); cmd.id[2] = (long int) arg3
+#define __SETXID_1(cmd, arg1) cmd.id[0] = (long int) arg1
+#define __SETXID_2(cmd, arg1, arg2)                                           \
+  __SETXID_1 (cmd, arg1);                                                     \
+  cmd.id[1] = (long int) arg2
+#define __SETXID_3(cmd, arg1, arg2, arg3)                                     \
+  __SETXID_2 (cmd, arg1, arg2);                                               \
+  cmd.id[2] = (long int) arg3
 
-#define INLINE_SETXID_SYSCALL(name, nr, args...) \
-  ({									\
-    int __result;							\
-    if (!SINGLE_THREAD_P)						\
-      {									\
-	struct xid_command __cmd;					\
-	__cmd.syscall_no = __NR_##name;					\
-	__SETXID_##nr (__cmd, args);					\
-	__result =__nptl_setxid (&__cmd);				\
-      }									\
-    else								\
-      __result = INLINE_SYSCALL (name, nr, args);			\
-    __result;								\
-   })
+#define INLINE_SETXID_SYSCALL(name, nr, args...)                              \
+  ({                                                                          \
+    int __result;                                                             \
+    if (!SINGLE_THREAD_P)                                                     \
+      {                                                                       \
+	struct xid_command __cmd;                                             \
+	__cmd.syscall_no = __NR_##name;                                       \
+	__SETXID_##nr (__cmd, args);                                          \
+	__result = __nptl_setxid (&__cmd);                                    \
+      }                                                                       \
+    else                                                                      \
+      __result = INLINE_SYSCALL (name, nr, args);                             \
+    __result;                                                                 \
+  })

@@ -47,7 +47,7 @@ sethostid (long int id)
     }
 
   /* Open file for writing.  Everybody is allowed to read this file.  */
-  fd = __open_nocancel (HOSTIDFILE, O_CREAT|O_WRONLY|O_TRUNC, 0644);
+  fd = __open_nocancel (HOSTIDFILE, O_CREAT | O_WRONLY | O_TRUNC, 0644);
   if (fd < 0)
     return -1;
 
@@ -59,11 +59,11 @@ sethostid (long int id)
 }
 
 #else
-# include <string.h>
-# include <sys/param.h>
-# include <resolv/netdb.h>
-# include <netinet/in.h>
-# include <scratch_buffer.h>
+#  include <string.h>
+#  include <sys/param.h>
+#  include <resolv/netdb.h>
+#  include <netinet/in.h>
+#  include <scratch_buffer.h>
 
 long int
 gethostid (void)
@@ -76,7 +76,7 @@ gethostid (void)
   int fd;
 
   /* First try to get the ID from a former invocation of sethostid.  */
-  fd = __open_nocancel (HOSTIDFILE, O_RDONLY|O_LARGEFILE, 0);
+  fd = __open_nocancel (HOSTIDFILE, O_RDONLY | O_LARGEFILE, 0);
   if (fd >= 0)
     {
       ssize_t n = __read_nocancel (fd, &id, sizeof (id));
@@ -99,8 +99,8 @@ gethostid (void)
   scratch_buffer_init (&tmpbuf);
   while (true)
     {
-      int ret = __gethostbyname_r (hostname, &hostbuf,
-				   tmpbuf.data, tmpbuf.length, &hp, &herr);
+      int ret = __gethostbyname_r (hostname, &hostbuf, tmpbuf.data,
+				   tmpbuf.length, &hp, &herr);
       if (ret == 0 && hp != NULL)
 	break;
       else

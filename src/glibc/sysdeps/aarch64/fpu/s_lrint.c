@@ -22,22 +22,21 @@
 #include <math-barriers.h>
 #include <libm-alias-double.h>
 
-# define IREG_SIZE 64
+#define IREG_SIZE 64
 
-# ifdef __ILP32__
+#ifdef __ILP32__
 #  define OREG_SIZE 32
-# else
-#  define OREG_SIZE 64
-# endif
-
-# define IREGS "d"
-
-#if OREG_SIZE == 32
-# define OREGS "w"
 #else
-# define OREGS "x"
+#  define OREG_SIZE 64
 #endif
 
+#define IREGS "d"
+
+#if OREG_SIZE == 32
+#  define OREGS "w"
+#else
+#  define OREGS "x"
+#endif
 
 long int
 __lrint (double x)
@@ -56,27 +55,35 @@ __lrint (double x)
       switch (get_rounding_mode ())
 	{
 	case FE_TONEAREST:
-	  asm volatile ("fcvtns" "\t%" OREGS "0, %" IREGS "1"
-			: "=r" (result) : "w" (x));
+	  asm volatile ("fcvtns"
+			"\t%" OREGS "0, %" IREGS "1"
+			: "=r"(result)
+			: "w"(x));
 	  break;
 	case FE_UPWARD:
-	  asm volatile ("fcvtps" "\t%" OREGS "0, %" IREGS "1"
-			: "=r" (result) : "w" (x));
+	  asm volatile ("fcvtps"
+			"\t%" OREGS "0, %" IREGS "1"
+			: "=r"(result)
+			: "w"(x));
 	  break;
 	case FE_DOWNWARD:
-	  asm volatile ("fcvtms" "\t%" OREGS "0, %" IREGS "1"
-			: "=r" (result) : "w" (x));
+	  asm volatile ("fcvtms"
+			"\t%" OREGS "0, %" IREGS "1"
+			: "=r"(result)
+			: "w"(x));
 	  break;
 	case FE_TOWARDZERO:
 	default:
-	  asm volatile ("fcvtzs" "\t%" OREGS "0, %" IREGS "1"
-			: "=r" (result) : "w" (x));
+	  asm volatile ("fcvtzs"
+			"\t%" OREGS "0, %" IREGS "1"
+			: "=r"(result)
+			: "w"(x));
 	}
       return result;
     }
 #endif
 
-  double r =  __builtin_rint (x);
+  double r = __builtin_rint (x);
 
   /* Prevent gcc from calling lrint directly when compiled with
      -fno-math-errno by inserting a barrier.  */

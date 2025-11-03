@@ -21,7 +21,6 @@
 #include <jmpbuf-offsets.h>
 #include <mach/thread_status.h>
 
-
 /* Set up STATE to do the equivalent of `longjmp (ENV, VAL);'.  */
 
 void

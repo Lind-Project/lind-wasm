@@ -1,29 +1,30 @@
 extern struct mutex _hurd_siglock; /* Locks _hurd_sigstates.  */
 
-#ifndef	_HURD_SIGNAL_H
-extern struct hurd_sigstate *_hurd_self_sigstate (void) __attribute__ ((__const__));
-#ifndef _ISOMAC
+#ifndef _HURD_SIGNAL_H
+extern struct hurd_sigstate *_hurd_self_sigstate (void)
+    __attribute__ ((__const__));
+#  ifndef _ISOMAC
 libc_hidden_proto (_hurd_self_sigstate)
-#endif
+#  endif
 
-#include_next <hurd/signal.h>
+#  include_next <hurd/signal.h>
 
-#ifndef _ISOMAC
+#  ifndef _ISOMAC
 
-#if defined __USE_EXTERN_INLINES
-# if IS_IN (libc) || IS_IN (libpthread)
-#  include <sigsetops.h>
-#  include <tls.h>
-# endif
-#endif
+#    if defined __USE_EXTERN_INLINES
+#      if IS_IN(libc) || IS_IN(libpthread)
+#	include <sigsetops.h>
+#	include <tls.h>
+#      endif
+#    endif
 
-#ifndef _HURD_SIGNAL_H_EXTERN_INLINE
-#define _HURD_SIGNAL_H_EXTERN_INLINE __extern_inline
-#endif
+#    ifndef _HURD_SIGNAL_H_EXTERN_INLINE
+#      define _HURD_SIGNAL_H_EXTERN_INLINE __extern_inline
+#    endif
 
-#if defined __USE_EXTERN_INLINES && IS_IN (libc)
-_HURD_SIGNAL_H_EXTERN_INLINE struct hurd_sigstate *
-_hurd_self_sigstate (void)
+#    if defined __USE_EXTERN_INLINES && IS_IN(libc)
+    _HURD_SIGNAL_H_EXTERN_INLINE
+    struct hurd_sigstate *_hurd_self_sigstate (void)
 {
   struct hurd_sigstate *ss = THREAD_GETMEM (THREAD_SELF, _hurd_sigstate);
   if (__glibc_unlikely (ss == NULL))
@@ -31,9 +32,9 @@ _hurd_self_sigstate (void)
       thread_t self = __mach_thread_self ();
 
       /* The thread variable is unset; this must be the first time we've
-        asked for it.  In this case, the critical section flag cannot
-        possible already be set.  Look up our sigstate structure the slow
-        way.  */
+	asked for it.  In this case, the critical section flag cannot
+	possible already be set.  Look up our sigstate structure the slow
+	way.  */
       ss = _hurd_thread_sigstate (self);
       THREAD_SETMEM (THREAD_SELF, _hurd_sigstate, ss);
       __mach_port_deallocate (__mach_task_self (), self);
@@ -52,7 +53,7 @@ _hurd_critical_section_lock (void)
 
   ss = _hurd_self_sigstate ();
 
-  if (! __spin_try_lock (&ss->critical_section_lock))
+  if (!__spin_try_lock (&ss->critical_section_lock))
     /* We are already in a critical section, so do nothing.  */
     return NULL;
 
@@ -84,20 +85,19 @@ _hurd_critical_section_unlock (void *our_lock)
 	__msg_sig_post (_hurd_msgport, 0, 0, __mach_task_self ());
     }
 }
-#endif /* defined __USE_EXTERN_INLINES && IS_IN (libc) */
-
+#    endif /* defined __USE_EXTERN_INLINES && IS_IN (libc) */
 
 libc_hidden_proto (_hurd_exception2signal)
-libc_hidden_proto (_hurd_intr_rpc_mach_msg)
-libc_hidden_proto (_hurd_thread_sigstate)
-libc_hidden_proto (_hurd_raise_signal)
-libc_hidden_proto (_hurd_sigstate_set_global_rcv)
-libc_hidden_proto (_hurd_sigstate_lock)
-libc_hidden_proto (_hurd_sigstate_pending)
-libc_hidden_proto (_hurd_sigstate_unlock)
-libc_hidden_proto (_hurd_sigstate_delete)
-#endif
-#ifdef _HURD_SIGNAL_H_HIDDEN_DEF
-libc_hidden_def (_hurd_self_sigstate)
-#endif
+    libc_hidden_proto (_hurd_intr_rpc_mach_msg)
+	libc_hidden_proto (_hurd_thread_sigstate)
+	    libc_hidden_proto (_hurd_raise_signal)
+		libc_hidden_proto (_hurd_sigstate_set_global_rcv)
+		    libc_hidden_proto (_hurd_sigstate_lock)
+			libc_hidden_proto (_hurd_sigstate_pending)
+			    libc_hidden_proto (_hurd_sigstate_unlock)
+				libc_hidden_proto (_hurd_sigstate_delete)
+#  endif
+#  ifdef _HURD_SIGNAL_H_HIDDEN_DEF
+				    libc_hidden_def (_hurd_self_sigstate)
+#  endif
 #endif

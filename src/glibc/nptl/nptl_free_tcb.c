@@ -25,17 +25,19 @@ __nptl_free_tcb (struct pthread *pd)
 {
   /* The thread is exiting now.  */
   if ((atomic_fetch_or_relaxed (&pd->cancelhandling, TERMINATED_BITMASK)
-      & TERMINATED_BITMASK) == 0)
+       & TERMINATED_BITMASK)
+      == 0)
     {
       // BUG: Thread Local storage is not supported yet
       // so we do not need to free it - Qianxi Chen
-      
+
       // Lind-Wasm: Original glibc code removed for compatibility
-      // to find original source code refer to (2.39.9000) at (nptl/nptl_free_tcb.c):(LINE 27-37)
+      // to find original source code refer to (2.39.9000) at
+      // (nptl/nptl_free_tcb.c):(LINE 27-37)
 
       /* Queue the stack memory block for reuse and exit the process.  The
-         kernel will signal via writing to the address returned by
-         QUEUE-STACK when the stack is available.  */
+	 kernel will signal via writing to the address returned by
+	 QUEUE-STACK when the stack is available.  */
       __nptl_deallocate_stack (pd);
     }
 }

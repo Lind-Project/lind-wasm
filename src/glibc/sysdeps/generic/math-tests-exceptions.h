@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_TESTS_EXCEPTIONS_H
-#define _MATH_TESTS_EXCEPTIONS_H 1
+#  define _MATH_TESTS_EXCEPTIONS_H 1
 
 /* Indicate whether to run tests of floating-point exceptions for a
    given floating-point type, given that the exception macros are
    defined.  All are run unless overridden.  */
-#define EXCEPTION_TESTS_float	1
-#define EXCEPTION_TESTS_double	1
-#define EXCEPTION_TESTS_long_double	1
-#define EXCEPTION_TESTS_float128	1
+#  define EXCEPTION_TESTS_float 1
+#  define EXCEPTION_TESTS_double 1
+#  define EXCEPTION_TESTS_long_double 1
+#  define EXCEPTION_TESTS_float128 1
 
 #endif /* math-tests-exceptions.h.  */

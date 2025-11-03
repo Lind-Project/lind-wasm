@@ -11,8 +11,7 @@
 #undef strtoll_l
 #undef __isoc23_strtoll_l
 strong_alias (____strtol_l_internal, ____strtoll_l_internal)
-libc_hidden_ver (____strtol_l_internal, ____strtoll_l_internal)
-weak_alias (__strtol_l, __strtoll_l)
-weak_alias (__strtol_l, strtoll_l)
-weak_alias (__isoc23_strtol_l, __isoc23_strtoll_l)
-libc_hidden_ver (__isoc23_strtol_l, __isoc23_strtoll_l)
+    libc_hidden_ver (____strtol_l_internal, ____strtoll_l_internal)
+	weak_alias (__strtol_l, __strtoll_l) weak_alias (__strtol_l, strtoll_l)
+	    weak_alias (__isoc23_strtol_l, __isoc23_strtoll_l)
+		libc_hidden_ver (__isoc23_strtol_l, __isoc23_strtoll_l)

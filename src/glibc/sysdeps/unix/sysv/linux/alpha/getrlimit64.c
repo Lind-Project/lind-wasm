@@ -20,18 +20,16 @@
 versioned_symbol (libc, __getrlimit, getrlimit, GLIBC_2_27);
 versioned_symbol (libc, __getrlimit64, getrlimit64, GLIBC_2_27);
 
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_27)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_27)
 /* RLIM64_INFINITY was supposed to be a glibc convention rather than
    anything seen by the kernel, but it ended being passed to the kernel
    through the prlimit64 syscall.  Given that a lot of binaries with
    the wrong constant value are in the wild, provide a wrapper function
    fixing the value after the syscall.  */
-# define OLD_RLIM64_INFINITY           0x7fffffffffffffffULL
+#  define OLD_RLIM64_INFINITY 0x7fffffffffffffffULL
 
-int
-attribute_compat_text_section
-__old_getrlimit64 (enum __rlimit_resource resource,
-		   struct rlimit64 *rlimits)
+int attribute_compat_text_section
+__old_getrlimit64 (enum __rlimit_resource resource, struct rlimit64 *rlimits)
 {
   struct rlimit64 krlimits;
 
@@ -51,6 +49,6 @@ __old_getrlimit64 (enum __rlimit_resource resource,
 }
 
 strong_alias (__old_getrlimit64, __old_getrlimit)
-compat_symbol (libc, __old_getrlimit, getrlimit, GLIBC_2_0);
+    compat_symbol (libc, __old_getrlimit, getrlimit, GLIBC_2_0);
 compat_symbol (libc, __old_getrlimit64, getrlimit64, GLIBC_2_1);
 #endif

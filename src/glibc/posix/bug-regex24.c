@@ -6,10 +6,7 @@
 #define str "civic"
 
 #define N 10
-static const char *expected[N] =
-  {
-    str, "c", "i", "", "", "", "", "", "", ""
-  };
+static const char *expected[N] = { str, "c", "i", "", "", "", "", "", "", "" };
 
 static int
 do_test (void)

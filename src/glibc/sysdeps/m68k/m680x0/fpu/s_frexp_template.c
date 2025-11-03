@@ -27,19 +27,18 @@ M_DECL_FUNC (__frexp) (FLOAT value, int *expptr)
 
   __asm ("ftst%.x %1\n"
 	 "fmove%.l %/fpsr, %0"
-	 : "=dm" (fpsr) : "f" (value));
+	 : "=dm"(fpsr)
+	 : "f"(value));
   if (fpsr & (7 << 24))
     {
       /* Not finite or zero.  */
       *expptr = 0;
       return value;
     }
-  __asm ("fgetexp%.x %1, %0" : "=f" (exponent) : "f" (value));
+  __asm ("fgetexp%.x %1, %0" : "=f"(exponent) : "f"(value));
   iexponent = (int) exponent + 1;
   *expptr = iexponent;
-  __asm ("fscale%.l %2, %0"
-	 : "=f" (mantissa)
-	 : "0" (value), "dmi" (-iexponent));
+  __asm ("fscale%.l %2, %0" : "=f"(mantissa) : "0"(value), "dmi"(-iexponent));
   return mantissa;
 }
 declare_mgen_alias (__frexp, frexp)

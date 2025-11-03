@@ -24,18 +24,15 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
-
 static pthread_barrier_t b2;
 static int fd;
 static int called;
-
 
 static void
 cl (void *arg)
 {
   called = 1;
 }
-
 
 static void *
 tf (void *arg)
@@ -61,7 +58,6 @@ tf (void *arg)
   return NULL;
 }
 
-
 static int
 do_test (void)
 {
@@ -82,7 +78,8 @@ do_test (void)
       return 1;
     }
 
-  void *p = mmap (NULL, sizeof (mem), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  void *p
+      = mmap (NULL, sizeof (mem), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (p == MAP_FAILED)
     {
       puts ("mmap failed");

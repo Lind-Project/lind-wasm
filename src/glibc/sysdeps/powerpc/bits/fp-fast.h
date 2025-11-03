@@ -17,23 +17,23 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_H
-# error "Never use <bits/fp-fast.h> directly; include <math.h> instead."
+#  error "Never use <bits/fp-fast.h> directly; include <math.h> instead."
 #endif
 
 #ifdef __USE_ISOC99
 
 /* The GCC 4.6 compiler will define __FP_FAST_FMA{,F,L} if the fma{,f,l}
    builtins are supported.  */
-# if (!defined _SOFT_FLOAT && !defined __NO_FPRS__) || defined __FP_FAST_FMA
-#  define FP_FAST_FMA 1
-# endif
+#  if (!defined _SOFT_FLOAT && !defined __NO_FPRS__) || defined __FP_FAST_FMA
+#    define FP_FAST_FMA 1
+#  endif
 
-# if (!defined _SOFT_FLOAT && !defined __NO_FPRS__) || defined __FP_FAST_FMAF
-#  define FP_FAST_FMAF 1
-# endif
+#  if (!defined _SOFT_FLOAT && !defined __NO_FPRS__) || defined __FP_FAST_FMAF
+#    define FP_FAST_FMAF 1
+#  endif
 
-# ifdef __FP_FAST_FMAL
-#  define FP_FAST_FMAL 1
-# endif
+#  ifdef __FP_FAST_FMAL
+#    define FP_FAST_FMAL 1
+#  endif
 
 #endif

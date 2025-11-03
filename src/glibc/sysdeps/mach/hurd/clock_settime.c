@@ -30,8 +30,7 @@ __clock_settime (clockid_t clock_id, const struct timespec *ts)
   mach_port_t hostpriv;
   time_value_t tv;
 
-  if (clock_id != CLOCK_REALTIME
-      || ! valid_nanoseconds (ts->tv_nsec))
+  if (clock_id != CLOCK_REALTIME || !valid_nanoseconds (ts->tv_nsec))
     return __hurd_fail (EINVAL);
 
   err = __get_privileged_ports (&hostpriv, NULL);
@@ -46,10 +45,10 @@ __clock_settime (clockid_t clock_id, const struct timespec *ts)
 }
 libc_hidden_def (__clock_settime)
 
-versioned_symbol (libc, __clock_settime, clock_settime, GLIBC_2_17);
+    versioned_symbol (libc, __clock_settime, clock_settime, GLIBC_2_17);
 /* clock_settime moved to libc in version 2.17;
    old binaries may expect the symbol version it had in librt.  */
-#if SHLIB_COMPAT (libc, GLIBC_2_2, GLIBC_2_17)
+#if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_17)
 strong_alias (__clock_settime, __clock_settime_2);
 compat_symbol (libc, __clock_settime_2, clock_settime, GLIBC_2_2);
 #endif

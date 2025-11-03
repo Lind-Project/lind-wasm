@@ -33,13 +33,10 @@
 #include <support/support.h>
 #include <tst-spawn.h>
 
-
 /* Nonzero if the program gets called via `exec'.  */
 static int restart;
 
-
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 
 /* Name of the temporary files.  */
 static char *name1;
@@ -59,7 +56,6 @@ static const char fd2string[] = "This file should stay opened";
 static const char fd3string[] = "This file will be opened";
 static const char fd5string[] = "This file should stay opened (O_CLOEXEC)";
 
-
 /* We have a preparation function.  */
 static void
 do_prepare (int argc, char *argv[])
@@ -78,7 +74,6 @@ do_prepare (int argc, char *argv[])
   TEST_COMPARE (fcntl (temp_fd5, F_SETFD, flags | FD_CLOEXEC), 0);
 }
 #define PREPARE do_prepare
-
 
 static int
 handle_restart (const char *fd1s, const char *fd2s, const char *fd3s,
@@ -141,7 +136,6 @@ handle_restart (const char *fd1s, const char *fd2s, const char *fd3s,
   return 0;
 }
 
-
 static int
 do_test (int argc, char *argv[])
 {
@@ -199,22 +193,19 @@ do_test (int argc, char *argv[])
   /* We want to open the third file.  */
   name3_copy = xstrdup (name3);
   TEST_COMPARE (posix_spawn_file_actions_addopen (&actions, temp_fd3,
-						  name3_copy,
-						  O_RDONLY, 0666),
+						  name3_copy, O_RDONLY, 0666),
 		0);
   /* Overwrite the name to check that a copy has been made.  */
   memset (name3_copy, 'X', strlen (name3_copy));
 
   /* We dup the second descriptor.  */
   fd4 = MAX (2, MAX (temp_fd1, MAX (temp_fd2, MAX (temp_fd3, temp_fd5)))) + 1;
-  TEST_COMPARE (posix_spawn_file_actions_adddup2 (&actions, temp_fd2, fd4),
-	        0);
+  TEST_COMPARE (posix_spawn_file_actions_adddup2 (&actions, temp_fd2, fd4), 0);
 
   /* We clear the O_CLOEXEC on fourth descriptor, so it should be
      stay open on child.  */
-  TEST_COMPARE (posix_spawn_file_actions_adddup2 (&actions, temp_fd5,
-						  temp_fd5),
-		0);
+  TEST_COMPARE (
+      posix_spawn_file_actions_adddup2 (&actions, temp_fd5, temp_fd5), 0);
 
   /* Now spawn the process.  */
   snprintf (fd1name, sizeof fd1name, "%d", temp_fd1);

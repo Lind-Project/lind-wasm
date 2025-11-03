@@ -19,6 +19,5 @@
 #include <pthread.h>
 #include <pt-internal.h>
 
-const struct __pthread_barrierattr __pthread_default_barrierattr = {
-  __pshared: PTHREAD_PROCESS_PRIVATE
-};
+const struct __pthread_barrierattr __pthread_default_barrierattr
+    = { __pshared : PTHREAD_PROCESS_PRIVATE };

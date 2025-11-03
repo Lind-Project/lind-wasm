@@ -42,14 +42,13 @@ do_prepare (int argc, char **argv)
   if (unlink (fname))
     FAIL_EXIT1 ("unlink failed");
 
-  long sz = sysconf(_SC_PAGESIZE);
+  long sz = sysconf (_SC_PAGESIZE);
   if (sz == -1)
     sz = 4096L;
   page_shift = ffs (sz) - 1;
 }
 
 #define PREPARE do_prepare
-
 
 /* Check if negative offsets are handled correctly by mmap.  */
 static int

@@ -21,8 +21,6 @@
 /* Check legacy shadow stack code in init_array.  */
 extern void legacy (void) __attribute__ ((visibility ("hidden")));
 
-void (*init_array []) (void)
-     __attribute__ ((section (".init_array"), aligned (sizeof (void *)))) =
-{
-  &legacy
-};
+void (*init_array[]) (void)
+    __attribute__ ((section (".init_array"), aligned (sizeof (void *))))
+    = { &legacy };

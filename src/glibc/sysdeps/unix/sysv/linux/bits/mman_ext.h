@@ -17,15 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_MMAN_H
-# error "Never include <bits/mman_ext.h> directly; use <sys/mman.h> instead."
+#  error "Never include <bits/mman_ext.h> directly; use <sys/mman.h> instead."
 #endif
 
 #ifdef __USE_GNU
 struct iovec;
 extern __ssize_t process_madvise (int __pid_fd, const struct iovec *__iov,
 				  size_t __count, int __advice,
-				  unsigned __flags)
-  __THROW;
+				  unsigned __flags) __THROW;
 
 extern int process_mrelease (int pidfd, unsigned int flags) __THROW;
 

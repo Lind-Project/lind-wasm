@@ -21,10 +21,10 @@
 #include <stdlib.h>
 #include <atomic.h>
 #include <sys/cachectl.h>
-#if __has_include (<asm/syscalls.h>)
-# include <asm/syscalls.h>
+#if __has_include(<asm/syscalls.h>)
+#  include <asm/syscalls.h>
 #else
-# include <asm/unistd.h>
+#  include <asm/unistd.h>
 #endif
 #include <sys/syscall.h>
 
@@ -52,7 +52,7 @@ __lookup_riscv_flush_icache (void)
 
 #ifdef SHARED
 
-# define INIT_ARCH()
+#  define INIT_ARCH()
 libc_ifunc (__riscv_flush_icache, __lookup_riscv_flush_icache ())
 
 #else

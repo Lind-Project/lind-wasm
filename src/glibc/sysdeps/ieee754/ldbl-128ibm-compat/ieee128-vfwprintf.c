@@ -21,7 +21,6 @@
 extern int
 ___ieee128_vfwprintf (FILE *fp, const wchar_t *format, va_list ap)
 {
-  return __vfwprintf_internal (fp, format, ap,
-			       PRINTF_LDBL_USES_FLOAT128);
+  return __vfwprintf_internal (fp, format, ap, PRINTF_LDBL_USES_FLOAT128);
 }
 strong_alias (___ieee128_vfwprintf, __vfwprintfieee128)

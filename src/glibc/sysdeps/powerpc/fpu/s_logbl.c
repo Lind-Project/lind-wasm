@@ -19,11 +19,11 @@
 /* ISA 2.07 provides fast GPR to FP instruction (mfvsr{d,wz}) which make
    generic implementation faster.  */
 #if defined(_ARCH_PWR8) || !defined(_ARCH_PWR7)
-# include <./sysdeps/ieee754/ldbl-128ibm/s_logbl.c>
+#  include <./sysdeps/ieee754/ldbl-128ibm/s_logbl.c>
 #else
-# include <math.h>
-# include <math_private.h>
-# include <math_ldbl_opt.h>
+#  include <math.h>
+#  include <math_private.h>
+#  include <math_ldbl_opt.h>
 
 /* This implementation avoids FP to INT conversions by using VSX
    bitwise instructions over FP values.  */
@@ -44,8 +44,8 @@ __logbl (long double x)
   /* Mask to extract the exponent.  */
   asm ("xxland %x0,%x1,%x2\n"
        "fcfid  %0,%0"
-       : "=d" (ret)
-       : "d" (xh), "d" (0x7ff0000000000000ULL));
+       : "=d"(ret)
+       : "d"(xh), "d"(0x7ff0000000000000ULL));
   ret = (ret * 0x1p-52) - 1023.0;
   if (ret > 1023.0)
     /* Multiplication is used to set logb (+-INF) = INF.  */
@@ -53,9 +53,9 @@ __logbl (long double x)
   else if (ret == -1023.0)
     {
       /* POSIX specifies that denormal number is treated as
-         though it were normalized.  */
-      return (long double) (- (__builtin_clzll (hx & 0x7fffffffffffffffLL) \
-			       - 12) - 1023);
+	 though it were normalized.  */
+      return (long double) (-(__builtin_clzll (hx & 0x7fffffffffffffffLL) - 12)
+			    - 1023);
     }
   else if ((hx & 0x000fffffffffffffLL) == 0)
     {
@@ -72,7 +72,7 @@ __logbl (long double x)
   /* Test to avoid logb_downward (0.0) == -0.0.  */
   return ret == -0.0 ? 0.0 : ret;
 }
-# ifndef __logbl
+#  ifndef __logbl
 long_double_symbol (libm, __logbl, logbl);
-# endif
+#  endif
 #endif

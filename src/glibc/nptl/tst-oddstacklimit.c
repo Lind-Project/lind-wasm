@@ -26,7 +26,7 @@
 /* This sets the stack resource limit to 1023kb, which is not a multiple
    of the page size since every architecture's page size is > 1k.  */
 #ifndef ODD_STACK_LIMIT
-# define ODD_STACK_LIMIT (1023 * 1024)
+#  define ODD_STACK_LIMIT (1023 * 1024)
 #endif
 
 static const char *command;
@@ -62,12 +62,11 @@ do_test (void)
     return 1;
 }
 
-#define OPT_COMMAND	10000
-#define CMDLINE_OPTIONS	\
-  { "command", required_argument, NULL, OPT_COMMAND },
-#define CMDLINE_PROCESS	\
-  case OPT_COMMAND:	\
-    command = optarg;	\
+#define OPT_COMMAND 10000
+#define CMDLINE_OPTIONS { "command", required_argument, NULL, OPT_COMMAND },
+#define CMDLINE_PROCESS                                                       \
+  case OPT_COMMAND:                                                           \
+    command = optarg;                                                         \
     break;
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

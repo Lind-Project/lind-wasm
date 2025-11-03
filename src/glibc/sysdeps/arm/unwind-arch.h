@@ -24,12 +24,12 @@
 
 #define UNWIND_LINK_FRAME_STATE_FOR 0
 #define UNWIND_LINK_FRAME_ADJUSTMENT 0
-#define UNWIND_LINK_EXTRA_FIELDS \
+#define UNWIND_LINK_EXTRA_FIELDS                                              \
   __typeof (_Unwind_VRS_Get) *ptr__Unwind_VRS_Get;
-#define UNWIND_LINK_EXTRA_INIT                                \
-  local.ptr__Unwind_VRS_Get                                   \
-    = __libc_dlsym (local_libgcc_handle, "_Unwind_VRS_Get");  \
-  assert (local.ptr__Unwind_VRS_Get != NULL);                 \
+#define UNWIND_LINK_EXTRA_INIT                                                \
+  local.ptr__Unwind_VRS_Get                                                   \
+      = __libc_dlsym (local_libgcc_handle, "_Unwind_VRS_Get");                \
+  assert (local.ptr__Unwind_VRS_Get != NULL);                                 \
   PTR_MANGLE (local.ptr__Unwind_VRS_Get);
 
 /* This is used by the _Unwind_Resume assembler implementation to

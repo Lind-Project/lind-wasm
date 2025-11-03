@@ -35,26 +35,30 @@ do_test (void)
   uint64_t t1, t2, f, diff;
 
   t1 = __ppc_get_timebase ();
-  printf ("t1 = %"PRIu64"\n", t1);
+  printf ("t1 = %" PRIu64 "\n", t1);
 
   f = __ppc_get_timebase_freq ();
-  printf ("Time Base frequency = %"PRIu64" Hz\n", f);
+  printf ("Time Base frequency = %" PRIu64 " Hz\n", f);
 
-  if (f == 0) {
+  if (f == 0)
+    {
       printf ("Fail: The time base frequency can't be zero.\n");
       return 1;
-  }
+    }
 
   t2 = __ppc_get_timebase ();
-  printf ("t2 = %"PRIu64"\n", t2);
+  printf ("t2 = %" PRIu64 "\n", t2);
 
-  if (t2 > t1) {
-    diff = t2 - t1;
-  } else {
-    diff = (MAX_TB - t2) + t1;
-  }
+  if (t2 > t1)
+    {
+      diff = t2 - t1;
+    }
+  else
+    {
+      diff = (MAX_TB - t2) + t1;
+    }
 
-  printf ("Elapsed time  = %1.2f usecs\n", (double) diff * 1000000 / f );
+  printf ("Elapsed time  = %1.2f usecs\n", (double) diff * 1000000 / f);
 
   return 0;
 }

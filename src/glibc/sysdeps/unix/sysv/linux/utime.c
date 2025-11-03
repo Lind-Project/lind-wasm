@@ -39,8 +39,7 @@ __utime64 (const char *file, const struct __utimbuf64 *times)
 #if __TIMESIZE != 64
 libc_hidden_def (__utime64)
 
-int
-__utime (const char *file, const struct utimbuf *times)
+    int __utime (const char *file, const struct utimbuf *times)
 {
   struct __utimbuf64 utb64;
 
@@ -53,5 +52,4 @@ __utime (const char *file, const struct utimbuf *times)
   return __utime64 (file, times ? &utb64 : NULL);
 }
 #endif
-strong_alias (__utime, utime)
-libc_hidden_def (utime)
+strong_alias (__utime, utime) libc_hidden_def (utime)

@@ -44,19 +44,19 @@
      mpfr_init2 (tcl, 64);
      for (j = 0; j <= 82; j++)
        {
-         mpfr_mul_ui (t, i, j, MPFR_RNDN);
-         mpfr_add (t, t, b, MPFR_RNDN);
-         printf ("  /" "* x = 0.1484375 + %d/128.  *" "/\n", j);
-         mpfr_cos (rc, t, MPFR_RNDN);
-         mpfr_sin (rs, t, MPFR_RNDN);
-         mpfr_set (tc, rc, MPFR_RNDN);
-         mpfr_set (ts, rs, MPFR_RNDN);
-         mpfr_sub (tcl, rc, tc, MPFR_RNDN);
-         mpfr_sub (tsl, rs, ts, MPFR_RNDN);
-         mpfr_printf ("  %.17RaL,\n", tc);
-         mpfr_printf ("  %.17RaL,\n", tcl);
-         mpfr_printf ("  %.17RaL,\n", ts);
-         mpfr_printf ("  %.17RaL,\n", tsl);
+	 mpfr_mul_ui (t, i, j, MPFR_RNDN);
+	 mpfr_add (t, t, b, MPFR_RNDN);
+	 printf ("  /" "* x = 0.1484375 + %d/128.  *" "/\n", j);
+	 mpfr_cos (rc, t, MPFR_RNDN);
+	 mpfr_sin (rs, t, MPFR_RNDN);
+	 mpfr_set (tc, rc, MPFR_RNDN);
+	 mpfr_set (ts, rs, MPFR_RNDN);
+	 mpfr_sub (tcl, rc, tc, MPFR_RNDN);
+	 mpfr_sub (tsl, rs, ts, MPFR_RNDN);
+	 mpfr_printf ("  %.17RaL,\n", tc);
+	 mpfr_printf ("  %.17RaL,\n", tcl);
+	 mpfr_printf ("  %.17RaL,\n", ts);
+	 mpfr_printf ("  %.17RaL,\n", tsl);
        }
      return 0;
    }

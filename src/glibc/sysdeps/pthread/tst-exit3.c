@@ -12,7 +12,6 @@ static int do_test (void);
 
 static pthread_barrier_t b;
 
-
 static void *
 tf2 (void *arg)
 {
@@ -22,7 +21,6 @@ tf2 (void *arg)
   /* NOTREACHED */
   return NULL;
 }
-
 
 static void *
 tf (void *arg)
@@ -46,7 +44,6 @@ tf (void *arg)
   /* Terminate only this thread.  */
   return NULL;
 }
-
 
 static int
 do_test (void)

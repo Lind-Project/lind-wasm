@@ -18,14 +18,13 @@
 
 #include <shlib-compat.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_1)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_1)
 
-#include <time.h>
-#include <sys/time.h>
-#include <tv32-compat.h>
+#  include <time.h>
+#  include <sys/time.h>
+#  include <tv32-compat.h>
 
-int
-attribute_compat_text_section
+int attribute_compat_text_section
 __getitimer_tv32 (int which, struct __itimerval32 *curr_value)
 {
   struct itimerval curr_value_64;
@@ -34,9 +33,8 @@ __getitimer_tv32 (int which, struct __itimerval32 *curr_value)
 
   /* Write all fields of 'curr_value' regardless of overflow.  */
   curr_value->it_interval
-    = valid_timeval_to_timeval32 (curr_value_64.it_interval);
-  curr_value->it_value
-    = valid_timeval_to_timeval32 (curr_value_64.it_value);
+      = valid_timeval_to_timeval32 (curr_value_64.it_interval);
+  curr_value->it_value = valid_timeval_to_timeval32 (curr_value_64.it_value);
   return 0;
 }
 

@@ -20,16 +20,16 @@
 #include <isa.h>
 
 #ifdef __x86_64__
-# include <isa-ifunc-macros.h>
+#  include <isa-ifunc-macros.h>
 #else
 /* Due to the reordering and the other nifty extensions in i686, it is
    not really good to use heavily i586 optimized code on an i686.  It's
    better to use i486 code if it isn't an i586.  */
-# if MINIMUM_ISA == 686
-#  define USE_I586 0
-#  define USE_I686 1
-# else
-#  define USE_I586 (HAS_ARCH_FEATURE (I586) && !HAS_ARCH_FEATURE (I686))
-#  define USE_I686 HAS_ARCH_FEATURE (I686)
-# endif
+#  if MINIMUM_ISA == 686
+#    define USE_I586 0
+#    define USE_I686 1
+#  else
+#    define USE_I586 (HAS_ARCH_FEATURE (I586) && !HAS_ARCH_FEATURE (I686))
+#    define USE_I686 HAS_ARCH_FEATURE (I686)
+#  endif
 #endif

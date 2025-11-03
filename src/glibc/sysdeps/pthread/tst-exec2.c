@@ -28,7 +28,6 @@
 #include <sys/wait.h>
 #include <support/xsignal.h>
 
-
 static void *
 tf (void *arg)
 {
@@ -43,7 +42,6 @@ tf (void *arg)
   puts ("join in thread in parent returned!?");
   exit (1);
 }
-
 
 static int
 do_test (void)

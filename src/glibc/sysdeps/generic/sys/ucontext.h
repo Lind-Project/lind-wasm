@@ -22,33 +22,32 @@
    requirements.  */
 
 #ifndef _SYS_UCONTEXT_H
-#define _SYS_UCONTEXT_H	1
+#  define _SYS_UCONTEXT_H 1
 
-#include <features.h>
+#  include <features.h>
 
-#include <bits/types/sigset_t.h>
-#include <bits/sigcontext.h>
-#include <bits/types/stack_t.h>
-
+#  include <bits/types/sigset_t.h>
+#  include <bits/sigcontext.h>
+#  include <bits/types/stack_t.h>
 
 typedef struct sigcontext mcontext_t;
 
-#ifdef __USE_MISC
-# define __ctx(fld) fld
-#else
-# define __ctx(fld) __ ## fld
-#endif
+#  ifdef __USE_MISC
+#    define __ctx(fld) fld
+#  else
+#    define __ctx(fld) __##fld
+#  endif
 
 /* Userlevel context.  */
 typedef struct ucontext_t
-  {
-    unsigned long int __ctx(uc_flags);
-    struct ucontext_t *uc_link;
-    stack_t uc_stack;
-    mcontext_t uc_mcontext;
-    sigset_t uc_sigmask;
-  } ucontext_t;
+{
+  unsigned long int __ctx (uc_flags);
+  struct ucontext_t *uc_link;
+  stack_t uc_stack;
+  mcontext_t uc_mcontext;
+  sigset_t uc_sigmask;
+} ucontext_t;
 
-#undef __ctx
+#  undef __ctx
 
 #endif /* sys/ucontext.h */

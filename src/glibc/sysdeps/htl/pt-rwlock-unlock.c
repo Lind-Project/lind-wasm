@@ -44,7 +44,6 @@ __pthread_rwlock_unlock (pthread_rwlock_t *rwlock)
     /* Last reader.  */
     rwlock->__readers = 0;
 
-
   /* Wake someone else up.  Try the writer queue first, then the
      reader queue if that is empty.  */
 
@@ -54,7 +53,7 @@ __pthread_rwlock_unlock (pthread_rwlock_t *rwlock)
       __pthread_dequeue (wakeup);
 
       /* We do not unlock RWLOCK->held: we are transferring the ownership
-         to the thread that we are waking up.  */
+	 to the thread that we are waking up.  */
 
       __pthread_spin_unlock (&rwlock->__lock);
       __pthread_wakeup (wakeup);
@@ -66,15 +65,15 @@ __pthread_rwlock_unlock (pthread_rwlock_t *rwlock)
     {
       unsigned n = 0;
 
-      __pthread_queue_iterate (rwlock->__readerqueue, wakeup)
-	n++;
+      __pthread_queue_iterate (rwlock->__readerqueue, wakeup) n++;
 
       {
 	struct __pthread *wakeups[n];
 	unsigned i = 0;
 
 	__pthread_dequeuing_iterate (rwlock->__readerqueue, wakeup)
-	  wakeups[i++] = wakeup;
+	    wakeups[i++]
+	    = wakeup;
 
 	rwlock->__readers += n;
 	rwlock->__readerqueue = 0;
@@ -87,7 +86,6 @@ __pthread_rwlock_unlock (pthread_rwlock_t *rwlock)
 
       return 0;
     }
-
 
   /* No one is waiting.  Just unlock it.  */
 

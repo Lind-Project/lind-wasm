@@ -63,10 +63,10 @@ __getitimer (enum __itimer_which which, struct itimerval *value)
 
   /* Get the time now.  */
   {
-     time_value_t tv;
-     __host_get_time (__mach_host_self (), &tv);
-     elapsed.tv_sec = tv.seconds;
-     elapsed.tv_usec = tv.microseconds;
+    time_value_t tv;
+    __host_get_time (__mach_host_self (), &tv);
+    elapsed.tv_sec = tv.seconds;
+    elapsed.tv_usec = tv.microseconds;
   }
 
   /* Extract the current timer setting; and the time it was set, so we can

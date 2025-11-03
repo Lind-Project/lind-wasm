@@ -1,7 +1,6 @@
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 swprintf (wchar_t *s, size_t n, const wchar_t *fmt, ...)
 {
   va_list arg;

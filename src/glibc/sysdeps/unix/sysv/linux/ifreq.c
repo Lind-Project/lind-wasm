@@ -17,7 +17,6 @@
 
 #include "ifreq.h"
 
-
 void
 __ifreq (struct ifreq **ifreqs, int *num_ifs, int sockfd)
 {
@@ -25,7 +24,7 @@ __ifreq (struct ifreq **ifreqs, int *num_ifs, int sockfd)
   struct ifconf ifc;
   int rq_len;
   int nifs;
-# define RQ_IFS	4
+#define RQ_IFS 4
 
   if (fd < 0)
     fd = __opensock ();

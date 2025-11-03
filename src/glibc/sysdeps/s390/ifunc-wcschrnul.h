@@ -16,38 +16,38 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WCSCHRNUL_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WCSCHRNUL_IFUNC 1
 #else
-# define HAVE_WCSCHRNUL_IFUNC	0
+#  define HAVE_WCSCHRNUL_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WCSCHRNUL_IFUNC_AND_VX_SUPPORT HAVE_WCSCHRNUL_IFUNC
+#  define HAVE_WCSCHRNUL_IFUNC_AND_VX_SUPPORT HAVE_WCSCHRNUL_IFUNC
 #else
-# define HAVE_WCSCHRNUL_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WCSCHRNUL_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WCSCHRNUL_DEFAULT	WCSCHRNUL_Z13
+#  define WCSCHRNUL_DEFAULT WCSCHRNUL_Z13
 /* The z13 ifunc variant is using the common code variant as fallback!  */
-# define HAVE_WCSCHRNUL_C	1
-# define HAVE_WCSCHRNUL_Z13	1
+#  define HAVE_WCSCHRNUL_C 1
+#  define HAVE_WCSCHRNUL_Z13 1
 #else
-# define WCSCHRNUL_DEFAULT	WCSCHRNUL_C
-# define HAVE_WCSCHRNUL_C	1
-# define HAVE_WCSCHRNUL_Z13	HAVE_WCSCHRNUL_IFUNC_AND_VX_SUPPORT
+#  define WCSCHRNUL_DEFAULT WCSCHRNUL_C
+#  define HAVE_WCSCHRNUL_C 1
+#  define HAVE_WCSCHRNUL_Z13 HAVE_WCSCHRNUL_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WCSCHRNUL_C
-# define WCSCHRNUL_C		__wcschrnul_c
+#  define WCSCHRNUL_C __wcschrnul_c
 #else
-# define WCSCHRNUL_C		NULL
+#  define WCSCHRNUL_C NULL
 #endif
 
 #if HAVE_WCSCHRNUL_Z13
-# define WCSCHRNUL_Z13		__wcschrnul_vx
+#  define WCSCHRNUL_Z13 __wcschrnul_vx
 #else
-# define WCSCHRNUL_Z13		NULL
+#  define WCSCHRNUL_Z13 NULL
 #endif

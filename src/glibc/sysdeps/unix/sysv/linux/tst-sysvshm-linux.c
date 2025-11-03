@@ -79,7 +79,6 @@ read_proc_file (const char *file)
   return v;
 }
 
-
 /* Check if the message queue with IDX (index into the kernel's internal
    array) matches the one with KEY.  The CMD is either SHM_STAT or
    SHM_STAT_ANY.  */
@@ -125,12 +124,12 @@ do_test (void)
   /* It does not check shmmax because kernel clamp its value to INT_MAX for:
 
      1. Compat symbols with IPC_64, i.e, 32-bit binaries running on 64-bit
-        kernels.
+	kernels.
 
      2. Default symbol without IPC_64 (defined as IPC_OLD within Linux) and
-        glibc always use IPC_64 for 32-bit ABIs (to support 64-bit time_t).
-        It means that 32-bit binaries running on 32-bit kernels will not see
-        shmmax being clamped.
+	glibc always use IPC_64 for 32-bit ABIs (to support 64-bit time_t).
+	It means that 32-bit binaries running on 32-bit kernels will not see
+	shmmax being clamped.
 
      And finding out whether the compat symbol is used would require checking
      the underlying kernel against the current ABI.  The shmall and shmmni

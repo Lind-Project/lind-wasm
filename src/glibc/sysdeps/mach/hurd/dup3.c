@@ -33,12 +33,10 @@ __dup3 (int fd, int fd2, int flags)
 
   /* Both passing flags different from O_CLOEXEC and FD2 being the same as FD
      are invalid.  */
-  if ((flags & ~O_CLOEXEC
-       || fd2 == fd)
+  if ((flags & ~O_CLOEXEC || fd2 == fd)
       /* ... with the exception in case that dup2 behavior is requested: if FD
 	 is valid and FD2 is already the same then just return it.  */
-      && ! (flags == -1
-	    && fd2 == fd))
+      && !(flags == -1 && fd2 == fd))
     return __hurd_fail (EINVAL);
 
   /* Extract the ports and flags from FD.  */
@@ -93,8 +91,8 @@ __dup3 (int fd, int fd2, int flags)
 		     memory), we will not have already added user
 		     references for the ports, which we would then have to
 		     deallocate.  */
-		  d2 = _hurd_dtable[fd2] = _hurd_new_fd (MACH_PORT_NULL,
-							 MACH_PORT_NULL);
+		  d2 = _hurd_dtable[fd2]
+		      = _hurd_new_fd (MACH_PORT_NULL, MACH_PORT_NULL);
 		}
 	    }
 	  __mutex_unlock (&_hurd_dtable_lock);
@@ -103,7 +101,7 @@ __dup3 (int fd, int fd2, int flags)
 	    {
 	      fd2 = -1;
 	      if (errno == EINVAL)
-		__hurd_fail (EBADF);	/* POSIX.1-1990 6.2.1.2 ll 54-55.  */
+		__hurd_fail (EBADF); /* POSIX.1-1990 6.2.1.2 ll 54-55.  */
 	    }
 	  else
 	    {
@@ -135,5 +133,4 @@ __dup3 (int fd, int fd2, int flags)
 
   return fd2;
 }
-libc_hidden_def (__dup3)
-weak_alias (__dup3, dup3)
+libc_hidden_def (__dup3) weak_alias (__dup3, dup3)

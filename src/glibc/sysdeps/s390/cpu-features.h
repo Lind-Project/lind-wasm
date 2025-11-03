@@ -16,23 +16,24 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef __CPU_FEATURES_S390X_H
-# define __CPU_FEATURES_S390X_H
+#define __CPU_FEATURES_S390X_H
 
-#define S390_STFLE_BITS_Z10  34 /* General instructions extension */
+#define S390_STFLE_BITS_Z10 34	/* General instructions extension */
 #define S390_STFLE_BITS_Z196 45 /* Distinct operands, pop ... */
-#define S390_STFLE_BITS_ARCH13_MIE3 61 /* Miscellaneous-Instruction-Extensions
-					  Facility 3, e.g. mvcrl.  */
+#define S390_STFLE_BITS_ARCH13_MIE3                                           \
+  61 /* Miscellaneous-Instruction-Extensions                                  \
+	Facility 3, e.g. mvcrl.  */
 
-#define S390_STFLE_MASK_ARCH13_MIE3 (1ULL << (63 - S390_STFLE_BITS_ARCH13_MIE3))
+#define S390_STFLE_MASK_ARCH13_MIE3                                           \
+  (1ULL << (63 - S390_STFLE_BITS_ARCH13_MIE3))
 
-
-#define S390_IS_ARCH13_MIE3(STFLE_BITS_ARRAY)			\
+#define S390_IS_ARCH13_MIE3(STFLE_BITS_ARRAY)                                 \
   (((STFLE_BITS_ARRAY)[0] & S390_STFLE_MASK_ARCH13_MIE3) != 0)
 
-#define S390_IS_Z196(STFLE_BITS_ARRAY)			\
+#define S390_IS_Z196(STFLE_BITS_ARRAY)                                        \
   (((STFLE_BITS_ARRAY)[0] & (1ULL << (63 - S390_STFLE_BITS_Z196))) != 0)
 
-#define S390_IS_Z10(STFLE_BITS_ARRAY)				\
+#define S390_IS_Z10(STFLE_BITS_ARRAY)                                         \
   (((STFLE_BITS_ARRAY)[0] & (1ULL << (63 - S390_STFLE_BITS_Z10))) != 0)
 
 struct cpu_features

@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define wcsrchr __redirect_wcsrchr
-# include <wchar.h>
-# undef wcsrchr
+#if IS_IN(libc)
+#  define wcsrchr __redirect_wcsrchr
+#  include <wchar.h>
+#  undef wcsrchr
 
-# define SYMBOL_NAME wcsrchr
-# include "ifunc-avx2.h"
+#  define SYMBOL_NAME wcsrchr
+#  include "ifunc-avx2.h"
 
 libc_ifunc_redirected (__redirect_wcsrchr, wcsrchr, IFUNC_SELECTOR ());
 #endif

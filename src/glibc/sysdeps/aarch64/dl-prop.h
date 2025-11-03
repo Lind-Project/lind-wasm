@@ -21,8 +21,7 @@
 
 extern void _dl_bti_protect (struct link_map *, int) attribute_hidden;
 
-extern void _dl_bti_check (struct link_map *, const char *)
-    attribute_hidden;
+extern void _dl_bti_check (struct link_map *, const char *) attribute_hidden;
 
 static inline void __attribute__ ((always_inline))
 _rtld_main_check (struct link_map *m, const char *program)
@@ -37,7 +36,7 @@ _dl_open_check (struct link_map *m)
 }
 
 static inline void __attribute__ ((always_inline))
-_dl_process_pt_note (struct link_map *l, int fd, const ElfW(Phdr) *ph)
+_dl_process_pt_note (struct link_map *l, int fd, const ElfW (Phdr) * ph)
 {
 }
 
@@ -45,7 +44,7 @@ static inline int
 _dl_process_gnu_property (struct link_map *l, int fd, uint32_t type,
 			  uint32_t datasz, void *data)
 {
-  if (!GLRO(dl_aarch64_cpu_features).bti)
+  if (!GLRO (dl_aarch64_cpu_features).bti)
     /* Skip note processing.  */
     return 0;
 

@@ -17,15 +17,15 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ABORT_INSTR_H
-#define _ABORT_INSTR_H  1
+#  define _ABORT_INSTR_H 1
 
 /* If the compiler provides the generic way to generate the right
    instruction, we can use that without any machine-specific knowledge.  */
-#if HAVE_BUILTIN_TRAP
-# define ABORT_INSTRUCTION      __builtin_trap ()
-#else
+#  if HAVE_BUILTIN_TRAP
+#    define ABORT_INSTRUCTION __builtin_trap ()
+#  else
 /* We cannot give any generic instruction to crash the program.
    abort will have to make sure it never returns.  */
-#endif
+#  endif
 
-#endif  /* abort-instr.h */
+#endif /* abort-instr.h */

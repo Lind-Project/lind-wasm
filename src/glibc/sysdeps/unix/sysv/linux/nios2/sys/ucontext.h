@@ -19,43 +19,42 @@
 /* System V/Nios II ABI compliant context switching support.  */
 
 #ifndef _SYS_UCONTEXT_H
-#define _SYS_UCONTEXT_H	1
+#  define _SYS_UCONTEXT_H 1
 
-#include <features.h>
+#  include <features.h>
 
-#include <bits/types/sigset_t.h>
-#include <bits/types/stack_t.h>
-
+#  include <bits/types/sigset_t.h>
+#  include <bits/types/stack_t.h>
 
 /* These definitions must be in sync with the kernel.  */
 
-#ifdef __USE_MISC
-# define MCONTEXT_VERSION 2
-#endif
+#  ifdef __USE_MISC
+#    define MCONTEXT_VERSION 2
+#  endif
 
-#ifdef __USE_MISC
-# define __ctx(fld) fld
-#else
-# define __ctx(fld) __ ## fld
-#endif
+#  ifdef __USE_MISC
+#    define __ctx(fld) fld
+#  else
+#    define __ctx(fld) __##fld
+#  endif
 
 /* Context to describe whole processor state.  */
 typedef struct
-  {
-    int __ctx(version);
-    unsigned long __ctx(regs)[32];
-  } mcontext_t;
+{
+  int __ctx (version);
+  unsigned long __ctx (regs)[32];
+} mcontext_t;
 
 /* Userlevel context.  */
 typedef struct ucontext_t
-  {
-    unsigned long __ctx(uc_flags);
-    struct ucontext_t *uc_link;
-    stack_t uc_stack;
-    mcontext_t uc_mcontext;
-    sigset_t uc_sigmask;
-  } ucontext_t;
+{
+  unsigned long __ctx (uc_flags);
+  struct ucontext_t *uc_link;
+  stack_t uc_stack;
+  mcontext_t uc_mcontext;
+  sigset_t uc_sigmask;
+} ucontext_t;
 
-#undef __ctx
+#  undef __ctx
 
 #endif /* sys/ucontext.h */

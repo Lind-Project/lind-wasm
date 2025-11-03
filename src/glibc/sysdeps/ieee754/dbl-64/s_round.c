@@ -24,7 +24,6 @@
 #include <stdint.h>
 #include <math-use-builtins.h>
 
-
 double
 __round (double x)
 {

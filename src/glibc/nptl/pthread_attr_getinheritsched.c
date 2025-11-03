@@ -17,7 +17,6 @@
 
 #include "pthreadP.h"
 
-
 int
 __pthread_attr_getinheritsched (const pthread_attr_t *attr, int *inherit)
 {
@@ -26,8 +25,9 @@ __pthread_attr_getinheritsched (const pthread_attr_t *attr, int *inherit)
   iattr = (struct pthread_attr *) attr;
 
   /* Store the current values.  */
-  *inherit = (iattr->flags & ATTR_FLAG_NOTINHERITSCHED
-	      ? PTHREAD_EXPLICIT_SCHED : PTHREAD_INHERIT_SCHED);
+  *inherit
+      = (iattr->flags & ATTR_FLAG_NOTINHERITSCHED ? PTHREAD_EXPLICIT_SCHED
+						  : PTHREAD_INHERIT_SCHED);
 
   return 0;
 }

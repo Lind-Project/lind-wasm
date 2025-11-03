@@ -39,13 +39,13 @@ __feupdateenv (const fenv_t *envp)
       fpsr_new = envp->__fpsr | excepts;
 
       if (fpcr != fpcr_new)
-        _FPU_SETCW (fpcr_new);
+	_FPU_SETCW (fpcr_new);
 
       if (fpsr != fpsr_new)
-        _FPU_SETFPSR (fpsr_new);
+	_FPU_SETFPSR (fpsr_new);
 
       if (excepts & (fpcr_new >> FE_EXCEPT_SHIFT))
-        return __feraiseexcept (excepts);
+	return __feraiseexcept (excepts);
 
       return 0;
     }
@@ -76,7 +76,7 @@ __feupdateenv (const fenv_t *envp)
       _FPU_GETCW (updated_fpcr);
 
       if (fpcr_new & ~updated_fpcr)
-        return 1;
+	return 1;
     }
 
   if (excepts & (fpcr_new >> FE_EXCEPT_SHIFT))
@@ -84,6 +84,5 @@ __feupdateenv (const fenv_t *envp)
 
   return 0;
 }
-libm_hidden_def (__feupdateenv)
-weak_alias (__feupdateenv, feupdateenv)
-libm_hidden_weak (feupdateenv)
+libm_hidden_def (__feupdateenv) weak_alias (__feupdateenv, feupdateenv)
+    libm_hidden_weak (feupdateenv)

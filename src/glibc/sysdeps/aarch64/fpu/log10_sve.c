@@ -36,7 +36,8 @@ special_case (svfloat64_t x, svfloat64_t y, svbool_t special)
    Maximum measured error is 2.46 ulps.
    SV_NAME_D1 (log10)(0x1.131956cd4b627p+0) got 0x1.fffbdf6eaa669p-6
 					   want 0x1.fffbdf6eaa667p-6.  */
-svfloat64_t SV_NAME_D1 (log10) (svfloat64_t x, const svbool_t pg)
+svfloat64_t
+SV_NAME_D1 (log10) (svfloat64_t x, const svbool_t pg)
 {
   svuint64_t ix = svreinterpret_u64 (x);
   svbool_t special = svcmpge (pg, svsub_x (pg, ix, Min), Thres);

@@ -26,21 +26,21 @@
 
 #ifndef WANT_ROUNDING
 /* Correct special case results in non-nearest rounding modes.  */
-# define WANT_ROUNDING 1
+#  define WANT_ROUNDING 1
 #endif
 #ifndef WANT_ERRNO
 /* Set errno according to ISO C with (math_errhandling & MATH_ERRNO) != 0.  */
-# define WANT_ERRNO 1
+#  define WANT_ERRNO 1
 #endif
 #ifndef WANT_ERRNO_UFLOW
 /* Set errno to ERANGE if result underflows to 0 (in all rounding modes).  */
-# define WANT_ERRNO_UFLOW (WANT_ROUNDING && WANT_ERRNO)
+#  define WANT_ERRNO_UFLOW (WANT_ROUNDING && WANT_ERRNO)
 #endif
 
 #ifndef TOINT_INTRINSICS
 /* When set, the roundtoint and converttoint functions are provided with
    the semantics documented below.  */
-# define TOINT_INTRINSICS 0
+#  define TOINT_INTRINSICS 0
 #endif
 
 static inline int
@@ -65,14 +65,12 @@ ctz_uint64 (uint64_t x)
 /* Round x to nearest int in all rounding modes, ties have to be rounded
    consistently with converttoint so the results match.  If the result
    would be outside of [-2^31, 2^31-1] then the semantics is unspecified.  */
-static inline double_t
-roundtoint (double_t x);
+static inline double_t roundtoint (double_t x);
 
 /* Convert x to nearest int in all rounding modes, ties have to be rounded
    consistently with roundtoint.  If the result is not representible in an
    int32_t then the semantics is unspecified.  */
-static inline int32_t
-converttoint (double_t x);
+static inline int32_t converttoint (double_t x);
 #endif
 
 static inline uint64_t
@@ -82,7 +80,7 @@ asuint64 (double f)
   {
     double f;
     uint64_t i;
-  } u = {f};
+  } u = { f };
   return u.i;
 }
 
@@ -93,7 +91,7 @@ asdouble (uint64_t i)
   {
     uint64_t i;
     double f;
-  } u = {i};
+  } u = { i };
   return u.f;
 }
 
@@ -106,14 +104,14 @@ issignaling_inline (double x)
   return 2 * (ix ^ 0x0008000000000000) > 2 * 0x7ff8000000000000ULL;
 }
 
-#define BIT_WIDTH       64
-#define MANTISSA_WIDTH  52
-#define EXPONENT_WIDTH  11
-#define MANTISSA_MASK   UINT64_C(0x000fffffffffffff)
-#define EXPONENT_MASK   UINT64_C(0x7ff0000000000000)
-#define EXP_MANT_MASK   UINT64_C(0x7fffffffffffffff)
-#define QUIET_NAN_MASK  UINT64_C(0x0008000000000000)
-#define SIGN_MASK	UINT64_C(0x8000000000000000)
+#define BIT_WIDTH 64
+#define MANTISSA_WIDTH 52
+#define EXPONENT_WIDTH 11
+#define MANTISSA_MASK UINT64_C (0x000fffffffffffff)
+#define EXPONENT_MASK UINT64_C (0x7ff0000000000000)
+#define EXP_MANT_MASK UINT64_C (0x7fffffffffffffff)
+#define QUIET_NAN_MASK UINT64_C (0x0008000000000000)
+#define SIGN_MASK UINT64_C (0x8000000000000000)
 
 static inline bool
 is_nan (uint64_t x)
@@ -205,7 +203,7 @@ extern const struct exp_data
   double neglog10_2hiN;
   double neglog10_2loN;
   double exp10_poly[5];
-  uint64_t tab[2*(1 << EXP_TABLE_BITS)];
+  uint64_t tab[2 * (1 << EXP_TABLE_BITS)];
 } __exp_data attribute_hidden;
 
 #define LOG_TABLE_BITS 7
@@ -218,9 +216,15 @@ extern const struct log_data
   double poly[LOG_POLY_ORDER - 1]; /* First coefficient is 1.  */
   double poly1[LOG_POLY1_ORDER - 1];
   /* See e_log_data.c for details.  */
-  struct {double invc, logc;} tab[1 << LOG_TABLE_BITS];
+  struct
+  {
+    double invc, logc;
+  } tab[1 << LOG_TABLE_BITS];
 #ifndef __FP_FAST_FMA
-  struct {double chi, clo;} tab2[1 << LOG_TABLE_BITS];
+  struct
+  {
+    double chi, clo;
+  } tab2[1 << LOG_TABLE_BITS];
 #endif
 } __log_data attribute_hidden;
 
@@ -234,9 +238,15 @@ extern const struct log2_data
   double poly[LOG2_POLY_ORDER - 1];
   double poly1[LOG2_POLY1_ORDER - 1];
   /* See e_log2_data.c for details.  */
-  struct {double invc, logc;} tab[1 << LOG2_TABLE_BITS];
+  struct
+  {
+    double invc, logc;
+  } tab[1 << LOG2_TABLE_BITS];
 #ifndef __FP_FAST_FMA
-  struct {double chi, clo;} tab2[1 << LOG2_TABLE_BITS];
+  struct
+  {
+    double chi, clo;
+  } tab2[1 << LOG2_TABLE_BITS];
 #endif
 } __log2_data attribute_hidden;
 
@@ -249,7 +259,10 @@ extern const struct pow_log_data
   double poly[POW_LOG_POLY_ORDER - 1]; /* First coefficient is 1.  */
   /* Note: the pad field is unused, but allows slightly faster indexing.  */
   /* See e_pow_log_data.c for details.  */
-  struct {double invc, pad, logc, logctail;} tab[1 << POW_LOG_TABLE_BITS];
+  struct
+  {
+    double invc, pad, logc, logctail;
+  } tab[1 << POW_LOG_TABLE_BITS];
 } __pow_log_data attribute_hidden;
 
 #endif

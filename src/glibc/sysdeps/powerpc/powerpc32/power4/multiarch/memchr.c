@@ -16,14 +16,14 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# undef memchr
+#if IS_IN(libc)
+#  undef memchr
 /* Redefine memchr so that the compiler won't make the weak_alias point
    to internal hidden definition (__GI_memchr), since PPC32 does not
    support local IFUNC calls.  */
-# define memchr __redirect_memchr
-# include <string.h>
-# include "init-arch.h"
+#  define memchr __redirect_memchr
+#  include <string.h>
+#  include "init-arch.h"
 
 extern __typeof (__redirect_memchr) __memchr_ppc attribute_hidden;
 extern __typeof (__redirect_memchr) __memchr_power7 attribute_hidden;
@@ -31,11 +31,9 @@ extern __typeof (__redirect_memchr) __memchr_power7 attribute_hidden;
 extern __typeof (__redirect_memchr) __libc_memchr;
 
 libc_ifunc (__libc_memchr,
-	    (hwcap & PPC_FEATURE_HAS_VSX)
-            ? __memchr_power7
-            : __memchr_ppc);
-#undef memchr
+	    (hwcap & PPC_FEATURE_HAS_VSX) ? __memchr_power7 : __memchr_ppc);
+#  undef memchr
 weak_alias (__libc_memchr, memchr)
 #else
-#include <string/memchr.c>
+#  include <string/memchr.c>
 #endif

@@ -29,8 +29,8 @@ __xstat_conv (int vers, struct kernel_stat *kbuf, void *ubuf)
     {
     case _STAT_VER_KERNEL:
       /* Nothing to do.  The struct is in the form the kernel expects.
-         We should have short-circuted before we got here, but for
-         completeness... */
+	 We should have short-circuted before we got here, but for
+	 completeness... */
       *(struct kernel_stat *) ubuf = *kbuf;
       break;
 
@@ -87,7 +87,7 @@ __xstat32_conv (int vers, struct stat64 *sbuf, struct stat *buf)
     case _STAT_VER_LINUX:
       {
 	/* Convert current kernel version of `struct stat64' to
-           `struct stat'.  */
+	   `struct stat'.  */
 	buf->st_dev = kbuf->st_dev;
 	buf->__pad1 = 0;
 	buf->st_ino = kbuf->st_ino;

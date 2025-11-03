@@ -33,7 +33,7 @@ retry:
   __mutex_lock (&_hurd_id.lock);
 
   err = _hurd_check_ids ();
-  if (! err)
+  if (!err)
     {
       size_t i;
       for (i = 0; i < _hurd_id.gen.ngids; ++i)

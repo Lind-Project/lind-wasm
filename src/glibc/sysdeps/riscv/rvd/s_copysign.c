@@ -23,7 +23,7 @@
 double
 __copysign (double x, double y)
 {
-  asm ("fsgnj.d %0, %1, %2" : "=f" (x) : "f" (x), "f" (y));
+  asm ("fsgnj.d %0, %1, %2" : "=f"(x) : "f"(x), "f"(y));
   return x;
 }
 libm_alias_double (__copysign, copysign)

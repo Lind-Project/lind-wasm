@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FLOAT128_IFUNC_REDIRECTS_MP_H
-#define _FLOAT128_IFUNC_REDIRECTS_MP_H 1
+#  define _FLOAT128_IFUNC_REDIRECTS_MP_H 1
 
-#include <float128-ifunc-redirect-macros.h>
+#  include <float128-ifunc-redirect-macros.h>
 
 F128_REDIR (__ieee754_acosf128)
 F128_REDIR (__ieee754_acoshf128)

@@ -72,12 +72,11 @@ __llround (double x)
     }
 
   long int ret;
-  __asm__ ("fctidz %0, %1" : "=d" (ret) : "d" (x));
+  __asm__ ("fctidz %0, %1" : "=d"(ret) : "d"(x));
   return ret;
 #endif
 }
 #ifndef __llround
-strong_alias (__llround, __lround)
-libm_alias_double (__llround, llround)
-libm_alias_double (__lround, lround)
+strong_alias (__llround, __lround) libm_alias_double (__llround, llround)
+    libm_alias_double (__lround, lround)
 #endif

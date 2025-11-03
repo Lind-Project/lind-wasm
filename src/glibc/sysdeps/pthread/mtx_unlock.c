@@ -27,9 +27,9 @@ __mtx_unlock (mtx_t *mutex)
 }
 #if PTHREAD_IN_LIBC
 versioned_symbol (libc, __mtx_unlock, mtx_unlock, GLIBC_2_34);
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_28, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_28, GLIBC_2_34)
 compat_symbol (libpthread, __mtx_unlock, mtx_unlock, GLIBC_2_28);
-# endif
+#  endif
 #else /* !PTHREAD_IN_LIBC */
 strong_alias (__mtx_unlock, mtx_unlock)
 #endif

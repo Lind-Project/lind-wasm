@@ -21,14 +21,13 @@
 #include <ldsodefs.h>
 #include <dl-procinfo.h>
 
-
 int
 __fegetexceptflag (fexcept_t *flagp, int excepts)
 {
   fexcept_t temp;
 
   /* Get the current exceptions.  */
-  __asm__ ("fnstsw %0" : "=m" (*&temp));
+  __asm__ ("fnstsw %0" : "=m"(*&temp));
 
   *flagp = temp & excepts & FE_ALL_EXCEPT;
 
@@ -38,7 +37,7 @@ __fegetexceptflag (fexcept_t *flagp, int excepts)
       unsigned int sse_exc;
 
       /* Get the current MXCSR.  */
-      __asm__ ("stmxcsr %0" : "=m" (*&sse_exc));
+      __asm__ ("stmxcsr %0" : "=m"(*&sse_exc));
 
       *flagp |= sse_exc & excepts & FE_ALL_EXCEPT;
     }
@@ -48,9 +47,9 @@ __fegetexceptflag (fexcept_t *flagp, int excepts)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__fegetexceptflag, __old_fegetexceptflag)
-compat_symbol (libm, __old_fegetexceptflag, fegetexceptflag, GLIBC_2_1);
+    compat_symbol (libm, __old_fegetexceptflag, fegetexceptflag, GLIBC_2_1);
 #endif
 
 versioned_symbol (libm, __fegetexceptflag, fegetexceptflag, GLIBC_2_2);

@@ -36,17 +36,16 @@ __sendfile64 (int out_fd, int in_fd, off64_t *offset, size_t count)
 
   char *data = 0;
   mach_msg_type_number_t datalen = 0;
-  error_t err = HURD_DPORT_USE (in_fd,
-				__io_read (port, &data, &datalen,
-					   offset ? *offset : (off_t) -1,
-					   count));
+  error_t err = HURD_DPORT_USE (
+      in_fd,
+      __io_read (port, &data, &datalen, offset ? *offset : (off_t) -1, count));
   if (err == 0)
     {
       vm_size_t nwrote;
       if (datalen == 0)
 	return 0;
-      err = HURD_DPORT_USE (out_fd, __io_write (port, data, datalen,
-						(off_t) -1, &nwrote));
+      err = HURD_DPORT_USE (
+	  out_fd, __io_write (port, data, datalen, (off_t) -1, &nwrote));
       __munmap (data, datalen);
       if (err == 0)
 	{

@@ -19,11 +19,11 @@
 #include <ifunc-memccpy.h>
 
 #if HAVE_MEMCCPY_C
-# if HAVE_MEMCCPY_IFUNC
-#  define MEMCCPY MEMCCPY_C
-#  undef weak_alias
-#  define weak_alias(a, b)
-#endif
+#  if HAVE_MEMCCPY_IFUNC
+#    define MEMCCPY MEMCCPY_C
+#    undef weak_alias
+#    define weak_alias(a, b)
+#  endif
 
-# include <string/memccpy.c>
+#  include <string/memccpy.c>
 #endif

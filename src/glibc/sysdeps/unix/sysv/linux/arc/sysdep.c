@@ -28,6 +28,6 @@ __syscall_error (long int err_no)
   return -1;
 }
 
-#if IS_IN (libc)
+#if IS_IN(libc)
 hidden_def (__syscall_error)
 #endif

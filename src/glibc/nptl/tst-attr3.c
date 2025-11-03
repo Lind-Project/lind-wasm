@@ -71,8 +71,8 @@ tf (void *arg)
 	}
       else if (detachstate1 != detachstate2)
 	{
-	  error (0, 0, "detachstate differs %d != %d",
-		 detachstate1, detachstate2);
+	  error (0, 0, "detachstate differs %d != %d", detachstate1,
+		 detachstate2);
 	  result = tf;
 	}
     }
@@ -85,10 +85,11 @@ tf (void *arg)
       error (0, err, "pthread_attr_getstack failed");
       result = tf;
     }
-  else if ((void *) &a < stackaddr
-	   || (void *) &a >= stackaddr + stacksize)
+  else if ((void *) &a < stackaddr || (void *) &a >= stackaddr + stacksize)
     {
-      error (0, 0, "pthread_attr_getstack returned range does not cover thread's stack");
+      error (0, 0,
+	     "pthread_attr_getstack returned range does not cover thread's "
+	     "stack");
       result = tf;
     }
   else
@@ -112,8 +113,7 @@ tf (void *arg)
 	}
       else if (guardsize1 != guardsize2)
 	{
-	  error (0, 0, "guardsize differs %zd != %zd",
-		 guardsize1, guardsize2);
+	  error (0, 0, "guardsize differs %zd != %zd", guardsize1, guardsize2);
 	  result = tf;
 	}
       else
@@ -137,8 +137,7 @@ tf (void *arg)
 	}
       else if (scope1 != scope2)
 	{
-	  error (0, 0, "scope differs %d != %d",
-		 scope1, scope2);
+	  error (0, 0, "scope differs %d != %d", scope1, scope2);
 	  result = tf;
 	}
     }
@@ -160,8 +159,8 @@ tf (void *arg)
 	}
       else if (inheritsched1 != inheritsched2)
 	{
-	  error (0, 0, "inheritsched differs %d != %d",
-		 inheritsched1, inheritsched2);
+	  error (0, 0, "inheritsched differs %d != %d", inheritsched1,
+		 inheritsched2);
 	  result = tf;
 	}
     }
@@ -178,7 +177,9 @@ tf (void *arg)
 	}
       else if (memcmp (&c1, &c2, sizeof (c1)))
 	{
-	  error (0, 0, "pthread_attr_getaffinity_np returned different CPU mask than pthread_getattr_np");
+	  error (0, 0,
+		 "pthread_attr_getaffinity_np returned different CPU mask "
+		 "than pthread_getattr_np");
 	  result = tf;
 	}
     }
@@ -202,7 +203,6 @@ tf (void *arg)
 
   return result;
 }
-
 
 static int
 do_test (void)
@@ -260,10 +260,11 @@ do_test (void)
       error (0, err, "pthread_attr_getstack failed");
       result = 1;
     }
-  else if ((void *) &a < stackaddr
-	   || (void *) &a >= stackaddr + stacksize)
+  else if ((void *) &a < stackaddr || (void *) &a >= stackaddr + stacksize)
     {
-      error (0, 0, "pthread_attr_getstack returned range does not cover main's stack");
+      error (
+	  0, 0,
+	  "pthread_attr_getstack returned range does not cover main's stack");
       result = 1;
     }
   else
@@ -279,8 +280,7 @@ do_test (void)
     }
   else if (guardsize != 0)
     {
-      error (0, 0, "pthread_attr_getguardsize returned %zd != 0",
-	     guardsize);
+      error (0, 0, "pthread_attr_getguardsize returned %zd != 0", guardsize);
       result = 1;
     }
 
@@ -307,8 +307,10 @@ do_test (void)
     }
   else if (inheritsched != PTHREAD_INHERIT_SCHED)
     {
-      error (0, 0, "pthread_attr_getinheritsched returned %d != PTHREAD_INHERIT_SCHED",
-	     inheritsched);
+      error (
+	  0, 0,
+	  "pthread_attr_getinheritsched returned %d != PTHREAD_INHERIT_SCHED",
+	  inheritsched);
       result = 1;
     }
 
@@ -323,7 +325,9 @@ do_test (void)
 	}
       else if (memcmp (&c1, &c2, sizeof (c1)))
 	{
-	  error (0, 0, "pthread_attr_getaffinity_np returned different CPU mask than pthread_getattr_np");
+	  error (0, 0,
+		 "pthread_attr_getaffinity_np returned different CPU mask "
+		 "than pthread_getattr_np");
 	  result = 1;
 	}
     }
@@ -363,7 +367,7 @@ do_test (void)
     }
 
   DIAG_PUSH_NEEDS_COMMENT;
-#if __GNUC_PREREQ (7, 0)
+#if __GNUC_PREREQ(7, 0)
   /* GCC 8 warns about aliasing of the restrict-qualified arguments
      passed &a.  Since pthread_create does not dereference its fourth
      argument, this aliasing, which is deliberate in this test, cannot
@@ -398,7 +402,7 @@ do_test (void)
     }
 
   DIAG_PUSH_NEEDS_COMMENT;
-#if __GNUC_PREREQ (7, 0)
+#if __GNUC_PREREQ(7, 0)
   /* GCC 8 warns about aliasing of the restrict-qualified arguments
      passed &a.  Since pthread_create does not dereference its fourth
      argument, this aliasing, which is deliberate in this test, cannot

@@ -21,12 +21,11 @@
 
 #include <elf/sotruss-lib.c>
 
-ElfW(Addr)
-la_m68k_gnu_pltenter (Elf32_Sym *sym __attribute__ ((unused)),
-		      unsigned int ndx __attribute__ ((unused)),
-		      uintptr_t *refcook, uintptr_t *defcook,
-		      La_m68k_regs *regs, unsigned int *flags,
-		      const char *symname, long int *framesizep)
+ElfW (Addr) la_m68k_gnu_pltenter (Elf32_Sym *sym __attribute__ ((unused)),
+				  unsigned int ndx __attribute__ ((unused)),
+				  uintptr_t *refcook, uintptr_t *defcook,
+				  La_m68k_regs *regs, unsigned int *flags,
+				  const char *symname, long int *framesizep)
 {
   unsigned long int *sp = (unsigned long int *) regs->lr_sp;
 
@@ -40,10 +39,8 @@ la_m68k_gnu_pltenter (Elf32_Sym *sym __attribute__ ((unused)),
 
 unsigned int
 la_m68k_gnu_pltexit (Elf32_Sym *sym, unsigned int ndx, uintptr_t *refcook,
-		     uintptr_t *defcook,
-		     const struct La_m68k_regs *inregs,
-		     struct La_m68k_retval *outregs,
-		     const char *symname)
+		     uintptr_t *defcook, const struct La_m68k_regs *inregs,
+		     struct La_m68k_retval *outregs, const char *symname)
 {
   print_exit (refcook, defcook, symname, outregs->lrv_d0);
 

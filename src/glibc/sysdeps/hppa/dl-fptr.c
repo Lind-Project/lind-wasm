@@ -34,44 +34,40 @@
 #ifndef ELF_MACHINE_BOOT_FPTR_TABLE_LEN
 /* ELF_MACHINE_BOOT_FPTR_TABLE_LEN should be greater than the number of
    dynamic symbols in ld.so.  */
-# define ELF_MACHINE_BOOT_FPTR_TABLE_LEN 256
+#  define ELF_MACHINE_BOOT_FPTR_TABLE_LEN 256
 #endif
 
 #ifndef ELF_MACHINE_LOAD_ADDRESS
-# error "ELF_MACHINE_LOAD_ADDRESS is not defined."
+#  error "ELF_MACHINE_LOAD_ADDRESS is not defined."
 #endif
 
 #ifndef COMPARE_AND_SWAP
-# define COMPARE_AND_SWAP(ptr, old, new) \
-  (catomic_compare_and_exchange_bool_acq (ptr, new, old) == 0)
+#  define COMPARE_AND_SWAP(ptr, old, new)                                     \
+    (catomic_compare_and_exchange_bool_acq (ptr, new, old) == 0)
 #endif
 
-ElfW(Addr) _dl_boot_fptr_table [ELF_MACHINE_BOOT_FPTR_TABLE_LEN];
+ElfW (Addr) _dl_boot_fptr_table[ELF_MACHINE_BOOT_FPTR_TABLE_LEN];
 
 static struct local
-  {
-    struct fdesc_table *root;
-    struct fdesc *free_list;
-    unsigned int npages;		/* # of pages to allocate */
-    /* the next to members MUST be consecutive! */
-    struct fdesc_table boot_table;
-    struct fdesc boot_fdescs[1024];
-  }
-local =
-  {
+{
+  struct fdesc_table *root;
+  struct fdesc *free_list;
+  unsigned int npages; /* # of pages to allocate */
+  /* the next to members MUST be consecutive! */
+  struct fdesc_table boot_table;
+  struct fdesc boot_fdescs[1024];
+} local = {
 #ifdef SHARED
-    /* Address of .boot_table is not known until runtime.  */
-    .root = 0,
+  /* Address of .boot_table is not known until runtime.  */
+  .root = 0,
 #else
-    .root = &local.boot_table,
+  .root = &local.boot_table,
 #endif
-    .npages = 2,
-    .boot_table =
-      {
-	.len = sizeof (local.boot_fdescs) / sizeof (local.boot_fdescs[0]),
-	.first_unused = 0
-      }
-  };
+  .npages = 2,
+  .boot_table
+  = { .len = sizeof (local.boot_fdescs) / sizeof (local.boot_fdescs[0]),
+      .first_unused = 0 }
+};
 
 /* Create a new fdesc table and return a pointer to the first fdesc
    entry.  The fdesc lock must have been acquired already.  */
@@ -85,18 +81,17 @@ new_fdesc_table (struct local *l, size_t *size)
 
   /* If someone has just created a new table, we return NULL to tell
      the caller to use the new table.  */
-  if (! COMPARE_AND_SWAP (&l->npages, old_npages, new_npages))
+  if (!COMPARE_AND_SWAP (&l->npages, old_npages, new_npages))
     return (struct fdesc_table *) NULL;
 
-  *size = old_npages * GLRO(dl_pagesize);
-  new_table = __mmap (NULL, *size,
-		      PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+  *size = old_npages * GLRO (dl_pagesize);
+  new_table = __mmap (NULL, *size, PROT_READ | PROT_WRITE,
+		      MAP_ANON | MAP_PRIVATE, -1, 0);
   if (new_table == MAP_FAILED)
     _dl_signal_error (errno, NULL, NULL,
-		      N_("cannot map pages for fdesc table"));
+		      N_ ("cannot map pages for fdesc table"));
 
-  new_table->len
-    = (*size - sizeof (*new_table)) / sizeof (struct fdesc);
+  new_table->len = (*size - sizeof (*new_table)) / sizeof (struct fdesc);
   new_table->first_unused = 1;
   return new_table;
 }
@@ -111,8 +106,7 @@ _dl_fptr_init (void)
   l->root = &l->boot_table;
 }
 
-static ElfW(Addr)
-make_fdesc (ElfW(Addr) ip, ElfW(Addr) gp)
+static ElfW (Addr) make_fdesc (ElfW (Addr) ip, ElfW (Addr) gp)
 {
   struct fdesc *fdesc = NULL;
   struct fdesc_table *root;
@@ -121,7 +115,7 @@ make_fdesc (ElfW(Addr) ip, ElfW(Addr) gp)
 
   ELF_MACHINE_LOAD_ADDRESS (l, local);
 
- retry:
+retry:
   root = l->root;
   while (1)
     {
@@ -144,8 +138,8 @@ make_fdesc (ElfW(Addr) ip, ElfW(Addr) gp)
 	  if (fdesc == NULL)
 	    goto retry;
 	}
-      while (! COMPARE_AND_SWAP ((ElfW(Addr) *) &l->free_list,
-				 (ElfW(Addr)) fdesc, fdesc->ip));
+      while (!COMPARE_AND_SWAP ((ElfW (Addr) *) &l->free_list,
+				(ElfW (Addr)) fdesc, fdesc->ip));
     }
   else
     {
@@ -157,9 +151,8 @@ make_fdesc (ElfW(Addr) ip, ElfW(Addr) gp)
 	goto retry;
 
       new_table->next = root;
-      if (! COMPARE_AND_SWAP ((ElfW(Addr) *) &l->root,
-			      (ElfW(Addr)) root,
-			      (ElfW(Addr)) new_table))
+      if (!COMPARE_AND_SWAP ((ElfW (Addr) *) &l->root, (ElfW (Addr)) root,
+			     (ElfW (Addr)) new_table))
 	{
 	  /* Someone has just installed a new table. Return NULL to
 	     tell the caller to use the new table.  */
@@ -172,49 +165,47 @@ make_fdesc (ElfW(Addr) ip, ElfW(Addr) gp)
       fdesc = &new_table->fdesc[0];
     }
 
- install:
+install:
   fdesc->gp = gp;
   fdesc->ip = ip;
 
-  return (ElfW(Addr)) fdesc;
+  return (ElfW (Addr)) fdesc;
 }
 
-
-static inline ElfW(Addr) * __attribute__ ((always_inline))
+static inline ElfW (Addr) *__attribute__ ((always_inline))
 make_fptr_table (struct link_map *map)
 {
-  const ElfW(Sym) *symtab = (const void *) D_PTR (map, l_info[DT_SYMTAB]);
+  const ElfW (Sym) *symtab = (const void *) D_PTR (map, l_info[DT_SYMTAB]);
   const char *strtab = (const void *) D_PTR (map, l_info[DT_STRTAB]);
-  ElfW(Addr) *fptr_table;
+  ElfW (Addr) * fptr_table;
   size_t size;
   size_t len;
-  const ElfW(Sym) *symtabend;
+  const ElfW (Sym) * symtabend;
 
   /* Determine the end of the dynamic symbol table using the hash.  */
   if (map->l_info[DT_HASH] != NULL)
     symtabend = (symtab + ((Elf_Symndx *) D_PTR (map, l_info[DT_HASH]))[1]);
   else
-  /* There is no direct way to determine the number of symbols in the
-     dynamic symbol table and no hash table is present.  The ELF
-     binary is ill-formed but what shall we do?  Use the beginning of
-     the string table which generally follows the symbol table.  */
-    symtabend = (const ElfW(Sym) *) strtab;
+    /* There is no direct way to determine the number of symbols in the
+       dynamic symbol table and no hash table is present.  The ELF
+       binary is ill-formed but what shall we do?  Use the beginning of
+       the string table which generally follows the symbol table.  */
+    symtabend = (const ElfW (Sym) *) strtab;
 
   len = (((char *) symtabend - (char *) symtab)
 	 / map->l_info[DT_SYMENT]->d_un.d_val);
-  size = ALIGN_UP (len * sizeof (fptr_table[0]), GLRO(dl_pagesize));
+  size = ALIGN_UP (len * sizeof (fptr_table[0]), GLRO (dl_pagesize));
 
   /* We don't support systems without MAP_ANON.  We avoid using malloc
      because this might get called before malloc is setup.  */
-  fptr_table = __mmap (NULL, size,
-		       PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE,
-		       -1, 0);
+  fptr_table = __mmap (NULL, size, PROT_READ | PROT_WRITE,
+		       MAP_ANON | MAP_PRIVATE, -1, 0);
   if (fptr_table == MAP_FAILED)
     _dl_signal_error (errno, NULL, NULL,
-		      N_("cannot map pages for fptr table"));
+		      N_ ("cannot map pages for fptr table"));
 
-  if (COMPARE_AND_SWAP ((ElfW(Addr) *) &map->l_mach.fptr_table,
-			(ElfW(Addr)) NULL, (ElfW(Addr)) fptr_table))
+  if (COMPARE_AND_SWAP ((ElfW (Addr) *) &map->l_mach.fptr_table,
+			(ElfW (Addr)) NULL, (ElfW (Addr)) fptr_table))
     map->l_mach.fptr_table_len = len;
   else
     __munmap (fptr_table, len * sizeof (fptr_table[0]));
@@ -222,13 +213,11 @@ make_fptr_table (struct link_map *map)
   return map->l_mach.fptr_table;
 }
 
-
-ElfW(Addr)
-_dl_make_fptr (struct link_map *map, const ElfW(Sym) *sym,
-	       ElfW(Addr) ip)
+ElfW (Addr) _dl_make_fptr (struct link_map *map, const ElfW (Sym) * sym,
+			   ElfW (Addr) ip)
 {
-  ElfW(Addr) *ftab = map->l_mach.fptr_table;
-  const ElfW(Sym) *symtab;
+  ElfW (Addr) *ftab = map->l_mach.fptr_table;
+  const ElfW (Sym) * symtab;
   Elf_Symndx symidx;
   struct local *l;
 
@@ -239,18 +228,18 @@ _dl_make_fptr (struct link_map *map, const ElfW(Sym) *sym,
   symidx = sym - symtab;
 
   if (symidx >= map->l_mach.fptr_table_len)
-    _dl_signal_error (0, NULL, NULL,
-		      N_("internal error: symidx out of range of fptr table"));
+    _dl_signal_error (
+	0, NULL, NULL,
+	N_ ("internal error: symidx out of range of fptr table"));
 
   while (ftab[symidx] == 0)
     {
       /* GOT has already been relocated in elf_get_dynamic_info -
 	 don't try to relocate it again.  */
-      ElfW(Addr) fdesc
-	= make_fdesc (ip, map->l_info[DT_PLTGOT]->d_un.d_ptr);
+      ElfW (Addr) fdesc = make_fdesc (ip, map->l_info[DT_PLTGOT]->d_un.d_ptr);
 
-      if (__builtin_expect (COMPARE_AND_SWAP (&ftab[symidx], (ElfW(Addr)) NULL,
-					      fdesc), 1))
+      if (__builtin_expect (
+	      COMPARE_AND_SWAP (&ftab[symidx], (ElfW (Addr)) NULL, fdesc), 1))
 	{
 	  /* No one has updated the entry and the new function
 	     descriptor has been installed.  */
@@ -275,20 +264,19 @@ _dl_make_fptr (struct link_map *map, const ElfW(Sym) *sym,
 	  ELF_MACHINE_LOAD_ADDRESS (l, local);
 
 	  do
-	    f->ip = (ElfW(Addr)) l->free_list;
-	  while (! COMPARE_AND_SWAP ((ElfW(Addr) *) &l->free_list,
-				     f->ip, fdesc));
+	    f->ip = (ElfW (Addr)) l->free_list;
+	  while (
+	      !COMPARE_AND_SWAP ((ElfW (Addr) *) &l->free_list, f->ip, fdesc));
 	}
     }
 
   return ftab[symidx];
 }
 
-
 void
 _dl_unmap (struct link_map *map)
 {
-  ElfW(Addr) *ftab = map->l_mach.fptr_table;
+  ElfW (Addr) *ftab = map->l_mach.fptr_table;
   struct fdesc *head = NULL, *tail = NULL;
   size_t i;
 
@@ -312,17 +300,17 @@ _dl_unmap (struct link_map *map)
   /* Prepend the new list to the free_list: */
   if (tail)
     do
-      tail->ip = (ElfW(Addr)) local.free_list;
-    while (! COMPARE_AND_SWAP ((ElfW(Addr) *) &local.free_list,
-			       tail->ip, (ElfW(Addr)) head));
+      tail->ip = (ElfW (Addr)) local.free_list;
+    while (!COMPARE_AND_SWAP ((ElfW (Addr) *) &local.free_list, tail->ip,
+			      (ElfW (Addr)) head));
 
-  __munmap (ftab, (map->l_mach.fptr_table_len
-		   * sizeof (map->l_mach.fptr_table[0])));
+  __munmap (ftab,
+	    (map->l_mach.fptr_table_len * sizeof (map->l_mach.fptr_table[0])));
 
   map->l_mach.fptr_table = NULL;
 }
 
-extern ElfW(Addr) _dl_fixup (struct link_map *, ElfW(Word)) attribute_hidden;
+extern ElfW (Addr) _dl_fixup (struct link_map *, ElfW (Word)) attribute_hidden;
 
 static inline Elf32_Addr
 elf_machine_resolve (void)
@@ -330,9 +318,11 @@ elf_machine_resolve (void)
   Elf32_Addr addr;
 
   asm ("b,l     1f,%0\n"
-"	addil	L'_dl_runtime_resolve - ($PIC_pcrel$0 - 1),%0\n"
-"1:	ldo	R'_dl_runtime_resolve - ($PIC_pcrel$0 - 5)(%%r1),%0\n"
-       : "=r" (addr) : : "r1");
+       "	addil	L'_dl_runtime_resolve - ($PIC_pcrel$0 - 1),%0\n"
+       "1:	ldo	R'_dl_runtime_resolve - ($PIC_pcrel$0 - 5)(%%r1),%0\n"
+       : "=r"(addr)
+       :
+       : "r1");
 
   return addr;
 }
@@ -342,16 +332,15 @@ _dl_read_access_allowed (unsigned int *addr)
 {
   int result;
 
-  asm ("proberi	(%1),3,%0" : "=r" (result) : "r" (addr) : );
+  asm ("proberi	(%1),3,%0" : "=r"(result) : "r"(addr) :);
 
   return result;
 }
 
-ElfW(Addr)
-_dl_lookup_address (const void *address)
+ElfW (Addr) _dl_lookup_address (const void *address)
 {
-  ElfW(Addr) addr = (ElfW(Addr)) address;
-  ElfW(Word) reloc_arg;
+  ElfW (Addr) addr = (ElfW (Addr)) address;
+  ElfW (Word) reloc_arg;
   unsigned int *desc, *gptr;
 
   /* Return ADDR if the least-significant two bits of ADDR are not consistent
@@ -370,14 +359,13 @@ _dl_lookup_address (const void *address)
     return addr;
 
   /* First load the relocation offset.  */
-  reloc_arg = (ElfW(Word)) desc[1];
-  atomic_full_barrier();
+  reloc_arg = (ElfW (Word)) desc[1];
+  atomic_full_barrier ();
 
   /* Then load first word of candidate descriptor.  It should be a pointer
      with word alignment and point to memory that can be read.  */
   gptr = (unsigned int *) desc[0];
-  if (((uintptr_t) gptr & 3) != 0
-      || !_dl_read_access_allowed (gptr))
+  if (((uintptr_t) gptr & 3) != 0 || !_dl_read_access_allowed (gptr))
     return addr;
 
   /* See if descriptor requires resolution.  The following trampoline is
@@ -392,9 +380,9 @@ _dl_lookup_address (const void *address)
 		.word "_dl_runtime_resolve ltp"
      got:	.word _DYNAMIC
 		.word "struct link map address" */
-  if (gptr[0] == 0xea9f1fdd			/* b,l .-12,r20     */
-      && gptr[1] == 0xd6801c1e			/* depwi 0,31,2,r20 */
-      && (ElfW(Addr)) gptr[2] == elf_machine_resolve ())
+  if (gptr[0] == 0xea9f1fdd    /* b,l .-12,r20     */
+      && gptr[1] == 0xd6801c1e /* depwi 0,31,2,r20 */
+      && (ElfW (Addr)) gptr[2] == elf_machine_resolve ())
     {
       struct link_map *l = (struct link_map *) gptr[5];
 
@@ -405,6 +393,6 @@ _dl_lookup_address (const void *address)
       _dl_fixup (l, reloc_arg);
     }
 
-  return (ElfW(Addr)) desc[0];
+  return (ElfW (Addr)) desc[0];
 }
 rtld_hidden_def (_dl_lookup_address)

@@ -27,17 +27,16 @@
 #include <support/timespec.h>
 #include <support/xthread.h>
 
-
 #define NWRITERS 15
 #define WRITETRIES 10
 #define NREADERS 15
 #define READTRIES 15
 
-static const struct timespec timeout = { 0,1000000 };
+static const struct timespec timeout = { 0, 1000000 };
 static const struct timespec delay = { 0, 1000000 };
 
 #ifndef KIND
-# define KIND PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
+#  define KIND PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
 #endif
 
 /* A bogus clock value that tells the tests to use pthread_rwlock_timedrdlock
@@ -60,8 +59,8 @@ writer_thread (void *arg)
   struct thread_args *args = arg;
   const int nr = args->nr;
   const clockid_t clockid = args->clockid;
-  const clockid_t clockid_for_get =
-    (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
+  const clockid_t clockid_for_get
+      = (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
   const char *fnname = args->fnname;
 
   struct timespec ts;
@@ -74,16 +73,16 @@ writer_thread (void *arg)
 	{
 	  xclock_gettime (clockid_for_get, &ts);
 
-          ts = timespec_add (ts, timeout);
-          ts = timespec_add (ts, timeout);
+	  ts = timespec_add (ts, timeout);
+	  ts = timespec_add (ts, timeout);
 
 	  printf ("writer thread %d tries again\n", nr);
 
 	  e = (clockid == CLOCK_USE_TIMEDLOCK)
-	    ? pthread_rwlock_timedwrlock (&lock, &ts)
-	    : pthread_rwlock_clockwrlock (&lock, clockid, &ts);
+		  ? pthread_rwlock_timedwrlock (&lock, &ts)
+		  : pthread_rwlock_clockwrlock (&lock, clockid, &ts);
 	  if (e != 0 && e != ETIMEDOUT)
-            FAIL_EXIT1 ("%swrlock failed", fnname);
+	    FAIL_EXIT1 ("%swrlock failed", fnname);
 	}
       while (e == ETIMEDOUT);
 
@@ -92,7 +91,7 @@ writer_thread (void *arg)
       nanosleep (&delay, NULL);
 
       if (pthread_rwlock_unlock (&lock) != 0)
-        FAIL_EXIT1 ("unlock for writer failed");
+	FAIL_EXIT1 ("unlock for writer failed");
 
       printf ("writer thread %d released\n", nr);
     }
@@ -100,15 +99,14 @@ writer_thread (void *arg)
   return NULL;
 }
 
-
 static void *
 reader_thread (void *arg)
 {
   struct thread_args *args = arg;
   const int nr = args->nr;
   const clockid_t clockid = args->clockid;
-  const clockid_t clockid_for_get =
-    (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
+  const clockid_t clockid_for_get
+      = (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
   const char *fnname = args->fnname;
 
   struct timespec ts;
@@ -121,16 +119,16 @@ reader_thread (void *arg)
 	{
 	  xclock_gettime (clockid_for_get, &ts);
 
-          ts = timespec_add (ts, timeout);
+	  ts = timespec_add (ts, timeout);
 
 	  printf ("reader thread %d tries again\n", nr);
 
 	  if (clockid == CLOCK_USE_TIMEDLOCK)
 	    e = pthread_rwlock_timedrdlock (&lock, &ts);
-          else
+	  else
 	    e = pthread_rwlock_clockrdlock (&lock, clockid, &ts);
 	  if (e != 0 && e != ETIMEDOUT)
-            FAIL_EXIT1 ("%srdlock failed", fnname);
+	    FAIL_EXIT1 ("%srdlock failed", fnname);
 	}
       while (e == ETIMEDOUT);
 
@@ -139,14 +137,13 @@ reader_thread (void *arg)
       nanosleep (&delay, NULL);
 
       if (pthread_rwlock_unlock (&lock) != 0)
-        FAIL_EXIT1 ("unlock for reader failed");
+	FAIL_EXIT1 ("unlock for reader failed");
 
       printf ("reader thread %d released\n", nr);
     }
 
   return NULL;
 }
-
 
 static int
 do_test_clock (clockid_t clockid, const char *fnname)
@@ -172,20 +169,22 @@ do_test_clock (clockid_t clockid, const char *fnname)
   setvbuf (stdout, NULL, _IONBF, 0);
 
   struct thread_args wargs[NWRITERS];
-  for (n = 0; n < NWRITERS; ++n) {
-    wargs[n].nr = n;
-    wargs[n].clockid = clockid;
-    wargs[n].fnname = fnname;
-    thwr[n] = xpthread_create (NULL, writer_thread, &wargs[n]);
-  }
+  for (n = 0; n < NWRITERS; ++n)
+    {
+      wargs[n].nr = n;
+      wargs[n].clockid = clockid;
+      wargs[n].fnname = fnname;
+      thwr[n] = xpthread_create (NULL, writer_thread, &wargs[n]);
+    }
 
   struct thread_args rargs[NREADERS];
-  for (n = 0; n < NREADERS; ++n) {
-    rargs[n].nr = n;
-    rargs[n].clockid = clockid;
-    rargs[n].fnname = fnname;
-    thrd[n] = xpthread_create (NULL, reader_thread, &rargs[n]);
-  }
+  for (n = 0; n < NREADERS; ++n)
+    {
+      rargs[n].nr = n;
+      rargs[n].clockid = clockid;
+      rargs[n].fnname = fnname;
+      thrd[n] = xpthread_create (NULL, reader_thread, &rargs[n]);
+    }
 
   /* Wait for all the threads.  */
   for (n = 0; n < NWRITERS; ++n)

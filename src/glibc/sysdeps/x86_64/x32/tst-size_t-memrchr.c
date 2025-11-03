@@ -21,10 +21,9 @@
 
 IMPL (memchr, 1)
 
-typedef void * (*proto_t) (const void *, int, size_t);
+typedef void *(*proto_t) (const void *, int, size_t);
 
-static void *
-__attribute__ ((noinline, noclone))
+static void *__attribute__ ((noinline, noclone))
 do_memrchr (parameter_t a, parameter_t b)
 {
   return CALL (&b, a.p, (uintptr_t) b.p, a.len);
@@ -42,11 +41,11 @@ test_main (void)
   FOR_EACH_IMPL (impl, 0)
     {
       c.fn = impl->fn;
-      void * res = do_memrchr (src, c);
+      void *res = do_memrchr (src, c);
       if (res)
 	{
-	  error (0, 0, "Wrong result in function %s: %p != NULL",
-		 impl->name, res);
+	  error (0, 0, "Wrong result in function %s: %p != NULL", impl->name,
+		 res);
 	  ret = 1;
 	}
     }

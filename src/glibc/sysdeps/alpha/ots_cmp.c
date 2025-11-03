@@ -22,27 +22,27 @@ static long
 internal_equality (long al, long ah, long bl, long bh, long neq)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A); FP_DECL_Q(B);
+  FP_DECL_Q (A);
+  FP_DECL_Q (B);
   long r;
 
-  AXP_UNPACK_RAW_Q(A, a);
-  AXP_UNPACK_RAW_Q(B, b);
+  AXP_UNPACK_RAW_Q (A, a);
+  AXP_UNPACK_RAW_Q (B, b);
 
-  if ((A_e == _FP_EXPMAX_Q && !_FP_FRAC_ZEROP_2(A))
-       || (B_e == _FP_EXPMAX_Q && !_FP_FRAC_ZEROP_2(B)))
+  if ((A_e == _FP_EXPMAX_Q && !_FP_FRAC_ZEROP_2 (A))
+      || (B_e == _FP_EXPMAX_Q && !_FP_FRAC_ZEROP_2 (B)))
     {
       /* EQ and NE signal invalid operation only if either operand is SNaN.  */
-      if (FP_ISSIGNAN_Q(A) || FP_ISSIGNAN_Q(B))
+      if (FP_ISSIGNAN_Q (A) || FP_ISSIGNAN_Q (B))
 	{
-	  FP_SET_EXCEPTION(FP_EX_INVALID);
+	  FP_SET_EXCEPTION (FP_EX_INVALID);
 	  FP_HANDLE_EXCEPTIONS;
 	}
       return -1;
     }
 
-  r = (A_e == B_e
-       && _FP_FRAC_EQ_2 (A, B)
-       && (A_s == B_s || (!A_e && _FP_FRAC_ZEROP_2(A))));
+  r = (A_e == B_e && _FP_FRAC_EQ_2 (A, B)
+       && (A_s == B_s || (!A_e && _FP_FRAC_ZEROP_2 (A))));
   r ^= neq;
 
   return r;

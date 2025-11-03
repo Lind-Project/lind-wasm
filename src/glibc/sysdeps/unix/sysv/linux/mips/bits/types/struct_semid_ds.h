@@ -17,19 +17,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SEM_H
-# error "Never include <bits/types/struct_semid_ds.h> directly; use <sys/sem.h> instead."
+#  error                                                                       \
+      "Never include <bits/types/struct_semid_ds.h> directly; use <sys/sem.h> instead."
 #endif
 
 /* Data structure describing a set of semaphores.  */
 struct semid_ds
 {
 #ifdef __USE_TIME_BITS64
-# include <bits/types/struct_semid64_ds_helper.h>
+#  include <bits/types/struct_semid64_ds_helper.h>
 #else
-  struct ipc_perm sem_perm;		/* operation permission struct */
-  __time_t sem_otime;	/* last semop() time */
-  __time_t sem_ctime;	/* last time changed by semctl() */
-  __syscall_ulong_t sem_nsems;		/* number of semaphores in set */
+  struct ipc_perm sem_perm;    /* operation permission struct */
+  __time_t sem_otime;	       /* last semop() time */
+  __time_t sem_ctime;	       /* last time changed by semctl() */
+  __syscall_ulong_t sem_nsems; /* number of semaphores in set */
   __syscall_ulong_t __sem_otime_high;
   __syscall_ulong_t __sem_ctime_high;
 #endif

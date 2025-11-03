@@ -37,45 +37,46 @@
   */
 
 #ifndef PROCINFO_CLASS
-# define PROCINFO_CLASS
+#  define PROCINFO_CLASS
 #endif
 
-#if !IS_IN (ldconfig)
-# if !defined PROCINFO_DECL && defined SHARED
-  ._dl_aarch64_cpu_features
-# else
+#if !IS_IN(ldconfig)
+#  if !defined PROCINFO_DECL && defined SHARED
+._dl_aarch64_cpu_features
+#  else
 PROCINFO_CLASS struct cpu_features _dl_aarch64_cpu_features
-# endif
-# ifndef PROCINFO_DECL
-= { }
-# endif
-# if !defined SHARED || defined PROCINFO_DECL
+#  endif
+#  ifndef PROCINFO_DECL
+    = {}
+#  endif
+#  if !defined SHARED || defined PROCINFO_DECL
 ;
-# else
-,
-# endif
+#  else
+    ,
+#  endif
 #endif
 
 /* Number of HWCAP bits set.  */
 #define _DL_HWCAP_COUNT 32
 
 #if !defined PROCINFO_DECL && defined SHARED
-  ._dl_aarch64_cap_flags
+._dl_aarch64_cap_flags
 #else
 PROCINFO_CLASS const char _dl_aarch64_cap_flags[_DL_HWCAP_COUNT][10]
 #endif
 #ifndef PROCINFO_DECL
-/* Matches the names in arch/arm64/kernel/cpuinfo.c of Linux.  */
-= { "fp", "asimd", "evtstrm", "aes", "pmull", "sha1", "sha2", "crc32",
-    "atomics", "fphp", "asimdhp", "cpuid", "asimdrdm", "jscvt", "fcma",
-    "lrcpc", "dcpop", "sha3", "sm3", "sm4", "asimddp", "sha512", "sve",
-    "asimdfhm", "dit", "uscat", "ilrcpc", "flagm", "ssbs", "sb", "paca",
-    "pacg" }
+    /* Matches the names in arch/arm64/kernel/cpuinfo.c of Linux.  */
+    = { "fp",	    "asimd", "evtstrm", "aes",	  "pmull",   "sha1",
+	"sha2",	    "crc32", "atomics", "fphp",	  "asimdhp", "cpuid",
+	"asimdrdm", "jscvt", "fcma",	"lrcpc",  "dcpop",   "sha3",
+	"sm3",	    "sm4",   "asimddp", "sha512", "sve",     "asimdfhm",
+	"dit",	    "uscat", "ilrcpc",	"flagm",  "ssbs",    "sb",
+	"paca",	    "pacg" }
 #endif
 #if !defined SHARED || defined PROCINFO_DECL
 ;
 #else
-,
+    ,
 #endif
 
 #undef PROCINFO_DECL

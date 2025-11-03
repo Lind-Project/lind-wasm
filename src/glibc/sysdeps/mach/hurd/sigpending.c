@@ -20,7 +20,6 @@
 #include <hurd.h>
 #include <hurd/signal.h>
 
-
 /* Store in SET all signals that are blocked and pending.  */
 /* XXX should be __sigpending ? */
 int

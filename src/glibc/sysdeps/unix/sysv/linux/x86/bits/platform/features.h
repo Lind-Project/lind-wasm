@@ -17,15 +17,16 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PLATFORM_X86_H
-# error "Never include <bits/platform/features.h> directly; use <sys/platform/x86.h> instead."
+#  error                                                                       \
+      "Never include <bits/platform/features.h> directly; use <sys/platform/x86.h> instead."
 #endif
 
 /* Bits in the feature_1 field in TCB.  */
 
 enum
 {
-  x86_feature_1_ibt		= 1U << 0,
-  x86_feature_1_shstk		= 1U << 1
+  x86_feature_1_ibt = 1U << 0,
+  x86_feature_1_shstk = 1U << 1
 };
 
 static __inline__ __BOOLEAN
@@ -33,11 +34,11 @@ x86_cpu_cet_active (unsigned int __index)
 {
 #ifdef __x86_64__
   unsigned int __feature_1;
-# ifdef __LP64__
+#  ifdef __LP64__
   // __asm__ ("mov %%fs:72, %0" : "=r" (__feature_1));
-# else
+#  else
   // __asm__ ("mov %%fs:40, %0" : "=r" (__feature_1));
-# endif
+#  endif
   if (__index == x86_cpu_IBT)
     return __feature_1 & x86_feature_1_ibt;
   else

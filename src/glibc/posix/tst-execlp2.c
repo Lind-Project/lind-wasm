@@ -7,13 +7,11 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-
 static void prepare (int argc, char *argv[]);
 static int do_test (void);
 #define PREPARE(argc, argv) prepare (argc, argv)
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"
-
 
 static char *copy;
 
@@ -40,7 +38,6 @@ prepare (int argc, char *argv[])
 
   add_temp_file (copy);
 }
-
 
 static int
 do_test (void)

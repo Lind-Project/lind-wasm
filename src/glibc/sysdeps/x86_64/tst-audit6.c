@@ -5,9 +5,8 @@
 #include <cpuid.h>
 #include <emmintrin.h>
 
-extern __m128i audit_test (__m128i, __m128i, __m128i, __m128i,
-			   __m128i, __m128i, __m128i, __m128i);
-
+extern __m128i audit_test (__m128i, __m128i, __m128i, __m128i, __m128i,
+			   __m128i, __m128i, __m128i);
 
 static int
 avx_enabled (void)
@@ -19,11 +18,10 @@ avx_enabled (void)
     return 0;
 
   /* Check the OS has AVX and SSE saving enabled.  */
-  asm ("xgetbv" : "=a" (eax), "=d" (edx) : "c" (0));
+  asm ("xgetbv" : "=a"(eax), "=d"(edx) : "c"(0));
 
   return (eax & 6) == 6;
 }
-
 
 static int
 do_test (void)

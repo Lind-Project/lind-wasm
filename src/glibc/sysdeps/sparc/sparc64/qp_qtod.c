@@ -21,26 +21,26 @@
 #include "double.h"
 #include "quad.h"
 
-double _Qp_qtod(const long double *a)
+double
+_Qp_qtod (const long double *a)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A);
-  FP_DECL_D(R);
+  FP_DECL_Q (A);
+  FP_DECL_D (R);
   double r;
 
   FP_INIT_ROUNDMODE;
-  FP_UNPACK_SEMIRAW_QP(A, a);
+  FP_UNPACK_SEMIRAW_QP (A, a);
 #if _FP_W_TYPE_SIZE < 64
-  FP_TRUNC(D,Q,2,4,R,A);
+  FP_TRUNC (D, Q, 2, 4, R, A);
 #else
-  FP_TRUNC(D,Q,1,2,R,A);
+  FP_TRUNC (D, Q, 1, 2, R, A);
 #endif
-  FP_PACK_SEMIRAW_D(r, R);
-  QP_HANDLE_EXCEPTIONS(__asm (
-"	ldd [%1], %%f52\n"
-"	ldd [%1+8], %%f54\n"
-"	fqtod %%f52, %0\n"
-"	" : "=&e" (r) : "r" (a) : QP_CLOBBER));
+  FP_PACK_SEMIRAW_D (r, R);
+  QP_HANDLE_EXCEPTIONS (__asm ("	ldd [%1], %%f52\n"
+			       "	ldd [%1+8], %%f54\n"
+			       "	fqtod %%f52, %0\n"
+			       "	" : "=&e"(r) : "r"(a) : QP_CLOBBER));
 
   return r;
 }

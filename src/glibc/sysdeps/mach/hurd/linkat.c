@@ -27,7 +27,8 @@
 
 /* Make a link to FROM relative to FROMFD called TO relative to TOFD.  */
 int
-__linkat_common (int fromfd, const char *from, int tofd, const char *to, int at_flags, int flags)
+__linkat_common (int fromfd, const char *from, int tofd, const char *to,
+		 int at_flags, int flags)
 {
   error_t err;
   file_t oldfile, linknode, todir;

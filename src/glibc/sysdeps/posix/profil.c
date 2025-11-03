@@ -27,7 +27,7 @@
 
 #ifndef SIGPROF
 
-#include <gmon/profil.c>
+#  include <gmon/profil.c>
 
 #else
 
@@ -53,7 +53,7 @@ profil_count (uintptr_t pc)
 /* Get the machine-dependent definition of `__profil_counter', the signal
    handler for SIGPROF.  It calls `profil_count' (above) with the PC of the
    interrupted code.  */
-#include "profil-counter.h"
+#  include "profil-counter.h"
 
 /* Enable statistical profiling, writing samples of the PC into at most
    SIZE bytes of SAMPLE_BUFFER; every processor clock tick while profiling
@@ -66,11 +66,11 @@ __profil (u_short *sample_buffer, size_t size, size_t offset, u_int scale)
 {
   struct sigaction act;
   struct itimerval timer;
-#if !IS_IN (rtld)
+#  if !IS_IN(rtld)
   static struct sigaction oact;
   static struct itimerval otimer;
-# define oact_ptr &oact
-# define otimer_ptr &otimer
+#    define oact_ptr &oact
+#    define otimer_ptr &otimer
 
   if (sample_buffer == NULL)
     {
@@ -85,7 +85,7 @@ __profil (u_short *sample_buffer, size_t size, size_t offset, u_int scale)
       return __sigaction (SIGPROF, &oact, NULL);
     }
 
- if (samples)
+  if (samples)
     {
       /* Was already turned on.  Restore old timer and signal handler
 	 first.  */
@@ -93,25 +93,25 @@ __profil (u_short *sample_buffer, size_t size, size_t offset, u_int scale)
 	  || __sigaction (SIGPROF, &oact, NULL) < 0)
 	return -1;
     }
-#else
- /* In ld.so profiling should never be disabled once it runs.  */
- //assert (sample_buffer != NULL);
-# define oact_ptr NULL
-# define otimer_ptr NULL
-#endif
+#  else
+  /* In ld.so profiling should never be disabled once it runs.  */
+  // assert (sample_buffer != NULL);
+#    define oact_ptr NULL
+#    define otimer_ptr NULL
+#  endif
 
   samples = sample_buffer;
   nsamples = size / sizeof *samples;
   pc_offset = offset;
   pc_scale = scale;
 
-#ifdef SA_SIGINFO
+#  ifdef SA_SIGINFO
   act.sa_sigaction = __profil_counter;
   act.sa_flags = SA_SIGINFO;
-#else
+#  else
   act.sa_handler = __profil_counter;
   act.sa_flags = 0;
-#endif
+#  endif
   act.sa_flags |= SA_RESTART;
   __sigfillset (&act.sa_mask);
   if (__sigaction (SIGPROF, &act, oact_ptr) < 0)

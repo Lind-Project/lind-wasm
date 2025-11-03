@@ -16,4 +16,5 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-extern int __rtld_execve (const char *path, char *const *argv, char *const *envp);
+extern int __rtld_execve (const char *path, char *const *argv,
+			  char *const *envp);

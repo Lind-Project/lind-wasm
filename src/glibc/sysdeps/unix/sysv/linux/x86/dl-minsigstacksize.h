@@ -21,7 +21,7 @@ static inline void
 dl_check_minsigstacksize (const struct cpu_features *cpu_features)
 {
   /* Return if AT_MINSIGSTKSZ is provide by kernel.  */
-  if (GLRO(dl_minsigstacksize) != 0)
+  if (GLRO (dl_minsigstacksize) != 0)
     return;
 
   if (cpu_features->basic.max_cpuid >= 0xd
@@ -71,13 +71,13 @@ dl_check_minsigstacksize (const struct cpu_features *cpu_features)
 #define FP_XSTATE_MAGIC2 0x46505845U
       sigframe_size += sizeof (FP_XSTATE_MAGIC2);
 
-      GLRO(dl_minsigstacksize) = sigframe_size;
+      GLRO (dl_minsigstacksize) = sigframe_size;
     }
   else
     {
       /* NB: Default to a constant MINSIGSTKSZ.  */
       _Static_assert (__builtin_constant_p (MINSIGSTKSZ),
 		      "MINSIGSTKSZ is constant");
-      GLRO(dl_minsigstacksize) = MINSIGSTKSZ;
+      GLRO (dl_minsigstacksize) = MINSIGSTKSZ;
     }
 }

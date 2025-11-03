@@ -22,9 +22,7 @@
 #include <string.h>
 #include <time.h>
 
-
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-
 
 static void *
 tf (void *arg)
@@ -37,7 +35,6 @@ tf (void *arg)
 
   return (void *) 42l;
 }
-
 
 static int
 do_test (void)

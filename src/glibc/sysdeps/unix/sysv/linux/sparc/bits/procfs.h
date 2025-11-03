@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
+#  error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
 #endif
 
 #include <signal.h>
@@ -26,34 +26,34 @@
 
 #if __WORDSIZE == 64
 
-#define ELF_NGREG		36
+#  define ELF_NGREG 36
 
 typedef struct
-  {
-    unsigned long	pr_regs[32];
-    unsigned long	pr_fsr;
-    unsigned long	pr_gsr;
-    unsigned long	pr_fprs;
-  } elf_fpregset_t;
+{
+  unsigned long pr_regs[32];
+  unsigned long pr_fsr;
+  unsigned long pr_gsr;
+  unsigned long pr_fprs;
+} elf_fpregset_t;
 
 #else /* sparc32 */
 
-#define ELF_NGREG		38
+#  define ELF_NGREG 38
 
 typedef struct
+{
+  union
   {
-    union
-      {
-	unsigned long	pr_regs[32];
-	double		pr_dregs[16];
-      }			pr_fr;
-    unsigned long	__glibc_reserved;
-    unsigned long	pr_fsr;
-    unsigned char	pr_qcnt;
-    unsigned char	pr_q_entrysize;
-    unsigned char	pr_en;
-    unsigned int	pr_q[64];
-  } elf_fpregset_t;
+    unsigned long pr_regs[32];
+    double pr_dregs[16];
+  } pr_fr;
+  unsigned long __glibc_reserved;
+  unsigned long pr_fsr;
+  unsigned char pr_qcnt;
+  unsigned char pr_q_entrysize;
+  unsigned char pr_en;
+  unsigned int pr_q[64];
+} elf_fpregset_t;
 
 #endif /* sparc32 */
 

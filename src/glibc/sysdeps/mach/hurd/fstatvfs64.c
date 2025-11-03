@@ -23,5 +23,5 @@ fstatvfs64 (int fd, struct statvfs64 *buf)
 {
   /* `struct statvfs64' is in fact identical to `struct statfs64' so
      we can simply call fstatfs64.  */
-  return __fstatfs64 (fd, (struct statfs64 *)buf);
+  return __fstatfs64 (fd, (struct statfs64 *) buf);
 }

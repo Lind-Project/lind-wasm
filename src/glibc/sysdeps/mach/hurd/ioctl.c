@@ -34,7 +34,7 @@
 #include <hurd/ioctls.defs>
 
 #define msg_align(x) ALIGN_UP (x, __alignof__ (uintptr_t))
-#define typesize(type)	(1 << (type))
+#define typesize(type) (1 << (type))
 
 /* Perform the I/O control operation specified by REQUEST on FD.
    The actual type and use of ARG and the return value depend on REQUEST.  */
@@ -43,19 +43,17 @@ __ioctl (int fd, unsigned long int request, ...)
 {
 #ifdef MACH_MSG_TYPE_BIT
   /* Map individual type fields to Mach IPC types.  */
-  static const int mach_types[] =
-    { MACH_MSG_TYPE_CHAR, MACH_MSG_TYPE_INTEGER_16, MACH_MSG_TYPE_INTEGER_32,
-      MACH_MSG_TYPE_INTEGER_64 };
-#define io2mach_type(count, type)   \
-  ((mach_msg_type_t) {		    \
-   .msgt_name = mach_types[type],   \
-   .msgt_size = typesize(type) * 8, \
-   .msgt_number = count,	    \
-   .msgt_inline = TRUE,		    \
-   .msgt_longform = FALSE,	    \
-   .msgt_deallocate = FALSE,	    \
-   .msgt_unused = 0		    \
-   })
+  static const int mach_types[]
+      = { MACH_MSG_TYPE_CHAR, MACH_MSG_TYPE_INTEGER_16,
+	  MACH_MSG_TYPE_INTEGER_32, MACH_MSG_TYPE_INTEGER_64 };
+#  define io2mach_type(count, type)                                           \
+    ((mach_msg_type_t) { .msgt_name = mach_types[type],                       \
+			 .msgt_size = typesize (type) * 8,                    \
+			 .msgt_number = count,                                \
+			 .msgt_inline = TRUE,                                 \
+			 .msgt_longform = FALSE,                              \
+			 .msgt_deallocate = FALSE,                            \
+			 .msgt_unused = 0 })
 #endif
 
   /* Extract the type information encoded in the request.  */
@@ -70,16 +68,16 @@ __ioctl (int fd, unsigned long int request, ...)
       mig_reply_header_t header;
       struct
       {
-	mach_msg_header_t	Head;
-	mach_msg_type_t		RetCodeType;
-	kern_return_t		RetCode;
+	mach_msg_header_t Head;
+	mach_msg_type_t RetCodeType;
+	kern_return_t RetCode;
       } header_typecheck;
     };
     char data[3 * sizeof (mach_msg_type_t)
 	      + msg_align (_IOT_COUNT0 (type) * typesize (_IOT_TYPE0 (type)))
 	      + msg_align (_IOT_COUNT1 (type) * typesize (_IOT_TYPE1 (type)))
 	      + msg_align (_IOT_COUNT2 (type) * typesize (_IOT_TYPE2 (type)))];
-#else  /* Untyped Mach IPC format.  */
+#else /* Untyped Mach IPC format.  */
     mig_reply_error_t header;
     char data[_IOT_COUNT0 (type) * typesize (_IOT_TYPE0 (type))
 	      + _IOT_COUNT1 (type) * typesize (_IOT_TYPE1 (type))
@@ -103,121 +101,118 @@ __ioctl (int fd, unsigned long int request, ...)
   /* Send the RPC already packed up in MSG to IOPORT
      and decode the return value.  */
   error_t send_rpc (io_t ioport)
-    {
-      error_t err;
+  {
+    error_t err;
 #ifdef MACH_MSG_TYPE_BIT
-      mach_msg_type_t *t = &msg.header.RetCodeType;
+    mach_msg_type_t *t = &msg.header.RetCodeType;
 #else
-      void *p = &msg.header.RetCode;
+    void *p = &msg.header.RetCode;
 #endif
 
-      /* Marshal the request arguments into the message buffer.
-	 We must redo this work each time we retry the RPC after a SIGTTOU,
-	 because the reply message containing the EBACKGROUND error code
-	 clobbers the same message buffer also used for the request.  */
+    /* Marshal the request arguments into the message buffer.
+       We must redo this work each time we retry the RPC after a SIGTTOU,
+       because the reply message containing the EBACKGROUND error code
+       clobbers the same message buffer also used for the request.  */
 
-      if (_IOC_INOUT (request) & IOC_IN)
+    if (_IOC_INOUT (request) & IOC_IN)
+      {
+	/* We don't want to advance ARG since it will be used to copy out
+	   too if IOC_OUT is also set.  */
+	void *argptr = arg;
+	int zero = 0;
+
+	if (request == TIOCFLUSH && !argptr)
+	  argptr = &zero;
+
+	/* Pack an argument into the message buffer.  */
+	void in (unsigned int count, enum __ioctl_datum type)
 	{
-	  /* We don't want to advance ARG since it will be used to copy out
-	     too if IOC_OUT is also set.  */
-	  void *argptr = arg;
-	  int zero = 0;
-
-	  if (request == TIOCFLUSH && !argptr)
-	    argptr = &zero;
-
-	  /* Pack an argument into the message buffer.  */
-	  void in (unsigned int count, enum __ioctl_datum type)
+	  if (count > 0)
 	    {
-	      if (count > 0)
-		{
-		  const size_t len = count * typesize ((unsigned int) type);
+	      const size_t len = count * typesize ((unsigned int) type);
 #ifdef MACH_MSG_TYPE_BIT
-		  void *p = &t[1];
-		  *t = io2mach_type (count, type);
-		  p = __mempcpy (p, argptr, len);
-		  p = (void *) msg_align ((uintptr_t) p);
-		  t = p;
+	      void *p = &t[1];
+	      *t = io2mach_type (count, type);
+	      p = __mempcpy (p, argptr, len);
+	      p = (void *) msg_align ((uintptr_t) p);
+	      t = p;
 #else
-		  p = __mempcpy (p, argptr, len);
+	      p = __mempcpy (p, argptr, len);
 #endif
-		  argptr += len;
-		}
+	      argptr += len;
 	    }
-
-	  /* Pack the argument data.  */
-	  in (_IOT_COUNT0 (type), _IOT_TYPE0 (type));
-	  in (_IOT_COUNT1 (type), _IOT_TYPE1 (type));
-	  in (_IOT_COUNT2 (type), _IOT_TYPE2 (type));
 	}
-      else if (_IOC_INOUT (request) == IOC_VOID && _IOT_COUNT0 (type) != 0)
-	{
-	  /* The RPC takes a single integer_t argument.
-	     Rather than pointing to the value, ARG is the value itself.  */
+
+	/* Pack the argument data.  */
+	in (_IOT_COUNT0 (type), _IOT_TYPE0 (type));
+	in (_IOT_COUNT1 (type), _IOT_TYPE1 (type));
+	in (_IOT_COUNT2 (type), _IOT_TYPE2 (type));
+      }
+    else if (_IOC_INOUT (request) == IOC_VOID && _IOT_COUNT0 (type) != 0)
+      {
+	/* The RPC takes a single integer_t argument.
+	   Rather than pointing to the value, ARG is the value itself.  */
 #ifdef MACH_MSG_TYPE_BIT
-	  *t++ = io2mach_type (1, _IOTS (integer_t));
-	  *(integer_t *) t = (integer_t) (intptr_t) arg;
-	  t = (void *) msg_align ((uintptr_t) t + sizeof (integer_t));
+	*t++ = io2mach_type (1, _IOTS (integer_t));
+	*(integer_t *) t = (integer_t) (intptr_t) arg;
+	t = (void *) msg_align ((uintptr_t) t + sizeof (integer_t));
 #else
-	  *(integer_t *) p = (integer_t) (intptr_t) arg;
-	  p = (void *) p + sizeof (integer_t);
+	*(integer_t *) p = (integer_t) (intptr_t) arg;
+	p = (void *) p + sizeof (integer_t);
 #endif
-	}
+      }
 
-      memset (m, 0, sizeof *m);	/* Clear unused fields.  */
-      m->msgh_size = (
+    memset (m, 0, sizeof *m); /* Clear unused fields.  */
+    m->msgh_size = (
 #ifdef MACH_MSG_TYPE_BIT
-		      (char *) t
+	(char *) t
 #else
-		      (char *) p
+	(char *) p
 #endif
-		      - (char *) &msg);
-      m->msgh_remote_port = ioport;
-      m->msgh_local_port = __mig_get_reply_port ();
-      m->msgh_id = msgid;
-      m->msgh_bits = MACH_MSGH_BITS (MACH_MSG_TYPE_COPY_SEND,
-				     MACH_MSG_TYPE_MAKE_SEND_ONCE);
-      err = _hurd_intr_rpc_mach_msg (m, MACH_SEND_MSG|MACH_RCV_MSG,
-				     m->msgh_size, sizeof (msg),
-				     m->msgh_local_port,
-				     MACH_MSG_TIMEOUT_NONE,
-				     MACH_PORT_NULL);
-      switch (err)
-	{
-	case MACH_MSG_SUCCESS:
-	  break;
-	case MACH_SEND_INVALID_REPLY:
-	case MACH_RCV_INVALID_NAME:
-	  __mig_dealloc_reply_port (m->msgh_local_port);
-	  /* Fall through.  */
-	default:
-	  return err;
-	}
+	- (char *) &msg);
+    m->msgh_remote_port = ioport;
+    m->msgh_local_port = __mig_get_reply_port ();
+    m->msgh_id = msgid;
+    m->msgh_bits = MACH_MSGH_BITS (MACH_MSG_TYPE_COPY_SEND,
+				   MACH_MSG_TYPE_MAKE_SEND_ONCE);
+    err = _hurd_intr_rpc_mach_msg (
+	m, MACH_SEND_MSG | MACH_RCV_MSG, m->msgh_size, sizeof (msg),
+	m->msgh_local_port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+    switch (err)
+      {
+      case MACH_MSG_SUCCESS:
+	break;
+      case MACH_SEND_INVALID_REPLY:
+      case MACH_RCV_INVALID_NAME:
+	__mig_dealloc_reply_port (m->msgh_local_port);
+	/* Fall through.  */
+      default:
+	return err;
+      }
 
-      if ((m->msgh_bits & MACH_MSGH_BITS_COMPLEX))
-	{
-	  /* Allow no ports or VM.  */
-	  __mach_msg_destroy (m);
-	  /* Want to return a different error below for a different msgid.  */
-	  if (m->msgh_id == msgid + 100)
-	    return MIG_TYPE_ERROR;
-	}
+    if ((m->msgh_bits & MACH_MSGH_BITS_COMPLEX))
+      {
+	/* Allow no ports or VM.  */
+	__mach_msg_destroy (m);
+	/* Want to return a different error below for a different msgid.  */
+	if (m->msgh_id == msgid + 100)
+	  return MIG_TYPE_ERROR;
+      }
 
-      if (m->msgh_id != msgid + 100)
-	return (m->msgh_id == MACH_NOTIFY_SEND_ONCE
-		? MIG_SERVER_DIED : MIG_REPLY_MISMATCH);
+    if (m->msgh_id != msgid + 100)
+      return (m->msgh_id == MACH_NOTIFY_SEND_ONCE ? MIG_SERVER_DIED
+						  : MIG_REPLY_MISMATCH);
 
-      if (m->msgh_size != reply_size
-	  && m->msgh_size != sizeof msg.header)
-	return MIG_TYPE_ERROR;
+    if (m->msgh_size != reply_size && m->msgh_size != sizeof msg.header)
+      return MIG_TYPE_ERROR;
 
 #ifdef MACH_MSG_TYPE_BIT
-      mach_msg_type_t ipctype = io2mach_type(1, _IOTS (msg.header.RetCode));
-      if (BAD_TYPECHECK (&msg.header_typecheck.RetCodeType, &ipctype))
-	return MIG_TYPE_ERROR;
+    mach_msg_type_t ipctype = io2mach_type (1, _IOTS (msg.header.RetCode));
+    if (BAD_TYPECHECK (&msg.header_typecheck.RetCodeType, &ipctype))
+      return MIG_TYPE_ERROR;
 #endif
-      return msg.header.RetCode;
-    }
+    return msg.header.RetCode;
+  }
 
   if (_IOT_COUNT0 (type) != 0)
     {
@@ -258,19 +253,19 @@ __ioctl (int fd, unsigned long int request, ...)
   if (_IOC_INOUT (request) & IOC_OUT)
     {
       inline void figure_reply (unsigned int count, enum __ioctl_datum type)
-	{
-	  if (count > 0)
-	    {
+      {
+	if (count > 0)
+	  {
 #ifdef MACH_MSG_TYPE_BIT
-	      /* Add the size of the type and data.  */
-	      reply_size += sizeof (mach_msg_type_t) + typesize (type) * count;
-	      /* Align it to word size.  */
-	      reply_size = msg_align (reply_size);
+	    /* Add the size of the type and data.  */
+	    reply_size += sizeof (mach_msg_type_t) + typesize (type) * count;
+	    /* Align it to word size.  */
+	    reply_size = msg_align (reply_size);
 #else
-	      reply_size += typesize (type) * count;
+	    reply_size += typesize (type) * count;
 #endif
-	    }
-	}
+	  }
+      }
       figure_reply (_IOT_COUNT0 (type), _IOT_TYPE0 (type));
       figure_reply (_IOT_COUNT1 (type), _IOT_TYPE1 (type));
       figure_reply (_IOT_COUNT2 (type), _IOT_TYPE2 (type));
@@ -282,8 +277,9 @@ __ioctl (int fd, unsigned long int request, ...)
   if (request == TIOCDRAIN)
     {
       /* This is a cancellation point.  */
-      int cancel_oldtype = LIBC_CANCEL_ASYNC();
-      err = HURD_DPORT_USE_CANCEL (fd, _hurd_ctty_output (port, ctty, send_rpc));
+      int cancel_oldtype = LIBC_CANCEL_ASYNC ();
+      err = HURD_DPORT_USE_CANCEL (fd,
+				   _hurd_ctty_output (port, ctty, send_rpc));
       LIBC_CANCEL_RESET (cancel_oldtype);
     }
   else
@@ -297,30 +293,30 @@ __ioctl (int fd, unsigned long int request, ...)
   switch (err)
     {
       /* Unpack the message buffer into the argument location.  */
-      int out (unsigned int count, unsigned int type,
-	       void *store, void **update)
-	{
-	  if (count > 0)
-	    {
-	      const size_t len = count * typesize (type);
+      int out (unsigned int count, unsigned int type, void *store,
+	       void **update)
+      {
+	if (count > 0)
+	  {
+	    const size_t len = count * typesize (type);
 #ifdef MACH_MSG_TYPE_BIT
-	      const mach_msg_type_t ipctype = io2mach_type(count, type);
-	      if (BAD_TYPECHECK (t, &ipctype))
-		return 1;
-	      ++t;
-	      memcpy (store, t, len);
-	      if (update != NULL)
-		*update += len;
-	      t = (mach_msg_type_t *) msg_align ((uintptr_t) t + len);
+	    const mach_msg_type_t ipctype = io2mach_type (count, type);
+	    if (BAD_TYPECHECK (t, &ipctype))
+	      return 1;
+	    ++t;
+	    memcpy (store, t, len);
+	    if (update != NULL)
+	      *update += len;
+	    t = (mach_msg_type_t *) msg_align ((uintptr_t) t + len);
 #else
-	      memcpy (store, p, len);
-	      p += len;
-	      if (update != NULL)
-		*update += len;
+	    memcpy (store, p, len);
+	    p += len;
+	    if (update != NULL)
+	      *update += len;
 #endif
-	    }
-	  return 0;
-	}
+	  }
+	return 0;
+      }
 
     case 0:
       if (m->msgh_size != reply_size
@@ -341,5 +337,4 @@ __ioctl (int fd, unsigned long int request, ...)
     }
 }
 
-libc_hidden_def (__ioctl)
-weak_alias (__ioctl, ioctl)
+libc_hidden_def (__ioctl) weak_alias (__ioctl, ioctl)

@@ -22,13 +22,11 @@ ssize_t
 __libc_write (int fd, const void *buf, size_t nbytes)
 {
   ssize_t ret;
-  int cancel_oldtype = LIBC_CANCEL_ASYNC();
+  int cancel_oldtype = LIBC_CANCEL_ASYNC ();
   ret = __write_nocancel (fd, buf, nbytes);
   LIBC_CANCEL_RESET (cancel_oldtype);
   return ret;
 }
-libc_hidden_def (__libc_write)
-weak_alias (__libc_write, __write)
-libc_hidden_weak (__write)
-weak_alias (__libc_write, write)
-libc_hidden_weak (write)
+libc_hidden_def (__libc_write) weak_alias (__libc_write, __write)
+    libc_hidden_weak (__write) weak_alias (__libc_write, write)
+	libc_hidden_weak (write)

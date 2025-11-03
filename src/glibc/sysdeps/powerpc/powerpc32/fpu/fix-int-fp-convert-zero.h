@@ -17,12 +17,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef FIX_INT_FP_CONVERT_ZERO_H
-#define FIX_INT_FP_CONVERT_ZERO_H	1
+#  define FIX_INT_FP_CONVERT_ZERO_H 1
 
 /* The code sequences GCC generates for conversion of integers to
    floating point result in -0 instead of +0 in FE_DOWNWARD mode when
    the fcfid instruction is not used, as of GCC 5.  See
    <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=67771>.  */
-#define FIX_INT_FP_CONVERT_ZERO (!HAVE_PPC_FCFID)
+#  define FIX_INT_FP_CONVERT_ZERO (!HAVE_PPC_FCFID)
 
 #endif /* fix-int-fp-convert-zero.h */

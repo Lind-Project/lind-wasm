@@ -25,7 +25,7 @@
 
 #include <unwind-link.h>
 
-typedef struct frame_state * (*framesf)(void *pc, struct frame_state *);
+typedef struct frame_state *(*framesf) (void *pc, struct frame_state *);
 struct frame_state *__frame_state_for (void *pc,
 				       struct frame_state *frame_state);
 

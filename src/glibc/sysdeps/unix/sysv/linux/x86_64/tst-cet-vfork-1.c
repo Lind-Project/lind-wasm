@@ -25,8 +25,7 @@
 #include <x86intrin.h>
 #include <support/test-driver.h>
 
-__attribute__ ((noinline)) __attribute_noclone__
-static void
+__attribute__ ((noinline)) __attribute_noclone__ static void
 do_test_1 (void)
 {
   pid_t p1;
@@ -53,7 +52,7 @@ do_test_1 (void)
       _exit (EXIT_FAILURE);
     }
 
-   if (!WIFSIGNALED (r) || WTERMSIG (r) != SIGSEGV)
+  if (!WIFSIGNALED (r) || WTERMSIG (r) != SIGSEGV)
     {
       puts ("Child not terminated with SIGSEGV");
       _exit (EXIT_FAILURE);

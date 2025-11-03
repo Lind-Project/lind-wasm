@@ -32,7 +32,6 @@
 
 #include "pthread_cond_common.c"
 
-
 struct _condvar_cleanup_buffer
 {
   uint64_t wseq;
@@ -40,7 +39,6 @@ struct _condvar_cleanup_buffer
   pthread_mutex_t *mutex;
   int private;
 };
-
 
 /* Decrease the waiter reference count.  */
 static void
@@ -53,7 +51,6 @@ __condvar_confirm_wakeup (pthread_cond_t *cond, int private)
   if ((atomic_fetch_add_release (&cond->__data.__wrefs, -8) >> 2) == 3)
     futex_wake (&cond->__data.__wrefs, INT_MAX, private);
 }
-
 
 /* Cancel waiting after having registered as a waiter previously.  SEQ is our
    position and G is our group index.
@@ -166,8 +163,8 @@ __condvar_dec_grefs (pthread_cond_t *cond, unsigned int g, int private)
 static void
 __condvar_cleanup_waiting (void *arg)
 {
-  struct _condvar_cleanup_buffer *cbuffer =
-    (struct _condvar_cleanup_buffer *) arg;
+  struct _condvar_cleanup_buffer *cbuffer
+      = (struct _condvar_cleanup_buffer *) arg;
   pthread_cond_t *cond = cbuffer->cond;
   unsigned g = cbuffer->wseq & 1;
 
@@ -377,7 +374,8 @@ __condvar_cleanup_waiting (void *arg)
 */
 static __always_inline int
 __pthread_cond_wait_common (pthread_cond_t *cond, pthread_mutex_t *mutex,
-    clockid_t clockid, const struct __timespec64 *abstime)
+			    clockid_t clockid,
+			    const struct __timespec64 *abstime)
 {
   const int maxspin = 0;
   int err;
@@ -498,10 +496,11 @@ __pthread_cond_wait_common (pthread_cond_t *cond, pthread_mutex_t *mutex,
 	  cbuffer.cond = cond;
 	  cbuffer.mutex = mutex;
 	  cbuffer.private = private;
-	  __pthread_cleanup_push (&buffer, __condvar_cleanup_waiting, &cbuffer);
+	  __pthread_cleanup_push (&buffer, __condvar_cleanup_waiting,
+				  &cbuffer);
 
 	  err = __futex_abstimed_wait_cancelable64 (
-	    cond->__data.__g_signals + g, 0, clockid, abstime, private);
+	      cond->__data.__g_signals + g, 0, clockid, abstime, private);
 
 	  __pthread_cleanup_pop (&buffer, 0);
 
@@ -523,7 +522,6 @@ __pthread_cond_wait_common (pthread_cond_t *cond, pthread_mutex_t *mutex,
 	  /* Reload signals.  See above for MO.  */
 	  signals = atomic_load_acquire (cond->__data.__g_signals + g);
 	}
-
     }
   /* Try to grab a signal.  Use acquire MO so that we see an up-to-date value
      of __g1_start below (see spinning above for a similar case).  In
@@ -576,8 +574,8 @@ __pthread_cond_wait_common (pthread_cond_t *cond, pthread_mutex_t *mutex,
 		 group is in the process of being closed (LSB is true), this
 		 has an effect similar to us adding a signal.  */
 	      if (((s & 1) != 0)
-		  || atomic_compare_exchange_weak_relaxed
-		       (cond->__data.__g_signals + g, &s, s + 2))
+		  || atomic_compare_exchange_weak_relaxed (
+		      cond->__data.__g_signals + g, &s, s + 2))
 		{
 		  /* If we added a signal, we also need to add a wake-up on
 		     the futex.  We also need to do that if we skipped adding
@@ -595,7 +593,7 @@ __pthread_cond_wait_common (pthread_cond_t *cond, pthread_mutex_t *mutex,
 	}
     }
 
- done:
+done:
 
   /* Confirm that we have been woken.  We do that before acquiring the mutex
      to allow for execution of pthread_cond_destroy while having acquired the
@@ -609,7 +607,6 @@ __pthread_cond_wait_common (pthread_cond_t *cond, pthread_mutex_t *mutex,
   return (err != 0) ? err : result;
 }
 
-
 /* See __pthread_cond_wait_common.  */
 int
 ___pthread_cond_wait (pthread_cond_t *cond, pthread_mutex_t *mutex)
@@ -618,28 +615,28 @@ ___pthread_cond_wait (pthread_cond_t *cond, pthread_mutex_t *mutex)
   return __pthread_cond_wait_common (cond, mutex, 0, NULL);
 }
 
-versioned_symbol (libc, ___pthread_cond_wait, pthread_cond_wait,
-		  GLIBC_2_3_2);
+versioned_symbol (libc, ___pthread_cond_wait, pthread_cond_wait, GLIBC_2_3_2);
 libc_hidden_ver (___pthread_cond_wait, __pthread_cond_wait)
 #ifndef SHARED
-strong_alias (___pthread_cond_wait, __pthread_cond_wait)
+    strong_alias (___pthread_cond_wait, __pthread_cond_wait)
 #endif
 
-/* See __pthread_cond_wait_common.  */
-int
-___pthread_cond_timedwait64 (pthread_cond_t *cond, pthread_mutex_t *mutex,
-			     const struct __timespec64 *abstime)
+    /* See __pthread_cond_wait_common.  */
+    int ___pthread_cond_timedwait64 (pthread_cond_t *cond,
+				     pthread_mutex_t *mutex,
+				     const struct __timespec64 *abstime)
 {
   /* Check parameter validity.  This should also tell the compiler that
      it can assume that abstime is not NULL.  */
-  if (! valid_nanoseconds (abstime->tv_nsec))
+  if (!valid_nanoseconds (abstime->tv_nsec))
     return EINVAL;
 
   /* Relaxed MO is suffice because clock ID bit is only modified
      in condition creation.  */
   unsigned int flags = atomic_load_relaxed (&cond->__data.__wrefs);
   clockid_t clockid = (flags & __PTHREAD_COND_CLOCK_MONOTONIC_MASK)
-                    ? CLOCK_MONOTONIC : CLOCK_REALTIME;
+			  ? CLOCK_MONOTONIC
+			  : CLOCK_REALTIME;
   return __pthread_cond_wait_common (cond, mutex, clockid, abstime);
 }
 
@@ -647,33 +644,32 @@ ___pthread_cond_timedwait64 (pthread_cond_t *cond, pthread_mutex_t *mutex,
 strong_alias (___pthread_cond_timedwait64, ___pthread_cond_timedwait)
 #else
 strong_alias (___pthread_cond_timedwait64, __pthread_cond_timedwait64)
-libc_hidden_def (__pthread_cond_timedwait64)
+    libc_hidden_def (__pthread_cond_timedwait64)
 
-int
-___pthread_cond_timedwait (pthread_cond_t *cond, pthread_mutex_t *mutex,
-			    const struct timespec *abstime)
+	int ___pthread_cond_timedwait (pthread_cond_t *cond,
+				       pthread_mutex_t *mutex,
+				       const struct timespec *abstime)
 {
   struct __timespec64 ts64 = valid_timespec_to_timespec64 (*abstime);
 
   return __pthread_cond_timedwait64 (cond, mutex, &ts64);
 }
 #endif /* __TIMESIZE == 64 */
-versioned_symbol (libc, ___pthread_cond_timedwait,
-		  pthread_cond_timedwait, GLIBC_2_3_2);
+    versioned_symbol (libc, ___pthread_cond_timedwait, pthread_cond_timedwait,
+		      GLIBC_2_3_2);
 libc_hidden_ver (___pthread_cond_timedwait, __pthread_cond_timedwait)
 #ifndef SHARED
-strong_alias (___pthread_cond_timedwait, __pthread_cond_timedwait)
+    strong_alias (___pthread_cond_timedwait, __pthread_cond_timedwait)
 #endif
 
-/* See __pthread_cond_wait_common.  */
-int
-___pthread_cond_clockwait64 (pthread_cond_t *cond, pthread_mutex_t *mutex,
-			      clockid_t clockid,
-			      const struct __timespec64 *abstime)
+    /* See __pthread_cond_wait_common.  */
+    int ___pthread_cond_clockwait64 (pthread_cond_t *cond,
+				     pthread_mutex_t *mutex, clockid_t clockid,
+				     const struct __timespec64 *abstime)
 {
   /* Check parameter validity.  This should also tell the compiler that
      it can assume that abstime is not NULL.  */
-  if (! valid_nanoseconds (abstime->tv_nsec))
+  if (!valid_nanoseconds (abstime->tv_nsec))
     return EINVAL;
 
   if (!futex_abstimed_supported_clockid (clockid))
@@ -688,23 +684,22 @@ strong_alias (___pthread_cond_clockwait64, ___pthread_cond_clockwait)
 strong_alias (___pthread_cond_clockwait64, __pthread_cond_clockwait64);
 libc_hidden_def (__pthread_cond_clockwait64)
 
-int
-___pthread_cond_clockwait (pthread_cond_t *cond, pthread_mutex_t *mutex,
-                          clockid_t clockid,
-                          const struct timespec *abstime)
+    int ___pthread_cond_clockwait (pthread_cond_t *cond,
+				   pthread_mutex_t *mutex, clockid_t clockid,
+				   const struct timespec *abstime)
 {
   struct __timespec64 ts64 = valid_timespec_to_timespec64 (*abstime);
 
   return __pthread_cond_clockwait64 (cond, mutex, clockid, &ts64);
 }
 #endif /* __TIMESIZE == 64 */
-libc_hidden_ver (___pthread_cond_clockwait, __pthread_cond_clockwait)
+    libc_hidden_ver (___pthread_cond_clockwait, __pthread_cond_clockwait)
 #ifndef SHARED
-strong_alias (___pthread_cond_clockwait, __pthread_cond_clockwait)
+	strong_alias (___pthread_cond_clockwait, __pthread_cond_clockwait)
 #endif
-versioned_symbol (libc, ___pthread_cond_clockwait,
-		  pthread_cond_clockwait, GLIBC_2_34);
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_30, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_cond_clockwait,
-	       pthread_cond_clockwait, GLIBC_2_30);
+	    versioned_symbol (libc, ___pthread_cond_clockwait,
+			      pthread_cond_clockwait, GLIBC_2_34);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_30, GLIBC_2_34)
+compat_symbol (libpthread, ___pthread_cond_clockwait, pthread_cond_clockwait,
+	       GLIBC_2_30);
 #endif

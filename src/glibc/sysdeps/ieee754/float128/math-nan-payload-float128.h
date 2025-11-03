@@ -18,17 +18,18 @@
 
 #include <ieee754_float128.h>
 
-#define SET_NAN_PAYLOAD(flt, mant)			\
-  do							\
-    {							\
-      union ieee854_float128 u;				\
-      u.d = (flt);					\
-      u.ieee_nan.mantissa0 = 0;				\
-      u.ieee_nan.mantissa1 = 0;				\
-      u.ieee_nan.mantissa2 = (mant) >> 32;		\
-      u.ieee_nan.mantissa3 = (mant);			\
-      if ((u.ieee.mantissa0 | u.ieee.mantissa1		\
-	   | u.ieee.mantissa2 | u.ieee.mantissa3) != 0)	\
-	(flt) = u.d;					\
-    }							\
+#define SET_NAN_PAYLOAD(flt, mant)                                            \
+  do                                                                          \
+    {                                                                         \
+      union ieee854_float128 u;                                               \
+      u.d = (flt);                                                            \
+      u.ieee_nan.mantissa0 = 0;                                               \
+      u.ieee_nan.mantissa1 = 0;                                               \
+      u.ieee_nan.mantissa2 = (mant) >> 32;                                    \
+      u.ieee_nan.mantissa3 = (mant);                                          \
+      if ((u.ieee.mantissa0 | u.ieee.mantissa1 | u.ieee.mantissa2             \
+	   | u.ieee.mantissa3)                                                \
+	  != 0)                                                               \
+	(flt) = u.d;                                                          \
+    }                                                                         \
   while (0)

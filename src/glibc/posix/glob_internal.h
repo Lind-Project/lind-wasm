@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef GLOB_INTERNAL_H
-# define GLOB_INTERNAL_H
+#define GLOB_INTERNAL_H
 
 enum
 {
-  GLOBPAT_NONE      = 0x0,
-  GLOBPAT_SPECIAL   = 0x1,
+  GLOBPAT_NONE = 0x0,
+  GLOBPAT_SPECIAL = 0x1,
   GLOBPAT_BACKSLASH = 0x2,
-  GLOBPAT_BRACKET   = 0x4
+  GLOBPAT_BRACKET = 0x4
 };
 
 static inline int
@@ -38,25 +38,25 @@ __glob_pattern_type (const char *pattern, int quote)
       {
       case '?':
       case '*':
-        return GLOBPAT_SPECIAL;
+	return GLOBPAT_SPECIAL;
 
       case '\\':
-        if (quote)
-          {
-            if (p[1] != '\0')
-              ++p;
-            ret |= GLOBPAT_BACKSLASH;
-          }
-        break;
+	if (quote)
+	  {
+	    if (p[1] != '\0')
+	      ++p;
+	    ret |= GLOBPAT_BACKSLASH;
+	  }
+	break;
 
       case '[':
-        ret |= GLOBPAT_BRACKET;
-        break;
+	ret |= GLOBPAT_BRACKET;
+	break;
 
       case ']':
-        if (ret & 4)
-          return GLOBPAT_SPECIAL;
-        break;
+	if (ret & 4)
+	  return GLOBPAT_SPECIAL;
+	break;
       }
 
   return ret;

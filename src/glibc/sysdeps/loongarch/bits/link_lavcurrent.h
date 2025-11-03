@@ -18,8 +18,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LINK_H
-# error "Never include <bits/link_lavcurrent.h> directly; use <link.h> instead."
+#  error                                                                       \
+      "Never include <bits/link_lavcurrent.h> directly; use <link.h> instead."
 #endif
 
 /* Version numbers for la_version handshake interface.  */
-#define LAV_CURRENT	3
+#define LAV_CURRENT 3

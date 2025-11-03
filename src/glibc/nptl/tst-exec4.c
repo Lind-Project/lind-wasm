@@ -56,7 +56,6 @@ tf (void *arg)
   exit (1);
 }
 
-
 static int
 do_test (int argc, char *argv[])
 {
@@ -82,7 +81,7 @@ do_test (int argc, char *argv[])
 	  puts ("2nd run: sigmask failed");
 	  return 1;
 	}
-      if (! sigismember (&ss, SIGUSR2))
+      if (!sigismember (&ss, SIGUSR2))
 	{
 	  puts ("SIGUSR2 not blocked");
 	  return 1;

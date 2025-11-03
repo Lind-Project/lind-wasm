@@ -64,6 +64,5 @@ do_test (void)
   return ok ? 0 : 1;
 }
 
-
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

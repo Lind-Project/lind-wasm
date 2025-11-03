@@ -16,35 +16,33 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if IS_IN(libc)
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (__memchr) __memchr_ppc attribute_hidden;
 extern __typeof (__memchr) __memchr_power7 attribute_hidden;
 extern __typeof (__memchr) __memchr_power8 attribute_hidden;
 
-# ifdef __LITTLE_ENDIAN__
+#  ifdef __LITTLE_ENDIAN__
 extern __typeof (__memchr) __memchr_power10 attribute_hidden;
-# endif
+#  endif
 /* Avoid DWARF definition DIE on ifunc symbol so that GDB can handle
    ifunc symbol properly.  */
 libc_ifunc (__memchr,
-# ifdef __LITTLE_ENDIAN__
-	    (hwcap2 & PPC_FEATURE2_ARCH_3_1
-	     && hwcap & PPC_FEATURE_HAS_VSX)
-	    ? __memchr_power10 :
-# endif
-	      (hwcap2 & PPC_FEATURE2_ARCH_2_07
-	      && hwcap & PPC_FEATURE_HAS_ALTIVEC)
-	      ? __memchr_power8 :
-	        (hwcap & PPC_FEATURE_ARCH_2_06)
-	        ? __memchr_power7
-	        : __memchr_ppc);
+#  ifdef __LITTLE_ENDIAN__
+	    (hwcap2 & PPC_FEATURE2_ARCH_3_1 && hwcap & PPC_FEATURE_HAS_VSX)
+		? __memchr_power10
+	    :
+#  endif
+	    (hwcap2 & PPC_FEATURE2_ARCH_2_07
+	     && hwcap & PPC_FEATURE_HAS_ALTIVEC)
+		? __memchr_power8
+	    : (hwcap &PPC_FEATURE_ARCH_2_06) ? __memchr_power7
+					     : __memchr_ppc);
 
-weak_alias (__memchr, memchr)
-libc_hidden_builtin_def (memchr)
+weak_alias (__memchr, memchr) libc_hidden_builtin_def (memchr)
 #else
-#include <string/memchr.c>
+#  include <string/memchr.c>
 #endif

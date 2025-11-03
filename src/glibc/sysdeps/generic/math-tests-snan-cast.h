@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_TESTS_SNAN_CAST_H
-#define _MATH_TESTS_SNAN_CAST_H 1
+#  define _MATH_TESTS_SNAN_CAST_H 1
 
 /* Indicate whether to run tests involving type casts of sNaN values.
    These are run unless overridden.  */
-#define SNAN_TESTS_TYPE_CAST	1
+#  define SNAN_TESTS_TYPE_CAST 1
 
 #endif /* math-tests-snan-cast.h.  */

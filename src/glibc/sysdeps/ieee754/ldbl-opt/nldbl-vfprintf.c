@@ -1,7 +1,6 @@
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 vfprintf (FILE *s, const char *fmt, va_list ap)
 {
   return __nldbl_vfprintf (s, fmt, ap);

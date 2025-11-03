@@ -27,7 +27,6 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-
 /* Get the canonical absolute name of the given directory port, and put it
    in SIZE bytes of BUF.  Returns NULL if the directory couldn't be
    determined or SIZE was too small.  If successful, returns BUF.  In GNU,
@@ -37,9 +36,8 @@
    a slash to indicate that it is relative to some unknown root directory.  */
 
 char *
-__hurd_canonicalize_directory_name_internal (file_t thisdir,
-					    char *buf,
-					    size_t size)
+__hurd_canonicalize_directory_name_internal (file_t thisdir, char *buf,
+					     size_t size)
 {
   error_t err;
   mach_port_t rootid, thisid, rootdevid, thisdevid;
@@ -52,26 +50,24 @@ __hurd_canonicalize_directory_name_internal (file_t thisdir,
   const size_t orig_size = size;
 
   inline void cleanup (void)
-    {
-      if (parent != thisdir)
-	__mach_port_deallocate (__mach_task_self (), parent);
+  {
+    if (parent != thisdir)
+      __mach_port_deallocate (__mach_task_self (), parent);
 
-      __mach_port_deallocate (__mach_task_self (), thisid);
-      __mach_port_deallocate (__mach_task_self (), thisdevid);
-      __mach_port_deallocate (__mach_task_self (), rootid);
+    __mach_port_deallocate (__mach_task_self (), thisid);
+    __mach_port_deallocate (__mach_task_self (), thisdevid);
+    __mach_port_deallocate (__mach_task_self (), rootid);
 
-      if (dirbuf != NULL)
-	__vm_deallocate (__mach_task_self (),
-			 (vm_address_t) dirbuf, dirbufsize);
-    }
-
+    if (dirbuf != NULL)
+      __vm_deallocate (__mach_task_self (), (vm_address_t) dirbuf, dirbufsize);
+  }
 
   if (size <= 0)
     {
       if (buf != NULL)
-        return __hurd_fail (EINVAL), NULL;
+	return __hurd_fail (EINVAL), NULL;
 
-      size = FILENAME_MAX * 4 + 1;	/* Good starting guess.  */
+      size = FILENAME_MAX * 4 + 1; /* Good starting guess.  */
     }
 
   if (buf != NULL)
@@ -88,8 +84,8 @@ __hurd_canonicalize_directory_name_internal (file_t thisdir,
 
   /* Get a port to our root directory and get its identity.  */
 
-  if (err = __USEPORT (CRDIR, __io_identity (port,
-					     &rootid, &rootdevid, &rootino)))
+  if (err
+      = __USEPORT (CRDIR, __io_identity (port, &rootid, &rootdevid, &rootino)))
     return __hurd_fail (err), NULL;
   __mach_port_deallocate (__mach_task_self (), rootdevid);
 
@@ -117,7 +113,6 @@ __hurd_canonicalize_directory_name_internal (file_t thisdir,
       mach_msg_type_number_t dirdatasize;
       int direntry, nentries;
 
-
       /* Look at the parent directory.  */
       newp = __file_name_lookup_under (parent, "..", O_READ, 0);
       if (newp == MACH_PORT_NULL)
@@ -127,7 +122,7 @@ __hurd_canonicalize_directory_name_internal (file_t thisdir,
       parent = newp;
 
       /* Get this directory's identity and figure out if it's a mount
-         point.  */
+	 point.  */
       if (err = __io_identity (parent, &dotid, &dotdevid, &dotino))
 	goto errlose;
       mount_point = dotdevid != thisdevid;
@@ -144,8 +139,8 @@ __hurd_canonicalize_directory_name_internal (file_t thisdir,
       direntry = 0;
       dirdata = dirbuf;
       dirdatasize = dirbufsize;
-      while (!(err = __dir_readdir (parent, &dirdata, &dirdatasize,
-				    direntry, -1, 0, &nentries))
+      while (!(err = __dir_readdir (parent, &dirdata, &dirdatasize, direntry,
+				    -1, 0, &nentries))
 	     && nentries != 0)
 	{
 	  /* We have a block of directory entries.  */
@@ -159,8 +154,8 @@ __hurd_canonicalize_directory_name_internal (file_t thisdir,
 	      /* The data was passed out of line, so our old buffer is no
 		 longer useful.  Deallocate the old buffer and reset our
 		 information for the new buffer.  */
-	      __vm_deallocate (__mach_task_self (),
-			       (vm_address_t) dirbuf, dirbufsize);
+	      __vm_deallocate (__mach_task_self (), (vm_address_t) dirbuf,
+			       dirbufsize);
 	      dirbuf = dirdata;
 	      dirbufsize = round_page (dirdatasize);
 	    }
@@ -202,7 +197,7 @@ __hurd_canonicalize_directory_name_internal (file_t thisdir,
 
       if (err)
 	{
-	inner_errlose:		/* Goto ERRLOSE: after cleaning up.  */
+	inner_errlose: /* Goto ERRLOSE: after cleaning up.  */
 	  __mach_port_deallocate (__mach_task_self (), dotid);
 	  __mach_port_deallocate (__mach_task_self (), dotdevid);
 	  goto errlose;
@@ -247,9 +242,9 @@ __hurd_canonicalize_directory_name_internal (file_t thisdir,
 	  *--file_namep = '/';
 	}
 
-      /* The next iteration will find the name of the directory we
-	 just searched through.  */
-      __mach_port_deallocate (__mach_task_self (), thisid);
+	/* The next iteration will find the name of the directory we
+	   just searched through.  */
+	__mach_port_deallocate (__mach_task_self (), thisid);
       __mach_port_deallocate (__mach_task_self (), thisdevid);
       thisid = dotid;
       thisdevid = dotdevid;
@@ -265,20 +260,20 @@ __hurd_canonicalize_directory_name_internal (file_t thisdir,
   cleanup ();
   return file_name;
 
- errlose:
+errlose:
   /* Set errno.  */
   (void) __hurd_fail (err);
- lose:
+lose:
   if (orig_size == 0)
     free (file_name);
   cleanup ();
   return NULL;
 }
-strong_alias (__hurd_canonicalize_directory_name_internal, _hurd_canonicalize_directory_name_internal)
+strong_alias (__hurd_canonicalize_directory_name_internal,
+	      _hurd_canonicalize_directory_name_internal)
 
-char *
-__canonicalize_directory_name_internal (const char *thisdir, char *buf,
-					size_t size)
+    char *__canonicalize_directory_name_internal (const char *thisdir,
+						  char *buf, size_t size)
 {
   char *result;
   file_t port = __file_name_lookup (thisdir, 0, 0);
@@ -288,7 +283,7 @@ __canonicalize_directory_name_internal (const char *thisdir, char *buf,
   __mach_port_deallocate (__mach_task_self (), port);
   return result;
 }
-
+
 /* Get the pathname of the current working directory, and put it in SIZE
    bytes of BUF.  Returns NULL if the directory couldn't be determined or
    SIZE was too small.  If successful, returns BUF.  In GNU, if BUF is
@@ -297,11 +292,8 @@ __canonicalize_directory_name_internal (const char *thisdir, char *buf,
 char *
 __getcwd (char *buf, size_t size)
 {
-  char *cwd =
-    __USEPORT (CWDIR,
-	       __hurd_canonicalize_directory_name_internal (port,
-							    buf, size));
+  char *cwd = __USEPORT (
+      CWDIR, __hurd_canonicalize_directory_name_internal (port, buf, size));
   return cwd;
 }
-libc_hidden_def (__getcwd)
-weak_alias (__getcwd, getcwd)
+libc_hidden_def (__getcwd) weak_alias (__getcwd, getcwd)

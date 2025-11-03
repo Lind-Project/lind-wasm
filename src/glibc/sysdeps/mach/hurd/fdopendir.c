@@ -34,10 +34,11 @@ __fdopendir (int fd)
     return __hurd_fail (EBADF), NULL;
 
   /* Ensure that it's a directory.  */
-  error_t err = HURD_FD_PORT_USE
-    (d, ({
+  error_t err = HURD_FD_PORT_USE (
+      d, ({
 	file_t dir = __file_name_lookup_under (port, "./",
-					       O_DIRECTORY | O_NOTRANS, 0);;
+					       O_DIRECTORY | O_NOTRANS, 0);
+	;
 	if (dir != MACH_PORT_NULL)
 	  __mach_port_deallocate (__mach_task_self (), dir);
 	dir != MACH_PORT_NULL ? 0 : errno;

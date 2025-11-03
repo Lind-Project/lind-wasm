@@ -119,10 +119,9 @@ reader_consumer (void *arg)
 	}
     }
   while (s == 0);
-    puts ("consumer finished");
+  puts ("consumer finished");
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -176,7 +175,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

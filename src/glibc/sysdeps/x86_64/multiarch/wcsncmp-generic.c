@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <isa-level.h>
-#if ISA_SHOULD_BUILD (2)
+#if ISA_SHOULD_BUILD(2)
 
-# define WCSNCMP __wcsncmp_generic
-# include <wcsmbs/wcsncmp.c>
+#  define WCSNCMP __wcsncmp_generic
+#  include <wcsmbs/wcsncmp.c>
 
 #endif

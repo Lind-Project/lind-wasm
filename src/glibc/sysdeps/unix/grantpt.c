@@ -31,7 +31,6 @@
 
 #include "pty-private.h"
 
-
 /* Return the result of ptsname_r in the buffer pointed to by PTS,
    which should be of length BUF_LEN.  If it is too long to fit in
    this buffer, a sufficiently long buffer is allocated using malloc,
@@ -56,7 +55,7 @@ pts_name (int fd, char **pts, size_t buf_len, struct stat64 *stp)
 		   a descriptor not referring to a pty master.
 		   For this condition, grantpt must return EINVAL.  */
 		rv = EINVAL;
-	      errno = rv;	/* Not necessarily set by __ptsname_r.  */
+	      errno = rv; /* Not necessarily set by __ptsname_r.  */
 	      break;
 	    }
 
@@ -65,18 +64,18 @@ pts_name (int fd, char **pts, size_t buf_len, struct stat64 *stp)
 	    break;
 
 	  /* Try again with a longer buffer.  */
-	  buf_len += buf_len;	/* Double it */
+	  buf_len += buf_len; /* Double it */
 	}
       else
 	/* No initial buffer; start out by mallocing one.  */
-	buf_len = 128;		/* First time guess.  */
+	buf_len = 128; /* First time guess.  */
 
       if (buf != *pts)
 	/* We've already malloced another buffer at least once.  */
 	new_buf = (char *) realloc (buf, buf_len);
       else
 	new_buf = (char *) malloc (buf_len);
-      if (! new_buf)
+      if (!new_buf)
 	{
 	  rv = -1;
 	  __set_errno (ENOMEM);
@@ -86,9 +85,9 @@ pts_name (int fd, char **pts, size_t buf_len, struct stat64 *stp)
     }
 
   if (rv == 0)
-    *pts = buf;		/* Return buffer to the user.  */
+    *pts = buf; /* Return buffer to the user.  */
   else if (buf != *pts)
-    free (buf);		/* Free what we malloced when returning an error.  */
+    free (buf); /* Free what we malloced when returning an error.  */
 
   return rv;
 }
@@ -117,14 +116,14 @@ grantpt (int fd)
       if (__libc_fcntl (fd, F_GETFD) == -1 && errno == EBADF)
 	return -1;
 
-       /* If the filedescriptor is no TTY, grantpt has to set errno
-	  to EINVAL.  */
-       if (save_errno == ENOTTY)
-	 __set_errno (EINVAL);
-       else
-	 __set_errno (save_errno);
+      /* If the filedescriptor is no TTY, grantpt has to set errno
+	 to EINVAL.  */
+      if (save_errno == ENOTTY)
+	__set_errno (EINVAL);
+      else
+	__set_errno (save_errno);
 
-       return -1;
+      return -1;
     }
 
   /* Make sure that we own the device.  */
@@ -160,7 +159,7 @@ grantpt (int fd)
       if (p != NULL)
 	tty_gid = p->gr_gid;
 
-      scratch_buffer_free(&sbuf);
+      scratch_buffer_free (&sbuf);
     }
   gid_t gid = tty_gid == -1 ? __getgid () : tty_gid;
 
@@ -174,7 +173,7 @@ grantpt (int fd)
 
   /* Make sure the permission mode is set to readable and writable by
      the owner, and writable by the group.  */
-  mode_t mode = S_IRUSR|S_IWUSR|S_IWGRP;
+  mode_t mode = S_IRUSR | S_IWUSR | S_IWGRP;
 #else
   /* When built without pt_chown, we have delegated the creation of the
      pty node with the right group and permission mode to the kernel, and
@@ -187,8 +186,8 @@ grantpt (int fd)
      owner.  For security reasons, make it writable by the group only
      when originally writable and when the group of the device is that
      special group.  */
-  mode_t mode = S_IRUSR|S_IWUSR
-	        |((st.st_gid == gid) ? (st.st_mode & S_IWGRP) : 0);
+  mode_t mode
+      = S_IRUSR | S_IWUSR | ((st.st_gid == gid) ? (st.st_mode & S_IWGRP) : 0);
 #endif
 
   if ((st.st_mode & ACCESSPERMS) != mode)
@@ -201,7 +200,7 @@ grantpt (int fd)
   goto cleanup;
 
   /* We have to use the helper program if it is available.  */
- helper:;
+helper:;
 
 #if HAVE_PT_CHOWN
   pid_t pid = __fork ();
@@ -218,9 +217,9 @@ grantpt (int fd)
 	if (__dup2 (fd, PTY_FILENO) < 0)
 	  _exit (FAIL_EBADF);
 
-# ifdef CLOSE_ALL_FDS
+#  ifdef CLOSE_ALL_FDS
       CLOSE_ALL_FDS ();
-# endif
+#  endif
 
       execle (_PATH_PT_CHOWN, __basename (_PATH_PT_CHOWN), NULL, NULL);
       _exit (FAIL_EXEC);
@@ -256,12 +255,13 @@ grantpt (int fd)
 	    break;
 
 	  default:
-	    assert(! "grantpt: internal error: invalid exit code from pt_chown");
+	    assert (
+		!"grantpt: internal error: invalid exit code from pt_chown");
 	  }
     }
 #endif
 
- cleanup:
+cleanup:
   if (buf != _buf)
     free (buf);
 

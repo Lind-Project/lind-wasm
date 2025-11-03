@@ -23,14 +23,13 @@
 #include <sys/types.h>
 #include <shlib-compat.h>
 
-
-#if SHLIB_COMPAT (libc, GLIBC_2_3_3, GLIBC_2_3_4)
+#if SHLIB_COMPAT(libc, GLIBC_2_3_3, GLIBC_2_3_4)
 extern int __sched_getaffinity_new (pid_t, size_t, cpu_set_t *);
 libc_hidden_proto (__sched_getaffinity_new)
 #endif
 
-int
-__sched_getaffinity_new (pid_t pid, size_t cpusetsize, cpu_set_t *cpuset)
+    int __sched_getaffinity_new (pid_t pid, size_t cpusetsize,
+				 cpu_set_t *cpuset)
 {
   int res = INLINE_SYSCALL (sched_getaffinity, 3, pid,
 			    MIN (INT_MAX, cpusetsize), cpuset);
@@ -46,13 +45,11 @@ __sched_getaffinity_new (pid_t pid, size_t cpusetsize, cpu_set_t *cpuset)
 versioned_symbol (libc, __sched_getaffinity_new, sched_getaffinity,
 		  GLIBC_2_3_4);
 
-
-#if SHLIB_COMPAT (libc, GLIBC_2_3_3, GLIBC_2_3_4)
+#if SHLIB_COMPAT(libc, GLIBC_2_3_3, GLIBC_2_3_4)
 libc_hidden_def (__sched_getaffinity_new)
 
-int
-attribute_compat_text_section
-__sched_getaffinity_old (pid_t pid, cpu_set_t *cpuset)
+    int attribute_compat_text_section
+    __sched_getaffinity_old (pid_t pid, cpu_set_t *cpuset)
 {
   /* The old interface by default assumed a 1024 processor bitmap.  */
   return __sched_getaffinity_new (pid, 128, cpuset);

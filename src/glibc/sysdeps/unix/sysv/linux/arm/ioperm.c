@@ -17,8 +17,8 @@
 
 #include <shlib-compat.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_4, GLIBC_2_30)
-# include <errno.h>
+#if SHLIB_COMPAT(libc, GLIBC_2_4, GLIBC_2_30)
+#  include <errno.h>
 
 int
 ioperm (unsigned long int from, unsigned long int num, int turn_on)
@@ -35,7 +35,6 @@ iopl (unsigned int level)
   return -1;
 }
 compat_symbol (libc, iopl, iopl, GLIBC_2_4);
-
 
 /* The remaining functions do not have any way to indicate failure.
    However, it is only valid to call them after calling ioperm/iopl,
@@ -66,14 +65,12 @@ inb (unsigned long int port)
 }
 compat_symbol (libc, inb, inb, GLIBC_2_4);
 
-
 unsigned int
 inw (unsigned long int port)
 {
   return 0;
 }
 compat_symbol (libc, inw, inw, GLIBC_2_4);
-
 
 unsigned int
 inl (unsigned long int port)

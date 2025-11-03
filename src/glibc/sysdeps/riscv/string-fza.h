@@ -17,12 +17,12 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _RISCV_STRING_FZA_H
-#define _RISCV_STRING_FZA_H 1
+#  define _RISCV_STRING_FZA_H 1
 
-#if defined __riscv_zbb || defined __riscv_xtheadbb
+#  if defined __riscv_zbb || defined __riscv_xtheadbb
 /* With bitmap extension we can use orc.b to find all zero bytes.  */
-# include <string-misc.h>
-# include <string-optype.h>
+#    include <string-misc.h>
+#    include <string-optype.h>
 
 /* The functions return a byte mask.  */
 typedef op_t find_t;
@@ -32,13 +32,13 @@ static __always_inline find_t
 find_zero_all (op_t x)
 {
   find_t r;
-#ifdef __riscv_xtheadbb
-  asm ("th.tstnbz %0, %1" : "=r" (r) : "r" (x));
+#    ifdef __riscv_xtheadbb
+  asm ("th.tstnbz %0, %1" : "=r"(r) : "r"(x));
   return r;
-#else
-  asm ("orc.b %0, %1" : "=r" (r) : "r" (x));
+#    else
+  asm ("orc.b %0, %1" : "=r"(r) : "r"(x));
   return ~r;
-#endif
+#    endif
 }
 
 /* This function returns 0xff for each byte that is equal between X1 and
@@ -64,11 +64,11 @@ find_zero_ne_all (op_t x1, op_t x2)
 }
 
 /* Define the "inexact" versions in terms of the exact versions.  */
-# define find_zero_low		find_zero_all
-# define find_eq_low		find_eq_all
-# define find_zero_eq_low	find_zero_eq_all
-#else
-#include <sysdeps/generic/string-fza.h>
-#endif
+#    define find_zero_low find_zero_all
+#    define find_eq_low find_eq_all
+#    define find_zero_eq_low find_zero_eq_all
+#  else
+#    include <sysdeps/generic/string-fza.h>
+#  endif
 
 #endif /* _RISCV_STRING_FZA_H  */

@@ -87,31 +87,30 @@ do_test (void)
   /* Executes a /bin/sh echo $$ 2>&1 > ${objpfx}tst-spawn3.pid .  */
   const char pidfile[] = OBJPFX "tst-spawn3.pid";
   TEST_COMPARE (posix_spawn_file_actions_addopen (&a, STDOUT_FILENO, pidfile,
-						  O_WRONLY| O_CREAT | O_TRUNC,
+						  O_WRONLY | O_CREAT | O_TRUNC,
 						  0644),
 		0);
 
-  TEST_COMPARE (posix_spawn_file_actions_adddup2 (&a, STDOUT_FILENO,
-						  STDERR_FILENO),
-		0);
+  TEST_COMPARE (
+      posix_spawn_file_actions_adddup2 (&a, STDOUT_FILENO, STDERR_FILENO), 0);
 
   /* Since execve (called by posix_spawn) might require to open files to
      actually execute the shell script, setup to close the temporary file
      descriptors.  */
   int maxnfiles =
 #ifdef TST_SPAWN_PIDFD
-    /* The sparing file descriptor will be returned as the pid descriptor,
-       otherwise clone fail with EMFILE.  */
-    nfiles - 1;
+      /* The sparing file descriptor will be returned as the pid descriptor,
+	 otherwise clone fail with EMFILE.  */
+      nfiles - 1;
 #else
-    nfiles;
+      nfiles;
 #endif
 
-  for (int i=0; i<maxnfiles; i++)
+  for (int i = 0; i < maxnfiles; i++)
     TEST_COMPARE (posix_spawn_file_actions_addclose (&a, files[i]), 0);
 
-  char *spawn_argv[] = { (char *) _PATH_BSHELL, (char *) "-c",
-			 (char *) "echo $$", NULL };
+  char *spawn_argv[]
+      = { (char *) _PATH_BSHELL, (char *) "-c", (char *) "echo $$", NULL };
   PID_T_TYPE pid;
 
   {
@@ -122,7 +121,7 @@ do_test (void)
     TEST_COMPARE (r, EMFILE);
 
     /* Free up one file descriptor, so posix_spawn_pidfd_ex can return it.  */
-    xclose (files[nfiles-1]);
+    xclose (files[nfiles - 1]);
     nfiles--;
     r = POSIX_SPAWN (&pid, _PATH_BSHELL, &a, NULL, spawn_argv, NULL);
 #endif
@@ -136,7 +135,7 @@ do_test (void)
 
   /* Close the temporary files descriptor so it can check posix_spawn
      output.  */
-  for (int i=0; i<nfiles; i++)
+  for (int i = 0; i < nfiles; i++)
     xclose (files[i]);
 
   int pidfd = xopen (pidfile, O_RDONLY, 0);

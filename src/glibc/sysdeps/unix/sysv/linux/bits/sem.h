@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SEM_H
-# error "Never include <bits/sem.h> directly; use <sys/sem.h> instead."
+#  error "Never include <bits/sem.h> directly; use <sys/sem.h> instead."
 #endif
 
 #include <sys/types.h>
@@ -25,16 +25,16 @@
 #include <bits/types/struct_semid64_ds.h>
 
 /* Flags for `semop'.  */
-#define SEM_UNDO	0x1000		/* undo the operation on exit */
+#define SEM_UNDO 0x1000 /* undo the operation on exit */
 
 /* Commands for `semctl'.  */
-#define GETPID		11		/* get sempid */
-#define GETVAL		12		/* get semval */
-#define GETALL		13		/* get all semval's */
-#define GETNCNT		14		/* get semncnt */
-#define GETZCNT		15		/* get semzcnt */
-#define SETVAL		16		/* set semval */
-#define SETALL		17		/* set all semval's */
+#define GETPID 11  /* get sempid */
+#define GETVAL 12  /* get semval */
+#define GETALL 13  /* get all semval's */
+#define GETNCNT 14 /* get semncnt */
+#define GETZCNT 15 /* get semzcnt */
+#define SETVAL 16  /* set semval */
+#define SETALL 17  /* set all semval's */
 
 /* The user should define a union like the following to use it for arguments
    for `semctl'.
@@ -50,16 +50,16 @@
    Previous versions of this file used to define this union but this is
    incorrect.  One can test the macro _SEM_SEMUN_UNDEFINED to see whether
    one must define the union or not.  */
-#define _SEM_SEMUN_UNDEFINED	1
+#define _SEM_SEMUN_UNDEFINED 1
 
 #ifdef __USE_MISC
 
 /* ipcs ctl cmds */
-# define SEM_STAT 18
-# define SEM_INFO 19
-# define SEM_STAT_ANY 20
+#  define SEM_STAT 18
+#  define SEM_INFO 19
+#  define SEM_STAT_ANY 20
 
-struct  seminfo
+struct seminfo
 {
   int semmap;
   int semmni;

@@ -20,8 +20,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern __m128i sse_test (__m128i, __m128i, __m128i, __m128i,
-			 __m128i, __m128i, __m128i, __m128i);
+extern __m128i sse_test (__m128i, __m128i, __m128i, __m128i, __m128i, __m128i,
+			 __m128i, __m128i);
 
 static int
 do_test (void)
@@ -34,9 +34,8 @@ do_test (void)
   __m128i xmm5 = _mm_set1_epi32 (5);
   __m128i xmm6 = _mm_set1_epi32 (6);
   __m128i xmm7 = _mm_set1_epi32 (7);
-  __m128i ret = sse_test (xmm0, xmm1, xmm2, xmm3,
-			  xmm4, xmm5, xmm6, xmm7);
-  xmm0 =  _mm_set1_epi32 (0x12349876);
+  __m128i ret = sse_test (xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7);
+  xmm0 = _mm_set1_epi32 (0x12349876);
   if (memcmp (&xmm0, &ret, sizeof (ret)))
     abort ();
   return 0;

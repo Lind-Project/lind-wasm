@@ -23,8 +23,7 @@ int
 __finitef (float x)
 {
   int x_cond;
-  asm volatile ("fclass.s \t%0, %1" : "=f" (x_cond) : "f" (x));
-  return  x_cond & ~(_FCLASS_INF | _FCLASS_NAN);
+  asm volatile ("fclass.s \t%0, %1" : "=f"(x_cond) : "f"(x));
+  return x_cond & ~(_FCLASS_INF | _FCLASS_NAN);
 }
-hidden_def (__finitef)
-weak_alias (__finitef, finitef)
+hidden_def (__finitef) weak_alias (__finitef, finitef)

@@ -46,9 +46,9 @@ __mremap (void *addr, size_t old_len, size_t new_len, int flags, ...)
   memory_object_name_t obj;
   vm_offset_t offset;
 
-  if ((flags & ~(MREMAP_MAYMOVE | MREMAP_FIXED)) ||
-      ((flags & MREMAP_FIXED) && !(flags & MREMAP_MAYMOVE)) ||
-      (old_len == 0 && !(flags & MREMAP_MAYMOVE)))
+  if ((flags & ~(MREMAP_MAYMOVE | MREMAP_FIXED))
+      || ((flags & MREMAP_FIXED) && !(flags & MREMAP_MAYMOVE))
+      || (old_len == 0 && !(flags & MREMAP_MAYMOVE)))
     return (void *) (long int) __hurd_fail (EINVAL);
 
   if (flags & MREMAP_FIXED)
@@ -59,9 +59,8 @@ __mremap (void *addr, size_t old_len, size_t new_len, int flags, ...)
       va_end (arg);
     }
 
-  err = __vm_region (__mach_task_self (),
-		     &begin, &len, &prot, &max_prot, &inherit,
-		     &shared, &obj, &offset);
+  err = __vm_region (__mach_task_self (), &begin, &len, &prot, &max_prot,
+		     &inherit, &shared, &obj, &offset);
   if (err)
     return (void *) (uintptr_t) __hurd_fail (err);
 
@@ -79,10 +78,10 @@ __mremap (void *addr, size_t old_len, size_t new_len, int flags, ...)
 
   end = begin + len;
 
-  if ((flags & MREMAP_FIXED) &&
-      ((new_vm_addr + new_len > vm_addr && new_vm_addr < end)))
+  if ((flags & MREMAP_FIXED)
+      && ((new_vm_addr + new_len > vm_addr && new_vm_addr < end)))
     {
-    /* Overlapping is not supported, like in Linux.  */
+      /* Overlapping is not supported, like in Linux.  */
       err = EINVAL;
       goto out;
     }
@@ -103,16 +102,15 @@ __mremap (void *addr, size_t old_len, size_t new_len, int flags, ...)
 	{
 	  /* Shrink.  */
 	  __mach_port_deallocate (__mach_task_self (), obj);
-	  err = __vm_deallocate (__mach_task_self (),
-				 begin + new_len, len - new_len);
+	  err = __vm_deallocate (__mach_task_self (), begin + new_len,
+				 len - new_len);
 	  new_vm_addr = vm_addr;
 	  goto out;
 	}
 
       /* Try to expand.  */
-      err = __vm_map (__mach_task_self (),
-		      &end, new_len - len, 0, 0,
-		      obj, offset + len, 0, prot, max_prot, inherit);
+      err = __vm_map (__mach_task_self (), &end, new_len - len, 0, 0, obj,
+		      offset + len, 0, prot, max_prot, inherit);
       if (!err)
 	{
 	  /* Ok, that worked.  Now coalesce them.  */
@@ -126,15 +124,13 @@ __mremap (void *addr, size_t old_len, size_t new_len, int flags, ...)
 	      goto out;
 	    }
 
-	  err = __vm_map (__mach_task_self (),
-			  &begin, new_len, 0, 0,
-			  obj, offset, 0, prot, max_prot, inherit);
+	  err = __vm_map (__mach_task_self (), &begin, new_len, 0, 0, obj,
+			  offset, 0, prot, max_prot, inherit);
 	  if (err)
 	    {
 	      /* Oops, try to remap before reporting.  */
-	      __vm_map (__mach_task_self (),
-			&begin, len, 0, 0,
-			obj, offset, 0, prot, max_prot, inherit);
+	      __vm_map (__mach_task_self (), &begin, len, 0, 0, obj, offset, 0,
+			prot, max_prot, inherit);
 	    }
 
 	  goto out;
@@ -148,21 +144,18 @@ __mremap (void *addr, size_t old_len, size_t new_len, int flags, ...)
       goto out;
     }
 
-  err = __vm_map (__mach_task_self (),
-		  &new_vm_addr, new_len, 0,
-		  new_vm_addr == 0, obj, offset,
-		  old_len == 0, prot, max_prot, inherit);
+  err = __vm_map (__mach_task_self (), &new_vm_addr, new_len, 0,
+		  new_vm_addr == 0, obj, offset, old_len == 0, prot, max_prot,
+		  inherit);
 
   if (err == KERN_NO_SPACE && (flags & MREMAP_FIXED))
     {
       /* XXX this is not atomic as it is in unix! */
       /* The region is already allocated; deallocate it first.  */
       err = __vm_deallocate (__mach_task_self (), new_vm_addr, new_len);
-      if (! err)
-	err = __vm_map (__mach_task_self (),
-			&new_vm_addr, new_len, 0,
-			0, obj, offset,
-			old_len == 0, prot, max_prot, inherit);
+      if (!err)
+	err = __vm_map (__mach_task_self (), &new_vm_addr, new_len, 0, 0, obj,
+			offset, old_len == 0, prot, max_prot, inherit);
     }
 
   if (!err)
@@ -176,5 +169,4 @@ out:
   return (void *) new_vm_addr;
 }
 
-libc_hidden_def (__mremap)
-weak_alias (__mremap, mremap)
+libc_hidden_def (__mremap) weak_alias (__mremap, mremap)

@@ -19,7 +19,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _AARCH64_DL_TLSDESC_H
-#define _AARCH64_DL_TLSDESC_H 1
+#  define _AARCH64_DL_TLSDESC_H 1
 
 /* Type used to represent a TLS descriptor in the GOT.  */
 struct tlsdesc
@@ -42,17 +42,14 @@ struct tlsdesc_dynamic_arg
   size_t gen_count;
 };
 
-extern ptrdiff_t attribute_hidden
-_dl_tlsdesc_return (struct tlsdesc *);
+extern ptrdiff_t attribute_hidden _dl_tlsdesc_return (struct tlsdesc *);
 
-extern ptrdiff_t attribute_hidden
-_dl_tlsdesc_undefweak (struct tlsdesc *);
+extern ptrdiff_t attribute_hidden _dl_tlsdesc_undefweak (struct tlsdesc *);
 
-# ifdef SHARED
+#  ifdef SHARED
 extern void *_dl_make_tlsdesc_dynamic (struct link_map *, size_t);
 
-extern ptrdiff_t attribute_hidden
-_dl_tlsdesc_dynamic (struct tlsdesc *);
-#endif
+extern ptrdiff_t attribute_hidden _dl_tlsdesc_dynamic (struct tlsdesc *);
+#  endif
 
 #endif

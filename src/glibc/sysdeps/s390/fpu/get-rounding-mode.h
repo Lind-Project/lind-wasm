@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _S390_GET_ROUNDING_MODE_H
-#define _S390_GET_ROUNDING_MODE_H	1
+#  define _S390_GET_ROUNDING_MODE_H 1
 
-#include <fenv.h>
-#include <fenv_libc.h>
-#include <fpu_control.h>
+#  include <fenv.h>
+#  include <fenv_libc.h>
+#  include <fpu_control.h>
 
 /* Return the floating-point rounding mode.  */
 

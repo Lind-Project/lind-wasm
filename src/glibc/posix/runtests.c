@@ -2,7 +2,7 @@
 
 Copyright 1995 by Tom Lord
 
-                        All Rights Reserved
+			All Rights Reserved
 
 Permission to use, copy, modify, and distribute this software and its
 documentation for any purpose and without fee is hereby granted,
@@ -22,36 +22,28 @@ PERFORMANCE OF THIS SOFTWARE.
 
 ******************************************************************/
 
-
-
 #include <sys/types.h>
 #include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-
-
 struct a_test
 {
   int expected;
-  const char * pattern;
-  const char * data;
+  const char *pattern;
+  const char *data;
 };
 
-static const struct a_test the_tests[] =
-{
+static const struct a_test the_tests[] = {
 #include "testcases.h"
-  {-1, 0, 0}
+  { -1, 0, 0 }
 };
-
-
-
 
 static int
-run_a_test (int id, const struct a_test * t)
+run_a_test (int id, const struct a_test *t)
 {
-  static const char * last_pattern = 0;
+  static const char *last_pattern = 0;
   static regex_t r;
   int err;
   char errmsg[100];
@@ -92,25 +84,19 @@ run_a_test (int id, const struct a_test * t)
   if (err != t->expected)
     {
       printf ("test %d\n", id);
-      printf ("pattern \"%s\" data \"%s\" wanted %d got %d\n",
-	      t->pattern, t->data, t->expected, err);
+      printf ("pattern \"%s\" data \"%s\" wanted %d got %d\n", t->pattern,
+	      t->data, t->expected, err);
       for (x = 0; x < 10; ++x)
-	printf ("reg %d == (%d, %d) %.*s\n",
-		x,
-		regs[x].rm_so,
-		regs[x].rm_eo,
-		regs[x].rm_eo - regs[x].rm_so,
-		t->data + regs[x].rm_so);
+	printf ("reg %d == (%d, %d) %.*s\n", x, regs[x].rm_so, regs[x].rm_eo,
+		regs[x].rm_eo - regs[x].rm_so, t->data + regs[x].rm_so);
       return 1;
     }
   puts (" OK.");
   return 0;
 }
 
-
-
 int
-main (int argc, char * argv[])
+main (int argc, char *argv[])
 {
   int x;
   int lo;

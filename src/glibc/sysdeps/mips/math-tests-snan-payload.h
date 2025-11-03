@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef MIPS_MATH_TESTS_SNAN_PAYLOAD_H
-#define MIPS_MATH_TESTS_SNAN_PAYLOAD_H 1
+#  define MIPS_MATH_TESTS_SNAN_PAYLOAD_H 1
 
 /* NaN payload preservation when converting a signaling NaN to quiet
    is only required in NAN2008 mode.  */
-#ifdef __mips_nan2008
-# define SNAN_TESTS_PRESERVE_PAYLOAD	1
-#else
-# define SNAN_TESTS_PRESERVE_PAYLOAD	0
-#endif
+#  ifdef __mips_nan2008
+#    define SNAN_TESTS_PRESERVE_PAYLOAD 1
+#  else
+#    define SNAN_TESTS_PRESERVE_PAYLOAD 0
+#  endif
 
 #endif /* math-tests-snan-payload.h.  */

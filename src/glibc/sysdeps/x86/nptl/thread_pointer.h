@@ -22,15 +22,15 @@
 static inline void *
 __thread_pointer (void)
 {
-#if __GNUC_PREREQ (11, 1)
+#if __GNUC_PREREQ(11, 1)
   return __builtin_thread_pointer ();
 #else
   void *__result;
-# ifdef __x86_64__
+#  ifdef __x86_64__
 
-# else
+#  else
 
-# endif
+#  endif
   return __result;
 #endif /* !GCC 11 */
 }

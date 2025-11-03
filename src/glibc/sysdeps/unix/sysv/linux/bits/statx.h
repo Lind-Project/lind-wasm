@@ -19,7 +19,7 @@
 /* This interface is based on <linux/stat.h> in Linux.  */
 
 #ifndef _SYS_STAT_H
-# error Never include <bits/statx.h> directly, include <sys/stat.h> instead.
+#  error Never include <bits/statx.h> directly, include <sys/stat.h> instead.
 #endif
 
 /* Use the Linux kernel header if available.  */
@@ -27,13 +27,13 @@
 /* Use "" to work around incorrect macro expansion of the
    __has_include argument (GCC PR 80005).  */
 #ifdef __has_include
-# if __has_include ("linux/stat.h")
-#  include "linux/stat.h"
-#  ifdef STATX_TYPE
-#   define __statx_timestamp_defined 1
-#   define __statx_defined 1
+#  if __has_include("linux/stat.h")
+#    include "linux/stat.h"
+#    ifdef STATX_TYPE
+#      define __statx_timestamp_defined 1
+#      define __statx_defined 1
+#    endif
 #  endif
-# endif
 #endif
 
 #include <bits/statx-generic.h>

@@ -22,6 +22,6 @@
 #define ELF_MACHINE_PLT_REL 1
 #define ELF_MACHINE_NO_REL 0
 #define ELF_MACHINE_NO_RELA 0
-#define PLTREL ElfW(Rel)
+#define PLTREL ElfW (Rel)
 
 #endif

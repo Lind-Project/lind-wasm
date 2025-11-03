@@ -21,12 +21,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static pthread_key_t key;
 
-
 static int rounds;
-
 
 static void
 destr (void *arg)
@@ -41,7 +38,6 @@ destr (void *arg)
     }
 }
 
-
 static void *
 tf (void *arg)
 {
@@ -54,7 +50,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 /* This test check non-standard behavior.  The standard does not
    require that the implementation has to stop calling TSD destructors
@@ -84,8 +79,8 @@ do_test (void)
 
   if (rounds < PTHREAD_DESTRUCTOR_ITERATIONS)
     {
-      printf ("rounds == %d, PTHREAD_DESTRUCTOR_ITERATIONS = %d\n",
-	      rounds, PTHREAD_DESTRUCTOR_ITERATIONS);
+      printf ("rounds == %d, PTHREAD_DESTRUCTOR_ITERATIONS = %d\n", rounds,
+	      PTHREAD_DESTRUCTOR_ITERATIONS);
       return 1;
     }
 
@@ -97,7 +92,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

@@ -18,18 +18,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _X86_AVX_RTM_VECS_H
-#define _X86_AVX_RTM_VECS_H			1
+#  define _X86_AVX_RTM_VECS_H 1
 
-#define COND_VZEROUPPER			COND_VZEROUPPER_XTEST
-#define ZERO_UPPER_VEC_REGISTERS_RETURN	\
-	ZERO_UPPER_VEC_REGISTERS_RETURN_XTEST
+#  define COND_VZEROUPPER COND_VZEROUPPER_XTEST
+#  define ZERO_UPPER_VEC_REGISTERS_RETURN ZERO_UPPER_VEC_REGISTERS_RETURN_XTEST
 
-#define VZEROUPPER_RETURN		jmp L(return_vzeroupper)
+#  define VZEROUPPER_RETURN jmp L (return_vzeroupper)
 
-#define USE_WITH_RTM			1
-#include "x86-avx-vecs.h"
+#  define USE_WITH_RTM 1
+#  include "x86-avx-vecs.h"
 
-#undef SECTION
-#define SECTION(p)				p##.avx.rtm
+#  undef SECTION
+#  define SECTION(p) p##.avx.rtm
 
 #endif

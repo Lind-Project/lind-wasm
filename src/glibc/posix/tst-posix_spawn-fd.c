@@ -37,29 +37,29 @@ static bool errors;
 static posix_spawn_file_actions_t actions;
 
 static void
-one_test (const char *name, int (*func) (int), int fd,
-          bool expect_success)
+one_test (const char *name, int (*func) (int), int fd, bool expect_success)
 {
   int ret = func (fd);
   if (expect_success)
     {
       if (ret != 0)
-        {
-          errno = ret;
-          printf ("error: posix_spawn_file_actions_%s (%d): %m\n", name, fd);
-          errors = true;
-        }
+	{
+	  errno = ret;
+	  printf ("error: posix_spawn_file_actions_%s (%d): %m\n", name, fd);
+	  errors = true;
+	}
     }
   else if (ret != EBADF)
     {
       if (ret == 0)
-          printf ("error: posix_spawn_file_actions_%s (%d):"
-                  " unexpected success\n", name, fd);
+	printf ("error: posix_spawn_file_actions_%s (%d):"
+		" unexpected success\n",
+		name, fd);
       else
-        {
-          errno = ret;
-          printf ("error: posix_spawn_file_actions_%s (%d): %m\n", name, fd);
-        }
+	{
+	  errno = ret;
+	  printf ("error: posix_spawn_file_actions_%s (%d): %m\n", name, fd);
+	}
       errors = true;
     }
 }
@@ -78,8 +78,8 @@ all_tests (const char *name, int (*func) (int))
 static int
 addopen (int fd)
 {
-  return posix_spawn_file_actions_addopen
-    (&actions, fd, "/dev/null", O_RDONLY, 0);
+  return posix_spawn_file_actions_addopen (&actions, fd, "/dev/null", O_RDONLY,
+					   0);
 }
 
 static int
@@ -117,8 +117,8 @@ do_test (void)
     struct rlimit limit;
     if (getrlimit (RLIMIT_NOFILE, &limit) < 0)
       {
-        printf ("error: getrlimit: %m\n");
-        return 1;
+	printf ("error: getrlimit: %m\n");
+	return 1;
       }
     limit.rlim_cur = RLIM_INFINITY;
     if (setrlimit (RLIMIT_NOFILE, &limit) < 0)

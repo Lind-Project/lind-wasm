@@ -21,8 +21,8 @@
 
 long int
 __lround (double x)
- {
+{
   return __builtin_lround (x);
- }
+}
 
 libm_alias_double (__lround, lround)

@@ -39,6 +39,5 @@ __feupdateenv (const fenv_t *envp)
   /* Success.  */
   return 0;
 }
-libm_hidden_def (__feupdateenv)
-weak_alias (__feupdateenv, feupdateenv)
-libm_hidden_weak (feupdateenv)
+libm_hidden_def (__feupdateenv) weak_alias (__feupdateenv, feupdateenv)
+    libm_hidden_weak (feupdateenv)

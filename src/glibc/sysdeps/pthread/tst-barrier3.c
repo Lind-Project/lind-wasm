@@ -69,8 +69,8 @@ worker (void *arg)
 	  /* Test the result.  */
 	  if (nr == 0 && counters[j] != j + 1)
 	    {
-	      printf ("barrier in round %d released but count is %d\n",
-		      j, counters[j]);
+	      printf ("barrier in round %d released but count is %d\n", j,
+		      counters[j]);
 	      result = (void *) 1;
 	    }
 
@@ -78,7 +78,8 @@ worker (void *arg)
 	    {
 	      if (retval != PTHREAD_BARRIER_SERIAL_THREAD)
 		{
-		  printf ("thread %d in round %d has nonzero return value != PTHREAD_BARRIER_SERIAL_THREAD\n",
+		  printf ("thread %d in round %d has nonzero return value != "
+			  "PTHREAD_BARRIER_SERIAL_THREAD\n",
 			  nr, j);
 		  result = (void *) 1;
 		}
@@ -104,7 +105,6 @@ worker (void *arg)
 
   return result;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #define TIMEOUT 60

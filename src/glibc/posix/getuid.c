@@ -28,4 +28,4 @@ __getuid (void)
 }
 stub_warning (getuid)
 
-weak_alias (__getuid, getuid)
+    weak_alias (__getuid, getuid)

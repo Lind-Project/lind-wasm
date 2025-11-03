@@ -26,14 +26,14 @@ __fmaximum_magf (float x, float y)
 {
   int x_cond;
   int y_cond;
-  asm volatile ("fclass.s \t%0, %1" : "=f" (x_cond) : "f" (x));
-  asm volatile ("fclass.s \t%0, %1" : "=f" (y_cond) : "f" (y));
+  asm volatile ("fclass.s \t%0, %1" : "=f"(x_cond) : "f"(x));
+  asm volatile ("fclass.s \t%0, %1" : "=f"(y_cond) : "f"(y));
 
-  if (__glibc_unlikely((x_cond | y_cond) & _FCLASS_NAN))
-      return x * y;
+  if (__glibc_unlikely ((x_cond | y_cond) & _FCLASS_NAN))
+    return x * y;
   else
     {
-      asm volatile ("fmaxa.s \t%0, %1, %2" : "=f" (x) : "f" (x), "f" (y));
+      asm volatile ("fmaxa.s \t%0, %1, %2" : "=f"(x) : "f"(x), "f"(y));
       return x;
     }
 }

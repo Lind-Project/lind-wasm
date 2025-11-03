@@ -29,7 +29,7 @@
 
 /* Give the socket FD the local address ADDR (which is LEN bytes long).  */
 int
-__bind  (int fd, __CONST_SOCKADDR_ARG addrarg, socklen_t len)
+__bind (int fd, __CONST_SOCKADDR_ARG addrarg, socklen_t len)
 {
   addr_port_t aport;
   error_t err;
@@ -50,31 +50,30 @@ __bind  (int fd, __CONST_SOCKADDR_ARG addrarg, socklen_t len)
       /* Create a new, unlinked node in the target directory.  */
       err = __dir_mkfile (dir, O_CREAT, 0666 & ~_hurd_umask, &node);
 
-      if (! err)
+      if (!err)
 	{
 	  /* Set the node's translator to make it a local-domain socket.  */
-	  err = __file_set_translator (node,
-				       FS_TRANS_EXCL | FS_TRANS_SET,
-				       FS_TRANS_EXCL | FS_TRANS_SET, 0,
-				       _HURD_IFSOCK, sizeof _HURD_IFSOCK,
-				       MACH_PORT_NULL,
-				       MACH_MSG_TYPE_COPY_SEND);
-	  if (! err)
+	  err = __file_set_translator (
+	      node, FS_TRANS_EXCL | FS_TRANS_SET, FS_TRANS_EXCL | FS_TRANS_SET,
+	      0, _HURD_IFSOCK, sizeof _HURD_IFSOCK, MACH_PORT_NULL,
+	      MACH_MSG_TYPE_COPY_SEND);
+	  if (!err)
 	    {
 	      enum retry_type doretry;
 	      char retryname[1024];
 	      /* Get a port to the ifsock translator.  */
-	      err = __dir_lookup (node, "", 0, 0, &doretry, retryname, &ifsock);
-	      if (! err && (doretry != FS_RETRY_NORMAL || retryname[0] != '\0'))
+	      err = __dir_lookup (node, "", 0, 0, &doretry, retryname,
+				  &ifsock);
+	      if (!err && (doretry != FS_RETRY_NORMAL || retryname[0] != '\0'))
 		err = EADDRINUSE;
 	    }
-	  if (! err)
+	  if (!err)
 	    {
 	      /* Get the address port.  */
 	      err = __ifsock_getsockaddr (ifsock, &aport);
 	      if (err == MIG_BAD_ID || err == EOPNOTSUPP)
 		err = EGRATUITOUS;
-	      if (! err)
+	      if (!err)
 		{
 		  /* Link the node, now a socket with proper mode, into the
 		     target directory.  */
@@ -96,21 +95,18 @@ __bind  (int fd, __CONST_SOCKADDR_ARG addrarg, socklen_t len)
   else
     err = EIEIO;
 
-  err = HURD_DPORT_USE (fd,
-			({
-			  if (err)
-			    err = __socket_create_address (port,
-							   addr->sun_family,
-							   (char *) addr, len,
-							   &aport);
-			  if (! err)
-			    {
-			      err = __socket_bind (port, aport);
-			      __mach_port_deallocate (__mach_task_self (),
-						      aport);
-			    }
-			  err;
-			}));
+  err = HURD_DPORT_USE (
+      fd, ({
+	if (err)
+	  err = __socket_create_address (port, addr->sun_family, (char *) addr,
+					 len, &aport);
+	if (!err)
+	  {
+	    err = __socket_bind (port, aport);
+	    __mach_port_deallocate (__mach_task_self (), aport);
+	  }
+	err;
+      }));
 
   return err ? __hurd_dfail (fd, err) : 0;
 }

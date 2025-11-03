@@ -19,16 +19,16 @@
 
 #if _MIPS_SIM == _ABIO32 || _MIPS_SIM == _ABIN32
 
-# include <shlib-compat.h>
+#  include <shlib-compat.h>
 
-# define getrlimit64 __new_getrlimit64
-# include <sysdeps/unix/sysv/linux/getrlimit64.c>
-# undef getrlimit64
+#  define getrlimit64 __new_getrlimit64
+#  include <sysdeps/unix/sysv/linux/getrlimit64.c>
+#  undef getrlimit64
 
 versioned_symbol (libc, __getrlimit64, getrlimit64, GLIBC_2_19);
 strong_alias (__getrlimit64, __GI_getrlimit64)
 
-# if SHLIB_COMPAT (libc, GLIBC_2_2, GLIBC_2_19)
+#  if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_19)
 
 /* RLIM64_INFINITY was supposed to be a glibc convention rather than
    anything seen by the kernel, but it ended being passed to the kernel
@@ -36,12 +36,11 @@ strong_alias (__getrlimit64, __GI_getrlimit64)
    the wrong constant value are in the wild, provide a wrapper function
    fixing the value after the syscall.  */
 
-#  define OLD_RLIM64_INFINITY		0x7fffffffffffffffULL
+#    define OLD_RLIM64_INFINITY 0x7fffffffffffffffULL
 
-int
-attribute_compat_text_section
-__old_getrlimit64 (enum __rlimit_resource resource,
-		   struct rlimit64 *rlimits)
+    int attribute_compat_text_section
+    __old_getrlimit64 (enum __rlimit_resource resource,
+		       struct rlimit64 *rlimits)
 {
   struct rlimit64 krlimits;
 
@@ -61,8 +60,8 @@ __old_getrlimit64 (enum __rlimit_resource resource,
 }
 
 compat_symbol (libc, __old_getrlimit64, getrlimit64, GLIBC_2_2);
-# endif
+#  endif
 
 #else /* !_ABI_O32 && !_ABI_N32 */
-# include <sysdeps/unix/sysv/linux/getrlimit64.c>
+#  include <sysdeps/unix/sysv/linux/getrlimit64.c>
 #endif

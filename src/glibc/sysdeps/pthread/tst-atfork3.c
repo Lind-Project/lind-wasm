@@ -75,13 +75,13 @@ do_test_generic (bool dlclose_prepare, bool dlclose_parent, bool dlclose_child)
 
   handler = xdlopen ("tst-atfork3mod.so", RTLD_NOW);
 
-  int (*atfork3mod_func)(void);
+  int (*atfork3mod_func) (void);
   atfork3mod_func = xdlsym (handler, "atfork3mod_func");
 
   atfork3mod_func ();
 
   struct support_capture_subprocess proc
-    = support_capture_subprocess (proc_func, NULL);
+      = support_capture_subprocess (proc_func, NULL);
   support_capture_subprocess_check (&proc, "tst-atfork3", 0, sc_allow_none);
 
   handler = atfork3mod_func = NULL;
@@ -108,9 +108,9 @@ do_test (void)
 
   TEST_COMPARE (pthread_atfork (prepare, parent, child), 0);
 
-  do_test_generic (true  /* prepare */, false /* parent */, false /* child */);
-  do_test_generic (false /* prepare */, true  /* parent */, false /* child */);
-  do_test_generic (false /* prepare */, false /* parent */, true  /* child */);
+  do_test_generic (true /* prepare */, false /* parent */, false /* child */);
+  do_test_generic (false /* prepare */, true /* parent */, false /* child */);
+  do_test_generic (false /* prepare */, false /* parent */, true /* child */);
 
   return 0;
 }

@@ -17,15 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_PTHREADTYPES_COMMON_H
-# define _BITS_PTHREADTYPES_COMMON_H	1
+#  define _BITS_PTHREADTYPES_COMMON_H 1
 
 /* For internal mutex and condition variable definitions.  */
-#include <bits/thread-shared-types.h>
+#  include <bits/thread-shared-types.h>
 
 /* Thread identifiers.  The structure of the attribute type is not
    exposed on purpose.  */
 typedef unsigned long int pthread_t;
-
 
 /* Data structures for mutex handling.  The structure of the attribute
    type is not exposed on purpose.  */
@@ -35,7 +34,6 @@ typedef union
   int __align;
 } pthread_mutexattr_t;
 
-
 /* Data structure for condition variable handling.  The structure of
    the attribute type is not exposed on purpose.  */
 typedef union
@@ -44,25 +42,21 @@ typedef union
   int __align;
 } pthread_condattr_t;
 
-
 /* Keys for thread-specific data */
 typedef unsigned int pthread_key_t;
 
-
 /* Once-only execution */
 typedef int __ONCE_ALIGNMENT pthread_once_t;
-
 
 union pthread_attr_t
 {
   char __size[__SIZEOF_PTHREAD_ATTR_T];
   long int __align;
 };
-#ifndef __have_pthread_attr_t
+#  ifndef __have_pthread_attr_t
 typedef union pthread_attr_t pthread_attr_t;
-# define __have_pthread_attr_t 1
-#endif
-
+#    define __have_pthread_attr_t 1
+#  endif
 
 typedef union
 {
@@ -71,7 +65,6 @@ typedef union
   long int __align;
 } pthread_mutex_t;
 
-
 typedef union
 {
   struct __pthread_cond_s __data;
@@ -79,8 +72,7 @@ typedef union
   __extension__ long long int __align;
 } pthread_cond_t;
 
-
-#if defined __USE_UNIX98 || defined __USE_XOPEN2K
+#  if defined __USE_UNIX98 || defined __USE_XOPEN2K
 /* Data structure for reader-writer lock variable handling.  The
    structure of the attribute type is deliberately not exposed.  */
 typedef union
@@ -95,13 +87,11 @@ typedef union
   char __size[__SIZEOF_PTHREAD_RWLOCKATTR_T];
   long int __align;
 } pthread_rwlockattr_t;
-#endif
+#  endif
 
-
-#ifdef __USE_XOPEN2K
+#  ifdef __USE_XOPEN2K
 /* POSIX spinlock data type.  */
 typedef volatile int pthread_spinlock_t;
-
 
 /* POSIX barriers data type.  The structure of the type is
    deliberately not exposed.  */
@@ -116,6 +106,6 @@ typedef union
   char __size[__SIZEOF_PTHREAD_BARRIERATTR_T];
   int __align;
 } pthread_barrierattr_t;
-#endif
+#  endif
 
 #endif

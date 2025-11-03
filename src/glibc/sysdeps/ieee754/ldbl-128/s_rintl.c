@@ -12,7 +12,7 @@
  * ====================================================
  */
 
-#if defined (LIBM_SCCS) && ! defined (lint)
+#if defined(LIBM_SCCS) && !defined(lint)
 static char rcsid[] = "$NetBSD: $";
 #endif
 
@@ -39,10 +39,9 @@ __rintl (_Float128 x)
   return __builtin_rintl (x);
 #else
   /* Use generic implementation.  */
-  static const _Float128
-    TWO112[2] = {
-		 5.19229685853482762853049632922009600E+33L, /* 0x406F000000000000, 0 */
-		 -5.19229685853482762853049632922009600E+33L  /* 0xC06F000000000000, 0 */
+  static const _Float128 TWO112[2] = {
+    5.19229685853482762853049632922009600E+33L, /* 0x406F000000000000, 0 */
+    -5.19229685853482762853049632922009600E+33L /* 0xC06F000000000000, 0 */
   };
   int64_t i0, j0, sx;
   uint64_t i1 __attribute__ ((unused));
@@ -64,9 +63,9 @@ __rintl (_Float128 x)
   else
     {
       if (j0 == 0x4000)
-	return x + x;		/* inf or NaN  */
+	return x + x; /* inf or NaN  */
       else
-	return x;		/* x is integral  */
+	return x; /* x is integral  */
     }
   w = TWO112[sx] + x;
   return w - TWO112[sx];

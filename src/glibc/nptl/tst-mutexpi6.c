@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 pthread_mutexattr_t a;
 pthread_mutexattr_t *attr;
 
@@ -23,7 +22,6 @@ prepare (void)
     }
 }
 #define PREPARE(argc, argv) prepare ()
-
 
 #define ATTR attr
 #include "tst-mutex6.c"

@@ -21,30 +21,27 @@
 
 #ifndef __ASSEMBLER__
 
-# include <stddef.h>
-# include <stdint.h>
-# include <stdbool.h>
-# include <sysdep.h>
-# include <mach/mig_errors.h>
-# include <mach.h>
-# include <atomic.h>
+#  include <stddef.h>
+#  include <stdint.h>
+#  include <stdbool.h>
+#  include <sysdep.h>
+#  include <mach/mig_errors.h>
+#  include <mach.h>
+#  include <atomic.h>
 
 /* This is the size of the initial TCB.  */
-# define TLS_INIT_TCB_SIZE sizeof (tcbhead_t)
+#  define TLS_INIT_TCB_SIZE sizeof (tcbhead_t)
 
 /* This is the size of the TCB.  */
-# define TLS_TCB_SIZE TLS_INIT_TCB_SIZE	/* XXX */
+#  define TLS_TCB_SIZE TLS_INIT_TCB_SIZE /* XXX */
 
 /* Install the dtv pointer.  The pointer passed is to the element with
    index -1 which contain the length.  */
-# define INSTALL_DTV(descr, dtvp) \
-  ((tcbhead_t *) (descr))->dtv = (dtvp) + 1
+#  define INSTALL_DTV(descr, dtvp) ((tcbhead_t *) (descr))->dtv = (dtvp) + 1
 
 /* Return dtv of given thread descriptor.  */
-# define GET_DTV(descr) \
-  (((tcbhead_t *) (descr))->dtv)
+#  define GET_DTV(descr) (((tcbhead_t *) (descr))->dtv)
 
 #endif /* !ASSEMBLER */
-
 
 #endif /* tls.h */

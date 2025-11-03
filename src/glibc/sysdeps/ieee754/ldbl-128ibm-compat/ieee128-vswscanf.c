@@ -21,8 +21,7 @@
 #include <strfile.h>
 
 extern int
-___ieee128_vswscanf (const wchar_t *string, const wchar_t *format,
-		     va_list ap)
+___ieee128_vswscanf (const wchar_t *string, const wchar_t *format, va_list ap)
 {
   _IO_strfile sf;
   struct _IO_wide_data wd;

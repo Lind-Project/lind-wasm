@@ -22,7 +22,6 @@
 #include <kernel-features.h>
 #include <futex-internal.h>
 
-
 int
 __new_sem_init (sem_t *sem, int pshared, unsigned int value)
 {
@@ -55,8 +54,8 @@ __new_sem_init (sem_t *sem, int pshared, unsigned int value)
   isem->nwaiters = 0;
 #endif
 
-  isem->private = (pshared == PTHREAD_PROCESS_PRIVATE
-		   ? FUTEX_PRIVATE : FUTEX_SHARED);
+  isem->private
+      = (pshared == PTHREAD_PROCESS_PRIVATE ? FUTEX_PRIVATE : FUTEX_SHARED);
 
   return 0;
 }
@@ -67,8 +66,7 @@ compat_symbol (libpthread, __new_sem_init, sem_init, GLIBC_2_1);
 #endif
 
 #if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_1)
-int
-attribute_compat_text_section
+int attribute_compat_text_section
 __old_sem_init (sem_t *sem, int pshared, unsigned int value)
 {
   ASSERT_PTHREAD_INTERNAL_SIZE (sem_t, struct new_sem);

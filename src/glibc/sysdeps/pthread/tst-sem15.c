@@ -23,7 +23,6 @@
 #include <string.h>
 #include <unistd.h>
 
-
 static int
 do_test (void)
 {
@@ -54,7 +53,7 @@ do_test (void)
     }
 
   errno = 0;
-  if (sem_post(&s) == 0)
+  if (sem_post (&s) == 0)
     {
       puts ("sem_post at SEM_VALUE_MAX succeeded!");
       result = 1;
@@ -64,8 +63,8 @@ do_test (void)
       printf ("sem_post at SEM_VALUE_MAX: %m (%d)\n", errno);
       if (errno != EOVERFLOW)
 	{
-	  printf ("\tshould be %s (EOVERFLOW = %d)\n",
-		  strerror (EOVERFLOW), EOVERFLOW);
+	  printf ("\tshould be %s (EOVERFLOW = %d)\n", strerror (EOVERFLOW),
+		  EOVERFLOW);
 	  result = 1;
 	}
     }

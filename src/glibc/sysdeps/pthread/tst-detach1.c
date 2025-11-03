@@ -20,13 +20,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static void *
 tf (void *arg)
 {
   return NULL;
 }
-
 
 static int
 do_test (void)

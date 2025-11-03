@@ -26,7 +26,6 @@
 
 #include "eintr.c"
 
-
 static int
 do_test (void)
 {

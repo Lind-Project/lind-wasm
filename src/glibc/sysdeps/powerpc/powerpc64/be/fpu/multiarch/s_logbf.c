@@ -26,8 +26,6 @@ extern __typeof (__logbf) __logbf_ppc64 attribute_hidden;
 extern __typeof (__logbf) __logbf_power7 attribute_hidden;
 
 libc_ifunc (__logbf,
-	    (hwcap & PPC_FEATURE_ARCH_2_06)
-	    ? __logbf_power7
-            : __logbf_ppc64);
+	    (hwcap & PPC_FEATURE_ARCH_2_06) ? __logbf_power7 : __logbf_ppc64);
 
 libm_alias_float (__logb, logb)

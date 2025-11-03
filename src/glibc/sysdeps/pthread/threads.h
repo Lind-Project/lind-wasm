@@ -17,49 +17,49 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _THREADS_H
-#define _THREADS_H	1
+#  define _THREADS_H 1
 
-#include <features.h>
-#include <time.h>
+#  include <features.h>
+#  include <time.h>
 
 __BEGIN_DECLS
 
-#include <bits/thread-shared-types.h>
-#include <bits/types/struct_timespec.h>
+#  include <bits/thread-shared-types.h>
+#  include <bits/types/struct_timespec.h>
 
-#if (!defined __STDC_VERSION__				\
-     || __STDC_VERSION__ <= 201710L			\
-     || !__GNUC_PREREQ (13, 0)) && !defined __cplusplus
-# define thread_local _Thread_local
-#endif
+#  if (!defined __STDC_VERSION__ || __STDC_VERSION__ <= 201710L               \
+       || !__GNUC_PREREQ(13, 0))                                              \
+      && !defined __cplusplus
+#    define thread_local _Thread_local
+#  endif
 
-#define TSS_DTOR_ITERATIONS 4
+#  define TSS_DTOR_ITERATIONS 4
 typedef __tss_t tss_t;
-typedef void (*tss_dtor_t) (void*);
+typedef void (*tss_dtor_t) (void *);
 
 typedef __thrd_t thrd_t;
-typedef int (*thrd_start_t) (void*);
+typedef int (*thrd_start_t) (void *);
 
 /* Exit and error codes.  */
 enum
 {
-  thrd_success  = 0,
-  thrd_busy     = 1,
-  thrd_error    = 2,
-  thrd_nomem    = 3,
+  thrd_success = 0,
+  thrd_busy = 1,
+  thrd_error = 2,
+  thrd_nomem = 3,
   thrd_timedout = 4
 };
 
 /* Mutex types.  */
 enum
 {
-  mtx_plain     = 0,
+  mtx_plain = 0,
   mtx_recursive = 1,
-  mtx_timed     = 2
+  mtx_timed = 2
 };
 
 typedef __once_flag once_flag;
-#define ONCE_FLAG_INIT __ONCE_FLAG_INIT
+#  define ONCE_FLAG_INIT __ONCE_FLAG_INIT
 
 typedef union
 {
@@ -90,18 +90,19 @@ extern thrd_t thrd_current (void);
    __TIME_POINT.  The current thread may resume if receives a signal.  In
    that case, if __REMAINING is not NULL, the remaining time is stored in
    the object pointed by it.  */
-#ifndef __USE_TIME_BITS64
+#  ifndef __USE_TIME_BITS64
 extern int thrd_sleep (const struct timespec *__time_point,
 		       struct timespec *__remaining);
-#else
-# ifdef __REDIRECT
-extern int __REDIRECT (thrd_sleep, (const struct timespec *__time_point,
-                                    struct timespec *__remaining),
-                       __thrd_sleep64);
-# else
-#  define thrd_sleep __thrd_sleep64
-# endif
-#endif
+#  else
+#    ifdef __REDIRECT
+extern int __REDIRECT (thrd_sleep,
+		       (const struct timespec *__time_point,
+			struct timespec *__remaining),
+		       __thrd_sleep64);
+#    else
+#      define thrd_sleep __thrd_sleep64
+#    endif
+#  endif
 
 /* Terminate current thread execution, cleaning up any thread local
    storage and freeing resources.  Returns the value specified in __RES.  */
@@ -120,15 +121,14 @@ extern int thrd_join (thrd_t __thr, int *__res);
    scheduler to keep running.  */
 extern void thrd_yield (void);
 
-#ifdef __USE_EXTERN_INLINES
+#  ifdef __USE_EXTERN_INLINES
 /* Optimizations.  */
 __extern_inline int
 thrd_equal (thrd_t __thread1, thrd_t __thread2)
 {
   return __thread1 == __thread2;
 }
-#endif
-
+#  endif
 
 /* Mutex functions.  */
 
@@ -143,19 +143,19 @@ extern int mtx_lock (mtx_t *__mutex);
 /* Block the current thread until the mutex pointed by __MUTEX is unlocked
    or time pointed by __TIME_POINT is reached.  In case the mutex is unlock,
    the current thread will not be blocked.  */
-#ifndef __USE_TIME_BITS64
+#  ifndef __USE_TIME_BITS64
 extern int mtx_timedlock (mtx_t *__restrict __mutex,
 			  const struct timespec *__restrict __time_point);
-#else
-# ifdef __REDIRECT
-extern int __REDIRECT (mtx_timedlock, (mtx_t *__restrict __mutex,
-                                       const struct timespec *__restrict
-                                       __time_point),
-                       __mtx_timedlock64);
-# else
-#  define mtx_timedlock __mtx_timedlock64
-# endif
-#endif
+#  else
+#    ifdef __REDIRECT
+extern int __REDIRECT (mtx_timedlock,
+		       (mtx_t *__restrict __mutex,
+			const struct timespec *__restrict __time_point),
+		       __mtx_timedlock64);
+#    else
+#      define mtx_timedlock __mtx_timedlock64
+#    endif
+#  endif
 
 /* Try to lock the mutex pointed by __MUTEX without blocking.  If the mutex
    is free the current threads takes control of it, otherwise it returns
@@ -169,11 +169,9 @@ extern int mtx_unlock (mtx_t *__mutex);
 /* Destroy the mutex object pointed by __MUTEX.  */
 extern void mtx_destroy (mtx_t *__mutex);
 
-
 /* Call function __FUNC exactly once, even if invoked from several threads.
    All calls must be made with the same __FLAGS object.  */
-extern void call_once (once_flag *__flag, void (*__func)(void));
-
+extern void call_once (once_flag *__flag, void (*__func) (void));
 
 /* Condition variable functions.  */
 
@@ -194,26 +192,23 @@ extern int cnd_wait (cnd_t *__cond, mtx_t *__mutex);
 /* Block current thread on the condition variable until condition variable
    pointed by __COND is signaled or time pointed by __TIME_POINT is
    reached.  */
-#ifndef __USE_TIME_BITS64
-extern int cnd_timedwait (cnd_t *__restrict __cond,
-			  mtx_t *__restrict __mutex,
+#  ifndef __USE_TIME_BITS64
+extern int cnd_timedwait (cnd_t *__restrict __cond, mtx_t *__restrict __mutex,
 			  const struct timespec *__restrict __time_point);
-#else
-# ifdef __REDIRECT
-extern int __REDIRECT (cnd_timedwait, (cnd_t *__restrict __cond,
-                                       mtx_t *__restrict __mutex,
-                                       const struct timespec *__restrict
-                                       __time_point),
-                       __cnd_timedwait64);
-# else
-#  define cnd_timedwait __cnd_timedwait64
-# endif
-#endif
+#  else
+#    ifdef __REDIRECT
+extern int __REDIRECT (cnd_timedwait,
+		       (cnd_t *__restrict __cond, mtx_t *__restrict __mutex,
+			const struct timespec *__restrict __time_point),
+		       __cnd_timedwait64);
+#    else
+#      define cnd_timedwait __cnd_timedwait64
+#    endif
+#  endif
 
 /* Destroy condition variable pointed by __cond and free all of its
    resources.  */
 extern void cnd_destroy (cnd_t *__COND);
-
 
 /* Thread specific storage functions.  */
 

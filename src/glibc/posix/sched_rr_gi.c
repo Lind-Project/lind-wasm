@@ -19,7 +19,6 @@
 #include <sched.h>
 #include <sys/types.h>
 
-
 /* Get the SCHED_RR interval for the named process.  */
 int
 __sched_rr_get_interval (pid_t pid, struct timespec *t)
@@ -29,4 +28,4 @@ __sched_rr_get_interval (pid_t pid, struct timespec *t)
 }
 stub_warning (sched_rr_get_interval)
 
-weak_alias (__sched_rr_get_interval, sched_rr_get_interval)
+    weak_alias (__sched_rr_get_interval, sched_rr_get_interval)

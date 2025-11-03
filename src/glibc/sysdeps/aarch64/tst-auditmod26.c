@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include "tst-audit26mod.h"
 
-#define TEST_NAME  "tst-audit26"
+#define TEST_NAME "tst-audit26"
 
 #define AUDIT26_COOKIE 0
 
@@ -46,15 +46,15 @@ la_objopen (struct link_map *map, Lmid_t lmid, uintptr_t *cookie)
   return ck == -1 ? 0 : LA_FLG_BINDFROM | LA_FLG_BINDTO;
 }
 
-ElfW(Addr)
-la_aarch64_gnu_pltenter (ElfW(Sym) *sym __attribute__ ((unused)),
-                         unsigned int ndx __attribute__ ((unused)),
-                         uintptr_t *refcook, uintptr_t *defcook,
-                         La_aarch64_regs *regs, unsigned int *flags,
-                         const char *symname, long int *framesizep)
+ElfW (Addr)
+    la_aarch64_gnu_pltenter (ElfW (Sym) * sym __attribute__ ((unused)),
+			     unsigned int ndx __attribute__ ((unused)),
+			     uintptr_t *refcook, uintptr_t *defcook,
+			     La_aarch64_regs *regs, unsigned int *flags,
+			     const char *symname, long int *framesizep)
 {
-  printf ("pltenter: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n",
-	  symname, (long int) sym->st_value, ndx, *flags);
+  printf ("pltenter: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n", symname,
+	  (long int) sym->st_value, ndx, *flags);
 
   if (strcmp (symname, "tst_audit26_func") == 0)
     {
@@ -76,13 +76,13 @@ la_aarch64_gnu_pltenter (ElfW(Sym) *sym __attribute__ ((unused)),
 }
 
 unsigned int
-la_aarch64_gnu_pltexit (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
-                        uintptr_t *defcook,
-                        const struct La_aarch64_regs *inregs,
-                        struct La_aarch64_retval *outregs, const char *symname)
+la_aarch64_gnu_pltexit (ElfW (Sym) * sym, unsigned int ndx, uintptr_t *refcook,
+			uintptr_t *defcook,
+			const struct La_aarch64_regs *inregs,
+			struct La_aarch64_retval *outregs, const char *symname)
 {
-  printf ("pltexit: symname=%s, st_value=%#lx, ndx=%u\n",
-	  symname, (long int) sym->st_value, ndx);
+  printf ("pltexit: symname=%s, st_value=%#lx, ndx=%u\n", symname,
+	  (long int) sym->st_value, ndx);
 
   if (strcmp (symname, "tst_audit26_func") == 0)
     {

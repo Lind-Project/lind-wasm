@@ -21,24 +21,23 @@
 #include "soft-fp.h"
 #include "quad.h"
 
-int _Qp_qtoi(const long double *a)
+int
+_Qp_qtoi (const long double *a)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A);
+  FP_DECL_Q (A);
   unsigned int r;
 
   FP_INIT_ROUNDMODE;
-  FP_UNPACK_RAW_QP(A, a);
-  FP_TO_INT_Q(r, A, 32, 1);
-  QP_HANDLE_EXCEPTIONS(
-	int rx;
-	__asm (
-"	ldd [%1], %%f52\n"
-"	ldd [%1+8], %%f54\n"
-"	fqtoi %%f52, %%f31\n"
-"	st %%f31, [%0]\n"
-"	" : : "r" (&rx), "r" (a) : QP_CLOBBER, "f31");
-	r = rx);
+  FP_UNPACK_RAW_QP (A, a);
+  FP_TO_INT_Q (r, A, 32, 1);
+  QP_HANDLE_EXCEPTIONS (int rx; __asm ("	ldd [%1], %%f52\n"
+				       "	ldd [%1+8], %%f54\n"
+				       "	fqtoi %%f52, %%f31\n"
+				       "	st %%f31, [%0]\n"
+				       "	" : : "r"(&rx),
+				       "r"(a) : QP_CLOBBER, "f31");
+			r = rx);
 
   return r;
 }

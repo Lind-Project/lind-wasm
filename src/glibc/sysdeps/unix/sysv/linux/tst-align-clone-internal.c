@@ -46,11 +46,10 @@ do_test (void)
 
 #define STACK_SIZE 128 * 1024
   char st[STACK_SIZE] __attribute__ ((aligned));
-  struct clone_args clone_args =
-    {
-      .stack = (uintptr_t) st,
-      .stack_size = sizeof (st),
-    };
+  struct clone_args clone_args = {
+    .stack = (uintptr_t) st,
+    .stack_size = sizeof (st),
+  };
   pid_t p = __clone_internal (&clone_args, f, 0);
   TEST_VERIFY (p != -1);
 

@@ -20,27 +20,30 @@
 #include <signal.h>
 #include <sysdep.h>
 #define __longjmp ____longjmp_chk
-#define CHECK_SP(sp)							\
-  do {									\
-    register unsigned long this_sp;				\
-    /* The stack grows up, therefore frames that were created and then	\
-       destroyed must all have stack values higher than ours.  */	\
-    if ((unsigned long) (sp) > this_sp)					\
-      {									\
-        stack_t oss;							\
-        int result = INTERNAL_SYSCALL_CALL (sigaltstack, NULL, &oss);\
-	/* If we aren't using an alternate stack then we have already	\
-	   shown that we are jumping to a frame that doesn't exist so	\
-	   error out. If we are using an alternate stack we must prove	\
-	   that we are jumping *out* of the alternate stack. Note that	\
-	   the check for that is the same as that for _STACK_GROWS_UP	\
-	   as for _STACK_GROWS_DOWN.  */				\
-        if (!INTERNAL_SYSCALL_ERROR_P (result)				\
-            && ((oss.ss_flags & SS_ONSTACK) == 0			\
-                || ((unsigned long) oss.ss_sp + oss.ss_size		\
-                    - (unsigned long) (sp)) < oss.ss_size))		\
-          __fortify_fail ("longjmp causes uninitialized stack frame");	\
-      }									\
-  } while (0)
+#define CHECK_SP(sp)                                                          \
+  do                                                                          \
+    {                                                                         \
+      register unsigned long this_sp;                                         \
+      /* The stack grows up, therefore frames that were created and then      \
+	 destroyed must all have stack values higher than ours.  */           \
+      if ((unsigned long) (sp) > this_sp)                                     \
+	{                                                                     \
+	  stack_t oss;                                                        \
+	  int result = INTERNAL_SYSCALL_CALL (sigaltstack, NULL, &oss);       \
+	  /* If we aren't using an alternate stack then we have already       \
+	     shown that we are jumping to a frame that doesn't exist so       \
+	     error out. If we are using an alternate stack we must prove      \
+	     that we are jumping *out* of the alternate stack. Note that      \
+	     the check for that is the same as that for _STACK_GROWS_UP       \
+	     as for _STACK_GROWS_DOWN.  */                                    \
+	  if (!INTERNAL_SYSCALL_ERROR_P (result)                              \
+	      && ((oss.ss_flags & SS_ONSTACK) == 0                            \
+		  || ((unsigned long) oss.ss_sp + oss.ss_size                 \
+		      - (unsigned long) (sp))                                 \
+			 < oss.ss_size))                                      \
+	    __fortify_fail ("longjmp causes uninitialized stack frame");      \
+	}                                                                     \
+    }                                                                         \
+  while (0)
 
 #include <__longjmp.c>

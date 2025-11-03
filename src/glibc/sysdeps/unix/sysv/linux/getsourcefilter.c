@@ -32,26 +32,23 @@
 #include <sys/socket.h>
 #include "getsourcefilter.h"
 
-
 static const struct
 {
   int sol;
   int af;
   socklen_t size;
-}  sol_map[] =
-  {
-    /* Sort the array according to importance of the protocols.  Add
-       more protocols when they become available.  */
-    { SOL_IP, AF_INET, sizeof (struct sockaddr_in) },
-    { SOL_IPV6, AF_INET6, sizeof (struct sockaddr_in6) },
-    { SOL_AX25, AF_AX25, sizeof (struct sockaddr_ax25) },
-    { SOL_IPX, AF_IPX, sizeof (struct sockaddr_ipx) },
-    { SOL_ATALK, AF_APPLETALK, sizeof (struct sockaddr_at) },
-    { SOL_ROSE, AF_ROSE, sizeof (struct sockaddr_rose) },
-    { SOL_PACKET, AF_PACKET, sizeof (struct sockaddr_ll) }
-  };
+} sol_map[] = {
+  /* Sort the array according to importance of the protocols.  Add
+     more protocols when they become available.  */
+  { SOL_IP, AF_INET, sizeof (struct sockaddr_in) },
+  { SOL_IPV6, AF_INET6, sizeof (struct sockaddr_in6) },
+  { SOL_AX25, AF_AX25, sizeof (struct sockaddr_ax25) },
+  { SOL_IPX, AF_IPX, sizeof (struct sockaddr_ipx) },
+  { SOL_ATALK, AF_APPLETALK, sizeof (struct sockaddr_at) },
+  { SOL_ROSE, AF_ROSE, sizeof (struct sockaddr_rose) },
+  { SOL_PACKET, AF_PACKET, sizeof (struct sockaddr_ll) }
+};
 #define NSOL_MAP (sizeof (sol_map) / sizeof (sol_map[0]))
-
 
 /* Try to determine the socket level value.  Ideally both side and
    family are set.  But sometimes only the size is correct and the
@@ -80,12 +77,11 @@ __get_sol (int af, socklen_t len)
 
 	  if (first_size_sol == -1)
 	    first_size_sol = sol_map[cnt].sol;
-      }
+	}
     }
 
   return first_size_sol;
 }
-
 
 int
 getsourcefilter (int s, uint32_t interface, const struct sockaddr *group,
@@ -125,7 +121,7 @@ getsourcefilter (int s, uint32_t interface, const struct sockaddr *group,
 	  *fmode = gf->gf_fmode;
 	  memcpy (slist, gf->gf_slist,
 		  MIN (*numsrc, gf->gf_numsrc)
-		  * sizeof (struct sockaddr_storage));
+		      * sizeof (struct sockaddr_storage));
 	  *numsrc = gf->gf_numsrc;
 	}
     }

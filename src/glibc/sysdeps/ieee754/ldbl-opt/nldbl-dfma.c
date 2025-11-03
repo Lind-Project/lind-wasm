@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef dfmal
 
-double
-attribute_hidden
+double attribute_hidden
 dfmal (double x, double y, double z)
 {
   return fma (x, y, z);

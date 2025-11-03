@@ -27,7 +27,9 @@ static int
 setsockopt_syscall (int fd, int level, int optname, const void *optval,
 		    socklen_t len)
 {
-return MAKE_SYSCALL(SETSOCKOPT_SYSCALL, "syscall|setsockopt", (uint64_t) fd, (uint64_t) level, (uint64_t) optname, (uint64_t)optval, len, (uint64_t)0);
+  return MAKE_SYSCALL (SETSOCKOPT_SYSCALL, "syscall|setsockopt", (uint64_t) fd,
+		       (uint64_t) level, (uint64_t) optname, (uint64_t) optval,
+		       len, (uint64_t) 0);
 }
 
 #ifndef __ASSUME_TIME64_SYSCALLS
@@ -45,14 +47,14 @@ setsockopt32 (int fd, int level, int optname, const void *optval,
     case COMPAT_SO_RCVTIMEO_NEW:
     case COMPAT_SO_SNDTIMEO_NEW:
       {
-        if (len < sizeof (struct __timeval64))
+	if (len < sizeof (struct __timeval64))
 	  {
 	    __set_errno (EINVAL);
 	    break;
 	  }
 
 	struct __timeval64 *tv64 = (struct __timeval64 *) optval;
-	if (! in_int32_t_range (tv64->tv_sec))
+	if (!in_int32_t_range (tv64->tv_sec))
 	  {
 	    __set_errno (EOVERFLOW);
 	    break;
@@ -88,7 +90,8 @@ setsockopt32 (int fd, int level, int optname, const void *optval,
 #endif
 
 int
-__setsockopt (int fd, int level, int optname, const void *optval, socklen_t len)
+__setsockopt (int fd, int level, int optname, const void *optval,
+	      socklen_t len)
 {
   int r = setsockopt_syscall (fd, level, optname, optval, len);
 
@@ -99,8 +102,7 @@ __setsockopt (int fd, int level, int optname, const void *optval, socklen_t len)
 
   return r;
 }
-libc_hidden_def (__setsockopt)
-weak_alias (__setsockopt, setsockopt)
+libc_hidden_def (__setsockopt) weak_alias (__setsockopt, setsockopt)
 #if __TIMESIZE != 64
-weak_alias (__setsockopt, __setsockopt64)
+    weak_alias (__setsockopt, __setsockopt64)
 #endif

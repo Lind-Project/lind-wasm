@@ -22,10 +22,8 @@
 #include <string.h>
 #include <unistd.h>
 
-
 static pthread_barrier_t bar;
 static int fd[2];
-
 
 static void
 cleanup (void *arg)
@@ -40,7 +38,6 @@ cleanup (void *arg)
 
   printf ("cleanup call #%d\n", ncall);
 }
-
 
 static void *
 tf (void *arg)
@@ -57,16 +54,15 @@ tf (void *arg)
   /* This call should block and be cancelable.  */
   char buf[20];
   if (read (fd[0], buf, sizeof (buf)))
-  {
-    puts ("read unexpectedly returned");
-    exit (1);
-  }
+    {
+      puts ("read unexpectedly returned");
+      exit (1);
+    }
 
   pthread_cleanup_pop (0);
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -119,7 +115,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

@@ -27,7 +27,7 @@
 #include <support/xunistd.h>
 
 #ifndef TEST_CLONE_FLAGS
-#define TEST_CLONE_FLAGS 0
+#  define TEST_CLONE_FLAGS 0
 #endif
 
 static int sig;
@@ -43,7 +43,6 @@ f (void *a)
     return 1;
   return 0;
 }
-
 
 static int
 do_test (void)
@@ -62,17 +61,16 @@ do_test (void)
 
 #define STACK_SIZE 128 * 1024
   char st[STACK_SIZE] __attribute__ ((aligned));
-  struct clone_args clone_args =
-    {
-      .flags = TEST_CLONE_FLAGS & ~CSIGNAL,
-      .exit_signal = TEST_CLONE_FLAGS & CSIGNAL,
-      .stack = (uintptr_t) st,
-      .stack_size = sizeof (st),
-    };
+  struct clone_args clone_args = {
+    .flags = TEST_CLONE_FLAGS & ~CSIGNAL,
+    .exit_signal = TEST_CLONE_FLAGS & CSIGNAL,
+    .stack = (uintptr_t) st,
+    .stack_size = sizeof (st),
+  };
   pid_t p = __clone_internal (&clone_args, f, 0);
   if (p == -1)
     {
-      printf("clone failed: %m\n");
+      printf ("clone failed: %m\n");
       return 1;
     }
   printf ("new thread: %d\n", (int) p);
@@ -81,11 +79,11 @@ do_test (void)
   do
     if (sigwaitinfo (&ss, &si) < 0)
       {
-	printf("sigwaitinfo failed: %m\n");
+	printf ("sigwaitinfo failed: %m\n");
 	kill (p, SIGKILL);
 	return 1;
       }
-  while  (si.si_signo != sig || si.si_code != SI_QUEUE);
+  while (si.si_signo != sig || si.si_code != SI_QUEUE);
 
   int e;
   xwaitpid (p, &e, __WCLONE);

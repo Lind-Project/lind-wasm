@@ -46,19 +46,20 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
   v.d = y;
   w.d = z;
   if (__builtin_expect (u.ieee.exponent + v.ieee.exponent
-			>= 0x7fff + IEEE854_LONG_DOUBLE_BIAS
-			   - LDBL_MANT_DIG, 0)
+			    >= 0x7fff + IEEE854_LONG_DOUBLE_BIAS
+				   - LDBL_MANT_DIG,
+			0)
       || __builtin_expect (u.ieee.exponent >= 0x7fff - LDBL_MANT_DIG, 0)
       || __builtin_expect (v.ieee.exponent >= 0x7fff - LDBL_MANT_DIG, 0)
       || __builtin_expect (w.ieee.exponent >= 0x7fff - LDBL_MANT_DIG, 0)
       || __builtin_expect (u.ieee.exponent + v.ieee.exponent
-			   <= IEEE854_LONG_DOUBLE_BIAS + LDBL_MANT_DIG, 0))
+			       <= IEEE854_LONG_DOUBLE_BIAS + LDBL_MANT_DIG,
+			   0))
     {
       /* If z is Inf, but x and y are finite, the result should be
 	 z rather than NaN.  */
-      if (w.ieee.exponent == 0x7fff
-	  && u.ieee.exponent != 0x7fff
-          && v.ieee.exponent != 0x7fff)
+      if (w.ieee.exponent == 0x7fff && u.ieee.exponent != 0x7fff
+	  && v.ieee.exponent != 0x7fff)
 	return (z + x) + y;
       /* If z is zero and x are y are nonzero, compute the result
 	 as x * y to avoid the wrong sign of a zero result if x * y
@@ -67,11 +68,8 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
 	return x * y;
       /* If x or y or z is Inf/NaN, or if x * y is zero, compute as
 	 x * y + z.  */
-      if (u.ieee.exponent == 0x7fff
-	  || v.ieee.exponent == 0x7fff
-	  || w.ieee.exponent == 0x7fff
-	  || x == 0
-	  || y == 0)
+      if (u.ieee.exponent == 0x7fff || v.ieee.exponent == 0x7fff
+	  || w.ieee.exponent == 0x7fff || x == 0 || y == 0)
 	return x * y + z;
       /* If fma will certainly overflow, compute as x * y.  */
       if (u.ieee.exponent + v.ieee.exponent
@@ -84,7 +82,7 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
 	  < IEEE854_LONG_DOUBLE_BIAS - LDBL_MANT_DIG - 2)
 	{
 	  int neg = u.ieee.negative ^ v.ieee.negative;
-	  _Float128 tiny = neg ? L(-0x1p-16494) : L(0x1p-16494);
+	  _Float128 tiny = neg ? L (-0x1p-16494) : L (0x1p-16494);
 	  if (w.ieee.exponent >= 3)
 	    return tiny + z;
 	  /* Scaling up, adding TINY and scaling down produces the
@@ -92,21 +90,18 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
 	     TINY has no effect and in other modes double rounding is
 	     harmless.  But it may not produce required underflow
 	     exceptions.  */
-	  v.d = z * L(0x1p114) + tiny;
+	  v.d = z * L (0x1p114) + tiny;
 	  if (TININESS_AFTER_ROUNDING
-	      ? v.ieee.exponent < 115
-	      : (w.ieee.exponent == 0
-		 || (w.ieee.exponent == 1
-		     && w.ieee.negative != neg
-		     && w.ieee.mantissa3 == 0
-		     && w.ieee.mantissa2 == 0
-		     && w.ieee.mantissa1 == 0
-		     && w.ieee.mantissa0 == 0)))
+		  ? v.ieee.exponent < 115
+		  : (w.ieee.exponent == 0
+		     || (w.ieee.exponent == 1 && w.ieee.negative != neg
+			 && w.ieee.mantissa3 == 0 && w.ieee.mantissa2 == 0
+			 && w.ieee.mantissa1 == 0 && w.ieee.mantissa0 == 0)))
 	    {
 	      _Float128 force_underflow = x * y;
 	      math_force_eval (force_underflow);
 	    }
-	  return v.d * L(0x1p-114);
+	  return v.d * L (0x1p-114);
 	}
       if (u.ieee.exponent + v.ieee.exponent
 	  >= 0x7fff + IEEE854_LONG_DOUBLE_BIAS - LDBL_MANT_DIG)
@@ -153,7 +148,7 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
 	  if (v.ieee.exponent)
 	    v.ieee.exponent += LDBL_MANT_DIG;
 	  else
-	    v.d *= L(0x1p113);
+	    v.d *= L (0x1p113);
 	}
       else if (v.ieee.exponent >= 0x7fff - LDBL_MANT_DIG)
 	{
@@ -161,7 +156,7 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
 	  if (u.ieee.exponent)
 	    u.ieee.exponent += LDBL_MANT_DIG;
 	  else
-	    u.d *= L(0x1p113);
+	    u.d *= L (0x1p113);
 	}
       else /* if (u.ieee.exponent + v.ieee.exponent
 		  <= IEEE854_LONG_DOUBLE_BIAS + LDBL_MANT_DIG) */
@@ -175,7 +170,7 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
 	      if (w.ieee.exponent)
 		w.ieee.exponent += 2 * LDBL_MANT_DIG + 2;
 	      else
-		w.d *= L(0x1p228);
+		w.d *= L (0x1p228);
 	      adjust = -1;
 	    }
 	  /* Otherwise x * y should just affect inexact
@@ -198,7 +193,7 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
   fesetround (FE_TONEAREST);
 
   /* Multiplication m1 + m2 = x * y using Dekker's algorithm.  */
-#define C ((1LL << (LDBL_MANT_DIG + 1) / 2) + 1)
+#  define C ((1LL << (LDBL_MANT_DIG + 1) / 2) + 1)
   _Float128 x1 = x * C;
   _Float128 y1 = y * C;
   _Float128 m1 = x * y;
@@ -247,7 +242,7 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
 	u.ieee.mantissa3 |= fetestexcept (FE_INEXACT) != 0;
       feupdateenv (&env);
       /* Result is a1 + u.d, scaled up.  */
-      return (a1 + u.d) * L(0x1p113);
+      return (a1 + u.d) * L (0x1p113);
     }
   else
     {
@@ -260,15 +255,15 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
       feupdateenv (&env);
       /* Ensure the following computations are performed in default rounding
 	 mode instead of just reusing the round to zero computation.  */
-    //   asm volatile ("" : "=m" (u) : "m" (u));
+      //   asm volatile ("" : "=m" (u) : "m" (u));
       /* If a1 + u.d is exact, the only rounding happens during
 	 scaling down.  */
       if (j == 0)
-	return v.d * L(0x1p-228);
+	return v.d * L (0x1p-228);
       /* If result rounded to zero is not subnormal, no double
 	 rounding will occur.  */
       if (v.ieee.exponent > 228)
-	return (a1 + u.d) * L(0x1p-228);
+	return (a1 + u.d) * L (0x1p-228);
       /* If v.d * 0x1p-228L with round to zero is a subnormal above
 	 or equal to LDBL_MIN / 2, then v.d * 0x1p-228L shifts mantissa
 	 down just by 1 bit, which means v.ieee.mantissa3 |= j would
@@ -287,7 +282,7 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
 	    {
 	      w.d = a1 + u.d;
 	      if (w.ieee.exponent == 229)
-		return w.d * L(0x1p-228);
+		return w.d * L (0x1p-228);
 	    }
 	  /* v.ieee.mantissa3 & 2 is LSB bit of the result before rounding,
 	     v.ieee.mantissa3 & 1 is the round bit and j is our sticky
@@ -296,14 +291,13 @@ __fmal (_Float128 x, _Float128 y, _Float128 z)
 	  w.ieee.mantissa3 = ((v.ieee.mantissa3 & 3) << 1) | j;
 	  w.ieee.negative = v.ieee.negative;
 	  v.ieee.mantissa3 &= ~3U;
-	  v.d *= L(0x1p-228);
-	  w.d *= L(0x1p-2);
+	  v.d *= L (0x1p-228);
+	  w.d *= L (0x1p-2);
 	  return v.d + w.d;
 	}
       v.ieee.mantissa3 |= j;
-      return v.d * L(0x1p-228);
+      return v.d * L (0x1p-228);
     }
 #endif /* ! USE_FMAL_BUILTIN  */
 }
-libm_alias_ldouble (__fma, fma)
-libm_alias_ldouble_narrow (__fma, fma)
+libm_alias_ldouble (__fma, fma) libm_alias_ldouble_narrow (__fma, fma)

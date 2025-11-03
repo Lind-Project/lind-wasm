@@ -56,5 +56,4 @@ retry:
 
   return __hurd_fail (err);
 }
-libc_hidden_def (__getresgid)
-weak_alias (__getresgid, getresgid)
+libc_hidden_def (__getresgid) weak_alias (__getresgid, getresgid)

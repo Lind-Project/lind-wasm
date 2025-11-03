@@ -18,49 +18,49 @@
 #include <endian.h>
 
 /* All supported kernel versions for MicroBlaze have these syscalls.  */
-#define __ASSUME_CONNECT_SYSCALL	1
-#define __ASSUME_SEND_SYSCALL		1
-#define __ASSUME_RECV_SYSCALL		1
+#define __ASSUME_CONNECT_SYSCALL 1
+#define __ASSUME_SEND_SYSCALL 1
+#define __ASSUME_RECV_SYSCALL 1
 
 #include_next <kernel-features.h>
 
 /* Support for the pselect6, preadv and pwritev syscalls was added in
    3.15.  */
 #if __LINUX_KERNEL_VERSION < 0x030f00
-# undef __ASSUME_PSELECT
-# undef __ASSUME_PREADV
-# undef __ASSUME_PWRITEV
+#  undef __ASSUME_PSELECT
+#  undef __ASSUME_PREADV
+#  undef __ASSUME_PWRITEV
 #endif
 
 /* Support for the sendmmsg syscall was added in 3.3.  */
 #if __LINUX_KERNEL_VERSION < 0x030300
-# undef __ASSUME_SENDMMSG_SYSCALL
+#  undef __ASSUME_SENDMMSG_SYSCALL
 #endif
 
 /* Support for the renameat2 syscall was added in 3.17.  */
 #if __LINUX_KERNEL_VERSION < 0x031100
-# undef __ASSUME_RENAMEAT2
+#  undef __ASSUME_RENAMEAT2
 #endif
 
 /* Support for the execveat syscall was added in 4.0.  */
 #if __LINUX_KERNEL_VERSION < 0x040000
-# undef __ASSUME_EXECVEAT
+#  undef __ASSUME_EXECVEAT
 #endif
 
 /* Support for the mlock2 syscall was added in 4.7.  */
 #if __LINUX_KERNEL_VERSION < 0x040700
-# undef __ASSUME_MLOCK2
+#  undef __ASSUME_MLOCK2
 #endif
 
 /* Support for statx was added in kernel 4.12.  */
 #if __LINUX_KERNEL_VERSION < 0X040C00
-# undef __ASSUME_STATX
+#  undef __ASSUME_STATX
 #endif
 
 #undef __ASSUME_CLONE_DEFAULT
 #define __ASSUME_CLONE_BACKWARDS3
 
 #if __BYTE_ORDER == __BIG_ENDIAN
-# define __ASSUME_SYSVIPC_BROKEN_MODE_T
+#  define __ASSUME_SYSVIPC_BROKEN_MODE_T
 #endif
 #undef __ASSUME_SYSVIPC_DEFAULT_IPC_64

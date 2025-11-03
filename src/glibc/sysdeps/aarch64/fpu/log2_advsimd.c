@@ -76,7 +76,8 @@ special_case (float64x2_t x, float64x2_t y, float64x2_t w, float64x2_t r2,
    precision. The maximum observed error is 2.58 ULP:
    _ZGVnN2v_log2(0x1.0b556b093869bp+0) got 0x1.fffb34198d9dap-5
 				      want 0x1.fffb34198d9ddp-5.  */
-float64x2_t VPCS_ATTR V_NAME_D1 (log2) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (log2) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
   uint64x2_t ix = vreinterpretq_u64_f64 (x);

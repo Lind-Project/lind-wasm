@@ -43,7 +43,6 @@
  *	Bit twiddling.
  */
 
-
 double
 __floor (double x)
 {
@@ -68,7 +67,7 @@ __floor (double x)
 	{
 	  uint64_t i = 0x000fffffffffffffl >> j0;
 	  if ((i0 & i) == 0)
-	    return x;			 /* x is integral */
+	    return x; /* x is integral */
 	  if (i0 < 0)
 	    i0 += 0x0010000000000000l >> j0;
 	  i0 &= ~i;
@@ -76,7 +75,7 @@ __floor (double x)
       INSERT_WORDS64 (x, i0);
     }
   else if (j0 == 0x400)
-    return x + x;			/* inf or NaN */
+    return x + x; /* inf or NaN */
   return x;
 #endif /* ! USE_FLOOR_BUILTIN  */
 }

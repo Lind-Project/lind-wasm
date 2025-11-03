@@ -30,34 +30,34 @@ __feraiseexcept (int excepts)
   /* Raise exceptions represented by EXPECTS.  */
 
   if (excepts & FE_INEXACT)
-  {
-    double d = 1.0, x = 3.0;
-    __asm__ __volatile__ ("fdiv %1, %0" : "+d" (d) : "d" (x));
-  }
+    {
+      double d = 1.0, x = 3.0;
+      __asm__ __volatile__ ("fdiv %1, %0" : "+d"(d) : "d"(x));
+    }
 
   if (excepts & FE_UNDERFLOW)
-  {
-    long double d = LDBL_MIN, x = 10;
-    __asm__ __volatile__ ("fdiv %1, %0" : "+d" (d) : "d" (x));
-  }
+    {
+      long double d = LDBL_MIN, x = 10;
+      __asm__ __volatile__ ("fdiv %1, %0" : "+d"(d) : "d"(x));
+    }
 
   if (excepts & FE_OVERFLOW)
-  {
-    long double d = LDBL_MAX;
-    __asm__ __volatile__ ("fmul %0, %0" : "+d" (d) : "d" (d));
-  }
+    {
+      long double d = LDBL_MAX;
+      __asm__ __volatile__ ("fmul %0, %0" : "+d"(d) : "d"(d));
+    }
 
   if (excepts & FE_DIVBYZERO)
-  {
-    double d = 1.0, x = 0.0;
-    __asm__ __volatile__ ("fdiv %1, %0" : "+d" (d) : "d" (x));
-  }
+    {
+      double d = 1.0, x = 0.0;
+      __asm__ __volatile__ ("fdiv %1, %0" : "+d"(d) : "d"(x));
+    }
 
   if (excepts & FE_INVALID)
-  {
-    double d = HUGE_VAL, x = 0.0;
-    __asm__ __volatile__ ("fmul %1, %0" : "+d" (d) : "d" (x));
-  }
+    {
+      double d = HUGE_VAL, x = 0.0;
+      __asm__ __volatile__ ("fmul %1, %0" : "+d"(d) : "d"(x));
+    }
 
   {
     /* Restore flag fields.  */
@@ -69,6 +69,5 @@ __feraiseexcept (int excepts)
 
   return 0;
 }
-libm_hidden_def (__feraiseexcept)
-weak_alias (__feraiseexcept, feraiseexcept)
-libm_hidden_weak (feraiseexcept)
+libm_hidden_def (__feraiseexcept) weak_alias (__feraiseexcept, feraiseexcept)
+    libm_hidden_weak (feraiseexcept)

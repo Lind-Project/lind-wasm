@@ -40,11 +40,11 @@ elf_machine_matches_host (const Elf32_Ehdr *ehdr)
   else if (ehdr->e_machine == EM_SPARC32PLUS)
     {
 #if defined SHARED
-      uint64_t hwcap_mask = TUNABLE_GET (glibc, cpu, hwcap_mask, uint64_t,
-					 NULL);
-      return GLRO(dl_hwcap) & hwcap_mask & HWCAP_SPARC_V9;
+      uint64_t hwcap_mask
+	  = TUNABLE_GET (glibc, cpu, hwcap_mask, uint64_t, NULL);
+      return GLRO (dl_hwcap) & hwcap_mask & HWCAP_SPARC_V9;
 #else
-      return GLRO(dl_hwcap) & HWCAP_SPARC_V9;
+      return GLRO (dl_hwcap) & HWCAP_SPARC_V9;
 #endif
     }
   else
@@ -54,14 +54,17 @@ elf_machine_matches_host (const Elf32_Ehdr *ehdr)
 /* We have to do this because elf_machine_{dynamic,load_address} can be
    invoked from functions that have no GOT references, and thus the compiler
    has no obligation to load the PIC register.  */
-#define LOAD_PIC_REG(PIC_REG)	\
-do {	register Elf32_Addr pc __asm("o7"); \
-	__asm("sethi %%hi(_GLOBAL_OFFSET_TABLE_-4), %1\n\t" \
-	      "call 1f\n\t" \
-	      "add %1, %%lo(_GLOBAL_OFFSET_TABLE_+4), %1\n" \
-	      "1:\tadd %1, %0, %1" \
-	      : "=r" (pc), "=r" (PIC_REG)); \
-} while (0)
+#define LOAD_PIC_REG(PIC_REG)                                                 \
+  do                                                                          \
+    {                                                                         \
+      register Elf32_Addr pc __asm ("o7");                                    \
+      __asm ("sethi %%hi(_GLOBAL_OFFSET_TABLE_-4), %1\n\t"                    \
+	     "call 1f\n\t"                                                    \
+	     "add %1, %%lo(_GLOBAL_OFFSET_TABLE_+4), %1\n"                    \
+	     "1:\tadd %1, %0, %1"                                             \
+	     : "=r"(pc), "=r"(PIC_REG));                                      \
+    }                                                                         \
+  while (0)
 
 /* Return the link-time address of _DYNAMIC.  Conveniently, this is the
    first element of the GOT.  This must be inlined in a function which
@@ -87,7 +90,8 @@ elf_machine_load_address (void)
 	 " add %1, %%lo(_GLOBAL_OFFSET_TABLE_+4), %1\n\t"
 	 "call _DYNAMIC\n\t"
 	 "call _GLOBAL_OFFSET_TABLE_\n"
-	 "1:\tadd %1, %0, %1\n\t" : "=r" (pc), "=r" (got));
+	 "1:\tadd %1, %0, %1\n\t"
+	 : "=r"(pc), "=r"(got));
 
   /* got is now l_addr + _GLOBAL_OFFSET_TABLE_
      *got is _DYNAMIC
@@ -121,9 +125,9 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
 	{
 	  rfunc = (Elf32_Addr) &_dl_runtime_profile;
 
-	  if (GLRO(dl_profile) != NULL
-	      && _dl_name_match_p (GLRO(dl_profile), l))
-	    GL(dl_profile_map) = l;
+	  if (GLRO (dl_profile) != NULL
+	      && _dl_name_match_p (GLRO (dl_profile), l))
+	    GL (dl_profile_map) = l;
 	}
       else
 #endif
@@ -143,7 +147,7 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
 
       plt[0] = 0x05000000 | ((rfunc >> 10) & 0x003fffff);
       plt[1] = 0x85c0a000 | (rfunc & 0x3ff);
-      plt[2] = OPCODE_NOP;	/* Fill call delay slot.  */
+      plt[2] = OPCODE_NOP; /* Fill call delay slot.  */
       plt[3] = (Elf32_Addr) l;
     }
 
@@ -154,30 +158,30 @@ elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
    PLT entries should not be allowed to define the value.
    ELF_RTYPE_CLASS_COPY iff TYPE should not be allowed to resolve to one
    of the main executable's symbols, as for a COPY reloc.  */
-#define elf_machine_type_class(type) \
-  ((((type) == R_SPARC_JMP_SLOT						      \
+#define elf_machine_type_class(type)                                          \
+  ((((type) == R_SPARC_JMP_SLOT                                               \
      || ((type) >= R_SPARC_TLS_GD_HI22 && (type) <= R_SPARC_TLS_TPOFF64))     \
-    * ELF_RTYPE_CLASS_PLT)						      \
+    * ELF_RTYPE_CLASS_PLT)                                                    \
    | (((type) == R_SPARC_COPY) * ELF_RTYPE_CLASS_COPY))
 
 /* A reloc type used for ld.so cmdline arg lookups to reject PLT entries.  */
-#define ELF_MACHINE_JMP_SLOT	R_SPARC_JMP_SLOT
+#define ELF_MACHINE_JMP_SLOT R_SPARC_JMP_SLOT
 
 /* Undo the sub %sp, 6*4, %sp; add %sp, 22*4, %o0 below to get at the
    value we want in __libc_stack_end.  */
-#define DL_STACK_END(cookie) \
-  ((void *) (((long) (cookie)) - (22 - 6) * 4))
+#define DL_STACK_END(cookie) ((void *) (((long) (cookie)) - (22 - 6) * 4))
 
 /* Initial entry point code for the dynamic linker.
    The C function `_dl_start' is the real entry point;
    its return value is the user program's entry point.  */
 
-#define RTLD_GOT_ADDRESS(pic_reg, reg, symbol)	\
-	"sethi	%gdop_hix22(" #symbol "), " #reg "\n\t" \
-	"xor	" #reg ", %gdop_lox10(" #symbol "), " #reg "\n\t" \
-	"ld	[" #pic_reg " + " #reg "], " #reg ", %gdop(" #symbol ")"
+#define RTLD_GOT_ADDRESS(pic_reg, reg, symbol)                                \
+  "sethi	%gdop_hix22(" #symbol "), " #reg "\n\t"                       \
+  "xor	" #reg ", %gdop_lox10(" #symbol "), " #reg "\n\t"                     \
+  "ld	[" #pic_reg " + " #reg "], " #reg ", %gdop(" #symbol ")"
 
-#define RTLD_START __asm__ ("\
+#define RTLD_START                                                            \
+  __asm__ ("\
 	.text\n\
 	.globl	_start\n\
 	.type	_start, @function\n\
@@ -201,7 +205,7 @@ _dl_start_user:\n\
 	mov	%o0, %l0\n\
 	ld	[%sp+22*4], %i5		/* load argc */\n\
   /* %o0 = _dl_loaded, %o1 = argc, %o2 = argv, %o3 = envp.  */\n\
-	" RTLD_GOT_ADDRESS(%l7, %o0, _rtld_local) "\n\
+	" RTLD_GOT_ADDRESS (% l7, % o0, _rtld_local) "\n\
 	add	%sp, 23*4, %o2\n\
 	sll	%i5, 2, %o3\n\
 	add	%o3, 4, %o3\n\
@@ -210,7 +214,7 @@ _dl_start_user:\n\
 	call	_dl_init\n\
 	 ld	[%o0], %o0\n\
   /* Pass our finalizer function to the user in %g1.  */\n\
-	" RTLD_GOT_ADDRESS(%l7, %g1, _dl_fini) "\n\
+	" RTLD_GOT_ADDRESS (% l7, % g1, _dl_fini) "\n\
   /* Jump to the user's entry point and deallocate the extra stack we got.  */\n\
 	jmp	%l0\n\
 	 add	%sp, 6*4, %sp\n\
@@ -219,9 +223,9 @@ _dl_start_user:\n\
 
 static inline Elf32_Addr
 elf_machine_fixup_plt (struct link_map *map, lookup_t t,
-		       const ElfW(Sym) *refsym, const ElfW(Sym) *sym,
-		       const Elf32_Rela *reloc,
-		       Elf32_Addr *reloc_addr, Elf32_Addr value)
+		       const ElfW (Sym) * refsym, const ElfW (Sym) * sym,
+		       const Elf32_Rela *reloc, Elf32_Addr *reloc_addr,
+		       Elf32_Addr value)
 {
 #ifdef __sparc_v9__
   /* Sparc v9 can assume flush is always present.  */
@@ -229,7 +233,7 @@ elf_machine_fixup_plt (struct link_map *map, lookup_t t,
 #else
   /* Note that we don't mask the hwcap here, as the flush is essential to
      functionality on those cpu's that implement it.  */
-  const int do_flush = GLRO(dl_hwcap) & HWCAP_SPARC_FLUSH;
+  const int do_flush = GLRO (dl_hwcap) & HWCAP_SPARC_FLUSH;
 #endif
   return sparc_fixup_plt (reloc, reloc_addr, value, 1, do_flush);
 }
@@ -244,16 +248,15 @@ elf_machine_plt_value (struct link_map *map, const Elf32_Rela *reloc,
 
 #endif /* dl_machine_h */
 
-#define ARCH_LA_PLTENTER	sparc32_gnu_pltenter
-#define ARCH_LA_PLTEXIT		sparc32_gnu_pltexit
+#define ARCH_LA_PLTENTER sparc32_gnu_pltenter
+#define ARCH_LA_PLTEXIT sparc32_gnu_pltexit
 
 #ifdef RESOLVE_MAP
 
 /* Perform the relocation specified by RELOC and SYM (which is fully resolved).
    MAP is the object containing the reloc.  */
 
-static inline void
-__attribute__ ((always_inline))
+static inline void __attribute__ ((always_inline))
 elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 		  const Elf32_Rela *reloc, const Elf32_Sym *sym,
 		  const struct r_found_version *version,
@@ -296,14 +299,14 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
       value = SYMBOL_ADDRESS (sym_map, sym, true);
     }
 
-  value += reloc->r_addend;	/* Assume copy relocs have zero addend.  */
+  value += reloc->r_addend; /* Assume copy relocs have zero addend.  */
 
   if (sym != NULL
-      && __builtin_expect (ELFW(ST_TYPE) (sym->st_info) == STT_GNU_IFUNC, 0)
+      && __builtin_expect (ELFW (ST_TYPE) (sym->st_info) == STT_GNU_IFUNC, 0)
       && __builtin_expect (sym->st_shndx != SHN_UNDEF, 1)
       && __builtin_expect (!skip_ifunc, 1))
     {
-      value = ((Elf32_Addr (*) (int)) value) (GLRO(dl_hwcap));
+      value = ((Elf32_Addr (*) (int)) value) (GLRO (dl_hwcap));
     }
 
   switch (r_type)
@@ -315,7 +318,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	   found.  */
 	break;
       if (sym->st_size > refsym->st_size
-	  || (GLRO(dl_verbose) && sym->st_size < refsym->st_size))
+	  || (GLRO (dl_verbose) && sym->st_size < refsym->st_size))
 	{
 	  const char *strtab;
 
@@ -334,12 +337,12 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
       break;
     case R_SPARC_IRELATIVE:
       if (__glibc_likely (!skip_ifunc))
-	value = ((Elf32_Addr (*) (int)) value) (GLRO(dl_hwcap));
+	value = ((Elf32_Addr (*) (int)) value) (GLRO (dl_hwcap));
       *reloc_addr = value;
       break;
     case R_SPARC_JMP_IREL:
       if (__glibc_likely (!skip_ifunc))
-	value = ((Elf32_Addr (*) (int)) value) (GLRO(dl_hwcap));
+	value = ((Elf32_Addr (*) (int)) value) (GLRO (dl_hwcap));
       /* Fall thru */
     case R_SPARC_JMP_SLOT:
       {
@@ -347,7 +350,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	/* Note that we don't mask the hwcap here, as the flush is
 	   essential to functionality on those cpu's that implement
 	   it.  For sparcv9 we can assume flush is present.  */
-	const int do_flush = GLRO(dl_hwcap) & HWCAP_SPARC_FLUSH;
+	const int do_flush = GLRO (dl_hwcap) & HWCAP_SPARC_FLUSH;
 #else
 	/* Unfortunately, this is necessary, so that we can ensure
 	   ld.so will not execute corrupt PLT entry instructions. */
@@ -377,8 +380,8 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
       if (sym != NULL)
 	{
 	  CHECK_STATIC_TLS (map, sym_map);
-	  *reloc_addr = sym->st_value - sym_map->l_tls_offset
-	    + reloc->r_addend;
+	  *reloc_addr
+	      = sym->st_value - sym_map->l_tls_offset + reloc->r_addend;
 	}
       break;
 #ifndef RTLD_BOOTSTRAP
@@ -387,13 +390,12 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
       if (sym != NULL)
 	{
 	  CHECK_STATIC_TLS (map, sym_map);
-	  value = sym->st_value - sym_map->l_tls_offset
-	    + reloc->r_addend;
+	  value = sym->st_value - sym_map->l_tls_offset + reloc->r_addend;
 	  if (r_type == R_SPARC_TLS_LE_HIX22)
 	    *reloc_addr = (*reloc_addr & 0xffc00000) | ((~value) >> 10);
 	  else
-	    *reloc_addr = (*reloc_addr & 0xffffe000) | (value & 0x3ff)
-	      | 0x1c00;
+	    *reloc_addr
+		= (*reloc_addr & 0xffffe000) | (value & 0x3ff) | 0x1c00;
 	}
       break;
 #endif
@@ -424,14 +426,14 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
       *reloc_addr = (*reloc_addr & 0xffc00000) | (value >> 10);
       break;
     case R_SPARC_UA16:
-      ((unsigned char *) reloc_addr_arg) [0] = value >> 8;
-      ((unsigned char *) reloc_addr_arg) [1] = value;
+      ((unsigned char *) reloc_addr_arg)[0] = value >> 8;
+      ((unsigned char *) reloc_addr_arg)[1] = value;
       break;
     case R_SPARC_UA32:
-      ((unsigned char *) reloc_addr_arg) [0] = value >> 24;
-      ((unsigned char *) reloc_addr_arg) [1] = value >> 16;
-      ((unsigned char *) reloc_addr_arg) [2] = value >> 8;
-      ((unsigned char *) reloc_addr_arg) [3] = value;
+      ((unsigned char *) reloc_addr_arg)[0] = value >> 24;
+      ((unsigned char *) reloc_addr_arg)[1] = value >> 16;
+      ((unsigned char *) reloc_addr_arg)[2] = value >> 8;
+      ((unsigned char *) reloc_addr_arg)[3] = value;
       break;
 #endif
 #if !defined RTLD_BOOTSTRAP || defined _NDEBUG
@@ -442,8 +444,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
     }
 }
 
-static inline void
-__attribute__ ((always_inline))
+static inline void __attribute__ ((always_inline))
 elf_machine_rela_relative (Elf32_Addr l_addr, const Elf32_Rela *reloc,
 			   void *const reloc_addr_arg)
 {
@@ -451,8 +452,7 @@ elf_machine_rela_relative (Elf32_Addr l_addr, const Elf32_Rela *reloc,
   *reloc_addr += l_addr + reloc->r_addend;
 }
 
-static inline void
-__attribute__ ((always_inline))
+static inline void __attribute__ ((always_inline))
 elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
 		      Elf32_Addr l_addr, const Elf32_Rela *reloc,
 		      int skip_ifunc)
@@ -466,7 +466,7 @@ elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
     {
       Elf32_Addr value = map->l_addr + reloc->r_addend;
       if (__glibc_likely (!skip_ifunc))
-	value = ((Elf32_Addr (*) (int)) value) (GLRO(dl_hwcap));
+	value = ((Elf32_Addr (*) (int)) value) (GLRO (dl_hwcap));
       sparc_fixup_plt (reloc, reloc_addr, value, 1, 1);
     }
   else if (r_type == R_SPARC_NONE)
@@ -475,4 +475,4 @@ elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
     _dl_reloc_bad_type (map, r_type, 1);
 }
 
-#endif	/* RESOLVE_MAP */
+#endif /* RESOLVE_MAP */

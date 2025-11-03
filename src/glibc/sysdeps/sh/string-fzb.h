@@ -17,10 +17,10 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef STRING_FZB_H
-#define STRING_FZB_H 1
+#  define STRING_FZB_H 1
 
-#include <sys/cdefs.h>
-#include <string-optype.h>
+#  include <sys/cdefs.h>
+#  include <string-optype.h>
 
 /* Determine if any bytes within X1 and X2 are equal.  */
 static __always_inline _Bool
@@ -31,9 +31,11 @@ has_eq (op_t x1, op_t x2)
   /* TODO: A compiler builtin for cmp/str would be much better.  It is
      difficult to use asm goto here, because the range of bt/bf are
      quite small.  */
-  asm("cmp/str %1,%2\n\t"
-      "movt %0"
-      : "=r" (ret) : "r" (x1), "r" (x2) : "t");
+  asm ("cmp/str %1,%2\n\t"
+       "movt %0"
+       : "=r"(ret)
+       : "r"(x1), "r"(x2)
+       : "t");
 
   return ret;
 }

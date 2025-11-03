@@ -22,10 +22,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 #ifdef SIGRTMIN
 
-# define N 2
+#  define N 2
 static pthread_barrier_t bar;
 static struct
 {
@@ -33,7 +32,6 @@ static struct
   pthread_t s;
 } ti[N];
 static int sig1;
-
 
 static void
 handler (int sig)
@@ -59,7 +57,6 @@ handler (int sig)
   puts ("handler: thread not found");
   exit (1);
 }
-
 
 static void *
 tf (void *arg)
@@ -114,7 +111,6 @@ tf (void *arg)
   return NULL;
 }
 
-
 static int
 do_test (void)
 {
@@ -130,8 +126,7 @@ do_test (void)
   sa.sa_flags = 0;
   sigemptyset (&sa.sa_mask);
 
-  if (sigaction (sig1, &sa, NULL) != 0
-      || sigaction (sig1 + 1, &sa, NULL) != 0
+  if (sigaction (sig1, &sa, NULL) != 0 || sigaction (sig1 + 1, &sa, NULL) != 0
       || sigaction (sig1 + 2, &sa, NULL) != 0)
     {
       puts ("sigaction failed");
@@ -188,9 +183,9 @@ do_test (void)
   return 0;
 }
 
-# define TEST_FUNCTION do_test ()
+#  define TEST_FUNCTION do_test ()
 
 #else
-# define TEST_FUNCTION 0
+#  define TEST_FUNCTION 0
 #endif
 #include "../test-skeleton.c"

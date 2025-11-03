@@ -23,7 +23,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-
 static int fd[4];
 static pthread_barrier_t b;
 volatile int in_sh_body;
@@ -35,8 +34,7 @@ cl (void *arg)
   cleanups = (cleanups << 4) | (long) arg;
 }
 
-
-static void __attribute__((noinline))
+static void __attribute__ ((noinline))
 sh_body (void)
 {
   char c;
@@ -53,7 +51,6 @@ sh_body (void)
   pthread_cleanup_pop (0);
 }
 
-
 static void
 sh (int sig)
 {
@@ -64,8 +61,7 @@ sh (int sig)
   pthread_cleanup_pop (0);
 }
 
-
-static void __attribute__((noinline))
+static void __attribute__ ((noinline))
 tf_body (void)
 {
   char c;
@@ -87,7 +83,6 @@ tf_body (void)
 
   pthread_cleanup_pop (0);
 }
-
 
 static void *
 tf (void *arg)
@@ -157,7 +152,6 @@ tf (void *arg)
   exit (0);
 }
 
-
 static int
 do_one_test (void)
 {
@@ -209,7 +203,6 @@ do_one_test (void)
   exit (1);
 }
 
-
 static int
 do_test (void)
 {
@@ -258,7 +251,7 @@ do_test (void)
     return 1;
 
 #ifdef SA_SIGINFO
-  sa.sa_sigaction = (void (*)(int, siginfo_t *, void *)) sh;
+  sa.sa_sigaction = (void (*) (int, siginfo_t *, void *)) sh;
   sigemptyset (&sa.sa_mask);
   sa.sa_flags = SA_SIGINFO;
 
@@ -272,7 +265,7 @@ do_test (void)
   if (do_one_test ())
     return 1;
 
-  sa.sa_sigaction = (void (*)(int, siginfo_t *, void *)) sh;
+  sa.sa_sigaction = (void (*) (int, siginfo_t *, void *)) sh;
   sigemptyset (&sa.sa_mask);
   sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
 

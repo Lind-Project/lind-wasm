@@ -36,9 +36,9 @@ __pthread_rwlockattr_setpshared (pthread_rwlockattr_t *attr, int pshared)
   return 0;
 }
 versioned_symbol (libc, __pthread_rwlockattr_setpshared,
-                  pthread_rwlockattr_setpshared, GLIBC_2_34);
+		  pthread_rwlockattr_setpshared, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_rwlockattr_setpshared,
-               pthread_rwlockattr_setpshared, GLIBC_2_1);
+	       pthread_rwlockattr_setpshared, GLIBC_2_1);
 #endif

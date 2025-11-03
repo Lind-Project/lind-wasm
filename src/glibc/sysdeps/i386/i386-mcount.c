@@ -1,3 +1,4 @@
-void _mcount(void) {
-
+void
+_mcount (void)
+{
 }

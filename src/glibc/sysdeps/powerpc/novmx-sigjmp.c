@@ -20,11 +20,11 @@
 
 #include <bits/wordsize.h>
 #include <shlib-compat.h>
-#if IS_IN (libc) && defined SHARED
-# if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_3_4)
-#  include <stddef.h>
-#  include <novmxsetjmp.h>
-#  include <signal.h>
+#if IS_IN(libc) && defined SHARED
+#  if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_3_4)
+#    include <stddef.h>
+#    include <novmxsetjmp.h>
+#    include <signal.h>
 
 /* This function is called by the `sigsetjmp' macro
    before doing a `__setjmp' on ENV[0].__jmpbuf.
@@ -33,12 +33,13 @@
 int
 __novmx__sigjmp_save (__novmx__sigjmp_buf env, int savemask)
 {
-  env[0].__mask_was_saved = (savemask
-			     && __sigprocmask (SIG_BLOCK, (sigset_t *) NULL,
-					       &env[0].__saved_mask) == 0);
+  env[0].__mask_was_saved
+      = (savemask
+	 && __sigprocmask (SIG_BLOCK, (sigset_t *) NULL, &env[0].__saved_mask)
+		== 0);
 
   return 0;
 }
 
-# endif /* SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_3_4) */
-#endif /* IS_IN (libc) && SHARED  */
+#  endif /* SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_3_4) */
+#endif	 /* IS_IN (libc) && SHARED  */

@@ -29,7 +29,6 @@
 #undef NOFLSH
 #include <sys/ioctl.h>
 
-
 /* Set the state of FD to *TERMIOS_P.  */
 int
 tcsetattr (int fd, int optional_actions, const struct termios *termios_p)

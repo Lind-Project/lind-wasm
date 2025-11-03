@@ -20,13 +20,13 @@
 
 /* Threshold at which vm_copy is more efficient than well-optimized copying
    by words.  */
-#define PAGE_COPY_THRESHOLD		(16384)
+#define PAGE_COPY_THRESHOLD (16384)
 
-#define PAGE_SIZE		__vm_page_size
-#define PAGE_COPY_FWD(dstp, srcp, nbytes_left, nbytes)			      \
-  ((nbytes_left) = ((nbytes)						      \
-		    - (__vm_copy (__mach_task_self (),			      \
-				  (vm_address_t) srcp, trunc_page (nbytes),   \
-				  (vm_address_t) dstp) == KERN_SUCCESS	      \
-		       ? trunc_page (nbytes)				      \
-		       : 0)))
+#define PAGE_SIZE __vm_page_size
+#define PAGE_COPY_FWD(dstp, srcp, nbytes_left, nbytes)                        \
+  ((nbytes_left) = ((nbytes)                                                  \
+		    - (__vm_copy (__mach_task_self (), (vm_address_t) srcp,   \
+				  trunc_page (nbytes), (vm_address_t) dstp)   \
+			       == KERN_SUCCESS                                \
+			   ? trunc_page (nbytes)                              \
+			   : 0)))

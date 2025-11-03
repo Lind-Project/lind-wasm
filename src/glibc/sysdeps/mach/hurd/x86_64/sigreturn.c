@@ -24,7 +24,7 @@
    unlock SS off sigstack.  */
 void
 __sigreturn2 (struct hurd_sigstate *ss, uintptr_t *usp,
-              mach_port_t sc_reply_port)
+	      mach_port_t sc_reply_port)
 {
   mach_port_t reply_port;
   _hurd_sigstate_unlock (ss);
@@ -43,32 +43,33 @@ __sigreturn2 (struct hurd_sigstate *ss, uintptr_t *usp,
   THREAD_SETMEM (THREAD_SELF, reply_port, MACH_PORT_DEAD);
   if (__glibc_likely (MACH_PORT_VALID (reply_port)))
     (void) __mach_port_mod_refs (__mach_task_self (), reply_port,
-                                 MACH_PORT_RIGHT_RECEIVE, -1);
+				 MACH_PORT_RIGHT_RECEIVE, -1);
   THREAD_SETMEM (THREAD_SELF, reply_port, sc_reply_port);
 
   asm volatile (
-                /* Point the stack to the register dump.  */
-                "movq %0, %%rsp\n"
-                /* Pop off the registers.  */
-                "popq %%r8\n"
-                "popq %%r9\n"
-                "popq %%r10\n"
-                "popq %%r11\n"
-                "popq %%r12\n"
-                "popq %%r13\n"
-                "popq %%r14\n"
-                "popq %%r15\n"
-                "popq %%rdi\n"
-                "popq %%rsi\n"
-                "popq %%rbp\n"
-                "popq %%rbx\n"
-                "popq %%rdx\n"
-                "popq %%rcx\n"
-                "popq %%rax\n"
-                "popfq\n"
-                /* Restore %rip and %rsp with a single instruction.  */
-                "retq $128" :
-                : "rm" (usp));
+      /* Point the stack to the register dump.  */
+      "movq %0, %%rsp\n"
+      /* Pop off the registers.  */
+      "popq %%r8\n"
+      "popq %%r9\n"
+      "popq %%r10\n"
+      "popq %%r11\n"
+      "popq %%r12\n"
+      "popq %%r13\n"
+      "popq %%r14\n"
+      "popq %%r15\n"
+      "popq %%rdi\n"
+      "popq %%rsi\n"
+      "popq %%rbp\n"
+      "popq %%rbx\n"
+      "popq %%rdx\n"
+      "popq %%rcx\n"
+      "popq %%rax\n"
+      "popfq\n"
+      /* Restore %rip and %rsp with a single instruction.  */
+      "retq $128"
+      :
+      : "rm"(usp));
   __builtin_unreachable ();
 }
 
@@ -118,7 +119,7 @@ __sigreturn (struct sigcontext *scp)
   if (scp->sc_fpused)
     /* Restore the FPU state.  Mach conveniently stores the state
        in the format the i387 `frstor' instruction uses to restore it.  */
-    asm volatile ("frstor %0" : : "m" (scp->sc_fpsave));
+    asm volatile ("frstor %0" : : "m"(scp->sc_fpsave));
 
   /* Copy the registers onto the user's stack, to be able to release the
      altstack (by unlocking sigstate).  Note that unless an altstack is used,
@@ -157,10 +158,11 @@ __sigreturn (struct sigcontext *scp)
      setup to actual memory.  We align the stack as per the ABI, but pass
      the original usp to __sigreturn2 as an argument.  */
   asm volatile ("movq %1, %%rsp\n"
-                "andq $-16, %%rsp\n"
-                "call __sigreturn2" :
-                : "D" (ss), "S" (usp), "d" (sc_reply_port)
-                : "memory");
+		"andq $-16, %%rsp\n"
+		"call __sigreturn2"
+		:
+		: "D"(ss), "S"(usp), "d"(sc_reply_port)
+		: "memory");
   __builtin_unreachable ();
 }
 

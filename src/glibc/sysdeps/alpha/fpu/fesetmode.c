@@ -31,9 +31,9 @@ fesetmode (const femode_t *modep)
   else
     mode = (unsigned long int) modep;
 
-  __asm__ __volatile__ ("excb; mf_fpcr %0" : "=f" (fpcr));
+  __asm__ __volatile__ ("excb; mf_fpcr %0" : "=f"(fpcr));
   fpcr = (fpcr & ~FPCR_ROUND_MASK) | (mode & FPCR_ROUND_MASK);
-  __asm__ __volatile__ ("mt_fpcr %0" : : "f" (fpcr));
+  __asm__ __volatile__ ("mt_fpcr %0" : : "f"(fpcr));
 
   swcr = __ieee_get_fp_control ();
   swcr = ((mode & SWCR_ALL_MASK & ~SWCR_STATUS_MASK)

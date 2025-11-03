@@ -29,8 +29,8 @@ prlimit (__pid_t pid, enum __rlimit_resource resource,
   struct rlimit64 new_rlimit64_mem;
   struct rlimit64 *new_rlimit64 = NULL;
   struct rlimit64 old_rlimit64_mem;
-  struct rlimit64 *old_rlimit64 = (old_rlimit != NULL
-				   ? &old_rlimit64_mem : NULL);
+  struct rlimit64 *old_rlimit64
+      = (old_rlimit != NULL ? &old_rlimit64_mem : NULL);
 
   if (new_rlimit != NULL)
     {

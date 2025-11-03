@@ -19,10 +19,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _AARCH64_GET_ROUNDING_MODE_H
-#define _AARCH64_GET_ROUNDING_MODE_H	1
+#  define _AARCH64_GET_ROUNDING_MODE_H 1
 
-#include <fenv.h>
-#include <fpu_control.h>
+#  include <fenv.h>
+#  include <fpu_control.h>
 
 /* Return the floating-point rounding mode.  */
 

@@ -25,7 +25,5 @@ extern __typeof (ceilf) __ceilf_vis3 attribute_hidden;
 extern __typeof (ceilf) __ceilf_generic attribute_hidden;
 
 sparc_libm_ifunc (__ceilf,
-		  hwcap & HWCAP_SPARC_VIS3
-		  ? __ceilf_vis3
-		  : __ceilf_generic);
+		  hwcap &HWCAP_SPARC_VIS3 ? __ceilf_vis3 : __ceilf_generic);
 libm_alias_float (__ceil, ceil)

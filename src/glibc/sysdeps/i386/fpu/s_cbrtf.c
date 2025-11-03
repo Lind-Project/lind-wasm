@@ -19,19 +19,11 @@
 #include <math.h>
 #include <libm-alias-float.h>
 
+#define CBRT2 1.2599210498948731648	/* 2^(1/3) */
+#define SQR_CBRT2 1.5874010519681994748 /* 2^(2/3) */
 
-#define CBRT2 1.2599210498948731648		/* 2^(1/3) */
-#define SQR_CBRT2 1.5874010519681994748		/* 2^(2/3) */
-
-static const double factor[5] =
-{
-  1.0 / SQR_CBRT2,
-  1.0 / CBRT2,
-  1.0,
-  CBRT2,
-  SQR_CBRT2
-};
-
+static const double factor[5]
+    = { 1.0 / SQR_CBRT2, 1.0 / CBRT2, 1.0, CBRT2, SQR_CBRT2 };
 
 float
 __cbrtf (float x)
@@ -49,8 +41,8 @@ __cbrtf (float x)
   if (xe == 0 && fpclassify (x) <= FP_ZERO)
     return x + x;
 
-  u = (0.492659620528969547 + (0.697570460207922770
-			       - 0.191502161678719066 * xm) * xm);
+  u = (0.492659620528969547
+       + (0.697570460207922770 - 0.191502161678719066 * xm) * xm);
 
   t2 = u * u * u;
 
@@ -59,4 +51,3 @@ __cbrtf (float x)
   return __ldexpf (x > 0.0 ? ym : -ym, xe / 3);
 }
 libm_alias_float (__cbrt, cbrt)
-

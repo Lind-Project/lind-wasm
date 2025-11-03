@@ -64,9 +64,8 @@
    384          && (r & PTHREAD_RWLOCK_WRLOCKED) == 0)
    385     {
    ...
-   390       if (atomic_compare_exchange_weak_acquire (&rwlock->__data.__readers, &r,
-   391                                                 r ^ PTHREAD_RWLOCK_WRPHASE))
-   392         {
+   390       if (atomic_compare_exchange_weak_acquire
+   (&rwlock->__data.__readers, &r, 391 r ^ PTHREAD_RWLOCK_WRPHASE)) 392 {
 
    And then attempts to start the read phase.
 
@@ -86,8 +85,8 @@
     53           rnew = r + (1 << PTHREAD_RWLOCK_READER_SHIFT);
     54         }
    ...
-    89   while (!atomic_compare_exchange_weak_acquire (&rwlock->__data.__readers,
-    90       &r, rnew));
+    89   while (!atomic_compare_exchange_weak_acquire
+   (&rwlock->__data.__readers, 90       &r, rnew));
 
    And succeeds.
 
@@ -113,9 +112,9 @@
    to waiting on the lock for explicit handover from either a new writer
    or a new reader.
 
-   448           int err = futex_abstimed_wait (&rwlock->__data.__wrphase_futex,
-   449                                          1 | PTHREAD_RWLOCK_FUTEX_USED,
-   450                                          abstime, private);
+   448           int err = futex_abstimed_wait
+   (&rwlock->__data.__wrphase_futex, 449 1 | PTHREAD_RWLOCK_FUTEX_USED, 450
+   abstime, private);
 
    We use PTHREAD_RWLOCK_FUTEX_USED to indicate the futex
    is in use.
@@ -195,18 +194,18 @@
 
    437   for (;;)
    438     {
-   439       while (((wpf = atomic_load_relaxed (&rwlock->__data.__wrphase_futex))
-   440               | PTHREAD_RWLOCK_FUTEX_USED) == (1 | PTHREAD_RWLOCK_FUTEX_USED))
-   441         {
+   439       while (((wpf = atomic_load_relaxed
+   (&rwlock->__data.__wrphase_futex)) 440               |
+   PTHREAD_RWLOCK_FUTEX_USED) == (1 | PTHREAD_RWLOCK_FUTEX_USED)) 441         {
    442           int private = __pthread_rwlock_get_private (rwlock);
    443           if (((wpf & PTHREAD_RWLOCK_FUTEX_USED) == 0)
    444               && (!atomic_compare_exchange_weak_relaxed
    445                   (&rwlock->__data.__wrphase_futex,
    446                    &wpf, wpf | PTHREAD_RWLOCK_FUTEX_USED)))
    447             continue;
-   448           int err = futex_abstimed_wait (&rwlock->__data.__wrphase_futex,
-   449                                          1 | PTHREAD_RWLOCK_FUTEX_USED,
-   450                                          abstime, private);
+   448           int err = futex_abstimed_wait
+   (&rwlock->__data.__wrphase_futex, 449 1 | PTHREAD_RWLOCK_FUTEX_USED, 450
+   abstime, private);
 
    We are in a write phase, so the while() on line 439 is true.
 
@@ -243,9 +242,9 @@
 
    437   for (;;)
    438     {
-   439       while (((wpf = atomic_load_relaxed (&rwlock->__data.__wrphase_futex))
-   440               | PTHREAD_RWLOCK_FUTEX_USED) == (1 | PTHREAD_RWLOCK_FUTEX_USED))
-   441         {
+   439       while (((wpf = atomic_load_relaxed
+   (&rwlock->__data.__wrphase_futex)) 440               |
+   PTHREAD_RWLOCK_FUTEX_USED) == (1 | PTHREAD_RWLOCK_FUTEX_USED)) 441         {
    ...
    508     }
 
@@ -302,7 +301,7 @@ run_loop (void *arg)
 	 that readers block (and eventually are susceptable to
 	 stalling).
 
-         If we are a writer, take the write lock, and then unlock.
+	 If we are a writer, take the write lock, and then unlock.
 	 If we are a reader, try the lock, then lock, then unlock.  */
       if ((i % 8) != 0)
 	xpthread_rwlock_wrlock (&onelock);

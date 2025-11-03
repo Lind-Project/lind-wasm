@@ -27,9 +27,9 @@ __cnd_destroy (cnd_t *cond)
 }
 #if PTHREAD_IN_LIBC
 versioned_symbol (libc, __cnd_destroy, cnd_destroy, GLIBC_2_34);
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_28, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_28, GLIBC_2_34)
 compat_symbol (libpthread, __cnd_destroy, cnd_destroy, GLIBC_2_28);
-# endif
+#  endif
 #else /* !PTHREAD_IN_LIBC */
 strong_alias (__cnd_destroy, cnd_destroy)
 #endif

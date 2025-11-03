@@ -20,7 +20,6 @@
 #include "pthreadP.h"
 #include <futex-internal.h>
 
-
 /* The next two functions are similar to pthread_setcanceltype() but
    more specialized for the use in the cancelable functions like write().
    They do not need to check parameters etc.  These functions must be
@@ -39,8 +38,8 @@ __pthread_enable_asynccancel (void)
       if (newval == oldval)
 	break;
 
-      if (atomic_compare_exchange_weak_acquire (&self->cancelhandling,
-						&oldval, newval))
+      if (atomic_compare_exchange_weak_acquire (&self->cancelhandling, &oldval,
+						newval))
 	{
 	  if (cancel_enabled_and_canceled_and_async (newval))
 	    {
@@ -56,10 +55,9 @@ __pthread_enable_asynccancel (void)
 }
 libc_hidden_def (__pthread_enable_asynccancel)
 
-/* See the comment for __pthread_enable_asynccancel regarding
-   the AS-safety of this function.  */
-void
-__pthread_disable_asynccancel (int oldtype)
+    /* See the comment for __pthread_enable_asynccancel regarding
+       the AS-safety of this function.  */
+    void __pthread_disable_asynccancel (int oldtype)
 {
   /* If asynchronous cancellation was enabled before we do not have
      anything to do.  */
@@ -73,8 +71,8 @@ __pthread_disable_asynccancel (int oldtype)
     {
       newval = oldval & ~CANCELTYPE_BITMASK;
     }
-  while (!atomic_compare_exchange_weak_acquire (&self->cancelhandling,
-						&oldval, newval));
+  while (!atomic_compare_exchange_weak_acquire (&self->cancelhandling, &oldval,
+						newval));
 
   /* We cannot return when we are being canceled.  Upon return the
      thread might be things which would have to be undone.  The

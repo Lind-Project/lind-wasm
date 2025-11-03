@@ -71,80 +71,69 @@
 
 static const _Float128 bp[] = {
   1,
-  L(1.5),
+  L (1.5),
 };
 
 /* log_2(1.5) */
-static const _Float128 dp_h[] = {
-  0.0,
-  L(5.8496250072115607565592654282227158546448E-1)
-};
+static const _Float128 dp_h[]
+    = { 0.0, L (5.8496250072115607565592654282227158546448E-1) };
 
 /* Low part of log_2(1.5) */
-static const _Float128 dp_l[] = {
-  0.0,
-  L(1.0579781240112554492329533686862998106046E-16)
-};
+static const _Float128 dp_l[]
+    = { 0.0, L (1.0579781240112554492329533686862998106046E-16) };
 
-static const _Float128 zero = 0,
-  one = 1,
-  two = 2,
-  two113 = L(1.0384593717069655257060992658440192E34),
-  huge = L(1.0e3000),
-  tiny = L(1.0e-3000);
+static const _Float128 zero = 0, one = 1, two = 2,
+		       two113 = L (1.0384593717069655257060992658440192E34),
+		       huge = L (1.0e3000), tiny = L (1.0e-3000);
 
 /* 3/2 log x = 3 z + z^3 + z^3 (z^2 R(z^2))
    z = (x-1)/(x+1)
    1 <= x <= 1.25
    Peak relative error 2.3e-37 */
-static const _Float128 LN[] =
-{
- L(-3.0779177200290054398792536829702930623200E1),
-  L(6.5135778082209159921251824580292116201640E1),
- L(-4.6312921812152436921591152809994014413540E1),
-  L(1.2510208195629420304615674658258363295208E1),
- L(-9.9266909031921425609179910128531667336670E-1)
-};
-static const _Float128 LD[] =
-{
- L(-5.129862866715009066465422805058933131960E1),
-  L(1.452015077564081884387441590064272782044E2),
- L(-1.524043275549860505277434040464085593165E2),
-  L(7.236063513651544224319663428634139768808E1),
- L(-1.494198912340228235853027849917095580053E1)
+static const _Float128 LN[]
+    = { L (-3.0779177200290054398792536829702930623200E1),
+	L (6.5135778082209159921251824580292116201640E1),
+	L (-4.6312921812152436921591152809994014413540E1),
+	L (1.2510208195629420304615674658258363295208E1),
+	L (-9.9266909031921425609179910128531667336670E-1) };
+static const _Float128 LD[] = {
+  L (-5.129862866715009066465422805058933131960E1),
+  L (1.452015077564081884387441590064272782044E2),
+  L (-1.524043275549860505277434040464085593165E2),
+  L (7.236063513651544224319663428634139768808E1),
+  L (-1.494198912340228235853027849917095580053E1)
   /* 1.0E0 */
 };
 
 /* exp(x) = 1 + x - x / (1 - 2 / (x - x^2 R(x^2)))
    0 <= x <= 0.5
    Peak relative error 5.7e-38  */
-static const _Float128 PN[] =
-{
-  L(5.081801691915377692446852383385968225675E8),
-  L(9.360895299872484512023336636427675327355E6),
-  L(4.213701282274196030811629773097579432957E4),
-  L(5.201006511142748908655720086041570288182E1),
-  L(9.088368420359444263703202925095675982530E-3),
+static const _Float128 PN[] = {
+  L (5.081801691915377692446852383385968225675E8),
+  L (9.360895299872484512023336636427675327355E6),
+  L (4.213701282274196030811629773097579432957E4),
+  L (5.201006511142748908655720086041570288182E1),
+  L (9.088368420359444263703202925095675982530E-3),
 };
-static const _Float128 PD[] =
-{
-  L(3.049081015149226615468111430031590411682E9),
-  L(1.069833887183886839966085436512368982758E8),
-  L(8.259257717868875207333991924545445705394E5),
-  L(1.872583833284143212651746812884298360922E3),
+static const _Float128 PD[] = {
+  L (3.049081015149226615468111430031590411682E9),
+  L (1.069833887183886839966085436512368982758E8),
+  L (8.259257717868875207333991924545445705394E5),
+  L (1.872583833284143212651746812884298360922E3),
   /* 1.0E0 */
 };
 
 static const _Float128
-  /* ln 2 */
-  lg2 = L(6.9314718055994530941723212145817656807550E-1),
-  lg2_h = L(6.9314718055994528622676398299518041312695E-1),
-  lg2_l = L(2.3190468138462996154948554638754786504121E-17),
-  ovt = L(8.0085662595372944372e-0017),
-  /* 2/(3*log(2)) */
-  cp = L(9.6179669392597560490661645400126142495110E-1),
-  cp_h = L(9.6179669392597555432899980587535537779331E-1),
-  cp_l = L(5.0577616648125906047157785230014751039424E-17);
+    /* ln 2 */
+    lg2
+    = L (6.9314718055994530941723212145817656807550E-1),
+    lg2_h = L (6.9314718055994528622676398299518041312695E-1),
+    lg2_l = L (2.3190468138462996154948554638754786504121E-17),
+    ovt = L (8.0085662595372944372e-0017),
+    /* 2/(3*log(2)) */
+    cp = L (9.6179669392597560490661645400126142495110E-1),
+    cp_h = L (9.6179669392597555432899980587535537779331E-1),
+    cp_l = L (5.0577616648125906047157785230014751039424E-17);
 
 _Float128
 __ieee754_powl (_Float128 x, _Float128 y)
@@ -164,7 +153,6 @@ __ieee754_powl (_Float128 x, _Float128 y)
   q.value = y;
   hy = q.parts32.w0;
   iy = hy & 0x7fffffff;
-
 
   /* y==zero: x**0 = 1 */
   if ((iy | q.parts32.w1 | q.parts32.w2 | q.parts32.w3) == 0
@@ -195,9 +183,9 @@ __ieee754_powl (_Float128 x, _Float128 y)
   yisint = 0;
   if (hx < 0)
     {
-      if (iy >= 0x40700000)	/* 2^113 */
-	yisint = 2;		/* even integer y */
-      else if (iy >= 0x3fff0000)	/* 1.0 */
+      if (iy >= 0x40700000)	 /* 2^113 */
+	yisint = 2;		 /* even integer y */
+      else if (iy >= 0x3fff0000) /* 1.0 */
 	{
 	  if (floorl (y) == y)
 	    {
@@ -213,28 +201,28 @@ __ieee754_powl (_Float128 x, _Float128 y)
   /* special value of y */
   if ((q.parts32.w1 | q.parts32.w2 | q.parts32.w3) == 0)
     {
-      if (iy == 0x7fff0000)	/* y is +-inf */
+      if (iy == 0x7fff0000) /* y is +-inf */
 	{
 	  if (((ix - 0x3fff0000) | p.parts32.w1 | p.parts32.w2 | p.parts32.w3)
 	      == 0)
-	    return y - y;	/* +-1**inf is NaN */
-	  else if (ix >= 0x3fff0000)	/* (|x|>1)**+-inf = inf,0 */
+	    return y - y;	     /* +-1**inf is NaN */
+	  else if (ix >= 0x3fff0000) /* (|x|>1)**+-inf = inf,0 */
 	    return (hy >= 0) ? y : zero;
-	  else			/* (|x|<1)**-,+inf = inf,0 */
+	  else /* (|x|<1)**-,+inf = inf,0 */
 	    return (hy < 0) ? -y : zero;
 	}
       if (iy == 0x3fff0000)
-	{			/* y is  +-1 */
+	{ /* y is  +-1 */
 	  if (hy < 0)
 	    return one / x;
 	  else
 	    return x;
 	}
       if (hy == 0x40000000)
-	return x * x;		/* y is  2 */
+	return x * x; /* y is  2 */
       if (hy == 0x3ffe0000)
-	{			/* y is  0.5 */
-	  if (hx >= 0)		/* x >= +0 */
+	{	       /* y is  0.5 */
+	  if (hx >= 0) /* x >= +0 */
 	    return sqrtl (x);
 	}
     }
@@ -245,17 +233,17 @@ __ieee754_powl (_Float128 x, _Float128 y)
     {
       if (ix == 0x7fff0000 || ix == 0 || ix == 0x3fff0000)
 	{
-	  z = ax;		/*x is +-0,+-inf,+-1 */
+	  z = ax; /*x is +-0,+-inf,+-1 */
 	  if (hy < 0)
-	    z = one / z;	/* z = (1/|x|) */
+	    z = one / z; /* z = (1/|x|) */
 	  if (hx < 0)
 	    {
 	      if (((ix - 0x3fff0000) | yisint) == 0)
 		{
-		  z = (z - z) / (z - z);	/* (-1)**non-int is NaN */
+		  z = (z - z) / (z - z); /* (-1)**non-int is NaN */
 		}
 	      else if (yisint == 1)
-		z = -z;		/* (x<0)**odd = -(|x|**odd) */
+		z = -z; /* (x<0)**odd = -(|x|**odd) */
 	    }
 	  return z;
 	}
@@ -268,7 +256,7 @@ __ieee754_powl (_Float128 x, _Float128 y)
   /* sgn (sign of result -ve**odd) = -1 else = 1 */
   sgn = one;
   if (((((uint32_t) hx >> 31) - 1) | (yisint - 1)) == 0)
-    sgn = -one;			/* (-ve)**(odd int) */
+    sgn = -one; /* (-ve)**(odd int) */
 
   /* |y| is huge.
      2^-16495 = 1/2 of smallest representable value.
@@ -306,11 +294,11 @@ __ieee754_powl (_Float128 x, _Float128 y)
   n += ((ix) >> 16) - 0x3fff;
   j = ix & 0x0000ffff;
   /* determine interval */
-  ix = j | 0x3fff0000;		/* normalize ix */
+  ix = j | 0x3fff0000; /* normalize ix */
   if (j <= 0x3988)
-    k = 0;			/* |x|<sqrt(3/2) */
+    k = 0; /* |x|<sqrt(3/2) */
   else if (j < 0xbb67)
-    k = 1;			/* |x|<sqrt(3)   */
+    k = 1; /* |x|<sqrt(3)   */
   else
     {
       k = 0;
@@ -323,7 +311,7 @@ __ieee754_powl (_Float128 x, _Float128 y)
   ax = o.value;
 
   /* compute s = s_h+s_l = (x-1)/(x+1) or (x-1.5)/(x+1.5) */
-  u = ax - bp[k];		/* bp[0]=1.0, bp[1]=1.5 */
+  u = ax - bp[k]; /* bp[0]=1.0, bp[1]=1.5 */
   v = one / (ax + bp[k]);
   s = u * v;
   s_h = s;
@@ -363,7 +351,7 @@ __ieee754_powl (_Float128 x, _Float128 y)
   o.parts32.w2 &= 0xf8000000;
   p_h = o.value;
   p_l = v - (p_h - u);
-  z_h = cp_h * p_h;		/* cp_h+cp_l = 2/(3*log2) */
+  z_h = cp_h * p_h; /* cp_h+cp_l = 2/(3*log2) */
   z_l = cp_l * p_h + p_l * cp + dp_l[k];
   /* log2(ax) = (s+..)*2/(3*log2) = n + dp_h + z_h + z_l */
   t = (_Float128) n;
@@ -389,23 +377,22 @@ __ieee754_powl (_Float128 x, _Float128 y)
     {
       /* if z > 16384 */
       if (((j - 0x400d0000) | o.parts32.w1 | o.parts32.w2 | o.parts32.w3) != 0)
-	return sgn * huge * huge;	/* overflow */
+	return sgn * huge * huge; /* overflow */
       else
 	{
 	  if (p_l + ovt > z - p_h)
-	    return sgn * huge * huge;	/* overflow */
+	    return sgn * huge * huge; /* overflow */
 	}
     }
-  else if ((j & 0x7fffffff) >= 0x400d01b9)	/* z <= -16495 */
+  else if ((j & 0x7fffffff) >= 0x400d01b9) /* z <= -16495 */
     {
       /* z < -16495 */
-      if (((j - 0xc00d01bc) | o.parts32.w1 | o.parts32.w2 | o.parts32.w3)
-	  != 0)
-	return sgn * tiny * tiny;	/* underflow */
+      if (((j - 0xc00d01bc) | o.parts32.w1 | o.parts32.w2 | o.parts32.w3) != 0)
+	return sgn * tiny * tiny; /* underflow */
       else
 	{
 	  if (p_l <= z - p_h)
-	    return sgn * tiny * tiny;	/* underflow */
+	    return sgn * tiny * tiny; /* underflow */
 	}
     }
   /* compute 2**(p_h+p_l) */
@@ -413,8 +400,8 @@ __ieee754_powl (_Float128 x, _Float128 y)
   k = (i >> 16) - 0x3fff;
   n = 0;
   if (i > 0x3ffe0000)
-    {				/* if |z| > 0.5, set n = [z+0.5] */
-      n = floorl (z + L(0.5));
+    { /* if |z| > 0.5, set n = [z+0.5] */
+      n = floorl (z + L (0.5));
       t = n;
       p_h -= t;
     }
@@ -439,7 +426,7 @@ __ieee754_powl (_Float128 x, _Float128 y)
   j += (n << 16);
   if ((j >> 16) <= 0)
     {
-      z = __scalbnl (z, n);	/* subnormal output */
+      z = __scalbnl (z, n); /* subnormal output */
       _Float128 force_underflow = z * z;
       math_force_eval (force_underflow);
     }

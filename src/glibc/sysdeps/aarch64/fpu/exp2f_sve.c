@@ -49,7 +49,8 @@ special_case (svfloat32_t x, svfloat32_t y, svbool_t special)
    Worst case error is 1.04 ULPs.
    SV_NAME_F1 (exp2)(0x1.943b9p-1) got 0x1.ba7eb2p+0
 				  want 0x1.ba7ebp+0.  */
-svfloat32_t SV_NAME_F1 (exp2) (svfloat32_t x, const svbool_t pg)
+svfloat32_t
+SV_NAME_F1 (exp2) (svfloat32_t x, const svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
   /* exp2(x) = 2^n (1 + poly(r)), with 1 + poly(r) in [1/sqrt(2),sqrt(2)]

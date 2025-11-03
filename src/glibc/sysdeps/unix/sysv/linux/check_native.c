@@ -38,8 +38,8 @@
 #include "netlinkaccess.h"
 
 void
-__check_native (uint32_t a1_index, int *a1_native,
-		uint32_t a2_index, int *a2_native)
+__check_native (uint32_t a1_index, int *a1_native, uint32_t a2_index,
+		int *a2_native)
 {
   int fd = __socket (PF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
 
@@ -94,22 +94,20 @@ __check_native (uint32_t a1_index, int *a1_native,
 
   if (TEMP_FAILURE_RETRY (__sendto (fd, (void *) &req, sizeof (req), 0,
 				    (struct sockaddr *) &nladdr,
-				    sizeof (nladdr))) < 0)
+				    sizeof (nladdr)))
+      < 0)
     goto out;
 
   bool done = false;
   do
     {
-      struct msghdr msg =
-	{
-	  .msg_name = (void *) &nladdr,
-	  .msg_namelen =  sizeof (nladdr),
-	  .msg_iov = &iov,
-	  .msg_iovlen = 1,
-	  .msg_control = NULL,
-	  .msg_controllen = 0,
-	  .msg_flags = 0
-	};
+      struct msghdr msg = { .msg_name = (void *) &nladdr,
+			    .msg_namelen = sizeof (nladdr),
+			    .msg_iov = &iov,
+			    .msg_iovlen = 1,
+			    .msg_control = NULL,
+			    .msg_controllen = 0,
+			    .msg_flags = 0 };
 
       ssize_t read_len = TEMP_FAILURE_RETRY (__recvmsg (fd, &msg, 0));
       __netlink_assert_response (fd, read_len);
@@ -120,8 +118,7 @@ __check_native (uint32_t a1_index, int *a1_native,
 	goto out;
 
       struct nlmsghdr *nlmh;
-      for (nlmh = (struct nlmsghdr *) buf;
-	   NLMSG_OK (nlmh, (size_t) read_len);
+      for (nlmh = (struct nlmsghdr *) buf; NLMSG_OK (nlmh, (size_t) read_len);
 	   nlmh = (struct nlmsghdr *) NLMSG_NEXT (nlmh, read_len))
 	{
 	  if (nladdr.nl_pid != 0 || (pid_t) nlmh->nlmsg_pid != pid
@@ -146,8 +143,7 @@ __check_native (uint32_t a1_index, int *a1_native,
 		  a2_index = 0xffffffffu;
 		}
 
-	      if (a1_index == 0xffffffffu
-		  && a2_index == 0xffffffffu)
+	      if (a1_index == 0xffffffffu && a2_index == 0xffffffffu)
 		goto out;
 	    }
 	  else if (nlmh->nlmsg_type == NLMSG_DONE)
@@ -155,7 +151,7 @@ __check_native (uint32_t a1_index, int *a1_native,
 	    done = true;
 	}
     }
-  while (! done);
+  while (!done);
 
 out:
   __close_nocancel_nostatus (fd);

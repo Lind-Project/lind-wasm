@@ -44,9 +44,9 @@ test_child (void)
 }
 
 #ifndef WEXITED
-# define WEXITED        0
-# define WCONTINUED     0
-# define WSTOPPED       WUNTRACED
+#  define WEXITED 0
+#  define WCONTINUED 0
+#  define WSTOPPED WUNTRACED
 #endif
 
 /* Set with only SIGCHLD on do_test_waitid.  */
@@ -78,8 +78,8 @@ do_test_wait (pid_t pid)
 {
   /* Adding process_state_tracing_stop ('t') allows the test to work under
      trace programs such as ptrace.  */
-  enum support_process_state stop_state = support_process_state_stopped
-                                          | support_process_state_tracing_stop;
+  enum support_process_state stop_state
+      = support_process_state_stopped | support_process_state_tracing_stop;
 
   support_process_state_wait (pid, stop_state);
 
@@ -89,23 +89,23 @@ do_test_wait (pid_t pid)
   int wstatus;
   struct rusage rusage;
 
-  ret = WAIT_CALL (pid, &wstatus, WUNTRACED|WCONTINUED|WNOHANG, NULL);
+  ret = WAIT_CALL (pid, &wstatus, WUNTRACED | WCONTINUED | WNOHANG, NULL);
   if (ret == -1 && errno == ENOTSUP)
     FAIL_RET ("waitid WNOHANG on stopped: %m");
   TEST_COMPARE (ret, pid);
   TEST_VERIFY (WIFSTOPPED (wstatus));
 
   /* Issue again but with struct rusage input.  */
-  ret = WAIT_CALL (pid, &wstatus, WUNTRACED|WCONTINUED|WNOHANG, &rusage);
+  ret = WAIT_CALL (pid, &wstatus, WUNTRACED | WCONTINUED | WNOHANG, &rusage);
   /* With WNOHANG and WUNTRACED, if the children has not changes its state
      since previous call the expected result it 0.  */
   TEST_COMPARE (ret, 0);
 
   /* Some sanity tests to check if 'wtatus' and 'rusage' possible
      input values.  */
-  ret = WAIT_CALL (pid, NULL, WUNTRACED|WCONTINUED|WNOHANG, &rusage);
+  ret = WAIT_CALL (pid, NULL, WUNTRACED | WCONTINUED | WNOHANG, &rusage);
   TEST_COMPARE (ret, 0);
-  ret = WAIT_CALL (pid, NULL, WUNTRACED|WCONTINUED|WNOHANG, NULL);
+  ret = WAIT_CALL (pid, NULL, WUNTRACED | WCONTINUED | WNOHANG, NULL);
   TEST_COMPARE (ret, 0);
 
   if (kill (pid, SIGCONT) != 0)
@@ -117,12 +117,12 @@ do_test_wait (pid_t pid)
 #if WCONTINUED != 0
   check_sigchld (CLD_CONTINUED, SIGCONT, pid);
 
-  ret = WAIT_CALL (pid, &wstatus, WCONTINUED|WNOHANG, NULL);
+  ret = WAIT_CALL (pid, &wstatus, WCONTINUED | WNOHANG, NULL);
   TEST_COMPARE (ret, pid);
   TEST_VERIFY (WIFCONTINUED (wstatus));
 
   /* Issue again but with struct rusage input.  */
-  ret = WAIT_CALL (pid, &wstatus, WUNTRACED|WCONTINUED|WNOHANG, &rusage);
+  ret = WAIT_CALL (pid, &wstatus, WUNTRACED | WCONTINUED | WNOHANG, &rusage);
   /* With WNOHANG and WUNTRACED, if the children has not changes its state
      since previous call the expected result it 0.  */
   TEST_COMPARE (ret, 0);
@@ -137,7 +137,7 @@ do_test_wait (pid_t pid)
      never delivered.  */
   support_process_state_wait (pid, stop_state);
 
-  ret = WAIT_CALL (pid, &wstatus, WUNTRACED|WNOHANG, &rusage);
+  ret = WAIT_CALL (pid, &wstatus, WUNTRACED | WNOHANG, &rusage);
   TEST_COMPARE (ret, pid);
 
   check_sigchld (CLD_STOPPED, SIGSTOP, pid);
@@ -150,7 +150,7 @@ do_test_wait (pid_t pid)
 
   check_sigchld (CLD_CONTINUED, SIGCONT, pid);
 
-  ret = WAIT_CALL (pid, &wstatus, WCONTINUED|WNOHANG, NULL);
+  ret = WAIT_CALL (pid, &wstatus, WCONTINUED | WNOHANG, NULL);
   TEST_COMPARE (ret, pid);
   TEST_VERIFY (WIFCONTINUED (wstatus));
 #endif
@@ -201,7 +201,7 @@ do_test (void)
   do_test_wait (pid);
 
   xsignal (SIGCHLD, SIG_IGN);
-  kill (pid, SIGKILL);          /* Make sure it's dead if we bailed early.  */
+  kill (pid, SIGKILL); /* Make sure it's dead if we bailed early.  */
 
   return 0;
 }

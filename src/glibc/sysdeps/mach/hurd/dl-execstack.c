@@ -33,13 +33,15 @@ _dl_make_stack_executable (void **stack_endp)
     return EPERM;
   *stack_endp = NULL;
 
-#if IS_IN (rtld)
-  if (__mprotect ((void *)_dl_hurd_data->stack_base, _dl_hurd_data->stack_size,
-		  PROT_READ|PROT_WRITE|PROT_EXEC) != 0)
+#if IS_IN(rtld)
+  if (__mprotect ((void *) _dl_hurd_data->stack_base,
+		  _dl_hurd_data->stack_size,
+		  PROT_READ | PROT_WRITE | PROT_EXEC)
+      != 0)
     return errno;
 
   /* Remember that we changed the permission.  */
-  GL(dl_stack_flags) |= PF_X;
+  GL (dl_stack_flags) |= PF_X;
 
   return 0;
 #else

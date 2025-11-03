@@ -33,4 +33,4 @@ alarm (unsigned int seconds)
 }
 libc_hidden_def (alarm)
 
-stub_warning (alarm)
+    stub_warning (alarm)

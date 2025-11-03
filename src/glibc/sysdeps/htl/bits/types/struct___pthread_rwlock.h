@@ -38,8 +38,13 @@ struct __pthread_rwlock
 };
 
 /* Initializer for a rwlock.  */
-#define __PTHREAD_RWLOCK_INITIALIZER \
-    { __PTHREAD_SPIN_LOCK_INITIALIZER, __PTHREAD_SPIN_LOCK_INITIALIZER, 0, 0, 0, 0, 0 }
-
+#define __PTHREAD_RWLOCK_INITIALIZER                                          \
+  { __PTHREAD_SPIN_LOCK_INITIALIZER,                                          \
+    __PTHREAD_SPIN_LOCK_INITIALIZER,                                          \
+    0,                                                                        \
+    0,                                                                        \
+    0,                                                                        \
+    0,                                                                        \
+    0 }
 
 #endif /* bits/types/struct___pthread_rwlock.h */

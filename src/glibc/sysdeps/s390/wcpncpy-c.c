@@ -19,9 +19,9 @@
 #include <ifunc-wcpncpy.h>
 
 #if HAVE_WCPNCPY_C
-# if HAVE_WCPNCPY_IFUNC || HAVE_WCPNCPY_Z13
-#  define WCPNCPY WCPNCPY_C
-# endif
+#  if HAVE_WCPNCPY_IFUNC || HAVE_WCPNCPY_Z13
+#    define WCPNCPY WCPNCPY_C
+#  endif
 
-# include <wcsmbs/wcpncpy.c>
+#  include <wcsmbs/wcpncpy.c>
 #endif

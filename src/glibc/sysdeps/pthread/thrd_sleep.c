@@ -22,15 +22,18 @@
 #include "thrd_priv.h"
 
 int
-thrd_sleep (const struct timespec* time_point, struct timespec* remaining)
+thrd_sleep (const struct timespec *time_point, struct timespec *remaining)
 {
   int ret = __clock_nanosleep (CLOCK_REALTIME, 0, time_point, remaining);
   /* C11 states thrd_sleep function returns -1 if it has been interrupted
      by a signal, or a negative value if it fails.  */
   switch (ret)
-  {
-     case 0:      return 0;
-     case EINTR:  return -1;
-     default:     return -2;
-  }
+    {
+    case 0:
+      return 0;
+    case EINTR:
+      return -1;
+    default:
+      return -2;
+    }
 }

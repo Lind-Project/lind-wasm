@@ -27,5 +27,4 @@ __chmod (const char *file, mode_t mode)
   return __fchmodat (AT_FDCWD, file, mode, 0);
 }
 
-libc_hidden_def (__chmod)
-weak_alias (__chmod, chmod)
+libc_hidden_def (__chmod) weak_alias (__chmod, chmod)

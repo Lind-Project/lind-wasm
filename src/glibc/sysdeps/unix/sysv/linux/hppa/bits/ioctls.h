@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_IOCTL_H
-# error "Never use <bits/ioctls.h> directly; include <sys/ioctl.h> instead."
+#  error "Never use <bits/ioctls.h> directly; include <sys/ioctl.h> instead."
 #endif
 
 /* Use the definitions from the kernel header files.  */
@@ -24,13 +24,13 @@
 
 /* Oh well, this is necessary since the kernel data structure is
    different from the user-level version.  */
-#undef  TCGETS
-#undef  TCSETS
-#undef  TCSETSW
-#undef  TCSETSF
-#define TCGETS	_IOR ('T', 16, char[36])
-#define TCSETS	_IOW ('T', 17, char[36])
-#define TCSETSW	_IOW ('T', 18, char[36])
-#define TCSETSF	_IOW ('T', 19, char[36])
+#undef TCGETS
+#undef TCSETS
+#undef TCSETSW
+#undef TCSETSF
+#define TCGETS _IOR ('T', 16, char[36])
+#define TCSETS _IOW ('T', 17, char[36])
+#define TCSETSW _IOW ('T', 18, char[36])
+#define TCSETSF _IOW ('T', 19, char[36])
 
 #include <linux/sockios.h>

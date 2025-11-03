@@ -21,7 +21,6 @@
 #include <pthreadP.h>
 #include <shlib-compat.h>
 
-
 /* Wait on the barrier.
 
    In each round, we wait for a fixed number of threads to enter the barrier
@@ -99,7 +98,7 @@ ___pthread_barrier_wait (pthread_barrier_t *barrier)
   /* How many threads entered so far, including ourself.  */
   unsigned int i;
 
- reset_restart:
+reset_restart:
   /* Try to enter the barrier.  We need acquire MO to (1) ensure that if we
      observe that our round can be completed (see below for our attempt to do
      so), all pre-barrier-entry effects of all threads in our round happen
@@ -113,8 +112,8 @@ ___pthread_barrier_wait (pthread_barrier_t *barrier)
   unsigned int count = bar->count;
   /* This is the number of threads that can enter before we need to reset.
      Always at the end of a round.  */
-  unsigned int max_in_before_reset = BARRIER_IN_THRESHOLD
-				   - BARRIER_IN_THRESHOLD % count;
+  unsigned int max_in_before_reset
+      = BARRIER_IN_THRESHOLD - BARRIER_IN_THRESHOLD % count;
 
   if (i > max_in_before_reset)
     {
@@ -193,7 +192,7 @@ ___pthread_barrier_wait (pthread_barrier_t *barrier)
 
   /* Now signal that we left.  */
   unsigned int o;
- ready_to_leave:
+ready_to_leave:
   /* We need release MO here so that our use of the barrier happens before
      reset or memory reuse after pthread_barrier_destroy.  */
   o = atomic_fetch_add_release (&bar->out, 1) + 1;
@@ -214,20 +213,19 @@ ___pthread_barrier_wait (pthread_barrier_t *barrier)
       int shared = bar->shared;
       atomic_store_release (&bar->in, 0);
       futex_wake (&bar->in, INT_MAX, shared);
-
     }
 
   /* Return a special value for exactly one thread per round.  */
-  return i % count == 0 ?  PTHREAD_BARRIER_SERIAL_THREAD : 0;
+  return i % count == 0 ? PTHREAD_BARRIER_SERIAL_THREAD : 0;
 }
 versioned_symbol (libc, ___pthread_barrier_wait, pthread_barrier_wait,
-                  GLIBC_2_34);
+		  GLIBC_2_34);
 libc_hidden_ver (___pthread_barrier_wait, __pthread_barrier_wait)
 #ifndef SHARED
-strong_alias (___pthread_barrier_wait, __pthread_barrier_wait)
+    strong_alias (___pthread_barrier_wait, __pthread_barrier_wait)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_barrier_wait, pthread_barrier_wait,
-               GLIBC_2_2);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_barrier_wait,
+		       pthread_barrier_wait, GLIBC_2_2);
 #endif

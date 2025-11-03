@@ -89,37 +89,38 @@ check_error_in_list (int code, int *codes, size_t count)
   return false;
 }
 
-#define test_wrp_rv(rtype, prtype, experr_list, syscall, ...)	\
-  (__extension__ ({						\
-    errno = 0xdead;						\
-    int experr[] = experr_list;					\
-    rtype ret = syscall (__VA_ARGS__);				\
-    int err = errno;						\
-    int fail;							\
-    if ((ret == (rtype) -1)					\
-	&& check_error_in_list (err, experr, array_length (experr))) \
-      fail = 0;							\
-    else							\
-      {								\
-        fail = 1;						\
-        if (ret != (rtype) -1)					\
-          printf ("FAIL: " #syscall ": didn't fail as expected"	\
-		  " (return "prtype")\n", ret);			\
-        else if (err == 0xdead)					\
-          puts ("FAIL: " #syscall ": didn't update errno");	\
-	else							\
-          printf ("FAIL: " #syscall				\
-		  ": errno is: %d (%s) expected one of %s\n",	\
-		  err, strerror (err), #experr_list);		\
-      }								\
-    fail;							\
+#define test_wrp_rv(rtype, prtype, experr_list, syscall, ...)                 \
+  (__extension__ ({                                                           \
+    errno = 0xdead;                                                           \
+    int experr[] = experr_list;                                               \
+    rtype ret = syscall (__VA_ARGS__);                                        \
+    int err = errno;                                                          \
+    int fail;                                                                 \
+    if ((ret == (rtype) - 1)                                                  \
+	&& check_error_in_list (err, experr, array_length (experr)))          \
+      fail = 0;                                                               \
+    else                                                                      \
+      {                                                                       \
+	fail = 1;                                                             \
+	if (ret != (rtype) - 1)                                               \
+	  printf ("FAIL: " #syscall ": didn't fail as expected"               \
+		  " (return " prtype ")\n",                                   \
+		  ret);                                                       \
+	else if (err == 0xdead)                                               \
+	  puts ("FAIL: " #syscall ": didn't update errno");                   \
+	else                                                                  \
+	  printf ("FAIL: " #syscall                                           \
+		  ": errno is: %d (%s) expected one of %s\n",                 \
+		  err, strerror (err), #experr_list);                         \
+      }                                                                       \
+    fail;                                                                     \
   }))
 
-#define test_wrp(experr, syscall, ...)				\
-  test_wrp_rv(int, "%d", LIST (experr), syscall, __VA_ARGS__)
+#define test_wrp(experr, syscall, ...)                                        \
+  test_wrp_rv (int, "%d", LIST (experr), syscall, __VA_ARGS__)
 
-#define test_wrp2(experr, syscall, ...)		\
-  test_wrp_rv(int, "%d", LIST_FORWARD (experr), syscall, __VA_ARGS__)
+#define test_wrp2(experr, syscall, ...)                                       \
+  test_wrp_rv (int, "%d", LIST_FORWARD (experr), syscall, __VA_ARGS__)
 
 static int
 invalid_sigprocmask_how (void)
@@ -175,7 +176,7 @@ do_test (void)
 
   DIAG_PUSH_NEEDS_COMMENT;
 
-#if __GNUC_PREREQ (9, 0)
+#if __GNUC_PREREQ(9, 0)
   /* Suppress valid GCC warning:
      'poll' specified size 18446744073709551608 exceeds maximum object size
   */
@@ -188,8 +189,8 @@ do_test (void)
      CONFIG_QUOTA, and may return EPERM if called within certain types
      of containers.  Linux 5.4 added additional argument validation
      and can return EINVAL.  */
-  fails |= test_wrp2 (LIST (ENODEV, ENOSYS, EPERM, EINVAL),
-		      quotactl, Q_GETINFO, NULL, -1, (caddr_t) &dqblk);
+  fails |= test_wrp2 (LIST (ENODEV, ENOSYS, EPERM, EINVAL), quotactl,
+		      Q_GETINFO, NULL, -1, (caddr_t) &dqblk);
   fails |= test_wrp (EINVAL, sched_getparam, -1, &sch_param);
   fails |= test_wrp (EINVAL, sched_getscheduler, -1);
   fails |= test_wrp (EINVAL, sched_get_priority_max, -1);

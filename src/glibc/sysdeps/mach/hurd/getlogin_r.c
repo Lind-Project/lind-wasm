@@ -40,6 +40,5 @@ __getlogin_r (char *name, size_t name_len)
   memcpy (name, login, len);
   return 0;
 }
-libc_hidden_def (__getlogin_r)
-weak_alias (__getlogin_r, getlogin_r)
-libc_hidden_weak (getlogin_r)
+libc_hidden_def (__getlogin_r) weak_alias (__getlogin_r, getlogin_r)
+    libc_hidden_weak (getlogin_r)

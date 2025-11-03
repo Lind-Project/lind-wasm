@@ -35,48 +35,54 @@
 #include <math_private.h>
 #include <libm-alias-finite.h>
 
-static const long double one = 1.0L, half=0.5L, huge = 1.0e300L;
+static const long double one = 1.0L, half = 0.5L, huge = 1.0e300L;
 
 long double
 __ieee754_coshl (long double x)
 {
-	long double t,w;
-	int64_t ix;
-	double xhi;
+  long double t, w;
+  int64_t ix;
+  double xhi;
 
-    /* High word of |x|. */
-	xhi = ldbl_high (x);
-	EXTRACT_WORDS64 (ix, xhi);
-	ix &= 0x7fffffffffffffffLL;
+  /* High word of |x|. */
+  xhi = ldbl_high (x);
+  EXTRACT_WORDS64 (ix, xhi);
+  ix &= 0x7fffffffffffffffLL;
 
-    /* x is INF or NaN */
-	if(ix>=0x7ff0000000000000LL) return x*x;
+  /* x is INF or NaN */
+  if (ix >= 0x7ff0000000000000LL)
+    return x * x;
 
-    /* |x| in [0,0.5*ln2], return 1+expm1(|x|)^2/(2*exp(|x|)) */
-	if(ix<0x3fd62e42fefa39efLL) {
-	    if (ix<0x3c80000000000000LL) return one;	/* cosh(tiny) = 1 */
-	    t = __expm1l(fabsl(x));
-	    w = one+t;
-	    return one+(t*t)/(w+w);
-	}
+  /* |x| in [0,0.5*ln2], return 1+expm1(|x|)^2/(2*exp(|x|)) */
+  if (ix < 0x3fd62e42fefa39efLL)
+    {
+      if (ix < 0x3c80000000000000LL)
+	return one; /* cosh(tiny) = 1 */
+      t = __expm1l (fabsl (x));
+      w = one + t;
+      return one + (t * t) / (w + w);
+    }
 
-    /* |x| in [0.5*ln2,40], return (exp(|x|)+1/exp(|x|)/2; */
-	if (ix < 0x4044000000000000LL) {
-		t = __ieee754_expl(fabsl(x));
-		return half*t+half/t;
-	}
+  /* |x| in [0.5*ln2,40], return (exp(|x|)+1/exp(|x|)/2; */
+  if (ix < 0x4044000000000000LL)
+    {
+      t = __ieee754_expl (fabsl (x));
+      return half * t + half / t;
+    }
 
-    /* |x| in [40, log(maxdouble)] return half*exp(|x|) */
-	if (ix < 0x40862e42fefa39efLL)  return half*__ieee754_expl(fabsl(x));
+  /* |x| in [40, log(maxdouble)] return half*exp(|x|) */
+  if (ix < 0x40862e42fefa39efLL)
+    return half * __ieee754_expl (fabsl (x));
 
-    /* |x| in [log(maxdouble), overflowthresold] */
-	if (ix < 0x408633ce8fb9f87fLL) {
-	    w = __ieee754_expl(half*fabsl(x));
-	    t = half*w;
-	    return t*w;
-	}
+  /* |x| in [log(maxdouble), overflowthresold] */
+  if (ix < 0x408633ce8fb9f87fLL)
+    {
+      w = __ieee754_expl (half * fabsl (x));
+      t = half * w;
+      return t * w;
+    }
 
-    /* |x| > overflowthresold, cosh(x) overflow */
-	return huge*huge;
+  /* |x| > overflowthresold, cosh(x) overflow */
+  return huge * huge;
 }
 libm_alias_finite (__ieee754_coshl, __coshl)

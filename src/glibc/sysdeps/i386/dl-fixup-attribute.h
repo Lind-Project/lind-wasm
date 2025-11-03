@@ -22,9 +22,9 @@
 /* We cannot use this scheme for profiling because the _mcount call destroys
    the passed register information.  */
 #ifndef PROF
-# define DL_ARCH_FIXUP_ATTRIBUTE __attribute__ ((stdcall, unused))
+#  define DL_ARCH_FIXUP_ATTRIBUTE __attribute__ ((stdcall, unused))
 #else
-# define DL_ARCH_FIXUP_ATTRIBUTE
+#  define DL_ARCH_FIXUP_ATTRIBUTE
 #endif
 
 #endif

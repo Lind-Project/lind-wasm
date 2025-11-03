@@ -41,22 +41,22 @@ __llround (double x)
   long long xr;
   if (HAVE_PPC_FCTIDZ)
     {
-       /* IEEE 1003.1 lround function.  IEEE specifies "round to the nearest
-	  integer value, rounding halfway cases away from zero, regardless of
-	  the current rounding mode."  However PowerPC Architecture defines
-	  "round to Nearest" as "Choose the best approximation. In case of a
-	  tie, choose the one that is even (least significant bit o).".
-	  So we can't use the PowerPC "round to Nearest" mode. Instead we set
-	  "round toward Zero" mode and round by adding +-0.5 before rounding
-	  to the integer value.
+      /* IEEE 1003.1 lround function.  IEEE specifies "round to the nearest
+	 integer value, rounding halfway cases away from zero, regardless of
+	 the current rounding mode."  However PowerPC Architecture defines
+	 "round to Nearest" as "Choose the best approximation. In case of a
+	 tie, choose the one that is even (least significant bit o).".
+	 So we can't use the PowerPC "round to Nearest" mode. Instead we set
+	 "round toward Zero" mode and round by adding +-0.5 before rounding
+	 to the integer value.
 
-	  It is necessary to detect when x is (+-)0x1.fffffffffffffp-2
-	  because adding +-0.5 in this case will cause an erroneous shift,
-	  carry and round.  We simply return 0 if 0.5 > x > -0.5.  Likewise
-	  if x is and odd number between +-(2^52 and 2^53-1) a shift and
-	  carry will erroneously round if biased with +-0.5.  Therefore if x
-	  is greater/less than +-2^52 we don't need to bias the number with
-	  +-0.5.  */
+	 It is necessary to detect when x is (+-)0x1.fffffffffffffp-2
+	 because adding +-0.5 in this case will cause an erroneous shift,
+	 carry and round.  We simply return 0 if 0.5 > x > -0.5.  Likewise
+	 if x is and odd number between +-(2^52 and 2^53-1) a shift and
+	 carry will erroneously round if biased with +-0.5.  Therefore if x
+	 is greater/less than +-2^52 we don't need to bias the number with
+	 +-0.5.  */
       double ax = fabs (x);
 
       if (ax < 0.5)
@@ -74,7 +74,7 @@ __llround (double x)
 		ax = -fabs (ax);
 	      x = ax;
 	    }
-        }
+	}
 
       return x;
     }
@@ -92,7 +92,7 @@ __llround (double x)
 	  if (exponent < 63)
 	    {
 	      unsigned long long int mant
-		= (i0 & ((1ULL << 52) - 1)) | (1ULL << 52);
+		  = (i0 & ((1ULL << 52) - 1)) | (1ULL << 52);
 	      if (exponent < 52)
 		/* llround is not required to raise "inexact".  */
 		mant >>= 52 - exponent;

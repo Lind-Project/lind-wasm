@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <sys/time.h>
 
-
 static pthread_mutex_t m;
 
 static void *

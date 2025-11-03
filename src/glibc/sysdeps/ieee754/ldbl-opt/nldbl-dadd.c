@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef daddl
 
-double
-attribute_hidden
+double attribute_hidden
 daddl (double x, double y)
 {
   return __nldbl_daddl (x, y);

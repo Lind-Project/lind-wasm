@@ -24,10 +24,8 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
-
 static char fname[] = "/tmp/tst-cond12-XXXXXX";
 static int fd;
-
 
 static void prepare (void);
 #define PREPARE(argc, argv) prepare ()
@@ -36,7 +34,6 @@ static int do_test (void);
 #define TEST_FUNCTION do_test ()
 
 #include "../test-skeleton.c"
-
 
 static void
 prepare (void)
@@ -55,7 +52,6 @@ prepare (void)
     }
 }
 
-
 static int
 do_test (void)
 {
@@ -64,7 +60,7 @@ do_test (void)
     pthread_mutex_t m;
     pthread_cond_t c;
     int var;
-  } *p = mmap (NULL, sizeof (*p), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  } *p = mmap (NULL, sizeof (*p), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (p == MAP_FAILED)
     {
       printf ("initial mmap failed: %m\n");
@@ -133,7 +129,7 @@ do_test (void)
   if (pid == 0)
     {
       void *oldp = p;
-      p = mmap (NULL, sizeof (*p), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+      p = mmap (NULL, sizeof (*p), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
       if (p == oldp)
 	{

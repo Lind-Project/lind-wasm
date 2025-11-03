@@ -25,7 +25,7 @@
 int
 ___sem_timedwait64 (sem_t *sem, const struct __timespec64 *abstime)
 {
-  if (! valid_nanoseconds (abstime->tv_nsec))
+  if (!valid_nanoseconds (abstime->tv_nsec))
     {
       __set_errno (EINVAL);
       return -1;
@@ -37,25 +37,24 @@ ___sem_timedwait64 (sem_t *sem, const struct __timespec64 *abstime)
   if (__new_sem_wait_fast ((struct new_sem *) sem, 0) == 0)
     return 0;
   else
-    return __new_sem_wait_slow64 ((struct new_sem *) sem,
-				  CLOCK_REALTIME, abstime);
+    return __new_sem_wait_slow64 ((struct new_sem *) sem, CLOCK_REALTIME,
+				  abstime);
 }
 
 #if __TIMESIZE == 64
 strong_alias (___sem_timedwait64, ___sem_timedwait)
-#else /* __TIMESPEC64 != 64 */
+#else  /* __TIMESPEC64 != 64 */
 strong_alias (___sem_timedwait64, __sem_timedwait64)
-libc_hidden_def (__sem_timedwait64)
+    libc_hidden_def (__sem_timedwait64)
 
-int
-___sem_timedwait (sem_t *sem, const struct timespec *abstime)
+	int ___sem_timedwait (sem_t *sem, const struct timespec *abstime)
 {
   struct __timespec64 ts64 = valid_timespec_to_timespec64 (*abstime);
 
   return __sem_timedwait64 (sem, &ts64);
 }
 #endif /* __TIMESPEC64 != 64 */
-versioned_symbol (libc, ___sem_timedwait, sem_timedwait, GLIBC_2_34);
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+    versioned_symbol (libc, ___sem_timedwait, sem_timedwait, GLIBC_2_34);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, ___sem_timedwait, sem_timedwait, GLIBC_2_2);
 #endif

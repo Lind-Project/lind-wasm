@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TLS_INTERNAL_H
-#define _TLS_INTERNAL_H 1
+#  define _TLS_INTERNAL_H 1
 
-#include <stdlib.h>
-#include <tls-internal-struct.h>
+#  include <stdlib.h>
+#  include <tls-internal-struct.h>
 
 extern __thread struct tls_internal_t __tls_internal attribute_hidden;
 

@@ -17,7 +17,7 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _THREAD_MUTEX_INTERNAL_H
-#define _THREAD_MUTEX_INTERNAL_H 1
+#  define _THREAD_MUTEX_INTERNAL_H 1
 
 struct __pthread_mutex_s
 {
@@ -45,9 +45,9 @@ struct __pthread_mutex_s
   int __glibc_reserved2;
 };
 
-#define __PTHREAD_MUTEX_HAVE_PREV       0
+#  define __PTHREAD_MUTEX_HAVE_PREV 0
 
-#define __PTHREAD_MUTEX_INITIALIZER(__kind) \
-  0, 0, 0, __kind, { 0, 0, 0, 0 }, 0, { 0 }, 0, 0
+#  define __PTHREAD_MUTEX_INITIALIZER(__kind)                                 \
+    0, 0, 0, __kind, { 0, 0, 0, 0 }, 0, { 0 }, 0, 0
 
 #endif

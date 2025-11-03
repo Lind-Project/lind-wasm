@@ -23,8 +23,7 @@
 char string1[STRING_SIZE];
 char string2[STRING_SIZE];
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 prepare (void)
 {
   memset (string1, 'a', STRING_SIZE);
@@ -35,8 +34,7 @@ prepare (void)
     return EXIT_FAILURE;
 }
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 function (void)
 {
   if (memmove (string2, string1, STRING_SIZE) == string2

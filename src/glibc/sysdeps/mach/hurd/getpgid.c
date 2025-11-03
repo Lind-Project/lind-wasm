@@ -38,5 +38,4 @@ __getpgid (pid_t pid)
 
   return err ? __hurd_fail (err) : pgrp;
 }
-libc_hidden_def (__getpgid)
-weak_alias (__getpgid, getpgid)
+libc_hidden_def (__getpgid) weak_alias (__getpgid, getpgid)

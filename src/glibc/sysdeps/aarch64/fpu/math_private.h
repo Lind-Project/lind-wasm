@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef AARCH64_MATH_PRIVATE_H
-#define AARCH64_MATH_PRIVATE_H 1
+#  define AARCH64_MATH_PRIVATE_H 1
 
-#include <stdint.h>
-#include <math.h>
+#  include <stdint.h>
+#  include <math.h>
 
 /* Use inline round and lround instructions.  */
-#define TOINT_INTRINSICS 1
+#  define TOINT_INTRINSICS 1
 
 static inline double_t
 roundtoint (double_t x)
@@ -37,6 +37,6 @@ converttoint (double_t x)
   return lround (x);
 }
 
-#include_next <math_private.h>
+#  include_next <math_private.h>
 
 #endif

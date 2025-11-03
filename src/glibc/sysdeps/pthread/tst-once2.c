@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-
 #define N 100
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
@@ -39,7 +38,6 @@ once_handler (void)
   nanosleep (&ts, NULL);
 }
 
-
 static void *
 tf (void *arg)
 {
@@ -53,7 +51,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)

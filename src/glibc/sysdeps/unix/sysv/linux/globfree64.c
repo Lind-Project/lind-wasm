@@ -22,15 +22,15 @@
 
 #if !XSTAT_IS_XSTAT64
 
-# include <glob.h>
+#  include <glob.h>
 
-# define glob_t glob64_t
-# define globfree(pglob) globfree64 (pglob)
+#  define glob_t glob64_t
+#  define globfree(pglob) globfree64 (pglob)
 
-# undef stat
-# define stat stat64
+#  undef stat
+#  define stat stat64
 
-# include <posix/globfree.c>
+#  include <posix/globfree.c>
 
 libc_hidden_def (globfree64)
 #endif

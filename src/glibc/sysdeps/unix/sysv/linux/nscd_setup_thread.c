@@ -20,7 +20,6 @@
 #include <nscd.h>
 #include <sysdep.h>
 
-
 int
 setup_thread (struct database_dyn *db)
 {

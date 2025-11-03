@@ -74,7 +74,8 @@ special_case (float64x2_t x, float64x2_t y, uint64x2_t special)
    The largest observed error in this region is 1.52 ulps,
    _ZGVnN2v_acos (0x1.23d362722f591p-1) got 0x1.edbbedf8a7d6ep-1
 				       want 0x1.edbbedf8a7d6cp-1.  */
-float64x2_t VPCS_ATTR V_NAME_D1 (acos) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (acos) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
 

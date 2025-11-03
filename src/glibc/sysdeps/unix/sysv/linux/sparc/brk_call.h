@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef __arch64__
-# define SYSCALL_NUM "0x6d"
+#  define SYSCALL_NUM "0x6d"
 #else
-# define SYSCALL_NUM "0x10"
+#  define SYSCALL_NUM "0x10"
 #endif
 
 static inline void *

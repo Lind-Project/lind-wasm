@@ -16,38 +16,38 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WCSPBRK_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WCSPBRK_IFUNC 1
 #else
-# define HAVE_WCSPBRK_IFUNC	0
+#  define HAVE_WCSPBRK_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WCSPBRK_IFUNC_AND_VX_SUPPORT HAVE_WCSPBRK_IFUNC
+#  define HAVE_WCSPBRK_IFUNC_AND_VX_SUPPORT HAVE_WCSPBRK_IFUNC
 #else
-# define HAVE_WCSPBRK_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WCSPBRK_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WCSPBRK_DEFAULT	WCSPBRK_Z13
+#  define WCSPBRK_DEFAULT WCSPBRK_Z13
 /* The z13 ifunc variant is using the common code variant as fallback!  */
-# define HAVE_WCSPBRK_C		1
-# define HAVE_WCSPBRK_Z13	1
+#  define HAVE_WCSPBRK_C 1
+#  define HAVE_WCSPBRK_Z13 1
 #else
-# define WCSPBRK_DEFAULT	WCSPBRK_C
-# define HAVE_WCSPBRK_C		1
-# define HAVE_WCSPBRK_Z13	HAVE_WCSPBRK_IFUNC_AND_VX_SUPPORT
+#  define WCSPBRK_DEFAULT WCSPBRK_C
+#  define HAVE_WCSPBRK_C 1
+#  define HAVE_WCSPBRK_Z13 HAVE_WCSPBRK_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WCSPBRK_C
-# define WCSPBRK_C		__wcspbrk_c
+#  define WCSPBRK_C __wcspbrk_c
 #else
-# define WCSPBRK_C		NULL
+#  define WCSPBRK_C NULL
 #endif
 
 #if HAVE_WCSPBRK_Z13
-# define WCSPBRK_Z13		__wcspbrk_vx
+#  define WCSPBRK_Z13 __wcspbrk_vx
 #else
-# define WCSPBRK_Z13		NULL
+#  define WCSPBRK_Z13 NULL
 #endif

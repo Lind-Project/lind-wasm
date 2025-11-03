@@ -56,5 +56,4 @@ retry:
 
   return __hurd_fail (err);
 }
-libc_hidden_def (__getresuid)
-weak_alias (__getresuid, getresuid)
+libc_hidden_def (__getresuid) weak_alias (__getresuid, getresuid)

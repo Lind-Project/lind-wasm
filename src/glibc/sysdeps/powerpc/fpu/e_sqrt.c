@@ -28,19 +28,19 @@ __ieee754_sqrt (double x)
 #if USE_SQRT_BUILTIN
   return __builtin_sqrt (x);
 #else
-/* The method is based on a description in
-   Computation of elementary functions on the IBM RISC System/6000 processor,
-   P. W. Markstein, IBM J. Res. Develop, 34(1) 1990.
-   Basically, it consists of two interleaved Newton-Raphson approximations,
-   one to find the actual square root, and one to find its reciprocal
-   without the expense of a division operation.   The tricky bit here
-   is the use of the POWER/PowerPC multiply-add operation to get the
-   required accuracy with high speed.
+  /* The method is based on a description in
+     Computation of elementary functions on the IBM RISC System/6000 processor,
+     P. W. Markstein, IBM J. Res. Develop, 34(1) 1990.
+     Basically, it consists of two interleaved Newton-Raphson approximations,
+     one to find the actual square root, and one to find its reciprocal
+     without the expense of a division operation.   The tricky bit here
+     is the use of the POWER/PowerPC multiply-add operation to get the
+     required accuracy with high speed.
 
-   The argument reduction works by a combination of table lookup to
-   obtain the initial guesses, and some careful modification of the
-   generated guesses (which mostly runs on the integer unit, while the
-   Newton-Raphson is running on the FPU).  */
+     The argument reduction works by a combination of table lookup to
+     obtain the initial guesses, and some careful modification of the
+     generated guesses (which mostly runs on the integer unit, while the
+     Newton-Raphson is running on the FPU).  */
 
   extern const float __t_sqrt[1024];
 
@@ -60,8 +60,8 @@ __ieee754_sqrt (double x)
 	     floating-point values.  */
 	  double sx;	/* The value of which we're trying to find the
 			   square root.  */
-	  double sg, g;	/* Guess of the square root of x.  */
-	  double sd, d;	/* Difference between the square of the guess and x.  */
+	  double sg, g; /* Guess of the square root of x.  */
+	  double sd, d; /* Difference between the square of the guess and x. */
 	  double sy;	/* Estimate of 1/2g (overestimated by 1ulp).  */
 	  double sy2;	/* 2*sy */
 	  double e;	/* Difference between y*g and 1/2 (se = e * fsy).  */
@@ -95,8 +95,8 @@ __ieee754_sqrt (double x)
 	  sd = -__builtin_fma (sg, sg, -sx);
 	  fsgi = (xi0 + 0x40000000) >> 1 & 0x7ff00000;
 	  sy2 = sy + sy;
-	  sg = __builtin_fma (sy, sd, sg);	/* 16-bit approximation to
-						   sqrt(sx). */
+	  sg = __builtin_fma (sy, sd, sg); /* 16-bit approximation to
+					      sqrt(sx). */
 
 	  /* schedule the INSERT_WORDS (fsg, fsgi, 0) to get separation
 	     between the store and the load.  */
@@ -108,8 +108,8 @@ __ieee754_sqrt (double x)
 	  if ((xi0 & 0x7ff00000) == 0)
 	    goto denorm;
 	  sy = __builtin_fma (e, sy2, sy);
-	  sg = __builtin_fma (sy, sd, sg);	/* 32-bit approximation to
-						   sqrt(sx).  */
+	  sg = __builtin_fma (sy, sd, sg); /* 32-bit approximation to
+					      sqrt(sx).  */
 	  sy2 = sy + sy;
 	  /* complete the INSERT_WORDS (fsg, fsgi, 0) operation.  */
 	  fsg = iw_u.value;
@@ -117,9 +117,9 @@ __ieee754_sqrt (double x)
 	  sd = -__builtin_fma (sg, sg, -sx);
 	  sy = __builtin_fma (e, sy2, sy);
 	  shx = sx * fsg;
-	  sg = __builtin_fma (sy, sd, sg);	/* 64-bit approximation to
-						   sqrt(sx), but perhaps
-						   rounded incorrectly.  */
+	  sg = __builtin_fma (sy, sd, sg); /* 64-bit approximation to
+					      sqrt(sx), but perhaps
+					      rounded incorrectly.  */
 	  sy2 = sy + sy;
 	  g = sg * fsg;
 	  e = -__builtin_fma (sy, sg, -0x1.0000000000001p-1);
@@ -138,12 +138,12 @@ __ieee754_sqrt (double x)
     {
       /* For some reason, some PowerPC32 processors don't implement
 	 FE_INVALID_SQRT.  */
-# ifdef FE_INVALID_SQRT
+#  ifdef FE_INVALID_SQRT
       __feraiseexcept (FE_INVALID_SQRT);
 
       fenv_union_t u = { .fenv = fegetenv_register () };
       if ((u.l & FE_INVALID) == 0)
-# endif
+#  endif
 	__feraiseexcept (FE_INVALID);
       x = NAN;
     }

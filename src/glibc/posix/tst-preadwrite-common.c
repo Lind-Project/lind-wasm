@@ -23,9 +23,9 @@
 #include <sys/stat.h>
 
 static void do_prepare (void);
-#define PREPARE(argc, argv)	do_prepare ()
+#define PREPARE(argc, argv) do_prepare ()
 static int do_test (void);
-#define TEST_FUNCTION		do_test ()
+#define TEST_FUNCTION do_test ()
 
 /* This defines the `main' function and some more.  */
 #include <test-skeleton.c>
@@ -41,7 +41,6 @@ do_prepare (void)
   if (fd == -1)
     error (EXIT_FAILURE, errno, "cannot create temporary file");
 }
-
 
 static ssize_t
 do_test_with_offset (off_t offset)

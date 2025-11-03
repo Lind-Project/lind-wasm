@@ -27,13 +27,12 @@ __fesetround (int round)
     /* ROUND is no valid rounding mode.  */
     return 1;
 
-  __asm__ ("fmove%.l %!,%0" : "=dm" (fpcr));
+  __asm__ ("fmove%.l %!,%0" : "=dm"(fpcr));
   fpcr &= ~FE_UPWARD;
   fpcr |= round;
-  __asm__ __volatile__ ("fmove%.l %0,%!" : : "dm" (fpcr));
+  __asm__ __volatile__ ("fmove%.l %0,%!" : : "dm"(fpcr));
 
   return 0;
 }
-libm_hidden_def (__fesetround)
-weak_alias (__fesetround, fesetround)
-libm_hidden_weak (fesetround)
+libm_hidden_def (__fesetround) weak_alias (__fesetround, fesetround)
+    libm_hidden_weak (fesetround)

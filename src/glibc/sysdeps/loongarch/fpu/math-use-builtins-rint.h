@@ -1,4 +1,4 @@
-#if __GNUC_PREREQ (13, 0)
+#if __GNUC_PREREQ(13, 0)
 #  define USE_RINT_BUILTIN 1
 #  define USE_RINTF_BUILTIN 1
 #else

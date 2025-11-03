@@ -7,5 +7,3 @@ __sched_getparam (pid_t pid, struct sched_param *param)
 {
   return -1;
 }
-
-

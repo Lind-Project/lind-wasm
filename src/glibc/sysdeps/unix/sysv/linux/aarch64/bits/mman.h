@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_MMAN_H
-# error "Never use <bits/mman.h> directly; include <sys/mman.h> instead."
+#  error "Never use <bits/mman.h> directly; include <sys/mman.h> instead."
 #endif
 
 /* AArch64 specific definitions, should be in sync with
    arch/arm64/include/uapi/asm/mman.h.  */
 
-#define PROT_BTI	0x10
-#define PROT_MTE	0x20
+#define PROT_BTI 0x10
+#define PROT_MTE 0x20
 
 #include <bits/mman-map-flags-generic.h>
 

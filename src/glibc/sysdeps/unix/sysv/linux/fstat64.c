@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #define __fstat __redirect___fstat
-#define fstat   __redirect_fstat
+#define fstat __redirect_fstat
 #include <sys/stat.h>
 #undef __fstat
 #undef fstat
@@ -30,13 +30,13 @@
 int
 __fstat64_time64 (int fd, struct __stat64_t64 *buf)
 {
-  return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t)buf);
+  return MAKE_SYSCALL2 (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
+			(uint64_t) buf);
 }
 #if __TIMESIZE != 64
 hidden_def (__fstat64_time64)
 
-int
-__fstat64 (int fd, struct stat64 *buf)
+    int __fstat64 (int fd, struct stat64 *buf)
 {
   if (fd < 0)
     {
@@ -44,17 +44,16 @@ __fstat64 (int fd, struct stat64 *buf)
       return -1;
     }
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-	return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t)buf);
+  return MAKE_SYSCALL2 (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
+			(uint64_t) buf);
 }
 #endif
 
 #undef __fstat
 #undef fstat
 
-hidden_def (__fstat64)
-weak_alias (__fstat64, fstat64)
+hidden_def (__fstat64) weak_alias (__fstat64, fstat64)
 
 #if XSTAT_IS_XSTAT64
-strong_alias (__fstat64, __fstat)
-weak_alias (__fstat64, fstat)
+    strong_alias (__fstat64, __fstat) weak_alias (__fstat64, fstat)
 #endif

@@ -33,15 +33,11 @@ extern __typeof (__llrint) __llrint_ppc64 attribute_hidden;
 extern __typeof (__llrint) __llrint_power6x attribute_hidden;
 extern __typeof (__llrint) __llrint_power8 attribute_hidden;
 
-libc_ifunc (__llrint,
-	    (hwcap2 & PPC_FEATURE2_ARCH_2_07)
-	    ? __llrint_power8 :
-	      (hwcap & PPC_FEATURE_POWER6_EXT)
-	      ? __llrint_power6x
-            : __llrint_ppc64);
+libc_ifunc (__llrint, (hwcap2 & PPC_FEATURE2_ARCH_2_07) ? __llrint_power8
+		      : (hwcap &PPC_FEATURE_POWER6_EXT) ? __llrint_power6x
+							: __llrint_ppc64);
 
 libm_alias_double (__llrint, llrint)
 
-/* long has the same width as long long on PowerPC64.  */
-strong_alias (__llrint, __lrint)
-libm_alias_double (__lrint, lrint)
+    /* long has the same width as long long on PowerPC64.  */
+    strong_alias (__llrint, __lrint) libm_alias_double (__lrint, lrint)

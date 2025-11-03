@@ -27,8 +27,7 @@ do_test (void)
     {
       uint64_t sig = i == 63 ? 0 : 1ULL << i;
       long double ld;
-      SET_LDOUBLE_WORDS (ld, 0x4141,
-			 sig >> 32, sig & 0xffffffffULL);
+      SET_LDOUBLE_WORDS (ld, 0x4141, sig >> 32, sig & 0xffffffffULL);
       /* The requirement is that no stack overflow occurs when the
 	 pseudo-zero or unnormal goes through range reduction.  */
       volatile long double ldr;

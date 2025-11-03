@@ -21,13 +21,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static pthread_key_t key1;
 static pthread_key_t key2;
 
-
 static int left;
-
 
 static void
 destr1 (void *arg)
@@ -45,7 +42,6 @@ destr1 (void *arg)
     }
 }
 
-
 static void
 destr2 (void *arg)
 {
@@ -61,7 +57,6 @@ destr2 (void *arg)
 	}
     }
 }
-
 
 static void *
 tf (void *arg)
@@ -79,7 +74,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -124,7 +118,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

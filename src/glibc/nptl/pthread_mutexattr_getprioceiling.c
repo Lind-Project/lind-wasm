@@ -32,7 +32,7 @@ __pthread_mutexattr_getprioceiling (const pthread_mutexattr_t *attr,
   ceiling = ((iattr->mutexkind & PTHREAD_MUTEXATTR_PRIO_CEILING_MASK)
 	     >> PTHREAD_MUTEXATTR_PRIO_CEILING_SHIFT);
 
-  if (! ceiling)
+  if (!ceiling)
     {
       /* See __init_sched_fifo_prio.  */
       if (atomic_load_relaxed (&__sched_fifo_min_prio) == -1)
@@ -48,7 +48,7 @@ __pthread_mutexattr_getprioceiling (const pthread_mutexattr_t *attr,
 versioned_symbol (libc, __pthread_mutexattr_getprioceiling,
 		  pthread_mutexattr_getprioceiling, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_4, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_4, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_mutexattr_getprioceiling,
-               pthread_mutexattr_getprioceiling, GLIBC_2_4);
+	       pthread_mutexattr_getprioceiling, GLIBC_2_4);
 #endif

@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_MMAN_H
-# error "Never use <bits/mman.h> directly; include <sys/mman.h> instead."
+#  error "Never use <bits/mman.h> directly; include <sys/mman.h> instead."
 #endif
 
 /* These definitions are appropriate for architectures that, in the

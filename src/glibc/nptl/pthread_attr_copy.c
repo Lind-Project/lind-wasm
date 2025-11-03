@@ -39,14 +39,14 @@ __pthread_attr_copy (pthread_attr_t *target, const pthread_attr_t *source)
     {
       /* Propagate affinity mask information.  */
       if (isource->extension->cpusetsize > 0)
-        ret = __pthread_attr_setaffinity_np (&temp.external,
-                                             isource->extension->cpusetsize,
-                                             isource->extension->cpuset);
+	ret = __pthread_attr_setaffinity_np (&temp.external,
+					     isource->extension->cpusetsize,
+					     isource->extension->cpuset);
 
       /* Propagate the signal mask information.  */
       if (ret == 0 && isource->extension->sigmask_set)
-        ret = __pthread_attr_setsigmask_internal ((pthread_attr_t *) &temp,
-                                                  &isource->extension->sigmask);
+	ret = __pthread_attr_setsigmask_internal (
+	    (pthread_attr_t *) &temp, &isource->extension->sigmask);
     }
 
   if (ret != 0)

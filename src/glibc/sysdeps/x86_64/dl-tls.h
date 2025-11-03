@@ -28,7 +28,6 @@ typedef struct dl_tls_index
   uint64_t ti_offset;
 } tls_index;
 
-
 extern void *__tls_get_addr (tls_index *ti);
 
 #endif /* _X86_64_DL_TLS_H */

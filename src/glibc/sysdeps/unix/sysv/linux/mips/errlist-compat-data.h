@@ -18,10 +18,10 @@
 
 #include <errlist-compat.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_2)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_2)
 DEFINE_COMPAT_ERRLIST (123, GLIBC_2_0)
 #endif
 
-#if SHLIB_COMPAT (libc, GLIBC_2_2, GLIBC_2_32)
+#if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_32)
 DEFINE_COMPAT_ERRLIST (1134, GLIBC_2_1)
 #endif

@@ -16,38 +16,38 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WMEMSET_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WMEMSET_IFUNC 1
 #else
-# define HAVE_WMEMSET_IFUNC	0
+#  define HAVE_WMEMSET_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WMEMSET_IFUNC_AND_VX_SUPPORT HAVE_WMEMSET_IFUNC
+#  define HAVE_WMEMSET_IFUNC_AND_VX_SUPPORT HAVE_WMEMSET_IFUNC
 #else
-# define HAVE_WMEMSET_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WMEMSET_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WMEMSET_DEFAULT	WMEMSET_Z13
+#  define WMEMSET_DEFAULT WMEMSET_Z13
 /* The z13 ifunc variant is using the common code variant as fallback!  */
-# define HAVE_WMEMSET_C		1
-# define HAVE_WMEMSET_Z13	1
+#  define HAVE_WMEMSET_C 1
+#  define HAVE_WMEMSET_Z13 1
 #else
-# define WMEMSET_DEFAULT	WMEMSET_C
-# define HAVE_WMEMSET_C		1
-# define HAVE_WMEMSET_Z13	HAVE_WMEMSET_IFUNC_AND_VX_SUPPORT
+#  define WMEMSET_DEFAULT WMEMSET_C
+#  define HAVE_WMEMSET_C 1
+#  define HAVE_WMEMSET_Z13 HAVE_WMEMSET_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WMEMSET_C
-# define WMEMSET_C		__wmemset_c
+#  define WMEMSET_C __wmemset_c
 #else
-# define WMEMSET_C		NULL
+#  define WMEMSET_C NULL
 #endif
 
 #if HAVE_WMEMSET_Z13
-# define WMEMSET_Z13		__wmemset_vx
+#  define WMEMSET_Z13 __wmemset_vx
 #else
-# define WMEMSET_Z13		NULL
+#  define WMEMSET_Z13 NULL
 #endif

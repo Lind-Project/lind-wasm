@@ -21,64 +21,58 @@
 
 #ifdef __ASSEMBLER__
 
-# define ASM_SIZE_DIRECTIVE(name) .size name,.-name
+#  define ASM_SIZE_DIRECTIVE(name) .size name, .- name
 
 /* Define an entry point visible from C.  */
-# define ENTRY(name)		\
-	.globl name;		\
-	.type name,@function;	\
-	.align 4;		\
-	name##:;		\
-	cfi_startproc;		\
-	CALL_MCOUNT
+#  define ENTRY(name)                                                         \
+    .globl name;                                                              \
+    .type name, @function;                                                    \
+    .align 4;                                                                 \
+    name## :;                                                                 \
+    cfi_startproc;                                                            \
+    CALL_MCOUNT
 
-# undef  END
-# define END(name)		\
-	cfi_endproc;		\
-	ASM_SIZE_DIRECTIVE(name)
+#  undef END
+#  define END(name)                                                           \
+    cfi_endproc;                                                              \
+    ASM_SIZE_DIRECTIVE (name)
 
 /* If compiled for profiling, call `mcount' at the start of each function.  */
-# ifdef PROF
-#  ifdef __PIC__
-#   define CALL_MCOUNT				\
-	subi	sp, 4;				\
-	stw	lr, (sp, 0);			\
-	grs	t0, .Lgetpc;			\
-.Lgetpc:					\
-	lrw	gb, .Lgetpc@GOTPC;		\
-	addu	gb, t0;				\
-	lrw	t1, _mcount@PLT;		\
-	ldr.w	t0, (gb, t1 << 0);		\
-	jmp	t0;
+#  ifdef PROF
+#    ifdef __PIC__
+#      define CALL_MCOUNT                                                     \
+	subi sp, 4;                                                           \
+	stw lr, (sp, 0);                                                      \
+	grs t0, .Lgetpc;                                                      \
+	.Lgetpc : lrw gb, .Lgetpc @GOTPC;                                     \
+	addu gb, t0;                                                          \
+	lrw t1, _mcount @PLT;                                                 \
+	ldr.w t0, (gb, t1 << 0);                                              \
+	jmp t0;
+#    else
+#      define CALL_MCOUNT                                                     \
+	subi sp, 4;                                                           \
+	stw lr, (sp, 0);                                                      \
+	jbsr _mcount;
+#    endif
 #  else
-#   define CALL_MCOUNT				\
-	subi	sp, 4;				\
-	stw	lr, (sp, 0);			\
-	jbsr	_mcount;
+#    define CALL_MCOUNT /* Do nothing.  */
 #  endif
-# else
-#  define CALL_MCOUNT	/* Do nothing.  */
-# endif
 
-# if defined (__CK860__)
+#  if defined(__CK860__)
 /* Instruction fetch will be faster when the label is 16 bytes aligned.
    Filling with nop instruction to avoid extra jump.  */
-#  define LABLE_ALIGN	\
-	.balignw 16, 0x6c03
+#    define LABLE_ALIGN .balignw 16, 0x6c03
 
-#  define PRE_BNEZAD(R)
+#    define PRE_BNEZAD(R)
 
-#  define BNEZAD(R, L)	\
-	bnezad	R, L
-# else
-#  define LABLE_ALIGN	\
-	.balignw 8, 0x6c03
+#    define BNEZAD(R, L) bnezad R, L
+#  else
+#    define LABLE_ALIGN .balignw 8, 0x6c03
 
-#  define PRE_BNEZAD(R)	\
-	subi	R, 1
+#    define PRE_BNEZAD(R) subi R, 1
 
-#  define BNEZAD(R, L)	\
-	bnez	R, L
-# endif
+#    define BNEZAD(R, L) bnez R, L
+#  endif
 
 #endif

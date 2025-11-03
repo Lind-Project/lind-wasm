@@ -36,12 +36,11 @@ __ftime64 (struct __timeb64 *timebuf)
 #if __TIMESIZE != 64
 libc_hidden_def (__ftime64)
 
-int
-ftime (struct timeb *timebuf)
+    int ftime (struct timeb *timebuf)
 {
   struct __timeb64 tb64;
   __ftime64 (&tb64);
-  if (! in_time_t_range (tb64.time))
+  if (!in_time_t_range (tb64.time))
     {
       __set_errno (EOVERFLOW);
       return -1;

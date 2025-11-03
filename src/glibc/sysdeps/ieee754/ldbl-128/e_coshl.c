@@ -55,8 +55,9 @@
 #include <math_private.h>
 #include <libm-alias-finite.h>
 
-static const _Float128 one = 1.0, half = 0.5, huge = L(1.0e4900),
-ovf_thresh = L(1.1357216553474703894801348310092223067821E4);
+static const _Float128 one = 1.0, half = 0.5, huge = L (1.0e4900),
+		       ovf_thresh
+		       = L (1.1357216553474703894801348310092223067821E4);
 
 _Float128
 __ieee754_coshl (_Float128 x)
@@ -79,7 +80,7 @@ __ieee754_coshl (_Float128 x)
   if (ex < 0x3ffd62e4) /* 0.3465728759765625 */
     {
       if (ex < 0x3fb80000) /* |x| < 2^-116 */
-	return one;		/* cosh(tiny) = 1 */
+	return one;	   /* cosh(tiny) = 1 */
       t = __expm1l (u.value);
       w = one + t;
 

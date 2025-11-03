@@ -39,23 +39,21 @@
   */
 
 #ifndef PROCINFO_CLASS
-#define PROCINFO_CLASS
+#  define PROCINFO_CLASS
 #endif
 
 #if !defined PROCINFO_DECL && defined SHARED
-  ._dl_alpha_platforms
+._dl_alpha_platforms
 #else
 PROCINFO_CLASS const char _dl_alpha_platforms[5][5]
 #endif
 #ifndef PROCINFO_DECL
-= {
-    "ev4", "ev5", "ev56", "ev6", "ev67"
-  }
+    = { "ev4", "ev5", "ev56", "ev6", "ev67" }
 #endif
 #if !defined SHARED || defined PROCINFO_DECL
 ;
 #else
-,
+    ,
 #endif
 
 #undef PROCINFO_DECL

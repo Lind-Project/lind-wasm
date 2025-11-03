@@ -24,13 +24,10 @@
 #include <unistd.h>
 #include <wait.h>
 
-
 /* Nonzero if the program gets called via `exec'.  */
 static int restart;
 
-
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 
 /* Prototype for our test function.  */
 extern void do_prepare (int argc, char *argv[]);
@@ -40,7 +37,6 @@ extern int do_test (int argc, char *argv[]);
 #define PREPARE do_prepare
 
 #include "../test-skeleton.c"
-
 
 /* Name of the temporary files.  */
 static char *name1;
@@ -53,7 +49,6 @@ static int temp_fd2 = -1;
 /* The contents of our files.  */
 static const char fd1string[] = "This file should get closed";
 static const char fd2string[] = "This file should stay opened";
-
 
 /* We have a preparation function.  */
 void
@@ -68,7 +63,6 @@ do_prepare (int argc, char *argv[])
   if (temp_fd1 < 0 || temp_fd2 < 0)
     exit (1);
 }
-
 
 static int
 handle_restart (const char *fd1s, const char *fd2s, const char *name)
@@ -114,7 +108,6 @@ handle_restart (const char *fd1s, const char *fd2s, const char *name)
   return 0;
 }
 
-
 int
 do_test (int argc, char *argv[])
 {
@@ -148,19 +141,19 @@ do_test (int argc, char *argv[])
   /* Prepare the test.  We are creating two files: one which file descriptor
      will be marked with FD_CLOEXEC, another which is not.  */
 
-   /* Set the bit.  */
-   flags = fcntl (temp_fd1, F_GETFD, 0);
-   if (flags < 0)
-     error (EXIT_FAILURE, errno, "cannot get flags");
-   flags |= FD_CLOEXEC;
-   if (fcntl (temp_fd1, F_SETFD, flags) < 0)
-     error (EXIT_FAILURE, errno, "cannot set flags");
+  /* Set the bit.  */
+  flags = fcntl (temp_fd1, F_GETFD, 0);
+  if (flags < 0)
+    error (EXIT_FAILURE, errno, "cannot get flags");
+  flags |= FD_CLOEXEC;
+  if (fcntl (temp_fd1, F_SETFD, flags) < 0)
+    error (EXIT_FAILURE, errno, "cannot set flags");
 
-   /* Write something in the files.  */
-   if (write (temp_fd1, fd1string, strlen (fd1string)) != strlen (fd1string))
-     error (EXIT_FAILURE, errno, "cannot write to first file");
-   if (write (temp_fd2, fd2string, strlen (fd2string)) != strlen (fd2string))
-     error (EXIT_FAILURE, errno, "cannot write to second file");
+  /* Write something in the files.  */
+  if (write (temp_fd1, fd1string, strlen (fd1string)) != strlen (fd1string))
+    error (EXIT_FAILURE, errno, "cannot write to first file");
+  if (write (temp_fd2, fd2string, strlen (fd2string)) != strlen (fd2string))
+    error (EXIT_FAILURE, errno, "cannot write to second file");
 
   /* We want to test the `exec' function.  To do this we restart the program
      with an additional parameter.  But first create another process.  */
@@ -178,8 +171,8 @@ do_test (int argc, char *argv[])
 	execl (argv[1], argv[1], argv[2], argv[3], argv[4], "--direct",
 	       "--restart", fd1name, fd2name, name1, NULL);
       else
-	execl (argv[1], argv[1], "--direct",
-	       "--restart", fd1name, fd2name, name1, NULL);
+	execl (argv[1], argv[1], "--direct", "--restart", fd1name, fd2name,
+	       name1, NULL);
 
       error (EXIT_FAILURE, errno, "cannot exec");
     }

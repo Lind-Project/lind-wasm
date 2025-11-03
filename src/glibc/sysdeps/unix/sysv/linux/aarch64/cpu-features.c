@@ -40,17 +40,16 @@ struct cpu_list
   uint64_t midr;
 };
 
-static const struct cpu_list cpu_list[] =
-{
+static const struct cpu_list cpu_list[] = {
 #define CPU_LIST_ENTRY(__str, __num) { __str, sizeof (__str) - 1, __num }
-  CPU_LIST_ENTRY ("thunderxt88",    0x430F0A10),
-  CPU_LIST_ENTRY ("thunderx2t99",   0x431F0AF0),
+  CPU_LIST_ENTRY ("thunderxt88", 0x430F0A10),
+  CPU_LIST_ENTRY ("thunderx2t99", 0x431F0AF0),
   CPU_LIST_ENTRY ("thunderx2t99p1", 0x420F5160),
-  CPU_LIST_ENTRY ("ares",           0x411FD0C0),
-  CPU_LIST_ENTRY ("emag",           0x503F0001),
-  CPU_LIST_ENTRY ("kunpeng920",     0x481FD010),
-  CPU_LIST_ENTRY ("a64fx",          0x460F0010),
-  CPU_LIST_ENTRY ("generic",        0x0),
+  CPU_LIST_ENTRY ("ares", 0x411FD0C0),
+  CPU_LIST_ENTRY ("emag", 0x503F0001),
+  CPU_LIST_ENTRY ("kunpeng920", 0x481FD010),
+  CPU_LIST_ENTRY ("a64fx", 0x460F0010),
+  CPU_LIST_ENTRY ("generic", 0x0),
 };
 
 static uint64_t
@@ -68,11 +67,11 @@ get_midr_from_mcpu (const struct tunable_str_t *mcpu)
 /* Return true if we prefer using SVE in string ifuncs.  Old kernels disable
    SVE after every system call which results in unnecessary traps if memcpy
    uses SVE.  This is true for kernels between 4.15.0 and before 6.2.0, except
-   for 5.14.0 which was patched.  For these versions return false to avoid using
-   SVE ifuncs.
-   Parse the kernel version into a 24-bit kernel.major.minor value without
-   calling any library functions.  If uname() is not supported or if the version
-   format is not recognized, assume the kernel is modern and return true.  */
+   for 5.14.0 which was patched.  For these versions return false to avoid
+   using SVE ifuncs. Parse the kernel version into a 24-bit kernel.major.minor
+   value without calling any library functions.  If uname() is not supported or
+   if the version format is not recognized, assume the kernel is modern and
+   return true.  */
 
 static inline bool
 prefer_sve_ifuncs (void)
@@ -109,9 +108,8 @@ init_cpu_features (struct cpu_features *cpu_features)
   register uint64_t midr = UINT64_MAX;
 
   /* Get the tunable override.  */
-  const struct tunable_str_t *mcpu = TUNABLE_GET (glibc, cpu, name,
-						  struct tunable_str_t *,
-						  NULL);
+  const struct tunable_str_t *mcpu
+      = TUNABLE_GET (glibc, cpu, name, struct tunable_str_t *, NULL);
   if (mcpu != NULL)
     midr = get_midr_from_mcpu (mcpu);
 
@@ -121,8 +119,7 @@ init_cpu_features (struct cpu_features *cpu_features)
     {
       if (GLRO (dl_hwcap) & HWCAP_CPUID)
 
-      else
-	midr = 0;
+	else midr = 0;
     }
 
   cpu_features->midr_el1 = midr;
@@ -155,12 +152,12 @@ init_cpu_features (struct cpu_features *cpu_features)
 	     0, 0, 0);
   else if (cpu_features->mte_state & 2)
     __prctl (PR_SET_TAGGED_ADDR_CTRL,
-	     (PR_TAGGED_ADDR_ENABLE | PR_MTE_TCF_SYNC | MTE_ALLOWED_TAGS),
-	     0, 0, 0);
+	     (PR_TAGGED_ADDR_ENABLE | PR_MTE_TCF_SYNC | MTE_ALLOWED_TAGS), 0,
+	     0, 0);
   else if (cpu_features->mte_state)
     __prctl (PR_SET_TAGGED_ADDR_CTRL,
-	     (PR_TAGGED_ADDR_ENABLE | PR_MTE_TCF_ASYNC | MTE_ALLOWED_TAGS),
-	     0, 0, 0);
+	     (PR_TAGGED_ADDR_ENABLE | PR_MTE_TCF_ASYNC | MTE_ALLOWED_TAGS), 0,
+	     0, 0);
 #endif
 
   /* Check if SVE is supported.  */

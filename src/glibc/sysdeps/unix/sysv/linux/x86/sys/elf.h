@@ -16,14 +16,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_ELF_H
-#define _SYS_ELF_H	1
+#  define _SYS_ELF_H 1
 
-#ifdef __x86_64__
-# error This header is unsupported on x86-64.
-#else
-# warning "This header is obsolete; use <sys/procfs.h> instead."
+#  ifdef __x86_64__
+#    error This header is unsupported on x86-64.
+#  else
+#    warning "This header is obsolete; use <sys/procfs.h> instead."
 
-# include <sys/procfs.h>
-#endif
+#    include <sys/procfs.h>
+#  endif
 
-#endif	/* _SYS_ELF_H */
+#endif /* _SYS_ELF_H */

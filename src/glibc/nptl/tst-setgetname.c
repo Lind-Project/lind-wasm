@@ -29,15 +29,15 @@
 
 /* Name of process which is one byte too big
    e.g. 17 bytes including null-terminator  */
-#define BIG_NAME       "....V....X....XV"
+#define BIG_NAME "....V....X....XV"
 
 /* Longest name of a process
    e.g. 16 bytes including null-terminator.  */
-#define LONGEST_NAME   "....V....X....X"
+#define LONGEST_NAME "....V....X....X"
 
 /* One less than longest name with unique
    characters to detect modification.  */
-#define CANARY_NAME    "abcdefghijklmn"
+#define CANARY_NAME "abcdefghijklmn"
 
 /* On Linux the maximum length of the name of a task *including* the null
    terminator.  */
@@ -62,11 +62,11 @@ get_self_comm (long tid, char *buf, size_t len)
   else
     {
       if (buf[n - 1] == '\n')
-        buf[n - 1] = '\0';
+	buf[n - 1] = '\0';
       else if (n == len)
-        res = ERANGE;
+	res = ERANGE;
       else
-        buf[n] = '\0';
+	buf[n] = '\0';
     }
 
   close (fd);
@@ -95,21 +95,22 @@ do_test (int argc, char **argv)
       res = get_self_comm (gettid (), name_check, TASK_COMM_LEN);
 
       if (res == 0)
-       {
-         if (strncmp (name, name_check, strlen (BIG_NAME)) == 0)
-           printf ("PASS: Test 1 - pthread_getname_np and /proc agree.\n");
-         else
-           {
-             printf ("FAIL: Test 1 - pthread_getname_np and /proc differ"
-                     " i.e. %s != %s\n", name, name_check);
-             ret++;
-           }
-       }
+	{
+	  if (strncmp (name, name_check, strlen (BIG_NAME)) == 0)
+	    printf ("PASS: Test 1 - pthread_getname_np and /proc agree.\n");
+	  else
+	    {
+	      printf ("FAIL: Test 1 - pthread_getname_np and /proc differ"
+		      " i.e. %s != %s\n",
+		      name, name_check);
+	      ret++;
+	    }
+	}
       else
-       {
-         printf ("FAIL: Test 1 - unable read task name via proc.\n");
-         ret++;
-        }
+	{
+	  printf ("FAIL: Test 1 - unable read task name via proc.\n");
+	  ret++;
+	}
     }
   else
     {
@@ -118,30 +119,30 @@ do_test (int argc, char **argv)
     }
 
   /* Test 2: Test setting the name and then independently verify it
-             was set.  */
+	     was set.  */
   res = pthread_setname_np (self, NEW_NAME);
 
   if (res == 0)
     {
       res = get_self_comm (gettid (), name_check, TASK_COMM_LEN);
       if (res == 0)
-        {
-         if (strncmp (NEW_NAME, name_check, strlen (BIG_NAME)) == 0)
-           printf ("PASS: Test 2 - Value used in pthread_setname_np and"
-                   " /proc agree.\n");
-         else
-           {
-             printf ("FAIL: Test 2 - Value used in pthread_setname_np"
-		     " and /proc differ i.e. %s != %s\n",
-		     NEW_NAME, name_check);
-             ret++;
-           }
-        }
+	{
+	  if (strncmp (NEW_NAME, name_check, strlen (BIG_NAME)) == 0)
+	    printf ("PASS: Test 2 - Value used in pthread_setname_np and"
+		    " /proc agree.\n");
+	  else
+	    {
+	      printf ("FAIL: Test 2 - Value used in pthread_setname_np"
+		      " and /proc differ i.e. %s != %s\n",
+		      NEW_NAME, name_check);
+	      ret++;
+	    }
+	}
       else
-       {
-         printf ("FAIL: Test 2 - unable to read task name via proc.\n");
-         ret++;
-        }
+	{
+	  printf ("FAIL: Test 2 - unable to read task name via proc.\n");
+	  ret++;
+	}
     }
   else
     {
@@ -156,47 +157,48 @@ do_test (int argc, char **argv)
     {
       res = pthread_setname_np (self, BIG_NAME);
       if (res != 0)
-        {
-         if (res == ERANGE)
-           {
-             printf ("PASS: Test 3 - pthread_setname_np returned ERANGE"
-                     " for a process name that was too long.\n");
+	{
+	  if (res == ERANGE)
+	    {
+	      printf ("PASS: Test 3 - pthread_setname_np returned ERANGE"
+		      " for a process name that was too long.\n");
 
-             /* Verify the old name didn't change.  */
-             res = get_self_comm (gettid (), name_check, TASK_COMM_LEN);
-             if (res == 0)
-               {
-                 if (strncmp (name, name_check, strlen (BIG_NAME)) == 0)
-                   printf ("PASS: Test 3 - Original name unchanged after"
-                           " pthread_setname_np returned ERANGE.\n");
-                 else
-                   {
-                     printf ("FAIL: Test 3 - Original name changed after"
-                             " pthread_setname_np returned ERANGE"
-                             " i.e. %s != %s\n",
-                             name, name_check);
-                     ret++;
-                   }
-               }
-             else
-               {
-                 printf ("FAIL: Test 3 - unable to read task name.\n");
-                 ret++;
-               }
-           }
-         else
-           {
-             printf ("FAIL: Test 3 - Wrong error returned"
-		     " i.e. ERANGE != %d\n", res);
-             ret++;
-           }
-        }
+	      /* Verify the old name didn't change.  */
+	      res = get_self_comm (gettid (), name_check, TASK_COMM_LEN);
+	      if (res == 0)
+		{
+		  if (strncmp (name, name_check, strlen (BIG_NAME)) == 0)
+		    printf ("PASS: Test 3 - Original name unchanged after"
+			    " pthread_setname_np returned ERANGE.\n");
+		  else
+		    {
+		      printf ("FAIL: Test 3 - Original name changed after"
+			      " pthread_setname_np returned ERANGE"
+			      " i.e. %s != %s\n",
+			      name, name_check);
+		      ret++;
+		    }
+		}
+	      else
+		{
+		  printf ("FAIL: Test 3 - unable to read task name.\n");
+		  ret++;
+		}
+	    }
+	  else
+	    {
+	      printf ("FAIL: Test 3 - Wrong error returned"
+		      " i.e. ERANGE != %d\n",
+		      res);
+	      ret++;
+	    }
+	}
       else
-        {
-         printf ("FAIL: Test 3 - Too-long name accepted by"
-	         " pthread_setname_np.\n");
-         ret++;
-        }
+	{
+	  printf ("FAIL: Test 3 - Too-long name accepted by"
+		  " pthread_setname_np.\n");
+	  ret++;
+	}
     }
   else
     {
@@ -211,22 +213,24 @@ do_test (int argc, char **argv)
     {
       res = get_self_comm (gettid (), name_check, TASK_COMM_LEN);
       if (res == 0)
-        {
-         if (strncmp (LONGEST_NAME, name_check, strlen (BIG_NAME)) == 0)
-           printf ("PASS: Test 4 - Longest name set via pthread_setname_np"
-                   " agrees with /proc.\n");
-         else
-           {
-             printf ("FAIL: Test 4 - Value used in pthread_setname_np and /proc"
-		     " differ i.e. %s != %s\n", LONGEST_NAME, name_check);
-             ret++;
-           }
-        }
+	{
+	  if (strncmp (LONGEST_NAME, name_check, strlen (BIG_NAME)) == 0)
+	    printf ("PASS: Test 4 - Longest name set via pthread_setname_np"
+		    " agrees with /proc.\n");
+	  else
+	    {
+	      printf (
+		  "FAIL: Test 4 - Value used in pthread_setname_np and /proc"
+		  " differ i.e. %s != %s\n",
+		  LONGEST_NAME, name_check);
+	      ret++;
+	    }
+	}
       else
-       {
-         printf ("FAIL: Test 4 - unable to read task name via proc.\n");
-         ret++;
-        }
+	{
+	  printf ("FAIL: Test 4 - unable to read task name via proc.\n");
+	  ret++;
+	}
     }
   else
     {
@@ -245,7 +249,7 @@ do_test (int argc, char **argv)
   if (res != 0)
     {
       if (res == ERANGE)
-        {
+	{
 	  if (strncmp (CANARY_NAME, name, strlen (BIG_NAME)) == 0)
 	    {
 	      printf ("PASS: Test 5 - ERANGE and buffer unmodified.\n");
@@ -255,12 +259,12 @@ do_test (int argc, char **argv)
 	      printf ("FAIL: Test 5 - Original buffer modified.\n");
 	      ret++;
 	    }
-        }
+	}
       else
-        {
+	{
 	  printf ("FAIL: Test 5 - Did not return ERANGE for small buffer.\n");
 	  ret++;
-        }
+	}
     }
   else
     {
@@ -274,15 +278,15 @@ do_test (int argc, char **argv)
   if (res == 0)
     {
       if (strncmp (LONGEST_NAME, name, strlen (BIG_NAME)) == 0)
-        {
+	{
 	  printf ("PASS: Test 6 - Read back longest name correctly.\n");
-        }
+	}
       else
-        {
+	{
 	  printf ("FAIL: Test 6 - Read \"%s\" instead of longest name.\n",
 		  name);
 	  ret++;
-        }
+	}
     }
   else
     {

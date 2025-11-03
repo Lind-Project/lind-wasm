@@ -56,9 +56,8 @@ do_test (void)
   do_test_call ();
 
   /* Compare against the expected output.  */
-  const char *expected =
-    "test-syslog: -1.000000\n"
-    "test-syslog: -1.000000\n";
+  const char *expected = "test-syslog: -1.000000\n"
+			 "test-syslog: -1.000000\n";
   TEST_COMPARE_STRING (expected, result.err.buffer);
 
   return 0;

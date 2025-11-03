@@ -28,9 +28,8 @@
    (MPN frexpl). */
 
 mp_size_t
-__mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size,
-			   int *expt, int *is_neg,
-			   long double value)
+__mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size, int *expt,
+			   int *is_neg, long double value)
 {
   union ieee854_long_double u;
   u.d = value;
@@ -41,14 +40,14 @@ __mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size,
 #if BITS_PER_MP_LIMB == 32
   res_ptr[0] = u.ieee.mantissa1; /* Low-order 32 bits of fraction.  */
   res_ptr[1] = u.ieee.mantissa0; /* High-order 32 bits.  */
-  #define N 2
+#  define N 2
 #elif BITS_PER_MP_LIMB == 64
   /* Hopefully the compiler will combine the two bitfield extracts
      and this composition into just the original quadword extract.  */
   res_ptr[0] = ((mp_limb_t) u.ieee.mantissa0 << 32) | u.ieee.mantissa1;
-  #define N 1
+#  define N 1
 #else
-  #error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
+#  error "mp_limb size " BITS_PER_MP_LIMB "not accounted for"
 #endif
 
   if (u.ieee.exponent == 0)
@@ -69,7 +68,8 @@ __mpn_extract_long_double (mp_ptr res_ptr, mp_size_t size,
 	     for denormalized number.  If it is one, the number is according
 	     to Intel's specification an invalid number.  We make the
 	     representation unique by explicitly clearing this bit.  */
-	  res_ptr[N - 1] &= ~((mp_limb_t) 1 << ((LDBL_MANT_DIG - 1) % BITS_PER_MP_LIMB));
+	  res_ptr[N - 1]
+	      &= ~((mp_limb_t) 1 << ((LDBL_MANT_DIG - 1) % BITS_PER_MP_LIMB));
 
 	  if (res_ptr[N - 1] != 0)
 	    {

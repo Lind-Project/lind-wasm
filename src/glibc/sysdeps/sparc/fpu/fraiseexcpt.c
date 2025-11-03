@@ -25,11 +25,10 @@
 int
 __feraiseexcept (int excepts)
 {
-  static const struct {
+  static const struct
+  {
     double zero, one, max, min, pi;
-  } c = {
-    0.0, 1.0, DBL_MAX, DBL_MIN, M_PI
-  };
+  } c = { 0.0, 1.0, DBL_MAX, DBL_MIN, M_PI };
   double d;
 
   /* Raise exceptions represented by EXPECTS.  But we must raise only
@@ -41,7 +40,7 @@ __feraiseexcept (int excepts)
   if ((FE_INVALID & excepts) != 0)
     {
       /* One example of an invalid operation is 0/0.  */
-      __asm ("" : "=e" (d) : "0" (c.zero));
+      __asm ("" : "=e"(d) : "0"(c.zero));
       d /= c.zero;
       math_force_eval (d);
     }
@@ -49,7 +48,7 @@ __feraiseexcept (int excepts)
   /* Next: division by zero.  */
   if ((FE_DIVBYZERO & excepts) != 0)
     {
-      __asm ("" : "=e" (d) : "0" (c.one));
+      __asm ("" : "=e"(d) : "0"(c.one));
       d /= c.zero;
       math_force_eval (d);
     }
@@ -57,7 +56,7 @@ __feraiseexcept (int excepts)
   /* Next: overflow.  */
   if ((FE_OVERFLOW & excepts) != 0)
     {
-      __asm ("" : "=e" (d) : "0" (c.max));
+      __asm ("" : "=e"(d) : "0"(c.max));
       d *= d;
       math_force_eval (d);
     }
@@ -65,7 +64,7 @@ __feraiseexcept (int excepts)
   /* Next: underflow.  */
   if ((FE_UNDERFLOW & excepts) != 0)
     {
-      __asm ("" : "=e" (d) : "0" (c.min));
+      __asm ("" : "=e"(d) : "0"(c.min));
       d *= d;
       math_force_eval (d);
     }
@@ -73,7 +72,7 @@ __feraiseexcept (int excepts)
   /* Last: inexact.  */
   if ((FE_INEXACT & excepts) != 0)
     {
-      __asm ("" : "=e" (d) : "0" (c.one));
+      __asm ("" : "=e"(d) : "0"(c.one));
       d /= c.pi;
       math_force_eval (d);
     }
@@ -82,11 +81,11 @@ __feraiseexcept (int excepts)
   return 0;
 }
 
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__feraiseexcept, __old_feraiseexcept)
-compat_symbol (libm, __old_feraiseexcept, feraiseexcept, GLIBC_2_1);
+    compat_symbol (libm, __old_feraiseexcept, feraiseexcept, GLIBC_2_1);
 #endif
 
 libm_hidden_def (__feraiseexcept)
-libm_hidden_ver (__feraiseexcept, feraiseexcept)
-versioned_symbol (libm, __feraiseexcept, feraiseexcept, GLIBC_2_2);
+    libm_hidden_ver (__feraiseexcept, feraiseexcept)
+	versioned_symbol (libm, __feraiseexcept, feraiseexcept, GLIBC_2_2);

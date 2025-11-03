@@ -26,9 +26,7 @@
 extern __typeof (__truncf) __truncf_ppc32 attribute_hidden;
 extern __typeof (__truncf) __truncf_power5plus attribute_hidden;
 
-libc_ifunc (__truncf,
-	    (hwcap & PPC_FEATURE_POWER5_PLUS)
-	    ? __truncf_power5plus
-            : __truncf_ppc32);
+libc_ifunc (__truncf, (hwcap & PPC_FEATURE_POWER5_PLUS) ? __truncf_power5plus
+							: __truncf_ppc32);
 
 libm_alias_float (__trunc, trunc)

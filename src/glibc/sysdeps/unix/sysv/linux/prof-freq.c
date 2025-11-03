@@ -20,10 +20,9 @@
 #include <libc-internal.h>
 #include <ldsodefs.h>
 
-
 int
 __profile_frequency (void)
 {
-  return GLRO(dl_clktck);
+  return GLRO (dl_clktck);
 }
 libc_hidden_def (__profile_frequency)

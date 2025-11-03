@@ -25,10 +25,10 @@
 /* The compatibility symbol is meant to match the old __NR_getrlimit syscall
    (with broken RLIM_INFINITY definition).  It should be provided iff
    __NR_getrlimit and __NR_ugetrlimit are both defined.  */
-# ifndef __NR_ugetrlimit
-#  undef SHLIB_COMPAT
-#  define SHLIB_COMPAT(a, b, c) 0
-# endif
+#  ifndef __NR_ugetrlimit
+#    undef SHLIB_COMPAT
+#    define SHLIB_COMPAT(a, b, c) 0
+#  endif
 
 int
 __setrlimit (enum __rlimit_resource resource, const struct rlimit *rlim)
@@ -48,12 +48,12 @@ __setrlimit (enum __rlimit_resource resource, const struct rlimit *rlim)
 }
 
 libc_hidden_def (__setrlimit)
-# if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_2)
-strong_alias (__setrlimit, __setrlimit_1)
-compat_symbol (libc, __setrlimit, setrlimit, GLIBC_2_0);
+#  if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_2)
+    strong_alias (__setrlimit, __setrlimit_1)
+	compat_symbol (libc, __setrlimit, setrlimit, GLIBC_2_0);
 versioned_symbol (libc, __setrlimit_1, setrlimit, GLIBC_2_2);
-# else
-weak_alias (__setrlimit, setrlimit)
-# endif
+#  else
+    weak_alias (__setrlimit, setrlimit)
+#  endif
 
 #endif /* __RLIM_T_MATCHES_RLIM64_T  */

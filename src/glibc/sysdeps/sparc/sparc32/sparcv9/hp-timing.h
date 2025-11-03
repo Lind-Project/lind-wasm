@@ -17,17 +17,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _HP_TIMING_H
-#define _HP_TIMING_H	1
+#  define _HP_TIMING_H 1
 
-#define HP_TIMING_INLINE	(1)
+#  define HP_TIMING_INLINE (1)
 
 typedef unsigned long long int hp_timing_t;
 
-#define HP_TIMING_NOW(Var) \
-      __asm__ __volatile__ ("rd %%tick, %L0\n\t" \
-			    "srlx %L0, 32, %H0" \
-			    : "=r" (Var))
+#  define HP_TIMING_NOW(Var)                                                  \
+    __asm__ __volatile__ ("rd %%tick, %L0\n\t"                                \
+			  "srlx %L0, 32, %H0"                                 \
+			  : "=r"(Var))
 
-#include <hp-timing-common.h>
+#  include <hp-timing-common.h>
 
-#endif	/* hp-timing.h */
+#endif /* hp-timing.h */

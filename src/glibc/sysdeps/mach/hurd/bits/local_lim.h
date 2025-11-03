@@ -24,23 +24,23 @@
 /* This one value is actually constrained by the `struct dirent'
    layout, in which the `d_namlen' member is only 8 bits wide.  */
 
-#define NAME_MAX	255
+#define NAME_MAX 255
 
 /* POSIX.1 requires that we define NGROUPS_MAX (though none of the others
    is required).  GNU allows any number of supplementary groups,
    dynamically allocated.  So we pick a number which seems vaguely
    suitable, and `sysconf' will return a number at least as large.  */
 
-#define NGROUPS_MAX	256
+#define NGROUPS_MAX 256
 
 /* The number of data keys per process.  */
-#define _POSIX_THREAD_KEYS_MAX	128
+#define _POSIX_THREAD_KEYS_MAX 128
 
 /* Controlling the iterations of destructors for thread-specific data.  */
-#define _POSIX_THREAD_DESTRUCTOR_ITERATIONS	4
+#define _POSIX_THREAD_DESTRUCTOR_ITERATIONS 4
 
 /* The number of threads per process.  */
-#define _POSIX_THREAD_THREADS_MAX	64
+#define _POSIX_THREAD_THREADS_MAX 64
 
 /* Maximum value the semaphore can have.  */
-#define SEM_VALUE_MAX   (2147483647)
+#define SEM_VALUE_MAX (2147483647)

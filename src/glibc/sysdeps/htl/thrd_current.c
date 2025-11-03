@@ -23,7 +23,7 @@
 #pragma weak __pthread_threads
 
 #ifndef SHARED
-#pragma weak _dl_pthread_threads
+#  pragma weak _dl_pthread_threads
 #endif
 
 thrd_t

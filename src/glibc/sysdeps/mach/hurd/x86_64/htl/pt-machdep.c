@@ -26,10 +26,8 @@
 #include <mach/thread_status.h>
 
 int
-__thread_set_pcsptp (thread_t thread,
-                     int set_ip, void *ip,
-                     int set_sp, void *sp,
-                     int set_tp, void *tp)
+__thread_set_pcsptp (thread_t thread, int set_ip, void *ip, int set_sp,
+		     void *sp, int set_tp, void *tp)
 {
   error_t err;
   struct i386_thread_state state;
@@ -39,7 +37,7 @@ __thread_set_pcsptp (thread_t thread,
   state_count = i386_THREAD_STATE_COUNT;
 
   err = __thread_get_state (thread, i386_REGS_SEGS_STATE,
-                            (thread_state_t) &state, &state_count);
+			    (thread_state_t) &state, &state_count);
   if (err)
     return err;
   assert (state_count == i386_THREAD_STATE_COUNT);
@@ -50,7 +48,7 @@ __thread_set_pcsptp (thread_t thread,
     state.rip = (uintptr_t) ip;
 
   err = __thread_set_state (thread, i386_REGS_SEGS_STATE,
-                            (thread_state_t) &state, i386_THREAD_STATE_COUNT);
+			    (thread_state_t) &state, i386_THREAD_STATE_COUNT);
   if (err)
     return err;
 
@@ -58,15 +56,15 @@ __thread_set_pcsptp (thread_t thread,
     {
       state_count = i386_FSGS_BASE_STATE_COUNT;
       err = __thread_get_state (thread, i386_FSGS_BASE_STATE,
-                                (thread_state_t) &fsgs_state, &state_count);
+				(thread_state_t) &fsgs_state, &state_count);
       if (err)
-        return err;
+	return err;
       assert (state_count == i386_FSGS_BASE_STATE_COUNT);
       fsgs_state.fs_base = (uintptr_t) tp;
       err = __thread_set_state (thread, i386_FSGS_BASE_STATE,
-                                (thread_state_t) &fsgs_state, state_count);
+				(thread_state_t) &fsgs_state, state_count);
       if (err)
-        return err;
+	return err;
     }
 
   return 0;

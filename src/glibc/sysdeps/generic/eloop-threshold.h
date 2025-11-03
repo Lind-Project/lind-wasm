@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ELOOP_THRESHOLD_H
-#define _ELOOP_THRESHOLD_H      1
+#  define _ELOOP_THRESHOLD_H 1
 
-#include <limits.h>
-#include <sys/param.h>
+#  include <limits.h>
+#  include <sys/param.h>
 
 /* POSIX specifies SYMLOOP_MAX as the "Maximum number of symbolic
    links that can be reliably traversed in the resolution of a
@@ -42,18 +42,18 @@
    resolve successfully.  It should be small enough that actual loops
    are detected without a huge number of iterations.  */
 
-#ifndef MIN_ELOOP_THRESHOLD
-# define MIN_ELOOP_THRESHOLD    40
-#endif
+#  ifndef MIN_ELOOP_THRESHOLD
+#    define MIN_ELOOP_THRESHOLD 40
+#  endif
 
 /* Return the maximum number of symlink traversals to permit
    before diagnosing ELOOP.  */
 static inline unsigned int __attribute__ ((const))
 __eloop_threshold (void)
 {
-#ifdef SYMLOOP_MAX
+#  ifdef SYMLOOP_MAX
   const int symloop_max = SYMLOOP_MAX;
-#else
+#  else
   /* The function is marked 'const' even though we use memory and
      call a function, because sysconf is required to return the
      same value in every call and so it must always be safe to
@@ -61,12 +61,11 @@ __eloop_threshold (void)
   static long int sysconf_symloop_max;
   if (sysconf_symloop_max == 0)
     sysconf_symloop_max = __sysconf (_SC_SYMLOOP_MAX);
-  const unsigned int symloop_max = (sysconf_symloop_max <= 0
-                                    ? _POSIX_SYMLOOP_MAX
-                                    : sysconf_symloop_max);
-#endif
+  const unsigned int symloop_max
+      = (sysconf_symloop_max <= 0 ? _POSIX_SYMLOOP_MAX : sysconf_symloop_max);
+#  endif
 
   return MAX (symloop_max, MIN_ELOOP_THRESHOLD);
 }
 
-#endif  /* eloop-threshold.h */
+#endif /* eloop-threshold.h */

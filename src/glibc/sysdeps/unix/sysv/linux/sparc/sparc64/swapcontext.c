@@ -34,5 +34,4 @@ __swapcontext (ucontext_t *oucp, const ucontext_t *ucp)
   return 0;
 }
 
-
 weak_alias (__swapcontext, swapcontext)

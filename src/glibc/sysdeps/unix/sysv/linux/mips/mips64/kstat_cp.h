@@ -22,9 +22,8 @@
 static inline long int
 __cp_kstat_stat (const struct kernel_stat *kst, struct stat *st)
 {
-  if (! in_ino_t_range (kst->st_ino)
-      || ! in_off_t_range (kst->st_size)
-      || ! in_blkcnt_t_range (kst->st_blocks))
+  if (!in_ino_t_range (kst->st_ino) || !in_off_t_range (kst->st_size)
+      || !in_blkcnt_t_range (kst->st_blocks))
     return -EOVERFLOW;
 
   st->st_dev = kst->st_dev;

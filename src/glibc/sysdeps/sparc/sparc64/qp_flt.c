@@ -20,27 +20,27 @@
 #include "soft-fp.h"
 #include "quad.h"
 
-int _Qp_flt(const long double *a, const long double *b)
+int
+_Qp_flt (const long double *a, const long double *b)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A); FP_DECL_Q(B);
+  FP_DECL_Q (A);
+  FP_DECL_Q (B);
   int r;
 
   FP_INIT_ROUNDMODE;
-  FP_UNPACK_RAW_QP(A, a);
-  FP_UNPACK_RAW_QP(B, b);
-  FP_CMP_Q(r, B, A, 3, 2);
+  FP_UNPACK_RAW_QP (A, a);
+  FP_UNPACK_RAW_QP (B, b);
+  FP_CMP_Q (r, B, A, 3, 2);
 
-  QP_HANDLE_EXCEPTIONS(
-	__asm (
-"	ldd [%0], %%f52\n"
-"	ldd [%0+8], %%f54\n"
-"	ldd [%1], %%f56\n"
-"	ldd [%1+8], %%f58\n"
-"	fcmpeq %%fcc3, %%f52, %%f56\n"
-"	" : : "r" (a), "r" (b) : QP_CLOBBER_CC);
-	_FPU_GETCW(_fcw);
-	r = ((_fcw >> 36) & 3));
+  QP_HANDLE_EXCEPTIONS (__asm ("	ldd [%0], %%f52\n"
+			       "	ldd [%0+8], %%f54\n"
+			       "	ldd [%1], %%f56\n"
+			       "	ldd [%1+8], %%f58\n"
+			       "	fcmpeq %%fcc3, %%f52, %%f56\n"
+			       "	" : : "r"(a),
+			       "r"(b) : QP_CLOBBER_CC);
+			_FPU_GETCW (_fcw); r = ((_fcw >> 36) & 3));
 
   return (r == 1);
 }

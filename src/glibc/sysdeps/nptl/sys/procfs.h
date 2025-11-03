@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-#define _SYS_PROCFS_H	1
+#  define _SYS_PROCFS_H 1
 
-#include <sys/types.h>
+#  include <sys/types.h>
 
 /* The rest of this file provides the types for emulation of the
    Solaris <proc_service.h> interfaces that should be implemented by
@@ -35,5 +35,4 @@ typedef struct prfpregset prfpregset_t;
 /* Type used for lightweight-process (i.e. thread) IDs.  */
 typedef __pid_t lwpid_t;
 
-
-#endif  /* sys/procfs.h */
+#endif /* sys/procfs.h */

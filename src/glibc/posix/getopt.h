@@ -19,20 +19,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _GETOPT_H
-#define _GETOPT_H 1
+#  define _GETOPT_H 1
 
-#include <features.h>
+#  include <features.h>
 
 /* The type of the 'argv' argument to getopt_long and getopt_long_only
    is properly 'char **', since both functions may write to the array
    (in order to move all the options to the beginning).  However, for
    compatibility with old versions of LSB, glibc has to use 'char *const *'
    instead.  */
-#ifndef __getopt_argv_const
-# define __getopt_argv_const const
-#endif
+#  ifndef __getopt_argv_const
+#    define __getopt_argv_const const
+#  endif
 
-#include <bits/getopt_core.h>
-#include <bits/getopt_ext.h>
+#  include <bits/getopt_core.h>
+#  include <bits/getopt_ext.h>
 
 #endif /* getopt.h */

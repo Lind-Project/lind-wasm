@@ -46,19 +46,18 @@ __if_nametoindex (const char *ifname)
       int saved_errno = errno;
       __close (fd);
       if (saved_errno == EINVAL || saved_errno == ENOTTY)
-        __hurd_fail (ENOSYS);
+	__hurd_fail (ENOSYS);
       return 0;
     }
   __close (fd);
   return ifr.ifr_ifindex;
 }
 libc_hidden_def (__if_nametoindex)
-weak_alias (__if_nametoindex, if_nametoindex)
-libc_hidden_weak (if_nametoindex)
+    weak_alias (__if_nametoindex, if_nametoindex)
+	libc_hidden_weak (if_nametoindex)
 
-/* Free the structure IFN returned by if_nameindex.  */
-void
-__if_freenameindex (struct if_nameindex *ifn)
+    /* Free the structure IFN returned by if_nameindex.  */
+    void __if_freenameindex (struct if_nameindex *ifn)
 {
   struct if_nameindex *ptr = ifn;
   while (ptr->if_name || ptr->if_index)
@@ -69,14 +68,13 @@ __if_freenameindex (struct if_nameindex *ifn)
   free (ifn);
 }
 libc_hidden_def (__if_freenameindex)
-weak_alias (__if_freenameindex, if_freenameindex)
-libc_hidden_weak (if_freenameindex)
+    weak_alias (__if_freenameindex, if_freenameindex)
+	libc_hidden_weak (if_freenameindex)
 
-/* Return an array of if_nameindex structures, one for each network
-   interface present, plus one indicating the end of the array.  On
-   error, return NULL.  */
-struct if_nameindex *
-__if_nameindex (void)
+    /* Return an array of if_nameindex structures, one for each network
+       interface present, plus one indicating the end of the array.  On
+       error, return NULL.  */
+    struct if_nameindex *__if_nameindex (void)
 {
   error_t err = 0;
   char data[2048];
@@ -125,30 +123,29 @@ __if_nameindex (void)
     {
       struct ifreq *ifr = &ifc.ifc_req[i];
       idx[i].if_name = __strdup (ifr->ifr_name);
-      if (idx[i].if_name == NULL
-          || __ioctl (fd, SIOCGIFINDEX, ifr) < 0)
-        {
-          unsigned int j;
-          err = errno;
+      if (idx[i].if_name == NULL || __ioctl (fd, SIOCGIFINDEX, ifr) < 0)
+	{
+	  unsigned int j;
+	  err = errno;
 
-          for (j =  0; j < i; ++j)
-            free (idx[j].if_name);
-          free (idx);
+	  for (j = 0; j < i; ++j)
+	    free (idx[j].if_name);
+	  free (idx);
 	  idx = NULL;
 
-          if (err == EINVAL)
-            err = ENOSYS;
-          else if (err == ENOMEM)
-            err = ENOBUFS;
-          goto out;
-        }
+	  if (err == EINVAL)
+	    err = ENOSYS;
+	  else if (err == ENOMEM)
+	    err = ENOBUFS;
+	  goto out;
+	}
       idx[i].if_index = ifr->ifr_ifindex;
     }
 
   idx[i].if_index = 0;
   idx[i].if_name = NULL;
 
- out:
+out:
   __close (fd);
   if (data != ifc.ifc_buf)
     __vm_deallocate (__mach_task_self (), (vm_address_t) ifc.ifc_buf,
@@ -156,14 +153,12 @@ __if_nameindex (void)
   __set_errno (err);
   return idx;
 }
-weak_alias (__if_nameindex, if_nameindex)
-libc_hidden_weak (if_nameindex)
+weak_alias (__if_nameindex, if_nameindex) libc_hidden_weak (if_nameindex)
 
-/* Store the name of the interface corresponding to index IFINDEX in
-   IFNAME (which has space for at least IFNAMSIZ characters).  Return
-   IFNAME, or NULL on error.  */
-char *
-__if_indextoname (unsigned int ifindex, char ifname[IF_NAMESIZE])
+    /* Store the name of the interface corresponding to index IFINDEX in
+       IFNAME (which has space for at least IFNAMSIZ characters).  Return
+       IFNAME, or NULL on error.  */
+    char *__if_indextoname (unsigned int ifindex, char ifname[IF_NAMESIZE])
 {
   struct ifreq ifr;
   int fd = __socket (AF_INET, SOCK_DGRAM, 0);
@@ -177,7 +172,7 @@ __if_indextoname (unsigned int ifindex, char ifname[IF_NAMESIZE])
       int saved_errno = errno;
       __close (fd);
       if (saved_errno == EINVAL || saved_errno == ENOTTY)
-        __hurd_fail (ENOSYS);
+	__hurd_fail (ENOSYS);
       else if (saved_errno == ENODEV)
 	__hurd_fail (ENXIO);
       return NULL;
@@ -185,8 +180,7 @@ __if_indextoname (unsigned int ifindex, char ifname[IF_NAMESIZE])
   __close (fd);
   return strncpy (ifname, ifr.ifr_name, IFNAMSIZ);
 }
-weak_alias (__if_indextoname, if_indextoname)
-libc_hidden_weak (if_indextoname)
+weak_alias (__if_indextoname, if_indextoname) libc_hidden_weak (if_indextoname)
 
 #if 0
 void

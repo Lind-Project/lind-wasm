@@ -20,10 +20,10 @@
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 
-# define PWRITEV pwritev
-# define PWRITE __pwrite
-# define OFF_T off_t
-# include <sysdeps/posix/pwritev_common.c>
+#  define PWRITEV pwritev
+#  define PWRITE __pwrite
+#  define OFF_T off_t
+#  include <sysdeps/posix/pwritev_common.c>
 
 libc_hidden_def (pwritev)
 

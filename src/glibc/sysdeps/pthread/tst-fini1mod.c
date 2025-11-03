@@ -22,7 +22,6 @@
 
 #include <support/xunistd.h>
 
-
 static void *
 tf (void *arg)
 {
@@ -42,8 +41,7 @@ tf (void *arg)
 
 static pthread_t th;
 
-static void
-__attribute ((destructor))
+static void __attribute ((destructor))
 dest (void)
 {
   if (pthread_cancel (th) != 0)

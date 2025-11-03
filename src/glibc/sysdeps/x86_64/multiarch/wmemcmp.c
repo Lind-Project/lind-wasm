@@ -18,13 +18,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define wmemcmp __redirect_wmemcmp
-# include <wchar.h>
-# undef wmemcmp
+#if IS_IN(libc)
+#  define wmemcmp __redirect_wmemcmp
+#  include <wchar.h>
+#  undef wmemcmp
 
-# define SYMBOL_NAME wmemcmp
-# include "ifunc-memcmp.h"
+#  define SYMBOL_NAME wmemcmp
+#  include "ifunc-memcmp.h"
 
 libc_ifunc_redirected (__redirect_wmemcmp, __wmemcmp, IFUNC_SELECTOR ());
 weak_alias (__wmemcmp, wmemcmp)

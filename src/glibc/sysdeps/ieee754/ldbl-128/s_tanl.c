@@ -48,33 +48,38 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-_Float128 __tanl(_Float128 x)
+_Float128
+__tanl (_Float128 x)
 {
-	_Float128 y[2],z=0;
-	int64_t n, ix;
+  _Float128 y[2], z = 0;
+  int64_t n, ix;
 
-    /* High word of x. */
-	GET_LDOUBLE_MSW64(ix,x);
+  /* High word of x. */
+  GET_LDOUBLE_MSW64 (ix, x);
 
-    /* |x| ~< pi/4 */
-	ix &= 0x7fffffffffffffffLL;
-	if(ix <= 0x3ffe921fb54442d1LL) return __kernel_tanl(x,z,1);
+  /* |x| ~< pi/4 */
+  ix &= 0x7fffffffffffffffLL;
+  if (ix <= 0x3ffe921fb54442d1LL)
+    return __kernel_tanl (x, z, 1);
 
-    /* tanl(Inf or NaN) is NaN */
-	else if (ix>=0x7fff000000000000LL) {
-	    if (ix == 0x7fff000000000000LL) {
-		GET_LDOUBLE_LSW64(n,x);
-		if (n == 0)
-		    __set_errno (EDOM);
-	    }
-	    return x-x;		/* NaN */
+  /* tanl(Inf or NaN) is NaN */
+  else if (ix >= 0x7fff000000000000LL)
+    {
+      if (ix == 0x7fff000000000000LL)
+	{
+	  GET_LDOUBLE_LSW64 (n, x);
+	  if (n == 0)
+	    __set_errno (EDOM);
 	}
+      return x - x; /* NaN */
+    }
 
-    /* argument reduction needed */
-	else {
-	    n = __ieee754_rem_pio2l(x,y);
-	    return __kernel_tanl(y[0],y[1],1-((n&1)<<1)); /*   1 -- n even
-							-1 -- n odd */
-	}
+  /* argument reduction needed */
+  else
+    {
+      n = __ieee754_rem_pio2l (x, y);
+      return __kernel_tanl (y[0], y[1], 1 - ((n & 1) << 1)); /*   1 -- n even
+							   -1 -- n odd */
+    }
 }
 libm_alias_ldouble (__tan, tan)

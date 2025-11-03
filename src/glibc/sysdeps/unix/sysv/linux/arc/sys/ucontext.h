@@ -19,12 +19,12 @@
 /* System V/ARC ABI compliant context switching support.  */
 
 #ifndef _SYS_UCONTEXT_H
-#define _SYS_UCONTEXT_H	1
+#  define _SYS_UCONTEXT_H 1
 
-#include <features.h>
+#  include <features.h>
 
-#include <bits/types/sigset_t.h>
-#include <bits/types/stack_t.h>
+#  include <bits/types/sigset_t.h>
+#  include <bits/types/stack_t.h>
 
 typedef struct
 {

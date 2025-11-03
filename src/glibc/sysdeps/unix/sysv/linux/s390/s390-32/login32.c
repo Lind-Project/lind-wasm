@@ -16,12 +16,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef SHARED
-# include <sys/types.h>
-# include <utmp.h>
-# include <libc-symbols.h>
+#  include <sys/types.h>
+#  include <utmp.h>
+#  include <libc-symbols.h>
 
-# include "utmp32.h"
-# include "utmp-convert.h"
+#  include "utmp32.h"
+#  include "utmp-convert.h"
 
 /* Write the given entry into utmp and wtmp.  */
 void

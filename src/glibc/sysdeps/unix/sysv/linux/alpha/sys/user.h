@@ -16,37 +16,37 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_USER_H
-#define _SYS_USER_H	1
+#  define _SYS_USER_H 1
 
 /* The whole purpose of this file is for gdb/strace and gdb/strace
    only. Don't read too much into it. Don't use it for anything other
    than gdb/strace unless you know what you are doing. */
 
-#include <asm/reg.h>
-#include <stddef.h>
+#  include <asm/reg.h>
+#  include <stddef.h>
 
 struct user
 {
-  unsigned long	int regs[EF_SIZE / 8 + 32];	/* integer and fp regs */
-  size_t u_tsize;				/* text size (pages) */
-  size_t u_dsize;				/* data size (pages) */
-  size_t u_ssize;				/* stack size (pages) */
-  unsigned long	int start_code;			/* text starting address */
-  unsigned long	int start_data;			/* data starting address */
-  unsigned long	int start_stack;		/* stack starting address */
-  long int signal;				/* signal causing core dump */
-  struct regs *u_ar0;				/* help gdb find registers */
-  unsigned long	int magic;			/* identifies a core file */
-  char u_comm[32];				/* user command name */
+  unsigned long int regs[EF_SIZE / 8 + 32]; /* integer and fp regs */
+  size_t u_tsize;			    /* text size (pages) */
+  size_t u_dsize;			    /* data size (pages) */
+  size_t u_ssize;			    /* stack size (pages) */
+  unsigned long int start_code;		    /* text starting address */
+  unsigned long int start_data;		    /* data starting address */
+  unsigned long int start_stack;	    /* stack starting address */
+  long int signal;			    /* signal causing core dump */
+  struct regs *u_ar0;			    /* help gdb find registers */
+  unsigned long int magic;		    /* identifies a core file */
+  char u_comm[32];			    /* user command name */
 };
 
-#define PAGE_SHIFT		13
-#define PAGE_SIZE		(1UL << PAGE_SHIFT)
-#define PAGE_MASK		(~(PAGE_SIZE-1))
-#define NBPG			PAGE_SIZE
-#define UPAGES			1
-#define HOST_TEXT_START_ADDR	(u.start_code)
-#define HOST_DATA_START_ADDR	(u.start_data)
-#define HOST_STACK_END_ADDR	(u.start_stack + u.u_ssize * NBPG)
+#  define PAGE_SHIFT 13
+#  define PAGE_SIZE (1UL << PAGE_SHIFT)
+#  define PAGE_MASK (~(PAGE_SIZE - 1))
+#  define NBPG PAGE_SIZE
+#  define UPAGES 1
+#  define HOST_TEXT_START_ADDR (u.start_code)
+#  define HOST_DATA_START_ADDR (u.start_data)
+#  define HOST_STACK_END_ADDR (u.start_stack + u.u_ssize * NBPG)
 
-#endif	/* sys/user.h */
+#endif /* sys/user.h */

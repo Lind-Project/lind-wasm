@@ -16,51 +16,51 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_STATFS_H
-# error "Never include <bits/statfs.h> directly; use <sys/statfs.h> instead."
+#  error "Never include <bits/statfs.h> directly; use <sys/statfs.h> instead."
 #endif
 
-#include <bits/types.h>  /* for __fsid_t and __fsblkcnt_t.  */
+#include <bits/types.h> /* for __fsid_t and __fsblkcnt_t.  */
 
 struct statfs
-  {
-    unsigned int f_type;
-    unsigned int f_bsize;
+{
+  unsigned int f_type;
+  unsigned int f_bsize;
 #ifndef __USE_FILE_OFFSET64
-    __fsblkcnt_t f_blocks;
-    __fsblkcnt_t f_bfree;
-    __fsblkcnt_t f_bavail;
-    __fsfilcnt_t f_files;
-    __fsfilcnt_t f_ffree;
+  __fsblkcnt_t f_blocks;
+  __fsblkcnt_t f_bfree;
+  __fsblkcnt_t f_bavail;
+  __fsfilcnt_t f_files;
+  __fsfilcnt_t f_ffree;
 #else
-    __fsblkcnt64_t f_blocks;
-    __fsblkcnt64_t f_bfree;
-    __fsblkcnt64_t f_bavail;
-    __fsfilcnt64_t f_files;
-    __fsfilcnt64_t f_ffree;
+  __fsblkcnt64_t f_blocks;
+  __fsblkcnt64_t f_bfree;
+  __fsblkcnt64_t f_bavail;
+  __fsfilcnt64_t f_files;
+  __fsfilcnt64_t f_ffree;
 #endif
-    __fsid_t f_fsid;
-    unsigned int f_namelen;
-    unsigned int f_frsize;
-    unsigned int f_flags;
-    unsigned int f_spare[4];
-  };
+  __fsid_t f_fsid;
+  unsigned int f_namelen;
+  unsigned int f_frsize;
+  unsigned int f_flags;
+  unsigned int f_spare[4];
+};
 
 #ifdef __USE_LARGEFILE64
 struct statfs64
-  {
-    unsigned int f_type;
-    unsigned int f_bsize;
-    __fsblkcnt64_t f_blocks;
-    __fsblkcnt64_t f_bfree;
-    __fsblkcnt64_t f_bavail;
-    __fsfilcnt64_t f_files;
-    __fsfilcnt64_t f_ffree;
-    __fsid_t f_fsid;
-    unsigned int f_namelen;
-    unsigned int f_frsize;
-    unsigned int f_flags;
-    unsigned int f_spare[4];
-  };
+{
+  unsigned int f_type;
+  unsigned int f_bsize;
+  __fsblkcnt64_t f_blocks;
+  __fsblkcnt64_t f_bfree;
+  __fsblkcnt64_t f_bavail;
+  __fsfilcnt64_t f_files;
+  __fsfilcnt64_t f_ffree;
+  __fsid_t f_fsid;
+  unsigned int f_namelen;
+  unsigned int f_frsize;
+  unsigned int f_flags;
+  unsigned int f_spare[4];
+};
 #endif
 
 /* Tell code we have this member.  */

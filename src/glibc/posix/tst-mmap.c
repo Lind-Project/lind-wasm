@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
-
 static int
 do_test (void)
 {
@@ -49,7 +48,8 @@ do_test (void)
     }
   else if (errno != EINVAL && errno != ENOSYS)
     {
-      puts ("wrong error value for mapping at offset with mod pagesize != 0: %m (should be EINVAL)");
+      puts ("wrong error value for mapping at offset with mod pagesize != 0: "
+	    "%m (should be EINVAL)");
       result = 1;
     }
 
@@ -62,7 +62,8 @@ do_test (void)
     }
   else if (errno != EINVAL && errno != ENOSYS)
     {
-      puts ("wrong error value for mapping at offset with mod pagesize != 0: %m (should be EINVAL)");
+      puts ("wrong error value for mapping at offset with mod pagesize != 0: "
+	    "%m (should be EINVAL)");
       result = 1;
     }
 
@@ -75,7 +76,8 @@ do_test (void)
     }
   else if (errno != EINVAL && errno != ENOSYS)
     {
-      puts ("wrong error value for mapping at offset with mod pagesize != 0: %m (should be EINVAL)");
+      puts ("wrong error value for mapping at offset with mod pagesize != 0: "
+	    "%m (should be EINVAL)");
       result = 1;
     }
 
@@ -88,7 +90,8 @@ do_test (void)
     }
   else if (errno != EINVAL && errno != ENOSYS)
     {
-      puts ("wrong error value for mapping at offset with mod pagesize != 0: %m (should be EINVAL)");
+      puts ("wrong error value for mapping at offset with mod pagesize != 0: "
+	    "%m (should be EINVAL)");
       result = 1;
     }
 
@@ -103,9 +106,10 @@ do_test (void)
 	  puts ("mapping at address with mod pagesize != 0 succeeded!");
 	  result = 1;
 	}
-      else  if (errno != EINVAL && errno != ENOSYS)
+      else if (errno != EINVAL && errno != ENOSYS)
 	{
-	  puts ("wrong error value for mapping at address with mod pagesize != 0: %m (should be EINVAL)");
+	  puts ("wrong error value for mapping at address with mod pagesize "
+		"!= 0: %m (should be EINVAL)");
 	  result = 1;
 	}
 
@@ -116,9 +120,10 @@ do_test (void)
 	  puts ("mapping at address with mod pagesize != 0 succeeded!");
 	  result = 1;
 	}
-      else  if (errno != EINVAL && errno != ENOSYS)
+      else if (errno != EINVAL && errno != ENOSYS)
 	{
-	  puts ("wrong error value for mapping at address with mod pagesize != 0: %m (should be EINVAL)");
+	  puts ("wrong error value for mapping at address with mod pagesize "
+		"!= 0: %m (should be EINVAL)");
 	  result = 1;
 	}
 
@@ -129,9 +134,10 @@ do_test (void)
 	  puts ("mapping at address with mod pagesize != 0 succeeded!");
 	  result = 1;
 	}
-      else  if (errno != EINVAL && errno != ENOSYS)
+      else if (errno != EINVAL && errno != ENOSYS)
 	{
-	  puts ("wrong error value for mapping at address with mod pagesize != 0: %m (should be EINVAL)");
+	  puts ("wrong error value for mapping at address with mod pagesize "
+		"!= 0: %m (should be EINVAL)");
 	  result = 1;
 	}
 
@@ -142,9 +148,10 @@ do_test (void)
 	  puts ("mapping at address with mod pagesize != 0 succeeded!");
 	  result = 1;
 	}
-      else  if (errno != EINVAL && errno != ENOSYS)
+      else if (errno != EINVAL && errno != ENOSYS)
 	{
-	  puts ("wrong error value for mapping at address with mod pagesize != 0: %m (should be EINVAL)");
+	  puts ("wrong error value for mapping at address with mod pagesize "
+		"!= 0: %m (should be EINVAL)");
 	  result = 1;
 	}
 

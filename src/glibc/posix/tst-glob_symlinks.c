@@ -45,8 +45,7 @@ create_link (const char *base, const char *fname, char *linkname,
   int ntries = 0;
   while (1)
     {
-      snprintf (linkname, linknamesize, "%s/%s%02d", test_dir, base,
-		ntries);
+      snprintf (linkname, linknamesize, "%s/%s%02d", test_dir, base, ntries);
       if (symlink (fname, linkname) == 0)
 	break;
       if (errno != EEXIST)
@@ -58,7 +57,7 @@ create_link (const char *base, const char *fname, char *linkname,
 }
 
 #ifndef PATH_MAX
-# define PATH_MAX 1024
+#  define PATH_MAX 1024
 #endif
 static char valid_link[PATH_MAX];
 static char dangling_link[PATH_MAX];
@@ -116,7 +115,7 @@ do_test (void)
   globfree (&gl);
 
   snprintf (buf, sizeof buf, "%s", dangling_link);
-  buf[strlen(buf) - 1] = '?';
+  buf[strlen (buf) - 1] = '?';
   TEST_VERIFY_EXIT (glob (buf, 0, NULL, &gl) == 0);
   TEST_VERIFY_EXIT (gl.gl_pathc == 1);
   TEST_VERIFY_EXIT (strcmp (gl.gl_pathv[0], dangling_link) == 0);

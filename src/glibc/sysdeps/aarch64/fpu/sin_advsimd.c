@@ -38,8 +38,8 @@ static const struct data
 };
 
 #if WANT_SIMD_EXCEPT
-# define TinyBound v_u64 (0x3000000000000000) /* asuint64 (0x1p-255).  */
-# define Thresh v_u64 (0x1160000000000000)    /* RangeVal - TinyBound.  */
+#  define TinyBound v_u64 (0x3000000000000000) /* asuint64 (0x1p-255).  */
+#  define Thresh v_u64 (0x1160000000000000)    /* RangeVal - TinyBound.  */
 #endif
 
 #define C(i) d->poly[i]
@@ -60,7 +60,8 @@ special_case (float64x2_t x, float64x2_t y, uint64x2_t odd, uint64x2_t cmp)
    is 3.22 ULP:
    _ZGVnN2v_sin (0x1.5702447b6f17bp+22) got 0x1.ffdcd125c84fbp-3
 				       want 0x1.ffdcd125c84f8p-3.  */
-float64x2_t VPCS_ATTR V_NAME_D1 (sin) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (sin) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
   float64x2_t n, r, r2, r3, r4, y, t1, t2, t3;

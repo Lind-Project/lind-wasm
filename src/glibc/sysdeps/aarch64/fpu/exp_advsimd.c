@@ -50,9 +50,9 @@ const static volatile struct
 
 #if WANT_SIMD_EXCEPT
 
-# define TinyBound v_u64 (0x2000000000000000) /* asuint64 (0x1p-511).  */
-# define BigBound v_u64 (0x4080000000000000) /* asuint64 (0x1p9).  */
-# define SpecialBound v_u64 (0x2080000000000000) /* BigBound - TinyBound.  */
+#  define TinyBound v_u64 (0x2000000000000000)	  /* asuint64 (0x1p-511).  */
+#  define BigBound v_u64 (0x4080000000000000)	  /* asuint64 (0x1p9).  */
+#  define SpecialBound v_u64 (0x2080000000000000) /* BigBound - TinyBound. */
 
 static float64x2_t VPCS_ATTR NOINLINE
 special_case (float64x2_t x, float64x2_t y, uint64x2_t cmp)
@@ -64,10 +64,10 @@ special_case (float64x2_t x, float64x2_t y, uint64x2_t cmp)
 
 #else
 
-# define SpecialOffset v_u64 (0x6000000000000000) /* 0x1p513.  */
+#  define SpecialOffset v_u64 (0x6000000000000000) /* 0x1p513.  */
 /* SpecialBias1 + SpecialBias1 = asuint(1.0).  */
-# define SpecialBias1 v_u64 (0x7000000000000000) /* 0x1p769.  */
-# define SpecialBias2 v_u64 (0x3010000000000000) /* 0x1p-254.  */
+#  define SpecialBias1 v_u64 (0x7000000000000000)  /* 0x1p769.  */
+#  define SpecialBias2 v_u64 (0x3010000000000000)  /* 0x1p-254.  */
 
 static inline float64x2_t VPCS_ATTR
 special_case (float64x2_t s, float64x2_t y, float64x2_t n)
@@ -85,7 +85,8 @@ special_case (float64x2_t s, float64x2_t y, float64x2_t n)
 
 #endif
 
-float64x2_t VPCS_ATTR V_NAME_D1 (exp) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (exp) (float64x2_t x)
 {
   float64x2_t n, r, r2, s, y, z;
   uint64x2_t cmp, u, e;
@@ -122,7 +123,7 @@ float64x2_t VPCS_ATTR V_NAME_D1 (exp) (float64x2_t x)
   y = vfmaq_f64 (r, y, r2);
 
   /* s = 2^(n/N).  */
-  u = (uint64x2_t){ Tab[u[0] & IndexMask], Tab[u[1] & IndexMask] };
+  u = (uint64x2_t) { Tab[u[0] & IndexMask], Tab[u[1] & IndexMask] };
   s = vreinterpretq_f64_u64 (vaddq_u64 (u, e));
 
   if (__glibc_unlikely (v_any_u64 (cmp)))

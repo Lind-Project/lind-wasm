@@ -28,5 +28,4 @@ __profil_counter (int signo, siginfo_t *info, void *ctx)
   /* This is a hack to prevent the compiler from implementing the
      above function call as a sibcall.  The sibcall would overwrite
      the signal context.  */
-
 }

@@ -32,10 +32,9 @@ __rint (double x)
   return __builtin_rint (x);
 #else
   /* Use generic implementation.  */
-  static const double
-    TWO52[2] = {
-		4.50359962737049600000e+15, /* 0x43300000, 0x00000000 */
-		-4.50359962737049600000e+15, /* 0xC3300000, 0x00000000 */
+  static const double TWO52[2] = {
+    4.50359962737049600000e+15,	 /* 0x43300000, 0x00000000 */
+    -4.50359962737049600000e+15, /* 0xC3300000, 0x00000000 */
   };
   int64_t i0, sx;
   int32_t j0;
@@ -47,19 +46,19 @@ __rint (double x)
       if (j0 < 0)
 	{
 	  double w = TWO52[sx] + x;
-	  double t =  w - TWO52[sx];
+	  double t = w - TWO52[sx];
 	  EXTRACT_WORDS64 (i0, t);
-	  INSERT_WORDS64 (t, (i0 & UINT64_C (0x7fffffffffffffff))
-			  | (sx << 63));
+	  INSERT_WORDS64 (t,
+			  (i0 & UINT64_C (0x7fffffffffffffff)) | (sx << 63));
 	  return t;
 	}
     }
   else
     {
       if (j0 == 0x400)
-	return x + x;			/* inf or NaN  */
+	return x + x; /* inf or NaN  */
       else
-	return x;			/* x is integral  */
+	return x; /* x is integral  */
     }
   double w = TWO52[sx] + x;
   return w - TWO52[sx];

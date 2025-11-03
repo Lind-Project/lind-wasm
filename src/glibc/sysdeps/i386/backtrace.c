@@ -37,32 +37,30 @@ backtrace_helper (struct _Unwind_Context *ctx, void *a)
      Skip it.  */
   if (arg->cnt != -1)
     arg->array[arg->cnt]
-      = (void *) UNWIND_LINK_PTR (arg->unwind_link, _Unwind_GetIP) (ctx);
+	= (void *) UNWIND_LINK_PTR (arg->unwind_link, _Unwind_GetIP) (ctx);
   if (++arg->cnt == arg->size)
     return _URC_END_OF_STACK;
 
   /* %ebp is DWARF2 register 5 on IA-32.  */
   arg->lastebp
-    = (void *) UNWIND_LINK_PTR (arg->unwind_link, _Unwind_GetGR) (ctx, 5);
+      = (void *) UNWIND_LINK_PTR (arg->unwind_link, _Unwind_GetGR) (ctx, 5);
   arg->lastesp
-    = (void *) UNWIND_LINK_PTR (arg->unwind_link, _Unwind_GetCFA) (ctx);
+      = (void *) UNWIND_LINK_PTR (arg->unwind_link, _Unwind_GetCFA) (ctx);
   return _URC_NO_REASON;
 }
-
 
 /* This is a global variable set at program start time.  It marks the
    highest used stack address.  */
 extern void *__libc_stack_end;
 
-
 /* This is the stack layout we see with every stack frame
    if not compiled without frame pointer.
 
-            +-----------------+        +-----------------+
+	    +-----------------+        +-----------------+
     %ebp -> | %ebp last frame--------> | %ebp last frame--->...
-            |                 |        |                 |
-            | return address  |        | return address  |
-            +-----------------+        +-----------------+
+	    |                 |        |                 |
+	    | return address  |        | return address  |
+	    +-----------------+        +-----------------+
 
    First try as far to get as far as possible using
    _Unwind_Backtrace which handles -fomit-frame-pointer
@@ -75,23 +73,21 @@ struct layout
   void *ret;
 };
 
-
 int
 __backtrace (void **array, int size)
 {
-  struct trace_arg arg =
-    {
-     .array = array,
-     .unwind_link = __libc_unwind_link_get (),
-     .size = size,
-     .cnt = -1,
-    };
+  struct trace_arg arg = {
+    .array = array,
+    .unwind_link = __libc_unwind_link_get (),
+    .size = size,
+    .cnt = -1,
+  };
 
   if (size <= 0 || arg.unwind_link == NULL)
     return 0;
 
   UNWIND_LINK_PTR (arg.unwind_link, _Unwind_Backtrace)
-    (backtrace_helper, &arg);
+  (backtrace_helper, &arg);
 
   if (arg.cnt > 1 && arg.array[arg.cnt - 1] == NULL)
     --arg.cnt;
@@ -112,5 +108,4 @@ __backtrace (void **array, int size)
     }
   return arg.cnt != -1 ? arg.cnt : 0;
 }
-weak_alias (__backtrace, backtrace)
-libc_hidden_def (__backtrace)
+weak_alias (__backtrace, backtrace) libc_hidden_def (__backtrace)

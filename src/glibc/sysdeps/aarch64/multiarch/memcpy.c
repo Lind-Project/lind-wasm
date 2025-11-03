@@ -18,13 +18,13 @@
 
 /* Define multiple versions only for the definition in libc.  */
 
-#if IS_IN (libc)
+#if IS_IN(libc)
 /* Redefine memcpy so that the compiler won't complain about the type
    mismatch with the IFUNC selector in strong_alias, below.  */
-# undef memcpy
-# define memcpy __redirect_memcpy
-# include <string.h>
-# include <init-arch.h>
+#  undef memcpy
+#  define memcpy __redirect_memcpy
+#  include <string.h>
+#  include <init-arch.h>
 
 extern __typeof (__redirect_memcpy) __libc_memcpy;
 
@@ -61,6 +61,6 @@ select_memcpy_ifunc (void)
 
 libc_ifunc (__libc_memcpy, select_memcpy_ifunc ());
 
-# undef memcpy
+#  undef memcpy
 strong_alias (__libc_memcpy, memcpy);
 #endif

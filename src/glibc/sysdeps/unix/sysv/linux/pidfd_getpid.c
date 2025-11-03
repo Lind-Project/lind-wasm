@@ -27,7 +27,7 @@
 
 #define FDINFO_TO_FILENAME_PREFIX "/proc/self/fdinfo/"
 
-#define FDINFO_FILENAME_LEN \
+#define FDINFO_FILENAME_LEN                                                   \
   (sizeof (FDINFO_TO_FILENAME_PREFIX) + INT_STRLEN_BOUND (int))
 
 struct parse_fdinfo_t
@@ -41,14 +41,17 @@ struct parse_fdinfo_t
 static int
 parse_fdinfo (const char *l, void *arg)
 {
-  enum { fieldlen = sizeof ("Pid:") - 1 };
+  enum
+  {
+    fieldlen = sizeof ("Pid:") - 1
+  };
   if (strncmp (l, "Pid:", fieldlen) != 0)
     return 0;
 
   l += fieldlen;
 
   /* Skip leading spaces.  */
-  while (*l == ' ' || (unsigned int) (*l) -'\t' < 5)
+  while (*l == ' ' || (unsigned int) (*l) - '\t' < 5)
     l++;
 
   bool neg = false;
@@ -70,12 +73,11 @@ parse_fdinfo (const char *l, void *arg)
     {
       /* Check if '*l' is a digit.  */
       if ('0' > *l || *l > '9')
-        return -1;
+	return -1;
 
       /* Ignore invalid large values.  */
-      if (INT_MULTIPLY_WRAPV (10, n, &n)
-          || INT_ADD_WRAPV (n, *l++ - '0', &n))
-        return -1;
+      if (INT_MULTIPLY_WRAPV (10, n, &n) || INT_ADD_WRAPV (n, *l++ - '0', &n))
+	return -1;
     }
 
   /* -1 indicates that the process is terminated.  */

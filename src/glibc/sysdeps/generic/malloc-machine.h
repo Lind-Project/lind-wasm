@@ -23,19 +23,19 @@
 #include <atomic.h>
 
 #ifndef atomic_full_barrier
-# define atomic_full_barrier()
+#  define atomic_full_barrier()
 #endif
 
 #ifndef atomic_read_barrier
-# define atomic_read_barrier() atomic_full_barrier ()
+#  define atomic_read_barrier() atomic_full_barrier ()
 #endif
 
 #ifndef atomic_write_barrier
-# define atomic_write_barrier() atomic_full_barrier ()
+#  define atomic_write_barrier() atomic_full_barrier ()
 #endif
 
 #ifndef DEFAULT_TOP_PAD
-# define DEFAULT_TOP_PAD 131072
+#  define DEFAULT_TOP_PAD 131072
 #endif
 
 #endif /* !defined(_GENERIC_MALLOC_MACHINE_H) */

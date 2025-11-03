@@ -39,8 +39,7 @@ FUNC (long double *x, long double payload)
   /* Test if argument is (a) negative or too large; (b) too small,
      except for 0 when allowed; (c) not an integer.  All valid
      arguments have the low part zero.  */
-  if ((lx & 0x7fffffffffffffffULL) != 0
-      || exponent >= BIAS + PAYLOAD_DIG
+  if ((lx & 0x7fffffffffffffffULL) != 0 || exponent >= BIAS + PAYLOAD_DIG
       || (exponent < BIAS && !(SET_HIGH_BIT && hx == 0))
       || (hx & ((1ULL << (BIAS + EXPLICIT_MANT_DIG - exponent)) - 1)) != 0)
     {

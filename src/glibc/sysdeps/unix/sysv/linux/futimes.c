@@ -1,6 +1,6 @@
-/* futimes -- change access and modification times of open file.  Linux version.
-   Copyright (C) 2002-2024 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
+/* futimes -- change access and modification times of open file.  Linux
+   version. Copyright (C) 2002-2024 Free Software Foundation, Inc. This file is
+   part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -38,8 +38,7 @@ __futimes64 (int fd, const struct __timeval64 tvp64[2])
 #if __TIMESIZE != 64
 libc_hidden_def (__futimes64)
 
-int
-__futimes (int fd, const struct timeval tvp[2])
+    int __futimes (int fd, const struct timeval tvp[2])
 {
   struct __timeval64 tv64[2];
 

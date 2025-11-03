@@ -18,13 +18,13 @@
 
 /* Define multiple versions only for the definition in libc.  */
 
-#if IS_IN (libc)
+#if IS_IN(libc)
 /* Redefine memmove so that the compiler won't complain about the type
    mismatch with the IFUNC selector in strong_alias, below.  */
-# undef memmove
-# define memmove __redirect_memmove
-# include <string.h>
-# include <init-arch.h>
+#  undef memmove
+#  define memmove __redirect_memmove
+#  include <string.h>
+#  include <init-arch.h>
 
 extern __typeof (__redirect_memmove) __libc_memmove;
 
@@ -61,6 +61,6 @@ select_memmove_ifunc (void)
 
 libc_ifunc (__libc_memmove, select_memmove_ifunc ());
 
-# undef memmove
+#  undef memmove
 strong_alias (__libc_memmove, memmove);
 #endif

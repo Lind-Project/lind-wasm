@@ -53,17 +53,16 @@ static struct
   const char *name;
   int level;
   int type;
-} filesystem[] =
-{
+} filesystem[] = {
   { ".", 1, DT_DIR },
   { "..", 1, DT_DIR },
   { "dir1lev1", 1, DT_UNKNOWN },
-    { ".", 2, DT_DIR },
-    { "..", 2, DT_DIR },
-    { "file1lev2", 2, DT_REG },
-    { "file2lev2", 2, DT_REG },
+  { ".", 2, DT_DIR },
+  { "..", 2, DT_DIR },
+  { "file1lev2", 2, DT_REG },
+  { "file2lev2", 2, DT_REG },
 };
-static const size_t nfiles = sizeof (filesystem) / sizeof (filesystem [0]);
+static const size_t nfiles = sizeof (filesystem) / sizeof (filesystem[0]);
 
 typedef struct
 {
@@ -169,7 +168,7 @@ my_readdir (void *gdir)
       return NULL;
     }
 
-  dir->d.d_ino = 1;		/* glob should not skip this entry.  */
+  dir->d.d_ino = 1; /* glob should not skip this entry.  */
 
   dir->d.d_type = filesystem[dir->idx].type;
 
@@ -204,9 +203,12 @@ my_stat (const char *name, struct stat *st)
   memset (st, '\0', sizeof (*st));
 
   if (filesystem[idx].type == DT_UNKNOWN)
-    st->st_mode = DTTOIF (idx + 1 < nfiles
+    st->st_mode
+	= DTTOIF (idx + 1 < nfiles
 			  && filesystem[idx].level < filesystem[idx + 1].level
-			  ? DT_DIR : DT_REG) | 0777;
+		      ? DT_DIR
+		      : DT_REG)
+	  | 0777;
   else
     st->st_mode = DTTOIF (filesystem[idx].type) | 0777;
   return 0;
@@ -224,9 +226,12 @@ my_lstat (const char *name, struct stat *st)
   memset (st, '\0', sizeof (*st));
 
   if (filesystem[idx].type == DT_UNKNOWN)
-    st->st_mode = DTTOIF (idx + 1 < nfiles
+    st->st_mode
+	= DTTOIF (idx + 1 < nfiles
 			  && filesystem[idx].level < filesystem[idx + 1].level
-			  ? DT_DIR : DT_REG) | 0777;
+		      ? DT_DIR
+		      : DT_REG)
+	  | 0777;
   else
     st->st_mode = DTTOIF (filesystem[idx].type) | 0777;
   return 0;

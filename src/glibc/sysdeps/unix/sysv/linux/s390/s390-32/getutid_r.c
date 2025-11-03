@@ -24,8 +24,8 @@
 #include "utmp-private.h"
 
 #if defined SHARED
-# undef weak_alias
-# define weak_alias(n,a)
+#  undef weak_alias
+#  define weak_alias(n, a)
 #endif
 #include "login/getutid_r.c"
 

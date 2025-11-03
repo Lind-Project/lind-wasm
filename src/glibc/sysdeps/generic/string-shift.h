@@ -17,12 +17,12 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_SHIFT_H
-#define _STRING_SHIFT_H 1
+#  define _STRING_SHIFT_H 1
 
-#include <endian.h>
-#include <limits.h>
-#include <stdint.h>
-#include <string-fza.h>
+#  include <endian.h>
+#  include <limits.h>
+#  include <stdint.h>
+#  include <string-fza.h>
 
 /* Return the mask WORD shifted based on S_INT address value, to ignore
    values not presented in the aligned word read.  */
@@ -44,9 +44,9 @@ shift_find_last (find_t word, uintptr_t s)
   if (s == 0)
     return word;
   if (__BYTE_ORDER == __LITTLE_ENDIAN)
-    return word & ~(((op_t)-1) << (s * CHAR_BIT));
+    return word & ~(((op_t) -1) << (s * CHAR_BIT));
   else
-    return word & ~(((op_t)-1) >> (s * CHAR_BIT));
+    return word & ~(((op_t) -1) >> (s * CHAR_BIT));
 }
 
 #endif /* _STRING_SHIFT_H */

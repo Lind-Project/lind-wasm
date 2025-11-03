@@ -27,5 +27,4 @@ __pipe (int fds[2])
 {
   return __pipe2 (fds, 0);
 }
-libc_hidden_def (__pipe)
-weak_alias (__pipe, pipe)
+libc_hidden_def (__pipe) weak_alias (__pipe, pipe)

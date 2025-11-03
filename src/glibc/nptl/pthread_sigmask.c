@@ -29,7 +29,7 @@ __pthread_sigmask (int how, const sigset_t *newmask, sigset_t *oldmask)
      SIGSETXID is not blocked.  */
   if (newmask != NULL
       && (__glibc_unlikely (__sigismember (newmask, SIGCANCEL))
-         || __glibc_unlikely (__sigismember (newmask, SIGSETXID))))
+	  || __glibc_unlikely (__sigismember (newmask, SIGSETXID))))
     {
       local_newmask = *newmask;
       clear_internal_signals (&local_newmask);
@@ -37,17 +37,16 @@ __pthread_sigmask (int how, const sigset_t *newmask, sigset_t *oldmask)
     }
 
   /* We know that realtime signals are available if NPTL is used.  */
-  int result = INTERNAL_SYSCALL_CALL (rt_sigprocmask, how, newmask,
-				      oldmask, __NSIG_BYTES);
+  int result = INTERNAL_SYSCALL_CALL (rt_sigprocmask, how, newmask, oldmask,
+				      __NSIG_BYTES);
 
-  return (INTERNAL_SYSCALL_ERROR_P (result)
-	  ? INTERNAL_SYSCALL_ERRNO (result)
-	  : 0);
+  return (INTERNAL_SYSCALL_ERROR_P (result) ? INTERNAL_SYSCALL_ERRNO (result)
+					    : 0);
 }
 libc_hidden_def (__pthread_sigmask)
 
-versioned_symbol (libc, __pthread_sigmask, pthread_sigmask, GLIBC_2_32);
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_32)
+    versioned_symbol (libc, __pthread_sigmask, pthread_sigmask, GLIBC_2_32);
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_32)
 strong_alias (__pthread_sigmask, __pthread_sigmask_2);
 compat_symbol (libc, __pthread_sigmask_2, pthread_sigmask, GLIBC_2_0);
 #endif

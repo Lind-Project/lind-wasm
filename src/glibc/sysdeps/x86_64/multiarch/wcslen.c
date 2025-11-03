@@ -18,13 +18,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define __wcslen __redirect_wcslen
-# include <wchar.h>
-# undef __wcslen
+#if IS_IN(libc)
+#  define __wcslen __redirect_wcslen
+#  include <wchar.h>
+#  undef __wcslen
 
-# define SYMBOL_NAME wcslen
-# include "ifunc-wcslen.h"
+#  define SYMBOL_NAME wcslen
+#  include "ifunc-wcslen.h"
 
 libc_ifunc_redirected (__redirect_wcslen, __wcslen, IFUNC_SELECTOR ());
 weak_alias (__wcslen, wcslen);

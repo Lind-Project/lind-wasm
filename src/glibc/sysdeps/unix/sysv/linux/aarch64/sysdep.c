@@ -22,12 +22,11 @@
 long __syscall_error (long err);
 hidden_proto (__syscall_error)
 
-/* This routine is jumped to by all the syscall handlers, to stash
-   an error number into errno.  */
-long
-__syscall_error (long err)
+    /* This routine is jumped to by all the syscall handlers, to stash
+       an error number into errno.  */
+    long __syscall_error (long err)
 {
-  __set_errno (- err);
+  __set_errno (-err);
   return -1;
 }
 hidden_def (__syscall_error)

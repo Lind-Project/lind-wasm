@@ -19,7 +19,7 @@
 #include <nptl/libpthread-compat.c>
 
 /* GLIBC_2.19 was used by a longjmp compatibility symbol.  */
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_19, GLIBC_2_20))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_19, GLIBC_2_20))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
-               __libpthread_version_placeholder, GLIBC_2_19);
+	       __libpthread_version_placeholder, GLIBC_2_19);
 #endif

@@ -21,7 +21,7 @@
 #include "utmp-compat.h"
 
 #undef weak_alias
-#define weak_alias(n,a)
+#define weak_alias(n, a)
 #define getutxid __getutxid
 #include "login/getutxid.c"
 #undef getutxid

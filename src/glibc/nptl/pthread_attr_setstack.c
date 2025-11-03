@@ -20,11 +20,9 @@
 #include "pthreadP.h"
 #include <shlib-compat.h>
 
-
 #ifndef NEW_VERNUM
-# define NEW_VERNUM GLIBC_2_3_3
+#  define NEW_VERNUM GLIBC_2_3_3
 #endif
-
 
 int
 __pthread_attr_setstack (pthread_attr_t *attr, void *stackaddr,
@@ -57,17 +55,17 @@ versioned_symbol (libc, __pthread_attr_setstack, pthread_attr_setstack,
 		  GLIBC_2_34);
 
 #if PTHREAD_STACK_MIN == 16384
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_attr_setstack, pthread_attr_setstack,
 	       GLIBC_2_2);
-# endif
+#  endif
 #else /* PTHREAD_STACK_MIN != 16384 */
-# if OTHER_SHLIB_COMPAT (libpthread, NEW_VERNUM, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, NEW_VERNUM, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_attr_setstack, pthread_attr_setstack,
 	       NEW_VERNUM);
-# endif
+#  endif
 
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, NEW_VERNUM)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, NEW_VERNUM)
 int
 __old_pthread_attr_setstack (pthread_attr_t *attr, void *stackaddr,
 			     size_t stacksize)
@@ -80,16 +78,16 @@ __old_pthread_attr_setstack (pthread_attr_t *attr, void *stackaddr,
   if (stacksize < 16384)
     return EINVAL;
 
-#  ifdef EXTRA_PARAM_CHECKS
+#    ifdef EXTRA_PARAM_CHECKS
   EXTRA_PARAM_CHECKS;
-#  endif
+#    endif
 
   iattr->stacksize = stacksize;
-#  if _STACK_GROWS_DOWN
+#    if _STACK_GROWS_DOWN
   iattr->stackaddr = (char *) stackaddr + stacksize;
-#  else
+#    else
   iattr->stackaddr = (char *) stackaddr;
-#  endif
+#    endif
   iattr->flags |= ATTR_FLAG_STACKADDR;
 
   return 0;
@@ -97,5 +95,5 @@ __old_pthread_attr_setstack (pthread_attr_t *attr, void *stackaddr,
 
 compat_symbol (libpthread, __old_pthread_attr_setstack, pthread_attr_setstack,
 	       GLIBC_2_2);
-# endif /* OTHER_SHLIB_COMPAT */
-#endif /* PTHREAD_STACK_MIN != 16384 */
+#  endif /* OTHER_SHLIB_COMPAT */
+#endif	 /* PTHREAD_STACK_MIN != 16384 */

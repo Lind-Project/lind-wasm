@@ -1,7 +1,6 @@
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 __obstack_vprintf_chk (struct obstack *obstack, int flag, const char *fmt,
 		       va_list ap)
 {

@@ -18,32 +18,32 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef _LIBC
-# include <shlib-compat.h>
+#  include <shlib-compat.h>
 #endif
 
-#if !defined _LIBC || SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_2_5)
+#if !defined _LIBC || SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_2_5)
 
-#ifdef _LIBC
-#include <stdlib.h>
-#include <string.h>
-#include <libc-lock.h>
-#include <dwarf2.h>
-#include <unwind.h>
-#define NO_BASE_OF_ENCODED_VALUE
-#include <unwind-pe.h>
-#include <unwind-dw2-fde.h>
-#else
-#ifndef _Unwind_Find_FDE
-#include "tconfig.h"
-#include "tsystem.h"
-#include "dwarf2.h"
-#include "unwind.h"
-#define NO_BASE_OF_ENCODED_VALUE
-#include "unwind-pe.h"
-#include "unwind-dw2-fde.h"
-#include "gthr.h"
-#endif
-#endif
+#  ifdef _LIBC
+#    include <stdlib.h>
+#    include <string.h>
+#    include <libc-lock.h>
+#    include <dwarf2.h>
+#    include <unwind.h>
+#    define NO_BASE_OF_ENCODED_VALUE
+#    include <unwind-pe.h>
+#    include <unwind-dw2-fde.h>
+#  else
+#    ifndef _Unwind_Find_FDE
+#      include "tconfig.h"
+#      include "tsystem.h"
+#      include "dwarf2.h"
+#      include "unwind.h"
+#      define NO_BASE_OF_ENCODED_VALUE
+#      include "unwind-pe.h"
+#      include "unwind-dw2-fde.h"
+#      include "gthr.h"
+#    endif
+#  endif
 
 /* The unseen_objects list contains objects that have been registered
    but not yet categorized in any way.  The seen_objects list has had
@@ -52,32 +52,30 @@
 static struct object *unseen_objects;
 static struct object *seen_objects;
 
-#ifdef _LIBC
+#  ifdef _LIBC
 
 __libc_lock_define_initialized (static, object_mutex)
-#define init_object_mutex_once()
-#define __gthread_mutex_lock(m) __libc_lock_lock (*(m))
-#define __gthread_mutex_unlock(m) __libc_lock_unlock (*(m))
+#    define init_object_mutex_once()
+#    define __gthread_mutex_lock(m) __libc_lock_lock (*(m))
+#    define __gthread_mutex_unlock(m) __libc_lock_unlock (*(m))
 
-void __register_frame_info_bases (void *begin, struct object *ob,
-				  void *tbase, void *dbase);
-hidden_proto (__register_frame_info_bases)
-void __register_frame_info_table_bases (void *begin,
-					struct object *ob,
-					void *tbase, void *dbase);
-hidden_proto (__register_frame_info_table_bases)
-void *__deregister_frame_info_bases (void *begin);
+    void __register_frame_info_bases (void *begin, struct object *ob,
+				      void *tbase, void *dbase);
+hidden_proto (__register_frame_info_bases) void __register_frame_info_table_bases (
+    void *begin, struct object *ob, void *tbase, void *dbase);
+hidden_proto (__register_frame_info_table_bases) void
+    *__deregister_frame_info_bases (void *begin);
 hidden_proto (__deregister_frame_info_bases)
 
-#else
+#  else
 
-#ifdef __GTHREAD_MUTEX_INIT
+#    ifdef __GTHREAD_MUTEX_INIT
 static __gthread_mutex_t object_mutex = __GTHREAD_MUTEX_INIT;
-#else
+#    else
 static __gthread_mutex_t object_mutex;
-#endif
+#    endif
 
-#ifdef __GTHREAD_MUTEX_INIT_FUNCTION
+#    ifdef __GTHREAD_MUTEX_INIT_FUNCTION
 static void
 init_object_mutex (void)
 {
@@ -90,31 +88,30 @@ init_object_mutex_once (void)
   static __gthread_once_t once = __GTHREAD_ONCE_INIT;
   __gthread_once (&once, init_object_mutex);
 }
-#else
-#define init_object_mutex_once()
-#endif
+#    else
+#      define init_object_mutex_once()
+#    endif
 
-#endif /* _LIBC */
+#  endif /* _LIBC */
 
-/* Called from crtbegin.o to register the unwind info for an object.  */
+    /* Called from crtbegin.o to register the unwind info for an object.  */
 
-void
-__register_frame_info_bases (void *begin, struct object *ob,
-			     void *tbase, void *dbase)
+    void __register_frame_info_bases (void *begin, struct object *ob,
+				      void *tbase, void *dbase)
 {
   /* If .eh_frame is empty, don't register at all.  */
   if (*(uword *) begin == 0)
     return;
 
-  ob->pc_begin = (void *)-1;
+  ob->pc_begin = (void *) -1;
   ob->tbase = tbase;
   ob->dbase = dbase;
   ob->u.single = begin;
   ob->s.i = 0;
   ob->s.b.encoding = DW_EH_PE_omit;
-#ifdef DWARF2_OBJECT_END_PTR_EXTENSION
+#  ifdef DWARF2_OBJECT_END_PTR_EXTENSION
   ob->fde_end = NULL;
-#endif
+#  endif
 
   init_object_mutex_once ();
   __gthread_mutex_lock (&object_mutex);
@@ -126,8 +123,7 @@ __register_frame_info_bases (void *begin, struct object *ob,
 }
 hidden_def (__register_frame_info_bases)
 
-void
-__register_frame_info (void *begin, struct object *ob)
+    void __register_frame_info (void *begin, struct object *ob)
 {
   __register_frame_info_bases (begin, ob, 0, 0);
 }
@@ -150,10 +146,10 @@ __register_frame (void *begin)
    collect2.  */
 
 void
-__register_frame_info_table_bases (void *begin, struct object *ob,
-				   void *tbase, void *dbase)
+__register_frame_info_table_bases (void *begin, struct object *ob, void *tbase,
+				   void *dbase)
 {
-  ob->pc_begin = (void *)-1;
+  ob->pc_begin = (void *) -1;
   ob->tbase = tbase;
   ob->dbase = dbase;
   ob->u.array = begin;
@@ -171,8 +167,7 @@ __register_frame_info_table_bases (void *begin, struct object *ob,
 }
 hidden_def (__register_frame_info_table_bases)
 
-void
-__register_frame_info_table (void *begin, struct object *ob)
+    void __register_frame_info_table (void *begin, struct object *ob)
 {
   __register_frame_info_table_bases (begin, ob, 0, 0);
 }
@@ -210,7 +205,7 @@ __deregister_frame_info_bases (void *begin)
   init_object_mutex_once ();
   __gthread_mutex_lock (&object_mutex);
 
-  for (p = &unseen_objects; *p ; p = &(*p)->next)
+  for (p = &unseen_objects; *p; p = &(*p)->next)
     if ((*p)->u.single == begin)
       {
 	ob = *p;
@@ -218,7 +213,7 @@ __deregister_frame_info_bases (void *begin)
 	goto out;
       }
 
-  for (p = &seen_objects; *p ; p = &(*p)->next)
+  for (p = &seen_objects; *p; p = &(*p)->next)
     if ((*p)->s.b.sorted)
       {
 	if ((*p)->u.sort->orig_data == begin)
@@ -242,15 +237,14 @@ __deregister_frame_info_bases (void *begin)
   __gthread_mutex_unlock (&object_mutex);
   abort ();
 
- out:
+out:
   __gthread_mutex_unlock (&object_mutex);
   free (tofree);
   return (void *) ob;
 }
 hidden_def (__deregister_frame_info_bases)
 
-void *
-__deregister_frame_info (void *begin)
+    void *__deregister_frame_info (void *begin)
 {
   return __deregister_frame_info_bases (begin);
 }
@@ -263,7 +257,6 @@ __deregister_frame (void *begin)
     free (__deregister_frame_info_bases (begin));
 }
 
-
 /* Like base_of_encoded_value, but take the base from a struct object
    instead of an _Unwind_Context.  */
 
@@ -305,12 +298,12 @@ get_cie_encoding (struct dwarf_cie *cie)
 
   /* Skip the augmentation string.  */
   p = aug + strlen ((const char *) aug) + 1;
-  p = read_uleb128 (p, &utmp);		/* Skip code alignment.  */
-  p = read_sleb128 (p, &stmp);		/* Skip data alignment.  */
-  p++;					/* Skip return address column.  */
+  p = read_uleb128 (p, &utmp); /* Skip code alignment.  */
+  p = read_sleb128 (p, &stmp); /* Skip data alignment.  */
+  p++;			       /* Skip return address column.  */
 
-  aug++;				/* Skip 'z' */
-  p = read_uleb128 (p, &utmp);		/* Skip augmentation length.  */
+  aug++;		       /* Skip 'z' */
+  p = read_uleb128 (p, &utmp); /* Skip augmentation length.  */
   while (1)
     {
       /* This is what we're looking for.  */
@@ -340,7 +333,6 @@ get_fde_encoding (struct dwarf_fde *f)
   return get_cie_encoding (get_cie (f));
 }
 
-
 /* Sorting an array of FDEs by address.
    (Ideally we would have the linker sort the FDEs so we don't have to do
    it at run time. But the linkers are not yet prepared for this.)  */
@@ -358,8 +350,8 @@ get_pc_begin (fde *x, size_t n)
 /* Comparison routines.  Three variants of increasing complexity.  */
 
 static int
-fde_unencoded_compare (struct object *ob __attribute__((unused)),
-		       fde *x, fde *y)
+fde_unencoded_compare (struct object *ob __attribute__ ((unused)), fde *x,
+		       fde *y)
 {
   _Unwind_Ptr x_ptr = get_pc_begin (x, 0);
   _Unwind_Ptr y_ptr = get_pc_begin (y, 0);
@@ -410,7 +402,6 @@ fde_mixed_encoding_compare (struct object *ob, fde *x, fde *y)
 
 typedef int (*fde_compare_t) (struct object *, fde *, fde *);
 
-
 /* This is a special mix of insertion sort and heap sort, optimized for
    the data sets that actually occur. They look like
    101 102 103 127 128 105 108 110 190 111 115 119 125 160 126 129 130.
@@ -432,7 +423,7 @@ static int
 start_fde_sort (struct fde_accumulator *accu, size_t count)
 {
   size_t size;
-  if (! count)
+  if (!count)
     return 0;
 
   size = sizeof (struct fde_vector) + sizeof (fde *) * count;
@@ -518,11 +509,18 @@ frame_heapsort (struct object *ob, fde_compare_t fde_compare,
   /* For a description of this algorithm, see:
      Samuel P. Harbison, Guy L. Steele Jr.: C, a reference manual, 2nd ed.,
      p. 60-61.  */
-  fde ** a = erratic->array;
+  fde **a = erratic->array;
   /* A portion of the array is called a "heap" if for all i>=0:
      If i and 2i+1 are valid indices, then a[i] >= a[2i+1].
      If i and 2i+2 are valid indices, then a[i] >= a[2i+2].  */
-#define SWAP(x,y) do { fde * tmp = x; x = y; y = tmp; } while (0)
+#  define SWAP(x, y)                                                          \
+    do                                                                        \
+      {                                                                       \
+	fde *tmp = x;                                                         \
+	x = y;                                                                \
+	y = tmp;                                                              \
+      }                                                                       \
+    while (0)
   size_t n = erratic->count;
   size_t m = n;
   size_t i;
@@ -531,19 +529,18 @@ frame_heapsort (struct object *ob, fde_compare_t fde_compare,
     {
       /* Invariant: a[m..n-1] is a heap.  */
       m--;
-      for (i = m; 2*i+1 < n; )
+      for (i = m; 2 * i + 1 < n;)
 	{
-	  if (2*i+2 < n
-	      && fde_compare (ob, a[2*i+2], a[2*i+1]) > 0
-	      && fde_compare (ob, a[2*i+2], a[i]) > 0)
+	  if (2 * i + 2 < n && fde_compare (ob, a[2 * i + 2], a[2 * i + 1]) > 0
+	      && fde_compare (ob, a[2 * i + 2], a[i]) > 0)
 	    {
-	      SWAP (a[i], a[2*i+2]);
-	      i = 2*i+2;
+	      SWAP (a[i], a[2 * i + 2]);
+	      i = 2 * i + 2;
 	    }
-	  else if (fde_compare (ob, a[2*i+1], a[i]) > 0)
+	  else if (fde_compare (ob, a[2 * i + 1], a[i]) > 0)
 	    {
-	      SWAP (a[i], a[2*i+1]);
-	      i = 2*i+1;
+	      SWAP (a[i], a[2 * i + 1]);
+	      i = 2 * i + 1;
 	    }
 	  else
 	    break;
@@ -554,34 +551,33 @@ frame_heapsort (struct object *ob, fde_compare_t fde_compare,
       /* Invariant: a[0..n-1] is a heap.  */
       n--;
       SWAP (a[0], a[n]);
-      for (i = 0; 2*i+1 < n; )
+      for (i = 0; 2 * i + 1 < n;)
 	{
-	  if (2*i+2 < n
-	      && fde_compare (ob, a[2*i+2], a[2*i+1]) > 0
-	      && fde_compare (ob, a[2*i+2], a[i]) > 0)
+	  if (2 * i + 2 < n && fde_compare (ob, a[2 * i + 2], a[2 * i + 1]) > 0
+	      && fde_compare (ob, a[2 * i + 2], a[i]) > 0)
 	    {
-	      SWAP (a[i], a[2*i+2]);
-	      i = 2*i+2;
+	      SWAP (a[i], a[2 * i + 2]);
+	      i = 2 * i + 2;
 	    }
-	  else if (fde_compare (ob, a[2*i+1], a[i]) > 0)
+	  else if (fde_compare (ob, a[2 * i + 1], a[i]) > 0)
 	    {
-	      SWAP (a[i], a[2*i+1]);
-	      i = 2*i+1;
+	      SWAP (a[i], a[2 * i + 1]);
+	      i = 2 * i + 1;
 	    }
 	  else
 	    break;
 	}
     }
-#undef SWAP
+#  undef SWAP
 }
 
 /* Merge V1 and V2, both sorted, and put the result into V1.  */
 static void
-fde_merge (struct object *ob, fde_compare_t fde_compare,
-	   struct fde_vector *v1, struct fde_vector *v2)
+fde_merge (struct object *ob, fde_compare_t fde_compare, struct fde_vector *v1,
+	   struct fde_vector *v2)
 {
   size_t i1, i2;
-  fde * fde2;
+  fde *fde2;
 
   i2 = v2->count;
   if (i2 > 0)
@@ -591,12 +587,12 @@ fde_merge (struct object *ob, fde_compare_t fde_compare,
 	{
 	  i2--;
 	  fde2 = v2->array[i2];
-	  while (i1 > 0 && fde_compare (ob, v1->array[i1-1], fde2) > 0)
+	  while (i1 > 0 && fde_compare (ob, v1->array[i1 - 1], fde2) > 0)
 	    {
-	      v1->array[i1+i2] = v1->array[i1-1];
+	      v1->array[i1 + i2] = v1->array[i1 - 1];
 	      i1--;
 	    }
-	  v1->array[i1+i2] = fde2;
+	  v1->array[i1 + i2] = fde2;
 	}
       while (i2 > 0);
       v1->count += v2->count;
@@ -635,7 +631,6 @@ end_fde_sort (struct object *ob, struct fde_accumulator *accu, size_t count)
     }
 }
 
-
 /* Update encoding, mixed_encoding, and pc_begin for OB for the
    fde array beginning at THIS_FDE.  Return the number of fdes
    encountered along the way.  */
@@ -648,7 +643,7 @@ classify_object_over_fdes (struct object *ob, fde *this_fde)
   int encoding = DW_EH_PE_absptr;
   _Unwind_Ptr base = 0;
 
-  for (; ! last_fde (ob, this_fde); this_fde = next_fde (this_fde))
+  for (; !last_fde (ob, this_fde); this_fde = next_fde (this_fde))
     {
       struct dwarf_cie *this_cie;
       _Unwind_Ptr mask, pc_begin;
@@ -702,7 +697,7 @@ add_fdes (struct object *ob, struct fde_accumulator *accu, fde *this_fde)
   int encoding = ob->s.b.encoding;
   _Unwind_Ptr base = base_from_object (ob->s.b.encoding, ob);
 
-  for (; ! last_fde (ob, this_fde); this_fde = next_fde (this_fde))
+  for (; !last_fde (ob, this_fde); this_fde = next_fde (this_fde))
     {
       struct dwarf_cie *this_cie;
 
@@ -759,7 +754,7 @@ add_fdes (struct object *ob, struct fde_accumulator *accu, fde *this_fde)
    allocate a sorted fde array on a previous occasion.  */
 
 static void
-init_object (struct object* ob)
+init_object (struct object *ob)
 {
   struct fde_accumulator accu;
   size_t count;
@@ -819,7 +814,7 @@ linear_search_fdes (struct object *ob, fde *this_fde, void *pc)
   int encoding = ob->s.b.encoding;
   _Unwind_Ptr base = base_from_object (ob->s.b.encoding, ob);
 
-  for (; ! last_fde (ob, this_fde); this_fde = next_fde (this_fde))
+  for (; !last_fde (ob, this_fde); this_fde = next_fde (this_fde))
     {
       struct dwarf_cie *this_cie;
       _Unwind_Ptr pc_begin, pc_range;
@@ -853,8 +848,8 @@ linear_search_fdes (struct object *ob, fde *this_fde, void *pc)
 	  _Unwind_Ptr mask;
 	  const unsigned char *p;
 
-	  p = read_encoded_value_with_base (encoding, base,
-					    this_fde->pc_begin, &pc_begin);
+	  p = read_encoded_value_with_base (encoding, base, this_fde->pc_begin,
+					    &pc_begin);
 	  read_encoded_value_with_base (encoding & 0x0F, 0, p, &pc_range);
 
 	  /* Take care to ignore link-once functions that were removed.
@@ -887,7 +882,7 @@ binary_search_unencoded_fdes (struct object *ob, void *pc)
   struct fde_vector *vec = ob->u.sort;
   size_t lo, hi;
 
-  for (lo = 0, hi = vec->count; lo < hi; )
+  for (lo = 0, hi = vec->count; lo < hi;)
     {
       size_t i = (lo + hi) / 2;
       fde *f = vec->array[i];
@@ -916,7 +911,7 @@ binary_search_single_encoding_fdes (struct object *ob, void *pc)
   _Unwind_Ptr base = base_from_object (encoding, ob);
   size_t lo, hi;
 
-  for (lo = 0, hi = vec->count; lo < hi; )
+  for (lo = 0, hi = vec->count; lo < hi;)
     {
       size_t i = (lo + hi) / 2;
       fde *f = vec->array[i];
@@ -944,7 +939,7 @@ binary_search_mixed_encoding_fdes (struct object *ob, void *pc)
   struct fde_vector *vec = ob->u.sort;
   size_t lo, hi;
 
-  for (lo = 0, hi = vec->count; lo < hi; )
+  for (lo = 0, hi = vec->count; lo < hi;)
     {
       size_t i = (lo + hi) / 2;
       fde *f = vec->array[i];
@@ -953,9 +948,8 @@ binary_search_mixed_encoding_fdes (struct object *ob, void *pc)
       int encoding;
 
       encoding = get_fde_encoding (f);
-      p = read_encoded_value_with_base (encoding,
-					base_from_object (encoding, ob),
-					f->pc_begin, &pc_begin);
+      p = read_encoded_value_with_base (
+	  encoding, base_from_object (encoding, ob), f->pc_begin, &pc_begin);
       read_encoded_value_with_base (encoding & 0x0F, 0, p, &pc_range);
 
       if ((_Unwind_Ptr) pc < pc_begin)
@@ -970,11 +964,11 @@ binary_search_mixed_encoding_fdes (struct object *ob, void *pc)
 }
 
 static fde *
-search_object (struct object* ob, void *pc)
+search_object (struct object *ob, void *pc)
 {
   /* If the data hasn't been sorted, try to do this now.  We may have
      more memory available than last time we tried.  */
-  if (! ob->s.b.sorted)
+  if (!ob->s.b.sorted)
     {
       init_object (ob);
 
@@ -1000,7 +994,7 @@ search_object (struct object* ob, void *pc)
       if (ob->s.b.from_array)
 	{
 	  fde **p;
-	  for (p = ob->u.array; *p ; p++)
+	  for (p = ob->u.array; *p; p++)
 	    {
 	      fde *f = linear_search_fdes (ob, *p, pc);
 	      if (f)
@@ -1043,7 +1037,7 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
       f = search_object (ob, pc);
 
       /* Insert the object into the classified list.  */
-      for (p = &seen_objects; *p ; p = &(*p)->next)
+      for (p = &seen_objects; *p; p = &(*p)->next)
 	if ((*p)->pc_begin < ob->pc_begin)
 	  break;
       ob->next = *p;
@@ -1053,7 +1047,7 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
 	goto fini;
     }
 
- fini:
+fini:
   __gthread_mutex_unlock (&object_mutex);
 
   if (f)

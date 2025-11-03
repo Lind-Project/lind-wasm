@@ -15,10 +15,10 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_IO_H
+#ifndef _SYS_IO_H
 
-#define	_SYS_IO_H	1
-#include <features.h>
+#  define _SYS_IO_H 1
+#  include <features.h>
 
 __BEGIN_DECLS
 
@@ -56,29 +56,25 @@ extern int hae_shift (void) __THROW __attribute__ ((const));
 
 enum __pciconfig_iobase_which
 {
-  IOBASE_HOSE = 0,		/* Return hose index. */
-  IOBASE_SPARSE_MEM = 1,	/* Return physical memory addresses.  */
+  IOBASE_HOSE = 0,	 /* Return hose index. */
+  IOBASE_SPARSE_MEM = 1, /* Return physical memory addresses.  */
   IOBASE_DENSE_MEM = 2,
   IOBASE_SPARSE_IO = 3,
   IOBASE_DENSE_IO = 4
 };
 
-extern long pciconfig_iobase(enum __pciconfig_iobase_which __which,
-			     unsigned long int __bus,
-			     unsigned long int __dfn)
-     __THROW __attribute__ ((const));
+extern long pciconfig_iobase (enum __pciconfig_iobase_which __which,
+			      unsigned long int __bus,
+			      unsigned long int __dfn) __THROW
+    __attribute__ ((const));
 
 /* Access PCI space protected from machine checks.  */
-extern int pciconfig_read (unsigned long int __bus,
-			   unsigned long int __dfn,
-			   unsigned long int __off,
-			   unsigned long int __len,
+extern int pciconfig_read (unsigned long int __bus, unsigned long int __dfn,
+			   unsigned long int __off, unsigned long int __len,
 			   unsigned char *__buf) __THROW;
 
-extern int pciconfig_write (unsigned long int __bus,
-			    unsigned long int __dfn,
-			    unsigned long int __off,
-			    unsigned long int __len,
+extern int pciconfig_write (unsigned long int __bus, unsigned long int __dfn,
+			    unsigned long int __off, unsigned long int __len,
 			    unsigned char *__buf) __THROW;
 
 /* Userspace declarations.  */

@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LIBC
-# include <libc-config.h>
+#  include <libc-config.h>
 #endif
 
 #include <glob.h>
@@ -31,7 +31,7 @@ globfree (glob_t *pglob)
     {
       size_t i;
       for (i = 0; i < pglob->gl_pathc; ++i)
-        free (pglob->gl_pathv[pglob->gl_offs + i]);
+	free (pglob->gl_pathv[pglob->gl_offs + i]);
       free (pglob->gl_pathv);
       pglob->gl_pathv = NULL;
     }

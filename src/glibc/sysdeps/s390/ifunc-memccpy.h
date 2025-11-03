@@ -16,37 +16,37 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_MEMCCPY_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_MEMCCPY_IFUNC 1
 #else
-# define HAVE_MEMCCPY_IFUNC	0
+#  define HAVE_MEMCCPY_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_MEMCCPY_IFUNC_AND_VX_SUPPORT HAVE_MEMCCPY_IFUNC
+#  define HAVE_MEMCCPY_IFUNC_AND_VX_SUPPORT HAVE_MEMCCPY_IFUNC
 #else
-# define HAVE_MEMCCPY_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_MEMCCPY_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define MEMCCPY_DEFAULT	MEMCCPY_Z13
-# define HAVE_MEMCCPY_C		0
-# define HAVE_MEMCCPY_Z13	1
+#  define MEMCCPY_DEFAULT MEMCCPY_Z13
+#  define HAVE_MEMCCPY_C 0
+#  define HAVE_MEMCCPY_Z13 1
 #else
-# define MEMCCPY_DEFAULT	MEMCCPY_C
-# define HAVE_MEMCCPY_C		1
-# define HAVE_MEMCCPY_Z13	HAVE_MEMCCPY_IFUNC_AND_VX_SUPPORT
+#  define MEMCCPY_DEFAULT MEMCCPY_C
+#  define HAVE_MEMCCPY_C 1
+#  define HAVE_MEMCCPY_Z13 HAVE_MEMCCPY_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_MEMCCPY_C
-# define MEMCCPY_C		__memccpy_c
+#  define MEMCCPY_C __memccpy_c
 #else
-# define MEMCCPY_C		NULL
+#  define MEMCCPY_C NULL
 #endif
 
 #if HAVE_MEMCCPY_Z13
-# define MEMCCPY_Z13		__memccpy_vx
+#  define MEMCCPY_Z13 __memccpy_vx
 #else
-# define MEMCCPY_Z13		NULL
+#  define MEMCCPY_Z13 NULL
 #endif

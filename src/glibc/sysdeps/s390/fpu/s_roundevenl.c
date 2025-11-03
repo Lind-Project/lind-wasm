@@ -18,10 +18,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# define NO_MATH_REDIRECT
-# include <math.h>
-# include <math_private.h>
-# include <libm-alias-ldouble.h>
+#  define NO_MATH_REDIRECT
+#  include <math.h>
+#  include <math_private.h>
+#  include <libm-alias-ldouble.h>
 
 _Float128
 __roundevenl (_Float128 x)
@@ -30,11 +30,11 @@ __roundevenl (_Float128 x)
   /* The z196 zarch "load fp integer" (fixbra) instruction is rounding
      x to the nearest integer with "ties to even" rounding mode
      (M3-field: 4) where inexact exceptions are suppressed (M4-field: 4).  */
-  __asm__ ("fixbra %0,4,%1,4" : "=f" (y) : "f" (x));
+  __asm__ ("fixbra %0,4,%1,4" : "=f"(y) : "f"(x));
   return y;
 }
 libm_alias_ldouble (__roundeven, roundeven)
 
 #else
-# include <sysdeps/ieee754/ldbl-128/s_roundevenl.c>
+#  include <sysdeps/ieee754/ldbl-128/s_roundevenl.c>
 #endif

@@ -49,25 +49,25 @@
  */
 
 #ifndef _SYS_QUOTA_H
-#define _SYS_QUOTA_H 1
+#  define _SYS_QUOTA_H 1
 
-#include <features.h>
-#include <sys/types.h>
+#  include <features.h>
+#  include <sys/types.h>
 
-#include <linux/quota.h>
+#  include <linux/quota.h>
 
 /*
  * Convert diskblocks to blocks and the other way around.
  * currently only to fool the BSD source. :-)
  */
-#define dbtob(num) ((num) << 10)
-#define btodb(num) ((num) >> 10)
+#  define dbtob(num) ((num) << 10)
+#  define btodb(num) ((num) >> 10)
 
 /*
  * Convert count of filesystem blocks to diskquota blocks, meant for
  * filesystems where i_blksize != 1024.
  */
-#define fs_to_dq_blocks(num, blksize) (((num) * (blksize)) / 1024)
+#  define fs_to_dq_blocks(num, blksize) (((num) * (blksize)) / 1024)
 
 /*
  * Definitions for disk quotas imposed on the average user
@@ -78,52 +78,52 @@
  * in an allocation failure). The timer is started when the user crosses
  * their soft limit, it is reset when they go below their soft limit.
  */
-#define MAX_IQ_TIME  604800	/* (7*24*60*60) 1 week */
-#define MAX_DQ_TIME  604800	/* (7*24*60*60) 1 week */
+#  define MAX_IQ_TIME 604800 /* (7*24*60*60) 1 week */
+#  define MAX_DQ_TIME 604800 /* (7*24*60*60) 1 week */
 
-#define QUOTAFILENAME "quota"
-#define QUOTAGROUP "staff"
+#  define QUOTAFILENAME "quota"
+#  define QUOTAGROUP "staff"
 
-#define NR_DQHASH 43          /* Just an arbitrary number any suggestions ? */
-#define NR_DQUOTS 256         /* Number of quotas active at one time */
+#  define NR_DQHASH 43	/* Just an arbitrary number any suggestions ? */
+#  define NR_DQUOTS 256 /* Number of quotas active at one time */
 
 /* Old name for struct if_dqblk.  */
 struct dqblk
-  {
-    __uint64_t dqb_bhardlimit;	/* absolute limit on disk quota blocks alloc */
-    __uint64_t dqb_bsoftlimit;	/* preferred limit on disk quota blocks */
-    __uint64_t dqb_curspace;	/* current quota block count */
-    __uint64_t dqb_ihardlimit;	/* maximum # allocated inodes */
-    __uint64_t dqb_isoftlimit;	/* preferred inode limit */
-    __uint64_t dqb_curinodes;	/* current # allocated inodes */
-    __uint64_t dqb_btime;	/* time limit for excessive disk use */
-    __uint64_t dqb_itime;	/* time limit for excessive files */
-    __uint32_t dqb_valid;	/* bitmask of QIF_* constants */
-  };
+{
+  __uint64_t dqb_bhardlimit; /* absolute limit on disk quota blocks alloc */
+  __uint64_t dqb_bsoftlimit; /* preferred limit on disk quota blocks */
+  __uint64_t dqb_curspace;   /* current quota block count */
+  __uint64_t dqb_ihardlimit; /* maximum # allocated inodes */
+  __uint64_t dqb_isoftlimit; /* preferred inode limit */
+  __uint64_t dqb_curinodes;  /* current # allocated inodes */
+  __uint64_t dqb_btime;	     /* time limit for excessive disk use */
+  __uint64_t dqb_itime;	     /* time limit for excessive files */
+  __uint32_t dqb_valid;	     /* bitmask of QIF_* constants */
+};
 
 /*
  * Shorthand notation.
  */
-#define	dq_bhardlimit	dq_dqb.dqb_bhardlimit
-#define	dq_bsoftlimit	dq_dqb.dqb_bsoftlimit
-#define dq_curspace	dq_dqb.dqb_curspace
-#define dq_valid	dq_dqb.dqb_valid
-#define	dq_ihardlimit	dq_dqb.dqb_ihardlimit
-#define	dq_isoftlimit	dq_dqb.dqb_isoftlimit
-#define	dq_curinodes	dq_dqb.dqb_curinodes
-#define	dq_btime	dq_dqb.dqb_btime
-#define	dq_itime	dq_dqb.dqb_itime
+#  define dq_bhardlimit dq_dqb.dqb_bhardlimit
+#  define dq_bsoftlimit dq_dqb.dqb_bsoftlimit
+#  define dq_curspace dq_dqb.dqb_curspace
+#  define dq_valid dq_dqb.dqb_valid
+#  define dq_ihardlimit dq_dqb.dqb_ihardlimit
+#  define dq_isoftlimit dq_dqb.dqb_isoftlimit
+#  define dq_curinodes dq_dqb.dqb_curinodes
+#  define dq_btime dq_dqb.dqb_btime
+#  define dq_itime dq_dqb.dqb_itime
 
-#define dqoff(UID)      ((__loff_t)((UID) * sizeof (struct dqblk)))
+#  define dqoff(UID) ((__loff_t) ((UID) * sizeof (struct dqblk)))
 
 /* Old name for struct if_dqinfo.  */
 struct dqinfo
-  {
-    __uint64_t dqi_bgrace;
-    __uint64_t dqi_igrace;
-    __uint32_t dqi_flags;
-    __uint32_t dqi_valid;
-  };
+{
+  __uint64_t dqi_bgrace;
+  __uint64_t dqi_igrace;
+  __uint32_t dqi_flags;
+  __uint32_t dqi_valid;
+};
 
 __BEGIN_DECLS
 

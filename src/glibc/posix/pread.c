@@ -39,6 +39,5 @@ __libc_pread (int fd, void *buf, size_t nbytes, off_t offset)
   __set_errno (ENOSYS);
   return -1;
 }
-strong_alias (__libc_pread, __pread)
-weak_alias (__libc_pread, pread)
-stub_warning (pread)
+strong_alias (__libc_pread, __pread) weak_alias (__libc_pread, pread)
+    stub_warning (pread)

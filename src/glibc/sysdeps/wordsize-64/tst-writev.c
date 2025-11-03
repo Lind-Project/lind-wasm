@@ -26,9 +26,8 @@
 
 /* GNU/Hurd does not define a IOV_MAX constraint.  */
 #ifndef IOV_MAX
-# define IOV_MAX 1024
+#  define IOV_MAX 1024
 #endif
-
 
 /* The purpose of this test is to verify that the INTERNAL_[V]SYSCALL_NCS
    macros on 64-bit platforms don't cast the return type to (int) which would
@@ -37,8 +36,8 @@
 
 #if 0
 /* Used to test the non power-of-2 code path.  */
-#undef IOV_MAX
-#define IOV_MAX 1000
+#  undef IOV_MAX
+#  define IOV_MAX 1000
 #endif
 
 /* writev() should report that it has written EXPECTED number of bytes.  */
@@ -105,8 +104,8 @@ do_test (void)
       if (ret != (ssize_t) ARTIFICIAL_LIMIT)
 #endif
 	{
-	  printf ("writev() return value: %zd != EXPECTED: %zd\n",
-		  ret, EXPECTED);
+	  printf ("writev() return value: %zd != EXPECTED: %zd\n", ret,
+		  EXPECTED);
 	  return 1;
 	}
     }

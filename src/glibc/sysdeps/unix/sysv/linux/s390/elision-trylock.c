@@ -52,10 +52,10 @@ __lll_trylock_elision (int *futex, short *adapt_count)
      we need to use atomic accesses to avoid data races.  However, the
      value of adapt_count is just a hint, so relaxed MO accesses are
      sufficient.  */
-    if (atomic_load_relaxed (adapt_count) <= 0 && aconf.try_tbegin > 0)
+  if (atomic_load_relaxed (adapt_count) <= 0 && aconf.try_tbegin > 0)
     {
       int status = __libc_tbegin ((void *) 0);
-      if (__glibc_likely (status  == _HTM_TBEGIN_STARTED))
+      if (__glibc_likely (status == _HTM_TBEGIN_STARTED))
 	{
 	  /* Check the futex to make sure nobody has touched it in the
 	     mean time.  This forces the futex into the cache and makes
@@ -69,8 +69,8 @@ __lll_trylock_elision (int *futex, short *adapt_count)
 	     This can be the case if e.g. adapt_count was decremented to zero
 	     by a former release and another thread has been waken up and
 	     acquired it.
-	     Since we are in a non-nested transaction there is no need to abort,
-	     which is expensive.  Simply end the started transaction.  */
+	     Since we are in a non-nested transaction there is no need to
+	     abort, which is expensive.  Simply end the started transaction. */
 	  __libc_tend ();
 	  /* Note: Changing the adapt_count here might abort a transaction on a
 	     different CPU, but that could happen anyway when the futex is

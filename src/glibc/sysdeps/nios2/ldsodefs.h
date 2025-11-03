@@ -17,27 +17,25 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _NIOS2_LDSODEFS_H
-#define _NIOS2_LDSODEFS_H 1
+#  define _NIOS2_LDSODEFS_H 1
 
-#include <elf.h>
+#  include <elf.h>
 
 struct La_nios2_regs;
 struct La_nios2_retval;
 
-#define ARCH_PLTENTER_MEMBERS						\
-    ElfW(Addr) (*nios2_gnu_pltenter) (ElfW(Sym) *, unsigned int,	\
-				      uintptr_t *, uintptr_t *,		\
-				      const struct La_nios2_regs *,	\
-				      unsigned int *, const char *,	\
-				      long int *);
+#  define ARCH_PLTENTER_MEMBERS                                               \
+    ElfW (Addr) (*nios2_gnu_pltenter) (                                       \
+	ElfW (Sym) *, unsigned int, uintptr_t *, uintptr_t *,                 \
+	const struct La_nios2_regs *, unsigned int *, const char *,           \
+	long int *);
 
-#define ARCH_PLTEXIT_MEMBERS						\
-    unsigned int (*nios2_gnu_pltexit) (ElfW(Sym) *, unsigned int,	\
-				       uintptr_t *, uintptr_t *,	\
-				       const struct La_nios2_regs *,	\
-				       struct La_nios2_retval *,	\
-				       const char *);
+#  define ARCH_PLTEXIT_MEMBERS                                                \
+    unsigned int (*nios2_gnu_pltexit) (                                       \
+	ElfW (Sym) *, unsigned int, uintptr_t *, uintptr_t *,                 \
+	const struct La_nios2_regs *, struct La_nios2_retval *,               \
+	const char *);
 
-#include_next <ldsodefs.h>
+#  include_next <ldsodefs.h>
 
 #endif

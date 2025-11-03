@@ -29,9 +29,8 @@ __epoll_pwait2_time64 (int fd, struct epoll_event *ev, int maxev,
 #if __TIMESIZE != 64
 libc_hidden_def (__epoll_pwait2_time64)
 
-int
-epoll_pwait2 (int fd, struct epoll_event *ev, int maxev,
-	      const struct timespec *tmo, const sigset_t *s)
+    int epoll_pwait2 (int fd, struct epoll_event *ev, int maxev,
+		      const struct timespec *tmo, const sigset_t *s)
 {
   struct __timespec64 tmo64, *ptmo64 = NULL;
   if (tmo != NULL)

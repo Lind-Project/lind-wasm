@@ -21,25 +21,25 @@
 #define __S390_SETJMP_H__
 
 #if !defined _SETJMP_H && !defined _PTHREAD_H
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
 #endif
 
 #include <bits/wordsize.h>
 
-#ifndef	_ASM
+#ifndef _ASM
 
 typedef struct __s390_jmp_buf
 {
   /* We save registers 6-15.  */
   long int __gregs[10];
 
-# if __WORDSIZE == 64
+#  if __WORDSIZE == 64
   /* We save fpu registers f8 - f15.  */
   long __fpregs[8];
-# else
+#  else
   /* We save fpu registers 4 and 6.  */
   long __fpregs[4];
-# endif
+#  endif
 } __jmp_buf[1];
 
 #endif

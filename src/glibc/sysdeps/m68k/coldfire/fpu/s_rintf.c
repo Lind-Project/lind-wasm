@@ -22,7 +22,7 @@ float
 __rintf (float x)
 {
   double result;
-  asm ("fint.s %1,%0" : "=f" (result) : "dm" (x));
+  asm ("fint.s %1,%0" : "=f"(result) : "dm"(x));
   return (float) result;
 }
 libm_alias_float (__rint, rint)

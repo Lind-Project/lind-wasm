@@ -23,7 +23,7 @@ __sigtimedwait64 (const sigset_t *set, siginfo_t *info,
 		  const struct __timespec64 *timeout)
 {
 #ifndef __NR_rt_sigtimedwait_time64
-# define __NR_rt_sigtimedwait_time64 __NR_rt_sigtimedwait
+#  define __NR_rt_sigtimedwait_time64 __NR_rt_sigtimedwait
 #endif
 
   int result;
@@ -49,8 +49,8 @@ __sigtimedwait64 (const sigset_t *set, siginfo_t *info,
 	  ts32 = valid_timespec64_to_timespec (*timeout);
 	  pts32 = &ts32;
 	}
-      result = SYSCALL_CANCEL (rt_sigtimedwait, set, info, pts32,
-			       __NSIG_BYTES);
+      result
+	  = SYSCALL_CANCEL (rt_sigtimedwait, set, info, pts32, __NSIG_BYTES);
     }
 #endif
 
@@ -66,9 +66,8 @@ __sigtimedwait64 (const sigset_t *set, siginfo_t *info,
 #if __TIMESIZE != 64
 libc_hidden_def (__sigtimedwait64)
 
-int
-__sigtimedwait (const sigset_t *set, siginfo_t *info,
-		const struct timespec *timeout)
+    int __sigtimedwait (const sigset_t *set, siginfo_t *info,
+			const struct timespec *timeout)
 {
   struct __timespec64 ts64, *pts64 = NULL;
   if (timeout != NULL)
@@ -79,5 +78,4 @@ __sigtimedwait (const sigset_t *set, siginfo_t *info,
   return __sigtimedwait64 (set, info, pts64);
 }
 #endif
-libc_hidden_def (__sigtimedwait)
-weak_alias (__sigtimedwait, sigtimedwait)
+libc_hidden_def (__sigtimedwait) weak_alias (__sigtimedwait, sigtimedwait)

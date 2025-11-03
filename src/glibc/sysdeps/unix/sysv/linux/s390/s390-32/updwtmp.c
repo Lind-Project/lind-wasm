@@ -21,8 +21,8 @@
 #include "utmp-private.h"
 
 #if defined SHARED
-# undef weak_alias
-# define weak_alias(n,a)
+#  undef weak_alias
+#  define weak_alias(n, a)
 #endif
 #include "sysdeps/gnu/updwtmp.c"
 

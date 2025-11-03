@@ -48,7 +48,7 @@ __pipe2 (int fds[2], int flags)
   if (result == -1 && errno == EPROTONOSUPPORT)
     {
       /* We contacted an "old" pflocal server that doesn't support the
-         magic S_IFIFO protocol.
+	 magic S_IFIFO protocol.
 	 FIXME: Remove this junk somewhere in the future.  */
       __set_errno (save_errno);
       return __socketpair (PF_LOCAL, SOCK_STREAM | flags, 0, fds);

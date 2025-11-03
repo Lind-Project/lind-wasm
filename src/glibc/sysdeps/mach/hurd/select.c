@@ -41,5 +41,4 @@ __select (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 
   return _hurd_select (nfds, NULL, readfds, writefds, exceptfds, to, NULL);
 }
-libc_hidden_def (__select)
-weak_alias (__select, select)
+libc_hidden_def (__select) weak_alias (__select, select)

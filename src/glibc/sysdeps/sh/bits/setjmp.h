@@ -17,30 +17,30 @@
 
 /* Define the machine-dependent type `jmp_buf'.  SH version. */
 #ifndef _BITS_SETJMP_H
-#define _BITS_SETJMP_H  1
+#  define _BITS_SETJMP_H 1
 
-#if !defined _SETJMP_H && !defined _PTHREAD_H
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
-#endif
+#  if !defined _SETJMP_H && !defined _PTHREAD_H
+#    error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  endif
 
-#ifndef _ASM
+#  ifndef _ASM
 typedef struct __jmp_buf_internal_tag
-  {
-    /* Callee-saved registers r8 through r15.  */
-    int __regs[8];
+{
+  /* Callee-saved registers r8 through r15.  */
+  int __regs[8];
 
-    /* Program counter.  */
-    void * __pc;
+  /* Program counter.  */
+  void *__pc;
 
-    /* The global pointer.  */
-    void * __gbr;
+  /* The global pointer.  */
+  void *__gbr;
 
-    /* Floating point status register.  */
-    int __fpscr;
+  /* Floating point status register.  */
+  int __fpscr;
 
-    /* Callee-saved floating point registers fr12 through fr15.  */
-    int __fpregs[4];
-  } __jmp_buf[1];
-#endif
+  /* Callee-saved floating point registers fr12 through fr15.  */
+  int __fpregs[4];
+} __jmp_buf[1];
+#  endif
 
-#endif  /* bits/setjmp.h */
+#endif /* bits/setjmp.h */

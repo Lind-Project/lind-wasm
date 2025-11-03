@@ -21,9 +21,8 @@
 
 void __mcount_internal (unsigned long frompc, unsigned long selfpc);
 
-#define _MCOUNT_DECL(frompc, selfpc) \
-void __mcount_internal (unsigned long frompc, unsigned long selfpc)
-
+#define _MCOUNT_DECL(frompc, selfpc)                                          \
+  void __mcount_internal (unsigned long frompc, unsigned long selfpc)
 
 /* Define MCOUNT as empty since we have the implementation in another
    file.  */

@@ -16,7 +16,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_RSEQ_H
-# error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
+#  error "Never use <bits/rseq.h> directly; include <sys/rseq.h> instead."
 #endif
 
 /* RSEQ_SIG is a signature required before each abort handler code.
@@ -32,12 +32,12 @@
    little-endian code and big-endian data.  Ensure the RSEQ_SIG signature
    matches code endianness.  */
 
-#define RSEQ_SIG_CODE  0xd428bc00  /* BRK #0x45E0.  */
+#define RSEQ_SIG_CODE 0xd428bc00 /* BRK #0x45E0.  */
 
 #ifdef __AARCH64EB__
-# define RSEQ_SIG_DATA 0x00bc28d4  /* BRK #0x45E0.  */
+#  define RSEQ_SIG_DATA 0x00bc28d4 /* BRK #0x45E0.  */
 #else
-# define RSEQ_SIG_DATA RSEQ_SIG_CODE
+#  define RSEQ_SIG_DATA RSEQ_SIG_CODE
 #endif
 
-#define RSEQ_SIG       RSEQ_SIG_DATA
+#define RSEQ_SIG RSEQ_SIG_DATA

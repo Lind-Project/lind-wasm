@@ -33,7 +33,7 @@ int
 __pselect (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 	   const struct timespec *timeout, const sigset_t *sigmask)
 {
-  return _hurd_select (nfds, NULL,
-		       readfds, writefds, exceptfds, timeout, sigmask);
+  return _hurd_select (nfds, NULL, readfds, writefds, exceptfds, timeout,
+		       sigmask);
 }
 weak_alias (__pselect, pselect)

@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef __ASSEMBLER__
-# define LP_SIZE 8
+#  define LP_SIZE 8
 #else
-# define LP_SIZE "8"
+#  define LP_SIZE "8"
 #endif

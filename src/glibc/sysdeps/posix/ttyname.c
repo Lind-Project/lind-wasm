@@ -28,15 +28,14 @@
 
 char *__ttyname;
 
-static char *getttyname (int fd, dev_t mydev, ino_t myino,
-			 int save, int *dostat);
-
+static char *getttyname (int fd, dev_t mydev, ino_t myino, int save,
+			 int *dostat);
 
 static char *getttyname_name;
 weak_alias (getttyname_name, __ttyname_freemem_ptr)
 
-static char *
-getttyname (int fd, dev_t mydev, ino_t myino, int save, int *dostat)
+    static char *getttyname (int fd, dev_t mydev, ino_t myino, int save,
+			     int *dostat)
 {
   static const char dev[] = "/dev";
   static size_t namelen;
@@ -53,8 +52,7 @@ getttyname (int fd, dev_t mydev, ino_t myino, int save, int *dostat)
 
   while ((d = __readdir (dirstream)) != NULL)
     if (((ino_t) d->d_fileno == myino || *dostat)
-	&& strcmp (d->d_name, "stdin")
-	&& strcmp (d->d_name, "stdout")
+	&& strcmp (d->d_name, "stdin") && strcmp (d->d_name, "stdout")
 	&& strcmp (d->d_name, "stderr"))
       {
 	size_t dlen = _D_ALLOC_NAMLEN (d);
@@ -63,7 +61,7 @@ getttyname (int fd, dev_t mydev, ino_t myino, int save, int *dostat)
 	    free (getttyname_name);
 	    namelen = 2 * (sizeof (dev) + dlen); /* Big enough.  */
 	    getttyname_name = malloc (namelen);
-	    if (! getttyname_name)
+	    if (!getttyname_name)
 	      {
 		*dostat = -1;
 		/* Perhaps it helps to free the directory stream buffer.  */
@@ -71,7 +69,7 @@ getttyname (int fd, dev_t mydev, ino_t myino, int save, int *dostat)
 		return NULL;
 	      }
 	    *((char *) __mempcpy (getttyname_name, dev, sizeof (dev) - 1))
-	      = '/';
+		= '/';
 	  }
 	(void) __mempcpy (&getttyname_name[sizeof (dev)], d->d_name, dlen);
 	if (stat (getttyname_name, &st) == 0
@@ -80,7 +78,7 @@ getttyname (int fd, dev_t mydev, ino_t myino, int save, int *dostat)
 #else
 	    && (ino_t) d->d_fileno == myino && st.st_dev == mydev
 #endif
-	   )
+	)
 	  {
 	    (void) __closedir (dirstream);
 	    __ttyname = getttyname_name;

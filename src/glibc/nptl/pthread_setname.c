@@ -26,7 +26,6 @@
 
 #include <not-cancel.h>
 
-
 int
 __pthread_setname_np (pthread_t th, const char *name)
 {
@@ -61,10 +60,9 @@ __pthread_setname_np (pthread_t th, const char *name)
 
   return res;
 }
-versioned_symbol (libc, __pthread_setname_np, pthread_setname_np,
-                  GLIBC_2_34);
+versioned_symbol (libc, __pthread_setname_np, pthread_setname_np, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_12, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_12, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_setname_np, pthread_setname_np,
-               GLIBC_2_12);
+	       GLIBC_2_12);
 #endif

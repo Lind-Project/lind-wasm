@@ -23,7 +23,7 @@
 #include <support/timespec.h>
 
 #ifndef ADJTIME_CALL
-# define ADJTIME_CALL(__clock, __timex) clock_adjtime (__clock, __timex)
+#  define ADJTIME_CALL(__clock, __timex) clock_adjtime (__clock, __timex)
 #endif
 
 static int
@@ -34,8 +34,8 @@ do_test (void)
 
   /* Check if altering target time is allowed.  */
   if (getenv (SETTIME_ENV_NAME) == NULL)
-    FAIL_UNSUPPORTED ("clock_adjtime is executed only when "\
-                      SETTIME_ENV_NAME" is set\n");
+    FAIL_UNSUPPORTED ("clock_adjtime is executed only when " SETTIME_ENV_NAME
+		      " is set\n");
 
   tv_then = xclock_now (CLOCK_REALTIME);
 
@@ -52,8 +52,9 @@ do_test (void)
 
   /* Check if clock_adjtime adjusted the system time.  */
   struct timespec r = timespec_sub (tv_now, tv_then);
-  TEST_COMPARE (support_timespec_check_in_range
-                ((struct timespec) { 1, 0 }, r, 0.9, 1.1), 1);
+  TEST_COMPARE (support_timespec_check_in_range ((struct timespec) { 1, 0 }, r,
+						 0.9, 1.1),
+		1);
 
   return 0;
 }

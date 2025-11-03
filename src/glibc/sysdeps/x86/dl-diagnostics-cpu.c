@@ -28,16 +28,16 @@ print_cpu_features_value (const char *label, uint64_t value)
 
 static void
 print_cpu_feature_internal (unsigned int index, const char *kind,
-                            unsigned int reg, uint32_t value)
+			    unsigned int reg, uint32_t value)
 {
-  _dl_printf ("x86.cpu_features.features[0x%x].%s[0x%x]=0x%x\n",
-              index, kind, reg, value);
+  _dl_printf ("x86.cpu_features.features[0x%x].%s[0x%x]=0x%x\n", index, kind,
+	      reg, value);
 }
 
 static void
 print_cpu_feature_preferred (const char *label, unsigned int flag)
 {
-  _dl_printf("x86.cpu_features.preferred.%s=0x%x\n", label, flag);
+  _dl_printf ("x86.cpu_features.preferred.%s=0x%x\n", label, flag);
 }
 
 void
@@ -54,65 +54,65 @@ _dl_diagnostics_cpu (void)
   for (unsigned int index = 0; index < CPUID_INDEX_MAX; ++index)
     {
       /* The index values are part of the ABI via
-         <sys/platform/x86.h>, so translating them to strings is not
-         necessary.  */
+	 <sys/platform/x86.h>, so translating them to strings is not
+	 necessary.  */
       for (unsigned int reg = 0; reg < 4; ++reg)
-        print_cpu_feature_internal
-          (index, "cpuid", reg,
-           cpu_features->features[index].cpuid_array[reg]);
+	print_cpu_feature_internal (
+	    index, "cpuid", reg,
+	    cpu_features->features[index].cpuid_array[reg]);
       for (unsigned int reg = 0; reg < 4; ++reg)
-        print_cpu_feature_internal
-          (index, "active", reg,
-           cpu_features->features[index].active_array[reg]);
+	print_cpu_feature_internal (
+	    index, "active", reg,
+	    cpu_features->features[index].active_array[reg]);
     }
 
-  /* The preferred indicators are not part of the ABI and need to be
-     translated.  */
-#define BIT(x) \
+    /* The preferred indicators are not part of the ABI and need to be
+       translated.  */
+#define BIT(x)                                                                \
   print_cpu_feature_preferred (#x, CPU_FEATURE_PREFERRED_P (cpu_features, x));
 #include "cpu-features-preferred_feature_index_1.def"
 #undef BIT
 
   print_cpu_features_value ("isa_1", cpu_features->isa_1);
   print_cpu_features_value ("xsave_state_size",
-                            cpu_features->xsave_state_size);
+			    cpu_features->xsave_state_size);
   print_cpu_features_value ("xsave_state_full_size",
-                            cpu_features->xsave_state_full_size);
+			    cpu_features->xsave_state_full_size);
   print_cpu_features_value ("data_cache_size", cpu_features->data_cache_size);
   print_cpu_features_value ("shared_cache_size",
-                            cpu_features->shared_cache_size);
+			    cpu_features->shared_cache_size);
   print_cpu_features_value ("non_temporal_threshold",
-                            cpu_features->non_temporal_threshold);
+			    cpu_features->non_temporal_threshold);
   print_cpu_features_value ("rep_movsb_threshold",
-                            cpu_features->rep_movsb_threshold);
+			    cpu_features->rep_movsb_threshold);
   print_cpu_features_value ("rep_movsb_stop_threshold",
-                            cpu_features->rep_movsb_stop_threshold);
+			    cpu_features->rep_movsb_stop_threshold);
   print_cpu_features_value ("rep_stosb_threshold",
-                            cpu_features->rep_stosb_threshold);
+			    cpu_features->rep_stosb_threshold);
   print_cpu_features_value ("level1_icache_size",
-                            cpu_features->level1_icache_size);
+			    cpu_features->level1_icache_size);
   print_cpu_features_value ("level1_icache_linesize",
-                            cpu_features->level1_icache_linesize);
+			    cpu_features->level1_icache_linesize);
   print_cpu_features_value ("level1_dcache_size",
-                            cpu_features->level1_dcache_size);
+			    cpu_features->level1_dcache_size);
   print_cpu_features_value ("level1_dcache_assoc",
-                            cpu_features->level1_dcache_assoc);
+			    cpu_features->level1_dcache_assoc);
   print_cpu_features_value ("level1_dcache_linesize",
-                            cpu_features->level1_dcache_linesize);
+			    cpu_features->level1_dcache_linesize);
   print_cpu_features_value ("level2_cache_size",
-                            cpu_features->level2_cache_size);
+			    cpu_features->level2_cache_size);
   print_cpu_features_value ("level2_cache_assoc",
-                            cpu_features->level2_cache_assoc);
+			    cpu_features->level2_cache_assoc);
   print_cpu_features_value ("level2_cache_linesize",
-                            cpu_features->level2_cache_linesize);
+			    cpu_features->level2_cache_linesize);
   print_cpu_features_value ("level3_cache_size",
-                            cpu_features->level3_cache_size);
+			    cpu_features->level3_cache_size);
   print_cpu_features_value ("level3_cache_assoc",
-                            cpu_features->level3_cache_assoc);
+			    cpu_features->level3_cache_assoc);
   print_cpu_features_value ("level3_cache_linesize",
-                            cpu_features->level3_cache_linesize);
+			    cpu_features->level3_cache_linesize);
   print_cpu_features_value ("level4_cache_size",
-                            cpu_features->level4_cache_size);
+			    cpu_features->level4_cache_size);
   print_cpu_features_value ("cachesize_non_temporal_divisor",
 			    cpu_features->cachesize_non_temporal_divisor);
   _Static_assert (

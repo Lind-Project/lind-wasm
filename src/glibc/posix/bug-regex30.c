@@ -37,14 +37,10 @@ struct
      U+0433	\xd0\xb3	CYRILLIC SMALL LETTER GHE
      U+0440	\xd1\x80	CYRILLIC SMALL LETTER ER
      U+044F	\xd1\x8f	CYRILLIC SMALL LETTER YA */
-  { "[\xd0\xb0-\xd1\x8f]", "\xd0\xb3", 0, 1,
-    { { 0, 2 } } },
-  { "[\xd0\xb0-\xd1\x8f]", "\xd0\x93", REG_ICASE, 1,
-    { { 0, 2 } } },
-  { "[\xd1\x80-\xd1\x8f]", "\xd0\xa0", REG_ICASE, 1,
-    { { 0, 2 } } },
+  { "[\xd0\xb0-\xd1\x8f]", "\xd0\xb3", 0, 1, { { 0, 2 } } },
+  { "[\xd0\xb0-\xd1\x8f]", "\xd0\x93", REG_ICASE, 1, { { 0, 2 } } },
+  { "[\xd1\x80-\xd1\x8f]", "\xd0\xa0", REG_ICASE, 1, { { 0, 2 } } },
 };
-
 
 static int
 do_test (void)
@@ -81,12 +77,12 @@ do_test (void)
 
       for (n = 0; n < tests[i].nmatch; ++n)
 	if (rm[n].rm_so != tests[i].rm[n].rm_so
-	      || rm[n].rm_eo != tests[i].rm[n].rm_eo)
+	    || rm[n].rm_eo != tests[i].rm[n].rm_eo)
 	  {
 	    if (tests[i].rm[n].rm_so == -1 && tests[i].rm[n].rm_eo == -1)
 	      break;
-	    printf ("regexec match failure rm[%d] %d..%d\n",
-		    n, rm[n].rm_so, rm[n].rm_eo);
+	    printf ("regexec match failure rm[%d] %d..%d\n", n, rm[n].rm_so,
+		    rm[n].rm_eo);
 	    ret = 1;
 	    break;
 	  }

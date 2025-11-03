@@ -29,8 +29,7 @@
 #include <tst-spawn.h>
 
 /* Nonzero if the program gets called via `exec'.  */
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 static int restart;
 
 /* Hold the four initial argument used to respawn the process, plus the extra
@@ -81,7 +80,7 @@ handle_restart (int argc, char *argv[])
 static void
 spawn_signal_test (const char *type, const posix_spawnattr_t *attr)
 {
-  spargs[check_type_argc] = (char*) type;
+  spargs[check_type_argc] = (char *) type;
 
   PID_T_TYPE pid;
   siginfo_t sinfo;
@@ -103,8 +102,9 @@ do_test_signals (void)
   /* Ensure the initial signal disposition, ignore EINVAL for internal
      signal such as SIGCANCEL.  */
   for (int sig = 1; sig < _NSIG; ++sig)
-    sigaction (sig, &(struct sigaction) { .sa_handler = SIG_DFL,
-					  .sa_flags = 0 }, NULL);
+    sigaction (sig,
+	       &(struct sigaction) { .sa_handler = SIG_DFL, .sa_flags = 0 },
+	       NULL);
 
   {
     /* Check if all signals handler are set to SIG_DFL on spawned process.  */
@@ -175,7 +175,6 @@ do_test (int argc, char *argv[])
   spargs[i++] = (char *) "--restart";
   check_type_argc = i++;
   spargs[i] = NULL;
-
 
   do_test_signals ();
 

@@ -21,7 +21,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 int
 do_test (void)
 {
@@ -82,7 +81,6 @@ default detach state wrong: %d, expected %d (PTHREAD_CREATE_JOINABLE)\n",
       exit (1);
     }
 
-
   size_t g;
   if (pthread_attr_getguardsize (&a, &g) != 0)
     {
@@ -91,8 +89,8 @@ default detach state wrong: %d, expected %d (PTHREAD_CREATE_JOINABLE)\n",
     }
   if (g != (size_t) sysconf (_SC_PAGESIZE))
     {
-      printf ("default guardsize %zu, expected %ld (PAGESIZE)\n",
-	      g, sysconf (_SC_PAGESIZE));
+      printf ("default guardsize %zu, expected %ld (PAGESIZE)\n", g,
+	      sysconf (_SC_PAGESIZE));
       exit (1);
     }
 
@@ -129,7 +127,6 @@ default detach state wrong: %d, expected %d (PTHREAD_CREATE_JOINABLE)\n",
       printf ("guardsize set to 1 but %zu returned\n", g);
       exit (1);
     }
-
 
   if (pthread_attr_getinheritsched (&a, &s) != 0)
     {
@@ -176,7 +173,6 @@ default detach state wrong: %d, expected %d (PTHREAD_CREATE_JOINABLE)\n",
       printf ("inheritsched set to PTHREAD_INHERIT_SCHED, but got %d\n", s);
       exit (1);
     }
-
 
   if (pthread_attr_getschedpolicy (&a, &s) != 0)
     {
@@ -241,7 +237,6 @@ default detach state wrong: %d, expected %d (PTHREAD_CREATE_JOINABLE)\n",
       exit (1);
     }
 
-
   if (pthread_attr_getscope (&a, &s) != 0)
     {
       puts ("1st attr_getscope failed");
@@ -270,7 +265,8 @@ default detach state wrong: %d, expected %d (PTHREAD_CREATE_JOINABLE)\n",
       if (s != PTHREAD_SCOPE_PROCESS)
 	{
 	  printf ("\
-contentionscope set to PTHREAD_SCOPE_PROCESS, but got %d\n", s);
+contentionscope set to PTHREAD_SCOPE_PROCESS, but got %d\n",
+		  s);
 	  exit (1);
 	}
     }
@@ -309,7 +305,6 @@ contentionscope set to PTHREAD_SCOPE_PROCESS, but got %d\n", s);
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

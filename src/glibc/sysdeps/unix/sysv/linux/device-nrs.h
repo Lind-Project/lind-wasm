@@ -17,29 +17,31 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DEVICE_NRS_H
-#define _DEVICE_NRS_H	1
+#  define _DEVICE_NRS_H 1
 
-#include <sys/sysmacros.h>
+#  include <sys/sysmacros.h>
 
 /* /dev/null is (1,3).  */
-#define DEV_NULL_MAJOR	1
-#define DEV_NULL_MINOR	3
+#  define DEV_NULL_MAJOR 1
+#  define DEV_NULL_MINOR 3
 
 /* /dev/full is (1,7).  */
-#define DEV_FULL_MAJOR	1
-#define DEV_FULL_MINOR	7
+#  define DEV_FULL_MAJOR 1
+#  define DEV_FULL_MINOR 7
 
 /* Pseudo tty slaves.  For Linux we use the Unix98 ttys.  We could
    also include the old BSD-style tty buts they should not be used and
    the extra test would only slow down correctly set up systems.  If a
    system still uses those device the slower tests performed (using
    isatty) will catch it.  */
-#define DEV_TTY_LOW_MAJOR	136
-#define DEV_TTY_HIGH_MAJOR	143
+#  define DEV_TTY_LOW_MAJOR 136
+#  define DEV_TTY_HIGH_MAJOR 143
 
 /* Test whether given device is a tty.  */
-#define DEV_TTY_P(statp) \
-  ({ int __dev_major = __gnu_dev_major ((statp)->st_rdev);		      \
-     __dev_major >= DEV_TTY_LOW_MAJOR && __dev_major <= DEV_TTY_HIGH_MAJOR; })
+#  define DEV_TTY_P(statp)                                                    \
+    ({                                                                        \
+      int __dev_major = __gnu_dev_major ((statp)->st_rdev);                   \
+      __dev_major >= DEV_TTY_LOW_MAJOR &&__dev_major <= DEV_TTY_HIGH_MAJOR;   \
+    })
 
-#endif	/* device-nrs.h */
+#endif /* device-nrs.h */

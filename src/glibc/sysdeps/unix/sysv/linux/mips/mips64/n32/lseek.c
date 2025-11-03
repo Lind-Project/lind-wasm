@@ -31,6 +31,5 @@ __lseek (int fd, off_t offset, int whence)
     }
   return (off_t) res;
 }
-libc_hidden_def (__lseek)
-weak_alias (__lseek, lseek)
-strong_alias (__lseek, __libc_lseek)
+libc_hidden_def (__lseek) weak_alias (__lseek, lseek)
+    strong_alias (__lseek, __libc_lseek)

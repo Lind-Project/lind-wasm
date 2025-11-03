@@ -17,21 +17,22 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _UCONTEXT_H
-# error "Never include <bits/indirect-return.h> directly; use <ucontext.h> instead."
+#  error                                                                       \
+      "Never include <bits/indirect-return.h> directly; use <ucontext.h> instead."
 #endif
 
 /* On x86, swapcontext returns via indirect branch when the shadow stack
    is enabled.  Define __INDIRECT_RETURN to indicate whether swapcontext
    returns via indirect branch.  */
 #if defined __CET__ && (__CET__ & 2) != 0
-# if __glibc_has_attribute (__indirect_return__)
-#  define __INDIRECT_RETURN __attribute__ ((__indirect_return__))
-# else
+#  if __glibc_has_attribute(__indirect_return__)
+#    define __INDIRECT_RETURN __attribute__ ((__indirect_return__))
+#  else
 /* Newer compilers provide the indirect_return attribute, but without
    it we can use returns_twice to affect the optimizer in the same
    way and avoid unsafe optimizations.  */
-#  define __INDIRECT_RETURN __attribute__ ((__returns_twice__))
-# endif
+#    define __INDIRECT_RETURN __attribute__ ((__returns_twice__))
+#  endif
 #else
-# define __INDIRECT_RETURN
+#  define __INDIRECT_RETURN
 #endif

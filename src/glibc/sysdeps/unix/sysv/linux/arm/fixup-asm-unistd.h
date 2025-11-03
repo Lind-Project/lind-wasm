@@ -17,8 +17,8 @@
 
 /* These system calls have iregular names and are used by glibc.  */
 #ifndef __NR_cacheflush
-# define __NR_cacheflush __ARM_NR_cacheflush
+#  define __NR_cacheflush __ARM_NR_cacheflush
 #endif
 #ifndef __NR_set_tls
-# define __NR_set_tls    __ARM_NR_set_tls
+#  define __NR_set_tls __ARM_NR_set_tls
 #endif

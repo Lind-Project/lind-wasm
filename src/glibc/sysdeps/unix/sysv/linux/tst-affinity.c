@@ -35,7 +35,8 @@ setaffinity (size_t size, const cpu_set_t *set)
 }
 
 struct conf;
-static bool early_test (struct conf *unused)
+static bool
+early_test (struct conf *unused)
 {
   return true;
 }

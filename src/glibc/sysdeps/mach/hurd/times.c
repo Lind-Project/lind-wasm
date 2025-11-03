@@ -34,7 +34,8 @@ clock_from_time_value (const time_value_t *t)
 
 #ifdef HAVE_HURD_PROC_GETCHILDREN_RUSAGE
 static inline clock_t
-clock_from_timeval (const struct timeval *t) {
+clock_from_timeval (const struct timeval *t)
+{
   return t->tv_sec * 1000000 + t->tv_usec;
 }
 #endif
@@ -53,8 +54,8 @@ __times (struct tms *tms)
   error_t err;
 
   count = TASK_BASIC_INFO_COUNT;
-  err = __task_info (__mach_task_self (), TASK_BASIC_INFO,
-		     (task_info_t) &bi, &count);
+  err = __task_info (__mach_task_self (), TASK_BASIC_INFO, (task_info_t) &bi,
+		     &count);
   if (err)
     return __hurd_fail (err);
 

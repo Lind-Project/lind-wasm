@@ -19,16 +19,16 @@
 
 /* Redefine strstr so that the compiler won't complain about the type
    mismatch with the IFUNC selector in strong_alias, below.  */
-#undef  strstr
+#undef strstr
 #define strstr __redirect_strstr
 #include <string.h>
-#undef  strstr
+#undef strstr
 
 #define STRSTR __strstr_generic
 #ifdef SHARED
-# undef libc_hidden_builtin_def
-# define libc_hidden_builtin_def(name) \
-  __hidden_ver1 (__strstr_generic, __GI_strstr, __strstr_generic);
+#  undef libc_hidden_builtin_def
+#  define libc_hidden_builtin_def(name)                                       \
+    __hidden_ver1 (__strstr_generic, __GI_strstr, __strstr_generic);
 #endif
 
 #include "string/strstr.c"
@@ -39,8 +39,7 @@ extern __typeof (__redirect_strstr) __strstr_sse2_unaligned attribute_hidden;
 
 /* Avoid DWARF definition DIE on ifunc symbol so that GDB can handle
    ifunc symbol properly.  */
-static inline void *
-inhibit_stack_protector
+static inline void *inhibit_stack_protector
 IFUNC_SELECTOR (void)
 {
   const struct cpu_features *cpu_features = __get_cpu_features ();

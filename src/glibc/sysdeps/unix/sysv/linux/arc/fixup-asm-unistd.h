@@ -25,22 +25,22 @@
 
 /* Elide all other 32-bit time_t syscalls.  */
 
-# undef __NR_clock_adjtime
-# undef __NR_clock_getres
-# undef __NR_clock_gettime
-# undef __NR_clock_nanosleep
-# undef __NR_clock_settime
-# undef __NR_futex
-# undef __NR_mq_timedreceive
-# undef __NR_mq_timedsend
-# undef __NR_ppoll
-# undef __NR_pselect6
-# undef __NR_recvmmsg
-# undef __NR_rt_sigtimedwait
-# undef __NR_sched_rr_get_interval
-# undef __NR_semtimedop
-# undef __NR_timer_gettime
-# undef __NR_timer_settime
-# undef __NR_timerfd_gettime
-# undef __NR_timerfd_settime
-# undef __NR_utimensat
+#undef __NR_clock_adjtime
+#undef __NR_clock_getres
+#undef __NR_clock_gettime
+#undef __NR_clock_nanosleep
+#undef __NR_clock_settime
+#undef __NR_futex
+#undef __NR_mq_timedreceive
+#undef __NR_mq_timedsend
+#undef __NR_ppoll
+#undef __NR_pselect6
+#undef __NR_recvmmsg
+#undef __NR_rt_sigtimedwait
+#undef __NR_sched_rr_get_interval
+#undef __NR_semtimedop
+#undef __NR_timer_gettime
+#undef __NR_timer_settime
+#undef __NR_timerfd_gettime
+#undef __NR_timerfd_settime
+#undef __NR_utimensat

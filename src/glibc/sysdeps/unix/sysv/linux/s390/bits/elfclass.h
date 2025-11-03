@@ -20,7 +20,7 @@
    machine.  */
 
 #ifndef _LINK_H
-# error "Never use <bits/elfclass.h> directly; include <link.h> instead."
+#  error "Never use <bits/elfclass.h> directly; include <link.h> instead."
 #endif
 
 #include <bits/wordsize.h>

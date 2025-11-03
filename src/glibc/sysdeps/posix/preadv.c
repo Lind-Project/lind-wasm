@@ -20,10 +20,10 @@
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 
-# define PREADV preadv
-# define PREAD __pread
-# define OFF_T off_t
-# include <sysdeps/posix/preadv_common.c>
+#  define PREADV preadv
+#  define PREAD __pread
+#  define OFF_T off_t
+#  include <sysdeps/posix/preadv_common.c>
 
 libc_hidden_def (preadv)
 

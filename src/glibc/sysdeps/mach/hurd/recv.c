@@ -39,13 +39,10 @@ __recv (int fd, void *buf, size_t n, int flags)
   mach_msg_type_number_t clen = 0;
   int cancel_oldtype;
 
-  cancel_oldtype = LIBC_CANCEL_ASYNC();
-  err = HURD_DPORT_USE_CANCEL (fd, __socket_recv (port, &addrport,
-						  flags, &bufp, &nread,
-						  &ports, &nports,
-						  &cdata, &clen,
-						  &flags,
-						  n));
+  cancel_oldtype = LIBC_CANCEL_ASYNC ();
+  err = HURD_DPORT_USE_CANCEL (
+      fd, __socket_recv (port, &addrport, flags, &bufp, &nread, &ports,
+			 &nports, &cdata, &clen, &flags, n));
   LIBC_CANCEL_RESET (cancel_oldtype);
 
   if (err == MIG_BAD_ID || err == EOPNOTSUPP)
@@ -66,5 +63,4 @@ __recv (int fd, void *buf, size_t n, int flags)
 
   return nread;
 }
-libc_hidden_def (__recv)
-weak_alias (__recv, recv)
+libc_hidden_def (__recv) weak_alias (__recv, recv)

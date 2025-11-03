@@ -31,23 +31,18 @@ static uint64_t saved_arg1;
 static __ifunc_arg_t saved_arg2;
 
 /* local ifunc symbol.  */
-int
-__attribute__ ((visibility ("hidden")))
-foo (void);
+int __attribute__ ((visibility ("hidden"))) foo (void);
 
-static void *
-__attribute__ ((used))
+static void *__attribute__ ((used))
 foo_ifunc (uint64_t, const __ifunc_arg_t *) __asm__ ("foo");
-__asm__(".type foo, %gnu_indirect_function");
+__asm__ (".type foo, %gnu_indirect_function");
 
-static void *
-__attribute__ ((used))
-inhibit_stack_protector
+static void *__attribute__ ((used)) inhibit_stack_protector
 foo_ifunc (uint64_t arg1, const __ifunc_arg_t *arg2)
 {
   saved_arg1 = arg1;
   if (arg1 & _IFUNC_ARG_HWCAP)
-      saved_arg2 = *arg2;
+    saved_arg2 = *arg2;
   return (void *) one;
 }
 
@@ -56,7 +51,7 @@ do_test (void)
 {
   TEST_VERIFY (foo () == 1);
   TEST_VERIFY (saved_arg1 & _IFUNC_ARG_HWCAP);
-  TEST_COMPARE ((uint32_t)saved_arg1, (uint32_t)getauxval (AT_HWCAP));
+  TEST_COMPARE ((uint32_t) saved_arg1, (uint32_t) getauxval (AT_HWCAP));
   TEST_COMPARE (saved_arg2._size, sizeof (__ifunc_arg_t));
   TEST_COMPARE (saved_arg2._hwcap, getauxval (AT_HWCAP));
   TEST_COMPARE (saved_arg2._hwcap2, getauxval (AT_HWCAP2));

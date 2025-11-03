@@ -18,7 +18,7 @@
 #define sigpause __rename_sigpause
 #include <errno.h>
 #include <signal.h>
-#include <stddef.h>		/* For NULL.  */
+#include <stddef.h> /* For NULL.  */
 #undef sigpause
 
 #include <sigset-cvt-mask.h>
@@ -46,26 +46,21 @@ __sigpause (int sig_or_mask, int is_sig)
 }
 libc_hidden_def (__sigpause)
 
-/* We have to provide a default version of this function since the
-   standards demand it.  The version which is a bit more reasonable is
-   the BSD version.  So make this the default.  */
-int
-__attribute__ ((weak))
-__default_sigpause (int mask)
+    /* We have to provide a default version of this function since the
+       standards demand it.  The version which is a bit more reasonable is
+       the BSD version.  So make this the default.  */
+    int __attribute__ ((weak)) __default_sigpause (int mask)
 {
   return __sigpause (mask, 0);
 }
 #undef sigpause
 weak_alias (__default_sigpause, sigpause)
-strong_alias (__default_sigpause, __libc_sigpause)
+    strong_alias (__default_sigpause, __libc_sigpause)
 
-
-/* We have to provide a default version of this function since the
-   standards demand it.  The version which is a bit more reasonable is
-   the BSD version.  So make this the default.  */
-int
-__attribute__ ((weak))
-__xpg_sigpause (int sig)
+    /* We have to provide a default version of this function since the
+       standards demand it.  The version which is a bit more reasonable is
+       the BSD version.  So make this the default.  */
+    int __attribute__ ((weak)) __xpg_sigpause (int sig)
 {
   return __sigpause (sig, 1);
 }

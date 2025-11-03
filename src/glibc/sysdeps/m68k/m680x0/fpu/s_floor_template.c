@@ -21,8 +21,5 @@
 #include "mathimpl.h"
 
 FLOAT
-M_DECL_FUNC (__floor) (FLOAT x)
-{
-  return __m81_u(M_SUF (__floor)) (x);
-}
+M_DECL_FUNC (__floor) (FLOAT x) { return __m81_u (M_SUF (__floor)) (x); }
 declare_mgen_alias (__floor, floor)

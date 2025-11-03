@@ -17,4 +17,4 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Minimum size for a thread.  We are free to choose a reasonable value.  */
-#define PTHREAD_STACK_MIN	24576
+#define PTHREAD_STACK_MIN 24576

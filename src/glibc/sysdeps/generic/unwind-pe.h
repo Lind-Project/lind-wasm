@@ -23,65 +23,61 @@
 
 /* If using C++, references to abort have to be qualified with std::.  */
 #ifdef __cplusplus
-#define __gxx_abort std::abort
+#  define __gxx_abort std::abort
 #else
-#define __gxx_abort abort
+#  define __gxx_abort abort
 #endif
 
 /* Pointer encodings, from dwarf2.h.  */
-#define DW_EH_PE_absptr         0x00
-#define DW_EH_PE_omit           0xff
+#define DW_EH_PE_absptr 0x00
+#define DW_EH_PE_omit 0xff
 
-#define DW_EH_PE_uleb128        0x01
-#define DW_EH_PE_udata2         0x02
-#define DW_EH_PE_udata4         0x03
-#define DW_EH_PE_udata8         0x04
-#define DW_EH_PE_sleb128        0x09
-#define DW_EH_PE_sdata2         0x0A
-#define DW_EH_PE_sdata4         0x0B
-#define DW_EH_PE_sdata8         0x0C
-#define DW_EH_PE_signed         0x08
+#define DW_EH_PE_uleb128 0x01
+#define DW_EH_PE_udata2 0x02
+#define DW_EH_PE_udata4 0x03
+#define DW_EH_PE_udata8 0x04
+#define DW_EH_PE_sleb128 0x09
+#define DW_EH_PE_sdata2 0x0A
+#define DW_EH_PE_sdata4 0x0B
+#define DW_EH_PE_sdata8 0x0C
+#define DW_EH_PE_signed 0x08
 
-#define DW_EH_PE_pcrel          0x10
-#define DW_EH_PE_textrel        0x20
-#define DW_EH_PE_datarel        0x30
-#define DW_EH_PE_funcrel        0x40
-#define DW_EH_PE_aligned        0x50
+#define DW_EH_PE_pcrel 0x10
+#define DW_EH_PE_textrel 0x20
+#define DW_EH_PE_datarel 0x30
+#define DW_EH_PE_funcrel 0x40
+#define DW_EH_PE_aligned 0x50
 
-#define DW_EH_PE_indirect	0x80
-
+#define DW_EH_PE_indirect 0x80
 
 #if defined(_LIBC)
 
 /* Prototypes.  */
-extern unsigned int size_of_encoded_value (unsigned char encoding)
-  attribute_hidden;
+extern unsigned int
+size_of_encoded_value (unsigned char encoding) attribute_hidden;
 
-extern const unsigned char *read_encoded_value_with_base
-  (unsigned char encoding, _Unwind_Ptr base,
-   const unsigned char *p, _Unwind_Ptr *val)
-  attribute_hidden;
+extern const unsigned char *
+read_encoded_value_with_base (unsigned char encoding, _Unwind_Ptr base,
+			      const unsigned char *p,
+			      _Unwind_Ptr *val) attribute_hidden;
 
-extern const unsigned char * read_encoded_value
-  (struct _Unwind_Context *context, unsigned char encoding,
-   const unsigned char *p, _Unwind_Ptr *val)
-  attribute_hidden;
+extern const unsigned char *
+read_encoded_value (struct _Unwind_Context *context, unsigned char encoding,
+		    const unsigned char *p, _Unwind_Ptr *val) attribute_hidden;
 
-extern const unsigned char * read_uleb128 (const unsigned char *p,
-					   _Unwind_Word *val)
-  attribute_hidden;
-extern const unsigned char * read_sleb128 (const unsigned char *p,
-					   _Unwind_Sword *val)
-  attribute_hidden;
+extern const unsigned char *read_uleb128 (const unsigned char *p,
+					  _Unwind_Word *val) attribute_hidden;
+extern const unsigned char *read_sleb128 (const unsigned char *p,
+					  _Unwind_Sword *val) attribute_hidden;
 
 #endif
 #if defined(_LIBC) && defined(_LIBC_DEFINITIONS)
 
-#ifdef _LIBC
-#define STATIC
-#else
-#define STATIC static
-#endif
+#  ifdef _LIBC
+#    define STATIC
+#  else
+#    define STATIC static
+#  endif
 
 /* Given an encoding, return the number of bytes the format occupies.
    This is only defined for fixed-size encodings, and so does not
@@ -107,7 +103,7 @@ size_of_encoded_value (unsigned char encoding)
   __gxx_abort ();
 }
 
-#ifndef NO_BASE_OF_ENCODED_VALUE
+#  ifndef NO_BASE_OF_ENCODED_VALUE
 
 /* Given an encoding and an _Unwind_Context, return the base to which
    the encoding is relative.  This base may then be passed to
@@ -137,7 +133,7 @@ base_of_encoded_value (unsigned char encoding, struct _Unwind_Context *context)
   __gxx_abort ();
 }
 
-#endif
+#  endif
 
 /* Read an unsigned leb128 value from P, store the value in VAL, return
    P incremented past the value.  We assume that a word is large enough to
@@ -199,15 +195,15 @@ read_encoded_value_with_base (unsigned char encoding, _Unwind_Ptr base,
 			      const unsigned char *p, _Unwind_Ptr *val)
 {
   union unaligned
-    {
-      void *ptr;
-      unsigned u2 __attribute__ ((mode (HI)));
-      unsigned u4 __attribute__ ((mode (SI)));
-      unsigned u8 __attribute__ ((mode (DI)));
-      signed s2 __attribute__ ((mode (HI)));
-      signed s4 __attribute__ ((mode (SI)));
-      signed s8 __attribute__ ((mode (DI)));
-    } __attribute__((__packed__));
+  {
+    void *ptr;
+    unsigned u2 __attribute__ ((mode (HI)));
+    unsigned u4 __attribute__ ((mode (SI)));
+    unsigned u8 __attribute__ ((mode (DI)));
+    signed s2 __attribute__ ((mode (HI)));
+    signed s4 __attribute__ ((mode (SI)));
+    signed s8 __attribute__ ((mode (DI)));
+  } __attribute__ ((__packed__));
 
   union unaligned *u = (union unaligned *) p;
   _Unwind_Internal_Ptr result;
@@ -215,7 +211,7 @@ read_encoded_value_with_base (unsigned char encoding, _Unwind_Ptr base,
   if (encoding == DW_EH_PE_aligned)
     {
       _Unwind_Internal_Ptr a = (_Unwind_Internal_Ptr) p;
-      a = (a + sizeof (void *) - 1) & - sizeof (void *);
+      a = (a + sizeof (void *) - 1) & -sizeof (void *);
       result = *(_Unwind_Internal_Ptr *) a;
       p = (const unsigned char *) (a + sizeof (void *));
     }
@@ -277,7 +273,8 @@ read_encoded_value_with_base (unsigned char encoding, _Unwind_Ptr base,
       if (result != 0)
 	{
 	  result += ((encoding & 0x70) == DW_EH_PE_pcrel
-		     ? (_Unwind_Internal_Ptr) u : base);
+			 ? (_Unwind_Internal_Ptr) u
+			 : base);
 	  if (encoding & DW_EH_PE_indirect)
 	    result = *(_Unwind_Internal_Ptr *) result;
 	}
@@ -287,7 +284,7 @@ read_encoded_value_with_base (unsigned char encoding, _Unwind_Ptr base,
   return p;
 }
 
-#ifndef NO_BASE_OF_ENCODED_VALUE
+#  ifndef NO_BASE_OF_ENCODED_VALUE
 
 /* Like read_encoded_value_with_base, but get the base from the context
    rather than providing it directly.  */
@@ -296,10 +293,9 @@ STATIC const unsigned char *
 read_encoded_value (struct _Unwind_Context *context, unsigned char encoding,
 		    const unsigned char *p, _Unwind_Ptr *val)
 {
-  return read_encoded_value_with_base (encoding,
-		base_of_encoded_value (encoding, context),
-		p, val);
+  return read_encoded_value_with_base (
+      encoding, base_of_encoded_value (encoding, context), p, val);
 }
 
-#endif
+#  endif
 #endif /* _LIBC */

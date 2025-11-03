@@ -41,10 +41,10 @@ static sem_t *sem;
 static void *
 tf (void *arg)
 {
-  char *cmd = xasprintf ("%s --direct --sem %s --pidfile %s",
-			 command, semfilename, pidfilename);
+  char *cmd = xasprintf ("%s --direct --sem %s --pidfile %s", command,
+			 semfilename, pidfilename);
   if (system (cmd))
-    FAIL_EXIT1("system call unexpectedly returned");
+    FAIL_EXIT1 ("system call unexpectedly returned");
   /* This call should never return.  */
   return NULL;
 }
@@ -60,13 +60,8 @@ sl (void)
   if (sem_post (sem) != 0)
     FAIL_EXIT1 ("sem_post: %m");
 
-  struct flock fl =
-    {
-      .l_type = F_WRLCK,
-      .l_start = 0,
-      .l_whence = SEEK_SET,
-      .l_len = 1
-    };
+  struct flock fl
+      = { .l_type = F_WRLCK, .l_start = 0, .l_whence = SEEK_SET, .l_len = 1 };
   if (fcntl (fileno (f), F_SETLK, &fl) != 0)
     FAIL_EXIT1 ("fcntl (F_SETFL): %m");
 
@@ -75,7 +70,6 @@ sl (void)
   sigsuspend (&ss);
   exit (0);
 }
-
 
 static void
 do_prepare (int argc, char *argv[])
@@ -110,7 +104,6 @@ do_prepare (int argc, char *argv[])
   xclose (fd);
 }
 
-
 static int
 do_test (void)
 {
@@ -129,13 +122,8 @@ do_test (void)
   if (fscanf (f, "%lld\n", &ll) != 1)
     FAIL_EXIT1 ("fscanf: %m");
 
-  struct flock fl =
-    {
-      .l_type = F_WRLCK,
-      .l_start = 0,
-      .l_whence = SEEK_SET,
-      .l_len = 1
-    };
+  struct flock fl
+      = { .l_type = F_WRLCK, .l_start = 0, .l_whence = SEEK_SET, .l_len = 1 };
   if (fcntl (fileno (f), F_GETLK, &fl) != 0)
     FAIL_EXIT1 ("fcntl: %m");
 
@@ -161,13 +149,9 @@ do_cleanup (void)
 
   if (f != NULL && fscanf (f, "%lld\n", &ll) == 1)
     {
-      struct flock fl =
-	{
-	  .l_type = F_WRLCK,
-	  .l_start = 0,
-	  .l_whence = SEEK_SET,
-	  .l_len = 1
-	};
+      struct flock fl = {
+	.l_type = F_WRLCK, .l_start = 0, .l_whence = SEEK_SET, .l_len = 1
+      };
       if (fcntl (fileno (f), F_GETLK, &fl) == 0 && fl.l_type != F_UNLCK
 	  && fl.l_pid == ll)
 	kill (fl.l_pid, SIGKILL);
@@ -176,13 +160,13 @@ do_cleanup (void)
     }
 }
 
-#define OPT_COMMAND	10000
-#define OPT_PIDFILE	10001
-#define OPT_SEMFILE	10002
-#define CMDLINE_OPTIONS \
-  { "command", required_argument, NULL, OPT_COMMAND },	\
-  { "pidfile", required_argument, NULL, OPT_PIDFILE },  \
-  { "sem",     required_argument, NULL, OPT_SEMFILE },
+#define OPT_COMMAND 10000
+#define OPT_PIDFILE 10001
+#define OPT_SEMFILE 10002
+#define CMDLINE_OPTIONS                                                       \
+  { "command", required_argument, NULL, OPT_COMMAND },                        \
+      { "pidfile", required_argument, NULL, OPT_PIDFILE },                    \
+      { "sem", required_argument, NULL, OPT_SEMFILE },
 static void
 cmdline_process (int c)
 {

@@ -12,8 +12,9 @@
  * ====================================================
  */
 
-#if defined (LIBM_SCCS) && ! defined (lint)
-static char rcsid[] = "$NetBSD: s_copysignf.c,v 1.4 1995/05/10 20:46:59 jtc Exp $";
+#if defined(LIBM_SCCS) && !defined(lint)
+static char rcsid[]
+    = "$NetBSD: s_copysignf.c,v 1.4 1995/05/10 20:46:59 jtc Exp $";
 #endif
 
 /*

@@ -16,13 +16,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _NETATALK_AT_H
-#define _NETATALK_AT_H 1
+#  define _NETATALK_AT_H 1
 
-#include <asm/types.h>
-#include <bits/sockaddr.h>
-#include <linux/atalk.h>
-#include <sys/socket.h>
+#  include <asm/types.h>
+#  include <bits/sockaddr.h>
+#  include <linux/atalk.h>
+#  include <sys/socket.h>
 
-#define SOL_ATALK       258     /* sockopt level for atalk */
+#  define SOL_ATALK 258 /* sockopt level for atalk */
 
-#endif	/* netatalk/at.h */
+#endif /* netatalk/at.h */

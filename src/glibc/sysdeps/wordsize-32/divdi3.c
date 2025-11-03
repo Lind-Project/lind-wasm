@@ -21,14 +21,14 @@
 #include <bits/wordsize.h>
 
 #if __WORDSIZE != 32
-#error This is for 32-bit targets only
+#  error This is for 32-bit targets only
 #endif
 
-typedef unsigned int UQItype	__attribute__ ((mode (QI)));
-typedef          int SItype	__attribute__ ((mode (SI)));
-typedef unsigned int USItype	__attribute__ ((mode (SI)));
-typedef          int DItype	__attribute__ ((mode (DI)));
-typedef unsigned int UDItype	__attribute__ ((mode (DI)));
+typedef unsigned int UQItype __attribute__ ((mode (QI)));
+typedef int SItype __attribute__ ((mode (SI)));
+typedef unsigned int USItype __attribute__ ((mode (SI)));
+typedef int DItype __attribute__ ((mode (DI)));
+typedef unsigned int UDItype __attribute__ ((mode (DI)));
 #define Wtype SItype
 #define HWtype SItype
 #define DWtype DItype
@@ -40,13 +40,23 @@ typedef unsigned int UDItype	__attribute__ ((mode (DI)));
 #include <stdlib/longlong.h>
 
 #if __BYTE_ORDER == __BIG_ENDIAN
-struct DWstruct { Wtype high, low;};
+struct DWstruct
+{
+  Wtype high, low;
+};
 #elif __BYTE_ORDER == __LITTLE_ENDIAN
-struct DWstruct { Wtype low, high;};
+struct DWstruct
+{
+  Wtype low, high;
+};
 #else
-#error Unhandled endianity
+#  error Unhandled endianity
 #endif
-typedef union { struct DWstruct s; DWtype ll; } DWunion;
+typedef union
+{
+  struct DWstruct s;
+  DWtype ll;
+} DWunion;
 
 /* Prototypes of exported functions.  */
 extern DWtype __divdi3 (DWtype u, DWtype v);
@@ -89,7 +99,7 @@ __udivmoddi4 (UDWtype n, UDWtype d, UDWtype *rp)
 	  /* qq = NN / 0d */
 
 	  if (d0 == 0)
-	    d0 = 1 / d0;	/* Divide intentionally by zero.  */
+	    d0 = 1 / d0; /* Divide intentionally by zero.  */
 
 	  udiv_qrnnd (q1, n1, 0, n1, d0);
 	  udiv_qrnnd (q0, n0, n1, n0, d0);
@@ -105,7 +115,7 @@ __udivmoddi4 (UDWtype n, UDWtype d, UDWtype *rp)
 	}
     }
 
-#else /* UDIV_NEEDS_NORMALIZATION */
+#else  /* UDIV_NEEDS_NORMALIZATION */
 
   if (d1 == 0)
     {
@@ -135,7 +145,7 @@ __udivmoddi4 (UDWtype n, UDWtype d, UDWtype *rp)
 	  /* qq = NN / 0d */
 
 	  if (d0 == 0)
-	    d0 = 1 / d0;	/* Divide intentionally by zero.  */
+	    d0 = 1 / d0; /* Divide intentionally by zero.  */
 
 	  count_leading_zeros (bm, d0);
 
@@ -294,8 +304,7 @@ __divdi3 (DWtype u, DWtype v)
 }
 strong_alias (__divdi3, __divdi3_internal)
 
-DWtype
-__moddi3 (DWtype u, DWtype v)
+    DWtype __moddi3 (DWtype u, DWtype v)
 {
   Wtype c = 0;
   DWtype w;
@@ -314,15 +323,13 @@ __moddi3 (DWtype u, DWtype v)
 }
 strong_alias (__moddi3, __moddi3_internal)
 
-UDWtype
-__udivdi3 (UDWtype u, UDWtype v)
+    UDWtype __udivdi3 (UDWtype u, UDWtype v)
 {
   return __udivmoddi4 (u, v, NULL);
 }
 strong_alias (__udivdi3, __udivdi3_internal)
 
-UDWtype
-__umoddi3 (UDWtype u, UDWtype v)
+    UDWtype __umoddi3 (UDWtype u, UDWtype v)
 {
   UDWtype w;
 
@@ -334,8 +341,8 @@ strong_alias (__umoddi3, __umoddi3_internal)
 /* We declare these with compat_symbol so that they are not visible at
    link time.  Programs must use the functions from libgcc.  */
 #ifdef SHARED
-# include <shlib-compat.h>
-compat_symbol (libc, __divdi3, __divdi3, GLIBC_2_0);
+#  include <shlib-compat.h>
+    compat_symbol (libc, __divdi3, __divdi3, GLIBC_2_0);
 compat_symbol (libc, __moddi3, __moddi3, GLIBC_2_0);
 compat_symbol (libc, __udivdi3, __udivdi3, GLIBC_2_0);
 compat_symbol (libc, __umoddi3, __umoddi3, GLIBC_2_0);

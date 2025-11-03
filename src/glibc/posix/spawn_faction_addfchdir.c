@@ -24,7 +24,7 @@
 
 int
 posix_spawn_file_actions_addfchdir_np (posix_spawn_file_actions_t *actions,
-                                       int fd)
+				       int fd)
 {
   struct __spawn_action *rec;
 

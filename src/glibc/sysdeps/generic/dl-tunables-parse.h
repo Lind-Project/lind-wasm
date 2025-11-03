@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DL_TUNABLES_PARSE_H
-#define _DL_TUNABLES_PARSE_H 1
+#  define _DL_TUNABLES_PARSE_H 1
 
-#include <assert.h>
-#include <string.h>
+#  include <assert.h>
+#  include <string.h>
 
 /* Compare the contents of STRVAL with STR of size LEN.  The STR might not
    be null-terminated.   */
@@ -30,8 +30,8 @@ tunable_strcmp (const struct tunable_str_t *strval, const char *str,
 {
   return strval->len == len && memcmp (strval->str, str, len) == 0;
 }
-#define tunable_strcmp_cte(__tunable, __str) \
- tunable_strcmp (&__tunable->strval, __str, sizeof (__str) - 1)
+#  define tunable_strcmp_cte(__tunable, __str)                                \
+    tunable_strcmp (&__tunable->strval, __str, sizeof (__str) - 1)
 
 /*
    Helper functions to iterate over a tunable string composed by multiple
@@ -51,7 +51,7 @@ tunable_strcmp (const struct tunable_str_t *strval, const char *str,
 		    tstr.str,
 		    (int) tstr.len);
 
-        if (tunable_str_comma_strcmp (&t, opt, opt1_len))
+	if (tunable_str_comma_strcmp (&t, opt, opt1_len))
 	  {
 	    [...]
 	  }
@@ -128,7 +128,7 @@ tunable_str_comma_strcmp (const struct tunable_str_comma_t *t, const char *str,
 {
   return t->len == len && memcmp (t->str, str, len) == 0;
 }
-#define tunable_str_comma_strcmp_cte(__t, __str) \
-  tunable_str_comma_strcmp (__t, __str, sizeof (__str) - 1)
+#  define tunable_str_comma_strcmp_cte(__t, __str)                            \
+    tunable_str_comma_strcmp (__t, __str, sizeof (__str) - 1)
 
 #endif

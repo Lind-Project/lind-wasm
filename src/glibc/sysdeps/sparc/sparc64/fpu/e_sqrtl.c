@@ -19,7 +19,7 @@
 #include <math.h>
 #include <libm-alias-finite.h>
 
-extern void _Qp_sqrt(long double *, const long double *);
+extern void _Qp_sqrt (long double *, const long double *);
 
 long double
 __ieee754_sqrtl (long double x)

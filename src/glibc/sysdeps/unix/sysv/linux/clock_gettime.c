@@ -28,22 +28,26 @@
 
 /* Get current value of CLOCK and store it in TP.  */
 
-// Now after clang compile it will call gettime64 first(but in real case we have only 32 bit)
-// In this case, we need “#if __TIMESIZE != 64” and this is always true. And always call __clock_gettime at last.
+// Now after clang compile it will call gettime64 first(but in real case we
+// have only 32 bit) In this case, we need “#if __TIMESIZE != 64” and this is
+// always true. And always call __clock_gettime at last.
 
 int
 __clock_gettime64 (clockid_t clock_id, struct __timespec64 *tp)
 {
-  return MAKE_SYSCALL(CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
+		       (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED,
+		       NOTUSED, NOTUSED);
 }
 
 #if __TIMESIZE != 64
 libc_hidden_def (__clock_gettime64)
 
-int
-__clock_gettime (clockid_t clock_id, struct timespec *tp)
+    int __clock_gettime (clockid_t clock_id, struct timespec *tp)
 {
-  return MAKE_SYSCALL(CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime", (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
+		       (uint64_t) clock_id, (uint64_t) tp, NOTUSED, NOTUSED,
+		       NOTUSED, NOTUSED);
 }
 
 #endif
@@ -52,7 +56,7 @@ libc_hidden_def (__clock_gettime);
 versioned_symbol (libc, __clock_gettime, clock_gettime, GLIBC_2_17);
 /* clock_gettime moved to libc in version 2.17;
    old binaries may expect the symbol version it had in librt.  */
-#if SHLIB_COMPAT (libc, GLIBC_2_2, GLIBC_2_17)
+#if SHLIB_COMPAT(libc, GLIBC_2_2, GLIBC_2_17)
 strong_alias (__clock_gettime, __clock_gettime_2);
 compat_symbol (libc, __clock_gettime_2, clock_gettime, GLIBC_2_2);
 #endif

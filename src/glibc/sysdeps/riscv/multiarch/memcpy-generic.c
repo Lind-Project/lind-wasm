@@ -19,8 +19,8 @@
 #include <string.h>
 
 #if IS_IN(libc)
-# define MEMCPY __memcpy_generic
-# undef libc_hidden_builtin_def
-# define libc_hidden_builtin_def(x)
+#  define MEMCPY __memcpy_generic
+#  undef libc_hidden_builtin_def
+#  define libc_hidden_builtin_def(x)
 #endif
 #include <string/memcpy.c>

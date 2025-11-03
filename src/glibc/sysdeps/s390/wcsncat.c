@@ -19,20 +19,19 @@
 #include <ifunc-wcsncat.h>
 
 #if HAVE_WCSNCAT_IFUNC
-# include <wchar.h>
-# include <ifunc-resolve.h>
+#  include <wchar.h>
+#  include <ifunc-resolve.h>
 
-# if HAVE_WCSNCAT_C
+#  if HAVE_WCSNCAT_C
 extern __typeof (wcsncat) WCSNCAT_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCSNCAT_Z13
+#  if HAVE_WCSNCAT_Z13
 extern __typeof (wcsncat) WCSNCAT_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (wcsncat, wcsncat,
 		      (HAVE_WCSNCAT_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCSNCAT_Z13
-		      : WCSNCAT_DEFAULT
-		      )
+			  ? WCSNCAT_Z13
+			  : WCSNCAT_DEFAULT)
 #endif

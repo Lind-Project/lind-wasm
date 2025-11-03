@@ -23,7 +23,7 @@
 #include <pt-internal.h>
 
 int
-__pthread_cond_init (pthread_cond_t *cond, const pthread_condattr_t * attr)
+__pthread_cond_init (pthread_cond_t *cond, const pthread_condattr_t *attr)
 {
   ASSERT_TYPE_SIZE (pthread_cond_t, __SIZEOF_PTHREAD_COND_T);
 

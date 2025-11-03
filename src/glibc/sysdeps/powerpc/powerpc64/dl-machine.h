@@ -46,10 +46,10 @@ elf_machine_matches_host (const Elf64_Ehdr *ehdr)
     {
 #if _CALL_ELF != 2
       if ((ehdr->e_flags & EF_PPC64_ABI) != 1)
-        return 0;
+	return 0;
 #else
       if ((ehdr->e_flags & EF_PPC64_ABI) != 2)
-        return 0;
+	return 0;
 #endif
     }
 
@@ -72,11 +72,10 @@ elf_host_tolerates_class (const Elf64_Ehdr *ehdr)
   return ehdr->e_ident[EI_CLASS] == ELFCLASS32;
 }
 
-
 /* Return the run-time load address of the shared object, assuming it
    was originally linked at zero.  */
-static inline Elf64_Addr
-elf_machine_load_address (void) __attribute__ ((const));
+static inline Elf64_Addr elf_machine_load_address (void)
+    __attribute__ ((const));
 
 static inline Elf64_Addr
 elf_machine_load_address (void)
@@ -87,9 +86,9 @@ elf_machine_load_address (void)
      link-time TOC_base, ie. r2.  So the difference between that and
      the current r2 set by the kernel is how far the shared lib has
      moved.  */
-  asm (	"	ld	%0,-32768(2)\n"
-	"	subf	%0,%0,2\n"
-	: "=r"	(ret));
+  asm ("	ld	%0,-32768(2)\n"
+       "	subf	%0,%0,2\n"
+       : "=r"(ret));
   return ret;
 }
 
@@ -99,145 +98,149 @@ elf_machine_dynamic (void)
 {
   Elf64_Addr runtime_dynamic;
   /* It's easier to get the run-time address.  */
-  asm (	"	addis	%0,2,_DYNAMIC@toc@ha\n"
-	"	addi	%0,%0,_DYNAMIC@toc@l\n"
-	: "=b"	(runtime_dynamic));
+  asm ("	addis	%0,2,_DYNAMIC@toc@ha\n"
+       "	addi	%0,%0,_DYNAMIC@toc@l\n"
+       : "=b"(runtime_dynamic));
   /* Then subtract off the load address offset.  */
-  return runtime_dynamic - elf_machine_load_address() ;
+  return runtime_dynamic - elf_machine_load_address ();
 }
 
 /* The PLT uses Elf64_Rela relocs.  */
 #define elf_machine_relplt elf_machine_rela
 
-
 #ifdef HAVE_INLINED_SYSCALLS
 /* We do not need _dl_starting_up.  */
-# define DL_STARTING_UP_DEF
+#  define DL_STARTING_UP_DEF
 #else
-# define DL_STARTING_UP_DEF \
-".LC__dl_starting_up:\n"  \
-"	.tc __GI__dl_starting_up[TC],__GI__dl_starting_up\n"
+#  define DL_STARTING_UP_DEF                                                  \
+    ".LC__dl_starting_up:\n"                                                  \
+    "	.tc __GI__dl_starting_up[TC],__GI__dl_starting_up\n"
 #endif
-
 
 /* Initial entry point code for the dynamic linker.  The C function
    `_dl_start' is the real entry point; its return value is the user
    program's entry point.  */
-#define RTLD_START \
-  asm (".pushsection \".text\"\n"					\
-"	.align	2\n"							\
-"	" ENTRY_2(_start) "\n"						\
-BODY_PREFIX "_start:\n"							\
-"	" LOCALENTRY(_start) "\n"						\
-/* We start with the following on the stack, from top:			\
-   argc (4 bytes);							\
-   arguments for program (terminated by NULL);				\
-   environment variables (terminated by NULL);				\
-   arguments for the program loader.  */				\
-"	mr	3,1\n"							\
-"	li	4,0\n"							\
-"	stdu	4,-128(1)\n"						\
-/* Call _dl_start with one parameter pointing at argc.  */		\
-"	bl	" DOT_PREFIX "_dl_start\n"				\
-"	nop\n"								\
-/* Transfer control to _dl_start_user!  */				\
-"	b	" DOT_PREFIX "_dl_start_user\n"				\
-".LT__start:\n"								\
-"	.long 0\n"							\
-"	.byte 0x00,0x0c,0x24,0x40,0x00,0x00,0x00,0x00\n"		\
-"	.long .LT__start-" BODY_PREFIX "_start\n"			\
-"	.short .LT__start_name_end-.LT__start_name_start\n"		\
-".LT__start_name_start:\n"						\
-"	.ascii \"_start\"\n"						\
-".LT__start_name_end:\n"						\
-"	.align 2\n"							\
-"	" END_2(_start) "\n"						\
-"	.pushsection	\".toc\",\"aw\"\n"				\
-DL_STARTING_UP_DEF							\
-".LC__rtld_local:\n"							\
-"	.tc _rtld_local[TC],_rtld_local\n"				\
-".LC__dl_argc:\n"							\
-"	.tc _dl_argc[TC],_dl_argc\n"					\
-".LC__dl_argv:\n"							\
-"	.tc __GI__dl_argv[TC],__GI__dl_argv\n"				\
-".LC__dl_fini:\n"							\
-"	.tc _dl_fini[TC],_dl_fini\n"					\
-"	.popsection\n"							\
-"	" ENTRY_2(_dl_start_user) "\n"					\
-/* Now, we do our main work of calling initialisation procedures.	\
-   The ELF ABI doesn't say anything about parameters for these,		\
-   so we just pass argc, argv, and the environment.			\
-   Changing these is strongly discouraged (not least because argc is	\
-   passed by value!).  */						\
-BODY_PREFIX "_dl_start_user:\n"						\
-"	" LOCALENTRY(_dl_start_user) "\n"				\
-/* the address of _start in r30.  */					\
-"	mr	30,3\n"							\
-/* &_dl_argc in 29, &_dl_argv in 27, and _dl_loaded in 28.  */		\
-"	addis	28,2,.LC__rtld_local@toc@ha\n"				\
-"	ld	28,.LC__rtld_local@toc@l(28)\n"				\
-"	addis	29,2,.LC__dl_argc@toc@ha\n"				\
-"	ld	29,.LC__dl_argc@toc@l(29)\n"				\
-"	addis	27,2,.LC__dl_argv@toc@ha\n"				\
-"	ld	27,.LC__dl_argv@toc@l(27)\n"				\
-/* _dl_init (_dl_loaded, _dl_argc, _dl_argv, _dl_argv+_dl_argc+1).  */	\
-"	ld	3,0(28)\n"						\
-"	lwa	4,0(29)\n"						\
-"	ld	5,0(27)\n"						\
-"	sldi	6,4,3\n"						\
-"	add	6,5,6\n"						\
-"	addi	6,6,8\n"						\
-"	bl	" DOT_PREFIX "_dl_init\n"				\
-"	nop\n"								\
-/* Now, to conform to the ELF ABI, we have to:				\
-   Pass argc (actually _dl_argc) in r3;  */				\
-"	lwa	3,0(29)\n"						\
-/* Pass argv (actually _dl_argv) in r4;  */				\
-"	ld	4,0(27)\n"						\
-/* Pass argv+argc+1 in r5;  */						\
-"	sldi	5,3,3\n"						\
-"	add	6,4,5\n"						\
-"	addi	5,6,8\n"						\
-/* Pass the auxiliary vector in r6. This is passed to us just after	\
-   _envp.  */								\
-"2:	ldu	0,8(6)\n"						\
-"	cmpdi	0,0\n"							\
-"	bne	2b\n"							\
-"	addi	6,6,8\n"						\
-/* Pass a termination function pointer (in this case _dl_fini) in	\
-   r7.  */								\
-"	addis	7,2,.LC__dl_fini@toc@ha\n"				\
-"	ld	7,.LC__dl_fini@toc@l(7)\n"				\
-/* Pass the stack pointer in r1 (so far so good), pointing to a NULL	\
-   value.  This lets our startup code distinguish between a program	\
-   linked statically, which linux will call with argc on top of the	\
-   stack which will hopefully never be zero, and a dynamically linked	\
-   program which will always have a NULL on the top of the stack.	\
-   Take the opportunity to clear LR, so anyone who accidentally		\
-   returns from _start gets SEGV.  Also clear the next few words of	\
-   the stack.  */							\
-"	li	31,0\n"							\
-"	std	31,0(1)\n"						\
-"	mtlr	31\n"							\
-"	std	31,8(1)\n"						\
-"	std	31,16(1)\n"						\
-"	std	31,24(1)\n"						\
-/* Now, call the start function descriptor at r30...  */		\
-"	.globl	._dl_main_dispatch\n"					\
-"._dl_main_dispatch:\n"							\
-"	" PPC64_LOAD_FUNCPTR(30) "\n"					\
-"	bctr\n"								\
-".LT__dl_start_user:\n"							\
-"	.long 0\n"							\
-"	.byte 0x00,0x0c,0x24,0x40,0x00,0x00,0x00,0x00\n"		\
-"	.long .LT__dl_start_user-" BODY_PREFIX "_dl_start_user\n"	\
-"	.short .LT__dl_start_user_name_end-.LT__dl_start_user_name_start\n" \
-".LT__dl_start_user_name_start:\n"					\
-"	.ascii \"_dl_start_user\"\n"					\
-".LT__dl_start_user_name_end:\n"					\
-"	.align 2\n"							\
-"	" END_2(_dl_start_user) "\n"					\
-"	.popsection");
+#define RTLD_START                                                                                                                                                                                                                  \
+  asm (                                                                                                                                                                                                                             \
+      ".pushsection \".text\"\n"                                                                                                                                                                                                    \
+      "	.align	2\n"                                                                                                                                                                                                                 \
+      "	" ENTRY_2 (                                                                                                                                                                                                                 \
+	  _start) "\n" BODY_PREFIX "_start:\n"                                                                                                                                                                                      \
+		  "	" LOCALENTRY (                                                                                                                                                                                              \
+		      _start) "\n" /* We start with the following on the                                                                                                                                                            \
+				      stack, from top: argc (4 bytes);                                                                                                                                                                                                                    \
+				      arguments for program (terminated by                                                                                                                                                          \
+				      NULL); environment variables                                                                                                                                                                                                              \
+				      (terminated by NULL); arguments for the                                                                                                                                                                                                                  \
+				      program loader.  */                                                                                                                                                                           \
+			      "	mr	3,1\n"                                                                                                                                                                                           \
+			      "	li	4,0\n"                                                                                                                                                                                           \
+			      "	stdu	4,-128(1)\n" /* Call _dl_start with                                                                                                                                                         \
+							one parameter                                                                                                                                                               \
+							pointing at argc.  */                                                                                                                                                       \
+			      "	bl	" DOT_PREFIX "_dl_start\n"                                                                                                                                                                  \
+			      "	nop\n" /* Transfer control to _dl_start_user!                                                                                                                                                       \
+					*/                                                                                                                                                                                          \
+			      "	b	" DOT_PREFIX "_dl_start_user\n"                                                                                                                                                             \
+			      ".LT__start:\n"                                                                                                                                                                                       \
+			      "	.long 0\n"                                                                                                                                                                                          \
+			      "	.byte "                                                                                                                                                                                             \
+			      "0x00,0x0c,0x24,0x40,0x00,0x00,0x00,0x00\n"                                                                                                                                                           \
+			      "	.long .LT__start-" BODY_PREFIX "_start\n"                                                                                                                                                           \
+			      "	.short "                                                                                                                                                                                            \
+			      ".LT__start_name_end-.LT__start_name_start\n"                                                                                                                                                         \
+			      ".LT__start_name_start:\n"                                                                                                                                                                            \
+			      "	.ascii \"_start\"\n"                                                                                                                                                                                \
+			      ".LT__start_name_end:\n"                                                                                                                                                                              \
+			      "	.align 2\n"                                                                                                                                                                                         \
+			      "	" END_2 (_start) "\n"                                                                                                                                                                               \
+						 "	.pushsection	"                                                                                                                                                                   \
+						 "\".toc\","                                                                                                                                                                        \
+						 "\"aw\""                                                                                                                                                                           \
+						 "\n" DL_STARTING_UP_DEF                                                                                                                                                            \
+						 ".LC__rtld_local:\n"                                                                                                                                                               \
+						 "	.tc "                                                                                                                                                                            \
+						 "_rtld_local[TC],_rtld_"                                                                                                                                                           \
+						 "local\n"                                                                                                                                                                          \
+						 ".LC__dl_argc:\n"                                                                                                                                                                  \
+						 "	.tc "                                                                                                                                                                            \
+						 "_dl_argc[TC],_dl_argc\n"                                                                                                                                                          \
+						 ".LC__dl_argv:\n"                                                                                                                                                                  \
+						 "	.tc "                                                                                                                                                                            \
+						 "__GI__dl_argv[TC],__GI__"                                                                                                                                                         \
+						 "dl_argv\n"                                                                                                                                                                        \
+						 ".LC__dl_fini:\n"                                                                                                                                                                  \
+						 "	.tc "                                                                                                                                                                            \
+						 "_dl_fini[TC],_dl_fini\n"                                                                                                                                                          \
+						 "	.popsection\n"                                                                                                                                                                   \
+						 "	" ENTRY_2 (_dl_start_user) "\n" /* Now, we do our main work of calling initialisation procedures.                                                                           \
+											   The ELF ABI doesn't say anything about parameters for these,                                                                             \
+											   so we just pass argc, argv, and the environment.                                                                                         \
+											   Changing these is strongly discouraged (not least because argc is                                                                        \
+											   passed by value!).  */                                                                                                                   \
+      BODY_PREFIX "_dl_start_user:\n"                                                                                                                                                                                               \
+										   "	" LOCALENTRY (_dl_start_user) "\n" /* the address of _start in r30.  */                                                                     \
+														      "	mr	30,3\n" /* &_dl_argc in 29, &_dl_argv in 27, and _dl_loaded in 28.  */                              \
+														      "	addis	28,2,.LC__rtld_local@toc@ha\n"                                                                        \
+														      "	ld	28,.LC__rtld_local@toc@l(28)\n"                                                                          \
+														      "	addis	29,2,.LC__dl_argc@toc@ha\n"                                                                           \
+														      "	ld	29,.LC__dl_argc@toc@l(29)\n"                                                                             \
+														      "	addis	27,2,.LC__dl_argv@toc@ha\n"                                                                           \
+														      "	ld	27,.LC__dl_argv@toc@l(27)\n" /* _dl_init (_dl_loaded, _dl_argc, _dl_argv, _dl_argv+_dl_argc+1).  */ \
+														      "	ld	3,0(28)\n"                                                                                               \
+														      "	lwa	4,0(29)\n"                                                                                              \
+														      "	ld	5,0(27)\n"                                                                                               \
+														      "	sldi	6,4,3\n"                                                                                               \
+														      "	add	6,5,6\n"                                                                                                \
+														      "	addi	6,6,8\n"                                                                                               \
+														      "	bl	" DOT_PREFIX                                                                                        \
+														      "_dl_init\n"                                                                                                  \
+														      "	nop\n" /* Now, to conform to the ELF ABI, we have to:                                                       \
+																  Pass argc (actually _dl_argc) in r3;  */                                                          \
+														      "	lwa	3,0(29)\n" /* Pass argv (actually _dl_argv) in r4;  */                                              \
+														      "	ld	4,0(27)\n" /* Pass argv+argc+1 in r5;  */                                                           \
+														      "	sldi	5,3,3\n"                                                                                               \
+														      "	add	6,4,5\n"                                                                                                \
+														      "	addi	5,6,8\n" /* Pass the auxiliary vector in r6. This is passed to us just after                        \
+																	    _envp.  */                                                                              \
+														      "2:	ldu	0,8(6)\n"                                                                                             \
+														      "	cmpdi	0,0\n"                                                                                                \
+														      "	bne	2b\n"                                                                                                   \
+														      "	addi	6,6,8\n" /* Pass a termination function pointer (in this case _dl_fini) in                          \
+																	    r7.  */                                                                                 \
+														      "	addis	7,2,.LC__dl_fini@toc@ha\n"                                                                            \
+														      "	ld	7,.LC__dl_fini@toc@l(7)\n" /* Pass the stack pointer in r1 (so far so good), pointing to a NULL     \
+																			      value.  This lets our startup code distinguish between a program      \
+																			      linked statically, which linux will call with argc on top of the      \
+																			      stack which will hopefully never be zero, and a dynamically linked    \
+																			      program which will always have a NULL on the top of the stack.        \
+																			      Take the opportunity to clear LR, so anyone who accidentally          \
+																			      returns from _start gets SEGV.  Also clear the next few words of      \
+																			      the stack.  */                                                        \
+														      "	li	31,0\n"                                                                                                  \
+														      "	std	31,0(1)\n"                                                                                              \
+														      "	mtlr	31\n"                                                                                                  \
+														      "	std	31,8(1)\n"                                                                                              \
+														      "	std	31,16(1)\n"                                                                                             \
+														      "	std	31,24(1)\n" /* Now, call the start function descriptor at r30...  */                                \
+														      "	.globl	._dl_main_dispatch\n"                                                                                \
+														      "._dl_main_dispatch:\n"                                                                                       \
+														      "	" PPC64_LOAD_FUNCPTR (                                                                                      \
+															  30) "\n"                                                                                                  \
+															      "	bctr\n"                                                                                             \
+															      ".LT__dl_start_user:\n"                                                                               \
+															      "	.long 0\n"                                                                                          \
+															      "	.byte 0x00,0x0c,0x24,0x40,0x00,0x00,0x00,0x00\n"                                                    \
+															      "	.long .LT__dl_start_user-" BODY_PREFIX                                                              \
+															      "_dl_start_user\n"                                                                                    \
+															      "	.short .LT__dl_start_user_name_end-.LT__dl_start_user_name_start\n"                                 \
+															      ".LT__dl_start_user_name_start:\n"                                                                    \
+															      "	.ascii \"_dl_start_user\"\n"                                                                        \
+															      ".LT__dl_start_user_name_end:\n"                                                                      \
+															      "	.align 2\n"                                                                                         \
+															      "	" END_2 (                                                                                           \
+																  _dl_start_user) "\n"                                                                              \
+																		  "	.popsection");
 
 /* ELF_RTYPE_CLASS_COPY iff TYPE should not be allowed to resolve to
    one of the main executable's symbols, as for a COPY reloc.
@@ -267,30 +270,30 @@ BODY_PREFIX "_dl_start_user:\n"						\
    like PLT relocations.  So always set ELF_RTYPE_CLASS_PLT.  */
 
 #if _CALL_ELF != 2
-#define elf_machine_type_class(type) \
-  (ELF_RTYPE_CLASS_PLT | (((type) == R_PPC64_COPY) * ELF_RTYPE_CLASS_COPY))
+#  define elf_machine_type_class(type)                                        \
+    (ELF_RTYPE_CLASS_PLT | (((type) == R_PPC64_COPY) * ELF_RTYPE_CLASS_COPY))
 #else
 /* And now that you have read that large comment, you can disregard it
    all for ELFv2.  ELFv2 does need the special SHN_UNDEF treatment.  */
-#define IS_PPC64_TLS_RELOC(R)						\
-  (((R) >= R_PPC64_TLS && (R) <= R_PPC64_DTPREL16_HIGHESTA)		\
-   || ((R) >= R_PPC64_TPREL16_HIGH && (R) <= R_PPC64_DTPREL16_HIGHA))
+#  define IS_PPC64_TLS_RELOC(R)                                               \
+    (((R) >= R_PPC64_TLS && (R) <= R_PPC64_DTPREL16_HIGHESTA)                 \
+     || ((R) >= R_PPC64_TPREL16_HIGH && (R) <= R_PPC64_DTPREL16_HIGHA))
 
-#define elf_machine_type_class(type) \
-  ((((type) == R_PPC64_JMP_SLOT					\
-     || (type) == R_PPC64_ADDR24				\
-     || IS_PPC64_TLS_RELOC (type)) * ELF_RTYPE_CLASS_PLT)	\
-   | (((type) == R_PPC64_COPY) * ELF_RTYPE_CLASS_COPY))
+#  define elf_machine_type_class(type)                                        \
+    ((((type) == R_PPC64_JMP_SLOT || (type) == R_PPC64_ADDR24                 \
+       || IS_PPC64_TLS_RELOC (type))                                          \
+      * ELF_RTYPE_CLASS_PLT)                                                  \
+     | (((type) == R_PPC64_COPY) * ELF_RTYPE_CLASS_COPY))
 #endif
 
 /* A reloc type used for ld.so cmdline arg lookups to reject PLT entries.  */
-#define ELF_MACHINE_JMP_SLOT	R_PPC64_JMP_SLOT
+#define ELF_MACHINE_JMP_SLOT R_PPC64_JMP_SLOT
 
 /* We define an initialization function to initialize HWCAP/HWCAP2 and
    platform data so it can be copied into the TCB later.  This is called
    very early in _dl_sysdep_start for dynamically linked binaries.  */
-#if defined(SHARED) && IS_IN (rtld)
-# define DL_PLATFORM_INIT dl_platform_init ()
+#if defined(SHARED) && IS_IN(rtld)
+#  define DL_PLATFORM_INIT dl_platform_init ()
 
 static inline void __attribute__ ((unused))
 dl_platform_init (void)
@@ -301,17 +304,17 @@ dl_platform_init (void)
 
 /* Stuff for the PLT.  */
 #if _CALL_ELF != 2
-#define PLT_INITIAL_ENTRY_WORDS 3
-#define PLT_ENTRY_WORDS 3
-#define GLINK_INITIAL_ENTRY_WORDS 8
+#  define PLT_INITIAL_ENTRY_WORDS 3
+#  define PLT_ENTRY_WORDS 3
+#  define GLINK_INITIAL_ENTRY_WORDS 8
 /* The first 32k entries of glink can set an index and branch using two
    instructions; past that point, glink uses three instructions.  */
-#define GLINK_ENTRY_WORDS(I) (((I) < 0x8000)? 2 : 3)
+#  define GLINK_ENTRY_WORDS(I) (((I) < 0x8000) ? 2 : 3)
 #else
-#define PLT_INITIAL_ENTRY_WORDS 2
-#define PLT_ENTRY_WORDS 1
-#define GLINK_INITIAL_ENTRY_WORDS 8
-#define GLINK_ENTRY_WORDS(I) 1
+#  define PLT_INITIAL_ENTRY_WORDS 2
+#  define PLT_ENTRY_WORDS 1
+#  define GLINK_INITIAL_ENTRY_WORDS 8
+#  define GLINK_ENTRY_WORDS(I) 1
 #endif
 
 #define PPC_DCBST(where) asm volatile ("dcbst 0,%0" : : "r"(where) : "memory")
@@ -323,11 +326,24 @@ dl_platform_init (void)
 #define PPC_DIE asm volatile ("tweq 0,0")
 /* Use this when you've modified some code, but it won't be in the
    instruction fetch queue (or when it doesn't matter if it is). */
-#define MODIFIED_CODE_NOQUEUE(where) \
-     do { PPC_DCBST(where); PPC_SYNC; PPC_ICBI(where); } while (0)
+#define MODIFIED_CODE_NOQUEUE(where)                                          \
+  do                                                                          \
+    {                                                                         \
+      PPC_DCBST (where);                                                      \
+      PPC_SYNC;                                                               \
+      PPC_ICBI (where);                                                       \
+    }                                                                         \
+  while (0)
 /* Use this when it might be in the instruction queue. */
-#define MODIFIED_CODE(where) \
-     do { PPC_DCBST(where); PPC_SYNC; PPC_ICBI(where); PPC_ISYNC; } while (0)
+#define MODIFIED_CODE(where)                                                  \
+  do                                                                          \
+    {                                                                         \
+      PPC_DCBST (where);                                                      \
+      PPC_SYNC;                                                               \
+      PPC_ICBI (where);                                                       \
+      PPC_ISYNC;                                                              \
+    }                                                                         \
+  while (0)
 
 /* Set up the loaded object described by MAP so its unrelocated PLT
    entries will jump to the on-demand fixup code in dl-runtime.c.  */
@@ -340,8 +356,8 @@ elf_machine_runtime_setup (struct link_map *map, struct r_scope_elem *scope[],
       Elf64_Word i;
       Elf64_Word *glink = NULL;
       Elf64_Xword *plt = (Elf64_Xword *) D_PTR (map, l_info[DT_PLTGOT]);
-      Elf64_Word num_plt_entries = (map->l_info[DT_PLTRELSZ]->d_un.d_val
-				    / sizeof (Elf64_Rela));
+      Elf64_Word num_plt_entries
+	  = (map->l_info[DT_PLTRELSZ]->d_un.d_val / sizeof (Elf64_Rela));
       Elf64_Addr l_addr = map->l_addr;
       Elf64_Dyn **info = map->l_info;
       char *p;
@@ -353,8 +369,8 @@ elf_machine_runtime_setup (struct link_map *map, struct r_scope_elem *scope[],
 	 elf_get_dynamic_info takes care of the standard entries but
 	 doesn't know exactly what to do with processor specific
 	 entries.  */
-      if (info[DT_PPC64(GLINK)] != NULL)
-	info[DT_PPC64(GLINK)]->d_un.d_ptr += l_addr;
+      if (info[DT_PPC64 (GLINK)] != NULL)
+	info[DT_PPC64 (GLINK)]->d_un.d_ptr += l_addr;
 
       if (lazy)
 	{
@@ -366,11 +382,11 @@ elf_machine_runtime_setup (struct link_map *map, struct r_scope_elem *scope[],
 	  if (__glibc_unlikely (profile))
 	    {
 	      dlrr = (Elf64_Addr) _dl_profile_resolve;
-	      if (profile && GLRO(dl_profile) != NULL
-		  && _dl_name_match_p (GLRO(dl_profile), map))
+	      if (profile && GLRO (dl_profile) != NULL
+		  && _dl_name_match_p (GLRO (dl_profile), map))
 		/* This is the object we are looking for.  Say that we really
 		   want profiling and the timers are started.  */
-		GL(dl_profile_map) = map;
+		GL (dl_profile_map) = map;
 	    }
 	  else
 #endif
@@ -388,14 +404,14 @@ elf_machine_runtime_setup (struct link_map *map, struct r_scope_elem *scope[],
 	    Elf64_FuncDesc *plt_reserve = (Elf64_FuncDesc *) plt;
 	    Elf64_FuncDesc *resolve_fd = (Elf64_FuncDesc *) dlrr;
 	    plt_reserve->fd_func = resolve_fd->fd_func;
-	    plt_reserve->fd_toc  = resolve_fd->fd_toc;
-	    plt_reserve->fd_aux  = (Elf64_Addr) map;
-#ifdef RTLD_BOOTSTRAP
+	    plt_reserve->fd_toc = resolve_fd->fd_toc;
+	    plt_reserve->fd_aux = (Elf64_Addr) map;
+#  ifdef RTLD_BOOTSTRAP
 	    /* When we're bootstrapping, the opd entry will not have
 	       been relocated yet.  */
 	    plt_reserve->fd_func += l_addr;
-	    plt_reserve->fd_toc  += l_addr;
-#endif
+	    plt_reserve->fd_toc += l_addr;
+#  endif
 	  }
 #else
 	  /* When we don't have function descriptors, the first doubleword
@@ -406,7 +422,7 @@ elf_machine_runtime_setup (struct link_map *map, struct r_scope_elem *scope[],
 #endif
 
 	  /* Set up the lazy PLT entries.  */
-	  glink = (Elf64_Word *) D_PTR (map, l_info[DT_PPC64(GLINK)]);
+	  glink = (Elf64_Word *) D_PTR (map, l_info[DT_PPC64 (GLINK)]);
 	  offset = PLT_INITIAL_ENTRY_WORDS;
 	  glink_offset = GLINK_INITIAL_ENTRY_WORDS;
 	  for (i = 0; i < num_plt_entries; i++)
@@ -443,7 +459,7 @@ extern void attribute_hidden _dl_error_localentry (struct link_map *map,
    the target function's local entry point offset if usable.  */
 static inline Elf64_Addr __attribute__ ((always_inline))
 ppc64_local_entry_offset (struct link_map *map, lookup_t sym_map,
-			  const ElfW(Sym) *refsym, const ElfW(Sym) *sym)
+			  const ElfW (Sym) * refsym, const ElfW (Sym) * sym)
 {
   /* If the target function is in a different object, we cannot
      use the local entry point.  */
@@ -451,9 +467,10 @@ ppc64_local_entry_offset (struct link_map *map, lookup_t sym_map,
     {
       /* Check that optimized plt call stubs for localentry:0 functions
 	 are not being satisfied by a non-zero localentry symbol.  */
-      if (map->l_info[DT_PPC64(OPT)]
-	  && (map->l_info[DT_PPC64(OPT)]->d_un.d_val & PPC64_OPT_LOCALENTRY) != 0
-	  && refsym->st_info == ELFW(ST_INFO) (STB_GLOBAL, STT_FUNC)
+      if (map->l_info[DT_PPC64 (OPT)]
+	  && (map->l_info[DT_PPC64 (OPT)]->d_un.d_val & PPC64_OPT_LOCALENTRY)
+		 != 0
+	  && refsym->st_info == ELFW (ST_INFO) (STB_GLOBAL, STT_FUNC)
 	  && (STO_PPC64_LOCAL_MASK & refsym->st_other) == 0
 	  && (STO_PPC64_LOCAL_MASK & sym->st_other) != 0)
 	_dl_error_localentry (map, refsym);
@@ -463,13 +480,13 @@ ppc64_local_entry_offset (struct link_map *map, lookup_t sym_map,
 
   /* If the linker inserted multiple TOCs, we cannot use the
      local entry point.  */
-  if (map->l_info[DT_PPC64(OPT)]
-      && (map->l_info[DT_PPC64(OPT)]->d_un.d_val & PPC64_OPT_MULTI_TOC))
+  if (map->l_info[DT_PPC64 (OPT)]
+      && (map->l_info[DT_PPC64 (OPT)]->d_un.d_val & PPC64_OPT_MULTI_TOC))
     return 0;
 
   /* If the target function is an ifunc then the local entry offset is
      for the resolver, not the final destination.  */
-  if (__builtin_expect (ELFW(ST_TYPE) (sym->st_info) == STT_GNU_IFUNC, 0))
+  if (__builtin_expect (ELFW (ST_TYPE) (sym->st_info) == STT_GNU_IFUNC, 0))
     return 0;
 
   /* Otherwise, we can use the local entry point.  Retrieve its offset
@@ -482,15 +499,15 @@ ppc64_local_entry_offset (struct link_map *map, lookup_t sym_map,
    routine.  */
 static inline Elf64_Addr __attribute__ ((always_inline))
 elf_machine_fixup_plt (struct link_map *map, lookup_t sym_map,
-		       const ElfW(Sym) *refsym, const ElfW(Sym) *sym,
-		       const Elf64_Rela *reloc,
-		       Elf64_Addr *reloc_addr, Elf64_Addr finaladdr)
+		       const ElfW (Sym) * refsym, const ElfW (Sym) * sym,
+		       const Elf64_Rela *reloc, Elf64_Addr *reloc_addr,
+		       Elf64_Addr finaladdr)
 {
 #if _CALL_ELF != 2
   Elf64_FuncDesc *plt = (Elf64_FuncDesc *) reloc_addr;
   Elf64_FuncDesc *rel = (Elf64_FuncDesc *) finaladdr;
   Elf64_Addr offset = 0;
-  Elf64_FuncDesc zero_fd = {0, 0, 0};
+  Elf64_FuncDesc zero_fd = { 0, 0, 0 };
 
   PPC_DCBT (&plt->fd_aux);
   PPC_DCBT (&plt->fd_func);
@@ -515,12 +532,13 @@ elf_machine_fixup_plt (struct link_map *map, lookup_t sym_map,
 
   /* If the opd entry is not yet relocated (because it's from a shared
      object that hasn't been processed yet), then manually reloc it.  */
-  if (finaladdr != 0 && map != sym_map && !sym_map->l_relocated
-#if !defined RTLD_BOOTSTRAP && defined SHARED
+  if (finaladdr != 0 && map != sym_map
+      && !sym_map->l_relocated
+#  if !defined RTLD_BOOTSTRAP && defined SHARED
       /* Bootstrap map doesn't have l_relocated set for it.  */
-      && sym_map != &GL(dl_rtld_map)
-#endif
-      )
+      && sym_map != &GL (dl_rtld_map)
+#  endif
+  )
     offset = sym_map->l_addr;
 
   /* For PPC64, fixup_plt copies the function descriptor from opd
@@ -553,19 +571,18 @@ elf_machine_plt_value (struct link_map *map, const Elf64_Rela *reloc,
   return value + reloc->r_addend;
 }
 
-
 /* Names of the architecture-specific auditing callback functions.  */
 #if _CALL_ELF != 2
-#define ARCH_LA_PLTENTER ppc64_gnu_pltenter
-#define ARCH_LA_PLTEXIT ppc64_gnu_pltexit
+#  define ARCH_LA_PLTENTER ppc64_gnu_pltenter
+#  define ARCH_LA_PLTEXIT ppc64_gnu_pltexit
 #else
-#define ARCH_LA_PLTENTER ppc64v2_gnu_pltenter
-#define ARCH_LA_PLTEXIT ppc64v2_gnu_pltexit
+#  define ARCH_LA_PLTENTER ppc64v2_gnu_pltenter
+#  define ARCH_LA_PLTEXIT ppc64v2_gnu_pltexit
 #endif
 
-#if ENABLE_STATIC_PIE && !defined SHARED && !IS_IN (rtld)
-#include <libc-diag.h>
-#include <tcb-offsets.h>
+#if ENABLE_STATIC_PIE && !defined SHARED && !IS_IN(rtld)
+#  include <libc-diag.h>
+#  include <tcb-offsets.h>
 
 /* Set up r13 for _dl_relocate_static_pie so that libgcc ifuncs that
    normally access the tcb copy of hwcap will see __tcb.hwcap.  */
@@ -580,8 +597,8 @@ ppc_init_fake_thread_pointer (void)
   DIAG_POP_NEEDS_COMMENT;
 }
 
-#define ELF_MACHINE_BEFORE_RTLD_RELOC(map, dynamic_info) \
-  ppc_init_fake_thread_pointer ();
+#  define ELF_MACHINE_BEFORE_RTLD_RELOC(map, dynamic_info)                    \
+    ppc_init_fake_thread_pointer ();
 #endif /* ENABLE_STATIC_PIE && !defined SHARED && !IS_IN (rtld) */
 
 #endif /* dl_machine_h */
@@ -595,7 +612,7 @@ ppc_init_fake_thread_pointer (void)
 #define PPC_HIGHERA(v) PPC_HIGHER ((v) + 0x8000)
 #define PPC_HIGHEST(v) (((v) >> 48) & 0xffff)
 #define PPC_HIGHESTA(v) PPC_HIGHEST ((v) + 0x8000)
-#define BIT_INSERT(var, val, mask) \
+#define BIT_INSERT(var, val, mask)                                            \
   ((var) = ((var) & ~(Elf64_Addr) (mask)) | ((val) & (mask)))
 
 #define dont_expect(X) __builtin_expect ((X), 0)
@@ -615,10 +632,8 @@ elf_machine_rela_relative (Elf64_Addr l_addr, const Elf64_Rela *reloc,
 
 /* This computes the value used by TPREL* relocs.  */
 static inline Elf64_Addr __attribute__ ((always_inline, const))
-elf_machine_tprel (struct link_map *map,
-		   struct link_map *sym_map,
-		   const Elf64_Sym *sym,
-		   const Elf64_Rela *reloc)
+elf_machine_tprel (struct link_map *map, struct link_map *sym_map,
+		   const Elf64_Sym *sym, const Elf64_Rela *reloc)
 {
 #ifndef RTLD_BOOTSTRAP
   if (sym_map)
@@ -634,17 +649,17 @@ elf_machine_tprel (struct link_map *map,
 
 /* Call function at address VALUE (an OPD entry) to resolve ifunc relocs.  */
 static inline Elf64_Addr __attribute__ ((always_inline))
-resolve_ifunc (Elf64_Addr value,
-	       const struct link_map *map, const struct link_map *sym_map)
+resolve_ifunc (Elf64_Addr value, const struct link_map *map,
+	       const struct link_map *sym_map)
 {
 #if _CALL_ELF != 2
   /* The function we are calling may not yet have its opd entry relocated.  */
   Elf64_FuncDesc opd;
   if (map != sym_map
-# if !defined RTLD_BOOTSTRAP && defined SHARED
+#  if !defined RTLD_BOOTSTRAP && defined SHARED
       /* Bootstrap map doesn't have l_relocated set for it.  */
-      && sym_map != &GL(dl_rtld_map)
-# endif
+      && sym_map != &GL (dl_rtld_map)
+#  endif
       && !sym_map->l_relocated)
     {
       Elf64_FuncDesc *func = (Elf64_FuncDesc *) value;
@@ -652,32 +667,30 @@ resolve_ifunc (Elf64_Addr value,
       opd.fd_toc = func->fd_toc + sym_map->l_addr;
       opd.fd_aux = func->fd_aux;
       /* GCC 4.9+ eliminates the branch as dead code, force the odp set
-         dependency.  */
-      asm ("" : "=r" (value) : "0" (&opd), "X" (opd));
+	 dependency.  */
+      asm ("" : "=r"(value) : "0"(&opd), "X"(opd));
     }
 #endif
-  return ((Elf64_Addr (*) (unsigned long int)) value) (GLRO(dl_hwcap));
+  return ((Elf64_Addr (*) (unsigned long int)) value) (GLRO (dl_hwcap));
 }
 
 /* Perform the relocation specified by RELOC and SYM (which is fully
    resolved).  MAP is the object containing the reloc.  */
 static inline void __attribute__ ((always_inline))
 elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
-		  const Elf64_Rela *reloc,
-		  const Elf64_Sym *sym,
+		  const Elf64_Rela *reloc, const Elf64_Sym *sym,
 		  const struct r_found_version *version,
-		  void *const reloc_addr_arg,
-		  int skip_ifunc)
+		  void *const reloc_addr_arg, int skip_ifunc)
 {
   Elf64_Addr *const reloc_addr = reloc_addr_arg;
   const int r_type = ELF64_R_TYPE (reloc->r_info);
   const Elf64_Sym *const refsym = sym;
   union unaligned
-    {
-      uint16_t u2;
-      uint32_t u4;
-      uint64_t u8;
-    } __attribute__ ((__packed__));
+  {
+    uint16_t u2;
+    uint32_t u4;
+    uint64_t u8;
+  } __attribute__ ((__packed__));
 
   if (r_type == R_PPC64_RELATIVE)
     {
@@ -694,7 +707,7 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
   Elf64_Addr value = SYMBOL_ADDRESS (sym_map, sym, true) + reloc->r_addend;
 
   if (sym != NULL
-      && __builtin_expect (ELFW(ST_TYPE) (sym->st_info) == STT_GNU_IFUNC, 0)
+      && __builtin_expect (ELFW (ST_TYPE) (sym->st_info) == STT_GNU_IFUNC, 0)
       && __builtin_expect (sym->st_shndx != SHN_UNDEF, 1)
       && __builtin_expect (!skip_ifunc, 1))
     value = resolve_ifunc (value, map, sym_map);
@@ -719,34 +732,34 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	value = resolve_ifunc (value, map, sym_map);
       /* Fall thru */
     case R_PPC64_JMP_SLOT:
-      elf_machine_fixup_plt (map, sym_map, refsym, sym,
-			     reloc, reloc_addr, value);
+      elf_machine_fixup_plt (map, sym_map, refsym, sym, reloc, reloc_addr,
+			     value);
       return;
 
     case R_PPC64_DTPMOD64:
-      if (map->l_info[DT_PPC64(OPT)]
-	  && (map->l_info[DT_PPC64(OPT)]->d_un.d_val & PPC64_OPT_TLS))
+      if (map->l_info[DT_PPC64 (OPT)]
+	  && (map->l_info[DT_PPC64 (OPT)]->d_un.d_val & PPC64_OPT_TLS))
 	{
 #ifdef RTLD_BOOTSTRAP
 	  reloc_addr[0] = 0;
-	  reloc_addr[1] = (sym_map->l_tls_offset - TLS_TP_OFFSET
-			   + TLS_DTV_OFFSET);
+	  reloc_addr[1]
+	      = (sym_map->l_tls_offset - TLS_TP_OFFSET + TLS_DTV_OFFSET);
 	  return;
 #else
 	  if (sym_map != NULL)
 	    {
-# ifndef SHARED
+#  ifndef SHARED
 	      CHECK_STATIC_TLS (map, sym_map);
-# else
+#  else
 	      if (TRY_STATIC_TLS (map, sym_map))
-# endif
-		{
-		  reloc_addr[0] = 0;
-		  /* Set up for local dynamic.  */
-		  reloc_addr[1] = (sym_map->l_tls_offset - TLS_TP_OFFSET
-				   + TLS_DTV_OFFSET);
-		  return;
-		}
+#  endif
+	      {
+		reloc_addr[0] = 0;
+		/* Set up for local dynamic.  */
+		reloc_addr[1]
+		    = (sym_map->l_tls_offset - TLS_TP_OFFSET + TLS_DTV_OFFSET);
+		return;
+	      }
 	    }
 #endif
 	}
@@ -762,8 +775,8 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
       return;
 
     case R_PPC64_DTPREL64:
-      if (map->l_info[DT_PPC64(OPT)]
-	  && (map->l_info[DT_PPC64(OPT)]->d_un.d_val & PPC64_OPT_TLS))
+      if (map->l_info[DT_PPC64 (OPT)]
+	  && (map->l_info[DT_PPC64 (OPT)]->d_un.d_val & PPC64_OPT_TLS))
 	{
 #ifdef RTLD_BOOTSTRAP
 	  *reloc_addr = TLS_TPREL_VALUE (sym_map, sym, reloc);
@@ -772,20 +785,20 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 	  if (sym_map != NULL)
 	    {
 	      /* This reloc is always preceded by R_PPC64_DTPMOD64.  */
-# ifndef SHARED
+#  ifndef SHARED
 	      assert (HAVE_STATIC_TLS (map, sym_map));
-# else
+#  else
 	      if (HAVE_STATIC_TLS (map, sym_map))
 #  endif
-		{
-		  *reloc_addr = TLS_TPREL_VALUE (sym_map, sym, reloc);
-		  return;
-		}
+	      {
+		*reloc_addr = TLS_TPREL_VALUE (sym_map, sym, reloc);
+		return;
+	      }
 	    }
 #endif
 	}
-      /* During relocation all TLS symbols are defined and used.
-	 Therefore the offset is already correct.  */
+	/* During relocation all TLS symbols are defined and used.
+	   Therefore the offset is already correct.  */
 #ifndef RTLD_BOOTSTRAP
       if (sym_map != NULL)
 	*reloc_addr = TLS_DTPREL_VALUE (sym, reloc);
@@ -907,15 +920,15 @@ elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
       if (dont_expect (sym == NULL))
 	/* This can happen in trace mode when an object could not be found. */
 	return;
-      if (dont_expect (sym->st_size > refsym->st_size
-		       || (GLRO(dl_verbose)
-			   && sym->st_size < refsym->st_size)))
+      if (dont_expect (
+	      sym->st_size > refsym->st_size
+	      || (GLRO (dl_verbose) && sym->st_size < refsym->st_size)))
 	{
 	  const char *strtab;
 
 	  strtab = (const void *) D_PTR (map, l_info[DT_STRTAB]);
-	  _dl_error_printf ("%s: Symbol `%s' has different size" \
-			    " in shared object," \
+	  _dl_error_printf ("%s: Symbol `%s' has different size"
+			    " in shared object,"
 			    " consider re-linking\n",
 			    RTLD_PROGNAME, strtab + refsym->st_name);
 	}
@@ -1022,6 +1035,5 @@ elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
 {
   /* elf_machine_runtime_setup handles this.  */
 }
-
 
 #endif /* RESOLVE */

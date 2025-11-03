@@ -17,7 +17,7 @@
 
 /* Versioned copy of sysdeps/generic/longjmp.c modified for AltiVec support. */
 
-#include  <shlib-compat.h>
+#include <shlib-compat.h>
 #include <stddef.h>
 #include <setjmp.h>
 #include <signal.h>
@@ -26,16 +26,15 @@
 #undef siglongjmp
 
 extern void __vmx__longjmp (__jmp_buf __env, int __val)
-     __attribute__ ((noreturn));
+    __attribute__ ((noreturn));
 extern void __vmx__libc_longjmp (sigjmp_buf env, int val)
-     __attribute__ ((noreturn));
+    __attribute__ ((noreturn));
 libc_hidden_proto (__vmx__libc_longjmp)
 
-/* Set the signal mask to the one specified in ENV, and jump
-   to the position specified in ENV, causing the setjmp
-   call there to return VAL, or 1 if VAL is 0.  */
-void
-__vmx__libc_siglongjmp (sigjmp_buf env, int val)
+    /* Set the signal mask to the one specified in ENV, and jump
+       to the position specified in ENV, causing the setjmp
+       call there to return VAL, or 1 if VAL is 0.  */
+    void __vmx__libc_siglongjmp (sigjmp_buf env, int val)
 {
   /* Perform any cleanups needed by the frames being unwound.  */
   _longjmp_unwind (env, val);
@@ -50,10 +49,11 @@ __vmx__libc_siglongjmp (sigjmp_buf env, int val)
 }
 
 strong_alias (__vmx__libc_siglongjmp, __vmx__libc_longjmp)
-libc_hidden_def (__vmx__libc_longjmp)
+    libc_hidden_def (__vmx__libc_longjmp)
 
-strong_alias (__vmx__libc_longjmp, __libc_longjmp)
-strong_alias (__vmx__libc_siglongjmp, __libc_siglongjmp)
-versioned_symbol (libc, __vmx__libc_siglongjmp, _longjmp, GLIBC_2_3_4);
+	strong_alias (__vmx__libc_longjmp, __libc_longjmp)
+	    strong_alias (__vmx__libc_siglongjmp, __libc_siglongjmp)
+		versioned_symbol (libc, __vmx__libc_siglongjmp, _longjmp,
+				  GLIBC_2_3_4);
 versioned_symbol (libc, __vmx__libc_siglongjmp, longjmp, GLIBC_2_3_4);
 versioned_symbol (libc, __vmx__libc_siglongjmp, siglongjmp, GLIBC_2_3_4);

@@ -46,45 +46,55 @@ static char rcsid[] = "$NetBSD: $";
 #include <math-underflow.h>
 #include <libm-alias-ldouble.h>
 
-static const long double one=1.0, two=2.0, tiny = 1.0e-4900L;
+static const long double one = 1.0, two = 2.0, tiny = 1.0e-4900L;
 
-long double __tanhl(long double x)
+long double
+__tanhl (long double x)
 {
-	long double t,z;
-	int32_t se;
-	uint32_t j0,j1,ix;
+  long double t, z;
+  int32_t se;
+  uint32_t j0, j1, ix;
 
-    /* High word of |x|. */
-	GET_LDOUBLE_WORDS(se,j0,j1,x);
-	ix = se&0x7fff;
+  /* High word of |x|. */
+  GET_LDOUBLE_WORDS (se, j0, j1, x);
+  ix = se & 0x7fff;
 
-    /* x is INF or NaN */
-	if(ix==0x7fff) {
-	    /* for NaN it's not important which branch: tanhl(NaN) = NaN */
-	    if (se&0x8000) return one/x-one;	/* tanhl(-inf)= -1; */
-	    else           return one/x+one;	/* tanhl(+inf)=+1 */
+  /* x is INF or NaN */
+  if (ix == 0x7fff)
+    {
+      /* for NaN it's not important which branch: tanhl(NaN) = NaN */
+      if (se & 0x8000)
+	return one / x - one; /* tanhl(-inf)= -1; */
+      else
+	return one / x + one; /* tanhl(+inf)=+1 */
+    }
+
+  /* |x| < 23 */
+  if (ix < 0x4003 || (ix == 0x4003 && j0 < 0xb8000000u))
+    { /* |x|<23 */
+      if ((ix | j0 | j1) == 0)
+	return x;      /* x == +- 0 */
+      if (ix < 0x3fc8) /* |x|<2**-55 */
+	{
+	  math_check_force_underflow (x);
+	  return x * (one + tiny); /* tanh(small) = small */
 	}
-
-    /* |x| < 23 */
-	if (ix < 0x4003 || (ix == 0x4003 && j0 < 0xb8000000u)) {/* |x|<23 */
-	    if ((ix|j0|j1) == 0)
-		return x;		/* x == +- 0 */
-	    if (ix<0x3fc8)		/* |x|<2**-55 */
-	      {
-		math_check_force_underflow (x);
-		return x*(one+tiny);	/* tanh(small) = small */
-	      }
-	    if (ix>=0x3fff) {	/* |x|>=1  */
-		t = __expm1l(two*fabsl(x));
-		z = one - two/(t+two);
-	    } else {
-	        t = __expm1l(-two*fabsl(x));
-	        z= -t/(t+two);
-	    }
-    /* |x| > 23, return +-1 */
-	} else {
-	    z = one - tiny;		/* raised inexact flag */
+      if (ix >= 0x3fff)
+	{ /* |x|>=1  */
+	  t = __expm1l (two * fabsl (x));
+	  z = one - two / (t + two);
 	}
-	return (se&0x8000)? -z: z;
+      else
+	{
+	  t = __expm1l (-two * fabsl (x));
+	  z = -t / (t + two);
+	}
+      /* |x| > 23, return +-1 */
+    }
+  else
+    {
+      z = one - tiny; /* raised inexact flag */
+    }
+  return (se & 0x8000) ? -z : z;
 }
 libm_alias_ldouble (__tanh, tanh)

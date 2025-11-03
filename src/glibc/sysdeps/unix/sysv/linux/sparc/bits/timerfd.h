@@ -15,15 +15,16 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_TIMERFD_H
-# error "Never use <bits/timerfd.h> directly; include <sys/timerfd.h> instead."
+#ifndef _SYS_TIMERFD_H
+#  error                                                                       \
+      "Never use <bits/timerfd.h> directly; include <sys/timerfd.h> instead."
 #endif
 
 /* Bits to be set in the FLAGS parameter of `timerfd_create'.  */
 enum
-  {
-    TFD_CLOEXEC = 0x400000,
+{
+  TFD_CLOEXEC = 0x400000,
 #define TFD_CLOEXEC TFD_CLOEXEC
-    TFD_NONBLOCK = 0x004000
+  TFD_NONBLOCK = 0x004000
 #define TFD_NONBLOCK TFD_NONBLOCK
-  };
+};

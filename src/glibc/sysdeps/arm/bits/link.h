@@ -15,10 +15,9 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_LINK_H
-# error "Never include <bits/link.h> directly; use <link.h> instead."
+#ifndef _LINK_H
+#  error "Never include <bits/link.h> directly; use <link.h> instead."
 #endif
-
 
 /* Registers for entry into PLT on ARM.  */
 typedef struct La_arm_regs
@@ -45,21 +44,16 @@ typedef struct La_arm_retval
   uint32_t lrv_coproc[12];
 } La_arm_retval;
 
-
 __BEGIN_DECLS
 
-extern Elf32_Addr la_arm_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
-				       uintptr_t *__refcook,
-				       uintptr_t *__defcook,
-				       La_arm_regs *__regs,
-				       unsigned int *__flags,
-				       const char *__symname,
-				       long int *__framesizep);
-extern unsigned int la_arm_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx,
-					uintptr_t *__refcook,
-					uintptr_t *__defcook,
-					const La_arm_regs *__inregs,
-					La_arm_retval *__outregs,
-					const char *__symname);
+extern Elf32_Addr
+la_arm_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
+		     uintptr_t *__refcook, uintptr_t *__defcook,
+		     La_arm_regs *__regs, unsigned int *__flags,
+		     const char *__symname, long int *__framesizep);
+extern unsigned int
+la_arm_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx, uintptr_t *__refcook,
+		    uintptr_t *__defcook, const La_arm_regs *__inregs,
+		    La_arm_retval *__outregs, const char *__symname);
 
 __END_DECLS

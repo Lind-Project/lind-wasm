@@ -18,22 +18,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define memcpy __redirect_memcpy
-# include <string.h>
-# undef memcpy
+#if IS_IN(libc)
+#  define memcpy __redirect_memcpy
+#  include <string.h>
+#  undef memcpy
 
-# define SYMBOL_NAME memcpy
-# include "ifunc-memmove.h"
+#  define SYMBOL_NAME memcpy
+#  include "ifunc-memmove.h"
 
-libc_ifunc_redirected (__redirect_memcpy, __new_memcpy,
-		       IFUNC_SELECTOR ());
+libc_ifunc_redirected (__redirect_memcpy, __new_memcpy, IFUNC_SELECTOR ());
 
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (__new_memcpy, __GI_memcpy, __redirect_memcpy)
-  __attribute__ ((visibility ("hidden")));
-# endif
+    __attribute__ ((visibility ("hidden")));
+#  endif
 
-# include <shlib-compat.h>
+#  include <shlib-compat.h>
 versioned_symbol (libc, __new_memcpy, memcpy, GLIBC_2_14);
 #endif

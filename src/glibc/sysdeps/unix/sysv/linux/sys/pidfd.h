@@ -18,10 +18,10 @@
 
 #ifndef _PIDFD_H
 
-#include <fcntl.h>
-#include <bits/types/siginfo_t.h>
+#  include <fcntl.h>
+#  include <bits/types/siginfo_t.h>
 
-#define PIDFD_NONBLOCK O_NONBLOCK
+#  define PIDFD_NONBLOCK O_NONBLOCK
 
 /* Returns a file descriptor that refers to the process PID.  The
    close-on-exec is set on the file descriptor.

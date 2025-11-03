@@ -19,16 +19,16 @@
 #include <ifunc-strchr.h>
 
 #if HAVE_STRCHR_C
-# if HAVE_STRCHR_IFUNC
-#  define STRCHR STRCHR_C
-# endif
-
-# include <string/strchr.c>
-
-# if HAVE_STRCHR_IFUNC
-#  if defined SHARED && IS_IN (libc)
-__hidden_ver1 (__strchr_c, __GI_strchr, __strchr_c);
+#  if HAVE_STRCHR_IFUNC
+#    define STRCHR STRCHR_C
 #  endif
-# endif
+
+#  include <string/strchr.c>
+
+#  if HAVE_STRCHR_IFUNC
+#    if defined SHARED && IS_IN(libc)
+__hidden_ver1 (__strchr_c, __GI_strchr, __strchr_c);
+#    endif
+#  endif
 
 #endif

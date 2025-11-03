@@ -20,5 +20,5 @@
 
 extern __typeof (memchr) __memchr_ppc attribute_hidden;
 
-#define MEMCHR  __memchr_ppc
+#define MEMCHR __memchr_ppc
 #include <string/memchr.c>

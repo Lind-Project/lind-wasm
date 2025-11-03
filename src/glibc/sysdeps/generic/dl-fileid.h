@@ -21,9 +21,9 @@
 /* This type stores whatever information is fetched by _dl_get_file_id
    and compared by _dl_file_id_match_p.  */
 struct r_file_id
-  {
-    /* In the stub version, we don't record anything at all.  */
-  };
+{
+  /* In the stub version, we don't record anything at all.  */
+};
 
 /* Sample FD to fill in *ID.  Returns true on success.
    On error, returns false, with errno set.  */

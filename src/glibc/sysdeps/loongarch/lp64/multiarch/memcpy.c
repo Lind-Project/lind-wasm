@@ -18,20 +18,19 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define memcpy __redirect_memcpy
-# include <string.h>
-# undef memcpy
+#if IS_IN(libc)
+#  define memcpy __redirect_memcpy
+#  include <string.h>
+#  undef memcpy
 
-# define SYMBOL_NAME memcpy
-# include "ifunc-lasx.h"
+#  define SYMBOL_NAME memcpy
+#  include "ifunc-lasx.h"
 
-libc_ifunc_redirected (__redirect_memcpy, memcpy,
-		       IFUNC_SELECTOR ());
+libc_ifunc_redirected (__redirect_memcpy, memcpy, IFUNC_SELECTOR ());
 
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (memcpy, __GI_memcpy, __redirect_memcpy)
-  __attribute__ ((visibility ("hidden"))) __attribute_copy__ (memcmp);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (memcmp);
+#  endif
 
 #endif

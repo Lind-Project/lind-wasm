@@ -26,9 +26,7 @@
 extern __typeof (__floor) __floor_ppc32 attribute_hidden;
 extern __typeof (__floor) __floor_power5plus attribute_hidden;
 
-libc_ifunc (__floor,
-	    (hwcap & PPC_FEATURE_POWER5_PLUS)
-	    ? __floor_power5plus
-            : __floor_ppc32);
+libc_ifunc (__floor, (hwcap & PPC_FEATURE_POWER5_PLUS) ? __floor_power5plus
+						       : __floor_ppc32);
 
 libm_alias_double (__floor, floor)

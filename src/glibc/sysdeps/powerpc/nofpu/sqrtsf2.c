@@ -30,7 +30,7 @@
 #include "single.h"
 #include <shlib-compat.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_3_2, GLIBC_2_28)
+#if SHLIB_COMPAT(libc, GLIBC_2_3_2, GLIBC_2_28)
 SFtype
 __sqrtsf2 (SFtype a)
 {

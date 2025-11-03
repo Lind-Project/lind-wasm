@@ -49,7 +49,8 @@ static const struct data
    z=1/x and shift = pi/2. Maximum observed error is 2.27 ulps:
    _ZGVnN2v_atan (0x1.0005af27c23e9p+0) got 0x1.9225645bdd7c1p-1
 				       want 0x1.9225645bdd7c3p-1.  */
-float64x2_t VPCS_ATTR V_NAME_D1 (atan) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (atan) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
 

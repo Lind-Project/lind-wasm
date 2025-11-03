@@ -25,8 +25,8 @@
 #include <pt-internal.h>
 
 error_t
-__pthread_sigstate (struct __pthread *thread, int how,
-		    const sigset_t *set, sigset_t *oset, int clear_pending)
+__pthread_sigstate (struct __pthread *thread, int how, const sigset_t *set,
+		    sigset_t *oset, int clear_pending)
 {
   error_t err = 0;
   struct hurd_sigstate *ss;

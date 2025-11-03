@@ -18,7 +18,6 @@
 #include <errno.h>
 #include <unistd.h>
 
-
 /* Get the effective user ID of the calling process.  */
 __uid_t
 __geteuid (void)
@@ -28,4 +27,4 @@ __geteuid (void)
 }
 stub_warning (geteuid)
 
-weak_alias (__geteuid, geteuid)
+    weak_alias (__geteuid, geteuid)

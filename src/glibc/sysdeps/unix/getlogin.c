@@ -57,7 +57,7 @@ getlogin (void)
       return NULL;
     }
 
-  real_tty_path += 5;		/* Remove "/dev/".  */
+  real_tty_path += 5; /* Remove "/dev/".  */
 
   __setutent ();
   strncpy (line.ut_line, real_tty_path, sizeof line.ut_line);

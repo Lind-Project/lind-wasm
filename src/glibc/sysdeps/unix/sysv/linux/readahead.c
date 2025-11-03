@@ -24,7 +24,6 @@ ssize_t
 __readahead (int fd, off64_t offset, size_t count)
 {
   return INLINE_SYSCALL_CALL (readahead, fd,
-			      __ALIGNMENT_ARG SYSCALL_LL64 (offset),
-			      count);
+			      __ALIGNMENT_ARG SYSCALL_LL64 (offset), count);
 }
 weak_alias (__readahead, readahead)

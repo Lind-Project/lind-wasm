@@ -28,7 +28,6 @@ typeof (snprintf) ___ieee128_snprintf attribute_hidden;
 #include <efgcvt-ldbl-macros.h>
 #include <efgcvt_r-template.c>
 
-#define cvt_symbol(local, symbol) \
-  strong_alias (local, symbol)
+#define cvt_symbol(local, symbol) strong_alias (local, symbol)
 cvt_symbol (___qfcvtieee128_r, __qfcvtieee128_r);
 cvt_symbol (___qecvtieee128_r, __qecvtieee128_r);

@@ -20,20 +20,20 @@
 
 #include <shlib-compat.h>
 
-#if IS_IN (libc) && defined SHARED && SHLIB_COMPAT (libc, GLIBC_2_19, GLIBC_2_20)
+#if IS_IN(libc) && defined SHARED && SHLIB_COMPAT(libc, GLIBC_2_19, GLIBC_2_20)
 /* this is a copy from debug/longjmp_chk.c because we need an unique name
    for __longjmp_chk, but it is already named via a define
    for __libc_siglongjmp in debug/longjmp_chk.c.  */
-# include <setjmp.h>
+#  include <setjmp.h>
 
 // XXX Should move to include/setjmp.h
 extern void ____longjmp_chk (__jmp_buf __env, int __val)
-     __attribute__ ((__noreturn__));
+    __attribute__ ((__noreturn__));
 
-# define __longjmp ____longjmp_chk
-# define __libc_siglongjmp __v1__longjmp_chk
+#  define __longjmp ____longjmp_chk
+#  define __libc_siglongjmp __v1__longjmp_chk
 
-# include <setjmp/longjmp.c>
+#  include <setjmp/longjmp.c>
 
 /* In glibc release 2.19 a new versions of __longjmp_chk was introduced,
    but was reverted before 2.20. Thus both versions are the same function.  */
@@ -43,6 +43,6 @@ compat_symbol (libc, __v2__longjmp_chk, __longjmp_chk, GLIBC_2_19);
 
 #else
 
-# include <debug/longjmp_chk.c>
+#  include <debug/longjmp_chk.c>
 
 #endif

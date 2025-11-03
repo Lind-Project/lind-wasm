@@ -1,8 +1,6 @@
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
-weak_function
+int attribute_hidden weak_function
 snprintf (char *s, size_t maxlen, const char *fmt, ...)
 {
   va_list arg;

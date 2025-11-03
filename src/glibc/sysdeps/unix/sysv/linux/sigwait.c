@@ -34,6 +34,5 @@ __sigwait (const sigset_t *set, int *sig)
   *sig = si.si_signo;
   return 0;
 }
-libc_hidden_def (__sigwait)
-weak_alias (__sigwait, sigwait)
-strong_alias (__sigwait, __libc_sigwait)
+libc_hidden_def (__sigwait) weak_alias (__sigwait, sigwait)
+    strong_alias (__sigwait, __libc_sigwait)

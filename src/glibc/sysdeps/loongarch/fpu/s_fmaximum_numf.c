@@ -27,22 +27,23 @@ __fmaximum_numf (float x, float y)
 {
   int x_cond;
   int y_cond;
-  asm volatile ("fclass.s \t%0, %1" : "=f" (x_cond) : "f" (x));
-  asm volatile ("fclass.s \t%0, %1" : "=f" (y_cond) : "f" (y));
+  asm volatile ("fclass.s \t%0, %1" : "=f"(x_cond) : "f"(x));
+  asm volatile ("fclass.s \t%0, %1" : "=f"(y_cond) : "f"(y));
 
-  if (__glibc_unlikely((x_cond & _FCLASS_NAN) && !(y_cond & _FCLASS_NAN)))
+  if (__glibc_unlikely ((x_cond & _FCLASS_NAN) && !(y_cond & _FCLASS_NAN)))
     {
-      asm volatile ("fmax.s \t%0, %1, %2" : "=f" (x) : "f" (x), "f" (y));
+      asm volatile ("fmax.s \t%0, %1, %2" : "=f"(x) : "f"(x), "f"(y));
       return y;
     }
-  else if (__glibc_unlikely(!(x_cond & _FCLASS_NAN) && (y_cond & _FCLASS_NAN)))
+  else if (__glibc_unlikely (!(x_cond & _FCLASS_NAN)
+			     && (y_cond & _FCLASS_NAN)))
     {
-      asm volatile ("fmax.s \t%0, %1, %2" : "=f" (y) : "f" (x), "f" (y));
+      asm volatile ("fmax.s \t%0, %1, %2" : "=f"(y) : "f"(x), "f"(y));
       return x;
     }
   else
     {
-      asm volatile ("fmax.s \t%0, %1, %2" : "=f" (x) : "f" (x), "f" (y));
+      asm volatile ("fmax.s \t%0, %1, %2" : "=f"(x) : "f"(x), "f"(y));
       return x;
     }
 }

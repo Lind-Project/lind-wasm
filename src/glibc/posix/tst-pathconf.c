@@ -23,7 +23,6 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-
 static void prepare (void);
 #define PREPARE(argc, argv) prepare ()
 
@@ -60,7 +59,6 @@ prepare (void)
       exit (1);
     }
 }
-
 
 static int
 do_test (void)

@@ -37,7 +37,7 @@ struct __pthread_rwlock_arch_t
   unsigned int __flags;
 };
 
-#define __PTHREAD_RWLOCK_INITIALIZER(__flags) \
+#define __PTHREAD_RWLOCK_INITIALIZER(__flags)                                 \
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, __flags
 
 #endif

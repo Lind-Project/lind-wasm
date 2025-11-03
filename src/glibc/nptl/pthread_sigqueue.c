@@ -55,16 +55,14 @@ __pthread_sigqueue (pthread_t threadid, int signo, const union sigval value)
   info.si_value = value;
 
   /* We have a special syscall to do the work.  */
-  int val = INTERNAL_SYSCALL_CALL (rt_tgsigqueueinfo, pid, tid, signo,
-				   &info);
-  return (INTERNAL_SYSCALL_ERROR_P (val)
-	  ? INTERNAL_SYSCALL_ERRNO (val) : 0);
+  int val = INTERNAL_SYSCALL_CALL (rt_tgsigqueueinfo, pid, tid, signo, &info);
+  return (INTERNAL_SYSCALL_ERROR_P (val) ? INTERNAL_SYSCALL_ERRNO (val) : 0);
 #else
   return ENOSYS;
 #endif
 }
 versioned_symbol (libc, __pthread_sigqueue, pthread_sigqueue, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_11, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_11, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_sigqueue, pthread_sigqueue, GLIBC_2_11);
 #endif

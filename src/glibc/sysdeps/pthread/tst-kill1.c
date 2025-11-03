@@ -20,7 +20,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static pthread_cond_t c = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 static pthread_barrier_t b;
@@ -46,7 +45,6 @@ tf (void *a)
 
   return NULL;
 }
-
 
 int
 do_test (void)
@@ -91,7 +89,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define EXPECTED_SIGNAL SIGUSR1
 #define TEST_FUNCTION do_test ()

@@ -48,16 +48,16 @@ get_timebase_freq_fallback (void)
   if (n == sizeof (buf))
     {
       /* We are here because the 1st read returned exactly sizeof
-         (buf) bytes.  This implies that we are not at EOF and may
-         not have read the timebase value yet.  So we need to read
-         more bytes until we know we have EOF.  We copy the lower
-         half of buf to the upper half and read sizeof (buf)/2
-         bytes into the lower half of buf and repeat until we
-         reach EOF.  We can assume that the timebase will be in
-         the last 512 bytes of cpuinfo, so two 512 byte half_bufs
-         will be sufficient to contain the timebase and will
-         handle the case where the timebase spans the half_buf
-         boundary.  */
+	 (buf) bytes.  This implies that we are not at EOF and may
+	 not have read the timebase value yet.  So we need to read
+	 more bytes until we know we have EOF.  We copy the lower
+	 half of buf to the upper half and read sizeof (buf)/2
+	 bytes into the lower half of buf and repeat until we
+	 reach EOF.  We can assume that the timebase will be in
+	 the last 512 bytes of cpuinfo, so two 512 byte half_bufs
+	 will be sufficient to contain the timebase and will
+	 handle the case where the timebase spans the half_buf
+	 boundary.  */
       const ssize_t half_buf = sizeof (buf) / 2;
       while (n >= half_buf)
 	{
@@ -101,7 +101,7 @@ uint64_t
 __get_timebase_freq (void)
 {
   /* The vDSO does not have a fallback mechanism (such calling a syscall).  */
-  uint64_t (*vdsop)(void) = GLRO(dl_vdso_get_tbfreq);
+  uint64_t (*vdsop) (void) = GLRO (dl_vdso_get_tbfreq);
   if (vdsop == NULL)
     return get_timebase_freq_fallback ();
 

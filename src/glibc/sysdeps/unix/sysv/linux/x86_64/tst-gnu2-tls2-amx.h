@@ -40,7 +40,7 @@ static inline void
 init_buffer (int8_t *buf, int8_t value)
 {
   int rows, colsb, i, j;
-  rows  = MAX_ROWS;
+  rows = MAX_ROWS;
   colsb = MAX_COLS;
 
   for (i = 0; i < rows; i++)
@@ -48,16 +48,16 @@ init_buffer (int8_t *buf, int8_t value)
       buf[i * colsb + j] = value;
 }
 
-#define BEFORE_TLSDESC_CALL()					\
-  int8_t src[MAX];						\
-  int8_t res[MAX];						\
-  /* Initialize src with data  */				\
-  init_buffer (src, 2);						\
-  /* Load tile rows from memory.  */				\
+#define BEFORE_TLSDESC_CALL()                                                 \
+  int8_t src[MAX];                                                            \
+  int8_t res[MAX];                                                            \
+  /* Initialize src with data  */                                             \
+  init_buffer (src, 2);                                                       \
+  /* Load tile rows from memory.  */                                          \
   _tile_loadd (2, src, STRIDE);
 
-#define AFTER_TLSDESC_CALL()					\
-  /* Store the tile data to memory.  */				\
-  _tile_stored (2, res, STRIDE);				\
-  _tile_release ();						\
+#define AFTER_TLSDESC_CALL()                                                  \
+  /* Store the tile data to memory.  */                                       \
+  _tile_stored (2, res, STRIDE);                                              \
+  _tile_release ();                                                           \
   TEST_VERIFY_EXIT (memcmp (src, res, sizeof (res)) == 0);

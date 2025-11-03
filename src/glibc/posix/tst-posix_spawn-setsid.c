@@ -42,8 +42,7 @@ static int restart;
 static char *initial_argv[7];
 static int initial_argv_count;
 
-#define CMDLINE_OPTIONS \
-  { "restart", no_argument, &restart, 1 },
+#define CMDLINE_OPTIONS { "restart", no_argument, &restart, 1 },
 
 static char *pidfile;
 

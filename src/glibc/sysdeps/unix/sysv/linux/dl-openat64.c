@@ -20,7 +20,6 @@
 #include <fcntl.h>
 #include <sysdep.h>
 
-
 int
 openat64 (int dfd, const char *file, int oflag, ...)
 {

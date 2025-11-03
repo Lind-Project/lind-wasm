@@ -18,7 +18,7 @@
 
 #include <errno.h>
 #include <signal.h>
-#include <stddef.h>		/* For NULL.  */
+#include <stddef.h> /* For NULL.  */
 #include <sysdep-cancel.h>
 
 /* This is our dummy signal handler we use here.  */
@@ -28,7 +28,6 @@ static void ignore_signal (int sig);
    implementation cannot be used for the threaded libc.  The
    libpthread must provide an own version.  */
 static int was_sig;
-
 
 static int
 do_sigwait (const sigset_t *set, int *sig)
@@ -45,7 +44,7 @@ do_sigwait (const sigset_t *set, int *sig)
   /* Unblock all signals in the SET and register our nice handler.  */
   action.sa_handler = ignore_signal;
   action.sa_flags = 0;
-  __sigfillset (&action.sa_mask);	/* Block all signals for handler.  */
+  __sigfillset (&action.sa_mask); /* Block all signals for handler.  */
 
   /* Make sure we recognize error conditions by setting WAS_SIG to a
      value which does not describe a legal signal number.  */
@@ -65,7 +64,7 @@ do_sigwait (const sigset_t *set, int *sig)
   /* Now we can wait for signals.  */
   __sigsuspend (&tmp_mask);
 
- restore_handler:
+restore_handler:
   save_errno = errno;
 
   while (--this >= 1)
@@ -80,19 +79,15 @@ do_sigwait (const sigset_t *set, int *sig)
   return was_sig == -1 ? -1 : 0;
 }
 
-
 int
 __sigwait (const sigset_t *set, int *sig)
 {
   /* __sigsuspend should be a cancellation point.  */
   return do_sigitid (idtype, id, infop, options);
 }
-libc_hidden_def (__sigwait)
-weak_alias (__sigwait, sigwait)
+libc_hidden_def (__sigwait) weak_alias (__sigwait, sigwait)
 
-
-static void
-ignore_signal (int sig)
+    static void ignore_signal (int sig)
 {
   /* Remember the signal.  */
   was_sig = sig;

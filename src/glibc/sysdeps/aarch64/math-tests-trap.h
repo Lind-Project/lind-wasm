@@ -18,9 +18,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef AARCH64_MATH_TESTS_TRAP_H
-#define AARCH64_MATH_TESTS_TRAP_H 1
+#  define AARCH64_MATH_TESTS_TRAP_H 1
 
 /* Trapping exceptions are optional on AArch64.  */
-#define EXCEPTION_ENABLE_SUPPORTED(EXCEPT)	((EXCEPT) == 0)
+#  define EXCEPTION_ENABLE_SUPPORTED(EXCEPT) ((EXCEPT) == 0)
 
 #endif /* math-tests-trap.h.  */

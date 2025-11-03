@@ -33,8 +33,8 @@ __nextupl (long double x)
   EXTRACT_WORDS64 (lx, xlo);
   ihx = hx & 0x7fffffffffffffffLL;
 
-  if (ihx > 0x7ff0000000000000LL)	/* x is nan.  */
-    return x + x;		/* Signal the nan.  */
+  if (ihx > 0x7ff0000000000000LL) /* x is nan.  */
+    return x + x;		  /* Signal the nan.  */
   if (ihx == 0)
     return LDBL_TRUE_MIN;
 
@@ -47,10 +47,10 @@ __nextupl (long double x)
       return u;
     }
   if (ihx <= 0x0360000000000000LL)
-    {				/* x <= LDBL_MIN.  */
+    { /* x <= LDBL_MIN.  */
       x += LDBL_TRUE_MIN;
-      if (x == 0.0L)		/* Handle negative LDBL_TRUE_MIN case.  */
-        x = -0.0L;
+      if (x == 0.0L) /* Handle negative LDBL_TRUE_MIN case.  */
+	x = -0.0L;
       return x;
     }
   /* If the high double is an exact power of two and the low
@@ -61,10 +61,10 @@ __nextupl (long double x)
      decreasing by one and normalisation of the mantissa.   */
   if ((hx & 0x000fffffffffffffLL) == 0
       && ((lx != 0 && lx != 0x8000000000000000LL && (hx ^ lx) < 0)
-          || ((lx == 0 || lx == 0x8000000000000000LL) && hx < 0)))
+	  || ((lx == 0 || lx == 0x8000000000000000LL) && hx < 0)))
     ihx -= 1LL << 52;
   if (ihx < (106LL << 52))
-    {				/* ulp will denormal.  */
+    { /* ulp will denormal.  */
       INSERT_WORDS64 (yhi, ihx & (0x7ffLL << 52));
       u = yhi * 0x1p-105;
     }

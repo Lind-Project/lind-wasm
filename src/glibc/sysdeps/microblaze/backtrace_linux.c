@@ -24,8 +24,8 @@
 
 int
 _identify_sighandler (unsigned long fp, unsigned long pc,
-                      unsigned long *pprev_fp, unsigned long *pprev_pc,
-                      unsigned long *retaddr)
+		      unsigned long *pprev_fp, unsigned long *pprev_pc,
+		      unsigned long *retaddr)
 {
   unsigned long *tramp = 0;
   struct ucontext *uc;
@@ -33,27 +33,27 @@ _identify_sighandler (unsigned long fp, unsigned long pc,
   if (*retaddr == 0)
     {
       /* Kernel inserts the tramp between the signal handler frame and the
-         caller frame in signal handling.  */
+	 caller frame in signal handling.  */
       tramp = (unsigned long *) pc;
       tramp += 2;
       if ((*tramp == (0x31800000 | __NR_rt_sigreturn))
-          && (*(tramp+1) == 0xb9cc0008))
-        {
-          /* Signal handler function argument are:
-             int sig_num, siginfo_t * info, void * ucontext
-             therefore ucontext is the 3rd argument.  */
-          unsigned long ucptr = ((unsigned long) tramp
-                                 - sizeof (struct ucontext));
-          uc = (struct ucontext *) ucptr;
-          *pprev_pc = uc->uc_mcontext.regs.pc;
-          /* Need to record the return address since the return address of the
-             function which causes this signal may not be recorded in the
-             stack.  */
-          *pprev_fp = uc->uc_mcontext.regs.r1;
-          *retaddr = uc->uc_mcontext.regs.r15;
-          /* It is a signal handler.  */
-          return 1;
-        }
+	  && (*(tramp + 1) == 0xb9cc0008))
+	{
+	  /* Signal handler function argument are:
+	     int sig_num, siginfo_t * info, void * ucontext
+	     therefore ucontext is the 3rd argument.  */
+	  unsigned long ucptr
+	      = ((unsigned long) tramp - sizeof (struct ucontext));
+	  uc = (struct ucontext *) ucptr;
+	  *pprev_pc = uc->uc_mcontext.regs.pc;
+	  /* Need to record the return address since the return address of the
+	     function which causes this signal may not be recorded in the
+	     stack.  */
+	  *pprev_fp = uc->uc_mcontext.regs.r1;
+	  *retaddr = uc->uc_mcontext.regs.r15;
+	  /* It is a signal handler.  */
+	  return 1;
+	}
     }
   return 0;
 }

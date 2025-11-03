@@ -18,11 +18,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ISA_IFUNC_MACROS_H
-#define _ISA_IFUNC_MACROS_H 1
+#  define _ISA_IFUNC_MACROS_H 1
 
-#include <isa-level.h>
-#include <sys/cdefs.h>
-#include <stdlib.h>
+#  include <isa-level.h>
+#  include <sys/cdefs.h>
+#  include <stdlib.h>
 
 /* Only include at the level of the minimum build ISA or higher. I.e
    if built with ISA=V1, then include all implementations. On the
@@ -30,30 +30,30 @@
    implementations. If there is no implementation at or above the
    minimum build ISA level, then include the highest ISA level
    implementation.  */
-#if MINIMUM_X86_ISA_LEVEL <= 4
-# define X86_IFUNC_IMPL_ADD_V4(...) IFUNC_IMPL_ADD (__VA_ARGS__)
-#endif
-#if MINIMUM_X86_ISA_LEVEL <= 3
-# define X86_IFUNC_IMPL_ADD_V3(...) IFUNC_IMPL_ADD (__VA_ARGS__)
-#endif
-#if MINIMUM_X86_ISA_LEVEL <= 2
-# define X86_IFUNC_IMPL_ADD_V2(...) IFUNC_IMPL_ADD (__VA_ARGS__)
-#endif
-#if MINIMUM_X86_ISA_LEVEL <= 1
-# define X86_IFUNC_IMPL_ADD_V1(...) IFUNC_IMPL_ADD (__VA_ARGS__)
-#endif
+#  if MINIMUM_X86_ISA_LEVEL <= 4
+#    define X86_IFUNC_IMPL_ADD_V4(...) IFUNC_IMPL_ADD (__VA_ARGS__)
+#  endif
+#  if MINIMUM_X86_ISA_LEVEL <= 3
+#    define X86_IFUNC_IMPL_ADD_V3(...) IFUNC_IMPL_ADD (__VA_ARGS__)
+#  endif
+#  if MINIMUM_X86_ISA_LEVEL <= 2
+#    define X86_IFUNC_IMPL_ADD_V2(...) IFUNC_IMPL_ADD (__VA_ARGS__)
+#  endif
+#  if MINIMUM_X86_ISA_LEVEL <= 1
+#    define X86_IFUNC_IMPL_ADD_V1(...) IFUNC_IMPL_ADD (__VA_ARGS__)
+#  endif
 
-#ifndef X86_IFUNC_IMPL_ADD_V4
-# define X86_IFUNC_IMPL_ADD_V4(...)
-#endif
-#ifndef X86_IFUNC_IMPL_ADD_V3
-# define X86_IFUNC_IMPL_ADD_V3(...)
-#endif
-#ifndef X86_IFUNC_IMPL_ADD_V2
-# define X86_IFUNC_IMPL_ADD_V2(...)
-#endif
-#ifndef X86_IFUNC_IMPL_ADD_V1
-# define X86_IFUNC_IMPL_ADD_V1(...)
-#endif
+#  ifndef X86_IFUNC_IMPL_ADD_V4
+#    define X86_IFUNC_IMPL_ADD_V4(...)
+#  endif
+#  ifndef X86_IFUNC_IMPL_ADD_V3
+#    define X86_IFUNC_IMPL_ADD_V3(...)
+#  endif
+#  ifndef X86_IFUNC_IMPL_ADD_V2
+#    define X86_IFUNC_IMPL_ADD_V2(...)
+#  endif
+#  ifndef X86_IFUNC_IMPL_ADD_V1
+#    define X86_IFUNC_IMPL_ADD_V1(...)
+#  endif
 
 #endif

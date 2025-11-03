@@ -21,16 +21,20 @@
 int
 fedisableexcept (int excepts)
 {
-  union { unsigned long long l; unsigned int sw[2]; } s;
+  union
+  {
+    unsigned long long l;
+    unsigned int sw[2];
+  } s;
   unsigned int old_exc;
 
   /* Get the current status word. */
-  __asm__ ("fstd %%fr0,0(%1)" : "=m" (s.l) : "r" (&s.l) : "%r0");
+  __asm__ ("fstd %%fr0,0(%1)" : "=m"(s.l) : "r"(&s.l) : "%r0");
 
   old_exc = s.sw[0] & FE_ALL_EXCEPT;
 
   s.sw[0] &= ~(excepts & FE_ALL_EXCEPT);
-  __asm__ ("fldd 0(%0),%%fr0" : : "r" (&s.l), "m" (s.l) : "%r0");
+  __asm__ ("fldd 0(%0),%%fr0" : : "r"(&s.l), "m"(s.l) : "%r0");
 
   return old_exc;
 }

@@ -22,8 +22,8 @@
 #include <spawn_int.h>
 
 int
-__posix_spawn_file_actions_addclosefrom (posix_spawn_file_actions_t
-					 *file_actions, int from)
+__posix_spawn_file_actions_addclosefrom (
+    posix_spawn_file_actions_t *file_actions, int from)
 {
 #if __SPAWN_SUPPORT_CLOSEFROM
   struct __spawn_action *rec;
@@ -53,5 +53,5 @@ __posix_spawn_file_actions_addclosefrom (posix_spawn_file_actions_t
 weak_alias (__posix_spawn_file_actions_addclosefrom,
 	    posix_spawn_file_actions_addclosefrom_np)
 #if !__SPAWN_SUPPORT_CLOSEFROM
-stub_warning (posix_spawn_file_actions_addclosefrom_np)
+    stub_warning (posix_spawn_file_actions_addclosefrom_np)
 #endif

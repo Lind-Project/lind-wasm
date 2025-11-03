@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef NOT_CANCEL_H
-# define NOT_CANCEL_H
+#define NOT_CANCEL_H
 
 #include <fcntl.h>
 #include <poll.h>
@@ -27,33 +27,21 @@
 #include <sys/uio.h>
 
 /* By default we have none.  Map the name to the normal functions.  */
-#define __open_nocancel(...) \
-  __open (__VA_ARGS__)
-#define __open64_nocancel(...) \
-  __open64 (__VA_ARGS__)
-#define __openat_nocancel(...) \
-  __openat (__VA_ARGS__)
-#define __openat64_nocancel(...) \
-  __openat64 (__VA_ARGS__)
-#define __close_nocancel(fd) \
-  __close (fd)
-#define __close_nocancel_nostatus(fd) \
-  (void) __close (fd)
-#define __read_nocancel(fd, buf, n) \
-  __read (fd, buf, n)
-#define __pread64_nocancel(fd, buf, count, offset) \
+#define __open_nocancel(...) __open (__VA_ARGS__)
+#define __open64_nocancel(...) __open64 (__VA_ARGS__)
+#define __openat_nocancel(...) __openat (__VA_ARGS__)
+#define __openat64_nocancel(...) __openat64 (__VA_ARGS__)
+#define __close_nocancel(fd) __close (fd)
+#define __close_nocancel_nostatus(fd) (void) __close (fd)
+#define __read_nocancel(fd, buf, n) __read (fd, buf, n)
+#define __pread64_nocancel(fd, buf, count, offset)                            \
   __pread64 (fd, buf, count, offset)
-#define __write_nocancel(fd, buf, n) \
-  __write (fd, buf, n)
-#define __writev_nocancel_nostatus(fd, iov, n) \
-  (void) __writev (fd, iov, n)
-#define __fcntl64_nocancel(fd, cmd, ...) \
-  __fcntl64 (fd, cmd, __VA_ARGS__)
-#define __getrandom_nocancel(buf, size, flags) \
+#define __write_nocancel(fd, buf, n) __write (fd, buf, n)
+#define __writev_nocancel_nostatus(fd, iov, n) (void) __writev (fd, iov, n)
+#define __fcntl64_nocancel(fd, cmd, ...) __fcntl64 (fd, cmd, __VA_ARGS__)
+#define __getrandom_nocancel(buf, size, flags) __getrandom (buf, size, flags)
+#define __getrandom_nocancel_nostatus(buf, size, flags)                       \
   __getrandom (buf, size, flags)
-#define __getrandom_nocancel_nostatus(buf, size, flags) \
-  __getrandom (buf, size, flags)
-#define __poll_infinity_nocancel(fds, nfds) \
-  __poll (fds, nfds, -1)
+#define __poll_infinity_nocancel(fds, nfds) __poll (fds, nfds, -1)
 
 #endif /* NOT_CANCEL_H  */

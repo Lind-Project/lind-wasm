@@ -19,18 +19,20 @@
 #include "local-soft-fp.h"
 
 void
-_OtsSubX(long al, long ah, long bl, long bh, long _round)
+_OtsSubX (long al, long ah, long bl, long bh, long _round)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A); FP_DECL_Q(B); FP_DECL_Q(C);
-  AXP_DECL_RETURN_Q(c);
+  FP_DECL_Q (A);
+  FP_DECL_Q (B);
+  FP_DECL_Q (C);
+  AXP_DECL_RETURN_Q (c);
 
   FP_INIT_ROUNDMODE;
-  AXP_UNPACK_SEMIRAW_Q(A, a);
-  AXP_UNPACK_SEMIRAW_Q(B, b);
-  FP_SUB_Q(C, A, B);
-  AXP_PACK_SEMIRAW_Q(c, C);
+  AXP_UNPACK_SEMIRAW_Q (A, a);
+  AXP_UNPACK_SEMIRAW_Q (B, b);
+  FP_SUB_Q (C, A, B);
+  AXP_PACK_SEMIRAW_Q (c, C);
   FP_HANDLE_EXCEPTIONS;
 
-  AXP_RETURN_Q(c);
+  AXP_RETURN_Q (c);
 }

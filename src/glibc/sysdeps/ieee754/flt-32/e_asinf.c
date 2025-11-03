@@ -44,62 +44,74 @@ static char rcsid[] = "$NetBSD: e_asinf.c,v 1.5 1995/05/12 04:57:25 jtc Exp $";
 #include <math-underflow.h>
 #include <libm-alias-finite.h>
 
-static const float
-one =  1.0000000000e+00, /* 0x3F800000 */
-huge =  1.000e+30,
+static const float one = 1.0000000000e+00, /* 0x3F800000 */
+    huge = 1.000e+30,
 
-pio2_hi = 1.57079637050628662109375f,
-pio2_lo = -4.37113900018624283e-8f,
-pio4_hi = 0.785398185253143310546875f,
+		   pio2_hi = 1.57079637050628662109375f,
+		   pio2_lo = -4.37113900018624283e-8f,
+		   pio4_hi = 0.785398185253143310546875f,
 
-/* asin x = x + x^3 p(x^2)
-   -0.5 <= x <= 0.5;
-   Peak relative error 4.8e-9 */
-p0 = 1.666675248e-1f,
-p1 = 7.495297643e-2f,
-p2 = 4.547037598e-2f,
-p3 = 2.417951451e-2f,
-p4 = 4.216630880e-2f;
+		   /* asin x = x + x^3 p(x^2)
+		      -0.5 <= x <= 0.5;
+		      Peak relative error 4.8e-9 */
+    p0 = 1.666675248e-1f, p1 = 7.495297643e-2f, p2 = 4.547037598e-2f,
+		   p3 = 2.417951451e-2f, p4 = 4.216630880e-2f;
 
-float __ieee754_asinf(float x)
+float
+__ieee754_asinf (float x)
 {
-	float t,w,p,q,c,r,s;
-	int32_t hx,ix;
-	GET_FLOAT_WORD(hx,x);
-	ix = hx&0x7fffffff;
-	if(ix==0x3f800000) {
-		/* asin(1)=+-pi/2 with inexact */
-	    return x*pio2_hi+x*pio2_lo;
-	} else if(ix> 0x3f800000) {	/* |x|>= 1 */
-	    return (x-x)/(x-x);		/* asin(|x|>1) is NaN */
-	} else if (ix<0x3f000000) {	/* |x|<0.5 */
-	    if(ix<0x32000000) {		/* if |x| < 2**-27 */
-		math_check_force_underflow (x);
-		if(huge+x>one) return x;/* return x with inexact if x!=0*/
-	    } else {
-		t = x*x;
-		w = t * (p0 + t * (p1 + t * (p2 + t * (p3 + t * p4))));
-		return x+x*w;
-	    }
+  float t, w, p, q, c, r, s;
+  int32_t hx, ix;
+  GET_FLOAT_WORD (hx, x);
+  ix = hx & 0x7fffffff;
+  if (ix == 0x3f800000)
+    {
+      /* asin(1)=+-pi/2 with inexact */
+      return x * pio2_hi + x * pio2_lo;
+    }
+  else if (ix > 0x3f800000)
+    {				/* |x|>= 1 */
+      return (x - x) / (x - x); /* asin(|x|>1) is NaN */
+    }
+  else if (ix < 0x3f000000)
+    { /* |x|<0.5 */
+      if (ix < 0x32000000)
+	{ /* if |x| < 2**-27 */
+	  math_check_force_underflow (x);
+	  if (huge + x > one)
+	    return x; /* return x with inexact if x!=0*/
 	}
-	/* 1> |x|>= 0.5 */
-	w = one-fabsf(x);
-	t = w*0.5f;
-	p = t * (p0 + t * (p1 + t * (p2 + t * (p3 + t * p4))));
-	s = sqrtf(t);
-	if(ix>=0x3F79999A) {	/* if |x| > 0.975 */
-	    t = pio2_hi-(2.0f*(s+s*p)-pio2_lo);
-	} else {
-	    int32_t iw;
-	    w  = s;
-	    GET_FLOAT_WORD(iw,w);
-	    SET_FLOAT_WORD(w,iw&0xfffff000);
-	    c  = (t-w*w)/(s+w);
-	    r  = p;
-	    p  = 2.0f*s*r-(pio2_lo-2.0f*c);
-	    q  = pio4_hi-2.0f*w;
-	    t  = pio4_hi-(p-q);
+      else
+	{
+	  t = x * x;
+	  w = t * (p0 + t * (p1 + t * (p2 + t * (p3 + t * p4))));
+	  return x + x * w;
 	}
-	if(hx>0) return t; else return -t;
+    }
+  /* 1> |x|>= 0.5 */
+  w = one - fabsf (x);
+  t = w * 0.5f;
+  p = t * (p0 + t * (p1 + t * (p2 + t * (p3 + t * p4))));
+  s = sqrtf (t);
+  if (ix >= 0x3F79999A)
+    { /* if |x| > 0.975 */
+      t = pio2_hi - (2.0f * (s + s * p) - pio2_lo);
+    }
+  else
+    {
+      int32_t iw;
+      w = s;
+      GET_FLOAT_WORD (iw, w);
+      SET_FLOAT_WORD (w, iw & 0xfffff000);
+      c = (t - w * w) / (s + w);
+      r = p;
+      p = 2.0f * s * r - (pio2_lo - 2.0f * c);
+      q = pio4_hi - 2.0f * w;
+      t = pio4_hi - (p - q);
+    }
+  if (hx > 0)
+    return t;
+  else
+    return -t;
 }
 libm_alias_finite (__ieee754_asinf, __asinf)

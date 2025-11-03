@@ -28,14 +28,13 @@ __wait3_time64 (int *stat_loc, int options, struct __rusage64 *usage)
 #if __TIMESIZE != 64
 libc_hidden_def (__wait3_time64)
 
-pid_t
-__wait3 (int *stat_loc, int options, struct rusage *usage)
+    pid_t __wait3 (int *stat_loc, int options, struct rusage *usage)
 {
   struct __rusage64 usage64;
-  pid_t ret = __wait3_time64 (stat_loc, options,
-			      usage != NULL ? &usage64 : NULL);
+  pid_t ret
+      = __wait3_time64 (stat_loc, options, usage != NULL ? &usage64 : NULL);
   if (ret > 0 && usage != NULL)
-     rusage64_to_rusage (&usage64, usage);
+    rusage64_to_rusage (&usage64, usage);
 
   return ret;
 }

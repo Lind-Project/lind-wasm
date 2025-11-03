@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _PTHREAD_EARLY_INIT_H
-#define _PTHREAD_EARLY_INIT_H 1
+#  define _PTHREAD_EARLY_INIT_H 1
 
 static inline void
 __pthread_early_init (void)
@@ -26,4 +26,4 @@ __pthread_early_init (void)
      initialization.  */
 }
 
-#endif  /* _PTHREAD_EARLY_INIT_H */
+#endif /* _PTHREAD_EARLY_INIT_H */

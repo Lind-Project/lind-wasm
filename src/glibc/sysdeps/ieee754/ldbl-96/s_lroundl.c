@@ -23,7 +23,6 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-
 long int
 __lroundl (long double x)
 {
@@ -52,9 +51,7 @@ __lroundl (long double x)
 
 	  result = j >> (31 - j0);
 #ifdef FE_INVALID
-	  if (sizeof (long int) == 4
-	      && sign == 1
-	      && result == LONG_MIN)
+	  if (sizeof (long int) == 4 && sign == 1 && result == LONG_MIN)
 	    /* Rounding brought the value out of range.  */
 	    feraiseexcept (FE_INVALID);
 #endif
@@ -78,9 +75,7 @@ __lroundl (long double x)
 	    {
 	      result = (ures << (j0 - 31)) | (j >> (63 - j0));
 #ifdef FE_INVALID
-	      if (sizeof (long int) == 8
-		  && sign == 1
-		  && result == LONG_MIN)
+	      if (sizeof (long int) == 8 && sign == 1 && result == LONG_MIN)
 		/* Rounding brought the value out of range.  */
 		feraiseexcept (FE_INVALID);
 #endif
@@ -93,8 +88,7 @@ __lroundl (long double x)
 	 FE_INVALID must be raised and the return value is
 	 unspecified.  */
 #ifdef FE_INVALID
-      if (sizeof (long int) == 4
-	  && x <= (long double) LONG_MIN - 0.5L)
+      if (sizeof (long int) == 4 && x <= (long double) LONG_MIN - 0.5L)
 	{
 	  /* If truncation produces LONG_MIN, the cast will not raise
 	     the exception, but may raise "inexact".  */

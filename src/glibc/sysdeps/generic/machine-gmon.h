@@ -26,7 +26,7 @@
    your own version of _mcount().  */
 
 #if __GNUC__ < 2
- #error "This file uses __builtin_return_address, a GCC 2 extension."
+#  error "This file uses __builtin_return_address, a GCC 2 extension."
 #endif
 
 #include <sysdep.h>
@@ -35,13 +35,14 @@
 void _mcount (void);
 weak_alias (_mcount, mcount)
 
-static void mcount_internal (u_long frompc, u_long selfpc);
+    static void mcount_internal (u_long frompc, u_long selfpc);
 
-#define _MCOUNT_DECL(frompc, selfpc) \
-static inline void mcount_internal (u_long frompc, u_long selfpc)
+#define _MCOUNT_DECL(frompc, selfpc)                                          \
+  static inline void mcount_internal (u_long frompc, u_long selfpc)
 
-#define MCOUNT \
-void _mcount (void)							      \
-{									      \
-  mcount_internal ((u_long) RETURN_ADDRESS (1), (u_long) RETURN_ADDRESS (0)); \
-}
+#define MCOUNT                                                                \
+  void _mcount (void)                                                         \
+  {                                                                           \
+    mcount_internal ((u_long) RETURN_ADDRESS (1),                             \
+		     (u_long) RETURN_ADDRESS (0));                            \
+  }

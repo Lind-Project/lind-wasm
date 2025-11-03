@@ -23,18 +23,18 @@
 #include <elision-conf.h>
 
 #ifndef EXTRAARG
-#define EXTRAARG
+#  define EXTRAARG
 #endif
 #ifndef LLL_LOCK
-#define LLL_LOCK(a,b) lll_lock(a,b), 0
+#  define LLL_LOCK(a, b) lll_lock (a, b), 0
 #endif
 
 #define aconf __elision_aconf
 
-#define _ABORT_LOCK_BUSY	0xff
-#define _XABORT_RETRY     (1 << 1)
-#define _XABORT_EXPLICIT  (1 << 0)
-#define _XABORT_CODE(x)   (((x) >> 24) & 0xFF)
+#define _ABORT_LOCK_BUSY 0xff
+#define _XABORT_RETRY (1 << 1)
+#define _XABORT_EXPLICIT (1 << 0)
+#define _XABORT_CODE(x) (((x) >> 24) & 0xFF)
 
 /* Adaptive lock using transactions.
    By default the lock region is run as a transaction, and when it
@@ -54,26 +54,24 @@ __lll_lock_elision (int *futex, short *adapt_count, EXTRAARG int private)
       unsigned status;
       int try_xbegin;
 
-      for (try_xbegin = aconf.retry_try_xbegin;
-	   try_xbegin > 0;
-	   try_xbegin--)
+      for (try_xbegin = aconf.retry_try_xbegin; try_xbegin > 0; try_xbegin--)
 	{
-	//   if ((status = _xbegin()) == _XBEGIN_STARTED)
-	//     {
-	//       if (*futex == 0)
-	// 	return 0;
+	  //   if ((status = _xbegin()) == _XBEGIN_STARTED)
+	  //     {
+	  //       if (*futex == 0)
+	  // 	return 0;
 
-	//       /* Lock was busy.  Fall back to normal locking.
-	// 	 Could also _xend here but xabort with 0xff code
-	// 	 is more visible in the profiler.  */
-	//       _xabort (_ABORT_LOCK_BUSY);
-	//     }
+	  //       /* Lock was busy.  Fall back to normal locking.
+	  // 	 Could also _xend here but xabort with 0xff code
+	  // 	 is more visible in the profiler.  */
+	  //       _xabort (_ABORT_LOCK_BUSY);
+	  //     }
 
 	  if (!(status & _XABORT_RETRY))
 	    {
 	      if ((status & _XABORT_EXPLICIT)
-			&& _XABORT_CODE (status) == _ABORT_LOCK_BUSY)
-	        {
+		  && _XABORT_CODE (status) == _ABORT_LOCK_BUSY)
+		{
 		  /* Right now we skip here.  Better would be to wait a bit
 		     and retry.  This likely needs some spinning.  See
 		     above for why relaxed MO is sufficient.  */
@@ -86,9 +84,9 @@ __lll_lock_elision (int *futex, short *adapt_count, EXTRAARG int private)
 		 Be careful to avoid writing to the lock.  See above for why
 		 relaxed MO is sufficient.  */
 	      else if (atomic_load_relaxed (adapt_count)
-		  != aconf.skip_lock_internal_abort)
+		       != aconf.skip_lock_internal_abort)
 		atomic_store_relaxed (adapt_count,
-		    aconf.skip_lock_internal_abort);
+				      aconf.skip_lock_internal_abort);
 	      break;
 	    }
 	}
@@ -98,7 +96,7 @@ __lll_lock_elision (int *futex, short *adapt_count, EXTRAARG int private)
       /* Use a normal lock until the threshold counter runs out.
 	 Lost updates possible.  */
       atomic_store_relaxed (adapt_count,
-	  atomic_load_relaxed (adapt_count) - 1);
+			    atomic_load_relaxed (adapt_count) - 1);
     }
 
   /* Use a normal lock here.  */

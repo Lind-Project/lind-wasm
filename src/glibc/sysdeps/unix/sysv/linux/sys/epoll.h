@@ -15,63 +15,60 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_EPOLL_H
-#define	_SYS_EPOLL_H	1
+#ifndef _SYS_EPOLL_H
+#  define _SYS_EPOLL_H 1
 
-#include <stdint.h>
-#include <sys/types.h>
+#  include <stdint.h>
+#  include <sys/types.h>
 
-#include <bits/types/sigset_t.h>
-#include <bits/types/struct_timespec.h>
+#  include <bits/types/sigset_t.h>
+#  include <bits/types/struct_timespec.h>
 
 /* Get the platform-dependent flags.  */
-#include <bits/epoll.h>
+#  include <bits/epoll.h>
 
-#ifndef __EPOLL_PACKED
-# define __EPOLL_PACKED
-#endif
-
+#  ifndef __EPOLL_PACKED
+#    define __EPOLL_PACKED
+#  endif
 
 enum EPOLL_EVENTS
-  {
-    EPOLLIN = 0x001,
-#define EPOLLIN EPOLLIN
-    EPOLLPRI = 0x002,
-#define EPOLLPRI EPOLLPRI
-    EPOLLOUT = 0x004,
-#define EPOLLOUT EPOLLOUT
-    EPOLLRDNORM = 0x040,
-#define EPOLLRDNORM EPOLLRDNORM
-    EPOLLRDBAND = 0x080,
-#define EPOLLRDBAND EPOLLRDBAND
-    EPOLLWRNORM = 0x100,
-#define EPOLLWRNORM EPOLLWRNORM
-    EPOLLWRBAND = 0x200,
-#define EPOLLWRBAND EPOLLWRBAND
-    EPOLLMSG = 0x400,
-#define EPOLLMSG EPOLLMSG
-    EPOLLERR = 0x008,
-#define EPOLLERR EPOLLERR
-    EPOLLHUP = 0x010,
-#define EPOLLHUP EPOLLHUP
-    EPOLLRDHUP = 0x2000,
-#define EPOLLRDHUP EPOLLRDHUP
-    EPOLLEXCLUSIVE = 1u << 28,
-#define EPOLLEXCLUSIVE EPOLLEXCLUSIVE
-    EPOLLWAKEUP = 1u << 29,
-#define EPOLLWAKEUP EPOLLWAKEUP
-    EPOLLONESHOT = 1u << 30,
-#define EPOLLONESHOT EPOLLONESHOT
-    EPOLLET = 1u << 31
-#define EPOLLET EPOLLET
-  };
-
+{
+  EPOLLIN = 0x001,
+#  define EPOLLIN EPOLLIN
+  EPOLLPRI = 0x002,
+#  define EPOLLPRI EPOLLPRI
+  EPOLLOUT = 0x004,
+#  define EPOLLOUT EPOLLOUT
+  EPOLLRDNORM = 0x040,
+#  define EPOLLRDNORM EPOLLRDNORM
+  EPOLLRDBAND = 0x080,
+#  define EPOLLRDBAND EPOLLRDBAND
+  EPOLLWRNORM = 0x100,
+#  define EPOLLWRNORM EPOLLWRNORM
+  EPOLLWRBAND = 0x200,
+#  define EPOLLWRBAND EPOLLWRBAND
+  EPOLLMSG = 0x400,
+#  define EPOLLMSG EPOLLMSG
+  EPOLLERR = 0x008,
+#  define EPOLLERR EPOLLERR
+  EPOLLHUP = 0x010,
+#  define EPOLLHUP EPOLLHUP
+  EPOLLRDHUP = 0x2000,
+#  define EPOLLRDHUP EPOLLRDHUP
+  EPOLLEXCLUSIVE = 1u << 28,
+#  define EPOLLEXCLUSIVE EPOLLEXCLUSIVE
+  EPOLLWAKEUP = 1u << 29,
+#  define EPOLLWAKEUP EPOLLWAKEUP
+  EPOLLONESHOT = 1u << 30,
+#  define EPOLLONESHOT EPOLLONESHOT
+  EPOLLET = 1u << 31
+#  define EPOLLET EPOLLET
+};
 
 /* Valid opcodes ( "op" parameter ) to issue to epoll_ctl().  */
-#define EPOLL_CTL_ADD 1	/* Add a file descriptor to the interface.  */
-#define EPOLL_CTL_DEL 2	/* Remove a file descriptor from the interface.  */
-#define EPOLL_CTL_MOD 3	/* Change file descriptor epoll_event structure.  */
-
+#  define EPOLL_CTL_ADD 1 /* Add a file descriptor to the interface.  */
+#  define EPOLL_CTL_DEL 2 /* Remove a file descriptor from the interface.  */
+#  define EPOLL_CTL_MOD 3 /* Change file descriptor epoll_event structure. */
 
 typedef union epoll_data
 {
@@ -83,10 +80,9 @@ typedef union epoll_data
 
 struct epoll_event
 {
-  uint32_t events;	/* Epoll events */
-  epoll_data_t data;	/* User data variable */
+  uint32_t events;   /* Epoll events */
+  epoll_data_t data; /* User data variable */
 } __EPOLL_PACKED;
-
 
 __BEGIN_DECLS
 
@@ -100,7 +96,6 @@ extern int epoll_create (int __size) __THROW;
    parameter has been dropped.  */
 extern int epoll_create1 (int __flags) __THROW;
 
-
 /* Manipulate an epoll instance "epfd". Returns 0 in case of success,
    -1 in case of error ( the "errno" variable will contain the
    specific error code ) The "op" parameter is one of the EPOLL_CTL_*
@@ -109,7 +104,6 @@ extern int epoll_create1 (int __flags) __THROW;
    is interested in and any associated user data.  */
 extern int epoll_ctl (int __epfd, int __op, int __fd,
 		      struct epoll_event *__event) __THROW;
-
 
 /* Wait for events on an epoll instance "epfd". Returns the number of
    triggered events returned in "events" buffer. Or -1 in case of
@@ -123,8 +117,7 @@ extern int epoll_ctl (int __epfd, int __op, int __fd,
    __THROW.  */
 extern int epoll_wait (int __epfd, struct epoll_event *__events,
 		       int __maxevents, int __timeout)
-	__attr_access ((__write_only__, 2, 3)) __nonnull ((2));
-
+    __attr_access ((__write_only__, 2, 3)) __nonnull ((2));
 
 /* Same as epoll_wait, but the thread's signal mask is temporarily
    and atomically replaced with the one provided as parameter.
@@ -132,31 +125,30 @@ extern int epoll_wait (int __epfd, struct epoll_event *__events,
    This function is a cancellation point and therefore not marked with
    __THROW.  */
 extern int epoll_pwait (int __epfd, struct epoll_event *__events,
-			int __maxevents, int __timeout,
-			const __sigset_t *__ss)
-	__attr_access ((__write_only__, 2, 3)) __nonnull ((2));
+			int __maxevents, int __timeout, const __sigset_t *__ss)
+    __attr_access ((__write_only__, 2, 3)) __nonnull ((2));
 
 /* Same as epoll_pwait, but the timeout as a timespec.
 
    This function is a cancellation point and therefore not marked with
    __THROW.  */
-#ifndef __USE_TIME_BITS64
+#  ifndef __USE_TIME_BITS64
 extern int epoll_pwait2 (int __epfd, struct epoll_event *__events,
 			 int __maxevents, const struct timespec *__timeout,
 			 const __sigset_t *__ss)
-	__attr_access ((__write_only__, 2, 3)) __nonnull ((2));
-#else
-# ifdef __REDIRECT
-extern int __REDIRECT (epoll_pwait2, (int __epfd, struct epoll_event *__ev,
-				      int __maxevs,
-				      const struct timespec *__timeout,
-				      const __sigset_t *__ss),
+    __attr_access ((__write_only__, 2, 3)) __nonnull ((2));
+#  else
+#    ifdef __REDIRECT
+extern int __REDIRECT (epoll_pwait2,
+		       (int __epfd, struct epoll_event *__ev, int __maxevs,
+			const struct timespec *__timeout,
+			const __sigset_t *__ss),
 		       __epoll_pwait2_time64)
-	__attr_access ((__write_only__, 2, 3)) __nonnull ((2));
-# else
-#  define epoll_pwait2 __epoll_pwait2_time64
-# endif
-#endif
+    __attr_access ((__write_only__, 2, 3)) __nonnull ((2));
+#    else
+#      define epoll_pwait2 __epoll_pwait2_time64
+#    endif
+#  endif
 
 __END_DECLS
 

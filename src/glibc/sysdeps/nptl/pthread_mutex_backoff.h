@@ -16,7 +16,7 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 #ifndef _PTHREAD_MUTEX_BACKOFF_H
-#define _PTHREAD_MUTEX_BACKOFF_H 1
+#  define _PTHREAD_MUTEX_BACKOFF_H 1
 
 static inline unsigned int
 get_jitter (void)

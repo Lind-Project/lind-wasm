@@ -26,49 +26,119 @@
 
 /* Standard signals, in the numerical order defined in
    bits/signum-generic.h.  */
-  init_sig (SIGHUP, "HUP", N_("Hangup"))
-  init_sig (SIGINT, "INT", N_("Interrupt"))
-  init_sig (SIGQUIT, "QUIT", N_("Quit"))
-  init_sig (SIGILL, "ILL", N_("Illegal instruction"))
-  init_sig (SIGTRAP, "TRAP", N_("Trace/breakpoint trap"))
-  init_sig (SIGABRT, "ABRT", N_("Aborted"))
-  init_sig (SIGFPE, "FPE", N_("Floating point exception"))
-  init_sig (SIGKILL, "KILL", N_("Killed"))
-  init_sig (SIGBUS, "BUS", N_("Bus error"))
-  init_sig (SIGSYS, "SYS", N_("Bad system call"))
-  init_sig (SIGSEGV, "SEGV", N_("Segmentation fault"))
-  init_sig (SIGPIPE, "PIPE", N_("Broken pipe"))
-  init_sig (SIGALRM, "ALRM", N_("Alarm clock"))
-  init_sig (SIGTERM, "TERM", N_("Terminated"))
-  init_sig (SIGURG, "URG", N_("Urgent I/O condition"))
-  init_sig (SIGSTOP, "STOP", N_("Stopped (signal)"))
-  init_sig (SIGTSTP, "TSTP", N_("Stopped"))
-  init_sig (SIGCONT, "CONT", N_("Continued"))
-  init_sig (SIGCHLD, "CHLD", N_("Child exited"))
-  init_sig (SIGTTIN, "TTIN", N_("Stopped (tty input)"))
-  init_sig (SIGTTOU, "TTOU", N_("Stopped (tty output)"))
-  init_sig (SIGPOLL, "POLL", N_("I/O possible"))
-  init_sig (SIGXCPU, "XCPU", N_("CPU time limit exceeded"))
-  init_sig (SIGXFSZ, "XFSZ", N_("File size limit exceeded"))
-  init_sig (SIGVTALRM, "VTALRM", N_("Virtual timer expired"))
-  init_sig (SIGPROF, "PROF", N_("Profiling timer expired"))
-  init_sig (SIGUSR1, "USR1", N_("User defined signal 1"))
-  init_sig (SIGUSR2, "USR2", N_("User defined signal 2"))
-  init_sig (SIGWINCH, "WINCH", N_("Window changed"))
+init_sig (SIGHUP, "HUP", N_ ("Hangup")) init_sig (
+    SIGINT, "INT",
+    N_ ("Interrupt")) init_sig (SIGQUIT, "QUIT",
+				N_ ("Quit")) init_sig (SIGILL, "ILL",
+						       N_ ("Illegal "
+							   "instruction"))
+    init_sig (SIGTRAP, "TRAP", N_ ("Trace/breakpoint trap")) init_sig (
+	SIGABRT, "ABRT",
+	N_ ("Aborted")) init_sig (SIGFPE, "FPE",
+				  N_ ("Floating point exception"))
+	init_sig (SIGKILL, "KILL", N_ ("Killed")) init_sig (
+	    SIGBUS, "BUS", N_ ("Bus error")) init_sig (SIGSYS, "SYS",
+						       N_ ("Bad system call"))
+	    init_sig (SIGSEGV, "SEGV", N_ ("Segmentation fault")) init_sig (
+		SIGPIPE, "PIPE",
+		N_ ("Broken pipe")) init_sig (SIGALRM, "ALRM",
+					      N_ ("Alarm clock"))
+		init_sig (SIGTERM, "TERM", N_ ("Terminated")) init_sig (
+		    SIGURG, "URG",
+		    N_ ("Urgent I/O condition")) init_sig (SIGSTOP, "STOP",
+							   N_ ("Stopped "
+							       "(signal)"))
+		    init_sig (SIGTSTP, "TSTP", N_ ("Stopped")) init_sig (
+			SIGCONT, "CONT",
+			N_ ("Continued")) init_sig (SIGCHLD, "CHLD",
+						    N_ ("Child exited"))
+			init_sig (
+			    SIGTTIN, "TTIN",
+			    N_ ("Stopped (tty input)")) init_sig (SIGTTOU,
+								  "TTOU",
+								  N_ ("Stopped"
+								      " (tty "
+								      "output"
+								      ")"))
+			    init_sig (
+				SIGPOLL, "POLL",
+				N_ ("I/O possible")) init_sig (SIGXCPU, "XCPU",
+							       N_ ("CPU time "
+								   "limit "
+								   "exceeded"))
+				init_sig (SIGXFSZ, "XFSZ",
+					  N_ ("File size limit exceeded"))
+				    init_sig (SIGVTALRM, "VTALRM",
+					      N_ ("Virtual timer expired"))
+					init_sig (
+					    SIGPROF, "PROF",
+					    N_ ("Profiling timer expired"))
+					    init_sig (
+						SIGUSR1, "USR1",
+						N_ ("User defined signal 1"))
+						init_sig (
+						    SIGUSR2, "USR2",
+						    N_ ("User defined signal "
+							"2")) init_sig (SIGWINCH,
+									"WINC"
+									"H",
+									N_ ("W"
+									    "i"
+									    "n"
+									    "d"
+									    "o"
+									    "w"
+									    " "
+									    "c"
+									    "h"
+									    "a"
+									    "n"
+									    "g"
+									    "e"
+									    "d"))
 
 /* Signals that are not present on all supported platforms.  */
 #ifdef SIGEMT
-  init_sig (SIGEMT, "EMT", N_("EMT trap"))
+						    init_sig (SIGEMT, "EMT",
+							      N_ ("EMT trap"))
 #endif
 #ifdef SIGSTKFLT
-  init_sig (SIGSTKFLT, "STKFLT", N_("Stack fault"))
+							init_sig (
+							    SIGSTKFLT,
+							    "STKFLT",
+							    N_ ("Stack fault"))
 #endif
 #ifdef SIGPWR
-  init_sig (SIGPWR, "PWR", N_("Power failure"))
+							    init_sig (
+								SIGPWR, "PWR",
+								N_ ("Power "
+								    "failure"))
 #endif
 #if defined SIGINFO && (!defined SIGPWR || SIGPWR != SIGINFO)
-  init_sig (SIGINFO, "INFO", N_("Information request"))
+								init_sig (
+								    SIGINFO,
+								    "INFO",
+								    N_ ("Infor"
+									"matio"
+									"n "
+									"reque"
+									"st"))
 #endif
 #if defined SIGLOST && (!defined SIGPWR || SIGPWR != SIGLOST)
-  init_sig (SIGLOST, "LOST", N_("Resource lost"))
+								    init_sig (
+									SIGLOST,
+									"LOST",
+									N_ ("R"
+									    "e"
+									    "s"
+									    "o"
+									    "u"
+									    "r"
+									    "c"
+									    "e"
+									    " "
+									    "l"
+									    "o"
+									    "s"
+									    "t"))
 #endif

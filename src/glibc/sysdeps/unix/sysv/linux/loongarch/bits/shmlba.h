@@ -17,8 +17,8 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_SHM_H
-# error "Never use <bits/shmlba.h> directly; include <sys/shm.h> instead."
+#  error "Never use <bits/shmlba.h> directly; include <sys/shm.h> instead."
 #endif
 
 /* Segment low boundary address multiple.  */
-#define SHMLBA		0x10000
+#define SHMLBA 0x10000

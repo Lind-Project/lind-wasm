@@ -25,11 +25,11 @@ static long int linux_sysconf (int name);
 /* Possible arguments for get_cache_info.
    The values are reflecting the level/attribute/type indications
    of ecag-instruction (extract cpu attribute).  */
-#define CACHE_LEVEL_MAX        8
-#define CACHE_ATTR_LINESIZE    1
-#define CACHE_ATTR_SIZE        2
-#define CACHE_ATTR_ASSOC       3
-#define CACHE_TYPE_DATA        0
+#define CACHE_LEVEL_MAX 8
+#define CACHE_ATTR_LINESIZE 1
+#define CACHE_ATTR_SIZE 2
+#define CACHE_ATTR_ASSOC 3
+#define CACHE_TYPE_DATA 0
 #define CACHE_TYPE_INSTRUCTION 1
 
 static long
@@ -40,12 +40,12 @@ get_cache_info (int level, int attr, int type)
   unsigned long int arg;
 
   /* Check arguments.  */
-  if (level < 1 || level > CACHE_LEVEL_MAX
-      || attr < CACHE_ATTR_LINESIZE || attr > CACHE_ATTR_ASSOC
-      || type < CACHE_TYPE_DATA || type > CACHE_TYPE_INSTRUCTION)
+  if (level < 1 || level > CACHE_LEVEL_MAX || attr < CACHE_ATTR_LINESIZE
+      || attr > CACHE_ATTR_ASSOC || type < CACHE_TYPE_DATA
+      || type > CACHE_TYPE_INSTRUCTION)
     return 0L;
 
-  const struct cpu_features *features = &GLRO(dl_s390_cpu_features);
+  const struct cpu_features *features = &GLRO (dl_s390_cpu_features);
 
   /* Check if ecag-instruction is available.
      ecag - extract CPU attribute (only in zarch; arch >= z10; in as 2.24)  */
@@ -54,11 +54,11 @@ get_cache_info (int level, int attr, int type)
       || !(features->hwcap & HWCAP_S390_ZARCH)
       || !(features->hwcap & HWCAP_S390_HIGH_GPRS)
 #endif /* !__s390x__ */
-      )
+  )
     {
       /* stfle (or zarch, high-gprs on s390-32) is not available.
-	 We are on an old machine. Return 256byte for LINESIZE for L1 d/i-cache,
-	 otherwise 0.  */
+	 We are on an old machine. Return 256byte for LINESIZE for L1
+	 d/i-cache, otherwise 0.  */
       if (level == 1 && attr == CACHE_ATTR_LINESIZE)
 	return 256L;
       else

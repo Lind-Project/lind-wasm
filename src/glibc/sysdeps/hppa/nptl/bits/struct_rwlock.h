@@ -26,7 +26,7 @@ struct __pthread_rwlock_arch_t
      start of the 4-word 16-byte aligned lock structure. The
      next four words are all set to 1 by the Linuxthreads
      PTHREAD_RWLOCK_INITIALIZER. We ignore them in NPTL.  */
-  int __compat_padding[4] __attribute__ ((__aligned__(16)));
+  int __compat_padding[4] __attribute__ ((__aligned__ (16)));
   unsigned int __readers;
   unsigned int __writers;
   unsigned int __wrphase_futex;
@@ -52,7 +52,7 @@ struct __pthread_rwlock_arch_t
   int __reserved4;
 };
 
-#define __PTHREAD_RWLOCK_INITIALIZER(__flags) \
+#define __PTHREAD_RWLOCK_INITIALIZER(__flags)                                 \
   { 0, 0, 0, 0 }, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, __flags, 0, 0, 0
 
 #endif

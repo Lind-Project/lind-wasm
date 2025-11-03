@@ -20,7 +20,7 @@
 /* Find the exception index table containing PC.  */
 
 _Unwind_Ptr
-__gnu_Unwind_Find_exidx (_Unwind_Ptr pc, int * pcount)
+__gnu_Unwind_Find_exidx (_Unwind_Ptr pc, int *pcount)
 {
   struct dl_find_object data;
   if (__dl_find_object ((void *) pc, &data) < 0)

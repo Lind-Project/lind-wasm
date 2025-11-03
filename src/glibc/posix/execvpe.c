@@ -26,11 +26,11 @@
 #include <sys/param.h>
 
 #ifndef PATH_MAX
-# ifdef MAXPATHLEN
-#  define PATH_MAX MAXPATHLEN
-# else
-#  define PATH_MAX 1024
-# endif
+#  ifdef MAXPATHLEN
+#    define PATH_MAX MAXPATHLEN
+#  else
+#    define PATH_MAX 1024
+#  endif
 #endif
 
 /* The file is accessible but it is not an executable file.  Invoke
@@ -69,7 +69,7 @@ maybe_script_execute (const char *file, char *const argv[], char *const envp[])
 
 static int
 __execvpe_common (const char *file, char *const argv[], char *const envp[],
-	          bool exec_script)
+		  bool exec_script)
 {
   /* We check the simple case first. */
   if (*file == '\0')
@@ -84,7 +84,7 @@ __execvpe_common (const char *file, char *const argv[], char *const envp[],
       __execve (file, argv, envp);
 
       if (errno == ENOEXEC && exec_script)
-        maybe_script_execute (file, argv, envp);
+	maybe_script_execute (file, argv, envp);
 
       return -1;
     }
@@ -112,7 +112,7 @@ __execvpe_common (const char *file, char *const argv[], char *const envp[],
      in PATH plus '/' (path_len + 1) and then the the resulting file name
      plus '\0' (file_len since it already accounts for the '\0').  */
   char buffer[path_len + file_len + 1];
-  for (const char *p = path; ; p = subp)
+  for (const char *p = path;; p = subp)
     {
       subp = __strchrnul (p, ':');
 
@@ -120,7 +120,7 @@ __execvpe_common (const char *file, char *const argv[], char *const envp[],
 	 the stack allocation.  */
       if (subp - p >= path_len)
 	{
-          /* If there is only one path, bail out.  */
+	  /* If there is only one path, bail out.  */
 	  if (*subp == '\0')
 	    break;
 	  /* Otherwise skip to next one.  */
@@ -128,7 +128,7 @@ __execvpe_common (const char *file, char *const argv[], char *const envp[],
 	}
 
       /* Use the current path entry, plus a '/' if nonempty, plus the file to
-         execute.  */
+	 execute.  */
       char *pend = mempcpy (buffer, p, subp - p);
       *pend = '/';
       memcpy (pend + (p < subp), file, file_len);
@@ -136,37 +136,37 @@ __execvpe_common (const char *file, char *const argv[], char *const envp[],
       __execve (buffer, argv, envp);
 
       if (errno == ENOEXEC && exec_script)
-        /* This has O(P*C) behavior, where P is the length of the path and C
-           is the argument count.  A better strategy would be allocate the
-           substitute argv and reuse it each time through the loop (so it
-           behaves as O(P+C) instead.  */
-        maybe_script_execute (buffer, argv, envp);
+	/* This has O(P*C) behavior, where P is the length of the path and C
+	   is the argument count.  A better strategy would be allocate the
+	   substitute argv and reuse it each time through the loop (so it
+	   behaves as O(P+C) instead.  */
+	maybe_script_execute (buffer, argv, envp);
 
       switch (errno)
 	{
-	  case EACCES:
+	case EACCES:
 	  /* Record that we got a 'Permission denied' error.  If we end
 	     up finding no executable we can use, we want to diagnose
 	     that we did find one but were denied access.  */
-	    got_eacces = true;
-	  case ENOENT:
-	  case ESTALE:
-	  case ENOTDIR:
-	  /* Those errors indicate the file is missing or not executable
-	     by us, in which case we want to just try the next path
-	     directory.  */
-	  case ENODEV:
-	  case ETIMEDOUT:
+	  got_eacces = true;
+	case ENOENT:
+	case ESTALE:
+	case ENOTDIR:
+	/* Those errors indicate the file is missing or not executable
+	   by us, in which case we want to just try the next path
+	   directory.  */
+	case ENODEV:
+	case ETIMEDOUT:
 	  /* Some strange filesystems like AFS return even
 	     stranger error numbers.  They cannot reasonably mean
 	     anything else so ignore those, too.  */
-	    break;
+	  break;
 
-          default:
+	default:
 	  /* Some other error means we found an executable file, but
 	     something went wrong executing it; return the error to our
 	     caller.  */
-	    return -1;
+	  return -1;
 	}
 
       if (*subp++ == '\0')
@@ -191,9 +191,8 @@ __execvpe (const char *file, char *const argv[], char *const envp[])
 }
 weak_alias (__execvpe, execvpe)
 
-/* Same as __EXECVPE, but does not try to execute NOEXEC files.  */
-int
-__execvpex (const char *file, char *const argv[], char *const envp[])
+    /* Same as __EXECVPE, but does not try to execute NOEXEC files.  */
+    int __execvpex (const char *file, char *const argv[], char *const envp[])
 {
   return __execvpe_common (file, argv, envp, false);
 }

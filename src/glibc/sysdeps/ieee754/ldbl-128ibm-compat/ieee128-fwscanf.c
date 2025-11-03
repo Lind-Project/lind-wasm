@@ -26,8 +26,7 @@ ___ieee128_fwscanf (FILE *fp, const wchar_t *format, ...)
   int done;
 
   va_start (ap, format);
-  done = __vfwscanf_internal (fp, format, ap,
-			      SCANF_LDBL_USES_FLOAT128);
+  done = __vfwscanf_internal (fp, format, ap, SCANF_LDBL_USES_FLOAT128);
   va_end (ap);
 
   return done;

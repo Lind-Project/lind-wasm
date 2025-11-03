@@ -25,8 +25,8 @@
 #include <stap-probe.h>
 
 /* See sysdeps/unix/sysv/linux/s390/s390-32/pointer_guard.h.  */
-#if IS_IN (rtld)
-# undef PTR_DEMANGLE
+#if IS_IN(rtld)
+#  undef PTR_DEMANGLE
 #endif
 
 /* Jump to the position specified by ENV, causing the
@@ -36,9 +36,9 @@ __longjmp (__jmp_buf env, int val)
 {
 #ifdef PTR_DEMANGLE
   uintptr_t guard = THREAD_GET_POINTER_GUARD ();
-# ifdef CHECK_SP
+#  ifdef CHECK_SP
   CHECK_SP (env, guard);
-# endif
+#  endif
 #elif defined CHECK_SP
   CHECK_SP (env, 0);
 #endif
@@ -49,40 +49,39 @@ __longjmp (__jmp_buf env, int val)
 #endif
   /* Restore registers and jump back.  */
   __asm__ __volatile__ (
-		/* longjmp probe expects longjmp first argument, second
-		   argument and target address.  */
+  /* longjmp probe expects longjmp first argument, second
+     argument and target address.  */
 #ifdef PTR_DEMANGLE
-			"lm   %%r4,%%r5,32(%1)\n\t"
-			"xr   %%r4,%2\n\t"
-			"xr   %%r5,%2\n\t"
-			LIBC_PROBE_ASM (longjmp, 4@%1 -4@%0 4@%%r4)
+      "lm   %%r4,%%r5,32(%1)\n\t"
+      "xr   %%r4,%2\n\t"
+      "xr   %%r5,%2\n\t" LIBC_PROBE_ASM (longjmp, 4 @ % 1 - 4 @ % 0 4 @ % % r4)
 #else
-			LIBC_PROBE_ASM (longjmp, 4@%1 -4@%0 4@%%r14)
+      LIBC_PROBE_ASM (longjmp, 4 @ % 1 - 4 @ % 0 4 @ % % r14)
 #endif
 
-			/* restore fpregs  */
-			"ld   %%f6,48(%1)\n\t"
-			"ld   %%f4,40(%1)\n\t"
+      /* restore fpregs  */
+      "ld   %%f6,48(%1)\n\t"
+      "ld   %%f4,40(%1)\n\t"
 
-			/* restore gregs and return to jmp_buf target  */
+  /* restore gregs and return to jmp_buf target  */
 #ifdef PTR_DEMANGLE
-			"lm   %%r6,%%r13,0(%1)\n\t"
-			"lr   %%r15,%%r5\n\t"
-			LIBC_PROBE_ASM (longjmp_target, 4@%1 -4@%0 4@%%r4)
-			"br   %%r4"
+      "lm   %%r6,%%r13,0(%1)\n\t"
+      "lr   %%r15,%%r5\n\t" LIBC_PROBE_ASM (
+	  longjmp_target, 4 @ % 1 - 4 @ % 0 4 @ % % r4) "br   %%r4"
 #else
-			"lm   %%r6,%%r15,0(%1)\n\t"
-			LIBC_PROBE_ASM (longjmp_target, 4@%1 -4@%0 4@%%r14)
-			"br   %%r14"
+      "lm   %%r6,%%r15,0(%1)\n\t" LIBC_PROBE_ASM (
+	  longjmp_target, 4 @ % 1 - 4 @ % 0 4 @ % % r14) "br   %%r14"
 #endif
-			: : "r" (r2),
+      :
+      : "r"(r2),
 #ifdef PTR_DEMANGLE
-			  "r" (r1), "r" (r3)
+	"r"(r1), "r"(r3)
 #else
-			  "a" (env)
+	"a"(env)
 #endif
-			);
+  );
 
   /* Avoid `volatile function does return' warnings.  */
-  for (;;);
+  for (;;)
+    ;
 }

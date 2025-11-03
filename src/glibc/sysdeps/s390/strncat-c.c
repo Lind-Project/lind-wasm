@@ -19,9 +19,9 @@
 #include <ifunc-strncat.h>
 
 #if HAVE_STRNCAT_C
-# if HAVE_STRNCAT_IFUNC
-#  define STRNCAT STRNCAT_C
-#  define STRNCAT_PRIMARY
-# endif
-# include <string/strncat.c>
+#  if HAVE_STRNCAT_IFUNC
+#    define STRNCAT STRNCAT_C
+#    define STRNCAT_PRIMARY
+#  endif
+#  include <string/strncat.c>
 #endif

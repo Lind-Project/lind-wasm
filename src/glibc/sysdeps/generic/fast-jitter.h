@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FAST_JITTER_H
-# define _FAST_JITTER_H
+#define _FAST_JITTER_H
 
-# include <stdint.h>
-# include <hp-timing.h>
+#include <stdint.h>
+#include <hp-timing.h>
 
 /* Baseline just return 0.  We could create jitter using a clock or
    'random_bits' but that may imply a syscall and the goal of
@@ -30,13 +30,13 @@
 static inline uint32_t
 get_fast_jitter (void)
 {
-# if HP_TIMING_INLINE
+#if HP_TIMING_INLINE
   hp_timing_t jitter;
   HP_TIMING_NOW (jitter);
   return (uint32_t) jitter;
-# else
+#else
   return 0;
-# endif
+#endif
 }
 
 #endif

@@ -27,14 +27,18 @@ test_strtold_value (const char *s, double exp_hi, double exp_lo, int exp_exc,
 		    int exp_errno)
 {
   int result = 0;
-  union { long double ld; double d[2]; } x;
+  union
+  {
+    long double ld;
+    double d[2];
+  } x;
   feclearexcept (FE_ALL_EXCEPT);
   errno = 0;
   x.ld = strtold (s, NULL);
   int exc = fetestexcept (FE_ALL_EXCEPT);
   int new_errno = errno;
-  printf ("strtold (\"%s\") returned (%a, %a), exceptions 0x%x, errno %d\n",
-	  s, x.d[0], x.d[1], exc, new_errno);
+  printf ("strtold (\"%s\") returned (%a, %a), exceptions 0x%x, errno %d\n", s,
+	  x.d[0], x.d[1], exc, new_errno);
   if (x.d[0] == exp_hi)
     printf ("PASS: strtold (\"%s\") high == %a\n", s, exp_hi);
   else

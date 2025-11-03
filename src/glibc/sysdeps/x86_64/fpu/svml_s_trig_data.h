@@ -19,44 +19,38 @@
 #ifndef S_TRIG_DATA_H
 #define S_TRIG_DATA_H
 
-.macro float_vector offset value
-.if .-__svml_s_trig_data != \offset
-.err
-.endif
-.rept 16
-.long \value
-.endr
-.endm
+.macro float_vector offset value.if.- __svml_s_trig_data
+    != \offset.err.endif.rept 16 .long \value.endr.endm
 
-#define __sAbsMask                      0
-#define __sRangeReductionVal            64
-#define __sRangeVal                     64*2
-#define __sS1                           64*3
-#define __sS2                           64*4
-#define __sC1                           64*5
-#define __sC2                           64*6
-#define __sPI1                          64*7
-#define __sPI2                          64*8
-#define __sPI3                          64*9
-#define __sPI4                          64*10
-#define __sPI1_FMA                      64*11
-#define __sPI2_FMA                      64*12
-#define __sPI3_FMA                      64*13
-#define __sA3                           64*14
-#define __sA5                           64*15
-#define __sA7                           64*16
-#define __sA9                           64*17
-#define __sA5_FMA                       64*18
-#define __sA7_FMA                       64*19
-#define __sA9_FMA                       64*20
-#define __sInvPI                        64*21
-#define __sRShifter                     64*22
-#define __sHalfPI                       64*23
-#define __sOneHalf                      64*24
-#define __iIndexMask                  	64*25
-#define __i2pK_1                      	64*26
-#define __sSignMask                   	64*27
-#define __dT_cosf                       64*28
-#define __dT                            64*92
+#define __sAbsMask 0
+#define __sRangeReductionVal 64
+#define __sRangeVal 64 * 2
+#define __sS1 64 * 3
+#define __sS2 64 * 4
+#define __sC1 64 * 5
+#define __sC2 64 * 6
+#define __sPI1 64 * 7
+#define __sPI2 64 * 8
+#define __sPI3 64 * 9
+#define __sPI4 64 * 10
+#define __sPI1_FMA 64 * 11
+#define __sPI2_FMA 64 * 12
+#define __sPI3_FMA 64 * 13
+#define __sA3 64 * 14
+#define __sA5 64 * 15
+#define __sA7 64 * 16
+#define __sA9 64 * 17
+#define __sA5_FMA 64 * 18
+#define __sA7_FMA 64 * 19
+#define __sA9_FMA 64 * 20
+#define __sInvPI 64 * 21
+#define __sRShifter 64 * 22
+#define __sHalfPI 64 * 23
+#define __sOneHalf 64 * 24
+#define __iIndexMask 64 * 25
+#define __i2pK_1 64 * 26
+#define __sSignMask 64 * 27
+#define __dT_cosf 64 * 28
+#define __dT 64 * 92
 
 #endif

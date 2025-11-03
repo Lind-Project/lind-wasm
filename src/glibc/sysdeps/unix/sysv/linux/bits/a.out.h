@@ -1,5 +1,5 @@
 #ifndef __A_OUT_GNU_H__
-# error "Never use <bits/a.out.h> directly; include <a.out.h> instead."
+#  error "Never use <bits/a.out.h> directly; include <a.out.h> instead."
 #endif
 
 /* Signal to users of this header that this architecture really doesn't

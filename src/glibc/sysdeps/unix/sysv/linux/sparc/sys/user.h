@@ -16,9 +16,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_USER_H
-#define _SYS_USER_H	1
+#  define _SYS_USER_H 1
 
-#include <stddef.h>
+#  include <stddef.h>
 
 struct sunos_regs
 {
@@ -35,10 +35,10 @@ struct sunos_fpqueue
 struct sunos_fp
 {
   union
-    {
-      unsigned int regs[32];
-      double reg_dbls[16];
-    } fregs;
+  {
+    unsigned int regs[32];
+    double reg_dbls[16];
+  } fregs;
   unsigned int fsr;
   unsigned int flags;
   unsigned int extra;
@@ -52,35 +52,36 @@ struct sunos_fpu
 };
 
 /* The SunOS core file header layout. */
-struct user {
+struct user
+{
   unsigned int magic;
   unsigned int len;
   struct sunos_regs regs;
   struct
-    {
-      unsigned char a_dynamic :1;
-      unsigned char a_toolversion :7;
-      unsigned char a_machtype;
-      unsigned short a_info;
-      unsigned int a_text;
-      unsigned int a_data;
-      unsigned int a_bss;
-      unsigned int a_syms;
-      unsigned int a_entry;
-      unsigned int a_trsize;
-      unsigned int a_drsize;
-    } uexec;
-  int           signal;
-  size_t        u_tsize;
-  size_t        u_dsize;
-  size_t        u_ssize;
-  char          u_comm[17];
+  {
+    unsigned char a_dynamic : 1;
+    unsigned char a_toolversion : 7;
+    unsigned char a_machtype;
+    unsigned short a_info;
+    unsigned int a_text;
+    unsigned int a_data;
+    unsigned int a_bss;
+    unsigned int a_syms;
+    unsigned int a_entry;
+    unsigned int a_trsize;
+    unsigned int a_drsize;
+  } uexec;
+  int signal;
+  size_t u_tsize;
+  size_t u_dsize;
+  size_t u_ssize;
+  char u_comm[17];
   struct sunos_fpu fpu;
-  unsigned int  sigcode;
+  unsigned int sigcode;
 };
 
-#define NBPG			0x2000
-#define UPAGES			1
-#define SUNOS_CORE_MAGIC	0x080456
+#  define NBPG 0x2000
+#  define UPAGES 1
+#  define SUNOS_CORE_MAGIC 0x080456
 
 #endif

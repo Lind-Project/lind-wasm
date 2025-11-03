@@ -22,8 +22,8 @@
 int
 __getshmlba (void)
 {
-  uint64_t hwcap = GLRO(dl_hwcap);
-  int pgsz = GLRO(dl_pagesize);
+  uint64_t hwcap = GLRO (dl_hwcap);
+  int pgsz = GLRO (dl_pagesize);
 
   if (hwcap & HWCAP_SPARC_V9)
     {

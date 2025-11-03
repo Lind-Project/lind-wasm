@@ -21,7 +21,6 @@
 #include <stdbool.h>
 #include "pthread_rwlock_common.c"
 
-
 /* See pthread_rwlock_common.c for an overview.  */
 int
 ___pthread_rwlock_tryrdlock (pthread_rwlock_t *rwlock)
@@ -62,7 +61,7 @@ ___pthread_rwlock_tryrdlock (pthread_rwlock_t *rwlock)
 	      /* If we do not care about potentially waiting writers, just
 		 try to acquire.  */
 	      rnew = (r + (1 << PTHREAD_RWLOCK_READER_SHIFT))
-		  ^ PTHREAD_RWLOCK_WRPHASE;
+		     ^ PTHREAD_RWLOCK_WRPHASE;
 	    }
 	}
       /* If we could have caused an overflow or take effect during an
@@ -85,8 +84,8 @@ ___pthread_rwlock_tryrdlock (pthread_rwlock_t *rwlock)
      sufficient.
      TODO Back-off.
      Acquire MO so we synchronize with prior writers.  */
-  while (!atomic_compare_exchange_weak_acquire (&rwlock->__data.__readers,
-      &r, rnew));
+  while (!atomic_compare_exchange_weak_acquire (&rwlock->__data.__readers, &r,
+						rnew));
 
   if ((r & PTHREAD_RWLOCK_WRPHASE) != 0)
     {
@@ -104,7 +103,8 @@ ___pthread_rwlock_tryrdlock (pthread_rwlock_t *rwlock)
 	 us and a writer that acquired and released the lock in the
 	 meantime.  */
       if ((atomic_exchange_relaxed (&rwlock->__data.__wrphase_futex, 0)
-	  & PTHREAD_RWLOCK_FUTEX_USED) != 0)
+	   & PTHREAD_RWLOCK_FUTEX_USED)
+	  != 0)
 	{
 	  int private = __pthread_rwlock_get_private (rwlock);
 	  futex_wake (&rwlock->__data.__wrphase_futex, INT_MAX, private);
@@ -112,18 +112,16 @@ ___pthread_rwlock_tryrdlock (pthread_rwlock_t *rwlock)
     }
 
   return 0;
-
-
 }
-versioned_symbol (libc, ___pthread_rwlock_tryrdlock,
-		  pthread_rwlock_tryrdlock, GLIBC_2_34);
+versioned_symbol (libc, ___pthread_rwlock_tryrdlock, pthread_rwlock_tryrdlock,
+		  GLIBC_2_34);
 libc_hidden_ver (___pthread_rwlock_tryrdlock, __pthread_rwlock_tryrdlock)
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_rwlock_tryrdlock,
-	       pthread_rwlock_tryrdlock, GLIBC_2_1);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
+    compat_symbol (libpthread, ___pthread_rwlock_tryrdlock,
+		   pthread_rwlock_tryrdlock, GLIBC_2_1);
 #endif
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_rwlock_tryrdlock,
 	       __pthread_rwlock_tryrdlock, GLIBC_2_2);
 #endif

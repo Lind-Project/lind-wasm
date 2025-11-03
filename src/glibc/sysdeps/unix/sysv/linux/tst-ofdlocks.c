@@ -41,10 +41,10 @@ do_test (void)
   /* It first allocates a open file description lock range which can not
      be represented in a 32 bit struct flock.   */
   struct flock64 lck64 = {
-    .l_type   = F_WRLCK,
+    .l_type = F_WRLCK,
     .l_whence = SEEK_SET,
-    .l_start  = (off64_t)INT32_MAX + 1024,
-    .l_len    = 1024,
+    .l_start = (off64_t) INT32_MAX + 1024,
+    .l_len = 1024,
   };
   int ret = fcntl64 (temp_fd, F_OFD_SETLKW, &lck64);
   if (ret == -1 && errno == EINVAL)
@@ -64,10 +64,10 @@ do_test (void)
      non-LFS bits struct flock but which will result in a conflicted region
      which can not be represented in a non-LFS struct flock.  */
   struct flock lck = {
-    .l_type   = F_WRLCK,
+    .l_type = F_WRLCK,
     .l_whence = SEEK_SET,
-    .l_start  = INT32_MAX - 1024,
-    .l_len    = 4 * 1024,
+    .l_start = INT32_MAX - 1024,
+    .l_len = 4 * 1024,
   };
   int r = fcntl (fd, F_OFD_GETLK, &lck);
   if (sizeof (off_t) != sizeof (off64_t))

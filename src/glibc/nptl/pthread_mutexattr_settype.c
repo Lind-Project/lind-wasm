@@ -39,20 +39,20 @@ ___pthread_mutexattr_settype (pthread_mutexattr_t *attr, int kind)
   return 0;
 }
 versioned_symbol (libc, ___pthread_mutexattr_settype,
-                  pthread_mutexattr_settype, GLIBC_2_34);
+		  pthread_mutexattr_settype, GLIBC_2_34);
 libc_hidden_ver (___pthread_mutexattr_settype, __pthread_mutexattr_settype)
 #ifndef SHARED
-strong_alias (___pthread_mutexattr_settype, __pthread_mutexattr_settype)
+    strong_alias (___pthread_mutexattr_settype, __pthread_mutexattr_settype)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_mutexattr_settype,
+		       pthread_mutexattr_setkind_np, GLIBC_2_0);
 compat_symbol (libpthread, ___pthread_mutexattr_settype,
-               pthread_mutexattr_setkind_np, GLIBC_2_0);
-compat_symbol (libpthread, ___pthread_mutexattr_settype,
-               __pthread_mutexattr_settype, GLIBC_2_0);
+	       __pthread_mutexattr_settype, GLIBC_2_0);
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_34)
 compat_symbol (libpthread, ___pthread_mutexattr_settype,
-               pthread_mutexattr_settype, GLIBC_2_1);
+	       pthread_mutexattr_settype, GLIBC_2_1);
 #endif

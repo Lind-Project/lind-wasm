@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FENV_LIBC_H
-#define _FENV_LIBC_H 1
+#  define _FENV_LIBC_H 1
 
 /* Mask for enabling exceptions and for the CAUSE bits.  */
-#define ENABLE_MASK 0x0000001FU
-#define CAUSE_MASK 0x1F000000U
+#  define ENABLE_MASK 0x0000001FU
+#  define CAUSE_MASK 0x1F000000U
 
 /* Shift for FE_* flags to get up to the ENABLE bits and the CAUSE bits.  */
-#define ENABLE_SHIFT 16
-#define CAUSE_SHIFT 8
+#  define ENABLE_SHIFT 16
+#  define CAUSE_SHIFT 8
 
 #endif /* _FENV_LIBC_H */

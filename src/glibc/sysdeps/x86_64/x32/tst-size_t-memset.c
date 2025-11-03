@@ -17,28 +17,27 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef WIDE
-# define TEST_NAME "wmemset"
+#  define TEST_NAME "wmemset"
 #else
-# define TEST_NAME "memset"
+#  define TEST_NAME "memset"
 #endif /* WIDE */
 
 #include "test-size_t.h"
 
 #ifdef WIDE
-# include <wchar.h>
-# define MEMSET wmemset
-# define CHAR wchar_t
+#  include <wchar.h>
+#  define MEMSET wmemset
+#  define CHAR wchar_t
 #else
-# define MEMSET memset
-# define CHAR char
+#  define MEMSET memset
+#  define CHAR char
 #endif /* WIDE */
 
 IMPL (MEMSET, 1)
 
 typedef CHAR *(*proto_t) (CHAR *, int, size_t);
 
-static void *
-__attribute__ ((noinline, noclone))
+static void *__attribute__ ((noinline, noclone))
 do_memset (parameter_t a, parameter_t b)
 {
   return CALL (&b, a.p, (uintptr_t) b.p, a.len);

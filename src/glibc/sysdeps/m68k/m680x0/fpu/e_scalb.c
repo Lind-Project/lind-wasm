@@ -21,18 +21,18 @@
 #include <libm-alias-finite.h>
 
 #ifndef SUFF
-#define SUFF
+#  define SUFF
 #endif
 #ifndef float_type
-#define float_type double
+#  define float_type double
 #endif
 
-#define CONCATX(a,b) __CONCAT(a,b)
-#define s(name) CONCATX(name,SUFF)
-#define m81(func) __m81_u(s(func))
+#define CONCATX(a, b) __CONCAT (a, b)
+#define s(name) CONCATX (name, SUFF)
+#define m81(func) __m81_u (s (func))
 
 float_type
-s(__ieee754_scalb) (float_type x, float_type fn)
+s (__ieee754_scalb) (float_type x, float_type fn)
 {
   float_type retval;
   unsigned long x_cond = __m81_test (x);
@@ -51,10 +51,10 @@ s(__ieee754_scalb) (float_type x, float_type fn)
 	return x / -fn;
     }
 
-  if (m81(__rint) (fn) != fn)
+  if (m81 (__rint) (fn) != fn)
     return (x - x) / (x - x);
 
-  __asm ("fscale%.x %1, %0" : "=f" (retval) : "f" (fn), "0" (x));
+  __asm ("fscale%.x %1, %0" : "=f"(retval) : "f"(fn), "0"(x));
   return retval;
 }
-libm_alias_finite (s(__ieee754_scalb), s (__scalb))
+libm_alias_finite (s (__ieee754_scalb), s (__scalb))

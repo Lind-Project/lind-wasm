@@ -18,22 +18,22 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _PTY_PRIVATE_H
-#define _PTY_PRIVATE_H 1
+#  define _PTY_PRIVATE_H 1
 
 /* The group slave pseudo terminals belong to.  */
-#define TTY_GROUP "tty"
+#  define TTY_GROUP "tty"
 
 /* The file descriptor connected to the master pseudo terminal.  */
-#define PTY_FILENO 3
+#  define PTY_FILENO 3
 
 /* Path to the helper program that implements `grantpt' in user space.  */
-#define _PATH_PT_CHOWN LIBEXECDIR "/pt_chown"
+#  define _PATH_PT_CHOWN LIBEXECDIR "/pt_chown"
 
 /* Test whether given TTY is really a Unix98 pseudo terminal.  */
 /* #define unix98_pseudo_p(Dev) ... */
 
 /* Exit codes for the helper program.  */
-enum  /* failure modes */
+enum /* failure modes */
 {
   FAIL_EBADF = 1,
   FAIL_EINVAL,

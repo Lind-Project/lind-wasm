@@ -22,28 +22,32 @@
 #include <x86-lp_size.h>
 #include <tcb-offsets.h>
 
-#if IS_IN (rtld)
+#if IS_IN(rtld)
 /* We cannot use the thread descriptor because in ld.so we use setjmp
    earlier than the descriptor is initialized.  */
-# ifdef __ASSEMBLER__
-#  define PTR_MANGLE(reg)       xor __pointer_chk_guard_local(%rip), reg;    \
-                                rol $2*LP_SIZE+1, reg
-#  define PTR_DEMANGLE(reg)     ror $2*LP_SIZE+1, reg;                       \
-                                xor __pointer_chk_guard_local(%rip), reg
-# else
-#  define PTR_MANGLE(reg)      
-#  define PTR_DEMANGLE(reg)     
-# endif
+#  ifdef __ASSEMBLER__
+#    define PTR_MANGLE(reg)                                                   \
+      xor __pointer_chk_guard_local (% rip), reg;                             \
+      rol $2 *LP_SIZE + 1, reg
+#    define PTR_DEMANGLE(reg)                                                 \
+      ror $2 *LP_SIZE + 1, reg;                                               \
+      xor __pointer_chk_guard_local (% rip), reg
+#  else
+#    define PTR_MANGLE(reg)
+#    define PTR_DEMANGLE(reg)
+#  endif
 #else
-# ifdef __ASSEMBLER__
-#  define PTR_MANGLE(reg)       xor %fs:POINTER_GUARD, reg;                   \
-                                rol $2*LP_SIZE+1, reg
-#  define PTR_DEMANGLE(reg)     ror $2*LP_SIZE+1, reg;                        \
-                                xor %fs:POINTER_GUARD, reg
-# else
-#  define PTR_MANGLE(var)       
-#  define PTR_DEMANGLE(var)     
-# endif
+#  ifdef __ASSEMBLER__
+#    define PTR_MANGLE(reg)                                                   \
+      xor% fs : POINTER_GUARD, reg;                                           \
+      rol $2 *LP_SIZE + 1, reg
+#    define PTR_DEMANGLE(reg)                                                 \
+      ror $2 *LP_SIZE + 1, reg;                                               \
+      xor% fs : POINTER_GUARD, reg
+#  else
+#    define PTR_MANGLE(var)
+#    define PTR_DEMANGLE(var)
+#  endif
 #endif
 
 #endif /* POINTER_GUARD_H */

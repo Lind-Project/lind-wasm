@@ -158,8 +158,8 @@ main (int argc, char **argv)
 	    {
 	      char buf[500];
 	      regerror (n, &re, buf, sizeof (buf));
-	      printf ("%zd: regcomp failed for %s: %s\n",
-		      linenum, pattern, buf);
+	      printf ("%zd: regcomp failed for %s: %s\n", linenum, pattern,
+		      buf);
 	      ret = 1;
 	      continue;
 	    }
@@ -186,8 +186,8 @@ main (int argc, char **argv)
 	{
 	  if (rm[0].rm_so != -1 || rm[0].rm_eo != -1)
 	    {
-	      printf ("%zd: /%s/ on %s unexpectedly matched %d..%d\n",
-		      linenum, pattern, string, rm[0].rm_so, rm[0].rm_eo);
+	      printf ("%zd: /%s/ on %s unexpectedly matched %d..%d\n", linenum,
+		      pattern, string, rm[0].rm_so, rm[0].rm_eo);
 	      ret = 1;
 	    }
 
@@ -196,7 +196,7 @@ main (int argc, char **argv)
 
       p = line;
       if (*p == ' ')
-        ++p;
+	++p;
 
       num = strtoul (p, &p, 10);
       if (num >= 20 || *p != ':' || p[1] != ' ')
@@ -210,9 +210,10 @@ main (int argc, char **argv)
 	{
 	  if (strcmp (p + 2, "<unset>") != 0)
 	    {
-	      printf ("%zd: /%s/ on %s unexpectedly failed to match register %ld %d..%d\n",
-		      linenum, pattern, string, num,
-		      rm[num].rm_so, rm[num].rm_eo);
+	      printf ("%zd: /%s/ on %s unexpectedly failed to match register "
+		      "%ld %d..%d\n",
+		      linenum, pattern, string, num, rm[num].rm_so,
+		      rm[num].rm_eo);
 	      ret = 1;
 	    }
 	  continue;
@@ -221,11 +222,13 @@ main (int argc, char **argv)
       if (rm[num].rm_eo < rm[num].rm_so
 	  || rm[num].rm_eo - rm[num].rm_so != len - (p + 2 - line)
 	  || strncmp (p + 2, string + rm[num].rm_so,
-		      rm[num].rm_eo - rm[num].rm_so) != 0)
+		      rm[num].rm_eo - rm[num].rm_so)
+		 != 0)
 	{
-	  printf ("%zd: /%s/ on %s unexpectedly failed to match %s for register %ld %d..%d\n",
-		  linenum, pattern, string, p + 2, num,
-		  rm[num].rm_so, rm[num].rm_eo);
+	  printf ("%zd: /%s/ on %s unexpectedly failed to match %s for "
+		  "register %ld %d..%d\n",
+		  linenum, pattern, string, p + 2, num, rm[num].rm_so,
+		  rm[num].rm_eo);
 	  ret = 1;
 	  continue;
 	}

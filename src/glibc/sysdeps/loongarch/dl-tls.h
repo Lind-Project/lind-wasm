@@ -31,7 +31,7 @@ typedef struct
 #define TLS_DTV_OFFSET 0
 
 /* Compute the value for a GOTTPREL reloc.  */
-#define TLS_TPREL_VALUE(sym_map, sym) \
+#define TLS_TPREL_VALUE(sym_map, sym)                                         \
   ((sym_map)->l_tls_offset + (sym)->st_value - TLS_TP_OFFSET)
 
 /* Compute the value for a DTPREL reloc.  */

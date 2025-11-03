@@ -21,26 +21,24 @@
    with an unaligned stack.  The compat implementation is in
    tls_get_addr-compat.S.  */
 
-# include <dl-tls.h>
+#  include <dl-tls.h>
 
 /* Define __tls_get_addr within elf/dl-tls.c under a different
    name.  */
 extern __typeof__ (__tls_get_addr) ___tls_get_addr;
 
-# define __tls_get_addr ___tls_get_addr
-# include <elf/dl-tls.c>
-# undef __tls_get_addr
+#  define __tls_get_addr ___tls_get_addr
+#  include <elf/dl-tls.c>
+#  undef __tls_get_addr
 
 hidden_ver (___tls_get_addr, __tls_get_addr)
 
-/* Only handle slow paths for __tls_get_addr.  */
-attribute_hidden
-void *
-__tls_get_addr_slow (GET_ADDR_ARGS)
+    /* Only handle slow paths for __tls_get_addr.  */
+    attribute_hidden void *__tls_get_addr_slow (GET_ADDR_ARGS)
 {
   dtv_t *dtv = THREAD_DTV ();
 
-  size_t gen = atomic_load_acquire (&GL(dl_tls_generation));
+  size_t gen = atomic_load_acquire (&GL (dl_tls_generation));
   if (__glibc_unlikely (dtv[0].counter != gen))
     return update_get_addr (GET_ADDR_PARAM, gen);
 
@@ -49,6 +47,6 @@ __tls_get_addr_slow (GET_ADDR_ARGS)
 #else
 
 /* No compatibility symbol needed.  */
-# include <elf/dl-tls.c>
+#  include <elf/dl-tls.c>
 
 #endif

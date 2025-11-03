@@ -16,38 +16,38 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if defined USE_MULTIARCH && IS_IN (libc)		\
-  && ! defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define HAVE_WMEMCHR_IFUNC	1
+#if defined USE_MULTIARCH && IS_IN(libc)                                      \
+    && !defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
+#  define HAVE_WMEMCHR_IFUNC 1
 #else
-# define HAVE_WMEMCHR_IFUNC	0
+#  define HAVE_WMEMCHR_IFUNC 0
 #endif
 
 #ifdef HAVE_S390_VX_ASM_SUPPORT
-# define HAVE_WMEMCHR_IFUNC_AND_VX_SUPPORT HAVE_WMEMCHR_IFUNC
+#  define HAVE_WMEMCHR_IFUNC_AND_VX_SUPPORT HAVE_WMEMCHR_IFUNC
 #else
-# define HAVE_WMEMCHR_IFUNC_AND_VX_SUPPORT 0
+#  define HAVE_WMEMCHR_IFUNC_AND_VX_SUPPORT 0
 #endif
 
 #if defined HAVE_S390_MIN_Z13_ZARCH_ASM_SUPPORT
-# define WMEMCHR_DEFAULT	WMEMCHR_Z13
+#  define WMEMCHR_DEFAULT WMEMCHR_Z13
 /* The z13 ifunc variant is using the common code variant as fallback!  */
-# define HAVE_WMEMCHR_C		1
-# define HAVE_WMEMCHR_Z13	1
+#  define HAVE_WMEMCHR_C 1
+#  define HAVE_WMEMCHR_Z13 1
 #else
-# define WMEMCHR_DEFAULT	WMEMCHR_C
-# define HAVE_WMEMCHR_C		1
-# define HAVE_WMEMCHR_Z13	HAVE_WMEMCHR_IFUNC_AND_VX_SUPPORT
+#  define WMEMCHR_DEFAULT WMEMCHR_C
+#  define HAVE_WMEMCHR_C 1
+#  define HAVE_WMEMCHR_Z13 HAVE_WMEMCHR_IFUNC_AND_VX_SUPPORT
 #endif
 
 #if HAVE_WMEMCHR_C
-# define WMEMCHR_C		__wmemchr_c
+#  define WMEMCHR_C __wmemchr_c
 #else
-# define WMEMCHR_C		NULL
+#  define WMEMCHR_C NULL
 #endif
 
 #if HAVE_WMEMCHR_Z13
-# define WMEMCHR_Z13		__wmemchr_vx
+#  define WMEMCHR_Z13 __wmemchr_vx
 #else
-# define WMEMCHR_Z13		NULL
+#  define WMEMCHR_Z13 NULL
 #endif

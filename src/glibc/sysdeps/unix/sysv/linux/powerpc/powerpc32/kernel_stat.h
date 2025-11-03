@@ -17,25 +17,25 @@
    <https://www.gnu.org/licenses/>.  */
 
 struct kernel_stat
-  {
-    unsigned int st_dev;
-    unsigned int st_ino;
-    unsigned int st_mode;
-    unsigned short st_nlink;
-    unsigned int st_uid;
-    unsigned int st_gid;
-    unsigned int st_rdev;
-    unsigned long int st_size;
-    unsigned long int st_blksize;
-    unsigned long int st_blocks;
-    struct timespec st_atim;
-    struct timespec st_mtim;
-    struct timespec st_ctim;
-    unsigned long int __glibc_reserved4;
+{
+  unsigned int st_dev;
+  unsigned int st_ino;
+  unsigned int st_mode;
+  unsigned short st_nlink;
+  unsigned int st_uid;
+  unsigned int st_gid;
+  unsigned int st_rdev;
+  unsigned long int st_size;
+  unsigned long int st_blksize;
+  unsigned long int st_blocks;
+  struct timespec st_atim;
+  struct timespec st_mtim;
+  struct timespec st_ctim;
+  unsigned long int __glibc_reserved4;
 #define _HAVE___UNUSED4
-    unsigned long int __glibc_reserved5;
+  unsigned long int __glibc_reserved5;
 #define _HAVE___UNUSED5
-  };
+};
 
 #define _HAVE_STAT___UNUSED4
 #define _HAVE_STAT___UNUSED5

@@ -16,21 +16,19 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if IS_IN(libc)
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (strncat) __strncat_ppc attribute_hidden;
 extern __typeof (strncat) __strncat_power7 attribute_hidden;
 extern __typeof (strncat) __strncat_power8 attribute_hidden;
 
 libc_ifunc (strncat,
-	    (hwcap2 & PPC_FEATURE2_ARCH_2_07
-	     && hwcap & PPC_FEATURE_HAS_VSX)
-	    ? __strncat_power8
-	    : (hwcap & PPC_FEATURE_ARCH_2_06
-	       && hwcap & PPC_FEATURE_HAS_VSX)
-            ? __strncat_power7
-            : __strncat_ppc);
+	    (hwcap2 & PPC_FEATURE2_ARCH_2_07 && hwcap & PPC_FEATURE_HAS_VSX)
+		? __strncat_power8
+	    : (hwcap & PPC_FEATURE_ARCH_2_06 && hwcap & PPC_FEATURE_HAS_VSX)
+		? __strncat_power7
+		: __strncat_ppc);
 #endif

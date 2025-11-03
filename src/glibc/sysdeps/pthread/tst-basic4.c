@@ -23,7 +23,6 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-
 static void
 final_test (void)
 {
@@ -32,7 +31,6 @@ final_test (void)
 #define THE_SIGNAL SIGUSR1
   kill (getpid (), SIGUSR1);
 }
-
 
 static void *
 tf (void *a)
@@ -59,7 +57,7 @@ tf (void *a)
       exit (1);
     }
 
-  if (! WIFSIGNALED (r))
+  if (!WIFSIGNALED (r))
     {
       puts ("child not signled");
       exit (1);
@@ -73,7 +71,6 @@ tf (void *a)
 
   return NULL;
 }
-
 
 int
 do_test (void)

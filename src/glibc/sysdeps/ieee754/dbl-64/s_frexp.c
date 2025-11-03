@@ -30,7 +30,6 @@
  * with *exp=0.
  */
 
-
 double
 __frexp (double x, int *eptr)
 {

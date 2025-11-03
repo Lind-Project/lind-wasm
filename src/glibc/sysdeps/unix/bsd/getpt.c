@@ -24,19 +24,17 @@
 /* Prefix for master pseudo terminal nodes.  */
 #define _PATH_PTY "/dev/pty"
 
-
 /* Letters indicating a series of pseudo terminals.  */
 #ifndef PTYNAME1
-#define PTYNAME1 "pqrsPQRS"
+#  define PTYNAME1 "pqrsPQRS"
 #endif
 const char __libc_ptyname1[] attribute_hidden = PTYNAME1;
 
 /* Letters indicating the position within a series.  */
 #ifndef PTYNAME2
-#define PTYNAME2 "0123456789abcdefghijklmnopqrstuv";
+#  define PTYNAME2 "0123456789abcdefghijklmnopqrstuv";
 #endif
 const char __libc_ptyname2[] attribute_hidden = PTYNAME2;
-
 
 /* Open a master pseudo terminal and return its file descriptor.  */
 int
@@ -78,11 +76,9 @@ __getpt (void)
 {
   return __bsd_openpt (O_RDWR);
 }
-libc_hidden_def (__getpt)
-weak_alias (__getpt, getpt)
+libc_hidden_def (__getpt) weak_alias (__getpt, getpt)
 
-int
-__posix_openpt (int oflag)
+    int __posix_openpt (int oflag)
 {
   return __bsd_openpt (oflag);
 }

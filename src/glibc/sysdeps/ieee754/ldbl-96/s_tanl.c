@@ -51,30 +51,34 @@ static char rcsid[] = "$NetBSD: $";
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-long double __tanl(long double x)
+long double
+__tanl (long double x)
 {
-	long double y[2],z=0.0;
-	int32_t n, se, i0, i1;
+  long double y[2], z = 0.0;
+  int32_t n, se, i0, i1;
 
-    /* High word of x. */
-	GET_LDOUBLE_WORDS(se,i0,i1,x);
+  /* High word of x. */
+  GET_LDOUBLE_WORDS (se, i0, i1, x);
 
-    /* |x| ~< pi/4 */
-	se &= 0x7fff;
-	if(se <= 0x3ffe) return __kernel_tanl(x,z,1);
+  /* |x| ~< pi/4 */
+  se &= 0x7fff;
+  if (se <= 0x3ffe)
+    return __kernel_tanl (x, z, 1);
 
-    /* tan(Inf or NaN) is NaN */
-	else if (se==0x7fff) {
-	  if (i1 == 0 && i0 == 0x80000000)
-	    __set_errno (EDOM);
-	  return x-x;
-	}
+  /* tan(Inf or NaN) is NaN */
+  else if (se == 0x7fff)
+    {
+      if (i1 == 0 && i0 == 0x80000000)
+	__set_errno (EDOM);
+      return x - x;
+    }
 
-    /* argument reduction needed */
-	else {
-	    n = __ieee754_rem_pio2l(x,y);
-	    return __kernel_tanl(y[0],y[1],1-((n&1)<<1)); /*   1 -- n even
-							-1 -- n odd */
-	}
+  /* argument reduction needed */
+  else
+    {
+      n = __ieee754_rem_pio2l (x, y);
+      return __kernel_tanl (y[0], y[1], 1 - ((n & 1) << 1)); /*   1 -- n even
+							   -1 -- n odd */
+    }
 }
 libm_alias_ldouble (__tan, tan)

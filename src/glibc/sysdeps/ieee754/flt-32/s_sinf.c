@@ -24,13 +24,13 @@
 #include "s_sincosf.h"
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
 #ifndef SINF
-# define SINF_FUNC __sinf
+#  define SINF_FUNC __sinf
 #else
-# define SINF_FUNC SINF
+#  define SINF_FUNC SINF
 #endif
 
 /* Fast sinf implementation.  Worst-case ULP is 0.5607, maximum relative
@@ -38,8 +38,7 @@
    small values.  Large inputs have their range reduced using fast integer
    arithmetic.
 */
-float
-SECTION
+float SECTION
 SINF_FUNC (float y)
 {
   double x = y;
@@ -52,12 +51,12 @@ SINF_FUNC (float y)
       s = x * x;
 
       if (__glibc_unlikely (abstop12 (y) < abstop12 (0x1p-12f)))
-      {
-	/* Force underflow for tiny y.  */
-	if (__glibc_unlikely (abstop12 (y) < abstop12 (0x1p-126f)))
-	  math_force_eval ((float)s);
-	return y;
-      }
+	{
+	  /* Force underflow for tiny y.  */
+	  if (__glibc_unlikely (abstop12 (y) < abstop12 (0x1p-126f)))
+	    math_force_eval ((float) s);
+	  return y;
+	}
 
       return sinf_poly (x, s, p, 0);
     }

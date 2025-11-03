@@ -26,9 +26,10 @@
 
 static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 
-static void test_bad_clockid (clockid_t clockid)
+static void
+test_bad_clockid (clockid_t clockid)
 {
-  const struct timespec ts = {0,0};
+  const struct timespec ts = { 0, 0 };
   TEST_COMPARE (pthread_mutex_clocklock (&mut, clockid, &ts), EINVAL);
 }
 

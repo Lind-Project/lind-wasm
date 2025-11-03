@@ -18,21 +18,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define strchrnul __redirect_strchrnul
-# define __strchrnul __redirect___strchrnul
-# include <string.h>
-# undef __strchrnul
-# undef strchrnul
+#if IS_IN(libc)
+#  define strchrnul __redirect_strchrnul
+#  define __strchrnul __redirect___strchrnul
+#  include <string.h>
+#  undef __strchrnul
+#  undef strchrnul
 
-# define SYMBOL_NAME strchrnul
-# include "ifunc-avx2.h"
+#  define SYMBOL_NAME strchrnul
+#  include "ifunc-avx2.h"
 
-libc_ifunc_redirected (__redirect_strchrnul, __strchrnul,
-		       IFUNC_SELECTOR ());
+libc_ifunc_redirected (__redirect_strchrnul, __strchrnul, IFUNC_SELECTOR ());
 weak_alias (__strchrnul, strchrnul)
-# ifdef SHARED
-__hidden_ver1 (__strchrnul, __GI___strchrnul, __redirect_strchrnul)
-  __attribute__((visibility ("hidden"))) __attribute_copy__ (strchrnul);
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (__strchrnul, __GI___strchrnul, __redirect_strchrnul)
+	__attribute__ ((visibility ("hidden"))) __attribute_copy__ (strchrnul);
+#  endif
 #endif

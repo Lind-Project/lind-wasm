@@ -38,17 +38,17 @@ __nextupl (_Float128 x)
   if ((ix | lx) == 0)
     return LDBL_TRUE_MIN;
   if (hx >= 0)
-    {				/* x > 0.  */
+    { /* x > 0.  */
       if (isinf (x))
-        return x;
+	return x;
       lx++;
       if (lx == 0)
-        hx++;
+	hx++;
     }
   else
-    {				/* x < 0.  */
+    { /* x < 0.  */
       if (lx == 0)
-        hx--;
+	hx--;
       lx--;
     }
   SET_LDOUBLE_WORDS64 (x, hx, lx);

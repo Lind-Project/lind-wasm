@@ -30,7 +30,7 @@
 #include <sys/wait.h>
 #include <sys/syscall.h>
 
-#include <stackinfo.h>  /* For _STACK_GROWS_{UP,DOWN}.  */
+#include <stackinfo.h> /* For _STACK_GROWS_{UP,DOWN}.  */
 
 #include <support/check.h>
 
@@ -56,7 +56,6 @@ f (void *a)
   return 0;
 }
 
-
 static int
 do_test (void)
 {
@@ -77,13 +76,13 @@ do_test (void)
 #elif _STACK_GROWS_UP
   pid_t p = clone (f, st, clone_flags, 0);
 #else
-#error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
+#  error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
 #endif
 
   close (pipefd[1]);
 
   if (p == -1)
-    FAIL_EXIT1("clone failed: %m");
+    FAIL_EXIT1 ("clone failed: %m");
 
   pid_t ppid, pid, tid;
   if (read (pipefd[0], &ppid, sizeof pid) != sizeof pid)
@@ -112,8 +111,8 @@ do_test (void)
   /* Some sanity checks for clone syscall: returned ppid should be current
      pid and both returned tid/pid should be different from current one.  */
   if ((ppid != own_pid) || (pid == own_pid) || (tid == own_tid))
-    FAIL_RET ("ppid=%i pid=%i tid=%i | own_pid=%i own_tid=%i",
-	      (int)ppid, (int)pid, (int)tid, (int)own_pid, (int)own_tid);
+    FAIL_RET ("ppid=%i pid=%i tid=%i | own_pid=%i own_tid=%i", (int) ppid,
+	      (int) pid, (int) tid, (int) own_pid, (int) own_tid);
 
   int e;
   if (waitpid (p, &e, __WCLONE) != p)

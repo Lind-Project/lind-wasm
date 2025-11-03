@@ -18,13 +18,13 @@
 
 /* Define multiple versions only for the definition in libc.  */
 
-#if IS_IN (libc)
+#if IS_IN(libc)
 /* Redefine strlen so that the compiler won't complain about the type
    mismatch with the IFUNC selector in strong_alias, below.  */
-# undef strlen
-# define strlen __redirect_strlen
-# include <string.h>
-# include <init-arch.h>
+#  undef strlen
+#  define strlen __redirect_strlen
+#  include <string.h>
+#  include <init-arch.h>
 
 extern __typeof (__redirect_strlen) __strlen;
 
@@ -33,6 +33,6 @@ extern __typeof (__redirect_strlen) __strlen_asimd attribute_hidden;
 
 libc_ifunc (__strlen, (mte ? __strlen_generic : __strlen_asimd));
 
-# undef strlen
+#  undef strlen
 strong_alias (__strlen, strlen);
 #endif

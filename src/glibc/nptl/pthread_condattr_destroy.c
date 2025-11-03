@@ -17,7 +17,6 @@
 
 #include "pthreadP.h"
 
-
 int
 __pthread_condattr_destroy (pthread_condattr_t *attr)
 {

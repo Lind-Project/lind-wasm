@@ -18,22 +18,22 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define wcschr __redirect_wcschr
-# define __wcschr __redirect___wcschr
-# include <wchar.h>
-# undef wcschr
-# undef __wcschr
+#if IS_IN(libc)
+#  define wcschr __redirect_wcschr
+#  define __wcschr __redirect___wcschr
+#  include <wchar.h>
+#  undef wcschr
+#  undef __wcschr
 
-# define SYMBOL_NAME wcschr
-# include "ifunc-avx2.h"
+#  define SYMBOL_NAME wcschr
+#  include "ifunc-avx2.h"
 
 libc_ifunc_redirected (__redirect_wcschr, __wcschr, IFUNC_SELECTOR ());
 weak_alias (__wcschr, wcschr);
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (__wcschr, __GI___wcschr, __redirect___wcschr)
-  __attribute__((visibility ("hidden")));
+    __attribute__ ((visibility ("hidden")));
 __hidden_ver1 (wcschr, __GI_wcschr, __redirect_wcschr)
-  __attribute__((weak, visibility ("hidden")));
-# endif
+    __attribute__ ((weak, visibility ("hidden")));
+#  endif
 #endif

@@ -17,30 +17,28 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _PTHREAD_FUNCTIONS_H
-#define _PTHREAD_FUNCTIONS_H	1
+#  define _PTHREAD_FUNCTIONS_H 1
 
-#include <pthread.h>
+#  include <pthread.h>
 
 int __pthread_attr_destroy (pthread_attr_t *);
 int __pthread_attr_init (pthread_attr_t *);
 int __pthread_attr_setschedparam (pthread_attr_t *,
-				 const struct sched_param *);
+				  const struct sched_param *);
 int __pthread_attr_getscope (const pthread_attr_t *, int *);
 int __pthread_attr_setscope (pthread_attr_t *, int);
 int __pthread_condattr_destroy (pthread_condattr_t *);
 int __pthread_condattr_init (pthread_condattr_t *);
 int __pthread_cond_broadcast (pthread_cond_t *);
 int __pthread_cond_destroy (pthread_cond_t *);
-int __pthread_cond_init (pthread_cond_t *,
-		       const pthread_condattr_t *);
+int __pthread_cond_init (pthread_cond_t *, const pthread_condattr_t *);
 int __pthread_cond_signal (pthread_cond_t *);
 int __pthread_cond_wait (pthread_cond_t *, pthread_mutex_t *);
 int __pthread_cond_timedwait (pthread_cond_t *, pthread_mutex_t *,
-			     const struct timespec *);
+			      const struct timespec *);
 void __pthread_exit (void *) __attribute__ ((__noreturn__));
 int _pthread_mutex_destroy (pthread_mutex_t *);
-int _pthread_mutex_init (pthread_mutex_t *,
-			 const pthread_mutexattr_t *);
+int _pthread_mutex_init (pthread_mutex_t *, const pthread_mutexattr_t *);
 int __pthread_mutex_lock (pthread_mutex_t *);
 int __pthread_mutex_trylock (pthread_mutex_t *);
 int __pthread_mutex_unlock (pthread_mutex_t *);
@@ -74,8 +72,7 @@ struct pthread_functions
   int (*ptr_pthread_condattr_init) (pthread_condattr_t *);
   int (*ptr_pthread_cond_broadcast) (pthread_cond_t *);
   int (*ptr_pthread_cond_destroy) (pthread_cond_t *);
-  int (*ptr_pthread_cond_init) (pthread_cond_t *,
-			       const pthread_condattr_t *);
+  int (*ptr_pthread_cond_init) (pthread_cond_t *, const pthread_condattr_t *);
   int (*ptr_pthread_cond_signal) (pthread_cond_t *);
   int (*ptr_pthread_cond_wait) (pthread_cond_t *, pthread_mutex_t *);
   int (*ptr_pthread_cond_timedwait) (pthread_cond_t *, pthread_mutex_t *,
@@ -89,7 +86,8 @@ struct pthread_functions
   int (*ptr_pthread_mutex_unlock) (pthread_mutex_t *);
   int (*ptr___pthread_setcancelstate) (int, int *);
   int (*ptr_pthread_setcanceltype) (int, int *);
-  struct __pthread_cancelation_handler **(*ptr___pthread_get_cleanup_stack) (void);
+  struct __pthread_cancelation_handler **(*ptr___pthread_get_cleanup_stack) (
+      void);
   int (*ptr_pthread_once) (pthread_once_t *, void (*) (void));
   int (*ptr_pthread_rwlock_rdlock) (pthread_rwlock_t *);
   int (*ptr_pthread_rwlock_wrlock) (pthread_rwlock_t *);
@@ -108,7 +106,6 @@ extern int __libc_pthread_functions_init attribute_hidden;
 
 void __libc_pthread_init (const struct pthread_functions *functions);
 
-#define PTHFCT_CALL(fct, params) \
-    __libc_pthread_functions.fct params
+#  define PTHFCT_CALL(fct, params) __libc_pthread_functions.fct params
 
-#endif	/* pthread-functions.h */
+#endif /* pthread-functions.h */

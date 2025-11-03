@@ -36,25 +36,25 @@
   */
 
 #ifndef PROCINFO_CLASS
-# define PROCINFO_CLASS
+#  define PROCINFO_CLASS
 #endif
 
 #include <sysdeps/x86/dl-procinfo.c>
 
-#if !IS_IN (ldconfig)
-# if !defined PROCINFO_DECL && defined SHARED
-  ._dl_x86_64_runtime_resolve
-# else
-PROCINFO_CLASS void * _dl_x86_64_runtime_resolve
-# endif
-# ifndef PROCINFO_DECL
-= NULL
-# endif
-# if !defined SHARED || defined PROCINFO_DECL
-;
-# else
-,
-# endif
+#if !IS_IN(ldconfig)
+#  if !defined PROCINFO_DECL && defined SHARED
+._dl_x86_64_runtime_resolve
+#  else
+PROCINFO_CLASS void *_dl_x86_64_runtime_resolve
+#  endif
+#  ifndef PROCINFO_DECL
+    = NULL
+#  endif
+#  if !defined SHARED || defined PROCINFO_DECL
+    ;
+#  else
+    ,
+#  endif
 #endif
 
 #undef PROCINFO_DECL

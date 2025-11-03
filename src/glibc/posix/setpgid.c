@@ -27,7 +27,6 @@ __setpgid (int pid, int pgid)
   __set_errno (ENOSYS);
   return -1;
 }
-libc_hidden_def (__setpgid)
-stub_warning (setpgid)
+libc_hidden_def (__setpgid) stub_warning (setpgid)
 
-weak_alias (__setpgid, setpgid)
+    weak_alias (__setpgid, setpgid)

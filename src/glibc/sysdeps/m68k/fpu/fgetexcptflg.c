@@ -24,7 +24,7 @@ __fegetexceptflag (fexcept_t *flagp, int excepts)
   fexcept_t fpsr;
 
   /* Get the current exceptions.  */
-  __asm__ ("fmove%.l %/fpsr,%0" : "=dm" (fpsr));
+  __asm__ ("fmove%.l %/fpsr,%0" : "=dm"(fpsr));
 
   *flagp = fpsr & excepts & FE_ALL_EXCEPT;
 
@@ -33,9 +33,9 @@ __fegetexceptflag (fexcept_t *flagp, int excepts)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__fegetexceptflag, __old_fegetexceptflag)
-compat_symbol (libm, __old_fegetexceptflag, fegetexceptflag, GLIBC_2_1);
+    compat_symbol (libm, __old_fegetexceptflag, fegetexceptflag, GLIBC_2_1);
 #endif
 
 versioned_symbol (libm, __fegetexceptflag, fegetexceptflag, GLIBC_2_2);

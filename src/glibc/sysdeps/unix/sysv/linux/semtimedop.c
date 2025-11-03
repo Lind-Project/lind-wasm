@@ -58,20 +58,19 @@ __semtimedop64 (int semid, struct sembuf *sops, size_t nsops,
       ts32 = valid_timespec64_to_timespec (*timeout);
       pts32 = &ts32;
     }
-# ifdef __ASSUME_DIRECT_SYSVIPC_SYSCALLS
+#  ifdef __ASSUME_DIRECT_SYSVIPC_SYSCALLS
   return INLINE_SYSCALL_CALL (semtimedop, semid, sops, nsops, pts32);
-# else
+#  else
   return INLINE_SYSCALL_CALL (ipc, IPCOP_semtimedop, semid,
 			      SEMTIMEDOP_IPC_ARGS (nsops, sops, pts32));
-# endif
+#  endif
 #endif
 }
 #if __TIMESIZE != 64
 libc_hidden_def (__semtimedop64)
 
-int
-__semtimedop (int semid, struct sembuf *sops, size_t nsops,
-	      const struct timespec *timeout)
+    int __semtimedop (int semid, struct sembuf *sops, size_t nsops,
+		      const struct timespec *timeout)
 {
   struct __timespec64 ts64, *pts64 = NULL;
   if (timeout != NULL)

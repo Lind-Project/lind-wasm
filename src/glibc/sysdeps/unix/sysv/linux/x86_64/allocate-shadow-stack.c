@@ -26,20 +26,19 @@
 /* NB: This can be treated as a syscall by caller.  */
 
 long int
-__allocate_shadow_stack (size_t stack_size,
-			 shadow_stack_size_t *child_stack)
+__allocate_shadow_stack (size_t stack_size, shadow_stack_size_t *child_stack)
 {
 #ifdef __NR_map_shadow_stack
   size_t shadow_stack_size
-    = stack_size >> STACK_SIZE_TO_SHADOW_STACK_SIZE_SHIFT;
+      = stack_size >> STACK_SIZE_TO_SHADOW_STACK_SIZE_SHIFT;
   /* Align shadow stack to 8 bytes.  */
   shadow_stack_size = ALIGN_UP (shadow_stack_size, 8);
   /* Since sigaltstack shares shadow stack with the current context in
      the thread, add extra 20 stack frames in shadow stack for signal
      handlers.  */
   shadow_stack_size += 20 * 8;
-  void *shadow_stack = (void *)INLINE_SYSCALL_CALL
-    (map_shadow_stack, NULL, shadow_stack_size, SHADOW_STACK_SET_TOKEN);
+  void *shadow_stack = (void *) INLINE_SYSCALL_CALL (
+      map_shadow_stack, NULL, shadow_stack_size, SHADOW_STACK_SET_TOKEN);
   /* Report the map_shadow_stack error.  */
   if (shadow_stack == MAP_FAILED)
     return -errno;

@@ -52,36 +52,43 @@ static char rcsid[] = "$NetBSD: $";
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-long double __sinl(long double x)
+long double
+__sinl (long double x)
 {
-	long double y[2],z=0.0;
-	int32_t n, se, i0, i1;
+  long double y[2], z = 0.0;
+  int32_t n, se, i0, i1;
 
-    /* High word of x. */
-	GET_LDOUBLE_WORDS(se,i0,i1,x);
+  /* High word of x. */
+  GET_LDOUBLE_WORDS (se, i0, i1, x);
 
-    /* |x| ~< pi/4 */
-	se &= 0x7fff;
-	if(se < 0x3ffe || (se == 0x3ffe && i0 <= 0xc90fdaa2))
-	  return __kernel_sinl(x,z,0);
+  /* |x| ~< pi/4 */
+  se &= 0x7fff;
+  if (se < 0x3ffe || (se == 0x3ffe && i0 <= 0xc90fdaa2))
+    return __kernel_sinl (x, z, 0);
 
-    /* sin(Inf or NaN) is NaN */
-	else if (se==0x7fff) {
-	  if (i1 == 0 && i0 == 0x80000000)
-	    __set_errno (EDOM);
-	  return x-x;
+  /* sin(Inf or NaN) is NaN */
+  else if (se == 0x7fff)
+    {
+      if (i1 == 0 && i0 == 0x80000000)
+	__set_errno (EDOM);
+      return x - x;
+    }
+
+  /* argument reduction needed */
+  else
+    {
+      n = __ieee754_rem_pio2l (x, y);
+      switch (n & 3)
+	{
+	case 0:
+	  return __kernel_sinl (y[0], y[1], 1);
+	case 1:
+	  return __kernel_cosl (y[0], y[1]);
+	case 2:
+	  return -__kernel_sinl (y[0], y[1], 1);
+	default:
+	  return -__kernel_cosl (y[0], y[1]);
 	}
-
-    /* argument reduction needed */
-	else {
-	    n = __ieee754_rem_pio2l(x,y);
-	    switch(n&3) {
-		case 0: return  __kernel_sinl(y[0],y[1],1);
-		case 1: return  __kernel_cosl(y[0],y[1]);
-		case 2: return -__kernel_sinl(y[0],y[1],1);
-		default:
-			return -__kernel_cosl(y[0],y[1]);
-	    }
-	}
+    }
 }
 libm_alias_ldouble (__sin, sin)

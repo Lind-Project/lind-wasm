@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef S390_FENV_PRIVATE_H
-#define S390_FENV_PRIVATE_H 1
+#  define S390_FENV_PRIVATE_H 1
 
-#include <fenv.h>
-#include <fenv_libc.h>
-#include <fpu_control.h>
+#  include <fenv.h>
+#  include <fenv_libc.h>
+#  include <fpu_control.h>
 
 static __always_inline void
 libc_feholdexcept_s390 (fenv_t *envp)
@@ -41,19 +41,19 @@ libc_feholdexcept_s390 (fenv_t *envp)
     _FPU_SETCW (fpc_new);
 }
 
-#define libc_feholdexcept  libc_feholdexcept_s390
-#define libc_feholdexceptf libc_feholdexcept_s390
-#define libc_feholdexceptl libc_feholdexcept_s390
+#  define libc_feholdexcept libc_feholdexcept_s390
+#  define libc_feholdexceptf libc_feholdexcept_s390
+#  define libc_feholdexceptl libc_feholdexcept_s390
 
 static __always_inline void
 libc_fesetround_s390 (int round)
 {
-  __asm__ __volatile__ ("srnm 0(%0)" : : "a" (round));
+  __asm__ __volatile__ ("srnm 0(%0)" : : "a"(round));
 }
 
-#define libc_fesetround  libc_fesetround_s390
-#define libc_fesetroundf libc_fesetround_s390
-#define libc_fesetroundl libc_fesetround_s390
+#  define libc_fesetround libc_fesetround_s390
+#  define libc_fesetroundf libc_fesetround_s390
+#  define libc_fesetroundl libc_fesetround_s390
 
 static __always_inline void
 libc_feholdexcept_setround_s390 (fenv_t *envp, int r)
@@ -66,8 +66,9 @@ libc_feholdexcept_setround_s390 (fenv_t *envp, int r)
   /* Clear the current exception flags and dxc field.
      Hold from generating fpu exceptions temporarily.
      Reset rounding mode bits.  */
-  fpc_new = fpc & ~(FPC_FLAGS_MASK | FPC_DXC_MASK | FPC_EXCEPTION_MASK
-		    | FPC_RM_MASK);
+  fpc_new
+      = fpc
+	& ~(FPC_FLAGS_MASK | FPC_DXC_MASK | FPC_EXCEPTION_MASK | FPC_RM_MASK);
 
   /* Set new rounding mode.  */
   fpc_new |= (r & FPC_RM_MASK);
@@ -77,9 +78,9 @@ libc_feholdexcept_setround_s390 (fenv_t *envp, int r)
     _FPU_SETCW (fpc_new);
 }
 
-#define libc_feholdexcept_setround  libc_feholdexcept_setround_s390
-#define libc_feholdexcept_setroundf libc_feholdexcept_setround_s390
-#define libc_feholdexcept_setroundl libc_feholdexcept_setround_s390
+#  define libc_feholdexcept_setround libc_feholdexcept_setround_s390
+#  define libc_feholdexcept_setroundf libc_feholdexcept_setround_s390
+#  define libc_feholdexcept_setroundl libc_feholdexcept_setround_s390
 
 static __always_inline int
 libc_fetestexcept_s390 (int excepts)
@@ -100,9 +101,9 @@ libc_fetestexcept_s390 (int excepts)
   return res & excepts;
 }
 
-#define libc_fetestexcept  libc_fetestexcept_s390
-#define libc_fetestexceptf libc_fetestexcept_s390
-#define libc_fetestexceptl libc_fetestexcept_s390
+#  define libc_fetestexcept libc_fetestexcept_s390
+#  define libc_fetestexceptf libc_fetestexcept_s390
+#  define libc_fetestexceptl libc_fetestexcept_s390
 
 static __always_inline void
 libc_fesetenv_s390 (const fenv_t *envp)
@@ -110,9 +111,9 @@ libc_fesetenv_s390 (const fenv_t *envp)
   _FPU_SETCW (envp->__fpc);
 }
 
-#define libc_fesetenv  libc_fesetenv_s390
-#define libc_fesetenvf libc_fesetenv_s390
-#define libc_fesetenvl libc_fesetenv_s390
+#  define libc_fesetenv libc_fesetenv_s390
+#  define libc_fesetenvf libc_fesetenv_s390
+#  define libc_fesetenvl libc_fesetenv_s390
 
 static __always_inline int
 libc_feupdateenv_test_s390 (const fenv_t *envp, int ex)
@@ -146,9 +147,9 @@ libc_feupdateenv_test_s390 (const fenv_t *envp, int ex)
   return excepts & ex;
 }
 
-#define libc_feupdateenv_test  libc_feupdateenv_test_s390
-#define libc_feupdateenv_testf libc_feupdateenv_test_s390
-#define libc_feupdateenv_testl libc_feupdateenv_test_s390
+#  define libc_feupdateenv_test libc_feupdateenv_test_s390
+#  define libc_feupdateenv_testf libc_feupdateenv_test_s390
+#  define libc_feupdateenv_testl libc_feupdateenv_test_s390
 
 static __always_inline void
 libc_feupdateenv_s390 (const fenv_t *envp)
@@ -156,9 +157,9 @@ libc_feupdateenv_s390 (const fenv_t *envp)
   libc_feupdateenv_test_s390 (envp, 0);
 }
 
-#define libc_feupdateenv  libc_feupdateenv_s390
-#define libc_feupdateenvf libc_feupdateenv_s390
-#define libc_feupdateenvl libc_feupdateenv_s390
+#  define libc_feupdateenv libc_feupdateenv_s390
+#  define libc_feupdateenvf libc_feupdateenv_s390
+#  define libc_feupdateenvl libc_feupdateenv_s390
 
 static __always_inline fenv_t
 libc_handle_user_fenv_s390 (const fenv_t *envp)
@@ -179,7 +180,7 @@ libc_handle_user_fenv_s390 (const fenv_t *envp)
 }
 
 /* We have support for rounding mode context.  */
-#define HAVE_RM_CTX 1
+#  define HAVE_RM_CTX 1
 
 static __always_inline void
 libc_feholdsetround_s390_ctx (struct rm_ctx *ctx, int r)
@@ -203,9 +204,9 @@ libc_feholdsetround_s390_ctx (struct rm_ctx *ctx, int r)
     ctx->updated_status = false;
 }
 
-#define libc_feholdsetround_ctx		libc_feholdsetround_s390_ctx
-#define libc_feholdsetroundf_ctx	libc_feholdsetround_s390_ctx
-#define libc_feholdsetroundl_ctx	libc_feholdsetround_s390_ctx
+#  define libc_feholdsetround_ctx libc_feholdsetround_s390_ctx
+#  define libc_feholdsetroundf_ctx libc_feholdsetround_s390_ctx
+#  define libc_feholdsetroundl_ctx libc_feholdsetround_s390_ctx
 
 static __always_inline void
 libc_feresetround_s390_ctx (struct rm_ctx *ctx)
@@ -220,9 +221,9 @@ libc_feresetround_s390_ctx (struct rm_ctx *ctx)
     }
 }
 
-#define libc_feresetround_ctx		libc_feresetround_s390_ctx
-#define libc_feresetroundf_ctx		libc_feresetround_s390_ctx
-#define libc_feresetroundl_ctx		libc_feresetround_s390_ctx
+#  define libc_feresetround_ctx libc_feresetround_s390_ctx
+#  define libc_feresetroundf_ctx libc_feresetround_s390_ctx
+#  define libc_feresetroundl_ctx libc_feresetround_s390_ctx
 
 static __always_inline void
 libc_feholdsetround_noex_s390_ctx (struct rm_ctx *ctx, int r)
@@ -230,9 +231,9 @@ libc_feholdsetround_noex_s390_ctx (struct rm_ctx *ctx, int r)
   libc_feholdexcept_setround_s390 (&ctx->env, r);
 }
 
-#define libc_feholdsetround_noex_ctx	libc_feholdsetround_noex_s390_ctx
-#define libc_feholdsetround_noexf_ctx	libc_feholdsetround_noex_s390_ctx
-#define libc_feholdsetround_noexl_ctx	libc_feholdsetround_noex_s390_ctx
+#  define libc_feholdsetround_noex_ctx libc_feholdsetround_noex_s390_ctx
+#  define libc_feholdsetround_noexf_ctx libc_feholdsetround_noex_s390_ctx
+#  define libc_feholdsetround_noexl_ctx libc_feholdsetround_noex_s390_ctx
 
 static __always_inline void
 libc_feresetround_noex_s390_ctx (struct rm_ctx *ctx)
@@ -241,10 +242,10 @@ libc_feresetround_noex_s390_ctx (struct rm_ctx *ctx)
   libc_fesetenv_s390 (&ctx->env);
 }
 
-#define libc_feresetround_noex_ctx	libc_feresetround_noex_s390_ctx
-#define libc_feresetround_noexf_ctx	libc_feresetround_noex_s390_ctx
-#define libc_feresetround_noexl_ctx	libc_feresetround_noex_s390_ctx
+#  define libc_feresetround_noex_ctx libc_feresetround_noex_s390_ctx
+#  define libc_feresetround_noexf_ctx libc_feresetround_noex_s390_ctx
+#  define libc_feresetround_noexl_ctx libc_feresetround_noex_s390_ctx
 
-#include_next <fenv_private.h>
+#  include_next <fenv_private.h>
 
 #endif

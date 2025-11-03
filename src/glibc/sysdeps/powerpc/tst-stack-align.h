@@ -16,18 +16,18 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define TEST_STACK_ALIGN_INIT() \
-  ({									     \
-    /* Altivec __vector int etc. needs 16byte aligned stack.		     \
-       Instead of using altivec.h here, use aligned attribute instead.  */   \
-    struct _S								     \
-      {									     \
-        int _i __attribute__((aligned (16)));				     \
-	int _j[3];							     \
-      } _s = { ._i = 18, ._j[0] = 19, ._j[1] = 20, ._j[2] = 21 };	     \
-    printf ("__vector int:  { %d, %d, %d, %d } %p %zu\n", _s._i, _s._j[0],   \
-            _s._j[1], _s._j[2], &_s, __alignof (_s));			     \
-    is_aligned (&_s, __alignof (_s));					     \
-   })
+#define TEST_STACK_ALIGN_INIT()                                               \
+  ({                                                                          \
+    /* Altivec __vector int etc. needs 16byte aligned stack.                  \
+       Instead of using altivec.h here, use aligned attribute instead.  */    \
+    struct _S                                                                 \
+    {                                                                         \
+      int _i __attribute__ ((aligned (16)));                                  \
+      int _j[3];                                                              \
+    } _s = { ._i = 18, ._j[0] = 19, ._j[1] = 20, ._j[2] = 21 };               \
+    printf ("__vector int:  { %d, %d, %d, %d } %p %zu\n", _s._i, _s._j[0],    \
+	    _s._j[1], _s._j[2], &_s, __alignof (_s));                         \
+    is_aligned (&_s, __alignof (_s));                                         \
+  })
 
 #include_next <tst-stack-align.h>

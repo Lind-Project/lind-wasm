@@ -36,4 +36,4 @@ ___ieee128___fprintf_chk (FILE *fp, int flag, const char *format, ...)
   return done;
 }
 hidden_def (___ieee128___fprintf_chk)
-strong_alias (___ieee128___fprintf_chk, __fprintf_chkieee128)
+    strong_alias (___ieee128___fprintf_chk, __fprintf_chkieee128)

@@ -36,8 +36,8 @@ cleanup (void *arg)
 
 int
 __pthread_clockjoin_ex (pthread_t threadid, void **thread_return,
-                        clockid_t clockid,
-                        const struct __timespec64 *abstime, bool block)
+			clockid_t clockid, const struct __timespec64 *abstime,
+			bool block)
 {
   struct pthread *pd = (struct pthread *) threadid;
 
@@ -60,7 +60,8 @@ __pthread_clockjoin_ex (pthread_t threadid, void **thread_return,
        || (self->joinid == pd
 	   && (pd->cancelhandling
 	       & (CANCELING_BITMASK | CANCELED_BITMASK | EXITING_BITMASK
-		  | TERMINATED_BITMASK)) == 0))
+		  | TERMINATED_BITMASK))
+		  == 0))
       && !cancel_enabled_and_canceled (self->cancelhandling))
     /* This is a deadlock situation.  The threads are waiting for each
        other to finish.  Note that this is a "may" error.  To be 100%
@@ -73,9 +74,8 @@ __pthread_clockjoin_ex (pthread_t threadid, void **thread_return,
 
   /* Wait for the thread to finish.  If it is already locked something
      is wrong.  There can only be one waiter.  */
-  else if (__glibc_unlikely (atomic_compare_exchange_weak_acquire (&pd->joinid,
-								   &self,
-								   NULL)))
+  else if (__glibc_unlikely (atomic_compare_exchange_weak_acquire (
+	       &pd->joinid, &self, NULL)))
     /* There is already somebody waiting for the thread.  */
     return EINVAL;
 
@@ -91,18 +91,18 @@ __pthread_clockjoin_ex (pthread_t threadid, void **thread_return,
       pthread_cleanup_push (cleanup, &pd->joinid);
 
       /* We need acquire MO here so that we synchronize with the
-         kernel's store to 0 when the clone terminates. (see above)  */
+	 kernel's store to 0 when the clone terminates. (see above)  */
       pid_t tid;
       while ((tid = atomic_load_acquire (&pd->tid)) != 0)
-        {
-         /* The kernel notifies a process which uses CLONE_CHILD_CLEARTID via
-	    futex wake-up when the clone terminates.  The memory location
-	    contains the thread ID while the clone is running and is reset to
-	    zero by the kernel afterwards.  The kernel up to version 3.16.3
-	    does not use the private futex operations for futex wake-up when
-	    the clone terminates.  */
+	{
+	  /* The kernel notifies a process which uses CLONE_CHILD_CLEARTID via
+	     futex wake-up when the clone terminates.  The memory location
+	     contains the thread ID while the clone is running and is reset to
+	     zero by the kernel afterwards.  The kernel up to version 3.16.3
+	     does not use the private futex operations for futex wake-up when
+	     the clone terminates.  */
 	  int ret = __futex_abstimed_wait_cancelable64 (
-	    (unsigned int *) &pd->tid, tid, clockid, abstime, LLL_SHARED);
+	      (unsigned int *) &pd->tid, tid, clockid, abstime, LLL_SHARED);
 	  if (ret == ETIMEDOUT || ret == EOVERFLOW)
 	    {
 	      result = ret;

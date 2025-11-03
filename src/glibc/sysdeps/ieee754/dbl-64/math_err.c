@@ -20,7 +20,7 @@
 #include "math_config.h"
 
 #if WANT_ERRNO
-#include <errno.h>
+#  include <errno.h>
 /* NOINLINE reduces code size and avoids making math functions non-leaf
    when the error handling is inlined.  */
 NOINLINE static double
@@ -30,7 +30,7 @@ with_errno (double y, int e)
   return y;
 }
 #else
-#define with_errno(x, e) (x)
+#  define with_errno(x, e) (x)
 #endif
 
 attribute_hidden double

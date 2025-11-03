@@ -20,7 +20,6 @@
 #include <setxid.h>
 #include <sysdep.h>
 
-
 /* Set the group set for the current user to GROUPS (N of them).  For
    Linux we must convert the array of groups into the format that the
    kernel expects.  */

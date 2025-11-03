@@ -19,7 +19,7 @@
 #include "math_config.h"
 
 #if WANT_ERRNO
-# include <errno.h>
+#  include <errno.h>
 /* NOINLINE reduces code size.  */
 NOINLINE static float
 with_errnof (float y, int e)
@@ -28,7 +28,7 @@ with_errnof (float y, int e)
   return y;
 }
 #else
-# define with_errnof(x, e) (x)
+#  define with_errnof(x, e) (x)
 #endif
 
 attribute_hidden float

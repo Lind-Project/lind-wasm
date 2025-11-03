@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef __INTERNAL_SIGNALS_H
-# define __INTERNAL_SIGNALS_H
+#define __INTERNAL_SIGNALS_H
 
 #include <signal.h>
 #include <sigsetops.h>
@@ -26,7 +26,7 @@
 
 /* How many signal numbers need to be reserved for libpthread's private uses
    (SIGCANCEL and SIGSETXID).  */
-#define RESERVED_SIGRT  0
+#define RESERVED_SIGRT 0
 
 static inline bool
 is_internal_signal (int sig)
@@ -41,8 +41,8 @@ clear_internal_signals (sigset_t *set)
 
 typedef sigset_t internal_sigset_t;
 
-#define internal_sigemptyset(__s)            __sigemptyset (__s)
-#define internal_sigaddset(__s, __i)         __sigaddset (__s, __i)
-#define internal_sigprocmask(__h, __s, __o)  __sigprocmask (__h, __s, __o)
+#define internal_sigemptyset(__s) __sigemptyset (__s)
+#define internal_sigaddset(__s, __i) __sigaddset (__s, __i)
+#define internal_sigprocmask(__h, __s, __o) __sigprocmask (__h, __s, __o)
 
 #endif /* __INTERNAL_SIGNALS_H  */

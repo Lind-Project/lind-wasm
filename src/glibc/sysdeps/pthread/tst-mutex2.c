@@ -20,10 +20,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static pthread_mutex_t m;
 static pthread_barrier_t b;
-
 
 static void *
 tf (void *arg)
@@ -92,7 +90,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)

@@ -35,4 +35,4 @@ __pthread_mutex_destroy (pthread_mutex_t *mtxp)
 }
 
 weak_alias (__pthread_mutex_destroy, pthread_mutex_destroy)
-hidden_def (__pthread_mutex_destroy)
+    hidden_def (__pthread_mutex_destroy)

@@ -24,5 +24,4 @@ __isnan (double x)
 {
   return (_FCLASS (x) & _FCLASS_NAN) != 0;
 }
-hidden_def (__isnan)
-weak_alias (__isnan, isnan)
+hidden_def (__isnan) weak_alias (__isnan, isnan)

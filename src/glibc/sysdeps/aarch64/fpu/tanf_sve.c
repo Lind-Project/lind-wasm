@@ -56,7 +56,8 @@ special_case (svfloat32_t x, svfloat32_t y, svbool_t cmp)
    Maximum error is 3.45 ULP:
    SV_NAME_F1 (tan)(-0x1.e5f0cap+13) got 0x1.ff9856p-1
 				    want 0x1.ff9850p-1.  */
-svfloat32_t SV_NAME_F1 (tan) (svfloat32_t x, const svbool_t pg)
+svfloat32_t
+SV_NAME_F1 (tan) (svfloat32_t x, const svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
 

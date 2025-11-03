@@ -38,56 +38,51 @@
 #include <support/check.h>
 #include <support/test-driver.h>
 
-
 static struct
 {
   const char *name;
   int level;
   int type;
-} filesystem[] =
-{
-  { ".", 1, DT_DIR },
-  { "..", 1, DT_DIR },
-  { "file1lev1", 1, DT_REG },
-  { "file2lev1", 1, DT_UNKNOWN },
-  { "dir1lev1", 1, DT_UNKNOWN },
-    { ".", 2, DT_DIR },
-    { "..", 2, DT_DIR },
-    { "file1lev2", 2, DT_REG },
-    { "dir1lev2", 2, DT_DIR },
-      { ".", 3, DT_DIR },
-      { "..", 3, DT_DIR },
-    { "dir2lev2", 2, DT_DIR },
-      { ".", 3, DT_DIR },
-      { "..", 3, DT_DIR },
-      { ".foo", 3, DT_REG },
-      { "dir1lev3", 3, DT_DIR },
-	{ ".", 4, DT_DIR },
-	{ "..", 4, DT_DIR },
-	{ "file1lev4", 4, DT_REG },
-      { "file1lev3", 3, DT_REG },
-      { "file2lev3", 3, DT_REG },
-    { "file2lev2", 2, DT_REG },
-    { "file3lev2", 2, DT_REG },
-    { "dir3lev2", 2, DT_DIR },
-      { ".", 3, DT_DIR },
-      { "..", 3, DT_DIR },
-      { "file3lev3", 3, DT_REG },
-      { "file4lev3", 3, DT_REG },
-  { "dir2lev1", 1, DT_DIR },
-    { ".", 2, DT_DIR },
-    { "..", 2, DT_DIR },
-    { "dir1lev2", 2, DT_UNKNOWN },
-      { ".", 3, DT_DIR },
-      { "..", 3, DT_DIR },
-      { ".foo", 3, DT_REG },
-      { ".dir", 3, DT_DIR },
-	{ ".", 4, DT_DIR },
-	{ "..", 4, DT_DIR },
-	{ "hidden", 4, DT_REG }
-};
+} filesystem[] = { { ".", 1, DT_DIR },
+		   { "..", 1, DT_DIR },
+		   { "file1lev1", 1, DT_REG },
+		   { "file2lev1", 1, DT_UNKNOWN },
+		   { "dir1lev1", 1, DT_UNKNOWN },
+		   { ".", 2, DT_DIR },
+		   { "..", 2, DT_DIR },
+		   { "file1lev2", 2, DT_REG },
+		   { "dir1lev2", 2, DT_DIR },
+		   { ".", 3, DT_DIR },
+		   { "..", 3, DT_DIR },
+		   { "dir2lev2", 2, DT_DIR },
+		   { ".", 3, DT_DIR },
+		   { "..", 3, DT_DIR },
+		   { ".foo", 3, DT_REG },
+		   { "dir1lev3", 3, DT_DIR },
+		   { ".", 4, DT_DIR },
+		   { "..", 4, DT_DIR },
+		   { "file1lev4", 4, DT_REG },
+		   { "file1lev3", 3, DT_REG },
+		   { "file2lev3", 3, DT_REG },
+		   { "file2lev2", 2, DT_REG },
+		   { "file3lev2", 2, DT_REG },
+		   { "dir3lev2", 2, DT_DIR },
+		   { ".", 3, DT_DIR },
+		   { "..", 3, DT_DIR },
+		   { "file3lev3", 3, DT_REG },
+		   { "file4lev3", 3, DT_REG },
+		   { "dir2lev1", 1, DT_DIR },
+		   { ".", 2, DT_DIR },
+		   { "..", 2, DT_DIR },
+		   { "dir1lev2", 2, DT_UNKNOWN },
+		   { ".", 3, DT_DIR },
+		   { "..", 3, DT_DIR },
+		   { ".foo", 3, DT_REG },
+		   { ".dir", 3, DT_DIR },
+		   { ".", 4, DT_DIR },
+		   { "..", 4, DT_DIR },
+		   { "hidden", 4, DT_REG } };
 #define nfiles (sizeof (filesystem) / sizeof (filesystem[0]))
-
 
 typedef struct
 {
@@ -96,7 +91,6 @@ typedef struct
   struct DIRENT_STRUCT d;
   char room_for_dirent[NAME_MAX];
 } my_DIR;
-
 
 static long int
 find_file (const char *s)
@@ -124,9 +118,9 @@ find_file (const char *s)
     {
       char *endp = strchrnul (s, '/');
 
-      if (test_verbose> 0)
-	printf ("info: looking for %.*s, level %d\n",
-		(int) (endp - s), s, level);
+      if (test_verbose > 0)
+	printf ("info: looking for %.*s, level %d\n", (int) (endp - s), s,
+		level);
 
       while (idx < nfiles && filesystem[idx].level >= level)
 	{
@@ -164,13 +158,11 @@ find_file (const char *s)
   return -1;
 }
 
-
 static void *
 my_opendir (const char *s)
 {
   long int idx = find_file (s);
   my_DIR *dir;
-
 
   if (idx == -1 || filesystem[idx].type != DT_DIR)
     {
@@ -187,12 +179,11 @@ my_opendir (const char *s)
   dir->idx = idx;
 
   if (test_verbose > 0)
-    printf ("info: my_opendir(\"%s\") == { level: %d, idx: %ld }\n",
-	    s, filesystem[idx].level, idx);
+    printf ("info: my_opendir(\"%s\") == { level: %d, idx: %ld }\n", s,
+	    filesystem[idx].level, idx);
 
   return dir;
 }
-
 
 static struct DIRENT_STRUCT *
 my_readdir (void *gdir)
@@ -219,7 +210,7 @@ my_readdir (void *gdir)
       return NULL;
     }
 
-  dir->d.d_ino = 1;		/* glob should not skip this entry.  */
+  dir->d.d_ino = 1; /* glob should not skip this entry.  */
 
   dir->d.d_type = filesystem[dir->idx].type;
 
@@ -234,15 +225,13 @@ my_readdir (void *gdir)
   if (test_verbose > 0)
     printf ("info: my_readdir ({ level: %d, idx: %ld })"
 	    " = { d_ino: %lld, d_type: %d, d_name: \"%s\" }\n",
-	    dir->level, (long int) dir->idx,
-	    (long long) dir->d.d_ino, dir->d.d_type,
-	    dir->d.d_name);
+	    dir->level, (long int) dir->idx, (long long) dir->d.d_ino,
+	    dir->d.d_type, dir->d.d_name);
 
   ++dir->idx;
 
   return &dir->d;
 }
-
 
 static void
 my_closedir (void *dir)
@@ -251,7 +240,6 @@ my_closedir (void *dir)
     printf ("info: my_closedir ()\n");
   free (dir);
 }
-
 
 /* We use this function for lstat as well since we don't have any.  */
 static int
@@ -262,46 +250,43 @@ my_stat (const char *name, struct STAT_STRUCT *st)
   if (idx == -1)
     {
       if (test_verbose > 0)
-	printf ("info: my_stat (\"%s\", ...) = -1 (%s)\n",
-		name, strerror (errno));
+	printf ("info: my_stat (\"%s\", ...) = -1 (%s)\n", name,
+		strerror (errno));
       return -1;
     }
 
   memset (st, '\0', sizeof (*st));
 
   if (filesystem[idx].type == DT_UNKNOWN)
-    st->st_mode = DTTOIF (idx + 1 < nfiles
+    st->st_mode
+	= DTTOIF (idx + 1 < nfiles
 			  && filesystem[idx].level < filesystem[idx + 1].level
-			  ? DT_DIR : DT_REG) | 0777;
+		      ? DT_DIR
+		      : DT_REG)
+	  | 0777;
   else
     st->st_mode = DTTOIF (filesystem[idx].type) | 0777;
 
   if (test_verbose > 0)
-    printf ("info: my_stat (\"%s\", { st_mode: %o }) = 0\n", name, st->st_mode);
+    printf ("info: my_stat (\"%s\", { st_mode: %o }) = 0\n", name,
+	    st->st_mode);
 
   return 0;
 }
 
-
-static const char *glob_errstring[] =
-{
-  [GLOB_NOSPACE] = "out of memory",
-  [GLOB_ABORTED] = "read error",
-  [GLOB_NOMATCH] = "no matches found"
-};
+static const char *glob_errstring[] = { [GLOB_NOSPACE] = "out of memory",
+					[GLOB_ABORTED] = "read error",
+					[GLOB_NOMATCH] = "no matches found" };
 #define nglob_errstring (sizeof (glob_errstring) / sizeof (glob_errstring[0]))
-
 
 static const char *
 flagstr (int flags)
 {
-  static const char *const strs[] =
-  {
-    "GLOB_ERR", "GLOB_MARK", "GLOB_NOSORT", "GLOB_DOOFSS", "GLOB_NOCHECK",
-    "GLOB_APPEND", "GLOB_NOESCAPE", "GLOB_PERIOD", "GLOB_MAGCHAR",
-    "GLOB_ALTDIRFUNC", "GLOB_BRACE", "GLOB_NOMAGIC", "GLOB_TILDE",
-    "GLOB_ONLYDIR", "GLOB_TILDECHECK"
-  };
+  static const char *const strs[]
+      = { "GLOB_ERR",	  "GLOB_MARK",	     "GLOB_NOSORT",    "GLOB_DOOFSS",
+	  "GLOB_NOCHECK", "GLOB_APPEND",     "GLOB_NOESCAPE",  "GLOB_PERIOD",
+	  "GLOB_MAGCHAR", "GLOB_ALTDIRFUNC", "GLOB_BRACE",     "GLOB_NOMAGIC",
+	  "GLOB_TILDE",	  "GLOB_ONLYDIR",    "GLOB_TILDECHECK" };
 #define nstrs (sizeof (strs) / sizeof (strs[0]))
   static char buf[100];
   char *cp = buf;
@@ -327,17 +312,13 @@ flagstr (int flags)
 #undef nstrs
 }
 
-
 static const char *
 errstr (int val)
 {
-  static const char *const strs[] =
-    {
-      [GLOB_NOSPACE] = "GLOB_NOSPACE",
-      [GLOB_ABORTED] = "GLOB_ABORTED",
-      [GLOB_NOMATCH] = "GLOB_NOMATCH",
-      [GLOB_NOSYS] = "GLOB_NOSYS"
-    };
+  static const char *const strs[] = { [GLOB_NOSPACE] = "GLOB_NOSPACE",
+				      [GLOB_ABORTED] = "GLOB_ABORTED",
+				      [GLOB_NOMATCH] = "GLOB_NOMATCH",
+				      [GLOB_NOSYS] = "GLOB_NOSYS" };
 #define nstrs (sizeof (strs) / sizeof (strs[0]))
   static char buf[100];
   if (val < 0 || val >= nstrs || strs[val] == NULL)
@@ -348,7 +329,6 @@ errstr (int val)
   return strs[val];
 #undef nstrs
 }
-
 
 static int
 test_result (const char *fmt, int flags, GLOB_TYPE *gl, const char *str[])
@@ -362,7 +342,7 @@ test_result (const char *fmt, int flags, GLOB_TYPE *gl, const char *str[])
       int ok = strcmp (gl->gl_pathv[cnt], str[cnt]) == 0;
       const char *errstr = "";
 
-      if (! ok)
+      if (!ok)
 	{
 	  size_t inner;
 
@@ -391,7 +371,6 @@ test_result (const char *fmt, int flags, GLOB_TYPE *gl, const char *str[])
   return result;
 }
 
-
 static int
 do_test (void)
 {
@@ -411,96 +390,60 @@ do_test (void)
   gl.gl_lstat = my_stat;
   gl.gl_stat = my_stat;
 
-#define test(a, b, r, c...) \
-  fmt = a;								      \
-  flags = GLOB_ALTDIRFUNC | b;						      \
-  errval = GLOB_FUNC (fmt, flags, NULL, &gl);				      \
-  if (errval != r)							      \
-    {									      \
-      if (r == 0)							      \
-	printf ("glob (\"%s\", %s) failed: %s\n", fmt, flagstr (flags),	      \
-		errval >= 0 && errval < nglob_errstring			      \
-		? glob_errstring[errval] : "???");			      \
-      else								      \
+#define test(a, b, r, c...)                                                   \
+  fmt = a;                                                                    \
+  flags = GLOB_ALTDIRFUNC | b;                                                \
+  errval = GLOB_FUNC (fmt, flags, NULL, &gl);                                 \
+  if (errval != r)                                                            \
+    {                                                                         \
+      if (r == 0)                                                             \
+	printf ("glob (\"%s\", %s) failed: %s\n", fmt, flagstr (flags),       \
+		errval >= 0 && errval < nglob_errstring                       \
+		    ? glob_errstring[errval]                                  \
+		    : "???");                                                 \
+      else                                                                    \
 	printf ("glob (\"%s\", %s) did not fail\n", fmt, flagstr (flags));    \
-      result = 1;							      \
-    }									      \
-  else if (r == 0)							      \
+      result = 1;                                                             \
+    }                                                                         \
+  else if (r == 0)                                                            \
     result |= test_result (fmt, flags, &gl, (const char *[]) { c, NULL });    \
-  else									      \
+  else                                                                        \
     printf ("result for glob (\"%s\", %s) = %s\n\n", fmt, flagstr (flags),    \
 	    errstr (errval))
 
-  test ("*/*/*", 0, 0,
-	"dir1lev1/dir2lev2/dir1lev3",
-	"dir1lev1/dir2lev2/file1lev3",
-	"dir1lev1/dir2lev2/file2lev3",
-	"dir1lev1/dir3lev2/file3lev3",
-	"dir1lev1/dir3lev2/file4lev3");
+  test ("*/*/*", 0, 0, "dir1lev1/dir2lev2/dir1lev3",
+	"dir1lev1/dir2lev2/file1lev3", "dir1lev1/dir2lev2/file2lev3",
+	"dir1lev1/dir3lev2/file3lev3", "dir1lev1/dir3lev2/file4lev3");
 
-  test ("*/*/*", GLOB_PERIOD, 0,
-	"dir1lev1/dir1lev2/.",
-	"dir1lev1/dir1lev2/..",
-	"dir1lev1/dir2lev2/.",
-	"dir1lev1/dir2lev2/..",
-	"dir1lev1/dir2lev2/.foo",
-	"dir1lev1/dir2lev2/dir1lev3",
-	"dir1lev1/dir2lev2/file1lev3",
-	"dir1lev1/dir2lev2/file2lev3",
-	"dir1lev1/dir3lev2/.",
-	"dir1lev1/dir3lev2/..",
-	"dir1lev1/dir3lev2/file3lev3",
-	"dir1lev1/dir3lev2/file4lev3",
-	"dir2lev1/dir1lev2/.",
-	"dir2lev1/dir1lev2/..",
-	"dir2lev1/dir1lev2/.dir",
-	"dir2lev1/dir1lev2/.foo");
+  test ("*/*/*", GLOB_PERIOD, 0, "dir1lev1/dir1lev2/.", "dir1lev1/dir1lev2/..",
+	"dir1lev1/dir2lev2/.", "dir1lev1/dir2lev2/..",
+	"dir1lev1/dir2lev2/.foo", "dir1lev1/dir2lev2/dir1lev3",
+	"dir1lev1/dir2lev2/file1lev3", "dir1lev1/dir2lev2/file2lev3",
+	"dir1lev1/dir3lev2/.", "dir1lev1/dir3lev2/..",
+	"dir1lev1/dir3lev2/file3lev3", "dir1lev1/dir3lev2/file4lev3",
+	"dir2lev1/dir1lev2/.", "dir2lev1/dir1lev2/..",
+	"dir2lev1/dir1lev2/.dir", "dir2lev1/dir1lev2/.foo");
 
-  test ("*/*/.*", 0, 0,
-	"dir1lev1/dir1lev2/.",
-	"dir1lev1/dir1lev2/..",
-	"dir1lev1/dir2lev2/.",
-	"dir1lev1/dir2lev2/..",
-	"dir1lev1/dir2lev2/.foo",
-	"dir1lev1/dir3lev2/.",
-	"dir1lev1/dir3lev2/..",
-	"dir2lev1/dir1lev2/.",
-	"dir2lev1/dir1lev2/..",
-	"dir2lev1/dir1lev2/.dir",
-	"dir2lev1/dir1lev2/.foo");
+  test ("*/*/.*", 0, 0, "dir1lev1/dir1lev2/.", "dir1lev1/dir1lev2/..",
+	"dir1lev1/dir2lev2/.", "dir1lev1/dir2lev2/..",
+	"dir1lev1/dir2lev2/.foo", "dir1lev1/dir3lev2/.",
+	"dir1lev1/dir3lev2/..", "dir2lev1/dir1lev2/.", "dir2lev1/dir1lev2/..",
+	"dir2lev1/dir1lev2/.dir", "dir2lev1/dir1lev2/.foo");
 
-  test ("*1*/*2*/.*", 0, 0,
-	"dir1lev1/dir1lev2/.",
-	"dir1lev1/dir1lev2/..",
-	"dir1lev1/dir2lev2/.",
-	"dir1lev1/dir2lev2/..",
-	"dir1lev1/dir2lev2/.foo",
-	"dir1lev1/dir3lev2/.",
-	"dir1lev1/dir3lev2/..",
-	"dir2lev1/dir1lev2/.",
-	"dir2lev1/dir1lev2/..",
-	"dir2lev1/dir1lev2/.dir",
-	"dir2lev1/dir1lev2/.foo");
+  test ("*1*/*2*/.*", 0, 0, "dir1lev1/dir1lev2/.", "dir1lev1/dir1lev2/..",
+	"dir1lev1/dir2lev2/.", "dir1lev1/dir2lev2/..",
+	"dir1lev1/dir2lev2/.foo", "dir1lev1/dir3lev2/.",
+	"dir1lev1/dir3lev2/..", "dir2lev1/dir1lev2/.", "dir2lev1/dir1lev2/..",
+	"dir2lev1/dir1lev2/.dir", "dir2lev1/dir1lev2/.foo");
 
-  test ("*1*/*1*/.*", 0, 0,
-	"dir1lev1/dir1lev2/.",
-	"dir1lev1/dir1lev2/..",
-	"dir2lev1/dir1lev2/.",
-	"dir2lev1/dir1lev2/..",
-	"dir2lev1/dir1lev2/.dir",
-	"dir2lev1/dir1lev2/.foo");
+  test ("*1*/*1*/.*", 0, 0, "dir1lev1/dir1lev2/.", "dir1lev1/dir1lev2/..",
+	"dir2lev1/dir1lev2/.", "dir2lev1/dir1lev2/..",
+	"dir2lev1/dir1lev2/.dir", "dir2lev1/dir1lev2/.foo");
 
-  test ("\\/*", 0, 0,
-	"/dir1lev1",
-	"/dir2lev1",
-	"/file1lev1",
-	"/file2lev1");
+  test ("\\/*", 0, 0, "/dir1lev1", "/dir2lev1", "/file1lev1", "/file2lev1");
 
-  test ("*/*/", 0 , 0,
-	"dir1lev1/dir1lev2/",
-	"dir1lev1/dir2lev2/",
-	"dir1lev1/dir3lev2/",
-	"dir2lev1/dir1lev2/");
+  test ("*/*/", 0, 0, "dir1lev1/dir1lev2/", "dir1lev1/dir2lev2/",
+	"dir1lev1/dir3lev2/", "dir2lev1/dir1lev2/");
 
   test ("", 0, GLOB_NOMATCH, NULL);
 

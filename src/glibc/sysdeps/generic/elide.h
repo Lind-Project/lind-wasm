@@ -16,10 +16,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 #ifndef ELIDE_H
-#define ELIDE_H 1
+#  define ELIDE_H 1
 
-#define ELIDE_LOCK(adapt_count, is_lock_free) 0
-#define ELIDE_TRYLOCK(adapt_count, is_lock_free, write) 0
-#define ELIDE_UNLOCK(is_lock_free) 0
+#  define ELIDE_LOCK(adapt_count, is_lock_free) 0
+#  define ELIDE_TRYLOCK(adapt_count, is_lock_free, write) 0
+#  define ELIDE_UNLOCK(is_lock_free) 0
 
 #endif

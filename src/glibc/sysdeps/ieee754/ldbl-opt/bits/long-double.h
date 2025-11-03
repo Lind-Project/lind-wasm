@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef __NO_LONG_DOUBLE_MATH
-# define __LONG_DOUBLE_MATH_OPTIONAL	1
-# ifndef __LONG_DOUBLE_128__
-#  define __NO_LONG_DOUBLE_MATH		1
-# endif
+#  define __LONG_DOUBLE_MATH_OPTIONAL 1
+#  ifndef __LONG_DOUBLE_128__
+#    define __NO_LONG_DOUBLE_MATH 1
+#  endif
 #endif
 #define __LDOUBLE_REDIRECTS_TO_FLOAT128_ABI 0

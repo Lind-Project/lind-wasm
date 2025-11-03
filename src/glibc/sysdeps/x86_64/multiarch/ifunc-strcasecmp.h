@@ -28,16 +28,14 @@ extern __typeof (REDIRECT_NAME) OPTIMIZE (sse42) attribute_hidden;
 
 extern __typeof (REDIRECT_NAME) OPTIMIZE (sse2) attribute_hidden;
 
-static inline void *
-inhibit_stack_protector
+static inline void *inhibit_stack_protector
 IFUNC_SELECTOR (void)
 {
   const struct cpu_features *cpu_features = __get_cpu_features ();
 
   if (X86_ISA_CPU_FEATURE_USABLE_P (cpu_features, AVX2)
       && X86_ISA_CPU_FEATURE_USABLE_P (cpu_features, BMI2)
-      && X86_ISA_CPU_FEATURES_ARCH_P (cpu_features,
-				      AVX_Fast_Unaligned_Load, ))
+      && X86_ISA_CPU_FEATURES_ARCH_P (cpu_features, AVX_Fast_Unaligned_Load, ))
     {
       if (X86_ISA_CPU_FEATURE_USABLE_P (cpu_features, AVX512VL)
 	  && X86_ISA_CPU_FEATURE_USABLE_P (cpu_features, AVX512BW))
@@ -46,14 +44,13 @@ IFUNC_SELECTOR (void)
       if (CPU_FEATURE_USABLE_P (cpu_features, RTM))
 	return OPTIMIZE (avx2_rtm);
 
-      if (X86_ISA_CPU_FEATURES_ARCH_P (cpu_features,
-				       Prefer_No_VZEROUPPER, !))
+      if (X86_ISA_CPU_FEATURES_ARCH_P (cpu_features, Prefer_No_VZEROUPPER, !))
 	return OPTIMIZE (avx2);
     }
 
   if (X86_ISA_CPU_FEATURE_USABLE_P (cpu_features, SSE4_2)
       /* Keep this as a runtime check as its not guaranteed at ISA
-         level 2.  */
+	 level 2.  */
       && !CPU_FEATURES_ARCH_P (cpu_features, Slow_SSE4_2))
     return OPTIMIZE (sse42);
 

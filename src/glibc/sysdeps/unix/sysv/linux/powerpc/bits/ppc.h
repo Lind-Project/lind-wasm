@@ -20,7 +20,7 @@
 #define _BITS_PPC_H
 
 #ifndef _SYS_PLATFORM_PPC_H
-# error "Never include this file directly; use <sys/platform/ppc.h> instead."
+#  error "Never include this file directly; use <sys/platform/ppc.h> instead."
 #endif
 
 __BEGIN_DECLS

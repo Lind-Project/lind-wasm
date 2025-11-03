@@ -17,32 +17,40 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef X86_MATH_BARRIERS_H
-#define X86_MATH_BARRIERS_H 1
+#  define X86_MATH_BARRIERS_H 1
 
-#if defined __SSE2_MATH__ && !defined (__clang__)
-#define math_opt_barrier(x)                   \
-  ({ __typeof(x) __x = (x);                   \
-     volatile __typeof(__x) __volatile_x = __x; \
-     __volatile_x; })
+#  if defined __SSE2_MATH__ && !defined(__clang__)
+#    define math_opt_barrier(x)                                               \
+      ({                                                                      \
+	__typeof (x) __x = (x);                                               \
+	volatile __typeof (__x) __volatile_x = __x;                           \
+	__volatile_x;                                                         \
+      })
 
-#define math_force_eval(x)                  \
-  do {                                      \
-    volatile __typeof(x) __volatile_x = (x); \
-    (void)__volatile_x;                     \
-  } while (0)
+#    define math_force_eval(x)                                                \
+      do                                                                      \
+	{                                                                     \
+	  volatile __typeof (x) __volatile_x = (x);                           \
+	  (void) __volatile_x;                                                \
+	}                                                                     \
+      while (0)
 
-#else
-#define math_opt_barrier(x)                        \
-  ({ __typeof (x) __x = (x);                       \
-     volatile __typeof (__x) __volatile_x = __x;   \
-     __volatile_x; })
+#  else
+#    define math_opt_barrier(x)                                               \
+      ({                                                                      \
+	__typeof (x) __x = (x);                                               \
+	volatile __typeof (__x) __volatile_x = __x;                           \
+	__volatile_x;                                                         \
+      })
 
-#define math_force_eval(x)                        \
-  do {                                            \
-    volatile __typeof (x) __volatile_x = (x);     \
-    (void)__volatile_x;                           \
-  } while (0)
+#    define math_force_eval(x)                                                \
+      do                                                                      \
+	{                                                                     \
+	  volatile __typeof (x) __volatile_x = (x);                           \
+	  (void) __volatile_x;                                                \
+	}                                                                     \
+      while (0)
 
-#endif
+#  endif
 
 #endif

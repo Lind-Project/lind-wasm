@@ -11,4 +11,3 @@ getpid (void)
 {
   return 0;
 }
-

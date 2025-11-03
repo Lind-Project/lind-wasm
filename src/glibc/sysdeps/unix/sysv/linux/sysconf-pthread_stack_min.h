@@ -22,7 +22,7 @@ static inline long int
 __get_pthread_stack_min (void)
 {
   /* sysconf (_SC_THREAD_STACK_MIN) >= sysconf (_SC_MINSIGSTKSZ).  */
-  long int pthread_stack_min = GLRO(dl_minsigstacksize);
+  long int pthread_stack_min = GLRO (dl_minsigstacksize);
   assert (pthread_stack_min != 0);
   _Static_assert (__builtin_constant_p (PTHREAD_STACK_MIN),
 		  "PTHREAD_STACK_MIN is constant");

@@ -19,34 +19,34 @@
 #include <ifunc-strstr.h>
 
 #if HAVE_STRSTR_Z13
-# if HAVE_STRSTR_IFUNC || STRSTR_Z13_ONLY_USED_AS_FALLBACK
-#  define STRSTR STRSTR_Z13
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_builtin_def
-#   if HAVE_STRSTR_C || STRSTR_Z13_ONLY_USED_AS_FALLBACK
-#    define libc_hidden_builtin_def(name)
-#   else
-#    define libc_hidden_builtin_def(name)		\
-  __hidden_ver1 (__strstr_vx, __GI_strstr, __strstr_vx);
-#   endif
+#  if HAVE_STRSTR_IFUNC || STRSTR_Z13_ONLY_USED_AS_FALLBACK
+#    define STRSTR STRSTR_Z13
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_builtin_def
+#      if HAVE_STRSTR_C || STRSTR_Z13_ONLY_USED_AS_FALLBACK
+#	define libc_hidden_builtin_def(name)
+#      else
+#	define libc_hidden_builtin_def(name)                                 \
+	  __hidden_ver1 (__strstr_vx, __GI_strstr, __strstr_vx);
+#      endif
+#    endif
 #  endif
-# endif
 
-# include <string.h>
+#  include <string.h>
 
-# ifdef USE_MULTIARCH
+#  ifdef USE_MULTIARCH
 extern __typeof (strchr) __strchr_vx attribute_hidden;
-#  define strchr __strchr_vx
+#    define strchr __strchr_vx
 
 extern __typeof (strlen) __strlen_vx attribute_hidden;
-#  define strlen __strlen_vx
+#    define strlen __strlen_vx
 
 extern __typeof (__strnlen) __strnlen_vx attribute_hidden;
-#  define __strnlen __strnlen_vx
+#    define __strnlen __strnlen_vx
 
 extern __typeof (memcmp) __memcmp_z196 attribute_hidden;
-#  define memcmp __memcmp_z196
-# endif
+#    define memcmp __memcmp_z196
+#  endif
 
-# include <string/strstr.c>
+#  include <string/strstr.c>
 #endif

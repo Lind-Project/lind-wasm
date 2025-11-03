@@ -21,7 +21,6 @@
 #include <time.h>
 #include <unistd.h>
 
-
 int
 do_test (void)
 {
@@ -31,9 +30,9 @@ do_test (void)
   int e = pthread_getcpuclockid (pthread_self (), &cl);
   if (e != 0)
     {
-# if _POSIX_THREAD_CPUTIME == 0
+#  if _POSIX_THREAD_CPUTIME == 0
       if (sysconf (_SC_THREAD_CPUTIME) >= 0)
-# endif
+#  endif
 	{
 	  puts ("cpuclock advertised, but cannot get ID");
 	  exit (1);
@@ -43,7 +42,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

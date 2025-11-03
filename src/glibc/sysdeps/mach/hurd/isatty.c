@@ -28,7 +28,7 @@ __isatty (int fd)
   mach_port_t id;
 
   err = HURD_DPORT_USE (fd, __term_getctty (port, &id));
-  if (! err)
+  if (!err)
     __mach_port_deallocate (__mach_task_self (), id);
 
   return !err;

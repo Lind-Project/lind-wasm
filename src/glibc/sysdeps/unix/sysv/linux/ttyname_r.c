@@ -34,8 +34,7 @@ static int getttyname_r (char *buf, size_t buflen,
 			 const struct __stat64_t64 *mytty, int save,
 			 int *dostat);
 
-static int
-attribute_compat_text_section
+static int attribute_compat_text_section
 getttyname_r (char *buf, size_t buflen, const struct __stat64_t64 *mytty,
 	      int save, int *dostat)
 {
@@ -53,8 +52,7 @@ getttyname_r (char *buf, size_t buflen, const struct __stat64_t64 *mytty,
 
   while ((d = __readdir64 (dirstream)) != NULL)
     if ((d->d_fileno == mytty->st_ino || *dostat)
-	&& strcmp (d->d_name, "stdin")
-	&& strcmp (d->d_name, "stdout")
+	&& strcmp (d->d_name, "stdin") && strcmp (d->d_name, "stdout")
 	&& strcmp (d->d_name, "stderr"))
       {
 	char *cp;
@@ -71,8 +69,7 @@ getttyname_r (char *buf, size_t buflen, const struct __stat64_t64 *mytty,
 	cp = __stpncpy (buf + devlen, d->d_name, needed);
 	cp[0] = '\0';
 
-	if (__stat64_time64 (buf, &st) == 0
-	    && is_mytty (mytty, &st))
+	if (__stat64_time64 (buf, &st) == 0 && is_mytty (mytty, &st))
 	  {
 	    (void) __closedir (dirstream);
 	    __set_errno (save);
@@ -143,8 +140,7 @@ __ttyname_r (int fd, char *buf, size_t buflen)
       buf[ret] = '\0';
 
       /* Verify readlink result, fall back on iterating through devices.  */
-      if (buf[0] == '/'
-	  && __stat64_time64 (buf, &st1) == 0
+      if (buf[0] == '/' && __stat64_time64 (buf, &st1) == 0
 	  && is_mytty (&st, &st1))
 	return 0;
 
@@ -157,8 +153,7 @@ __ttyname_r (int fd, char *buf, size_t buflen)
 
   if (__stat64_time64 (buf, &st1) == 0 && S_ISDIR (st1.st_mode))
     {
-      ret = getttyname_r (buf, buflen, &st, save,
-			  &dostat);
+      ret = getttyname_r (buf, buflen, &st, save, &dostat);
     }
   else
     {
@@ -170,29 +165,26 @@ __ttyname_r (int fd, char *buf, size_t buflen)
     {
       buf[sizeof ("/dev/") - 1] = '\0';
       buflen += sizeof ("pts/") - 1;
-      ret = getttyname_r (buf, buflen, &st, save,
-			  &dostat);
+      ret = getttyname_r (buf, buflen, &st, save, &dostat);
     }
 
   if (ret && dostat != -1)
     {
       buf[sizeof ("/dev/") - 1] = '\0';
       dostat = 1;
-      ret = getttyname_r (buf, buflen, &st,
-			  save, &dostat);
+      ret = getttyname_r (buf, buflen, &st, save, &dostat);
     }
 
   if (ret && doispty && is_pty (&st))
     {
       /* We failed to figure out the TTY's name, but we can at least
-         signal that we did verify that it really is a PTY slave.
-         This happens when we have inherited the file descriptor from
-         a different mount namespace.  */
+	 signal that we did verify that it really is a PTY slave.
+	 This happens when we have inherited the file descriptor from
+	 a different mount namespace.  */
       __set_errno (ENODEV);
       return ENODEV;
     }
 
   return ret;
 }
-libc_hidden_def (__ttyname_r)
-weak_alias (__ttyname_r, ttyname_r)
+libc_hidden_def (__ttyname_r) weak_alias (__ttyname_r, ttyname_r)

@@ -21,6 +21,6 @@
 int
 fesetexcept (int excepts)
 {
-  asm volatile ("csrs fflags, %0" : : "r" (excepts));
+  asm volatile ("csrs fflags, %0" : : "r"(excepts));
   return 0;
 }

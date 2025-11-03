@@ -15,14 +15,14 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_SYS_SIGNALFD_H
-#define	_SYS_SIGNALFD_H	1
+#ifndef _SYS_SIGNALFD_H
+#  define _SYS_SIGNALFD_H 1
 
-#include <stdint.h>
-#include <bits/types/sigset_t.h>
+#  include <stdint.h>
+#  include <bits/types/sigset_t.h>
 
 /* Get the platform-dependent flags.  */
-#include <bits/signalfd.h>
+#  include <bits/signalfd.h>
 
 struct signalfd_siginfo
 {
@@ -54,8 +54,8 @@ __BEGIN_DECLS
 
 /* Request notification for delivery of signals in MASK to be
    performed using descriptor FD.*/
-extern int signalfd (int __fd, const sigset_t *__mask, int __flags)
-  __THROW __nonnull ((2));
+extern int signalfd (int __fd, const sigset_t *__mask, int __flags) __THROW
+    __nonnull ((2));
 
 __END_DECLS
 

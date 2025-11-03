@@ -108,7 +108,6 @@ R[5] = {
 
 static const long double zero = 0.0;
 
-
 long double
 __ieee754_j1l (long double x)
 {
@@ -122,12 +121,12 @@ __ieee754_j1l (long double x)
     return one / x;
   y = fabsl (x);
   if (ix >= 0x4000)
-    {				/* |x| >= 2.0 */
+    { /* |x| >= 2.0 */
       __sincosl (y, &s, &c);
       ss = -s - c;
       cc = s - c;
       if (ix < 0x7ffe)
-	{			/* make sure y+y not overflow */
+	{ /* make sure y+y not overflow */
 	  z = __cosl (y + y);
 	  if ((s * c) > zero)
 	    cc = z / ss;
@@ -151,9 +150,9 @@ __ieee754_j1l (long double x)
       else
 	return z;
     }
-  if (__glibc_unlikely (ix < 0x3fde))       /* |x| < 2^-33 */
+  if (__glibc_unlikely (ix < 0x3fde)) /* |x| < 2^-33 */
     {
-      if (huge + x > one)		/* inexact if x!=0 necessary */
+      if (huge + x > one) /* inexact if x!=0 necessary */
 	{
 	  long double ret = 0.5 * x;
 	  math_check_force_underflow (ret);
@@ -163,25 +162,25 @@ __ieee754_j1l (long double x)
 	}
     }
   z = x * x;
-  r = z * (R[0] + z * (R[1]+ z * (R[2] + z * (R[3] + z * R[4]))));
+  r = z * (R[0] + z * (R[1] + z * (R[2] + z * (R[3] + z * R[4]))));
   s = S[0] + z * (S[1] + z * (S[2] + z * (S[3] + z)));
   r *= x;
   return (x * 0.5 + r / s);
 }
 libm_alias_finite (__ieee754_j1l, __j1l)
 
-
-/* Y1(x) = 2/pi * (log(x) * j1(x) - 1/x) + x R(x^2)
-   0 <= x <= 2
-   Peak relative error 2.3e-23 */
-static const long double U0[6] = {
-  -5.908077186259914699178903164682444848615E10L,
-  1.546219327181478013495975514375773435962E10L,
-  -6.438303331169223128870035584107053228235E8L,
-  9.708540045657182600665968063824819371216E6L,
-  -6.138043997084355564619377183564196265471E4L,
-  1.418503228220927321096904291501161800215E2L,
-};
+    /* Y1(x) = 2/pi * (log(x) * j1(x) - 1/x) + x R(x^2)
+       0 <= x <= 2
+       Peak relative error 2.3e-23 */
+    static const long double U0[6]
+    = {
+	-5.908077186259914699178903164682444848615E10L,
+	1.546219327181478013495975514375773435962E10L,
+	-6.438303331169223128870035584107053228235E8L,
+	9.708540045657182600665968063824819371216E6L,
+	-6.138043997084355564619377183564196265471E4L,
+	1.418503228220927321096904291501161800215E2L,
+      };
 static const long double V0[5] = {
   3.013447341682896694781964795373783679861E11L,
   4.669546565705981649470005402243136124523E9L,
@@ -190,7 +189,6 @@ static const long double V0[5] = {
   5.668480419646516568875555062047234534863E2L,
   /*  1.000000000000000000000000000000000000000E0L, */
 };
-
 
 long double
 __ieee754_y1l (long double x)
@@ -207,14 +205,14 @@ __ieee754_y1l (long double x)
   if (__glibc_unlikely (ix >= 0x7fff))
     return one / (x + x * x);
   if (__glibc_unlikely ((i0 | i1) == 0))
-    return -HUGE_VALL + x;  /* -inf and overflow exception.  */
+    return -HUGE_VALL + x; /* -inf and overflow exception.  */
   if (ix >= 0x4000)
-    {				/* |x| >= 2.0 */
+    { /* |x| >= 2.0 */
       __sincosl (x, &s, &c);
       ss = -s - c;
       cc = s - c;
       if (ix < 0x7ffe)
-	{			/* make sure x+x not overflow */
+	{ /* make sure x+x not overflow */
 	  z = __cosl (x + x);
 	  if ((s * c) > zero)
 	    cc = z / ss;
@@ -243,41 +241,42 @@ __ieee754_y1l (long double x)
       return z;
     }
   if (__glibc_unlikely (ix <= 0x3fbe))
-    {				/* x < 2**-65 */
+    { /* x < 2**-65 */
       z = -tpi / x;
       if (isinf (z))
 	__set_errno (ERANGE);
       return z;
     }
   z = x * x;
- u = U0[0] + z * (U0[1] + z * (U0[2] + z * (U0[3] + z * (U0[4] + z * U0[5]))));
- v = V0[0] + z * (V0[1] + z * (V0[2] + z * (V0[3] + z * (V0[4] + z))));
-  return (x * (u / v) +
-	  tpi * (__ieee754_j1l (x) * __ieee754_logl (x) - one / x));
+  u = U0[0]
+      + z * (U0[1] + z * (U0[2] + z * (U0[3] + z * (U0[4] + z * U0[5]))));
+  v = V0[0] + z * (V0[1] + z * (V0[2] + z * (V0[3] + z * (V0[4] + z))));
+  return (x * (u / v)
+	  + tpi * (__ieee754_j1l (x) * __ieee754_logl (x) - one / x));
 }
 libm_alias_finite (__ieee754_y1l, __y1l)
 
+    /* For x >= 8, the asymptotic expansions of pone is
+     *	1 + 15/128 s^2 - 4725/2^15 s^4 - ...,	where s = 1/x.
+     * We approximate pone by
+     *	pone(x) = 1 + (R/S)
+     */
 
-/* For x >= 8, the asymptotic expansions of pone is
- *	1 + 15/128 s^2 - 4725/2^15 s^4 - ...,	where s = 1/x.
- * We approximate pone by
- *	pone(x) = 1 + (R/S)
- */
+    /* J1(x) cosX + Y1(x) sinX  =  sqrt( 2/(pi x)) P1(x)
+       P1(x) = 1 + z^2 R(z^2), z=1/x
+       8 <= x <= inf  (0 <= z <= 0.125)
+       Peak relative error 5.2e-22  */
 
-/* J1(x) cosX + Y1(x) sinX  =  sqrt( 2/(pi x)) P1(x)
-   P1(x) = 1 + z^2 R(z^2), z=1/x
-   8 <= x <= inf  (0 <= z <= 0.125)
-   Peak relative error 5.2e-22  */
-
-static const long double pr8[7] = {
-  8.402048819032978959298664869941375143163E-9L,
-  1.813743245316438056192649247507255996036E-6L,
-  1.260704554112906152344932388588243836276E-4L,
-  3.439294839869103014614229832700986965110E-3L,
-  3.576910849712074184504430254290179501209E-2L,
-  1.131111483254318243139953003461511308672E-1L,
-  4.480715825681029711521286449131671880953E-2L,
-};
+    static const long double pr8[7]
+    = {
+	8.402048819032978959298664869941375143163E-9L,
+	1.813743245316438056192649247507255996036E-6L,
+	1.260704554112906152344932388588243836276E-4L,
+	3.439294839869103014614229832700986965110E-3L,
+	3.576910849712074184504430254290179501209E-2L,
+	1.131111483254318243139953003461511308672E-1L,
+	4.480715825681029711521286449131671880953E-2L,
+      };
 static const long double ps8[6] = {
   7.169748325574809484893888315707824924354E-8L,
   1.556549720596672576431813934184403614817E-5L,
@@ -354,9 +353,8 @@ static const long double ps2[6] = {
   5.718412857897054829999458736064922974662E0L,
   1.065626298505499086386584642761602177568E1L,
   6.809140730053382188468983548092322151791E0L,
- /* 1.000000000000000000000000000000000000000E0L, */
+  /* 1.000000000000000000000000000000000000000E0L, */
 };
-
 
 static long double
 pone (long double x)
@@ -377,29 +375,31 @@ pone (long double x)
   else
     {
       i1 = (ix << 16) | (i0 >> 16);
-      if (i1 >= 0x40019174)	/* x >= 4.54541015625 */
+      if (i1 >= 0x40019174) /* x >= 4.54541015625 */
 	{
 	  p = pr5;
 	  q = ps5;
 	}
-      else if (i1 >= 0x4000b6db)	/* x >= 2.85711669921875 */
+      else if (i1 >= 0x4000b6db) /* x >= 2.85711669921875 */
 	{
 	  p = pr3;
 	  q = ps3;
 	}
-      else	/* x >= 2 */
+      else /* x >= 2 */
 	{
 	  p = pr2;
 	  q = ps2;
 	}
     }
   z = one / (x * x);
- r = p[0] + z * (p[1] +
-		 z * (p[2] + z * (p[3] + z * (p[4] + z * (p[5] + z * p[6])))));
- s = q[0] + z * (q[1] + z * (q[2] + z * (q[3] + z * (q[4] + z * (q[5] + z)))));
+  r = p[0]
+      + z
+	    * (p[1]
+	       + z * (p[2] + z * (p[3] + z * (p[4] + z * (p[5] + z * p[6])))));
+  s = q[0]
+      + z * (q[1] + z * (q[2] + z * (q[3] + z * (q[4] + z * (q[5] + z)))));
   return one + z * r / s;
 }
-
 
 /* For x >= 8, the asymptotic expansions of qone is
  *	3/8 s - 105/1024 s^3 - ..., where s = 1/x.
@@ -501,9 +501,8 @@ static const long double qs2[7] = {
   2.468479301872299311658145549931764426840E1L,
   2.961179686096262083509383820557051621644E1L,
   1.201402313144305153005639494661767354977E1L,
- /* 1.000000000000000000000000000000000000000E0L, */
+  /* 1.000000000000000000000000000000000000000E0L, */
 };
-
 
 static long double
 qone (long double x)
@@ -516,7 +515,7 @@ qone (long double x)
   GET_LDOUBLE_WORDS (se, i0, i1, x);
   ix = se & 0x7fff;
   /* ix >= 0x4000 for all calls to this function.  */
-  if (ix >= 0x4002)		/* x >= 8 */
+  if (ix >= 0x4002) /* x >= 8 */
     {
       p = qr8;
       q = qs8;
@@ -524,29 +523,34 @@ qone (long double x)
   else
     {
       i1 = (ix << 16) | (i0 >> 16);
-      if (i1 >= 0x40019174)	/* x >= 4.54541015625 */
+      if (i1 >= 0x40019174) /* x >= 4.54541015625 */
 	{
 	  p = qr5;
 	  q = qs5;
 	}
-      else if (i1 >= 0x4000b6db)	/* x >= 2.85711669921875 */
+      else if (i1 >= 0x4000b6db) /* x >= 2.85711669921875 */
 	{
 	  p = qr3;
 	  q = qs3;
 	}
-      else	/* x >= 2 */
+      else /* x >= 2 */
 	{
 	  p = qr2;
 	  q = qs2;
 	}
     }
   z = one / (x * x);
-  r =
-    p[0] + z * (p[1] +
-		z * (p[2] + z * (p[3] + z * (p[4] + z * (p[5] + z * p[6])))));
-  s =
-    q[0] + z * (q[1] +
-		z * (q[2] +
-		     z * (q[3] + z * (q[4] + z * (q[5] + z * (q[6] + z))))));
+  r = p[0]
+      + z
+	    * (p[1]
+	       + z * (p[2] + z * (p[3] + z * (p[4] + z * (p[5] + z * p[6])))));
+  s = q[0]
+      + z
+	    * (q[1]
+	       + z
+		     * (q[2]
+			+ z
+			      * (q[3]
+				 + z * (q[4] + z * (q[5] + z * (q[6] + z))))));
   return (.375 + z * r / s) / x;
 }

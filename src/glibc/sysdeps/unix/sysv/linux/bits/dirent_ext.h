@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DIRENT_H
-# error "Never include <bits/dirent_ext.h> directly; use <dirent.h> instead."
+#  error "Never include <bits/dirent_ext.h> directly; use <dirent.h> instead."
 #endif
 
 __BEGIN_DECLS
@@ -26,8 +26,8 @@ __BEGIN_DECLS
 /* Read from the directory descriptor FD into LENGTH bytes at BUFFER.
    Return the number of bytes read on success (0 for end of
    directory), and -1 for failure.  */
-extern __ssize_t getdents64 (int __fd, void *__buffer, size_t __length)
-  __THROW __nonnull ((2));
+extern __ssize_t getdents64 (int __fd, void *__buffer, size_t __length) __THROW
+    __nonnull ((2));
 #endif
 
 __END_DECLS

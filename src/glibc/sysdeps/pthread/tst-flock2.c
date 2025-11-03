@@ -30,17 +30,11 @@ static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t lock2 = PTHREAD_MUTEX_INITIALIZER;
 static int fd;
 
-
 static void *
 tf (void *arg)
 {
-  struct flock fl =
-    {
-      .l_type = F_WRLCK,
-      .l_start = 0,
-      .l_whence = SEEK_SET,
-      .l_len = 10
-    };
+  struct flock fl
+      = { .l_type = F_WRLCK, .l_start = 0, .l_whence = SEEK_SET, .l_len = 10 };
   if (TEMP_FAILURE_RETRY (fcntl (fd, F_SETLKW, &fl)) != 0)
     {
       puts ("fourth fcntl failed");
@@ -53,7 +47,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -107,13 +100,8 @@ do_test (void)
       return 1;
     }
 
-  struct flock fl =
-    {
-      .l_type = F_WRLCK,
-      .l_start = 0,
-      .l_whence = SEEK_SET,
-      .l_len = 10
-    };
+  struct flock fl
+      = { .l_type = F_WRLCK, .l_start = 0, .l_whence = SEEK_SET, .l_len = 10 };
   if (TEMP_FAILURE_RETRY (fcntl (fd, F_SETLKW, &fl)) != 0)
     {
       puts ("first fcntl failed");

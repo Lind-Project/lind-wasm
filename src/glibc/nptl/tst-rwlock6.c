@@ -27,18 +27,16 @@
 #include <support/xthread.h>
 #include <support/xtime.h>
 
-
 /* A bogus clock value that tells run_test to use pthread_rwlock_timedrdlock
    and pthread_rwlock_timedwrlock rather than pthread_rwlock_clockrdlock and
    pthread_rwlock_clockwrlock.  */
 #define CLOCK_USE_TIMEDLOCK (-1)
 
-static int kind[] =
-  {
-    PTHREAD_RWLOCK_PREFER_READER_NP,
-    PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP,
-    PTHREAD_RWLOCK_PREFER_WRITER_NP,
-  };
+static int kind[] = {
+  PTHREAD_RWLOCK_PREFER_READER_NP,
+  PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP,
+  PTHREAD_RWLOCK_PREFER_WRITER_NP,
+};
 
 struct thread_args
 {
@@ -53,16 +51,16 @@ tf (void *arg)
   struct thread_args *args = arg;
   pthread_rwlock_t *r = args->rwlock;
   const clockid_t clockid = args->clockid;
-  const clockid_t clockid_for_get =
-    (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
+  const clockid_t clockid_for_get
+      = (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
   const char *fnname = args->fnname;
 
   /* Timeout: 0.3 secs.  */
   struct timespec ts_start;
   xclock_gettime (clockid_for_get, &ts_start);
 
-  struct timespec ts_timeout = timespec_add (ts_start,
-                                             make_timespec (0, 300000000));
+  struct timespec ts_timeout
+      = timespec_add (ts_start, make_timespec (0, 300000000));
 
   verbose_printf ("child calling %srdlock\n", fnname);
 
@@ -70,7 +68,7 @@ tf (void *arg)
     TEST_COMPARE (pthread_rwlock_timedrdlock (r, &ts_timeout), ETIMEDOUT);
   else
     TEST_COMPARE (pthread_rwlock_clockrdlock (r, clockid, &ts_timeout),
-                  ETIMEDOUT);
+		  ETIMEDOUT);
 
   verbose_printf ("1st child %srdlock done\n", fnname);
 
@@ -84,19 +82,19 @@ tf (void *arg)
   if (clockid == CLOCK_USE_TIMEDLOCK)
     TEST_COMPARE (pthread_rwlock_timedrdlock (r, &ts_timeout), EINVAL);
   else
-    TEST_COMPARE (pthread_rwlock_clockrdlock (r, clockid, &ts_timeout), EINVAL);
+    TEST_COMPARE (pthread_rwlock_clockrdlock (r, clockid, &ts_timeout),
+		  EINVAL);
 
   verbose_printf ("2nd child %srdlock done\n", fnname);
 
   return NULL;
 }
 
-
 static int
 do_test_clock (clockid_t clockid, const char *fnname)
 {
-  const clockid_t clockid_for_get =
-    (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
+  const clockid_t clockid_for_get
+      = (clockid == CLOCK_USE_TIMEDLOCK) ? CLOCK_REALTIME : clockid;
   size_t cnt;
   for (cnt = 0; cnt < sizeof (kind) / sizeof (kind[0]); ++cnt)
     {
@@ -104,16 +102,16 @@ do_test_clock (clockid_t clockid, const char *fnname)
       pthread_rwlockattr_t a;
 
       if (pthread_rwlockattr_init (&a) != 0)
-        FAIL_EXIT1 ("round %zu: rwlockattr_t failed\n", cnt);
+	FAIL_EXIT1 ("round %zu: rwlockattr_t failed\n", cnt);
 
       if (pthread_rwlockattr_setkind_np (&a, kind[cnt]) != 0)
-        FAIL_EXIT1 ("round %zu: rwlockattr_setkind failed\n", cnt);
+	FAIL_EXIT1 ("round %zu: rwlockattr_setkind failed\n", cnt);
 
       if (pthread_rwlock_init (&r, &a) != 0)
-        FAIL_EXIT1 ("round %zu: rwlock_init failed\n", cnt);
+	FAIL_EXIT1 ("round %zu: rwlock_init failed\n", cnt);
 
       if (pthread_rwlockattr_destroy (&a) != 0)
-        FAIL_EXIT1 ("round %zu: rwlockattr_destroy failed\n", cnt);
+	FAIL_EXIT1 ("round %zu: rwlockattr_destroy failed\n", cnt);
 
       struct timespec ts;
       xclock_gettime (clockid_for_get, &ts);
@@ -121,29 +119,28 @@ do_test_clock (clockid_t clockid, const char *fnname)
 
       /* Get a write lock.  */
       int e = (clockid == CLOCK_USE_TIMEDLOCK)
-	? pthread_rwlock_timedwrlock (&r, &ts)
-	: pthread_rwlock_clockwrlock (&r, clockid, &ts);
+		  ? pthread_rwlock_timedwrlock (&r, &ts)
+		  : pthread_rwlock_clockwrlock (&r, clockid, &ts);
       if (e != 0)
-        FAIL_EXIT1 ("round %zu: %swrlock failed (%d)\n",
-                    cnt, fnname, e);
+	FAIL_EXIT1 ("round %zu: %swrlock failed (%d)\n", cnt, fnname, e);
 
       verbose_printf ("1st %swrlock done\n", fnname);
 
       xclock_gettime (clockid_for_get, &ts);
       ++ts.tv_sec;
       if (clockid == CLOCK_USE_TIMEDLOCK)
-        TEST_COMPARE (pthread_rwlock_timedrdlock (&r, &ts), EDEADLK);
+	TEST_COMPARE (pthread_rwlock_timedrdlock (&r, &ts), EDEADLK);
       else
-        TEST_COMPARE (pthread_rwlock_clockrdlock (&r, clockid, &ts), EDEADLK);
+	TEST_COMPARE (pthread_rwlock_clockrdlock (&r, clockid, &ts), EDEADLK);
 
       verbose_printf ("1st %srdlock done\n", fnname);
 
       xclock_gettime (clockid_for_get, &ts);
       ++ts.tv_sec;
       if (clockid == CLOCK_USE_TIMEDLOCK)
-        TEST_COMPARE (pthread_rwlock_timedwrlock (&r, &ts), EDEADLK);
+	TEST_COMPARE (pthread_rwlock_timedwrlock (&r, &ts), EDEADLK);
       else
-        TEST_COMPARE (pthread_rwlock_clockwrlock (&r, clockid, &ts), EDEADLK);
+	TEST_COMPARE (pthread_rwlock_clockwrlock (&r, clockid, &ts), EDEADLK);
 
       verbose_printf ("2nd %swrlock done\n", fnname);
 
@@ -160,13 +157,14 @@ do_test_clock (clockid_t clockid, const char *fnname)
       puts ("joined thread");
 
       if (pthread_rwlock_destroy (&r) != 0)
-        FAIL_EXIT1 ("round %zu: rwlock_destroy failed\n", cnt);
+	FAIL_EXIT1 ("round %zu: rwlock_destroy failed\n", cnt);
     }
 
   return 0;
 }
 
-static int do_test (void)
+static int
+do_test (void)
 {
   do_test_clock (CLOCK_USE_TIMEDLOCK, "timed");
   do_test_clock (CLOCK_REALTIME, "clock(realtime)");

@@ -39,50 +39,50 @@
 #undef R14_LP
 #undef R15_LP
 
-#ifdef	__ASSEMBLER__
+#ifdef __ASSEMBLER__
 
-# define LP_OP(insn) insn##l
+#  define LP_OP(insn) insn##l
 
-# define ASM_ADDR .long
+#  define ASM_ADDR .long
 
-# define RAX_LP	eax
-# define RBP_LP	ebp
-# define RBX_LP	ebx
-# define RCX_LP	ecx
-# define RDI_LP	edi
-# define RDX_LP	edx
-# define RSI_LP	esi
-# define RSP_LP	esp
-# define R8_LP	r8d
-# define R9_LP	r9d
-# define R10_LP	r10d
-# define R11_LP	r11d
-# define R12_LP	r12d
-# define R13_LP	r13d
-# define R14_LP	r14d
-# define R15_LP	r15d
+#  define RAX_LP eax
+#  define RBP_LP ebp
+#  define RBX_LP ebx
+#  define RCX_LP ecx
+#  define RDI_LP edi
+#  define RDX_LP edx
+#  define RSI_LP esi
+#  define RSP_LP esp
+#  define R8_LP r8d
+#  define R9_LP r9d
+#  define R10_LP r10d
+#  define R11_LP r11d
+#  define R12_LP r12d
+#  define R13_LP r13d
+#  define R14_LP r14d
+#  define R15_LP r15d
 
-#else	/* __ASSEMBLER__ */
+#else /* __ASSEMBLER__ */
 
-# define LP_OP(insn) #insn "l"
+#  define LP_OP(insn) #insn "l"
 
-# define ASM_ADDR ".long"
+#  define ASM_ADDR ".long"
 
-# define RAX_LP	"eax"
-# define RBP_LP	"ebp"
-# define RBX_LP	"ebx"
-# define RCX_LP	"ecx"
-# define RDI_LP	"edi"
-# define RDX_LP	"edx"
-# define RSI_LP	"esi"
-# define RSP_LP	"esp"
-# define R8_LP	"r8d"
-# define R9_LP	"r9d"
-# define R10_LP	"r10d"
-# define R11_LP	"r11d"
-# define R12_LP	"r12d"
-# define R13_LP	"r13d"
-# define R14_LP	"r14d"
-# define R15_LP	"r15d"
+#  define RAX_LP "eax"
+#  define RBP_LP "ebp"
+#  define RBX_LP "ebx"
+#  define RCX_LP "ecx"
+#  define RDI_LP "edi"
+#  define RDX_LP "edx"
+#  define RSI_LP "esi"
+#  define RSP_LP "esp"
+#  define R8_LP "r8d"
+#  define R9_LP "r9d"
+#  define R10_LP "r10d"
+#  define R11_LP "r11d"
+#  define R12_LP "r12d"
+#  define R13_LP "r13d"
+#  define R14_LP "r14d"
+#  define R15_LP "r15d"
 
-#endif	/* __ASSEMBLER__ */
+#endif /* __ASSEMBLER__ */

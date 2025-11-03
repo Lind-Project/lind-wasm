@@ -20,18 +20,18 @@
 
 #if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_27)
 
-# include <glob.h>
+#  include <glob.h>
 
-# define glob(pattern, flags, errfunc, pglob) \
-  __glob64_lstat_compat (pattern, flags, errfunc, pglob)
+#  define glob(pattern, flags, errfunc, pglob)                                \
+    __glob64_lstat_compat (pattern, flags, errfunc, pglob)
 
-# define GLOB_ATTRIBUTE attribute_compat_text_section
+#  define GLOB_ATTRIBUTE attribute_compat_text_section
 
 /* Avoid calling gl_lstat with GLOB_ALTDIRFUNC.  */
-# define GLOB_LSTAT   gl_stat
-# define GLOB_LSTAT64 __stat64
+#  define GLOB_LSTAT gl_stat
+#  define GLOB_LSTAT64 __stat64
 
-# include <posix/glob64.c>
+#  include <posix/glob64.c>
 
 compat_symbol (libc, __glob64_lstat_compat, glob64, GLIBC_2_0);
 #endif

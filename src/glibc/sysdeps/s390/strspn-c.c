@@ -19,14 +19,14 @@
 #include <ifunc-strspn.h>
 
 #if HAVE_STRSPN_C
-# if HAVE_STRSPN_IFUNC
-#  define STRSPN STRSPN_C
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_builtin_def
-#   define libc_hidden_builtin_def(name)			\
-     __hidden_ver1 (__strspn_c, __GI_strspn, __strspn_c);
+#  if HAVE_STRSPN_IFUNC
+#    define STRSPN STRSPN_C
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_builtin_def
+#      define libc_hidden_builtin_def(name)                                   \
+	__hidden_ver1 (__strspn_c, __GI_strspn, __strspn_c);
+#    endif
 #  endif
-# endif
 
-# include <string/strspn.c>
+#  include <string/strspn.c>
 #endif

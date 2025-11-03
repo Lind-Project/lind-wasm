@@ -25,5 +25,4 @@ __readv (int fd, const struct iovec *iov, int iovcnt)
 {
   return SYSCALL_CANCEL (readv, fd, iov, iovcnt);
 }
-libc_hidden_def (__readv)
-weak_alias (__readv, readv)
+libc_hidden_def (__readv) weak_alias (__readv, readv)

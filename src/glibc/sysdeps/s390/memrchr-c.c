@@ -19,15 +19,15 @@
 #include <ifunc-memrchr.h>
 
 #if HAVE_MEMRCHR_C
-# if HAVE_MEMRCHR_IFUNC
-#  define MEMRCHR MEMRCHR_C
-# endif
-
-# include <string/memrchr.c>
-
-# if HAVE_MEMRCHR_IFUNC
-#  if defined SHARED && IS_IN (libc)
-__hidden_ver1 (__memrchr_c, __GI___memrchr, __memrchr_c);
+#  if HAVE_MEMRCHR_IFUNC
+#    define MEMRCHR MEMRCHR_C
 #  endif
-# endif
+
+#  include <string/memrchr.c>
+
+#  if HAVE_MEMRCHR_IFUNC
+#    if defined SHARED && IS_IN(libc)
+__hidden_ver1 (__memrchr_c, __GI___memrchr, __memrchr_c);
+#    endif
+#  endif
 #endif

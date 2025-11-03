@@ -18,31 +18,31 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _X86_AVX_VECS_H
-#define _X86_AVX_VECS_H			1
+#  define _X86_AVX_VECS_H 1
 
-#ifdef VEC_SIZE
-# error "Multiple VEC configs included!"
-#endif
+#  ifdef VEC_SIZE
+#    error "Multiple VEC configs included!"
+#  endif
 
-#define VEC_SIZE			32
-#include "x86-vec-macros.h"
+#  define VEC_SIZE 32
+#  include "x86-vec-macros.h"
 
-#define USE_WITH_AVX2		1
+#  define USE_WITH_AVX2 1
 
-#define SECTION(p)			p##.avx
+#  define SECTION(p) p##.avx
 
 /* 4-byte mov instructions with AVX2.  */
-#define MOV_SIZE			4
+#  define MOV_SIZE 4
 /* 1 (ret) + 3 (vzeroupper).  */
-#define RET_SIZE			4
-#define VZEROUPPER			vzeroupper
+#  define RET_SIZE 4
+#  define VZEROUPPER vzeroupper
 
-#define VMOVU				vmovdqu
-#define VMOVA				vmovdqa
-#define VMOVNT				vmovntdq
+#  define VMOVU vmovdqu
+#  define VMOVA vmovdqa
+#  define VMOVNT vmovntdq
 
 /* Often need to access xmm portion.  */
-#define VMM_128				VMM_any_xmm
-#define VMM					VMM_any_ymm
+#  define VMM_128 VMM_any_xmm
+#  define VMM VMM_any_ymm
 
 #endif

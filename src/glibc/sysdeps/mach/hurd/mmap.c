@@ -46,7 +46,7 @@ __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
   if ((mapaddr & (__vm_page_size - 1)) || (offset & (__vm_page_size - 1)))
     return (void *) (long int) __hurd_fail (EINVAL);
 
-  if ((flags & MAP_EXCL) && ! (flags & MAP_FIXED))
+  if ((flags & MAP_EXCL) && !(flags & MAP_FIXED))
     return (void *) (long int) __hurd_fail (EINVAL);
 
   vmprot = VM_PROT_NONE;
@@ -57,8 +57,8 @@ __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
   if (prot & PROT_EXEC)
     vmprot |= VM_PROT_EXECUTE;
 
-  copy = ! (flags & MAP_SHARED);
-  anywhere = ! (flags & MAP_FIXED);
+  copy = !(flags & MAP_SHARED);
+  anywhere = !(flags & MAP_FIXED);
 
 #ifdef __x86_64__
   if ((addr == NULL) && (prot & PROT_EXEC)
@@ -78,16 +78,16 @@ __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
       break;
 
     case MAP_FILE:
-    case 0:			/* Allow, e.g., just MAP_SHARED.  */
+    case 0: /* Allow, e.g., just MAP_SHARED.  */
       {
 	mach_port_t robj, wobj;
 	if (err = HURD_DPORT_USE (fd, __io_map (port, &robj, &wobj)))
 	  {
 	    if (err == MIG_BAD_ID || err == EOPNOTSUPP || err == ENOSYS)
-	      err = ENODEV;	/* File descriptor doesn't support mmap.  */
+	      err = ENODEV; /* File descriptor doesn't support mmap.  */
 	    return (void *) (long int) __hurd_dfail (fd, err);
 	  }
-	switch (prot & (PROT_READ|PROT_WRITE))
+	switch (prot & (PROT_READ | PROT_WRITE))
 	  {
 	  /* Although it apparently doesn't make sense to map a file with
 	     protection set to PROT_NONE, it is actually sometimes done.
@@ -97,23 +97,23 @@ __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
 	     anonymous or not when selecting addresses.  */
 	  case PROT_NONE:
 	  case PROT_READ:
-            max_vmprot = VM_PROT_READ|VM_PROT_EXECUTE;
-            if (wobj == robj)
-              max_vmprot |= VM_PROT_WRITE;
+	    max_vmprot = VM_PROT_READ | VM_PROT_EXECUTE;
+	    if (wobj == robj)
+	      max_vmprot |= VM_PROT_WRITE;
 	    memobj = robj;
 	    if (MACH_PORT_VALID (wobj))
 	      __mach_port_deallocate (__mach_task_self (), wobj);
 	    break;
 	  case PROT_WRITE:
-            max_vmprot = VM_PROT_WRITE;
-            if (robj == wobj)
-              max_vmprot |= VM_PROT_READ|VM_PROT_EXECUTE;
+	    max_vmprot = VM_PROT_WRITE;
+	    if (robj == wobj)
+	      max_vmprot |= VM_PROT_READ | VM_PROT_EXECUTE;
 	    memobj = wobj;
 	    if (MACH_PORT_VALID (robj))
 	      __mach_port_deallocate (__mach_task_self (), robj);
 	    break;
-	  case PROT_READ|PROT_WRITE:
-            max_vmprot = VM_PROT_ALL;
+	  case PROT_READ | PROT_WRITE:
+	    max_vmprot = VM_PROT_ALL;
 	    if (robj == wobj)
 	      {
 		memobj = wobj;
@@ -148,10 +148,8 @@ __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
   /* When ANYWHERE is true but the caller has provided a preferred address,
      try mapping at that address with anywhere = 0 first.  If this fails,
      we'll retry with anywhere = 1 below.  */
-  err = __vm_map (__mach_task_self (),
-		  &mapaddr, (vm_size_t) len, mask,
-		  anywhere && (mapaddr == 0),
-		  memobj, (vm_offset_t) offset,
+  err = __vm_map (__mach_task_self (), &mapaddr, (vm_size_t) len, mask,
+		  anywhere && (mapaddr == 0), memobj, (vm_offset_t) offset,
 		  copy, vmprot, max_vmprot,
 		  copy ? VM_INHERIT_COPY : VM_INHERIT_SHARE);
 
@@ -166,11 +164,10 @@ __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
 	      /* The region is already allocated; deallocate it first.  */
 	      /* XXX this is not atomic as it is in unix! */
 	      err = __vm_deallocate (__mach_task_self (), mapaddr, len);
-	      if (! err)
-		err = __vm_map (__mach_task_self (),
-				&mapaddr, (vm_size_t) len, mask,
-				0, memobj, (vm_offset_t) offset,
-				copy, vmprot, max_vmprot,
+	      if (!err)
+		err = __vm_map (__mach_task_self (), &mapaddr, (vm_size_t) len,
+				mask, 0, memobj, (vm_offset_t) offset, copy,
+				vmprot, max_vmprot,
 				copy ? VM_INHERIT_COPY : VM_INHERIT_SHARE);
 	    }
 	}
@@ -178,14 +175,13 @@ __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
   else
     {
       /* This mmap call is allowed to allocate anywhere,  */
-      if (mapaddr != 0 && (err == KERN_NO_SPACE || err == KERN_INVALID_ADDRESS))
-        /* ...but above, we tried allocating at the specific address,
-           and failed to.  Now try again, with anywhere = 1 this time.  */
-	err = __vm_map (__mach_task_self (),
-			&mapaddr, (vm_size_t) len, mask,
-			1, memobj, (vm_offset_t) offset,
-			copy, vmprot, max_vmprot,
-			copy ? VM_INHERIT_COPY : VM_INHERIT_SHARE);
+      if (mapaddr != 0
+	  && (err == KERN_NO_SPACE || err == KERN_INVALID_ADDRESS))
+	/* ...but above, we tried allocating at the specific address,
+	   and failed to.  Now try again, with anywhere = 1 this time.  */
+	err = __vm_map (__mach_task_self (), &mapaddr, (vm_size_t) len, mask,
+			1, memobj, (vm_offset_t) offset, copy, vmprot,
+			max_vmprot, copy ? VM_INHERIT_COPY : VM_INHERIT_SHARE);
     }
 
   if (MACH_PORT_VALID (memobj))
@@ -200,5 +196,4 @@ __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
   return (void *) mapaddr;
 }
 
-libc_hidden_def (__mmap)
-weak_alias (__mmap, mmap)
+libc_hidden_def (__mmap) weak_alias (__mmap, mmap)

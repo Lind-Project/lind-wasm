@@ -16,19 +16,20 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _NETINET_IF_FDDI_H
-#define	_NETINET_IF_FDDI_H 1
+#  define _NETINET_IF_FDDI_H 1
 
-#include <sys/types.h>
-#include <stdint.h>
-#include <linux/if_fddi.h>
+#  include <sys/types.h>
+#  include <stdint.h>
+#  include <linux/if_fddi.h>
 
-#ifdef __USE_MISC
+#  ifdef __USE_MISC
 
-struct fddi_header {
-  uint8_t fddi_fc;                    /* Frame Control (FC) value */
-  uint8_t fddi_dhost[FDDI_K_ALEN];    /* Destination host */
-  uint8_t fddi_shost[FDDI_K_ALEN];    /* Source host */
+struct fddi_header
+{
+  uint8_t fddi_fc;		   /* Frame Control (FC) value */
+  uint8_t fddi_dhost[FDDI_K_ALEN]; /* Destination host */
+  uint8_t fddi_shost[FDDI_K_ALEN]; /* Source host */
 };
-#endif
+#  endif
 
-#endif	/* netinet/if_fddi.h */
+#endif /* netinet/if_fddi.h */

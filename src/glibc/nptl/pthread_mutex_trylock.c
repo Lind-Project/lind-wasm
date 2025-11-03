@@ -29,12 +29,12 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
   pid_t id = THREAD_GETMEM (THREAD_SELF, tid);
 
   /* See concurrency notes regarding mutex type which is loaded from __kind
-     in struct __pthread_mutex_s in sysdeps/nptl/bits/thread-shared-types.h.  */
+     in struct __pthread_mutex_s in sysdeps/nptl/bits/thread-shared-types.h. */
   switch (__builtin_expect (PTHREAD_MUTEX_TYPE_ELISION (mutex),
 			    PTHREAD_MUTEX_TIMED_NP))
     {
       /* Recursive mutex.  */
-    case PTHREAD_MUTEX_RECURSIVE_NP|PTHREAD_MUTEX_ELISION_NP:
+    case PTHREAD_MUTEX_RECURSIVE_NP | PTHREAD_MUTEX_ELISION_NP:
     case PTHREAD_MUTEX_RECURSIVE_NP:
       /* Check whether we already hold the mutex.  */
       if (mutex->__data.__owner == id)
@@ -59,10 +59,11 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
       break;
 
     case PTHREAD_MUTEX_TIMED_ELISION_NP:
-    elision: __attribute__((unused))
-      if (lll_trylock_elision (mutex->__data.__lock,
-			       mutex->__data.__elision) != 0)
-	break;
+    elision:
+      __attribute__ ((unused)) if (lll_trylock_elision (
+				       mutex->__data.__lock,
+				       mutex->__data.__elision)
+				   != 0) break;
       /* Don't record the ownership.  */
       return 0;
 
@@ -99,9 +100,8 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 	      /* The previous owner died.  Try locking the mutex.  */
 	      int newval = id | (oldval & FUTEX_WAITERS);
 
-	      newval
-		= atomic_compare_and_exchange_val_acq (&mutex->__data.__lock,
-						       newval, oldval);
+	      newval = atomic_compare_and_exchange_val_acq (
+		  &mutex->__data.__lock, newval, oldval);
 
 	      if (newval != oldval)
 		{
@@ -172,8 +172,8 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 	      return EBUSY;
 	    }
 
-	  if (__builtin_expect (mutex->__data.__owner
-				== PTHREAD_MUTEX_NOTRECOVERABLE, 0))
+	  if (__builtin_expect (
+		  mutex->__data.__owner == PTHREAD_MUTEX_NOTRECOVERABLE, 0))
 	    {
 	      /* This mutex is now not recoverable.  */
 	      mutex->__data.__count = 0;
@@ -202,9 +202,9 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 
       return 0;
 
-    /* The PI support requires the Linux futex system call.  If that's not
-       available, pthread_mutex_init should never have allowed the type to
-       be set.  So it will get the default case for an invalid type.  */
+      /* The PI support requires the Linux futex system call.  If that's not
+	 available, pthread_mutex_init should never have allowed the type to
+	 be set.  So it will get the default case for an invalid type.  */
 #ifdef __NR_futex
     case PTHREAD_MUTEX_PI_RECURSIVE_NP:
     case PTHREAD_MUTEX_PI_ERRORCHECK_NP:
@@ -227,9 +227,9 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 	if (robust)
 	  {
 	    /* Note: robust PI futexes are signaled by setting bit 0.  */
-	    THREAD_SETMEM (THREAD_SELF, robust_head.list_op_pending,
-			   (void *) (((uintptr_t) &mutex->__data.__list.__next)
-				     | 1));
+	    THREAD_SETMEM (
+		THREAD_SELF, robust_head.list_op_pending,
+		(void *) (((uintptr_t) &mutex->__data.__list.__next) | 1));
 	    /* We need to set op_pending before starting the operation.  Also
 	       see comments at ENQUEUE_MUTEX.  */
 	    __asm ("" ::: "memory");
@@ -265,17 +265,16 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 	      }
 	  }
 
-	oldval
-	  = atomic_compare_and_exchange_val_acq (&mutex->__data.__lock,
-						 id, 0);
+	oldval = atomic_compare_and_exchange_val_acq (&mutex->__data.__lock,
+						      id, 0);
 
 	if (oldval != 0)
 	  {
 	    if ((oldval & FUTEX_OWNER_DIED) == 0)
 	      {
 		/* We haven't acquired the lock as it is already acquired by
-		   another owner.  We do not need to ensure ordering wrt another
-		   memory access.  */
+		   another owner.  We do not need to ensure ordering wrt
+		   another memory access.  */
 		THREAD_SETMEM (THREAD_SELF, robust_head.list_op_pending, NULL);
 
 		return EBUSY;
@@ -285,12 +284,11 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 
 	    /* The mutex owner died.  The kernel will now take care of
 	       everything.  */
-	    int private = (robust
-			   ? PTHREAD_ROBUST_MUTEX_PSHARED (mutex)
-			   : PTHREAD_MUTEX_PSHARED (mutex));
-	    int e = INTERNAL_SYSCALL_CALL (futex, &mutex->__data.__lock,
-					   __lll_private_flag (FUTEX_TRYLOCK_PI,
-							       private), 0, 0);
+	    int private = (robust ? PTHREAD_ROBUST_MUTEX_PSHARED (mutex)
+				  : PTHREAD_MUTEX_PSHARED (mutex));
+	    int e = INTERNAL_SYSCALL_CALL (
+		futex, &mutex->__data.__lock,
+		__lll_private_flag (FUTEX_TRYLOCK_PI, private), 0, 0);
 
 	    if (INTERNAL_SYSCALL_ERROR_P (e)
 		&& INTERNAL_SYSCALL_ERRNO (e) == EWOULDBLOCK)
@@ -308,7 +306,8 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 
 	if (__glibc_unlikely (oldval & FUTEX_OWNER_DIED))
 	  {
-	    atomic_fetch_and_acquire (&mutex->__data.__lock, ~FUTEX_OWNER_DIED);
+	    atomic_fetch_and_acquire (&mutex->__data.__lock,
+				      ~FUTEX_OWNER_DIED);
 
 	    /* We got the mutex.  */
 	    mutex->__data.__count = 1;
@@ -331,8 +330,8 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 	  }
 
 	if (robust
-	    && __builtin_expect (mutex->__data.__owner
-				 == PTHREAD_MUTEX_NOTRECOVERABLE, 0))
+	    && __builtin_expect (
+		mutex->__data.__owner == PTHREAD_MUTEX_NOTRECOVERABLE, 0))
 	  {
 	    /* This mutex is now not recoverable.  */
 	    mutex->__data.__count = 0;
@@ -363,7 +362,7 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 
 	return 0;
       }
-#endif  /* __NR_futex.  */
+#endif /* __NR_futex.  */
 
     case PTHREAD_MUTEX_PP_RECURSIVE_NP:
     case PTHREAD_MUTEX_PP_ERRORCHECK_NP:
@@ -373,7 +372,7 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 	/* See concurrency notes regarding __kind in struct __pthread_mutex_s
 	   in sysdeps/nptl/bits/thread-shared-types.h.  */
 	int kind = atomic_load_relaxed (&(mutex->__data.__kind))
-	  & PTHREAD_MUTEX_KIND_MASK_NP;
+		   & PTHREAD_MUTEX_KIND_MASK_NP;
 
 	oldval = mutex->__data.__lock;
 
@@ -416,9 +415,8 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 	    ceilval = ceiling << PTHREAD_MUTEX_PRIO_CEILING_SHIFT;
 	    oldprio = ceiling;
 
-	    oldval
-	      = atomic_compare_and_exchange_val_acq (&mutex->__data.__lock,
-						     ceilval | 1, ceilval);
+	    oldval = atomic_compare_and_exchange_val_acq (
+		&mutex->__data.__lock, ceilval | 1, ceilval);
 
 	    if (oldval == ceilval)
 	      break;
@@ -448,16 +446,16 @@ ___pthread_mutex_trylock (pthread_mutex_t *mutex)
 
   return EBUSY;
 }
-versioned_symbol (libc, ___pthread_mutex_trylock,
-		  pthread_mutex_trylock, GLIBC_2_34);
+versioned_symbol (libc, ___pthread_mutex_trylock, pthread_mutex_trylock,
+		  GLIBC_2_34);
 libc_hidden_ver (___pthread_mutex_trylock, __pthread_mutex_trylock)
 #ifndef SHARED
-strong_alias (___pthread_mutex_trylock, __pthread_mutex_trylock)
+    strong_alias (___pthread_mutex_trylock, __pthread_mutex_trylock)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_mutex_trylock,
-	       pthread_mutex_trylock, GLIBC_2_0);
-compat_symbol (libpthread, ___pthread_mutex_trylock,
-	       __pthread_mutex_trylock, GLIBC_2_0);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_mutex_trylock,
+		       pthread_mutex_trylock, GLIBC_2_0);
+compat_symbol (libpthread, ___pthread_mutex_trylock, __pthread_mutex_trylock,
+	       GLIBC_2_0);
 #endif

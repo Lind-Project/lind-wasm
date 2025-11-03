@@ -28,8 +28,8 @@ __ieee128_obstack_vprintf (struct obstack *obstack, const char *format,
 }
 strong_alias (__ieee128_obstack_vprintf, __obstack_vprintfieee128)
 
-int
-__ieee128_obstack_printf (struct obstack *obstack, const char *format, ...)
+    int __ieee128_obstack_printf (struct obstack *obstack, const char *format,
+				  ...)
 {
   int result;
   va_list ap;

@@ -21,8 +21,8 @@
 #include <sys/timex.h>
 #include <sysdep.h>
 
-#define MAX_SEC	(INT_MAX / 1000000L - 2)
-#define MIN_SEC	(INT_MIN / 1000000L + 2)
+#define MAX_SEC (INT_MAX / 1000000L - 2)
+#define MIN_SEC (INT_MIN / 1000000L + 2)
 
 int
 __adjtime64 (const struct __timeval64 *itv, struct __timeval64 *otv)
@@ -52,12 +52,12 @@ __adjtime64 (const struct __timeval64 *itv, struct __timeval64 *otv)
       if (tntx.offset < 0)
 	{
 	  otv->tv_usec = -(-tntx.offset % 1000000);
-	  otv->tv_sec  = -(-tntx.offset / 1000000);
+	  otv->tv_sec = -(-tntx.offset / 1000000);
 	}
       else
 	{
 	  otv->tv_usec = tntx.offset % 1000000;
-	  otv->tv_sec  = tntx.offset / 1000000;
+	  otv->tv_sec = tntx.offset / 1000000;
 	}
     }
   return 0;
@@ -66,8 +66,7 @@ __adjtime64 (const struct __timeval64 *itv, struct __timeval64 *otv)
 #if __TIMESIZE != 64
 libc_hidden_def (__adjtime64)
 
-int
-__adjtime (const struct timeval *itv, struct timeval *otv)
+    int __adjtime (const struct timeval *itv, struct timeval *otv)
 {
   struct __timeval64 itv64, *pitv64 = NULL;
   struct __timeval64 otv64;

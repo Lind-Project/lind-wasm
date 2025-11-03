@@ -15,34 +15,33 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_UTMPX_H
-#define	_UTMPX_H	1
+#ifndef _UTMPX_H
+#  define _UTMPX_H 1
 
-#include <features.h>
-#include <sys/time.h>
+#  include <features.h>
+#  include <sys/time.h>
 
 /* Required according to Unix98.  */
-#ifndef __pid_t_defined
+#  ifndef __pid_t_defined
 typedef __pid_t pid_t;
-# define __pid_t_defined
-#endif
+#    define __pid_t_defined
+#  endif
 
 /* Get system dependent values and data structures.  */
-#include <bits/utmpx.h>
+#  include <bits/utmpx.h>
 
-#ifdef __USE_GNU
+#  ifdef __USE_GNU
 /* Compatibility names for the strings of the canonical file names.  */
-# define UTMPX_FILE	_PATH_UTMPX
-# define UTMPX_FILENAME	_PATH_UTMPX
-# define WTMPX_FILE	_PATH_WTMPX
-# define WTMPX_FILENAME	_PATH_WTMPX
-#endif
+#    define UTMPX_FILE _PATH_UTMPX
+#    define UTMPX_FILENAME _PATH_UTMPX
+#    define WTMPX_FILE _PATH_WTMPX
+#    define WTMPX_FILENAME _PATH_WTMPX
+#  endif
 
 /* For the getutmp{,x} functions we need the `struct utmp'.  */
-#ifdef __USE_GNU
+#  ifdef __USE_GNU
 struct utmp;
-#endif
-
+#  endif
 
 __BEGIN_DECLS
 
@@ -82,8 +81,7 @@ extern struct utmpx *getutxline (const struct utmpx *__line);
    marked with __THROW.  */
 extern struct utmpx *pututxline (const struct utmpx *__utmpx);
 
-
-#ifdef __USE_GNU
+#  ifdef __USE_GNU
 /* Change name of the utmpx file to be examined.
 
    This function is not part of POSIX and therefore no official
@@ -98,9 +96,7 @@ extern int utmpxname (const char *__file);
    cancellation point.  But due to similarity with an POSIX interface
    or due to the implementation it is a cancellation point and
    therefore not marked with __THROW.  */
-extern void updwtmpx (const char *__wtmpx_file,
-		      const struct utmpx *__utmpx);
-
+extern void updwtmpx (const char *__wtmpx_file, const struct utmpx *__utmpx);
 
 /* Copy the information in UTMPX to UTMP.
 
@@ -108,8 +104,7 @@ extern void updwtmpx (const char *__wtmpx_file,
    cancellation point.  But due to similarity with an POSIX interface
    or due to the implementation it is a cancellation point and
    therefore not marked with __THROW.  */
-extern void getutmp (const struct utmpx *__utmpx,
-		     struct utmp *__utmp);
+extern void getutmp (const struct utmpx *__utmpx, struct utmp *__utmp);
 
 /* Copy the information in UTMP to UTMPX.
 
@@ -118,7 +113,7 @@ extern void getutmp (const struct utmpx *__utmpx,
    or due to the implementation it is a cancellation point and
    therefore not marked with __THROW.  */
 extern void getutmpx (const struct utmp *__utmp, struct utmpx *__utmpx);
-#endif
+#  endif
 
 __END_DECLS
 

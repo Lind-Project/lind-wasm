@@ -4,8 +4,7 @@
 #undef nexttoward
 #undef nexttowardl
 
-double
-attribute_hidden
+double attribute_hidden
 nexttoward (double x, double y)
 {
   return nextafter (x, y);

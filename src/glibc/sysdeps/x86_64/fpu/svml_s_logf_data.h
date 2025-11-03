@@ -19,30 +19,24 @@
 #ifndef S_LOGF_DATA_H
 #define S_LOGF_DATA_H
 
-#define _sPoly_1                      	0
-#define _sPoly_2                      	64
-#define _sPoly_3                      	128
-#define _sPoly_4                      	192
-#define _sPoly_5                      	256
-#define _sPoly_6                      	320
-#define _sPoly_7                      	384
-#define _iHiDelta                     	448
-#define _iLoRange                     	512
-#define _iBrkValue                    	576
-#define _iOffExpoMask                 	640
-#define _sOne                         	704
-#define _sLn2                         	768
-#define _sInfs                        	832
-#define _sOnes                        	896
-#define _sZeros                       	960
+#define _sPoly_1 0
+#define _sPoly_2 64
+#define _sPoly_3 128
+#define _sPoly_4 192
+#define _sPoly_5 256
+#define _sPoly_6 320
+#define _sPoly_7 384
+#define _iHiDelta 448
+#define _iLoRange 512
+#define _iBrkValue 576
+#define _iOffExpoMask 640
+#define _sOne 704
+#define _sLn2 768
+#define _sInfs 832
+#define _sOnes 896
+#define _sZeros 960
 
-.macro float_vector offset value
-.if .-__svml_slog_data != \offset
-.err
-.endif
-.rept 16
-.long \value
-.endr
-.endm
+.macro float_vector offset value.if.- __svml_slog_data
+    != \offset.err.endif.rept 16 .long \value.endr.endm
 
 #endif

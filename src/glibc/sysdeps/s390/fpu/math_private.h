@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef S390_MATH_PRIVATE_H
-#define S390_MATH_PRIVATE_H 1
+#  define S390_MATH_PRIVATE_H 1
 
-#include <stdint.h>
-#include <math.h>
+#  include <stdint.h>
+#  include <math.h>
 
-#ifdef HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# define TOINT_INTRINSICS 1
+#  ifdef HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
+#    define TOINT_INTRINSICS 1
 
 static inline double_t
 roundtoint (double_t x)
@@ -32,7 +32,7 @@ roundtoint (double_t x)
   /* The z196 zarch "load fp integer" (fidbra) instruction is rounding
      x to the nearest integer with ties away from zero (M3-field: 1)
      where inexact exceptions are suppressed (M4-field: 4).  */
-  __asm__ ("fidbra %0,1,%1,4" : "=f" (y) : "f" (x));
+  __asm__ ("fidbra %0,1,%1,4" : "=f"(y) : "f"(x));
   return y;
 }
 
@@ -43,11 +43,11 @@ converttoint (double_t x)
   /* The z196 zarch "convert to fixed" (cfdbra) instruction is rounding
      x to the nearest integer with ties away from zero (M3-field: 1)
      where inexact exceptions are suppressed (M4-field: 4).  */
-  __asm__ ("cfdbra %0,1,%1,4" : "=d" (y) : "f" (x) : "cc");
+  __asm__ ("cfdbra %0,1,%1,4" : "=d"(y) : "f"(x) : "cc");
   return y;
 }
-#endif
+#  endif
 
-#include_next <math_private.h>
+#  include_next <math_private.h>
 
 #endif

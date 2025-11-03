@@ -20,16 +20,16 @@
 #include <sys/stat.h>
 
 #if __TIMESIZE != 64
-# include <glob.h>
-# include <dirent.h>
-# include <sys/stat.h>
+#  include <glob.h>
+#  include <dirent.h>
+#  include <sys/stat.h>
 
-# define glob_t glob64_time64_t
-# define globfree(pglob) __globfree64_time64 (pglob)
+#  define glob_t glob64_time64_t
+#  define globfree(pglob) __globfree64_time64 (pglob)
 
-# undef stat
-# define stat __stat64_t64
+#  undef stat
+#  define stat __stat64_t64
 
-# include <posix/globfree.c>
+#  include <posix/globfree.c>
 libc_hidden_def (__globfree64_time64)
 #endif

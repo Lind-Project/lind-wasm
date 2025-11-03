@@ -22,7 +22,6 @@
 #include <time.h>
 #include <sysdep.h>
 
-
 /* Change the access time of the file associated with FD to TSP[0] and
    the modification time of FILE to TSP[1].
 

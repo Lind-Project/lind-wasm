@@ -17,22 +17,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES_STRUCT___PTHREAD_BARRIER_H
-#define _BITS_TYPES_STRUCT___PTHREAD_BARRIER_H	1
+#  define _BITS_TYPES_STRUCT___PTHREAD_BARRIER_H 1
 
-#include <bits/types/__pthread_spinlock_t.h>
+#  include <bits/types/__pthread_spinlock_t.h>
 
 /* This structure describes the attributes of a POSIX barrier.  */
 struct __pthread_barrier
 {
   __pthread_spinlock_t __lock;
-  struct __pthread *__queue;	/* List of waiters.  */
-  unsigned __pending;		/* Number of that still need to wait on
-				   barrier.  */
-  unsigned __count;		/* Number of threads that must wait before
-				   barrier is passed.  */
+  struct __pthread *__queue; /* List of waiters.  */
+  unsigned __pending;	     /* Number of that still need to wait on
+				barrier.  */
+  unsigned __count;	     /* Number of threads that must wait before
+				barrier is passed.  */
   struct __pthread_barrierattr *__attr;
   void *__data;
 };
-
 
 #endif /* bits/types/struct___pthread_barrier.h */

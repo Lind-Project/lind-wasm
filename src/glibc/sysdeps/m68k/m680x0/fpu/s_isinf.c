@@ -19,20 +19,19 @@
 #include "mathimpl.h"
 
 #ifndef FUNC
-#define FUNC isinf
+#  define FUNC isinf
 #endif
 #ifndef float_type
-#define float_type double
+#  define float_type double
 #endif
 
-#define __CONCATX(a,b) __CONCAT(a,b)
+#define __CONCATX(a, b) __CONCAT (a, b)
 
 int
-__CONCATX(__,FUNC) (float_type x)
+__CONCATX (__, FUNC) (float_type x)
 {
-  return __m81_u(__CONCATX(__,FUNC))(x);
+  return __m81_u (__CONCATX (__, FUNC)) (x);
 }
 
-#define hidden_defx(a) hidden_def(a)
-hidden_defx(__CONCATX(__,FUNC))
-weak_alias (__CONCATX(__,FUNC), FUNC)
+#define hidden_defx(a) hidden_def (a)
+hidden_defx (__CONCATX (__, FUNC)) weak_alias (__CONCATX (__, FUNC), FUNC)

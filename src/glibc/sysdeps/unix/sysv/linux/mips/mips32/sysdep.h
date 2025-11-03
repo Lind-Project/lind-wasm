@@ -16,35 +16,35 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LINUX_MIPS_MIPS32_SYSDEP_H
-#define _LINUX_MIPS_MIPS32_SYSDEP_H 1
+#  define _LINUX_MIPS_MIPS32_SYSDEP_H 1
 
 /* There is some commonality.  */
-#include <sysdeps/unix/sysv/linux/mips/sysdep.h>
-#include <sysdeps/unix/sysv/linux/sysdep.h>
-#include <sysdeps/unix/mips/mips32/sysdep.h>
+#  include <sysdeps/unix/sysv/linux/mips/sysdep.h>
+#  include <sysdeps/unix/sysv/linux/sysdep.h>
+#  include <sysdeps/unix/mips/mips32/sysdep.h>
 
-#include <tls.h>
+#  include <tls.h>
 
 /* For Linux we can use the system call table in the header file
 	/usr/include/asm/unistd.h
    of the kernel.  But these symbols do not follow the SYS_* syntax
    so we have to redefine the `SYS_ify' macro here.  */
-#undef SYS_ify
-#define SYS_ify(syscall_name)	__NR_##syscall_name
+#  undef SYS_ify
+#  define SYS_ify(syscall_name) __NR_##syscall_name
 
-#ifdef __ASSEMBLER__
+#  ifdef __ASSEMBLER__
 
 /* We don't want the label for the error handler to be visible in the symbol
    table when we define it here.  */
-#ifdef __PIC__
-# undef SYSCALL_ERROR_LABEL
-# define SYSCALL_ERROR_LABEL 99b
-#endif
+#    ifdef __PIC__
+#      undef SYSCALL_ERROR_LABEL
+#      define SYSCALL_ERROR_LABEL 99b
+#    endif
 
-#else   /* ! __ASSEMBLER__ */
+#  else /* ! __ASSEMBLER__ */
 
-#undef HAVE_INTERNAL_BRK_ADDR_SYMBOL
-#define HAVE_INTERNAL_BRK_ADDR_SYMBOL 1
+#    undef HAVE_INTERNAL_BRK_ADDR_SYMBOL
+#    define HAVE_INTERNAL_BRK_ADDR_SYMBOL 1
 
 /* Note that the original Linux syscall restart convention required the
    instruction immediately preceding SYSCALL to initialize $v0 with the
@@ -67,155 +67,145 @@
    carefully.  This also means we have to force a 32-bit encoding of the
    microMIPS MOVE instruction if one is used.  */
 
-#ifdef __mips_micromips
-# define MOVE32 "move32"
-#else
-# define MOVE32 "move"
-#endif
+#    ifdef __mips_micromips
+#      define MOVE32 "move32"
+#    else
+#      define MOVE32 "move"
+#    endif
 
-#undef INTERNAL_SYSCALL
-#undef INTERNAL_SYSCALL_NCS
+#    undef INTERNAL_SYSCALL
+#    undef INTERNAL_SYSCALL_NCS
 
-#define __nomips16 __attribute__ ((nomips16))
+#    define __nomips16 __attribute__ ((nomips16))
 
 union __mips_syscall_return
+{
+  long long int val;
+  struct
   {
-    long long int val;
-    struct
-      {
-	long int v0;
-	long int v1;
-      }
-    reg;
-  };
+    long int v0;
+    long int v1;
+  } reg;
+};
 
-#ifdef __mips16
+#    ifdef __mips16
 /* There's no MIPS16 syscall instruction, so we go through out-of-line
    standard MIPS wrappers.  These do use inline snippets below though,
    through INTERNAL_SYSCALL_MIPS16.  Spilling the syscall number to
    memory gives the best code in that case, avoiding the need to save
    and restore a static register.  */
 
-# include <mips16-syscall.h>
+#      include <mips16-syscall.h>
 
-# define INTERNAL_SYSCALL(name, nr, args...)				\
+#      define INTERNAL_SYSCALL(name, nr, args...)                             \
 	INTERNAL_SYSCALL_NCS (SYS_ify (name), nr, args)
 
-# define INTERNAL_SYSCALL_NCS(number, nr, args...)			\
-({									\
-	union __mips_syscall_return _sc_ret;				\
-	_sc_ret.val = __mips16_syscall##nr (args, number);		\
-	_sc_ret.reg.v0;							\
-})
+#      define INTERNAL_SYSCALL_NCS(number, nr, args...)                       \
+	({                                                                    \
+	  union __mips_syscall_return _sc_ret;                                \
+	  _sc_ret.val = __mips16_syscall##nr (args, number);                  \
+	  _sc_ret.reg.v0;                                                     \
+	})
 
-# define INTERNAL_SYSCALL_MIPS16(number, err, nr, args...)		\
-	internal_syscall##nr ("lw\t%0, %2\n\t",				\
-			      "R" (number),				\
-			      number, err, args)
+#      define INTERNAL_SYSCALL_MIPS16(number, err, nr, args...)               \
+	internal_syscall##nr ("lw\t%0, %2\n\t", "R"(number), number, err, args)
 
-#else /* !__mips16 */
-# define INTERNAL_SYSCALL(name, nr, args...)				\
-	internal_syscall##nr ("li\t%0, %2\t\t\t# " #name "\n\t",	\
-			      "IK" (SYS_ify (name)),			\
-			      SYS_ify (name), err, args)
+#    else /* !__mips16 */
+#      define INTERNAL_SYSCALL(name, nr, args...)                             \
+	internal_syscall##nr ("li\t%0, %2\t\t\t# " #name "\n\t",              \
+			      "IK"(SYS_ify (name)), SYS_ify (name), err,      \
+			      args)
 
-# define INTERNAL_SYSCALL_NCS(number, nr, args...)			\
-	internal_syscall##nr (MOVE32 "\t%0, %2\n\t",			\
-			      "r" (__s0),				\
-			      number, err, args)
+#      define INTERNAL_SYSCALL_NCS(number, nr, args...)                       \
+	internal_syscall##nr (MOVE32 "\t%0, %2\n\t", "r"(__s0), number, err,  \
+			      args)
 
-#endif /* !__mips16 */
+#    endif /* !__mips16 */
 
-#define internal_syscall0(v0_init, input, number, err, dummy...)	\
-({									\
-	long int _sys_result;						\
-									\
-	{								\
-	register long int __s0 __attribute__ ((unused))	\
-	  = (number);							\
-	register long int __v0 ;				\
-	register long int __a3 ;				\
-	_sys_result = __a3 != 0 ? -__v0 : __v0;				\
-	}								\
-	_sys_result;							\
-})
+#    define internal_syscall0(v0_init, input, number, err, dummy...)          \
+      ({                                                                      \
+	long int _sys_result;                                                 \
+                                                                              \
+	{                                                                     \
+	  register long int __s0 __attribute__ ((unused)) = (number);         \
+	  register long int __v0;                                             \
+	  register long int __a3;                                             \
+	  _sys_result = __a3 != 0 ? -__v0 : __v0;                             \
+	}                                                                     \
+	_sys_result;                                                          \
+      })
 
-#define internal_syscall1(v0_init, input, number, err, arg1)		\
-({									\
-	long int _sys_result;						\
-									\
-	{								\
-	long int _arg1 = (long int) (arg1);				\
-	register long int __s0  __attribute__ ((unused))	\
-	  = (number);							\
-	register long int __v0 ;				\
-	register long int __a0  = _arg1;			\
-	register long int __a3 ;				\
-	_sys_result = __a3 != 0 ? -__v0 : __v0;				\
-	}								\
-	_sys_result;							\
-})
+#    define internal_syscall1(v0_init, input, number, err, arg1)              \
+      ({                                                                      \
+	long int _sys_result;                                                 \
+                                                                              \
+	{                                                                     \
+	  long int _arg1 = (long int) (arg1);                                 \
+	  register long int __s0 __attribute__ ((unused)) = (number);         \
+	  register long int __v0;                                             \
+	  register long int __a0 = _arg1;                                     \
+	  register long int __a3;                                             \
+	  _sys_result = __a3 != 0 ? -__v0 : __v0;                             \
+	}                                                                     \
+	_sys_result;                                                          \
+      })
 
-#define internal_syscall2(v0_init, input, number, err, arg1, arg2)	\
-({									\
-	long int _sys_result;						\
-									\
-	{								\
-	long int _arg1 = (long int) (arg1);				\
-	long int _arg2 = (long int) (arg2);				\
-	register long int __s0 __attribute__ ((unused))	\
-	  = (number);							\
-	register long int __v0 ;				\
-	register long int __a0 = _arg1;			\
-	register long int __a1 = _arg2;			\
-	register long int __a3 ;				\
-	_sys_result = __a3 != 0 ? -__v0 : __v0;				\
-	}								\
-	_sys_result;							\
-})
+#    define internal_syscall2(v0_init, input, number, err, arg1, arg2)        \
+      ({                                                                      \
+	long int _sys_result;                                                 \
+                                                                              \
+	{                                                                     \
+	  long int _arg1 = (long int) (arg1);                                 \
+	  long int _arg2 = (long int) (arg2);                                 \
+	  register long int __s0 __attribute__ ((unused)) = (number);         \
+	  register long int __v0;                                             \
+	  register long int __a0 = _arg1;                                     \
+	  register long int __a1 = _arg2;                                     \
+	  register long int __a3;                                             \
+	  _sys_result = __a3 != 0 ? -__v0 : __v0;                             \
+	}                                                                     \
+	_sys_result;                                                          \
+      })
 
-#define internal_syscall3(v0_init, input, number, err,			\
-			  arg1, arg2, arg3)				\
-({									\
-	long int _sys_result;						\
-									\
-	{								\
-	long int _arg1 = (long int) (arg1);				\
-	long int _arg2 = (long int) (arg2);				\
-	long int _arg3 = (long int) (arg3);				\
-	register long int __s0 __attribute__ ((unused))	\
-	  = (number);							\
-	register long int __v0 ;				\
-	register long int __a0 = _arg1;			\
-	register long int __a1  = _arg2;			\
-	register long int __a2  = _arg3;			\
-	register long int __a3 ;				\
-	_sys_result = __a3 != 0 ? -__v0 : __v0;				\
-	}								\
-	_sys_result;							\
-})
+#    define internal_syscall3(v0_init, input, number, err, arg1, arg2, arg3)  \
+      ({                                                                      \
+	long int _sys_result;                                                 \
+                                                                              \
+	{                                                                     \
+	  long int _arg1 = (long int) (arg1);                                 \
+	  long int _arg2 = (long int) (arg2);                                 \
+	  long int _arg3 = (long int) (arg3);                                 \
+	  register long int __s0 __attribute__ ((unused)) = (number);         \
+	  register long int __v0;                                             \
+	  register long int __a0 = _arg1;                                     \
+	  register long int __a1 = _arg2;                                     \
+	  register long int __a2 = _arg3;                                     \
+	  register long int __a3;                                             \
+	  _sys_result = __a3 != 0 ? -__v0 : __v0;                             \
+	}                                                                     \
+	_sys_result;                                                          \
+      })
 
-#define internal_syscall4(v0_init, input, number, err,			\
-			  arg1, arg2, arg3, arg4)			\
-({									\
-	long int _sys_result;						\
-									\
-	{								\
-	long int _arg1 = (long int) (arg1);				\
-	long int _arg2 = (long int) (arg2);				\
-	long int _arg3 = (long int) (arg3);				\
-	long int _arg4 = (long int) (arg4);				\
-	register long int __s0 __attribute__ ((unused))	\
-	  = (number);							\
-	register long int __v0 ;				\
-	register long int __a0= _arg1;			\
-	register long int __a1 = _arg2;			\
-	register long int __a2  = _arg3;			\
-	register long int __a3 = _arg4;			\
-	_sys_result = __a3 != 0 ? -__v0 : __v0;				\
-	}								\
-	_sys_result;							\
-})
+#    define internal_syscall4(v0_init, input, number, err, arg1, arg2, arg3,  \
+			      arg4)                                           \
+      ({                                                                      \
+	long int _sys_result;                                                 \
+                                                                              \
+	{                                                                     \
+	  long int _arg1 = (long int) (arg1);                                 \
+	  long int _arg2 = (long int) (arg2);                                 \
+	  long int _arg3 = (long int) (arg3);                                 \
+	  long int _arg4 = (long int) (arg4);                                 \
+	  register long int __s0 __attribute__ ((unused)) = (number);         \
+	  register long int __v0;                                             \
+	  register long int __a0 = _arg1;                                     \
+	  register long int __a1 = _arg2;                                     \
+	  register long int __a2 = _arg3;                                     \
+	  register long int __a3 = _arg4;                                     \
+	  _sys_result = __a3 != 0 ? -__v0 : __v0;                             \
+	}                                                                     \
+	_sys_result;                                                          \
+      })
 
 /* Standalone MIPS wrappers used for 5, 6, and 7 argument syscalls,
    which require stack arguments.  We rely on the compiler arranging
@@ -228,73 +218,63 @@ union __mips_syscall_return
 
 long long int __nomips16 __mips_syscall5 (long int arg1, long int arg2,
 					  long int arg3, long int arg4,
-					  long int arg5,
-					  long int number);
+					  long int arg5, long int number);
 libc_hidden_proto (__mips_syscall5, nomips16)
 
-#define internal_syscall5(v0_init, input, number, err,			\
-			  arg1, arg2, arg3, arg4, arg5)			\
-({									\
-	union __mips_syscall_return _sc_ret;				\
-	_sc_ret.val = __mips_syscall5 ((long int) (arg1),		\
-				       (long int) (arg2),		\
-				       (long int) (arg3),		\
-				       (long int) (arg4),		\
-				       (long int) (arg5),		\
-				       (long int) (number));		\
-	_sc_ret.reg.v1 != 0 ? -_sc_ret.reg.v0 : _sc_ret.reg.v0;		\
-})
+#    define internal_syscall5(v0_init, input, number, err, arg1, arg2, arg3,  \
+			      arg4, arg5)                                     \
+      ({                                                                      \
+	union __mips_syscall_return _sc_ret;                                  \
+	_sc_ret.val = __mips_syscall5 (                                       \
+	    (long int) (arg1), (long int) (arg2), (long int) (arg3),          \
+	    (long int) (arg4), (long int) (arg5), (long int) (number));       \
+	_sc_ret.reg.v1 != 0 ? -_sc_ret.reg.v0 : _sc_ret.reg.v0;               \
+      })
 
-long long int __nomips16 __mips_syscall6 (long int arg1, long int arg2,
-					  long int arg3, long int arg4,
-					  long int arg5, long int arg6,
-					  long int number);
+    long long int __nomips16
+    __mips_syscall6 (long int arg1, long int arg2, long int arg3,
+		     long int arg4, long int arg5, long int arg6,
+		     long int number);
 libc_hidden_proto (__mips_syscall6, nomips16)
 
-#define internal_syscall6(v0_init, input, number, err,			\
-			  arg1, arg2, arg3, arg4, arg5, arg6)		\
-({									\
-	union __mips_syscall_return _sc_ret;				\
-	_sc_ret.val = __mips_syscall6 ((long int) (arg1),		\
-				       (long int) (arg2),		\
-				       (long int) (arg3),		\
-				       (long int) (arg4),		\
-				       (long int) (arg5),		\
-				       (long int) (arg6),		\
-				       (long int) (number));		\
-	_sc_ret.reg.v1 != 0 ? -_sc_ret.reg.v0 : _sc_ret.reg.v0;		\
-})
+#    define internal_syscall6(v0_init, input, number, err, arg1, arg2, arg3,  \
+			      arg4, arg5, arg6)                               \
+      ({                                                                      \
+	union __mips_syscall_return _sc_ret;                                  \
+	_sc_ret.val = __mips_syscall6 ((long int) (arg1), (long int) (arg2),  \
+				       (long int) (arg3), (long int) (arg4),  \
+				       (long int) (arg5), (long int) (arg6),  \
+				       (long int) (number));                  \
+	_sc_ret.reg.v1 != 0 ? -_sc_ret.reg.v0 : _sc_ret.reg.v0;               \
+      })
 
-long long int __nomips16 __mips_syscall7 (long int arg1, long int arg2,
-					  long int arg3, long int arg4,
-					  long int arg5, long int arg6,
-					  long int arg7,
-					  long int number);
+    long long int __nomips16
+    __mips_syscall7 (long int arg1, long int arg2, long int arg3,
+		     long int arg4, long int arg5, long int arg6,
+		     long int arg7, long int number);
 libc_hidden_proto (__mips_syscall7, nomips16)
 
-#define internal_syscall7(v0_init, input, number, err,			\
-			  arg1, arg2, arg3, arg4, arg5, arg6, arg7)	\
-({									\
-	union __mips_syscall_return _sc_ret;				\
-	_sc_ret.val = __mips_syscall7 ((long int) (arg1),		\
-				       (long int) (arg2),		\
-				       (long int) (arg3),		\
-				       (long int) (arg4),		\
-				       (long int) (arg5),		\
-				       (long int) (arg6),		\
-				       (long int) (arg7),		\
-				       (long int) (number));		\
-	_sc_ret.reg.v1 != 0 ? -_sc_ret.reg.v0 : _sc_ret.reg.v0;		\
-})
+#    define internal_syscall7(v0_init, input, number, err, arg1, arg2, arg3,  \
+			      arg4, arg5, arg6, arg7)                         \
+      ({                                                                      \
+	union __mips_syscall_return _sc_ret;                                  \
+	_sc_ret.val = __mips_syscall7 (                                       \
+	    (long int) (arg1), (long int) (arg2), (long int) (arg3),          \
+	    (long int) (arg4), (long int) (arg5), (long int) (arg6),          \
+	    (long int) (arg7), (long int) (number));                          \
+	_sc_ret.reg.v1 != 0 ? -_sc_ret.reg.v0 : _sc_ret.reg.v0;               \
+      })
 
-#if __mips_isa_rev >= 6
-# define __SYSCALL_CLOBBERS "$1", "$3", "$8", "$9", "$10", "$11", "$12", "$13", \
-	 "$14", "$15", "$24", "$25", "memory"
-#else
-# define __SYSCALL_CLOBBERS "$1", "$3", "$8", "$9", "$10", "$11", "$12", "$13", \
-	 "$14", "$15", "$24", "$25", "hi", "lo", "memory"
-#endif
+#    if __mips_isa_rev >= 6
+#      define __SYSCALL_CLOBBERS                                              \
+	"$1", "$3", "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15",     \
+	    "$24", "$25", "memory"
+#    else
+#      define __SYSCALL_CLOBBERS                                              \
+	"$1", "$3", "$8", "$9", "$10", "$11", "$12", "$13", "$14", "$15",     \
+	    "$24", "$25", "hi", "lo", "memory"
+#    endif
 
-#endif /* __ASSEMBLER__ */
+#  endif /* __ASSEMBLER__ */
 
 #endif /* linux/mips/mips32/sysdep.h */

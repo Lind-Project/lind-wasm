@@ -25,6 +25,5 @@
 #undef globfree64
 
 #if XSTAT_IS_XSTAT64
-weak_alias (globfree, globfree64)
-libc_hidden_ver (globfree, globfree64)
+weak_alias (globfree, globfree64) libc_hidden_ver (globfree, globfree64)
 #endif

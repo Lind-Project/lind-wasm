@@ -23,7 +23,6 @@
 
 #include <not-cancel.h>
 
-
 DIR *
 __fdopendir (int fd)
 {
@@ -31,7 +30,7 @@ __fdopendir (int fd)
 
   if (__glibc_unlikely (__fstat64_time64 (fd, &statbuf) < 0))
     return NULL;
-  if (__glibc_unlikely (! S_ISDIR (statbuf.st_mode)))
+  if (__glibc_unlikely (!S_ISDIR (statbuf.st_mode)))
     {
       __set_errno (ENOTDIR);
       return NULL;

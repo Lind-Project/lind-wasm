@@ -26,13 +26,11 @@
 
 #include "eintr.c"
 
-
 static void *
 tf2 (void *arg)
 {
   return arg;
 }
-
 
 static void *
 tf1 (void *arg)
@@ -44,7 +42,6 @@ tf1 (void *arg)
     }
   return NULL;
 }
-
 
 static int
 do_test (void)

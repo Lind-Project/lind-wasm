@@ -28,4 +28,4 @@ __aeabi_memcpy (void *dest, const void *src, size_t n)
 
 /* Versions of the above which may assume memory alignment.  */
 strong_alias (__aeabi_memcpy, __aeabi_memcpy4)
-strong_alias (__aeabi_memcpy, __aeabi_memcpy8)
+    strong_alias (__aeabi_memcpy, __aeabi_memcpy8)

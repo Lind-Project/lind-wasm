@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _HP_TIMING_H
-#define _HP_TIMING_H	1
+#  define _HP_TIMING_H 1
 
 /* We indeed have inlined functions.  */
-#define HP_TIMING_INLINE	(1)
+#  define HP_TIMING_INLINE (1)
 
 /* We use 64bit values for the times.  */
 typedef unsigned long long int hp_timing_t;
@@ -31,19 +31,22 @@ typedef unsigned long long int hp_timing_t;
    'lwsync' right before the `mftb' instruction.  But we are not interested
    in accurate clock cycles here so we don't do this.  */
 
-#define HP_TIMING_NOW(Var)						\
-  do {									\
-    unsigned int hi, lo, tmp;						\
-    __asm__ __volatile__ ("1:	mfspr	%0,269;"			\
-			  "	mfspr	%1,268;"			\
-			  "	mfspr	%2,269;"			\
-			  "	cmpw	%0,%2;"				\
-			  "	bne	1b;"				\
-			  : "=&r" (hi), "=&r" (lo), "=&r" (tmp)		\
-			  : : "cr0");					\
-    Var = ((hp_timing_t) hi << 32) | lo;				\
-  } while (0)
+#  define HP_TIMING_NOW(Var)                                                  \
+    do                                                                        \
+      {                                                                       \
+	unsigned int hi, lo, tmp;                                             \
+	__asm__ __volatile__ ("1:	mfspr	%0,269;"                              \
+			      "	mfspr	%1,268;"                                \
+			      "	mfspr	%2,269;"                                \
+			      "	cmpw	%0,%2;"                                  \
+			      "	bne	1b;"                                      \
+			      : "=&r"(hi), "=&r"(lo), "=&r"(tmp)              \
+			      :                                               \
+			      : "cr0");                                       \
+	Var = ((hp_timing_t) hi << 32) | lo;                                  \
+      }                                                                       \
+    while (0)
 
-#include <hp-timing-common.h>
+#  include <hp-timing-common.h>
 
-#endif	/* hp-timing.h */
+#endif /* hp-timing.h */

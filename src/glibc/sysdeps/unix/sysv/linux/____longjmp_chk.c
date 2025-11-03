@@ -24,21 +24,22 @@
 #include <stackinfo.h>
 
 #ifdef _STACK_GROWS_DOWN
-#define called_from(this, saved) ((this) < (saved))
+#  define called_from(this, saved) ((this) < (saved))
 #else
-#define called_from(this, saved) ((this) > (saved))
+#  define called_from(this, saved) ((this) > (saved))
 #endif
 
 _Noreturn extern void ____longjmp_chk (__jmp_buf __env, int __val);
 
-void ____longjmp_chk (__jmp_buf env, int val)
+void
+____longjmp_chk (__jmp_buf env, int val)
 {
   void *this_frame = __builtin_frame_address (0);
   void *saved_frame = JB_FRAME_ADDRESS (env);
   stack_t ss;
 
   /* If "env" is from a frame that called us, we're all set.  */
-  if (called_from(this_frame, saved_frame))
+  if (called_from (this_frame, saved_frame))
     __longjmp (env, val);
 
   /* If we can't get the current stack state, give up and do the longjmp. */

@@ -25,15 +25,15 @@
 pthread_mutex_t mutex;
 pthread_cond_t cond;
 
-#define CHECK_RETURN_VAL_OR_FAIL(ret,str) \
-  ({ if ((ret) != 0) \
-       { \
-         printf ("%s failed: %s\n", (str), strerror (ret)); \
-         ret = 1; \
-         goto out; \
-       } \
+#define CHECK_RETURN_VAL_OR_FAIL(ret, str)                                    \
+  ({                                                                          \
+    if ((ret) != 0)                                                           \
+      {                                                                       \
+	printf ("%s failed: %s\n", (str), strerror (ret));                    \
+	ret = 1;                                                              \
+	goto out;                                                             \
+      }                                                                       \
   })
-
 
 void
 clean (void *arg)

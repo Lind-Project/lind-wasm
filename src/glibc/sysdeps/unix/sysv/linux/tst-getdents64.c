@@ -38,10 +38,10 @@ large_buffer_check (int fd, char *large_buffer, size_t large_buffer_size)
   ssize_t ret = getdents64 (fd, large_buffer, large_buffer_size);
   if (ret < 0)
     FAIL_EXIT1 ("getdents64 for buffer of %zu bytes failed: %m",
-                large_buffer_size);
+		large_buffer_size);
   if (ret < offsetof (struct dirent64, d_name))
     FAIL_EXIT1 ("getdents64 for buffer of %zu returned small value %zd",
-                large_buffer_size, ret);
+		large_buffer_size, ret);
 }
 
 /* Bug 24740: Make sure that the system call argument is adjusted
@@ -59,20 +59,21 @@ large_buffer_checks (int fd)
       flags |= MAP_NORESERVE;
 #endif
       void *large_buffer = mmap (NULL, large_buffer_size,
-                                 PROT_READ | PROT_WRITE, flags, -1, 0);
+				 PROT_READ | PROT_WRITE, flags, -1, 0);
       if (large_buffer == MAP_FAILED)
-        printf ("warning: could not allocate %zu bytes of memory,"
-                " subtests skipped\n", large_buffer_size);
+	printf ("warning: could not allocate %zu bytes of memory,"
+		" subtests skipped\n",
+		large_buffer_size);
       else
-        {
-          large_buffer_check (fd, large_buffer, INT_MAX);
-          large_buffer_check (fd, large_buffer, (size_t) INT_MAX + 1);
-          large_buffer_check (fd, large_buffer, (size_t) INT_MAX + 2);
-          large_buffer_check (fd, large_buffer, UINT_MAX);
-          large_buffer_check (fd, large_buffer, (size_t) UINT_MAX + 1);
-          large_buffer_check (fd, large_buffer, (size_t) UINT_MAX + 2);
-          xmunmap (large_buffer, large_buffer_size);
-        }
+	{
+	  large_buffer_check (fd, large_buffer, INT_MAX);
+	  large_buffer_check (fd, large_buffer, (size_t) INT_MAX + 1);
+	  large_buffer_check (fd, large_buffer, (size_t) INT_MAX + 2);
+	  large_buffer_check (fd, large_buffer, UINT_MAX);
+	  large_buffer_check (fd, large_buffer, (size_t) UINT_MAX + 1);
+	  large_buffer_check (fd, large_buffer, (size_t) UINT_MAX + 2);
+	  xmunmap (large_buffer, large_buffer_size);
+	}
     }
 }
 
@@ -105,44 +106,44 @@ do_test_by_size (size_t buffer_size)
       int read_count = 0;
 
       while (true)
-        {
-          ssize_t ret = getdents64 (fd, data, buffer_size);
-          if (ret < 0)
-            FAIL_EXIT1 ("getdents64: %m");
-          if (ret == 0)
-            break;
-          ++read_count;
+	{
+	  ssize_t ret = getdents64 (fd, data, buffer_size);
+	  if (ret < 0)
+	    FAIL_EXIT1 ("getdents64: %m");
+	  if (ret == 0)
+	    break;
+	  ++read_count;
 
-          char *current = data;
-          char *end = data + ret;
-          while (current != end)
-            {
-              struct dirent64 entry;
-              memcpy (&entry, current, sizeof (entry));
-              /* Truncate overlong strings.  */
-              entry.d_name[sizeof (entry.d_name) - 1] = '\0';
-              TEST_VERIFY (strlen (entry.d_name) < sizeof (entry.d_name) - 1);
+	  char *current = data;
+	  char *end = data + ret;
+	  while (current != end)
+	    {
+	      struct dirent64 entry;
+	      memcpy (&entry, current, sizeof (entry));
+	      /* Truncate overlong strings.  */
+	      entry.d_name[sizeof (entry.d_name) - 1] = '\0';
+	      TEST_VERIFY (strlen (entry.d_name) < sizeof (entry.d_name) - 1);
 
-              errno = 0;
-              struct dirent64 *refentry = readdir64 (reference);
-              if (refentry == NULL && errno == 0)
-                FAIL_EXIT1 ("readdir64 failed too early, at: %s",
-                            entry.d_name);
-              else if (refentry == NULL)
-                FAIL_EXIT1 ("readdir64: %m");
+	      errno = 0;
+	      struct dirent64 *refentry = readdir64 (reference);
+	      if (refentry == NULL && errno == 0)
+		FAIL_EXIT1 ("readdir64 failed too early, at: %s",
+			    entry.d_name);
+	      else if (refentry == NULL)
+		FAIL_EXIT1 ("readdir64: %m");
 
-              TEST_COMPARE_STRING (entry.d_name, refentry->d_name);
-              TEST_COMPARE (entry.d_ino, refentry->d_ino);
-              TEST_COMPARE (entry.d_off, refentry->d_off);
-              TEST_COMPARE (entry.d_type, refentry->d_type);
+	      TEST_COMPARE_STRING (entry.d_name, refentry->d_name);
+	      TEST_COMPARE (entry.d_ino, refentry->d_ino);
+	      TEST_COMPARE (entry.d_off, refentry->d_off);
+	      TEST_COMPARE (entry.d_type, refentry->d_type);
 
-              /* Offset zero is reserved for the first entry.  */
-              TEST_VERIFY (entry.d_off != 0);
+	      /* Offset zero is reserved for the first entry.  */
+	      TEST_VERIFY (entry.d_off != 0);
 
-              TEST_VERIFY_EXIT (entry.d_reclen <= end - current);
-              current += entry.d_reclen;
-            }
-        }
+	      TEST_VERIFY_EXIT (entry.d_reclen <= end - current);
+	      current += entry.d_reclen;
+	    }
+	}
 
       /* We expect to have reached the end of the stream.  */
       errno = 0;

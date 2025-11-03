@@ -22,14 +22,16 @@
 int
 __feholdexcept (fenv_t *envp)
 {
-  union { unsigned long long buf[4]; fenv_t env; } clear;
+  union
+  {
+    unsigned long long buf[4];
+    fenv_t env;
+  } clear;
   unsigned long long *bufptr;
 
   /* Store the environment.  */
   bufptr = clear.buf;
-  __asm__ (
-	   "fstd %%fr0,0(%1)\n"
-	   : "=m" (clear) : "r" (bufptr) : "%r0");
+  __asm__ ("fstd %%fr0,0(%1)\n" : "=m"(clear) : "r"(bufptr) : "%r0");
   memcpy (envp, &clear.env, sizeof (fenv_t));
 
   /* Clear exception queues */
@@ -40,13 +42,10 @@ __feholdexcept (fenv_t *envp)
   clear.env.__status_word &= ~(FE_ALL_EXCEPT << 27);
 
   /* Load the new environment. Note: fr0 must load last to enable T-bit.  */
-  __asm__ (
-	   "fldd 0(%0),%%fr0\n"
-	   : : "r" (bufptr), "m" (clear) : "%r0");
+  __asm__ ("fldd 0(%0),%%fr0\n" : : "r"(bufptr), "m"(clear) : "%r0");
 
   return 0;
 }
 
-libm_hidden_def (__feholdexcept)
-weak_alias (__feholdexcept, feholdexcept)
-libm_hidden_weak (feholdexcept)
+libm_hidden_def (__feholdexcept) weak_alias (__feholdexcept, feholdexcept)
+    libm_hidden_weak (feholdexcept)

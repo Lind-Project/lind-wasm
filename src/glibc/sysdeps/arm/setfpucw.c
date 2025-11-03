@@ -20,7 +20,6 @@
 #include <fpu_control.h>
 #include <arm-features.h>
 
-
 void
 __setfpucw (fpu_control_t set)
 {

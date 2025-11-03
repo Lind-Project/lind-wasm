@@ -24,10 +24,10 @@ recvmmsg_syscall (int fd, struct mmsghdr *vmessages, unsigned int vlen,
 		  int flags, struct __timespec64 *timeout)
 {
 #ifndef __NR_recvmmsg_time64
-# define __NR_recvmmsg_time64 __NR_recvmmsg
+#  define __NR_recvmmsg_time64 __NR_recvmmsg
 #endif
-  int r = SYSCALL_CANCEL (recvmmsg_time64, fd, vmessages, vlen, flags,
-			  timeout);
+  int r
+      = SYSCALL_CANCEL (recvmmsg_time64, fd, vmessages, vlen, flags, timeout);
 #ifndef __ASSUME_TIME64_SYSCALLS
   if (r >= 0 || errno != ENOSYS)
     return r;
@@ -35,7 +35,7 @@ recvmmsg_syscall (int fd, struct mmsghdr *vmessages, unsigned int vlen,
   struct timespec ts32, *pts32 = NULL;
   if (timeout != NULL)
     {
-      if (! in_int32_t_range (timeout->tv_sec))
+      if (!in_int32_t_range (timeout->tv_sec))
 	{
 	  __set_errno (EINVAL);
 	  return -1;
@@ -44,15 +44,15 @@ recvmmsg_syscall (int fd, struct mmsghdr *vmessages, unsigned int vlen,
       pts32 = &ts32;
     }
 
-# ifdef __ASSUME_RECVMMSG_SYSCALL
+#  ifdef __ASSUME_RECVMMSG_SYSCALL
   r = SYSCALL_CANCEL (recvmmsg, fd, vmessages, vlen, flags, pts32);
-# else
+#  else
   r = SOCKETCALL_CANCEL (recvmmsg, fd, vmessages, vlen, flags, pts32);
-# endif
+#  endif
   if (r >= 0)
     {
       if (timeout != NULL)
-        *timeout = valid_timespec_to_timespec64 (ts32);
+	*timeout = valid_timespec_to_timespec64 (ts32);
     }
 #endif
   return r;
@@ -74,8 +74,8 @@ __recvmmsg64 (int fd, struct mmsghdr *vmessages, unsigned int vlen, int flags,
 #if __TIMESIZE != 64
   if (r > 0)
     {
-      for (int i=0; i < r; i++)
-        __convert_scm_timestamps (&vmessages[i].msg_hdr, csize[i]);
+      for (int i = 0; i < r; i++)
+	__convert_scm_timestamps (&vmessages[i].msg_hdr, csize[i]);
     }
 #endif
   return r;
@@ -83,9 +83,8 @@ __recvmmsg64 (int fd, struct mmsghdr *vmessages, unsigned int vlen, int flags,
 #if __TIMESIZE != 64
 libc_hidden_def (__recvmmsg64)
 
-int
-__recvmmsg (int fd, struct mmsghdr *vmessages, unsigned int vlen, int flags,
-	    struct timespec *timeout)
+    int __recvmmsg (int fd, struct mmsghdr *vmessages, unsigned int vlen,
+		    int flags, struct timespec *timeout)
 {
   struct __timespec64 ts64, *pts64 = NULL;
   if (timeout != NULL)

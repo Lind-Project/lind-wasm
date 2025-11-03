@@ -30,19 +30,15 @@ extern __typeof (__llround) __llround_power5plus attribute_hidden;
 extern __typeof (__llround) __llround_power6x attribute_hidden;
 extern __typeof (__llround) __llround_power8 attribute_hidden;
 
-libc_ifunc (__llround,
-	    (hwcap2 & PPC_FEATURE2_ARCH_2_07)
-	    ? __llround_power8 :
-	      (hwcap & PPC_FEATURE_POWER6_EXT)
-	      ? __llround_power6x :
-		(hwcap & PPC_FEATURE_POWER5_PLUS)
-		? __llround_power5plus
-            : __llround_ppc64);
+libc_ifunc (__llround, (hwcap2 & PPC_FEATURE2_ARCH_2_07) ? __llround_power8
+		       : (hwcap &PPC_FEATURE_POWER6_EXT) ? __llround_power6x
+		       : (hwcap &PPC_FEATURE_POWER5_PLUS)
+			   ? __llround_power5plus
+			   : __llround_ppc64);
 
 libm_alias_double (__llround, llround)
 
 /* long has the same width as long long on PPC64.  */
 #undef lround
 #undef __lround
-strong_alias (__llround, __lround)
-libm_alias_double (__lround, lround)
+    strong_alias (__llround, __lround) libm_alias_double (__lround, lround)

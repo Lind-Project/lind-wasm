@@ -34,8 +34,7 @@ __timespec_get64 (struct __timespec64 *ts, int base)
 #if __TIMESIZE != 64
 libc_hidden_def (__timespec_get64)
 
-int
-__timespec_get (struct timespec *ts, int base)
+    int __timespec_get (struct timespec *ts, int base)
 {
   int ret;
   struct __timespec64 tp64;
@@ -44,11 +43,11 @@ __timespec_get (struct timespec *ts, int base)
 
   if (ret == TIME_UTC)
     {
-      if (! in_time_t_range (tp64.tv_sec))
-        {
-          __set_errno (EOVERFLOW);
-          return 0;
-        }
+      if (!in_time_t_range (tp64.tv_sec))
+	{
+	  __set_errno (EOVERFLOW);
+	  return 0;
+	}
 
       *ts = valid_timespec64_to_timespec (tp64);
     }

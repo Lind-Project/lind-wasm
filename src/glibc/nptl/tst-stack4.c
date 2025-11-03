@@ -38,7 +38,7 @@ pthread_mutex_t g_lock;
 typedef void (*function) (void);
 
 void *
-dso_invoke(void *dso_fun)
+dso_invoke (void *dso_fun)
 {
   function *fun_vec = (function *) dso_fun;
   int dso;
@@ -50,7 +50,7 @@ dso_invoke(void *dso_fun)
 }
 
 void *
-dso_process (void * p)
+dso_process (void *p)
 {
   void *handle[DSO_SHARED_FILES];
   function fun_vec[DSO_SHARED_FILES];
@@ -117,7 +117,7 @@ static int
 do_test (void)
 {
   pthread_t thread[DSO_OPEN_THREADS];
-  int i,j;
+  int i, j;
   int ret;
   int result = 0;
 

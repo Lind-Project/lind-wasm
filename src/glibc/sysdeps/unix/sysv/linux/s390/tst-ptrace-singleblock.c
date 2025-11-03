@@ -96,8 +96,8 @@ tracer_func (int pid)
 	 have the same values.  */
       TEST_VERIFY_EXIT (memcmp (&regs, &regs2, sizeof (regs)) == 0);
 
-      printf ("child IA: %p last_break: %p\n",
-	      (void *) regs[1], (void *) last_break);
+      printf ("child IA: %p last_break: %p\n", (void *) regs[1],
+	      (void *) last_break);
 
       /* Execute tracee until next taken branch.
 
@@ -123,8 +123,8 @@ tracer_func (int pid)
 
       /* Ptrace request 12 is first done with data argument pointing to
 	 a buffer:
-	 -If request 12 is interpreted as PTRACE_GETREGS, it will store the regs
-	 to buffer without an error.
+	 -If request 12 is interpreted as PTRACE_GETREGS, it will store the
+	 regs to buffer without an error.
 
 	 -If request 12 is interpreted as PTRACE_SINGLEBLOCK, it will fail
 	 as data argument is used as signal-number and the address of
@@ -136,7 +136,7 @@ tracer_func (int pid)
 	 returned.  */
       memset (buf, 'a', MAX_CHARS_IN_BUF);
       ret = ptrace (req_singleblock, pid, NULL, buf);
-      buf [MAX_CHARS_IN_BUF] = '\0';
+      buf[MAX_CHARS_IN_BUF] = '\0';
       buf_count = strspn (buf, "a");
       TEST_VERIFY_EXIT (buf_count == MAX_CHARS_IN_BUF);
       TEST_VERIFY_EXIT (ret == -1);

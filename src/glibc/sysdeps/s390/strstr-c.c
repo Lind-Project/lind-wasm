@@ -19,14 +19,14 @@
 #include <ifunc-strstr.h>
 
 #if HAVE_STRSTR_C
-# if HAVE_STRSTR_IFUNC
-#  define STRSTR STRSTR_C
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_builtin_def
-#   define libc_hidden_builtin_def(name)		\
-  __hidden_ver1 (__strstr_c, __GI_strstr, __strstr_c);
+#  if HAVE_STRSTR_IFUNC
+#    define STRSTR STRSTR_C
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_builtin_def
+#      define libc_hidden_builtin_def(name)                                   \
+	__hidden_ver1 (__strstr_c, __GI_strstr, __strstr_c);
+#    endif
 #  endif
-# endif
 
-# include <string/strstr.c>
+#  include <string/strstr.c>
 #endif

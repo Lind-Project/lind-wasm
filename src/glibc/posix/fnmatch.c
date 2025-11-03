@@ -16,12 +16,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LIBC
-# include <libc-config.h>
+#  include <libc-config.h>
 #endif
 
 /* Enable GNU extensions in fnmatch.h.  */
 #ifndef _GNU_SOURCE
-# define _GNU_SOURCE    1
+#  define _GNU_SOURCE 1
 #endif
 
 #include <fnmatch.h>
@@ -40,34 +40,34 @@
    but there is no interface to get this information in general.  Therefore
    we support a correct implementation only in glibc.  */
 #ifdef _LIBC
-# include "../locale/localeinfo.h"
-# include "../locale/coll-lookup.h"
-# include <shlib-compat.h>
+#  include "../locale/localeinfo.h"
+#  include "../locale/coll-lookup.h"
+#  include <shlib-compat.h>
 
-# define CONCAT(a,b) __CONCAT(a,b)
-# define btowc __btowc
-# define iswctype __iswctype
-# define mbsrtowcs __mbsrtowcs
-# define mempcpy __mempcpy
-# define strnlen __strnlen
-# define towlower __towlower
-# define wcscat __wcscat
-# define wcslen __wcslen
-# define wctype __wctype
-# define wmemchr __wmemchr
-# define wmempcpy __wmempcpy
-# define fnmatch __fnmatch
+#  define CONCAT(a, b) __CONCAT (a, b)
+#  define btowc __btowc
+#  define iswctype __iswctype
+#  define mbsrtowcs __mbsrtowcs
+#  define mempcpy __mempcpy
+#  define strnlen __strnlen
+#  define towlower __towlower
+#  define wcscat __wcscat
+#  define wcslen __wcslen
+#  define wctype __wctype
+#  define wmemchr __wmemchr
+#  define wmempcpy __wmempcpy
+#  define fnmatch __fnmatch
 extern int fnmatch (const char *pattern, const char *string, int flags);
 #endif
 
 #ifdef _LIBC
-# if __GNUC__ >= 7
-#  define FALLTHROUGH __attribute__ ((__fallthrough__))
-# else
-#  define FALLTHROUGH ((void) 0)
-# endif
+#  if __GNUC__ >= 7
+#    define FALLTHROUGH __attribute__ ((__fallthrough__))
+#  else
+#    define FALLTHROUGH ((void) 0)
+#  endif
 #else
-# include "attribute.h"
+#  include "attribute.h"
 #endif
 
 #include <intprops.h>
@@ -77,21 +77,21 @@ extern int fnmatch (const char *pattern, const char *string, int flags);
 #ifdef _LIBC
 typedef ptrdiff_t idx_t;
 #else
-# include "idx.h"
+#  include "idx.h"
 #endif
 
 /* We often have to test for FNM_FILE_NAME and FNM_PERIOD being both set.  */
-#define NO_LEADING_PERIOD(flags) \
+#define NO_LEADING_PERIOD(flags)                                              \
   ((flags & (FNM_FILE_NAME | FNM_PERIOD)) == (FNM_FILE_NAME | FNM_PERIOD))
 
 /* Provide support for user-defined character classes, based on the functions
    from ISO C 90 amendment 1.  */
 #ifdef CHARCLASS_NAME_MAX
-# define CHAR_CLASS_MAX_LENGTH CHARCLASS_NAME_MAX
+#  define CHAR_CLASS_MAX_LENGTH CHARCLASS_NAME_MAX
 #else
 /* This shouldn't happen but some implementation might still have this
    problem.  Use a reasonable default value.  */
-# define CHAR_CLASS_MAX_LENGTH 256
+#  define CHAR_CLASS_MAX_LENGTH 256
 #endif
 
 #define IS_CHAR_CLASS(string) wctype (string)
@@ -104,14 +104,14 @@ static int posixly_correct;
 
 /* Note that this evaluates C many times.  */
 #define FOLD(c) ((flags & FNM_CASEFOLD) ? tolower (c) : (c))
-#define CHAR    char
-#define UCHAR   unsigned char
-#define INT     int
-#define FCT     internal_fnmatch
-#define EXT     ext_match
-#define END     end_pattern
-#define STRUCT  fnmatch_struct
-#define L_(CS)  CS
+#define CHAR char
+#define UCHAR unsigned char
+#define INT int
+#define FCT internal_fnmatch
+#define EXT ext_match
+#define END end_pattern
+#define STRUCT fnmatch_struct
+#define L_(CS) CS
 #define BTOWC(C) btowc (C)
 #define STRLEN(S) strlen (S)
 #define STRCAT(D, S) strcat (D, S)
@@ -119,20 +119,19 @@ static int posixly_correct;
 #define MEMCHR(S, C, N) memchr (S, C, N)
 #define WIDE_CHAR_VERSION 0
 #ifdef _LIBC
-# include <locale/weight.h>
-# define FINDIDX findidx
+#  include <locale/weight.h>
+#  define FINDIDX findidx
 #endif
 #include "fnmatch_loop.c"
 
-
 #define FOLD(c) ((flags & FNM_CASEFOLD) ? towlower (c) : (c))
-#define CHAR    wchar_t
-#define UCHAR   wint_t
-#define INT     wint_t
-#define FCT     internal_fnwmatch
-#define EXT     ext_wmatch
-#define END     end_wpattern
-#define L_(CS)  L##CS
+#define CHAR wchar_t
+#define UCHAR wint_t
+#define INT wint_t
+#define FCT internal_fnwmatch
+#define EXT ext_wmatch
+#define END end_wpattern
+#define L_(CS) L##CS
 #define BTOWC(C) (C)
 #define STRLEN(S) wcslen (S)
 #define STRCAT(D, S) wcscat (D, S)
@@ -142,10 +141,10 @@ static int posixly_correct;
 #ifdef _LIBC
 /* Change the name the header defines so it doesn't conflict with
    the <locale/weight.h> version included above.  */
-# define findidx findidxwc
-# include <locale/weightwc.h>
-# undef findidx
-# define FINDIDX findidxwc
+#  define findidx findidxwc
+#  include <locale/weightwc.h>
+#  undef findidx
+#  define FINDIDX findidxwc
 #endif
 
 #undef IS_CHAR_CLASS
@@ -165,41 +164,113 @@ is_char_class (const wchar_t *wcs)
     {
       /* Test for a printable character from the portable character set.  */
 #ifdef _LIBC
-      if (*wcs < 0x20 || *wcs > 0x7e
-          || *wcs == 0x24 || *wcs == 0x40 || *wcs == 0x60)
-        return (wctype_t) 0;
+      if (*wcs < 0x20 || *wcs > 0x7e || *wcs == 0x24 || *wcs == 0x40
+	  || *wcs == 0x60)
+	return (wctype_t) 0;
 #else
       switch (*wcs)
-        {
-        case L' ': case L'!': case L'"': case L'#': case L'%':
-        case L'&': case L'\'': case L'(': case L')': case L'*':
-        case L'+': case L',': case L'-': case L'.': case L'/':
-        case L'0': case L'1': case L'2': case L'3': case L'4':
-        case L'5': case L'6': case L'7': case L'8': case L'9':
-        case L':': case L';': case L'<': case L'=': case L'>':
-        case L'?':
-        case L'A': case L'B': case L'C': case L'D': case L'E':
-        case L'F': case L'G': case L'H': case L'I': case L'J':
-        case L'K': case L'L': case L'M': case L'N': case L'O':
-        case L'P': case L'Q': case L'R': case L'S': case L'T':
-        case L'U': case L'V': case L'W': case L'X': case L'Y':
-        case L'Z':
-        case L'[': case L'\\': case L']': case L'^': case L'_':
-        case L'a': case L'b': case L'c': case L'd': case L'e':
-        case L'f': case L'g': case L'h': case L'i': case L'j':
-        case L'k': case L'l': case L'm': case L'n': case L'o':
-        case L'p': case L'q': case L'r': case L's': case L't':
-        case L'u': case L'v': case L'w': case L'x': case L'y':
-        case L'z': case L'{': case L'|': case L'}': case L'~':
-          break;
-        default:
-          return (wctype_t) 0;
-        }
+	{
+	case L' ':
+	case L'!':
+	case L'"':
+	case L'#':
+	case L'%':
+	case L'&':
+	case L'\'':
+	case L'(':
+	case L')':
+	case L'*':
+	case L'+':
+	case L',':
+	case L'-':
+	case L'.':
+	case L'/':
+	case L'0':
+	case L'1':
+	case L'2':
+	case L'3':
+	case L'4':
+	case L'5':
+	case L'6':
+	case L'7':
+	case L'8':
+	case L'9':
+	case L':':
+	case L';':
+	case L'<':
+	case L'=':
+	case L'>':
+	case L'?':
+	case L'A':
+	case L'B':
+	case L'C':
+	case L'D':
+	case L'E':
+	case L'F':
+	case L'G':
+	case L'H':
+	case L'I':
+	case L'J':
+	case L'K':
+	case L'L':
+	case L'M':
+	case L'N':
+	case L'O':
+	case L'P':
+	case L'Q':
+	case L'R':
+	case L'S':
+	case L'T':
+	case L'U':
+	case L'V':
+	case L'W':
+	case L'X':
+	case L'Y':
+	case L'Z':
+	case L'[':
+	case L'\\':
+	case L']':
+	case L'^':
+	case L'_':
+	case L'a':
+	case L'b':
+	case L'c':
+	case L'd':
+	case L'e':
+	case L'f':
+	case L'g':
+	case L'h':
+	case L'i':
+	case L'j':
+	case L'k':
+	case L'l':
+	case L'm':
+	case L'n':
+	case L'o':
+	case L'p':
+	case L'q':
+	case L'r':
+	case L's':
+	case L't':
+	case L'u':
+	case L'v':
+	case L'w':
+	case L'x':
+	case L'y':
+	case L'z':
+	case L'{':
+	case L'|':
+	case L'}':
+	case L'~':
+	  break;
+	default:
+	  return (wctype_t) 0;
+	}
 #endif
 
       /* Avoid overrunning the buffer.  */
       if (cp == s + CHAR_CLASS_MAX_LENGTH)
-        return (wctype_t) 0;
+	return (wctype_t) 0;
 
       *cp++ = (char) *wcs++;
     }
@@ -215,7 +286,7 @@ is_char_class (const wchar_t *wcs)
 
 static int
 fnmatch_convert_to_wide (const char *str, struct scratch_buffer *buf,
-                         size_t *n)
+			 size_t *n)
 {
   mbstate_t ps;
   memset (&ps, '\0', sizeof (ps));
@@ -227,12 +298,12 @@ fnmatch_convert_to_wide (const char *str, struct scratch_buffer *buf,
       const char *p = str;
       *n = mbsrtowcs (buf->data, &p, *n + 1, &ps);
       if (__glibc_unlikely (*n == (size_t) -1))
-        /* Something wrong.
-           XXX Do we have to set 'errno' to something which mbsrtows hasn't
-           already done?  */
-        return -1;
+	/* Something wrong.
+	   XXX Do we have to set 'errno' to something which mbsrtows hasn't
+	   already done?  */
+	return -1;
       if (p == NULL)
-        return 0;
+	return 0;
       memset (&ps, '\0', sizeof (ps));
     }
 
@@ -262,32 +333,32 @@ fnmatch (const char *pattern, const char *string, int flags)
       int r;
 
       /* Convert the strings into wide characters.  Any conversion issue
-         fallback to the ascii version.  */
+	 fallback to the ascii version.  */
       r = fnmatch_convert_to_wide (pattern, &wpattern, &n);
       if (r == 0)
-        {
-          r = fnmatch_convert_to_wide (string, &wstring, &n);
-          if (r == 0)
-            r = internal_fnwmatch (wpattern.data, wstring.data,
-                                   (wchar_t *) wstring.data + n,
-                                   flags & FNM_PERIOD, flags, NULL);
-        }
+	{
+	  r = fnmatch_convert_to_wide (string, &wstring, &n);
+	  if (r == 0)
+	    r = internal_fnwmatch (wpattern.data, wstring.data,
+				   (wchar_t *) wstring.data + n,
+				   flags & FNM_PERIOD, flags, NULL);
+	}
 
       scratch_buffer_free (&wstring);
       scratch_buffer_free (&wpattern);
 
       if (r == -2 || r == 0)
-        return r;
+	return r;
     }
 
   return internal_fnmatch (pattern, string, string + strlen (string),
-                           flags & FNM_PERIOD, flags, NULL);
+			   flags & FNM_PERIOD, flags, NULL);
 }
 
 #undef fnmatch
 versioned_symbol (libc, __fnmatch, fnmatch, GLIBC_2_2_3);
 #if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_2_3)
 strong_alias (__fnmatch, __fnmatch_old)
-compat_symbol (libc, __fnmatch_old, fnmatch, GLIBC_2_0);
+    compat_symbol (libc, __fnmatch_old, fnmatch, GLIBC_2_0);
 #endif
 libc_hidden_ver (__fnmatch, fnmatch)

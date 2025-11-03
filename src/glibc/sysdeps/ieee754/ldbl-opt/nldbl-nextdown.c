@@ -19,8 +19,7 @@
 #include "nldbl-compat.h"
 
 /* Return the greatest floating-point number less than X.  */
-double
-attribute_hidden
+double attribute_hidden
 nextdownl (double x)
 {
   return nextdown (x);

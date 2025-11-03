@@ -15,15 +15,13 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_DIRSTREAM_H
+#ifndef _DIRSTREAM_H
 
-#define	_DIRSTREAM_H	1
-
+#  define _DIRSTREAM_H 1
 
 /* This file should define a type `struct __dirstream', the data type of
    directory stream objects returned by `opendir'.  */
 
-#error "No system-dependent definition of `struct __dirstream'."
+#  error "No system-dependent definition of `struct __dirstream'."
 
-
-#endif	/* dirstream.h */
+#endif /* dirstream.h */

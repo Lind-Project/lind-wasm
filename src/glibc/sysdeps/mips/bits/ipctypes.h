@@ -21,11 +21,10 @@
  */
 
 #ifndef _BITS_IPCTYPES_H
-#define _BITS_IPCTYPES_H	1
+#  define _BITS_IPCTYPES_H 1
 
-#include <bits/types.h>
+#  include <bits/types.h>
 
 typedef __SLONG32_TYPE __ipc_pid_t;
-
 
 #endif /* bits/ipctypes.h */

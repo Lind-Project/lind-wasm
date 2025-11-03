@@ -31,22 +31,22 @@ struct trace_arg
 /* This function is identical to "_Unwind_GetGR", except that it uses
    "unwind_vrs_get" instead of "_Unwind_VRS_Get".  */
 static inline _Unwind_Word
-unwind_getgr (struct unwind_link *unwind_link,
-	      _Unwind_Context *context, int regno)
+unwind_getgr (struct unwind_link *unwind_link, _Unwind_Context *context,
+	      int regno)
 {
   _uw val;
   UNWIND_LINK_PTR (unwind_link, _Unwind_VRS_Get)
-    (context, _UVRSC_CORE, regno, _UVRSD_UINT32, &val);
+  (context, _UVRSC_CORE, regno, _UVRSD_UINT32, &val);
   return val;
 }
 
 /* This macro is identical to the _Unwind_GetIP macro, except that it
    uses "unwind_getgr" instead of "_Unwind_GetGR".  */
-#define unwind_getip(context) \
-  (unwind_getgr (arg->unwind_link, context, 15) & ~(_Unwind_Word)1)
+#  define unwind_getip(context)                                               \
+    (unwind_getgr (arg->unwind_link, context, 15) & ~(_Unwind_Word) 1)
 
 #else /* !SHARED */
-# define unwind_getip _Unwind_GetIP
+#  define unwind_getip _Unwind_GetIP
 #endif
 
 static _Unwind_Reason_Code
@@ -66,23 +66,19 @@ backtrace_helper (struct _Unwind_Context *ctx, void *a)
 int
 __backtrace (void **array, int size)
 {
-  struct trace_arg arg =
-    {
-     .array = array,
-     .unwind_link = __libc_unwind_link_get (),
-     .size = size,
-     .cnt = -1
-    };
+  struct trace_arg arg = { .array = array,
+			   .unwind_link = __libc_unwind_link_get (),
+			   .size = size,
+			   .cnt = -1 };
 
   if (size <= 0 || arg.unwind_link == NULL)
     return 0;
 
   UNWIND_LINK_PTR (arg.unwind_link, _Unwind_Backtrace)
-    (backtrace_helper, &arg);
+  (backtrace_helper, &arg);
 
   if (arg.cnt > 1 && arg.array[arg.cnt - 1] == NULL)
     --arg.cnt;
   return arg.cnt != -1 ? arg.cnt : 0;
 }
-weak_alias (__backtrace, backtrace)
-libc_hidden_def (__backtrace)
+weak_alias (__backtrace, backtrace) libc_hidden_def (__backtrace)

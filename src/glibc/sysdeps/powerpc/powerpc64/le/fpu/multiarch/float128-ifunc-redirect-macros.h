@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FLOAT128_IFUNC_REDIRECT_MACROS_PPC64LE
-#define _FLOAT128_IFUNC_REDIRECT_MACROS_PPC64LE 1
+#  define _FLOAT128_IFUNC_REDIRECT_MACROS_PPC64LE 1
 
 /* Define the redirection macros used throughout most of the IFUNC headers.
    The variant is inferred via compiler options.
@@ -38,16 +38,16 @@
      a suffix argument.
 
 */
-#ifndef _ARCH_PWR9
-#define F128_REDIR_PFX_R(func, pfx, r) \
-  extern __typeof(func ## r) func ## r __asm( #pfx #func "_power8" #r );
-#define F128_SFX_APPEND(x) x ## _power8
-#else
-#define F128_REDIR_PFX_R(func, pfx, r) \
-  extern __typeof(func ## r) func ## r __asm( #pfx #func "_power9" #r );
-#define F128_SFX_APPEND(x) x ## _power9
-#endif
-#define F128_REDIR_R(func, r) F128_REDIR_PFX_R (func, , r)
-#define F128_REDIR(func) F128_REDIR_R (func, )
+#  ifndef _ARCH_PWR9
+#    define F128_REDIR_PFX_R(func, pfx, r)                                    \
+      extern __typeof (func##r) func##r __asm (#pfx #func "_power8" #r);
+#    define F128_SFX_APPEND(x) x##_power8
+#  else
+#    define F128_REDIR_PFX_R(func, pfx, r)                                    \
+      extern __typeof (func##r) func##r __asm (#pfx #func "_power9" #r);
+#    define F128_SFX_APPEND(x) x##_power9
+#  endif
+#  define F128_REDIR_R(func, r) F128_REDIR_PFX_R (func, , r)
+#  define F128_REDIR(func) F128_REDIR_R (func, )
 
 #endif /*_FLOAT128_IFUNC_REDIRECT_MACROS_PPC64LE */

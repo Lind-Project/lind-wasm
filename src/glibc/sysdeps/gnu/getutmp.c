@@ -20,9 +20,9 @@
 #include <utmp.h>
 #ifndef _UTMPX_H
 /* This is an ugly hack but we must not see the getutmpx declaration.  */
-# define getutmpx XXXgetutmpx
-# include <utmpx.h>
-# undef getutmpx
+#  define getutmpx XXXgetutmpx
+#  include <utmpx.h>
+#  undef getutmpx
 #endif
 
 void

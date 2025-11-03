@@ -17,23 +17,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for definition in libc.  */
-#if defined SHARED && IS_IN (libc)
-# define memset __redirect_memset
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if defined SHARED && IS_IN(libc)
+#  define memset __redirect_memset
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (memset) __memset_ppc attribute_hidden;
 extern __typeof (memset) __memset_power6 attribute_hidden;
 extern __typeof (memset) __memset_power7 attribute_hidden;
-# undef memset
+#  undef memset
 
 /* Avoid DWARF definition DIE on ifunc symbol so that GDB can handle
    ifunc symbol properly.  */
 libc_ifunc_redirected (__redirect_memset, memset,
-		       (hwcap & PPC_FEATURE_HAS_VSX)
-		       ? __memset_power7
-		       : (hwcap & PPC_FEATURE_ARCH_2_05)
-			 ? __memset_power6
-			 : __memset_ppc);
+		       (hwcap & PPC_FEATURE_HAS_VSX)	? __memset_power7
+		       : (hwcap &PPC_FEATURE_ARCH_2_05) ? __memset_power6
+							: __memset_ppc);
 #endif

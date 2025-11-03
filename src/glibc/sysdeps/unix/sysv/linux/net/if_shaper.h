@@ -16,30 +16,30 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _NET_IF_SHAPER_H
-#define _NET_IF_SHAPER_H 1
+#  define _NET_IF_SHAPER_H 1
 
-#include <sys/types.h>
-#include <stdint.h>
-#include <net/if.h>
-#include <sys/ioctl.h>
+#  include <sys/types.h>
+#  include <stdint.h>
+#  include <net/if.h>
+#  include <sys/ioctl.h>
 
 __BEGIN_DECLS
 
-#define SHAPER_QLEN	10
+#  define SHAPER_QLEN 10
 /*
  *	This is a bit speed dependent (read it shouldn't be a constant!)
  *
  *	5 is about right for 28.8 upwards. Below that double for every
  *	halving of speed or so. - ie about 20 for 9600 baud.
  */
-#define SHAPER_LATENCY	(5 * HZ)
-#define SHAPER_MAXSLIP	2
-#define SHAPER_BURST	(HZ / 50)	/* Good for >128K then */
+#  define SHAPER_LATENCY (5 * HZ)
+#  define SHAPER_MAXSLIP 2
+#  define SHAPER_BURST (HZ / 50) /* Good for >128K then */
 
-#define SHAPER_SET_DEV		0x0001
-#define SHAPER_SET_SPEED	0x0002
-#define SHAPER_GET_DEV		0x0003
-#define SHAPER_GET_SPEED	0x0004
+#  define SHAPER_SET_DEV 0x0001
+#  define SHAPER_SET_SPEED 0x0002
+#  define SHAPER_GET_DEV 0x0003
+#  define SHAPER_GET_SPEED 0x0004
 
 struct shaperconf
 {
@@ -49,8 +49,8 @@ struct shaperconf
     char ssu_name[14];
     uint32_t ssu_speed;
   } ss_u;
-#define ss_speed ss_u.ssu_speed
-#define ss_name ss_u.ssu_name
+#  define ss_speed ss_u.ssu_speed
+#  define ss_name ss_u.ssu_name
 };
 
 __END_DECLS

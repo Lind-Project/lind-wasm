@@ -43,13 +43,15 @@ f (void *a)
 
 /* Futex wait for TID argument, similar to pthread_join internal
    implementation.  */
-#define wait_tid(ctid_ptr, ctid_val)					\
-  do {									\
-    /* We need acquire MO here so that we synchronize with the		\
-       kernel's store to 0 when the clone terminates.  */		\
-    while (atomic_load_explicit (ctid_ptr, memory_order_acquire) != 0)	\
-      futex_wait (ctid_ptr, ctid_val);					\
-  } while (0)
+#define wait_tid(ctid_ptr, ctid_val)                                          \
+  do                                                                          \
+    {                                                                         \
+      /* We need acquire MO here so that we synchronize with the              \
+	 kernel's store to 0 when the clone terminates.  */                   \
+      while (atomic_load_explicit (ctid_ptr, memory_order_acquire) != 0)      \
+	futex_wait (ctid_ptr, ctid_val);                                      \
+    }                                                                         \
+  while (0)
 
 static inline int
 futex_wait (_Atomic pid_t *futexp, int val)
@@ -70,20 +72,19 @@ do_test (void)
   clone_flags |= CLONE_VM | CLONE_SIGHAND;
   /* We will used ctid to call on futex to wait for thread exit.  */
   clone_flags |= CLONE_CHILD_CLEARTID;
-  /* Initialize with a known value.  ctid is set to zero by the kernel after the
-     cloned thread has exited.  */
+  /* Initialize with a known value.  ctid is set to zero by the kernel after
+     the cloned thread has exited.  */
 #define CTID_INIT_VAL 1
   _Atomic pid_t ctid = CTID_INIT_VAL;
   pid_t tid;
 
-  struct clone_args clone_args =
-    {
-      .flags = clone_flags & ~CSIGNAL,
-      .exit_signal = clone_flags & CSIGNAL,
-      .stack = (uintptr_t) st,
-      .stack_size = sizeof (st),
-      .child_tid = (uintptr_t) &ctid,
-    };
+  struct clone_args clone_args = {
+    .flags = clone_flags & ~CSIGNAL,
+    .exit_signal = clone_flags & CSIGNAL,
+    .stack = (uintptr_t) st,
+    .stack_size = sizeof (st),
+    .child_tid = (uintptr_t) &ctid,
+  };
   tid = __clone_internal (&clone_args, f, NULL);
   if (tid == -1)
     FAIL_EXIT1 ("clone failed: %m");

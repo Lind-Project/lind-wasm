@@ -33,12 +33,11 @@ __nanosleep64 (const struct __timespec64 *req, struct __timespec64 *rem)
 #if __TIMESIZE != 64
 libc_hidden_def (__nanosleep64)
 
-int
-__nanosleep (const struct timespec *req, struct timespec *rem)
+    int __nanosleep (const struct timespec *req, struct timespec *rem)
 {
   // have to initialize the value to 0, not sure why it
   // is not required in original glibc - Qianxi Chen
-  struct __timespec64 treq64 = {0, 0}, trem64 = {0, 0};
+  struct __timespec64 treq64 = { 0, 0 }, trem64 = { 0, 0 };
 
   treq64 = valid_timespec_to_timespec64 (*req);
   int ret = __nanosleep64 (&treq64, rem != NULL ? &trem64 : NULL);
@@ -48,5 +47,4 @@ __nanosleep (const struct timespec *req, struct timespec *rem)
   return ret;
 }
 #endif
-libc_hidden_def (__nanosleep)
-weak_alias (__nanosleep, nanosleep)
+libc_hidden_def (__nanosleep) weak_alias (__nanosleep, nanosleep)

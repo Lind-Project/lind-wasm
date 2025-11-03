@@ -27,7 +27,7 @@ feenableexcept (int excepts)
   __fenv_stfsr (new_exc);
 
   old_exc = (new_exc >> 18) & FE_ALL_EXCEPT;
-  new_exc |= (((fenv_t)excepts & FE_ALL_EXCEPT) << 18);
+  new_exc |= (((fenv_t) excepts & FE_ALL_EXCEPT) << 18);
 
   __fenv_ldfsr (new_exc);
 

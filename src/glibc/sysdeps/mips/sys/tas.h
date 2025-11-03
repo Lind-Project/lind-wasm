@@ -16,21 +16,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_TAS_H
-#define _SYS_TAS_H 1
+#  define _SYS_TAS_H 1
 
-#include <features.h>
-#include <sgidefs.h>
+#  include <features.h>
+#  include <sgidefs.h>
 
 __BEGIN_DECLS
 
-extern int _test_and_set (int *__p, int __v)
-     __THROW __attribute__ ((__nomips16__));
+extern int _test_and_set (int *__p, int __v) __THROW
+    __attribute__ ((__nomips16__));
 
-#ifdef __USE_EXTERN_INLINES
+#  ifdef __USE_EXTERN_INLINES
 
-# ifndef _EXTERN_INLINE
-#  define _EXTERN_INLINE __extern_inline
-# endif
+#    ifndef _EXTERN_INLINE
+#      define _EXTERN_INLINE __extern_inline
+#    endif
 
 _EXTERN_INLINE int __attribute__ ((__nomips16__))
 __NTH (_test_and_set (int *__p, int __v))
@@ -38,31 +38,30 @@ __NTH (_test_and_set (int *__p, int __v))
   int __r, __t;
 
   /* The R5900 reports itself as MIPS III but it does not have LL/SC.  */
-  __asm__ __volatile__
-    ("/* Inline test and set */\n"
-     ".set	push\n\t"
-#if _MIPS_SIM == _ABIO32 && (__mips < 2 || defined (_MIPS_ARCH_R5900))
-     ".set	mips2\n\t"
-#endif
-     "sync\n\t"
-     "1:\n\t"
-     "ll	%0,%3\n\t"
-     "move	%1,%4\n\t"
-     "beq	%0,%4,2f\n\t"
-     "sc	%1,%2\n\t"
-     "beqz	%1,1b\n"
-     "sync\n\t"
-     ".set	pop\n\t"
-     "2:\n\t"
-     "/* End test and set */"
-     : "=&r" (__r), "=&r" (__t), "=m" (*__p)
-     : "m" (*__p), "r" (__v)
-     : "memory");
+  __asm__ __volatile__ ("/* Inline test and set */\n"
+			".set	push\n\t"
+#    if _MIPS_SIM == _ABIO32 && (__mips < 2 || defined(_MIPS_ARCH_R5900))
+			".set	mips2\n\t"
+#    endif
+			"sync\n\t"
+			"1:\n\t"
+			"ll	%0,%3\n\t"
+			"move	%1,%4\n\t"
+			"beq	%0,%4,2f\n\t"
+			"sc	%1,%2\n\t"
+			"beqz	%1,1b\n"
+			"sync\n\t"
+			".set	pop\n\t"
+			"2:\n\t"
+			"/* End test and set */"
+			: "=&r"(__r), "=&r"(__t), "=m"(*__p)
+			: "m"(*__p), "r"(__v)
+			: "memory");
 
   return __r;
 }
 
-#endif /* __USE_EXTERN_INLINES */
+#  endif /* __USE_EXTERN_INLINES */
 
 __END_DECLS
 

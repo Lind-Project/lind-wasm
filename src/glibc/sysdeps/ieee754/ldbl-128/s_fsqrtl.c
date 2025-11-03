@@ -27,7 +27,6 @@
 float
 __fsqrtl (_Float128 x)
 {
-  NARROW_SQRT_ROUND_TO_ODD (x, float, union ieee854_long_double, l,
-			    mantissa3);
+  NARROW_SQRT_ROUND_TO_ODD (x, float, union ieee854_long_double, l, mantissa3);
 }
 libm_alias_float_ldouble (sqrt)

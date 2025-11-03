@@ -19,25 +19,23 @@
 #include <ifunc-wcschr.h>
 
 #if HAVE_WCSCHR_IFUNC
-# define wcschr __redirect_wcschr
-# define __wcschr __redirect___wcschr
-# include <wchar.h>
-# undef wcschr
-# undef __wcschr
-# include <ifunc-resolve.h>
+#  define wcschr __redirect_wcschr
+#  define __wcschr __redirect___wcschr
+#  include <wchar.h>
+#  undef wcschr
+#  undef __wcschr
+#  include <ifunc-resolve.h>
 
-# if HAVE_WCSCHR_C
+#  if HAVE_WCSCHR_C
 extern __typeof (__redirect___wcschr) WCSCHR_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCSCHR_Z13
+#  if HAVE_WCSCHR_Z13
 extern __typeof (__redirect___wcschr) WCSCHR_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect___wcschr, __wcschr,
 		      (HAVE_WCSCHR_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCSCHR_Z13
-		      : WCSCHR_DEFAULT
-		      )
-weak_alias (__wcschr, wcschr)
+			  ? WCSCHR_Z13
+			  : WCSCHR_DEFAULT) weak_alias (__wcschr, wcschr)
 #endif

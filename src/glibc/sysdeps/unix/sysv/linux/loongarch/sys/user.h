@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_USER_H
-#define _SYS_USER_H 1
+#  define _SYS_USER_H 1
 
-#include <stdint.h>
+#  include <stdint.h>
 
 struct user_regs_struct
 {
@@ -33,10 +33,11 @@ struct user_regs_struct
   uint64_t reserved[10];
 };
 
-struct user_fp_struct {
-  uint64_t    fpr[32];
-  uint64_t    fcc;
-  uint32_t    fcsr;
+struct user_fp_struct
+{
+  uint64_t fpr[32];
+  uint64_t fcc;
+  uint32_t fcsr;
 };
 
 #endif /* _SYS_USER_H */

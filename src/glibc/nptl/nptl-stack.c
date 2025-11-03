@@ -38,8 +38,7 @@ __nptl_stack_list_del (list_t *elem)
 }
 libc_hidden_def (__nptl_stack_list_del)
 
-void
-__nptl_stack_list_add (list_t *elem, list_t *list)
+    void __nptl_stack_list_add (list_t *elem, list_t *list)
 {
   GL (dl_in_flight_stack) = (uintptr_t) elem | 1;
 
@@ -53,8 +52,7 @@ __nptl_stack_list_add (list_t *elem, list_t *list)
 }
 libc_hidden_def (__nptl_stack_list_add)
 
-void
-__nptl_free_stacks (size_t limit)
+    void __nptl_free_stacks (size_t limit)
 {
   /* We reduce the size of the cache.  Remove the last entries until
      the size is below the limit.  */
@@ -92,8 +90,7 @@ __nptl_free_stacks (size_t limit)
 
 /* Add a stack frame which is not used anymore to the stack.  Must be
    called with the cache lock held.  */
-static inline void
-__attribute ((always_inline))
+static inline void __attribute ((always_inline))
 queue_stack (struct pthread *stack)
 {
   /* We unconditionally add the stack to the list.  The memory may
@@ -120,7 +117,7 @@ __nptl_deallocate_stack (struct pthread *pd)
      not reset the 'used' flag in the 'tid' field.  This is done by
      the kernel.  If no thread has been created yet this field is
      still zero.  */
-  if (__glibc_likely (! pd->user_stack))
+  if (__glibc_likely (!pd->user_stack))
     (void) queue_stack (pd);
   else
     /* Free the memory associated with the ELF TLS.  */
@@ -130,18 +127,17 @@ __nptl_deallocate_stack (struct pthread *pd)
 }
 libc_hidden_def (__nptl_deallocate_stack)
 
-/* This function is internal (it has a GLIBC_PRIVATE) version, but it
-   is widely used (either via weak symbol, or dlsym) to obtain the
-   __static_tls_size value.  This value is then used to adjust the
-   value of the stack size attribute, so that applications receive the
-   full requested stack size, not diminished by the TCB and static TLS
-   allocation on the stack.  Once the TCB is separately allocated,
-   this function should be removed or renamed (if it is still
-   necessary at that point).  */
-size_t
-__pthread_get_minstack (const pthread_attr_t *attr)
+    /* This function is internal (it has a GLIBC_PRIVATE) version, but it
+       is widely used (either via weak symbol, or dlsym) to obtain the
+       __static_tls_size value.  This value is then used to adjust the
+       value of the stack size attribute, so that applications receive the
+       full requested stack size, not diminished by the TCB and static TLS
+       allocation on the stack.  Once the TCB is separately allocated,
+       this function should be removed or renamed (if it is still
+       necessary at that point).  */
+    size_t __pthread_get_minstack (const pthread_attr_t *attr)
 {
-  return (GLRO(dl_pagesize) + __nptl_tls_static_size_for_stack ()
+  return (GLRO (dl_pagesize) + __nptl_tls_static_size_for_stack ()
 	  + PTHREAD_STACK_MIN);
 }
 libc_hidden_def (__pthread_get_minstack)

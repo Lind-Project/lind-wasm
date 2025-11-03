@@ -64,7 +64,7 @@ __socketpair (int domain, int type, int protocol, int fds[2])
     }
   /* TODO: do we need special ERR massaging here, like it is done in
      __socket?  */
-  if (! err)
+  if (!err)
     {
       if (flags & O_NONBLOCK)
 	err = __io_set_some_openmodes (sock1, O_NONBLOCK);
@@ -80,7 +80,7 @@ __socketpair (int domain, int type, int protocol, int fds[2])
   if (flags & O_NONBLOCK)
     err = __io_set_some_openmodes (sock2, O_NONBLOCK);
   /* TODO: do we need special ERR massaging after the previous call?  */
-  if (! err)
+  if (!err)
     err = __socket_connect2 (sock1, sock2);
   if (err)
     {

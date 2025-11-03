@@ -26,11 +26,10 @@ ___ieee128_sprintf (char *s, const char *format, ...)
   int done;
 
   va_start (ap, format);
-  done = __vsprintf_internal (s, -1, format, ap,
-			      PRINTF_LDBL_USES_FLOAT128);
+  done = __vsprintf_internal (s, -1, format, ap, PRINTF_LDBL_USES_FLOAT128);
   va_end (ap);
 
   return done;
 }
 strong_alias (___ieee128_sprintf, __sprintfieee128)
-hidden_def (___ieee128_sprintf)
+    hidden_def (___ieee128_sprintf)

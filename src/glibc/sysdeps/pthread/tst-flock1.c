@@ -27,7 +27,6 @@ static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 static int fd;
 
-
 static void *
 tf (void *arg)
 {
@@ -41,7 +40,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)

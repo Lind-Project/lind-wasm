@@ -34,7 +34,7 @@ int
 test_vector_abi (void)
 {
   int i;
-  for(i = 0; i < N; i++)
+  for (i = 0; i < N; i++)
     {
       x[i] = i / 3;
       s_ptrs[i] = &s[i];
@@ -42,7 +42,7 @@ test_vector_abi (void)
     }
 
 #pragma omp simd
-  for(i = 0; i < N; i++)
+  for (i = 0; i < N; i++)
     LIBMVEC_SINCOS (x[i], s_ptrs[i], c_ptrs[i]);
 
   return 0;

@@ -26,10 +26,10 @@
 #define N (1 << EXP_TABLE_BITS)
 #define IndexMask (N - 1)
 #define OFlowBound 0x1.34413509f79ffp8 /* log10(DBL_MAX).  */
-#define UFlowBound -0x1.5ep+8 /* -350.  */
-#define SmallTop 0x3c6 /* top12(0x1p-57).  */
-#define BigTop 0x407   /* top12(0x1p8).  */
-#define Thresh 0x41    /* BigTop - SmallTop.  */
+#define UFlowBound -0x1.5ep+8	       /* -350.  */
+#define SmallTop 0x3c6		       /* top12(0x1p-57).  */
+#define BigTop 0x407		       /* top12(0x1p8).  */
+#define Thresh 0x41		       /* BigTop - SmallTop.  */
 #define Shift __exp_data.shift
 #define C(i) __exp_data.exp10_poly[i]
 
@@ -73,7 +73,8 @@ special_case (uint64_t sbits, double_t tmp, uint64_t ki)
   return check_uflow (y);
 }
 
-/* Double-precision 10^x approximation. Largest observed error is ~0.513 ULP.  */
+/* Double-precision 10^x approximation. Largest observed error is ~0.513 ULP.
+ */
 double
 __exp10 (double x)
 {
@@ -145,10 +146,10 @@ __exp10 (double x)
 }
 
 strong_alias (__exp10, __ieee754_exp10)
-libm_alias_finite (__ieee754_exp10, __exp10)
+    libm_alias_finite (__ieee754_exp10, __exp10)
 #if LIBM_SVID_COMPAT
-versioned_symbol (libm, __exp10, exp10, GLIBC_2_39);
+	versioned_symbol (libm, __exp10, exp10, GLIBC_2_39);
 libm_alias_double_other (__exp10, exp10)
 #else
-libm_alias_double (__exp10, exp10)
+	libm_alias_double (__exp10, exp10)
 #endif

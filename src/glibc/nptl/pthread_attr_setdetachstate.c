@@ -18,7 +18,6 @@
 #include <errno.h>
 #include "pthreadP.h"
 
-
 int
 __pthread_attr_setdetachstate (pthread_attr_t *attr, int detachstate)
 {

@@ -34,10 +34,9 @@ __nearbyint (double x)
   return __builtin_nearbyint (x);
 #else
   /* Use generic implementation.  */
-  static const double
-    TWO52[2] = {
-		4.50359962737049600000e+15, /* 0x43300000, 0x00000000 */
-		-4.50359962737049600000e+15, /* 0xC3300000, 0x00000000 */
+  static const double TWO52[2] = {
+    4.50359962737049600000e+15,	 /* 0x43300000, 0x00000000 */
+    -4.50359962737049600000e+15, /* 0xC3300000, 0x00000000 */
   };
   fenv_t env;
   int64_t i0, sx;
@@ -51,7 +50,7 @@ __nearbyint (double x)
 	{
 	  libc_feholdexcept (&env);
 	  double w = TWO52[sx] + math_opt_barrier (x);
-	  double t =  w - TWO52[sx];
+	  double t = w - TWO52[sx];
 	  math_force_eval (t);
 	  libc_fesetenv (&env);
 	  return copysign (t, x);
@@ -60,9 +59,9 @@ __nearbyint (double x)
   else
     {
       if (j0 == 0x400)
-	return x + x;			/* inf or NaN  */
+	return x + x; /* inf or NaN  */
       else
-	return x;			/* x is integral  */
+	return x; /* x is integral  */
     }
   libc_feholdexcept (&env);
   double w = TWO52[sx] + math_opt_barrier (x);

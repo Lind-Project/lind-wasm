@@ -12,7 +12,7 @@
  * ====================================================
  */
 
-#if defined (LIBM_SCCS) && ! defined (lint)
+#if defined(LIBM_SCCS) && !defined(lint)
 static char rcsid[] = "$NetBSD: $";
 #endif
 
@@ -39,7 +39,7 @@ __copysignl (_Float128 x, _Float128 y)
   GET_LDOUBLE_MSW64 (hx, x);
   GET_LDOUBLE_MSW64 (hy, y);
   SET_LDOUBLE_MSW64 (x, (hx & 0x7fffffffffffffffULL)
-		     | (hy & 0x8000000000000000ULL));
+			    | (hy & 0x8000000000000000ULL));
   return x;
 #endif /* ! USE_COPYSIGNL_BUILTIN  */
 }

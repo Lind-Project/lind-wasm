@@ -40,30 +40,30 @@
 
 /* The total number of available bits (including those prior to
    _DL_HWCAP_FIRST).  Some of these bits might not be used.  */
-#define _DL_HWCAP_COUNT         128
+#define _DL_HWCAP_COUNT 128
 
 #ifndef PROCINFO_CLASS
-# define PROCINFO_CLASS
+#  define PROCINFO_CLASS
 #endif
 
-#if !IS_IN (ldconfig)
-# if !defined PROCINFO_DECL && defined SHARED
-  ._dl_powerpc_cpu_features
-# else
+#if !IS_IN(ldconfig)
+#  if !defined PROCINFO_DECL && defined SHARED
+._dl_powerpc_cpu_features
+#  else
 PROCINFO_CLASS struct cpu_features _dl_powerpc_cpu_features
-# endif
-# ifndef PROCINFO_DECL
-= { }
-# endif
-# if !defined SHARED || defined PROCINFO_DECL
+#  endif
+#  ifndef PROCINFO_DECL
+    = {}
+#  endif
+#  if !defined SHARED || defined PROCINFO_DECL
 ;
-# else
+#  else
 ,
-# endif
+#  endif
 #endif
 
 #if !defined PROCINFO_DECL && defined SHARED
-  ._dl_powerpc_cap_flags
+._dl_powerpc_cap_flags
 #else
 PROCINFO_CLASS const char _dl_powerpc_cap_flags[_DL_HWCAP_COUNT][15]
 #endif
@@ -90,25 +90,24 @@ PROCINFO_CLASS const char _dl_powerpc_cap_flags[_DL_HWCAP_COUNT][15]
 #if !defined SHARED || defined PROCINFO_DECL
 ;
 #else
-,
+    ,
 #endif
 
-#if !IS_IN (ldconfig)
-# if !defined PROCINFO_DECL && defined SHARED
-     ._dl_cache_line_size
-# else
+#if !IS_IN(ldconfig)
+#  if !defined PROCINFO_DECL && defined SHARED
+._dl_cache_line_size
+#  else
 PROCINFO_CLASS int _dl_cache_line_size
-# endif
-# ifndef PROCINFO_DECL
-     = 0
-# endif
-# if !defined SHARED || defined PROCINFO_DECL
-;
-# else
-,
-# endif
+#  endif
+#  ifndef PROCINFO_DECL
+    = 0
+#  endif
+#  if !defined SHARED || defined PROCINFO_DECL
+    ;
+#  else
+    ,
+#  endif
 #endif
-
 
 #undef PROCINFO_DECL
 #undef PROCINFO_CLASS

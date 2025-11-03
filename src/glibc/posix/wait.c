@@ -24,6 +24,7 @@
 __pid_t
 __wait (int *stat_loc)
 {
-   return MAKE_SYSCALL(WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) 0, (uint64_t) stat_loc, 0, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) 0,
+		       (uint64_t) stat_loc, 0, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__wait, wait)

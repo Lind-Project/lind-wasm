@@ -26,5 +26,4 @@ __stat64 (const char *file, struct stat64 *buf)
 {
   return __fstatat64 (AT_FDCWD, file, buf, 0);
 }
-hidden_def (__stat64)
-weak_alias (__stat64, stat64)
+hidden_def (__stat64) weak_alias (__stat64, stat64)

@@ -39,6 +39,5 @@ __libc_pwrite (int fd, const void *buf, size_t nbytes, off_t offset)
   __set_errno (ENOSYS);
   return -1;
 }
-strong_alias (__libc_pwrite, __pwrite)
-weak_alias (__libc_pwrite, pwrite)
-stub_warning (pwrite)
+strong_alias (__libc_pwrite, __pwrite) weak_alias (__libc_pwrite, pwrite)
+    stub_warning (pwrite)

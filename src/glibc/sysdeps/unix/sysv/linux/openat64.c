@@ -39,12 +39,10 @@ __libc_openat64 (int fd, const char *file, int oflag, ...)
   return SYSCALL_CANCEL (openat, fd, file, oflag | O_LARGEFILE, mode);
 }
 
-strong_alias (__libc_openat64, __openat64)
-libc_hidden_weak (__openat64)
-weak_alias (__libc_openat64, openat64)
+strong_alias (__libc_openat64, __openat64) libc_hidden_weak (__openat64)
+    weak_alias (__libc_openat64, openat64)
 
 #ifdef __OFF_T_MATCHES_OFF64_T
-strong_alias (__libc_openat64, __openat)
-libc_hidden_weak (__openat)
-weak_alias (__libc_openat64, openat)
+	strong_alias (__libc_openat64, __openat) libc_hidden_weak (__openat)
+	    weak_alias (__libc_openat64, openat)
 #endif

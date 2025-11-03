@@ -62,7 +62,7 @@ thread_main (void *unused)
 }
 
 #define STR2(X) #X
-#define STR(X) STR2(X)
+#define STR(X) STR2 (X)
 
 static int
 do_test (void)
@@ -79,10 +79,10 @@ do_test (void)
 
   threads = (pthread_t *) xcalloc (num_threads, sizeof (pthread_t));
   for (i = 0; i < num_threads; i++)
-    threads[i] = xpthread_create(NULL, thread_main, NULL);
+    threads[i] = xpthread_create (NULL, thread_main, NULL);
 
   for (i = 0; i < num_threads; i++)
-    xpthread_join(threads[i]);
+    xpthread_join (threads[i]);
 
   free (threads);
 

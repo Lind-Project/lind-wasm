@@ -16,43 +16,37 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_S390_LDSODEFS_H
-#define	_S390_LDSODEFS_H	1
+#ifndef _S390_LDSODEFS_H
+#  define _S390_LDSODEFS_H 1
 
-#include <elf.h>
-#include <cpu-features.h>
+#  include <elf.h>
+#  include <cpu-features.h>
 
 struct La_s390_32_regs;
 struct La_s390_32_retval;
 struct La_s390_64_regs;
 struct La_s390_64_retval;
 
-#define ARCH_PLTENTER_MEMBERS						\
-    Elf32_Addr (*s390_32_gnu_pltenter) (Elf32_Sym *, unsigned int,	\
-					uintptr_t *,			\
-					uintptr_t *,			\
-					struct La_s390_32_regs *,	\
-					unsigned int *, const char *name, \
-					long int *framesizep);		\
-    Elf64_Addr (*s390_64_gnu_pltenter) (Elf64_Sym *, unsigned int,	\
-					uintptr_t *,			\
-					uintptr_t *,			\
-					struct La_s390_64_regs *,	\
-					unsigned int *, const char *name, \
-					long int *framesizep)
+#  define ARCH_PLTENTER_MEMBERS                                               \
+    Elf32_Addr (*s390_32_gnu_pltenter) (                                      \
+	Elf32_Sym *, unsigned int, uintptr_t *, uintptr_t *,                  \
+	struct La_s390_32_regs *, unsigned int *, const char *name,           \
+	long int *framesizep);                                                \
+    Elf64_Addr (*s390_64_gnu_pltenter) (                                      \
+	Elf64_Sym *, unsigned int, uintptr_t *, uintptr_t *,                  \
+	struct La_s390_64_regs *, unsigned int *, const char *name,           \
+	long int *framesizep)
 
-#define ARCH_PLTEXIT_MEMBERS						\
-    unsigned int (*s390_32_gnu_pltexit) (Elf32_Sym *, unsigned int,	\
-					 uintptr_t *, uintptr_t *,	\
-					 const struct La_s390_32_regs *, \
-					 struct La_s390_32_retval *,	\
-					 const char *);			\
-    unsigned int (*s390_64_gnu_pltexit) (Elf64_Sym *, unsigned int,	\
-					 uintptr_t *, uintptr_t *,	\
-					 const struct La_s390_64_regs *, \
-					 struct La_s390_64_retval *,	\
-					 const char *)
+#  define ARCH_PLTEXIT_MEMBERS                                                \
+    unsigned int (*s390_32_gnu_pltexit) (                                     \
+	Elf32_Sym *, unsigned int, uintptr_t *, uintptr_t *,                  \
+	const struct La_s390_32_regs *, struct La_s390_32_retval *,           \
+	const char *);                                                        \
+    unsigned int (*s390_64_gnu_pltexit) (                                     \
+	Elf64_Sym *, unsigned int, uintptr_t *, uintptr_t *,                  \
+	const struct La_s390_64_regs *, struct La_s390_64_retval *,           \
+	const char *)
 
-#include_next <ldsodefs.h>
+#  include_next <ldsodefs.h>
 
 #endif

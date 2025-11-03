@@ -19,14 +19,14 @@
 #include <ifunc-strcat.h>
 
 #if HAVE_STRCAT_C
-# if HAVE_STRCAT_IFUNC
-# define STRCAT STRCAT_C
-#  if defined SHARED && IS_IN (libc)
-#   undef libc_hidden_builtin_def
-#   define libc_hidden_builtin_def(name)		\
-  __hidden_ver1 (__strcat_c, __GI_strcat, __strcat_c);
+#  if HAVE_STRCAT_IFUNC
+#    define STRCAT STRCAT_C
+#    if defined SHARED && IS_IN(libc)
+#      undef libc_hidden_builtin_def
+#      define libc_hidden_builtin_def(name)                                   \
+	__hidden_ver1 (__strcat_c, __GI_strcat, __strcat_c);
+#    endif
 #  endif
-# endif
 
-# include <string/strcat.c>
+#  include <string/strcat.c>
 #endif

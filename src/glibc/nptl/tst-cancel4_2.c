@@ -54,8 +54,9 @@ tf_recvmmsg (void *arg)
       sun.sun_family = AF_UNIX;
     }
   while (bind (tempfd, (struct sockaddr *) &sun,
-	       offsetof (struct sockaddr_un, sun_path)
-	       + strlen (sun.sun_path) + 1) != 0);
+	       offsetof (struct sockaddr_un, sun_path) + strlen (sun.sun_path)
+		   + 1)
+	 != 0);
 
   tempfname = strdup (sun.sun_path);
 
@@ -98,8 +99,7 @@ tf_recvmmsg (void *arg)
   FAIL_EXIT1 ("recvmmsg returned");
 }
 
-struct cancel_tests tests[] =
-{
+struct cancel_tests tests[] = {
   ADD_TEST (recvmmsg, 2, 1),
 };
 #define ntest_tf (sizeof (tests) / sizeof (tests[0]))

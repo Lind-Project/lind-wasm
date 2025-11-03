@@ -21,23 +21,23 @@
    DSO load/unload.  */
 
 #ifdef _LIBC
-# include <shlib-compat.h>
+#  include <shlib-compat.h>
 #endif
 
-#if !defined _LIBC || SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_2_5)
+#if !defined _LIBC || SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_2_5)
 
-#include <link.h>
-#include <stddef.h>
+#  include <link.h>
+#  include <stddef.h>
 
-#define _Unwind_Find_FDE _Unwind_Find_registered_FDE
+#  define _Unwind_Find_FDE _Unwind_Find_registered_FDE
 
-#include <unwind-dw2-fde.c>
+#  include <unwind-dw2-fde.c>
 
-#undef _Unwind_Find_FDE
+#  undef _Unwind_Find_FDE
 
-extern fde * _Unwind_Find_registered_FDE (void *pc,
-					  struct dwarf_eh_bases *bases);
-extern fde * _Unwind_Find_FDE (void *, struct dwarf_eh_bases *);
+extern fde *_Unwind_Find_registered_FDE (void *pc,
+					 struct dwarf_eh_bases *bases);
+extern fde *_Unwind_Find_FDE (void *, struct dwarf_eh_bases *);
 
 struct unw_eh_callback_data
 {
@@ -84,8 +84,8 @@ static int
 _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
 {
   struct unw_eh_callback_data *data = (struct unw_eh_callback_data *) ptr;
-  const ElfW(Phdr) *phdr, *p_eh_frame_hdr;
-  const ElfW(Phdr) *p_dynamic __attribute__ ((unused));
+  const ElfW (Phdr) * phdr, *p_eh_frame_hdr;
+  const ElfW (Phdr) * p_dynamic __attribute__ ((unused));
   long n, match;
   _Unwind_Ptr load_base;
   const unsigned char *p;
@@ -94,8 +94,8 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
   struct object ob;
 
   /* Make sure struct dl_phdr_info is at least as big as we need.  */
-  if (size < offsetof (struct dl_phdr_info, dlpi_phnum)
-	     + sizeof (info->dlpi_phnum))
+  if (size
+      < offsetof (struct dl_phdr_info, dlpi_phnum) + sizeof (info->dlpi_phnum))
     return -1;
 
   match = 0;
@@ -123,20 +123,20 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
     return 0;
 
   /* Read .eh_frame_hdr header.  */
-  hdr = (const struct unw_eh_frame_hdr *)
-	(p_eh_frame_hdr->p_vaddr + load_base);
+  hdr = (const struct unw_eh_frame_hdr *) (p_eh_frame_hdr->p_vaddr
+					   + load_base);
   if (hdr->version != 1)
     return 1;
 
-#ifdef CRT_GET_RFIB_DATA
-# ifdef __i386__
+#  ifdef CRT_GET_RFIB_DATA
+#    ifdef __i386__
   data->dbase = NULL;
   if (p_dynamic)
     {
       /* For dynamically linked executables and shared libraries,
 	 DT_PLTGOT is the gp value for that object.  */
-      ElfW(Dyn) *dyn = (ElfW(Dyn) *)(p_dynamic->p_vaddr + load_base);
-      for (; dyn->d_tag != DT_NULL ; dyn++)
+      ElfW (Dyn) *dyn = (ElfW (Dyn) *) (p_dynamic->p_vaddr + load_base);
+      for (; dyn->d_tag != DT_NULL; dyn++)
 	if (dyn->d_tag == DT_PLTGOT)
 	  {
 	    /* On IA-32, _DYNAMIC is writable and GLIBC has relocated it.  */
@@ -144,19 +144,17 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
 	    break;
 	  }
     }
-# else
-#  error What is DW_EH_PE_datarel base on this platform?
-# endif
-#endif
-#ifdef CRT_GET_RFIB_TEXT
-# error What is DW_EH_PE_textrel base on this platform?
-#endif
+#    else
+#      error What is DW_EH_PE_datarel base on this platform?
+#    endif
+#  endif
+#  ifdef CRT_GET_RFIB_TEXT
+#    error What is DW_EH_PE_textrel base on this platform?
+#  endif
 
-  p = read_encoded_value_with_base (hdr->eh_frame_ptr_enc,
-				    base_from_cb_data (hdr->eh_frame_ptr_enc,
-						       data),
-				    (const unsigned char *) (hdr + 1),
-				    &eh_frame);
+  p = read_encoded_value_with_base (
+      hdr->eh_frame_ptr_enc, base_from_cb_data (hdr->eh_frame_ptr_enc, data),
+      (const unsigned char *) (hdr + 1), &eh_frame);
 
   /* We require here specific table encoding to speed things up.
      Also, DW_EH_PE_datarel here means using PT_GNU_EH_FRAME start
@@ -166,16 +164,16 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
     {
       _Unwind_Ptr fde_count;
 
-      p = read_encoded_value_with_base (hdr->fde_count_enc,
-					base_from_cb_data (hdr->fde_count_enc,
-							   data),
-					p, &fde_count);
+      p = read_encoded_value_with_base (
+	  hdr->fde_count_enc, base_from_cb_data (hdr->fde_count_enc, data), p,
+	  &fde_count);
       /* Shouldn't happen.  */
       if (fde_count == 0)
 	return 1;
       if ((((_Unwind_Ptr) p) & 3) == 0)
 	{
-	  struct fde_table {
+	  struct fde_table
+	  {
 	    signed initial_loc __attribute__ ((mode (SI)));
 	    signed fde __attribute__ ((mode (SI)));
 	  };
@@ -229,7 +227,7 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
   ob.dbase = data->dbase;
   ob.u.single = (fde *) eh_frame;
   ob.s.i = 0;
-  ob.s.b.mixed_encoding = 1;  /* Need to assume worst case.  */
+  ob.s.b.mixed_encoding = 1; /* Need to assume worst case.  */
   data->ret = linear_search_fdes (&ob, (fde *) eh_frame, (void *) data->pc);
   if (data->ret != NULL)
     {
@@ -243,9 +241,9 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
   return 1;
 }
 
-# ifdef _LIBC
-# define dl_iterate_phdr __dl_iterate_phdr
-# endif
+#  ifdef _LIBC
+#    define dl_iterate_phdr __dl_iterate_phdr
+#  endif
 
 fde *
 _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)

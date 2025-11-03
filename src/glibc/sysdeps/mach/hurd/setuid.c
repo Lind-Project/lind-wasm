@@ -78,12 +78,11 @@ retry:
 	  ngen = _hurd_id.gen.nuids;
 	}
 
-      err = __USEPORT (AUTH, __auth_makeauth
-		       (port, NULL, MACH_MSG_TYPE_COPY_SEND, 0,
-			newgen, ngen, newaux, naux,
-			_hurd_id.gen.gids, _hurd_id.gen.ngids,
-			_hurd_id.aux.gids, _hurd_id.aux.ngids,
-			&newauth));
+      err = __USEPORT (
+	  AUTH, __auth_makeauth (port, NULL, MACH_MSG_TYPE_COPY_SEND, 0,
+				 newgen, ngen, newaux, naux, _hurd_id.gen.gids,
+				 _hurd_id.gen.ngids, _hurd_id.aux.gids,
+				 _hurd_id.aux.ngids, &newauth));
     }
   __mutex_unlock (&_hurd_id.lock);
   HURD_CRITICAL_END;

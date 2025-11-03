@@ -33,28 +33,31 @@ static char rcsid[] = "$NetBSD: $";
 
 static const long double
 #if LDBL_MANT_DIG == 64
-two65 =  3.68934881474191032320e+19L; /* 0x4040, 0x80000000, 0x00000000 */
+    two65
+    = 3.68934881474191032320e+19L; /* 0x4040, 0x80000000, 0x00000000 */
 #else
-# error "Cannot handle this MANT_DIG"
+#  error "Cannot handle this MANT_DIG"
 #endif
 
-
-long double __frexpl(long double x, int *eptr)
+long double
+__frexpl (long double x, int *eptr)
 {
-	uint32_t se, hx, ix, lx;
-	GET_LDOUBLE_WORDS(se,hx,lx,x);
-	ix = 0x7fff&se;
-	*eptr = 0;
-	if(ix==0x7fff||((ix|hx|lx)==0)) return x + x;	/* 0,inf,nan */
-	if (ix==0x0000) {		/* subnormal */
-	    x *= two65;
-	    GET_LDOUBLE_EXP(se,x);
-	    ix = se&0x7fff;
-	    *eptr = -65;
-	}
-	*eptr += ix-16382;
-	se = (se & 0x8000) | 0x3ffe;
-	SET_LDOUBLE_EXP(x,se);
-	return x;
+  uint32_t se, hx, ix, lx;
+  GET_LDOUBLE_WORDS (se, hx, lx, x);
+  ix = 0x7fff & se;
+  *eptr = 0;
+  if (ix == 0x7fff || ((ix | hx | lx) == 0))
+    return x + x; /* 0,inf,nan */
+  if (ix == 0x0000)
+    { /* subnormal */
+      x *= two65;
+      GET_LDOUBLE_EXP (se, x);
+      ix = se & 0x7fff;
+      *eptr = -65;
+    }
+  *eptr += ix - 16382;
+  se = (se & 0x8000) | 0x3ffe;
+  SET_LDOUBLE_EXP (x, se);
+  return x;
 }
 libm_alias_ldouble (__frexp, frexp)

@@ -1,4 +1,5 @@
-/* Copyright (C) 1996-2024 Free Software Foundation, Inc.  This file is part of the GNU C Library.
+/* Copyright (C) 1996-2024 Free Software Foundation, Inc.  This file is part of
+   the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -15,15 +16,16 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_SIGCONTEXT_H
-#define _BITS_SIGCONTEXT_H 1
+#  define _BITS_SIGCONTEXT_H 1
 
-#if !defined _SIGNAL_H && !defined _SYS_UCONTEXT_H
-# error "Never use <bits/sigcontext.h> directly; include <signal.h> instead."
-#endif
+#  if !defined _SIGNAL_H && !defined _SYS_UCONTEXT_H
+#    error                                                                     \
+	"Never use <bits/sigcontext.h> directly; include <signal.h> instead."
+#  endif
 
-#include <sgidefs.h>
+#  include <sgidefs.h>
 
-#if _MIPS_SIM == _ABIO32
+#  if _MIPS_SIM == _ABIO32
 
 /* Certain unused fields were replaced with new ones in 2.6.12-rc4.
    The changes were as follows:
@@ -36,7 +38,8 @@
    sc_sigset[3] -> sc_lo3
 
    sc_regmask, sc_ownedfp and sc_fpc_eir are not used.  */
-struct sigcontext {
+struct sigcontext
+{
   unsigned int sc_regmask;
   unsigned int sc_status;
   __extension__ unsigned long long sc_pc;
@@ -57,10 +60,11 @@ struct sigcontext {
   unsigned long sc_lo3;
 };
 
-#else
+#  else
 
 /* This structure changed in 2.6.12-rc4 when DSP support was added.  */
-struct sigcontext {
+struct sigcontext
+{
   __extension__ unsigned long long sc_regs[32];
   __extension__ unsigned long long sc_fpregs[32];
   __extension__ unsigned long long sc_mdhi;
@@ -78,5 +82,5 @@ struct sigcontext {
   unsigned int sc_reserved;
 };
 
-#endif /* _MIPS_SIM != _ABIO32 */
+#  endif /* _MIPS_SIM != _ABIO32 */
 #endif

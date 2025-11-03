@@ -44,8 +44,8 @@ __lgamma_productl (long double t, long double x, long double x_eps, int n)
       long double rpq_eps = (ret - rpq) + quot;
       long double nret = rpq + rhi;
       long double nret_eps = (rpq - nret) + rhi;
-      ret_eps += (rpq_eps + nret_eps + rlo + ret_eps * quot
-		  + quot_lo + quot_lo * (ret + ret_eps));
+      ret_eps += (rpq_eps + nret_eps + rlo + ret_eps * quot + quot_lo
+		  + quot_lo * (ret + ret_eps));
       ret = nret;
     }
   return ret + ret_eps;

@@ -19,9 +19,8 @@
 #include <poll.h>
 
 int
-__ppoll64_chk (struct pollfd *fds, nfds_t nfds,
-	       const struct __timespec64 *tmo, const __sigset_t *ss,
-	       __SIZE_TYPE__ fdslen)
+__ppoll64_chk (struct pollfd *fds, nfds_t nfds, const struct __timespec64 *tmo,
+	       const __sigset_t *ss, __SIZE_TYPE__ fdslen)
 {
   if (fdslen / sizeof (*fds) < nfds)
     __chk_fail ();

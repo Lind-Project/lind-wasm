@@ -21,12 +21,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static pthread_barrier_t b;
 static pthread_cond_t c = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t m;
 static bool first = true;
-
 
 static void *
 tf (void *arg)
@@ -76,7 +74,6 @@ tf (void *arg)
   printf ("thread %ld: testcancel returned\n", n + 1);
   exit (1);
 }
-
 
 static int
 do_test (void)

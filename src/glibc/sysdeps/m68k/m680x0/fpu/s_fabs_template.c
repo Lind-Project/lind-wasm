@@ -20,8 +20,5 @@
 #include "mathimpl.h"
 
 FLOAT
-M_DECL_FUNC (__fabs) (FLOAT x)
-{
-  return __m81_u(M_SUF (__fabs)) (x);
-}
+M_DECL_FUNC (__fabs) (FLOAT x) { return __m81_u (M_SUF (__fabs)) (x); }
 declare_mgen_alias (__fabs, fabs)

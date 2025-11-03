@@ -17,4 +17,4 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Minimum size for a thread.  At least two pages with 64k pages.  */
-#define PTHREAD_STACK_MIN	131072
+#define PTHREAD_STACK_MIN 131072

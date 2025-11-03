@@ -17,10 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TLS_INTERNAL_H
-#define _TLS_INTERNAL_H 1
+#  define _TLS_INTERNAL_H 1
 
-#include <stdlib.h>
-#include <pthreadP.h>
+#  include <stdlib.h>
+#  include <pthreadP.h>
 
 static inline struct tls_internal_t *
 __glibc_tls_internal (void)

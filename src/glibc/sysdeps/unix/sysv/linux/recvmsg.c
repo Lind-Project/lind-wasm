@@ -50,11 +50,9 @@ __libc_recvmsg64 (int fd, struct msghdr *msg, int flags)
 #if __TIMESIZE != 64
 weak_alias (__libc_recvmsg64, __recvmsg64)
 
-ssize_t
-__libc_recvmsg (int fd, struct msghdr *msg, int flags)
+    ssize_t __libc_recvmsg (int fd, struct msghdr *msg, int flags)
 {
   return __recvmsg_syscall (fd, msg, flags);
 }
 #endif
-weak_alias (__libc_recvmsg, recvmsg)
-weak_alias (__libc_recvmsg, __recvmsg)
+weak_alias (__libc_recvmsg, recvmsg) weak_alias (__libc_recvmsg, __recvmsg)

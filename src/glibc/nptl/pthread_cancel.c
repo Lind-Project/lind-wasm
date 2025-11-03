@@ -35,9 +35,7 @@ sigcancel_handler (int sig, siginfo_t *si, void *ctx)
      other signals and send a signal from another process.  This is not
      correct and might even be a security problem.  Try to catch as
      many incorrect invocations as possible.  */
-  if (sig != SIGCANCEL
-      || si->si_pid != __getpid()
-      || si->si_code != SI_TKILL)
+  if (sig != SIGCANCEL || si->si_pid != __getpid () || si->si_code != SI_TKILL)
     return;
 
   struct pthread *self = THREAD_SELF;
@@ -54,8 +52,8 @@ sigcancel_handler (int sig, siginfo_t *si, void *ctx)
 	/* Already canceled or exiting.  */
 	break;
 
-      if (atomic_compare_exchange_weak_acquire (&self->cancelhandling,
-						&oldval, newval))
+      if (atomic_compare_exchange_weak_acquire (&self->cancelhandling, &oldval,
+						newval))
 	{
 	  self->result = PTHREAD_CANCELED;
 
@@ -155,13 +153,13 @@ __pthread_cancel (pthread_t th)
 	  break;
 	}
 
-	/* A single-threaded process should be able to kill itself, since
-	   there is nothing in the POSIX specification that says that it
-	   cannot.  So we set multiple_threads to true so that cancellation
-	   points get executed.  */
-	THREAD_SETMEM (THREAD_SELF, header.multiple_threads, 1);
+      /* A single-threaded process should be able to kill itself, since
+	 there is nothing in the POSIX specification that says that it
+	 cannot.  So we set multiple_threads to true so that cancellation
+	 points get executed.  */
+      THREAD_SETMEM (THREAD_SELF, header.multiple_threads, 1);
 #ifndef TLS_MULTIPLE_THREADS_IN_TCB
-	__libc_single_threaded_internal = 0;
+      __libc_single_threaded_internal = 0;
 #endif
     }
   while (!atomic_compare_exchange_weak_acquire (&pd->cancelhandling, &oldval,
@@ -171,7 +169,7 @@ __pthread_cancel (pthread_t th)
 }
 versioned_symbol (libc, __pthread_cancel, pthread_cancel, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_cancel, pthread_cancel, GLIBC_2_0);
 #endif
 

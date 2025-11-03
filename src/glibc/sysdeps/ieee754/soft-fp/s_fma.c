@@ -70,6 +70,5 @@ __fma (double a, double b, double c)
 DIAG_POP_NEEDS_COMMENT;
 
 #ifndef __fma
-libm_alias_double (__fma, fma)
-libm_alias_double_narrow (__fma, fma)
+libm_alias_double (__fma, fma) libm_alias_double_narrow (__fma, fma)
 #endif

@@ -23,6 +23,8 @@
 int
 __getpeername (int fd, struct sockaddr *__restrict addr, socklen_t *len)
 {
-   return MAKE_SYSCALL(GETPEERNAME_SYSCALL, "syscall|getpeername", (uint64_t) fd, (uint64_t) addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (GETPEERNAME_SYSCALL, "syscall|getpeername",
+		       (uint64_t) fd, (uint64_t) addr, (uint64_t) len, NOTUSED,
+		       NOTUSED, NOTUSED);
 }
 weak_alias (__getpeername, getpeername)

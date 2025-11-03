@@ -27,25 +27,25 @@
 #define SAT 0x1
 
 /* This test is supported only on POWER 5 or higher.  */
-#define PPC_CPU_SUPPORTED (PPC_FEATURE_POWER5 | PPC_FEATURE_POWER5_PLUS \
-			   | PPC_FEATURE_ARCH_2_05 | PPC_FEATURE_ARCH_2_06 \
-			   | PPC_FEATURE2_ARCH_2_07)
+#define PPC_CPU_SUPPORTED                                                     \
+  (PPC_FEATURE_POWER5 | PPC_FEATURE_POWER5_PLUS | PPC_FEATURE_ARCH_2_05       \
+   | PPC_FEATURE_ARCH_2_06 | PPC_FEATURE2_ARCH_2_07)
 static int
 do_test (void)
 {
 
-  if (!(getauxval(AT_HWCAP2) & PPC_CPU_SUPPORTED))
+  if (!(getauxval (AT_HWCAP2) & PPC_CPU_SUPPORTED))
     {
-      if (!(getauxval(AT_HWCAP) & PPC_CPU_SUPPORTED))
-      FAIL_UNSUPPORTED("This test is unsupported on POWER < 5\n");
+      if (!(getauxval (AT_HWCAP) & PPC_CPU_SUPPORTED))
+	FAIL_UNSUPPORTED ("This test is unsupported on POWER < 5\n");
     }
 
   uint32_t vscr[4] __attribute__ ((aligned (16)));
-  uint32_t* vscr_ptr = vscr;
+  uint32_t *vscr_ptr = vscr;
   uint32_t vscr_word;
   ucontext_t ucp;
-  __vector unsigned int v0 = {0};
-  __vector unsigned int v1 = {0};
+  __vector unsigned int v0 = { 0 };
+  __vector unsigned int v1 = { 0 };
 
   /* Set SAT bit in VSCR register.  */
   asm volatile (".machine push;\n"
@@ -57,8 +57,8 @@ do_test (void)
 		"mfvscr %0;\n"
 		"stvx %0,0,%2;\n"
 		".machine pop;"
-		: "=v" (v0), "=v" (v1)
-		: "r" (vscr_ptr)
+		: "=v"(v0), "=v"(v1)
+		: "r"(vscr_ptr)
 		: "memory");
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   vscr_word = vscr[0];
@@ -68,16 +68,16 @@ do_test (void)
 
   if ((vscr_word & SAT) != SAT)
     {
-      FAIL_EXIT1("FAIL: SAT bit is not set.\n");
+      FAIL_EXIT1 ("FAIL: SAT bit is not set.\n");
     }
 
   if (getcontext (&ucp))
     {
-      FAIL_EXIT1("FAIL: getcontext error\n");
+      FAIL_EXIT1 ("FAIL: getcontext error\n");
     }
   if (ucp.uc_mcontext.v_regs->vscr.vscr_word != vscr_word)
     {
-      FAIL_EXIT1("FAIL: ucontext vscr does not match with vscr\n");
+      FAIL_EXIT1 ("FAIL: ucontext vscr does not match with vscr\n");
     }
   return 0;
 }

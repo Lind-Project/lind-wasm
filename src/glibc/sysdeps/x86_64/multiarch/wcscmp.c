@@ -17,21 +17,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define wcscmp __redirect_wcscmp
-# define __wcscmp __redirect___wcscmp
-# include <wchar.h>
-# undef wcscmp
-# undef __wcscmp
+#if IS_IN(libc)
+#  define wcscmp __redirect_wcscmp
+#  define __wcscmp __redirect___wcscmp
+#  include <wchar.h>
+#  undef wcscmp
+#  undef __wcscmp
 
-# define SYMBOL_NAME wcscmp
-# include "ifunc-avx2.h"
+#  define SYMBOL_NAME wcscmp
+#  include "ifunc-avx2.h"
 
 libc_ifunc_redirected (__redirect_wcscmp, __wcscmp, IFUNC_SELECTOR ());
 weak_alias (__wcscmp, wcscmp)
 
-# ifdef SHARED
-__hidden_ver1 (__wcscmp, __GI___wcscmp, __redirect_wcscmp)
-  __attribute__ ((visibility ("hidden")));
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (__wcscmp, __GI___wcscmp, __redirect_wcscmp)
+	__attribute__ ((visibility ("hidden")));
+#  endif
 #endif

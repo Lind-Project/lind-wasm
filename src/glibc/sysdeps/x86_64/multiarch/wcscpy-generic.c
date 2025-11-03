@@ -16,11 +16,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-
 #include <isa-level.h>
-#if ISA_SHOULD_BUILD (2)
+#if ISA_SHOULD_BUILD(2)
 
-# define WCSCPY  __wcscpy_generic
-# include <wcsmbs/wcscpy.c>
+#  define WCSCPY __wcscpy_generic
+#  include <wcsmbs/wcscpy.c>
 
 #endif

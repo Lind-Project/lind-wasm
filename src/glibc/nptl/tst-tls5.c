@@ -32,9 +32,9 @@ struct tls_obj tls_registry[64];
 static int
 tls_addr_cmp (const void *a, const void *b)
 {
-  if (((struct tls_obj *)a)->addr < ((struct tls_obj *)b)->addr)
+  if (((struct tls_obj *) a)->addr < ((struct tls_obj *) b)->addr)
     return -1;
-  if (((struct tls_obj *)a)->addr > ((struct tls_obj *)b)->addr)
+  if (((struct tls_obj *) a)->addr > ((struct tls_obj *) b)->addr)
     return 1;
   return 0;
 }
@@ -46,7 +46,8 @@ do_test (void)
   int res = 0;
   uintptr_t min_addr = ~(uintptr_t) 0, max_addr = 0;
 
-  for (cnt = 0; tls_registry[cnt].name; ++cnt);
+  for (cnt = 0; tls_registry[cnt].name; ++cnt)
+    ;
   tls_registry[cnt].name = NULL;
   tls_registry[cnt].addr = (uintptr_t) pthread_self ();
   tls_registry[cnt].size = sizeof (struct pthread);
@@ -59,8 +60,8 @@ do_test (void)
       printf ("%s%s = %p, size %zd, align %zd",
 	      tls_registry[i].name ? "&" : "",
 	      tls_registry[i].name ?: "pthread_self ()",
-	      (void *) tls_registry[i].addr,
-	      tls_registry[i].size, tls_registry[i].align);
+	      (void *) tls_registry[i].addr, tls_registry[i].size,
+	      tls_registry[i].align);
       if (tls_registry[i].addr & (tls_registry[i].align - 1))
 	{
 	  fputs (", WRONG ALIGNMENT", stdout);
@@ -77,14 +78,14 @@ do_test (void)
       if (tls_registry[i].name)
 	{
 	  min_addr = MIN (tls_registry[i].addr, min_addr);
-	  max_addr = MAX (tls_registry[i].addr + tls_registry[i].size,
-			  max_addr);
+	  max_addr
+	      = MAX (tls_registry[i].addr + tls_registry[i].size, max_addr);
 	}
     }
 
   if (cnt > 1)
     {
-#if TLS_TCB_AT_TP
+#  if TLS_TCB_AT_TP
       if (tls_registry[cnt - 1].name)
 	{
 	  puts ("pthread_self () not larger than all TLS addresses");
@@ -92,26 +93,26 @@ do_test (void)
 	}
       else
 	max_addr = MAX (tls_registry[cnt - 1].addr, max_addr);
-#elif TLS_DTV_AT_TP
+#  elif TLS_DTV_AT_TP
       if (tls_registry[0].name)
 	{
 	  puts ("pthread_self () not smaller than all TLS addresses");
 	  res = 1;
 	}
-#else
+#  else
       abort ();
-#endif
+#  endif
       printf ("Initial TLS used block size %zd\n",
 	      (size_t) (max_addr - min_addr));
     }
   return res;
 }
 
-#define TEST_FUNCTION do_test ()
+#  define TEST_FUNCTION do_test ()
 
 #else
 
-#define TEST_FUNCTION 0
+#  define TEST_FUNCTION 0
 
 #endif
 

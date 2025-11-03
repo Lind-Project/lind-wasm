@@ -20,9 +20,11 @@
 
 #ifdef __ASSEMBLER__
 
-#define ret	rts ; nop
+#  define ret                                                                 \
+    rts;                                                                      \
+    nop
 
 /* The sh move insn is s, d.  */
-#define MOVE(x,y)	mov x , y
+#  define MOVE(x, y) mov x, y
 
 #endif

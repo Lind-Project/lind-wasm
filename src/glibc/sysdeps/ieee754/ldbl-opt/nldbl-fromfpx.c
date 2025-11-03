@@ -18,8 +18,7 @@
 
 #include "nldbl-compat.h"
 
-intmax_t
-attribute_hidden
+intmax_t attribute_hidden
 fromfpxl (double x, int round, unsigned int width)
 {
   return fromfpx (x, round, width);

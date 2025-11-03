@@ -19,9 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 
-
 static int result;
-
 
 static void
 destr (void *arg)
@@ -31,7 +29,6 @@ destr (void *arg)
   else
     result = 0;
 }
-
 
 static void *
 tf (void *arg)
@@ -46,7 +43,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -90,7 +86,6 @@ do_test (void)
 
   return result;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

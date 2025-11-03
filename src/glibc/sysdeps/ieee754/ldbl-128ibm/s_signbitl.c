@@ -24,7 +24,7 @@ ___signbitl (long double x)
 {
   return __builtin_signbitl (x);
 }
-#if IS_IN (libm)
+#if IS_IN(libm)
 long_double_symbol (libm, ___signbitl, __signbitl);
 #else
 long_double_symbol (libc, ___signbitl, __signbitl);

@@ -16,7 +16,7 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define JB_SP	1
+#define JB_SP 1
 
 /* Helper for generic ____longjmp_chk.  */
 #define JB_FRAME_ADDRESS(buf) ((void *) (unsigned long int) (buf[JB_SP]))

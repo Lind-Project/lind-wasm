@@ -1,7 +1,6 @@
 #include "nldbl-compat.h"
 
-void
-attribute_hidden
+void attribute_hidden
 syslog (int pri, const char *fmt, ...)
 {
   va_list ap;

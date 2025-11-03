@@ -16,28 +16,27 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define mempcpy __redirect_mempcpy
-# define __mempcpy __redirect___mempcpy
-# define NO_MEMPCPY_STPCPY_REDIRECT
-# define __NO_STRING_INLINES
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if IS_IN(libc)
+#  define mempcpy __redirect_mempcpy
+#  define __mempcpy __redirect___mempcpy
+#  define NO_MEMPCPY_STPCPY_REDIRECT
+#  define __NO_STRING_INLINES
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (__mempcpy) __mempcpy_ppc attribute_hidden;
 extern __typeof (__mempcpy) __mempcpy_power7 attribute_hidden;
-# undef mempcpy
-# undef __mempcpy
+#  undef mempcpy
+#  undef __mempcpy
 
 /* Avoid DWARF definition DIE on ifunc symbol so that GDB can handle
    ifunc symbol properly.  */
-libc_ifunc_redirected (__redirect___mempcpy,  __mempcpy,
-		       (hwcap & PPC_FEATURE_HAS_VSX)
-		       ? __mempcpy_power7
-		       : __mempcpy_ppc);
+libc_ifunc_redirected (__redirect___mempcpy, __mempcpy,
+		       (hwcap & PPC_FEATURE_HAS_VSX) ? __mempcpy_power7
+						     : __mempcpy_ppc);
 
 weak_alias (__mempcpy, mempcpy)
 #else
-# include <string/mempcpy.c>
+#  include <string/mempcpy.c>
 #endif

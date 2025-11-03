@@ -29,27 +29,28 @@
 
 // #define DEBUG
 #ifdef DEBUG
-# define PRINTF(fmt, args...) \
-  do					\
-    {					\
-      int save_errno = errno;		\
-      printf (fmt, ##args);		\
-      errno = save_errno;		\
-    } while (0)
+#  define PRINTF(fmt, args...)                                                \
+    do                                                                        \
+      {                                                                       \
+	int save_errno = errno;                                               \
+	printf (fmt, ##args);                                                 \
+	errno = save_errno;                                                   \
+      }                                                                       \
+    while (0)
 #else
-# define PRINTF(fmt, args...)
+#  define PRINTF(fmt, args...)
 #endif
 
-#define LONG_NAME \
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
-  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+#define LONG_NAME                                                             \
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"                        \
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"                        \
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"                        \
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"                        \
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"                        \
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"                        \
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"                        \
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"                        \
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"                        \
   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 static struct
@@ -58,29 +59,17 @@ static struct
   int level;
   int type;
   mode_t mode;
-} filesystem[] =
-{
-  { ".", 1, DT_DIR, 0755 },
-  { "..", 1, DT_DIR, 0755 },
-  { "dir", 1, DT_DIR, 0755 },
-    { ".", 2, DT_DIR, 0755 },
-    { "..", 2, DT_DIR, 0755 },
-    { "readable", 2, DT_DIR, 0755 },
-      { ".", 3, DT_DIR, 0755 },
-      { "..", 3, DT_DIR, 0755 },
-      { "a", 3, DT_REG, 0644 },
-      { LONG_NAME, 3, DT_REG, 0644 },
-    { "unreadable", 2, DT_DIR, 0111 },
-      { ".", 3, DT_DIR, 0111 },
-      { "..", 3, DT_DIR, 0755 },
-      { "a", 3, DT_REG, 0644 },
-    { "zz-readable", 2, DT_DIR, 0755 },
-      { ".", 3, DT_DIR, 0755 },
-      { "..", 3, DT_DIR, 0755 },
-      { "a", 3, DT_REG, 0644 }
-};
+} filesystem[]
+    = { { ".", 1, DT_DIR, 0755 },	    { "..", 1, DT_DIR, 0755 },
+	{ "dir", 1, DT_DIR, 0755 },	    { ".", 2, DT_DIR, 0755 },
+	{ "..", 2, DT_DIR, 0755 },	    { "readable", 2, DT_DIR, 0755 },
+	{ ".", 3, DT_DIR, 0755 },	    { "..", 3, DT_DIR, 0755 },
+	{ "a", 3, DT_REG, 0644 },	    { LONG_NAME, 3, DT_REG, 0644 },
+	{ "unreadable", 2, DT_DIR, 0111 },  { ".", 3, DT_DIR, 0111 },
+	{ "..", 3, DT_DIR, 0755 },	    { "a", 3, DT_REG, 0644 },
+	{ "zz-readable", 2, DT_DIR, 0755 }, { ".", 3, DT_DIR, 0755 },
+	{ "..", 3, DT_DIR, 0755 },	    { "a", 3, DT_REG, 0644 } };
 #define nfiles (sizeof (filesystem) / sizeof (filesystem[0]))
-
 
 typedef struct
 {
@@ -89,7 +78,6 @@ typedef struct
   struct dirent d;
   char room_for_dirent[sizeof (LONG_NAME)];
 } my_DIR;
-
 
 static long int
 find_file (const char *s)
@@ -145,7 +133,6 @@ find_file (const char *s)
   return -1;
 }
 
-
 static void *
 my_opendir (const char *s)
 {
@@ -175,12 +162,11 @@ my_opendir (const char *s)
   dir->level = filesystem[idx].level;
   dir->idx = idx;
 
-  PRINTF ("my_opendir(\"%s\") == { level: %d, idx: %ld }\n",
-	  s, filesystem[idx].level, idx);
+  PRINTF ("my_opendir(\"%s\") == { level: %d, idx: %ld }\n", s,
+	  filesystem[idx].level, idx);
 
   return dir;
 }
-
 
 static struct dirent *
 my_readdir (void *gdir)
@@ -189,8 +175,8 @@ my_readdir (void *gdir)
 
   if (dir->idx == -1)
     {
-      PRINTF ("my_readdir ({ level: %d, idx: %ld }) = NULL\n",
-	      dir->level, (long int) dir->idx);
+      PRINTF ("my_readdir ({ level: %d, idx: %ld }) = NULL\n", dir->level,
+	      (long int) dir->idx);
       return NULL;
     }
 
@@ -200,18 +186,19 @@ my_readdir (void *gdir)
   if (dir->idx == nfiles || filesystem[dir->idx].level < dir->level)
     {
       dir->idx = -1;
-      PRINTF ("my_readdir ({ level: %d, idx: %ld }) = NULL\n",
-	      dir->level, (long int) dir->idx);
+      PRINTF ("my_readdir ({ level: %d, idx: %ld }) = NULL\n", dir->level,
+	      (long int) dir->idx);
       return NULL;
     }
 
-  dir->d.d_ino = 1;		/* glob should not skip this entry.  */
+  dir->d.d_ino = 1; /* glob should not skip this entry.  */
 
   dir->d.d_type = filesystem[dir->idx].type;
 
   strcpy (dir->d.d_name, filesystem[dir->idx].name);
 
-  PRINTF ("my_readdir ({ level: %d, idx: %ld }) = { d_ino: %ld, d_type: %d, d_name: \"%s\" }\n",
+  PRINTF ("my_readdir ({ level: %d, idx: %ld }) = { d_ino: %ld, d_type: %d, "
+	  "d_name: \"%s\" }\n",
 	  dir->level, (long int) dir->idx, dir->d.d_ino, dir->d.d_type,
 	  dir->d.d_name);
 
@@ -220,14 +207,12 @@ my_readdir (void *gdir)
   return &dir->d;
 }
 
-
 static void
 my_closedir (void *dir)
 {
   PRINTF ("my_closedir ()\n");
   free (dir);
 }
-
 
 /* We use this function for lstat as well since we don't have any.  */
 static int
@@ -244,9 +229,12 @@ my_stat (const char *name, struct stat *st)
   memset (st, '\0', sizeof (*st));
 
   if (filesystem[idx].type == DT_UNKNOWN)
-    st->st_mode = DTTOIF (idx + 1 < nfiles
+    st->st_mode
+	= DTTOIF (idx + 1 < nfiles
 			  && filesystem[idx].level < filesystem[idx + 1].level
-			  ? DT_DIR : DT_REG) | filesystem[idx].mode;
+		      ? DT_DIR
+		      : DT_REG)
+	  | filesystem[idx].mode;
   else
     st->st_mode = DTTOIF (filesystem[idx].type) | filesystem[idx].mode;
 
@@ -254,7 +242,6 @@ my_stat (const char *name, struct stat *st)
 
   return 0;
 }
-
 
 static void
 init_glob_altdirfuncs (glob_t *pglob)
@@ -265,7 +252,6 @@ init_glob_altdirfuncs (glob_t *pglob)
   pglob->gl_lstat = my_stat;
   pglob->gl_stat = my_stat;
 }
-
 
 int
 do_test (void)

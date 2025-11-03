@@ -20,11 +20,9 @@
 #include <stdio.h>
 #include <unistd.h>
 
-
 #ifndef IS_NO_DIRECTORY_ERROR
-# define IS_NO_DIRECTORY_ERROR errno != EPERM
+#  define IS_NO_DIRECTORY_ERROR errno != EPERM
 #endif
-
 
 int
 remove (const char *file)

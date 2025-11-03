@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LINK_H
-# error "Never include <bits/link.h> directly; use <link.h> instead."
+#  error "Never include <bits/link.h> directly; use <link.h> instead."
 #endif
 
 /* Registers for entry into PLT.  */
@@ -37,13 +37,11 @@ typedef struct La_or1k_retval
 
 __BEGIN_DECLS
 
-extern Elf32_Addr la_or1k_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
-					uintptr_t *__refcook,
-					uintptr_t *__defcook,
-					La_or1k_regs *__regs,
-					unsigned int *__flags,
-					const char *__symname,
-					long int *__framesizep);
+extern Elf32_Addr
+la_or1k_gnu_pltenter (Elf32_Sym *__sym, unsigned int __ndx,
+		      uintptr_t *__refcook, uintptr_t *__defcook,
+		      La_or1k_regs *__regs, unsigned int *__flags,
+		      const char *__symname, long int *__framesizep);
 extern unsigned int la_or1k_gnu_pltexit (Elf32_Sym *__sym, unsigned int __ndx,
 					 uintptr_t *__refcook,
 					 uintptr_t *__defcook,

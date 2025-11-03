@@ -22,7 +22,9 @@ long
 _OtsNintXQ (long al, long ah, long _round)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A); FP_DECL_Q(B); FP_DECL_Q(C);
+  FP_DECL_Q (A);
+  FP_DECL_Q (B);
+  FP_DECL_Q (C);
   unsigned long r;
   long s;
 
@@ -31,17 +33,17 @@ _OtsNintXQ (long al, long ah, long _round)
   _round = _round & 3;
 
   FP_INIT_ROUNDMODE;
-  AXP_UNPACK_SEMIRAW_Q(A, a);
+  AXP_UNPACK_SEMIRAW_Q (A, a);
 
   /* Build 0.5 * sign(A) */
   B_e = _FP_EXPBIAS_Q;
   __FP_FRAC_SET_2 (B, 0, 0);
   B_s = A_s;
 
-  FP_ADD_Q(C, A, B);
-  _FP_FRAC_SRL_2(C, _FP_WORKBITS);
-  _FP_FRAC_HIGH_RAW_Q(C) &= ~(_FP_W_TYPE)_FP_IMPLBIT_Q;
-  FP_TO_INT_Q(r, C, 64, s);
+  FP_ADD_Q (C, A, B);
+  _FP_FRAC_SRL_2 (C, _FP_WORKBITS);
+  _FP_FRAC_HIGH_RAW_Q (C) &= ~(_FP_W_TYPE) _FP_IMPLBIT_Q;
+  FP_TO_INT_Q (r, C, 64, s);
   if (s > 0 && (_fex &= FP_EX_INVALID))
     FP_HANDLE_EXCEPTIONS;
 

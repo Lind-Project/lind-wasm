@@ -25,7 +25,7 @@
 
 #if !PTHREAD_IN_LIBC
 /* The private name is not exported from libc.  */
-# define __unlink unlink
+#  define __unlink unlink
 #endif
 
 int
@@ -46,9 +46,9 @@ __sem_unlink (const char *name)
 }
 #if PTHREAD_IN_LIBC
 versioned_symbol (libc, __sem_unlink, sem_unlink, GLIBC_2_34);
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1_1, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1_1, GLIBC_2_34)
 compat_symbol (libpthread, __sem_unlink, sem_unlink, GLIBC_2_1_1);
-# endif
+#  endif
 #else /* !PTHREAD_IN_LIBC */
 strong_alias (__sem_unlink, sem_unlink)
 #endif

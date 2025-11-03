@@ -17,10 +17,10 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_FZB_H
-#define _STRING_FZB_H 1
+#  define _STRING_FZB_H 1
 
-#include <sys/cdefs.h>
-#include <string-optype.h>
+#  include <sys/cdefs.h>
+#  include <string-optype.h>
 
 _Static_assert (sizeof (op_t) == 4, "64-bit not supported");
 
@@ -31,9 +31,13 @@ has_zero (op_t x)
   /* It's more useful to expose a control transfer to the compiler
      than to expose a proper boolean result.  */
   asm goto ("uxor,sbz %%r0,%0,%%r0\n\t"
-	    "b,n %l1" : : "r"(x) : : nbz);
+	    "b,n %l1"
+	    :
+	    : "r"(x)
+	    :
+	    : nbz);
   return 1;
- nbz:
+nbz:
   return 0;
 }
 
@@ -42,9 +46,13 @@ static __always_inline _Bool
 has_eq (op_t x1, op_t x2)
 {
   asm goto ("uxor,sbz %0,%1,%%r0\n\t"
-	    "b,n %l2" : : "r"(x1), "r"(x2) : : nbz);
+	    "b,n %l2"
+	    :
+	    : "r"(x1), "r"(x2)
+	    :
+	    : nbz);
   return 1;
- nbz:
+nbz:
   return 0;
 }
 
@@ -54,9 +62,13 @@ has_zero_eq (op_t x1, op_t x2)
 {
   asm goto ("uxor,sbz %%r0,%0,%%r0\n\t"
 	    "uxor,nbz %0,%1,%%r0\n\t"
-	    "b,n %l2" : : "r"(x1), "r"(x2) : : sbz);
+	    "b,n %l2"
+	    :
+	    : "r"(x1), "r"(x2)
+	    :
+	    : sbz);
   return 0;
- sbz:
+sbz:
   return 1;
 }
 

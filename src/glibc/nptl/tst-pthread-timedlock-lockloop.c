@@ -70,8 +70,8 @@ worker_clocklock (void *arg)
 {
   for (unsigned int run = 0; run < runs; run++)
     {
-      struct timespec time =
-	timespec_add (xclock_now (clockid), make_timespec (0, 1000000));
+      struct timespec time
+	  = timespec_add (xclock_now (clockid), make_timespec (0, 1000000));
 
       int ret = pthread_mutex_clocklock (&mutex, clockid, &time);
 
@@ -84,7 +84,7 @@ worker_clocklock (void *arg)
 }
 
 static int
-run_test_set (void *(*worker) (void *))
+run_test_set (void *(*worker) (void *) )
 {
   pthread_t workers[NUM_THREADS];
 

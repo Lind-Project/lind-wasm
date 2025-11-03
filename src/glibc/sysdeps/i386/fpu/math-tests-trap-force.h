@@ -18,12 +18,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef I386_FPU_MATH_TESTS_TRAP_FORCE_H
-#define I386_FPU_MATH_TESTS_TRAP_FORCE_H 1
+#  define I386_FPU_MATH_TESTS_TRAP_FORCE_H 1
 
-#include <cpu-features.h>
+#  include <cpu-features.h>
 
 /* Setting exception flags in FPU Status Register results in enabled traps for
    those exceptions being taken.  */
-#define EXCEPTION_SET_FORCES_TRAP !CPU_FEATURE_USABLE (SSE)
+#  define EXCEPTION_SET_FORCES_TRAP !CPU_FEATURE_USABLE (SSE)
 
 #endif /* math-tests-trap-force.h.  */

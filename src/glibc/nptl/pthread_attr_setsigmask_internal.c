@@ -21,7 +21,7 @@
 
 int
 __pthread_attr_setsigmask_internal (pthread_attr_t *attr,
-                                    const sigset_t *sigmask)
+				    const sigset_t *sigmask)
 {
   struct pthread_attr *iattr = (struct pthread_attr *) attr;
 
@@ -29,7 +29,7 @@ __pthread_attr_setsigmask_internal (pthread_attr_t *attr,
     {
       /* Mark the signal mask as unset if it is present.  */
       if (iattr->extension != NULL)
-        iattr->extension->sigmask_set = false;
+	iattr->extension->sigmask_set = false;
       return 0;
     }
 

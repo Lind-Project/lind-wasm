@@ -39,21 +39,23 @@
 #include <_itoa.h>
 
 /* Compute the difference between START and END, storing into DIFF.  */
-#define HP_TIMING_DIFF(Diff, Start, End)	((Diff) = (End) - (Start))
+#define HP_TIMING_DIFF(Diff, Start, End) ((Diff) = (End) - (Start))
 
 /* Accumulate ADD into SUM.  No attempt is made to be thread-safe.  */
-#define HP_TIMING_ACCUM_NT(Sum, Diff)		((Sum) += (Diff))
+#define HP_TIMING_ACCUM_NT(Sum, Diff) ((Sum) += (Diff))
 
 #define HP_TIMING_PRINT_SIZE (3 * sizeof (hp_timing_t) + 1)
 
-/* Write a decimal representation of the timing value into the given string.  */
-#define HP_TIMING_PRINT(Dest, Len, Val) 				\
-  do {									\
-    char __buf[HP_TIMING_PRINT_SIZE];					\
-    char *__dest = (Dest);						\
-    size_t __len = (Len);						\
-    char *__cp = _itoa ((Val), __buf + sizeof (__buf), 10, 0);		\
-    size_t __cp_len = MIN (__buf + sizeof (__buf) - __cp, __len);	\
-    memcpy (__dest, __cp, __cp_len);					\
-    __dest[__cp_len - 1] = '\0';					\
-  } while (0)
+/* Write a decimal representation of the timing value into the given string. */
+#define HP_TIMING_PRINT(Dest, Len, Val)                                       \
+  do                                                                          \
+    {                                                                         \
+      char __buf[HP_TIMING_PRINT_SIZE];                                       \
+      char *__dest = (Dest);                                                  \
+      size_t __len = (Len);                                                   \
+      char *__cp = _itoa ((Val), __buf + sizeof (__buf), 10, 0);              \
+      size_t __cp_len = MIN (__buf + sizeof (__buf) - __cp, __len);           \
+      memcpy (__dest, __cp, __cp_len);                                        \
+      __dest[__cp_len - 1] = '\0';                                            \
+    }                                                                         \
+  while (0)

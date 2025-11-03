@@ -26,16 +26,14 @@
 #include <errorlib.h>
 #include <tls-internal.h>
 
-
 static const char *
 translate (const char *str, locale_t loc)
 {
   locale_t oldloc = __uselocale (loc);
-  const char *res = _(str);
+  const char *res = _ (str);
   __uselocale (oldloc);
   return res;
 }
-
 
 /* Return a string describing the errno code in ERRNUM.  */
 char *
@@ -55,13 +53,14 @@ __strerror_l (int errnum, locale_t loc)
   sub = err_get_sub (errnum);
   code = err_get_code (errnum);
 
-  if (system > err_max_system || ! __mach_error_systems[system].bad_sub)
+  if (system > err_max_system || !__mach_error_systems[system].bad_sub)
     {
       struct tls_internal_t *tls_internal = __glibc_tls_internal ();
       free (tls_internal->strerror_l_buf);
       if (__asprintf (&tls_internal->strerror_l_buf, "%s%X",
 		      translate ("Error in unknown error system: ", loc),
-		      errnum) > 0)
+		      errnum)
+	  > 0)
 	err = tls_internal->strerror_l_buf;
       else
 	{
@@ -85,8 +84,8 @@ __strerror_l (int errnum, locale_t loc)
       free (tls_internal->strerror_l_buf);
       if (__asprintf (&tls_internal->strerror_l_buf, "%s%s %d",
 		      translate ("Unknown error ", loc),
-		      translate (es->subsystem[sub].subsys_name, loc),
-		      errnum) > 0)
+		      translate (es->subsystem[sub].subsys_name, loc), errnum)
+	  > 0)
 	err = tls_internal->strerror_l_buf;
       else
 	{
@@ -102,5 +101,4 @@ __strerror_l (int errnum, locale_t loc)
   __set_errno (saved_errno);
   return err;
 }
-weak_alias (__strerror_l, strerror_l)
-libc_hidden_def (__strerror_l)
+weak_alias (__strerror_l, strerror_l) libc_hidden_def (__strerror_l)

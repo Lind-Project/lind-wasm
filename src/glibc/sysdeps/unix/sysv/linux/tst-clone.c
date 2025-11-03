@@ -22,20 +22,20 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sched.h>
-#include <stackinfo.h>  /* For _STACK_GROWS_{UP,DOWN}.  */
+#include <stackinfo.h> /* For _STACK_GROWS_{UP,DOWN}.  */
 #include <support/check.h>
 
 volatile unsigned v = 0xdeadbeef;
 
-int child_fn(void *arg)
+int
+child_fn (void *arg)
 {
   puts ("FAIL: in child_fn(); should not be here");
-  exit(1);
+  exit (1);
 }
 
-static int
-__attribute__((noinline))
-do_clone (int (*fn)(void *), void *stack)
+static int __attribute__ ((noinline))
+do_clone (int (*fn) (void *), void *stack)
 {
   int result;
   unsigned int a = v;
@@ -64,9 +64,8 @@ do_clone (int (*fn)(void *), void *stack)
   return result;
 }
 
-static void
-__attribute__((noinline))
-do_test_single (int (*fn)(void *), void *stack)
+static void __attribute__ ((noinline))
+do_test_single (int (*fn) (void *), void *stack)
 {
   printf ("%s (fn=%p, stack=%p)\n", __FUNCTION__, fn, stack);
   errno = 0;
@@ -87,7 +86,7 @@ do_test (void)
 #elif _STACK_GROWS_UP
   stack = st;
 #else
-# error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
+#  error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
 #endif
 
   do_test_single (child_fn, NULL);

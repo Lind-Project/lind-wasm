@@ -72,13 +72,13 @@
    pthread_rwlock_t, and pthread_cond_t initialize the respective field of
    those structures to zero, and we want FUTEX_PRIVATE to be the default.  */
 #define FUTEX_PRIVATE LLL_PRIVATE
-#define FUTEX_SHARED  LLL_SHARED
+#define FUTEX_SHARED LLL_SHARED
 #if FUTEX_PRIVATE != 0
-# error FUTEX_PRIVATE must be equal to 0
+#  error FUTEX_PRIVATE must be equal to 0
 #endif
 
 #ifndef __NR_futex_time64
-# define __NR_futex_time64 __NR_futex
+#  define __NR_futex_time64 __NR_futex
 #endif
 
 /* Calls __libc_fatal with an error message.  Convenience function for
@@ -88,7 +88,6 @@ futex_fatal_error (void)
 {
   __libc_fatal ("The futex facility returned an unexpected error code.\n");
 }
-
 
 /* The Linux kernel treats provides absolute timeouts based on the
    CLOCK_REALTIME clock and relative timeouts measured against the
@@ -206,7 +205,7 @@ futex_abstimed_supported_clockid (clockid_t clockid)
    object destruction (see above); therefore, we must not report or abort
    on most errors.  */
 static __always_inline void
-futex_wake (unsigned int* futex_word, int processes_to_wake, int private)
+futex_wake (unsigned int *futex_word, int processes_to_wake, int private)
 {
   int res = lll_futex_wake (futex_word, processes_to_wake, private);
   /* No error.  Ignore the number of woken processes.  */
@@ -274,9 +273,9 @@ futex_unlock_pi (unsigned int *futex_word, int private)
     case -ESRCH:
     case -EDEADLK:
     case -ENOSYS:
-    case -EPERM:  /*  The caller is not allowed to attach itself to the futex.
-		      Used to check if PI futexes are supported by the
-		      kernel.  */
+    case -EPERM: /*  The caller is not allowed to attach itself to the futex.
+		     Used to check if PI futexes are supported by the
+		     kernel.  */
       return -err;
 
     case -EINVAL: /* Either due to wrong alignment or due to the timeout not
@@ -300,37 +299,34 @@ futex_unlock_pi (unsigned int *futex_word, int private)
    additionally, returns ETIMEDOUT if the timeout expired.
 
    The call acts as a cancellation entrypoint.  */
-int
-__futex_abstimed_wait_cancelable64 (unsigned int* futex_word,
-                                    unsigned int expected, clockid_t clockid,
-                                    const struct __timespec64* abstime,
-                                    int private);
+int __futex_abstimed_wait_cancelable64 (unsigned int *futex_word,
+					unsigned int expected,
+					clockid_t clockid,
+					const struct __timespec64 *abstime,
+					int private);
 libc_hidden_proto (__futex_abstimed_wait_cancelable64);
 
-int
-__futex_abstimed_wait64 (unsigned int* futex_word, unsigned int expected,
-                         clockid_t clockid,
-                         const struct __timespec64* abstime,
-                         int private);
+int __futex_abstimed_wait64 (unsigned int *futex_word, unsigned int expected,
+			     clockid_t clockid,
+			     const struct __timespec64 *abstime, int private);
 libc_hidden_proto (__futex_abstimed_wait64);
-
 
 static __always_inline int
 __futex_clocklock64 (int *futex, clockid_t clockid,
-                     const struct __timespec64 *abstime, int private)
+		     const struct __timespec64 *abstime, int private)
 {
   if (__glibc_unlikely (atomic_compare_and_exchange_bool_acq (futex, 1, 0)))
     {
       while (atomic_exchange_acquire (futex, 2) != 0)
-        {
+	{
 	  int err = 0;
-          err = __futex_abstimed_wait64 ((unsigned int *) futex, 2, clockid,
+	  err = __futex_abstimed_wait64 ((unsigned int *) futex, 2, clockid,
 					 abstime, private);
-          if (err == EINVAL || err == ETIMEDOUT || err == EOVERFLOW)
-            return err;
-        }
+	  if (err == EINVAL || err == ETIMEDOUT || err == EOVERFLOW)
+	    return err;
+	}
     }
   return 0;
 }
 
-#endif  /* futex-internal.h */
+#endif /* futex-internal.h */

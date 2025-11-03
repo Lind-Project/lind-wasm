@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static pthread_mutexattr_t a;
 
 static void
@@ -21,7 +20,6 @@ prepare (void)
     }
 }
 #define PREPARE(argc, argv) prepare ()
-
 
 #define ATTR &a
 #define ATTR_NULL false

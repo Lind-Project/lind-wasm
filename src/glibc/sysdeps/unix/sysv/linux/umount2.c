@@ -26,4 +26,4 @@ __umount2 (const char *special_file, int flags)
 }
 libc_hidden_def (__umount2)
 
-weak_alias (__umount2, umount2)
+    weak_alias (__umount2, umount2)

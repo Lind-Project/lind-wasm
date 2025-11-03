@@ -22,18 +22,18 @@
 #include <bits/floatn.h>
 
 #if __HAVE_FLOAT64X && !__HAVE_FLOAT64X_LONG_DOUBLE
-# define strtof64x __hide_strtof64x
-# define wcstof64x __hide_wcstof64x
+#  define strtof64x __hide_strtof64x
+#  define wcstof64x __hide_wcstof64x
 #endif
 
-#define FLOAT		_Float128
-#define FLT		FLT128
+#define FLOAT _Float128
+#define FLT FLT128
 #ifdef USE_WIDE_CHAR
-# define STRTOF		wcstof128
-# define STRTOF_L	__wcstof128_l
+#  define STRTOF wcstof128
+#  define STRTOF_L __wcstof128_l
 #else
-# define STRTOF		strtof128
-# define STRTOF_L	__strtof128_l
+#  define STRTOF strtof128
+#  define STRTOF_L __strtof128_l
 #endif
 
 #include <float128_private.h>
@@ -41,11 +41,11 @@
 #include <stdlib/strtod.c>
 
 #if __HAVE_FLOAT64X && !__HAVE_FLOAT64X_LONG_DOUBLE
-# undef strtof64x
-# undef wcstof64x
-# ifdef USE_WIDE_CHAR
+#  undef strtof64x
+#  undef wcstof64x
+#  ifdef USE_WIDE_CHAR
 weak_alias (wcstof128, wcstof64x)
-# else
+#  else
 weak_alias (strtof128, strtof64x)
-# endif
+#  endif
 #endif

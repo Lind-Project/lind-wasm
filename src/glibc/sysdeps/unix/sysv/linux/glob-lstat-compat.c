@@ -30,22 +30,22 @@
 #define GLOB_ATTRIBUTE attribute_compat_text_section
 
 /* Avoid calling gl_lstat with GLOB_ALTDIRFUNC.  */
-#define struct_stat    struct stat
-#define struct_stat64  struct stat64
-#define GLOB_LSTAT     gl_stat
-#define GLOB_STAT64    __stat64
-#define GLOB_LSTAT64   __stat64
+#define struct_stat struct stat
+#define struct_stat64 struct stat64
+#define GLOB_LSTAT gl_stat
+#define GLOB_STAT64 __stat64
+#define GLOB_LSTAT64 __stat64
 
 #include <posix/glob.c>
 
 #ifndef GLOB_LSTAT_VERSION
-# define GLOB_LSTAT_VERSION GLIBC_2_0
+#  define GLOB_LSTAT_VERSION GLIBC_2_0
 #endif
 
 #if SHLIB_COMPAT(libc, GLOB_LSTAT_VERSION, GLIBC_2_27)
 compat_symbol (libc, __glob_lstat_compat, glob, GLOB_LSTAT_VERSION);
-# if XSTAT_IS_XSTAT64
+#  if XSTAT_IS_XSTAT64
 strong_alias (__glob_lstat_compat, __glob64_lstat_compat)
-compat_symbol (libc, __glob64_lstat_compat, glob64, GLOB_LSTAT_VERSION);
-# endif
+    compat_symbol (libc, __glob64_lstat_compat, glob64, GLOB_LSTAT_VERSION);
+#  endif
 #endif

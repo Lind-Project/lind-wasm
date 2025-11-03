@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef HPPA_MATH_TESTS_SNAN_PAYLOAD_H
-#define HPPA_MATH_TESTS_SNAN_PAYLOAD_H 1
+#  define HPPA_MATH_TESTS_SNAN_PAYLOAD_H 1
 
 /* SNaN tests do not preserve payloads.  */
-#define SNAN_TESTS_PRESERVE_PAYLOAD 0
+#  define SNAN_TESTS_PRESERVE_PAYLOAD 0
 
 #endif /* math-tests-snan-payload.h.  */

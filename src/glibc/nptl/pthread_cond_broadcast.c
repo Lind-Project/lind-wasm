@@ -28,7 +28,6 @@
 
 #include "pthread_cond_common.c"
 
-
 /* We do the following steps from __pthread_cond_signal in one critical
    section: (1) signal all waiters in G1, (2) close G1 so that it can become
    the new G2 and make G2 the new G1, and (3) signal all waiters in the new
@@ -86,9 +85,9 @@ ___pthread_cond_broadcast (pthread_cond_t *cond)
 
   return 0;
 }
-versioned_symbol (libc, ___pthread_cond_broadcast,
-		  pthread_cond_broadcast, GLIBC_2_3_2);
+versioned_symbol (libc, ___pthread_cond_broadcast, pthread_cond_broadcast,
+		  GLIBC_2_3_2);
 libc_hidden_ver (___pthread_cond_broadcast, __pthread_cond_broadcast)
 #ifndef SHARED
-strong_alias (___pthread_cond_broadcast, __pthread_cond_broadcast)
+    strong_alias (___pthread_cond_broadcast, __pthread_cond_broadcast)
 #endif

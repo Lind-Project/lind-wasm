@@ -24,7 +24,7 @@
    normally involve a syscall.  */
 
 const fenv_t *
-__fe_mask_env(void)
+__fe_mask_env (void)
 {
   __set_errno (ENOSYS);
   return FE_DFL_ENV;

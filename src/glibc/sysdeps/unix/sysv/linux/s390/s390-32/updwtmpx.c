@@ -21,7 +21,7 @@
 #include "utmp-compat.h"
 
 #undef weak_alias
-#define weak_alias(n,a)
+#define weak_alias(n, a)
 #define updwtmpx __updwtmpx
 #include "login/updwtmpx.c"
 #undef updwtmpx

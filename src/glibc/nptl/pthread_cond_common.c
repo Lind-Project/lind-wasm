@@ -94,8 +94,8 @@ __condvar_fetch_xor_wseq_release (pthread_cond_t *cond, unsigned int val)
      This uses release MO to make the full operation have release semantics
      (all other operations access the lower-order half).  */
   unsigned int l2
-    = (atomic_fetch_xor_release (&cond->__data.__wseq.__value32.__low, val)
-       & ~((unsigned int) 1 << 31));
+      = (atomic_fetch_xor_release (&cond->__data.__wseq.__value32.__low, val)
+	 & ~((unsigned int) 1 << 31));
   if (l2 < l)
     /* The lower-order half overflowed in the meantime.  This happened exactly
        once due to the limit on concurrent waiters (see above).  */
@@ -117,7 +117,7 @@ __condvar_acquire_lock (pthread_cond_t *cond, int private)
   while ((s & 3) == 0)
     {
       if (atomic_compare_exchange_weak_acquire (&cond->__data.__g1_orig_size,
-	  &s, s | 1))
+						&s, s | 1))
 	return;
       /* TODO Spinning and back-off.  */
     }
@@ -128,8 +128,9 @@ __condvar_acquire_lock (pthread_cond_t *cond, int private)
     {
       while ((s & 3) != 2)
 	{
-	  if (atomic_compare_exchange_weak_acquire
-	      (&cond->__data.__g1_orig_size, &s, (s & ~(unsigned int) 3) | 2))
+	  if (atomic_compare_exchange_weak_acquire (
+		  &cond->__data.__g1_orig_size, &s,
+		  (s & ~(unsigned int) 3) | 2))
 	    {
 	      if ((s & 3) == 0)
 		return;
@@ -138,7 +139,7 @@ __condvar_acquire_lock (pthread_cond_t *cond, int private)
 	  /* TODO Back off.  */
 	}
       futex_wait_simple (&cond->__data.__g1_orig_size,
-	  (s & ~(unsigned int) 3) | 2, private);
+			 (s & ~(unsigned int) 3) | 2, private);
       /* Reload so we see a recent value.  */
       s = atomic_load_relaxed (&cond->__data.__g1_orig_size);
     }
@@ -149,7 +150,8 @@ static void __attribute__ ((unused))
 __condvar_release_lock (pthread_cond_t *cond, int private)
 {
   if ((atomic_fetch_and_release (&cond->__data.__g1_orig_size,
-				 ~(unsigned int) 3) & 3)
+				 ~(unsigned int) 3)
+       & 3)
       == 2)
     futex_wake (&cond->__data.__g1_orig_size, 1, private);
 }
@@ -171,8 +173,7 @@ __condvar_set_orig_size (pthread_cond_t *cond, unsigned int size)
      changes to the lock bits nor the size, and we will subsequently release
      the lock with release MO.  */
   unsigned int s;
-  s = (atomic_load_relaxed (&cond->__data.__g1_orig_size) & 3)
-      | (size << 2);
+  s = (atomic_load_relaxed (&cond->__data.__g1_orig_size) & 3) | (size << 2);
   if ((atomic_exchange_relaxed (&cond->__data.__g1_orig_size, s) & 3)
       != (s & 3))
     atomic_store_relaxed (&cond->__data.__g1_orig_size, (size << 2) | 2);
@@ -199,7 +200,7 @@ __condvar_get_private (int flags)
    Returns false iff groups were not switched because G2 was empty.  */
 static bool __attribute__ ((unused))
 __condvar_quiesce_and_switch_g1 (pthread_cond_t *cond, uint64_t wseq,
-    unsigned int *g1index, int private)
+				 unsigned int *g1index, int private)
 {
   const unsigned int maxspin = 0;
   unsigned int g1 = *g1index;
@@ -212,8 +213,9 @@ __condvar_quiesce_and_switch_g1 (pthread_cond_t *cond, uint64_t wseq,
   unsigned int old_orig_size = __condvar_get_orig_size (cond);
   uint64_t old_g1_start = __condvar_load_g1_start_relaxed (cond) >> 1;
   if (((unsigned) (wseq - old_g1_start - old_orig_size)
-	  + cond->__data.__g_size[g1 ^ 1]) == 0)
-	return false;
+       + cond->__data.__g_size[g1 ^ 1])
+      == 0)
+    return false;
 
   /* Now try to close and quiesce G1.  We have to consider the following kinds
      of waiters:
@@ -292,7 +294,7 @@ __condvar_quiesce_and_switch_g1 (pthread_cond_t *cond, uint64_t wseq,
      Relaxed MO is fine because the change comes with no additional
      constraints that others would have to observe.  */
   __condvar_add_g1_start_relaxed (cond,
-      (old_orig_size << 1) + (g1 == 1 ? 1 : - 1));
+				  (old_orig_size << 1) + (g1 == 1 ? 1 : -1));
 
   /* Now reopen the group, thus enabling waiters to again block using the
      futex controlled by __g_signals.  Release MO so that observers that see

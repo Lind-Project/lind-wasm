@@ -16,8 +16,7 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-extern void __cp_stat64_statx (struct stat64 *to, struct statx *from)
-  attribute_hidden;
+extern void __cp_stat64_statx (struct stat64 *to,
+			       struct statx *from) attribute_hidden;
 extern void __cp_stat64_t64_statx (struct __stat64_t64 *to,
-				   const struct statx *from)
-  attribute_hidden;
+				   const struct statx *from) attribute_hidden;

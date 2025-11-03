@@ -31,4 +31,4 @@ __setuid (uid_t uid)
 }
 stub_warning (setuid)
 
-weak_alias (__setuid, setuid)
+    weak_alias (__setuid, setuid)

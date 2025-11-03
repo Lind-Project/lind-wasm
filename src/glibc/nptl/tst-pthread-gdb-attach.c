@@ -52,7 +52,7 @@ struct elf_prefix
   uint32_t e_version;
 };
 _Static_assert (sizeof (struct elf_prefix) == EI_NIDENT + 8,
-                "padding in struct elf_prefix");
+		"padding in struct elf_prefix");
 
 /* Reads the ELF header from PATH.  Returns true if the header can be
    read, false if the file is too short.  */
@@ -77,10 +77,10 @@ find_gdb (void)
       const char *colon = strchrnul (path, ':');
       char *candidate = xasprintf ("%.*s/gdb", (int) (colon - path), path);
       if (access (candidate, X_OK) == 0)
-        return candidate;
+	return candidate;
       free (candidate);
       if (*colon == '\0')
-        break;
+	break;
       path = colon + 1;
     }
   return NULL;
@@ -92,30 +92,30 @@ write_gdbscript (const char *path, int tested_pid)
 {
   FILE *fp = xfopen (path, "w");
   fprintf (fp,
-           "set trace-commands on\n"
-           "set debug libthread-db 1\n"
+	   "set trace-commands on\n"
+	   "set debug libthread-db 1\n"
 #if DO_ADD_SYMBOL_FILE
-           /* Do not do this unconditionally to work around a GDB
-              assertion failure: ../../gdb/symtab.c:6404:
-              internal-error: CORE_ADDR get_msymbol_address(objfile*,
-              const minimal_symbol*): Assertion `(objf->flags &
-              OBJF_MAINLINE) == 0' failed.  */
-           "add-symbol-file %1$s/nptl/tst-pthread-gdb-attach\n"
+	   /* Do not do this unconditionally to work around a GDB
+	      assertion failure: ../../gdb/symtab.c:6404:
+	      internal-error: CORE_ADDR get_msymbol_address(objfile*,
+	      const minimal_symbol*): Assertion `(objf->flags &
+	      OBJF_MAINLINE) == 0' failed.  */
+	   "add-symbol-file %1$s/nptl/tst-pthread-gdb-attach\n"
 #endif
-           "set auto-load safe-path %1$s/nptl_db\n"
-           "set libthread-db-search-path %1$s/nptl_db\n"
-           "attach %2$d\n",
-           support_objdir_root, tested_pid);
+	   "set auto-load safe-path %1$s/nptl_db\n"
+	   "set libthread-db-search-path %1$s/nptl_db\n"
+	   "attach %2$d\n",
+	   support_objdir_root, tested_pid);
   fputs ("break debugger_inspection_point\n"
-         "continue\n"
-         "thread 1\n"
-         "print altered_by_debugger\n"
-         "print altered_by_debugger = 1\n"
-         "thread 2\n"
-         "print altered_by_debugger\n"
-         "print altered_by_debugger = 2\n"
-         "continue\n",
-         fp);
+	 "continue\n"
+	 "thread 1\n"
+	 "print altered_by_debugger\n"
+	 "print altered_by_debugger = 1\n"
+	 "thread 2\n"
+	 "print altered_by_debugger\n"
+	 "print altered_by_debugger = 2\n"
+	 "continue\n",
+	 fp);
   xfclose (fp);
 }
 
@@ -183,22 +183,22 @@ do_test (void)
   /* Check that libthread_db is compatible with the gdb architecture
      because gdb loads it via dlopen.  */
   {
-    char *threaddb_path = xasprintf ("%s/nptl_db/libthread_db.so",
-                                     support_objdir_root);
+    char *threaddb_path
+	= xasprintf ("%s/nptl_db/libthread_db.so", support_objdir_root);
     struct elf_prefix elf_threaddb;
     TEST_VERIFY_EXIT (read_elf_header (threaddb_path, &elf_threaddb));
     struct elf_prefix elf_gdb;
     /* If the ELF header cannot be read or "gdb" is not an ELF file,
        assume this is a wrapper script that can run.  */
     if (read_elf_header (gdb_path, &elf_gdb)
-        && memcmp (&elf_gdb, ELFMAG, SELFMAG) == 0)
+	&& memcmp (&elf_gdb, ELFMAG, SELFMAG) == 0)
       {
-        if (elf_gdb.e_ident[EI_CLASS] != elf_threaddb.e_ident[EI_CLASS])
-          FAIL_UNSUPPORTED ("GDB at %s has wrong class", gdb_path);
-        if (elf_gdb.e_ident[EI_DATA] != elf_threaddb.e_ident[EI_DATA])
-          FAIL_UNSUPPORTED ("GDB at %s has wrong data", gdb_path);
-        if (elf_gdb.e_machine != elf_threaddb.e_machine)
-          FAIL_UNSUPPORTED ("GDB at %s has wrong machine", gdb_path);
+	if (elf_gdb.e_ident[EI_CLASS] != elf_threaddb.e_ident[EI_CLASS])
+	  FAIL_UNSUPPORTED ("GDB at %s has wrong class", gdb_path);
+	if (elf_gdb.e_ident[EI_DATA] != elf_threaddb.e_ident[EI_DATA])
+	  FAIL_UNSUPPORTED ("GDB at %s has wrong data", gdb_path);
+	if (elf_gdb.e_machine != elf_threaddb.e_machine)
+	  FAIL_UNSUPPORTED ("GDB at %s has wrong machine", gdb_path);
       }
     free (threaddb_path);
   }

@@ -27,11 +27,11 @@
 #include <intr-msg.h>
 #include <sys/ucontext.h>
 
-
 /* Fill in a siginfo_t structure for SA_SIGINFO-enabled handlers.  */
-static void fill_siginfo (siginfo_t *si, int signo,
-			  const struct hurd_signal_detail *detail,
-			  const struct machine_thread_all_state *state)
+static void
+fill_siginfo (siginfo_t *si, int signo,
+	      const struct hurd_signal_detail *detail,
+	      const struct machine_thread_all_state *state)
 {
   si->si_signo = signo;
   si->si_errno = detail->error;
@@ -59,12 +59,13 @@ static void fill_siginfo (siginfo_t *si, int signo,
    * to send this information along with the signal.  */
   si->si_status = 0;
 
-  si->si_band = 0;              /* SIGPOLL is not supported yet.  */
-  si->si_value.sival_int = 0;   /* sigqueue() is not supported yet.  */
+  si->si_band = 0;	      /* SIGPOLL is not supported yet.  */
+  si->si_value.sival_int = 0; /* sigqueue() is not supported yet.  */
 }
 
 /* Fill in a ucontext_t structure SA_SIGINFO-enabled handlers.  */
-static void fill_ucontext (ucontext_t *uc, const struct sigcontext *sc)
+static void
+fill_ucontext (ucontext_t *uc, const struct sigcontext *sc)
 {
   uc->uc_flags = 0;
   uc->uc_link = NULL;
@@ -80,10 +81,10 @@ static void fill_ucontext (ucontext_t *uc, const struct sigcontext *sc)
   /* Registers.  */
 #ifdef __x86_64__
   memcpy (&uc->uc_mcontext.gregs[REG_R8], &sc->sc_r8,
-          (REG_ERR - REG_R8) * sizeof (long));
+	  (REG_ERR - REG_R8) * sizeof (long));
 #else
   memcpy (&uc->uc_mcontext.gregs[REG_GS], &sc->sc_gs,
-          (REG_TRAPNO - REG_GS) * sizeof (int));
+	  (REG_TRAPNO - REG_GS) * sizeof (int));
   memcpy (&uc->uc_mcontext.gregs[REG_EIP], &sc->sc_eip,
 	  (NGREG - REG_EIP) * sizeof (int));
 #endif
@@ -95,11 +96,10 @@ static void fill_ucontext (ucontext_t *uc, const struct sigcontext *sc)
 }
 
 struct sigcontext *
-_hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action,
-			__sighandler_t handler,
+_hurd_setup_sighandler (struct hurd_sigstate *ss,
+			const struct sigaction *action, __sighandler_t handler,
 			int signo, struct hurd_signal_detail *detail,
-			int rpc_wait,
-			struct machine_thread_all_state *state)
+			int rpc_wait, struct machine_thread_all_state *state)
 {
   void trampoline (void);
   void rpc_wait_trampoline (void);
@@ -107,49 +107,49 @@ _hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action
   void *sigsp;
   struct sigcontext *scp;
   struct
+  {
+    union
     {
-      union
-        {
-          int signo;
-          /* Make sure signo takes up a pointer-sized slot on the stack.
-             (This should already be the case considering the siginfop
-             pointer below, but better be explicit.)  */
-          void *_pointer_sized;
-        };
-      union
-	{
-	  /* Extra arguments for traditional signal handlers */
-	  struct
-	    {
-	      long int sigcode;
-	      struct sigcontext *scp;       /* Points to ctx, below.  */
-	    } legacy;
+      int signo;
+      /* Make sure signo takes up a pointer-sized slot on the stack.
+	 (This should already be the case considering the siginfop
+	 pointer below, but better be explicit.)  */
+      void *_pointer_sized;
+    };
+    union
+    {
+      /* Extra arguments for traditional signal handlers */
+      struct
+      {
+	long int sigcode;
+	struct sigcontext *scp; /* Points to ctx, below.  */
+      } legacy;
 
-	  /* Extra arguments for SA_SIGINFO handlers */
-	  struct
-	    {
-	      siginfo_t *siginfop;          /* Points to siginfo, below.  */
-	      ucontext_t *uctxp;            /* Points to uctx, below.  */
-	    } posix;
-	};
+      /* Extra arguments for SA_SIGINFO handlers */
+      struct
+      {
+	siginfo_t *siginfop; /* Points to siginfo, below.  */
+	ucontext_t *uctxp;   /* Points to uctx, below.  */
+      } posix;
+    };
 
 #ifdef __x86_64__
-      void *_pad;
+    void *_pad;
 #endif
-      void *sigreturn_addr;
-      void *sigreturn_returns_here;
-      struct sigcontext *return_scp; /* Same; arg to sigreturn.  */
+    void *sigreturn_addr;
+    void *sigreturn_returns_here;
+    struct sigcontext *return_scp; /* Same; arg to sigreturn.  */
 
-      /* NB: sigreturn assumes link is next to ctx.  */
-      struct sigcontext ctx;
-      struct hurd_userlink link;
-      ucontext_t ucontext;
-      siginfo_t siginfo;
-    } *stackframe;
+    /* NB: sigreturn assumes link is next to ctx.  */
+    struct sigcontext ctx;
+    struct hurd_userlink link;
+    ucontext_t ucontext;
+    siginfo_t siginfo;
+  } *stackframe;
 
 #ifdef __x86_64__
   _Static_assert (offsetof (typeof (*stackframe), sigreturn_addr) % 16 == 0,
-                  "sigreturn_addr must be 16-byte aligned");
+		  "sigreturn_addr must be 16-byte aligned");
 #endif
 
   if (ss->context)
@@ -157,7 +157,7 @@ _hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action
       /* We have a previous sigcontext that sigreturn was about
 	 to restore when another signal arrived.  We will just base
 	 our setup on that.  */
-      if (! _hurdsig_catch_memory_fault (ss->context))
+      if (!_hurdsig_catch_memory_fault (ss->context))
 	{
 	  memcpy (&state->basic, &ss->context->sc_i386_thread_state,
 		  sizeof (state->basic));
@@ -167,7 +167,7 @@ _hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action
 	}
     }
 
-  if (! machine_get_basic_state (ss->thread, state))
+  if (!machine_get_basic_state (ss->thread, state))
     return NULL;
 
   /* Save the original SP in the gratuitous `esp' slot.
@@ -180,7 +180,7 @@ _hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action
 #endif
 
   if ((action->sa_flags & SA_ONSTACK)
-      && !(ss->sigaltstack.ss_flags & (SS_DISABLE|SS_ONSTACK)))
+      && !(ss->sigaltstack.ss_flags & (SS_DISABLE | SS_ONSTACK)))
     {
       sigsp = ss->sigaltstack.ss_sp + ss->sigaltstack.ss_size;
       ss->sigaltstack.ss_flags |= SS_ONSTACK;
@@ -189,7 +189,7 @@ _hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action
     {
 #ifdef __x86_64__
       /* Per the ABI, we're not supposed to clobber 128 bytes below
-         SP -- the red zone.  */
+	 SP -- the red zone.  */
       sigsp = (char *) state->basic.ursp - 128;
 #else
       sigsp = (char *) state->basic.uesp;
@@ -232,7 +232,7 @@ _hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action
       stackframe->link.thread.prevp = &ss->active_resources;
       if (stackframe->link.thread.next)
 	stackframe->link.thread.next->thread.prevp
-	  = &stackframe->link.thread.next;
+	    = &stackframe->link.thread.next;
       ss->active_resources = &stackframe->link;
 
       /* Set up the sigcontext from the current state of the thread.  */
@@ -243,19 +243,20 @@ _hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action
       /* struct sigcontext is laid out so that starting at sc_gs mimics a
 	 struct i386_thread_state.  */
       _Static_assert (offsetof (struct sigcontext, sc_i386_thread_state)
-		      % __alignof__ (struct i386_thread_state) == 0,
+			      % __alignof__ (struct i386_thread_state)
+			  == 0,
 		      "sc_i386_thread_state layout mismatch");
-      memcpy (&scp->sc_i386_thread_state,
-	      &state->basic, sizeof (state->basic));
+      memcpy (&scp->sc_i386_thread_state, &state->basic,
+	      sizeof (state->basic));
 
       /* struct sigcontext is laid out so that starting at sc_fpkind mimics
 	 a struct i386_float_state.  */
       _Static_assert (offsetof (struct sigcontext, sc_i386_float_state)
-		      % __alignof__ (struct i386_float_state) == 0,
+			      % __alignof__ (struct i386_float_state)
+			  == 0,
 		      "sc_i386_float_state layout mismatch");
-      ok = machine_get_state (ss->thread, state, i386_FLOAT_STATE,
-			      &state->fpu, &scp->sc_i386_float_state,
-			      sizeof (state->fpu));
+      ok = machine_get_state (ss->thread, state, i386_FLOAT_STATE, &state->fpu,
+			      &scp->sc_i386_float_state, sizeof (state->fpu));
 
       /* Set up the arguments for the signal handler.  */
       stackframe->signo = signo;
@@ -288,42 +289,42 @@ _hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action
 
       _hurdsig_end_catch_fault ();
 
-      if (! ok)
+      if (!ok)
 	return NULL;
     }
 
-  /* Modify the thread state to call the trampoline code on the new stack.  */
+    /* Modify the thread state to call the trampoline code on the new stack. */
 #ifdef __x86_64__
   if (rpc_wait)
     {
       /* The signalee thread was blocked in a mach_msg_trap system call,
-         still waiting for a reply.  We will have it run the special
-         trampoline code which retries the message receive before running
-         the signal handler.
+	 still waiting for a reply.  We will have it run the special
+	 trampoline code which retries the message receive before running
+	 the signal handler.
 
-         To do this we change the OPTION argument (in rsi) to enable only
-         message reception, since the request message has already been
-         sent.  */
+	 To do this we change the OPTION argument (in rsi) to enable only
+	 message reception, since the request message has already been
+	 sent.  */
 
       assert (state->basic.rsi & MACH_RCV_MSG);
       /* Disable the message-send, since it has already completed.  The
-         calls we retry need only wait to receive the reply message.  */
+	 calls we retry need only wait to receive the reply message.  */
       state->basic.rsi &= ~MACH_SEND_MSG;
 
       /* Limit the time to receive the reply message, in case the server
-         claimed that `interrupt_operation' succeeded but in fact the RPC
-         is hung.  */
+	 claimed that `interrupt_operation' succeeded but in fact the RPC
+	 is hung.  */
       state->basic.rsi |= MACH_RCV_TIMEOUT;
       state->basic.r9 = _hurd_interrupted_rpc_timeout;
 
       state->basic.rip = (uintptr_t) rpc_wait_trampoline;
       /* The reply-receiving trampoline code runs initially on the original
-         user stack.  We pass it the signal stack pointer in %rbx.  */
+	 user stack.  We pass it the signal stack pointer in %rbx.  */
       state->basic.rbx = (uintptr_t) sigsp;
       /* After doing the message receive, the trampoline code will need to
-         update the %rax value to be restored by sigreturn.  To simplify
-         the assembly code, we pass the address of its slot in SCP to the
-         trampoline code in %r12.  */
+	 update the %rax value to be restored by sigreturn.  To simplify
+	 the assembly code, we pass the address of its slot in SCP to the
+	 trampoline code in %r12.  */
       state->basic.r12 = (uintptr_t) &scp->sc_rax;
     }
   else
@@ -405,59 +406,59 @@ _hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action
 
 #ifdef __x86_64__
 asm ("rpc_wait_trampoline:\n"
-  /* This is the entry point when we have an RPC reply message to receive
-     before running the handler.  The MACH_MSG_SEND bit has already been
-     cleared in the OPTION argument in our %rsi.  The interrupted user
-     stack pointer has not been changed, so the system call can find its
-     arguments; the signal stack pointer is in %rbx.  For our convenience,
-     %r12 points to the sc_rax member of the sigcontext.  */
-     "movq $-25, %rax\n"	/* mach_msg_trap */
+     /* This is the entry point when we have an RPC reply message to receive
+	before running the handler.  The MACH_MSG_SEND bit has already been
+	cleared in the OPTION argument in our %rsi.  The interrupted user
+	stack pointer has not been changed, so the system call can find its
+	arguments; the signal stack pointer is in %rbx.  For our convenience,
+	%r12 points to the sc_rax member of the sigcontext.  */
+     "movq $-25, %rax\n" /* mach_msg_trap */
      "syscall\n"
      /* When the sigcontext was saved, %rax was MACH_RCV_INTERRUPTED.  But
-        now the message receive has completed and the original caller of
-        the RPC (i.e. the code running when the signal arrived) needs to
-        see the final return value of the message receive in %rax.  So
-        store the new %rax value into the sc_rax member of the sigcontext
-        (whose address is in %r12 to make this code simpler).  */
+	now the message receive has completed and the original caller of
+	the RPC (i.e. the code running when the signal arrived) needs to
+	see the final return value of the message receive in %rax.  So
+	store the new %rax value into the sc_rax member of the sigcontext
+	(whose address is in %r12 to make this code simpler).  */
      "movq %rax, (%r12)\n"
      /* Switch to the signal stack.  */
      "movq %rbx, %rsp\n"
 
      "trampoline:\n"
      /* Entry point for running the handler normally.  The arguments to the
-        handler function are on the top of the stack, same as in the i386
-        version:
+	handler function are on the top of the stack, same as in the i386
+	version:
 
-        0(%rsp)  SIGNO
-        8(%rsp)  SIGCODE
-        16(%rsp) SCP
+	0(%rsp)  SIGNO
+	8(%rsp)  SIGCODE
+	16(%rsp) SCP
 
-        Pop them off to the registers, to pass as arguments to the handler.
+	Pop them off to the registers, to pass as arguments to the handler.
      */
      "popq %rdi\n"
      "popq %rsi\n"
      "popq %rdx\n"
      /* Pop the _pad member to make the stack 16-byte aligned, as per the
-        ABI.  */
+	ABI.  */
      "addq $8, %rsp\n"
-     "call *%r13\n"		/* Call the handler function.  */
+     "call *%r13\n" /* Call the handler function.  */
      /* The word at the top of stack is &__sigreturn; following are a dummy
-        word to fill the slot for the address for __sigreturn to return to,
-        and a copy of SCP for __sigreturn's argument.  Load the SCP as for a
-        call, and "return" to calling __sigreturn (SCP); this call never
-        returns.  */
+	word to fill the slot for the address for __sigreturn to return to,
+	and a copy of SCP for __sigreturn's argument.  Load the SCP as for a
+	call, and "return" to calling __sigreturn (SCP); this call never
+	returns.  */
      "movq 16(%rsp), %rdi\n"
      "ret");
 #else
 asm ("rpc_wait_trampoline:\n");
-  /* This is the entry point when we have an RPC reply message to receive
-     before running the handler.  The MACH_MSG_SEND bit has already been
-     cleared in the OPTION argument on our stack.  The interrupted user
-     stack pointer has not been changed, so the system call can find its
-     arguments; the signal stack pointer is in %ebx.  For our convenience,
-     %ecx points to the sc_eax member of the sigcontext.  */
-asm (/* Retry the interrupted mach_msg system call.  */
-     "movl $-25, %eax\n"	/* mach_msg_trap */
+/* This is the entry point when we have an RPC reply message to receive
+   before running the handler.  The MACH_MSG_SEND bit has already been
+   cleared in the OPTION argument on our stack.  The interrupted user
+   stack pointer has not been changed, so the system call can find its
+   arguments; the signal stack pointer is in %ebx.  For our convenience,
+   %ecx points to the sc_eax member of the sigcontext.  */
+asm (			 /* Retry the interrupted mach_msg system call.  */
+     "movl $-25, %eax\n" /* mach_msg_trap */
      "lcall $7, $0\n"
      /* When the sigcontext was saved, %eax was MACH_RCV_INTERRUPTED.  But
 	now the message receive has completed and the original caller of
@@ -469,16 +470,16 @@ asm (/* Retry the interrupted mach_msg system call.  */
      /* Switch to the signal stack.  */
      "movl %ebx, %esp\n");
 
- asm ("trampoline:\n");
-  /* Entry point for running the handler normally.  The arguments to the
-     handler function are already on the top of the stack:
+asm ("trampoline:\n");
+/* Entry point for running the handler normally.  The arguments to the
+   handler function are already on the top of the stack:
 
-       0(%esp)	SIGNO
-       4(%esp)	SIGCODE
-       8(%esp)	SCP
-     */
-asm ("call *%edx\n"		/* Call the handler function.  */
-     "addl $12, %esp\n"		/* Pop its args.  */
+     0(%esp)	SIGNO
+     4(%esp)	SIGCODE
+     8(%esp)	SCP
+   */
+asm ("call *%edx\n"	/* Call the handler function.  */
+     "addl $12, %esp\n" /* Pop its args.  */
      /* The word at the top of stack is &__sigreturn; following are a dummy
 	word to fill the slot for the address for __sigreturn to return to,
 	and a copy of SCP for __sigreturn's argument.  "Return" to calling

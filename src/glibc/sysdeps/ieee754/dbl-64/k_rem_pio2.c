@@ -11,7 +11,8 @@
  */
 
 #if defined(LIBM_SCCS) && !defined(lint)
-static char rcsid[] = "$NetBSD: k_rem_pio2.c,v 1.7 1995/05/10 20:46:25 jtc Exp $";
+static char rcsid[]
+    = "$NetBSD: k_rem_pio2.c,v 1.7 1995/05/10 20:46:25 jtc Exp $";
 #endif
 
 /*
@@ -121,7 +122,6 @@ static char rcsid[] = "$NetBSD: k_rem_pio2.c,v 1.7 1995/05/10 20:46:25 jtc Exp $
  *
  */
 
-
 /*
  * Constants:
  * The hexadecimal values are the intended ones for the following
@@ -135,7 +135,7 @@ static char rcsid[] = "$NetBSD: k_rem_pio2.c,v 1.7 1995/05/10 20:46:25 jtc Exp $
 #include <math_private.h>
 #include <libc-diag.h>
 
-static const int init_jk[] = {2,3,4,6}; /* initial value for jk */
+static const int init_jk[] = { 2, 3, 4, 6 }; /* initial value for jk */
 
 static const double PIo2[] = {
   1.57079625129699707031e+00, /* 0x3FF921FB, 0x40000000 */
@@ -148,15 +148,14 @@ static const double PIo2[] = {
   2.16741683877804819444e-51, /* 0x3569F31D, 0x00000000 */
 };
 
-static const double
-  zero   = 0.0,
-  one    = 1.0,
-  two24  = 1.67772160000000000000e+07, /* 0x41700000, 0x00000000 */
-  twon24 = 5.96046447753906250000e-08; /* 0x3E700000, 0x00000000 */
+static const double zero = 0.0, one = 1.0,
+		    two24
+		    = 1.67772160000000000000e+07, /* 0x41700000, 0x00000000 */
+    twon24 = 5.96046447753906250000e-08;	  /* 0x3E700000, 0x00000000 */
 
 int
 __kernel_rem_pio2 (double *x, double *y, int e0, int nx, int prec,
-                   const int32_t *ipio2)
+		   const int32_t *ipio2)
 {
   int32_t jz, jx, jv, jp, jk, carry, n, iq[20], i, j, k, m, q0, ih;
   double z, fw, f[20], fq[20], q[20];
@@ -167,12 +166,14 @@ __kernel_rem_pio2 (double *x, double *y, int e0, int nx, int prec,
 
   /* determine jx,jv,q0, note that 3>q0 */
   jx = nx - 1;
-  jv = (e0 - 3) / 24; if (jv < 0)
+  jv = (e0 - 3) / 24;
+  if (jv < 0)
     jv = 0;
   q0 = e0 - 24 * (jv + 1);
 
   /* set up f[0] to f[jx+jk] where f[jx+jk] = ipio2[jv+jk] */
-  j = jv - jx; m = jx + jk;
+  j = jv - jx;
+  m = jx + jk;
   for (i = 0; i <= m; i++, j++)
     f[i] = (j < 0) ? zero : (double) ipio2[j];
 
@@ -195,14 +196,15 @@ recompute:
     }
 
   /* compute n */
-  z = __scalbn (z, q0);                 /* actual value of z */
-  z -= 8.0 * floor (z * 0.125);               /* trim off integer >= 8 */
+  z = __scalbn (z, q0);		/* actual value of z */
+  z -= 8.0 * floor (z * 0.125); /* trim off integer >= 8 */
   n = (int32_t) z;
   z -= (double) n;
   ih = 0;
-  if (q0 > 0)           /* need iq[jz-1] to determine n */
+  if (q0 > 0) /* need iq[jz-1] to determine n */
     {
-      i = (iq[jz - 1] >> (24 - q0)); n += i;
+      i = (iq[jz - 1] >> (24 - q0));
+      n += i;
       iq[jz - 1] -= i << (24 - q0);
       ih = iq[jz - 1] >> (23 - q0);
     }
@@ -211,30 +213,34 @@ recompute:
   else if (z >= 0.5)
     ih = 2;
 
-  if (ih > 0)           /* q > 0.5 */
+  if (ih > 0) /* q > 0.5 */
     {
-      n += 1; carry = 0;
-      for (i = 0; i < jz; i++)          /* compute 1-q */
+      n += 1;
+      carry = 0;
+      for (i = 0; i < jz; i++) /* compute 1-q */
 	{
 	  j = iq[i];
 	  if (carry == 0)
 	    {
 	      if (j != 0)
 		{
-		  carry = 1; iq[i] = 0x1000000 - j;
+		  carry = 1;
+		  iq[i] = 0x1000000 - j;
 		}
 	    }
 	  else
 	    iq[i] = 0xffffff - j;
 	}
-      if (q0 > 0)               /* rare case: chance is 1 in 12 */
+      if (q0 > 0) /* rare case: chance is 1 in 12 */
 	{
 	  switch (q0)
 	    {
 	    case 1:
-	      iq[jz - 1] &= 0x7fffff; break;
+	      iq[jz - 1] &= 0x7fffff;
+	      break;
 	    case 2:
-	      iq[jz - 1] &= 0x3fffff; break;
+	      iq[jz - 1] &= 0x3fffff;
+	      break;
 	    }
 	}
       if (ih == 2)
@@ -251,18 +257,18 @@ recompute:
       j = 0;
       for (i = jz - 1; i >= jk; i--)
 	j |= iq[i];
-      if (j == 0)      /* need recomputation */
+      if (j == 0) /* need recomputation */
 	{
-	  /* On s390x gcc 6.1 -O3 produces the warning "array subscript is below
-	     array bounds [-Werror=array-bounds]".  Only __ieee754_rem_pio2l
-	     calls __kernel_rem_pio2 for normal numbers and |x| > pi/4 in case
-	     of ldbl-96 and |x| > 3pi/4 in case of ldbl-128[ibm].
-	     Thus x can't be zero and ipio2 is not zero, too.  Thus not all iq[]
-	     values can't be zero.  */
+	  /* On s390x gcc 6.1 -O3 produces the warning "array subscript is
+	     below array bounds [-Werror=array-bounds]".  Only
+	     __ieee754_rem_pio2l calls __kernel_rem_pio2 for normal numbers and
+	     |x| > pi/4 in case of ldbl-96 and |x| > 3pi/4 in case of
+	     ldbl-128[ibm]. Thus x can't be zero and ipio2 is not zero, too.
+	     Thus not all iq[] values can't be zero.  */
 	  DIAG_PUSH_NEEDS_COMMENT;
 	  DIAG_IGNORE_NEEDS_COMMENT (6.1, "-Warray-bounds");
 	  for (k = 1; iq[jk - k] == 0; k++)
-	    ;                               /* k = no. of terms needed */
+	    ; /* k = no. of terms needed */
 	  DIAG_POP_NEEDS_COMMENT;
 
 	  for (i = jz + 1; i <= jz + k; i++) /* add q[jz+1] to q[jz+k] */
@@ -280,20 +286,23 @@ recompute:
   /* chop off zero terms */
   if (z == 0.0)
     {
-      jz -= 1; q0 -= 24;
+      jz -= 1;
+      q0 -= 24;
       while (iq[jz] == 0)
 	{
-	  jz--; q0 -= 24;
+	  jz--;
+	  q0 -= 24;
 	}
     }
-  else           /* break z into 24-bit if necessary */
+  else /* break z into 24-bit if necessary */
     {
       z = __scalbn (z, -q0);
       if (z >= two24)
 	{
 	  fw = (double) ((int32_t) (twon24 * z));
 	  iq[jz] = (int32_t) (z - two24 * fw);
-	  jz += 1; q0 += 24;
+	  jz += 1;
+	  q0 += 24;
 	  iq[jz] = (int32_t) fw;
 	}
       else
@@ -303,13 +312,15 @@ recompute:
   /* jz is always nonnegative here, because the result is never zero to
      full precision (this function is not called for zero arguments).
      Help the compiler to know it.  */
-  if (jz < 0) __builtin_unreachable ();
+  if (jz < 0)
+    __builtin_unreachable ();
 
   /* convert integer "bit" chunk to floating-point value */
   fw = __scalbn (one, q0);
   for (i = jz; i >= 0; i--)
     {
-      q[i] = fw * (double) iq[i]; fw *= twon24;
+      q[i] = fw * (double) iq[i];
+      fw *= twon24;
     }
 
   /* compute PIo2[0,...,jp]*q[jz,...,0] */
@@ -340,7 +351,7 @@ recompute:
 	fv = math_narrow_eval (fv + fq[i]);
       y[1] = (ih == 0) ? fv : -fv;
       break;
-    case 3:             /* painful */
+    case 3: /* painful */
       for (i = jz; i > 0; i--)
 	{
 	  double fv = math_narrow_eval (fq[i - 1] + fq[i]);
@@ -357,11 +368,15 @@ recompute:
 	fw += fq[i];
       if (ih == 0)
 	{
-	  y[0] = fq[0]; y[1] = fq[1]; y[2] = fw;
+	  y[0] = fq[0];
+	  y[1] = fq[1];
+	  y[2] = fw;
 	}
       else
 	{
-	  y[0] = -fq[0]; y[1] = -fq[1]; y[2] = -fw;
+	  y[0] = -fq[0];
+	  y[1] = -fq[1];
+	  y[2] = -fw;
 	}
     }
   return n & 7;

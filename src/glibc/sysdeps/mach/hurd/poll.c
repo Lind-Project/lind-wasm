@@ -43,5 +43,4 @@ __poll (struct pollfd *fds, nfds_t nfds, int timeout)
 
   return _hurd_select (nfds, fds, NULL, NULL, NULL, to, NULL);
 }
-libc_hidden_def (__poll)
-weak_alias (__poll, poll)
+libc_hidden_def (__poll) weak_alias (__poll, poll)

@@ -18,8 +18,8 @@
 #include <setjmp.h>
 #include <stdlib.h>
 
-#ifndef	__GNUC__
-  #error This file uses GNU C extensions; you must compile with GCC.
+#ifndef __GNUC__
+#  error This file uses GNU C extensions; you must compile with GCC.
 #endif
 
 static void __attribute__ ((nomips16))
@@ -38,46 +38,49 @@ ____longjmp (__jmp_buf env_arg, int val_arg)
 
 #ifdef __mips_hard_float
   /* Pull back the floating point callee-saved registers.  */
-  asm volatile ("l.d $f20, %0" : : "m" (env[0].__fpregs[0]));
-  asm volatile ("l.d $f22, %0" : : "m" (env[0].__fpregs[1]));
-  asm volatile ("l.d $f24, %0" : : "m" (env[0].__fpregs[2]));
-  asm volatile ("l.d $f26, %0" : : "m" (env[0].__fpregs[3]));
-  asm volatile ("l.d $f28, %0" : : "m" (env[0].__fpregs[4]));
-  asm volatile ("l.d $f30, %0" : : "m" (env[0].__fpregs[5]));
+  asm volatile ("l.d $f20, %0" : : "m"(env[0].__fpregs[0]));
+  asm volatile ("l.d $f22, %0" : : "m"(env[0].__fpregs[1]));
+  asm volatile ("l.d $f24, %0" : : "m"(env[0].__fpregs[2]));
+  asm volatile ("l.d $f26, %0" : : "m"(env[0].__fpregs[3]));
+  asm volatile ("l.d $f28, %0" : : "m"(env[0].__fpregs[4]));
+  asm volatile ("l.d $f30, %0" : : "m"(env[0].__fpregs[5]));
 #endif
 
   /* Get the GP. */
-  asm volatile ("lw $gp, %0" : : "m" (env[0].__gp));
+  asm volatile ("lw $gp, %0" : : "m"(env[0].__gp));
 
   /* Get the callee-saved registers.  */
-  asm volatile ("lw $16, %0" : : "m" (env[0].__regs[0]));
-  asm volatile ("lw $17, %0" : : "m" (env[0].__regs[1]));
-  asm volatile ("lw $18, %0" : : "m" (env[0].__regs[2]));
-  asm volatile ("lw $19, %0" : : "m" (env[0].__regs[3]));
-  asm volatile ("lw $20, %0" : : "m" (env[0].__regs[4]));
-  asm volatile ("lw $21, %0" : : "m" (env[0].__regs[5]));
-  asm volatile ("lw $22, %0" : : "m" (env[0].__regs[6]));
-  asm volatile ("lw $23, %0" : : "m" (env[0].__regs[7]));
+  asm volatile ("lw $16, %0" : : "m"(env[0].__regs[0]));
+  asm volatile ("lw $17, %0" : : "m"(env[0].__regs[1]));
+  asm volatile ("lw $18, %0" : : "m"(env[0].__regs[2]));
+  asm volatile ("lw $19, %0" : : "m"(env[0].__regs[3]));
+  asm volatile ("lw $20, %0" : : "m"(env[0].__regs[4]));
+  asm volatile ("lw $21, %0" : : "m"(env[0].__regs[5]));
+  asm volatile ("lw $22, %0" : : "m"(env[0].__regs[6]));
+  asm volatile ("lw $23, %0" : : "m"(env[0].__regs[7]));
 
   /* Get the PC.  */
-  asm volatile ("lw $25, %0" : : "m" (env[0].__pc));
+  asm volatile ("lw $25, %0" : : "m"(env[0].__pc));
 
   /* Restore the stack pointer and the FP.  They have to be restored
      last and in a single asm as gcc, depending on options used, may
      use either of them to access env.  */
   asm volatile ("lw $29, %0\n\t"
-		"lw $30, %1\n\t" : : "m" (env[0].__sp), "m" (env[0].__fp));
+		"lw $30, %1\n\t"
+		:
+		: "m"(env[0].__sp), "m"(env[0].__fp));
 
-/* Give setjmp 1 if given a 0, or what they gave us if non-zero.  */
+  /* Give setjmp 1 if given a 0, or what they gave us if non-zero.  */
   if (val == 0)
     asm volatile ("li $2, 1");
   else
-    asm volatile ("move $2, %0" : : "r" (val));
+    asm volatile ("move $2, %0" : : "r"(val));
 
   asm volatile ("jr $25");
 
   /* Avoid `volatile function does return' warnings.  */
-  for (;;);
+  for (;;)
+    ;
 }
 
 /* Not using strong_alias because the nomips16 attribute cannot be
@@ -85,4 +88,5 @@ ____longjmp (__jmp_buf env_arg, int val_arg)
    architecture-independent declaration of __longjmp without the
    attribute and compiler errors for such attributes not being the
    same on all declarations.  */
-extern __typeof (____longjmp) __longjmp __attribute__ ((alias ("____longjmp")));
+extern __typeof (____longjmp) __longjmp
+    __attribute__ ((alias ("____longjmp")));

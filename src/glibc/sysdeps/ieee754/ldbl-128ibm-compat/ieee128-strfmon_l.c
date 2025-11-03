@@ -21,14 +21,15 @@
 #include <locale/localeinfo.h>
 
 ssize_t
-___ieee128_strfmon_l (char *s, size_t maxsize, locale_t loc, const char *format, ...)
+___ieee128_strfmon_l (char *s, size_t maxsize, locale_t loc,
+		      const char *format, ...)
 {
   va_list ap;
   ssize_t res;
 
   va_start (ap, format);
-  res = __vstrfmon_l_internal (s, maxsize, loc,
-                               format, ap, STRFMON_LDBL_USES_FLOAT128);
+  res = __vstrfmon_l_internal (s, maxsize, loc, format, ap,
+			       STRFMON_LDBL_USES_FLOAT128);
   va_end (ap);
   return res;
 }

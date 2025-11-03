@@ -18,21 +18,21 @@
 
 #include <sysdeps/x86/isa-level.h>
 #if MINIMUM_X86_ISA_LEVEL < AVX2_X86_ISA_LEVEL
-# include <libm-alias-double.h>
+#  include <libm-alias-double.h>
 
 extern double __redirect_expm1 (double);
 
-# define SYMBOL_NAME expm1
-# include "ifunc-fma.h"
+#  define SYMBOL_NAME expm1
+#  include "ifunc-fma.h"
 
 libc_ifunc_redirected (__redirect_expm1, __expm1, IFUNC_SELECTOR ());
 libm_alias_double (__expm1, expm1)
 
-# define __expm1 __expm1_sse2
+#  define __expm1 __expm1_sse2
 
-/* NB: __expm1 may be expanded to __expm1_sse2 in the following
-   prototypes.  */
-extern long double __expm1l (long double);
+    /* NB: __expm1 may be expanded to __expm1_sse2 in the following
+       prototypes.  */
+    extern long double __expm1l (long double);
 extern long double __expm1f128 (long double);
 
 #endif

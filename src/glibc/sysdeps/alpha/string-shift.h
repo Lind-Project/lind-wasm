@@ -17,11 +17,11 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_SHIFT_H
-#define _STRING_SHIFT_H 1
+#  define _STRING_SHIFT_H 1
 
-#include <limits.h>
-#include <stdint.h>
-#include <string-fza.h>
+#  include <limits.h>
+#  include <stdint.h>
+#  include <string-fza.h>
 
 /* Return the mask WORD shifted based on S_INT address value, to ignore
    values not presented in the aligned word read.  */
@@ -38,7 +38,7 @@ shift_find_last (find_t word, uintptr_t s)
   s = s % sizeof (op_t);
   if (s == 0)
     return word;
-  return word & ~((op_t)-1 << s);
+  return word & ~((op_t) -1 << s);
 }
 
 #endif /* _STRING_SHIFT_H */

@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <setxid.h>
 
-
 int
 __setreuid (uid_t ruid, uid_t euid)
 {

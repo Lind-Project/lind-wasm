@@ -43,32 +43,33 @@ __feraiseexcept (int excepts)
     {
       /* One example of an invalid operation is 0 * Infinity.  */
       double d = HUGE_VAL;
-      __asm__ __volatile__ (
-		"	fcpy,dbl %%fr0,%%fr22\n"
-		"	fmpy,dbl %0,%%fr22,%0\n"
-		"	fldd 0(%%sr0,%%sp),%0"
-		: "+f" (d) : : "%fr22" );
+      __asm__ __volatile__ ("	fcpy,dbl %%fr0,%%fr22\n"
+			    "	fmpy,dbl %0,%%fr22,%0\n"
+			    "	fldd 0(%%sr0,%%sp),%0"
+			    : "+f"(d)
+			    :
+			    : "%fr22");
     }
 
   /* Second: Division by zero.  */
   if (excepts & FE_DIVBYZERO)
     {
       double d = 1.0;
-      __asm__ __volatile__ (
-		"	fcpy,dbl %%fr0,%%fr22\n"
-		"	fdiv,dbl %0,%%fr22,%0\n"
-		"	fldd 0(%%sr0,%%sp),%0"
-		: "+f" (d) : : "%fr22" );
+      __asm__ __volatile__ ("	fcpy,dbl %%fr0,%%fr22\n"
+			    "	fdiv,dbl %0,%%fr22,%0\n"
+			    "	fldd 0(%%sr0,%%sp),%0"
+			    : "+f"(d)
+			    :
+			    : "%fr22");
     }
 
   /* Third: Overflow.  */
   if (excepts & FE_OVERFLOW)
     {
       double d = DBL_MAX;
-      __asm__ __volatile__ (
-		"	fadd,dbl %0,%0,%0\n"
-		"	fldd 0(%%sr0,%%sp),%0"
-		: "+f" (d) );
+      __asm__ __volatile__ ("	fadd,dbl %0,%0,%0\n"
+			    "	fldd 0(%%sr0,%%sp),%0"
+			    : "+f"(d));
     }
 
   /* Fourth: Underflow.  */
@@ -76,10 +77,10 @@ __feraiseexcept (int excepts)
     {
       double d = DBL_MIN;
       double e = 3.0;
-      __asm__ __volatile__ (
-		"	fdiv,dbl %0,%1,%0\n"
-		"	fldd 0(%%sr0,%%sp),%0"
-		: "+f" (d) : "f" (e) );
+      __asm__ __volatile__ ("	fdiv,dbl %0,%1,%0\n"
+			    "	fldd 0(%%sr0,%%sp),%0"
+			    : "+f"(d)
+			    : "f"(e));
     }
 
   /* Fifth: Inexact */
@@ -87,16 +88,16 @@ __feraiseexcept (int excepts)
     {
       double d = M_PI;
       double e = 69.69;
-      __asm__ __volatile__ (
-		"	fdiv,dbl %0,%1,%%fr22\n"
-		"	fcnvfxt,dbl,sgl %%fr22,%%fr22L\n"
-		"	fldd 0(%%sr0,%%sp),%%fr22"
-		: : "f" (d), "f" (e) : "%fr22" );
+      __asm__ __volatile__ ("	fdiv,dbl %0,%1,%%fr22\n"
+			    "	fcnvfxt,dbl,sgl %%fr22,%%fr22L\n"
+			    "	fldd 0(%%sr0,%%sp),%%fr22"
+			    :
+			    : "f"(d), "f"(e)
+			    : "%fr22");
     }
 
   /* Success.  */
   return 0;
 }
-libm_hidden_def (__feraiseexcept)
-weak_alias (__feraiseexcept, feraiseexcept)
-libm_hidden_weak (feraiseexcept)
+libm_hidden_def (__feraiseexcept) weak_alias (__feraiseexcept, feraiseexcept)
+    libm_hidden_weak (feraiseexcept)

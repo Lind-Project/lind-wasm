@@ -42,8 +42,9 @@ __pthread_thread_terminate (struct __pthread *thread)
   if (thread->stack)
     {
       stackaddr = thread->stackaddr;
-      stacksize = ((thread->guardsize + __vm_page_size - 1)
-		   / __vm_page_size) * __vm_page_size + thread->stacksize;
+      stacksize = ((thread->guardsize + __vm_page_size - 1) / __vm_page_size)
+		      * __vm_page_size
+		  + thread->stacksize;
     }
   else
     {

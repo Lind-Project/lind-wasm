@@ -27,10 +27,10 @@
    consider using it in place of this one.  */
 
 struct sockaddr_pkt
-  {
-    __SOCKADDR_COMMON (spkt_);
-    unsigned char spkt_device[14];
-    unsigned short spkt_protocol;
-  };
+{
+  __SOCKADDR_COMMON (spkt_);
+  unsigned char spkt_device[14];
+  unsigned short spkt_protocol;
+};
 
 #endif

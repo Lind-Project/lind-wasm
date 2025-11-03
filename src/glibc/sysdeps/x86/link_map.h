@@ -18,11 +18,11 @@
 
 /* if this object has GNU property.  */
 enum
-  {
-    lc_property_unknown = 0,		/* Unknown property status.  */
-    lc_property_none = 1 << 0,		/* No property.  */
-    lc_property_valid = 1 << 1		/* Has valid property.  */
-  } l_property:2;
+{
+  lc_property_unknown = 0,   /* Unknown property status.  */
+  lc_property_none = 1 << 0, /* No property.  */
+  lc_property_valid = 1 << 1 /* Has valid property.  */
+} l_property : 2;
 
 /* GNU_PROPERTY_X86_FEATURE_1_AND of this object.  */
 unsigned int l_x86_feature_1_and;

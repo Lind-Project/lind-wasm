@@ -22,8 +22,7 @@
 static inline void __attribute__ ((always_inline))
 _dl_check_protected_symbol (const char *undef_name,
 			    const struct link_map *undef_map,
-			    const ElfW(Sym) *ref,
-			    const struct link_map *map,
+			    const ElfW (Sym) * ref, const struct link_map *map,
 			    int type_class)
 {
   if (undef_map == NULL || undef_map->l_type != lt_executable)

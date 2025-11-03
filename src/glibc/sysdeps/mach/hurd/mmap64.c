@@ -43,5 +43,4 @@ __mmap64 (void *addr, size_t len, int prot, int flags, int fd,
   return __mmap (addr, len, prot, flags, fd, small_offset);
 }
 
-libc_hidden_def (__mmap64)
-weak_alias (__mmap64, mmap64)
+libc_hidden_def (__mmap64) weak_alias (__mmap64, mmap64)

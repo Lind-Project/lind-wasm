@@ -23,7 +23,6 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-
 long long int
 __llroundl (long double x)
 {

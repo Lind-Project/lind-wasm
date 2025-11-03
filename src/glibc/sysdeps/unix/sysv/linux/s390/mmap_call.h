@@ -16,17 +16,18 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define MMAP_CALL(__nr, __addr, __len, __prot, __flags, __fd, __offset)	\
-  ({									\
-    long int __args[6] = { (long int) (__addr), (long int) (__len),	\
-			   (long int) (__prot), (long int) (__flags),	\
-			   (long int) (__fd), (long int) (__offset) };	\
-    INLINE_SYSCALL_CALL (__nr, __args);					\
+#define MMAP_CALL(__nr, __addr, __len, __prot, __flags, __fd, __offset)       \
+  ({                                                                          \
+    long int __args[6] = { (long int) (__addr), (long int) (__len),           \
+			   (long int) (__prot), (long int) (__flags),         \
+			   (long int) (__fd),	(long int) (__offset) };      \
+    INLINE_SYSCALL_CALL (__nr, __args);                                       \
   })
-#define MMAP_CALL_INTERNAL(__nr, __addr, __len, __prot, __flags, __fd, __offset)	\
-  ({									\
-    long int __args[6] = { (long int) (__addr), (long int) (__len),	\
-			   (long int) (__prot), (long int) (__flags),	\
-			   (long int) (__fd), (long int) (__offset) };	\
-    INTERNAL_SYSCALL_CALL (__nr, __args);				\
+#define MMAP_CALL_INTERNAL(__nr, __addr, __len, __prot, __flags, __fd,        \
+			   __offset)                                          \
+  ({                                                                          \
+    long int __args[6] = { (long int) (__addr), (long int) (__len),           \
+			   (long int) (__prot), (long int) (__flags),         \
+			   (long int) (__fd),	(long int) (__offset) };      \
+    INTERNAL_SYSCALL_CALL (__nr, __args);                                     \
   })

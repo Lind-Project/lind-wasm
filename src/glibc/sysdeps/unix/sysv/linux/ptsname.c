@@ -31,7 +31,6 @@
 /* Static buffer for `ptsname'.  */
 static char buffer[sizeof (_PATH_DEVPTS) + 20];
 
-
 /* Return the pathname of the pseudo terminal slave associated with
    the master FD is open on, or NULL on errors.
    The returned storage is good until the next call to this function.  */
@@ -40,7 +39,6 @@ ptsname (int fd)
 {
   return __ptsname_r (fd, buffer, sizeof (buffer)) != 0 ? NULL : buffer;
 }
-
 
 /* Store at most BUFLEN characters of the pathname of the slave pseudo
    terminal associated with the master FD is open on in BUF.
@@ -78,5 +76,4 @@ __ptsname_r (int fd, char *buf, size_t buflen)
   __set_errno (save_errno);
   return 0;
 }
-libc_hidden_def (__ptsname_r)
-weak_alias (__ptsname_r, ptsname_r)
+libc_hidden_def (__ptsname_r) weak_alias (__ptsname_r, ptsname_r)

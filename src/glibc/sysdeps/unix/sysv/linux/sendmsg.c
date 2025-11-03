@@ -24,14 +24,13 @@
 ssize_t
 __libc_sendmsg (int fd, const struct msghdr *msg, int flags)
 {
-# ifdef __ASSUME_SENDMSG_SYSCALL
+#ifdef __ASSUME_SENDMSG_SYSCALL
   return SYSCALL_CANCEL (sendmsg, fd, msg, flags);
-# else
+#else
   return SOCKETCALL_CANCEL (sendmsg, fd, msg, flags);
-# endif
+#endif
 }
-weak_alias (__libc_sendmsg, sendmsg)
-weak_alias (__libc_sendmsg, __sendmsg)
+weak_alias (__libc_sendmsg, sendmsg) weak_alias (__libc_sendmsg, __sendmsg)
 #if __TIMESIZE != 64
-weak_alias (__sendmsg, __sendmsg64)
+    weak_alias (__sendmsg, __sendmsg64)
 #endif

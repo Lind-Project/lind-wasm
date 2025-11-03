@@ -18,7 +18,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef FIX_FP_INT_COMPARE_INVALID_H
-#define FIX_FP_INT_COMPARE_INVALID_H	1
+#  define FIX_FP_INT_COMPARE_INVALID_H 1
 
 /* GCC uses unordered comparison instructions like cebr (Short BFP COMPARE)
    when it should use ordered comparison instructions like kebr
@@ -29,10 +29,10 @@
    <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52451>.
    This s390 gcc bug is fixed with gcc 10, thus we don't need the workaround
    to call feraiseexcept (FE_INVALID) in math/s_iseqsig_template.c.  */
-#if __GNUC_PREREQ (10, 0)
-# define FIX_COMPARE_INVALID 0
-#else
-# define FIX_COMPARE_INVALID 1
-#endif
+#  if __GNUC_PREREQ(10, 0)
+#    define FIX_COMPARE_INVALID 0
+#  else
+#    define FIX_COMPARE_INVALID 1
+#  endif
 
 #endif /* fix-fp-int-compare-invalid.h */

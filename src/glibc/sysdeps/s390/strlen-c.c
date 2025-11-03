@@ -19,16 +19,16 @@
 #include <ifunc-strlen.h>
 
 #if HAVE_STRLEN_C
-# if HAVE_STRLEN_IFUNC
-#  define STRLEN STRLEN_C
-# endif
-
-# include <string/strlen.c>
-
-# if HAVE_STRLEN_IFUNC
-#  if defined SHARED && IS_IN (libc)
-__hidden_ver1 (__strlen_c, __GI_strlen, __strlen_c);
+#  if HAVE_STRLEN_IFUNC
+#    define STRLEN STRLEN_C
 #  endif
-# endif
+
+#  include <string/strlen.c>
+
+#  if HAVE_STRLEN_IFUNC
+#    if defined SHARED && IS_IN(libc)
+__hidden_ver1 (__strlen_c, __GI_strlen, __strlen_c);
+#    endif
+#  endif
 
 #endif

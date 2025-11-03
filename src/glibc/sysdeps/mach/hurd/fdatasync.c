@@ -28,7 +28,7 @@ fdatasync (int fd)
   error_t err;
   int cancel_oldtype;
 
-  cancel_oldtype = LIBC_CANCEL_ASYNC();
+  cancel_oldtype = LIBC_CANCEL_ASYNC ();
   err = HURD_DPORT_USE_CANCEL (fd, __file_sync (port, 1, 1));
   LIBC_CANCEL_RESET (cancel_oldtype);
   if (err)

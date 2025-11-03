@@ -19,20 +19,19 @@
 #include <ifunc-wcsncmp.h>
 
 #if HAVE_WCSNCMP_IFUNC
-# include <wchar.h>
-# include <ifunc-resolve.h>
+#  include <wchar.h>
+#  include <ifunc-resolve.h>
 
-# if HAVE_WCSNCMP_C
+#  if HAVE_WCSNCMP_C
 extern __typeof (wcsncmp) WCSNCMP_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCSNCMP_Z13
+#  if HAVE_WCSNCMP_Z13
 extern __typeof (wcsncmp) WCSNCMP_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (wcsncmp, wcsncmp,
 		      (HAVE_WCSNCMP_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCSNCMP_Z13
-		      : WCSNCMP_DEFAULT
-		      )
+			  ? WCSNCMP_Z13
+			  : WCSNCMP_DEFAULT)
 #endif

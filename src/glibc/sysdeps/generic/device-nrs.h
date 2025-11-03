@@ -17,11 +17,11 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _DEVICE_NRS_H
-#define _DEVICE_NRS_H	1
+#  define _DEVICE_NRS_H 1
 
 /* By default we know no device numbers.  */
 
 /* We cannot check whether a given device is a tty.  */
-#define DEV_TTY_P(statp) (0)
+#  define DEV_TTY_P(statp) (0)
 
-#endif	/* device-nrs.h */
+#endif /* device-nrs.h */

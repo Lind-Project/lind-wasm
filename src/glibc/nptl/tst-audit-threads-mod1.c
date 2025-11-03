@@ -50,15 +50,13 @@ la_objopen (struct link_map *map, Lmid_t lmid, uintptr_t *cookie)
 }
 
 uintptr_t
-CONCATX(la_symbind, __ELF_NATIVE_CLASS) (ElfW(Sym) *sym,
-					unsigned int ndx,
-					uintptr_t *refcook,
-					uintptr_t *defcook,
-					unsigned int *flags,
-					const char *symname)
+CONCATX (la_symbind,
+	 __ELF_NATIVE_CLASS) (ElfW (Sym) * sym, unsigned int ndx,
+			      uintptr_t *refcook, uintptr_t *defcook,
+			      unsigned int *flags, const char *symname)
 {
-  const char * retnum = "retNum";
-  char * num = strstr (symname, retnum);
+  const char *retnum = "retNum";
+  char *num = strstr (symname, retnum);
   int n;
   /* Validate if the symbols are getting called in the correct order.
      This code is here to verify binutils does not optimize out the PLT

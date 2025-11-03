@@ -19,9 +19,9 @@
 #include <ifunc-wcsncat.h>
 
 #if HAVE_WCSNCAT_C
-# if HAVE_WCSNCAT_IFUNC || HAVE_WCSNCAT_Z13
-#  define WCSNCAT WCSNCAT_C
-# endif
+#  if HAVE_WCSNCAT_IFUNC || HAVE_WCSNCAT_Z13
+#    define WCSNCAT WCSNCAT_C
+#  endif
 
-# include <wcsmbs/wcsncat.c>
+#  include <wcsmbs/wcsncat.c>
 #endif

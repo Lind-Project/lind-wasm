@@ -27,12 +27,11 @@
 /* Coefficients B_2k / 2k(2k-1) of x^-(2k-1) inside exp in Stirling's
    approximation to gamma function.  */
 
-static const float gamma_coeff[] =
-  {
-    0x1.555556p-4f,
-    -0xb.60b61p-12f,
-    0x3.403404p-12f,
-  };
+static const float gamma_coeff[] = {
+  0x1.555556p-4f,
+  -0xb.60b61p-12f,
+  0x3.403404p-12f,
+};
 
 #define NCOEFF (sizeof (gamma_coeff) / sizeof (gamma_coeff[0]))
 
@@ -91,11 +90,10 @@ gammaf_positive (float x, int *exp2_adj)
 	  x_adj_mant *= 2.0f;
 	}
       *exp2_adj = x_adj_log2 * (int) x_adj_int;
-      float ret = (__ieee754_powf (x_adj_mant, x_adj)
-		   * __ieee754_exp2f (x_adj_log2 * x_adj_frac)
-		   * __ieee754_expf (-x_adj)
-		   * sqrtf (2 * M_PIf / x_adj)
-		   / prod);
+      float ret
+	  = (__ieee754_powf (x_adj_mant, x_adj)
+	     * __ieee754_exp2f (x_adj_log2 * x_adj_frac)
+	     * __ieee754_expf (-x_adj) * sqrtf (2 * M_PIf / x_adj) / prod);
       exp_adj += x_eps * __ieee754_logf (x_adj);
       float bsum = gamma_coeff[NCOEFF - 1];
       float x_adj2 = x_adj * x_adj;
@@ -120,8 +118,8 @@ __ieee754_gammaf_r (float x, int *signgamp)
       *signgamp = 0;
       return 1.0 / x;
     }
-  if (__builtin_expect (hx < 0, 0)
-      && (uint32_t) hx < 0xff800000 && rintf (x) == x)
+  if (__builtin_expect (hx < 0, 0) && (uint32_t) hx < 0xff800000
+      && rintf (x) == x)
     {
       /* Return value for integer x < 0 is NaN with invalid exception.  */
       *signgamp = 0;
@@ -175,12 +173,11 @@ __ieee754_gammaf_r (float x, int *signgamp)
 	      float frac = tx - x;
 	      if (frac > 0.5f)
 		frac = 1.0f - frac;
-	      float sinpix = (frac <= 0.25f
-			      ? __sinf (M_PIf * frac)
-			      : __cosf (M_PIf * (0.5f - frac)));
+	      float sinpix = (frac <= 0.25f ? __sinf (M_PIf * frac)
+					    : __cosf (M_PIf * (0.5f - frac)));
 	      int exp2_adj;
-	      float tret = M_PIf / (-x * sinpix
-				    * gammaf_positive (-x, &exp2_adj));
+	      float tret
+		  = M_PIf / (-x * sinpix * gammaf_positive (-x, &exp2_adj));
 	      ret = __scalbnf (tret, -exp2_adj);
 	      math_check_force_underflow_nonneg (ret);
 	    }

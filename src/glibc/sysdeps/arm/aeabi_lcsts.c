@@ -44,7 +44,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#define eabi_constant2(X,Y) const int __aeabi_##X attribute_hidden = Y
+#define eabi_constant2(X, Y) const int __aeabi_##X attribute_hidden = Y
 #define eabi_constant(X) const int __aeabi_##X attribute_hidden = X
 
 eabi_constant (EDOM);
@@ -93,6 +93,6 @@ setup_aeabi_stdio (void)
 }
 
 static void (*fp) (void) __attribute__ ((used, section (".preinit_array")))
-  = setup_aeabi_stdio;
+= setup_aeabi_stdio;
 
 eabi_constant (CLOCKS_PER_SEC);

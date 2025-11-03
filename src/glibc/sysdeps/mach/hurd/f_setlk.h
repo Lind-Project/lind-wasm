@@ -16,8 +16,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _F_SETLK_H
-#define _F_SETLK_H 1
+#  define _F_SETLK_H 1
 
-extern int __f_setlk (int fd, int type, int whence, __off64_t start, __off64_t len, int wait);
+extern int __f_setlk (int fd, int type, int whence, __off64_t start,
+		      __off64_t len, int wait);
 
 #endif /* f_setlk.h */

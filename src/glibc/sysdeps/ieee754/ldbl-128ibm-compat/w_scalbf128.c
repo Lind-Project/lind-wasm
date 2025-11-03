@@ -20,8 +20,8 @@
 #include <math-type-macros-float128.h>
 
 #undef declare_mgen_alias
-#define declare_mgen_alias(a,b)
+#define declare_mgen_alias(a, b)
 #define __ieee754_scalbl __ieee754_scalbf128
 #include <w_scalb_template.c>
 
-libm_alias_float128_other_r_ldbl (__scalb, scalb,)
+libm_alias_float128_other_r_ldbl (__scalb, scalb, )

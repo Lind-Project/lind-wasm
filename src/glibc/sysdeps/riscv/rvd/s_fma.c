@@ -30,8 +30,7 @@
 double
 __fma (double x, double y, double z)
 {
-  asm ("fmadd.d %0, %1, %2, %3" : "=f" (x) : "f" (x), "f" (y), "f" (z));
+  asm ("fmadd.d %0, %1, %2, %3" : "=f"(x) : "f"(x), "f"(y), "f"(z));
   return x;
 }
-libm_alias_double (__fma, fma)
-libm_alias_double_narrow (__fma, fma)
+libm_alias_double (__fma, fma) libm_alias_double_narrow (__fma, fma)

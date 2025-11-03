@@ -18,7 +18,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _GETOPT_EXT_H
-#define _GETOPT_EXT_H 1
+#  define _GETOPT_EXT_H 1
 
 /* This header should not be used directly; include getopt.h instead.
    Unlike most bits headers, it does not have a protective #error,
@@ -59,18 +59,18 @@ struct option
 
 /* Names for the values of the 'has_arg' field of 'struct option'.  */
 
-#define no_argument		0
-#define required_argument	1
-#define optional_argument	2
+#  define no_argument 0
+#  define required_argument 1
+#  define optional_argument 2
 
 extern int getopt_long (int ___argc, char *__getopt_argv_const *___argv,
 			const char *__shortopts,
-		        const struct option *__longopts, int *__longind)
-       __THROW __nonnull ((2, 3));
+			const struct option *__longopts,
+			int *__longind) __THROW __nonnull ((2, 3));
 extern int getopt_long_only (int ___argc, char *__getopt_argv_const *___argv,
 			     const char *__shortopts,
-		             const struct option *__longopts, int *__longind)
-       __THROW __nonnull ((2, 3));
+			     const struct option *__longopts,
+			     int *__longind) __THROW __nonnull ((2, 3));
 
 __END_DECLS
 

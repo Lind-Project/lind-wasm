@@ -16,25 +16,28 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_CACHECTL_H
-#define _SYS_CACHECTL_H 1
+#  define _SYS_CACHECTL_H 1
 
-#include <features.h>
+#  include <features.h>
 
 /*
  * Get the kernel definition for the op bits.
  */
-#include <asm/cachectl.h>
+#  include <asm/cachectl.h>
 
 __BEGIN_DECLS
 
-#ifdef __USE_MISC
+#  ifdef __USE_MISC
 extern int cachectl (void *__addr, const int __nbytes, const int __op) __THROW;
-#endif
-extern int __cachectl (void *__addr, const int __nbytes, const int __op) __THROW;
-#ifdef __USE_MISC
-extern int cacheflush (void *__addr, const int __nbytes, const int __op) __THROW;
-#endif
-extern int _flush_cache (char *__addr, const int __nbytes, const int __op) __THROW;
+#  endif
+extern int __cachectl (void *__addr, const int __nbytes,
+		       const int __op) __THROW;
+#  ifdef __USE_MISC
+extern int cacheflush (void *__addr, const int __nbytes,
+		       const int __op) __THROW;
+#  endif
+extern int _flush_cache (char *__addr, const int __nbytes,
+			 const int __op) __THROW;
 
 __END_DECLS
 

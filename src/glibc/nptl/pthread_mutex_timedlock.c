@@ -29,8 +29,7 @@
 #include <stap-probe.h>
 
 int
-__pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
-				  clockid_t clockid,
+__pthread_mutex_clocklock_common (pthread_mutex_t *mutex, clockid_t clockid,
 				  const struct __timespec64 *abstime)
 {
   int oldval;
@@ -41,12 +40,12 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
      abstime must not be checked for a valid value.  */
 
   /* See concurrency notes regarding mutex type which is loaded from __kind
-     in struct __pthread_mutex_s in sysdeps/nptl/bits/thread-shared-types.h.  */
+     in struct __pthread_mutex_s in sysdeps/nptl/bits/thread-shared-types.h. */
   switch (__builtin_expect (PTHREAD_MUTEX_TYPE_ELISION (mutex),
 			    PTHREAD_MUTEX_TIMED_NP))
     {
       /* Recursive mutex.  */
-    case PTHREAD_MUTEX_RECURSIVE_NP|PTHREAD_MUTEX_ELISION_NP:
+    case PTHREAD_MUTEX_RECURSIVE_NP | PTHREAD_MUTEX_ELISION_NP:
     case PTHREAD_MUTEX_RECURSIVE_NP:
       /* Check whether we already hold the mutex.  */
       if (mutex->__data.__owner == id)
@@ -63,7 +62,7 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 
       /* We have to get the mutex.  */
       result = __futex_clocklock64 (&mutex->__data.__lock, clockid, abstime,
-                                    PTHREAD_MUTEX_PSHARED (mutex));
+				    PTHREAD_MUTEX_PSHARED (mutex));
 
       if (result != 0)
 	goto out;
@@ -86,31 +85,30 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
     simple:
       /* Normal mutex.  */
       result = __futex_clocklock64 (&mutex->__data.__lock, clockid, abstime,
-                                    PTHREAD_MUTEX_PSHARED (mutex));
+				    PTHREAD_MUTEX_PSHARED (mutex));
       break;
 
     case PTHREAD_MUTEX_TIMED_ELISION_NP:
-    elision: __attribute__((unused))
+    elision:
+      __attribute__ ((unused))
       /* Don't record ownership */
       return lll_clocklock_elision (mutex->__data.__lock,
-				    mutex->__data.__spins,
-				    clockid, abstime,
+				    mutex->__data.__spins, clockid, abstime,
 				    PTHREAD_MUTEX_PSHARED (mutex));
-
 
     case PTHREAD_MUTEX_ADAPTIVE_NP:
       if (lll_trylock (mutex->__data.__lock) != 0)
 	{
 	  int cnt = 0;
-	  int max_cnt = MIN (max_adaptive_count (),
-			     mutex->__data.__spins * 2 + 10);
+	  int max_cnt
+	      = MIN (max_adaptive_count (), mutex->__data.__spins * 2 + 10);
 	  do
 	    {
 	      if (cnt++ >= max_cnt)
 		{
-		  result = __futex_clocklock64 (&mutex->__data.__lock,
-		                                clockid, abstime,
-		                                PTHREAD_MUTEX_PSHARED (mutex));
+		  result = __futex_clocklock64 (&mutex->__data.__lock, clockid,
+						abstime,
+						PTHREAD_MUTEX_PSHARED (mutex));
 		  break;
 		}
 	      atomic_spin_nop ();
@@ -143,9 +141,8 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	     our TID | assume_other_futex_waiters.  */
 	  if (__glibc_likely (oldval == 0))
 	    {
-	      oldval
-	        = atomic_compare_and_exchange_val_acq (&mutex->__data.__lock,
-	            id | assume_other_futex_waiters, 0);
+	      oldval = atomic_compare_and_exchange_val_acq (
+		  &mutex->__data.__lock, id | assume_other_futex_waiters, 0);
 	      if (__glibc_likely (oldval == 0))
 		break;
 	    }
@@ -153,12 +150,11 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	  if ((oldval & FUTEX_OWNER_DIED) != 0)
 	    {
 	      /* The previous owner died.  Try locking the mutex.  */
-	      int newval = id | (oldval & FUTEX_WAITERS)
-		  | assume_other_futex_waiters;
+	      int newval
+		  = id | (oldval & FUTEX_WAITERS) | assume_other_futex_waiters;
 
-	      newval
-		= atomic_compare_and_exchange_val_acq (&mutex->__data.__lock,
-						       newval, oldval);
+	      newval = atomic_compare_and_exchange_val_acq (
+		  &mutex->__data.__lock, newval, oldval);
 	      if (newval != oldval)
 		{
 		  oldval = newval;
@@ -219,7 +215,7 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	    }
 
 	  /* We are about to block; check whether the timeout is invalid.  */
-	  if (! valid_nanoseconds (abstime->tv_nsec))
+	  if (!valid_nanoseconds (abstime->tv_nsec))
 	    return EINVAL;
 	  /* Work around the fact that the kernel rejects negative timeout
 	     values despite them being valid.  */
@@ -233,8 +229,8 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	     meantime.  */
 	  if ((oldval & FUTEX_WAITERS) == 0)
 	    {
-	      int val = atomic_compare_and_exchange_val_acq
-		(&mutex->__data.__lock, oldval | FUTEX_WAITERS, oldval);
+	      int val = atomic_compare_and_exchange_val_acq (
+		  &mutex->__data.__lock, oldval | FUTEX_WAITERS, oldval);
 	      if (val != oldval)
 		{
 		  oldval = val;
@@ -251,8 +247,7 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 
 	  /* Block using the futex.  */
 	  int err = __futex_abstimed_wait64 (
-	      (unsigned int *) &mutex->__data.__lock,
-	      oldval, clockid, abstime,
+	      (unsigned int *) &mutex->__data.__lock, oldval, clockid, abstime,
 	      PTHREAD_ROBUST_MUTEX_PSHARED (mutex));
 	  /* The futex call timed out.  */
 	  if (err == ETIMEDOUT || err == EOVERFLOW)
@@ -262,8 +257,8 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	}
 
       /* We have acquired the mutex; check if it is still consistent.  */
-      if (__builtin_expect (mutex->__data.__owner
-			    == PTHREAD_MUTEX_NOTRECOVERABLE, 0))
+      if (__builtin_expect (
+	      mutex->__data.__owner == PTHREAD_MUTEX_NOTRECOVERABLE, 0))
 	{
 	  /* This mutex is now not recoverable.  */
 	  mutex->__data.__count = 0;
@@ -285,9 +280,9 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
       THREAD_SETMEM (THREAD_SELF, robust_head.list_op_pending, NULL);
       break;
 
-    /* The PI support requires the Linux futex system call.  If that's not
-       available, pthread_mutex_init should never have allowed the type to
-       be set.  So it will get the default case for an invalid type.  */
+      /* The PI support requires the Linux futex system call.  If that's not
+	 available, pthread_mutex_init should never have allowed the type to
+	 be set.  So it will get the default case for an invalid type.  */
 #ifdef __NR_futex
     case PTHREAD_MUTEX_PI_RECURSIVE_NP:
     case PTHREAD_MUTEX_PI_ERRORCHECK_NP:
@@ -310,9 +305,9 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	if (robust)
 	  {
 	    /* Note: robust PI futexes are signaled by setting bit 0.  */
-	    THREAD_SETMEM (THREAD_SELF, robust_head.list_op_pending,
-			   (void *) (((uintptr_t) &mutex->__data.__list.__next)
-				     | 1));
+	    THREAD_SETMEM (
+		THREAD_SELF, robust_head.list_op_pending,
+		(void *) (((uintptr_t) &mutex->__data.__list.__next) | 1));
 	    /* We need to set op_pending before starting the operation.  Also
 	       see comments at ENQUEUE_MUTEX.  */
 	    __asm ("" ::: "memory");
@@ -358,9 +353,8 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	    /* The mutex is locked.  The kernel will now take care of
 	       everything.  The timeout value must be a relative value.
 	       Convert it.  */
-	    int private = (robust
-			   ? PTHREAD_ROBUST_MUTEX_PSHARED (mutex)
-			   : PTHREAD_MUTEX_PSHARED (mutex));
+	    int private = (robust ? PTHREAD_ROBUST_MUTEX_PSHARED (mutex)
+				  : PTHREAD_MUTEX_PSHARED (mutex));
 	    int e = __futex_lock_pi64 (&mutex->__data.__lock, clockid, abstime,
 				       private);
 	    if (e == ETIMEDOUT)
@@ -369,7 +363,7 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	      {
 		assert (e != EDEADLK
 			|| (kind != PTHREAD_MUTEX_ERRORCHECK_NP
-			   && kind != PTHREAD_MUTEX_RECURSIVE_NP));
+			    && kind != PTHREAD_MUTEX_RECURSIVE_NP));
 		/* ESRCH can happen only for non-robust PI mutexes where
 		   the owner of the lock died.  */
 		assert (e != ESRCH || !robust);
@@ -377,8 +371,8 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 		/* Delay the thread until the timeout is reached. Then return
 		   ETIMEDOUT.  */
 		do
-		  e = __futex_abstimed_wait64 (&(unsigned int){0}, 0, clockid,
-					       abstime, private);
+		  e = __futex_abstimed_wait64 (&(unsigned int) { 0 }, 0,
+					       clockid, abstime, private);
 		while (e != ETIMEDOUT);
 		return ETIMEDOUT;
 	      }
@@ -392,7 +386,8 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 
 	if (__glibc_unlikely (oldval & FUTEX_OWNER_DIED))
 	  {
-	    atomic_fetch_and_acquire (&mutex->__data.__lock, ~FUTEX_OWNER_DIED);
+	    atomic_fetch_and_acquire (&mutex->__data.__lock,
+				      ~FUTEX_OWNER_DIED);
 
 	    /* We got the mutex.  */
 	    mutex->__data.__count = 1;
@@ -415,8 +410,8 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	  }
 
 	if (robust
-	    && __builtin_expect (mutex->__data.__owner
-				 == PTHREAD_MUTEX_NOTRECOVERABLE, 0))
+	    && __builtin_expect (
+		mutex->__data.__owner == PTHREAD_MUTEX_NOTRECOVERABLE, 0))
 	  {
 	    /* This mutex is now not recoverable.  */
 	    mutex->__data.__count = 0;
@@ -441,9 +436,9 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	    __asm ("" ::: "memory");
 	    THREAD_SETMEM (THREAD_SELF, robust_head.list_op_pending, NULL);
 	  }
-	}
+      }
       break;
-#endif  /* __NR_futex.  */
+#endif /* __NR_futex.  */
 
     case PTHREAD_MUTEX_PP_RECURSIVE_NP:
     case PTHREAD_MUTEX_PP_ERRORCHECK_NP:
@@ -453,7 +448,7 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	/* See concurrency notes regarding __kind in struct __pthread_mutex_s
 	   in sysdeps/nptl/bits/thread-shared-types.h.  */
 	int kind = atomic_load_relaxed (&(mutex->__data.__kind))
-	  & PTHREAD_MUTEX_KIND_MASK_NP;
+		   & PTHREAD_MUTEX_KIND_MASK_NP;
 
 	oldval = mutex->__data.__lock;
 
@@ -500,19 +495,16 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 	    ceilval = ceiling << PTHREAD_MUTEX_PRIO_CEILING_SHIFT;
 	    oldprio = ceiling;
 
-	    oldval
-	      = atomic_compare_and_exchange_val_acq (&mutex->__data.__lock,
-						     ceilval | 1, ceilval);
+	    oldval = atomic_compare_and_exchange_val_acq (
+		&mutex->__data.__lock, ceilval | 1, ceilval);
 
 	    if (oldval == ceilval)
 	      break;
 
 	    do
 	      {
-		oldval
-		  = atomic_compare_and_exchange_val_acq (&mutex->__data.__lock,
-							 ceilval | 2,
-							 ceilval | 1);
+		oldval = atomic_compare_and_exchange_val_acq (
+		    &mutex->__data.__lock, ceilval | 2, ceilval | 1);
 
 		if ((oldval & PTHREAD_MUTEX_PRIO_CEILING_MASK) != ceilval)
 		  break;
@@ -520,15 +512,15 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
 		if (oldval != ceilval)
 		  {
 		    /* Reject invalid timeouts.  */
-		    if (! valid_nanoseconds (abstime->tv_nsec))
+		    if (!valid_nanoseconds (abstime->tv_nsec))
 		      {
 			result = EINVAL;
 			goto failpp;
 		      }
 
 		    int e = __futex_abstimed_wait64 (
-		      (unsigned int *) &mutex->__data.__lock, ceilval | 2,
-		      clockid, abstime, PTHREAD_MUTEX_PSHARED (mutex));
+			(unsigned int *) &mutex->__data.__lock, ceilval | 2,
+			clockid, abstime, PTHREAD_MUTEX_PSHARED (mutex));
 		    if (e == ETIMEDOUT || e == EOVERFLOW)
 		      return e;
 		  }
@@ -558,13 +550,12 @@ __pthread_mutex_clocklock_common (pthread_mutex_t *mutex,
       LIBC_PROBE (mutex_timedlock_acquired, 1, mutex);
     }
 
- out:
+out:
   return result;
 }
 
 int
-___pthread_mutex_clocklock64 (pthread_mutex_t *mutex,
-			      clockid_t clockid,
+___pthread_mutex_clocklock64 (pthread_mutex_t *mutex, clockid_t clockid,
 			      const struct __timespec64 *abstime)
 {
   if (__glibc_unlikely (!futex_abstimed_supported_clockid (clockid)))
@@ -576,34 +567,33 @@ ___pthread_mutex_clocklock64 (pthread_mutex_t *mutex,
 
 #if __TIMESIZE == 64
 strong_alias (___pthread_mutex_clocklock64, ___pthread_mutex_clocklock)
-#else /* __TIMESPEC64 != 64 */
+#else  /* __TIMESPEC64 != 64 */
 strong_alias (___pthread_mutex_clocklock64, __pthread_mutex_clocklock64)
-libc_hidden_def (__pthread_mutex_clocklock64)
+    libc_hidden_def (__pthread_mutex_clocklock64)
 
-int
-___pthread_mutex_clocklock (pthread_mutex_t *mutex,
-			    clockid_t clockid,
-			    const struct timespec *abstime)
+	int ___pthread_mutex_clocklock (pthread_mutex_t *mutex,
+					clockid_t clockid,
+					const struct timespec *abstime)
 {
   struct __timespec64 ts64 = valid_timespec_to_timespec64 (*abstime);
 
   return ___pthread_mutex_clocklock64 (mutex, clockid, &ts64);
 }
 #endif /* __TIMESPEC64 != 64 */
-libc_hidden_ver (___pthread_mutex_clocklock, __pthread_mutex_clocklock)
+    libc_hidden_ver (___pthread_mutex_clocklock, __pthread_mutex_clocklock)
 #ifndef SHARED
-strong_alias (___pthread_mutex_clocklock, __pthread_mutex_clocklock)
+	strong_alias (___pthread_mutex_clocklock, __pthread_mutex_clocklock)
 #endif
-versioned_symbol (libc, ___pthread_mutex_clocklock,
-		  pthread_mutex_clocklock, GLIBC_2_34);
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_30, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_mutex_clocklock,
-	       pthread_mutex_clocklock, GLIBC_2_30);
+	    versioned_symbol (libc, ___pthread_mutex_clocklock,
+			      pthread_mutex_clocklock, GLIBC_2_34);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_30, GLIBC_2_34)
+compat_symbol (libpthread, ___pthread_mutex_clocklock, pthread_mutex_clocklock,
+	       GLIBC_2_30);
 #endif
 
 int
 ___pthread_mutex_timedlock64 (pthread_mutex_t *mutex,
-			     const struct __timespec64 *abstime)
+			      const struct __timespec64 *abstime)
 {
   LIBC_PROBE (mutex_timedlock_entry, 2, mutex, abstime);
   return __pthread_mutex_clocklock_common (mutex, CLOCK_REALTIME, abstime);
@@ -611,27 +601,26 @@ ___pthread_mutex_timedlock64 (pthread_mutex_t *mutex,
 
 #if __TIMESIZE == 64
 strong_alias (___pthread_mutex_timedlock64, ___pthread_mutex_timedlock)
-#else /* __TIMESPEC64 != 64 */
+#else  /* __TIMESPEC64 != 64 */
 strong_alias (___pthread_mutex_timedlock64, __pthread_mutex_timedlock64);
 libc_hidden_def (__pthread_mutex_timedlock64)
 
-int
-___pthread_mutex_timedlock (pthread_mutex_t *mutex,
-			   const struct timespec *abstime)
+    int ___pthread_mutex_timedlock (pthread_mutex_t *mutex,
+				    const struct timespec *abstime)
 {
   struct __timespec64 ts64 = valid_timespec_to_timespec64 (*abstime);
 
   return __pthread_mutex_timedlock64 (mutex, &ts64);
 }
 #endif /* __TIMESPEC64 != 64 */
-versioned_symbol (libc, ___pthread_mutex_timedlock,
-		  pthread_mutex_timedlock, GLIBC_2_34);
+    versioned_symbol (libc, ___pthread_mutex_timedlock,
+		      pthread_mutex_timedlock, GLIBC_2_34);
 libc_hidden_ver (___pthread_mutex_timedlock, __pthread_mutex_timedlock)
 #ifndef SHARED
-strong_alias (___pthread_mutex_timedlock, __pthread_mutex_timedlock)
+    strong_alias (___pthread_mutex_timedlock, __pthread_mutex_timedlock)
 #endif
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_34)
-compat_symbol (libpthread, ___pthread_mutex_timedlock,
-	       pthread_mutex_timedlock, GLIBC_2_2);
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_34)
+	compat_symbol (libpthread, ___pthread_mutex_timedlock,
+		       pthread_mutex_timedlock, GLIBC_2_2);
 #endif

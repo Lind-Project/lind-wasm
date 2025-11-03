@@ -17,57 +17,57 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MIPS_BITS_SETJMP_H
-#define _MIPS_BITS_SETJMP_H 1
+#  define _MIPS_BITS_SETJMP_H 1
 
-#if !defined(_SETJMP_H) && !defined(_PTHREAD_H)
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
-#endif
+#  if !defined(_SETJMP_H) && !defined(_PTHREAD_H)
+#    error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  endif
 
-#include <sgidefs.h>
+#  include <sgidefs.h>
 
 typedef struct __jmp_buf_internal_tag
-  {
-#if _MIPS_SIM == _ABIO32
-    /* Program counter.  */
-    void *__pc;
+{
+#  if _MIPS_SIM == _ABIO32
+  /* Program counter.  */
+  void *__pc;
 
-    /* Stack pointer.  */
-    void *__sp;
+  /* Stack pointer.  */
+  void *__sp;
 
-    /* Callee-saved registers s0 through s7.  */
-    int __regs[8];
+  /* Callee-saved registers s0 through s7.  */
+  int __regs[8];
 
-    /* The frame pointer.  */
-    void *__fp;
+  /* The frame pointer.  */
+  void *__fp;
 
-    /* The global pointer.  */
-    void *__gp;
-#else
-    /* Program counter.  */
-    __extension__ long long __pc;
+  /* The global pointer.  */
+  void *__gp;
+#  else
+  /* Program counter.  */
+  __extension__ long long __pc;
 
-    /* Stack pointer.  */
-    __extension__ long long __sp;
+  /* Stack pointer.  */
+  __extension__ long long __sp;
 
-    /* Callee-saved registers s0 through s7.  */
-    __extension__ long long __regs[8];
+  /* Callee-saved registers s0 through s7.  */
+  __extension__ long long __regs[8];
 
-    /* The frame pointer.  */
-    __extension__ long long __fp;
+  /* The frame pointer.  */
+  __extension__ long long __fp;
 
-    /* The global pointer.  */
-    __extension__ long long __gp;
-#endif
+  /* The global pointer.  */
+  __extension__ long long __gp;
+#  endif
 
-    /* Unused (was floating point status register).  */
-    int __glibc_reserved1;
+  /* Unused (was floating point status register).  */
+  int __glibc_reserved1;
 
-    /* Callee-saved floating point registers.  */
-#if _MIPS_SIM == _ABI64
-    double __fpregs[8];
-#else
-    double __fpregs[6];
-#endif
-  } __jmp_buf[1];
+  /* Callee-saved floating point registers.  */
+#  if _MIPS_SIM == _ABI64
+  double __fpregs[8];
+#  else
+  double __fpregs[6];
+#  endif
+} __jmp_buf[1];
 
 #endif /* _MIPS_BITS_SETJMP_H */

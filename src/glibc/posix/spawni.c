@@ -20,14 +20,12 @@
 #include <spawn.h>
 #include "spawn_int.h"
 
-
 /* The Unix standard contains a long explanation of the way to signal
    an error after the fork() was successful.  Since no new wait status
    was wanted there is no way to signal an error using one of the
    available methods.  The committee chose to signal an error by a
    normal program exit with the exit code 127.  */
-#define SPAWN_ERROR	127
-
+#define SPAWN_ERROR 127
 
 /* Spawn a new process executing PATH with the attributes describes in *ATTRP.
    Before running the process perform the actions described in FILE-ACTIONS. */

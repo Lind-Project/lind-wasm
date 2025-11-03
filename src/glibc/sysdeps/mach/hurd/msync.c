@@ -51,9 +51,8 @@ msync (void *addr, size_t length, int flags)
     {
       vm_address_t begin = cur;
 
-      err = __vm_region (__mach_task_self (),
-			 &begin, &len, &prot, &max_prot, &inherit,
-			 &shared, &obj, &offset);
+      err = __vm_region (__mach_task_self (), &begin, &len, &prot, &max_prot,
+			 &inherit, &shared, &obj, &offset);
 
       if (err != KERN_SUCCESS)
 	return __hurd_fail (err);
@@ -76,7 +75,7 @@ msync (void *addr, size_t length, int flags)
 	  else
 	    sync_len = len;
 
-	  cancel_oldtype = LIBC_CANCEL_ASYNC();
+	  cancel_oldtype = LIBC_CANCEL_ASYNC ();
 	  err = __vm_object_sync (obj, cur - begin + offset, sync_len,
 				  should_flush, 1, should_iosync);
 	  LIBC_CANCEL_RESET (cancel_oldtype);
@@ -84,7 +83,6 @@ msync (void *addr, size_t length, int flags)
 
 	  if (err)
 	    return __hurd_fail (err);
-
 	}
 
       cur = begin + len;

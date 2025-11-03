@@ -31,7 +31,8 @@
 
    where:
    - n is an integer, 16384 >= n >= -16495;
-   - ln(2)_0 is the first 93 bits of ln(2), and |ln(2)_0-ln(2)-ln(2)_1| < 2^-205
+   - ln(2)_0 is the first 93 bits of ln(2), and |ln(2)_0-ln(2)-ln(2)_1| <
+   2^-205
    - t1 is an integer, 89 >= t1 >= -89
    - t2 is an integer, 65 >= t2 >= -65
    - |arg1[t1]-t1/256.0| < 2^-53
@@ -54,7 +55,7 @@
    */
 
 #ifndef _GNU_SOURCE
-#define _GNU_SOURCE
+#  define _GNU_SOURCE
 #endif
 #include <float.h>
 #include <ieee754.h>
@@ -70,51 +71,51 @@
 static const long double C[] = {
 /* Smallest integer x for which e^x overflows.  */
 #define himark C[0]
- 709.78271289338399678773454114191496482L,
+  709.78271289338399678773454114191496482L,
 
 /* Largest integer x for which e^x underflows.  */
 #define lomark C[1]
--744.44007192138126231410729844608163411L,
+  -744.44007192138126231410729844608163411L,
 
 /* 3x2^96 */
 #define THREEp96 C[2]
- 59421121885698253195157962752.0L,
+  59421121885698253195157962752.0L,
 
 /* 3x2^103 */
 #define THREEp103 C[3]
- 30423614405477505635920876929024.0L,
+  30423614405477505635920876929024.0L,
 
 /* 3x2^111 */
 #define THREEp111 C[4]
- 7788445287802241442795744493830144.0L,
+  7788445287802241442795744493830144.0L,
 
 /* 1/ln(2) */
 #define M_1_LN2 C[5]
- 1.44269504088896340735992468100189204L,
+  1.44269504088896340735992468100189204L,
 
 /* first 93 bits of ln(2) */
 #define M_LN2_0 C[6]
- 0.693147180559945309417232121457981864L,
+  0.693147180559945309417232121457981864L,
 
 /* ln2_0 - ln(2) */
 #define M_LN2_1 C[7]
--1.94704509238074995158795957333327386E-31L,
+  -1.94704509238074995158795957333327386E-31L,
 
 /* very small number */
 #define TINY C[8]
- 1.0e-308L,
+  1.0e-308L,
 
 /* 2^16383 */
 #define TWO1023 C[9]
- 8.988465674311579538646525953945123668E+307L,
+  8.988465674311579538646525953945123668E+307L,
 
 /* 256 */
 #define TWO8 C[10]
- 256.0L,
+  256.0L,
 
 /* 32768 */
 #define TWO15 C[11]
- 32768.0L,
+  32768.0L,
 
 /* Chebyshev polynom coefficients for (exp(x)-1)/x */
 #define P1 C[12]
@@ -123,12 +124,12 @@ static const long double C[] = {
 #define P4 C[15]
 #define P5 C[16]
 #define P6 C[17]
- 0.5L,
- 1.66666666666666666666666666666666683E-01L,
- 4.16666666666666666666654902320001674E-02L,
- 8.33333333333333333333314659767198461E-03L,
- 1.38888888889899438565058018857254025E-03L,
- 1.98412698413981650382436541785404286E-04L,
+  0.5L,
+  1.66666666666666666666666666666666683E-01L,
+  4.16666666666666666666654902320001674E-02L,
+  8.33333333333333333333314659767198461E-03L,
+  1.38888888889899438565058018857254025E-03L,
+  1.98412698413981650382436541785404286E-04L,
 };
 
 /* Avoid local PLT entry use from (int) roundl (...) being converted
@@ -153,33 +154,35 @@ __ieee754_expl (long double x)
 
       SET_RESTORE_ROUND (FE_TONEAREST);
 
-      n = roundl (x*M_1_LN2);
-      x = x-n*M_LN2_0;
-      xl = n*M_LN2_1;
+      n = roundl (x * M_1_LN2);
+      x = x - n * M_LN2_0;
+      xl = n * M_LN2_1;
 
-      tval1 = roundl (x*TWO8);
-      x -= __expl_table[T_EXPL_ARG1+2*tval1];
-      xl -= __expl_table[T_EXPL_ARG1+2*tval1+1];
+      tval1 = roundl (x * TWO8);
+      x -= __expl_table[T_EXPL_ARG1 + 2 * tval1];
+      xl -= __expl_table[T_EXPL_ARG1 + 2 * tval1 + 1];
 
-      tval2 = roundl (x*TWO15);
-      x -= __expl_table[T_EXPL_ARG2+2*tval2];
-      xl -= __expl_table[T_EXPL_ARG2+2*tval2+1];
+      tval2 = roundl (x * TWO15);
+      x -= __expl_table[T_EXPL_ARG2 + 2 * tval2];
+      xl -= __expl_table[T_EXPL_ARG2 + 2 * tval2 + 1];
 
       x = x + xl;
 
       /* Compute ex2 = 2^n_0 e^(argtable[tval1]) e^(argtable[tval2]).  */
       ex2_u.ld = (__expl_table[T_EXPL_RES1 + tval1]
 		  * __expl_table[T_EXPL_RES2 + tval2]);
-      n_i = (int)n;
+      n_i = (int) n;
       /* 'unsafe' is 1 iff n_1 != 0.  */
-      unsafe = fabsl(n_i) >= -LDBL_MIN_EXP - 1;
+      unsafe = fabsl (n_i) >= -LDBL_MIN_EXP - 1;
       ex2_u.d[0].ieee.exponent += n_i >> unsafe;
       /* Fortunately, there are no subnormal lowpart doubles in
 	 __expl_table, only normal values and zeros.
 	 But after scaling it can be subnormal.  */
       exponent2 = ex2_u.d[1].ieee.exponent + (n_i >> unsafe);
       if (ex2_u.d[1].ieee.exponent == 0)
-	/* assert ((ex2_u.d[1].ieee.mantissa0|ex2_u.d[1].ieee.mantissa1) == 0) */;
+	/* assert ((ex2_u.d[1].ieee.mantissa0|ex2_u.d[1].ieee.mantissa1) == 0)
+	 */
+	;
       else if (exponent2 > 0)
 	ex2_u.d[1].ieee.exponent = exponent2;
       else if (exponent2 <= -54)
@@ -190,9 +193,9 @@ __ieee754_expl (long double x)
 	}
       else
 	{
-	  static const double
-	    two54 = 1.80143985094819840000e+16, /* 4350000000000000 */
-	    twom54 = 5.55111512312578270212e-17; /* 3C90000000000000 */
+	  static const double two54
+	      = 1.80143985094819840000e+16,	   /* 4350000000000000 */
+	      twom54 = 5.55111512312578270212e-17; /* 3C90000000000000 */
 	  ex2_u.d[1].d *= two54;
 	  ex2_u.d[1].ieee.exponent += n_i >> unsafe;
 	  ex2_u.d[1].d *= twom54;
@@ -205,7 +208,9 @@ __ieee754_expl (long double x)
       /* Approximate e^x2 - 1, using a seventh-degree polynomial,
 	 with maximum error in [-2^-16-2^-53,2^-16+2^-53]
 	 less than 4.8e-39.  */
-      x22 = x + x*x*(P1+x*(P2+x*(P3+x*(P4+x*(P5+x*P6)))));
+      x22 = x
+	    + x * x
+		  * (P1 + x * (P2 + x * (P3 + x * (P4 + x * (P5 + x * P6)))));
 
       /* Now we can test whether the result is ultimate or if we are unsure.
 	 In the later case we should probably call a mpn based routine to give
@@ -249,7 +254,7 @@ __ieee754_expl (long double x)
     }
   else
     /* Return x, if x is a NaN or Inf; or overflow, otherwise.  */
-    return TWO1023*x;
+    return TWO1023 * x;
 
   result = x22 * ex2_u.ld + ex2_u.ld;
   if (!unsafe)

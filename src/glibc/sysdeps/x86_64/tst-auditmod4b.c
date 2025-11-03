@@ -57,8 +57,8 @@ la_objsearch (const char *name, uintptr_t *cookie, unsigned int flag)
     flagstr = "LA_SER_SECURE";
   else
     {
-       sprintf (buf, "unknown flag %d", flag);
-       flagstr = buf;
+      sprintf (buf, "unknown flag %d", flag);
+      flagstr = buf;
     }
   printf ("objsearch: %s, %s\n", name, flagstr);
 
@@ -80,7 +80,7 @@ la_preinit (uintptr_t *cookie)
 }
 
 unsigned int
-la_objclose  (uintptr_t *cookie)
+la_objclose (uintptr_t *cookie)
 {
   printf ("objclose\n");
   return 0;
@@ -90,8 +90,8 @@ uintptr_t
 la_symbind32 (Elf32_Sym *sym, unsigned int ndx, uintptr_t *refcook,
 	      uintptr_t *defcook, unsigned int *flags, const char *symname)
 {
-  printf ("symbind32: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n",
-	  symname, (long int) sym->st_value, ndx, *flags);
+  printf ("symbind32: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n", symname,
+	  (long int) sym->st_value, ndx, *flags);
 
   return sym->st_value;
 }
@@ -100,8 +100,8 @@ uintptr_t
 la_symbind64 (Elf64_Sym *sym, unsigned int ndx, uintptr_t *refcook,
 	      uintptr_t *defcook, unsigned int *flags, const char *symname)
 {
-  printf ("symbind64: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n",
-	  symname, (long int) sym->st_value, ndx, *flags);
+  printf ("symbind64: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n", symname,
+	  (long int) sym->st_value, ndx, *flags);
 
   return sym->st_value;
 }
@@ -109,21 +109,19 @@ la_symbind64 (Elf64_Sym *sym, unsigned int ndx, uintptr_t *refcook,
 #include <tst-audit.h>
 
 #ifdef __AVX__
-#include <immintrin.h>
-#include <cpuid.h>
+#  include <immintrin.h>
+#  include <cpuid.h>
 
 static int avx = -1;
 
-static inline int
-__attribute ((always_inline))
+static inline int __attribute ((always_inline))
 check_avx (void)
 {
   if (avx == -1)
     {
       unsigned int eax, ebx, ecx, edx;
 
-      if (__get_cpuid (1, &eax, &ebx, &ecx, &edx)
-	  && (ecx & bit_AVX))
+      if (__get_cpuid (1, &eax, &ebx, &ecx, &edx) && (ecx & bit_AVX))
 	avx = 1;
       else
 	avx = 0;
@@ -131,16 +129,15 @@ check_avx (void)
   return avx;
 }
 #else
-#include <emmintrin.h>
+#  include <emmintrin.h>
 #endif
 
-ElfW(Addr)
-pltenter (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
-	  uintptr_t *defcook, La_regs *regs, unsigned int *flags,
-	  const char *symname, long int *framesizep)
+ElfW (Addr) pltenter (ElfW (Sym) * sym, unsigned int ndx, uintptr_t *refcook,
+		      uintptr_t *defcook, La_regs *regs, unsigned int *flags,
+		      const char *symname, long int *framesizep)
 {
-  printf ("pltenter: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n",
-	  symname, (long int) sym->st_value, ndx, *flags);
+  printf ("pltenter: symname=%s, st_value=%#lx, ndx=%u, flags=%u\n", symname,
+	  (long int) sym->st_value, ndx, *flags);
 
 #ifdef __AVX__
   if (check_avx () && strcmp (symname, "audit_test") == 0)
@@ -157,18 +154,17 @@ pltenter (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
 	abort ();
 
       for (int i = 0; i < 8; i++)
-	regs->lr_vector[i].ymm[0]
-	  = (La_x86_64_ymm) _mm256_set1_epi32 (i + 1);
+	regs->lr_vector[i].ymm[0] = (La_x86_64_ymm) _mm256_set1_epi32 (i + 1);
 
       __m256i ymm = _mm256_set1_epi32 (-1);
-      asm volatile ("vmovdqa %0, %%ymm0" : : "x" (ymm) : "xmm0" );
-      asm volatile ("vmovdqa %0, %%ymm1" : : "x" (ymm) : "xmm1" );
-      asm volatile ("vmovdqa %0, %%ymm2" : : "x" (ymm) : "xmm2" );
-      asm volatile ("vmovdqa %0, %%ymm3" : : "x" (ymm) : "xmm3" );
-      asm volatile ("vmovdqa %0, %%ymm4" : : "x" (ymm) : "xmm4" );
-      asm volatile ("vmovdqa %0, %%ymm5" : : "x" (ymm) : "xmm5" );
-      asm volatile ("vmovdqa %0, %%ymm6" : : "x" (ymm) : "xmm6" );
-      asm volatile ("vmovdqa %0, %%ymm7" : : "x" (ymm) : "xmm7" );
+      asm volatile ("vmovdqa %0, %%ymm0" : : "x"(ymm) : "xmm0");
+      asm volatile ("vmovdqa %0, %%ymm1" : : "x"(ymm) : "xmm1");
+      asm volatile ("vmovdqa %0, %%ymm2" : : "x"(ymm) : "xmm2");
+      asm volatile ("vmovdqa %0, %%ymm3" : : "x"(ymm) : "xmm3");
+      asm volatile ("vmovdqa %0, %%ymm4" : : "x"(ymm) : "xmm4");
+      asm volatile ("vmovdqa %0, %%ymm5" : : "x"(ymm) : "xmm5");
+      asm volatile ("vmovdqa %0, %%ymm6" : : "x"(ymm) : "xmm6");
+      asm volatile ("vmovdqa %0, %%ymm7" : : "x"(ymm) : "xmm7");
 
       *framesizep = 1024;
     }
@@ -178,13 +174,12 @@ pltenter (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
 }
 
 unsigned int
-pltexit (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
+pltexit (ElfW (Sym) * sym, unsigned int ndx, uintptr_t *refcook,
 	 uintptr_t *defcook, const La_regs *inregs, La_retval *outregs,
 	 const char *symname)
 {
-  printf ("pltexit: symname=%s, st_value=%#lx, ndx=%u, retval=%tu\n",
-	  symname, (long int) sym->st_value, ndx,
-	  (ptrdiff_t) outregs->int_retval);
+  printf ("pltexit: symname=%s, st_value=%#lx, ndx=%u, retval=%tu\n", symname,
+	  (long int) sym->st_value, ndx, (ptrdiff_t) outregs->int_retval);
 
 #ifdef __AVX__
   if (check_avx () && strcmp (symname, "audit_test") == 0)
@@ -201,11 +196,11 @@ pltexit (ElfW(Sym) *sym, unsigned int ndx, uintptr_t *refcook,
 	}
 
       outregs->lrv_vector0.ymm[0]
-	= (La_x86_64_ymm) _mm256_set1_epi32 (0x12349876);
+	  = (La_x86_64_ymm) _mm256_set1_epi32 (0x12349876);
 
       __m256i ymm = _mm256_set1_epi32 (-1);
-      asm volatile ("vmovdqa %0, %%ymm0" : : "x" (ymm) : "xmm0" );
-      asm volatile ("vmovdqa %0, %%ymm1" : : "x" (ymm) : "xmm1" );
+      asm volatile ("vmovdqa %0, %%ymm0" : : "x"(ymm) : "xmm0");
+      asm volatile ("vmovdqa %0, %%ymm1" : : "x"(ymm) : "xmm1");
     }
 #endif
 

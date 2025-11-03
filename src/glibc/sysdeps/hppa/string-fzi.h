@@ -17,10 +17,10 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_FZI_H
-#define _STRING_FZI_H 1
+#  define _STRING_FZI_H 1
 
-#include <string-optype.h>
-#include <string-fza.h>
+#  include <string-optype.h>
+#  include <string-fza.h>
 
 _Static_assert (sizeof (op_t) == 4, "64-bit not supported");
 
@@ -37,7 +37,8 @@ index_first (find_t c)
        "ldi 1,%0\n\t"
        "extrw,u,= %1,7,8,%%r0\n\t"
        "ldi 0,%0"
-       : "=r"(ret) : "r"(c), "0"(3));
+       : "=r"(ret)
+       : "r"(c), "0"(3));
 
   return ret;
 }
@@ -55,7 +56,8 @@ index_last (find_t c)
        "ldi 2,%0\n\t"
        "extrw,u,= %1,31,8,%%r0\n\t"
        "ldi 3,%0"
-       : "=r"(ret) : "r"(c), "0"(0));
+       : "=r"(ret)
+       : "r"(c), "0"(0));
 
   return ret;
 }

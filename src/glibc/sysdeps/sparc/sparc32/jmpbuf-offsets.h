@@ -16,6 +16,6 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#define JB_SP	0
-#define JB_FP	1
-#define JB_PC	2
+#define JB_SP 0
+#define JB_FP 1
+#define JB_PC 2

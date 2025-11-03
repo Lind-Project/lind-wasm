@@ -43,15 +43,11 @@ do_sendto (const struct sockaddr_in *addr, int payload)
 }
 
 static void
-do_recvmsg_ancillary (bool use_multi_call, struct mmsghdr *mmhdr,
-		      void *msgbuf, size_t msgbuflen, int exp_payload)
+do_recvmsg_ancillary (bool use_multi_call, struct mmsghdr *mmhdr, void *msgbuf,
+		      size_t msgbuflen, int exp_payload)
 {
   int payload;
-  struct iovec iov =
-    {
-      .iov_base = &payload,
-      .iov_len = sizeof (payload)
-    };
+  struct iovec iov = { .iov_base = &payload, .iov_len = sizeof (payload) };
   mmhdr->msg_hdr.msg_name = NULL;
   mmhdr->msg_hdr.msg_iov = &iov;
   mmhdr->msg_hdr.msg_iovlen = 1;
@@ -89,7 +85,7 @@ do_test_large_buffer (bool mc)
   /* Enable 32 bit timeval precision and check if no 64 bit timeval stamp
      is created.  */
   {
-    int r = setsockopt (srv, SOL_SOCKET, COMPAT_SO_TIMESTAMP_OLD, &(int){1},
+    int r = setsockopt (srv, SOL_SOCKET, COMPAT_SO_TIMESTAMP_OLD, &(int) { 1 },
 			sizeof (int));
     TEST_VERIFY_EXIT (r != -1);
 
@@ -97,44 +93,43 @@ do_test_large_buffer (bool mc)
     do_recvmsg_ancillary (mc, &mmhdr, &control, sizeof control, 42);
 
     bool found_timestamp = false;
-    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR (&mmhdr.msg_hdr);
-	 cmsg != NULL;
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR (&mmhdr.msg_hdr); cmsg != NULL;
 	 cmsg = CMSG_NXTHDR (&mmhdr.msg_hdr, cmsg))
-    {
-      if (cmsg->cmsg_level != SOL_SOCKET)
-	continue;
+      {
+	if (cmsg->cmsg_level != SOL_SOCKET)
+	  continue;
 
-      if (sizeof (time_t) > 4 && cmsg->cmsg_type == COMPAT_SO_TIMESTAMP_NEW)
-	found_timestamp = true;
-      else
-	TEST_VERIFY (cmsg->cmsg_type != COMPAT_SO_TIMESTAMP_NEW);
-    }
+	if (sizeof (time_t) > 4 && cmsg->cmsg_type == COMPAT_SO_TIMESTAMP_NEW)
+	  found_timestamp = true;
+	else
+	  TEST_VERIFY (cmsg->cmsg_type != COMPAT_SO_TIMESTAMP_NEW);
+      }
 
     TEST_COMPARE (found_timestamp, sizeof (time_t) > 4);
   }
 
   /* Same as before, but for timespec.  */
   {
-    int r = setsockopt (srv, SOL_SOCKET, COMPAT_SO_TIMESTAMPNS_OLD, &(int){1},
-			sizeof (int));
+    int r = setsockopt (srv, SOL_SOCKET, COMPAT_SO_TIMESTAMPNS_OLD,
+			&(int) { 1 }, sizeof (int));
     TEST_VERIFY_EXIT (r != -1);
 
     do_sendto (&srv_addr, 42);
     do_recvmsg_ancillary (mc, &mmhdr, &control, sizeof control, 42);
 
     bool found_timestamp = false;
-    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR (&mmhdr.msg_hdr);
-	 cmsg != NULL;
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR (&mmhdr.msg_hdr); cmsg != NULL;
 	 cmsg = CMSG_NXTHDR (&mmhdr.msg_hdr, cmsg))
-    {
-      if (cmsg->cmsg_level != SOL_SOCKET)
-	continue;
+      {
+	if (cmsg->cmsg_level != SOL_SOCKET)
+	  continue;
 
-      if (sizeof (time_t) > 4 && cmsg->cmsg_type == COMPAT_SO_TIMESTAMPNS_NEW)
-	found_timestamp = true;
-      else
-	TEST_VERIFY (cmsg->cmsg_type != COMPAT_SO_TIMESTAMPNS_NEW);
-    }
+	if (sizeof (time_t) > 4
+	    && cmsg->cmsg_type == COMPAT_SO_TIMESTAMPNS_NEW)
+	  found_timestamp = true;
+	else
+	  TEST_VERIFY (cmsg->cmsg_type != COMPAT_SO_TIMESTAMPNS_NEW);
+      }
 
     TEST_COMPARE (found_timestamp, sizeof (time_t) > 4);
   }
@@ -152,7 +147,7 @@ do_test_small_buffer (bool mc)
   /* Enable 32 bit timeval precision and check if no 64 bit timeval stamp
      is created.  */
   {
-    int r = setsockopt (srv, SOL_SOCKET, COMPAT_SO_TIMESTAMP_OLD, &(int){1},
+    int r = setsockopt (srv, SOL_SOCKET, COMPAT_SO_TIMESTAMP_OLD, &(int) { 1 },
 			sizeof (int));
     TEST_VERIFY_EXIT (r != -1);
 
@@ -166,18 +161,17 @@ do_test_small_buffer (bool mc)
     do_recvmsg_ancillary (mc, &mmhdr, &control, sizeof control, 42);
 
     bool found_timestamp = false;
-    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR (&mmhdr.msg_hdr);
-	 cmsg != NULL;
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR (&mmhdr.msg_hdr); cmsg != NULL;
 	 cmsg = CMSG_NXTHDR (&mmhdr.msg_hdr, cmsg))
-    {
-      if (cmsg->cmsg_level != SOL_SOCKET)
-	continue;
+      {
+	if (cmsg->cmsg_level != SOL_SOCKET)
+	  continue;
 
-      if (sizeof (time_t) > 4 && cmsg->cmsg_type == COMPAT_SO_TIMESTAMP_NEW)
-	found_timestamp = true;
-      else
-	TEST_VERIFY (cmsg->cmsg_type != COMPAT_SO_TIMESTAMP_NEW);
-    }
+	if (sizeof (time_t) > 4 && cmsg->cmsg_type == COMPAT_SO_TIMESTAMP_NEW)
+	  found_timestamp = true;
+	else
+	  TEST_VERIFY (cmsg->cmsg_type != COMPAT_SO_TIMESTAMP_NEW);
+      }
 
     if (sizeof (time_t) > 4)
       {
@@ -193,8 +187,8 @@ do_test_small_buffer (bool mc)
 
   /* Same as before, but for timespec.  */
   {
-    int r = setsockopt (srv, SOL_SOCKET, COMPAT_SO_TIMESTAMPNS_OLD, &(int){1},
-			sizeof (int));
+    int r = setsockopt (srv, SOL_SOCKET, COMPAT_SO_TIMESTAMPNS_OLD,
+			&(int) { 1 }, sizeof (int));
     TEST_VERIFY_EXIT (r != -1);
 
     union
@@ -207,18 +201,18 @@ do_test_small_buffer (bool mc)
     do_recvmsg_ancillary (mc, &mmhdr, &control, sizeof control, 42);
 
     bool found_timestamp = false;
-    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR (&mmhdr.msg_hdr);
-	 cmsg != NULL;
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR (&mmhdr.msg_hdr); cmsg != NULL;
 	 cmsg = CMSG_NXTHDR (&mmhdr.msg_hdr, cmsg))
-    {
-      if (cmsg->cmsg_level != SOL_SOCKET)
-	continue;
+      {
+	if (cmsg->cmsg_level != SOL_SOCKET)
+	  continue;
 
-      if (sizeof (time_t) > 4 && cmsg->cmsg_type == COMPAT_SO_TIMESTAMPNS_NEW)
-	found_timestamp = true;
-      else
-	TEST_VERIFY (cmsg->cmsg_type != COMPAT_SO_TIMESTAMPNS_NEW);
-    }
+	if (sizeof (time_t) > 4
+	    && cmsg->cmsg_type == COMPAT_SO_TIMESTAMPNS_NEW)
+	  found_timestamp = true;
+	else
+	  TEST_VERIFY (cmsg->cmsg_type != COMPAT_SO_TIMESTAMPNS_NEW);
+      }
 
     if (sizeof (time_t) > 4)
       {
@@ -244,7 +238,7 @@ do_test (void)
   srv = xsocket (AF_INET, SOCK_DGRAM, 0);
   srv_addr = (struct sockaddr_in) {
     .sin_family = AF_INET,
-    .sin_addr = {.s_addr = htonl (INADDR_LOOPBACK) },
+    .sin_addr = { .s_addr = htonl (INADDR_LOOPBACK) },
   };
   xbind (srv, (struct sockaddr *) &srv_addr, sizeof (srv_addr));
   {

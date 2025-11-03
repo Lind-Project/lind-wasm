@@ -29,6 +29,5 @@ __libc_pwrite (int fd, const void *buf, size_t nbytes, off_t offset)
 }
 
 #ifndef __libc_pwrite
-strong_alias (__libc_pwrite, __pwrite)
-weak_alias (__libc_pwrite, pwrite)
+strong_alias (__libc_pwrite, __pwrite) weak_alias (__libc_pwrite, pwrite)
 #endif

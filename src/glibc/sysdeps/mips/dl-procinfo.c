@@ -39,23 +39,21 @@
   */
 
 #ifndef PROCINFO_CLASS
-#define PROCINFO_CLASS
+#  define PROCINFO_CLASS
 #endif
 
 #if !defined PROCINFO_DECL && defined SHARED
-  ._dl_mips_platforms
+._dl_mips_platforms
 #else
 PROCINFO_CLASS const char _dl_mips_platforms[4][11]
 #endif
 #ifndef PROCINFO_DECL
-= {
-    "loongson2e", "loongson2f", "octeon", "octeon2"
-  }
+    = { "loongson2e", "loongson2f", "octeon", "octeon2" }
 #endif
 #if !defined SHARED || defined PROCINFO_DECL
 ;
 #else
-,
+    ,
 #endif
 
 #undef PROCINFO_DECL

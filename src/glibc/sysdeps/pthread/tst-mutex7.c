@@ -28,19 +28,19 @@
    operations in each thread as described before for the thread
    function.  */
 #ifndef TYPE
-# define TYPE PTHREAD_MUTEX_DEFAULT
+#  define TYPE PTHREAD_MUTEX_DEFAULT
 #endif
 #ifndef ROBUST
-# define ROBUST PTHREAD_MUTEX_STALLED
+#  define ROBUST PTHREAD_MUTEX_STALLED
 #endif
 #ifndef DELAY_NSEC
-# define DELAY_NSEC 11000
+#  define DELAY_NSEC 11000
 #endif
 #ifndef ROUNDS
-# define ROUNDS 1000
+#  define ROUNDS 1000
 #endif
 #ifndef N
-# define N 100
+#  define N 100
 #endif
 
 static pthread_mutex_t lock;

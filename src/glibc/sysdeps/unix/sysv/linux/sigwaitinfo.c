@@ -25,6 +25,5 @@ __sigwaitinfo (const sigset_t *set, siginfo_t *info)
   return __sigtimedwait (set, info, 0);
 }
 
-libc_hidden_def (__sigwaitinfo)
-weak_alias (__sigwaitinfo, sigwaitinfo)
-strong_alias (__sigwaitinfo, __libc_sigwaitinfo)
+libc_hidden_def (__sigwaitinfo) weak_alias (__sigwaitinfo, sigwaitinfo)
+    strong_alias (__sigwaitinfo, __libc_sigwaitinfo)

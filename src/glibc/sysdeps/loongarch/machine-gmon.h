@@ -25,13 +25,13 @@
 static void mcount_internal (unsigned long int frompc,
 			     unsigned long int selfpc);
 
-#define _MCOUNT_DECL(frompc, selfpc) \
-  static inline void mcount_internal (unsigned long int frompc, \
+#define _MCOUNT_DECL(frompc, selfpc)                                          \
+  static inline void mcount_internal (unsigned long int frompc,               \
 				      unsigned long int selfpc)
 
-#define MCOUNT \
-  void _mcount (void *frompc) \
-  { \
-    mcount_internal ((unsigned long int) frompc, \
-		     (unsigned long int) RETURN_ADDRESS (0)); \
+#define MCOUNT                                                                \
+  void _mcount (void *frompc)                                                 \
+  {                                                                           \
+    mcount_internal ((unsigned long int) frompc,                              \
+		     (unsigned long int) RETURN_ADDRESS (0));                 \
   }

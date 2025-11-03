@@ -22,7 +22,6 @@
 #include <pthreadP.h>
 #include <shlib-compat.h>
 
-
 int
 __pthread_attr_setaffinity_np (pthread_attr_t *attr, size_t cpusetsize,
 			       const cpu_set_t *cpuset)
@@ -62,18 +61,17 @@ __pthread_attr_setaffinity_np (pthread_attr_t *attr, size_t cpusetsize,
   return 0;
 }
 libc_hidden_def (__pthread_attr_setaffinity_np)
-versioned_symbol (libc, __pthread_attr_setaffinity_np,
-		  pthread_attr_setaffinity_np, GLIBC_2_32);
+    versioned_symbol (libc, __pthread_attr_setaffinity_np,
+		      pthread_attr_setaffinity_np, GLIBC_2_32);
 
-
-#if SHLIB_COMPAT (libc, GLIBC_2_3_4, GLIBC_2_32)
+#if SHLIB_COMPAT(libc, GLIBC_2_3_4, GLIBC_2_32)
 /* Compat symbol with the old libc version.  */
 strong_alias (__pthread_attr_setaffinity_np, __pthread_attr_setaffinity_alias)
-compat_symbol (libc, __pthread_attr_setaffinity_alias,
-	       pthread_attr_setaffinity_np, GLIBC_2_3_4);
+    compat_symbol (libc, __pthread_attr_setaffinity_alias,
+		   pthread_attr_setaffinity_np, GLIBC_2_3_4);
 #endif
 
-#if SHLIB_COMPAT (libc, GLIBC_2_3_3, GLIBC_2_3_4)
+#if SHLIB_COMPAT(libc, GLIBC_2_3_3, GLIBC_2_3_4)
 int
 __pthread_attr_setaffinity_old (pthread_attr_t *attr, cpu_set_t *cpuset)
 {

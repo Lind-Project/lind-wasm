@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _THREAD_SHARED_TYPES_H
-#define _THREAD_SHARED_TYPES_H 1
+#  define _THREAD_SHARED_TYPES_H 1
 
 /* Arch-specific definitions.  Each architecture must define the following
    macros to define the expected sizes of pthread data types:
@@ -41,10 +41,9 @@
 
    __ONCE_ALIGNMENT - for pthread_once_t/once_flag definition.  */
 
-#include <bits/pthreadtypes-arch.h>
+#  include <bits/pthreadtypes-arch.h>
 
-#include <bits/atomic_wide_counter.h>
-
+#  include <bits/atomic_wide_counter.h>
 
 /* Common definition of pthread_mutex_t. */
 
@@ -73,7 +72,7 @@ typedef struct __pthread_internal_slist
    3. The macro __PTHREAD_MUTEX_INITIALIZER used for static initialization.
       It should initialize the mutex internal flag.  */
 
-#include <bits/struct_mutex.h>
+#  include <bits/struct_mutex.h>
 
 /* Arch-sepecific read-write lock definitions.  A generic implementation is
    provided by struct_rwlock.h.  If required, an architecture can override it
@@ -86,8 +85,7 @@ typedef struct __pthread_internal_slist
    2. The macro __PTHREAD_RWLOCK_INITIALIZER used for static initialization.
       It should initialize the rwlock internal type.  */
 
-#include <bits/struct_rwlock.h>
-
+#  include <bits/struct_rwlock.h>
 
 /* Common definition of pthread_cond_t. */
 
@@ -110,6 +108,6 @@ typedef struct
   int __data __ONCE_ALIGNMENT;
 } __once_flag;
 
-#define __ONCE_FLAG_INIT { 0 }
+#  define __ONCE_FLAG_INIT { 0 }
 
 #endif /* _THREAD_SHARED_TYPES_H  */

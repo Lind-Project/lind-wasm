@@ -20,26 +20,26 @@
    Adapted for GNU C library by Roland McGrath.  */
 
 #ifdef HAVE_CONFIG_H
-# include <config.h>
+#  include <config.h>
 #endif
 
 #include <sys/types.h>
 #include <sys/stat.h>
 
 #ifdef S_IEXEC
-# ifndef S_IXUSR
-#  define S_IXUSR S_IEXEC
-# endif
-# ifndef S_IXGRP
-#  define S_IXGRP (S_IEXEC >> 3)
-# endif
-# ifndef S_IXOTH
-#  define S_IXOTH (S_IEXEC >> 6)
-# endif
+#  ifndef S_IXUSR
+#    define S_IXUSR S_IEXEC
+#  endif
+#  ifndef S_IXGRP
+#    define S_IXGRP (S_IEXEC >> 3)
+#  endif
+#  ifndef S_IXOTH
+#    define S_IXOTH (S_IEXEC >> 6)
+#  endif
 #endif /* S_IEXEC */
 
 #if defined HAVE_UNISTD_H || defined _LIBC
-# include <unistd.h>
+#  include <unistd.h>
 #endif
 
 #ifndef _POSIX_VERSION
@@ -54,35 +54,34 @@ gid_t getegid ();
 extern int errno;
 #endif
 #ifndef __set_errno
-# define __set_errno(val) errno = (val)
+#  define __set_errno(val) errno = (val)
 #endif
 
 #if defined EACCES && !defined EACCESS
-# define EACCESS EACCES
+#  define EACCESS EACCES
 #endif
 
 #ifndef F_OK
-# define F_OK 0
-# define X_OK 1
-# define W_OK 2
-# define R_OK 4
+#  define F_OK 0
+#  define X_OK 1
+#  define W_OK 2
+#  define R_OK 4
 #endif
 
 #if !defined S_IROTH && defined R_OK
-# define S_IROTH R_OK
+#  define S_IROTH R_OK
 #endif
 #if !defined S_IWOTH && defined W_OK
-# define S_IWOTH W_OK
+#  define S_IWOTH W_OK
 #endif
 #if !defined S_IXOTH && defined X_OK
-# define S_IXOTH X_OK
+#  define S_IXOTH X_OK
 #endif
-
 
 #ifdef _LIBC
 
-# define group_member __group_member
-# define euidaccess __euidaccess
+#  define group_member __group_member
+#  define euidaccess __euidaccess
 
 #else
 
@@ -101,14 +100,13 @@ static gid_t egid;
 /* Nonzero if UID, GID, EUID, and EGID have valid values. */
 static int have_ids;
 
-# ifdef HAVE_GETGROUPS
+#  ifdef HAVE_GETGROUPS
 int group_member ();
-# else
-#  define group_member(gid)	0
-# endif
+#  else
+#    define group_member(gid) 0
+#  endif
 
 #endif
-
 
 /* Return 0 if the user has permission of type MODE on file PATH;
    otherwise, return -1 and set `errno' to EACCESS.
@@ -122,7 +120,7 @@ euidaccess (const char *path, int mode)
   struct __stat64_t64 stats;
   int granted;
 
-#ifdef	_LIBC
+#ifdef _LIBC
   uid_t euid;
   gid_t egid;
 #else
@@ -143,15 +141,14 @@ euidaccess (const char *path, int mode)
   if (__stat64_time64 (path, &stats))
     return -1;
 
-  mode &= (X_OK | W_OK | R_OK);	/* Clear any bogus bits. */
+  mode &= (X_OK | W_OK | R_OK); /* Clear any bogus bits. */
 #if R_OK != S_IROTH || W_OK != S_IWOTH || X_OK != S_IXOTH
-  ?error Oops, portability assumptions incorrect.
+  ? error Oops, portability assumptions incorrect.
 #endif
 
-  if (mode == F_OK)
-    return 0;			/* The file exists. */
+		if (mode == F_OK) return 0; /* The file exists. */
 
-#ifdef	_LIBC
+#ifdef _LIBC
   /* Now we need the IDs.  */
   euid = __geteuid ();
   egid = __getegid ();
@@ -163,8 +160,9 @@ euidaccess (const char *path, int mode)
 
   /* The super-user can read and write any file, and execute any file
      that anyone can execute. */
-  if (euid == 0 && ((mode & X_OK) == 0
-		    || (stats.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))))
+  if (euid == 0
+      && ((mode & X_OK) == 0
+	  || (stats.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))))
     return 0;
 
   if (euid == stats.st_uid)
@@ -182,16 +180,15 @@ euidaccess (const char *path, int mode)
 #undef euidaccess
 #undef eaccess
 #ifdef weak_alias
-weak_alias (__euidaccess, euidaccess)
-weak_alias (__euidaccess, eaccess)
+weak_alias (__euidaccess, euidaccess) weak_alias (__euidaccess, eaccess)
 #endif
-
-#ifdef TEST
-# include <stdio.h>
-# include <errno.h>
-# include "error.h"
 
-char *program_name;
+#ifdef TEST
+#  include <stdio.h>
+#  include <errno.h>
+#  include "error.h"
+
+    char *program_name;
 
 int
 main (int argc, char **argv)

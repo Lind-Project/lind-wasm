@@ -24,6 +24,5 @@ __fegetround (void)
 {
   return riscv_getround ();
 }
-libm_hidden_def (__fegetround)
-weak_alias (__fegetround, fegetround)
-libm_hidden_weak (fegetround)
+libm_hidden_def (__fegetround) weak_alias (__fegetround, fegetround)
+    libm_hidden_weak (fegetround)

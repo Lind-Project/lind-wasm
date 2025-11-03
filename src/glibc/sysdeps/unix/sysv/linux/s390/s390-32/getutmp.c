@@ -25,7 +25,7 @@
 #include "utmp-compat.h"
 
 #undef weak_alias
-#define weak_alias(n,a)
+#define weak_alias(n, a)
 #define getutmp __getutmp
 #define getutmpx __getutmpx
 #include "sysdeps/gnu/getutmp.c"

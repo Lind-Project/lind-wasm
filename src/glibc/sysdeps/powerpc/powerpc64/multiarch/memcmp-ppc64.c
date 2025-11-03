@@ -19,17 +19,17 @@
 
 #define MEMCMP __memcmp_ppc
 #undef weak_alias
-#define weak_alias(name, aliasname) \
-  extern __typeof (__memcmp_ppc) aliasname \
-    __attribute__ ((weak, alias ("__memcmp_ppc")));
+#define weak_alias(name, aliasname)                                           \
+  extern __typeof (__memcmp_ppc) aliasname                                    \
+      __attribute__ ((weak, alias ("__memcmp_ppc")));
 #undef strong_alias
-#define strong_alias(name, aliasname) \
-  extern __typeof (__memcmp_ppc) aliasname \
-    __attribute__ ((alias ("__memcmp_ppc")));
-#if IS_IN (libc) && defined(SHARED)
-# undef libc_hidden_builtin_def
-# define libc_hidden_builtin_def(name) \
-  __hidden_ver1(__memcmp_ppc, __GI_memcmp, __memcmp_ppc);
+#define strong_alias(name, aliasname)                                         \
+  extern __typeof (__memcmp_ppc) aliasname                                    \
+      __attribute__ ((alias ("__memcmp_ppc")));
+#if IS_IN(libc) && defined(SHARED)
+#  undef libc_hidden_builtin_def
+#  define libc_hidden_builtin_def(name)                                       \
+    __hidden_ver1 (__memcmp_ppc, __GI_memcmp, __memcmp_ppc);
 #endif
 
 extern __typeof (memcmp) __memcmp_ppc attribute_hidden;

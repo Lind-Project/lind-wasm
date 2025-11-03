@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #define __lstat __redirect___lstat
-#define lstat   __redirect_lstat
+#define lstat __redirect_lstat
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <kernel_stat.h>
@@ -30,24 +30,23 @@ __lstat64_time64 (const char *file, struct __stat64_t64 *buf)
 {
   // BUG: we do not have fstatat syscall in rawposix
   // so let's just use xstat - Qianxi Chen
-  return MAKE_SYSCALL2(XSTAT_SYSCALL, "syscall|xstat", (uint64_t)file, (uint64_t)buf); 
+  return MAKE_SYSCALL2 (XSTAT_SYSCALL, "syscall|xstat", (uint64_t) file,
+			(uint64_t) buf);
 }
 #if __TIMESIZE != 64
 hidden_def (__lstat64_time64)
 
-int
-__lstat64 (const char *file, struct stat64 *buf)
+    int __lstat64 (const char *file, struct stat64 *buf)
 {
-  return MAKE_SYSCALL2(XSTAT_SYSCALL, "syscall|xstat", (uint64_t)file, (uint64_t)buf); 
+  return MAKE_SYSCALL2 (XSTAT_SYSCALL, "syscall|xstat", (uint64_t) file,
+			(uint64_t) buf);
 }
 #endif
-hidden_def (__lstat64)
-weak_alias (__lstat64, lstat64)
+hidden_def (__lstat64) weak_alias (__lstat64, lstat64)
 
 #undef __lstat
 #undef lstat
 
 #if XSTAT_IS_XSTAT64
-strong_alias (__lstat64, __lstat)
-weak_alias (__lstat64, lstat)
+    strong_alias (__lstat64, __lstat) weak_alias (__lstat64, lstat)
 #endif

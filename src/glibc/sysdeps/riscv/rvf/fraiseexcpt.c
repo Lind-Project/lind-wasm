@@ -22,9 +22,8 @@
 int
 __feraiseexcept (int excepts)
 {
-  asm volatile ("csrs fflags, %0" : : "r" (excepts));
+  asm volatile ("csrs fflags, %0" : : "r"(excepts));
   return 0;
 }
-libm_hidden_def (__feraiseexcept)
-weak_alias (__feraiseexcept, feraiseexcept)
-libm_hidden_weak (feraiseexcept)
+libm_hidden_def (__feraiseexcept) weak_alias (__feraiseexcept, feraiseexcept)
+    libm_hidden_weak (feraiseexcept)

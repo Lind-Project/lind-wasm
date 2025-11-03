@@ -17,14 +17,14 @@
 
 #ifndef _SYS_VM86_H
 
-#define _SYS_VM86_H	1
-#include <features.h>
+#  define _SYS_VM86_H 1
+#  include <features.h>
 
-#ifdef __x86_64__
-# error This header is unsupported on x86-64.
-#else
+#  ifdef __x86_64__
+#    error This header is unsupported on x86-64.
+#  else
 /* Get constants and data types from kernel header file.  */
-# include <asm/vm86.h>
+#    include <asm/vm86.h>
 
 __BEGIN_DECLS
 
@@ -33,6 +33,6 @@ extern int vm86 (unsigned long int __subfunction,
 		 struct vm86plus_struct *__info) __THROW;
 
 __END_DECLS
-# endif
+#  endif
 
-#endif	/* _SYS_VM86_H */
+#endif /* _SYS_VM86_H */

@@ -19,7 +19,6 @@
 #include <pthread.h>
 #include <stdio.h>
 
-
 static int
 do_test (void)
 {
@@ -35,7 +34,7 @@ do_test (void)
   puts ("rwlockattr_init succeeded");
 
 #ifndef TYPE
-# define TYPE PTHREAD_RWLOCK_PREFER_READER_NP
+#  define TYPE PTHREAD_RWLOCK_PREFER_READER_NP
 #endif
 
   if (pthread_rwlockattr_setkind_np (&at, TYPE) != 0)

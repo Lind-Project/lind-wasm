@@ -16,9 +16,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _NET_IF_SLIP_H
-#define _NET_IF_SLIP_H 1
+#  define _NET_IF_SLIP_H 1
 
 /* We can use the kernel header.  */
-#include <linux/if_slip.h>
+#  include <linux/if_slip.h>
 
-#endif	/* net/if_slip.h.  */
+#endif /* net/if_slip.h.  */

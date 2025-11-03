@@ -28,13 +28,13 @@
 #include <kernel_sigaction.h>
 
 #ifndef SA_RESTORER
-# define SET_SA_RESTORER(kact, act)
-# define RESET_SA_RESTORER(act, kact)
+#  define SET_SA_RESTORER(kact, act)
+#  define RESET_SA_RESTORER(act, kact)
 #endif
 
 /* SPARC passes the restore function as an argument to rt_sigaction.  */
 #ifndef STUB
-# define STUB(act, sigsetsize) (sigsetsize)
+#  define STUB(act, sigsetsize) (sigsetsize)
 #endif
 
 /* If ACT is not NULL, change the action for SIG to *ACT.
@@ -57,9 +57,9 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
   // /* XXX The size argument hopefully will have to be changed to the
   //    real size of the user-level sigset_t.  */
   // result = INLINE_SYSCALL_CALL (rt_sigaction, sig,
-	// 			act ? &kact : NULL,
-	// 			oact ? &koact : NULL, STUB (act,
-	// 						    __NSIG_BYTES));
+  // 			act ? &kact : NULL,
+  // 			oact ? &koact : NULL, STUB (act,
+  // 						    __NSIG_BYTES));
 
   // if (oact && result >= 0)
   //   {
@@ -70,8 +70,10 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
   //   }
   // return result;
 
-   // Dennis Edit
+  // Dennis Edit
   return 0;
-  // return MAKE_SYSCALL(147, "syscall|sigaction", (uint64_t) sig, (uint64_t)(uintptr_t) act, (uint64_t)(uintptr_t) oact, NOTUSED, NOTUSED, NOTUSED);
+  // return MAKE_SYSCALL(147, "syscall|sigaction", (uint64_t) sig,
+  // (uint64_t)(uintptr_t) act, (uint64_t)(uintptr_t) oact, NOTUSED, NOTUSED,
+  // NOTUSED);
 }
 libc_hidden_def (__libc_sigaction)

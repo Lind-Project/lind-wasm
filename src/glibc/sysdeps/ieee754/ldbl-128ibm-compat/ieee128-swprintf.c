@@ -20,8 +20,8 @@
 #include <libio/libioP.h>
 
 extern int
-___ieee128_swprintf (wchar_t *string, size_t maxlen,
-		    const wchar_t *format, ...)
+___ieee128_swprintf (wchar_t *string, size_t maxlen, const wchar_t *format,
+		     ...)
 {
   va_list ap;
   int done;

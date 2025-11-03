@@ -15,14 +15,12 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_GETCWD_H
-#define	_GETCWD_H	1
+#ifndef _GETCWD_H
+#  define _GETCWD_H 1
 
-#include <hurd.h>
+#  include <hurd.h>
 
-char *
-__hurd_canonicalize_directory_name_internal (file_t thisdir,
-					     char *buf,
-					     size_t size);
+char *__hurd_canonicalize_directory_name_internal (file_t thisdir, char *buf,
+						   size_t size);
 
 #endif /* getcwd.h */

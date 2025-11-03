@@ -19,11 +19,11 @@
    generic implementation faster.  Also disables for old ISAs that do not
    have ceil/floor instructions.  */
 #if defined(_ARCH_PWR8) || !defined(_ARCH_PWR5X)
-# include <sysdeps/ieee754/ldbl-opt/s_modf.c>
+#  include <sysdeps/ieee754/ldbl-opt/s_modf.c>
 #else
-# include <math.h>
-# include <math_ldbl_opt.h>
-# include <libm-alias-double.h>
+#  include <math.h>
+#  include <math_ldbl_opt.h>
+#  include <libm-alias-double.h>
 
 double
 __modf (double x, double *iptr)
@@ -50,10 +50,10 @@ __modf (double x, double *iptr)
       return copysign (x - *iptr, x);
     }
 }
-# ifndef __modf
+#  ifndef __modf
 libm_alias_double (__modf, modf)
-#  if LONG_DOUBLE_COMPAT (libc, GLIBC_2_0)
-compat_symbol (libc, __modf, modfl, GLIBC_2_0);
+#    if LONG_DOUBLE_COMPAT(libc, GLIBC_2_0)
+    compat_symbol (libc, __modf, modfl, GLIBC_2_0);
+#    endif
 #  endif
-# endif
 #endif

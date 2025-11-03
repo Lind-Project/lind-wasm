@@ -16,14 +16,14 @@
    License along with the GNU C Library.  If not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_LINK_H
-# error "Never include <bits/link.h> directly; use <link.h> instead."
+#ifndef _LINK_H
+#  error "Never include <bits/link.h> directly; use <link.h> instead."
 #endif
 
 typedef struct La_riscv_regs
 {
   unsigned long int lr_reg[8]; /* a0 - a7 */
-  double lr_fpreg[8]; /* fa0 - fa7 */
+  double lr_fpreg[8];	       /* fa0 - fa7 */
   unsigned long int lr_ra;
   unsigned long int lr_sp;
 } La_riscv_regs;
@@ -39,18 +39,15 @@ typedef struct La_riscv_retval
 
 __BEGIN_DECLS
 
-extern ElfW(Addr) la_riscv_gnu_pltenter (ElfW(Sym) *__sym, unsigned int __ndx,
-					 uintptr_t *__refcook,
-					 uintptr_t *__defcook,
-					 La_riscv_regs *__regs,
-					 unsigned int *__flags,
-					 const char *__symname,
-					 long int *__framesizep);
-extern unsigned int la_riscv_gnu_pltexit (ElfW(Sym) *__sym, unsigned int __ndx,
-					  uintptr_t *__refcook,
-					  uintptr_t *__defcook,
-					  const La_riscv_regs *__inregs,
-					  La_riscv_retval *__outregs,
-					  const char *__symname);
+extern ElfW (Addr)
+    la_riscv_gnu_pltenter (ElfW (Sym) * __sym, unsigned int __ndx,
+			   uintptr_t *__refcook, uintptr_t *__defcook,
+			   La_riscv_regs *__regs, unsigned int *__flags,
+			   const char *__symname, long int *__framesizep);
+extern unsigned int
+la_riscv_gnu_pltexit (ElfW (Sym) * __sym, unsigned int __ndx,
+		      uintptr_t *__refcook, uintptr_t *__defcook,
+		      const La_riscv_regs *__inregs,
+		      La_riscv_retval *__outregs, const char *__symname);
 
 __END_DECLS

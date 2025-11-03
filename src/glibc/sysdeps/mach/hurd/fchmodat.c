@@ -38,5 +38,4 @@ __fchmodat (int fd, const char *file, mode_t mode, int flag)
   return 0;
 }
 
-weak_alias (__fchmodat, fchmodat)
-libc_hidden_def (fchmodat)
+weak_alias (__fchmodat, fchmodat) libc_hidden_def (fchmodat)

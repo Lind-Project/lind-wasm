@@ -17,11 +17,11 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_FZI_H
-#define _STRING_FZI_H 1
+#  define _STRING_FZI_H 1
 
-#include <limits.h>
-#include <endian.h>
-#include <string-fza.h>
+#  include <limits.h>
+#  include <endian.h>
+#  include <string-fza.h>
 
 static __always_inline int
 clz (find_t c)

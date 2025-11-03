@@ -17,26 +17,26 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _HP_TIMING_H
-#define _HP_TIMING_H 1
+#  define _HP_TIMING_H 1
 
 /* We always assume having the timestamp register.  */
-#define HP_TIMING_AVAIL (1)
-#define HP_SMALL_TIMING_AVAIL (1)
+#  define HP_TIMING_AVAIL (1)
+#  define HP_SMALL_TIMING_AVAIL (1)
 
 /* We indeed have inlined functions.  */
-#define HP_TIMING_INLINE (1)
+#  define HP_TIMING_INLINE (1)
 
 /* We use 64bit values for the times.  */
 typedef unsigned long long int hp_timing_t;
 
 /* Read the stable counter.  */
-#define HP_TIMING_NOW(Var) \
-  ({ \
-    unsigned long long int _count; \
-    asm volatile ("rdtime.d\t%0,$r0" : "=r" (_count)); \
-    (Var) = _count; \
-  })
+#  define HP_TIMING_NOW(Var)                                                  \
+    ({                                                                        \
+      unsigned long long int _count;                                          \
+      asm volatile ("rdtime.d\t%0,$r0" : "=r"(_count));                       \
+      (Var) = _count;                                                         \
+    })
 
-#include <hp-timing-common.h>
+#  include <hp-timing-common.h>
 
 #endif /* hp-timing.h */

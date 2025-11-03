@@ -31,23 +31,23 @@ static char shrd_counter;
 /* Function to choose an action to do, depending on mtx_trylock
    return value.  */
 static inline void
-choose_action (int action, char* thread_name)
+choose_action (int action, char *thread_name)
 {
   switch (action)
     {
-      case thrd_success:
-        ++shrd_counter;
+    case thrd_success:
+      ++shrd_counter;
 
-	if (mtx_unlock (&mutex) != thrd_success)
-	  FAIL_EXIT1 ("mtx_unlock failed");
+      if (mtx_unlock (&mutex) != thrd_success)
+	FAIL_EXIT1 ("mtx_unlock failed");
       break;
 
-      case thrd_busy:
-        break;
+    case thrd_busy:
+      break;
 
-      case thrd_error:
-	FAIL_EXIT1 ("%s lock error", thread_name);
-        break;
+    case thrd_error:
+      FAIL_EXIT1 ("%s lock error", thread_name);
+      break;
     }
 }
 

@@ -17,19 +17,19 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _ARM_GCC_COMPAT_H
-#define _ARM_GCC_COMPAT_H 1
+#  define _ARM_GCC_COMPAT_H 1
 
-#ifndef GCC_COMPAT_VERSION
-# ifdef __ARM_PCS_VFP
+#  ifndef GCC_COMPAT_VERSION
+#    ifdef __ARM_PCS_VFP
 /* The hard-float ABI was first supported in 4.5.  */
-#  define GCC_COMPAT_VERSION    GCC_VERSION (4, 5)
-# else
+#      define GCC_COMPAT_VERSION GCC_VERSION (4, 5)
+#    else
 /* The EABI configurations (the only ones we handle) were first supported
    in 4.1.  */
-#  define GCC_COMPAT_VERSION    GCC_VERSION (4, 1)
-# endif
-#endif
+#      define GCC_COMPAT_VERSION GCC_VERSION (4, 1)
+#    endif
+#  endif
 
-#include_next <gcc-compat.h>
+#  include_next <gcc-compat.h>
 
 #endif

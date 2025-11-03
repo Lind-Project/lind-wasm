@@ -21,17 +21,17 @@
 #include <sysdeps/unix/sysv/linux/profil-counter.h>
 
 #ifndef __profil_counter
-# include <shlib-compat.h>
-# if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_31)
+#  include <shlib-compat.h>
+#  if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_31)
 void
 __profil_counter_global (int signo, struct sigcontext *si)
 {
-#ifdef __arch64__
+#    ifdef __arch64__
   profil_count (si->sigc_regs.tpc);
-#else
+#    else
   profil_count (si->si_regs.pc);
-#endif
+#    endif
 }
 compat_symbol (libc, __profil_counter_global, profil_counter, GLIBC_2_0);
-# endif
+#  endif
 #endif

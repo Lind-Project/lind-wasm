@@ -20,95 +20,93 @@
 #include <shlib-compat.h>
 
 #ifdef SHARED
-void
-attribute_compat_text_section
-__attribute_used__
+void attribute_compat_text_section __attribute_used__
 __libpthread_version_placeholder_1 (void)
 {
 }
 #endif
 
-#if SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
+#if SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34)
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_0);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_2))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_2))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_1);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_1_1, GLIBC_2_1_2))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_1_1, GLIBC_2_1_2))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_1_1);
 #endif
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_1_2, GLIBC_2_2))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_1_2, GLIBC_2_2))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_1_2);
 #endif
 
-#if SHLIB_COMPAT (libpthread, GLIBC_2_2, GLIBC_2_3) \
-  && ABI_libpthread_GLIBC_2_2 != ABI_libpthread_GLIBC_2_0
+#if SHLIB_COMPAT(libpthread, GLIBC_2_2, GLIBC_2_3)                            \
+    && ABI_libpthread_GLIBC_2_2 != ABI_libpthread_GLIBC_2_0
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_2);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_2_3, GLIBC_2_2_4))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_2_3, GLIBC_2_2_4))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_2_3);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_2_6, GLIBC_2_3))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_2_6, GLIBC_2_3))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_2_6);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_3_2, GLIBC_2_3_4))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_3_2, GLIBC_2_3_4))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_3_2);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_3_3, GLIBC_2_3_4))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_3_3, GLIBC_2_3_4))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_3_3);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_3_4, GLIBC_2_4))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_3_4, GLIBC_2_4))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_3_4);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_4, GLIBC_2_5))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_4, GLIBC_2_5))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_4);
 #endif
 
-#if SHLIB_COMPAT (libpthread, GLIBC_2_11, GLIBC_2_12)
+#if SHLIB_COMPAT(libpthread, GLIBC_2_11, GLIBC_2_12)
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_11);
 #endif
 
-#if SHLIB_COMPAT (libpthread, GLIBC_2_12, GLIBC_2_13)
+#if SHLIB_COMPAT(libpthread, GLIBC_2_12, GLIBC_2_13)
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_12);
 #endif
 
-#if SHLIB_COMPAT (libpthread, GLIBC_2_18, GLIBC_2_19)
+#if SHLIB_COMPAT(libpthread, GLIBC_2_18, GLIBC_2_19)
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_18);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_28, GLIBC_2_29))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_28, GLIBC_2_29))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_28);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_30, GLIBC_2_31))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_30, GLIBC_2_31))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_30);
 #endif
 
-#if (SHLIB_COMPAT (libpthread, GLIBC_2_31, GLIBC_2_32))
+#if (SHLIB_COMPAT(libpthread, GLIBC_2_31, GLIBC_2_32))
 compat_symbol (libpthread, __libpthread_version_placeholder_1,
 	       __libpthread_version_placeholder, GLIBC_2_31);
 #endif

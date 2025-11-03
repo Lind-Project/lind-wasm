@@ -25,7 +25,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-static sem_t sem;	/* Use to sync with thread start.  */
+static sem_t sem; /* Use to sync with thread start.  */
 static const char pipe_name[] = "/glibc-tst-sem16";
 
 static void

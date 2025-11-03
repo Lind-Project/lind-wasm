@@ -35,7 +35,7 @@
    which the dynamic linker must assume the non-PIC ABI semantics are
    marked with the STO_MIPS_PLT flag.  */
 static inline bool
-elf_machine_sym_no_match (const ElfW(Sym) *sym)
+elf_machine_sym_no_match (const ElfW (Sym) * sym)
 {
   return sym->st_shndx == SHN_UNDEF && !(sym->st_other & STO_MIPS_PLT);
 }

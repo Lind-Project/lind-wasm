@@ -31,14 +31,14 @@ __pthread_kill_implementation (pthread_t threadid, int signo, int no_tid)
   if (pd == THREAD_SELF)
     {
       /* Use the actual TID from the kernel, so that it refers to the
-         current thread even if called after vfork.  There is no
-         signal blocking in this case, so that the signal is delivered
-         immediately, before __pthread_kill_internal returns: a signal
-         sent to the thread itself needs to be delivered
-         synchronously.  (It is unclear if Linux guarantees the
-         delivery of all pending signals after unblocking in the code
-         below.  POSIX only guarantees delivery of a single signal,
-         which may not be the right one.)  */
+	 current thread even if called after vfork.  There is no
+	 signal blocking in this case, so that the signal is delivered
+	 immediately, before __pthread_kill_internal returns: a signal
+	 sent to the thread itself needs to be delivered
+	 synchronously.  (It is unclear if Linux guarantees the
+	 delivery of all pending signals after unblocking in the code
+	 below.  POSIX only guarantees delivery of a single signal,
+	 which may not be the right one.)  */
       pid_t tid = INTERNAL_SYSCALL_CALL (gettid);
       int ret = INTERNAL_SYSCALL_CALL (tgkill, __getpid (), tid, signo);
       return INTERNAL_SYSCALL_ERROR_P (ret) ? INTERNAL_SYSCALL_ERRNO (ret) : 0;
@@ -93,13 +93,12 @@ __pthread_kill (pthread_t threadid, int signo)
    avoid the symbol version if it ends up being used on ld.so.  */
 #if !IS_IN(rtld)
 libc_hidden_def (__pthread_kill)
-versioned_symbol (libc, __pthread_kill, pthread_kill, GLIBC_2_34);
+    versioned_symbol (libc, __pthread_kill, pthread_kill, GLIBC_2_34);
 
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_0, GLIBC_2_34)
 /* Variant which returns ESRCH in the no-TID case, for backwards
    compatibility.  */
-int
-attribute_compat_text_section
+int attribute_compat_text_section
 __pthread_kill_esrch (pthread_t threadid, int signo)
 {
   if (is_internal_signal (signo))
@@ -108,5 +107,5 @@ __pthread_kill_esrch (pthread_t threadid, int signo)
   return __pthread_kill_implementation (threadid, signo, ESRCH);
 }
 compat_symbol (libc, __pthread_kill_esrch, pthread_kill, GLIBC_2_0);
-# endif
+#  endif
 #endif

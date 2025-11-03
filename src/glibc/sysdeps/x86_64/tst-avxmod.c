@@ -1,13 +1,13 @@
 /* Test case for x86-64 preserved AVX registers in dynamic linker.  */
 
 #ifdef __AVX__
-#include <stdlib.h>
-#include <string.h>
-#include <immintrin.h>
+#  include <stdlib.h>
+#  include <string.h>
+#  include <immintrin.h>
 
 __m256i
-avx_test (__m256i x0, __m256i x1, __m256i x2, __m256i x3,
-	  __m256i x4, __m256i x5, __m256i x6, __m256i x7)
+avx_test (__m256i x0, __m256i x1, __m256i x2, __m256i x3, __m256i x4,
+	  __m256i x5, __m256i x6, __m256i x7)
 {
   __m256i ymm;
 

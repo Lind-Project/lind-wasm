@@ -31,15 +31,15 @@ have_sse2 (void)
   return (edx & bit_SSE2) != 0;
 }
 
-#define CHECK_CAN_TEST						\
-  do								\
-    {								\
-      if (!have_sse2 ())					\
-	{							\
-	  puts ("CPU does not support SSE2, cannot test");	\
-	  return 0;						\
-	}							\
-    }								\
+#define CHECK_CAN_TEST                                                        \
+  do                                                                          \
+    {                                                                         \
+      if (!have_sse2 ())                                                      \
+	{                                                                     \
+	  puts ("CPU does not support SSE2, cannot test");                    \
+	  return 0;                                                           \
+	}                                                                     \
+    }                                                                         \
   while (0)
 
 #include <test-fenv-clear-main.c>

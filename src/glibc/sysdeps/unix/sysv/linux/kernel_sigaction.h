@@ -1,8 +1,8 @@
 #ifndef _KERNEL_SIGACTION_H
-# define _KERNEL_SIGACTION_H
+#define _KERNEL_SIGACTION_H
 
 #ifdef SA_RESTORER
-# define HAS_SA_RESTORER 1
+#  define HAS_SA_RESTORER 1
 #endif
 
 /* This is the sigaction structure from the Linux 3.2 kernel.  */
@@ -19,10 +19,10 @@ struct kernel_sigaction
 };
 
 #ifndef SET_SA_RESTORER
-# define SET_SA_RESTORER(kact, act)
+#  define SET_SA_RESTORER(kact, act)
 #endif
 #ifndef RESET_SA_RESTORER
-# define RESET_SA_RESTORER(act, kact)
+#  define RESET_SA_RESTORER(act, kact)
 #endif
 
 #endif

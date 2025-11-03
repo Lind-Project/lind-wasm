@@ -29,5 +29,4 @@ __getcpu (unsigned int *cpu, unsigned int *node)
   return INLINE_SYSCALL_CALL (getcpu, cpu, node, NULL);
 #endif
 }
-weak_alias (__getcpu, getcpu)
-libc_hidden_def (__getcpu)
+weak_alias (__getcpu, getcpu) libc_hidden_def (__getcpu)

@@ -25,25 +25,22 @@
 #include <sys/prctl.h>
 
 #if __mips_fpr != 0 || _MIPS_SPFPSET != 16
-# error This test requires -mfpxx -mno-odd-spreg
+#  error This test requires -mfpxx -mno-odd-spreg
 #endif
 
 /* This test verifies that mode changes do not clobber register state
    in other threads.  */
 
 static volatile int finished;
-static int mode[6] =
-  {
-    0,
-    PR_FP_MODE_FR,
-    PR_FP_MODE_FR | PR_FP_MODE_FRE,
-    PR_FP_MODE_FR,
-    0,
-    PR_FP_MODE_FR | PR_FP_MODE_FRE
-  };
+static int mode[6] = { 0,
+		       PR_FP_MODE_FR,
+		       PR_FP_MODE_FR | PR_FP_MODE_FRE,
+		       PR_FP_MODE_FR,
+		       0,
+		       PR_FP_MODE_FR | PR_FP_MODE_FRE };
 
 static void *
-thread_function (void * arg __attribute__ ((unused)))
+thread_function (void *arg __attribute__ ((unused)))
 {
   volatile int i = 0;
   volatile float f = 0.0;
@@ -90,10 +87,9 @@ do_test (void)
 	exit (1);
       }
 
-  for (i = 0 ; i < 1000000 ; i++)
+  for (i = 0; i < 1000000; i++)
     {
-      if (prctl (PR_SET_FP_MODE, mode[i % 6]) != 0
-	  && errno != ENOTSUP)
+      if (prctl (PR_SET_FP_MODE, mode[i % 6]) != 0 && errno != ENOTSUP)
 	{
 	  printf ("prctl PR_SET_FP_MODE failed: %m\n");
 	  exit (1);

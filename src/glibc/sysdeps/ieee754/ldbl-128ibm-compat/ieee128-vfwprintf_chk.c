@@ -20,7 +20,7 @@
 
 extern int
 ___ieee128___vfwprintf_chk (FILE *fp, int flag, const wchar_t *format,
-			 va_list ap)
+			    va_list ap)
 {
   unsigned int mode = PRINTF_LDBL_USES_FLOAT128;
   if (flag > 0)

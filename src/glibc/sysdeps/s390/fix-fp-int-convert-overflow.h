@@ -17,17 +17,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef FIX_FP_INT_CONVERT_OVERFLOW_H
-#define FIX_FP_INT_CONVERT_OVERFLOW_H	1
+#  define FIX_FP_INT_CONVERT_OVERFLOW_H 1
 
 /* GCC emits "convert to fixed" instructions for casting floating point values
    to integer values. These instructions raise invalid and inexact exceptions
    if the floating point value exceeds the integer type ranges.  */
-#define FIX_FLT_LLONG_CONVERT_OVERFLOW 1
-#define FIX_DBL_LLONG_CONVERT_OVERFLOW 1
-#define FIX_LDBL_LLONG_CONVERT_OVERFLOW 1
+#  define FIX_FLT_LLONG_CONVERT_OVERFLOW 1
+#  define FIX_DBL_LLONG_CONVERT_OVERFLOW 1
+#  define FIX_LDBL_LLONG_CONVERT_OVERFLOW 1
 
-#define FIX_FLT_LONG_CONVERT_OVERFLOW 1
-#define FIX_DBL_LONG_CONVERT_OVERFLOW 1
-#define FIX_LDBL_LONG_CONVERT_OVERFLOW 1
+#  define FIX_FLT_LONG_CONVERT_OVERFLOW 1
+#  define FIX_DBL_LONG_CONVERT_OVERFLOW 1
+#  define FIX_LDBL_LONG_CONVERT_OVERFLOW 1
 
 #endif /* fix-fp-int-convert-overflow.h */

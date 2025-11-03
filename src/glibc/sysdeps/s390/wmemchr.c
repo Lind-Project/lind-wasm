@@ -19,25 +19,23 @@
 #include <ifunc-wmemchr.h>
 
 #if HAVE_WMEMCHR_IFUNC
-# define wmemchr __redirect_wmemchr
-# define __wmemchr __redirect___wmemchr
-# include <wchar.h>
-# undef wmemchr
-# undef __wmemchr
-# include <ifunc-resolve.h>
+#  define wmemchr __redirect_wmemchr
+#  define __wmemchr __redirect___wmemchr
+#  include <wchar.h>
+#  undef wmemchr
+#  undef __wmemchr
+#  include <ifunc-resolve.h>
 
-# if HAVE_WMEMCHR_C
+#  if HAVE_WMEMCHR_C
 extern __typeof (__redirect___wmemchr) WMEMCHR_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WMEMCHR_Z13
+#  if HAVE_WMEMCHR_Z13
 extern __typeof (__redirect___wmemchr) WMEMCHR_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect___wmemchr, __wmemchr,
 		      (HAVE_WMEMCHR_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WMEMCHR_Z13
-		      : WMEMCHR_DEFAULT
-		      )
-weak_alias (__wmemchr, wmemchr)
+			  ? WMEMCHR_Z13
+			  : WMEMCHR_DEFAULT) weak_alias (__wmemchr, wmemchr)
 #endif

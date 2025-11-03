@@ -24,7 +24,6 @@
 #include <scratch_buffer.h>
 #include <sys/socket.h>
 
-
 int
 setipv4sourcefilter (int s, struct in_addr interface, struct in_addr group,
 		     uint32_t fmode, uint32_t numsrc,

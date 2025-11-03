@@ -20,7 +20,7 @@
 double
 __fabs (double x)
 {
-  asm ("fdabs.d %1,%0" : "=f" (x) : "fm" (x));
+  asm ("fdabs.d %1,%0" : "=f"(x) : "fm"(x));
   return x;
 }
 libm_alias_double (__fabs, fabs)

@@ -17,13 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef ARM_NOFPU_MATH_TESTS_ROUNDING_H
-#define ARM_NOFPU_MATH_TESTS_ROUNDING_H 1
+#  define ARM_NOFPU_MATH_TESTS_ROUNDING_H 1
 
 /* On systems with VFP support, but where glibc is built for
    soft-float, the libgcc functions used in libc and libm do not
    support rounding modes, although fesetround succeeds.  */
-#define ROUNDING_TESTS_float(MODE)	((MODE) == FE_TONEAREST)
-#define ROUNDING_TESTS_double(MODE)	((MODE) == FE_TONEAREST)
-#define ROUNDING_TESTS_long_double(MODE)	((MODE) == FE_TONEAREST)
+#  define ROUNDING_TESTS_float(MODE) ((MODE) == FE_TONEAREST)
+#  define ROUNDING_TESTS_double(MODE) ((MODE) == FE_TONEAREST)
+#  define ROUNDING_TESTS_long_double(MODE) ((MODE) == FE_TONEAREST)
 
 #endif /* math-tests-rounding.h.  */

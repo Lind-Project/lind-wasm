@@ -31,7 +31,7 @@ struct fd_to_filename
 /* Writes a /proc/self/fd-style path for DESCRIPTOR to *STORAGE and
    returns a pointer to the start of the string.  DESCRIPTOR must be
    non-negative.  */
-char *__fd_to_filename (int descriptor, struct fd_to_filename *storage)
-  attribute_hidden;
+char *__fd_to_filename (int descriptor,
+			struct fd_to_filename *storage) attribute_hidden;
 
 #endif /* _FD_TO_FILENAME_H */

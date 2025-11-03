@@ -24,9 +24,8 @@ ssize_t x;
 extern __typeof (SSIZE_MAX) x;
 
 /* Test the value of SSIZE_MAX.  */
-_Static_assert (SSIZE_MAX == (sizeof (ssize_t) == sizeof (int)
-			      ? INT_MAX
-			      : LONG_MAX),
+_Static_assert (SSIZE_MAX
+		    == (sizeof (ssize_t) == sizeof (int) ? INT_MAX : LONG_MAX),
 		"value of SSIZE_MAX");
 
 static int

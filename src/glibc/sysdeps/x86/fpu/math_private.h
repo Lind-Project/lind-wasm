@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef X86_MATH_PRIVATE_H
-#define X86_MATH_PRIVATE_H 1
+#  define X86_MATH_PRIVATE_H 1
 
-#include_next <math_private.h>
+#  include_next <math_private.h>
 
 __extern_always_inline long double
 __NTH (__ieee754_atan2l (long double y, long double x))

@@ -28,11 +28,10 @@ __fegetenv (fenv_t *envp)
 }
 
 #include <shlib-compat.h>
-#if SHLIB_COMPAT (libm, GLIBC_2_1, GLIBC_2_2)
+#if SHLIB_COMPAT(libm, GLIBC_2_1, GLIBC_2_2)
 strong_alias (__fegetenv, __old_fegetenv)
-compat_symbol (libm, __old_fegetenv, fegetenv, GLIBC_2_1);
+    compat_symbol (libm, __old_fegetenv, fegetenv, GLIBC_2_1);
 #endif
 
-libm_hidden_def (__fegetenv)
-libm_hidden_ver (__fegetenv, fegetenv)
-versioned_symbol (libm, __fegetenv, fegetenv, GLIBC_2_2);
+libm_hidden_def (__fegetenv) libm_hidden_ver (__fegetenv, fegetenv)
+    versioned_symbol (libm, __fegetenv, fegetenv, GLIBC_2_2);

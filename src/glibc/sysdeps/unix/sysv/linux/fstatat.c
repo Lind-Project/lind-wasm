@@ -28,12 +28,11 @@ __fstatat (int fd, const char *file, struct stat *buf, int flag)
   int r = __fstatat64_time64 (fd, file, &st64, flag);
   if (r == 0)
     {
-      if (! in_ino_t_range (st64.st_ino)
-	  || ! in_off_t_range (st64.st_size)
-	  || ! in_blkcnt_t_range (st64.st_blocks)
-	  || ! in_time_t_range (st64.st_atim.tv_sec)
-	  || ! in_time_t_range (st64.st_mtim.tv_sec)
-	  || ! in_time_t_range (st64.st_ctim.tv_sec))
+      if (!in_ino_t_range (st64.st_ino) || !in_off_t_range (st64.st_size)
+	  || !in_blkcnt_t_range (st64.st_blocks)
+	  || !in_time_t_range (st64.st_atim.tv_sec)
+	  || !in_time_t_range (st64.st_mtim.tv_sec)
+	  || !in_time_t_range (st64.st_ctim.tv_sec))
 	return INLINE_SYSCALL_ERROR_RETURN_VALUE (EOVERFLOW);
 
       /* Clear internal pad and reserved fields.  */
@@ -48,7 +47,7 @@ __fstatat (int fd, const char *file, struct stat *buf, int flag)
       buf->st_rdev = st64.st_rdev;
       buf->st_size = st64.st_size;
       buf->st_blksize = st64.st_blksize;
-      buf->st_blocks  = st64.st_blocks;
+      buf->st_blocks = st64.st_blocks;
       buf->st_atim = valid_timespec64_to_timespec (st64.st_atim);
       buf->st_mtim = valid_timespec64_to_timespec (st64.st_mtim);
       buf->st_ctim = valid_timespec64_to_timespec (st64.st_ctim);

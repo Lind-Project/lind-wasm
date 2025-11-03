@@ -17,23 +17,23 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# define mempcpy __redirect_mempcpy
-# define __mempcpy __redirect___mempcpy
-# define NO_MEMPCPY_STPCPY_REDIRECT
-# define __NO_STRING_INLINES
-# include <string.h>
-# undef mempcpy
-# undef __mempcpy
+#if IS_IN(libc)
+#  define mempcpy __redirect_mempcpy
+#  define __mempcpy __redirect___mempcpy
+#  define NO_MEMPCPY_STPCPY_REDIRECT
+#  define __NO_STRING_INLINES
+#  include <string.h>
+#  undef mempcpy
+#  undef __mempcpy
 
-# include <sparc-ifunc.h>
+#  include <sparc-ifunc.h>
 
-# define SYMBOL_NAME mempcpy
-# include "ifunc-memcpy.h"
+#  define SYMBOL_NAME mempcpy
+#  include "ifunc-memcpy.h"
 
 sparc_libc_ifunc_redirected (__redirect_mempcpy, __mempcpy, IFUNC_SELECTOR)
 
-sparc_ifunc_redirected_hidden_def (__redirect___mempcpy, __mempcpy)
-weak_alias (__mempcpy, mempcpy)
-sparc_ifunc_redirected_hidden_def (__redirect_mempcpy, mempcpy)
+    sparc_ifunc_redirected_hidden_def (__redirect___mempcpy, __mempcpy)
+	weak_alias (__mempcpy, mempcpy)
+	    sparc_ifunc_redirected_hidden_def (__redirect_mempcpy, mempcpy)
 #endif

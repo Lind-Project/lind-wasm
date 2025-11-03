@@ -25,6 +25,6 @@ _dl_write (int fd, const void *buffer, size_t length)
 {
   long int r = INTERNAL_SYSCALL_CALL (write, fd, buffer, length);
   if (INTERNAL_SYSCALL_ERROR_P (r))
-    r = - INTERNAL_SYSCALL_ERRNO (r);
+    r = -INTERNAL_SYSCALL_ERRNO (r);
   return r;
 }

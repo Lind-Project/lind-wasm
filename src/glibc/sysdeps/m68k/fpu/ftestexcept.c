@@ -24,7 +24,7 @@ fetestexcept (int excepts)
   fexcept_t fpsr;
 
   /* Get current exceptions.  */
-  __asm__ ("fmove%.l %/fpsr,%0" : "=dm" (fpsr));
+  __asm__ ("fmove%.l %/fpsr,%0" : "=dm"(fpsr));
 
   return fpsr & excepts & FE_ALL_EXCEPT;
 }

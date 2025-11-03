@@ -17,5 +17,5 @@
 
 /* X32 uses the same 64-bit syscall interface for set_thread_area.   */
 #ifndef __NR_set_thread_area
-# define __NR_set_thread_area 1073742029
+#  define __NR_set_thread_area 1073742029
 #endif

@@ -11,5 +11,4 @@
 
    See sysdeps/mach/hurd/i386/intr-msg.h for an example. */
 
-
 #error Could not find machine-dependent intr-msg.h file.

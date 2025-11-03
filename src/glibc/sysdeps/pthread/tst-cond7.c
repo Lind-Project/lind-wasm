@@ -24,17 +24,14 @@
 #include <time.h>
 #include <sys/time.h>
 
-
 typedef struct
-  {
-    pthread_cond_t cond;
-    pthread_mutex_t lock;
-    pthread_t h;
-  } T;
-
+{
+  pthread_cond_t cond;
+  pthread_mutex_t lock;
+  pthread_t h;
+} T;
 
 static volatile bool done;
-
 
 static void *
 tf (void *arg)
@@ -78,7 +75,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -124,7 +120,7 @@ do_test (void)
 	    puts ("cond_wait failed");
 	    exit (1);
 	  }
-      while (! done);
+      while (!done);
 
       /* Release the lock since the cancel handler will get it.  */
       if (pthread_mutex_unlock (&t[i]->lock) != 0)
@@ -160,7 +156,6 @@ do_test (void)
 
   return 0;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

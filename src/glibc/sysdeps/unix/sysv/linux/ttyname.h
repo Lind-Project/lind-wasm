@@ -34,9 +34,6 @@ is_pty (struct __stat64_t64 *sb)
 static inline bool
 is_mytty (const struct __stat64_t64 *mytty, const struct __stat64_t64 *maybe)
 {
-  return (maybe->st_ino == mytty->st_ino
-	  && maybe->st_dev == mytty->st_dev
-	  && S_ISCHR (maybe->st_mode)
-	  && maybe->st_rdev == mytty->st_rdev
-	  );
+  return (maybe->st_ino == mytty->st_ino && maybe->st_dev == mytty->st_dev
+	  && S_ISCHR (maybe->st_mode) && maybe->st_rdev == mytty->st_rdev);
 }

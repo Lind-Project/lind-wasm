@@ -47,7 +47,8 @@ special_case (float64x2_t x, float64x2_t y, uint64x2_t odd, uint64x2_t cmp)
   return v_call_f64 (cos, x, y, cmp);
 }
 
-float64x2_t VPCS_ATTR V_NAME_D1 (cos) (float64x2_t x)
+float64x2_t VPCS_ATTR
+V_NAME_D1 (cos) (float64x2_t x)
 {
   const struct data *d = ptr_barrier (&data);
   float64x2_t n, r, r2, r3, r4, t1, t2, t3, y;

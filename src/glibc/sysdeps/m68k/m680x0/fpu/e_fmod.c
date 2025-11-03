@@ -21,17 +21,17 @@
 #include <libm-alias-finite.h>
 
 #ifndef FUNC
-# define FUNC __ieee754_fmod
-# define FUNC_FINITE __fmod
+#  define FUNC __ieee754_fmod
+#  define FUNC_FINITE __fmod
 #endif
 #ifndef float_type
-# define float_type double
+#  define float_type double
 #endif
 
 float_type
 FUNC (float_type x, float_type y)
 {
-  return __m81_u(FUNC)(x, y);
+  return __m81_u (FUNC) (x, y);
 }
 #ifdef FUNC_FINITE
 libm_alias_finite (FUNC, FUNC_FINITE)

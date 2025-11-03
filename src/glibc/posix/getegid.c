@@ -27,4 +27,4 @@ __getegid (void)
 }
 stub_warning (getegid)
 
-weak_alias (__getegid, getegid)
+    weak_alias (__getegid, getegid)

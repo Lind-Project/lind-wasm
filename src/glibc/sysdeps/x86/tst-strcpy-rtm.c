@@ -23,24 +23,20 @@
 char string1[STRING_SIZE];
 char string2[STRING_SIZE];
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 prepare (void)
 {
   memset (string1, 'a', STRING_SIZE - 1);
-  if (strcpy (string2, string1) == string2
-      && strcmp (string2, string1) == 0)
+  if (strcpy (string2, string1) == string2 && strcmp (string2, string1) == 0)
     return EXIT_SUCCESS;
   else
     return EXIT_FAILURE;
 }
 
-__attribute__ ((noinline)) __attribute_noclone__
-static int
+__attribute__ ((noinline)) __attribute_noclone__ static int
 function (void)
 {
-  if (strcpy (string2, string1) == string2
-      && strcmp (string2, string1) == 0)
+  if (strcpy (string2, string1) == string2 && strcmp (string2, string1) == 0)
     return 0;
   else
     return 1;

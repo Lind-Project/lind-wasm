@@ -18,22 +18,23 @@
 #include <signal.h>
 #include <stdio.h>
 #define __longjmp ____longjmp_chk
-#define CHECK_SP(saved_sp, cur_sp, sp_type)				\
-  do {									\
-    sp_type sp_saved = (sp_type) (saved_sp);				\
-    if (sp_saved < (cur_sp))						\
-      {									\
-	struct __jmp_buf_internal_tag *env_save = env_arg;		\
-	int val_save = val_arg;						\
-	stack_t ss;							\
-	int ret = __sigaltstack (NULL, &ss);				\
-	if (ret == 0							\
-	    && (!(ss.ss_flags & SS_ONSTACK)				\
-		|| ((unsigned sp_type) ((sp_type) (long) ss.ss_sp	\
-					+ (sp_type) ss.ss_size		\
-					- sp_saved)			\
-		    < ss.ss_size)))					\
-	  __fortify_fail ("longjmp causes uninitialized stack frame");	\
-      }									\
-  } while (0)
+#define CHECK_SP(saved_sp, cur_sp, sp_type)                                   \
+  do                                                                          \
+    {                                                                         \
+      sp_type sp_saved = (sp_type) (saved_sp);                                \
+      if (sp_saved < (cur_sp))                                                \
+	{                                                                     \
+	  struct __jmp_buf_internal_tag *env_save = env_arg;                  \
+	  int val_save = val_arg;                                             \
+	  stack_t ss;                                                         \
+	  int ret = __sigaltstack (NULL, &ss);                                \
+	  if (ret == 0                                                        \
+	      && (!(ss.ss_flags & SS_ONSTACK)                                 \
+		  || ((unsigned sp_type) ((sp_type) (long) ss.ss_sp           \
+					  + (sp_type) ss.ss_size - sp_saved)  \
+		      < ss.ss_size)))                                         \
+	    __fortify_fail ("longjmp causes uninitialized stack frame");      \
+	}                                                                     \
+    }                                                                         \
+  while (0)
 #include <__longjmp.c>

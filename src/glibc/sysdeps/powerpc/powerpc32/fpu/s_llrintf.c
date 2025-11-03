@@ -27,7 +27,7 @@ __llrintf (float x)
 #ifdef _ARCH_PWR4
   /* Assume powerpc64 instructions availability.  */
   long long int ret;
-  __asm__ ("fctid %0, %1" : "=d" (ret) : "d" (x));
+  __asm__ ("fctid %0, %1" : "=d"(ret) : "d"(x));
   return ret;
 #else
   float rx = rintf (x);

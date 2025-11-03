@@ -28,15 +28,14 @@ __BEGIN_DECLS
 
 /* Get a pointer to the CPU feature structure.  */
 extern const struct cpuid_feature *__x86_get_cpuid_feature_leaf (unsigned int)
-     __attribute__ ((pure));
+    __attribute__ ((pure));
 
 static __inline__ __BOOLEAN
 x86_cpu_present (unsigned int __index)
 {
-  const struct cpuid_feature *__ptr = __x86_get_cpuid_feature_leaf
-    (__index / (8 * sizeof (unsigned int) * 4));
-  unsigned int __reg
-     = __index & (8 * sizeof (unsigned int) * 4 - 1);
+  const struct cpuid_feature *__ptr = __x86_get_cpuid_feature_leaf (
+      __index / (8 * sizeof (unsigned int) * 4));
+  unsigned int __reg = __index & (8 * sizeof (unsigned int) * 4 - 1);
   unsigned int __bit = __reg & (8 * sizeof (unsigned int) - 1);
   __reg /= 8 * sizeof (unsigned int);
 
@@ -49,10 +48,9 @@ x86_cpu_active (unsigned int __index)
   if (__index == x86_cpu_IBT || __index == x86_cpu_SHSTK)
     return x86_cpu_cet_active (__index);
 
-  const struct cpuid_feature *__ptr = __x86_get_cpuid_feature_leaf
-    (__index / (8 * sizeof (unsigned int) * 4));
-  unsigned int __reg
-     = __index & (8 * sizeof (unsigned int) * 4 - 1);
+  const struct cpuid_feature *__ptr = __x86_get_cpuid_feature_leaf (
+      __index / (8 * sizeof (unsigned int) * 4));
+  unsigned int __reg = __index & (8 * sizeof (unsigned int) * 4 - 1);
   unsigned int __bit = __reg & (8 * sizeof (unsigned int) - 1);
   __reg /= 8 * sizeof (unsigned int);
 
@@ -66,4 +64,4 @@ x86_cpu_active (unsigned int __index)
 
 __END_DECLS
 
-#endif  /* _SYS_PLATFORM_X86_H */
+#endif /* _SYS_PLATFORM_X86_H */

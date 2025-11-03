@@ -38,9 +38,9 @@ __strerror_r (int errnum, char *buf, size_t buflen)
   sub = err_get_sub (errnum);
   code = err_get_code (errnum);
 
-  if (system > err_max_system || ! __mach_error_systems[system].bad_sub)
+  if (system > err_max_system || !__mach_error_systems[system].bad_sub)
     {
-      __snprintf (buf, buflen, "%s%X", _("Error in unknown error system: "),
+      __snprintf (buf, buflen, "%s%X", _ ("Error in unknown error system: "),
 		  errnum);
       return buf;
     }
@@ -52,12 +52,11 @@ __strerror_r (int errnum, char *buf, size_t buflen)
 
   if (code >= es->subsystem[sub].max_code)
     {
-      __snprintf (buf, buflen, "%s%s %d", _("Unknown error "),
+      __snprintf (buf, buflen, "%s%s %d", _ ("Unknown error "),
 		  es->subsystem[sub].subsys_name, errnum);
       return buf;
     }
 
-  return (char *) _(es->subsystem[sub].codes[code]);
+  return (char *) _ (es->subsystem[sub].codes[code]);
 }
-libc_hidden_def (__strerror_r)
-weak_alias (__strerror_r, strerror_r)
+libc_hidden_def (__strerror_r) weak_alias (__strerror_r, strerror_r)

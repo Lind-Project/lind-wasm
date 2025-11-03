@@ -23,7 +23,6 @@
 #include <hurd/fd.h>
 #include <hurd/term.h>
 
-
 /* Return the pathname of the pseudo terminal slave associated with
    the master FD is open on, or NULL on errors.
    The returned storage is good until the next call to this function.  */
@@ -37,7 +36,6 @@ ptsname (int fd)
 
   return err ? NULL : peername;
 }
-
 
 /* We don't need STP, but fill it for conformity with the Linux version...  */
 int
@@ -73,7 +71,6 @@ __ptsname_internal (int fd, char *buf, size_t buflen, struct stat64 *stp)
   return 0;
 }
 
-
 /* Store at most BUFLEN characters of the pathname of the slave pseudo
    terminal associated with the master FD is open on in BUF.
    Return 0 on success, otherwise an error number.  */
@@ -82,5 +79,4 @@ __ptsname_r (int fd, char *buf, size_t buflen)
 {
   return __ptsname_internal (fd, buf, buflen, NULL);
 }
-libc_hidden_def (__ptsname_r)
-weak_alias (__ptsname_r, ptsname_r)
+libc_hidden_def (__ptsname_r) weak_alias (__ptsname_r, ptsname_r)

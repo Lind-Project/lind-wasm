@@ -45,28 +45,28 @@ __libc_recvmsg (int fd, struct msghdr *message, int flags)
   int newfds;
   int cancel_oldtype;
 
-  error_t reauthenticate (mach_port_t port, mach_port_t *result)
-    {
-      error_t err;
-      mach_port_t ref;
-      ref = __mach_reply_port ();
-      int cancel_oldtype;
+  error_t reauthenticate (mach_port_t port, mach_port_t * result)
+  {
+    error_t err;
+    mach_port_t ref;
+    ref = __mach_reply_port ();
+    int cancel_oldtype;
 
-      cancel_oldtype = LIBC_CANCEL_ASYNC();
+    cancel_oldtype = LIBC_CANCEL_ASYNC ();
+    do
+      err = __io_reauthenticate (port, ref, MACH_MSG_TYPE_MAKE_SEND);
+    while (err == EINTR);
+    if (!err)
       do
-	err = __io_reauthenticate (port, ref, MACH_MSG_TYPE_MAKE_SEND);
+	err = __USEPORT_CANCEL (
+	    AUTH, __auth_user_authenticate (port, ref, MACH_MSG_TYPE_MAKE_SEND,
+					    result));
       while (err == EINTR);
-      if (!err)
-	do
-	  err = __USEPORT_CANCEL (AUTH, __auth_user_authenticate (port,
-					  ref, MACH_MSG_TYPE_MAKE_SEND,
-					  result));
-	while (err == EINTR);
-      LIBC_CANCEL_RESET (cancel_oldtype);
+    LIBC_CANCEL_RESET (cancel_oldtype);
 
-      __mach_port_destroy (__mach_task_self (), ref);
-      return err;
-    }
+    __mach_port_destroy (__mach_task_self (), ref);
+    return err;
+  }
 
   /* Find the total number of bytes to be read.  */
   amount = 0;
@@ -75,8 +75,8 @@ __libc_recvmsg (int fd, struct msghdr *message, int flags)
       amount += message->msg_iov[i].iov_len;
 
       /* As an optimization, we set the initial values of DATA and LEN
-         from the first non-empty iovec.  This kicks-in in the case
-         where the whole packet fits into that iovec buffer.  */
+	 from the first non-empty iovec.  This kicks-in in the case
+	 where the whole packet fits into that iovec buffer.  */
       if (data == NULL && message->msg_iov[i].iov_len > 0)
 	{
 	  data = message->msg_iov[i].iov_base;
@@ -85,12 +85,10 @@ __libc_recvmsg (int fd, struct msghdr *message, int flags)
     }
 
   buf = data;
-  cancel_oldtype = LIBC_CANCEL_ASYNC();
-  err = HURD_DPORT_USE_CANCEL (fd, __socket_recv (port, &aport,
-						  flags, &data, &len,
-						  &ports, &nports,
-						  &cdata, &clen,
-						  &message->msg_flags, amount));
+  cancel_oldtype = LIBC_CANCEL_ASYNC ();
+  err = HURD_DPORT_USE_CANCEL (
+      fd, __socket_recv (port, &aport, flags, &data, &len, &ports, &nports,
+			 &cdata, &clen, &message->msg_flags, amount));
   LIBC_CANCEL_RESET (cancel_oldtype);
   if (err)
     return __hurd_sockfail (fd, flags, err);
@@ -101,7 +99,7 @@ __libc_recvmsg (int fd, struct msghdr *message, int flags)
       mach_msg_type_number_t buflen = message->msg_namelen;
       int type;
 
-      cancel_oldtype = LIBC_CANCEL_ASYNC();
+      cancel_oldtype = LIBC_CANCEL_ASYNC ();
       err = __socket_whatis_address (aport, &type, &buf, &buflen);
       LIBC_CANCEL_RESET (cancel_oldtype);
 
@@ -151,7 +149,7 @@ __libc_recvmsg (int fd, struct msghdr *message, int flags)
       buf = data;
       for (i = 0; i < message->msg_iovlen; i++)
 	{
-#define min(a, b)	((a) > (b) ? (b) : (a))
+#define min(a, b) ((a) > (b) ? (b) : (a))
 	  size_t copy = min (message->msg_iov[i].iov_len, amount);
 
 	  memcpy (message->msg_iov[i].iov_base, buf, copy);
@@ -183,40 +181,38 @@ __libc_recvmsg (int fd, struct msghdr *message, int flags)
   /* This counts how many new fds we create.  */
   newfds = 0;
 
-  for (cmsg = CMSG_FIRSTHDR (message);
-       cmsg;
+  for (cmsg = CMSG_FIRSTHDR (message); cmsg;
        cmsg = CMSG_NXTHDR (message, cmsg))
-  {
-    if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
-      {
-	/* SCM_RIGHTS support.  */
-	/* The fd's flags are passed in the control data.  */
-	int *fds = (int *) CMSG_DATA (cmsg);
-	nfds = (cmsg->cmsg_len - CMSG_ALIGN (sizeof (struct cmsghdr)))
-	       / sizeof (int);
+    {
+      if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
+	{
+	  /* SCM_RIGHTS support.  */
+	  /* The fd's flags are passed in the control data.  */
+	  int *fds = (int *) CMSG_DATA (cmsg);
+	  nfds = (cmsg->cmsg_len - CMSG_ALIGN (sizeof (struct cmsghdr)))
+		 / sizeof (int);
 
-	for (j = 0; j < nfds; j++)
-	  {
-	    int fd_flags = (flags & MSG_CMSG_CLOEXEC) ? O_CLOEXEC : 0;
-	    err = reauthenticate (ports[i], &newports[newfds]);
-	    if (err)
-	      goto cleanup;
-	    /* We do not currently take any flag from the sender.  */
-	    fds[j] = opened_fds[newfds] = _hurd_intern_fd (newports[newfds],
-							   (fds[j] & 0)
-							   | fd_flags,
-							   0);
-	    if (fds[j] == -1)
-	      {
-		err = errno;
-		__mach_port_deallocate (__mach_task_self (), newports[newfds]);
+	  for (j = 0; j < nfds; j++)
+	    {
+	      int fd_flags = (flags & MSG_CMSG_CLOEXEC) ? O_CLOEXEC : 0;
+	      err = reauthenticate (ports[i], &newports[newfds]);
+	      if (err)
 		goto cleanup;
-	      }
-	    i++;
-	    newfds++;
-	  }
-      }
-  }
+	      /* We do not currently take any flag from the sender.  */
+	      fds[j] = opened_fds[newfds] = _hurd_intern_fd (
+		  newports[newfds], (fds[j] & 0) | fd_flags, 0);
+	      if (fds[j] == -1)
+		{
+		  err = errno;
+		  __mach_port_deallocate (__mach_task_self (),
+					  newports[newfds]);
+		  goto cleanup;
+		}
+	      i++;
+	      newfds++;
+	    }
+	}
+    }
 
   for (i = 0; i < nports; i++)
     __mach_port_deallocate (mach_task_self (), ports[i]);
@@ -231,8 +227,7 @@ cleanup:
     {
       ii = 0;
       newfds = 0;
-      for (cmsg = CMSG_FIRSTHDR (message);
-	   cmsg;
+      for (cmsg = CMSG_FIRSTHDR (message); cmsg;
 	   cmsg = CMSG_NXTHDR (message, cmsg))
 	{
 	  if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
@@ -240,11 +235,12 @@ cleanup:
 	      nfds = (cmsg->cmsg_len - CMSG_ALIGN (sizeof (struct cmsghdr)))
 		     / sizeof (int);
 	      for (j = 0; j < nfds && ii < i; j++, ii++, newfds++)
-	      {
-		_hurd_fd_close (_hurd_fd_get (opened_fds[newfds]));
-		__mach_port_deallocate (__mach_task_self (), newports[newfds]);
-		__mach_port_deallocate (__mach_task_self (), ports[ii]);
-	      }
+		{
+		  _hurd_fd_close (_hurd_fd_get (opened_fds[newfds]));
+		  __mach_port_deallocate (__mach_task_self (),
+					  newports[newfds]);
+		  __mach_port_deallocate (__mach_task_self (), ports[ii]);
+		}
 	    }
 	}
     }
@@ -253,5 +249,4 @@ cleanup:
   return __hurd_fail (err);
 }
 
-weak_alias (__libc_recvmsg, recvmsg)
-weak_alias (__libc_recvmsg, __recvmsg)
+weak_alias (__libc_recvmsg, recvmsg) weak_alias (__libc_recvmsg, __recvmsg)

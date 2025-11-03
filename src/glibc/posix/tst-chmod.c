@@ -29,13 +29,14 @@
 
 #include <support/xunistd.h>
 
-
-#define OUT_OF_MEMORY \
-  do {									      \
-    puts ("cannot allocate memory");					      \
-    result = 1;								      \
-    goto fail;								      \
-  } while (0)
+#define OUT_OF_MEMORY                                                         \
+  do                                                                          \
+    {                                                                         \
+      puts ("cannot allocate memory");                                        \
+      result = 1;                                                             \
+      goto fail;                                                              \
+    }                                                                         \
+  while (0)
 
 static int
 do_test (int argc, char *argv[])
@@ -237,8 +238,8 @@ do_test (int argc, char *argv[])
      directory in.  */
 
   sleep (1);
-  snprintf (buf, buflen, "./%s/../%s/file",
-	    basename (testdir), basename (testdir));
+  snprintf (buf, buflen, "./%s/../%s/file", basename (testdir),
+	    basename (testdir));
   if (chmod (buf, 0600) != 0)
     {
       printf ("cannot change mode of file to 0600: %m\n");
@@ -292,7 +293,8 @@ do_test (int argc, char *argv[])
     }
   else if ((st2.st_mode & ALLPERMS) != (0777 | S_ISUID | S_ISGID | S_ISVTX))
     {
-      puts ("directory mode not changed to 0777 | S_ISUID | S_ISGID | S_ISGID");
+      puts (
+	  "directory mode not changed to 0777 | S_ISUID | S_ISGID | S_ISGID");
       result = 1;
     }
 
@@ -327,7 +329,8 @@ do_test (int argc, char *argv[])
 	}
       else if (errno != EACCES)
 	{
-	  puts ("chmod(\".../file\") with no-exec directory didn't set EACCES");
+	  puts (
+	      "chmod(\".../file\") with no-exec directory didn't set EACCES");
 	  result = 1;
 	}
     }
@@ -347,11 +350,12 @@ do_test (int argc, char *argv[])
     }
   else if (errno != ENOTDIR)
     {
-      puts ("chmod(\".../file/cannot-be\",0600) does not set errno to ENOTDIR");
+      puts (
+	  "chmod(\".../file/cannot-be\",0600) does not set errno to ENOTDIR");
       result = 1;
     }
 
- fail:
+fail:
   xchdir (startdir);
 
   /* Remove all the files.  */

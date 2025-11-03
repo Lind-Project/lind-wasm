@@ -55,7 +55,8 @@ special_case (svfloat32_t x, svfloat32_t y, svbool_t special)
    Worst case error is 1.02 ULPs.
    _ZGVsMxv_exp10f(-0x1.040488p-4) got 0x1.ba5f9ep-1
 				  want 0x1.ba5f9cp-1.  */
-svfloat32_t SV_NAME_F1 (exp10) (svfloat32_t x, const svbool_t pg)
+svfloat32_t
+SV_NAME_F1 (exp10) (svfloat32_t x, const svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
   /* exp10(x) = 2^(n/N) * 10^r = 2^n * (1 + poly (r)),

@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _TST_AUDIT27MOD_H
-#define _TST_AUDIT27MOD_H 1
+#  define _TST_AUDIT27MOD_H 1
 
-#include <array_length.h>
+#  include <array_length.h>
 
 struct large_struct
 {
@@ -41,9 +41,9 @@ set_large_struct (char a, short b, long int c)
   return r;
 }
 
-#define ARG1 0x12
-#define ARG2 0x1234
-#define ARG3 0x12345678
+#  define ARG1 0x12
+#  define ARG2 0x1234
+#  define ARG3 0x12345678
 
 struct large_struct tst_audit26_func (char a, short b, long int c);
 

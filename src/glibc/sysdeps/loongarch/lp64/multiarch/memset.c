@@ -18,20 +18,19 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define memset __redirect_memset
-# include <string.h>
-# undef memset
+#if IS_IN(libc)
+#  define memset __redirect_memset
+#  include <string.h>
+#  undef memset
 
-# define SYMBOL_NAME memset
-# include "ifunc-lasx.h"
+#  define SYMBOL_NAME memset
+#  include "ifunc-lasx.h"
 
-libc_ifunc_redirected (__redirect_memset, memset,
-		       IFUNC_SELECTOR ());
+libc_ifunc_redirected (__redirect_memset, memset, IFUNC_SELECTOR ());
 
-# ifdef SHARED
+#  ifdef SHARED
 __hidden_ver1 (memset, __GI_memset, __redirect_memset)
-  __attribute__ ((visibility ("hidden"))) __attribute_copy__ (memset);
-# endif
+    __attribute__ ((visibility ("hidden"))) __attribute_copy__ (memset);
+#  endif
 
 #endif

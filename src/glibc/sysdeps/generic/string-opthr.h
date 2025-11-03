@@ -17,9 +17,9 @@
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef _STRING_OPTHR_H
-#define _STRING_OPTHR_H 1
+#  define _STRING_OPTHR_H 1
 
 /* Threshold value for when to enter the unrolled loops.  */
-#define OP_T_THRES	16
+#  define OP_T_THRES 16
 
 #endif /* string-opthr.h */

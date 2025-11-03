@@ -17,9 +17,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES___PTHREAD_SPINLOCK_T_H
-#define _BITS_TYPES___PTHREAD_SPINLOCK_T_H	1
+#  define _BITS_TYPES___PTHREAD_SPINLOCK_T_H 1
 
-#include <features.h>
+#  include <features.h>
 
 __BEGIN_DECLS
 
@@ -27,7 +27,7 @@ __BEGIN_DECLS
 typedef volatile int __pthread_spinlock_t;
 
 /* Initializer for a spin lock object.  */
-#define __PTHREAD_SPIN_LOCK_INITIALIZER 0
+#  define __PTHREAD_SPIN_LOCK_INITIALIZER 0
 
 __END_DECLS
 

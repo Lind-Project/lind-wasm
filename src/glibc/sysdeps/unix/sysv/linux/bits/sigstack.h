@@ -17,16 +17,16 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_SIGSTACK_H
-#define _BITS_SIGSTACK_H 1
+#  define _BITS_SIGSTACK_H 1
 
-#if !defined _SIGNAL_H && !defined _SYS_UCONTEXT_H
-# error "Never include this file directly.  Use <signal.h> instead"
-#endif
+#  if !defined _SIGNAL_H && !defined _SYS_UCONTEXT_H
+#    error "Never include this file directly.  Use <signal.h> instead"
+#  endif
 
 /* Minimum stack size for a signal handler.  */
-#define MINSIGSTKSZ	2048
+#  define MINSIGSTKSZ 2048
 
 /* System default stack size.  */
-#define SIGSTKSZ	8192
+#  define SIGSTKSZ 8192
 
 #endif /* bits/sigstack.h */

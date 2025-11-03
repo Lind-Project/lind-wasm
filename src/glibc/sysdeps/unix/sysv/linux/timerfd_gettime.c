@@ -26,7 +26,7 @@ int
 __timerfd_gettime64 (int fd, struct __itimerspec64 *value)
 {
 #ifndef __NR_timerfd_gettime64
-# define __NR_timerfd_gettime64 __NR_timerfd_gettime
+#  define __NR_timerfd_gettime64 __NR_timerfd_gettime
 #endif
 
 #ifdef __ASSUME_TIME64_SYSCALLS
@@ -50,8 +50,7 @@ __timerfd_gettime64 (int fd, struct __itimerspec64 *value)
 #if __TIMESIZE != 64
 libc_hidden_def (__timerfd_gettime64)
 
-int
-__timerfd_gettime (int fd, struct itimerspec *value)
+    int __timerfd_gettime (int fd, struct itimerspec *value)
 {
   struct __itimerspec64 its64;
   int retval = __timerfd_gettime64 (fd, &its64);

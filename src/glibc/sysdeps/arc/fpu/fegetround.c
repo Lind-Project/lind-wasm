@@ -27,6 +27,5 @@ __fegetround (void)
 
   return (fpcr >> __FPU_RND_SHIFT) & __FPU_RND_MASK;
 }
-libm_hidden_def (__fegetround)
-weak_alias (__fegetround, fegetround)
-libm_hidden_weak (fegetround)
+libm_hidden_def (__fegetround) weak_alias (__fegetround, fegetround)
+    libm_hidden_weak (fegetround)

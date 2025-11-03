@@ -17,27 +17,26 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for definition in libc.  */
-#if defined SHARED && IS_IN (libc)
-# define strchr __redirect_strchr
+#if defined SHARED && IS_IN(libc)
+#  define strchr __redirect_strchr
 /* Omit the strchr inline definitions because it would redefine strchr.  */
-# define __NO_STRING_INLINES
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#  define __NO_STRING_INLINES
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (strchr) __strchr_ppc attribute_hidden;
 extern __typeof (strchr) __strchr_power7 attribute_hidden;
 extern __typeof (strchr) __strchr_power8 attribute_hidden;
-# undef strchr
+#  undef strchr
 
 /* Avoid DWARF definition DIE on ifunc symbol so that GDB can handle
    ifunc symbol properly.  */
 libc_ifunc_redirected (__redirect_strchr, strchr,
 		       (hwcap2 & PPC_FEATURE2_ARCH_2_07
 			&& hwcap & PPC_FEATURE_HAS_ALTIVEC)
-		       ? __strchr_power8 :
-		       (hwcap & PPC_FEATURE_ARCH_2_06)
-		       ? __strchr_power7
-		       : __strchr_ppc);
+			   ? __strchr_power8
+		       : (hwcap &PPC_FEATURE_ARCH_2_06) ? __strchr_power7
+							: __strchr_ppc);
 weak_alias (strchr, index)
 #endif

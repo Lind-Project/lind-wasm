@@ -22,7 +22,7 @@ long
 _OtsCvtXQ (long al, long ah, long _round)
 {
   FP_DECL_EX;
-  FP_DECL_Q(A);
+  FP_DECL_Q (A);
   unsigned long r;
   long s;
 
@@ -31,8 +31,8 @@ _OtsCvtXQ (long al, long ah, long _round)
   _round = _round & 3;
 
   FP_INIT_ROUNDMODE;
-  AXP_UNPACK_RAW_Q(A, a);
-  FP_TO_INT_Q(r, A, 64, s);
+  AXP_UNPACK_RAW_Q (A, a);
+  FP_TO_INT_Q (r, A, 64, s);
   FP_HANDLE_EXCEPTIONS;
 
   return r;

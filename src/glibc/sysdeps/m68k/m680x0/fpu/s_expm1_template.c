@@ -25,6 +25,6 @@ M_DECL_FUNC (__expm1) (FLOAT x)
 {
   if ((__m81_test (x) & __M81_COND_INF) == 0 && isgreater (x, o_threshold))
     __set_errno (ERANGE);
-  return __m81_u(M_SUF (__expm1)) (x);
+  return __m81_u (M_SUF (__expm1)) (x);
 }
 declare_mgen_alias (__expm1, expm1)

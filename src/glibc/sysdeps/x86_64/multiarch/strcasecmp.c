@@ -18,22 +18,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define strcasecmp __redirect_strcasecmp
-# define __strcasecmp __redirect___strcasecmp
-# include <string.h>
-# undef strcasecmp
-# undef __strcasecmp
+#if IS_IN(libc)
+#  define strcasecmp __redirect_strcasecmp
+#  define __strcasecmp __redirect___strcasecmp
+#  include <string.h>
+#  undef strcasecmp
+#  undef __strcasecmp
 
-# define SYMBOL_NAME strcasecmp
-# include "ifunc-strcasecmp.h"
+#  define SYMBOL_NAME strcasecmp
+#  include "ifunc-strcasecmp.h"
 
-libc_ifunc_redirected (__redirect_strcasecmp, __strcasecmp,
-		       IFUNC_SELECTOR ());
+libc_ifunc_redirected (__redirect_strcasecmp, __strcasecmp, IFUNC_SELECTOR ());
 
 weak_alias (__strcasecmp, strcasecmp)
-# ifdef SHARED
-__hidden_ver1 (__strcasecmp, __GI___strcasecmp, __redirect___strcasecmp)
-  __attribute__ ((visibility ("hidden")));
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (__strcasecmp, __GI___strcasecmp, __redirect___strcasecmp)
+	__attribute__ ((visibility ("hidden")));
+#  endif
 #endif

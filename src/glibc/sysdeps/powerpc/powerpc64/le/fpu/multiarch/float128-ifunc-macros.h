@@ -17,45 +17,45 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FLOAT128_IFUNC_MACROS_PPC64LE
-#define _FLOAT128_IFUNC_MACROS_PPC64LE 1
+#  define _FLOAT128_IFUNC_MACROS_PPC64LE 1
 
 /* Bring in the various alias-providing headers, and disable
    _Float128 related macros.  This prevents exporting any ABI
    from _Float128 implementation objects.  */
-#include <libm-alias-float128.h>
-#include <libm-alias-finite.h>
-#include <math-narrow-alias.h>
+#  include <libm-alias-float128.h>
+#  include <libm-alias-finite.h>
+#  include <math-narrow-alias.h>
 
-#undef libm_alias_float128_r
-#undef libm_alias_finite
-#undef libm_alias_exclusive_ldouble
-#undef libm_alias_float128_other_r_ldbl
-#undef libm_alias_float128_narrow
-#undef declare_mgen_finite_alias
-#undef declare_mgen_alias
-#undef declare_mgen_alias_r
-#undef declare_mgen_alias_narrow
+#  undef libm_alias_float128_r
+#  undef libm_alias_finite
+#  undef libm_alias_exclusive_ldouble
+#  undef libm_alias_float128_other_r_ldbl
+#  undef libm_alias_float128_narrow
+#  undef declare_mgen_finite_alias
+#  undef declare_mgen_alias
+#  undef declare_mgen_alias_r
+#  undef declare_mgen_alias_narrow
 
-#define libm_alias_finite(from, to)
-#define libm_alias_float128_r(from, to, r)
-#define libm_alias_exclusive_ldouble(from, to)
-#define libm_alias_float128_other_r_ldbl(from, to, r)
-#define libm_alias_float128_narrow(from, to)
-#define declare_mgen_finite_alias(from, to)
-#define declare_mgen_alias(from, to)
-#define declare_mgen_alias_r(from, to)
-#define declare_mgen_alias_narrow(from, to)
+#  define libm_alias_finite(from, to)
+#  define libm_alias_float128_r(from, to, r)
+#  define libm_alias_exclusive_ldouble(from, to)
+#  define libm_alias_float128_other_r_ldbl(from, to, r)
+#  define libm_alias_float128_narrow(from, to)
+#  define declare_mgen_finite_alias(from, to)
+#  define declare_mgen_alias(from, to)
+#  define declare_mgen_alias_r(from, to)
+#  define declare_mgen_alias_narrow(from, to)
 
 /*  Likewise, disable hidden symbol support.  This is not needed
     for the implementation objects as the redirects already give
     us this support.  This also means any non-_Float128 headers
     which provide hidden_def's should be included prior to this
     header (e.g fenv.h).  */
-#undef libm_hidden_def
-#define libm_hidden_def(func)
-#undef libm_hidden_proto
-#define libm_hidden_proto(f)
+#  undef libm_hidden_def
+#  define libm_hidden_def(func)
+#  undef libm_hidden_proto
+#  define libm_hidden_proto(f)
 
-#include <float128-ifunc-redirect-macros.h>
+#  include <float128-ifunc-redirect-macros.h>
 
 #endif /* _FLOAT128_IFUNC_MACROS_PPC64LE */

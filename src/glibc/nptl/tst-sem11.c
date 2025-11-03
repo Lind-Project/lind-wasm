@@ -5,7 +5,7 @@
 #include <internaltypes.h>
 
 #ifndef SEM_WAIT
-# define SEM_WAIT(s) sem_wait (s)
+#  define SEM_WAIT(s) sem_wait (s)
 #endif
 
 static void *
@@ -28,7 +28,7 @@ main (void)
     sem_t s;
     struct new_sem ns;
   } u;
- again:
+again:
   if (sem_init (&u.s, 0, 0) != 0)
     {
       puts ("sem_init failed");

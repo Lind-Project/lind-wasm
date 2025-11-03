@@ -20,8 +20,7 @@
 #include "nldbl-compat.h"
 #undef fdivl
 
-float
-attribute_hidden
+float attribute_hidden
 fdivl (double x, double y)
 {
   return fdiv (x, y);

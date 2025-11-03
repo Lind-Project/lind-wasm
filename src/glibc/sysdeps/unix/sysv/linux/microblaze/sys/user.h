@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_USER_H
-# define _SYS_USER_H	1
+#  define _SYS_USER_H 1
 
 /* The whole purpose of this file is for GDB and GDB only.  Don't read
    too much into it.  Don't use it for anything other than GDB unless
@@ -32,7 +32,7 @@ struct user_fpregs_struct
   long int fcs;
   long int foo;
   long int fos;
-  long int st_space [20];
+  long int st_space[20];
 };
 
 struct user_regs_struct
@@ -49,21 +49,21 @@ struct user_regs_struct
 
 struct user
 {
-  struct user_regs_struct	regs;
-  int				u_fpvalid;
-  struct user_fpregs_struct	elf_fpregset_t;
-  unsigned long int		u_tsize;
-  unsigned long int		u_dsize;
-  unsigned long int		u_ssize;
-  unsigned long			start_code;
-  unsigned long			start_stack;
-  long int			signal;
-  int				reserved;
-  struct user_regs_struct*	u_ar0;
-  struct user_fpregs_struct*	u_fpstate;
-  unsigned long int		magic;
-  char				u_comm [32];
-  int				u_debugreg [8];
+  struct user_regs_struct regs;
+  int u_fpvalid;
+  struct user_fpregs_struct elf_fpregset_t;
+  unsigned long int u_tsize;
+  unsigned long int u_dsize;
+  unsigned long int u_ssize;
+  unsigned long start_code;
+  unsigned long start_stack;
+  long int signal;
+  int reserved;
+  struct user_regs_struct *u_ar0;
+  struct user_fpregs_struct *u_fpstate;
+  unsigned long int magic;
+  char u_comm[32];
+  int u_debugreg[8];
 };
 
-#endif	/* _SYS_USER_H */
+#endif /* _SYS_USER_H */

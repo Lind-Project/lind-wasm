@@ -19,7 +19,6 @@
 #include <stddef.h>
 #include <unistd.h>
 
-
 /* Execute the file FD refers to, overlaying the running program image.
    ARGV and ENVP are passed to the new program, as for `execve'.  */
 int

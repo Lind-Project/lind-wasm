@@ -83,8 +83,7 @@ do_test_call_varg (FILE *stream, const char *format, ...)
 }
 
 static void
-do_test_call_rarg (FILE *stream, const char *format, long double ld,
-		   double d)
+do_test_call_rarg (FILE *stream, const char *format, long double ld, double d)
 {
   char *buffer = NULL;
   char string[128];
@@ -141,8 +140,8 @@ do_test_call (void)
   do_test_call_varg (stdout, "%.10La, %.10a", ld, d);
 
   /* Test positional parameters.  */
-  do_test_call_varg (stdout, "%3$Lf, %2$Lf, %1$f",
-		     (double) 1, (long double) 2, (long double) 3);
+  do_test_call_varg (stdout, "%3$Lf, %2$Lf, %1$f", (double) 1, (long double) 2,
+		     (long double) 3);
 }
 
 static int
@@ -152,37 +151,37 @@ do_test (void)
   result = support_capture_subprocess ((void *) &do_test_call, NULL);
 
   /* Compare against the expected output.  */
-  const char *expected =
-    "    __asprintf_chk: -1.0000000000, -1.0000000000\n"
-    "     __dprintf_chk: -1.0000000000, -1.0000000000\n"
-    "     __fprintf_chk: -1.0000000000, -1.0000000000\n"
-    "      __printf_chk: -1.0000000000, -1.0000000000\n"
-    "    __snprintf_chk: -1.0000000000, -1.0000000000\n"
-    "     __sprintf_chk: -1.0000000000, -1.0000000000\n"
-    "   __vasprintf_chk: -1.0000000000, -1.0000000000\n"
-    "    __vdprintf_chk: -1.0000000000, -1.0000000000\n"
-    "    __vfprintf_chk: -1.0000000000, -1.0000000000\n"
-    "     __vprintf_chk: -1.0000000000, -1.0000000000\n"
-    "   __vsnprintf_chk: -1.0000000000, -1.0000000000\n"
-    "    __vsprintf_chk: -1.0000000000, -1.0000000000\n"
-    "    __asprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     __dprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     __fprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "      __printf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    __snprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     __sprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "   __vasprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    __vdprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    __vfprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "     __vprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "   __vsnprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "    __vsprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
-    "   __vasprintf_chk: 3.000000, 2.000000, 1.000000\n"
-    "    __vdprintf_chk: 3.000000, 2.000000, 1.000000\n"
-    "    __vfprintf_chk: 3.000000, 2.000000, 1.000000\n"
-    "     __vprintf_chk: 3.000000, 2.000000, 1.000000\n"
-    "   __vsnprintf_chk: 3.000000, 2.000000, 1.000000\n"
-    "    __vsprintf_chk: 3.000000, 2.000000, 1.000000\n";
+  const char *expected
+      = "    __asprintf_chk: -1.0000000000, -1.0000000000\n"
+	"     __dprintf_chk: -1.0000000000, -1.0000000000\n"
+	"     __fprintf_chk: -1.0000000000, -1.0000000000\n"
+	"      __printf_chk: -1.0000000000, -1.0000000000\n"
+	"    __snprintf_chk: -1.0000000000, -1.0000000000\n"
+	"     __sprintf_chk: -1.0000000000, -1.0000000000\n"
+	"   __vasprintf_chk: -1.0000000000, -1.0000000000\n"
+	"    __vdprintf_chk: -1.0000000000, -1.0000000000\n"
+	"    __vfprintf_chk: -1.0000000000, -1.0000000000\n"
+	"     __vprintf_chk: -1.0000000000, -1.0000000000\n"
+	"   __vsnprintf_chk: -1.0000000000, -1.0000000000\n"
+	"    __vsprintf_chk: -1.0000000000, -1.0000000000\n"
+	"    __asprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     __dprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     __fprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"      __printf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    __snprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     __sprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"   __vasprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    __vdprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    __vfprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"     __vprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"   __vsnprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"    __vsprintf_chk: -0x1.0000000000p+0, -0x1.0000000000p+0\n"
+	"   __vasprintf_chk: 3.000000, 2.000000, 1.000000\n"
+	"    __vdprintf_chk: 3.000000, 2.000000, 1.000000\n"
+	"    __vfprintf_chk: 3.000000, 2.000000, 1.000000\n"
+	"     __vprintf_chk: 3.000000, 2.000000, 1.000000\n"
+	"   __vsnprintf_chk: 3.000000, 2.000000, 1.000000\n"
+	"    __vsprintf_chk: 3.000000, 2.000000, 1.000000\n";
   TEST_COMPARE_STRING (expected, result.out.buffer);
 
   return 0;

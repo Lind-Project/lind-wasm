@@ -24,7 +24,7 @@
 #include <sys/wait.h>
 
 static void *
-thread_function (void * arg)
+thread_function (void *arg)
 {
   int i = (intptr_t) arg;
   int status;
@@ -49,13 +49,13 @@ thread_function (void * arg)
   pid2 = TEMP_FAILURE_RETRY (waitpid (pid, &status, 0));
   if (pid2 != pid)
     {
-      printf ("waitpid returned %ld, expected %ld\n",
-	      (long int) pid2, (long int) pid);
+      printf ("waitpid returned %ld, expected %ld\n", (long int) pid2,
+	      (long int) pid);
       return (void *) 1l;
     }
 
-  printf ("%ld with %d, expected %d\n",
-	  (long int) pid, WEXITSTATUS (status), i);
+  printf ("%ld with %d, expected %d\n", (long int) pid, WEXITSTATUS (status),
+	  i);
 
   return WEXITSTATUS (status) == i ? NULL : (void *) 1l;
 }
@@ -85,7 +85,8 @@ do_test (void)
 
   for (i = 0; i < N; ++i)
     if (pthread_create (&th[i], NULL, thread_function,
-			(void *) (intptr_t) t[i]) != 0)
+			(void *) (intptr_t) t[i])
+	!= 0)
       {
 	printf ("creation of thread %d failed\n", i);
 	exit (1);

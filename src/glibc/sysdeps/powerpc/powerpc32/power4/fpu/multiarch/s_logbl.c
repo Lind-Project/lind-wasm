@@ -25,8 +25,6 @@ extern __typeof (__logbl) __logbl_ppc32 attribute_hidden;
 extern __typeof (__logbl) __logbl_power7 attribute_hidden;
 
 libc_ifunc (__logbl,
-	    (hwcap & PPC_FEATURE_ARCH_2_06)
-	    ? __logbl_power7
-            : __logbl_ppc32);
+	    (hwcap & PPC_FEATURE_ARCH_2_06) ? __logbl_power7 : __logbl_ppc32);
 
 long_double_symbol (libm, __logbl, logbl);

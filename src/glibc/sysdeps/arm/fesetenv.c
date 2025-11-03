@@ -20,7 +20,6 @@
 #include <fpu_control.h>
 #include <arm-features.h>
 
-
 int
 __fesetenv (const fenv_t *envp)
 {
@@ -61,6 +60,5 @@ __fesetenv (const fenv_t *envp)
 
   return 0;
 }
-libm_hidden_def (__fesetenv)
-weak_alias (__fesetenv, fesetenv)
-libm_hidden_weak (fesetenv)
+libm_hidden_def (__fesetenv) weak_alias (__fesetenv, fesetenv)
+    libm_hidden_weak (fesetenv)

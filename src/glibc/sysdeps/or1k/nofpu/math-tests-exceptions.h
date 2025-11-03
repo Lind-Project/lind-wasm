@@ -18,12 +18,12 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef OR1K_NOFPU_MATH_TESTS_EXCEPTIONS_H
-#define OR1K_NOFPU_MATH_TESTS_EXCEPTIONS_H 1
+#  define OR1K_NOFPU_MATH_TESTS_EXCEPTIONS_H 1
 
 /* We support setting floating-point exception flags on hard-float
    targets.  These are not supported on soft-float targets.  */
-#define EXCEPTION_TESTS_float 0
-#define EXCEPTION_TESTS_double        0
-#define EXCEPTION_TESTS_long_double   0
+#  define EXCEPTION_TESTS_float 0
+#  define EXCEPTION_TESTS_double 0
+#  define EXCEPTION_TESTS_long_double 0
 
 #endif /* math-tests-exceptions.h.  */

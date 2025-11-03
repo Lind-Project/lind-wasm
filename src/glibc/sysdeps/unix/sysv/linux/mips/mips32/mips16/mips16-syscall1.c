@@ -21,11 +21,9 @@
 #undef __mips16_syscall1
 
 long long int __nomips16
-__mips16_syscall1 (long int a0,
-		   long int number)
+__mips16_syscall1 (long int a0, long int number)
 {
   union __mips_syscall_return ret;
-  ret.reg.v0 = INTERNAL_SYSCALL_MIPS16 (number, ret.reg.v1, 1,
-					a0);
+  ret.reg.v0 = INTERNAL_SYSCALL_MIPS16 (number, ret.reg.v1, 1, a0);
   return ret.val;
 }

@@ -28,8 +28,8 @@
 #include <support/temp_file.h>
 #include <support/check.h>
 
-#define XSTR(s) STR(S)
-#define STR(s)  #s
+#define XSTR(s) STR (S)
+#define STR(s) #s
 
 static char *temp_filename;
 static int temp_fd;
@@ -71,51 +71,67 @@ do_test (void)
   /* Check for invalid file descriptor.  */
   if ((ret = sync_file_range (-1, 0, 0, 0)) != -1)
     FAIL_EXIT1 ("sync_file_range did not fail on an invalid descriptor "
-		"(returned %d, expected -1)", ret);
+		"(returned %d, expected -1)",
+		ret);
   if (errno != EBADF)
-    FAIL_EXIT1 ("sync_file_range on an invalid descriptor did not set errno to "
-		"EBADF (%d)", errno);
+    FAIL_EXIT1 (
+	"sync_file_range on an invalid descriptor did not set errno to "
+	"EBADF (%d)",
+	errno);
 
   if ((ret = sync_file_range (fifofd, 0, 0, 0)) != -1)
     FAIL_EXIT1 ("sync_file_range did not fail on an invalid descriptor "
-		"(returned %d, expected -1)", ret);
+		"(returned %d, expected -1)",
+		ret);
   if (errno != ESPIPE)
-    FAIL_EXIT1 ("sync_file_range on an invalid descriptor did not set errno to "
-		"EBADF (%d)", errno);
+    FAIL_EXIT1 (
+	"sync_file_range on an invalid descriptor did not set errno to "
+	"EBADF (%d)",
+	errno);
 
   /* Check for invalid flags (it must be
      SYNC_FILE_RANGE_{WAIT_BEFORE,WRITE,WAIT_AFTER) or a 'or' combination of
      them.  */
   if ((ret = sync_file_range (temp_fd, 0, 0, -1)) != -1)
     FAIL_EXIT1 ("sync_file_range did not failed with invalid flags "
-		"(returned %d, " "expected -1)", ret);
+		"(returned %d, "
+		"expected -1)",
+		ret);
   if (errno != EINVAL)
     FAIL_EXIT1 ("sync_file_range with invalid flag did not set errno to "
-		"EINVAL (%d)", errno);
+		"EINVAL (%d)",
+		errno);
 
   /* Check for negative offset.  */
   if ((ret = sync_file_range (temp_fd, -1, 1, 0)) != -1)
     FAIL_EXIT1 ("sync_file_range did not failed with invalid offset "
-		"(returned %d, expected -1)", ret);
+		"(returned %d, expected -1)",
+		ret);
   if (errno != EINVAL)
     FAIL_EXIT1 ("sync_file_range with invalid offset did not set errno to "
-		"EINVAL (%d)", errno);
+		"EINVAL (%d)",
+		errno);
 
   /* offset + nbytes must be a positive value.  */
   if ((ret = sync_file_range (temp_fd, 1024, -2048, 0)) != -1)
-    FAIL_EXIT1 ("sync_file_range did not failed with invalid nbytes (returned %d, "
-	  "expected -1)", ret);
+    FAIL_EXIT1 (
+	"sync_file_range did not failed with invalid nbytes (returned %d, "
+	"expected -1)",
+	ret);
   if (errno != EINVAL)
     FAIL_EXIT1 ("sync_file_range with invalid offset did not set errno to "
-		"EINVAL (%d)", errno);
+		"EINVAL (%d)",
+		errno);
 
   /* offset + nbytes must be larger or equal than offset */
   if ((ret = sync_file_range (temp_fd, -1024, 1024, 0)) != -1)
     FAIL_EXIT1 ("sync_file_range did not failed with invalid offset "
-		"(returned %d, expected -1)", ret);
+		"(returned %d, expected -1)",
+		ret);
   if (errno != EINVAL)
     FAIL_EXIT1 ("sync_file_range with invalid offset did not set errno to "
-		"EINVAL (%d)", errno);
+		"EINVAL (%d)",
+		errno);
 
   /* Check simple successful case.  */
   if ((ret = sync_file_range (temp_fd, 0, 1024, 0)) == -1)

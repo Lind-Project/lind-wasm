@@ -34,7 +34,7 @@ do_once (void)
 }
 
 static int
-func (void* data)
+func (void *data)
 {
   call_once (&flag, do_once);
   thrd_exit (thrd_success);

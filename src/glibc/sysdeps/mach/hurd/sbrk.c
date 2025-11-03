@@ -37,5 +37,4 @@ __sbrk (intptr_t increment)
 
   return result;
 }
-libc_hidden_def (__sbrk)
-weak_alias (__sbrk, sbrk)
+libc_hidden_def (__sbrk) weak_alias (__sbrk, sbrk)

@@ -21,31 +21,34 @@
 #include <errno.h>
 #include <sched.h>
 #include <clone_internal.h>
-#include <libc-pointer-arith.h>	/* For cast_to_pointer.  */
+#include <libc-pointer-arith.h> /* For cast_to_pointer.  */
 #include <stackinfo.h>		/* For _STACK_GROWS_{UP,DOWN}.  */
 
 #define CLONE_ARGS_SIZE_VER0 64 /* sizeof first published struct */
 #define CLONE_ARGS_SIZE_VER1 80 /* sizeof second published struct */
 #define CLONE_ARGS_SIZE_VER2 88 /* sizeof third published struct */
 
-#define sizeof_field(TYPE, MEMBER) sizeof ((((TYPE *)0)->MEMBER))
-#define offsetofend(TYPE, MEMBER) \
+#define sizeof_field(TYPE, MEMBER) sizeof ((((TYPE *) 0)->MEMBER))
+#define offsetofend(TYPE, MEMBER)                                             \
   (offsetof (TYPE, MEMBER) + sizeof_field (TYPE, MEMBER))
 
 _Static_assert (__alignof (struct clone_args) == 8,
 		"__alignof (struct clone_args) != 8");
-_Static_assert (offsetofend (struct clone_args, tls) == CLONE_ARGS_SIZE_VER0,
-		"offsetofend (struct clone_args, tls) != CLONE_ARGS_SIZE_VER0");
-_Static_assert (offsetofend (struct clone_args, set_tid_size) == CLONE_ARGS_SIZE_VER1,
-		"offsetofend (struct clone_args, set_tid_size) != CLONE_ARGS_SIZE_VER1");
-_Static_assert (offsetofend (struct clone_args, cgroup) == CLONE_ARGS_SIZE_VER2,
-		"offsetofend (struct clone_args, cgroup) != CLONE_ARGS_SIZE_VER2");
+_Static_assert (
+    offsetofend (struct clone_args, tls) == CLONE_ARGS_SIZE_VER0,
+    "offsetofend (struct clone_args, tls) != CLONE_ARGS_SIZE_VER0");
+_Static_assert (
+    offsetofend (struct clone_args, set_tid_size) == CLONE_ARGS_SIZE_VER1,
+    "offsetofend (struct clone_args, set_tid_size) != CLONE_ARGS_SIZE_VER1");
+_Static_assert (
+    offsetofend (struct clone_args, cgroup) == CLONE_ARGS_SIZE_VER2,
+    "offsetofend (struct clone_args, cgroup) != CLONE_ARGS_SIZE_VER2");
 _Static_assert (sizeof (struct clone_args) == CLONE_ARGS_SIZE_VER2,
 		"sizeof (struct clone_args) != CLONE_ARGS_SIZE_VER2");
 
 int
-__clone_internal_fallback (struct clone_args *cl_args,
-			   int (*func) (void *arg), void *arg)
+__clone_internal_fallback (struct clone_args *cl_args, int (*func) (void *arg),
+			   void *arg)
 {
   /* Map clone3 arguments to clone arguments.  NB: No need to check
      invalid clone3 specific bits in flags nor exit_signal since this
@@ -55,16 +58,15 @@ __clone_internal_fallback (struct clone_args *cl_args,
   int ret;
 
 #if !_STACK_GROWS_DOWN && !_STACK_GROWS_UP
-# error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
+#  error "Define either _STACK_GROWS_DOWN or _STACK_GROWS_UP"
 #endif
 
 #if _STACK_GROWS_DOWN
   stack += cl_args->stack_size;
 #endif
-  ret = __clone (func, stack, flags, arg,
-		 cast_to_pointer (cl_args->parent_tid),
-		 cast_to_pointer (cl_args->tls),
-		 cast_to_pointer (cl_args->child_tid));
+  ret = __clone (
+      func, stack, flags, arg, cast_to_pointer (cl_args->parent_tid),
+      cast_to_pointer (cl_args->tls), cast_to_pointer (cl_args->child_tid));
   return ret;
 }
 
@@ -73,9 +75,9 @@ __clone3_internal (struct clone_args *cl_args, int (*func) (void *args),
 		   void *arg)
 {
 #ifdef HAVE_CLONE3_WRAPPER
-# if __ASSUME_CLONE3
+#  if __ASSUME_CLONE3
   return __clone3 (cl_args, sizeof (*cl_args), func, arg);
-# else
+#  else
   static int clone3_supported = 1;
   if (atomic_load_relaxed (&clone3_supported) == 1)
     {
@@ -85,15 +87,15 @@ __clone3_internal (struct clone_args *cl_args, int (*func) (void *args),
 
       atomic_store_relaxed (&clone3_supported, 0);
     }
-# endif
+#  endif
 #endif
   __set_errno (ENOSYS);
   return -1;
 }
 
 int
-__clone_internal (struct clone_args *cl_args,
-		  int (*func) (void *arg), void *arg)
+__clone_internal (struct clone_args *cl_args, int (*func) (void *arg),
+		  void *arg)
 {
 #ifdef HAVE_CLONE3_WRAPPER
   int saved_errno = errno;
@@ -107,8 +109,8 @@ __clone_internal (struct clone_args *cl_args,
 #endif
 
   // remove __clone_internal_fallback since it could crash for some reason
-  // and this branch should not normally be reached since we have clone3 syscall
-  // and it is not supposed to fail
+  // and this branch should not normally be reached since we have clone3
+  // syscall and it is not supposed to fail
   return -1;
 }
 

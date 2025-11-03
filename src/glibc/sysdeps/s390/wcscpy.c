@@ -19,22 +19,20 @@
 #include <ifunc-wcscpy.h>
 
 #if HAVE_WCSCPY_IFUNC
-# include <wchar.h>
-# include <ifunc-resolve.h>
+#  include <wchar.h>
+#  include <ifunc-resolve.h>
 
-# if HAVE_WCSCPY_C
+#  if HAVE_WCSCPY_C
 extern __typeof (wcscpy) WCSCPY_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_WCSCPY_Z13
+#  if HAVE_WCSCPY_Z13
 extern __typeof (wcscpy) WCSCPY_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (wcscpy, __wcscpy,
 		      (HAVE_WCSCPY_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? WCSCPY_Z13
-		      : WCSCPY_DEFAULT
-		      )
-weak_alias (__wcscpy, wcscpy)
-libc_hidden_def (__wcscpy)
+			  ? WCSCPY_Z13
+			  : WCSCPY_DEFAULT) weak_alias (__wcscpy, wcscpy)
+    libc_hidden_def (__wcscpy)
 #endif

@@ -18,11 +18,9 @@
 #include <errno.h>
 #include <time.h>
 
-
 /* Pause execution for a number of nanoseconds.  */
 int
-__nanosleep (const struct timespec *requested_time,
-	     struct timespec *remaining)
+__nanosleep (const struct timespec *requested_time, struct timespec *remaining)
 {
   int ret = __clock_nanosleep (CLOCK_REALTIME, 0, requested_time, remaining);
   if (ret != 0)
@@ -32,5 +30,4 @@ __nanosleep (const struct timespec *requested_time,
     }
   return 0;
 }
-libc_hidden_def (__nanosleep)
-weak_alias (__nanosleep, nanosleep)
+libc_hidden_def (__nanosleep) weak_alias (__nanosleep, nanosleep)

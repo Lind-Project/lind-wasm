@@ -17,12 +17,13 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_PROCFS_H
-# error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
+#  error "Never include <bits/procfs.h> directly; use <sys/procfs.h> instead."
 #endif
 
 typedef unsigned long elf_greg_t;
-#define ELF_NGREG 80    /* We only need 64 at present, but leave space
-			                              for expansion. */
+#define ELF_NGREG                                                             \
+  80 /* We only need 64 at present, but leave space                           \
+				   for expansion. */
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 
 #define ELF_NFPREG 32

@@ -20,11 +20,9 @@
 #include <fpu_control.h>
 #include <assert.h>
 
-
 /* All exceptions, including the x86-specific "denormal operand"
    exception.  */
 #define FE_ALL_EXCEPT_X86 (FE_ALL_EXCEPT | __FE_DENORM)
-
 
 int
 __fesetenv (const fenv_t *envp)
@@ -36,7 +34,8 @@ __fesetenv (const fenv_t *envp)
      Therefore, we get the current environment and replace the values
      we want to use from the environment specified by the parameter.  */
   __asm__ ("fnstenv %0\n"
-	   "stmxcsr %1" : "=m" (*&temp), "=m" (*&temp.__mxcsr));
+	   "stmxcsr %1"
+	   : "=m"(*&temp), "=m"(*&temp.__mxcsr));
 
   if (envp == FE_DFL_ENV)
     {
@@ -54,7 +53,7 @@ __fesetenv (const fenv_t *envp)
       /* Set mask for SSE MXCSR.  */
       temp.__mxcsr |= (FE_ALL_EXCEPT_X86 << 7);
       /* Set rounding to FE_TONEAREST.  */
-      temp.__mxcsr &= ~ 0x6000;
+      temp.__mxcsr &= ~0x6000;
       temp.__mxcsr |= (FE_TONEAREST << 3);
       /* Clear the FZ and DAZ bits.  */
       temp.__mxcsr &= ~0x8040;
@@ -75,7 +74,7 @@ __fesetenv (const fenv_t *envp)
       temp.__mxcsr &= ~FE_ALL_EXCEPT_X86;
       /* Set mask for SSE MXCSR.  */
       /* Set rounding to FE_TONEAREST.  */
-      temp.__mxcsr &= ~ 0x6000;
+      temp.__mxcsr &= ~0x6000;
       temp.__mxcsr |= (FE_TONEAREST << 3);
       /* Do not mask exceptions.  */
       temp.__mxcsr &= ~(FE_ALL_EXCEPT << 7);
@@ -86,13 +85,11 @@ __fesetenv (const fenv_t *envp)
     }
   else
     {
-      temp.__control_word &= ~(FE_ALL_EXCEPT_X86
-			       | FE_TOWARDZERO
-			       | _FPU_EXTENDED);
-      temp.__control_word |= (envp->__control_word
-			      & (FE_ALL_EXCEPT_X86
-				 | FE_TOWARDZERO
-				 | _FPU_EXTENDED));
+      temp.__control_word
+	  &= ~(FE_ALL_EXCEPT_X86 | FE_TOWARDZERO | _FPU_EXTENDED);
+      temp.__control_word
+	  |= (envp->__control_word
+	      & (FE_ALL_EXCEPT_X86 | FE_TOWARDZERO | _FPU_EXTENDED));
       temp.__status_word &= ~FE_ALL_EXCEPT_X86;
       temp.__status_word |= envp->__status_word & FE_ALL_EXCEPT_X86;
       temp.__eip = envp->__eip;
@@ -104,11 +101,12 @@ __fesetenv (const fenv_t *envp)
     }
 
   __asm__ ("fldenv %0\n"
-	   "ldmxcsr %1" : : "m" (temp), "m" (temp.__mxcsr));
+	   "ldmxcsr %1"
+	   :
+	   : "m"(temp), "m"(temp.__mxcsr));
 
   /* Success.  */
   return 0;
 }
-libm_hidden_def (__fesetenv)
-weak_alias (__fesetenv, fesetenv)
-libm_hidden_weak (fesetenv)
+libm_hidden_def (__fesetenv) weak_alias (__fesetenv, fesetenv)
+    libm_hidden_weak (fesetenv)

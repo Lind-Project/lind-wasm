@@ -81,7 +81,8 @@ special_case (svbool_t pg, svfloat64_t s, svfloat64_t y, svfloat64_t n,
    Maximum measured error is 1.02 ulp.
    SV_NAME_D1 (exp10)(-0x1.2862fec805e58p+2) got 0x1.885a89551d782p-16
 					    want 0x1.885a89551d781p-16.  */
-svfloat64_t SV_NAME_D1 (exp10) (svfloat64_t x, svbool_t pg)
+svfloat64_t
+SV_NAME_D1 (exp10) (svfloat64_t x, svbool_t pg)
 {
   const struct data *d = ptr_barrier (&data);
   svbool_t no_big_scale = svacle (pg, x, d->special_bound);

@@ -19,6 +19,6 @@
 #include <shlib-compat.h>
 
 #undef SHLIB_COMPAT
-#define SHLIB_COMPAT(a,b,c) 0
+#define SHLIB_COMPAT(a, b, c) 0
 
 #include <sysdeps/unix/sysv/linux/getrlimit64.c>

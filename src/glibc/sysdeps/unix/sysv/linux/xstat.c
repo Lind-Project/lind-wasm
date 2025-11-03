@@ -23,20 +23,22 @@
 #include <syscall-template.h>
 
 #if !XSTAT_IS_XSTAT64
-# include <xstatconv.h>
-# include <xstatover.h>
-# include <shlib-compat.h>
-# include <lind_syscall_num.h>
+#  include <xstatconv.h>
+#  include <xstatover.h>
+#  include <shlib-compat.h>
+#  include <lind_syscall_num.h>
 
-# if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
+#  if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
 
 /* Get information about the file NAME in BUF.  */
 int
 __xstat (int vers, const char *name, struct stat *buf)
 {
-	return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers, (uint64_t) name, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers,
+		       (uint64_t) name, (uint64_t) buf, NOTUSED, NOTUSED,
+		       NOTUSED);
 }
 
-# endif /* LIB_COMPAT  */
+#  endif /* LIB_COMPAT  */
 
 #endif /* XSTAT_IS_XSTAT64  */

@@ -40,7 +40,7 @@ __fstatat (int fd, const char *file, struct stat *buf, int flag)
       buf->st_rdev = st64.st_rdev;
       buf->st_size = st64.st_size;
       buf->st_blksize = st64.st_blksize;
-      buf->st_blocks  = st64.st_blocks;
+      buf->st_blocks = st64.st_blocks;
       buf->st_atim = st64.st_atim;
       buf->st_mtim = st64.st_mtim;
       buf->st_ctim = st64.st_ctim;

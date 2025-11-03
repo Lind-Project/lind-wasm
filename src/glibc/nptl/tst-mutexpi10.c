@@ -28,24 +28,16 @@
 static int
 do_test (void)
 {
-  const int types[] = {
-    PTHREAD_MUTEX_NORMAL,
-    PTHREAD_MUTEX_ERRORCHECK,
-    PTHREAD_MUTEX_RECURSIVE,
-    PTHREAD_MUTEX_ADAPTIVE_NP
-  };
-  const int robust[] = {
-    PTHREAD_MUTEX_STALLED,
-    PTHREAD_MUTEX_ROBUST
-  };
-  const struct {
+  const int types[] = { PTHREAD_MUTEX_NORMAL, PTHREAD_MUTEX_ERRORCHECK,
+			PTHREAD_MUTEX_RECURSIVE, PTHREAD_MUTEX_ADAPTIVE_NP };
+  const int robust[] = { PTHREAD_MUTEX_STALLED, PTHREAD_MUTEX_ROBUST };
+  const struct
+  {
     int clk;
     int r;
-  } clocks[] = {
-    { CLOCK_REALTIME,         0 },
-    { CLOCK_MONOTONIC,        0 },
-    { CLOCK_REALTIME_COARSE,  EINVAL }
-  };
+  } clocks[] = { { CLOCK_REALTIME, 0 },
+		 { CLOCK_MONOTONIC, 0 },
+		 { CLOCK_REALTIME_COARSE, EINVAL } };
 
   for (int t = 0; t < array_length (types); t++)
     for (int r = 0; r < array_length (robust); r++)

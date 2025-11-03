@@ -17,7 +17,6 @@
 
 #include "pthreadP.h"
 
-
 int
 __pthread_attr_getscope (const pthread_attr_t *attr, int *scope)
 {
@@ -26,8 +25,8 @@ __pthread_attr_getscope (const pthread_attr_t *attr, int *scope)
   iattr = (struct pthread_attr *) attr;
 
   /* Store the current values.  */
-  *scope = (iattr->flags & ATTR_FLAG_SCOPEPROCESS
-	      ? PTHREAD_SCOPE_PROCESS : PTHREAD_SCOPE_SYSTEM);
+  *scope = (iattr->flags & ATTR_FLAG_SCOPEPROCESS ? PTHREAD_SCOPE_PROCESS
+						  : PTHREAD_SCOPE_SYSTEM);
 
   return 0;
 }

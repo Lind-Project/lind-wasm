@@ -17,17 +17,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define wcsncmp __redirect_wcsncmp
-# define __wcsncmp __redirect___wcsncmp
-# include <wchar.h>
-# undef wcsncmp
-# undef __wcsncmp
+#if IS_IN(libc)
+#  define wcsncmp __redirect_wcsncmp
+#  define __wcsncmp __redirect___wcsncmp
+#  include <wchar.h>
+#  undef wcsncmp
+#  undef __wcsncmp
 
-# define GENERIC generic
+#  define GENERIC generic
 
-# define SYMBOL_NAME wcsncmp
-# include "ifunc-avx2.h"
+#  define SYMBOL_NAME wcsncmp
+#  include "ifunc-avx2.h"
 
 libc_ifunc_redirected (__redirect_wcsncmp, wcsncmp, IFUNC_SELECTOR ());
 #endif

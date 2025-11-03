@@ -23,7 +23,7 @@
 #undef ntp_gettime
 
 #ifndef MOD_OFFSET
-# define modes mode
+#  define modes mode
 #endif
 
 /* glibc 2.12 added the 'tai' field to follow along the kernel, but it did
@@ -52,8 +52,7 @@ __ntp_gettime64 (struct __ntptimeval64 *ntv)
 #if __TIMESIZE != 64
 libc_hidden_def (__ntp_gettime64)
 
-int
-__ntp_gettime (struct ntptimeval *ntv)
+    int __ntp_gettime (struct ntptimeval *ntv)
 {
   struct __ntptimeval64 ntv64;
   int result;

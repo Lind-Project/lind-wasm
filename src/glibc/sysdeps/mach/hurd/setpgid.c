@@ -42,7 +42,5 @@ __setpgid (pid_t pid, pid_t pgid)
       lll_wait (_hurd_pids_changed_stamp, stamp, 0);
 
   return 0;
-
 }
-libc_hidden_def (__setpgid)
-weak_alias (__setpgid, setpgid)
+libc_hidden_def (__setpgid) weak_alias (__setpgid, setpgid)

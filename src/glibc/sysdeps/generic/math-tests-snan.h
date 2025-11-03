@@ -17,14 +17,14 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _MATH_TESTS_SNAN_H
-#define _MATH_TESTS_SNAN_H 1
+#  define _MATH_TESTS_SNAN_H 1
 
 /* Indicate whether to run tests involving sNaN values for the float,
    double, long double and _Float128 C data types, respectively.  All
    are run unless overridden.  */
-#define SNAN_TESTS_float	1
-#define SNAN_TESTS_double	1
-#define SNAN_TESTS_long_double	1
-#define SNAN_TESTS_float128	1
+#  define SNAN_TESTS_float 1
+#  define SNAN_TESTS_double 1
+#  define SNAN_TESTS_long_double 1
+#  define SNAN_TESTS_float128 1
 
 #endif /* math-tests-snan.h.  */

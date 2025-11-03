@@ -39,8 +39,8 @@ __llround (double x)
   EXTRACT_WORDS64 (i0, x);
   j0 = ((i0 >> 52) & 0x7ff) - 0x3ff;
   sign = i0 < 0 ? -1 : 1;
-  i0 &= UINT64_C(0xfffffffffffff);
-  i0 |= UINT64_C(0x10000000000000);
+  i0 &= UINT64_C (0xfffffffffffff);
+  i0 |= UINT64_C (0x10000000000000);
 
   if (j0 < (int32_t) (8 * sizeof (long long int)) - 1)
     {
@@ -50,7 +50,7 @@ __llround (double x)
 	result = i0 << (j0 - 52);
       else
 	{
-	  i0 += UINT64_C(0x8000000000000) >> j0;
+	  i0 += UINT64_C (0x8000000000000) >> j0;
 
 	  result = i0 >> (52 - j0);
 	}
@@ -79,6 +79,5 @@ libm_alias_double (__llround, llround)
 #undef lround
 #undef __lround
 #ifdef _LP64
-strong_alias (__llround, __lround)
-libm_alias_double (__lround, lround)
+    strong_alias (__llround, __lround) libm_alias_double (__lround, lround)
 #endif

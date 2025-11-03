@@ -50,5 +50,4 @@ __setrlimit (enum __rlimit_resource resource, const struct rlimit *rlimits)
   return 0;
 }
 
-libc_hidden_def (__setrlimit)
-weak_alias (__setrlimit, setrlimit)
+libc_hidden_def (__setrlimit) weak_alias (__setrlimit, setrlimit)

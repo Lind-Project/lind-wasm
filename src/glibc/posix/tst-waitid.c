@@ -46,9 +46,9 @@ test_child (bool setgroup)
 }
 
 #ifndef WEXITED
-# define WEXITED	0
-# define WCONTINUED	0
-# define WSTOPPED	WUNTRACED
+#  define WEXITED 0
+#  define WCONTINUED 0
+#  define WSTOPPED WUNTRACED
 #endif
 
 /* Set with only SIGCHLD on do_test_waitid.  */
@@ -80,8 +80,8 @@ do_test_waitd_common (idtype_t type, pid_t pid)
 {
   /* Adding process_state_tracing_stop ('t') allows the test to work under
      trace programs such as ptrace.  */
-  enum support_process_state stop_state = support_process_state_stopped
-					  | support_process_state_tracing_stop;
+  enum support_process_state stop_state
+      = support_process_state_stopped | support_process_state_tracing_stop;
 
   support_process_state_wait (pid, stop_state);
 
@@ -91,18 +91,18 @@ do_test_waitd_common (idtype_t type, pid_t pid)
   siginfo_t info;
   int fail;
 
-  info.si_signo = 0;		/* A successful call sets it to SIGCHLD.  */
-  fail = waitid (P_PID, pid, &info, WEXITED|WCONTINUED|WNOHANG);
+  info.si_signo = 0; /* A successful call sets it to SIGCHLD.  */
+  fail = waitid (P_PID, pid, &info, WEXITED | WCONTINUED | WNOHANG);
   if (fail == -1 && errno == ENOTSUP)
     FAIL_RET ("waitid WNOHANG on stopped: %m");
   TEST_COMPARE (fail, 0);
   TEST_COMPARE (info.si_signo, 0);
 
   /* Next the wait that should succeed right away.  */
-  info.si_signo = 0;		/* A successful call sets it to SIGCHLD.  */
+  info.si_signo = 0; /* A successful call sets it to SIGCHLD.  */
   info.si_pid = -1;
   info.si_status = -1;
-  fail = waitid (P_PID, pid, &info, WSTOPPED|WNOHANG);
+  fail = waitid (P_PID, pid, &info, WSTOPPED | WNOHANG);
   if (fail == -1 && errno == ENOTSUP)
     FAIL_RET ("waitid WNOHANG on stopped: %m");
   TEST_COMPARE (fail, 0);
@@ -120,10 +120,10 @@ do_test_waitd_common (idtype_t type, pid_t pid)
 #if WCONTINUED != 0
   check_sigchld (CLD_CONTINUED, SIGCONT, pid);
 
-  info.si_signo = 0;		/* A successful call sets it to SIGCHLD.  */
+  info.si_signo = 0; /* A successful call sets it to SIGCHLD.  */
   info.si_pid = -1;
   info.si_status = -1;
-  fail = waitid (P_PID, pid, &info, WCONTINUED|WNOWAIT);
+  fail = waitid (P_PID, pid, &info, WCONTINUED | WNOWAIT);
   if (fail == -1 && errno == ENOTSUP)
     FAIL_RET ("waitid WCONTINUED|WNOWAIT on continued: %m");
   TEST_COMPARE (fail, 0);
@@ -133,7 +133,7 @@ do_test_waitd_common (idtype_t type, pid_t pid)
   TEST_COMPARE (info.si_pid, pid);
 
   /* That should leave the CLD_CONTINUED state waiting to be seen again.  */
-  info.si_signo = 0;		/* A successful call sets it to SIGCHLD.  */
+  info.si_signo = 0; /* A successful call sets it to SIGCHLD.  */
   info.si_pid = -1;
   info.si_status = -1;
   fail = waitid (P_PID, pid, &info, WCONTINUED);
@@ -146,8 +146,8 @@ do_test_waitd_common (idtype_t type, pid_t pid)
   TEST_COMPARE (info.si_pid, pid);
 
   /* Now try a wait that should not succeed.  */
-  info.si_signo = 0;		/* A successful call sets it to SIGCHLD.  */
-  fail = waitid (P_PID, pid, &info, WCONTINUED|WNOHANG);
+  info.si_signo = 0; /* A successful call sets it to SIGCHLD.  */
+  fail = waitid (P_PID, pid, &info, WCONTINUED | WNOHANG);
   if (fail == -1 && errno == ENOTSUP)
     FAIL_RET ("waitid WCONTINUED|WNOHANG on waited continued: %m");
   TEST_COMPARE (fail, 0);
@@ -163,7 +163,7 @@ do_test_waitd_common (idtype_t type, pid_t pid)
      never delivered.  */
   support_process_state_wait (pid, stop_state);
 
-  fail = waitid (type, pid, &info, WEXITED|WSTOPPED);
+  fail = waitid (type, pid, &info, WEXITED | WSTOPPED);
   TEST_COMPARE (fail, 0);
   TEST_COMPARE (info.si_signo, SIGCHLD);
   TEST_COMPARE (info.si_code, CLD_STOPPED);
@@ -193,10 +193,10 @@ do_test_waitd_common (idtype_t type, pid_t pid)
     FAIL_RET ("kill (%d, SIGKILL): %m\n", pid);
 
 #ifdef WNOWAIT
-  info.si_signo = 0;		/* A successful call sets it to SIGCHLD.  */
+  info.si_signo = 0; /* A successful call sets it to SIGCHLD.  */
   info.si_pid = -1;
   info.si_status = -1;
-  fail = waitid (type, pid, &info, WEXITED|WNOWAIT);
+  fail = waitid (type, pid, &info, WEXITED | WNOWAIT);
   if (fail == -1 && errno == ENOTSUP)
     FAIL_RET ("waitid WNOHANG on killed: %m");
   TEST_COMPARE (fail, 0);
@@ -209,7 +209,7 @@ do_test_waitd_common (idtype_t type, pid_t pid)
 #endif
   check_sigchld (CLD_KILLED, SIGKILL, pid);
 
-  info.si_signo = 0;		/* A successful call sets it to SIGCHLD.  */
+  info.si_signo = 0; /* A successful call sets it to SIGCHLD.  */
   info.si_pid = -1;
   info.si_status = -1;
   fail = waitid (type, pid, &info, WEXITED | WNOHANG);
@@ -256,7 +256,7 @@ do_test_waitid (idtype_t type)
   int ret = do_test_waitd_common (type, pid);
 
   xsignal (SIGCHLD, SIG_IGN);
-  kill (pid, SIGKILL);		/* Make sure it's dead if we bailed early.  */
+  kill (pid, SIGKILL); /* Make sure it's dead if we bailed early.  */
   return ret;
 }
 

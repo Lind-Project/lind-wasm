@@ -48,11 +48,11 @@ main (void)
 	}
       else if (regs.start[0] != 2 || regs.end[0] != 7)
 	{
-	  printf ("re_match returned %d..%d, expected 2..7\n",
-		  regs.start[0], regs.end[0]);
+	  printf ("re_match returned %d..%d, expected 2..7\n", regs.start[0],
+		  regs.end[0]);
 	  result = 1;
 	}
-	puts (" -> OK");
+      puts (" -> OK");
     }
 
   return result;

@@ -27,4 +27,4 @@ __vfork (void)
 }
 libc_hidden_def (__vfork)
 
-weak_alias (__vfork, vfork)
+    weak_alias (__vfork, vfork)

@@ -33,7 +33,7 @@ __feraiseexcept (int excepts)
       /* One example of an invalid operation is 0.0 / 0.0.  */
       float f = 0.0;
 
-      __asm__ __volatile__ ("divss %0, %0 " : "+x" (f));
+      __asm__ __volatile__ ("divss %0, %0 " : "+x"(f));
       (void) &f;
     }
 
@@ -43,7 +43,7 @@ __feraiseexcept (int excepts)
       float f = 1.0;
       float g = 0.0;
 
-      __asm__ __volatile__ ("divss %1, %0" : "+x" (f) : "x" (g));
+      __asm__ __volatile__ ("divss %1, %0" : "+x"(f) : "x"(g));
       (void) &f;
     }
 
@@ -57,13 +57,13 @@ __feraiseexcept (int excepts)
 
       /* Bah, we have to clear selected exceptions.  Since there is no
 	 `fldsw' instruction we have to do it the hard way.  */
-      __asm__ __volatile__ ("fnstenv %0" : "=m" (*&temp));
+      __asm__ __volatile__ ("fnstenv %0" : "=m"(*&temp));
 
       /* Set the relevant bits.  */
       temp.__status_word |= FE_OVERFLOW;
 
       /* Put the new data in effect.  */
-      __asm__ __volatile__ ("fldenv %0" : : "m" (*&temp));
+      __asm__ __volatile__ ("fldenv %0" : : "m"(*&temp));
 
       /* And raise the exception.  */
       __asm__ __volatile__ ("fwait");
@@ -79,13 +79,13 @@ __feraiseexcept (int excepts)
 
       /* Bah, we have to clear selected exceptions.  Since there is no
 	 `fldsw' instruction we have to do it the hard way.  */
-      __asm__ __volatile__ ("fnstenv %0" : "=m" (*&temp));
+      __asm__ __volatile__ ("fnstenv %0" : "=m"(*&temp));
 
       /* Set the relevant bits.  */
       temp.__status_word |= FE_UNDERFLOW;
 
       /* Put the new data in effect.  */
-      __asm__ __volatile__ ("fldenv %0" : : "m" (*&temp));
+      __asm__ __volatile__ ("fldenv %0" : : "m"(*&temp));
 
       /* And raise the exception.  */
       __asm__ __volatile__ ("fwait");
@@ -101,13 +101,13 @@ __feraiseexcept (int excepts)
 
       /* Bah, we have to clear selected exceptions.  Since there is no
 	 `fldsw' instruction we have to do it the hard way.  */
-      __asm__ __volatile__ ("fnstenv %0" : "=m" (*&temp));
+      __asm__ __volatile__ ("fnstenv %0" : "=m"(*&temp));
 
       /* Set the relevant bits.  */
       temp.__status_word |= FE_INEXACT;
 
       /* Put the new data in effect.  */
-      __asm__ __volatile__ ("fldenv %0" : : "m" (*&temp));
+      __asm__ __volatile__ ("fldenv %0" : : "m"(*&temp));
 
       /* And raise the exception.  */
       __asm__ __volatile__ ("fwait");
@@ -116,6 +116,5 @@ __feraiseexcept (int excepts)
   /* Success.  */
   return 0;
 }
-libm_hidden_def (__feraiseexcept)
-weak_alias (__feraiseexcept, feraiseexcept)
-libm_hidden_weak (feraiseexcept)
+libm_hidden_def (__feraiseexcept) weak_alias (__feraiseexcept, feraiseexcept)
+    libm_hidden_weak (feraiseexcept)

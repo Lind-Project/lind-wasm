@@ -17,58 +17,62 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES_H
-# error "Never include <bits/typesizes.h> directly; use <sys/types.h> instead."
+#  error                                                                       \
+      "Never include <bits/typesizes.h> directly; use <sys/types.h> instead."
 #endif
 
-#ifndef	_BITS_TYPESIZES_H
-#define	_BITS_TYPESIZES_H	1
+#ifndef _BITS_TYPESIZES_H
+#  define _BITS_TYPESIZES_H 1
 
 /* See <bits/types.h> for the meaning of these macros.  This file exists so
    that <bits/types.h> need not vary across different GNU platforms.  */
 
-#define __DEV_T_TYPE		__UQUAD_TYPE
-#define __UID_T_TYPE		__U32_TYPE
-#define __GID_T_TYPE		__U32_TYPE
-#define __INO_T_TYPE		__ULONGWORD_TYPE
-#define __INO64_T_TYPE		__UQUAD_TYPE
-#define __MODE_T_TYPE		__U32_TYPE
-#define __NLINK_T_TYPE		__UWORD_TYPE
-#define __OFF_T_TYPE		__SLONGWORD_TYPE
-#define __OFF64_T_TYPE		__SQUAD_TYPE
-#define __PID_T_TYPE		__S32_TYPE
-#define __RLIM_T_TYPE		__ULONGWORD_TYPE
-#define __RLIM64_T_TYPE		__UQUAD_TYPE
-#define	__BLKCNT_T_TYPE		__SLONGWORD_TYPE
-#define	__BLKCNT64_T_TYPE	__SQUAD_TYPE
-#define	__FSBLKCNT_T_TYPE	__ULONGWORD_TYPE
-#define	__FSBLKCNT64_T_TYPE	__UQUAD_TYPE
-#define	__FSFILCNT_T_TYPE	__ULONGWORD_TYPE
-#define	__FSFILCNT64_T_TYPE	__UQUAD_TYPE
-#define	__FSWORD_T_TYPE		__SWORD_TYPE
-#define	__ID_T_TYPE		__U32_TYPE
-#define __CLOCK_T_TYPE		__SLONGWORD_TYPE
-#define __TIME_T_TYPE		__SLONGWORD_TYPE
-#define __USECONDS_T_TYPE	__U32_TYPE
-#define __SUSECONDS_T_TYPE	__SLONGWORD_TYPE
-#define __SUSECONDS64_T_TYPE	__SQUAD_TYPE
-#define __DADDR_T_TYPE		__S32_TYPE
-#define __KEY_T_TYPE		__S32_TYPE
-#define __CLOCKID_T_TYPE	__S32_TYPE
-#define __TIMER_T_TYPE		void *
-#define __BLKSIZE_T_TYPE	__SLONGWORD_TYPE
-#define __FSID_T_TYPE		struct { int __val[2]; }
-#define __SSIZE_T_TYPE		__SWORD_TYPE
-#define __SYSCALL_SLONG_TYPE	__SLONGWORD_TYPE
-#define __SYSCALL_ULONG_TYPE	__ULONGWORD_TYPE
-#define __CPU_MASK_TYPE 	__ULONGWORD_TYPE
+#  define __DEV_T_TYPE __UQUAD_TYPE
+#  define __UID_T_TYPE __U32_TYPE
+#  define __GID_T_TYPE __U32_TYPE
+#  define __INO_T_TYPE __ULONGWORD_TYPE
+#  define __INO64_T_TYPE __UQUAD_TYPE
+#  define __MODE_T_TYPE __U32_TYPE
+#  define __NLINK_T_TYPE __UWORD_TYPE
+#  define __OFF_T_TYPE __SLONGWORD_TYPE
+#  define __OFF64_T_TYPE __SQUAD_TYPE
+#  define __PID_T_TYPE __S32_TYPE
+#  define __RLIM_T_TYPE __ULONGWORD_TYPE
+#  define __RLIM64_T_TYPE __UQUAD_TYPE
+#  define __BLKCNT_T_TYPE __SLONGWORD_TYPE
+#  define __BLKCNT64_T_TYPE __SQUAD_TYPE
+#  define __FSBLKCNT_T_TYPE __ULONGWORD_TYPE
+#  define __FSBLKCNT64_T_TYPE __UQUAD_TYPE
+#  define __FSFILCNT_T_TYPE __ULONGWORD_TYPE
+#  define __FSFILCNT64_T_TYPE __UQUAD_TYPE
+#  define __FSWORD_T_TYPE __SWORD_TYPE
+#  define __ID_T_TYPE __U32_TYPE
+#  define __CLOCK_T_TYPE __SLONGWORD_TYPE
+#  define __TIME_T_TYPE __SLONGWORD_TYPE
+#  define __USECONDS_T_TYPE __U32_TYPE
+#  define __SUSECONDS_T_TYPE __SLONGWORD_TYPE
+#  define __SUSECONDS64_T_TYPE __SQUAD_TYPE
+#  define __DADDR_T_TYPE __S32_TYPE
+#  define __KEY_T_TYPE __S32_TYPE
+#  define __CLOCKID_T_TYPE __S32_TYPE
+#  define __TIMER_T_TYPE void *
+#  define __BLKSIZE_T_TYPE __SLONGWORD_TYPE
+#  define __FSID_T_TYPE                                                       \
+    struct                                                                    \
+    {                                                                         \
+      int __val[2];                                                           \
+    }
+#  define __SSIZE_T_TYPE __SWORD_TYPE
+#  define __SYSCALL_SLONG_TYPE __SLONGWORD_TYPE
+#  define __SYSCALL_ULONG_TYPE __ULONGWORD_TYPE
+#  define __CPU_MASK_TYPE __ULONGWORD_TYPE
 
-#define __RLIM_T_MATCHES_RLIM64_T		0
-#define __STATFS_MATCHES_STATFS64		0
+#  define __RLIM_T_MATCHES_RLIM64_T 0
+#  define __STATFS_MATCHES_STATFS64 0
 /* And for getitimer, setitimer and rusage  */
-#define __KERNEL_OLD_TIMEVAL_MATCHES_TIMEVAL64	0
+#  define __KERNEL_OLD_TIMEVAL_MATCHES_TIMEVAL64 0
 
 /* Number of descriptors that can fit in an `fd_set'.  */
-#define	__FD_SETSIZE		1024
-
+#  define __FD_SETSIZE 1024
 
 #endif /* bits/typesizes.h */

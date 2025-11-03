@@ -30,12 +30,12 @@
 int
 __statfs64 (const char *file, struct statfs64 *buf)
 {
-  return MAKE_SYSCALL(STATFS_SYSCALL, "syscall|statfs", (uint64_t) file, (uint64_t) buf , NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_SYSCALL (STATFS_SYSCALL, "syscall|statfs", (uint64_t) file,
+		       (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__statfs64, statfs64)
 
 #if STATFS_IS_STATFS64
-weak_alias (__statfs64, __statfs)
-weak_alias (__statfs64, statfs)
-libc_hidden_ver (__statfs64, __statfs)
+    weak_alias (__statfs64, __statfs) weak_alias (__statfs64, statfs)
+	libc_hidden_ver (__statfs64, __statfs)
 #endif

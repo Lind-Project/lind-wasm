@@ -21,6 +21,6 @@
 
 /* Test if longjmp to JMPBUF would unwind the frame containing a local
    variable at ADDRESS.  */
-#define _JMPBUF_UNWINDS(_jmpbuf, _address, _demangle)			\
-  ((void *) (_address)							\
+#define _JMPBUF_UNWINDS(_jmpbuf, _address, _demangle)                         \
+  ((void *) (_address)                                                        \
    > (void *) _demangle ((((unsigned long *) _jmpbuf)[JB_SP])))

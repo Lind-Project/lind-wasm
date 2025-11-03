@@ -19,24 +19,23 @@
 #include <ifunc-strpbrk.h>
 
 #if HAVE_STRPBRK_IFUNC
-# define strpbrk __redirect_strpbrk
+#  define strpbrk __redirect_strpbrk
 /* Omit the strpbrk inline definitions because it would redefine strpbrk.  */
-# define __NO_STRING_INLINES
-# include <string.h>
-# undef strpbrk
-# include <ifunc-resolve.h>
+#  define __NO_STRING_INLINES
+#  include <string.h>
+#  undef strpbrk
+#  include <ifunc-resolve.h>
 
-# if HAVE_STRPBRK_C
+#  if HAVE_STRPBRK_C
 extern __typeof (__redirect_strpbrk) STRPBRK_C attribute_hidden;
-# endif
+#  endif
 
-# if HAVE_STRPBRK_Z13
+#  if HAVE_STRPBRK_Z13
 extern __typeof (__redirect_strpbrk) STRPBRK_Z13 attribute_hidden;
-# endif
+#  endif
 
 s390_libc_ifunc_expr (__redirect_strpbrk, strpbrk,
 		      (HAVE_STRPBRK_Z13 && (hwcap & HWCAP_S390_VX))
-		      ? STRPBRK_Z13
-		      : STRPBRK_DEFAULT
-		      )
+			  ? STRPBRK_Z13
+			  : STRPBRK_DEFAULT)
 #endif /* HAVE_STRPBRK_IFUNC  */

@@ -45,7 +45,7 @@ __uname (struct utsname *name)
 	  name->nodename[0] = '\0';
 	  __set_errno (save);
 	}
-#ifdef	ENAMETOOLONG
+#ifdef ENAMETOOLONG
       else if (errno == ENAMETOOLONG)
 	/* The name was truncated.  */
 	__set_errno (save);
@@ -60,6 +60,4 @@ __uname (struct utsname *name)
 
   return 0;
 }
-weak_alias (__uname, uname)
-libc_hidden_def (__uname)
-libc_hidden_def (uname)
+weak_alias (__uname, uname) libc_hidden_def (__uname) libc_hidden_def (uname)

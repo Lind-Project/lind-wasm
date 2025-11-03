@@ -18,8 +18,7 @@
 
 #include "nldbl-compat.h"
 
-int
-attribute_hidden
+int attribute_hidden
 setpayloadsigl (double *x, double payload)
 {
   return setpayloadsig (x, payload);

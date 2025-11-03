@@ -22,7 +22,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static const char text[] = "#! /bin/sh";
 
 int
@@ -50,11 +49,11 @@ main (void)
 	  puts ("regexec failed");
 	  exit (2);
 	}
-      if (rm[0].rm_so != 0 || rm[0].rm_eo != 10
-	  || rm[1].rm_so != 8 || rm[1].rm_eo != 8)
+      if (rm[0].rm_so != 0 || rm[0].rm_eo != 10 || rm[1].rm_so != 8
+	  || rm[1].rm_eo != 8)
 	{
-	  printf ("regexec match failure: %d %d %d %d\n",
-		  rm[0].rm_so, rm[0].rm_eo, rm[1].rm_so, rm[1].rm_eo);
+	  printf ("regexec match failure: %d %d %d %d\n", rm[0].rm_so,
+		  rm[0].rm_eo, rm[1].rm_so, rm[1].rm_eo);
 	  exit (3);
 	}
     }

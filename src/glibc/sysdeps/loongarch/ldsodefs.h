@@ -17,26 +17,26 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _LOONGARCH_LDSODEFS_H
-#define _LOONGARCH_LDSODEFS_H 1
+#  define _LOONGARCH_LDSODEFS_H 1
 
-#include <elf.h>
-#include <cpu-features.h>
+#  include <elf.h>
+#  include <cpu-features.h>
 
 struct La_loongarch_regs;
 struct La_loongarch_retval;
 
-#define ARCH_PLTENTER_MEMBERS \
-  ElfW (Addr) (*loongarch_gnu_pltenter) (ElfW (Sym) *, unsigned int, \
-					 uintptr_t *, uintptr_t *, \
-					 const struct La_loongarch_regs *, \
-					 unsigned int *, const char *name, \
-					 long int *framesizep);
+#  define ARCH_PLTENTER_MEMBERS                                               \
+    ElfW (Addr) (*loongarch_gnu_pltenter) (                                   \
+	ElfW (Sym) *, unsigned int, uintptr_t *, uintptr_t *,                 \
+	const struct La_loongarch_regs *, unsigned int *, const char *name,   \
+	long int *framesizep);
 
-#define ARCH_PLTEXIT_MEMBERS \
-  unsigned int (*loongarch_gnu_pltexit) (ElfW (Sym) *, unsigned int, \
-		uintptr_t *, uintptr_t *, const struct La_loongarch_regs *, \
-		struct La_loongarch_retval *, const char *);
+#  define ARCH_PLTEXIT_MEMBERS                                                \
+    unsigned int (*loongarch_gnu_pltexit) (                                   \
+	ElfW (Sym) *, unsigned int, uintptr_t *, uintptr_t *,                 \
+	const struct La_loongarch_regs *, struct La_loongarch_retval *,       \
+	const char *);
 
-#include_next <ldsodefs.h>
+#  include_next <ldsodefs.h>
 
 #endif

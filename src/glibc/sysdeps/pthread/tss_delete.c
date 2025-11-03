@@ -26,9 +26,9 @@ __tss_delete (tss_t tss_id)
 }
 #if PTHREAD_IN_LIBC
 versioned_symbol (libc, __tss_delete, tss_delete, GLIBC_2_34);
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_28, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_28, GLIBC_2_34)
 compat_symbol (libpthread, __tss_delete, tss_delete, GLIBC_2_28);
-# endif
+#  endif
 #else /* !PTHREAD_IN_LIBC */
 strong_alias (__tss_delete, tss_delete)
 #endif

@@ -37,7 +37,7 @@
    as the third argument to a sa_sigaction handler with SA_SIGINFO enabled.  */
 
 #ifndef STACK_BIAS
-#define STACK_BIAS 2047
+#  define STACK_BIAS 2047
 #endif
 
 struct pt_regs
@@ -53,7 +53,7 @@ struct pt_regs
 static inline uintptr_t
 sigcontext_get_pc (const siginfo_t *ctx)
 {
-  struct pt_regs *regs = (struct pt_regs*) ((siginfo_t *)(ctx) + 1);
+  struct pt_regs *regs = (struct pt_regs *) ((siginfo_t *) (ctx) + 1);
   return regs->tpc;
 }
 

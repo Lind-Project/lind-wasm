@@ -16,10 +16,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#if IS_IN (libc)
-# include <string.h>
-# include <shlib-compat.h>
-# include "init-arch.h"
+#if IS_IN(libc)
+#  include <string.h>
+#  include <shlib-compat.h>
+#  include "init-arch.h"
 
 extern __typeof (__strchrnul) __strchrnul_ppc attribute_hidden;
 extern __typeof (__strchrnul) __strchrnul_power7 attribute_hidden;
@@ -30,13 +30,11 @@ extern __typeof (__strchrnul) __strchrnul_power8 attribute_hidden;
 libc_ifunc_hidden (__strchrnul, __strchrnul,
 		   (hwcap2 & PPC_FEATURE2_ARCH_2_07
 		    && hwcap & PPC_FEATURE_HAS_ALTIVEC)
-		   ? __strchrnul_power8 :
-		   (hwcap & PPC_FEATURE_ARCH_2_06)
-		   ? __strchrnul_power7
-		   : __strchrnul_ppc);
+		       ? __strchrnul_power8
+		   : (hwcap &PPC_FEATURE_ARCH_2_06) ? __strchrnul_power7
+						    : __strchrnul_ppc);
 
-libc_hidden_def (__strchrnul)
-weak_alias (__strchrnul, strchrnul)
+libc_hidden_def (__strchrnul) weak_alias (__strchrnul, strchrnul)
 #else
-#include <string/strchrnul.c>
+#  include <string/strchrnul.c>
 #endif

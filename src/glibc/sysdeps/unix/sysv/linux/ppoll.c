@@ -23,7 +23,7 @@
 
 int
 __ppoll64 (struct pollfd *fds, nfds_t nfds, const struct __timespec64 *timeout,
-           const sigset_t *sigmask)
+	   const sigset_t *sigmask)
 {
   /* The Linux kernel can in some situations update the timeout value.
      We do not want that so use a local variable.  */
@@ -35,7 +35,7 @@ __ppoll64 (struct pollfd *fds, nfds_t nfds, const struct __timespec64 *timeout,
     }
 
 #ifndef __NR_ppoll_time64
-# define __NR_ppoll_time64 __NR_ppoll
+#  define __NR_ppoll_time64 __NR_ppoll
 #endif
 
 #ifdef __ASSUME_TIME64_SYSCALLS
@@ -66,9 +66,8 @@ __ppoll64 (struct pollfd *fds, nfds_t nfds, const struct __timespec64 *timeout,
 #if __TIMESIZE != 64
 libc_hidden_def (__ppoll64)
 
-int
-ppoll (struct pollfd *fds, nfds_t nfds, const struct timespec *timeout,
-         const sigset_t *sigmask)
+    int ppoll (struct pollfd *fds, nfds_t nfds, const struct timespec *timeout,
+	       const sigset_t *sigmask)
 {
   struct __timespec64 ts64;
   if (timeout)

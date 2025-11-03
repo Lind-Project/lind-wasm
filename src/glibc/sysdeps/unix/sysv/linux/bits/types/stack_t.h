@@ -17,17 +17,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef __stack_t_defined
-#define __stack_t_defined 1
+#  define __stack_t_defined 1
 
-#define __need_size_t
-#include <stddef.h>
+#  define __need_size_t
+#  include <stddef.h>
 
 /* Structure describing a signal stack.  */
 typedef struct
-  {
-    void *ss_sp;
-    int ss_flags;
-    size_t ss_size;
-  } stack_t;
+{
+  void *ss_sp;
+  int ss_flags;
+  size_t ss_size;
+} stack_t;
 
 #endif

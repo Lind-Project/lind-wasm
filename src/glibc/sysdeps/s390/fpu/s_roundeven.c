@@ -18,9 +18,9 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifdef HAVE_S390_MIN_Z196_ZARCH_ASM_SUPPORT
-# define NO_MATH_REDIRECT
-# include <math.h>
-# include <libm-alias-double.h>
+#  define NO_MATH_REDIRECT
+#  include <math.h>
+#  include <libm-alias-double.h>
 
 double
 __roundeven (double x)
@@ -29,11 +29,11 @@ __roundeven (double x)
   /* The z196 zarch "load fp integer" (fidbra) instruction is rounding
      x to the nearest integer with "ties to even" rounding mode
      (M3-field: 4) where inexact exceptions are suppressed (M4-field: 4).  */
-  __asm__ ("fidbra %0,4,%1,4" : "=f" (y) : "f" (x));
+  __asm__ ("fidbra %0,4,%1,4" : "=f"(y) : "f"(x));
   return y;
 }
 libm_alias_double (__roundeven, roundeven)
 
 #else
-# include <sysdeps/ieee754/dbl-64/s_roundeven.c>
+#  include <sysdeps/ieee754/dbl-64/s_roundeven.c>
 #endif

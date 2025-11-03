@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* The type of the return value of fixup/profile_fixup.  */
-#define DL_FIXUP_VALUE_TYPE ElfW(Addr)
+#define DL_FIXUP_VALUE_TYPE ElfW (Addr)
 /* Construct a value of type DL_FIXUP_VALUE_TYPE from a code address
    and a link map.  */
 #define DL_FIXUP_MAKE_VALUE(map, addr) (addr)
@@ -27,5 +27,5 @@
 #define DL_FIXUP_VALUE_ADDR(value) (value)
 #define DL_FIXUP_ADDR_VALUE(addr) (addr)
 #define DL_FIXUP_BINDNOW_ADDR_VALUE(addr) (addr)
-#define DL_FIXUP_BINDNOW_RELOC(l, reloc, value, new_value, st_value, lazy) \
+#define DL_FIXUP_BINDNOW_RELOC(l, reloc, value, new_value, st_value, lazy)    \
   (*value) = st_value;

@@ -10,14 +10,11 @@
 
 #include <pthreadP.h>
 
-
-
 static void prepare (void);
 #define PREPARE(argc, argv) prepare ()
 static int do_test (void);
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"
-
 
 static int fd;
 #define N 100
@@ -30,17 +27,13 @@ prepare (void)
     exit (1);
 }
 
-
 #define THESIGNAL SIGKILL
 #define ROUNDS 5
 #define THREADS 9
 
-
 static const struct timespec before = { 0, 0 };
 
-
 static pthread_mutex_t *map;
-
 
 static void *
 tf (void *arg)
@@ -64,8 +57,8 @@ tf (void *arg)
 	      e = pthread_mutex_lock (&map[r]);
 	      if (e != 0)
 		{
-		  printf ("mutex_lock of %d in thread %ld failed with %d\n",
-			  r, nr, e);
+		  printf ("mutex_lock of %d in thread %ld failed with %d\n", r,
+			  nr, e);
 		  exit (1);
 		}
 	      state[r] = 1;
@@ -102,8 +95,8 @@ mutex_timedlock of %d in thread %ld failed with %d\n",
 	  int e = pthread_mutex_unlock (&map[r]);
 	  if (e != 0)
 	    {
-	      printf ("mutex_unlock of %d in thread %ld failed with %d\n",
-		      r, nr, e);
+	      printf ("mutex_unlock of %d in thread %ld failed with %d\n", r,
+		      nr, e);
 	      exit (1);
 	    }
 
@@ -111,7 +104,6 @@ mutex_timedlock of %d in thread %ld failed with %d\n",
 	}
     }
 }
-
 
 static void
 child (int round)
@@ -138,7 +130,6 @@ child (int round)
   /* We better never get here.  */
   abort ();
 }
-
 
 static int
 do_test (void)
@@ -224,8 +215,8 @@ do_test (void)
 	}
       if (WTERMSIG (status) != THESIGNAL)
 	{
-	  printf ("child did not die of signal %d in round %d\n",
-		  THESIGNAL, round);
+	  printf ("child did not die of signal %d in round %d\n", THESIGNAL,
+		  round);
 	  return 1;
 	}
 
@@ -251,10 +242,10 @@ do_test (void)
 	  int e = pthread_mutex_destroy (&map[n]);
 	  if (e != 0)
 	    {
-	      printf ("mutex_destroy %d in round %d failed with %d\n",
-		      n + 1, round, e);
+	      printf ("mutex_destroy %d in round %d failed with %d\n", n + 1,
+		      round, e);
 #ifdef __PTHREAD_NPTL
-	      printf("nusers = %d\n", (int) map[n].__data.__nusers);
+	      printf ("nusers = %d\n", (int) map[n].__data.__nusers);
 #endif
 	      return 1;
 	    }

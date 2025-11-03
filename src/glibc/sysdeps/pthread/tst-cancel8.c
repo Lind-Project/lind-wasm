@@ -20,18 +20,15 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 static pthread_barrier_t bar;
 
 static int global;
-
 
 static void
 cleanup (void *arg)
 {
   global = 1;
 }
-
 
 static void *
 tf (void *arg)
@@ -53,7 +50,7 @@ tf (void *arg)
 
   /* Synchronize with the main thread.  */
   int r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("tf: first barrier_wait failed");
       exit (1);
@@ -62,7 +59,7 @@ tf (void *arg)
   /* And again.  Once this is done the main thread should have canceled
      this thread.  */
   r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("tf: second barrier_wait failed");
       exit (1);
@@ -77,7 +74,6 @@ tf (void *arg)
   /* This call should never return.  */
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -96,7 +92,7 @@ do_test (void)
     }
 
   int r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("first barrier_wait failed");
       exit (1);
@@ -109,7 +105,7 @@ do_test (void)
     }
 
   r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("second barrier_wait failed");
       exit (1);

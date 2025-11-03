@@ -24,10 +24,10 @@ extern __typeof (_wordcopy_fwd_dest_aligned) _wordcopy_fwd_dest_aligned_ppc;
 extern __typeof (_wordcopy_bwd_aligned) _wordcopy_bwd_aligned_ppc;
 extern __typeof (_wordcopy_bwd_dest_aligned) _wordcopy_bwd_dest_aligned_ppc;
 
-#define _wordcopy_fwd_aligned       _wordcopy_fwd_aligned_ppc
-#define _wordcopy_fwd_dest_aligned  _wordcopy_fwd_dest_aligned_ppc
-#define _wordcopy_bwd_aligned       _wordcopy_bwd_aligned_ppc
-#define _wordcopy_bwd_dest_aligned  _wordcopy_bwd_dest_aligned_ppc
+#define _wordcopy_fwd_aligned _wordcopy_fwd_aligned_ppc
+#define _wordcopy_fwd_dest_aligned _wordcopy_fwd_dest_aligned_ppc
+#define _wordcopy_bwd_aligned _wordcopy_bwd_aligned_ppc
+#define _wordcopy_bwd_dest_aligned _wordcopy_bwd_dest_aligned_ppc
 
 extern __typeof (memcpy) __memcpy_ppc;
 #define memcpy __memcpy_ppc
@@ -36,9 +36,9 @@ extern __typeof (memmove) __memmove_ppc;
 #define MEMMOVE __memmove_ppc
 
 #if defined SHARED
-# undef libc_hidden_builtin_def
-# define libc_hidden_builtin_def(name)  \
-  __hidden_ver1 (__memmove_ppc, __GI_memmove, __memmove_ppc);
+#  undef libc_hidden_builtin_def
+#  define libc_hidden_builtin_def(name)                                       \
+    __hidden_ver1 (__memmove_ppc, __GI_memmove, __memmove_ppc);
 #endif
 
 #include <string/memmove.c>

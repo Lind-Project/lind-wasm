@@ -43,8 +43,8 @@
 static pthread_rwlock_t lock;
 static int done = 0;
 
-static void*
-tf (void* arg)
+static void *
+tf (void *arg)
 {
   while (atomic_load_relaxed (&done) == 0)
     {
@@ -63,21 +63,18 @@ tf (void* arg)
 	      xpthread_rwlock_wrlock (&lock);
 	      xpthread_rwlock_unlock (&lock);
 	      wcnt--;
-	  }
+	    }
 	  if (rcnt)
 	    {
 	      xpthread_rwlock_rdlock (&lock);
 	      xpthread_rwlock_unlock (&lock);
 	      rcnt--;
-	  }
+	    }
 	}
       while ((atomic_load_relaxed (&done) == 0) && (rcnt + wcnt > 0));
-
     }
-    return NULL;
+  return NULL;
 }
-
-
 
 static int
 do_test (void)

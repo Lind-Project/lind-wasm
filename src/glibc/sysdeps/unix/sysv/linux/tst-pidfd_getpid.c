@@ -52,7 +52,7 @@ do_test (void)
 	   file descriptor.  */
 	pid_t child1 = xfork ();
 	TEST_VERIFY_EXIT (child1 >= 0);
-        if (child1 == 0)
+	if (child1 == 0)
 	  _exit (0);
 	int child1_pidfd = pidfd_open (child1, 0);
 	TEST_VERIFY_EXIT (child1_pidfd != -1);
@@ -61,8 +61,8 @@ do_test (void)
 	  {
 	    /* Older kernels may not support all the options, or security
 	       policy may block this call.  */
-	    if (errno == EINVAL || errno == EPERM
-	        || errno == ENOSPC || errno == EACCES)
+	    if (errno == EINVAL || errno == EPERM || errno == ENOSPC
+		|| errno == EACCES)
 	      exit (EXIT_UNSUPPORTED);
 	    FAIL_EXIT1 ("unshare user/fs/pid failed: %m");
 	  }
@@ -72,7 +72,7 @@ do_test (void)
 	    /* This happens if we're trying to create a nested container,
 	       like if the build is running under podman, and we lack
 	       priviledges.  */
-	    if (errno  == EPERM)
+	    if (errno == EPERM)
 	      _exit (EXIT_UNSUPPORTED);
 	    else
 	      _exit (EXIT_FAILURE);
@@ -104,18 +104,18 @@ do_test (void)
 
 	_exit (EXIT_SUCCESS);
       }
-      int child0_pidfd = pidfd_open (child0, 0);
-      TEST_VERIFY_EXIT (child0_pidfd != -1);
+    int child0_pidfd = pidfd_open (child0, 0);
+    TEST_VERIFY_EXIT (child0_pidfd != -1);
 
-      pid_t child0pid = pidfd_getpid (child0_pidfd);
+    pid_t child0pid = pidfd_getpid (child0_pidfd);
 
-      siginfo_t info;
-      TEST_COMPARE (waitid (P_PIDFD, child0_pidfd, &info, WEXITED), 0);
-      if (info.si_status == EXIT_UNSUPPORTED)
-	FAIL_UNSUPPORTED ("unable to unshare user/fs/pid");
-      TEST_COMPARE (info.si_status, 0);
-      TEST_COMPARE (info.si_code, CLD_EXITED);
-      TEST_COMPARE (info.si_pid, child0pid);
+    siginfo_t info;
+    TEST_COMPARE (waitid (P_PIDFD, child0_pidfd, &info, WEXITED), 0);
+    if (info.si_status == EXIT_UNSUPPORTED)
+      FAIL_UNSUPPORTED ("unable to unshare user/fs/pid");
+    TEST_COMPARE (info.si_status, 0);
+    TEST_COMPARE (info.si_code, CLD_EXITED);
+    TEST_COMPARE (info.si_pid, child0pid);
   }
 
   return 0;

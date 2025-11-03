@@ -31,8 +31,8 @@
 static void
 do_test_clock (clockid_t clockid)
 {
-  const clockid_t clockid_for_get =
-    clockid == CLOCK_USE_TIMEDWAIT ? CLOCK_REALTIME : clockid;
+  const clockid_t clockid_for_get
+      = clockid == CLOCK_USE_TIMEDWAIT ? CLOCK_REALTIME : clockid;
   sem_t s;
   struct timespec ts;
 
@@ -41,17 +41,19 @@ do_test_clock (clockid_t clockid)
 
   /* We wait for half a second.  */
   xclock_gettime (clockid_for_get, &ts);
-  ts = timespec_add (ts, make_timespec (0, TIMESPEC_HZ/2));
+  ts = timespec_add (ts, make_timespec (0, TIMESPEC_HZ / 2));
 
   errno = 0;
   TEST_COMPARE (TEMP_FAILURE_RETRY ((clockid == CLOCK_USE_TIMEDWAIT)
-                                    ? sem_timedwait (&s, &ts)
-                                    : sem_clockwait (&s, clockid, &ts)), -1);
+					? sem_timedwait (&s, &ts)
+					: sem_clockwait (&s, clockid, &ts)),
+		-1);
   TEST_COMPARE (errno, ETIMEDOUT);
   TEST_TIMESPEC_NOW_OR_AFTER (clockid_for_get, ts);
 }
 
-static int do_test (void)
+static int
+do_test (void)
 {
   do_test_clock (CLOCK_USE_TIMEDWAIT);
   do_test_clock (CLOCK_REALTIME);

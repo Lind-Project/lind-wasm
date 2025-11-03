@@ -27,54 +27,63 @@
 #include <math_ldbl_opt.h>
 #include <float.h>
 
-float __nldbl_nexttowardf(float x, double y);
+float __nldbl_nexttowardf (float x, double y);
 
-float __nldbl_nexttowardf(float x, double y)
+float
+__nldbl_nexttowardf (float x, double y)
 {
-	int32_t hx,hy,ix,iy;
-	uint32_t ly;
+  int32_t hx, hy, ix, iy;
+  uint32_t ly;
 
-	GET_FLOAT_WORD(hx,x);
-	EXTRACT_WORDS(hy,ly,y);
-	ix = hx&0x7fffffff;		/* |x| */
-	iy = hy&0x7fffffff;		/* |y| */
+  GET_FLOAT_WORD (hx, x);
+  EXTRACT_WORDS (hy, ly, y);
+  ix = hx & 0x7fffffff; /* |x| */
+  iy = hy & 0x7fffffff; /* |y| */
 
-	if((ix>0x7f800000) ||				   /* x is nan */
-	   ((iy>=0x7ff00000)&&((iy-0x7ff00000)|ly)!=0))    /* y is nan */
-	   return x+y;
-	if((double) x==y) return y;		/* x=y, return y */
-	if(ix==0) {				/* x == 0 */
-	    float u;
-	    SET_FLOAT_WORD(x,(uint32_t)(hy&0x80000000)|1);/* return +-minsub*/
-	    u = math_opt_barrier (x);
-	    u = u * u;
-	    math_force_eval (u);		/* raise underflow flag */
-	    return x;
-	}
-	if(hx>=0) {				/* x > 0 */
-	    if(x > y)				/* x -= ulp */
-		hx -= 1;
-	    else				/* x < y, x += ulp */
-		hx += 1;
-	} else {				/* x < 0 */
-	    if(x < y)				/* x -= ulp */
-		hx -= 1;
-	    else				/* x > y, x += ulp */
-		hx += 1;
-	}
-	hy = hx&0x7f800000;
-	if(hy>=0x7f800000) {
-	  float u = x+x;			/* overflow  */
-	  math_force_eval (u);
-	  __set_errno (ERANGE);
-	}
-	if(hy<0x00800000) {
-	    float u = x*x;			/* underflow */
-	    math_force_eval (u);		/* raise underflow flag */
-	    __set_errno (ERANGE);
-	}
-	SET_FLOAT_WORD(x,hx);
-	return x;
+  if ((ix > 0x7f800000) ||				     /* x is nan */
+      ((iy >= 0x7ff00000) && ((iy - 0x7ff00000) | ly) != 0)) /* y is nan */
+    return x + y;
+  if ((double) x == y)
+    return y; /* x=y, return y */
+  if (ix == 0)
+    { /* x == 0 */
+      float u;
+      SET_FLOAT_WORD (x,
+		      (uint32_t) (hy & 0x80000000) | 1); /* return +-minsub*/
+      u = math_opt_barrier (x);
+      u = u * u;
+      math_force_eval (u); /* raise underflow flag */
+      return x;
+    }
+  if (hx >= 0)
+    {		 /* x > 0 */
+      if (x > y) /* x -= ulp */
+	hx -= 1;
+      else /* x < y, x += ulp */
+	hx += 1;
+    }
+  else
+    {		 /* x < 0 */
+      if (x < y) /* x -= ulp */
+	hx -= 1;
+      else /* x > y, x += ulp */
+	hx += 1;
+    }
+  hy = hx & 0x7f800000;
+  if (hy >= 0x7f800000)
+    {
+      float u = x + x; /* overflow  */
+      math_force_eval (u);
+      __set_errno (ERANGE);
+    }
+  if (hy < 0x00800000)
+    {
+      float u = x * x;	   /* underflow */
+      math_force_eval (u); /* raise underflow flag */
+      __set_errno (ERANGE);
+    }
+  SET_FLOAT_WORD (x, hx);
+  return x;
 }
 
 #if LONG_DOUBLE_COMPAT(libm, GLIBC_2_1)

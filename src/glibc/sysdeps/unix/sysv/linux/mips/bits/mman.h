@@ -17,28 +17,29 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _SYS_MMAN_H
-# error "Never use <bits/mman.h> directly; include <sys/mman.h> instead."
+#  error "Never use <bits/mman.h> directly; include <sys/mman.h> instead."
 #endif
 
 /* The following definitions basically come from the kernel headers.
    But the kernel header is not namespace clean.  */
 
 /* These are Linux-specific.  */
-#define MAP_NORESERVE	0x0400		/* don't check for reservations */
-#define MAP_GROWSDOWN	0x1000		/* stack-like segment */
-#define MAP_DENYWRITE	0x2000		/* ETXTBSY */
-#define MAP_EXECUTABLE	0x4000		/* mark it as an executable */
-#define MAP_LOCKED	0x8000		/* pages are locked */
-#define MAP_POPULATE   0x10000         /* populate (prefault) pagetables */
-#define MAP_NONBLOCK   0x20000         /* do not block on IO */
-#define MAP_STACK	0x40000		/* Allocation is for a stack.  */
-#define MAP_HUGETLB	0x80000		/* Create huge page mapping.  */
-#define MAP_FIXED_NOREPLACE 0x100000	/* MAP_FIXED but do not unmap
-					   underlying mapping.  */
+#define MAP_NORESERVE 0x0400  /* don't check for reservations */
+#define MAP_GROWSDOWN 0x1000  /* stack-like segment */
+#define MAP_DENYWRITE 0x2000  /* ETXTBSY */
+#define MAP_EXECUTABLE 0x4000 /* mark it as an executable */
+#define MAP_LOCKED 0x8000     /* pages are locked */
+#define MAP_POPULATE 0x10000  /* populate (prefault) pagetables */
+#define MAP_NONBLOCK 0x20000  /* do not block on IO */
+#define MAP_STACK 0x40000     /* Allocation is for a stack.  */
+#define MAP_HUGETLB 0x80000   /* Create huge page mapping.  */
+#define MAP_FIXED_NOREPLACE                                                   \
+  0x100000 /* MAP_FIXED but do not unmap                                      \
+	      underlying mapping.  */
 
 #define __MAP_ANONYMOUS 0x0800
 
 /* Include generic Linux declarations.  */
 #include <bits/mman-linux.h>
 
-#define MAP_RENAME	MAP_ANONYMOUS
+#define MAP_RENAME MAP_ANONYMOUS

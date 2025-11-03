@@ -25,7 +25,7 @@ static inline int
 get_rounding_mode (void)
 {
   int rm;
-  asm volatile ("frrm %0" : "=r" (rm));
+  asm volatile ("frrm %0" : "=r"(rm));
   return rm;
 }
 

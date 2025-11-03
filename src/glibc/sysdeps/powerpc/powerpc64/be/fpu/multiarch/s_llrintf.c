@@ -35,13 +35,9 @@ extern __typeof (__llrintf) __llrint_power8 attribute_hidden;
    of "double" type.  Both l[l]rint and l[l]rintf return long type.  So these
    functions have identical signatures and functionality, and can use a
    single implementation.  */
-libc_ifunc (__llrintf,
-	    (hwcap2 & PPC_FEATURE2_ARCH_2_07)
-	    ? __llrint_power8 :
-	    (hwcap & PPC_FEATURE_POWER6_EXT)
-	    ? __llrint_power6x
-	    : __llrint_ppc64);
+libc_ifunc (__llrintf, (hwcap2 & PPC_FEATURE2_ARCH_2_07) ? __llrint_power8
+		       : (hwcap &PPC_FEATURE_POWER6_EXT) ? __llrint_power6x
+							 : __llrint_ppc64);
 
-libm_alias_float (__llrint, llrint)
-strong_alias (__llrintf, __lrintf)
-libm_alias_float (__lrint, lrint)
+libm_alias_float (__llrint, llrint) strong_alias (__llrintf, __lrintf)
+    libm_alias_float (__lrint, lrint)

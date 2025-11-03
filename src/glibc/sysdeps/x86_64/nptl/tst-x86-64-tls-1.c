@@ -28,8 +28,7 @@ do_test (void)
   THREAD_SETMEM (THREAD_SELF, header.ssp_base, (1ULL << 57) - 1);
   ssp_base = THREAD_GETMEM (THREAD_SELF, header.ssp_base);
   if (ssp_base != ((1ULL << 57) - 1))
-    FAIL_EXIT1 ("THREAD_SETMEM: 0x%llx != 0x%llx",
-		ssp_base, (1ULL << 57) - 1);
+    FAIL_EXIT1 ("THREAD_SETMEM: 0x%llx != 0x%llx", ssp_base, (1ULL << 57) - 1);
 
   THREAD_SETMEM (THREAD_SELF, header.ssp_base, -1ULL);
   ssp_base = THREAD_GETMEM (THREAD_SELF, header.ssp_base);
@@ -46,15 +45,15 @@ do_test (void)
 		    (struct pthread_key_data *) value);
   specific = THREAD_GETMEM_NC (THREAD_SELF, specific, 1);
   if (specific != (struct pthread_key_data *) value)
-    FAIL_EXIT1 ("THREAD_GETMEM_NC: %p != %p",
-		specific, (struct pthread_key_data *) value);
+    FAIL_EXIT1 ("THREAD_GETMEM_NC: %p != %p", specific,
+		(struct pthread_key_data *) value);
 
   THREAD_SETMEM_NC (THREAD_SELF, specific, 1,
 		    (struct pthread_key_data *) -1UL);
   specific = THREAD_GETMEM_NC (THREAD_SELF, specific, 1);
   if (specific != (struct pthread_key_data *) -1UL)
-    FAIL_EXIT1 ("THREAD_GETMEM_NC: %p != %p",
-		specific, (struct pthread_key_data *) -1UL);
+    FAIL_EXIT1 ("THREAD_GETMEM_NC: %p != %p", specific,
+		(struct pthread_key_data *) -1UL);
 
   THREAD_SETMEM_NC (THREAD_SELF, specific, 1, saved_specific);
 #endif

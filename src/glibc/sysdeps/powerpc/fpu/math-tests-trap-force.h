@@ -18,10 +18,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef POWERPC_FPU_MATH_TESTS_TRAP_FORCE_H
-#define POWERPC_FPU_MATH_TESTS_TRAP_FORCE_H 1
+#  define POWERPC_FPU_MATH_TESTS_TRAP_FORCE_H 1
 
 /* Setting exception flags in FPSCR results in enabled traps for those
    exceptions being taken.  */
-#define EXCEPTION_SET_FORCES_TRAP 1
+#  define EXCEPTION_SET_FORCES_TRAP 1
 
 #endif /* math-tests-trap-force.h.  */

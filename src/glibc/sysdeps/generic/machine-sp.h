@@ -22,7 +22,7 @@
 /* Return the current stack pointer.  */
 
 #ifndef _EXTERN_INLINE
-#define _EXTERN_INLINE __extern_inline
+#  define _EXTERN_INLINE __extern_inline
 #endif
 
 _EXTERN_INLINE void *
@@ -32,4 +32,4 @@ __thread_stack_pointer (void)
   return __sp__;
 }
 
-#endif	/* machine-sp.h */
+#endif /* machine-sp.h */

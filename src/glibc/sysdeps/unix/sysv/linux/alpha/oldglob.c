@@ -21,31 +21,28 @@
 #include <glob.h>
 #include <shlib-compat.h>
 
-#if SHLIB_COMPAT (libc, GLIBC_2_0, GLIBC_2_1)
+#if SHLIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_1)
 
 /* This is the old structure.  The difference is that the gl_pathc and
    gl_offs elements have type `int'.  */
 typedef struct
-  {
-    int gl_pathc;		/* Count of paths matched by the pattern.  */
-    char **gl_pathv;		/* List of matched pathnames.  */
-    int gl_offs;		/* Slots to reserve in `gl_pathv'.  */
-    int gl_flags;		/* Set to FLAGS, maybe | GLOB_MAGCHAR.  */
+{
+  int gl_pathc;	   /* Count of paths matched by the pattern.  */
+  char **gl_pathv; /* List of matched pathnames.  */
+  int gl_offs;	   /* Slots to reserve in `gl_pathv'.  */
+  int gl_flags;	   /* Set to FLAGS, maybe | GLOB_MAGCHAR.  */
 
-    /* If the GLOB_ALTDIRFUNC flag is set, the following functions
-       are used instead of the normal file access functions.  */
-    void (*gl_closedir) (void *);
-    struct dirent *(*gl_readdir) (void *);
-    void *(*gl_opendir) (const char *);
-    int (*gl_lstat) (const char *, struct stat *);
-    int (*gl_stat) (const char *, struct stat *);
-  } old_glob_t;
+  /* If the GLOB_ALTDIRFUNC flag is set, the following functions
+     are used instead of the normal file access functions.  */
+  void (*gl_closedir) (void *);
+  struct dirent *(*gl_readdir) (void *);
+  void *(*gl_opendir) (const char *);
+  int (*gl_lstat) (const char *, struct stat *);
+  int (*gl_stat) (const char *, struct stat *);
+} old_glob_t;
 
-
-int
-attribute_compat_text_section
-__old_glob (const char *pattern, int flags,
-	    int (*errfunc) (const char *, int),
+int attribute_compat_text_section
+__old_glob (const char *pattern, int flags, int (*errfunc) (const char *, int),
 	    old_glob_t *pglob)
 {
   glob_t correct;
@@ -81,10 +78,8 @@ __old_glob (const char *pattern, int flags,
 }
 compat_symbol (libc, __old_glob, glob, GLIBC_2_0);
 
-
 /* Free storage allocated in PGLOB by a previous `glob' call.  */
-void
-attribute_compat_text_section
+void attribute_compat_text_section
 __old_globfree (old_glob_t *pglob)
 {
   glob_t correct;

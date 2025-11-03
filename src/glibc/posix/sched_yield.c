@@ -18,7 +18,6 @@
 #include <errno.h>
 #include <sched.h>
 
-
 /* Yield the processor.  */
 int
 __sched_yield (void)
@@ -26,7 +25,6 @@ __sched_yield (void)
   __set_errno (ENOSYS);
   return -1;
 }
-stub_warning (sched_yield)
-libc_hidden_def (__sched_yield)
+stub_warning (sched_yield) libc_hidden_def (__sched_yield)
 
-weak_alias (__sched_yield, sched_yield)
+    weak_alias (__sched_yield, sched_yield)

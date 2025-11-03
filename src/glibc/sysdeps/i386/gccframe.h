@@ -18,10 +18,10 @@
 
 #define DWARF_FRAME_REGISTERS 17
 
-#define CRT_GET_RFIB_DATA(BASE)		\
-  {					\
-    register void *__ebx __asm__("ebx");\
-    BASE = __ebx;			\
+#define CRT_GET_RFIB_DATA(BASE)                                               \
+  {                                                                           \
+    register void *__ebx __asm__ ("ebx");                                     \
+    BASE = __ebx;                                                             \
   }
 
 #include <sysdeps/generic/gccframe.h>

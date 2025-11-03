@@ -16,29 +16,29 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _COMPLEX_H
-# error "Never use <bits/mathdef.h> directly; include <complex.h> instead"
+#  error "Never use <bits/mathdef.h> directly; include <complex.h> instead"
 #endif
 
 #if defined _COMPLEX_H && !defined _COMPLEX_H_MATHDEF
-# define _COMPLEX_H_MATHDEF 1
-# if defined(__GNUC__) && !__GNUC_PREREQ(3,4)
+#  define _COMPLEX_H_MATHDEF 1
+#  if defined(__GNUC__) && !__GNUC_PREREQ(3, 4)
 
 /* Due to an ABI change, we need to remap the complex float symbols.  */
-#  define _Mdouble_		float
-#  define __MATHCALL(function, args) \
-    __MATHDECL (_Complex float, function, args)
-#  define __MATHDECL(type, function, args) \
-    __MATHDECL_1(type, function##f, args, __c1_##function##f); \
-    __MATHDECL_1(type, __##function##f, args, __c1_##function##f)
-#  define __MATHDECL_1(type, function, args, alias) \
-    extern type function args __asm__(#alias) __THROW
+#    define _Mdouble_ float
+#    define __MATHCALL(function, args)                                        \
+      __MATHDECL (_Complex float, function, args)
+#    define __MATHDECL(type, function, args)                                  \
+      __MATHDECL_1 (type, function##f, args, __c1_##function##f);             \
+      __MATHDECL_1 (type, __##function##f, args, __c1_##function##f)
+#    define __MATHDECL_1(type, function, args, alias)                         \
+      extern type function args __asm__ (#alias) __THROW
 
-#  include <bits/cmathcalls.h>
+#    include <bits/cmathcalls.h>
 
-#  undef _Mdouble_
-#  undef __MATHCALL
-#  undef __MATHDECL
-#  undef __MATHDECL_1
+#    undef _Mdouble_
+#    undef __MATHCALL
+#    undef __MATHDECL
+#    undef __MATHDECL_1
 
-# endif /* GNUC before 3.4 */
-#endif /* COMPLEX_H */
+#  endif /* GNUC before 3.4 */
+#endif	 /* COMPLEX_H */

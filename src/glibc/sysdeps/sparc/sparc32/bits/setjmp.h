@@ -18,9 +18,9 @@
 /* Define the machine-dependent type `jmp_buf'.  SPARC version.  */
 
 #ifndef _SETJMP_H
-# error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
+#  error "Never include <bits/setjmp.h> directly; use <setjmp.h> instead."
 #endif
 
-#ifndef	_ASM
+#ifndef _ASM
 typedef int __jmp_buf[3];
 #endif

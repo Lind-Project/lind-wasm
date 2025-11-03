@@ -20,7 +20,6 @@
 
 #include <math_private.h>
 
-
 int
 __fpclassifyl (long double x)
 {

@@ -32,10 +32,10 @@
 #include <math-underflow.h>
 #include <libm-alias-finite.h>
 
-#define SCALE      L(0x1p-8303)
-#define LARGE_VAL  L(0x1.6a09e667f3bcc908b2fb1366ea95p+8191)
-#define TINY_VAL   L(0x1p-8191)
-#define EPS        L(0x1p-114)
+#define SCALE L (0x1p-8303)
+#define LARGE_VAL L (0x1.6a09e667f3bcc908b2fb1366ea95p+8191)
+#define TINY_VAL L (0x1p-8191)
+#define EPS L (0x1p-114)
 
 /* Hypot kernel. The inputs must be adjusted so that ax >= ay >= 0
    and squaring ax, ay and (ax - ay) does not overflow or underflow.  */
@@ -44,30 +44,29 @@ kernel (_Float128 ax, _Float128 ay)
 {
   _Float128 t1, t2;
   _Float128 h = sqrtl (ax * ax + ay * ay);
-  if (h <= L(2.0) * ay)
+  if (h <= L (2.0) * ay)
     {
       _Float128 delta = h - ay;
-      t1 = ax * (L(2.0) * delta - ax);
-      t2 = (delta - L(2.0) * (ax - ay)) * delta;
+      t1 = ax * (L (2.0) * delta - ax);
+      t2 = (delta - L (2.0) * (ax - ay)) * delta;
     }
   else
     {
       _Float128 delta = h - ax;
-      t1 = L(2.0) * delta * (ax - L(2.0) * ay);
-      t2 = (L(4.0) * delta - ay) * ay + delta * delta;
+      t1 = L (2.0) * delta * (ax - L (2.0) * ay);
+      t2 = (L (4.0) * delta - ay) * ay + delta * delta;
     }
 
-  h -= (t1 + t2) / (L(2.0) * h);
+  h -= (t1 + t2) / (L (2.0) * h);
   return h;
 }
 
 _Float128
-__ieee754_hypotl(_Float128 x, _Float128 y)
+__ieee754_hypotl (_Float128 x, _Float128 y)
 {
-  if (!isfinite(x) || !isfinite(y))
+  if (!isfinite (x) || !isfinite (y))
     {
-      if ((isinf (x) || isinf (y))
-	  && !issignaling (x) && !issignaling (y))
+      if ((isinf (x) || isinf (y)) && !issignaling (x) && !issignaling (y))
 	return INFINITY;
       return x + y;
     }

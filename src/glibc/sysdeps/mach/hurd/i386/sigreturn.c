@@ -51,7 +51,7 @@ __sigreturn2 (int *usp, struct sigcontext *scp)
   THREAD_SETMEM (THREAD_SELF, reply_port, MACH_PORT_DEAD);
   if (__glibc_likely (MACH_PORT_VALID (reply_port)))
     (void) __mach_port_mod_refs (__mach_task_self (), reply_port,
-                                 MACH_PORT_RIGHT_RECEIVE, -1);
+				 MACH_PORT_RIGHT_RECEIVE, -1);
   THREAD_SETMEM (THREAD_SELF, reply_port, scp->sc_reply_port);
 
   sp = usp;
@@ -60,10 +60,10 @@ __sigreturn2 (int *usp, struct sigcontext *scp)
      so we can pop them easily.  */
 
   /* Pop the segment registers (except %cs and %ss, done last).  */
-  A (popl %gs);
-  A (popl %fs);
-  A (popl %es);
-  A (popl %ds);
+  A (popl % gs);
+  A (popl % fs);
+  A (popl % es);
+  A (popl % ds);
   /* Pop the general registers.  */
   A (popa);
   /* Pop the processor flags.  */
@@ -121,7 +121,7 @@ __sigreturn (struct sigcontext *scp)
   if (scp->sc_fpused)
     /* Restore the FPU state.  Mach conveniently stores the state
        in the format the i387 `frstor' instruction uses to restore it.  */
-    asm volatile ("frstor %0" : : "m" (scp->sc_fpsave));
+    asm volatile ("frstor %0" : : "m"(scp->sc_fpsave));
 
   {
     /* There are convenient instructions to pop state off the stack, so we

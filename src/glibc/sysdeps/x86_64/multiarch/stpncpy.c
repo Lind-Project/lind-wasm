@@ -18,21 +18,21 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Define multiple versions only for the definition in libc.  */
-#if IS_IN (libc)
-# define stpncpy __redirect_stpncpy
-# define __stpncpy __redirect___stpncpy
-# include <string.h>
-# undef stpncpy
-# undef __stpncpy
+#if IS_IN(libc)
+#  define stpncpy __redirect_stpncpy
+#  define __stpncpy __redirect___stpncpy
+#  include <string.h>
+#  undef stpncpy
+#  undef __stpncpy
 
-# define SYMBOL_NAME stpncpy
-# include "ifunc-strncpy.h"
+#  define SYMBOL_NAME stpncpy
+#  include "ifunc-strncpy.h"
 
 libc_ifunc_redirected (__redirect_stpncpy, __stpncpy, IFUNC_SELECTOR ());
 
 weak_alias (__stpncpy, stpncpy)
-# ifdef SHARED
-__hidden_ver1 (__stpncpy, __GI___stpncpy, __redirect___stpncpy)
-  __attribute__ ((visibility ("hidden")));
-# endif
+#  ifdef SHARED
+    __hidden_ver1 (__stpncpy, __GI___stpncpy, __redirect___stpncpy)
+	__attribute__ ((visibility ("hidden")));
+#  endif
 #endif

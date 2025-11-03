@@ -53,8 +53,7 @@ __pthread_setspecific (pthread_key_t key, const void *value)
 	}
       else
 	{
-	  new = realloc (self->thread_specifics,
-			 newsize * sizeof (new[0]));
+	  new = realloc (self->thread_specifics, newsize * sizeof (new[0]));
 	}
       if (new == NULL)
 	return ENOMEM;

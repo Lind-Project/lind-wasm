@@ -49,7 +49,7 @@ __pthread_mutexattr_setprioceiling (pthread_mutexattr_t *attr, int prioceiling)
 versioned_symbol (libc, __pthread_mutexattr_setprioceiling,
 		  pthread_mutexattr_setprioceiling, GLIBC_2_34);
 
-#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_4, GLIBC_2_34)
+#if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_4, GLIBC_2_34)
 compat_symbol (libpthread, __pthread_mutexattr_setprioceiling,
-               pthread_mutexattr_setprioceiling, GLIBC_2_4);
+	       pthread_mutexattr_setprioceiling, GLIBC_2_4);
 #endif

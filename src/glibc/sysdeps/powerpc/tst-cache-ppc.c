@@ -18,12 +18,12 @@
 
 #include <errno.h>
 
-int test_cache(int *);
+int test_cache (int *);
 
 static int
 do_test (void)
 {
-  return test_cache(&errno);
+  return test_cache (&errno);
 }
 
 #include <support/test-driver.c>

@@ -24,17 +24,15 @@
 #include <math_private.h>
 #include <libm-alias-ldouble.h>
 
-static const long double two63[2] =
-{
+static const long double two63[2] = {
   9.223372036854775808000000e+18, /* 0x403E, 0x00000000, 0x00000000 */
- -9.223372036854775808000000e+18  /* 0xC03E, 0x00000000, 0x00000000 */
+  -9.223372036854775808000000e+18 /* 0xC03E, 0x00000000, 0x00000000 */
 };
-
 
 long int
 __lrintl (long double x)
 {
-  int32_t se,j0;
+  int32_t se, j0;
   uint32_t i0, i1;
   long int result;
   long double w;
@@ -50,8 +48,7 @@ __lrintl (long double x)
     {
 #if defined FE_INVALID || defined FE_INEXACT
       /* X < LONG_MAX + 1 implied by J0 < 31.  */
-      if (sizeof (long int) == 4
-	  && x > (long double) LONG_MAX)
+      if (sizeof (long int) == 4 && x > (long double) LONG_MAX)
 	{
 	  /* In the event of overflow we must raise the "invalid"
 	     exception, but not "inexact".  */
@@ -77,8 +74,7 @@ __lrintl (long double x)
 	{
 #if defined FE_INVALID || defined FE_INEXACT
 	  /* X < LONG_MAX + 1 implied by J0 < 63.  */
-	  if (sizeof (long int) == 8
-	      && x > (long double) LONG_MAX)
+	  if (sizeof (long int) == 8 && x > (long double) LONG_MAX)
 	    {
 	      /* In the event of overflow we must raise the "invalid"
 		 exception, but not "inexact".  */
@@ -106,8 +102,7 @@ __lrintl (long double x)
 	 FE_INVALID must be raised and the return value is
 	 unspecified.  */
 #if defined FE_INVALID || defined FE_INEXACT
-      if (sizeof (long int) == 4
-	  && x < (long double) LONG_MIN
+      if (sizeof (long int) == 4 && x < (long double) LONG_MIN
 	  && x > (long double) LONG_MIN - 1.0L)
 	{
 	  /* If truncation produces LONG_MIN, the cast will not raise

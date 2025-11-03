@@ -19,9 +19,9 @@
 #include <ifunc-wcscat.h>
 
 #if HAVE_WCSCAT_C
-# if HAVE_WCSCAT_IFUNC || HAVE_WCSCAT_Z13
-#  define WCSCAT WCSCAT_C
-# endif
+#  if HAVE_WCSCAT_IFUNC || HAVE_WCSCAT_Z13
+#    define WCSCAT WCSCAT_C
+#  endif
 
-# include <wcsmbs/wcscat.c>
+#  include <wcsmbs/wcscat.c>
 #endif

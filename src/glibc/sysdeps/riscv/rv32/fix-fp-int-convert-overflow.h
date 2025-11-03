@@ -17,22 +17,22 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef FIX_FP_INT_CONVERT_OVERFLOW_H
-#define FIX_FP_INT_CONVERT_OVERFLOW_H	1
+#  define FIX_FP_INT_CONVERT_OVERFLOW_H 1
 
 /* The generic libgcc2.c conversions from floating point to long long
    may not raise the correct exceptions on overflow (and may raise
    spurious "inexact" exceptions even in non-overflow cases, see
    <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=59412>).  */
-#define FIX_FLT_LONG_CONVERT_OVERFLOW 0
-#define FIX_FLT_LLONG_CONVERT_OVERFLOW 1
+#  define FIX_FLT_LONG_CONVERT_OVERFLOW 0
+#  define FIX_FLT_LLONG_CONVERT_OVERFLOW 1
 
-#define FIX_DBL_LONG_CONVERT_OVERFLOW 0
-#define FIX_DBL_LLONG_CONVERT_OVERFLOW 1
+#  define FIX_DBL_LONG_CONVERT_OVERFLOW 0
+#  define FIX_DBL_LLONG_CONVERT_OVERFLOW 1
 
-#define FIX_LDBL_LONG_CONVERT_OVERFLOW 0
-#define FIX_LDBL_LLONG_CONVERT_OVERFLOW 0
+#  define FIX_LDBL_LONG_CONVERT_OVERFLOW 0
+#  define FIX_LDBL_LLONG_CONVERT_OVERFLOW 0
 
-#define FIX_FLT128_LONG_CONVERT_OVERFLOW 0
-#define FIX_FLT128_LLONG_CONVERT_OVERFLOW 0
+#  define FIX_FLT128_LONG_CONVERT_OVERFLOW 0
+#  define FIX_FLT128_LLONG_CONVERT_OVERFLOW 0
 
 #endif /* fix-fp-int-convert-overflow.h */

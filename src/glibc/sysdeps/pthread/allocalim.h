@@ -19,14 +19,12 @@
 #include <alloca.h>
 #include <limits.h>
 
-
-extern __always_inline
-int
+extern __always_inline int
 __libc_use_alloca (size_t size)
 {
   return (__glibc_likely (__libc_alloca_cutoff (size))
 #ifdef PTHREAD_STACK_MIN
-          || __glibc_likely (size <= PTHREAD_STACK_MIN / 4)
+	  || __glibc_likely (size <= PTHREAD_STACK_MIN / 4)
 #endif
-	  );
+  );
 }

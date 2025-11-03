@@ -6,15 +6,13 @@
 int
 main (int argc, char **argv)
 {
-  static const struct option options[] =
-    {
-      {"required", required_argument, NULL, 'r'},
-      {"optional", optional_argument, NULL, 'o'},
-      {"none",     no_argument,       NULL, 'n'},
-      {"color",    no_argument,       NULL, 'C'},
-      {"colour",   no_argument,       NULL, 'C'},
-      {NULL,       0,                 NULL, 0 }
-    };
+  static const struct option options[]
+      = { { "required", required_argument, NULL, 'r' },
+	  { "optional", optional_argument, NULL, 'o' },
+	  { "none", no_argument, NULL, 'n' },
+	  { "color", no_argument, NULL, 'C' },
+	  { "colour", no_argument, NULL, 'C' },
+	  { NULL, 0, NULL, 0 } };
 
   int aflag = 0;
   int bflag = 0;

@@ -26,7 +26,6 @@
 
 #include "eintr.c"
 
-
 static void *
 tf (void *arg)
 {
@@ -38,7 +37,6 @@ tf (void *arg)
   puts ("tf: mutex_lock returned");
   exit (1);
 }
-
 
 static int
 do_test (void)

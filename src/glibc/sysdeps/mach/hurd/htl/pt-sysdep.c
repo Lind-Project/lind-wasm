@@ -71,9 +71,9 @@ _init_routine (void *stack)
       memory_object_name_t obj;
       vm_offset_t offset;
 
-      if (__vm_region (__mach_task_self (), &addr,
-		     &vm_size, &prot, &max_prot, &inherit, &is_shared,
-		     &obj, &offset) == KERN_SUCCESS)
+      if (__vm_region (__mach_task_self (), &addr, &vm_size, &prot, &max_prot,
+		       &inherit, &is_shared, &obj, &offset)
+	  == KERN_SUCCESS)
 	__mach_port_deallocate (__mach_task_self (), obj);
       else
 	{
@@ -108,7 +108,7 @@ _init_routine (void *stack)
      down to simply reading that register.  */
   thread->tcb = (tcbhead_t *) (((char *) THREAD_SELF) + TLS_PRE_TCB_SIZE);
 #else
-# error "Either TLS_TCB_AT_TP or TLS_DTV_AT_TP must be defined"
+#  error "Either TLS_TCB_AT_TP or TLS_DTV_AT_TP must be defined"
 #endif
 
 #ifndef PAGESIZE
@@ -118,8 +118,8 @@ _init_routine (void *stack)
   /* Copy over the thread-specific state */
   assert (!init_thread.thread_specifics);
   memcpy (&thread->static_thread_specifics,
-          &init_thread.static_thread_specifics,
-          sizeof (thread->static_thread_specifics));
+	  &init_thread.static_thread_specifics,
+	  sizeof (thread->static_thread_specifics));
 
   ___pthread_self = thread;
 
@@ -130,7 +130,7 @@ _init_routine (void *stack)
 
   __pthread_atfork (NULL, NULL, reset_pthread_total);
 
-  GL(dl_init_static_tls) = &__pthread_init_static_tls;
+  GL (dl_init_static_tls) = &__pthread_init_static_tls;
 
   /* Make MiG code thread aware.  */
   __mig_init (thread->stackaddr);
@@ -143,8 +143,7 @@ __pthread_initialize_minimal (void)
 }
 
 #ifdef SHARED
-__attribute__ ((constructor))
-static void
+__attribute__ ((constructor)) static void
 dynamic_init_routine (void)
 {
   _init_routine (__libc_stack_end);

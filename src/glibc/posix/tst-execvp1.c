@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 #ifndef EXECVP
-# define EXECVP(file, argv) execvp (file, argv)
+#  define EXECVP(file, argv) execvp (file, argv)
 #endif
 
 static int

@@ -18,4 +18,4 @@
 
 /* Number of extra dynamic section entries for this architecture.  By
    default there are none.  */
-#define DT_THISPROCNUM	DT_PPC64_NUM
+#define DT_THISPROCNUM DT_PPC64_NUM

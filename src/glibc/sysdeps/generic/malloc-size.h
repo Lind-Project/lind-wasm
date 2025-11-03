@@ -50,7 +50,7 @@
    awkward.) Some of these casts result in harmless compiler warnings
    on some systems.  */
 #ifndef INTERNAL_SIZE_T
-# define INTERNAL_SIZE_T size_t
+#  define INTERNAL_SIZE_T size_t
 #endif
 
 /* The corresponding word size.  */

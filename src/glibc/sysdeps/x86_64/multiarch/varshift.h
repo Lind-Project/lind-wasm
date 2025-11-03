@@ -25,7 +25,6 @@ extern const int8_t ___m128i_shift_right[31] attribute_hidden
 static __inline__ __m128i
 __m128i_shift_right (__m128i value, unsigned long int offset)
 {
-  return _mm_shuffle_epi8 (value,
-			   _mm_loadu_si128 ((__m128i *) (___m128i_shift_right
-							 + offset)));
+  return _mm_shuffle_epi8 (
+      value, _mm_loadu_si128 ((__m128i *) (___m128i_shift_right + offset)));
 }

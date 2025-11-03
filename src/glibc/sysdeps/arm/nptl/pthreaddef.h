@@ -16,18 +16,17 @@
    <https://www.gnu.org/licenses/>.  */
 
 /* Default stack size.  */
-#define ARCH_STACK_DEFAULT_SIZE	(2 * 1024 * 1024)
+#define ARCH_STACK_DEFAULT_SIZE (2 * 1024 * 1024)
 
 /* Minimum guard size.  */
 #define ARCH_MIN_GUARD_SIZE 0
 
 /* Required stack pointer alignment at beginning.  SSE requires 16
    bytes.  */
-#define STACK_ALIGN		16
+#define STACK_ALIGN 16
 
 /* Minimal stack size after allocating thread descriptor and guard size.  */
-#define MINIMAL_REST_STACK	2048
-
+#define MINIMAL_REST_STACK 2048
 
 /* Location of current stack frame.
 
@@ -38,4 +37,4 @@
    CURRENT_STACK_FRAME using "struct layout", we need to have the macro
    return the hard FP minus 12.  Of course, this makes no sense
    without the obsolete APCS stack layout...  */
-#define CURRENT_STACK_FRAME	(__builtin_frame_address (0) - 12)
+#define CURRENT_STACK_FRAME (__builtin_frame_address (0) - 12)

@@ -60,33 +60,31 @@ __confstr (int name, char *buf, size_t len)
 
 	 Currently this means all environments that the system allows.  */
 
-#define START_ENV_GROUP(VERSION)		\
-    case _CS_##VERSION##_WIDTH_RESTRICTED_ENVS:	\
-      string_len = 0;
+#define START_ENV_GROUP(VERSION)                                              \
+  case _CS_##VERSION##_WIDTH_RESTRICTED_ENVS:                                 \
+    string_len = 0;
 
-#define END_ENV_GROUP(VERSION)			\
-      restenvs[string_len++] = '\0';		\
-      string = restenvs;			\
-      break;
+#define END_ENV_GROUP(VERSION)                                                \
+  restenvs[string_len++] = '\0';                                              \
+  string = restenvs;                                                          \
+  break;
 
-#define KNOWN_ABSENT_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX)	\
-      /* Empty.  */
+#define KNOWN_ABSENT_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX) /* Empty.  */
 
-#define KNOWN_PRESENT_ENV_STRING(STR)		\
-      if (string_len > 0)			\
-	restenvs[string_len++] = '\n';		\
-      memcpy (restenvs + string_len, STR,	\
-	      sizeof STR - 1);			\
-      string_len += sizeof STR - 1;
+#define KNOWN_PRESENT_ENV_STRING(STR)                                         \
+  if (string_len > 0)                                                         \
+    restenvs[string_len++] = '\n';                                            \
+  memcpy (restenvs + string_len, STR, sizeof STR - 1);                        \
+  string_len += sizeof STR - 1;
 
-#define KNOWN_PRESENT_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX)	\
-      KNOWN_PRESENT_ENV_STRING (#ENV_PREFIX "_" #SUFFIX)
+#define KNOWN_PRESENT_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX)              \
+  KNOWN_PRESENT_ENV_STRING (#ENV_PREFIX "_" #SUFFIX)
 
-#define UNKNOWN_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX)		\
-      if (__sysconf (_SC_##SC_PREFIX##_##SUFFIX) > 0)			\
-	{								\
-	  KNOWN_PRESENT_ENVIRONMENT (SC_PREFIX, ENV_PREFIX, SUFFIX)	\
-	}
+#define UNKNOWN_ENVIRONMENT(SC_PREFIX, ENV_PREFIX, SUFFIX)                    \
+  if (__sysconf (_SC_##SC_PREFIX##_##SUFFIX) > 0)                             \
+    {                                                                         \
+      KNOWN_PRESENT_ENVIRONMENT (SC_PREFIX, ENV_PREFIX, SUFFIX)               \
+    }
 
 #include "posix-envs.def"
 
@@ -101,12 +99,12 @@ __confstr (int name, char *buf, size_t len)
     case _CS_POSIX_V6_ILP32_OFF32_CFLAGS:
     case _CS_POSIX_V7_ILP32_OFF32_CFLAGS:
 #ifdef __ILP32_OFF32_CFLAGS
-# if CONF_IS_DEFINED_UNSET (_POSIX_V7_ILP32_OFF32)
-#  error "__ILP32_OFF32_CFLAGS should not be defined"
-# elif CONF_IS_UNDEFINED (_POSIX_V7_ILP32_OFF32)
+#  if CONF_IS_DEFINED_UNSET(_POSIX_V7_ILP32_OFF32)
+#    error "__ILP32_OFF32_CFLAGS should not be defined"
+#  elif CONF_IS_UNDEFINED(_POSIX_V7_ILP32_OFF32)
       if (__sysconf (_SC_V7_ILP32_OFF32) < 0)
 	break;
-# endif
+#  endif
       string = __ILP32_OFF32_CFLAGS;
       string_len = sizeof (__ILP32_OFF32_CFLAGS);
 #endif
@@ -116,12 +114,12 @@ __confstr (int name, char *buf, size_t len)
     case _CS_POSIX_V6_ILP32_OFFBIG_CFLAGS:
     case _CS_POSIX_V7_ILP32_OFFBIG_CFLAGS:
 #ifdef __ILP32_OFFBIG_CFLAGS
-# if CONF_IS_DEFINED_UNSET (_POSIX_V7_ILP32_OFFBIG)
-#  error "__ILP32_OFFBIG_CFLAGS should not be defined"
-# elif CONF_IS_UNDEFINED (_POSIX_V7_ILP32_OFFBIG)
+#  if CONF_IS_DEFINED_UNSET(_POSIX_V7_ILP32_OFFBIG)
+#    error "__ILP32_OFFBIG_CFLAGS should not be defined"
+#  elif CONF_IS_UNDEFINED(_POSIX_V7_ILP32_OFFBIG)
       if (__sysconf (_SC_V7_ILP32_OFFBIG) < 0)
 	break;
-# endif
+#  endif
       string = __ILP32_OFFBIG_CFLAGS;
       string_len = sizeof (__ILP32_OFFBIG_CFLAGS);
 #endif
@@ -131,12 +129,12 @@ __confstr (int name, char *buf, size_t len)
     case _CS_POSIX_V6_LP64_OFF64_CFLAGS:
     case _CS_POSIX_V7_LP64_OFF64_CFLAGS:
 #ifdef __LP64_OFF64_CFLAGS
-# if CONF_IS_DEFINED_UNSET (_POSIX_V7_LP64_OFF64)
-#  error "__LP64_OFF64_CFLAGS should not be defined"
-# elif CONF_IS_UNDEFINED (_POSIX_V7_LP64_OFF64)
+#  if CONF_IS_DEFINED_UNSET(_POSIX_V7_LP64_OFF64)
+#    error "__LP64_OFF64_CFLAGS should not be defined"
+#  elif CONF_IS_UNDEFINED(_POSIX_V7_LP64_OFF64)
       if (__sysconf (_SC_V7_LP64_OFF64) < 0)
 	break;
-# endif
+#  endif
       string = __LP64_OFF64_CFLAGS;
       string_len = sizeof (__LP64_OFF64_CFLAGS);
 #endif
@@ -146,12 +144,12 @@ __confstr (int name, char *buf, size_t len)
     case _CS_POSIX_V6_ILP32_OFF32_LDFLAGS:
     case _CS_POSIX_V7_ILP32_OFF32_LDFLAGS:
 #ifdef __ILP32_OFF32_LDFLAGS
-# if CONF_IS_DEFINED_UNSET (_POSIX_V7_ILP32_OFF32 )
-#  error "__ILP32_OFF32_LDFLAGS should not be defined"
-# elif CONF_IS_UNDEFINED (_POSIX_V7_ILP32_OFF32)
+#  if CONF_IS_DEFINED_UNSET(_POSIX_V7_ILP32_OFF32)
+#    error "__ILP32_OFF32_LDFLAGS should not be defined"
+#  elif CONF_IS_UNDEFINED(_POSIX_V7_ILP32_OFF32)
       if (__sysconf (_SC_V7_ILP32_OFF32) < 0)
 	break;
-# endif
+#  endif
       string = __ILP32_OFF32_LDFLAGS;
       string_len = sizeof (__ILP32_OFF32_LDFLAGS);
 #endif
@@ -161,12 +159,12 @@ __confstr (int name, char *buf, size_t len)
     case _CS_POSIX_V6_ILP32_OFFBIG_LDFLAGS:
     case _CS_POSIX_V7_ILP32_OFFBIG_LDFLAGS:
 #ifdef __ILP32_OFFBIG_LDFLAGS
-# if CONF_IS_DEFINED_UNSET (_POSIX_V7_ILP32_OFFBIG)
-#  error "__ILP32_OFFBIG_LDFLAGS should not be defined"
-# elif CONF_IS_UNDEFINED (_POSIX_V7_ILP32_OFFBIG)
+#  if CONF_IS_DEFINED_UNSET(_POSIX_V7_ILP32_OFFBIG)
+#    error "__ILP32_OFFBIG_LDFLAGS should not be defined"
+#  elif CONF_IS_UNDEFINED(_POSIX_V7_ILP32_OFFBIG)
       if (__sysconf (_SC_V7_ILP32_OFFBIG) < 0)
 	break;
-# endif
+#  endif
       string = __ILP32_OFFBIG_LDFLAGS;
       string_len = sizeof (__ILP32_OFFBIG_LDFLAGS);
 #endif
@@ -176,12 +174,12 @@ __confstr (int name, char *buf, size_t len)
     case _CS_POSIX_V6_LP64_OFF64_LDFLAGS:
     case _CS_POSIX_V7_LP64_OFF64_LDFLAGS:
 #ifdef __LP64_OFF64_LDFLAGS
-# if CONF_IS_DEFINED_UNSET (_POSIX_V7_LP64_OFF64)
-#  error "__LP64_OFF64_LDFLAGS should not be defined"
-# elif CONF_IS_UNDEFINED (_POSIX_V7_LP64_OFF64)
+#  if CONF_IS_DEFINED_UNSET(_POSIX_V7_LP64_OFF64)
+#    error "__LP64_OFF64_LDFLAGS should not be defined"
+#  elif CONF_IS_UNDEFINED(_POSIX_V7_LP64_OFF64)
       if (__sysconf (_SC_V7_LP64_OFF64) < 0)
 	break;
-# endif
+#  endif
       string = __LP64_OFF64_LDFLAGS;
       string_len = sizeof (__LP64_OFF64_LDFLAGS);
 #endif
@@ -189,9 +187,9 @@ __confstr (int name, char *buf, size_t len)
 
     case _CS_LFS_CFLAGS:
     case _CS_LFS_LINTFLAGS:
-#if (CONF_IS_DEFINED_SET (_POSIX_V6_ILP32_OFF32) \
-     && CONF_IS_DEFINED_SET (_POSIX_V6_ILP32_OFFBIG))
-# define __LFS_CFLAGS "-D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
+#if (CONF_IS_DEFINED_SET(_POSIX_V6_ILP32_OFF32)                               \
+     && CONF_IS_DEFINED_SET(_POSIX_V6_ILP32_OFFBIG))
+#  define __LFS_CFLAGS "-D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64"
       /* Signal that we want the new ABI.  */
       string = __LFS_CFLAGS;
       string_len = sizeof (__LFS_CFLAGS);
@@ -291,10 +289,10 @@ __confstr (int name, char *buf, size_t len)
   return string_len;
 }
 libc_hidden_def (__confstr)
-/* clang warns that alias will be always resolve to _GI___confstr even if weak
-   definition of __GI_confstr is overridden, which is really the intention.  */
-DIAG_PUSH_NEEDS_COMMENT_CLANG;
+    /* clang warns that alias will be always resolve to _GI___confstr even if
+       weak definition of __GI_confstr is overridden, which is really the
+       intention.  */
+    DIAG_PUSH_NEEDS_COMMENT_CLANG;
 DIAG_IGNORE_NEEDS_COMMENT_CLANG (13, "-Wignored-attributes");
-libc_hidden_def (confstr)
-DIAG_POP_NEEDS_COMMENT_CLANG;
+libc_hidden_def (confstr) DIAG_POP_NEEDS_COMMENT_CLANG;
 weak_alias (__confstr, confstr)

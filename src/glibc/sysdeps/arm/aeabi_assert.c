@@ -19,8 +19,7 @@
 #include <stdlib.h>
 
 void
-__aeabi_assert (const char *assertion, const char *file,
-		unsigned int line)
+__aeabi_assert (const char *assertion, const char *file, unsigned int line)
 {
   __assert_fail (assertion, file, line, NULL);
 }

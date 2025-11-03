@@ -85,22 +85,23 @@
 #include <math-underflow.h>
 #include <libc-diag.h>
 
-static const double
-  ln2_hi = 6.93147180369123816490e-01,  /* 3fe62e42 fee00000 */
-  ln2_lo = 1.90821492927058770002e-10,  /* 3dea39ef 35793c76 */
-  two54 = 1.80143985094819840000e+16,   /* 43500000 00000000 */
-  Lp[] = { 0.0, 6.666666666666735130e-01, /* 3FE55555 55555593 */
-	   3.999999999940941908e-01, /* 3FD99999 9997FA04 */
-	   2.857142874366239149e-01, /* 3FD24924 94229359 */
-	   2.222219843214978396e-01, /* 3FCC71C5 1D8E78AF */
-	   1.818357216161805012e-01, /* 3FC74664 96CB03DE */
-	   1.531383769920937332e-01, /* 3FC39A09 D078C69F */
-	   1.479819860511658591e-01 }; /* 3FC2F112 DF3E5244 */
+static const double ln2_hi
+    = 6.93147180369123816490e-01,	 /* 3fe62e42 fee00000 */
+    ln2_lo = 1.90821492927058770002e-10, /* 3dea39ef 35793c76 */
+    two54 = 1.80143985094819840000e+16,	 /* 43500000 00000000 */
+    Lp[] = { 0.0,
+	     6.666666666666735130e-01,	 /* 3FE55555 55555593 */
+	     3.999999999940941908e-01,	 /* 3FD99999 9997FA04 */
+	     2.857142874366239149e-01,	 /* 3FD24924 94229359 */
+	     2.222219843214978396e-01,	 /* 3FCC71C5 1D8E78AF */
+	     1.818357216161805012e-01,	 /* 3FC74664 96CB03DE */
+	     1.531383769920937332e-01,	 /* 3FC39A09 D078C69F */
+	     1.479819860511658591e-01 }; /* 3FC2F112 DF3E5244 */
 
 static const double zero = 0.0;
 
 #ifndef SECTION
-# define SECTION
+#  define SECTION
 #endif
 
 SECTION
@@ -114,19 +115,19 @@ __log1p (double x)
   ax = hx & 0x7fffffff;
 
   k = 1;
-  if (hx < 0x3FDA827A)                          /* x < 0.41422  */
+  if (hx < 0x3FDA827A) /* x < 0.41422  */
     {
-      if (__glibc_unlikely (ax >= 0x3ff00000))           /* x <= -1.0 */
+      if (__glibc_unlikely (ax >= 0x3ff00000)) /* x <= -1.0 */
 	{
 	  if (x == -1.0)
-	    return -two54 / zero;               /* log1p(-1)=-inf */
+	    return -two54 / zero; /* log1p(-1)=-inf */
 	  else
-	    return (x - x) / (x - x);           /* log1p(x<-1)=NaN */
+	    return (x - x) / (x - x); /* log1p(x<-1)=NaN */
 	}
-      if (__glibc_unlikely (ax < 0x3e200000))           /* |x| < 2**-29 */
+      if (__glibc_unlikely (ax < 0x3e200000)) /* |x| < 2**-29 */
 	{
-	  math_force_eval (two54 + x);          /* raise inexact */
-	  if (ax < 0x3c900000)                  /* |x| < 2**-54 */
+	  math_force_eval (two54 + x); /* raise inexact */
+	  if (ax < 0x3c900000)	       /* |x| < 2**-54 */
 	    {
 	      math_check_force_underflow (x);
 	      return x;
@@ -136,8 +137,10 @@ __log1p (double x)
 	}
       if (hx > 0 || hx <= ((int32_t) 0xbfd2bec3))
 	{
-	  k = 0; f = x; hu = 1;
-	}                       /* -0.2929<x<0.41422 */
+	  k = 0;
+	  f = x;
+	  hu = 1;
+	} /* -0.2929<x<0.41422 */
     }
   else if (__glibc_unlikely (hx >= 0x7ff00000))
     return x + x;
@@ -161,18 +164,18 @@ __log1p (double x)
       hu &= 0x000fffff;
       if (hu < 0x6a09e)
 	{
-	  SET_HIGH_WORD (u, hu | 0x3ff00000);   /* normalize u */
+	  SET_HIGH_WORD (u, hu | 0x3ff00000); /* normalize u */
 	}
       else
 	{
 	  k += 1;
-	  SET_HIGH_WORD (u, hu | 0x3fe00000);   /* normalize u/2 */
+	  SET_HIGH_WORD (u, hu | 0x3fe00000); /* normalize u/2 */
 	  hu = (0x00100000 - hu) >> 2;
 	}
       f = u - 1.0;
     }
   hfsq = 0.5 * f * f;
-  if (hu == 0)          /* |f| < 2**-20 */
+  if (hu == 0) /* |f| < 2**-20 */
     {
       if (f == zero)
 	{
@@ -180,7 +183,8 @@ __log1p (double x)
 	    return zero;
 	  else
 	    {
-	      c += k * ln2_lo; return k * ln2_hi + c;
+	      c += k * ln2_lo;
+	      return k * ln2_hi + c;
 	    }
 	}
       R = hfsq * (1.0 - 0.66666666666666666 * f);
@@ -191,9 +195,12 @@ __log1p (double x)
     }
   s = f / (2.0 + f);
   z = s * s;
-  R1 = z * Lp[1]; z2 = z * z;
-  R2 = Lp[2] + z * Lp[3]; z4 = z2 * z2;
-  R3 = Lp[4] + z * Lp[5]; z6 = z4 * z2;
+  R1 = z * Lp[1];
+  z2 = z * z;
+  R2 = Lp[2] + z * Lp[3];
+  z4 = z2 * z2;
+  R3 = Lp[4] + z * Lp[5];
+  z6 = z4 * z2;
   R4 = Lp[6] + z * Lp[7];
   R = R1 + z2 * R2 + z4 * R3 + z6 * R4;
   if (k == 0)

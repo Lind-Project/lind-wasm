@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-
 #define N 100
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
@@ -44,7 +43,7 @@ once_handler1 (void)
   puts ("once_handler1: locked");
 
   int r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("once_handler1: barrier_wait failed");
       exit (1);
@@ -64,20 +63,18 @@ once_handler2 (void)
   global = 1;
 }
 
-
 static void
 cl (void *arg)
 {
   cl_called = 1;
 }
 
-
 static void *
 tf (void *arg)
 {
   pthread_cleanup_push (cl, NULL)
 
-  pthread_once (&once, once_handler1);
+      pthread_once (&once, once_handler1);
 
   pthread_cleanup_pop (0);
 
@@ -85,7 +82,6 @@ tf (void *arg)
   puts ("pthread_once in tf returned");
   exit (1);
 }
-
 
 static int
 do_test (void)
@@ -105,7 +101,7 @@ do_test (void)
     }
 
   int r = pthread_barrier_wait (&bar);
-  if (r != 0 && r!= PTHREAD_BARRIER_SERIAL_THREAD)
+  if (r != 0 && r != PTHREAD_BARRIER_SERIAL_THREAD)
     {
       puts ("barrier_wait failed");
       return 1;

@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef NOT_CANCEL_H
-# define NOT_CANCEL_H
+#define NOT_CANCEL_H
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -37,14 +37,12 @@ void __close_nocancel_nostatus (int fd);
 /* Non cancellable open syscall.  */
 __typeof (__open) __open_nocancel;
 /* open64 is just the same as open for us.  */
-#define __open64_nocancel(...) \
-  __open_nocancel (__VA_ARGS__)
+#define __open64_nocancel(...) __open_nocancel (__VA_ARGS__)
 
 /* Non cancellable openat syscall.  */
 __typeof (__openat) __openat_nocancel;
 /* open64 is just the same as open for us.  */
-#define __openat64_nocancel(...) \
-  __openat_nocancel (__VA_ARGS__)
+#define __openat64_nocancel(...) __openat_nocancel (__VA_ARGS__)
 
 /* Non cancellable read syscall.  */
 __typeof (__read) __read_nocancel;
@@ -62,19 +60,19 @@ __typeof (__pwrite64) __pwrite64_nocancel;
 __typeof (__writev) __writev_nocancel;
 
 /* Non cancellable writev syscall with no status.  */
-void __writev_nocancel_nostatus (int fd, const struct iovec *vector, int count);
+void __writev_nocancel_nostatus (int fd, const struct iovec *vector,
+				 int count);
 
 /* Non cancellable wait4 syscall.  */
 __typeof (__wait4) __wait4_nocancel;
 
-# define __waitpid_nocancel(pid, stat_loc, options) \
+#define __waitpid_nocancel(pid, stat_loc, options)                            \
   __wait4_nocancel (pid, stat_loc, options, NULL)
 
 /* Non cancellable fcntl syscall.  */
 __typeof (__fcntl) __fcntl_nocancel;
 /* fcntl64 is just the same as fcntl for us.  */
-#define __fcntl64_nocancel(...) \
-  __fcntl_nocancel (__VA_ARGS__)
+#define __fcntl64_nocancel(...) __fcntl_nocancel (__VA_ARGS__)
 
 /* Non cancellable getrandom syscall that does not also set errno in case of
    failure.  */
@@ -88,25 +86,19 @@ __getrandom_nocancel_nostatus (void *buf, size_t buflen, unsigned int flags)
   return r;
 }
 
-#define __getrandom_nocancel(buf, size, flags) \
-  __getrandom (buf, size, flags)
+#define __getrandom_nocancel(buf, size, flags) __getrandom (buf, size, flags)
 
-#define __poll_infinity_nocancel(fds, nfds) \
-  __poll (fds, nfds, -1)
+#define __poll_infinity_nocancel(fds, nfds) __poll (fds, nfds, -1)
 
-#if IS_IN (libc)
-hidden_proto (__close_nocancel)
-hidden_proto (__close_nocancel_nostatus)
-hidden_proto (__open_nocancel)
-hidden_proto (__openat_nocancel)
-hidden_proto (__read_nocancel)
-hidden_proto (__pread64_nocancel)
-hidden_proto (__write_nocancel)
-hidden_proto (__pwrite64_nocancel)
-hidden_proto (__writev_nocancel)
-hidden_proto (__writev_nocancel_nostatus)
-hidden_proto (__wait4_nocancel)
-hidden_proto (__fcntl_nocancel)
+#if IS_IN(libc)
+hidden_proto (__close_nocancel) hidden_proto (__close_nocancel_nostatus)
+    hidden_proto (__open_nocancel) hidden_proto (__openat_nocancel)
+	hidden_proto (__read_nocancel) hidden_proto (__pread64_nocancel)
+	    hidden_proto (__write_nocancel) hidden_proto (__pwrite64_nocancel)
+		hidden_proto (__writev_nocancel)
+		    hidden_proto (__writev_nocancel_nostatus)
+			hidden_proto (__wait4_nocancel)
+			    hidden_proto (__fcntl_nocancel)
 #endif
 
 #endif /* NOT_CANCEL_H  */

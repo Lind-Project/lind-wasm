@@ -44,10 +44,10 @@ get_cpuinfo (void)
   while ((read = getline (&line, &len, f)) != -1)
     {
       if (strncmp (line, "flags", 5) == 0)
-       {
-         cpu_flags = strdup (line);
-         break;
-       }
+	{
+	  cpu_flags = strdup (line);
+	  break;
+	}
     }
   fclose (f);
   free (line);
@@ -91,15 +91,13 @@ check_proc (const char *proc_name, const char *search_name, int flag,
   return (found != flag);
 }
 
-#define CHECK_PROC(str, name) \
-  check_proc (#str, " "#str" ", HAS_CPU_FEATURE (name), \
-	      CPU_FEATURE_USABLE (name), \
-	      "HAS_CPU_FEATURE (" #name ")")
+#define CHECK_PROC(str, name)                                                 \
+  check_proc (#str, " " #str " ", HAS_CPU_FEATURE (name),                     \
+	      CPU_FEATURE_USABLE (name), "HAS_CPU_FEATURE (" #name ")")
 
-#define CHECK_PROC_ACTIVE(str, name) \
-  check_proc (#str, " "#str" ", CPU_FEATURE_USABLE (name), \
-	      CPU_FEATURE_USABLE (name), \
-	      "CPU_FEATURE_USABLE (" #name ")")
+#define CHECK_PROC_ACTIVE(str, name)                                          \
+  check_proc (#str, " " #str " ", CPU_FEATURE_USABLE (name),                  \
+	      CPU_FEATURE_USABLE (name), "CPU_FEATURE_USABLE (" #name ")")
 
 static int
 do_test (int argc, char **argv)
@@ -179,9 +177,9 @@ do_test (int argc, char **argv)
        * on KVM guests (synthetic bit).  In both cases the cpuinfo entry is the
        * same.  */
       if (HAS_CPU_FEATURE (IBRS_IBPB))
-        fails += CHECK_PROC (ibrs, IBRS_IBPB);
+	fails += CHECK_PROC (ibrs, IBRS_IBPB);
       else
-        fails += CHECK_PROC (ibrs, AMD_IBRS);
+	fails += CHECK_PROC (ibrs, AMD_IBRS);
       fails += CHECK_PROC (stibp, AMD_STIBP);
     }
   fails += CHECK_PROC (ibt, IBT);

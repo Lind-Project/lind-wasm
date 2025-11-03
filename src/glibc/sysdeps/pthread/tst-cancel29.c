@@ -60,9 +60,9 @@ tf_sigtimedwait (void *arg)
   sigemptyset (&mask);
   r = sigtimedwait (&mask, NULL, &(struct timespec) { 0, 250000000 });
   if (r != -1)
-    return (void*) -1;
+    return (void *) -1;
   if (errno != EAGAIN)
-    return (void*) -2;
+    return (void *) -2;
 
   pthread_cleanup_pop (0);
   return NULL;
@@ -79,7 +79,7 @@ tf_poll (void *arg)
 
   r = poll (NULL, 0, 250);
   if (r != 0)
-    return (void*) -1;
+    return (void *) -1;
 
   pthread_cleanup_pop (0);
   return NULL;
@@ -97,7 +97,7 @@ tf_ppoll (void *arg)
 
   r = ppoll (NULL, 0, &(struct timespec) { 0, 250000000 }, NULL);
   if (r != 0)
-    return (void*) -1;
+    return (void *) -1;
 
   pthread_cleanup_pop (0);
   return NULL;
@@ -114,7 +114,7 @@ tf_select (void *arg)
 
   r = select (0, NULL, NULL, NULL, &(struct timeval) { 0, 250000 });
   if (r != 0)
-    return (void*) -1;
+    return (void *) -1;
 
   pthread_cleanup_pop (0);
   return NULL;
@@ -131,7 +131,7 @@ tf_pselect (void *arg)
 
   r = pselect (0, NULL, NULL, NULL, &(struct timespec) { 0, 250000000 }, NULL);
   if (r != 0)
-    return (void*) -1;
+    return (void *) -1;
 
   pthread_cleanup_pop (0);
   return NULL;
@@ -149,7 +149,7 @@ tf_clock_nanosleep (void *arg)
   r = clock_nanosleep (CLOCK_REALTIME, 0, &(struct timespec) { 0, 250000000 },
 		       NULL);
   if (r != 0)
-    return (void*) -1;
+    return (void *) -1;
 
   pthread_cleanup_pop (0);
   return NULL;
@@ -158,15 +158,32 @@ tf_clock_nanosleep (void *arg)
 struct cancel_test_t
 {
   const char *name;
-  void * (*cf) (void *);
-} tests[] =
-{
-  { "sigtimedwait",    tf_sigtimedwait,    },
-  { "poll",            tf_poll,            },
-  { "ppoll",           tf_ppoll,           },
-  { "select",          tf_select,          },
-  { "pselect",         tf_pselect  ,       },
-  { "clock_nanosleep", tf_clock_nanosleep, },
+  void *(*cf) (void *);
+} tests[] = {
+  {
+      "sigtimedwait",
+      tf_sigtimedwait,
+  },
+  {
+      "poll",
+      tf_poll,
+  },
+  {
+      "ppoll",
+      tf_ppoll,
+  },
+  {
+      "select",
+      tf_select,
+  },
+  {
+      "pselect",
+      tf_pselect,
+  },
+  {
+      "clock_nanosleep",
+      tf_clock_nanosleep,
+  },
 };
 
 static int

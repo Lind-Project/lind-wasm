@@ -30,35 +30,35 @@
 
 #if defined __SSE__ && defined __SSE2__
 /* NB: ISAs, excluding MMX, in x86-64 ISA level baseline are used.  */
-# define __X86_ISA_V1 1
+#  define __X86_ISA_V1 1
 #else
-# define __X86_ISA_V1 0
+#  define __X86_ISA_V1 0
 #endif
 
 #if __X86_ISA_V1 && defined __GCC_HAVE_SYNC_COMPARE_AND_SWAP_16               \
     && defined HAVE_X86_LAHF_SAHF && defined __POPCNT__ && defined __SSE3__   \
     && defined __SSSE3__ && defined __SSE4_1__ && defined __SSE4_2__
 /* NB: ISAs in x86-64 ISA level v2 are used.  */
-# define __X86_ISA_V2 1
+#  define __X86_ISA_V2 1
 #else
-# define __X86_ISA_V2 0
+#  define __X86_ISA_V2 0
 #endif
 
 #if __X86_ISA_V2 && defined __AVX__ && defined __AVX2__ && defined __F16C__   \
     && defined __FMA__ && defined __LZCNT__ && defined HAVE_X86_MOVBE         \
     && defined __BMI__ && defined __BMI2__
 /* NB: ISAs in x86-64 ISA level v3 are used.  */
-# define __X86_ISA_V3 1
+#  define __X86_ISA_V3 1
 #else
-# define __X86_ISA_V3 0
+#  define __X86_ISA_V3 0
 #endif
 
 #if __X86_ISA_V3 && defined __AVX512F__ && defined __AVX512BW__               \
     && defined __AVX512CD__ && defined __AVX512DQ__ && defined __AVX512VL__
 /* NB: ISAs in x86-64 ISA level v4 are used.  */
-# define __X86_ISA_V4 1
+#  define __X86_ISA_V4 1
 #else
-# define __X86_ISA_V4 0
+#  define __X86_ISA_V4 0
 #endif
 
 #define MINIMUM_X86_ISA_LEVEL                                                 \
@@ -66,7 +66,6 @@
 
 /* Depending on the minimum ISA level, a feature check result can be a
    compile-time constant.. */
-
 
 /* For CPU_FEATURE_USABLE_P.  */
 
@@ -89,18 +88,17 @@
 #define SSE4_1_X86_ISA_LEVEL 2
 #define SSSE3_X86_ISA_LEVEL 2
 
-
 /* For X86_ISA_CPU_FEATURES_ARCH_P.  */
 
 /* NB: This feature is enabled when ISA level >= 3, which was disabled
    for the following CPUs:
-        - AMD Excavator
+	- AMD Excavator
    when ISA level < 3.  */
 #define AVX_Fast_Unaligned_Load_X86_ISA_LEVEL 3
 
 /* NB: This feature is disabled when ISA level >= 3, which was enabled
    for the following CPUs:
-        - Intel KNL
+	- Intel KNL
    when ISA level < 3.  */
 #define Prefer_No_VZEROUPPER_X86_ISA_LEVEL 3
 
@@ -115,33 +113,32 @@
    for the early Atom CPUs.  */
 #define Slow_BSF_X86_ISA_LEVEL 2
 
-
 /* Both X86_ISA_CPU_FEATURE_USABLE_P and X86_ISA_CPU_FEATURES_ARCH_P
    macros are wrappers for the respective CPU_FEATURE{S}_{USABLE|ARCH}_P
    runtime checks.  They differ in two ways.
 
     1.  The USABLE_P version is evaluated to true when the feature
-        is enabled.
+	is enabled.
 
     2.  The ARCH_P version has a third argument `not`.  The `not`
-        argument can either be `!` or empty.  If the feature is
-        enabled above an ISA level, the third argument should be empty
-        and the expression is evaluated to true when the feature is
-        enabled.  If the feature is disabled above an ISA level, the
-        third argument should be `!` and the expression is evaluated
-        to true when the feature is disabled.
+	argument can either be `!` or empty.  If the feature is
+	enabled above an ISA level, the third argument should be empty
+	and the expression is evaluated to true when the feature is
+	enabled.  If the feature is disabled above an ISA level, the
+	third argument should be `!` and the expression is evaluated
+	to true when the feature is disabled.
  */
 
-#define X86_ISA_CPU_FEATURE_USABLE_P(ptr, name)                        \
-  (((name##_X86_ISA_LEVEL) <= MINIMUM_X86_ISA_LEVEL)                   \
+#define X86_ISA_CPU_FEATURE_USABLE_P(ptr, name)                               \
+  (((name##_X86_ISA_LEVEL) <= MINIMUM_X86_ISA_LEVEL)                          \
    || CPU_FEATURE_USABLE_P (ptr, name))
 
-#define X86_ISA_CPU_FEATURES_ARCH_P(ptr, name, not)                    \
-  (((name##_X86_ISA_LEVEL) <= MINIMUM_X86_ISA_LEVEL)                   \
+#define X86_ISA_CPU_FEATURES_ARCH_P(ptr, name, not)                           \
+  (((name##_X86_ISA_LEVEL) <= MINIMUM_X86_ISA_LEVEL)                          \
    || not CPU_FEATURES_ARCH_P (ptr, name))
 
-#define ISA_SHOULD_BUILD(isa_build_level)                              \
-  (MINIMUM_X86_ISA_LEVEL <= (isa_build_level) && IS_IN (libc))         \
-   || defined ISA_DEFAULT_IMPL
+#define ISA_SHOULD_BUILD(isa_build_level)                                     \
+  (MINIMUM_X86_ISA_LEVEL <= (isa_build_level) && IS_IN (libc))                \
+      || defined ISA_DEFAULT_IMPL
 
 #endif

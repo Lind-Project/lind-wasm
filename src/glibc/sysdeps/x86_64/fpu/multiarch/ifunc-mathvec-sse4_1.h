@@ -20,7 +20,7 @@
 #include <init-arch.h>
 
 #undef PASTER2
-#define PASTER2(x,y)	x##_##y
+#define PASTER2(x, y) x##_##y
 
 extern void REDIRECT_NAME (void);
 extern __typeof (REDIRECT_NAME) OPTIMIZE (sse2) attribute_hidden;
@@ -29,7 +29,7 @@ extern __typeof (REDIRECT_NAME) OPTIMIZE (sse4) attribute_hidden;
 static inline void *
 IFUNC_SELECTOR (void)
 {
-  const struct cpu_features* cpu_features = __get_cpu_features ();
+  const struct cpu_features *cpu_features = __get_cpu_features ();
 
   if (CPU_FEATURE_USABLE_P (cpu_features, SSE4_1))
     return OPTIMIZE (sse4);

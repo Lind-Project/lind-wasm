@@ -24,7 +24,5 @@ extern __typeof (fabsf) __fabsf_vis3 attribute_hidden;
 extern __typeof (fabsf) __fabsf_generic attribute_hidden;
 
 sparc_libm_ifunc (__fabsf,
-		  hwcap & HWCAP_SPARC_VIS3
-		  ? __fabsf_vis3
-		  : __fabsf_generic);
+		  hwcap &HWCAP_SPARC_VIS3 ? __fabsf_vis3 : __fabsf_generic);
 libm_alias_float (__fabs, fabs)

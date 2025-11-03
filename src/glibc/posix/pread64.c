@@ -39,7 +39,5 @@ __libc_pread64 (int fd, void *buf, size_t nbytes, off64_t offset)
   __set_errno (ENOSYS);
   return -1;
 }
-strong_alias (__libc_pread64, __pread64)
-libc_hidden_def (__pread64)
-weak_alias (__libc_pread64, pread64)
-stub_warning (pread64)
+strong_alias (__libc_pread64, __pread64) libc_hidden_def (__pread64)
+    weak_alias (__libc_pread64, pread64) stub_warning (pread64)

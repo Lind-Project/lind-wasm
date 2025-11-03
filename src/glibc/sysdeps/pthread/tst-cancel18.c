@@ -22,9 +22,7 @@
 #include <time.h>
 #include <unistd.h>
 
-
 static pthread_barrier_t b;
-
 
 /* Cleanup handling test.  */
 static int cl_called;
@@ -34,7 +32,6 @@ cl (void *arg)
 {
   ++cl_called;
 }
-
 
 static void *
 tf (void *arg)
@@ -57,7 +54,6 @@ tf (void *arg)
 
   exit (1);
 }
-
 
 static int
 do_test (void)
@@ -82,7 +78,7 @@ do_test (void)
       exit (1);
     }
 
-  struct timespec  ts = { .tv_sec = 0, .tv_nsec = 100000000 };
+  struct timespec ts = { .tv_sec = 0, .tv_nsec = 100000000 };
   while (nanosleep (&ts, &ts) != 0)
     continue;
 
@@ -117,7 +113,6 @@ do_test (void)
     }
 
   puts ("in-time cancellation succeeded");
-
 
   cl_called = 0;
 

@@ -21,5 +21,5 @@
 #include <isa-level.h>
 
 #if MINIMUM_X86_ISA_LEVEL >= 2
-# include "multiarch/strpbrk-generic.c"
+#  include "multiarch/strpbrk-generic.c"
 #endif

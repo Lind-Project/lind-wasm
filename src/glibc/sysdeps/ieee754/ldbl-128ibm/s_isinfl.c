@@ -31,8 +31,8 @@ ___isinfl (long double x)
   return ~mask & (hx >> 62);
 }
 hidden_ver (___isinfl, __isinfl)
-#if !IS_IN (libm)
-weak_alias (___isinfl, ____isinfl)
-long_double_symbol (libc, ___isinfl, isinfl);
+#if !IS_IN(libm)
+    weak_alias (___isinfl, ____isinfl)
+	long_double_symbol (libc, ___isinfl, isinfl);
 long_double_symbol (libc, ____isinfl, __isinfl);
 #endif

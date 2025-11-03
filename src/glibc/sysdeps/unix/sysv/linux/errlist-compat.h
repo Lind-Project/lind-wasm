@@ -29,24 +29,24 @@
    (defined on errlist.c) while _sys_nerr and sys_nerr created new variable
    with the expected size.  */
 #ifdef __ASSEMBLER__
-# define DEFINE_COMPAT_ERRLIST(NUMBERERR, VERSION) 			    \
-  declare_object_symbol_alias (__ ## VERSION ## _sys_errlist,		    \
-			       _sys_errlist_internal,			    \
-			       NUMBERERR * (ULONG_WIDTH / UCHAR_WIDTH))	    \
-			       ASM_LINE_SEP				    \
-  declare_object_symbol_alias (__ ## VERSION ## __sys_errlist,		    \
-			       _sys_errlist_internal, 			    \
-			       NUMBERERR * (ULONG_WIDTH / UCHAR_WIDTH))	    \
-			       ASM_LINE_SEP				    \
-  compat_symbol (libc, __## VERSION ## _sys_errlist, sys_errlist, VERSION)  \
-		 ASM_LINE_SEP						    \
-  compat_symbol (libc, __## VERSION ## __sys_errlist, _sys_errlist, VERSION)
+#  define DEFINE_COMPAT_ERRLIST(NUMBERERR, VERSION)                           \
+    declare_object_symbol_alias (__##VERSION##_sys_errlist,                   \
+				 _sys_errlist_internal,                       \
+				 NUMBERERR *(ULONG_WIDTH / UCHAR_WIDTH))      \
+	ASM_LINE_SEP                                                          \
+	declare_object_symbol_alias (__##VERSION##__sys_errlist,              \
+				     _sys_errlist_internal,                   \
+				     NUMBERERR *(ULONG_WIDTH / UCHAR_WIDTH))  \
+	    ASM_LINE_SEP compat_symbol (libc, __##VERSION##_sys_errlist,      \
+					sys_errlist, VERSION)                 \
+    ASM_LINE_SEP                                                              \
+    compat_symbol (libc, __##VERSION##__sys_errlist, _sys_errlist, VERSION)
 #else
-# define DEFINE_COMPAT_ERRLIST(NUMBERERR, VERSION) 			    \
-  const int __##VERSION##_sys_nerr = NUMBERERR;				    \
-  strong_alias (__##VERSION##_sys_nerr, __##VERSION##__sys_nerr);	    \
-  compat_symbol (libc, __## VERSION ## _sys_nerr, sys_nerr, VERSION);	    \
-  compat_symbol (libc, __## VERSION ## __sys_nerr, _sys_nerr, VERSION);
+#  define DEFINE_COMPAT_ERRLIST(NUMBERERR, VERSION)                           \
+    const int __##VERSION##_sys_nerr = NUMBERERR;                             \
+    strong_alias (__##VERSION##_sys_nerr, __##VERSION##__sys_nerr);           \
+    compat_symbol (libc, __##VERSION##_sys_nerr, sys_nerr, VERSION);          \
+    compat_symbol (libc, __##VERSION##__sys_nerr, _sys_nerr, VERSION);
 #endif
 
 #endif

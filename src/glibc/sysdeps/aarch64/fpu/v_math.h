@@ -86,27 +86,27 @@ v_any_u32h (uint32x2_t x)
 static inline float32x4_t
 v_lookup_f32 (const float *tab, uint32x4_t idx)
 {
-  return (float32x4_t){ tab[idx[0]], tab[idx[1]], tab[idx[2]], tab[idx[3]] };
+  return (float32x4_t) { tab[idx[0]], tab[idx[1]], tab[idx[2]], tab[idx[3]] };
 }
 static inline uint32x4_t
 v_lookup_u32 (const uint32_t *tab, uint32x4_t idx)
 {
-  return (uint32x4_t){ tab[idx[0]], tab[idx[1]], tab[idx[2]], tab[idx[3]] };
+  return (uint32x4_t) { tab[idx[0]], tab[idx[1]], tab[idx[2]], tab[idx[3]] };
 }
 static inline float32x4_t
 v_call_f32 (float (*f) (float), float32x4_t x, float32x4_t y, uint32x4_t p)
 {
-  return (float32x4_t){ p[0] ? f (x[0]) : y[0], p[1] ? f (x[1]) : y[1],
-			p[2] ? f (x[2]) : y[2], p[3] ? f (x[3]) : y[3] };
+  return (float32x4_t) { p[0] ? f (x[0]) : y[0], p[1] ? f (x[1]) : y[1],
+			 p[2] ? f (x[2]) : y[2], p[3] ? f (x[3]) : y[3] };
 }
 static inline float32x4_t
 v_call2_f32 (float (*f) (float, float), float32x4_t x1, float32x4_t x2,
 	     float32x4_t y, uint32x4_t p)
 {
-  return (float32x4_t){ p[0] ? f (x1[0], x2[0]) : y[0],
-			p[1] ? f (x1[1], x2[1]) : y[1],
-			p[2] ? f (x1[2], x2[2]) : y[2],
-			p[3] ? f (x1[3], x2[3]) : y[3] };
+  return (float32x4_t) { p[0] ? f (x1[0], x2[0]) : y[0],
+			 p[1] ? f (x1[1], x2[1]) : y[1],
+			 p[2] ? f (x1[2], x2[2]) : y[2],
+			 p[3] ? f (x1[3], x2[3]) : y[3] };
 }
 
 static inline float64x2_t
@@ -142,12 +142,12 @@ v_all_u64 (uint64x2_t x)
 static inline float64x2_t
 v_lookup_f64 (const double *tab, uint64x2_t idx)
 {
-  return (float64x2_t){ tab[idx[0]], tab[idx[1]] };
+  return (float64x2_t) { tab[idx[0]], tab[idx[1]] };
 }
 static inline uint64x2_t
 v_lookup_u64 (const uint64_t *tab, uint64x2_t idx)
 {
-  return (uint64x2_t){ tab[idx[0]], tab[idx[1]] };
+  return (uint64x2_t) { tab[idx[0]], tab[idx[1]] };
 }
 static inline float64x2_t
 v_call_f64 (double (*f) (double), float64x2_t x, float64x2_t y, uint64x2_t p)
@@ -164,8 +164,8 @@ static inline float64x2_t
 v_call2_f64 (double (*f) (double, double), float64x2_t x1, float64x2_t x2,
 	     float64x2_t y, uint64x2_t p)
 {
-  return (float64x2_t){ p[0] ? f (x1[0], x2[0]) : y[0],
-			p[1] ? f (x1[1], x2[1]) : y[1] };
+  return (float64x2_t) { p[0] ? f (x1[0], x2[0]) : y[0],
+			 p[1] ? f (x1[1], x2[1]) : y[1] };
 }
 
 #endif

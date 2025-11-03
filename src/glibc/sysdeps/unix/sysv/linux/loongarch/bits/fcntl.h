@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _FCNTL_H
-#error "Never use <bits/fcntl.h> directly; include <fcntl.h> instead."
+#  error "Never use <bits/fcntl.h> directly; include <fcntl.h> instead."
 #endif
 
 #include <bits/wordsize.h>
@@ -25,11 +25,11 @@
 /* In 64-bit ISA files are always with 64bit off_t and F_*LK64 are the same as
    non-64-bit versions.  It will need to be revised for 128-bit.  */
 #if __WORDSIZE == 64
-#define __O_LARGEFILE 0
+#  define __O_LARGEFILE 0
 
-#define F_GETLK64 5  /* Get record locking info.  */
-#define F_SETLK64 6  /* Set record locking info (non-blocking).  */
-#define F_SETLKW64 7 /* Set record locking info (blocking).  */
+#  define F_GETLK64 5  /* Get record locking info.  */
+#  define F_SETLK64 6  /* Set record locking info (non-blocking).  */
+#  define F_SETLKW64 7 /* Set record locking info (blocking).  */
 #endif
 
 struct flock

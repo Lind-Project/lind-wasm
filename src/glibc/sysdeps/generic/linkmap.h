@@ -1,4 +1,4 @@
 struct link_map_machine
-  {
-    /* empty by default */
-  };
+{
+  /* empty by default */
+};

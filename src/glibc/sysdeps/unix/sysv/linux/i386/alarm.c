@@ -23,5 +23,3 @@ alarm (unsigned int seconds)
     ++retval;
   return retval;
 }
-
-

@@ -15,9 +15,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#ifndef	_FSTATAT_COMMON_H
-#define	_FSTATAT_COMMON_H	1
+#ifndef _FSTATAT_COMMON_H
+#  define _FSTATAT_COMMON_H 1
 
-extern int __fstatat64_common (int fd, const char *filename, struct stat64 *buf, int at_flags, int flags);
+extern int __fstatat64_common (int fd, const char *filename,
+			       struct stat64 *buf, int at_flags, int flags);
 
 #endif /* link_common.h */

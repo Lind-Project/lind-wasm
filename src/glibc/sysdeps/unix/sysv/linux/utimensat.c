@@ -26,28 +26,28 @@
    and utimensat_time64 syscall.  */
 int
 __utimensat64_helper (int fd, const char *file,
-                      const struct __timespec64 tsp64[2], int flags)
+		      const struct __timespec64 tsp64[2], int flags)
 {
 #ifndef __NR_utimensat_time64
-# define __NR_utimensat_time64 __NR_utimensat
+#  define __NR_utimensat_time64 __NR_utimensat
 #endif
 
 #ifdef __ASSUME_TIME64_SYSCALLS
   return INLINE_SYSCALL_CALL (utimensat_time64, fd, file, &tsp64[0], flags);
 #else
   /* For UTIME_NOW and UTIME_OMIT the value of tv_sec field is ignored.  */
-# define TS_SPECIAL(ts) \
-  ((ts).tv_nsec == UTIME_NOW || (ts).tv_nsec == UTIME_OMIT)
+#  define TS_SPECIAL(ts)                                                      \
+    ((ts).tv_nsec == UTIME_NOW || (ts).tv_nsec == UTIME_OMIT)
 
-  bool need_time64 = tsp64 != NULL
-		     && ((!TS_SPECIAL (tsp64[0])
-			  && !in_int32_t_range (tsp64[0].tv_sec))
-			 || (!TS_SPECIAL (tsp64[1])
-			     && !in_int32_t_range (tsp64[1].tv_sec)));
+  bool need_time64
+      = tsp64 != NULL
+	&& ((!TS_SPECIAL (tsp64[0]) && !in_int32_t_range (tsp64[0].tv_sec))
+	    || (!TS_SPECIAL (tsp64[1])
+		&& !in_int32_t_range (tsp64[1].tv_sec)));
   if (need_time64)
     {
-      int r = INLINE_SYSCALL_CALL (utimensat_time64, fd, file, &tsp64[0],
-				   flags);
+      int r
+	  = INLINE_SYSCALL_CALL (utimensat_time64, fd, file, &tsp64[0], flags);
       if (r == 0 || errno != ENOSYS)
 	return r;
       __set_errno (EOVERFLOW);
@@ -67,13 +67,12 @@ __utimensat64_helper (int fd, const char *file,
 }
 libc_hidden_def (__utimensat64_helper)
 
-/* Change the access time of FILE to TSP[0] and
-   the modification time of FILE to TSP[1].
+    /* Change the access time of FILE to TSP[0] and
+       the modification time of FILE to TSP[1].
 
-   Starting with 2.6.22 the Linux kernel has the utimensat syscall.  */
-int
-__utimensat64 (int fd, const char *file, const struct __timespec64 tsp64[2],
-               int flags)
+       Starting with 2.6.22 the Linux kernel has the utimensat syscall.  */
+    int __utimensat64 (int fd, const char *file,
+		       const struct __timespec64 tsp64[2], int flags)
 {
   if (file == NULL)
     return INLINE_SYSCALL_ERROR_RETURN_VALUE (EINVAL);
@@ -84,9 +83,8 @@ __utimensat64 (int fd, const char *file, const struct __timespec64 tsp64[2],
 #if __TIMESIZE != 64
 libc_hidden_def (__utimensat64)
 
-int
-__utimensat (int fd, const char *file, const struct timespec tsp[2],
-             int flags)
+    int __utimensat (int fd, const char *file, const struct timespec tsp[2],
+		     int flags)
 {
   struct __timespec64 tsp64[2];
   if (tsp)

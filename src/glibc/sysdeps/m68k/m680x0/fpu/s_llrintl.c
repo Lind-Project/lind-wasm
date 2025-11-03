@@ -29,7 +29,7 @@ __llrintl (long double x)
   uint32_t h, l;
   long long int result;
 
-  x = __m81_u(__rintl) (x);
+  x = __m81_u (__rintl) (x);
 
   GET_LDOUBLE_WORDS (e, h, l, x);
 

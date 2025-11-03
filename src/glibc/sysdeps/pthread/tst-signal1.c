@@ -31,7 +31,6 @@
 static sigset_t ss;
 static pthread_barrier_t *b;
 
-
 static void *
 tf (void *arg)
 {
@@ -57,7 +56,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static void
 receiver (void)
@@ -89,7 +87,6 @@ receiver (void)
 
   _exit (0);
 }
-
 
 static int
 do_test (void)

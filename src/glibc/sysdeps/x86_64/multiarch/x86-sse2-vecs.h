@@ -18,30 +18,29 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _X86_SSE2_VECS_H
-#define _X86_SSE2_VECS_H			1
+#  define _X86_SSE2_VECS_H 1
 
-#ifdef VEC_SIZE
-# error "Multiple VEC configs included!"
-#endif
+#  ifdef VEC_SIZE
+#    error "Multiple VEC configs included!"
+#  endif
 
-#define VEC_SIZE			16
-#include "x86-vec-macros.h"
+#  define VEC_SIZE 16
+#  include "x86-vec-macros.h"
 
-#define USE_WITH_SSE2		1
-#define SECTION(p)			p
+#  define USE_WITH_SSE2 1
+#  define SECTION(p) p
 
 /* 3-byte mov instructions with SSE2.  */
-#define MOV_SIZE			3
+#  define MOV_SIZE 3
 /* No vzeroupper needed.  */
-#define RET_SIZE			1
-#define VZEROUPPER
+#  define RET_SIZE 1
+#  define VZEROUPPER
 
-#define VMOVU				movups
-#define VMOVA				movaps
-#define VMOVNT				movntdq
+#  define VMOVU movups
+#  define VMOVA movaps
+#  define VMOVNT movntdq
 
-#define VMM_128				VMM_any_xmm
-#define VMM					VMM_any_xmm
-
+#  define VMM_128 VMM_any_xmm
+#  define VMM VMM_any_xmm
 
 #endif

@@ -50,7 +50,7 @@ do_test (void)
     TEST_COMPARE (r, -1);
     if (errno == ENOSYS)
       FAIL_UNSUPPORTED ("kernel does not support process_mrelease, "
-		        "skipping test");
+			"skipping test");
     TEST_COMPARE (errno, EBADF);
   }
 

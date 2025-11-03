@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #ifndef _BITS_TYPES_STRUCT___PTHREAD_MUTEXATTR_H
-#define _BITS_TYPES_STRUCT___PTHREAD_MUTEXATTR_H	1
+#  define _BITS_TYPES_STRUCT___PTHREAD_MUTEXATTR_H 1
 
 enum __pthread_mutex_protocol;
 enum __pthread_process_shared;

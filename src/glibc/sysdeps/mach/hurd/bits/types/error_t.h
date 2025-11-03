@@ -22,14 +22,14 @@
    'kern_return_t' for these, but with 'error_t' the debugger prints
    symbolic values.  */
 #ifndef __error_t_defined
-# define __error_t_defined 1
+#  define __error_t_defined 1
 
-#ifdef __cplusplus
+#  ifdef __cplusplus
 /* Unfortunately, in C++ int and enum __error_t_codes are not
    interoperable...  */
 typedef int error_t;
-#else
+#  else
 typedef enum __error_t_codes error_t;
-#endif
+#  endif
 
 #endif

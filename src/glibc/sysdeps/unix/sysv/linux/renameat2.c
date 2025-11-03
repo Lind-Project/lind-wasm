@@ -22,9 +22,9 @@
 
 int
 __renameat2 (int oldfd, const char *old, int newfd, const char *new,
-           unsigned int flags)
+	     unsigned int flags)
 {
-#if !defined (__NR_renameat) || defined (__ASSUME_RENAMEAT2)
+#if !defined(__NR_renameat) || defined(__ASSUME_RENAMEAT2)
   return INLINE_SYSCALL_CALL (renameat2, oldfd, old, newfd, new, flags);
 #else
   if (flags == 0)
@@ -41,5 +41,4 @@ __renameat2 (int oldfd, const char *old, int newfd, const char *new,
   return -1;
 #endif
 }
-libc_hidden_def (__renameat2)
-weak_alias (__renameat2, renameat2)
+libc_hidden_def (__renameat2) weak_alias (__renameat2, renameat2)

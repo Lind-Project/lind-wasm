@@ -37,6 +37,5 @@ __libc_open64 (const char *file, int oflag, ...)
   /* __libc_open should be a cancellation point.  */
   return __libc_open (file, oflag | O_LARGEFILE, mode);
 }
-weak_alias (__libc_open64, __open64)
-libc_hidden_weak (__open64)
-weak_alias (__libc_open64, open64)
+weak_alias (__libc_open64, __open64) libc_hidden_weak (__open64)
+    weak_alias (__libc_open64, open64)

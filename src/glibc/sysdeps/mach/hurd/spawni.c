@@ -39,9 +39,8 @@
 int
 __spawni (pid_t *pid, const char *file,
 	  const posix_spawn_file_actions_t *file_actions,
-	  const posix_spawnattr_t *attrp,
-	  char *const argv[], char *const envp[],
-	  int xflags)
+	  const posix_spawnattr_t *attrp, char *const argv[],
+	  char *const envp[], int xflags)
 {
   pid_t new_pid;
   char *path, *p, *name;
@@ -87,7 +86,8 @@ __spawni (pid_t *pid, const char *file,
      ** gives up all benefits of this implementation in that case
      * if addopen was used, don't do any file actions at all here;
        instead, exec an installed helper program e.g.:
-	/libexec/spawn-helper close 3 dup2 1 2 open 0 /file 0x123 0666 exec /bin/foo foo a1 a2
+	/libexec/spawn-helper close 3 dup2 1 2 open 0 /file 0x123 0666 exec
+     /bin/foo foo a1 a2
      ** extra exec might be more or less overhead than fork
      * could do some weird half-fork thing where the child would inherit
        our vm and run some code here, but not do the full work of fork
@@ -120,185 +120,177 @@ __spawni (pid_t *pid, const char *file,
      directory ports with the new AUTH port.  */
   file_t rcrdir = MACH_PORT_NULL, rcwdir = MACH_PORT_NULL;
   error_t reauthenticate (int which, file_t *result)
-    {
-      error_t err;
-      mach_port_t ref;
-      if (*result != MACH_PORT_NULL)
-	return 0;
-      ref = __mach_reply_port ();
-      if (which == INIT_PORT_CWDIR && ccwdir != MACH_PORT_NULL)
-	{
-	  err = __io_reauthenticate (ccwdir, ref, MACH_MSG_TYPE_MAKE_SEND);
-	  if (!err)
-	    err = __auth_user_authenticate (auth,
-					    ref, MACH_MSG_TYPE_MAKE_SEND,
-					    result);
-	}
-      else
-	err = HURD_PORT_USE
-	  (&_hurd_ports[which],
-	   ({
-	     err = __io_reauthenticate (port, ref, MACH_MSG_TYPE_MAKE_SEND);
-	     if (!err)
-	       err = __auth_user_authenticate (auth,
-					       ref, MACH_MSG_TYPE_MAKE_SEND,
-					       result);
-	     err;
-	   }));
-      __mach_port_destroy (__mach_task_self (), ref);
-      return err;
-    }
+  {
+    error_t err;
+    mach_port_t ref;
+    if (*result != MACH_PORT_NULL)
+      return 0;
+    ref = __mach_reply_port ();
+    if (which == INIT_PORT_CWDIR && ccwdir != MACH_PORT_NULL)
+      {
+	err = __io_reauthenticate (ccwdir, ref, MACH_MSG_TYPE_MAKE_SEND);
+	if (!err)
+	  err = __auth_user_authenticate (auth, ref, MACH_MSG_TYPE_MAKE_SEND,
+					  result);
+      }
+    else
+      err = HURD_PORT_USE (&_hurd_ports[which], ({
+	err = __io_reauthenticate (port, ref, MACH_MSG_TYPE_MAKE_SEND);
+	if (!err)
+	  err = __auth_user_authenticate (auth, ref, MACH_MSG_TYPE_MAKE_SEND,
+					  result);
+	err;
+      }));
+    __mach_port_destroy (__mach_task_self (), ref);
+    return err;
+  }
 
   /* Reauthenticate one of our file descriptors for the child.  A null
      element of DTABLE_CELLS indicates a descriptor that was already
      reauthenticated, or was newly opened on behalf of the child.  */
   error_t reauthenticate_fd (int fd)
-    {
-      if (dtable_cells[fd] != NULL && dtable[fd] != MACH_PORT_NULL)
-	{
-	  file_t newfile;
-	  mach_port_t ref = __mach_reply_port ();
-	  error_t err = __io_reauthenticate (dtable[fd],
-					     ref, MACH_MSG_TYPE_MAKE_SEND);
-	  if (!err)
-	    err = __auth_user_authenticate (auth,
-					    ref, MACH_MSG_TYPE_MAKE_SEND,
-					    &newfile);
-	  __mach_port_destroy (__mach_task_self (), ref);
-	  if (err)
-	    return err;
-	  _hurd_port_free (dtable_cells[fd], &ulink_dtable[fd], dtable[fd]);
-	  dtable_cells[fd] = NULL;
-	  dtable[fd] = newfile;
-	}
-      return 0;
-    }
+  {
+    if (dtable_cells[fd] != NULL && dtable[fd] != MACH_PORT_NULL)
+      {
+	file_t newfile;
+	mach_port_t ref = __mach_reply_port ();
+	error_t err
+	    = __io_reauthenticate (dtable[fd], ref, MACH_MSG_TYPE_MAKE_SEND);
+	if (!err)
+	  err = __auth_user_authenticate (auth, ref, MACH_MSG_TYPE_MAKE_SEND,
+					  &newfile);
+	__mach_port_destroy (__mach_task_self (), ref);
+	if (err)
+	  return err;
+	_hurd_port_free (dtable_cells[fd], &ulink_dtable[fd], dtable[fd]);
+	dtable_cells[fd] = NULL;
+	dtable[fd] = newfile;
+      }
+    return 0;
+  }
 
   /* These callbacks are for looking up file names on behalf of the child.  */
   error_t child_init_port (int which, error_t (*operate) (mach_port_t))
-    {
-      if (flags & POSIX_SPAWN_RESETIDS)
-	switch (which)
-	  {
-	  case INIT_PORT_AUTH:
-	    return (*operate) (auth);
-	  case INIT_PORT_CRDIR:
-	    return (reauthenticate (INIT_PORT_CRDIR, &rcrdir)
-		    ?: (*operate) (rcrdir));
-	  case INIT_PORT_CWDIR:
-	    return (reauthenticate (INIT_PORT_CWDIR, &rcwdir)
-		    ?: (*operate) (rcwdir));
-	  }
-      else
-	switch (which)
-	  {
-	  case INIT_PORT_CWDIR:
-	    if (ccwdir != MACH_PORT_NULL)
-	      return (*operate) (ccwdir);
-	    break;
-	  }
-      assert (which != INIT_PORT_PROC);
-      return _hurd_ports_use (which, operate);
-    }
-  file_t child_fd (int fd)
-    {
-      if ((unsigned int) fd < dtablesize && dtable[fd] != MACH_PORT_NULL)
+  {
+    if (flags & POSIX_SPAWN_RESETIDS)
+      switch (which)
 	{
-	  if (flags & POSIX_SPAWN_RESETIDS)
-	    {
-	      /* Reauthenticate this descriptor right now,
-		 since it is going to be used on behalf of the child.  */
-	      errno = reauthenticate_fd (fd);
-	      if (errno)
-		return MACH_PORT_NULL;
-	    }
-	  __mach_port_mod_refs (__mach_task_self (), dtable[fd],
-				MACH_PORT_RIGHT_SEND, +1);
-	  return dtable[fd];
+	case INIT_PORT_AUTH:
+	  return (*operate) (auth);
+	case INIT_PORT_CRDIR:
+	  return (reauthenticate (INIT_PORT_CRDIR, &rcrdir)
+		      ?: (*operate) (rcrdir));
+	case INIT_PORT_CWDIR:
+	  return (reauthenticate (INIT_PORT_CWDIR, &rcwdir)
+		      ?: (*operate) (rcwdir));
 	}
-      return __hurd_fail (EBADF), MACH_PORT_NULL;
-    }
+    else
+      switch (which)
+	{
+	case INIT_PORT_CWDIR:
+	  if (ccwdir != MACH_PORT_NULL)
+	    return (*operate) (ccwdir);
+	  break;
+	}
+    assert (which != INIT_PORT_PROC);
+    return _hurd_ports_use (which, operate);
+  }
+  file_t child_fd (int fd)
+  {
+    if ((unsigned int) fd < dtablesize && dtable[fd] != MACH_PORT_NULL)
+      {
+	if (flags & POSIX_SPAWN_RESETIDS)
+	  {
+	    /* Reauthenticate this descriptor right now,
+	       since it is going to be used on behalf of the child.  */
+	    errno = reauthenticate_fd (fd);
+	    if (errno)
+	      return MACH_PORT_NULL;
+	  }
+	__mach_port_mod_refs (__mach_task_self (), dtable[fd],
+			      MACH_PORT_RIGHT_SEND, +1);
+	return dtable[fd];
+      }
+    return __hurd_fail (EBADF), MACH_PORT_NULL;
+  }
   inline error_t child_lookup (const char *file, int oflag, mode_t mode,
 			       file_t *result)
-    {
-      return __hurd_file_name_lookup (&child_init_port, &child_fd, 0,
-				      file, oflag, mode, result);
-    }
+  {
+    return __hurd_file_name_lookup (&child_init_port, &child_fd, 0, file,
+				    oflag, mode, result);
+  }
   auto error_t child_chdir (const char *name)
-    {
-      file_t new_ccwdir;
+  {
+    file_t new_ccwdir;
 
-      /* Append trailing "/." to directory name to force ENOTDIR if
-	 it's not a directory and EACCES if we don't have search
-	 permission.  */
-      len = strlen (name);
-      const char *lookup = name;
-      if (len >= 2 && name[len - 2] == '/' && name[len - 1] == '.')
-	lookup = name;
-      else if (len == 0)
-	/* Special-case empty file name according to POSIX.  */
-	return __hurd_fail (ENOENT);
-      else
-	{
-	  char *n = alloca (len + 3);
-	  memcpy (n, name, len);
-	  n[len] = '/';
-	  n[len + 1] = '.';
-	  n[len + 2] = '\0';
-	  lookup = n;
-	}
+    /* Append trailing "/." to directory name to force ENOTDIR if
+       it's not a directory and EACCES if we don't have search
+       permission.  */
+    len = strlen (name);
+    const char *lookup = name;
+    if (len >= 2 && name[len - 2] == '/' && name[len - 1] == '.')
+      lookup = name;
+    else if (len == 0)
+      /* Special-case empty file name according to POSIX.  */
+      return __hurd_fail (ENOENT);
+    else
+      {
+	char *n = alloca (len + 3);
+	memcpy (n, name, len);
+	n[len] = '/';
+	n[len + 1] = '.';
+	n[len + 2] = '\0';
+	lookup = n;
+      }
 
-      error_t err = child_lookup (lookup, 0, 0, &new_ccwdir);
-      if (!err)
-	{
-	  if (ccwdir != MACH_PORT_NULL)
-	    __mach_port_deallocate (__mach_task_self (), ccwdir);
-	  ccwdir = new_ccwdir;
-	}
+    error_t err = child_lookup (lookup, 0, 0, &new_ccwdir);
+    if (!err)
+      {
+	if (ccwdir != MACH_PORT_NULL)
+	  __mach_port_deallocate (__mach_task_self (), ccwdir);
+	ccwdir = new_ccwdir;
+      }
 
-      return err;
-    }
+    return err;
+  }
   inline error_t child_lookup_under (file_t startdir, const char *file,
 				     int oflag, mode_t mode, file_t *result)
+  {
+    error_t use_init_port (int which, error_t (*operate) (mach_port_t))
     {
-      error_t use_init_port (int which, error_t (*operate) (mach_port_t))
-	{
-	  return (which == INIT_PORT_CWDIR ? (*operate) (startdir)
-		  : child_init_port (which, operate));
-	}
-
-      return __hurd_file_name_lookup (&use_init_port, &child_fd, 0,
-				      file, oflag, mode, result);
+      return (which == INIT_PORT_CWDIR ? (*operate) (startdir)
+				       : child_init_port (which, operate));
     }
+
+    return __hurd_file_name_lookup (&use_init_port, &child_fd, 0, file, oflag,
+				    mode, result);
+  }
   auto error_t child_fchdir (int fd)
-    {
-      file_t new_ccwdir;
-      error_t err;
+  {
+    file_t new_ccwdir;
+    error_t err;
 
-      if ((unsigned int)fd >= dtablesize
-	  || dtable[fd] == MACH_PORT_NULL)
-	return EBADF;
+    if ((unsigned int) fd >= dtablesize || dtable[fd] == MACH_PORT_NULL)
+      return EBADF;
 
-      /* We look up "." to force ENOTDIR if it's not a directory and EACCES if
-         we don't have search permission.  */
-      if (dtable_cells[fd] != NULL)
-	  err = HURD_PORT_USE (dtable_cells[fd],
-		    ({
-		      child_lookup_under (port, ".", O_NOTRANS, 0, &new_ccwdir);
-		     }));
-      else
-	  err = child_lookup_under (dtable[fd], ".", O_NOTRANS, 0, &new_ccwdir);
+    /* We look up "." to force ENOTDIR if it's not a directory and EACCES if
+       we don't have search permission.  */
+    if (dtable_cells[fd] != NULL)
+      err = HURD_PORT_USE (
+	  dtable_cells[fd],
+	  ({ child_lookup_under (port, ".", O_NOTRANS, 0, &new_ccwdir); }));
+    else
+      err = child_lookup_under (dtable[fd], ".", O_NOTRANS, 0, &new_ccwdir);
 
-      if (!err)
-	{
-	  if (ccwdir != MACH_PORT_NULL)
-	    __mach_port_deallocate (__mach_task_self (), ccwdir);
-	  ccwdir = new_ccwdir;
-	}
+    if (!err)
+      {
+	if (ccwdir != MACH_PORT_NULL)
+	  __mach_port_deallocate (__mach_task_self (), ccwdir);
+	ccwdir = new_ccwdir;
+      }
 
-      return err;
-    }
-
+    return err;
+  }
 
   /* Do this once.  */
   flags = attrp == NULL ? 0 : attrp->__flags;
@@ -309,7 +301,7 @@ __spawni (pid_t *pid, const char *file,
 
   err = __task_create (__mach_task_self (),
 #ifdef KERN_INVALID_LEDGER
-		       NULL, 0,	/* OSF Mach */
+		       NULL, 0, /* OSF Mach */
 #endif
 		       0, &task);
   if (err)
@@ -333,7 +325,7 @@ __spawni (pid_t *pid, const char *file,
   ss = _hurd_self_sigstate ();
 
 retry:
-  assert (! __spin_lock_locked (&ss->critical_section_lock));
+  assert (!__spin_lock_locked (&ss->critical_section_lock));
   __spin_lock (&ss->critical_section_lock);
 
   _hurd_sigstate_lock (ss);
@@ -366,7 +358,7 @@ retry:
 
 #ifdef _POSIX_PRIORITY_SCHEDULING
   /* Set the scheduling algorithm and parameters.  */
-# error implement me
+#  error implement me
   if ((flags & (POSIX_SPAWN_SETSCHEDPARAM | POSIX_SPAWN_SETSCHEDULER))
       == POSIX_SPAWN_SETSCHEDPARAM)
     {
@@ -375,9 +367,10 @@ retry:
     }
   else if ((flags & POSIX_SPAWN_SETSCHEDULER) != 0)
     {
-      if (__sched_setscheduler (0, attrp->__policy,
-				(flags & POSIX_SPAWN_SETSCHEDPARAM) != 0
-				? &attrp->__sp : NULL) == -1)
+      if (__sched_setscheduler (
+	      0, attrp->__policy,
+	      (flags & POSIX_SPAWN_SETSCHEDPARAM) != 0 ? &attrp->__sp : NULL)
+	  == -1)
 	_exit (SPAWN_ERROR);
     }
 #endif
@@ -409,16 +402,13 @@ retry:
 	  /* Create a new auth port using our real UID and GID (the first
 	     auxiliary UID and GID) as the only effective IDs.  */
 	  if (!err)
-	    err = __USEPORT (AUTH,
-			     __auth_makeauth (port,
-					      NULL, MACH_MSG_TYPE_COPY_SEND, 0,
-					      _hurd_id.aux.uids, 1,
-					      _hurd_id.aux.uids,
-					      _hurd_id.aux.nuids,
-					      _hurd_id.aux.gids, 1,
-					      _hurd_id.aux.gids,
-					      _hurd_id.aux.ngids,
-					      &_hurd_id.rid_auth));
+	    err = __USEPORT (
+		AUTH,
+		__auth_makeauth (port, NULL, MACH_MSG_TYPE_COPY_SEND, 0,
+				 _hurd_id.aux.uids, 1, _hurd_id.aux.uids,
+				 _hurd_id.aux.nuids, _hurd_id.aux.gids, 1,
+				 _hurd_id.aux.gids, _hurd_id.aux.ngids,
+				 &_hurd_id.rid_auth));
 	}
       if (!err)
 	{
@@ -432,9 +422,9 @@ retry:
     }
   else
     /* Copy our existing auth port.  */
-    err = __USEPORT (AUTH, __mach_port_mod_refs (__mach_task_self (),
-						 (auth = port),
-						 MACH_PORT_RIGHT_SEND, +1));
+    err = __USEPORT (AUTH,
+		     __mach_port_mod_refs (__mach_task_self (), (auth = port),
+					   MACH_PORT_RIGHT_SEND, +1));
 
   if (err)
     {
@@ -442,7 +432,8 @@ retry:
 
       if (err == EINTR)
 	{
-	  /* Got a signal while inside an RPC of the critical section, retry again */
+	  /* Got a signal while inside an RPC of the critical section, retry
+	   * again */
 	  __mach_port_deallocate (__mach_task_self (), auth);
 	  auth = MACH_PORT_NULL;
 	  goto retry;
@@ -486,66 +477,75 @@ retry:
       {
 	/* Close a file descriptor in the child.  */
 	error_t do_close (int fd)
-	  {
-	    if ((unsigned int)fd < dtablesize
-		&& dtable[fd] != MACH_PORT_NULL)
-	      {
-		if (dtable_cells[fd] == NULL)
-		  __mach_port_deallocate (__mach_task_self (), dtable[fd]);
-		else
-		  {
-		    _hurd_port_free (dtable_cells[fd],
-				     &ulink_dtable[fd], dtable[fd]);
-		  }
-		dtable_cells[fd] = NULL;
-		dtable[fd] = MACH_PORT_NULL;
-		return 0;
-	      }
-	    return EBADF;
-	  }
+	{
+	  if ((unsigned int) fd < dtablesize && dtable[fd] != MACH_PORT_NULL)
+	    {
+	      if (dtable_cells[fd] == NULL)
+		__mach_port_deallocate (__mach_task_self (), dtable[fd]);
+	      else
+		{
+		  _hurd_port_free (dtable_cells[fd], &ulink_dtable[fd],
+				   dtable[fd]);
+		}
+	      dtable_cells[fd] = NULL;
+	      dtable[fd] = MACH_PORT_NULL;
+	      return 0;
+	    }
+	  return EBADF;
+	}
 
 	/* Close file descriptors in the child.  */
 	error_t do_closefrom (int lowfd)
-	  {
-	    while ((unsigned int) lowfd < dtablesize)
-	      {
-		error_t err = do_close (lowfd);
-		if (err != 0 && err != EBADF)
-		  return err;
-		lowfd++;
-	      }
-	    return 0;
-	  }
+	{
+	  while ((unsigned int) lowfd < dtablesize)
+	    {
+	      error_t err = do_close (lowfd);
+	      if (err != 0 && err != EBADF)
+		return err;
+	      lowfd++;
+	    }
+	  return 0;
+	}
 
-	/* Make sure the dtable can hold NEWFD.  */
-#define EXPAND_DTABLE(newfd)						      \
-	({								      \
-	  if ((unsigned int)newfd >= dtablesize				      \
-	      && newfd < _hurd_rlimits[RLIMIT_OFILE].rlim_cur)		      \
-	    {								      \
-	      /* We need to expand the dtable for the child.  */	      \
-	      NEW_TABLE (dtable, newfd);				      \
-	      NEW_ULINK_TABLE (ulink_dtable, newfd);			      \
-	      NEW_TABLE (dtable_cells, newfd);				      \
-	      dtablesize = newfd + 1;					      \
-	    }								      \
-	  ((unsigned int)newfd < dtablesize ? 0 : EMFILE);		      \
-	})
-#define NEW_TABLE(x, newfd) \
-  do { __typeof (x) new_##x = __alloca ((newfd + 1) * sizeof (x[0]));	      \
-  memcpy (new_##x, x, dtablesize * sizeof (x[0]));			      \
-  memset (&new_##x[dtablesize], 0, (newfd + 1 - dtablesize) * sizeof (x[0])); \
-  x = new_##x; } while (0)
-#define NEW_ULINK_TABLE(x, newfd) \
-  do { __typeof (x) new_##x = __alloca ((newfd + 1) * sizeof (x[0]));	      \
-  unsigned i;								      \
-  for (i = 0; i < dtablesize; i++)					      \
-    if (dtable_cells[i] != NULL)					      \
-      _hurd_port_move (dtable_cells[i], &new_##x[i], &x[i]);		      \
-    else								      \
-      memset (&new_##x[i], 0, sizeof (new_##x[i]));			      \
-  memset (&new_##x[dtablesize], 0, (newfd + 1 - dtablesize) * sizeof (x[0])); \
-  x = new_##x; } while (0)
+      /* Make sure the dtable can hold NEWFD.  */
+#define EXPAND_DTABLE(newfd)                                                  \
+  ({                                                                          \
+    if ((unsigned int) newfd >= dtablesize                                    \
+	&& newfd < _hurd_rlimits[RLIMIT_OFILE].rlim_cur)                      \
+      {                                                                       \
+	/* We need to expand the dtable for the child.  */                    \
+	NEW_TABLE (dtable, newfd);                                            \
+	NEW_ULINK_TABLE (ulink_dtable, newfd);                                \
+	NEW_TABLE (dtable_cells, newfd);                                      \
+	dtablesize = newfd + 1;                                               \
+      }                                                                       \
+    ((unsigned int) newfd < dtablesize ? 0 : EMFILE);                         \
+  })
+#define NEW_TABLE(x, newfd)                                                   \
+  do                                                                          \
+    {                                                                         \
+      __typeof (x) new_##x = __alloca ((newfd + 1) * sizeof (x[0]));          \
+      memcpy (new_##x, x, dtablesize * sizeof (x[0]));                        \
+      memset (&new_##x[dtablesize], 0,                                        \
+	      (newfd + 1 - dtablesize) * sizeof (x[0]));                      \
+      x = new_##x;                                                            \
+    }                                                                         \
+  while (0)
+#define NEW_ULINK_TABLE(x, newfd)                                             \
+  do                                                                          \
+    {                                                                         \
+      __typeof (x) new_##x = __alloca ((newfd + 1) * sizeof (x[0]));          \
+      unsigned i;                                                             \
+      for (i = 0; i < dtablesize; i++)                                        \
+	if (dtable_cells[i] != NULL)                                          \
+	  _hurd_port_move (dtable_cells[i], &new_##x[i], &x[i]);              \
+	else                                                                  \
+	  memset (&new_##x[i], 0, sizeof (new_##x[i]));                       \
+      memset (&new_##x[dtablesize], 0,                                        \
+	      (newfd + 1 - dtablesize) * sizeof (x[0]));                      \
+      x = new_##x;                                                            \
+    }                                                                         \
+  while (0)
 
 	struct __spawn_action *action = &file_actions->__actions[i];
 
@@ -556,7 +556,7 @@ retry:
 	    break;
 
 	  case spawn_do_dup2:
-	    if ((unsigned int)action->action.dup2_action.fd < dtablesize
+	    if ((unsigned int) action->action.dup2_action.fd < dtablesize
 		&& dtable[action->action.dup2_action.fd] != MACH_PORT_NULL)
 	      {
 		const int fd = action->action.dup2_action.fd;
@@ -634,8 +634,8 @@ retry:
 	    {
 	      pid_t pgrp;
 	      /* Check if it is possible to avoid an extra syscall.  */
-	      if ((attrp->__flags & POSIX_SPAWN_SETPGROUP)
-		  != 0 && attrp->__pgrp != 0)
+	      if ((attrp->__flags & POSIX_SPAWN_SETPGROUP) != 0
+		  && attrp->__pgrp != 0)
 		pgrp = attrp->__pgrp;
 	      else
 		err = __proc_getpgrp (proc, new_pid, &pgrp);
@@ -675,8 +675,7 @@ retry:
       ref = __mach_reply_port ();
       err = __proc_reauthenticate (proc, ref, MACH_MSG_TYPE_MAKE_SEND);
       if (!err)
-	err = __auth_user_authenticate (auth,
-					ref, MACH_MSG_TYPE_MAKE_SEND,
+	err = __auth_user_authenticate (auth, ref, MACH_MSG_TYPE_MAKE_SEND,
 					&newproc);
       __mach_port_destroy (__mach_task_self (), ref);
       if (!err)
@@ -760,7 +759,7 @@ retry:
 		 directory.  */
 	      continue;
 
-	    case 0:		/* Success! */
+	    case 0: /* Success! */
 	    default:
 	      /* Some other error means we found an executable file, but
 		 something went wrong executing it; return the error to our
@@ -811,44 +810,40 @@ retry:
     size_t argslen = 0, envlen = 0;
 
     inline error_t exec (file_t file)
-      {
-	sigset_t old, new;
+    {
+      sigset_t old, new;
 
-	/* Avoid getting interrupted while exec(), notably not after the exec
-	   server has committed to the exec and started thrashing the task.
+      /* Avoid getting interrupted while exec(), notably not after the exec
+	 server has committed to the exec and started thrashing the task.
 
-	   Various issues otherwise show up when building e.g. ghc.
+	 Various issues otherwise show up when building e.g. ghc.
 
-	   TODO Rather add proper interrupt support to the exec server, that
-	   avoids interrupts in that period.  */
-	__sigfillset(&new);
-	__sigprocmask (SIG_SETMASK, &new, &old);
+	 TODO Rather add proper interrupt support to the exec server, that
+	 avoids interrupts in that period.  */
+      __sigfillset (&new);
+      __sigprocmask (SIG_SETMASK, &new, &old);
 
-	error_t err = __file_exec_paths
-	  (file, task,
-	   __sigismember (&_hurdsig_traced, SIGKILL) ? EXEC_SIGTRAP : 0,
-	   relpath, abspath, args, argslen, env, envlen,
-	   dtable, MACH_MSG_TYPE_COPY_SEND, dtablesize,
-	   ports, MACH_MSG_TYPE_COPY_SEND, _hurd_nports,
-	   ints, INIT_INT_MAX,
-	   NULL, 0, NULL, 0);
+      error_t err = __file_exec_paths (
+	  file, task,
+	  __sigismember (&_hurdsig_traced, SIGKILL) ? EXEC_SIGTRAP : 0,
+	  relpath, abspath, args, argslen, env, envlen, dtable,
+	  MACH_MSG_TYPE_COPY_SEND, dtablesize, ports, MACH_MSG_TYPE_COPY_SEND,
+	  _hurd_nports, ints, INIT_INT_MAX, NULL, 0, NULL, 0);
 
-	/* Fallback for backwards compatibility.  This can just be removed
-	   when __file_exec goes away.  */
-	if (err == MIG_BAD_ID)
-	  err = __file_exec (file, task,
-			      (__sigismember (&_hurdsig_traced, SIGKILL)
-			      ? EXEC_SIGTRAP : 0),
-			      args, argslen, env, envlen,
-			      dtable, MACH_MSG_TYPE_COPY_SEND, dtablesize,
-			      ports, MACH_MSG_TYPE_COPY_SEND, _hurd_nports,
-			      ints, INIT_INT_MAX,
-			      NULL, 0, NULL, 0);
+      /* Fallback for backwards compatibility.  This can just be removed
+	 when __file_exec goes away.  */
+      if (err == MIG_BAD_ID)
+	err = __file_exec (
+	    file, task,
+	    (__sigismember (&_hurdsig_traced, SIGKILL) ? EXEC_SIGTRAP : 0),
+	    args, argslen, env, envlen, dtable, MACH_MSG_TYPE_COPY_SEND,
+	    dtablesize, ports, MACH_MSG_TYPE_COPY_SEND, _hurd_nports, ints,
+	    INIT_INT_MAX, NULL, 0, NULL, 0);
 
-	__sigprocmask (SIG_SETMASK, &old, NULL);
+      __sigprocmask (SIG_SETMASK, &old, NULL);
 
-	return err;
-      }
+      return err;
+    }
 
     /* Now we are out of things that can fail before the file_exec RPC,
        for which everything else must be prepared.  The only thing left
@@ -949,7 +944,7 @@ retry:
   if (pid != NULL)
     *pid = new_pid;
 
- out:
+out:
   /* Clean up all the references we are now holding.  */
 
   if (task != MACH_PORT_NULL)

@@ -18,19 +18,18 @@
 
 /* Return the address of the struct r_debug after relocation.  */
 
-static inline EW(Addr)
-E(r_debug_address) (EW(Dyn) *d)
+static inline EW (Addr) E (r_debug_address) (EW (Dyn) * d)
 {
   if (d->d_tag == DT_DEBUG)
-    return (EW(Addr)) d->d_un.d_ptr;
+    return (EW (Addr)) d->d_un.d_ptr;
 
   return 0;
 }
 
 /* Return the offset of the struct r_debug before relocation.  */
 
-static inline EW(Addr)
-E(r_debug_offset) (EW(Dyn) *d, int fd, EW(Addr) offset)
+static inline EW (Addr)
+    E (r_debug_offset) (EW (Dyn) * d, int fd, EW (Addr) offset)
 {
-  return E(r_debug_address) (d);
+  return E (r_debug_address) (d);
 }

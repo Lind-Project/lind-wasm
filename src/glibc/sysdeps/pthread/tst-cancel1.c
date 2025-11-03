@@ -21,12 +21,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 static pthread_mutex_t m1 = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t m2 = PTHREAD_MUTEX_INITIALIZER;
 
 static int cntr;
-
 
 static void
 cleanup (void *arg)
@@ -36,7 +34,6 @@ cleanup (void *arg)
   else
     cntr = 1;
 }
-
 
 static void *
 tf (void *arg)
@@ -84,7 +81,6 @@ tf (void *arg)
 
   return NULL;
 }
-
 
 static int
 do_test (void)
@@ -155,7 +151,6 @@ do_test (void)
 
   return result;
 }
-
 
 #define TEST_FUNCTION do_test ()
 #include "../test-skeleton.c"

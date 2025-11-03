@@ -33,6 +33,6 @@ __fe_nomask_env_priv (void)
 #endif
   return FE_ENABLED_ENV;
 }
-#if SHLIB_COMPAT (libm, GLIBC_2_3, GLIBC_2_19)
+#if SHLIB_COMPAT(libm, GLIBC_2_3, GLIBC_2_19)
 compat_symbol (libm, __fe_nomask_env_priv, __fe_nomask_env, GLIBC_2_3);
 #endif

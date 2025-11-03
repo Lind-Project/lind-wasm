@@ -22,7 +22,7 @@
 #include "thrd_priv.h"
 
 void
-__call_once (once_flag *flag, void (*func)(void))
+__call_once (once_flag *flag, void (*func) (void))
 {
   _Static_assert (sizeof (once_flag) == sizeof (pthread_once_t),
 		  "sizeof (once_flag) != sizeof (pthread_once_t)");
@@ -32,9 +32,9 @@ __call_once (once_flag *flag, void (*func)(void))
 }
 #if PTHREAD_IN_LIBC
 versioned_symbol (libc, __call_once, call_once, GLIBC_2_34);
-# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_28, GLIBC_2_34)
+#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_28, GLIBC_2_34)
 compat_symbol (libpthread, __call_once, call_once, GLIBC_2_28);
-# endif
+#  endif
 #else /* !PTHREAD_IN_LIBC */
 strong_alias (__call_once, call_once)
 #endif
