@@ -12,6 +12,7 @@ use crate::{
 };
 use alloc::sync::Arc;
 use cage::memory::{fork_vmmap, init_vmmap};
+use sysdefs::constants::PAGESIZE;
 use core::ptr::NonNull;
 use sysdefs::constants::fs_const::{
     MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, PAGESHIFT, PROT_READ, PROT_WRITE,
@@ -28,6 +29,7 @@ use super::Val;
 pub enum InstantiateType {
     InstantiateFirst(u64),
     InstantiateChild { parent_pid: u64, child_pid: u64 },
+    InstantiateLib(*mut u32),
 }
 
 /// An instantiated WebAssembly module.
@@ -230,12 +232,24 @@ impl Instance {
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
     ) -> Result<(Instance, InstanceId)> {
-        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
+        fn round_size(base: u32, align: u32) -> u32 {
+            if base > 0 {
+                (base + align - 1) / align * align
+            } else {
+                base
+            }
+        }
         // retrieve the initial memory size
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
         // in wasmtime, one page is 65536 bytes, so we need to convert to pagesize in rawposix
         let minimal_pages = plan.memory.minimum * 0x10;
+        println!("[debug] minimal_pages: {}", minimal_pages);
+        let module_meminfo = module.dylink_meminfo().as_ref().unwrap();
+        println!("[debug] module memory size: {}, align: {}", module_meminfo.memory_size, module_meminfo.memory_alignment);
+        let module_rounded_size = round_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
+        let module_rounded_size = round_size(module_rounded_size, PAGESIZE);
+        println!("[debug] module memory size round to {}", module_rounded_size);
 
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
@@ -255,9 +269,11 @@ impl Instance {
                 // if this is the first wasm instance, we need to
                 // 1. set memory base address
                 // 2. manually call mmap_syscall to set up the first memory region
-                let handle = store.0.instance(InstanceId::from_index(0));
-                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                let memory_base = defined_memory.base as usize;
+                let mut memory_iter = store.0.all_memories();
+                let memory = memory_iter.next().expect("no defined memory found").clone();
+                // assert!(memory_iter.next().is_none(), "multiple defined memory found");
+                drop(memory_iter);
+                let memory_base = memory.data_ptr(&mut *store) as usize;
 
                 init_vmmap(pid, memory_base, Some(minimal_pages as u32));
 
@@ -270,7 +286,9 @@ impl Instance {
                     pid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     pid,
-                    minimal_pages << PAGESHIFT, // size of first memory region
+                    // minimal_pages << PAGESHIFT, // size of first memory region
+                    // 4096000,
+                    module_rounded_size as u64 + (minimal_pages << PAGESHIFT),
                     pid,
                     (PROT_READ | PROT_WRITE) as u64,
                     pid,
@@ -294,17 +312,67 @@ impl Instance {
                 // therefore in this case, we only need to:
                 // 1. set memory base address
                 // 2. fork the memory space from parent
-                let handle = store.0.instance(InstanceId::from_index(0));
-                let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                let child_address = defined_memory.base as usize;
+                let mut memory_iter = store.0.all_memories();
+                let memory = memory_iter.next().expect("no defined memory found").clone();
+                assert!(memory_iter.next().is_none(), "multiple defined memory found");
+                drop(memory_iter);
+                let child_address = memory.data_ptr(&mut *store) as usize;
 
                 init_vmmap(child_pid, child_address, None);
                 fork_vmmap(parent_pid as u64, child_pid);
             }
+            InstantiateType::InstantiateLib(memory_base) => {
+                let dylink_meminfo = module.dylink_meminfo().as_ref().unwrap();
+                println!("[debug] library memory size: {}, align: {}", dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
+
+                let rounded_size = round_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
+                let rounded_size = round_size(rounded_size, PAGESIZE);
+                println!("[debug] library size round to {}", rounded_size);
+
+                let mut addr = make_syscall(
+                    1,                   // self cageid
+                    (MMAP_SYSCALL) as u64, // syscall num
+                    0, // since wasmtime operates with lower level memory, it always interacts with underlying os
+                    1, // target cageid (should be same)
+                    0, // the first memory region starts from 0
+                    1,
+                    rounded_size as u64, // size of first memory region
+                    1,
+                    (PROT_READ | PROT_WRITE) as u64,
+                    1,
+                    (MAP_PRIVATE | MAP_ANONYMOUS) as u64,
+                    1,
+                    // we need to pass -1 here, but since make_syscall only accepts u64
+                    // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
+                    (0 - 1) as u64,
+                    1,
+                    0,
+                    1,
+                ) as u32;
+
+                // update the address
+                unsafe {
+                    *memory_base = addr;
+                }
+                
+                println!("[debug] library memory starts at {}", addr);
+            }
         }
+        
+        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;
+        }
+
+        match instantiate_type {
+            InstantiateType::InstantiateLib(_) => {
+                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                println!("[debug] library start reloc func");
+                let res = reloc.call(store.as_context_mut(), ());
+                println!("[debug] reloc result: {:?}", res);
+            },
+            _ => {}
         }
 
         Ok((instance, instanceid))

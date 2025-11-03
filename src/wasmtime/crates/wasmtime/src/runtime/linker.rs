@@ -1,7 +1,7 @@
 use crate::func::HostFunc;
 use crate::instance::InstancePre;
 use crate::store::StoreOpaque;
-use crate::{prelude::*, IntoFunc};
+use crate::{prelude::*, Global, GlobalType, IntoFunc};
 use crate::{
     AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, ImportType,
     Instance, Module, StoreContextMut, Val, ValRaw, ValType, WasmTyList,
@@ -840,7 +840,18 @@ impl<T> Linker<T> {
                 )
             }
             ModuleKind::Reactor => {
-                let instance = self.instantiate(&mut store, &module)?;
+                println!("[debug] link a reactor module");
+
+                self.allow_shadowing(true);
+
+                // placeholder for memory base, initialized into 0, will be replaced once vmmap for main module
+                // is initialized
+                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
+                self.define(&mut store, "lib", "__memory_base", memory_base);
+                let handler = memory_base.get_handler(&mut store) as *mut u32;
+
+                println!("[debug] library instantiate");
+                let (instance, _) = self.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib(handler))?;
 
                 if let Some(export) = instance.get_export(&mut store, "_initialize") {
                     if let Extern::Func(func) = export {
@@ -849,7 +860,10 @@ impl<T> Linker<T> {
                             .context("calling the Reactor initialization function")?;
                     }
                 }
+                // self.allow_shadowing(false);
 
+
+                println!("[debug] library instance");
                 self.instance(store, module_name, instance)
             }
         }

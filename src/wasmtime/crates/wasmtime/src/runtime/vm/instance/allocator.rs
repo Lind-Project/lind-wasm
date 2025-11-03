@@ -673,6 +673,7 @@ fn check_memory_init_bounds(
 }
 
 fn initialize_memories(instance: &mut Instance, module: &Module) -> Result<()> {
+    println!("[debug] initialize memories");
     // Delegates to the `init_memory` method which is sort of a duplicate of
     // `instance.memory_init_segment` but is used at compile-time in other
     // contexts so is shared here to have only one method of memory
@@ -730,12 +731,15 @@ fn initialize_memories(instance: &mut Instance, module: &Module) -> Result<()> {
             }
             let memory = self.instance.get_memory(memory_index);
 
+            panic!("panic here");
+
             unsafe {
                 let src = self.instance.wasm_data(init.data.clone());
                 let dst = memory.base.add(usize::try_from(init.offset).unwrap());
                 // FIXME audit whether this is safe in the presence of shared
                 // memory
                 // (https://github.com/bytecodealliance/wasmtime/issues/4203).
+                println!("[debug] constant data write to {:?} ({} bytes)", dst, src.len());
                 ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len())
             }
             true

@@ -1372,11 +1372,16 @@ impl<
 
 // get the base address of the wasm process
 pub fn get_memory_base<T: Clone + Send + 'static + std::marker::Sync>(
-    caller: &Caller<'_, T>,
+    mut caller: &mut Caller<'_, T>,
 ) -> u64 {
-    let handle = caller.as_context().0.instance(InstanceId::from_index(0));
-    let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
-    defined_memory.base as u64
+    // let handle = caller.as_context().0.instance(InstanceId::from_index(1));
+    // let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
+    let mut memory_iter = caller.as_context_mut().0.all_memories();
+    let memory = memory_iter.next().expect("no defined memory found").clone();
+    // assert!(memory_iter.next().is_none(), "multiple defined memory found");
+    drop(memory_iter);
+
+    memory.data_ptr(caller.as_context()) as u64
 }
 
 // entry point of fork syscall

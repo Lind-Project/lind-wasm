@@ -88,6 +88,7 @@ use crate::runtime::vm::{
     VMRuntimeLimits, WasmFault,
 };
 use crate::trampoline::VMHostGlobalContext;
+use crate::vm::ExportMemory;
 use crate::RootSet;
 use crate::{module::ModuleRegistry, Engine, Module, Trap, Val, ValRaw};
 use crate::{Global, Instance, Memory, RootScope, Table, Uninhabited};
