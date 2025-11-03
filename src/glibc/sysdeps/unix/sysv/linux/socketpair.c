@@ -25,8 +25,6 @@ int
 __socketpair (int domain, int type, int protocol, int sv[2])
 {
   uint64_t host_sv = TRANSLATE_GUEST_POINTER_TO_HOST (sv);
-  // sv array must not be NULL - it stores the two created socket fds
-  CHECK_NULL_PTR (host_sv, "sv");
   
   return MAKE_SYSCALL (SOCKETPAIR_SYSCALL, "syscall|socketpair",
 		       (uint64_t) domain, (uint64_t) type, (uint64_t) protocol,

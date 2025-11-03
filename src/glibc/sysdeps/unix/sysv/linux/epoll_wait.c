@@ -29,8 +29,6 @@ int
 epoll_wait (int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
   uint64_t host_events = TRANSLATE_GUEST_POINTER_TO_HOST (events);
-  // events array is required unless maxevents is 0
-  CHECK_NULL_BUF (host_events, maxevents);
   return MAKE_SYSCALL (
       EPOLL_WAIT_SYSCALL, "syscall|epoll_wait", (uint64_t) epfd,
       host_events, (uint64_t) maxevents, (uint64_t) timeout,

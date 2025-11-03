@@ -27,11 +27,6 @@ libc_hidden_proto (epoll_ctl)
     int epoll_ctl (int __epfd, int __op, int __fd, struct epoll_event *__event)
 {
      uint64_t host_event = TRANSLATE_GUEST_POINTER_TO_HOST (__event);
-  // event can be NULL for EPOLL_CTL_DEL, but required for ADD/MOD
-  if (__op != EPOLL_CTL_DEL)
-    {
-      CHECK_NULL_PTR (host_event, "__event");
-    }
   return MAKE_SYSCALL (EPOLL_CTL_SYSCALL, "syscall|epoll_ctl",
 		       (uint64_t) __epfd, (uint64_t) __op, (uint64_t) __fd,
 		       host_event, NOTUSED, NOTUSED);

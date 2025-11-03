@@ -42,8 +42,6 @@ __libc_open (const char *file, int oflag, ...)
     }
 
   uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
-  // Pathname cannot be NULL
-  CHECK_NULL_PTR (host_file, "file");
 
   return MAKE_SYSCALL (
       OPEN_SYSCALL, "syscall|open", host_file,

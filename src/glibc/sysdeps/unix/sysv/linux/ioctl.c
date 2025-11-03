@@ -46,8 +46,6 @@ __ioctl (int fd, unsigned long int request, ...)
    * (pointer). */
   uint64_t host_ptr
       = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
-  
-  CHECK_NULL_PTR (host_ptr, "argp");
 
   return MAKE_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd,
 		       (uint64_t) request, host_ptr, NOTUSED, NOTUSED,

@@ -29,10 +29,6 @@ __stat (const char *fd, struct stat *buf)
   uint64_t host_fd = TRANSLATE_GUEST_POINTER_TO_HOST (fd);
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
-  // Both pathname and stat buffer must not be NULL
-  CHECK_NULL_PTR (host_fd, "pathname");
-  CHECK_NULL_PTR (host_buf, "buf");
-  
   return MAKE_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
 		       host_fd, host_buf,
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);

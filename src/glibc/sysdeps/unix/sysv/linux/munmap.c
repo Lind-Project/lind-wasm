@@ -10,8 +10,6 @@ int
 __GI___munmap (void *addr, size_t len)
 {
   uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
-  // addr must not be NULL for munmap
-  CHECK_NULL_PTR (host_addr, "addr");
   
   return MAKE_SYSCALL (MUNMAP_SYSCALL, "syscall|munmap",
 		       host_addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, NOTUSED);

@@ -7,7 +7,6 @@ int
 __chdir (const char *__path)
 {
   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (__path);
-  CHECK_NULL_PTR (host_path, "__path");
   
   return MAKE_SYSCALL (CHDIR_SYSCALL, "syscall|chdir",
 		       host_path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
@@ -17,7 +16,6 @@ int
 chdir (const char *__path)
 {
   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (__path);
-  CHECK_NULL_PTR (host_path, "__path");
   
   return MAKE_SYSCALL (CHDIR_SYSCALL, "syscall|chdir",
 		       host_path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);

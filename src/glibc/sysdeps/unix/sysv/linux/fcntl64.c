@@ -50,15 +50,6 @@ __libc_fcntl64 (int fd, int cmd, ...)
   cmd = FCNTL_ADJUST_CMD (cmd);
 
   uint64_t host_arg = TRANSLATE_GUEST_POINTER_TO_HOST (arg);
-  
-  // TODO: Check if there are any other cases apart from locks where fcntl64 will accept null ptr
-  // arg is a pointer to struct flock/flock64 and must not be NULL
-  if (cmd == F_SETLKW || cmd == F_SETLKW64 || cmd == F_OFD_SETLKW ||
-      cmd == F_OFD_GETLK || cmd == F_OFD_SETLK || cmd == F_GETLK ||
-      cmd == F_SETLK || cmd == F_GETLK64 || cmd == F_SETLK64)
-    {
-      CHECK_NULL_PTR (host_arg, "arg");
-    }
 
   if (cmd == F_SETLKW || cmd == F_SETLKW64 || cmd == F_OFD_SETLKW)
     return MAKE_SYSCALL (FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,

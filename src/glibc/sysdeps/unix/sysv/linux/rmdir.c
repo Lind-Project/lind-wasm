@@ -28,7 +28,6 @@ int
 __rmdir (const char *path)
 {
   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
-  CHECK_NULL_PTR (host_path, "path");
   
   return MAKE_SYSCALL (RMDIR_SYSCALL, "syscall|rmdir",
 		       host_path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);

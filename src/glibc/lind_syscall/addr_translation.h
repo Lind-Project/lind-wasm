@@ -46,35 +46,6 @@ extern "C"
 #define TRANSLATE_GUEST_POINTER_TO_HOST(p)                                    \
   __lind_translate_ptr_to_host ((const void *) (p))
 
-
-// Helper macro to check if a translated host pointer is null and return error
-// Used for mandatory non-nullable pointer parameters
-// Returns -1 and sets errno to EFAULT if the pointer is null
-// name param is unused, mainly for better readibility in call sites
-#define CHECK_NULL_PTR(ptr, name)                                             \
-  do                                                                          \
-    {                                                                         \
-      if ((ptr) == 0ULL)                                                      \
-	{                                                                     \
-	  errno = EFAULT;                                                     \
-	  return -1;                                                          \
-	}                                                                     \
-    }                                                                         \
-  while (0)
-
-// Helper macro for checking buffer pointers (used in read/write/etc.)
-// Only checks if count > 0, allows NULL buffers otherwise
-#define CHECK_NULL_BUF(ptr, count)                                            \
-  do                                                                          \
-    {                                                                         \
-      if ((count) > 0 && (ptr) == 0ULL)                                       \
-	{                                                                     \
-	  errno = EFAULT;                                                     \
-	  return -1;                                                          \
-	}                                                                     \
-    }                                                                         \
-  while (0)
-
 #ifdef __cplusplus
 }
 #endif

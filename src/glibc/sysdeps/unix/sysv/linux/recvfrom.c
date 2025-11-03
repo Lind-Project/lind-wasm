@@ -30,12 +30,6 @@ __libc_recvfrom (int fd, void *buf, size_t len, int flags,
   uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
   uint64_t host_addrlen = TRANSLATE_GUEST_POINTER_TO_HOST (addrlen);
   
-  // buf must not be NULL if len > 0
-  CHECK_NULL_BUF (host_buf, len);
-  
-  // NOTE: addr and addrlen can be NULL - caller may not need peer address
-  // Do NOT check addr/addrlen - NULL is valid
-  
   return MAKE_SYSCALL (RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd,
 		       host_buf, (uint64_t) len, (uint64_t) flags,
 		       host_addr, host_addrlen);

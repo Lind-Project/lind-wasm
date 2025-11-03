@@ -30,8 +30,6 @@ int
 __pipe (int __pipedes[2])
 {
   uint64_t host_pipedes = TRANSLATE_GUEST_POINTER_TO_HOST (__pipedes);
-  // pipedes array must not be NULL (mirrors rawposix check)
-  CHECK_NULL_PTR (host_pipedes, "__pipedes");
   
   return MAKE_SYSCALL (PIPE_SYSCALL, "syscall|pipe",
 		       host_pipedes, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);

@@ -41,10 +41,6 @@ __readlink (const char *path, char *buf, size_t len)
   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
-  // Both path and buf must not be NULL
-  CHECK_NULL_PTR (host_path, "path");
-  CHECK_NULL_BUF (host_buf, len);
-  
   return MAKE_SYSCALL (READLINK_SYSCALL, "syscall|readlink",
 		       host_path, host_buf,
 		       (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);

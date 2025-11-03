@@ -10,8 +10,6 @@ int
 __GI___mprotect (void *addr, size_t len, int prot)
 {
   uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
-  // addr must not be NULL for mprotect
-  CHECK_NULL_PTR (host_addr, "addr");
   
   return MAKE_SYSCALL (MPROTECT_SYSCALL, "syscall|mprotect",
 		       host_addr, (uint64_t) len, (uint64_t) prot, NOTUSED, NOTUSED,

@@ -32,8 +32,6 @@ __setitimer64 (__itimer_which_t which,
 {
   uint64_t host_new = TRANSLATE_GUEST_POINTER_TO_HOST (new_value);
   uint64_t host_old = TRANSLATE_GUEST_POINTER_TO_HOST (old_value);
-  // new_value is mandatory, old_value can be NULL if caller doesn't need it
-  CHECK_NULL_PTR (host_new, "new_value");
   return MAKE_SYSCALL (SETITIMER_SYSCALL, "syscall|setitimer",
 		       (uint64_t) which, host_new, host_old,
 		       NOTUSED, NOTUSED, NOTUSED);

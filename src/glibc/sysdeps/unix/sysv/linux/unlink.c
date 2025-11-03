@@ -28,7 +28,6 @@ int
 __unlink (const char *name)
 {
   uint64_t host_name = TRANSLATE_GUEST_POINTER_TO_HOST (name);
-  CHECK_NULL_PTR (host_name, "name");
   
   return MAKE_SYSCALL (UNLINK_SYSCALL, "syscall|unlink",
 		       host_name, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);

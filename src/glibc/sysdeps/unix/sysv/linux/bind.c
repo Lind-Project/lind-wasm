@@ -26,8 +26,6 @@ __bind (int fd, const struct sockaddr *addr, socklen_t len)
 {
   // Dennis Edit
   uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
-  // addr must not be NULL for bind
-  CHECK_NULL_PTR (host_addr, "addr");
   
   return MAKE_SYSCALL (BIND_SYSCALL, "syscall|bind", (uint64_t) fd,
 		       host_addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);

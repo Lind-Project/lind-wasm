@@ -49,7 +49,6 @@ __libc_fcntl (int fd, int cmd, ...)
       {
 	/* Pointer argument - use arg4 (ptr_arg) slot */
 	uint64_t host_arg = TRANSLATE_GUEST_POINTER_TO_HOST (arg);
-	CHECK_NULL_PTR (host_arg, "arg");
 	return MAKE_SYSCALL (
 	    FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd,
 	    NOTUSED,   /* arg3: int_arg unused */
@@ -58,9 +57,8 @@ __libc_fcntl (int fd, int cmd, ...)
       }
     case F_OFD_SETLKW:
       {
-	/* Pointer argument - validate before dereferencing */
+	/* Pointer argument - use arg4 (ptr_arg) slot */
 	uint64_t host_arg = TRANSLATE_GUEST_POINTER_TO_HOST (arg);
-	CHECK_NULL_PTR (host_arg, "arg");
 	struct flock *flk = (struct flock *) arg;
 	struct flock64 flk64 = { .l_type = flk->l_type,
 				 .l_whence = flk->l_whence,
@@ -78,9 +76,8 @@ __libc_fcntl (int fd, int cmd, ...)
     case F_OFD_GETLK:
     case F_OFD_SETLK:
       {
-	/* Pointer argument - validate before dereferencing */
+	/* Pointer argument - use arg4 (ptr_arg) slot */
 	uint64_t host_arg = TRANSLATE_GUEST_POINTER_TO_HOST (arg);
-	CHECK_NULL_PTR (host_arg, "arg");
 	struct flock *flk = (struct flock *) arg;
 	struct flock64 flk64 = { .l_type = flk->l_type,
 				 .l_whence = flk->l_whence,
