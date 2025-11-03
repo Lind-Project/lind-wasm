@@ -21,6 +21,7 @@
 
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <lind_syscall/addr_translation.h>
 
 #ifndef __ASSEMBLER__
 # include <sysdep.h>
@@ -118,8 +119,8 @@
 /* Wake up up to NR_WAKE waiters on FUTEXP.  Move up to NR_MOVE of the
    rest from waiting on FUTEXP to waiting on MUTEX (a different futex).
    Returns non-zero if error happened, zero if success.  */
-# define lll_futex_requeue(futexp, nr_wake, nr_move, mutex, val, private) \
-  ({                                                                      \
+# define lll_futex_requeue(futexp, nr_wake, nr_move, mutex, val, private) 
+  ({                                                                      
     uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futexp);     \
     uint64_t __host_mutex = TRANSLATE_GUEST_POINTER_TO_HOST (mutex);      \
     long int __ret = MAKE_RAW_SYSCALL6 (                                  \
