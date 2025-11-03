@@ -82,7 +82,7 @@ cd $BUILD
   --prefix=$GLIBC/target \
   --host=i686-linux-gnu \
   --build=i686-linux-gnu \
-  CFLAGS=" -matomics -mbulk-memory -O2 -g -I../lind_syscall" \
+  CFLAGS=" -matomics -mbulk-memory -O2 -g" \
   CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion"
 
 make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
@@ -200,5 +200,3 @@ cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
 cp "$GLIBC/lind_syscall/register_handler.h" "$SYSROOT/include/wasm32-wasi/"
 cp "$GLIBC/lind_syscall/copy_data_between_cages.h" "$SYSROOT/include/wasm32-wasi/"
-# Header used internally by glibc wrappers; installing for completeness
-cp "$GLIBC/lind_syscall/addr_translation.h" "$SYSROOT/include/wasm32-wasi/"
