@@ -19,6 +19,14 @@ use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
 use typemap::path_conversion::*;
 
+/// Helper to detect if mmap return value is an error based on page alignment
+///
+/// Valid mmap addresses are always page-aligned (multiple of PAGESIZE = 4096).
+/// Error returns like -1 cast to usize become non-page-aligned values.
+fn is_mmap_error(ret: usize) -> bool {
+    ret % PAGESIZE as usize != 0
+}
+
 /// Helper function for close_syscall
 ///
 /// Lind-WASM is running as same Linux-Process from host kernel perspective, so standard IO stream fds
@@ -760,6 +768,12 @@ pub fn mmap_syscall(
             off,
         );
 
+        // Check for error BEFORE sys_to_user conversion
+        if is_mmap_error(result) {
+            let errno = get_errno();
+            return handle_errno(errno, "mmap");
+        }
+
         let vmmap = cage.vmmap.read();
         let result = vmmap.sys_to_user(result);
         drop(vmmap);
@@ -821,7 +835,12 @@ pub fn mmap_syscall(
 /// Helper function for `mmap` / `munmap`
 ///
 /// This function calls underlying libc::mmap and serves as helper functions for memory related (vmmap related)
-/// syscalls. This function provides fd translation between virtual to kernel and error handling.
+/// syscalls. This function provides fd translation between virtual to kernel.
+///
+/// Returns:
+/// - On success: valid page-aligned memory address
+/// - On failure: -1 cast to usize (non-page-aligned, caller should check alignment, get_errno and handle_errno)
+/// - On fd translation error: negative errno value cast to usize (non-page-aligned)
 pub fn mmap_inner(
     cageid: u64,
     addr: *mut u8,
@@ -845,12 +864,8 @@ pub fn mmap_inner(
                     ) as i64
                 };
 
-                // Check if mmap failed and return the appropriate error if so
-                if ret == -1 {
-                    let errno = get_errno();
-                    return handle_errno(errno, "mmap") as usize;
-                }
-
+                // Return raw result (including -1 on error)
+                // Caller will check page alignment to detect errors
                 ret as usize
             }
             Err(_e) => {
@@ -860,12 +875,8 @@ pub fn mmap_inner(
     } else {
         // Handle mmap with fd = -1 (anonymous memory mapping or special case)
         let ret = unsafe { libc::mmap(addr as *mut c_void, len, prot, flags, -1, off) as i64 };
-        // Check if mmap failed and return the appropriate error if so
-        if ret == -1 {
-            let errno = get_errno();
-            return handle_errno(errno, "mmap") as usize;
-        }
-
+        // Return raw result (including -1 on error)
+        // Caller will check page alignment to detect errors
         ret as usize
     }
 }
@@ -1077,8 +1088,10 @@ pub fn brk_syscall(
             0,
         );
 
-        if ret < 0 {
-            panic!("brk mmap failed");
+        // Check for error using page alignment
+        if is_mmap_error(ret) {
+            let errno = get_errno();
+            return handle_errno(errno, "brk");
         }
     }
     // if we are shrinking the brk
@@ -1095,8 +1108,10 @@ pub fn brk_syscall(
             0,
         );
 
-        if ret < 0 {
-            panic!("brk mmap failed");
+        // Check for error using page alignment
+        if is_mmap_error(ret) {
+            let errno = get_errno();
+            return handle_errno(errno, "brk");
         }
     }
 
@@ -3895,6 +3910,13 @@ pub fn shmat_syscall(
 
     // Call the raw shmat helper to attach the shared memory segment.
     let result = shmat_helper(cageid, sysaddr as *mut u8, shmflag, shmid);
+
+    // Check for error BEFORE sys_to_user conversion
+    if is_mmap_error(result) {
+        let errno = get_errno();
+        return handle_errno(errno, "shmat");
+    }
+
     let vmmap = cage.vmmap.read();
     let result = vmmap.sys_to_user(result);
     drop(vmmap);
