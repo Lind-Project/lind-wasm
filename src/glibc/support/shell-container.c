@@ -57,9 +57,7 @@
 
 /* Debugging is enabled via --debug, which must be the first argument.  */
 static int debug_mode = 0;
-#define dprintf                                                               \
-  if (debug_mode)                                                             \
-  fprintf
+#define dprintf if (debug_mode) fprintf
 
 /* Emulate the "/bin/true" command.  Arguments are ignored.  */
 static int
@@ -101,30 +99,30 @@ copy_func (char **argv)
   sfd = open (sname, O_RDONLY);
   if (sfd < 0)
     {
-      fprintf (stderr, "cp: unable to open %s for reading: %s\n", sname,
-	       strerror (errno));
+      fprintf (stderr, "cp: unable to open %s for reading: %s\n",
+	       sname, strerror (errno));
       return 1;
     }
 
   if (fstat (sfd, &st) < 0)
     {
-      fprintf (stderr, "cp: unable to fstat %s: %s\n", sname,
-	       strerror (errno));
+      fprintf (stderr, "cp: unable to fstat %s: %s\n",
+	       sname, strerror (errno));
       goto out;
     }
 
   dfd = open (dname, O_WRONLY | O_TRUNC | O_CREAT, 0600);
   if (dfd < 0)
     {
-      fprintf (stderr, "cp: unable to open %s for writing: %s\n", dname,
-	       strerror (errno));
+      fprintf (stderr, "cp: unable to open %s for writing: %s\n",
+	       dname, strerror (errno));
       goto out;
     }
 
   if (support_copy_file_range (sfd, 0, dfd, 0, st.st_size, 0) != st.st_size)
     {
-      fprintf (stderr, "cp: cannot copy file %s to %s: %s\n", sname, dname,
-	       strerror (errno));
+      fprintf (stderr, "cp: cannot copy file %s to %s: %s\n",
+	       sname, dname, strerror (errno));
       goto out;
     }
 
@@ -138,6 +136,7 @@ out:
     close (dfd);
 
   return ret;
+
 }
 
 /* Emulate the 'exit' builtin.  The exit value is optional.  */
@@ -163,10 +162,10 @@ kill_func (char **argv)
     {
       pid_t pid;
       if (strcmp (argv[i], "$$") == 0)
-	// Dennis Edit
-
+      
+  // Dennis Edit
 	pid = 0;
-      // pid = getpid ();
+  // pid = getpid ();
 
       else
 	pid = atoi (argv[i]);
@@ -202,14 +201,18 @@ sleep_func (char **argv)
 }
 
 /* This is a list of all the built-in commands we understand.  */
-static struct
-{
+static struct {
   const char *name;
   int (*func) (char **argv);
-} builtin_funcs[]
-    = { { "true", true_func }, { "echo", echo_func }, { "cp", copy_func },
-	{ "exit", exit_func }, { "kill", kill_func }, { "sleep", sleep_func },
-	{ NULL, NULL } };
+} builtin_funcs[] = {
+  { "true", true_func },
+  { "echo", echo_func },
+  { "cp", copy_func },
+  { "exit", exit_func },
+  { "kill", kill_func },
+  { "sleep", sleep_func },
+  { NULL, NULL }
+};
 
 /* Run one tokenized command.  argv[0] is the command.  argv is
    NULL-terminated.  */
@@ -238,25 +241,25 @@ run_command_array (char **argv)
     {
       if (strcmp (argv[i], "<") == 0 && argv[i + 1])
 	{
-	  new_stdin = open (argv[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+	  new_stdin = open (argv[i + 1], O_WRONLY|O_CREAT|O_TRUNC, 0777);
 	  ++i;
 	  continue;
 	}
       if (strcmp (argv[i], ">") == 0 && argv[i + 1])
 	{
-	  new_stdout = open (argv[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+	  new_stdout = open (argv[i + 1], O_WRONLY|O_CREAT|O_TRUNC, 0777);
 	  ++i;
 	  continue;
 	}
       if (strcmp (argv[i], ">>") == 0 && argv[i + 1])
 	{
-	  new_stdout = open (argv[i + 1], O_WRONLY | O_CREAT | O_APPEND, 0777);
+	  new_stdout = open (argv[i + 1], O_WRONLY|O_CREAT|O_APPEND, 0777);
 	  ++i;
 	  continue;
 	}
       if (strcmp (argv[i], "2>") == 0 && argv[i + 1])
 	{
-	  new_stderr = open (argv[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+	  new_stderr = open (argv[i + 1], O_WRONLY|O_CREAT|O_TRUNC, 0777);
 	  ++i;
 	  continue;
 	}
@@ -264,9 +267,10 @@ run_command_array (char **argv)
     }
   argv[j] = NULL;
 
+
   for (i = 0; builtin_funcs[i].name != NULL; i++)
     if (strcmp (argv[0], builtin_funcs[i].name) == 0)
-      builtin_func = builtin_funcs[i].func;
+       builtin_func = builtin_funcs[i].func;
 
   dprintf (stderr, "builtin %p argv0 `%s'\n", builtin_func, argv[0]);
 
@@ -300,7 +304,8 @@ run_command_array (char **argv)
 
       execvp (argv[0], argv);
 
-      fprintf (stderr, "sh: execing %s failed: %s", argv[0], strerror (errno));
+      fprintf (stderr, "sh: execing %s failed: %s",
+	       argv[0], strerror (errno));
       exit (127);
     }
 
@@ -330,7 +335,7 @@ run_command_array (char **argv)
 static void
 run_command_string (const char *cmdline, const char **iargs)
 {
-  char *args[MAX_ARG_COUNT + 1];
+  char *args[MAX_ARG_COUNT+1];
   int ap = 0;
   const char *start, *end;
   int nargs;
@@ -347,7 +352,7 @@ run_command_string (const char *cmdline, const char **iargs)
 
       /* Skip whitespace up to the next token.  */
       while (*cmdline && isspace (*cmdline))
-	cmdline++;
+	cmdline ++;
       if (*cmdline == 0)
 	break;
 
@@ -357,12 +362,14 @@ run_command_string (const char *cmdline, const char **iargs)
 
       /* Skip to end of token; either by whitespace or matching quote.  */
       dprintf (stderr, "in_quote %d\n", in_quote);
-      while (*cmdline && (!isspace (*cmdline) || in_quote))
+      while (*cmdline
+	     && (!isspace (*cmdline) || in_quote))
 	{
-	  if (*cmdline == in_quote && cmdline != start)
+	  if (*cmdline == in_quote
+	      && cmdline != start)
 	    in_quote = 0;
 	  dprintf (stderr, "[%c]%d ", *cmdline, in_quote);
-	  cmdline++;
+	  cmdline ++;
 	}
       dprintf (stderr, "\n");
 
@@ -375,27 +382,31 @@ run_command_string (const char *cmdline, const char **iargs)
 
       /* Strip off quotes, if found.  */
       dprintf (stderr, "args[%d] = <%s>\n", ap, args[ap]);
-      if (args[ap][0] == '\'' && args[ap][strlen (args[ap]) - 1] == '\'')
+      if (args[ap][0] == '\''
+	  && args[ap][strlen (args[ap])-1] == '\'')
 	{
-	  args[ap][strlen (args[ap]) - 1] = 0;
-	  args[ap]++;
+	  args[ap][strlen (args[ap])-1] = 0;
+	  args[ap] ++;
 	}
 
-      else if (args[ap][0] == '"' && args[ap][strlen (args[ap]) - 1] == '"')
+      else if (args[ap][0] == '"'
+	  && args[ap][strlen (args[ap])-1] == '"')
 	{
-	  args[ap][strlen (args[ap]) - 1] = 0;
-	  args[ap]++;
+	  args[ap][strlen (args[ap])-1] = 0;
+	  args[ap] ++;
 	}
 
       /* Replace positional parameters like $4.  */
-      else if (args[ap][0] == '$' && isdigit (args[ap][1]) && args[ap][2] == 0)
+      else if (args[ap][0] == '$'
+	       && isdigit (args[ap][1])
+	       && args[ap][2] == 0)
 	{
 	  int a = args[ap][1] - '1';
 	  if (0 <= a && a < nargs)
 	    args[ap] = strdup (iargs[a]);
 	}
 
-      ap++;
+      ap ++;
 
       if (*cmdline == 0)
 	break;
@@ -450,12 +461,12 @@ main (int argc, const char **argv)
   if (strcmp (argv[1], "-c") == 0)
     {
       if (strcmp (argv[2], "--") == 0)
-	run_command_string (argv[3], argv + 4);
+		run_command_string (argv[3], argv+4);
       else
-	run_command_string (argv[2], argv + 3);
+		run_command_string (argv[2], argv+3);
     }
   else
-    run_script (argv[1], argv + 2);
+    run_script (argv[1], argv+2);
 
   dprintf (stderr, "normal exit 0\n");
   return 0;
