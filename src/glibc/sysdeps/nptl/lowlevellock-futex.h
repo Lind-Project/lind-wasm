@@ -47,6 +47,7 @@
 
 #define FUTEX_BITSET_MATCH_ANY	0xffffffff
 
+
 /* Values for 'private' parameter of locking macros.  Yes, the
    definition seems to be backwards.  But it is not.  The bit will be
    reversed before passing to the system call.  */
@@ -65,6 +66,29 @@
      ? -INTERNAL_SYSCALL_ERRNO (__ret) : 0);                     	\
   })
 
+/* Safe version of futex syscall that first translates the futex pointer
+   from user space to host space (used in Lind WASM build).  */
+# define __lll_futex_syscall_with_translated_ptrs(nargs, futexp, op, ...)  \
+  ({                                                                      \
+    uint64_t __host_futex_ptr = TRANSLATE_GUEST_POINTER_TO_HOST (futexp); \
+    long int __ret;                                                       \
+                                                                          \
+    if (!__host_futex_ptr)                                                \
+      {                                                                   \
+        __ret = -EINVAL;                                                  \
+      }                                                                   \
+    else                                                                  \
+      {                                                                   \
+        __ret = MAKE_RAW_SYSCALL##nargs (FUTEX_SYSCALL, "syscall|futex",  \
+                                         __host_futex_ptr, op,            \
+                                         __VA_ARGS__);                    \
+      }                                                                   \
+                                                                          \
+    (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (__ret))                  \
+         ? -INTERNAL_SYSCALL_ERRNO (__ret)                                \
+         : 0);                                                            \
+  })
+
 /* For most of these macros, the return value is never really used.
    Nevertheless, the protocol is that each one returns a negated errno
    code for failure or zero for success.  (Note that the corresponding
@@ -77,9 +101,9 @@
   lll_futex_timed_wait (futexp, val, NULL, private)
 
 # define lll_futex_timed_wait(futexp, val, timeout, private)     \
-  lll_futex_syscall (4, futexp,                                 \
+  __lll_futex_syscall_with_translated_ptrs (4, futexp,         \
 		     __lll_private_flag (FUTEX_WAIT, private),  \
-		     val, timeout)
+		     val, TRANSLATE_GUEST_POINTER_TO_HOST (timeout))
 
 /* Verify whether the supplied clockid is supported by
    lll_futex_clock_wait_bitset.  */
@@ -88,28 +112,43 @@
 
 /* Wake up up to NR waiters on FUTEXP.  */
 # define lll_futex_wake(futexp, nr, private)                             \
-  lll_futex_syscall (4, futexp,                                         \
+  __lll_futex_syscall_with_translated_ptrs (4, futexp,                  \
 		     __lll_private_flag (FUTEX_WAKE, private), nr, 0)
 
 /* Wake up up to NR_WAKE waiters on FUTEXP.  Move up to NR_MOVE of the
    rest from waiting on FUTEXP to waiting on MUTEX (a different futex).
    Returns non-zero if error happened, zero if success.  */
 # define lll_futex_requeue(futexp, nr_wake, nr_move, mutex, val, private) \
-  lll_futex_syscall (6, futexp,                                         \
-		     __lll_private_flag (FUTEX_CMP_REQUEUE, private),   \
-		     nr_wake, nr_move, mutex, val)
+  ({                                                                      \
+    uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futexp);     \
+    uint64_t __host_mutex = TRANSLATE_GUEST_POINTER_TO_HOST (mutex);      \
+    long int __ret = MAKE_RAW_SYSCALL6 (                                  \
+        FUTEX_SYSCALL, "syscall|futex", __host_futex,                     \
+        __lll_private_flag (FUTEX_CMP_REQUEUE, private), nr_wake,         \
+        nr_move, __host_mutex, val);                                      \
+    (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (__ret))                  \
+         ? -INTERNAL_SYSCALL_ERRNO (__ret)                                \
+         : 0);                                                            \
+  })
 
 /* Wake up up to NR_WAKE waiters on FUTEXP and NR_WAKE2 on FUTEXP2.
    Returns non-zero if error happened, zero if success.  */
 # define lll_futex_wake_unlock(futexp, nr_wake, nr_wake2, futexp2, private) \
-  lll_futex_syscall (6, futexp,                                         \
-		     __lll_private_flag (FUTEX_WAKE_OP, private),       \
-		     nr_wake, nr_wake2, futexp2,                        \
-		     FUTEX_OP_CLEAR_WAKE_IF_GT_ONE)
+  ({                                                                      \
+    uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futexp);     \
+    uint64_t __host_futex2 = TRANSLATE_GUEST_POINTER_TO_HOST (futexp2);   \
+    long int __ret = MAKE_RAW_SYSCALL6 (                                  \
+        FUTEX_SYSCALL, "syscall|futex", __host_futex,                     \
+        __lll_private_flag (FUTEX_WAKE_OP, private), nr_wake, nr_wake2,   \
+        __host_futex2, FUTEX_OP_CLEAR_WAKE_IF_GT_ONE);                    \
+    (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (__ret))                  \
+         ? -INTERNAL_SYSCALL_ERRNO (__ret)                                \
+         : 0);                                                            \
+  })
 
 
 #define lll_futex_timed_unlock_pi(futexp, private) 			\
-  lll_futex_syscall (4, futexp,						\
+  __lll_futex_syscall_with_translated_ptrs (4, futexp,			\
 		     __lll_private_flag (FUTEX_UNLOCK_PI, private),	\
 		     0, 0)
 
@@ -117,10 +156,17 @@
    and inherits priority from the waiter.  */
 # define lll_futex_cmp_requeue_pi(futexp, nr_wake, nr_move, mutex,       \
                                  val, private)                          \
-  lll_futex_syscall (6, futexp,                                         \
-		     __lll_private_flag (FUTEX_CMP_REQUEUE_PI,          \
-					 private),                      \
-		     nr_wake, nr_move, mutex, val)
+  ({                                                                      \
+    uint64_t __host_futex = TRANSLATE_GUEST_POINTER_TO_HOST (futexp);     \
+    uint64_t __host_mutex = TRANSLATE_GUEST_POINTER_TO_HOST (mutex);      \
+    long int __ret = MAKE_RAW_SYSCALL6 (                                  \
+        FUTEX_SYSCALL, "syscall|futex", __host_futex,                     \
+        __lll_private_flag (FUTEX_CMP_REQUEUE_PI, private), nr_wake,      \
+        nr_move, __host_mutex, val);                                      \
+    (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (__ret))                  \
+         ? -INTERNAL_SYSCALL_ERRNO (__ret)                                \
+         : 0);                                                            \
+  })
 
 /* Like lll_futex_wait, but acting as a cancellable entrypoint.  */
 # define lll_futex_wait_cancel(futexp, val, private) \

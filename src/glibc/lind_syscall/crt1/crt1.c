@@ -203,5 +203,6 @@ int _start() {
     __libc_setup_tls();
     __wasi_init_tp();
     __wasi_initialize_environ();
+    __lind_init_addr_translation();
     return __main_void();
 }
