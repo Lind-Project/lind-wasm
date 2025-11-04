@@ -838,10 +838,14 @@ def generate_html_report(report):
                     # Extract just the test file name for display
                     test_name = test_path.split('/')[-1]
                     
+                    # For successful tests, just show "Success" instead of full output
+                    # For failures, show the full output for debugging
+                    output_display = "Success" if result['status'].lower() == "success" else result["output"]
+                    
                     html_content.append(
                         f'<tr class="{row_class}"><td>{test_name}</td>'
                         f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
-                        f'<td><pre>{result["output"]}</pre></td></tr>'
+                        f'<td><pre>{output_display}</pre></td></tr>'
                     )
             
             html_content.append('</table>')
