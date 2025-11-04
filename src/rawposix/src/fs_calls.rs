@@ -19,12 +19,31 @@ use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
 use typemap::path_conversion::*;
 
-/// Helper to detect if mmap return value is an error based on page alignment
+/// Helper to detect if mmap return value is an error
 ///
 /// Valid mmap addresses are always page-aligned (multiple of PAGESIZE = 4096).
 /// Error returns like -1 cast to usize become non-page-aligned values.
+/// This function also validates that unaligned values are in the valid errno range
+/// (-1 to -PAGESIZE) and panics if they are not, as this would indicate a serious bug.
 fn is_mmap_error(ret: usize) -> bool {
-    ret % PAGESIZE as usize != 0
+    // Check if page-aligned first (normal case)
+    if ret % PAGESIZE as usize == 0 {
+        return false; // Not an error
+    }
+
+    // If not aligned, verify it's in the valid errno range
+    // Valid errno values are -1 to -PAGESIZE, which when cast to usize are:
+    // usize::MAX - PAGESIZE + 1 to usize::MAX
+    let min_errno = usize::MAX - (PAGESIZE as usize) + 1;
+    if ret >= min_errno {
+        return true; // Valid error in errno range
+    }
+
+    // Unaligned but not in errno range - this should never happen
+    panic!(
+        "mmap returned unaligned address outside errno range: 0x{:x}",
+        ret
+    );
 }
 
 /// Helper function for close_syscall
