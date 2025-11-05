@@ -2,6 +2,8 @@
 #include <sys/types.h>  // For other system types, if needed
 #include <syscall-template.h>
 #include <stdlib.h>
+#include <string.h>  // For memcpy
+#include <sched.h>  // For struct clone_args
 #include <lind_syscall_num.h>
 #include <addr_translation.h>
 

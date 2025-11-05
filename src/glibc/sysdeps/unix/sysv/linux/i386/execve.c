@@ -35,6 +35,7 @@ int __execve (const char *__path, char *const __argv[], char *const __envp[])
     host_envp[envc] = NULL;
   }
 
-  return MAKE_SYSCALL(EXECVE_SYSCALL, "syscall|execve", host_path, (uint64_t) host_argv, (uint64_t) host_envp, NOTUSED, NOTUSED, NOTUSED)
+  return MAKE_SYSCALL(EXECVE_SYSCALL, "syscall|execve", host_path, (uint64_t) host_argv, (uint64_t) host_envp, NOTUSED, NOTUSED, NOTUSED);
 }
 strong_alias (__execve, execve)
+libc_hidden_def (__execve)
