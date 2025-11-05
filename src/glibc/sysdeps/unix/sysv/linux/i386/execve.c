@@ -2,6 +2,7 @@
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
 #include <alloca.h>
+#include <addr_translation.h>
 
 int __execve (const char *__path, char *const __argv[], char *const __envp[])
 {
