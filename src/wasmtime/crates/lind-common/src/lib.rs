@@ -70,8 +70,8 @@ impl LindCommonCtx {
         match call_number as i32 {
             // clone syscall
             CLONE_SYSCALL => {
-                let clone_args = unsafe { &mut *((arg1 + start_address) as *mut CloneArgStruct) };
-                clone_args.child_tid += start_address;
+                let clone_args = unsafe { &mut *(arg1 as *mut CloneArgStruct) };
+                // clone_args.child_tid += start_address;
                 wasmtime_lind_multi_process::clone_syscall(caller, clone_args)
             }
             // exec syscall

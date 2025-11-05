@@ -5,7 +5,13 @@
 #include <lind_syscall_num.h>
 
 int __GI___clone3 (struct clone_args *cl_args, size_t size, int (*func)(void *), void *arg) {
-  int pid = MAKE_SYSCALL(CLONE_SYSCALL, "syscall|clone3", (uint64_t)cl_args, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_cl_args = TRANSLATE_GUEST_POINTER_TO_HOST(cl_args);
+  struct clone_args local_args;
+  memcpy(&local_args, (void *)host_cl_args, sizeof(struct clone_args));
+
+  local_args.child_tid = TRANSLATE_GUEST_POINTER_TO_HOST((void *)local_args.child_tid);
+
+  int pid = MAKE_SYSCALL(CLONE_SYSCALL, "syscall|clone3", (uint64_t) &local_args, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
   if(pid == 0 && func != NULL) {
     int ret = func(arg);
     exit(ret);

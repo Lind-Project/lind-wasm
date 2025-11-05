@@ -899,11 +899,11 @@ impl<
         let parent_unwind_data_start_sys = address as u64 + parent_unwind_data_start_usr;
 
         // parse the path and argv
-        let path_ptr = ((address as i64) + path) as *const u8;
+        let path_ptr = path as *const u8;
         let path_str;
 
         // NOTE: the address passed from wasm module is 32-bit address
-        let argv_ptr = ((address as i64) + argv) as *const *const u8;
+        let argv_ptr = argv as *const *const u8;
         let mut args = Vec::new();
         let mut environs = None;
 
@@ -932,7 +932,7 @@ impl<
                     break; // Stop if we encounter NULL
                 }
 
-                let arg_ptr = ((address as i64) + (c_str as i64)) as *const c_char;
+                let arg_ptr = (c_str as i64) as *const c_char;
 
                 // Convert it to a Rust String
                 let arg = CStr::from_ptr(arg_ptr).to_string_lossy().into_owned();
@@ -961,7 +961,7 @@ impl<
 
         // parse the environment variables
         if let Some(envs_addr) = envs {
-            let env_ptr = ((address as i64) + envs_addr) as *const *const u8;
+            let env_ptr = (envs_addr) as *const *const u8;
             let mut env_vec = Vec::new();
 
             unsafe {
@@ -975,7 +975,7 @@ impl<
                         break; // Stop if we encounter NULL
                     }
 
-                    let env_ptr = ((address as i64) + (c_str as i64)) as *const c_char;
+                    let env_ptr = (c_str as i64) as *const c_char;
 
                     // Convert it to a Rust String
                     let env = CStr::from_ptr(env_ptr).to_string_lossy().into_owned();
