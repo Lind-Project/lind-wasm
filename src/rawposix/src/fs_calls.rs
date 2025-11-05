@@ -250,6 +250,25 @@ pub fn close_syscall(
 /// ## Returns:
 ///     - On success: 0 or number of woken threads depending on futex operation
 ///     - On failure: a negative errno value indicating the syscall error
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/futex.2.html
+///
+/// The Linux `futex()` syscall provides a mechanism for fast user-space locking. It allows a process or thread
+/// to wait for or wake another process or thread on a shared memory location without invoking heavy kernel-side
+/// synchronization primitives unless contention arises. This implementation wraps the futex syscall, allowing
+/// direct invocation with the relevant arguments passed from the current cage context.
+///
+/// Input:
+///     - cageid: current cageid
+///     - uaddr_arg: pointer to the futex word in user memory
+///     - futex_op_arg: operation code indicating futex command type
+///     - val_arg: value expected at uaddr or the number of threads to wake
+///     - val2_arg: timeout or other auxiliary parameter depending on operation
+///     - uaddr2_arg: second address used for requeueing operations
+///     - val3_arg: additional value for some futex operations
+///
+/// ## Returns:
+///     - On success: 0 or number of woken threads depending on futex operation
+///     - On failure: a negative errno value indicating the syscall error
 pub fn futex_syscall(
     cageid: u64,
     uaddr_arg: u64,
@@ -265,11 +284,11 @@ pub fn futex_syscall(
     val3_arg: u64,
     val3_cageid: u64,
 ) -> i32 {
-    let uaddr = uaddr_arg;
+    let uaddr = sc_convert_uaddr_to_host(uaddr_arg, uaddr_cageid, cageid);
     let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
     let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
     let val2 = sc_convert_sysarg_to_u32(val2_arg, val2_cageid, cageid);
-    let uaddr2 = uaddr2_arg;
+    let uaddr2 = sc_convert_sysarg_to_u32(uaddr2_arg, uaddr2_cageid, cageid);
     let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
 
     let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
@@ -1384,7 +1403,7 @@ pub fn link_syscall(
 /// ## Implementation Details:
 ///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
 ///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
-///  - The statbuf buffer is converted from WASM address to host address using `sc_convert_addr_to_host`.
+///  - We pas .
 ///  - The underlying libc::stat() is called and results are copied to the user buffer.
 ///
 /// ## Return Value:
@@ -1420,16 +1439,22 @@ pub fn stat_syscall(
         );
     }
 
-    // Cast directly to libc::stat and write kernel data into buffer.
-    let statbuf_ptr = statbuf_arg as *mut libc::stat;
-    let ret = unsafe { libc::stat(path.as_ptr(), statbuf_ptr) };
+    // Declare statbuf by ourselves
+    let mut libc_statbuf: stat = unsafe { std::mem::zeroed() };
+    let libcret = unsafe { libc::stat(path.as_ptr(), &mut libc_statbuf) };
 
-    if ret < 0 {
+    if libcret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "xstat");
     }
 
-    ret
+    // Convert libc stat to StatData and copy to user buffer
+    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
+        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, libc_statbuf),
+        Err(e) => return syscall_error(e, "xstat", "Bad address"),
+    }
+
+    libcret
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/statfs.2.html
@@ -2607,12 +2632,17 @@ pub fn fstat_syscall(
     }
 
     // Cast directly to libc::stat and write kernel data into buffer.
-
-    let statbuf_ptr = statbuf_arg as *mut libc::stat;
-    let ret = unsafe { libc::fstat(kernel_fd, statbuf_ptr) };
-
+    let mut host_stat: libc::stat = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::fstat(kernel_fd, &mut host_stat as *mut libc::stat) };
     if ret < 0 {
         return handle_errno(get_errno(), "fstat");
+    }
+
+    // Validate guest buffer range and writability
+    match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
+        // 3) Populate StatData directly
+        Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, host_stat),
+        Err(e) => return syscall_error(e, "fstat", "Bad address"),
     }
 
     ret
@@ -2726,11 +2756,18 @@ pub fn fstatfs_syscall(
         );
     }
 
-    // Cast directly to libc::statfs and write kernel data into buffer.
-    let statfs_ptr = statfs_arg as *mut libc::statfs;
-    let ret = unsafe { libc::fstatfs(kernel_fd, statfs_ptr) };
+    // 1) Call host fstatfs into a local host variable
+    let mut host_statfs: libc::statfs = unsafe { std::mem::zeroed() };
+    let ret = unsafe { libc::fstatfs(kernel_fd, &mut host_statfs) };
     if ret < 0 {
         return handle_errno(get_errno(), "fstatfs");
+    }
+
+    // 2) Validate guest buffer range and writability
+    match sc_convert_addr_to_fstatdata(statfs_arg, statfs_cageid, cageid) {
+        // 3) Populate StatData directly
+        Ok(statbuf_addr) => convert_fstatdata_to_user(statbuf_addr, host_statfs),
+        Err(e) => return syscall_error(e, "fstatfs", "Bad address"),
     }
 
     ret
