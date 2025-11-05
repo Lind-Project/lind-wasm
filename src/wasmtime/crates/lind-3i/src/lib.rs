@@ -14,8 +14,9 @@
 //! callback + context for the target Grate.
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::ffi::c_void;
 use std::sync::RwLock;
-use threei::{threei_const, GrateFnEntry};
+use threei::{threei_const, WasmGrateFnEntry, WasmGrateFnEntryPtr};
 
 /// The [`VMContext`](wasmtime_runtime::VMContext) is Wasmtime’s low-level runtime state for an
 /// instance. It includes the instance’s memories, tables, globals,
@@ -29,34 +30,64 @@ use threei::{threei_const, GrateFnEntry};
 ///
 /// The runtime context includes a pointer to the instance’s `VMContext`, which is required
 /// by Wasmtime to correctly re-enter the target instance with the right execution state.
-/// `GRATE_FN_WASM_TABLE` is a `HashMap<(u64, u64), Box<GrateFnEntry>>` keyed by `(pid, tid)`
+/// `GRATE_FN_WASM_TABLE` is a `HashMap<(u64, u64), WasmGrateFnEntryPtr>` keyed by `(pid, tid)`
 /// that stores one entry per process/thread.
 ///
 /// Todo: We currently use tid = 0 as a placeholder; the multi-thread support is needed in future.
 ///
 /// Entries are boxed to keep their addresses stable—3i receives and holds raw pointers to these
 /// entries, so using `Box` ensures pointer validity even if the map rehashes or moves its buckets.
-pub static GRATE_FN_WASM_TABLE: Lazy<RwLock<HashMap<(u64, u64), Box<GrateFnEntry>>>> =
+pub static GRATE_FN_WASM_TABLE: Lazy<RwLock<HashMap<(u64, u64), WasmGrateFnEntryPtr>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
+#[inline]
+fn fn_ptr_is_null(
+    p: extern "C" fn(
+        *mut c_void,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+    ) -> i32,
+) -> bool {
+    (p as *const ()).is_null()
+}
+
 /// Called during module initiation (from [`wasmtime_cli::run.rs`]).
-/// Builds a `GrateFnEntry` from Wasmtime-side state, validates that both the entry pointer and
+/// Builds a `WasmGrateFnEntry` from Wasmtime-side state, validates that both the entry pointer and
 /// its `ctx_ptr` are non-null, and stores the boxed entry into `GRATE_FN_WASM_TABLE` under `(pid, 0)`.
 ///
 /// Returns `GRATE_OK` on success or `GRATE_ERR` on invalid input.
 ///
 /// This function is `extern "C"` and `unsafe` because it crosses the FFI boundary and dereferences
 /// raw pointers.
-pub extern "C" fn set_gratefn_wasm(pid: u64, entry: *const GrateFnEntry) -> i32 {
+pub extern "C" fn set_gratefn_wasm(pid: u64, entry: *const WasmGrateFnEntry) -> i32 {
     if entry.is_null() {
         return threei_const::GRATE_ERR;
     }
-    let entry = unsafe { *entry };
-    if entry.ctx_ptr.is_null() {
+    let src = unsafe { &*entry };
+    if src.ctx_ptr.is_null() || fn_ptr_is_null(src.fn_ptr) {
         return threei_const::GRATE_ERR;
     }
+
+    // Wrap the raw pointer into a WasmGrateFnEntryPtr for safe storage
+    let handle = match WasmGrateFnEntryPtr::new(entry) {
+        Some(h) => h,
+        None => return threei_const::GRATE_ERR,
+    };
+
     let mut map = GRATE_FN_WASM_TABLE.write().unwrap();
-    map.insert((pid, 0), Box::new(entry));
+    map.insert((pid, 0), handle);
 
     threei_const::GRATE_OK
 }
@@ -64,12 +95,12 @@ pub extern "C" fn set_gratefn_wasm(pid: u64, entry: *const GrateFnEntry) -> i32 
 /// Used by [`lind-common::register_handler`] to fetch the previously staged entry and pass its pointer into 3i.
 /// Performs a read-locked lookup of `(pid, 0)` in `GRATE_FN_WASM_TABLE`  
 ///
-/// Returns a raw `*const GrateFnEntry` for 3i to consume.
+/// Returns a raw `*const WasmGrateFnEntry` for 3i to consume.
 ///
 /// No ownership is transferred; the entry remains owned by this module until cleanup.
-pub fn take_gratefn_wasm(pid: u64) -> Option<*const GrateFnEntry> {
+pub fn take_gratefn_wasm(pid: u64) -> Option<*const WasmGrateFnEntry> {
     let map = GRATE_FN_WASM_TABLE.read().unwrap();
-    map.get(&(pid, 0)).map(|b| &**b as *const GrateFnEntry)
+    map.get(&(pid, 0)).map(|h| h.as_ptr())
 }
 
 /// Called when the Wasm module (or its Grate instance) exits.

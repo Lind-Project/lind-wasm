@@ -24,3 +24,29 @@ pub const GRATE_OK: i32 = 0;
 /// state during Grate function dispatch (e.g., invalid pointer, missing
 /// context, or lookup failure).
 pub const GRATE_ERR: i32 = -1;
+/// Indicates that the `GrateFnEntry` is active and callable.
+///
+/// - New invocations through `_call_grate_func` are **allowed**.
+/// - `ctx_ptr` and its associated Wasm `VMContext` are assumed to be valid.
+/// - Normal re-entry into the Wasm module can proceed.
+///
+/// Used in the `state` field of `GrateFnEntry` of wasmtime 3i.
+pub const STATE_ALIVE: u8 = 0;
+/// Indicates that the entry is being revoked (teardown in progress).
+///
+/// - New invocations are **rejected** immediately.
+/// - Existing in-flight calls may still be running.
+/// - The removal path waits to acquire `call_lock` to ensure all in-flight
+///   calls have completed before proceeding to full cleanup.
+///
+/// Used in the `state` field of `GrateFnEntry` of wasmtime 3i.
+pub const STATE_REVOKING: u8 = 1;
+/// Indicates that the entry has been fully invalidated and cleaned up.
+///
+/// - No invocations are allowed.
+/// - The associated `ctx_ptr` and resources may have been released by
+///   the Wasmtime side.
+/// - Any further access to this entry is considered a logic error.
+///
+/// Used in the `state` field of `GrateFnEntry` of wasmtime 3i.
+pub const STATE_DEAD: u8 = 2;

@@ -40,7 +40,7 @@ use std::{
     ptr::NonNull,
 };
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::{make_syscall, threei_const, GrateFnEntry};
+use threei::{make_syscall, threei_const, WasmGrateFnEntry};
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 
 #[cfg(feature = "wasi-nn")]
@@ -813,7 +813,7 @@ impl RunCommand {
                 // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
                 // instance boundaries particularly difficult. To overcome this, the design employs low-level context
                 // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
-                // structures. 
+                // structures.
                 // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
                 let grate_storeopaque = store.inner_mut();
                 let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
@@ -850,8 +850,9 @@ impl RunCommand {
                 ) -> i32 = grate_callback_trampoline;
 
                 // 4) Build entry and store in [`crates::lind-3i`] table
-                let entry = GrateFnEntry { fn_ptr, ctx_ptr };
-                let rc = unsafe { set_gratefn_wasm(pid, &entry) };
+                let boxed_entry = Box::new(WasmGrateFnEntry { fn_ptr, ctx_ptr });
+                let raw_entry: *const WasmGrateFnEntry = Box::into_raw(boxed_entry);
+                let rc = unsafe { set_gratefn_wasm(pid, raw_entry) };
                 if rc < 0 {
                     // reclaim memory on error
                     unsafe {
