@@ -852,7 +852,7 @@ impl RunCommand {
                 // 4) Build entry and store in [`crates::lind-3i`] table
                 let boxed_entry = Box::new(WasmGrateFnEntry { fn_ptr, ctx_ptr });
                 let raw_entry: *const WasmGrateFnEntry = Box::into_raw(boxed_entry);
-                let rc = unsafe { set_gratefn_wasm(pid, raw_entry) };
+                let rc = set_gratefn_wasm(pid, raw_entry);
                 if rc < 0 {
                     // reclaim memory on error
                     unsafe {
