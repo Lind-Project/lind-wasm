@@ -40,7 +40,7 @@ use std::{
     ptr::NonNull,
 };
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::{make_syscall, threei_const, GrateFnEntry};
+use threei::{make_syscall, threei_const, WasmGrateFnEntry};
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 
 #[cfg(feature = "wasi-nn")]
@@ -850,8 +850,9 @@ impl RunCommand {
                 ) -> i32 = grate_callback_trampoline;
 
                 // 4) Build entry and store in [`crates::lind-3i`] table
-                let entry = GrateFnEntry { fn_ptr, ctx_ptr };
-                let rc = unsafe { set_gratefn_wasm(pid, &entry) };
+                let boxed_entry = Box::new(WasmGrateFnEntry { fn_ptr, ctx_ptr });
+                let raw_entry: *const WasmGrateFnEntry = Box::into_raw(boxed_entry);
+                let rc = unsafe { set_gratefn_wasm(pid, raw_entry) };
                 if rc < 0 {
                     // reclaim memory on error
                     unsafe {
