@@ -119,7 +119,7 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 pub fn register_handler_impl(
     targetcage: u64,
     targetcallnum: u64,
-    op_flag: u64,
+    is_register: u64, // 0: deregister, otherwise: register
     handlefunccage: u64,
     in_grate_fn_ptr_u64: u64,
 ) -> i32 {
@@ -147,7 +147,7 @@ pub fn register_handler_impl(
         // Check if targetcallnum exists
         if let Some(mut callnum_entry) = cage_entry.get_mut(&targetcallnum) {
             // （targetcage, targetcallnum) exists
-            if op_flag == 0 {
+            if is_register == 0 {
                 // If deregistering a single syscall, remove the entry if it exists
                 callnum_entry.retain(|_, dest_grateid| *dest_grateid != handlefunccage);
                 // cleanup empties
@@ -179,7 +179,7 @@ pub fn register_handler_impl(
             }
         } else {
             // callnum does not exist yet under this cage
-            if op_flag == 0 {
+            if is_register == 0 {
                 // nothing to delete
                 return 0;
             }
@@ -194,7 +194,7 @@ pub fn register_handler_impl(
 
     // cage does not exist yet
     // Inserts a new mapping in HANDLERTABLE.
-    if op_flag == 0 {
+    if is_register == 0 {
         // nothing to delete
         return 0;
     }

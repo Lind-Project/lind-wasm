@@ -63,7 +63,7 @@ int __imported_lind_3i_trampoline_register_syscall(uint64_t targetcage,
     uint64_t targetcallnum, 
     uint64_t handlefunc_flag, 
     uint64_t this_grate_id,
-    uint64_t fn_ptr_u64) __attribute__((
+    uint64_t optional_arg) __attribute__((
     __import_module__("lind"),
     __import_name__("register-syscall")
 ));
@@ -83,9 +83,9 @@ int lind_register_syscall (int64_t targetcage,
     uint64_t targetcallnum, 
     uint64_t handlefunc_flag, 
     uint64_t this_grate_id,
-    uint64_t fn_ptr_u64)
+    uint64_t optional_arg)
 {
-    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, handlefunc_flag, this_grate_id, fn_ptr_u64);
+    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, handlefunc_flag, this_grate_id, optional_arg);
     
     return ret;
 }

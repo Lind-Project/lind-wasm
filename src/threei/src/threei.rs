@@ -87,7 +87,7 @@ pub struct WasmGrateFnEntry {
 }
 
 #[repr(transparent)]
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct WasmGrateFnEntryPtr(NonNull<WasmGrateFnEntry>);
 
 unsafe impl Send for WasmGrateFnEntryPtr {}
@@ -148,7 +148,7 @@ impl WasmGrateFnEntryPtr {
 /// - re-check `state` (guard against races while waiting for the lock),
 /// - then invoke `fn_ptr(ctx_ptr, ...)`.
 ///
-/// TODO: Currently, we assume that tid is always 0.
+/// TODO: Currently, we assume that tid is always 0, because functionalitys not implemented yet.
 ///
 /// This data structure is also accessed by the lind-3i crate within Wasmtime
 /// to coordinate re-entry into the correct Wasm execution context.
@@ -212,7 +212,7 @@ fn _add_global_grate(grateid: u64, entry_ptr_u64: u64) -> i32 {
 
     let entry = Arc::new(GrateFnEntry {
         fn_ptr: src.fn_ptr,
-        ctx_ptr: unsafe { src.ctx_ptr as *mut c_void },
+        ctx_ptr: src.ctx_ptr as *mut c_void,
         state: AtomicU8::new(threei_const::STATE_ALIVE),
         call_lock: Mutex::new(()),
     });
@@ -331,7 +331,7 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// - targetcage: The ID of the cage whose syscall table is being modified (i.e., the source of the syscall).
 /// - targetcallnum: The syscall number to interpose on (can be treated as a match-all in some configurations).
 /// - entry_ptr_u64: Pointer to the Grate function entry (contains `fn_ptr` and `ctx_ptr`).
-/// - op_flag: The operation flag to indicate whether to register or deregister.
+/// - is_register: The operation flag to indicate whether to register or deregister.
 /// - handlefunccage: The cage (typically a grate) that owns the destination function to be called.
 ///
 /// ## Returns:
@@ -343,7 +343,7 @@ pub fn register_handler(
     targetcage: u64,    // Cage to modify
     targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all.
     entry_ptr_u64: u64,
-    op_flag: u64,        // 0 for deregister
+    is_register: u64,    // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
     _arg3cage: u64,
@@ -366,7 +366,7 @@ pub fn register_handler(
     register_handler_impl(
         targetcage,
         targetcallnum,
-        op_flag,
+        is_register,
         handlefunccage,
         in_grate_fn_ptr_u64,
     )

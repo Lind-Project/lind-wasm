@@ -1015,34 +1015,12 @@ pub fn rawposix_start(verbosity: isize) {
 
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
 
-    let utilcage = Cage {
-        cageid: 0,
-        cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
-        parent: 0,
-        rev_shm: Mutex::new(Vec::new()),
-        main_threadid: RwLock::new(0),
-        interval_timer: IntervalTimer::new(0),
-        epoch_handler: DashMap::new(),
-        pending_signals: RwLock::new(vec![]),
-        signalhandler: DashMap::new(),
-        sigset: AtomicU64::new(0),
-        zombies: RwLock::new(vec![]),
-        child_num: AtomicU64::new(0),
-        vmmap: RwLock::new(Vmmap::new()),
-    };
-
-    add_cage(
-        0, // cageid
-        utilcage,
-    );
-    fdtables::init_empty_cage(0);
-    // Set the first 3 fd to STDIN / STDOUT / STDERR
+    // Set up standard file descriptors for the init cage
     // TODO:
     // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
     let dev_null = CString::new("/home/lind-wasm/src/RawPOSIX/tmp/dev/null").unwrap();
 
-    // Make sure that the standard file descriptor (stdin, stdout, stderr) is always valid, even if they
-    // are closed before.
+    // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
     // Standard input (fd = 0) is redirected to /dev/null
     // Standard output (fd = 1) is redirected to /dev/null
     // Standard error (fd = 2) is set to copy of stdout
@@ -1051,37 +1029,6 @@ pub fn rawposix_start(verbosity: isize) {
         libc::open(dev_null.as_ptr(), libc::O_WRONLY);
         libc::dup(1);
     }
-
-    // STDIN
-    fdtables::get_specific_virtual_fd(
-        0,
-        STDIN_FILENO as u64,
-        FDKIND_KERNEL,
-        STDIN_FILENO as u64,
-        false,
-        0,
-    )
-    .unwrap();
-    // STDOUT
-    fdtables::get_specific_virtual_fd(
-        0,
-        STDOUT_FILENO as u64,
-        FDKIND_KERNEL,
-        STDOUT_FILENO as u64,
-        false,
-        0,
-    )
-    .unwrap();
-    // STDERR
-    fdtables::get_specific_virtual_fd(
-        0,
-        STDERR_FILENO as u64,
-        FDKIND_KERNEL,
-        STDERR_FILENO as u64,
-        false,
-        0,
-    )
-    .unwrap();
 
     //init cage is its own parent
     let initcage = Cage {

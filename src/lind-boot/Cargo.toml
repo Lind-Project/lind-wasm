@@ -1,0 +1,12 @@
+[package]
+name = "lind-boot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }
+wasmtime-lind-multi-process = { path = "../wasmtime/crates/lind-multi-process" }
+wasmtime-lind-utils = { path = "../wasmtime/crates/lind-utils" }
+rawposix = { path = "../wasmtime/crates/rawposix" }
+cage = { path = "../wasmtime/crates/cage" }
+threei = { path = "../wasmtime/crates/threei" }
