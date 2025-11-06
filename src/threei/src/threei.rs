@@ -343,7 +343,7 @@ pub fn register_handler(
     targetcage: u64,    // Cage to modify
     targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all.
     entry_ptr_u64: u64,
-    is_register: u64,        // 0 for deregister
+    is_register: u64,    // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
     _arg3cage: u64,
