@@ -18,6 +18,7 @@ use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
 use typemap::path_conversion::*;
+use sysdefs::logging::{lind_debug_panic};
 
 /// Helper function for close_syscall
 ///
@@ -684,7 +685,7 @@ pub fn mmap_syscall(
     }
 
     if prot & PROT_EXEC > 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "PROT_EXEC is not allowed");
+        lind_debug_panic("Error in syscall: mmap - EINVAL: Invalid Argument: PROT_EXEC is not allowed");
     }
 
     // check if the provided address is multiple of pages
@@ -3702,7 +3703,7 @@ pub fn shmget_syscall(
     }
 
     if key == IPC_PRIVATE {
-        return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
+        lind_debug_panic("Error in syscall: shmget - ENOENT: no such file or directory: IPC_PRIVATE not implemented");
     }
     let shmid: i32;
     let metadata = &SHM_METADATA;
