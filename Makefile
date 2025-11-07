@@ -22,11 +22,11 @@ wasmtime:
 
 .PHONY: wasmtime-debug
 wasmtime-debug:
-	# Build wasmtime in debug mode for faster iteration in devcontainer
-	cargo build --manifest-path src/wasmtime/Cargo.toml
+        # Build wasmtime in debug mode for faster iteration in devcontainer
+        cargo build --manifest-path src/wasmtime/Cargo.toml
 
+.PHONY: test
 test: prepare-lind-root
-test:
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
 	LIND_WASM_BASE=. LIND_ROOT=src/tmp \
 	./scripts/wasmtestreport.py && \
