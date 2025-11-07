@@ -9,8 +9,8 @@ pub use std::ffi::{CStr, CString};
 pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
-pub use sysdefs::constants::{err_const, fs_const};
 use sysdefs::constants::lind_platform_const::LIND_ROOT;
+pub use sysdefs::constants::{err_const, fs_const};
 
 /// Convert data type from `&str` to `PathBuf`
 ///

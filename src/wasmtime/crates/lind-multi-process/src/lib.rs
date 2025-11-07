@@ -3,7 +3,7 @@
 use cfg_if::cfg_if;
 
 use anyhow::{anyhow, Result};
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME, LIND_ROOT};
+use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::threei::make_syscall;
 use wasmtime_lind_3i_vmctx::remove_ctx;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
@@ -33,8 +33,6 @@ const ASYNCIFY_START_UNWIND: &str = "asyncify_start_unwind";
 const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
-
-
 
 const UNWIND_METADATA_SIZE: u64 = 16;
 
@@ -950,7 +948,7 @@ impl<
 
         // NOTE: join method will replace the original path if joined path is an absolute path
         // so must make sure the usr_path is not absolute otherwise it may escape the lind filesystem
-    let real_path = Path::new(LIND_ROOT).join(usr_path);
+        let real_path = Path::new(LIND_ROOT).join(usr_path);
         let real_path_str = String::from(real_path.to_str().unwrap());
 
         // if the file to exec does not exist
