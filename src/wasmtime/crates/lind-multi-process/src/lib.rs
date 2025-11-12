@@ -969,7 +969,6 @@ impl<
 
                 // Iterate over argv until we encounter a NULL pointer
                 loop {
-                    println!("env_ptr: {:?}", env_ptr);
                     let c_str = *(env_ptr.add(i));
 
                     if c_str == 0 {
