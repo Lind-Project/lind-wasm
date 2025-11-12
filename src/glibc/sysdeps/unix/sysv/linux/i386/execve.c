@@ -60,9 +60,8 @@ int __execve (const char *__path, char *const __argv[], char *const __envp[])
 
   // Translate the array pointers themselves
   uint64_t host_argv_ptr = TRANSLATE_GUEST_POINTER_TO_HOST(host_argv);
-  uint64_t host_envp_ptr = host_envp ? TRANSLATE_GUEST_POINTER_TO_HOST(host_envp) : 0;
+  uint64_t host_envp_ptr = TRANSLATE_GUEST_POINTER_TO_HOST(host_envp);
 
-  printf("host_path: %d, host_argv_ptr: %d, host_envp_ptr: %d", host_path, host_argv_ptr, host_envp_ptr);
   int result = MAKE_SYSCALL(EXECVE_SYSCALL, "syscall|execve",
                             host_path,
                             host_argv_ptr,
