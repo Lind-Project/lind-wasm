@@ -903,7 +903,7 @@ impl<
         let path_str;
 
         // NOTE: the address passed from wasm module is 32-bit address
-        let argv_ptr = argv as *const *const u8;
+        let argv_ptr = argv as *const u64;
         let mut args = Vec::new();
         let mut environs = None;
 
@@ -926,13 +926,13 @@ impl<
             // parse the arg pointers
             // Iterate over argv until we encounter a NULL pointer
             loop {
-                let c_str = *(argv_ptr as *const i32).add(i) as *const i32;
+                let c_str = *(argv_ptr.add(i));
 
-                if c_str.is_null() {
+                if c_str == 0 {
                     break; // Stop if we encounter NULL
                 }
 
-                let arg_ptr = (c_str as i64) as *const c_char;
+                let arg_ptr = c_str as *const c_char;
 
                 // Convert it to a Rust String
                 let arg = CStr::from_ptr(arg_ptr).to_string_lossy().into_owned();
@@ -961,7 +961,7 @@ impl<
 
         // parse the environment variables
         if let Some(envs_addr) = envs {
-            let env_ptr = (envs_addr) as *const *const u8;
+            let env_ptr = envs_addr as *const u64;
             let mut env_vec = Vec::new();
 
             unsafe {
@@ -969,13 +969,14 @@ impl<
 
                 // Iterate over argv until we encounter a NULL pointer
                 loop {
-                    let c_str = *(env_ptr as *const i32).add(i) as *const i32;
+                    println!("env_ptr: {:?}", env_ptr);
+                    let c_str = *(env_ptr.add(i));
 
-                    if c_str.is_null() {
+                    if c_str == 0 {
                         break; // Stop if we encounter NULL
                     }
 
-                    let env_ptr = (c_str as i64) as *const c_char;
+                    let env_ptr = c_str as *const c_char;
 
                     // Convert it to a Rust String
                     let env = CStr::from_ptr(env_ptr).to_string_lossy().into_owned();
