@@ -769,6 +769,36 @@ and for re-adding support for interface types you can see this issue:
                     log::warn!("failed to parse name section {:?}", e);
                 }
             }
+            KnownCustom::Dylink0(dylinks) => {
+                println!("[debug]: encounter dylink section");
+
+                for subsection in dylinks {
+                    let subsection = subsection.unwrap();
+                    match subsection {
+                        wasmparser::Dylink0Subsection::MemInfo(meminfo) => {
+                            println!("[debug]: meminfo: {:?}", meminfo);
+                            self.result.module.dylink_mem_info.insert(crate::DylinkMemInfo {
+                                memory_size: meminfo.memory_size,
+                                memory_alignment: meminfo.memory_alignment,
+                                table_size: meminfo.table_size,
+                                table_alignment: meminfo.table_alignment
+                            });
+                        },
+                        wasmparser::Dylink0Subsection::Needed(needed) => {
+                            println!("[debug]: needed: {:?}", needed);
+                        },
+                        wasmparser::Dylink0Subsection::ExportInfo(exportinfo) => {
+                            println!("[debug]: exportinfo: {:?}", exportinfo);
+                        },
+                        wasmparser::Dylink0Subsection::ImportInfo(importinfo) => {
+                            println!("[debug]: importinfo: {:?}", importinfo);
+                        },
+                        _ => {
+                            println!("[debug]: unknown dylink subsection!");
+                        },
+                    }
+                }
+            }
             _ => {
                 let name = section.name().trim_end_matches(".dwo");
                 if name.starts_with(".debug_") {

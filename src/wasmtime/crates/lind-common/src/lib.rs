@@ -7,7 +7,7 @@ use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
-use wasmtime::Caller;
+use wasmtime::{AsContextMut, Caller};
 use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
@@ -56,7 +56,7 @@ impl LindCommonCtx {
         &self,
         call_number: u32,
         call_name: u64,
-        caller: &mut Caller<'_, T>,
+        mut caller: &mut Caller<'_, T>,
         arg1: u64,
         arg2: u64,
         arg3: u64,
@@ -64,7 +64,7 @@ impl LindCommonCtx {
         arg5: u64,
         arg6: u64,
     ) -> i32 {
-        let start_address = get_memory_base(&caller);
+        let start_address = get_memory_base(&mut caller);
         // todo:
         // replacing the execution path by calling to 3i first
         match call_number as i32 {
@@ -208,6 +208,36 @@ pub fn add_to_linker<
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
 
             retval
+        },
+    )?;
+
+
+    linker.func_wrap(
+        "lind",
+        "lind-debug-num",
+        move |mut caller: Caller<'_, T>,
+              num: i32,|
+              -> i32 {
+            let base = get_memory_base(&mut caller);
+            // if num == 192456 || num == 192472 {
+            //     let addr = (base + num as u64) as usize;
+            //     unsafe {
+            //         let p = addr as *const u8;
+            //         let buf = std::slice::from_raw_parts(p, 128);
+            //         for (i, &b) in buf.iter().enumerate() {
+            //             if i % 16 == 0 { print!("\n{:016x}: ", addr + i); }
+            //             print!("{:02x} ", b);
+            //         }
+            //         println!();
+            //     }
+            // }
+            // unsafe {
+            //     let debug_ptr = (base + 40960080) as *const i32;
+            //     println!("[debug] memory base + 40960080: {} ({:?})", *debug_ptr, debug_ptr);
+            // }
+
+            println!("[debug] lind-debug-num: {} (base: {})", num, base); 
+            num
         },
     )?;
 

@@ -767,6 +767,7 @@ pub fn mmap_syscall(
         // if mmap addr is positive, that would mean the mapping is successful and we need to update the vmmap entry
         if result >= 0 {
             if result != useraddr {
+                println!("result: {}, useraddr: {}", result, useraddr);
                 panic!("MAP_FIXED not fixed");
             }
 
