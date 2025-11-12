@@ -42,7 +42,7 @@ hidden_def (__lstat64_time64)
 
     int __lstat64 (const char *file, struct stat64 *buf)
 {
-  return MAKE_SYSCALL2(XSTAT_SYSCALL, "syscall|xstat", (uint64_t)file, (uint64_t)buf); 
+  return MAKE_SYSCALL2(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(file), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf)); 
 }
 #endif
 hidden_def (__lstat64)

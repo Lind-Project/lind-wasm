@@ -31,7 +31,7 @@
 int
 __fstat64_time64 (int fd, struct __stat64_t64 *buf)
 {
-  return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t)buf);
+  return MAKE_SYSCALL2(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf));
 }
 #if __TIMESIZE != 64
 hidden_def (__fstat64_time64)
