@@ -35,5 +35,5 @@ __libc_accept (int fd, struct sockaddr *addr, socklen_t *len)
 		       host_addr, host_len,
 		       NOTUSED, NOTUSED, NOTUSED);
 }
-weak_alias (__libc_accept, accept) 
+weak_alias (__libc_accept, accept)
 libc_hidden_def (accept)

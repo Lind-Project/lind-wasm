@@ -78,6 +78,5 @@ int __execve (const char *__path, char *const __argv[], char *const __envp[])
 
   return result;
 }
- 
 strong_alias (__execve, execve)
 libc_hidden_def (__execve)

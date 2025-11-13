@@ -30,5 +30,5 @@ __access (const char *file, int type)
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
 		       (uint64_t) type, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__access) 
+libc_hidden_def (__access)
 weak_alias (__access, access)

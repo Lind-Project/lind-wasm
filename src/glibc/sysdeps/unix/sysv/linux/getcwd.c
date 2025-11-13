@@ -55,5 +55,5 @@ __getcwd (char *buf, size_t size)
   return MAKE_SYSCALL (GETCWD_SYSCALL, "syscall|getcwd",
 		       host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__getcwd) 
+libc_hidden_def (__getcwd)
 weak_alias (__getcwd, getcwd)

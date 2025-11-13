@@ -50,8 +50,9 @@ __select64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 #if __TIMESIZE != 64
 libc_hidden_def (__select64)
 
-    int __select (int nfds, fd_set *readfds, fd_set *writefds,
-		  fd_set *exceptfds, struct timeval *timeout)
+int
+__select (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+	  struct timeval *timeout)
 {
   struct __timeval64 tv64, *ptv64 = NULL;
   if (timeout != NULL)
