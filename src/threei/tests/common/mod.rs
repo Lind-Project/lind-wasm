@@ -45,13 +45,19 @@ pub fn mappings_for(cage: u64, callnum: u64) -> Vec<(u64, u64)> {
 }
 
 /// Convenience to call register_handler with only the meaningful args.
-pub fn reg(targetcage: u64, targetcallnum: u64, handlefunc: u64, handlefunccage: u64) -> i32 {
+pub fn register_simple(
+    targetcage: u64,
+    targetcallnum: u64,
+    handlefunc: u64,
+    handlefunccage: u64,
+    op_flag: u64,
+) -> i32 {
     register_handler(
-        0,              // _callnum (unused)
+        handlefunc,     // in_grate_fn_ptr_u64, we use handlefunc as a stand-in
         targetcage,     // target cage
         targetcallnum,  // syscall number
         0,              // _arg1cage
-        handlefunc,     // handlefunc (or 0 for selective deregister)
+        op_flag,        // flag (or 0 for selective deregister)
         handlefunccage, // dest cage / THREEI_DEREGISTER
         0,
         0,

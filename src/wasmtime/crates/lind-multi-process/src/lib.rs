@@ -5,7 +5,7 @@ use cfg_if::cfg_if;
 use anyhow::{anyhow, Result};
 use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::threei::make_syscall;
-use wasmtime_lind_3i_vmctx::remove_ctx;
+use wasmtime_lind_3i::remove_gratefn_wasm;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -526,8 +526,7 @@ impl<
                                     // We only register grate calls into the vmctx table during fork+exec (the logic
                                     // lives in the grate module), so a bare fork currently does not register a vmctx
                                     // table instance.
-                                    remove_ctx(child_cageid as usize);
-
+                                    remove_gratefn_wasm(child_cageid as u64);
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
                                     // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -813,7 +812,7 @@ impl<
                                 next_tid as u64,
                             ) {
                                 // Clean up the context from the global table
-                                if !remove_ctx(child_cageid as usize) {
+                                if !remove_gratefn_wasm(child_cageid as u64) {
                                     eprintln!("[wasmtime|pthread_create] Warning: failed to remove context for cage {}", child_cageid);
                                 }
 
