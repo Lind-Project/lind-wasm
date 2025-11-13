@@ -33,4 +33,5 @@ __chmod (const char *file, mode_t mode)
 		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
-libc_hidden_def (__chmod) weak_alias (__chmod, chmod)
+libc_hidden_def (__chmod) 
+weak_alias (__chmod, chmod)

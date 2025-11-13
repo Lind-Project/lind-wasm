@@ -52,8 +52,9 @@ __ioctl (int fd, unsigned long int request, ...)
 		       NOTUSED);
 }
 
-libc_hidden_def (__ioctl) weak_alias (__ioctl, ioctl)
+libc_hidden_def (__ioctl) 
+weak_alias (__ioctl, ioctl)
 
 #if __TIMESIZE != 64
-    strong_alias (__ioctl, __ioctl_time64)
+strong_alias (__ioctl, __ioctl_time64)
 #endif

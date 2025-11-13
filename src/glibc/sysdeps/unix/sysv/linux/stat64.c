@@ -40,7 +40,8 @@ __stat64_time64 (const char *file, struct __stat64_t64 *buf)
 #if __TIMESIZE != 64
 hidden_def (__stat64_time64)
 
-    int __stat64 (const char *file, struct stat64 *buf)
+int
+__stat64 (const char *file, struct stat64 *buf)
 {
   return MAKE_SYSCALL2(XSTAT_SYSCALL, "syscall|xstat", (uint64_t)file, (uint64_t)buf);
 }

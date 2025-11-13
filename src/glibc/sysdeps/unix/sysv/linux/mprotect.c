@@ -16,5 +16,5 @@ __GI___mprotect (void *addr, size_t len, int prot)
 		       NOTUSED);
 }
 
-weak_alias (__GI___mprotect, __mprotect)
-    strong_alias (__GI___mprotect, mprotect)
+weak_alias(__GI___mprotect, __mprotect)
+strong_alias(__GI___mprotect, mprotect)

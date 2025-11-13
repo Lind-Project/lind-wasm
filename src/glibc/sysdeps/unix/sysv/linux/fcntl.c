@@ -26,9 +26,9 @@
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 
-#  ifndef FCNTL_ADJUST_CMD
-#    define FCNTL_ADJUST_CMD(__cmd) __cmd
-#  endif
+# ifndef FCNTL_ADJUST_CMD
+#  define FCNTL_ADJUST_CMD(__cmd) __cmd
+# endif
 
 int
 __libc_fcntl (int fd, int cmd, ...)

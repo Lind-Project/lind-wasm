@@ -31,8 +31,8 @@
 
 /* If we compile the file for use in ld.so we don't need the feature
    that getcwd() allocates the buffers itself.  */
-#if IS_IN(rtld)
-#  define NO_ALLOCATION 1
+#if IS_IN (rtld)
+# define NO_ALLOCATION	1
 #endif
 
 /* The "proc" filesystem provides an easy method to retrieve the value.
@@ -42,7 +42,7 @@
    the proc filesystem mounted.  Use the POSIX implementation in this case.  */
 
 /* Get the code for the generic version.  */
-#define GETCWD_RETURN_TYPE static char *
+#define GETCWD_RETURN_TYPE	static char *
 #include <sysdeps/posix/getcwd.c>
 
 char *
@@ -55,4 +55,5 @@ __getcwd (char *buf, size_t size)
   return MAKE_SYSCALL (GETCWD_SYSCALL, "syscall|getcwd",
 		       host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__getcwd) weak_alias (__getcwd, getcwd)
+libc_hidden_def (__getcwd) 
+weak_alias (__getcwd, getcwd)

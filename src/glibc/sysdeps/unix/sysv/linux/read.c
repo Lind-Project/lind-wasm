@@ -34,5 +34,7 @@ __libc_read (int fd, void *buf, size_t nbytes)
 }
 libc_hidden_def (__libc_read)
 
-    weak_alias (__libc_read, __read) libc_hidden_weak (__read)
-	weak_alias (__libc_read, read) libc_hidden_weak (read)
+weak_alias (__libc_read, __read)
+libc_hidden_weak (__read)
+weak_alias (__libc_read, read)
+libc_hidden_weak (read)

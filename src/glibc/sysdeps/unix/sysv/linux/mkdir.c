@@ -31,4 +31,5 @@ __mkdir (const char *path, mode_t mode)
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (path),
 		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__mkdir) weak_alias (__mkdir, mkdir)
+libc_hidden_def (__mkdir) 
+weak_alias (__mkdir, mkdir)

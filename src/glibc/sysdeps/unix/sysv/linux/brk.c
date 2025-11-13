@@ -39,11 +39,8 @@ weak_alias (__curbrk, ___brk_addr)
 
 #define PAGESIZE (0x10000)
 
-    int __brk (void *addr)
+int __brk (void *addr)
 {
-  // TODO: Need to eventually add translation for addr pointer in brk
-  // This does require additional platform specific logic so will be
-  // handled in a future PR
   __curbrk = MAKE_SYSCALL (BRK_SYSCALL, "syscall|brk",
 			   (uint64_t) addr,
 			   NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);

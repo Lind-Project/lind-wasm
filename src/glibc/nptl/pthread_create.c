@@ -42,7 +42,6 @@
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
 #include <shlib-compat.h>
-  
 #include <stap-probe.h>
 
 int32_t __imported_wasi_thread_spawn(int32_t arg0) __attribute__((

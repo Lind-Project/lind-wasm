@@ -35,5 +35,6 @@ __statfs (const char *file, struct statfs *buf)
 		       host_file, host_buf,
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__statfs) weak_alias (__statfs, statfs)
+libc_hidden_def (__statfs) 
+weak_alias (__statfs, statfs)
 #endif

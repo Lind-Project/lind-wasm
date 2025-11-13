@@ -22,4 +22,4 @@ __libc_readlinkat (int fd, const char *path, char *buf, size_t len)
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
 		       (uint64_t) len, NOTUSED, NOTUSED);
 }
-weak_alias (__libc_readlinkat, readlinkat)
+weak_alias(__libc_readlinkat, readlinkat)

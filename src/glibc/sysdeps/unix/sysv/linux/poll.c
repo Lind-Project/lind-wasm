@@ -33,5 +33,6 @@ __poll (struct pollfd *fds, nfds_t nfds, int timeout)
 		       host_fds, (uint64_t) nfds, (uint64_t) timeout, NOTUSED, NOTUSED,
 		       NOTUSED);
 }
-libc_hidden_def (__poll) weak_alias (__poll, poll)
-    strong_alias (__poll, __libc_poll)
+libc_hidden_def (__poll)
+weak_alias (__poll, poll)
+strong_alias (__poll, __libc_poll)

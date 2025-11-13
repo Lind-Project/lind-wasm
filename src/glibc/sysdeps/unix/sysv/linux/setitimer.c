@@ -27,8 +27,8 @@
 
 int
 __setitimer64 (__itimer_which_t which,
-	       const struct __itimerval64 *restrict new_value,
-	       struct __itimerval64 *restrict old_value)
+               const struct __itimerval64 *restrict new_value,
+               struct __itimerval64 *restrict old_value)
 {
   uint64_t host_new = TRANSLATE_GUEST_POINTER_TO_HOST (new_value);
   uint64_t host_old = TRANSLATE_GUEST_POINTER_TO_HOST (old_value);

@@ -51,11 +51,12 @@ __libc_pread (int fd, void *buf, size_t count, off_t offset)
   // return SYSCALL_CANCEL (pread64, fd, buf, count, SYSCALL_LL_PRW (offset));
 }
 
-strong_alias (__libc_pread, __pread) libc_hidden_weak (__pread)
-    weak_alias (__libc_pread, pread)
+strong_alias (__libc_pread, __pread)
+libc_hidden_weak (__pread)
+weak_alias (__libc_pread, pread)
 
-#  if OTHER_SHLIB_COMPAT(libpthread, GLIBC_2_1, GLIBC_2_2)
-	compat_symbol (libc, __libc_pread, pread, GLIBC_2_2);
-#  endif
+# if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_1, GLIBC_2_2)
+compat_symbol (libc, __libc_pread, pread, GLIBC_2_2);
+#endif
 
 #endif

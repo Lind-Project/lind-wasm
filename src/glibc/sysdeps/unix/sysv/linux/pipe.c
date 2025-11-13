@@ -34,4 +34,5 @@ __pipe (int __pipedes[2])
   return MAKE_SYSCALL (PIPE_SYSCALL, "syscall|pipe",
 		       host_pipedes, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__pipe) weak_alias (__pipe, pipe)
+libc_hidden_def (__pipe) 
+weak_alias (__pipe, pipe)

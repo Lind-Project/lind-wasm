@@ -41,4 +41,5 @@ __waitpid (pid_t pid, int *stat_loc, int options)
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (stat_loc),
 		       (uint64_t) options, NOTUSED, NOTUSED, NOTUSED);
 }
-libc_hidden_def (__waitpid) weak_alias (__waitpid, waitpid)
+libc_hidden_def (__waitpid) 
+weak_alias (__waitpid, waitpid)

@@ -66,4 +66,5 @@ __writev (int fd, const struct iovec *iov, int iovcnt)
   free (host_iov);
   return ret;
 }
-libc_hidden_def (__writev) weak_alias (__writev, writev)
+libc_hidden_def (__writev) 
+weak_alias (__writev, writev)

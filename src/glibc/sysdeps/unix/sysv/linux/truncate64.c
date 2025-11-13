@@ -22,7 +22,7 @@
 #include <addr_translation.h>
 
 #ifndef __NR_truncate64
-#  define __NR_truncate64 __NR_truncate
+# define __NR_truncate64 __NR_truncate
 #endif
 
 /* Truncate PATH to LENGTH bytes.  */
@@ -37,5 +37,5 @@ __truncate64 (const char *path, off64_t length)
 weak_alias (__truncate64, truncate64)
 
 #ifdef __OFF_T_MATCHES_OFF64_T
-    weak_alias (__truncate64, truncate);
+weak_alias (__truncate64, truncate);
 #endif
