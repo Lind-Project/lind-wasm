@@ -14,6 +14,7 @@ use sysdefs::constants::fs_const::{
 };
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
+use sysdefs::constants::LIND_ROOT;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
