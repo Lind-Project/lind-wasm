@@ -43,6 +43,7 @@
 #include <lind_syscall_num.h>
 #include <shlib-compat.h>
 #include <stap-probe.h>
+#include <addr_translation.h>
 
 int32_t __imported_wasi_thread_spawn(int32_t arg0) __attribute__((
     __import_module__("wasi"),
@@ -658,7 +659,7 @@ out:
   
   // signal other threads that the thread has exited
   pd->tid = 0;
-  MAKE_SYSCALL(FUTEX_SYSCALL, "syscall|futex", (uint64_t) &pd->tid, (uint64_t) FUTEX_WAKE, (uint64_t) 1, (uint64_t)0, 0, (uint64_t)0);
+  MAKE_SYSCALL(FUTEX_SYSCALL, "syscall|futex", (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(&pd->tid), (uint64_t) FUTEX_WAKE, (uint64_t) 1, (uint64_t)0, 0, (uint64_t)0);
   while (1)
     // replacing with lind exit
     exit(0);
