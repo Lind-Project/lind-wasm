@@ -46,7 +46,7 @@ __futex_abstimed_wait_common32 (unsigned int* futex_word,
     uint64_t host_timeout = TRANSLATE_GUEST_POINTER_TO_HOST(pts32);
 
     // replace with lind syscall
-    return MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op, (uint64_t) expected, host_timeout, 0, (uint64_t)0);
+    return MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op, (uint64_t) expected, host_timeout, 0, (uint64_t)FUTEX_BITSET_MATCH_ANY);
 }
 #endif /* ! __ASSUME_TIME64_SYSCALLS */
 
@@ -96,7 +96,7 @@ __futex_abstimed_wait_common (unsigned int* futex_word,
 	err = -EOVERFLOW;
     }
   else
-    err = __futex_abstimed_wait_common32 (futex_word, expected, FUTEX_WAIT, abstime,
+    err = __futex_abstimed_wait_common32 (futex_word, expected, op, abstime,
                                           private, cancel);
 #endif
 
