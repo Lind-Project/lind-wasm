@@ -20,21 +20,34 @@
 #include <shlib-compat.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 
 // ssize_t
 // __libc_pread (int fd, void *buf, size_t count, off_t offset)
 // {
-//   return MAKE_SYSCALL(21, "syscall|mmap", (uint64_t)(uintptr_t) addr, (uint64_t) len, (uint64_t) prot, (uint64_t) flags, (uint64_t) fd, (uint64_t) offset);
-//   // return SYSCALL_CANCEL (pread64, fd, buf, count, SYSCALL_LL_PRW (offset));
+//   return MAKE_SYSCALL(21, "syscall|mmap", (uint64_t)(uintptr_t) addr,
+//   (uint64_t) len, (uint64_t) prot, (uint64_t) flags, (uint64_t) fd,
+//   (uint64_t) offset);
+//   // return SYSCALL_CANCEL (pread64, fd, buf, count, SYSCALL_LL_PRW
+//   (offset));
 // }
 
 // Edit: Dennis
 ssize_t
 __libc_pread (int fd, void *buf, size_t count, off_t offset)
 {
-  return MAKE_SYSCALL(PREAD_SYSCALL, "syscall|pread", (uint64_t) fd, (uint64_t)(uintptr_t) buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  if (count > 0 && host_buf == 0ULL)
+    {
+      errno = EFAULT;
+      return -1;
+    }
+  
+  return MAKE_SYSCALL (PREAD_SYSCALL, "syscall|pread", (uint64_t) fd,
+		       host_buf, (uint64_t) count,
+		       (uint64_t) offset, NOTUSED, NOTUSED);
   // return SYSCALL_CANCEL (pread64, fd, buf, count, SYSCALL_LL_PRW (offset));
 }
 

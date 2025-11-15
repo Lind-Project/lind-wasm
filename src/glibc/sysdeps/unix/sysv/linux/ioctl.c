@@ -22,16 +22,34 @@
 #include <internal-ioctl.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
+#include <assert.h>
+#include <stdint.h>
 
 int
 __ioctl (int fd, unsigned long int request, ...)
 {
   va_list args;
   va_start (args, request);
-  void *arg = va_arg (args, void *);
+
+  /* Use unsigned long to safely capture either pointer or integer values */
+  unsigned long raw = va_arg (args, unsigned long);
   va_end (args);
 
-        return MAKE_SYSCALL(IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd, (uint64_t) request, (uint64_t) arg, NOTUSED, NOTUSED, NOTUSED);
+  /* Only support FIONBIO and FIOASYNC.  Fail fast otherwise. */
+  assert (request == FIONBIO || request == FIOASYNC);
+
+  /* For FIONBIO and FIOASYNC, the third argument should be a pointer to int
+   * (int *argp). Translate the guest pointer to host pointer.
+   * TODO: Handle the edge case where someone passes a direct integer value (0
+   * or 1) instead of a pointer. For now, we assume correct API usage
+   * (pointer). */
+  uint64_t host_ptr
+      = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
+
+  return MAKE_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd,
+		       (uint64_t) request, host_ptr, NOTUSED, NOTUSED,
+		       NOTUSED);
 }
 libc_hidden_def (__ioctl)
 weak_alias (__ioctl, ioctl)

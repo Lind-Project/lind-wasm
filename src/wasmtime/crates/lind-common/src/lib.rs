@@ -70,8 +70,8 @@ impl LindCommonCtx {
         match call_number as i32 {
             // clone syscall
             CLONE_SYSCALL => {
-                let clone_args = unsafe { &mut *((arg1 + start_address) as *mut CloneArgStruct) };
-                clone_args.child_tid += start_address;
+                let clone_args = unsafe { &mut *(arg1 as *mut CloneArgStruct) };
+                // clone_args.child_tid += start_address;
                 wasmtime_lind_multi_process::clone_syscall(caller, clone_args)
             }
             // exec syscall
@@ -282,6 +282,28 @@ pub fn add_to_linker<
                 UNUSED_ARG, thiscage, targetcage, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG,
                 UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
             ) as i32
+        },
+    )?;
+
+    // export lind-get-memory-base for libc to query base address
+    linker.func_wrap(
+        "lind",
+        "lind-get-memory-base",
+        move |caller: Caller<'_, T>| -> u64 {
+            // Return the base address of memory[0] for the calling instance
+            let base = get_memory_base(&caller);
+            base
+        },
+    )?;
+
+    // export lind-get-cage-id for libc to query the current cage id (pid)
+    linker.func_wrap(
+        "lind",
+        "lind-get-cage-id",
+        move |caller: Caller<'_, T>| -> u64 {
+            let host = caller.data().clone();
+            let ctx = get_cx(&host);
+            ctx.getpid() as u64
         },
     )?;
 

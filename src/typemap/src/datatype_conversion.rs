@@ -6,13 +6,13 @@
 //! Function naming convention:
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
-use cage::{get_cage, memory::memory::translate_vmmap_addr};
+use cage::get_cage;
 use std::error::Error;
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
-    EpollEvent, FSData, ITimerVal, PipeArray, ShmidsStruct, SigactionStruct, SigsetType, StatData,
+    FSData, ITimerVal, PipeArray, ShmidsStruct, SigactionStruct, SigsetType, StatData,
 };
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
@@ -148,9 +148,7 @@ pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, arg_cageid: u64, cageid: u64) 
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    return unsafe { &mut *((addr) as *mut i32) };
+    unsafe { &mut *(arg as *mut i32) }
 }
 
 /// ## Arguments:
@@ -272,32 +270,49 @@ pub fn sc_convert_to_u8_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut u8 {
 /// ## Returns:
 ///     - buf: actual system address, which is the actual position that stores data
 pub fn sc_convert_buf(buf_arg: u64, arg_cageid: u64, cageid: u64) -> *const u8 {
-    // Get cage reference to translate address
-    let cage = get_cage(cageid).unwrap();
-    // Convert user buffer address to system address. We don't need to check permission here.
-    // Permission check has been handled in 3i
-    let buf = translate_vmmap_addr(&cage, buf_arg).unwrap() as *const u8;
-    buf
+    buf_arg as *const u8
+}
+
+// TODO: This function can be removed/revamped significantly
+// Leaving it in for now since it is used threei/
+/// ## Arguments:
+/// - `uaddr`: The user address to convert (u64).
+/// - `addr_cageid`: The cage ID associated with the address.
+/// - `cageid`: The calling cage ID (used for validation in secure mode).
+///
+/// ## Returns:
+/// - The host address as u64, or 0 if the address is null.
+pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, cageid: u64) -> u64 {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(addr_cageid, cageid) {
+            return 0;
+        }
+    }
+
+    uaddr
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
-/// a mutable reference to a `EpollEvent`.
+/// a mutable reference to a `libc::epoll_event`.
 ///
 /// This function follows the same pattern as other `sc_convert_addr_*`
 /// helpers:
 /// - Validates the Cage ID when the `secure` feature is enabled.
-/// - Retrieves the Cage object via `get_cage`.
-/// - Translates the Wasm linear memory address to a host address using
-///   `translate_vmmap_addr`.
-/// - Casts the host address to a `*mut EpollEvent` and returns it as a
-///   mutable reference if non-null.
-/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
-///   Linux's `EFAULT` ("Bad address") error semantics.
+/// - Casts the address to a `*mut libc::epoll_event` and returns it as a
+///   mutable reference.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
+///
+/// The libc::epoll_event structure matches the kernel's struct epoll_event:
+/// - `events: u32` - event mask
+/// - `u64: u64` - union data field (can represent fd, ptr, u32, or u64)
 pub fn sc_convert_addr_to_epollevent<'a>(
     arg: u64,
     arg_cageid: u64,
     cageid: u64,
-) -> Result<&'a mut EpollEvent, Errno> {
+) -> Result<&'a mut libc::epoll_event, Errno> {
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
@@ -305,49 +320,8 @@ pub fn sc_convert_addr_to_epollevent<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut EpollEvent;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
-}
-
-/// This function translates 64 bits uadd from the WASM context
-/// into the corresponding host address value. Unlike the previous two functions, it returns
-/// the translated address as a raw `u64` rather than a pointer.
-///
-/// Input:
-///     - uaddr_arg: the original 64-bit address from the WASM space
-///     - uaddr_arg_cageid: the cage ID that owns the address
-///     - cageid: the currently executing cage ID
-///
-/// Output:
-///     - Returns the translated 64-bit address in host space as a u64.
-pub fn sc_convert_uaddr_to_host(uaddr_arg: u64, uaddr_arg_cageid: u64, cageid: u64) -> u64 {
-    let cage = get_cage(uaddr_arg_cageid).unwrap();
-    let uaddr = translate_vmmap_addr(&cage, uaddr_arg).unwrap();
-    return uaddr;
-}
-
-/// This function translates a memory address from the WASM environment (user space)
-/// to the corresponding host system address (kernel space). It is typically used when
-/// the guest application passes a pointer argument to a syscall, and we need to dereference
-/// it in the kernel context.
-///
-/// Input:
-///     - addr_arg: the raw 64-bit address from the user
-///     - addr_arg_cageid: the cage ID where the address belongs to
-///     - cageid: the current running cage's ID (used for checking context)
-///
-/// Output:
-///     - Returns a mutable pointer to host memory corresponding to the given address
-///       from the guest. The pointer can be used for direct read/write operations.
-pub fn sc_convert_addr_to_host(addr_arg: u64, addr_arg_cageid: u64, cageid: u64) -> *mut u8 {
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, addr_arg).unwrap() as *mut u8;
-    return addr;
+    let pointer = arg as *mut libc::epoll_event;
+    Ok(unsafe { &mut *pointer })
 }
 
 /// Convert a user-provided pointer (u64) from a cage into a shared reference to
@@ -377,19 +351,7 @@ pub fn sc_convert_sigactionStruct<'a>(
         return None;
     }
 
-    // Get cage reference to translate address
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return None,
-    };
-
-    // Convert user buffer address to system address. We don't need to check permission here.
-    let addr = match translate_vmmap_addr(&cage, act_arg) {
-        Ok(a) => a,
-        Err(_) => return None,
-    };
-
-    let ptr = addr as *const SigactionStruct;
+    let ptr = act_arg as *const SigactionStruct;
     unsafe { Some(&*ptr) }
 }
 
@@ -419,18 +381,8 @@ pub fn sc_convert_sigactionStruct_mut<'a>(
     if act_arg == 0 {
         return None;
     }
-    // Get cage reference to translate address
-    let cage = match get_cage(cageid) {
-        Some(c) => c,
-        None => return None,
-    };
-    // Convert user buffer address to system address. We don't need to check permission here.
-    let addr = match translate_vmmap_addr(&cage, act_arg) {
-        Ok(a) => a,
-        Err(_) => return None,
-    };
 
-    let ptr = addr as *mut SigactionStruct;
+    let ptr = act_arg as *mut SigactionStruct;
     unsafe { Some(&mut *ptr) }
 }
 
@@ -460,19 +412,13 @@ pub fn sc_convert_sigset(
     if set_arg == 0 {
         return None; // If the argument is 0, return None
     } else {
-        let cage = get_cage(cageid).unwrap();
-        match translate_vmmap_addr(&cage, set_arg) {
-            Ok(addr) => {
-                let ptr = addr as *mut SigsetType;
-                if !ptr.is_null() {
-                    unsafe {
-                        return Some(&mut *ptr);
-                    }
-                } else {
-                    panic!("Failed to get SigsetType from address");
-                }
+        let ptr = set_arg as *mut SigsetType;
+        if !ptr.is_null() {
+            unsafe {
+                return Some(&mut *ptr);
             }
-            Err(_) => panic!("Failed to get SigsetType from address"), // If translation fails, return None
+        } else {
+            panic!("Failed to get SigsetType from address");
         }
     }
 }
@@ -560,17 +506,12 @@ pub fn sc_convert_itimerval(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-
     if val_arg == 0 {
         None
     } else {
-        match translate_vmmap_addr(&cage, val_arg) {
-            Ok(addr) => match get_constitimerval(addr) {
-                Ok(itimeval) => itimeval,
-                Ok(None) => None,
-                Err(_) => panic!("Failed to get ITimerVal from address"),
-            },
+        match get_constitimerval(val_arg) {
+            Ok(itimeval) => itimeval,
+            Ok(None) => None,
             Err(_) => panic!("Failed to get ITimerVal from address"),
         }
     }
@@ -605,17 +546,12 @@ pub fn sc_convert_itimerval_mut(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-
     if val_arg == 0 {
         None
     } else {
-        match translate_vmmap_addr(&cage, val_arg) {
-            Ok(addr) => match get_itimerval(addr) {
-                Ok(itimeval) => itimeval,
-                Ok(None) => None,
-                Err(_) => panic!("Failed to get ITimerVal from address"),
-            },
+        match get_itimerval(val_arg) {
+            Ok(itimeval) => itimeval,
+            Ok(None) => None,
             Err(_) => panic!("Failed to get ITimerVal from address"),
         }
     }
@@ -633,17 +569,13 @@ pub fn sc_convert_itimerval_mut(
 /// ## Implementation Details:
 ///  - When the `secure` feature is enabled, the function validates that the
 ///    provided `arg_cageid` matches the current `cageid`.
-///  - The Cage object is retrieved via `get_cage(cageid)`.
-///  - The virtual address is translated into a host address using
-///    `translate_vmmap_addr`.
-///  - The host address is cast into a `*mut StatData`, and if non-null,
-///    reinterpreted as a mutable reference.
-///  - If the pointer is null, the function returns `Err(Errno::EFAULT)`,
-///    indicating a "Bad address" error consistent with Linux error handling.
+///  - The address is cast into a `*mut StatData` and returned as a mutable reference.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
 ///
 /// ## Return Value:
 ///  - `Ok(&mut StatData)` if the address translation succeeds.
-///  - `Err(Errno::EFAULT)` if the address is invalid or null.
 pub fn sc_convert_addr_to_statdata<'a>(
     arg: u64,
     arg_cageid: u64,
@@ -656,19 +588,17 @@ pub fn sc_convert_addr_to_statdata<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut StatData;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
+    let pointer = arg as *mut StatData;
+    Ok(unsafe { &mut *pointer })
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
 /// a mutable reference to an `FSData` structure.
 ///
-/// This function follows the same logic as `sc_convert_addr_to_statdata`
+/// This function follows the same logic as `sc_convert_addr_to_statdata`.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_fstatdata<'a>(
     arg: u64,
     arg_cageid: u64,
@@ -681,13 +611,8 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut FSData;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
+    let pointer = arg as *mut FSData;
+    Ok(unsafe { &mut *pointer })
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
@@ -696,13 +621,11 @@ pub fn sc_convert_addr_to_fstatdata<'a>(
 /// This function follows the same pattern as other `sc_convert_addr_*`
 /// helpers:
 /// - Validates the Cage ID when the `secure` feature is enabled.
-/// - Retrieves the Cage object via `get_cage`.
-/// - Translates the Wasm linear memory address to a host address using
-///   `translate_vmmap_addr`.
-/// - Casts the host address to a `*mut PipeArray` and returns it as a
-///   mutable reference if non-null.
-/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
-///   Linux's `EFAULT` ("Bad address") error semantics.
+/// - Casts the address to a `*mut PipeArray` and returns it as a
+///   mutable reference.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_pipearray<'a>(
     arg: u64,
     arg_cageid: u64,
@@ -715,13 +638,8 @@ pub fn sc_convert_addr_to_pipearray<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut PipeArray;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
+    let pointer = arg as *mut PipeArray;
+    Ok(unsafe { &mut *pointer })
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
@@ -730,13 +648,11 @@ pub fn sc_convert_addr_to_pipearray<'a>(
 /// This function mirrors the structure of other `sc_convert_addr_*`
 /// helpers:
 /// - Validates the Cage ID when the `secure` feature is enabled.
-/// - Retrieves the Cage object via `get_cage`.
-/// - Translates the Wasm linear memory address to a host address using
-///   `translate_vmmap_addr`.
-/// - Casts the host address to a `*mut ShmidsStruct` and returns it as a
-///   mutable reference if non-null.
-/// - Returns `Err(Errno::EFAULT)` if the pointer is null, consistent with
-///   Linux's `EFAULT` ("Bad address") error semantics.
+/// - Casts the address to a `*mut ShmidsStruct` and returns it as a
+///   mutable reference.
+///
+/// Note: Null pointer validation is now performed at the glibc layer before
+/// calling into rawposix, so this function assumes the pointer is valid.
 pub fn sc_convert_addr_to_shmidstruct<'a>(
     arg: u64,
     arg_cageid: u64,
@@ -749,13 +665,8 @@ pub fn sc_convert_addr_to_shmidstruct<'a>(
         }
     }
 
-    let cage = get_cage(cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, arg).unwrap();
-    let pointer = addr as *mut ShmidsStruct;
-    if !pointer.is_null() {
-        return Ok(unsafe { &mut *pointer });
-    }
-    return Err(Errno::EFAULT);
+    let pointer = arg as *mut ShmidsStruct;
+    Ok(unsafe { &mut *pointer })
 }
 
 /// Converts a raw `u64` argument into a nullity check.

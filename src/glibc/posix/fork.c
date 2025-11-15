@@ -27,6 +27,7 @@
 #include <unwind-link.h>
 #include <clone3.h>
 #include <clone_internal.h>
+#include <lind_syscall/addr_translation.h>
 
 static void
 fresetlockfiles (void)
@@ -83,6 +84,10 @@ __libc_fork (void)
   if (pid == 0)
     {
       fork_system_setup ();
+      // Reinitialize address translation for child processes
+      __lind_base = 0ULL;
+      __lind_cageid = 0ULL;
+      __lind_init_addr_translation ();
 
       /* Reset the lock state in the multi-threaded case.  */
       if (multiple_threads)

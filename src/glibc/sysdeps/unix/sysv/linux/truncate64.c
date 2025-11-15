@@ -19,6 +19,7 @@
 #include <sysdep.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #ifndef __NR_truncate64
 # define __NR_truncate64 __NR_truncate
@@ -28,7 +29,10 @@
 int
 __truncate64 (const char *path, off64_t length)
 {
-   return MAKE_SYSCALL(TRUNCATE_SYSCALL, "syscall|truncate", (uint64_t) path, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
+  return MAKE_SYSCALL (TRUNCATE_SYSCALL, "syscall|truncate",
+		       host_path, (uint64_t) length,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__truncate64, truncate64)
 

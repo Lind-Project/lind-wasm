@@ -17,21 +17,25 @@
    <https://www.gnu.org/licenses/>.  */
 
 #define __stat __redirect___stat
-#define stat   __redirect_stat
+#define stat __redirect_stat
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <kernel_stat.h>
 #include <stat_t64_cp.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 int
 __stat64_time64 (const char *file, struct __stat64_t64 *buf)
 {
   // BUG: we do not have fstatat syscall in rawposix
   // so let's just use xstat - Qianxi Chen
-  return MAKE_SYSCALL2(XSTAT_SYSCALL, "syscall|xstat", (uint64_t)file, (uint64_t)buf); 
-
+  uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  return MAKE_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
+		       host_file, host_buf,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 #if __TIMESIZE != 64
 hidden_def (__stat64_time64)
