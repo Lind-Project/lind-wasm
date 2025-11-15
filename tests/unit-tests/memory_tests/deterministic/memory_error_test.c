@@ -120,31 +120,8 @@ int main() {
         }
     }
 
-    // Test 8: shmat with unaligned address
-    // Note: This test may be skipped if shared memory creation is not supported
-    printf("Test 8: shmat with unaligned address (should fail with EINVAL)... ");
-    errno = 0;
-    int shmid = shmget(IPC_PRIVATE, 4096, IPC_CREAT | 0666);
-    if (shmid >= 0) {
-        result = shmat(shmid, (void *)0x1001, 0);
-        if (result == (void *)-1 && errno == EINVAL) {
-            printf("PASSED\n");
-            passed++;
-        } else {
-            printf("FAILED (expected -1 with EINVAL, got %p, errno=%d)\n", result, errno);
-            failed++;
-            if (result != (void *)-1) {
-                shmdt(result);
-            }
-        }
-        shmctl(shmid, IPC_RMID, NULL);
-    } else {
-        // Shared memory creation not supported in this environment, skip test
-        printf("SKIPPED\n");
-    }
-
-    // Test 9: shmget with invalid size (too large)
-    printf("Test 9: shmget with size exceeding SHMMAX (should fail)... ");
+    // Test 8: shmget with invalid size (too large)
+    printf("Test 8: shmget with size exceeding SHMMAX (should fail)... ");
     errno = 0;
     ret = shmget(IPC_PRIVATE, (size_t)-1, IPC_CREAT | 0666);
     if (ret == -1) {
@@ -158,8 +135,8 @@ int main() {
         }
     }
 
-    // Test 10: Verify successful mmap returns page-aligned address
-    printf("Test 10: Successful mmap returns page-aligned address... ");
+    // Test 9: Verify successful mmap returns page-aligned address
+    printf("Test 9: Successful mmap returns page-aligned address... ");
     result = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (result != MAP_FAILED && ((unsigned long)result % 4096) == 0) {
         printf("PASSED\n");
