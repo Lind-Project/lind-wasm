@@ -565,40 +565,86 @@ impl VmmapOps for Vmmap {
         let new_region_end_page = page_num + npages;
         let new_region_start_page = page_num;
 
-        // Store intervals that need to be inserted after iteration
-        let mut to_insert = Vec::new();
+        // Collect information about overlapping entries that need to be modified
+        let mut entries_to_modify = Vec::new();
 
-        // Iterate over overlapping entries
         for (overlap_interval, entry) in self
             .entries
-            .overlapping_mut(ie(new_region_start_page, new_region_end_page))
+            .overlapping(ie(new_region_start_page, new_region_end_page))
         {
-            let mut ent_start = overlap_interval.start();
+            let ent_start = overlap_interval.start();
             let ent_end = overlap_interval.end();
 
-            // Case 1: Entry starts before region but extends into it
-            if ent_start < new_region_start_page && ent_end > new_region_start_page {
-                to_insert.push(ie(new_region_start_page, ent_end));
-                ent_start = new_region_start_page;
-            }
+            // Clone the entry to work with
+            let original_entry = entry.clone();
 
-            // Case 2: Entry extends beyond region end
-            if ent_start < new_region_end_page && ent_end > new_region_end_page {
-                to_insert.push(ie(ent_start, new_region_end_page));
-            } else {
-                // Case 3: Entry is fully contained - update protection
-                entry.prot = new_prot;
-            }
+            // Calculate the three potential parts:
+            // 1. Before the target region (keep old protection)
+            // 2. Inside the target region (apply new protection)
+            // 3. After the target region (keep old protection)
+
+            let overlap_start = ent_start.max(new_region_start_page);
+            let overlap_end = ent_end.min(new_region_end_page);
+
+            // Store the parts we need to create
+            entries_to_modify.push((
+                ent_start,
+                ent_end,
+                overlap_start,
+                overlap_end,
+                original_entry,
+            ));
         }
 
-        // Insert new intervals with updated protection
-        for interval in to_insert {
-            // Get and clone the entry at the start of the interval
-            let mut interval_val = self.entries.get_at_point(interval.start()).unwrap().clone();
-            // Update protection
-            interval_val.prot = new_prot;
-            // Insert the new interval
-            let _ = self.entries.insert_overwrite(interval, interval_val);
+        // Now modify the entries
+        for (ent_start, ent_end, overlap_start, overlap_end, original_entry) in entries_to_modify {
+            // Remove the original entry
+            let _ = self.entries.remove_overlapping(ie(ent_start, ent_end));
+
+            // Check if protection is actually changing
+            let prot_unchanged = original_entry.prot == new_prot;
+
+            if prot_unchanged {
+                // Protection isn't changing, keep the entry as-is (no fragmentation)
+                let _ = self
+                    .entries
+                    .insert_overwrite(ie(ent_start, ent_end), original_entry);
+            } else {
+                // Protection is changing, need to split
+
+                // Part 1: Before the target region (if exists)
+                if ent_start < overlap_start {
+                    let mut before_entry = original_entry.clone();
+                    before_entry.page_num = ent_start;
+                    before_entry.npages = overlap_start - ent_start;
+                    // Keep original protection
+                    let _ = self
+                        .entries
+                        .insert_overwrite(ie(ent_start, overlap_start), before_entry);
+                }
+
+                // Part 2: Inside the target region (apply new protection)
+                if overlap_start < overlap_end {
+                    let mut inside_entry = original_entry.clone();
+                    inside_entry.page_num = overlap_start;
+                    inside_entry.npages = overlap_end - overlap_start;
+                    inside_entry.prot = new_prot;
+                    let _ = self
+                        .entries
+                        .insert_overwrite(ie(overlap_start, overlap_end), inside_entry);
+                }
+
+                // Part 3: After the target region (if exists)
+                if overlap_end < ent_end {
+                    let mut after_entry = original_entry.clone();
+                    after_entry.page_num = overlap_end;
+                    after_entry.npages = ent_end - overlap_end;
+                    // Keep original protection
+                    let _ = self
+                        .entries
+                        .insert_overwrite(ie(overlap_end, ent_end), after_entry);
+                }
+            }
         }
     }
 
@@ -960,7 +1006,14 @@ impl VmmapOps for Vmmap {
 
             let gap_size = aligned_end_page - aligned_start_page;
             if gap_size >= rounded_num_pages {
-                return Some(ie(aligned_end_page - rounded_num_pages, aligned_end_page));
+                // Calculate the aligned end position
+                let result_end = aligned_end_page;
+                // Calculate aligned start by ensuring it's a multiple of pages_per_map
+                let result_start = result_end - rounded_num_pages;
+                // Verify both boundaries are properly aligned
+                debug_assert!(result_start % pages_per_map == 0);
+                debug_assert!(result_end % pages_per_map == 0);
+                return Some(ie(result_start, result_end));
             }
         }
 
