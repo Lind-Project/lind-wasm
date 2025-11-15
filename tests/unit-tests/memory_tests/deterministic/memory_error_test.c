@@ -20,10 +20,10 @@ int main() {
     errno = 0;
     result = mmap(NULL, 4096, PROT_READ, MAP_PRIVATE, 999, 0);
     if (result == MAP_FAILED) {
-        printf("PASSED (errno=%d)\n", errno);
+        printf("PASSED\n");
         passed++;
     } else {
-        printf("FAILED (expected MAP_FAILED, got %p, errno=%d)\n", result, errno);
+        printf("FAILED (expected MAP_FAILED, got %p)\n", result);
         failed++;
         if (result != MAP_FAILED) {
             munmap(result, 4096);
@@ -121,6 +121,7 @@ int main() {
     }
 
     // Test 8: shmat with unaligned address
+    // Note: This test may be skipped if shared memory creation is not supported
     printf("Test 8: shmat with unaligned address (should fail with EINVAL)... ");
     errno = 0;
     int shmid = shmget(IPC_PRIVATE, 4096, IPC_CREAT | 0666);
@@ -138,7 +139,8 @@ int main() {
         }
         shmctl(shmid, IPC_RMID, NULL);
     } else {
-        printf("SKIPPED (could not create shared memory segment)\n");
+        // Shared memory creation not supported in this environment, skip test
+        printf("SKIPPED\n");
     }
 
     // Test 9: shmget with invalid size (too large)
