@@ -20,7 +20,6 @@ int main(void) {
         shmdt(result1);
     } else {
         printf("Test 1 PASSED: shmat with invalid shmid returned -1\n");
-        printf("errno: %d (%s)\n", errno, strerror(errno));
     }
 
     // Test 2: shmat with non-existent shmid should fail
@@ -32,7 +31,6 @@ int main(void) {
         shmdt(result2);
     } else {
         printf("Test 2 PASSED: shmat with non-existent shmid returned -1\n");
-        printf("errno: %d (%s)\n", errno, strerror(errno));
     }
 
     // Test 3: Try to create shared memory with invalid size (too large)
@@ -44,26 +42,24 @@ int main(void) {
         shmctl(shmid, IPC_RMID, NULL);
     } else {
         printf("Test 3 PASSED: shmget with invalid size returned -1\n");
-        printf("errno: %d (%s)\n", errno, strerror(errno));
     }
 
-    // Test 4: Create valid shared memory, then try invalid attach with bad address
+    // Test 4: Create valid shared memory and successfully attach
     errno = 0;
     int valid_shmid = shmget(IPC_PRIVATE, 4096, IPC_CREAT | 0666);
     if (valid_shmid == -1) {
         fprintf(stderr, "Test 4 SETUP FAILED: Could not create shared memory\n");
         test_passed = 0;
     } else {
-        // Try to attach at an invalid address (not page-aligned on some systems)
+        // Try to attach the shared memory segment
         errno = 0;
-        void *result4 = shmat(valid_shmid, (void *)0x1, 0);
-        if (result4 != (void *)-1) {
-            // Some systems allow this, so we just check that it doesn't crash
-            printf("Test 4 NOTE: shmat with unaligned address succeeded (system-dependent)\n");
-            shmdt(result4);
+        void *result4 = shmat(valid_shmid, NULL, 0);
+        if (result4 == (void *)-1) {
+            fprintf(stderr, "Test 4 FAILED: shmat with valid shmid should succeed\n");
+            test_passed = 0;
         } else {
-            printf("Test 4 PASSED: shmat with unaligned address returned -1\n");
-            printf("errno: %d (%s)\n", errno, strerror(errno));
+            printf("Test 4 PASSED: shmat with valid shmid succeeded\n");
+            shmdt(result4);
         }
         
         // Clean up
