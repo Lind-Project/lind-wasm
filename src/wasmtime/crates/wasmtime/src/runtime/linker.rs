@@ -1,12 +1,13 @@
 use crate::func::HostFunc;
 use crate::instance::InstancePre;
 use crate::store::StoreOpaque;
-use crate::{prelude::*, Global, GlobalType, IntoFunc};
+use crate::{Global, GlobalType, IntoFunc, Table, prelude::*};
 use crate::{
     AsContext, AsContextMut, Caller, Engine, Extern, ExternType, Func, FuncType, ImportType,
     Instance, Module, StoreContextMut, Val, ValRaw, ValType, WasmTyList,
 };
 use alloc::sync::Arc;
+use wasmtime_lind_utils::LindGOT;
 use core::fmt;
 #[cfg(feature = "async")]
 use core::future::Future;
@@ -246,6 +247,38 @@ impl<T> Linker<T> {
                         bail!(import_err.clone());
                     })?;
                 }
+            }
+        }
+        Ok(())
+    }
+
+    // redirect all GOT functions/symbols into a centralized dispatcher function
+    // for dynamic updating of the entries after the module is initialized
+    pub fn define_GOT_dispatcher(&mut self, mut store: impl AsContextMut<Data = T>, module: &Module, got: &mut LindGOT) -> anyhow::Result<()> {
+        for import in module.imports() {
+            // println!("[debug]: define_GOT_dispatcher: import module: {}, name: {}", import.module(), import.name());
+            if let Err(import_err) = self._get_by_import(&import) {
+                println!("[debug]: define_GOT_dispatcher: import module: {}, name: {}", import.module(), import.name());
+                if import.module() == "GOT.func" || import.module() == "GOT.mem" {
+                    // NOT verified: all GOT entries are defined as mut i32
+                    // would panic if the assumption is not true
+
+                    // create a GOT global placeholder with value set to 0
+                    // GOT entries could possibly be updated after instantiation of modules
+                    // and more importantly, some GOT entries comes from the exports of the module itself
+                    // module exports are initialized only after the module is instantiated
+                    // therefore, we must create a placeholder for these GOT entries
+                    // and update them with module exports once the module is instantiated
+                    let got_placeholder = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Var), Val::I32(0)).unwrap();
+                    self.define(&mut store, import.module(), import.name(), got_placeholder);
+                    let handler = got_placeholder.get_handler_as_u32(&mut store);
+                    got.new_entry(import.name().to_string(), handler);
+                }
+                // if let ExternType::Func(func_ty) = import_err.ty() {
+                //     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
+                //         bail!(import_err.clone());
+                //     })?;
+                // }
             }
         }
         Ok(())
@@ -794,6 +827,8 @@ impl<T> Linker<T> {
         mut store: impl AsContextMut<Data = T>,
         module_name: &str,
         module: &Module,
+        table: &mut Table,
+        got: &LindGOT
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -848,10 +883,13 @@ impl<T> Linker<T> {
                 // is initialized
                 let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
                 self.define(&mut store, "lib", "__memory_base", memory_base);
-                let handler = memory_base.get_handler(&mut store) as *mut u32;
+                let handler = memory_base.get_handler_as_u32(&mut store);
 
                 println!("[debug] library instantiate");
                 let (instance, _) = self.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib(handler))?;
+
+                let memory_base = unsafe { *handler };
+                println!("[debug] after instantiate_with_lind, memory_base: {}", memory_base);
 
                 if let Some(export) = instance.get_export(&mut store, "_initialize") {
                     if let Extern::Func(func) = export {
@@ -860,6 +898,52 @@ impl<T> Linker<T> {
                             .context("calling the Reactor initialization function")?;
                     }
                 }
+
+                let mut funcs = vec![];
+                let mut globals = vec![];
+                for export in instance.exports(&mut store) {
+                    let name = export.name().to_owned();
+                    match export.into_extern() {
+                        Extern::Func(func) => {
+                            funcs.push((name, func));
+                        },
+                        Extern::Global(global) => {
+                            globals.push((name, global));
+                        },
+                        _ => {}
+                    }
+                }
+
+                for (name, func) in funcs {
+                    let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
+                    if got.update_entry_if_exist(&name, index) {
+                        println!("[debug] update GOT.func.{} to {}", name, index);
+                    }
+                }
+                for (name, global) in globals {
+                    let val = global.get(&mut store);
+                    let val = val.i32().unwrap() as u32 + memory_base;
+                    if got.update_entry_if_exist(&name, val) {
+                        println!("[debug] update GOT.mem.{} to {}", name, val);
+                    }
+                }
+
+                // if let Some(export) = instance.get_export(&mut store, "lib_function") {
+                //     if let Extern::Func(func) = export {
+                //         // println!("[debug] export lib_function: index: {}",);
+                //         let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
+                //         println!("[debug] update GOT lib_function to {}", index);
+                //         got.update_entry_if_exist("lib_function", index);
+                //     }
+                // }
+                // if let Some(export) = instance.get_export(&mut store, "data") {
+                //     if let Extern::Global(global) = export {
+                //         let val = global.get(&mut store);
+                //         let val = val.i32().unwrap() as u32 + memory_base;
+                //         println!("[debug] update GOT.data to {}", val);
+                //         got.update_entry_if_exist("data", val);
+                //     }
+                // }
                 // self.allow_shadowing(false);
 
 

@@ -30,7 +30,7 @@ use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
 use wasmtime_lind_3i_vmctx::{get_ctx, insert_ctx, remove_ctx};
-use wasmtime_lind_utils::LindCageManager;
+use wasmtime_lind_utils::{LindCageManager, LindGOT};
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
 use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
@@ -150,6 +150,7 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
+        let mut lind_got = LindGOT::new();
 
 
         // Initialize Lind here
@@ -215,6 +216,10 @@ impl RunCommand {
             linker.define(&mut store, "env", "__memory_base", memory_base);
             linker.define(&mut store, "env", "__table_base", table_base);
 
+            if let RunTarget::Core(module) = &main {
+                linker.define_GOT_dispatcher(&mut store, module, &mut lind_got);
+            }
+
             // TODO: temporary workaround for weak defined symbol in glibc
             // linker.func_wrap(
             //     "env",
@@ -240,14 +245,14 @@ impl RunCommand {
             //         },
             //     )?;
             // }
-            for val in skip_val {
-                let tmp = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(0)).unwrap();
-                linker.define(&mut store, "GOT.func", val, tmp);
-            }
-            {
-                let tmp = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(0)).unwrap();
-                linker.define(&mut store, "GOT.mem", "_dl_rtld_map", tmp);
-            }
+            // for val in skip_val {
+            //     let tmp = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(0)).unwrap();
+            //     linker.define(&mut store, "GOT.func", val, tmp);
+            // }
+            // {
+            //     let tmp = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(0)).unwrap();
+            //     linker.define(&mut store, "GOT.mem", "_dl_rtld_map", tmp);
+            // }
 
         } else {
             panic!("not core")
@@ -332,9 +337,12 @@ impl RunCommand {
                     linker.define(&mut store, name, "__indirect_function_table", table);
                     linker.define(&mut store, "lib", "__table_base", table_base);
 
+                    // link GOT entries
+                    linker.define_GOT_dispatcher(&mut store, &module, &mut lind_got);
+
                     println!("[debug]: library name: {}", name);
                     // link other instances of the library into the main linker
-                    linker.module(&mut store, name, &module).context(format!(
+                    linker.module(&mut store, name, &module, &mut table, &lind_got).context(format!(
                         "failed to process preload `{}` at `{}`",
                         name,
                         path.display()
@@ -554,11 +562,12 @@ impl RunCommand {
             match &mut linker {
                 #[cfg(feature = "cranelift")]
                 CliLinker::Core(linker) => {
-                    linker.module(&mut store, name, &module).context(format!(
-                        "failed to process preload `{}` at `{}`",
-                        name,
-                        path.display()
-                    ))?;
+                    unimplemented!()
+                    // linker.module(&mut store, name, &module).context(format!(
+                    //     "failed to process preload `{}` at `{}`",
+                    //     name,
+                    //     path.display()
+                    // ))?;
                 }
                 #[cfg(not(feature = "cranelift"))]
                 CliLinker::Core(_) => {

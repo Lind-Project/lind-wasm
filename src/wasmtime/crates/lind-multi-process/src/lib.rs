@@ -448,7 +448,7 @@ impl<
                                 .expect("Failed to find epoch global export!");
 
                             // retrieve the handler (underlying pointer) for the epoch global
-                            let pointer = lind_epoch.get_handler(&mut store);
+                            let pointer = lind_epoch.get_handler_as_u64(&mut store);
                         }
                     }
 
@@ -747,7 +747,7 @@ impl<
                                 .expect("Failed to find epoch global export!");
 
                             // retrieve the handler (underlying pointer) for the epoch global
-                            let pointer = lind_epoch.get_handler(&mut store);
+                            let pointer = lind_epoch.get_handler_as_u64(&mut store);
                         }
                     }
 
@@ -1076,9 +1076,10 @@ impl<
     // TODO: exit_call should be switched to epoch interrupt method later
     pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32) {
         // get the base address of the memory
-        let handle = caller.as_context().0.instance(InstanceId::from_index(0));
-        let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
-        let address = defined_memory.base;
+        // let handle = caller.as_context().0.instance(InstanceId::from_index(0));
+        // let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
+        // let address = defined_memory.base;
+        let address = get_memory_base(&mut caller) as *mut u8;
 
         // get the wasm stack top address
         let parent_stack_low_usr = caller.as_context().get_stack_top();
