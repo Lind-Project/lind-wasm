@@ -151,7 +151,7 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
-        let mut lind_got = LindGOT::new();
+        let mut lind_got = Arc::new(Mutex::new(LindGOT::new()));
 
 
         // Initialize Lind here
@@ -221,7 +221,8 @@ impl RunCommand {
                 linker.define(&mut store, "env", "__table_base", table_base);
 
                 if let RunTarget::Core(module) = &main {
-                    linker.define_GOT_dispatcher(&mut store, module, &mut lind_got);
+                    let mut guard = lind_got.lock().unwrap();
+                    linker.define_GOT_dispatcher(&mut store, module, &mut *guard);
                 }
 
                 // TODO: temporary workaround for weak defined symbol in glibc
@@ -266,12 +267,13 @@ impl RunCommand {
         {
             let run_cmd = self.clone();
             let cloned_linker = linker.clone();
+            let cloned_lind_got = lind_got.clone();
 
             let dlopen = move |mut caller: wasmtime::Caller<'_, Host>, lib: i32| -> i32 {
                 let base = get_memory_base(&mut caller);
                 let path = typemap::get_cstr(base + lib as u64).unwrap();
 
-                run_cmd.load_library_module(&mut caller, cloned_linker.clone(), path)
+                run_cmd.load_library_module(&mut caller, cloned_linker.clone(), cloned_lind_got.clone(), path)
             };
 
             let dlsym = move |mut caller: wasmtime::Caller<'_, Host>, handle: i32, sym: i32| -> i32 {
@@ -385,18 +387,24 @@ impl RunCommand {
                         // linker.define(&mut store, name, "__indirect_function_table", table);
 
                         // link GOT entries
-                        linker.define_GOT_dispatcher(&mut store, &module, &mut lind_got);
+                        {
+                            let mut guard = lind_got.lock().unwrap();
+                            linker.define_GOT_dispatcher(&mut store, &module, &mut *guard);
+                        }
 
                         // let mut module_linker = linker.clone();
                         // module_linker.define(&mut store, "env", "__table_base", table_base);
 
                         println!("[debug]: library name: {}", name);
                         // link other instances of the library into the main linker
-                        linker.module(&mut store, name, &module, &mut table, table_start, &lind_got).context(format!(
-                            "failed to process preload `{}` at `{}`",
-                            name,
-                            path.display()
-                        ))?;
+                        {
+                            let mut guard = lind_got.lock().unwrap();
+                            linker.module(&mut store, name, &module, &mut table, table_start, &*guard).context(format!(
+                                "failed to process preload `{}` at `{}`",
+                                name,
+                                path.display()
+                            ))?;
+                        }
                     }
                     #[cfg(not(feature = "cranelift"))]
                     CliLinker::Core(_) => {
@@ -425,7 +433,7 @@ impl RunCommand {
                 &main,
                 modules,
                 CAGE_START_ID as u64,
-                &lind_got,
+                lind_got,
             )
             .with_context(|| {
                 format!(
@@ -642,7 +650,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut Arc::new(Mutex::new(linker)), &main, modules, pid as u64, &lind_got)
+            self.load_main_module(&mut store, &mut Arc::new(Mutex::new(linker)), &main, modules, pid as u64, Arc::new(Mutex::new(lind_got)))
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -786,7 +794,7 @@ impl RunCommand {
         module: &RunTarget,
         modules: Vec<(String, Module)>,
         pid: u64,
-        got: &LindGOT,
+        got: Arc<Mutex<LindGOT>>,
     ) -> Result<Vec<Val>> {
         let mut guard = linker.lock().unwrap();
         // The main module might be allowed to have unknown imports, which
@@ -862,7 +870,8 @@ impl RunCommand {
                     let val = global.get(&mut store);
                     // relocate the variable
                     let val = val.i32().unwrap() as u32 + 0; // 0 stands for memory base for main module
-                    if got.update_entry_if_exist(&name, val) {
+                    let mut guard = got.lock().unwrap();
+                    if (*guard).update_entry_if_exist(&name, val) {
                         println!("[debug] main update GOT.mem.{} to {}", name, val);
                     }
                 }
@@ -1086,10 +1095,51 @@ impl RunCommand {
 
     fn load_library_module(
         &self,
-        main_module: &mut wasmtime::Caller<Host>,
+        mut main_module: &mut wasmtime::Caller<Host>,
         mut main_linker: Arc<Mutex<CliLinker>>,
+        mut lind_got: Arc<Mutex<LindGOT>>,
         library_name: &str,
     ) -> i32 {
+        println!("[debug] load_library_module");
+
+        // use the same engine for the library
+        let engine = main_module.engine();
+        // let mut store = main_module.as_context_mut();
+
+        let library = self
+            .run
+            .load_module(&engine, Path::new(library_name)).unwrap();
+        let lib_module = match library {
+            RunTarget::Core(module) => module,
+            _ => { unreachable!() }
+        };
+        let dylink_info = lib_module.dylink_meminfo().unwrap();
+
+        let table_size = main_module.get_table_size();
+        let table_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_size as i32)).unwrap();
+        let memory_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
+
+        {
+            let mut guard = main_linker.lock().unwrap();
+            match &mut *guard {
+                CliLinker::Core(linker) => {
+                    {
+                        let mut guard = lind_got.lock().unwrap();
+                        linker.define_GOT_dispatcher(&mut main_module, &lib_module, &mut *guard);
+                    }
+
+                    {
+                        // let mut guard = lind_got.lock().unwrap();
+                        // linker.module(&mut store, library_name, &lib_module, &mut table, table_size as i32, &*guard).context(format!(
+                        //     "failed to process library `{}`",
+                        //     library_name
+                        // )).unwrap();
+                    }
+                },
+                _ => { unreachable!() }
+            }
+        }
+
         0
     }
 

@@ -64,7 +64,7 @@ pub fn parse_env_var(env_var: &str) -> (String, Option<String>) {
 #[allow(missing_docs)]
 #[derive(Default)]
 pub struct LindGOT {
-    global_offset_table: DashMap<String, *mut u32>
+    global_offset_table: DashMap<String, u64> // use u64 instead of *mut i32 in order to share this struct across threads
 }
 
 impl LindGOT {
@@ -76,12 +76,12 @@ impl LindGOT {
 
     pub fn new_entry(&mut self, name: String, handler: *mut u32) {
         // to-do: handle existing GOT entry
-        self.global_offset_table.insert(name, handler);
+        self.global_offset_table.insert(name, handler as u64);
     }
 
     pub fn update_entry_if_exist(&self, name: &str, val: u32) -> bool {
         if let Some(handler) = self.global_offset_table.get(name) {
-            let handler = *handler;
+            let handler = (*handler) as *mut u32;
             unsafe {
                 *handler = val;
             }
