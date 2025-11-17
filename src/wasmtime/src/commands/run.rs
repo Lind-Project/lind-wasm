@@ -84,6 +84,7 @@ pub struct RunCommand {
     pub module_and_args: Vec<OsString>,
 }
 
+#[derive(Clone)]
 enum CliLinker {
     Core(wasmtime::Linker<Host>),
     #[cfg(feature = "component-model")]
@@ -159,114 +160,161 @@ impl RunCommand {
         lind_manager.increment();
 
         // we need to explicity manage the table for each wasm module now
+        let mut linker = Arc::new(Mutex::new(linker));
         let mut table;
-        if let CliLinker::Core(linker) = &mut linker {
-            println!("[debug]: define a table");
-            // retrieve necessary information
-            let mut main_module_table_size = None;
-            let memory_size;
-            match &main {
-                RunTarget::Core(module) => {
-                    // retrieve the minimal table size specified by main module
-                    for import in module.imports() {
-                        if let ExternType::Table(table) = import.ty() {
-                            main_module_table_size = Some(table.minimum());
+        {
+            let mut guard = linker.lock().unwrap();
+            if let CliLinker::Core(linker) = &mut *guard {
+                println!("[debug]: define a table");
+                // retrieve necessary information
+                let mut main_module_table_size = None;
+                let memory_size;
+                match &main {
+                    RunTarget::Core(module) => {
+                        // retrieve the minimal table size specified by main module
+                        for import in module.imports() {
+                            if let ExternType::Table(table) = import.ty() {
+                                main_module_table_size = Some(table.minimum());
+                            }
                         }
+
+                        // memory size is stored in dylink section
+                        let dylink_info = module.dylink_meminfo();
+                        let dylink_info = dylink_info.as_ref().unwrap();
+
+                        let size = dylink_info.memory_size;
+                        let align = dylink_info.memory_alignment;
+                        memory_size = (size + align) & !align;
                     }
+                    #[cfg(feature = "component-model")]
+                    RunTarget::Component(_) => {
+                        panic!("component model not supported")
+                    }
+                };
+                let main_module_table_size = main_module_table_size.unwrap();
 
-                    // memory size is stored in dylink section
-                    let dylink_info = module.dylink_meminfo();
-                    let dylink_info = dylink_info.as_ref().unwrap();
+                // create a table with specified size
+                println!("[debug] main module table size: {}", main_module_table_size);
+                let ty = TableType::new(RefType::FUNCREF, main_module_table_size, None);
+                table = Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap();
+                linker.define(&mut store, "env", "__indirect_function_table", table);
 
-                    let size = dylink_info.memory_size;
-                    let align = dylink_info.memory_alignment;
-                    memory_size = (size + align) & !align;
+                // calculate the stack address for main module
+                // println!("[debug]: main module memory size: {}", memory_size);
+                let stack_low_num = memory_size as i32 + 1024; // reserve first 1024 bytes for guard page
+                let stack_high_num = stack_low_num + 65536; // stack size
+                let stack_low = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_low_num)).unwrap();
+                let stack_high = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
+                linker.define(&mut store, "GOT.mem", "__stack_low", stack_low);
+                linker.define(&mut store, "GOT.mem", "__stack_high", stack_high);
+
+                let stack_pointer = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
+                linker.define(&mut store, "env", "__stack_pointer", stack_pointer);
+                // for (module_name, item_name, item) in linker.iter(&mut store) {
+                //     println!("[debug]: {} {}: {:?}", module_name, item_name, item);
+                // }
+
+                // for main module, both memory base and table base starts from zero
+                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
+                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
+                linker.define(&mut store, "env", "__memory_base", memory_base);
+                linker.define(&mut store, "env", "__table_base", table_base);
+
+                if let RunTarget::Core(module) = &main {
+                    linker.define_GOT_dispatcher(&mut store, module, &mut lind_got);
                 }
-                #[cfg(feature = "component-model")]
-                RunTarget::Component(_) => {
-                    panic!("component model not supported")
-                }
-            };
-            let main_module_table_size = main_module_table_size.unwrap();
 
-            // create a table with specified size
-            println!("[debug] main module table size: {}", main_module_table_size);
-            let ty = TableType::new(RefType::FUNCREF, main_module_table_size, None);
-            table = Table::new(&mut store, ty, wasmtime::Ref::Func(None)).unwrap();
-            linker.define(&mut store, "env", "__indirect_function_table", table);
+                // TODO: temporary workaround for weak defined symbol in glibc
+                // linker.func_wrap(
+                //     "env",
+                //     "__printf_buffer_flush_dprintf",
+                //     move |mut caller: wasmtime::Caller<'_, Host>, val: i32| {
+                //         unreachable!();
+                //     },
+                // )?;
+                // linker.func_wrap(
+                //     "env",
+                //     "__pthread_unwind",
+                //     move |mut caller: wasmtime::Caller<'_, Host>, val: i32| {
+                //         unreachable!();
+                //     },
+                // )?;
 
-            // calculate the stack address for main module
-            // println!("[debug]: main module memory size: {}", memory_size);
-            let stack_low_num = memory_size as i32 + 1024; // reserve first 1024 bytes for guard page
-            let stack_high_num = stack_low_num + 65536; // stack size
-            let stack_low = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_low_num)).unwrap();
-            let stack_high = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
-            linker.define(&mut store, "GOT.mem", "__stack_low", stack_low);
-            linker.define(&mut store, "GOT.mem", "__stack_high", stack_high);
+                // for func in skip_func {
+                //     linker.func_wrap(
+                //         "env",
+                //         func,
+                //         move |mut caller: wasmtime::Caller<'_, Host>, val: i32| {
+                //             unreachable!();
+                //         },
+                //     )?;
+                // }
+                // for val in skip_val {
+                //     let tmp = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(0)).unwrap();
+                //     linker.define(&mut store, "GOT.func", val, tmp);
+                // }
+                // {
+                //     let tmp = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(0)).unwrap();
+                //     linker.define(&mut store, "GOT.mem", "_dl_rtld_map", tmp);
+                // }
 
-            let stack_pointer = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
-            linker.define(&mut store, "env", "__stack_pointer", stack_pointer);
-            // for (module_name, item_name, item) in linker.iter(&mut store) {
-            //     println!("[debug]: {} {}: {:?}", module_name, item_name, item);
-            // }
-
-            // for main module, both memory base and table base starts from zero
-            let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
-            let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
-            linker.define(&mut store, "env", "__memory_base", memory_base);
-            linker.define(&mut store, "env", "__table_base", table_base);
-
-            if let RunTarget::Core(module) = &main {
-                linker.define_GOT_dispatcher(&mut store, module, &mut lind_got);
+            } else {
+                panic!("not core")
             }
+        }
 
-            // TODO: temporary workaround for weak defined symbol in glibc
-            // linker.func_wrap(
-            //     "env",
-            //     "__printf_buffer_flush_dprintf",
-            //     move |mut caller: wasmtime::Caller<'_, Host>, val: i32| {
-            //         unreachable!();
-            //     },
-            // )?;
-            // linker.func_wrap(
-            //     "env",
-            //     "__pthread_unwind",
-            //     move |mut caller: wasmtime::Caller<'_, Host>, val: i32| {
-            //         unreachable!();
-            //     },
-            // )?;
+        {
+            let mut guard = linker.lock().unwrap();
+            if let CliLinker::Core(linker) = &mut *guard {
+                // let run_cmd = self.clone();
+                // let cloned_linker = linker.clone();
+                // let dlopen = move |mut caller: wasmtime::Caller<'_, Host>, lib: i32| -> i32 {
+                //     let handle = caller.as_context().0.instance(wasmtime::InstanceId::from_index(1));
+                //     let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
+                //     let base = defined_memory.base as u64;
+                //     // let base = get_memory_base(&caller);
+                //     let path = rawposix::interface::get_cstr(base + lib as u64).unwrap();
 
-            // for func in skip_func {
-            //     linker.func_wrap(
-            //         "env",
-            //         func,
-            //         move |mut caller: wasmtime::Caller<'_, Host>, val: i32| {
-            //             unreachable!();
-            //         },
-            //     )?;
-            // }
-            // for val in skip_val {
-            //     let tmp = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(0)).unwrap();
-            //     linker.define(&mut store, "GOT.func", val, tmp);
-            // }
-            // {
-            //     let tmp = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(0)).unwrap();
-            //     linker.define(&mut store, "GOT.mem", "_dl_rtld_map", tmp);
-            // }
+                //     run_cmd.load_library_module(&mut caller, cloned_linker.clone(), path)
+                // };
 
-        } else {
-            panic!("not core")
+                // let dlsym = move |mut caller: wasmtime::Caller<'_, Host>, handle: i32, sym: i32| -> i32 {
+                //     let instance_handle = caller.as_context().0.instance(wasmtime::InstanceId::from_index(1));
+                //     let defined_memory = instance_handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
+                //     let base = defined_memory.base as u64;
+                //     let symbol = rawposix::interface::get_cstr(base + sym as u64).unwrap();
+                //     let lib_symbol = caller.get_library_symbols((handle - 1) as usize).unwrap();
+                //     let func_index = lib_symbol.get(&String::from(symbol)).unwrap();
+                //     println!("dlsym! func_index: {}", func_index);
+                //     *func_index as i32
+                // };
+
+                // linker.func_wrap(
+                //     "lind",
+                //     "dlopen",
+                //     dlopen,
+                // ).unwrap();
+
+                // linker.func_wrap(
+                //     "lind",
+                //     "dlsym",
+                //     dlsym,
+                // ).unwrap();
+            }
         }
 
         println!("[debug] before wasi");
-        self.populate_with_wasi(
-            &mut linker,
-            &mut store,
-            &main,
-            lind_manager.clone(),
-            None,
-            None,
-        )?;
+        {
+            let mut guard = linker.lock().unwrap();
+            self.populate_with_wasi(
+                &mut *guard,
+                &mut store,
+                &main,
+                lind_manager.clone(),
+                None,
+                None,
+            )?;
+        }
         println!("[debug] after wasi");
 
         store.data_mut().limits = self.run.store_limits();
@@ -295,68 +343,72 @@ impl RunCommand {
             modules.push((name.clone(), module.clone()));
 
             // Add the module's functions to the linker.
-            match &mut linker {
-                #[cfg(feature = "cranelift")]
-                CliLinker::Core(linker) => {
-                    // retrieve the dylink information for preload modules
-                    let dylink_info = module.dylink_meminfo();
-                    let dylink_info = dylink_info.as_ref().unwrap();
-                    // we'd like to append the module's function table right after the existing table
-                    let table_start = table.size(&mut store) as i32;
 
-                    for (name, val) in module.raw_exports() {
-                        println!("[debug]: library export {:?}: {:?}", name, val);
-                        // match name.as_str() {
-                        //     "__wasm_apply_data_relocs" => { continue; }
-                        //     _ => {}
-                        // }
+            {
+                let mut guard = linker.lock().unwrap();
+                match &mut *guard {
+                    #[cfg(feature = "cranelift")]
+                    CliLinker::Core(linker) => {
+                        // retrieve the dylink information for preload modules
+                        let dylink_info = module.dylink_meminfo();
+                        let dylink_info = dylink_info.as_ref().unwrap();
+                        // we'd like to append the module's function table right after the existing table
+                        let table_start = table.size(&mut store) as i32;
 
-                        // match val {
-                        //     wasmtime_environ::EntityIndex::Global(global_index) => {
-                        //         let value = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(110384 + 40960000)).unwrap();
-                        //         linker.define(&mut store, "GOT.mem", name, value);
-                        //         println!("export {}, type: global({:?})", name, global_index);
-                        //     },
-                        //     wasmtime_environ::EntityIndex::Function(func_index) => {
-                        //         let value = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(func_index.as_u32() as i32)).unwrap();
-                        //         linker.define(&mut store, "GOT.func", name, value);
-                        //         println!("export {}, type: function({:?})", name, func_index);
-                        //     },
-                        //     wasmtime_environ::EntityIndex::Table(table_index) => {},
-                        //     wasmtime_environ::EntityIndex::Memory(memory_index) => {},
-                        // }
+                        for (name, val) in module.raw_exports() {
+                            println!("[debug]: library export {:?}: {:?}", name, val);
+                            // match name.as_str() {
+                            //     "__wasm_apply_data_relocs" => { continue; }
+                            //     _ => {}
+                            // }
+
+                            // match val {
+                            //     wasmtime_environ::EntityIndex::Global(global_index) => {
+                            //         let value = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(110384 + 40960000)).unwrap();
+                            //         linker.define(&mut store, "GOT.mem", name, value);
+                            //         println!("export {}, type: global({:?})", name, global_index);
+                            //     },
+                            //     wasmtime_environ::EntityIndex::Function(func_index) => {
+                            //         let value = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(func_index.as_u32() as i32)).unwrap();
+                            //         linker.define(&mut store, "GOT.func", name, value);
+                            //         println!("export {}, type: function({:?})", name, func_index);
+                            //     },
+                            //     wasmtime_environ::EntityIndex::Table(table_index) => {},
+                            //     wasmtime_environ::EntityIndex::Memory(memory_index) => {},
+                            // }
+                        }
+
+                        println!("[debug] library table_start: {}, grow: {}", table_start, dylink_info.table_size);
+                        // the size of the table required by the library is inside dylink information
+                        // let's just use it and grow the table by that amount
+                        table.grow(&mut store, dylink_info.table_size, wasmtime::Ref::Func(None));
+                        // the table base for the library starts from the size of the previous table
+                        // let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_start)).unwrap();
+                        // link the table and the table base for the library
+                        // linker.define(&mut store, name, "__indirect_function_table", table);
+
+                        // link GOT entries
+                        linker.define_GOT_dispatcher(&mut store, &module, &mut lind_got);
+
+                        // let mut module_linker = linker.clone();
+                        // module_linker.define(&mut store, "env", "__table_base", table_base);
+
+                        println!("[debug]: library name: {}", name);
+                        // link other instances of the library into the main linker
+                        linker.module(&mut store, name, &module, &mut table, table_start, &lind_got).context(format!(
+                            "failed to process preload `{}` at `{}`",
+                            name,
+                            path.display()
+                        ))?;
                     }
-
-                    println!("[debug] library table_start: {}, grow: {}", table_start, dylink_info.table_size);
-                    // the size of the table required by the library is inside dylink information
-                    // let's just use it and grow the table by that amount
-                    table.grow(&mut store, dylink_info.table_size, wasmtime::Ref::Func(None));
-                    // the table base for the library starts from the size of the previous table
-                    // let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_start)).unwrap();
-                    // link the table and the table base for the library
-                    // linker.define(&mut store, name, "__indirect_function_table", table);
-
-                    // link GOT entries
-                    linker.define_GOT_dispatcher(&mut store, &module, &mut lind_got);
-
-                    // let mut module_linker = linker.clone();
-                    // module_linker.define(&mut store, "env", "__table_base", table_base);
-
-                    println!("[debug]: library name: {}", name);
-                    // link other instances of the library into the main linker
-                    linker.module(&mut store, name, &module, &mut table, table_start, &lind_got).context(format!(
-                        "failed to process preload `{}` at `{}`",
-                        name,
-                        path.display()
-                    ))?;
-                }
-                #[cfg(not(feature = "cranelift"))]
-                CliLinker::Core(_) => {
-                    bail!("support for --preload disabled at compile time");
-                }
-                #[cfg(feature = "component-model")]
-                CliLinker::Component(_) => {
-                    bail!("--preload cannot be used with components");
+                    #[cfg(not(feature = "cranelift"))]
+                    CliLinker::Core(_) => {
+                        bail!("support for --preload disabled at compile time");
+                    }
+                    #[cfg(feature = "component-model")]
+                    CliLinker::Component(_) => {
+                        bail!("--preload cannot be used with components");
+                    }
                 }
             }
         }
@@ -593,7 +645,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules, pid as u64, &lind_got)
+            self.load_main_module(&mut store, &mut Arc::new(Mutex::new(linker)), &main, modules, pid as u64, &lind_got)
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -733,42 +785,44 @@ impl RunCommand {
     fn load_main_module(
         &self,
         mut store: &mut Store<Host>,
-        linker: &mut CliLinker,
+        linker: &mut Arc<Mutex<CliLinker>>,
         module: &RunTarget,
         modules: Vec<(String, Module)>,
         pid: u64,
         got: &LindGOT,
     ) -> Result<Vec<Val>> {
+        let mut guard = linker.lock().unwrap();
         // The main module might be allowed to have unknown imports, which
         // should be defined as traps:
-        if self.run.common.wasm.unknown_imports_trap == Some(true) {
-            #[cfg(feature = "cranelift")]
-            match linker {
-                CliLinker::Core(linker) => {
-                    linker.define_unknown_imports_as_traps(module.unwrap_core())?;
-                }
-                _ => bail!("cannot use `--trap-unknown-imports` with components"),
-            }
-            #[cfg(not(feature = "cranelift"))]
-            bail!("support for `unknown-imports-trap` disabled at compile time");
-        }
+        // if self.run.common.wasm.unknown_imports_trap == Some(true) {
+        //     #[cfg(feature = "cranelift")]
+        //     match *guard {
+        //         CliLinker::Core(linker) => {
+        //             linker.define_unknown_imports_as_traps(module.unwrap_core())?;
+        //         }
+        //         _ => bail!("cannot use `--trap-unknown-imports` with components"),
+        //     }
+        //     #[cfg(not(feature = "cranelift"))]
+        //     bail!("support for `unknown-imports-trap` disabled at compile time");
+        // }
 
         // ...or as default values.
-        if self.run.common.wasm.unknown_imports_default == Some(true) {
-            #[cfg(feature = "cranelift")]
-            match linker {
-                CliLinker::Core(linker) => {
-                    linker.define_unknown_imports_as_default_values(module.unwrap_core())?;
-                }
-                _ => bail!("cannot use `--default-values-unknown-imports` with components"),
-            }
-            #[cfg(not(feature = "cranelift"))]
-            bail!("support for `unknown-imports-trap` disabled at compile time");
-        }
+        // if self.run.common.wasm.unknown_imports_default == Some(true) {
+        //     #[cfg(feature = "cranelift")]
+        //     match *guard {
+        //         CliLinker::Core(linker) => {
+        //             linker.define_unknown_imports_as_default_values(module.unwrap_core())?;
+        //         }
+        //         _ => bail!("cannot use `--default-values-unknown-imports` with components"),
+        //     }
+        //     #[cfg(not(feature = "cranelift"))]
+        //     bail!("support for `unknown-imports-trap` disabled at compile time");
+        // }
 
         let finish_epoch_handler = self.setup_epoch_handler(store, modules)?;
 
-        let result = match linker {
+        let guard_linker = guard.clone();
+        let result = match guard_linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
                 let (instance, grate_instanceid) = linker
@@ -781,6 +835,8 @@ impl RunCommand {
                         "failed to instantiate {:?}",
                         self.module_and_args[0]
                     ))?;
+                
+                drop(guard);
                 
                 // update GOT entries after main module is instantiated
                 // let mut funcs = vec![];
@@ -1011,7 +1067,7 @@ impl RunCommand {
                 let command = wasmtime_wasi::bindings::sync::Command::instantiate(
                     &mut *store,
                     component,
-                    linker,
+                    &linker,
                 )?;
                 let result = command
                     .wasi_cli_run()
