@@ -15,6 +15,13 @@ int __GI___clone3 (struct clone_args *cl_args, size_t size, int (*func)(void *),
                          host_cl_args,
                          NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 
+  // Reinitialize address translation for child processes
+  if (pid == 0) {
+    __lind_base = 0ULL;
+    __lind_cageid = 0ULL;
+    __lind_init_addr_translation ();
+  }
+
   // Execute child function if in child process
   if (pid == 0 && func != NULL) {
     int ret = func(arg);
