@@ -828,7 +828,8 @@ impl<T> Linker<T> {
         module_name: &str,
         module: &Module,
         table: &mut Table,
-        got: &LindGOT
+        table_base: i32,
+        got: &LindGOT,
     ) -> Result<&mut Self>
     where
         T: 'static,
@@ -846,6 +847,7 @@ impl<T> Linker<T> {
         );
         match ModuleKind::categorize(module)? {
             ModuleKind::Command => {
+                panic!("lind: unexpected branch reached");
                 self.command(
                     store,
                     module_name,
@@ -881,12 +883,15 @@ impl<T> Linker<T> {
 
                 // placeholder for memory base, initialized into 0, will be replaced once vmmap for main module
                 // is initialized
+                let mut module_linker = self.clone();
                 let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
-                self.define(&mut store, "lib", "__memory_base", memory_base);
+                module_linker.define(&mut store, "env", "__memory_base", memory_base);
                 let handler = memory_base.get_handler_as_u32(&mut store);
+                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base)).unwrap();
+                module_linker.define(&mut store, "env", "__table_base", table_base);
 
                 println!("[debug] library instantiate");
-                let (instance, _) = self.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib(handler))?;
+                let (instance, _) = module_linker.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib(handler))?;
 
                 let memory_base = unsafe { *handler };
                 println!("[debug] after instantiate_with_lind, memory_base: {}", memory_base);
@@ -922,6 +927,7 @@ impl<T> Linker<T> {
                 }
                 for (name, global) in globals {
                     let val = global.get(&mut store);
+                    // relocate the variable
                     let val = val.i32().unwrap() as u32 + memory_base;
                     if got.update_entry_if_exist(&name, val) {
                         println!("[debug] update GOT.mem.{} to {}", name, val);

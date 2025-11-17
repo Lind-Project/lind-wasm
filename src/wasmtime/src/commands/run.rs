@@ -332,17 +332,19 @@ impl RunCommand {
                     // let's just use it and grow the table by that amount
                     table.grow(&mut store, dylink_info.table_size, wasmtime::Ref::Func(None));
                     // the table base for the library starts from the size of the previous table
-                    let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_start)).unwrap();
+                    // let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_start)).unwrap();
                     // link the table and the table base for the library
-                    linker.define(&mut store, name, "__indirect_function_table", table);
-                    linker.define(&mut store, "lib", "__table_base", table_base);
+                    // linker.define(&mut store, name, "__indirect_function_table", table);
 
                     // link GOT entries
                     linker.define_GOT_dispatcher(&mut store, &module, &mut lind_got);
 
+                    // let mut module_linker = linker.clone();
+                    // module_linker.define(&mut store, "env", "__table_base", table_base);
+
                     println!("[debug]: library name: {}", name);
                     // link other instances of the library into the main linker
-                    linker.module(&mut store, name, &module, &mut table, &lind_got).context(format!(
+                    linker.module(&mut store, name, &module, &mut table, table_start, &lind_got).context(format!(
                         "failed to process preload `{}` at `{}`",
                         name,
                         path.display()
