@@ -92,4 +92,15 @@ impl LindGOT {
 
         return true;
     }
+
+    pub fn get_entry_if_exist(&self, name: &str) -> Option<u32> {
+        if let Some(handler) = self.global_offset_table.get(name) {
+            let handler = (*handler) as *mut u32;
+            unsafe {
+                return Some(*handler);
+            }
+        } else {
+            return None;
+        }
+    }
 }

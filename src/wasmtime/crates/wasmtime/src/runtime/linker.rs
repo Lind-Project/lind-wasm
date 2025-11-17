@@ -7,6 +7,7 @@ use crate::{
     Instance, Module, StoreContextMut, Val, ValRaw, ValType, WasmTyList,
 };
 use alloc::sync::Arc;
+use cage::DashMap;
 use wasmtime_lind_utils::LindGOT;
 use core::fmt;
 #[cfg(feature = "async")]
@@ -990,7 +991,7 @@ impl<T> Linker<T> {
         module: &Module,
         table_base: i32,
         got: &LindGOT,
-    ) -> Result<&mut Self>
+    ) -> Result<u64>
     where
         T: 'static,
     {
@@ -1052,23 +1053,32 @@ impl<T> Linker<T> {
                     }
                 }
 
+                let mut symbol_mapping = DashMap::<String, u32>::new();
+
                 for (name, func) in funcs {
-                    // let main_module = store as crate::Caller<T>;
-                    // let t = store.as_context_mut();
+                    // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
                     let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)));
+                    // append the symbol into mappings
+                    symbol_mapping.insert(name.clone(), index);
+                    println!("[debug] add func {} to table with index {}", name, index);
                     // let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
                     if got.update_entry_if_exist(&name, index) {
                         println!("[debug] update GOT.func.{} to {}", name, index);
                     }
                 }
                 for (name, global) in globals {
+                    // TODO: probably needs to skip if the symbol is internal symbols (e.g. epoch symbols)
                     let val = global.get(&mut store);
                     // relocate the variable
                     let val = val.i32().unwrap() as u32 + memory_base;
+                    // append the symbol into mappings
+                    symbol_mapping.insert(name.clone(), val);
                     if got.update_entry_if_exist(&name, val) {
                         println!("[debug] update GOT.mem.{} to {}", name, val);
                     }
                 }
+
+                let handle = store.push_library_symbols(&symbol_mapping).unwrap() as u64;
 
                 // if let Some(export) = instance.get_export(&mut store, "lib_function") {
                 //     if let Extern::Func(func) = export {
@@ -1090,7 +1100,9 @@ impl<T> Linker<T> {
 
 
                 println!("[debug] library instance");
-                self.instance(store, module_name, instance)
+                self.instance(store, module_name, instance);
+
+                Ok(handle)
             }
         }
     }

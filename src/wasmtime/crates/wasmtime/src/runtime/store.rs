@@ -93,6 +93,7 @@ use crate::RootSet;
 use crate::{module::ModuleRegistry, Engine, Module, Trap, Val, ValRaw};
 use crate::{Global, Instance, Memory, RootScope, Table, Uninhabited};
 use alloc::sync::Arc;
+use cage::DashMap;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::future::Future;
@@ -345,6 +346,8 @@ pub struct StoreOpaque {
     stack_top: u64,
     // stack bottom
     stack_base: u64,
+    // libraries symbol mapping
+    library_symbols: Vec<DashMap<String, u32>>,
 
     // used by setjmp/longjmp
     // a mapping of raw unwind data hash to unwind data
@@ -549,6 +552,7 @@ impl<T> Store<T> {
                 asyncify_state: super::AsyncifyState::Normal,
                 signal_asyncify_data: Vec::new(),
                 signal_asyncify_counter: 0,
+                library_symbols: vec![],
                 #[cfg(feature = "component-model")]
                 num_component_instances: 0,
                 signal_handler: None,
@@ -661,6 +665,7 @@ impl<T> Store<T> {
             asyncify_state: super::AsyncifyState::Normal,
             signal_asyncify_data: Vec::new(),
             signal_asyncify_counter: 0,
+            library_symbols: vec![],
             #[cfg(feature = "component-model")]
             num_component_instances: 0,
             signal_handler: None,
@@ -1427,6 +1432,17 @@ impl<'a, T> StoreContextMut<'a, T> {
     pub fn set_signal_asyncify_data(&mut self, data: Vec<SignalAsyncifyData>) {
         self.0.signal_asyncify_data = data;
         self.0.signal_asyncify_counter = 0;
+    }
+
+    // push new library instance
+    pub fn push_library_symbols(&mut self, symbols: &DashMap<String, u32>) -> Result<usize> {
+        self.0.library_symbols.push(symbols.clone());
+        Ok(self.0.library_symbols.len())
+    }
+
+    // get library symbol
+    pub fn get_library_symbols(&mut self, index: usize) -> Option<&DashMap<String, u32>> {
+        self.0.library_symbols.get(index)
     }
 
     /// get stack top

@@ -12,6 +12,7 @@ use crate::{
     StoreContext, StoreContextMut, Val, ValRaw, ValType,
 };
 use alloc::sync::Arc;
+use cage::DashMap;
 use core::ffi::c_void;
 use core::future::Future;
 use core::mem::{self, MaybeUninit};
@@ -2136,6 +2137,14 @@ impl<T> Caller<'_, T> {
             .ok_or(())
             .unwrap()
             .get_stack_pointer(&mut self.store)
+    }
+
+    pub fn push_library_symbols(&mut self, symbols: &DashMap<String, u32>) -> Result<usize> {
+        self.store.push_library_symbols(symbols)
+    }
+
+    pub fn get_library_symbols(&mut self, index: usize) -> Option<&DashMap<String, u32>> {
+        self.store.get_library_symbols(index)
     }
 
     pub fn get_asyncify_start_unwind(&mut self) -> Result<TypedFunc<i32, ()>, ()> {

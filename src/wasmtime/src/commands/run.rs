@@ -272,18 +272,34 @@ impl RunCommand {
             let dlopen = move |mut caller: wasmtime::Caller<'_, Host>, lib: i32| -> i32 {
                 let base = get_memory_base(&mut caller);
                 let path = typemap::get_cstr(base + lib as u64).unwrap();
+                println!("[debug] dlopen {}", path);
 
-                run_cmd.load_library_module(&mut caller, cloned_linker.clone(), cloned_lind_got.clone(), path)
+                run_cmd.load_library_module(&mut caller, cloned_linker.clone(), cloned_lind_got.clone(), path) as i32
             };
 
+            let cloned_lind_got = lind_got.clone();
             let dlsym = move |mut caller: wasmtime::Caller<'_, Host>, handle: i32, sym: i32| -> i32 {
                 let base = get_memory_base(&mut caller);
                 let symbol = typemap::get_cstr(base + sym as u64).unwrap();
-                // let lib_symbol = caller.get_library_symbols((handle - 1) as usize).unwrap();
-                // let func_index = lib_symbol.get(&String::from(symbol)).unwrap();
+                println!("[debug] dlsym {}", symbol);
+                // let res;
+                // {
+                //     let mut guard = cloned_lind_got.lock().unwrap();
+                //     let got = guard;
+                //     res = got.get_entry_if_exist(symbol);
+                // }
+                // if let Some(val) = res {
+                //     println!("[debug] dlsym resolves {} to {}", symbol, val);
+                //     return val as i32;
+                // } else {
+                //     println!("[debug] dlsym: {} not found in GOT entries", symbol);
+                // }
+                let lib_symbol = caller.get_library_symbols((handle - 1) as usize).unwrap();
+                let val = *lib_symbol.get(&String::from(symbol)).unwrap() as i32;
+                println!("[debug] dlsym resolves {} to {}", symbol, val);
                 // println!("dlsym! func_index: {}", func_index);
                 // *func_index as i32
-                0
+                val
             };
 
             let mut guard = linker.lock().unwrap();
@@ -1120,6 +1136,7 @@ impl RunCommand {
         let table_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_size as i32)).unwrap();
         let memory_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
 
+        let handle;
         {
             let mut guard = main_linker.lock().unwrap();
             match &mut *guard {
@@ -1131,7 +1148,7 @@ impl RunCommand {
 
                     {
                         let mut guard = lind_got.lock().unwrap();
-                        linker.module_dyn(&mut main_module, library_name, &lib_module, table_size as i32, &*guard).context(format!(
+                        handle = linker.module_dyn(&mut main_module, library_name, &lib_module, table_size as i32, &*guard).context(format!(
                             "failed to process library `{}`",
                             library_name
                         )).unwrap();
@@ -1140,8 +1157,9 @@ impl RunCommand {
                 _ => { unreachable!() }
             }
         }
+        println!("[debug] dlopen: handle={}", handle);
 
-        0
+        handle as i32
     }
 
     fn invoke_func(&self, store: &mut Store<Host>, func: Func) -> Result<Vec<Val>> {
