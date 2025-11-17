@@ -792,6 +792,17 @@ and for re-adding support for interface types you can see this issue:
                         },
                         wasmparser::Dylink0Subsection::ImportInfo(importinfo) => {
                             println!("[debug]: importinfo: {:?}", importinfo);
+                            let mut imports = vec![];
+                            for import in importinfo {
+                                imports.push(crate::DylinkImport {
+                                    module: import.module.to_owned(),
+                                    field: import.field.to_owned(),
+                                    flags: 0 // TODO: we assume the flag is always BINDING_WEAK for now
+                                });
+                            }
+                            self.result.module.dylink_import_info.insert(crate::DylinkImportInfo {
+                                imports: imports
+                            });
                         },
                         _ => {
                             println!("[debug]: unknown dylink subsection!");

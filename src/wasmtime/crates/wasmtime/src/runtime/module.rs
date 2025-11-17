@@ -18,7 +18,7 @@ use core::ptr::NonNull;
 use std::path::Path;
 use wasmparser::{Parser, ValidPayload, Validator};
 use wasmtime_environ::{
-    CompiledModuleInfo, DylinkMemInfo, EntityIndex, HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex
+    CompiledModuleInfo, DylinkImportInfo, DylinkMemInfo, EntityIndex, HostPtr, ModuleTypes, ObjectKind, TypeTrace, VMOffsets, VMSharedTypeIndex
 };
 mod registry;
 
@@ -1029,8 +1029,13 @@ impl Module {
     }
     
     // lind-wasm: retrieve dynamic loading memory information
-    pub fn dylink_meminfo<'a>(&'a self) -> &Option<DylinkMemInfo> {
+    pub fn dylink_meminfo<'a>(&'a self) -> Option<&DylinkMemInfo> {
         self.compiled_module().dylink_mem_info()
+    }
+
+    // lind-wasm: retrieve dynamic loading memory information
+    pub fn dylink_importinfo<'a>(&'a self) -> Option<&DylinkImportInfo> {
+        self.compiled_module().dylink_import_info()
     }
 
     pub(crate) fn id(&self) -> CompiledModuleId {

@@ -245,7 +245,7 @@ impl Instance {
         // in wasmtime, one page is 65536 bytes, so we need to convert to pagesize in rawposix
         let minimal_pages = plan.memory.minimum * 0x10;
         println!("[debug] minimal_pages: {}", minimal_pages);
-        let module_meminfo = module.dylink_meminfo().as_ref().unwrap();
+        let module_meminfo = module.dylink_meminfo().unwrap();
         println!("[debug] module memory size: {}, align: {}", module_meminfo.memory_size, module_meminfo.memory_alignment);
         let module_rounded_size = round_size(module_meminfo.memory_size, module_meminfo.memory_alignment);
         let module_rounded_size = round_size(module_rounded_size, PAGESIZE);
@@ -322,7 +322,7 @@ impl Instance {
                 fork_vmmap(parent_pid as u64, child_pid);
             }
             InstantiateType::InstantiateLib(memory_base) => {
-                let dylink_meminfo = module.dylink_meminfo().as_ref().unwrap();
+                let dylink_meminfo = module.dylink_meminfo().unwrap();
                 println!("[debug] library memory size: {}, align: {}", dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);
 
                 let rounded_size = round_size(dylink_meminfo.memory_size, dylink_meminfo.memory_alignment);

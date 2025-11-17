@@ -252,6 +252,29 @@ impl<T> Linker<T> {
         Ok(())
     }
 
+    /// define undefined weak imports as trap
+    pub fn define_weak_imports_as_traps(&mut self, module: &Module) -> anyhow::Result<()> {
+        // for weak symbols, it should be resolved to NULL if it is not defined by any module
+        // in wasm, we will instead link these symbols into a panic function
+        let weak_imports = module.dylink_importinfo().unwrap();
+        for import in module.imports() {
+            // only trap the weak symbols that are NOT already defined
+            if let Err(import_err) = self._get_by_import(&import) {
+                if let ExternType::Func(func_ty) = import_err.ty() {
+                    // check if the undefined symbol is listed as a weak symbol
+                    if !weak_imports.is_weak_symbol(import.module(), import.name()) {
+                        continue;
+                    }
+                    println!("[debug] define weak symbol {}.{} into trap", import.module(), import.name());
+                    self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
+                        bail!(import_err.clone());
+                    })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     // redirect all GOT functions/symbols into a centralized dispatcher function
     // for dynamic updating of the entries after the module is initialized
     pub fn define_GOT_dispatcher(&mut self, mut store: impl AsContextMut<Data = T>, module: &Module, got: &mut LindGOT) -> anyhow::Result<()> {

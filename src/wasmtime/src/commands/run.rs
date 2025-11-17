@@ -113,8 +113,8 @@ impl RunCommand {
 
         let engine = Engine::new(&config)?;
 
-        let skip_func = vec!["__call_tls_dtors", "__printf_buffer_flush_dprintf", "__pthread_unwind", "_IO_wmem_sync","_IO_wmem_finish","_IO_mem_sync","_IO_mem_finish","_IO_new_proc_close","_IO_wstr_finish","_IO_wstr_overflow","_IO_wstr_underflow","_IO_wstr_pbackfail","_IO_wstr_seekoff","_IO_wfile_doallocate","_IO_cookie_seekoff","_IO_cookie_read","_IO_cookie_write","_IO_cookie_seek","_IO_cookie_close"];
-        let skip_val = vec!["__call_tls_dtors","_IO_wstr_finish","_IO_wstr_overflow","_IO_wstr_underflow","_IO_wstr_pbackfail","_IO_wstr_seekoff","_IO_wfile_doallocate","_IO_cookie_seekoff","_IO_cookie_read","_IO_cookie_write","_IO_cookie_seek","_IO_cookie_close","_IO_new_proc_close","_IO_mem_finish","_IO_mem_sync","_IO_wmem_finish","_IO_wmem_sync"];
+        // let skip_func = vec!["__call_tls_dtors", "__printf_buffer_flush_dprintf", "__pthread_unwind", "_IO_wmem_sync","_IO_wmem_finish","_IO_mem_sync","_IO_mem_finish","_IO_new_proc_close","_IO_wstr_finish","_IO_wstr_overflow","_IO_wstr_underflow","_IO_wstr_pbackfail","_IO_wstr_seekoff","_IO_wfile_doallocate","_IO_cookie_seekoff","_IO_cookie_read","_IO_cookie_write","_IO_cookie_seek","_IO_cookie_close"];
+        // let skip_val = vec!["__call_tls_dtors","_IO_wstr_finish","_IO_wstr_overflow","_IO_wstr_underflow","_IO_wstr_pbackfail","_IO_wstr_seekoff","_IO_wfile_doallocate","_IO_cookie_seekoff","_IO_cookie_read","_IO_cookie_write","_IO_cookie_seek","_IO_cookie_close","_IO_new_proc_close","_IO_mem_finish","_IO_mem_sync","_IO_wmem_finish","_IO_wmem_sync"];
 
         // Read the wasm module binary either as `*.wat` or a raw binary.
         let main = self
@@ -1345,7 +1345,7 @@ impl RunCommand {
                 _ => bail!("wasi-threads does not support components yet"),
             };
             let module = module.unwrap_core();
-            linker.define_unknown_imports_as_traps(module)?;
+            linker.define_weak_imports_as_traps(module)?;
             // store.data_mut().wasi_threads = Some(Arc::new(WasiThreadsCtx::new(
             //     module.clone(),
             //     Arc::new(linker.clone()),
