@@ -376,6 +376,7 @@ impl RunCommand {
                 &main,
                 modules,
                 CAGE_START_ID as u64,
+                &lind_got,
             )
             .with_context(|| {
                 format!(
@@ -494,6 +495,7 @@ impl RunCommand {
         }
 
         let engine = Engine::new(&config)?;
+        let mut lind_got = LindGOT::new();
 
         // Read the wasm module binary either as `*.wat` or a raw binary.
         let main = self
@@ -591,7 +593,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules, pid as u64)
+            self.load_main_module(&mut store, &mut linker, &main, modules, pid as u64, &lind_got)
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -730,11 +732,12 @@ impl RunCommand {
 
     fn load_main_module(
         &self,
-        store: &mut Store<Host>,
+        mut store: &mut Store<Host>,
         linker: &mut CliLinker,
         module: &RunTarget,
         modules: Vec<(String, Module)>,
         pid: u64,
+        got: &LindGOT,
     ) -> Result<Vec<Val>> {
         // The main module might be allowed to have unknown imports, which
         // should be defined as traps:
@@ -778,6 +781,38 @@ impl RunCommand {
                         "failed to instantiate {:?}",
                         self.module_and_args[0]
                     ))?;
+                
+                // update GOT entries after main module is instantiated
+                // let mut funcs = vec![];
+                let mut globals = vec![];
+                for export in instance.exports(&mut store) {
+                    let name = export.name().to_owned();
+                    match export.into_extern() {
+                        // I don't think main module should update GOT functions? 
+                        // Extern::Func(func) => {
+                        //     funcs.push((name, func));
+                        // },
+                        wasmtime::Extern::Global(global) => {
+                            globals.push((name, global));
+                        },
+                        _ => {}
+                    }
+                }
+
+                // for (name, func) in funcs {
+                //     let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
+                //     if got.update_entry_if_exist(&name, index) {
+                //         println!("[debug] update GOT.func.{} to {}", name, index);
+                //     }
+                // }
+                for (name, global) in globals {
+                    let val = global.get(&mut store);
+                    // relocate the variable
+                    let val = val.i32().unwrap() as u32 + 0; // 0 stands for memory base for main module
+                    if got.update_entry_if_exist(&name, val) {
+                        println!("[debug] main update GOT.mem.{} to {}", name, val);
+                    }
+                }
 
                 // If `_initialize` is present, meaning a reactor, then invoke
                 // the function.
