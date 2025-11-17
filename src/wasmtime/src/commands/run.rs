@@ -25,7 +25,7 @@ use wasmtime::{
 use wasmtime::Instance;
 
 use wasmtime_lind_common::LindCommonCtx;
-use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
+use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, LindHost, THREAD_START_ID, get_memory_base};
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
@@ -264,42 +264,39 @@ impl RunCommand {
         }
 
         {
+            let run_cmd = self.clone();
+            let cloned_linker = linker.clone();
+
+            let dlopen = move |mut caller: wasmtime::Caller<'_, Host>, lib: i32| -> i32 {
+                let base = get_memory_base(&mut caller);
+                let path = typemap::get_cstr(base + lib as u64).unwrap();
+
+                run_cmd.load_library_module(&mut caller, cloned_linker.clone(), path)
+            };
+
+            let dlsym = move |mut caller: wasmtime::Caller<'_, Host>, handle: i32, sym: i32| -> i32 {
+                let base = get_memory_base(&mut caller);
+                let symbol = typemap::get_cstr(base + sym as u64).unwrap();
+                // let lib_symbol = caller.get_library_symbols((handle - 1) as usize).unwrap();
+                // let func_index = lib_symbol.get(&String::from(symbol)).unwrap();
+                // println!("dlsym! func_index: {}", func_index);
+                // *func_index as i32
+                0
+            };
+
             let mut guard = linker.lock().unwrap();
             if let CliLinker::Core(linker) = &mut *guard {
-                // let run_cmd = self.clone();
-                // let cloned_linker = linker.clone();
-                // let dlopen = move |mut caller: wasmtime::Caller<'_, Host>, lib: i32| -> i32 {
-                //     let handle = caller.as_context().0.instance(wasmtime::InstanceId::from_index(1));
-                //     let defined_memory = handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                //     let base = defined_memory.base as u64;
-                //     // let base = get_memory_base(&caller);
-                //     let path = rawposix::interface::get_cstr(base + lib as u64).unwrap();
+                linker.func_wrap(
+                    "lind",
+                    "dlopen",
+                    dlopen,
+                ).unwrap();
 
-                //     run_cmd.load_library_module(&mut caller, cloned_linker.clone(), path)
-                // };
-
-                // let dlsym = move |mut caller: wasmtime::Caller<'_, Host>, handle: i32, sym: i32| -> i32 {
-                //     let instance_handle = caller.as_context().0.instance(wasmtime::InstanceId::from_index(1));
-                //     let defined_memory = instance_handle.get_memory(wasmtime_environ::MemoryIndex::from_u32(0));
-                //     let base = defined_memory.base as u64;
-                //     let symbol = rawposix::interface::get_cstr(base + sym as u64).unwrap();
-                //     let lib_symbol = caller.get_library_symbols((handle - 1) as usize).unwrap();
-                //     let func_index = lib_symbol.get(&String::from(symbol)).unwrap();
-                //     println!("dlsym! func_index: {}", func_index);
-                //     *func_index as i32
-                // };
-
-                // linker.func_wrap(
-                //     "lind",
-                //     "dlopen",
-                //     dlopen,
-                // ).unwrap();
-
-                // linker.func_wrap(
-                //     "lind",
-                //     "dlsym",
-                //     dlsym,
-                // ).unwrap();
+                linker.func_wrap(
+                    "lind",
+                    "dlsym",
+                    dlsym,
+                ).unwrap();
             }
         }
 
@@ -1085,6 +1082,15 @@ impl RunCommand {
         };
         finish_epoch_handler(store);
         result
+    }
+
+    fn load_library_module(
+        &self,
+        main_module: &mut wasmtime::Caller<Host>,
+        mut main_linker: Arc<Mutex<CliLinker>>,
+        library_name: &str,
+    ) -> i32 {
+        0
     }
 
     fn invoke_func(&self, store: &mut Store<Host>, func: Func) -> Result<Vec<Val>> {

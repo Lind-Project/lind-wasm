@@ -64,6 +64,7 @@ threei = { workspace = true }
 cage = { workspace = true, optional = false }
 fdtables = { workspace = true }
 sysdefs = { workspace = true }
+typemap = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true, features = ['std'] }
 target-lexicon = { workspace = true }
@@ -233,6 +234,7 @@ rawposix = { path = "crates/rawposix" }
 fdtables = { path = "crates/fdtables" }
 sysdefs = { path = "crates/sysdefs" }
 cage = { path = "crates/cage" }
+typemap = { path = "crates/typemap" }
 
 cranelift-wasm = { path = "cranelift/wasm", version = "0.110.0" }
 cranelift-codegen = { path = "cranelift/codegen", version = "0.110.0", default-features = false, features = ["std", "unwind", "trace-log"] }
