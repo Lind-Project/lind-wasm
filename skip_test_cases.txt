@@ -6,8 +6,6 @@ file_tests/deterministic/popen.c
 file_tests/deterministic/creat_access.c
 file_tests/deterministic/readlinkat.c
 file_tests/non-deterministic/sc-writev.c
-memory_tests/deterministic/mmap-negative1.c
-memory_tests/deterministic/mmap-negative2.c
 memory_tests/deterministic/mmaptest.c
 networking_tests/deterministic/uds-getsockname.c
 networking_tests/deterministic/uds-nb-select.c

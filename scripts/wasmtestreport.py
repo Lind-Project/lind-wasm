@@ -51,6 +51,7 @@ TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
 TESTFILES_DST = LIND_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
 NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
+FAIL_PARENT_NAME = "fail"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 
@@ -65,7 +66,10 @@ error_types = {
     "Lind_wasm_Segmentation_Fault": "Lind Wasm Segmentation Failure",
     "Lind_wasm_Timeout": "Timeout During Lind Wasm run",
     "Unknown_Failure": "Unknown Failure",
-    "Output_mismatch": "C Compiler and Wasm Output mismatch"
+    "Output_mismatch": "C Compiler and Wasm Output mismatch",
+    "Fail_native_succeeded": "Fail Test: Native Succeeded (Should Fail)",
+    "Fail_wasm_succeeded": "Fail Test: Wasm Succeeded (Should Fail)",
+    "Fail_both_succeeded": "Fail Test: Both Native and Wasm Succeeded (Should Fail)"
     }
 
 # ----------------------------------------------------------------------
@@ -440,9 +444,78 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 # TODO: Currently for non deterministic cases, we are only compiling and running the test case, success means the compiled test case ran, need to add more specific tests
 # 
 def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic"):
-    """Unified test function for both deterministic and non-deterministic tests"""
+    """Unified test function for both deterministic, non-deterministic and failing tests"""
     source_file = Path(source_file)
     handler = TestResultHandler(result, source_file)
+    
+    # For fail tests, we need to run both native and wasm
+    if test_mode == "fail":
+        # Run native version
+        native_success, native_output, native_retcode, native_error = compile_and_run_native(source_file, timeout_sec)
+        
+        # If native compile failed, report and return
+        if native_error == "Failure_native_compiling":
+            handler.add_compile_failure(native_output, is_native=True)
+            return
+        
+        # Compile and run WASM
+        wasm_file, compile_err = compile_c_to_wasm(source_file)
+        if wasm_file is None:
+            handler.add_compile_failure(compile_err, is_native=False)
+            return
+        
+        try:
+            wasm_retcode, wasm_output = run_compiled_wasm(wasm_file, timeout_sec)
+            
+            # Normalize return codes for comparison
+            native_failed = native_retcode != 0
+            
+            # Check if wasm_retcode is an integer or string
+            if isinstance(wasm_retcode, str):
+                wasm_failed = True  # timeout or unknown_error means it failed
+            else:
+                wasm_failed = wasm_retcode != 0
+            
+            # Both should fail for this test to pass
+            if native_failed and wasm_failed:
+                # Success: both failed as expected
+                output_info = (
+                    f"Native exit code: {native_retcode}\n"
+                    f"Wasm exit code: {wasm_retcode}\n"
+                    "Both failed as expected."
+                )
+                handler.add_success(output_info)
+            elif not native_failed and not wasm_failed:
+                # Both succeeded when they should have failed
+                failure_info = (
+                    "=== FAILURE: Both Native and Wasm succeeded when they should fail ===\n"
+                    f"Native output:\n{native_output}\n\n"
+                    f"Wasm output:\n{wasm_output}"
+                )
+                add_test_result(result, str(source_file), "Failure", "Fail_both_succeeded", failure_info)
+            elif not native_failed:
+                # Only native succeeded
+                failure_info = (
+                    "=== FAILURE: Native succeeded when it should fail ===\n"
+                    f"Native output:\n{native_output}\n\n"
+                    f"Wasm failed with exit code {wasm_retcode}:\n{wasm_output}"
+                )
+                add_test_result(result, str(source_file), "Failure", "Fail_native_succeeded", failure_info)
+            else:
+                # Only wasm succeeded
+                failure_info = (
+                    "=== FAILURE: Wasm succeeded when it should fail ===\n"
+                    f"Wasm output:\n{wasm_output}\n\n"
+                    f"Native failed with exit code {native_retcode}:\n{native_output}"
+                )
+                add_test_result(result, str(source_file), "Failure", "Fail_wasm_succeeded", failure_info)
+        
+        finally:
+            # Always clean up WASM file
+            if wasm_file and wasm_file.exists():
+                wasm_file.unlink()
+        
+        return  # Exit early for fail tests
     
     # For deterministic tests, get expected output
     expected_output = None
@@ -490,6 +563,9 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
 
 def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
     test_single_file_unified(source_file, result, timeout_sec, "non_deterministic")
+
+def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
+    test_single_file_unified(source_file, result, timeout_sec, "fail")
 
 # ----------------------------------------------------------------------
 # Function: analyze_testfile_dependencies
@@ -1141,10 +1217,11 @@ def run_tests(config, artifacts_root, results, timeout_sec):
             test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
         elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
             test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
+        elif parent_name == FAIL_PARENT_NAME:
+            test_single_file_fail(dest_source, results["fail"], timeout_sec)
         else:
-            # Log warning for tests not in deterministic/non-deterministic folders
-            logger.warning(f"Test file {original_source} is not in a deterministic or non-deterministic folder - skipping")
-
+            # Log warning for tests not in deterministic/non-deterministic/fail folders
+            logger.warning(f"Test file {original_source} is not in a deterministic, non-deterministic, or fail folder - skipping")
 def main():
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
@@ -1184,7 +1261,8 @@ def main():
 
     results = {
         "deterministic": get_empty_result(),
-        "non_deterministic": get_empty_result()
+        "non_deterministic": get_empty_result(),
+        "fail": get_empty_result()
     }
 
     # Prepare artifacts root
