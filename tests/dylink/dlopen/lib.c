@@ -24,9 +24,13 @@ void make_call(func_type func, char* arg)
 
 char *data = "this is the data from library";
 
+int var = 233;
+int library_data = 111;
+
 func_type myfunc(func_type main_func)
 {
     __lind_debug_num(2333);
+    printf("in lib, var=%d\n", var);
     // write(1, tmp, strlen(tmp));
     func_type lib_func = lib_function;
     make_call(lib_function, data);

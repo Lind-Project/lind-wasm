@@ -24,8 +24,12 @@ void make_call(func_type func, char* arg)
 
 char *data = "string from main process!";
 
+int var = 123;
+extern int library_data;
+
 int main()
 {
+    printf("main module var=%d, library_data=%d\n", var, library_data);
     __lind_debug_num(233);
     func_type main_func = main_function;
     make_call(main_func, data);
