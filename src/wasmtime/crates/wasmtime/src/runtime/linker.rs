@@ -982,6 +982,119 @@ impl<T> Linker<T> {
         }
     }
 
+
+    pub fn module_dyn(
+        &mut self,
+        mut store: &mut crate::Caller<T>,
+        module_name: &str,
+        module: &Module,
+        table_base: i32,
+        got: &LindGOT,
+    ) -> Result<&mut Self>
+    where
+        T: 'static,
+    {
+        // NB: this is intended to function the same as `Linker::module_async`,
+        // they should be kept in sync.
+
+        // This assert isn't strictly necessary since it'll bottom out in the
+        // `HostFunc::to_func` method anyway. This is placed earlier for this
+        // function though to prevent the functions created here from delaying
+        // the panic until they're called.
+        assert!(
+            Engine::same(&self.engine, store.as_context().engine()),
+            "different engines for this linker and the store provided"
+        );
+        match ModuleKind::categorize(module)? {
+            ModuleKind::Command => {
+                unreachable!();
+            }
+            ModuleKind::Reactor => {
+                println!("[debug] link a reactor module");
+
+                self.allow_shadowing(true);
+
+                // placeholder for memory base, initialized into 0, will be replaced once vmmap for main module
+                // is initialized
+                let mut module_linker = self.clone();
+                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(0)).unwrap();
+                module_linker.define(&mut store, "env", "__memory_base", memory_base);
+                let handler = memory_base.get_handler_as_u32(&mut store);
+                let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base)).unwrap();
+                module_linker.define(&mut store, "env", "__table_base", table_base);
+
+                println!("[debug] library instantiate");
+                let (instance, _) = module_linker.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib(handler))?;
+
+                let memory_base = unsafe { *handler };
+                println!("[debug] after instantiate_with_lind, memory_base: {}", memory_base);
+
+                if let Some(export) = instance.get_export(&mut store, "_initialize") {
+                    if let Extern::Func(func) = export {
+                        func.typed::<(), ()>(&store)
+                            .and_then(|f| f.call(&mut store, ()).map_err(Into::into))
+                            .context("calling the Reactor initialization function")?;
+                    }
+                }
+
+                let mut funcs = vec![];
+                let mut globals = vec![];
+                for export in instance.exports(&mut store) {
+                    let name = export.name().to_owned();
+                    match export.into_extern() {
+                        Extern::Func(func) => {
+                            funcs.push((name, func));
+                        },
+                        Extern::Global(global) => {
+                            globals.push((name, global));
+                        },
+                        _ => {}
+                    }
+                }
+
+                for (name, func) in funcs {
+                    // let main_module = store as crate::Caller<T>;
+                    // let t = store.as_context_mut();
+                    let index = store.grow_table_lib(1, crate::Ref::Func(Some(func)));
+                    // let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
+                    if got.update_entry_if_exist(&name, index) {
+                        println!("[debug] update GOT.func.{} to {}", name, index);
+                    }
+                }
+                for (name, global) in globals {
+                    let val = global.get(&mut store);
+                    // relocate the variable
+                    let val = val.i32().unwrap() as u32 + memory_base;
+                    if got.update_entry_if_exist(&name, val) {
+                        println!("[debug] update GOT.mem.{} to {}", name, val);
+                    }
+                }
+
+                // if let Some(export) = instance.get_export(&mut store, "lib_function") {
+                //     if let Extern::Func(func) = export {
+                //         // println!("[debug] export lib_function: index: {}",);
+                //         let index = table.grow(&mut store, 1, crate::Ref::Func(Some(func))).unwrap();
+                //         println!("[debug] update GOT lib_function to {}", index);
+                //         got.update_entry_if_exist("lib_function", index);
+                //     }
+                // }
+                // if let Some(export) = instance.get_export(&mut store, "data") {
+                //     if let Extern::Global(global) = export {
+                //         let val = global.get(&mut store);
+                //         let val = val.i32().unwrap() as u32 + memory_base;
+                //         println!("[debug] update GOT.data to {}", val);
+                //         got.update_entry_if_exist("data", val);
+                //     }
+                // }
+                // self.allow_shadowing(false);
+
+
+                println!("[debug] library instance");
+                self.instance(store, module_name, instance)
+            }
+        }
+    }
+
     /// Define automatic instantiations of a [`Module`] in this linker.
     ///
     /// This is the same as [`Linker::module`], except for async `Store`s.

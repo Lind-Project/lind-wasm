@@ -1116,6 +1116,7 @@ impl RunCommand {
         let dylink_info = lib_module.dylink_meminfo().unwrap();
 
         let table_size = main_module.get_table_size();
+        main_module.grow_table_lib(dylink_info.table_size, wasmtime::Ref::Func(None));
         let table_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(table_size as i32)).unwrap();
         let memory_base = Global::new(&mut *main_module, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
 
@@ -1129,11 +1130,11 @@ impl RunCommand {
                     }
 
                     {
-                        // let mut guard = lind_got.lock().unwrap();
-                        // linker.module(&mut store, library_name, &lib_module, &mut table, table_size as i32, &*guard).context(format!(
-                        //     "failed to process library `{}`",
-                        //     library_name
-                        // )).unwrap();
+                        let mut guard = lind_got.lock().unwrap();
+                        linker.module_dyn(&mut main_module, library_name, &lib_module, table_size as i32, &*guard).context(format!(
+                            "failed to process library `{}`",
+                            library_name
+                        )).unwrap();
                     }
                 },
                 _ => { unreachable!() }
