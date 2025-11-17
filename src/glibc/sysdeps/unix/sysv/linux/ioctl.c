@@ -23,7 +23,6 @@
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
 #include <addr_translation.h>
-#include <assert.h>
 #include <stdint.h>
 
 int
@@ -35,10 +34,7 @@ __ioctl (int fd, unsigned long int request, ...)
   /* Use unsigned long to safely capture either pointer or integer values */
   unsigned long raw = va_arg (args, unsigned long);
   va_end (args);
-
-  /* Only support FIONBIO and FIOASYNC.  Fail fast otherwise. */
-  assert (request == FIONBIO || request == FIOASYNC);
-
+  
   /* For FIONBIO and FIOASYNC, the third argument should be a pointer to int
    * (int *argp). Translate the guest pointer to host pointer.
    * TODO: Handle the edge case where someone passes a direct integer value (0

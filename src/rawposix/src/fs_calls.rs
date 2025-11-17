@@ -8,7 +8,7 @@ use libc::c_void;
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC,
+    F_GETLK64, F_SETLK64, F_SETLKW64, FIOASYNC, FIONBIO, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC,
     PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST,
     SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
 };
@@ -3564,6 +3564,11 @@ pub fn ioctl_syscall(
             "{}: unused arguments contain unexpected values -- security violation",
             "ioctl_syscall"
         );
+    }
+    
+    // Only support FIONBIO and FIOASYNC. Return error for unsupported requests.
+    if req_arg != FIONBIO as u64 && req_arg != FIOASYNC as u64 {
+        return syscall_error(Errno::EINVAL, "ioctl", "Unsupported ioctl request");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
