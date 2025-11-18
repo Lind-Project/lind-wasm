@@ -706,9 +706,7 @@ pub fn mmap_syscall(
     }
 
     if prot & PROT_EXEC > 0 {
-        lind_debug_panic(
-            "Error in syscall: mmap - EINVAL: Invalid Argument: PROT_EXEC is not allowed",
-        );
+        lind_debug_panic("mmap protection flag PROT_EXEC is not allowed in Lind");
     }
 
     // check if the provided address is multiple of pages
@@ -3736,9 +3734,7 @@ pub fn shmget_syscall(
     }
 
     if key == IPC_PRIVATE {
-        lind_debug_panic(
-            "Error in syscall: shmget - ENOENT: no such file or directory: IPC_PRIVATE not implemented",
-        );
+        lind_debug_panic("shmget key IPC_PRIVATE is not allowed in Lind");
     }
     let shmid: i32;
     let metadata = &SHM_METADATA;
