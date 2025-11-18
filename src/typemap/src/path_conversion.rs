@@ -9,16 +9,8 @@ pub use std::ffi::{CStr, CString};
 pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
+use sysdefs::constants::lind_platform_const::LIND_ROOT;
 pub use sysdefs::constants::{err_const, fs_const};
-
-/// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
-/// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
-/// error will be emitted if the environment variable is not a valid Unicode string). If the environment
-/// variable is not present, then this will expand to None, and will be set to default path.
-pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
-    Some(path) => path,
-    None => "/home/lind/lind-wasm/src/RawPOSIX/tmp",
-};
 
 /// Convert data type from `&str` to `PathBuf`
 ///
@@ -104,10 +96,10 @@ pub fn add_lind_root(cageid: u64, path: &str) -> CString {
 ///
 /// ## Example:
 /// ```
-/// // If LIND_ROOT is "/home/lind/lind-wasm/src/RawPOSIX/tmp"
-/// // and host_path is "/home/lind/lind-wasm/src/RawPOSIX/tmp/foo/bar"
+/// // If LIND_ROOT is "/home/lind/lind-wasm/src/tmp"
+/// // and host_path is "/home/lind/lind-wasm/src/tmp/foo/bar"
 /// // this returns "/foo/bar"
-/// let user_path = strip_lind_root("/home/lind/lind-wasm/src/RawPOSIX/tmp/foo/bar");
+/// let user_path = strip_lind_root("/home/lind/lind-wasm/src/tmp/foo/bar");
 /// assert_eq!(user_path, PathBuf::from("/foo/bar"));
 /// ```
 pub fn strip_lind_root(host_path: &str) -> PathBuf {

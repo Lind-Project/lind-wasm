@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
+use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, LIND_ROOT};
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
@@ -1018,7 +1018,7 @@ pub fn rawposix_start(verbosity: isize) {
     // Set up standard file descriptors for the init cage
     // TODO:
     // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
-    let dev_null = CString::new("/home/lind-wasm/src/RawPOSIX/tmp/dev/null").unwrap();
+    let dev_null = CString::new(format!("{}/dev/null", LIND_ROOT)).unwrap();
 
     // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
     // Standard input (fd = 0) is redirected to /dev/null
