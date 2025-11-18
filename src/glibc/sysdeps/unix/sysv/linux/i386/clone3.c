@@ -20,12 +20,12 @@ int __GI___clone3 (struct clone_args *cl_args, size_t size, int (*func)(void *),
     __lind_base = 0ULL;
     __lind_cageid = 0ULL;
     __lind_init_addr_translation ();
-  }
 
-  // Execute child function if in child process
-  if (pid == 0 && func != NULL) {
-    int ret = func(arg);
-    exit(ret);
+    // Execute child function if in child process
+    if (func != NULL) {
+      int ret = func(arg);
+      exit(ret);
+    }
   }
 
   return pid;
