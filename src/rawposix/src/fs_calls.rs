@@ -3572,12 +3572,12 @@ pub fn ioctl_syscall(
 
     // Only support FIONBIO and FIOASYNC. Return error for unsupported requests.
     if req_arg != FIONBIO as u64 && req_arg != FIOASYNC as u64 {
-        return syscall_error(Errno::EINVAL, "ioctl", "Unsupported ioctl request");
+        lind_debug_panic("Error in syscall: ioctl - EINVAL: Unsupported ioctl request");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
     if wrappedvfd.is_err() {
-        return syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor");
+        lind_debug_panic("Error in syscall: ioctl - EBADF: Bad File Descriptor");
     }
 
     let vfd = wrappedvfd.unwrap();
