@@ -2,8 +2,7 @@
 // Verifies correct three-way splitting when changing protection in middle
 #include <sys/mman.h>
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include <assert.h>
 
 #define PAGESIZE 4096
 #define NUMPAGES 10
@@ -13,10 +12,7 @@ int main(void) {
     size_t len = PAGESIZE * NUMPAGES;
     unsigned char *p = mmap(NULL, len, PROT_READ | PROT_WRITE,
                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (p == MAP_FAILED) {
-        perror("mmap failed");
-        return 1;
-    }
+    assert(p != MAP_FAILED && "mmap failed");
 
     // Write to all pages
     for (int i = 0; i < NUMPAGES; i++) {
@@ -24,18 +20,11 @@ int main(void) {
     }
 
     // Change protection on middle 4 pages (pages 3-6) to READ-only
-    if (mprotect(p + (3 * PAGESIZE), 4 * PAGESIZE, PROT_READ) != 0) {
-        perror("mprotect failed");
-        munmap(p, len);
-        return 2;
-    }
+    assert(mprotect(p + (3 * PAGESIZE), 4 * PAGESIZE, PROT_READ) == 0 && "mprotect failed");
 
     // Verify we can read from middle protected region
-    if (p[3 * PAGESIZE] != 0xCC + 3 || p[6 * PAGESIZE] != 0xCC + 6) {
-        fprintf(stderr, "read from protected middle region failed\n");
-        munmap(p, len);
-        return 3;
-    }
+    assert(p[3 * PAGESIZE] == 0xCC + 3 && "read from protected middle region failed");
+    assert(p[6 * PAGESIZE] == 0xCC + 6 && "read from protected middle region failed");
 
     // Verify we can write to pages before protected region (0-2)
     for (int i = 0; i < 3; i++) {
@@ -48,17 +37,12 @@ int main(void) {
     }
 
     // Verify all writes succeeded
-    if (p[0] != 0xDD || p[2 * PAGESIZE] != 0xDD + 2 ||
-        p[7 * PAGESIZE] != 0xDD + 7 || p[9 * PAGESIZE] != 0xDD + 9) {
-        fprintf(stderr, "write to unprotected regions failed\n");
-        munmap(p, len);
-        return 4;
-    }
+    assert(p[0] == 0xDD && "write to unprotected regions failed");
+    assert(p[2 * PAGESIZE] == 0xDD + 2 && "write to unprotected regions failed");
+    assert(p[7 * PAGESIZE] == 0xDD + 7 && "write to unprotected regions failed");
+    assert(p[9 * PAGESIZE] == 0xDD + 9 && "write to unprotected regions failed");
 
-    if (munmap(p, len) != 0) {
-        perror("munmap failed");
-        return 5;
-    }
+    assert(munmap(p, len) == 0 && "munmap failed");
 
     printf("mprotect_middle_region test: PASS\n");
     return 0;

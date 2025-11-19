@@ -2,8 +2,7 @@
 // Verifies no fragmentation when protection doesn't actually change
 #include <sys/mman.h>
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include <assert.h>
 
 #define PAGESIZE 4096
 #define NUMPAGES 10
@@ -13,10 +12,7 @@ int main(void) {
     size_t len = PAGESIZE * NUMPAGES;
     unsigned char *p = mmap(NULL, len, PROT_READ | PROT_WRITE,
                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (p == MAP_FAILED) {
-        perror("mmap failed");
-        return 1;
-    }
+    assert(p != MAP_FAILED && "mmap failed");
 
     // Write test data
     for (int i = 0; i < NUMPAGES; i++) {
@@ -25,11 +21,7 @@ int main(void) {
 
     // Apply mprotect with the SAME protection (READ|WRITE) on middle pages
     // This should NOT cause fragmentation
-    if (mprotect(p + (3 * PAGESIZE), 4 * PAGESIZE, PROT_READ | PROT_WRITE) != 0) {
-        perror("mprotect failed");
-        munmap(p, len);
-        return 2;
-    }
+    assert(mprotect(p + (3 * PAGESIZE), 4 * PAGESIZE, PROT_READ | PROT_WRITE) == 0 && "mprotect failed");
 
     // Verify we can still write to all pages (protection unchanged)
     for (int i = 0; i < NUMPAGES; i++) {
@@ -37,16 +29,11 @@ int main(void) {
     }
 
     // Verify writes succeeded
-    if (p[0] != 0xFF || p[5 * PAGESIZE] != 0xFF - 5 || p[9 * PAGESIZE] != 0xFF - 9) {
-        fprintf(stderr, "write after same-value mprotect failed\n");
-        munmap(p, len);
-        return 3;
-    }
+    assert(p[0] == 0xFF && "write after same-value mprotect failed");
+    assert(p[5 * PAGESIZE] == 0xFF - 5 && "write after same-value mprotect failed");
+    assert(p[9 * PAGESIZE] == 0xFF - 9 && "write after same-value mprotect failed");
 
-    if (munmap(p, len) != 0) {
-        perror("munmap failed");
-        return 4;
-    }
+    assert(munmap(p, len) == 0 && "munmap failed");
 
     printf("mprotect_same_value test: PASS\n");
     return 0;
