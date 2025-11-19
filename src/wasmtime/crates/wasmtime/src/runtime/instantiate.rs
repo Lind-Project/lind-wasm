@@ -9,9 +9,7 @@ use crate::{code_memory::CodeMemory, profiling_agent::ProfilingAgent};
 use alloc::sync::Arc;
 use core::str;
 use wasmtime_environ::{
-    CompiledFunctionInfo, CompiledModuleInfo, DefinedFuncIndex, FuncIndex, FunctionLoc,
-    FunctionName, Metadata, Module, ModuleInternedTypeIndex, PrimaryMap, StackMapInformation,
-    WasmFunctionInfo,
+    CompiledFunctionInfo, CompiledModuleInfo, DefinedFuncIndex, DylinkImportInfo, DylinkMemInfo, FuncIndex, FunctionLoc, FunctionName, Metadata, Module, ModuleInternedTypeIndex, PrimaryMap, StackMapInformation, WasmFunctionInfo
 };
 
 /// A compiled wasm module, ready to be instantiated.
@@ -104,6 +102,16 @@ impl CompiledModule {
     /// Returns the underlying owned mmap of this compiled image.
     pub fn code_memory(&self) -> &Arc<CodeMemory> {
         &self.code_memory
+    }
+
+    /// lind-wasm: retrieve dynamic loading information
+    pub fn dylink_mem_info(&self) -> Option<&DylinkMemInfo> {
+        self.module.dylink_mem_info.as_ref()
+    }
+
+    /// lind-wasm: retrieve dynamic loading information
+    pub fn dylink_import_info(&self) -> Option<&DylinkImportInfo> {
+        self.module.dylink_import_info.as_ref()
     }
 
     /// Returns the text section of the ELF image for this compiled module.

@@ -2,6 +2,8 @@
 
 use std::sync::{Condvar, Mutex};
 
+use dashmap::DashMap;
+
 pub mod lind_syscall_numbers;
 
 // used to manage global active cage count. Used to determine when wasmtime can exit
@@ -55,5 +57,50 @@ pub fn parse_env_var(env_var: &str) -> (String, Option<String>) {
     } else {
         // If '=' is not found, return the whole string as the key and None for the value
         (env_var.to_string(), None)
+    }
+}
+
+
+#[allow(missing_docs)]
+#[derive(Default)]
+pub struct LindGOT {
+    global_offset_table: DashMap<String, u64> // use u64 instead of *mut i32 in order to share this struct across threads
+}
+
+impl LindGOT {
+    pub fn new() -> Self {
+        Self {
+            global_offset_table: DashMap::new()
+        }
+    }
+
+    pub fn new_entry(&mut self, name: String, handler: *mut u32) {
+        // to-do: handle existing GOT entry
+        self.global_offset_table.insert(name, handler as u64);
+    }
+
+    pub fn update_entry_if_exist(&self, name: &str, val: u32) -> bool {
+        if let Some(handler) = self.global_offset_table.get(name) {
+            let handler = (*handler) as *mut u32;
+            unsafe {
+                *handler = val;
+            }
+        } else {
+            // do nothing
+            return false;
+        }
+
+        return true;
+    }
+
+    pub fn get_entry_if_exist(&self, name: &str) -> Option<u32> {
+        if let Some(handler) = self.global_offset_table.get(name) {
+            let handler = (*handler) as *mut u32;
+            unsafe {
+                return Some(*handler);
+            }
+        } else {
+            return None;
+        }
     }
 }

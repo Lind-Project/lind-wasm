@@ -12,13 +12,14 @@ use crate::{
     StoreContext, StoreContextMut, Val, ValRaw, ValType,
 };
 use alloc::sync::Arc;
+use cage::DashMap;
 use core::ffi::c_void;
 use core::future::Future;
 use core::mem::{self, MaybeUninit};
 use core::num::NonZeroUsize;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
-use wasmtime_environ::VMSharedTypeIndex;
+use wasmtime_environ::{TableIndex, VMSharedTypeIndex};
 
 /// A reference to the abstract `nofunc` heap value.
 ///
@@ -2056,7 +2057,7 @@ for_each_function_signature!(impl_wasm_ty_list);
 /// recommended to use this type.
 pub struct Caller<'a, T> {
     pub store: StoreContextMut<'a, T>,
-    pub caller: &'a crate::runtime::vm::Instance,
+    pub caller: &'a mut crate::runtime::vm::Instance,
 }
 
 impl<T> Caller<'_, T> {
@@ -2075,7 +2076,7 @@ impl<T> Caller<'_, T> {
 
             let ret = f(Caller {
                 store,
-                caller: &instance,
+                caller: instance,
             });
 
             // Safe to recreate a mutable borrow of the store because `ret`
@@ -2136,6 +2137,14 @@ impl<T> Caller<'_, T> {
             .ok_or(())
             .unwrap()
             .get_stack_pointer(&mut self.store)
+    }
+
+    pub fn push_library_symbols(&mut self, symbols: &DashMap<String, u32>) -> Result<usize> {
+        self.store.push_library_symbols(symbols)
+    }
+
+    pub fn get_library_symbols(&mut self, index: usize) -> Option<&DashMap<String, u32>> {
+        self.store.get_library_symbols(index)
     }
 
     pub fn get_asyncify_start_unwind(&mut self) -> Result<TypedFunc<i32, ()>, ()> {
@@ -2328,6 +2337,22 @@ impl<T> Caller<'_, T> {
     /// [`Store::fuel_async_yield_interval`](crate::Store::fuel_async_yield_interval)
     pub fn fuel_async_yield_interval(&mut self, interval: Option<u64>) -> Result<()> {
         self.store.fuel_async_yield_interval(interval)
+    }
+
+    pub fn grow_table_lib(&mut self, delta: u32, init_value: Ref) -> u32 {
+        let lib_ty = crate::TableType::new(crate::RefType::FUNCREF, 0, None);
+        let lib_init = init_value.into_table_element(self.store.0, lib_ty.element()).unwrap();
+        let res = self.caller.table_grow(TableIndex::from_u32(0), delta, lib_init).unwrap();
+
+        res.unwrap()
+    }
+
+    pub fn get_table_size(&mut self) -> u32 {
+        let table_pointer = self.caller.get_table(TableIndex::from_u32(0));
+        unsafe {
+            let table = &*table_pointer;
+            table.size()
+        }
     }
 }
 
