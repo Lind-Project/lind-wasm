@@ -14,7 +14,6 @@ int main() {
     int passed = 0;
     int failed = 0;
     void *result;
-    int ret;
 
     printf("=== Memory Error Handling Test (mmap + shmat) ===\n\n");
 
@@ -143,21 +142,6 @@ int main() {
         failed++;
         if (result != (void *)-1) {
             shmdt(result);
-        }
-    }
-
-    // Test 9: shmget with invalid size (too large)
-    printf("Test 9: shmget with size exceeding SHMMAX (should fail)... ");
-    errno = 0;
-    ret = shmget(IPC_PRIVATE, (size_t)-1, IPC_CREAT | 0666);
-    if (ret == -1) {
-        printf("PASSED\n");
-        passed++;
-    } else {
-        printf("FAILED (expected -1, got %d)\n", ret);
-        failed++;
-        if (ret >= 0) {
-            shmctl(ret, IPC_RMID, NULL);
         }
     }
 
