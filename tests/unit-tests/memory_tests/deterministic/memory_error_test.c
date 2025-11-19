@@ -85,8 +85,5 @@ int main() {
     assert(result == (void *)-1);
     printf("PASSED\n");
 
-    printf("\n=== All Tests Passed ===\n");
-    printf("Issue #451: Error codes are properly propagated for memory operations\n");
-
     return 0;
 }
