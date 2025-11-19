@@ -8,13 +8,15 @@ use libc::c_void;
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC,
-    PROT_NONE, PROT_READ, PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO,
-    STDIN_FILENO, STDOUT_FILENO,
+    FIOASYNC, FIONBIO, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE,
+    MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+    SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
 };
+
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
 use sysdefs::constants::LIND_ROOT;
+use sysdefs::logging::lind_debug_panic;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
 use typemap::filesystem_helpers::{convert_fstatdata_to_user, convert_statdata_to_user};
@@ -250,6 +252,25 @@ pub fn close_syscall(
 /// ## Returns:
 ///     - On success: 0 or number of woken threads depending on futex operation
 ///     - On failure: a negative errno value indicating the syscall error
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/futex.2.html
+///
+/// The Linux `futex()` syscall provides a mechanism for fast user-space locking. It allows a process or thread
+/// to wait for or wake another process or thread on a shared memory location without invoking heavy kernel-side
+/// synchronization primitives unless contention arises. This implementation wraps the futex syscall, allowing
+/// direct invocation with the relevant arguments passed from the current cage context.
+///
+/// Input:
+///     - cageid: current cageid
+///     - uaddr_arg: pointer to the futex word in user memory
+///     - futex_op_arg: operation code indicating futex command type
+///     - val_arg: value expected at uaddr or the number of threads to wake
+///     - val2_arg: timeout or other auxiliary parameter depending on operation
+///     - uaddr2_arg: second address used for requeueing operations
+///     - val3_arg: additional value for some futex operations
+///
+/// ## Returns:
+///     - On success: 0 or number of woken threads depending on futex operation
+///     - On failure: a negative errno value indicating the syscall error
 pub fn futex_syscall(
     cageid: u64,
     uaddr_arg: u64,
@@ -268,8 +289,8 @@ pub fn futex_syscall(
     let uaddr = sc_convert_uaddr_to_host(uaddr_arg, uaddr_cageid, cageid);
     let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
     let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
-    let val2 = sc_convert_sysarg_to_u32(val2_arg, val2_cageid, cageid);
-    let uaddr2 = sc_convert_sysarg_to_u32(uaddr2_arg, uaddr2_cageid, cageid);
+    let val2 = sc_convert_uaddr_to_host(val2_arg, val2_cageid, cageid);
+    let uaddr2 = sc_convert_uaddr_to_host(uaddr2_arg, uaddr2_cageid, cageid);
     let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
 
     let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
@@ -685,7 +706,7 @@ pub fn mmap_syscall(
     }
 
     if prot & PROT_EXEC > 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "PROT_EXEC is not allowed");
+        lind_debug_panic("mmap protection flag PROT_EXEC is not allowed in Lind");
     }
 
     // check if the provided address is multiple of pages
@@ -1178,22 +1199,22 @@ pub fn fcntl_syscall(
     vfd_cageid: u64,
     cmd_arg: u64,
     cmd_cageid: u64,
-    arg_arg: u64,
-    arg_cageid: u64,
-    arg4: u64,
-    arg4_cageid: u64,
+    int_arg: u64, // arg3: integer value (for F_DUPFD, F_SETFD, F_GETFL, etc.)
+    int_arg_cageid: u64,
+    ptr_arg: u64, // arg4: translated host pointer (for F_GETLK, F_SETLK, etc.)
+    ptr_arg_cageid: u64,
     arg5: u64,
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     let cmd = sc_convert_sysarg_to_i32(cmd_arg, cmd_cageid, cageid);
-    let arg = sc_convert_sysarg_to_i32(arg_arg, arg_cageid, cageid);
-    // would sometimes check, sometimes be a no-op depending on the compiler settings
-    if !(sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
-        && sc_unusedarg(arg6, arg6_cageid))
-    {
+
+    // Convert int value only, we handle the pointer args if it's a lock operation
+    let arg = int_arg as i32;
+
+    // Validate unused arguments
+    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
             "fcntl_syscall"
@@ -1284,7 +1305,21 @@ pub fn fcntl_syscall(
                 Ok(entry) => entry,
                 Err(e) => return syscall_error(e, "fcntl", "Bad File Descriptor"),
             };
-            let ret = unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) };
+            let is_lock_op = cmd == F_GETLK
+                || cmd == F_SETLK
+                || cmd == F_SETLKW
+                || cmd == F_GETLK64
+                || cmd == F_SETLK64
+                || cmd == F_SETLKW64;
+
+            let ret = if is_lock_op {
+                // Lock operation - use ptr_arg (arg4)
+                unsafe { libc::fcntl(vfd.underfd as i32, cmd, ptr_arg as *mut c_void) }
+            } else {
+                // Other operations - use int_arg (arg3)
+                unsafe { libc::fcntl(vfd.underfd as i32, cmd, arg) }
+            };
+
             if ret < 0 {
                 let errno = get_errno();
                 return handle_errno(errno, "fcntl");
@@ -1370,7 +1405,7 @@ pub fn link_syscall(
 /// ## Implementation Details:
 ///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
 ///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
-///  - The statbuf buffer is converted from WASM address to host address using `sc_convert_addr_to_host`.
+///  - We pas .
 ///  - The underlying libc::stat() is called and results are copied to the user buffer.
 ///
 /// ## Return Value:
@@ -1477,22 +1512,16 @@ pub fn statfs_syscall(
         );
     }
 
-    // Declare statbuf by ourselves
-    let mut libc_statbuf: statfs = unsafe { std::mem::zeroed() };
-    let libcret = unsafe { libc::statfs(path.as_ptr(), &mut libc_statbuf) };
+    // Cast directly to libc::statfs and write kernel data into buffer.
+    let statbuf_ptr = statbuf_arg as *mut libc::statfs;
+    let ret = unsafe { libc::statfs(path.as_ptr(), statbuf_ptr) };
 
-    if libcret < 0 {
+    if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "statfs");
     }
 
-    // Convert libc stat to FStatData and copy to user buffer
-    match sc_convert_addr_to_fstatdata(statbuf_arg, statbuf_cageid, cageid) {
-        Ok(statbuf_addr) => convert_fstatdata_to_user(statbuf_addr, libc_statbuf),
-        Err(e) => return syscall_error(e, "statfs", "Bad address"),
-    }
-
-    libcret
+    ret
 }
 
 //------------------------------------FSYNC SYSCALL------------------------------------
@@ -1728,7 +1757,7 @@ pub fn readlink_syscall(
 ) -> i32 {
     // Type conversion
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
 
     // Validate unused args
@@ -1838,7 +1867,7 @@ pub fn readlinkat_syscall(
     // Type conversion
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
 
     // Validate unused args
@@ -2092,7 +2121,7 @@ pub fn unlinkat_syscall(
         }
         let vfd = wrappedvfd.unwrap();
         // For this case, we pass the provided pathname directly.
-        let pathname = sc_convert_uaddr_to_host(pathname_arg, pathname_cageid, cageid);
+        let pathname = pathname_arg;
         let tmp_cstr = get_cstr(pathname).unwrap();
         c_path = CString::new(tmp_cstr).unwrap();
         vfd.underfd as i32
@@ -2202,7 +2231,7 @@ pub fn clock_gettime_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let clockid = sc_convert_sysarg_to_u32(clockid_arg, clockid_cageid, cageid);
-    let tp = sc_convert_addr_to_host(tp_arg, tp_cageid, cageid);
+    let tp = tp_arg as *mut u8;
     // would sometimes check, sometimes be a no-op depending on the compiler settings
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
@@ -2604,14 +2633,14 @@ pub fn fstat_syscall(
         );
     }
 
-    // 1) Call host fstat into a local host variable
+    // Cast directly to libc::stat and write kernel data into buffer.
     let mut host_stat: libc::stat = unsafe { std::mem::zeroed() };
     let ret = unsafe { libc::fstat(kernel_fd, &mut host_stat as *mut libc::stat) };
     if ret < 0 {
         return handle_errno(get_errno(), "fstat");
     }
 
-    // 2) Validate guest buffer range and writability
+    // Validate guest buffer range and writability
     match sc_convert_addr_to_statdata(statbuf_arg, statbuf_cageid, cageid) {
         // 3) Populate StatData directly
         Ok(statbuf_addr) => convert_statdata_to_user(statbuf_addr, host_stat),
@@ -3270,10 +3299,7 @@ pub fn getcwd_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
-    if buf.is_null() {
-        return syscall_error(Errno::EFAULT, "getcwd", "Buffer is null");
-    }
+    let buf = buf_arg as *mut u8;
 
     let size = sc_convert_sysarg_to_usize(size_arg, size_cageid, cageid);
     if size == 0 {
@@ -3455,7 +3481,7 @@ pub fn mprotect_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Type conversion
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
     let prot = sc_convert_sysarg_to_i32(prot_arg, prot_cageid, cageid);
 
@@ -3529,7 +3555,7 @@ pub fn ioctl_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     // Type conversion
-    let ptrunion = sc_convert_addr_to_host(ptrunion_arg, ptrunion_cageid, cageid);
+    let ptrunion = ptrunion_arg as *mut u8;
 
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -3540,6 +3566,11 @@ pub fn ioctl_syscall(
             "{}: unused arguments contain unexpected values -- security violation",
             "ioctl_syscall"
         );
+    }
+
+    // Only support FIONBIO and FIOASYNC. Return error for unsupported requests.
+    if req_arg != FIONBIO as u64 && req_arg != FIOASYNC as u64 {
+        lind_debug_panic("Lind unsupported ioctl request - FIONBIO and FIOASYNC only");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
@@ -3703,7 +3734,7 @@ pub fn shmget_syscall(
     }
 
     if key == IPC_PRIVATE {
-        return syscall_error(Errno::ENOENT, "shmget", "IPC_PRIVATE not implemented");
+        lind_debug_panic("shmget key IPC_PRIVATE is not allowed in Lind");
     }
     let shmid: i32;
     let metadata = &SHM_METADATA;

@@ -2,7 +2,7 @@
 //!
 //! This file provides APIs for converting between different argument types and translation between path from
 //! user's perspective to host's perspective
-use cage::{get_cage, memory::memory::translate_vmmap_addr};
+use cage::get_cage;
 pub use libc::*;
 pub use std::env;
 pub use std::ffi::{CStr, CString};
@@ -170,8 +170,8 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
         }
     }
     let cage = get_cage(path_arg_cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, path_arg).unwrap();
-    let path = match get_cstr(addr) {
+
+    let path = match get_cstr(path_arg) {
         Ok(path) => path,
         Err(e) => panic!("{:?}", e),
     };

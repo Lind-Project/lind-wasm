@@ -100,6 +100,12 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -o $BUILD/lind_syscall.o \
     -c $GLIBC/lind_syscall/lind_syscall.c
 
+# Compile address translation module
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/addr_translation.o \
+    -c $GLIBC/lind_syscall/addr_translation.c
+
 # Compile crt1.c
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
