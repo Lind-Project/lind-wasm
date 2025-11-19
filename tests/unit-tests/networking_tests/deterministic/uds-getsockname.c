@@ -8,7 +8,7 @@
 
 #define SOCK_PATH "unix_sock.tmp"
 
-void main()
+int main()
 {
     int addrlen;
     int rc;
@@ -40,5 +40,6 @@ void main()
 
     close(server_fd);
     unlink(SOCK_PATH);
-
+    
+    return 0;
 }
