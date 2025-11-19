@@ -25,11 +25,11 @@ pub const GRATE_OK: i32 = 0;
 /// context, or lookup failure).
 pub const GRATE_ERR: i32 = -1;
 /// Below are used to represent the states for Grate function entries:
-/// When a grate function is registered, it's in `STATE_ALIVE`. 
-/// When deregistering, it sets the state to `REVOKING` to reject new calls 
-/// but let existing calls continue, once all calls are done, it sets it to 
+/// When a grate function is registered, it's in `STATE_ALIVE`.
+/// When deregistering, it sets the state to `REVOKING` to reject new calls
+/// but let existing calls continue, once all calls are done, it sets it to
 /// `DEAD`.
-/// 
+///
 /// Indicates that the `GrateFnEntry` is active and callable.
 ///
 /// - New invocations through `_call_grate_func` are **allowed**.
