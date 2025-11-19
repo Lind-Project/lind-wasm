@@ -69,7 +69,9 @@ error_types = {
     "Output_mismatch": "C Compiler and Wasm Output mismatch",
     "Fail_native_succeeded": "Fail Test: Native Succeeded (Should Fail)",
     "Fail_wasm_succeeded": "Fail Test: Wasm Succeeded (Should Fail)",
-    "Fail_both_succeeded": "Fail Test: Both Native and Wasm Succeeded (Should Fail)"
+    "Fail_both_succeeded": "Fail Test: Both Native and Wasm Succeeded (Should Fail)",
+    "Fail_native_compiling": "Fail Test: Native Compilation Failure (Should Succeed)",
+    "Fail_wasm_compiling": "Fail Test: Wasm Compilation Failure (Should Succeed)"
     }
 
 # ----------------------------------------------------------------------
@@ -453,15 +455,30 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
         # Run native version
         native_success, native_output, native_retcode, native_error = compile_and_run_native(source_file, timeout_sec)
         
-        # If native compile failed, report and return
+        # NOTE: We explicitly early-abort here and report the native compilation failure
+        # rather than treating it as a successful "fail-test".
         if native_error == "Failure_native_compiling":
-            handler.add_compile_failure(native_output, is_native=True)
+            # Record this specifically as a fail-test native-compilation error so it is
+            # counted alongside other `Fail_*` test categories instead of the generic
+            # compilation error bucket used elsewhere.
+            failure_info = (
+                "=== FAILURE: Native compilation failed during fail-test (expected runtime failure) ===\n"
+                f"Native output:\n{native_output}"
+            )
+            add_test_result(result, str(source_file), "Failure", "Fail_native_compiling", failure_info)
             return
         
         # Compile and run WASM
-        wasm_file, compile_err = compile_c_to_wasm(source_file)
+        wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
         if wasm_file is None:
-            handler.add_compile_failure(compile_err, is_native=False)
+            # Record this specifically as a fail-test WASM-compilation error so it is
+            # counted alongside other `Fail_*` test categories instead of the generic
+            # Lind_wasm_compiling bucket used elsewhere.
+            failure_info = (
+                "=== FAILURE: Wasm compilation failed during fail-test (expected runtime failure) ===\n"
+                f"Wasm compile output:\n{wasm_compile_error}"
+            )
+            add_test_result(result, str(source_file), "Failure", "Fail_wasm_compiling", failure_info)
             return
         
         try:
@@ -472,7 +489,7 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
             
             # Check if wasm_retcode is an integer or string
             if isinstance(wasm_retcode, str):
-                wasm_failed = True  # timeout or unknown_error means it failed
+                wasm_failed = wasm_retcode in ["timeout", "unknown_error"]  # Explicitly check for failure strings
             else:
                 wasm_failed = wasm_retcode != 0
             
@@ -487,27 +504,15 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
                 handler.add_success(output_info)
             elif not native_failed and not wasm_failed:
                 # Both succeeded when they should have failed
-                failure_info = (
-                    "=== FAILURE: Both Native and Wasm succeeded when they should fail ===\n"
-                    f"Native output:\n{native_output}\n\n"
-                    f"Wasm output:\n{wasm_output}"
-                )
+                failure_info = build_fail_message("both", native_output, wasm_output, native_retcode, wasm_retcode)
                 add_test_result(result, str(source_file), "Failure", "Fail_both_succeeded", failure_info)
             elif not native_failed:
                 # Only native succeeded
-                failure_info = (
-                    "=== FAILURE: Native succeeded when it should fail ===\n"
-                    f"Native output:\n{native_output}\n\n"
-                    f"Wasm failed with exit code {wasm_retcode}:\n{wasm_output}"
-                )
+                failure_info = build_fail_message("native_only", native_output, wasm_output, native_retcode, wasm_retcode)
                 add_test_result(result, str(source_file), "Failure", "Fail_native_succeeded", failure_info)
             else:
                 # Only wasm succeeded
-                failure_info = (
-                    "=== FAILURE: Wasm succeeded when it should fail ===\n"
-                    f"Wasm output:\n{wasm_output}\n\n"
-                    f"Native failed with exit code {native_retcode}:\n{native_output}"
-                )
+                failure_info = build_fail_message("wasm_only", native_output, wasm_output, native_retcode, wasm_retcode)
                 add_test_result(result, str(source_file), "Failure", "Fail_wasm_succeeded", failure_info)
         
         finally:
@@ -526,9 +531,9 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
             return
     
     # Compile and run WASM
-    wasm_file, compile_err = compile_c_to_wasm(source_file)
+    wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
     if wasm_file is None:
-        handler.add_compile_failure(compile_err)
+        handler.add_compile_failure(wasm_compile_error)
         return
     
     try:
@@ -1222,6 +1227,46 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         else:
             # Log warning for tests not in deterministic/non-deterministic/fail folders
             logger.warning(f"Test file {original_source} is not in a deterministic, non-deterministic, or fail folder - skipping")
+
+def build_fail_message(case: str, native_output: str, wasm_output: str, native_retcode=None, wasm_retcode=None) -> str:
+    """
+    Build a consistent failure message for fail-tests.
+
+    Args:
+        case: One of "both", "native_only", "wasm_only" describing which succeeded.
+        native_output: Captured native stdout/stderr text.
+        wasm_output: Captured wasm stdout/stderr text.
+        native_retcode: Native return code (optional, included where helpful).
+        wasm_retcode: Wasm return code (optional, included where helpful).
+
+    Returns:
+        A formatted failure string.
+    """
+    if case == "both":
+        return (
+            "=== FAILURE: Both Native and Wasm succeeded when they should fail ===\n"
+            f"Native output:\n{native_output}\n\n"
+            f"Wasm output:\n{wasm_output}"
+        )
+    elif case == "native_only":
+        return (
+            "=== FAILURE: Native succeeded when it should fail ===\n"
+            f"Native output:\n{native_output}\n\n"
+            f"Wasm failed with exit code {wasm_retcode}:\n{wasm_output}"
+        )
+    elif case == "wasm_only":
+        return (
+            "=== FAILURE: Wasm succeeded when it should fail ===\n"
+            f"Wasm output:\n{wasm_output}\n\n"
+            f"Native failed with exit code {native_retcode}:\n{native_output}"
+        )
+    else:
+        return (
+            "=== FAILURE: Unexpected fail-test result ===\n"
+            f"Native (rc={native_retcode}) output:\n{native_output}\n\n"
+            f"Wasm (rc={wasm_retcode}) output:\n{wasm_output}"
+        )
+
 def main():
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
