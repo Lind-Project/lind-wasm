@@ -20,3 +20,4 @@ wasmtime-lind-multi-process = { path = "../lind-multi-process" }
 wasmtime-lind-utils = { path = "../lind-utils" }
 sysdefs = { path = "../sysdefs" }
 wasmtime-lind-3i = { path = "../lind-3i" }
+cage = { path = "../cage" }

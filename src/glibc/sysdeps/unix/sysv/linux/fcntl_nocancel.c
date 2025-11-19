@@ -23,6 +23,7 @@
 #include <not-cancel.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #ifndef __NR_fcntl64
 # define __NR_fcntl64 __NR_fcntl
@@ -54,13 +55,36 @@ __fcntl64_nocancel_adjusted (int fd, int cmd, void *arg)
   if (cmd == F_GETOWN)
     {
       struct f_owner_ex fex;
-      int res = MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) F_GETOWN_EX, (uint64_t) &fex, NOTUSED, NOTUSED, NOTUSED);
+      int res = MAKE_SYSCALL (
+	  FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
+	  (uint64_t) F_GETOWN_EX, NOTUSED,
+	  (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&fex), NOTUSED, NOTUSED);
       if (!INTERNAL_SYSCALL_ERROR_P (res))
 	return fex.type == F_OWNER_GID ? -fex.pid : fex.pid;
 
-      return INLINE_SYSCALL_ERROR_RETURN_VALUE
-        (INTERNAL_SYSCALL_ERRNO (res));
+      return INLINE_SYSCALL_ERROR_RETURN_VALUE (INTERNAL_SYSCALL_ERRNO (res));
     }
 
-  return MAKE_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, (uint64_t) (void *) arg, NOTUSED, NOTUSED, NOTUSED);
+  /* We populate separate slots for integer args and pointer args.
+     rawposix uses the appropriate slot based on the command. */
+  uint64_t int_arg = 0;
+  uint64_t ptr_arg = 0;
+
+  /* Check command type to determine if arg is a pointer or integer */
+  if (cmd == F_GETLK || cmd == F_GETLK64 || cmd == F_SETLK || cmd == F_SETLK64
+      || cmd == F_SETLKW || cmd == F_SETLKW64)
+    {
+      /* Lock operation - arg is a struct flock pointer */
+      ptr_arg = (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (arg);
+      int_arg = 0; /* Unused for pointer commands */
+    }
+  else
+    {
+      /* Integer argument (flags, fd numbers, etc.) - no translation */
+      int_arg = (uint64_t) (uintptr_t) arg;
+      ptr_arg = 0; /* Unused for integer commands */
+    }
+
+  return MAKE_SYSCALL (FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
+		       (uint64_t) cmd, int_arg, ptr_arg, NOTUSED, NOTUSED);
 }

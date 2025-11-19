@@ -20,13 +20,16 @@
 #include <shlib-compat.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #ifndef __OFF_T_MATCHES_OFF64_T
 
 ssize_t
 __libc_pwrite (int fd, const void *buf, size_t count, off_t offset)
 {
-   return MAKE_SYSCALL(PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd, (uint64_t) buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
+   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+   
+   return MAKE_SYSCALL(PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd, host_buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
 }
 
 strong_alias (__libc_pwrite, __pwrite)
