@@ -28,6 +28,39 @@ pub fn round_up_page(length: u64) -> u64 {
     }
 }
 
+/// Check if a return value from libc::mmap indicates an error
+///
+/// Valid mmap addresses are always page-aligned. This function uses page alignment
+/// to detect errors, as libc::mmap returns -1 (cast to usize) on error, which is
+/// not page-aligned. As a defensive measure, if an unaligned value is detected that
+/// falls outside the expected errno range (-1 to -PAGESIZE), the function panics.
+///
+/// # Arguments
+/// * `ret` - return value from libc::mmap cast to usize
+///
+/// # Returns
+/// * `bool` - true if ret indicates an error, false if it's a valid address
+pub fn is_mmap_error(ret: usize) -> bool {
+    // Check if page-aligned first (normal case)
+    if ret % PAGESIZE as usize == 0 {
+        return false; // Not an error
+    }
+
+    // If not aligned, verify it's in the valid errno range
+    // Valid errno values are -1 to -PAGESIZE, which when cast to usize are:
+    // usize::MAX - PAGESIZE + 1 to usize::MAX
+    let min_errno = usize::MAX - (PAGESIZE as usize) + 1;
+    if ret >= min_errno {
+        return true; // Valid error in errno range
+    }
+
+    // Unaligned but not in errno range - this should never happen
+    panic!(
+        "mmap returned unaligned address outside errno range: 0x{:x}",
+        ret
+    );
+}
+
 /// Copies the memory regions from parent to child based on the provided `vmmap` memory layout.
 ///
 /// This function is designed to replicate the parent's memory space into the child immediately after

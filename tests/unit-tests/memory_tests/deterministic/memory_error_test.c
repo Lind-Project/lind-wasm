@@ -72,17 +72,17 @@ int main() {
     // =====================
 
     // Test 7: shmat with invalid shmid (-1)
-    printf("Test 7: shmat with invalid shmid -1 (should fail)... ");
+    printf("Test 7: shmat with invalid shmid -1 (should fail with EINVAL)... ");
     errno = 0;
     result = shmat(-1, NULL, 0);
-    assert(result == (void *)-1);
+    assert(errno == EINVAL);
     printf("PASSED\n");
 
     // Test 8: shmat with non-existent shmid
-    printf("Test 8: shmat with non-existent shmid (should fail)... ");
+    printf("Test 8: shmat with non-existent shmid (should fail with EINVAL)... ");
     errno = 0;
     result = shmat(999999, NULL, 0);
-    assert(result == (void *)-1);
+    assert(errno == EINVAL);
     printf("PASSED\n");
 
     return 0;
