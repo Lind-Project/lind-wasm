@@ -3,7 +3,7 @@
 use cfg_if::cfg_if;
 
 use anyhow::{anyhow, Result};
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::threei::make_syscall;
 use wasmtime_lind_3i_vmctx::remove_ctx;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
@@ -33,8 +33,6 @@ const ASYNCIFY_START_UNWIND: &str = "asyncify_start_unwind";
 const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
-
-const LIND_FS_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
 
 const UNWIND_METADATA_SIZE: u64 = 16;
 
@@ -899,11 +897,11 @@ impl<
         let parent_unwind_data_start_sys = address as u64 + parent_unwind_data_start_usr;
 
         // parse the path and argv
-        let path_ptr = ((address as i64) + path) as *const u8;
+        let path_ptr = path as *const u8;
         let path_str;
 
         // NOTE: the address passed from wasm module is 32-bit address
-        let argv_ptr = ((address as i64) + argv) as *const *const u8;
+        let argv_ptr = argv as *const u64;
         let mut args = Vec::new();
         let mut environs = None;
 
@@ -926,13 +924,13 @@ impl<
             // parse the arg pointers
             // Iterate over argv until we encounter a NULL pointer
             loop {
-                let c_str = *(argv_ptr as *const i32).add(i) as *const i32;
+                let c_str = *(argv_ptr.add(i));
 
-                if c_str.is_null() {
+                if c_str == 0 {
                     break; // Stop if we encounter NULL
                 }
 
-                let arg_ptr = ((address as i64) + (c_str as i64)) as *const c_char;
+                let arg_ptr = c_str as *const c_char;
 
                 // Convert it to a Rust String
                 let arg = CStr::from_ptr(arg_ptr).to_string_lossy().into_owned();
@@ -950,7 +948,7 @@ impl<
 
         // NOTE: join method will replace the original path if joined path is an absolute path
         // so must make sure the usr_path is not absolute otherwise it may escape the lind filesystem
-        let real_path = Path::new(LIND_FS_ROOT).join(usr_path);
+        let real_path = Path::new(LIND_ROOT).join(usr_path);
         let real_path_str = String::from(real_path.to_str().unwrap());
 
         // if the file to exec does not exist
@@ -961,7 +959,7 @@ impl<
 
         // parse the environment variables
         if let Some(envs_addr) = envs {
-            let env_ptr = ((address as i64) + envs_addr) as *const *const u8;
+            let env_ptr = envs_addr as *const u64;
             let mut env_vec = Vec::new();
 
             unsafe {
@@ -969,13 +967,13 @@ impl<
 
                 // Iterate over argv until we encounter a NULL pointer
                 loop {
-                    let c_str = *(env_ptr as *const i32).add(i) as *const i32;
+                    let c_str = *(env_ptr.add(i));
 
-                    if c_str.is_null() {
+                    if c_str == 0 {
                         break; // Stop if we encounter NULL
                     }
 
-                    let env_ptr = ((address as i64) + (c_str as i64)) as *const c_char;
+                    let env_ptr = c_str as *const c_char;
 
                     // Convert it to a Rust String
                     let env = CStr::from_ptr(env_ptr).to_string_lossy().into_owned();
