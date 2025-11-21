@@ -1,8 +1,8 @@
 [package]
-name = "wasmtime-lind-3i-vmctx"
+name = "wasmtime-lind-3i"
 version.workspace = true
 authors.workspace = true
-description = "lind interface within wasmtime"
+description = "lind 3i interface within wasmtime for grate calls"
 edition.workspace = true
 rust-version.workspace = true
 
@@ -13,3 +13,6 @@ workspace = true
 wasmtime = { workspace = true, features = ['threads'] }
 wasmtime-environ = { workspace = true }
 once_cell = { workspace = true }
+sysdefs = { path = "../sysdefs" }
+anyhow = { version = "1.0.22", default-features = false }
+threei = { path = "../threei" }
