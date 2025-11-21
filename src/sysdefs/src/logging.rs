@@ -2,6 +2,6 @@
 
 //! This is a wrapper around rust's panic macro
 
-pub fn lind_debug_panic(arg: &str) {
+pub fn lind_debug_panic(arg: &str) -> ! {
     panic!("LIND DEBUG PANIC: {}", arg);
 }
