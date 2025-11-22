@@ -95,6 +95,8 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -c pthread_create.c -MD -MP -MF $BUILD/nptl/pthread_create.o.dt \
     -MT $BUILD/nptl/pthread_create.o
 
+# Compile lind_syscall.c, which contains the make_threei, register_handler, 
+# and copy_data_between_cages functions
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $BUILD/lind_syscall.o \
@@ -130,16 +132,6 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -MD -MP -MF $GLIBC/build/nptl/elision-unlock.o.dt \
     -MT $GLIBC/build/nptl/elision-unlock.o
 
-$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
-    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $BUILD/register_handler.o \
-    -c $GLIBC/lind_syscall/register_handler.c
-
-$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
-    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $BUILD/copy_data_between_cages.o \
-    -c $GLIBC/lind_syscall/copy_data_between_cages.c
-
 # Compile assembly files
 cd ../
 $CC --target=wasm32-wasi-threads -matomics \
@@ -170,7 +162,6 @@ if [ -z "$object_files" ]; then
   exit 1
 fi
 
-
 # Create the sysroot directory structure
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 
@@ -198,5 +189,4 @@ cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
-cp "$GLIBC/lind_syscall/register_handler.h" "$SYSROOT/include/wasm32-wasi/"
-cp "$GLIBC/lind_syscall/copy_data_between_cages.h" "$SYSROOT/include/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/lind_syscall.h" "$SYSROOT/include/wasm32-wasi/"
