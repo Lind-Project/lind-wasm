@@ -30,7 +30,7 @@ __libc_recvfrom (int fd, void *buf, size_t len, int flags,
   uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
   uint64_t host_addrlen = TRANSLATE_GUEST_POINTER_TO_HOST (addrlen);
   
-  return MAKE_TRANDITION (RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd,
+  return MAKE_TRADITION (RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd,
 		       host_buf, (uint64_t) len, (uint64_t) flags,
 		       host_addr, host_addrlen, WRAPPED_SYSCALL);
 }

@@ -112,7 +112,7 @@ __libc_sigaction (int sig, const struct sigaction *act, struct sigaction *oact)
     rawposix_act.sa_mask = act->sa_mask.__val[0];
     rawposix_act.sa_flags = act->sa_flags;
   }
-  int retval = MAKE_TRANDITION(SIGACTION_SYSCALL, "syscall|sigaction", (uint64_t) sig, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(act ? &rawposix_act : NULL), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(oact ? &rawposix_oact : NULL), NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+  int retval = MAKE_TRADITION(SIGACTION_SYSCALL, "syscall|sigaction", (uint64_t) sig, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(act ? &rawposix_act : NULL), (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(oact ? &rawposix_oact : NULL), NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 
   // check for NULL pointer
   if (oact)

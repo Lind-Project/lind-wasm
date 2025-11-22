@@ -31,7 +31,7 @@ __libc_recv (int fd, void *buf, size_t len, int flags)
   // `recv(sockfd, buf, size, flags, NULL, NULL);`
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
-  return MAKE_TRANDITION (RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd,
+  return MAKE_TRADITION (RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd,
 		       host_buf, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 weak_alias (__libc_recv, recv)

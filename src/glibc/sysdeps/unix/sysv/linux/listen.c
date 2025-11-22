@@ -23,6 +23,6 @@
 int
 listen (int fd, int backlog)
 {
-   return MAKE_TRANDITION(LISTEN_SYSCALL, "syscall|listen", (uint64_t) fd, (uint64_t) backlog, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+   return MAKE_TRADITION(LISTEN_SYSCALL, "syscall|listen", (uint64_t) fd, (uint64_t) backlog, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 weak_alias (listen, __listen);

@@ -37,7 +37,7 @@ __clock_nanosleep_time64 (clockid_t clock_id, int flags,
 {
   uint64_t host_req = TRANSLATE_GUEST_POINTER_TO_HOST (req);
   uint64_t host_rem = TRANSLATE_GUEST_POINTER_TO_HOST (rem);
-  return MAKE_TRANDITION (
+  return MAKE_TRADITION (
       NANOSLEEP_TIME64_SYSCALL, "syscall|nanosleep", (uint64_t) clock_id,
       (uint64_t) flags, host_req, host_rem, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

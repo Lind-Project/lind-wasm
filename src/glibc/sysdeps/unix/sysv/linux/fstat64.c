@@ -31,7 +31,7 @@
 int
 __fstat64_time64 (int fd, struct __stat64_t64 *buf)
 {
-  return MAKE_TRANDITION(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+  return MAKE_TRADITION(FXSTAT_SYSCALL, "syscall|fstat", (uint64_t)fd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 #if __TIMESIZE != 64
 hidden_def (__fstat64_time64)
@@ -45,7 +45,7 @@ hidden_def (__fstat64_time64)
     }
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-  return MAKE_TRANDITION (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
+  return MAKE_TRADITION (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
 		       host_buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 #endif

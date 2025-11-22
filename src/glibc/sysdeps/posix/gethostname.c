@@ -29,7 +29,7 @@
 int
 __gethostname (char *name, size_t len)
 {
-  return MAKE_TRANDITION (GETHOSTNAME_SYSCALL, "syscall|gethostname",
+  return MAKE_TRADITION (GETHOSTNAME_SYSCALL, "syscall|gethostname",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (name),
 		       (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

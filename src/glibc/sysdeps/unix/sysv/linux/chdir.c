@@ -8,7 +8,7 @@ __chdir (const char *__path)
 {
   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (__path);
   
-  return MAKE_TRANDITION (CHDIR_SYSCALL, "syscall|chdir",
+  return MAKE_TRADITION (CHDIR_SYSCALL, "syscall|chdir",
 		       host_path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
@@ -17,6 +17,6 @@ chdir (const char *__path)
 {
   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (__path);
   
-  return MAKE_TRANDITION (CHDIR_SYSCALL, "syscall|chdir",
+  return MAKE_TRADITION (CHDIR_SYSCALL, "syscall|chdir",
 		       host_path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

@@ -34,7 +34,7 @@ __writev (int fd, const struct iovec *iov, int iovcnt)
     host_iov[i].iov_base = TRANSLATE_GUEST_POINTER_TO_HOST (host_iov[i].iov_base);
   }
 
-  ssize_t ret = MAKE_TRANDITION (WRITEV_SYSCALL, "syscall|writev", (uint64_t) fd,
+  ssize_t ret = MAKE_TRADITION (WRITEV_SYSCALL, "syscall|writev", (uint64_t) fd,
 			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(host_iov),
 			      (uint64_t) iovcnt, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
   return ret;

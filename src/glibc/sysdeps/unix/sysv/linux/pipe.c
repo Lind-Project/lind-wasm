@@ -31,7 +31,7 @@ __pipe (int __pipedes[2])
 {
   uint64_t host_pipedes = TRANSLATE_GUEST_POINTER_TO_HOST (__pipedes);
   
-  return MAKE_TRANDITION (PIPE_SYSCALL, "syscall|pipe",
+  return MAKE_TRADITION (PIPE_SYSCALL, "syscall|pipe",
 		       host_pipedes, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 libc_hidden_def (__pipe)

@@ -39,7 +39,7 @@ __open64_nocancel (const char *file, int oflag, ...)
     }
 
     // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-    return MAKE_TRANDITION(OPEN_SYSCALL, "syscall|open", (uint64_t)file, (uint64_t)oflag, (uint64_t)mode, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+    return MAKE_TRADITION(OPEN_SYSCALL, "syscall|open", (uint64_t)file, (uint64_t)oflag, (uint64_t)mode, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
 hidden_def (__open64_nocancel)

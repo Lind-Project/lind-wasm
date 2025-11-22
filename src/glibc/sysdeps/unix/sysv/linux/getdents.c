@@ -39,7 +39,7 @@ __getdents (int fd, void *buf0, size_t nbytes)
 {
    uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf0);
    
-   return MAKE_TRANDITION(GETDENTS_SYSCALL, "syscall|getdents", (uint64_t) fd, host_buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+   return MAKE_TRADITION(GETDENTS_SYSCALL, "syscall|getdents", (uint64_t) fd, host_buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
 # undef DIRENT_SET_DP_INO

@@ -43,7 +43,7 @@ static inline off_t lseek_overflow (loff_t res)
 off_t
 __lseek (int fd, off_t offset, int whence)
 {
-        return MAKE_TRANDITION(LSEEK_SYSCALL, "syscall|lseek", (uint64_t) fd, (uint64_t) offset, (uint64_t) whence, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+        return MAKE_TRADITION(LSEEK_SYSCALL, "syscall|lseek", (uint64_t) fd, (uint64_t) offset, (uint64_t) whence, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 libc_hidden_def (__lseek)
 weak_alias (__lseek, lseek)
