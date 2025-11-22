@@ -26,7 +26,7 @@
 int
 __ftruncate (int fd, off_t length)
 {
-	return MAKE_SYSCALL(FTRUNCATE_SYSCALL, "syscall|ftruncate", (uint64_t) fd, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_TRANDITION(FTRUNCATE_SYSCALL, "syscall|ftruncate", (uint64_t) fd, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 weak_alias (__ftruncate, ftruncate)
 #endif

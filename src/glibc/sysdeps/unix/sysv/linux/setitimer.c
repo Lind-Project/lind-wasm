@@ -32,9 +32,9 @@ __setitimer64 (__itimer_which_t which,
 {
   uint64_t host_new = TRANSLATE_GUEST_POINTER_TO_HOST (new_value);
   uint64_t host_old = TRANSLATE_GUEST_POINTER_TO_HOST (old_value);
-  return MAKE_SYSCALL (SETITIMER_SYSCALL, "syscall|setitimer",
+  return MAKE_TRANDITION (SETITIMER_SYSCALL, "syscall|setitimer",
 		       (uint64_t) which, host_new, host_old,
-		       NOTUSED, NOTUSED, NOTUSED);
+		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
 #if __TIMESIZE != 64

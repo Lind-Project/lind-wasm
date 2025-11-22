@@ -43,10 +43,10 @@ __open_nocancel (const char *file, int oflag, ...)
     }
 
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
-  return MAKE_SYSCALL (OPEN_SYSCALL, "syscall|open",
+  return MAKE_TRANDITION (OPEN_SYSCALL, "syscall|open",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
 		       (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED,
-		       NOTUSED);
+		       NOTUSED, WRAPPED_SYSCALL);
 }
 hidden_def (__open_nocancel)
 

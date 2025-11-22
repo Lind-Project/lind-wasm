@@ -32,8 +32,8 @@ int
 __fstatfs64 (int fd, struct statfs64 *buf)
 {
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-  return MAKE_SYSCALL (FSTATFS_SYSCALL, "syscall|fstatfs", (uint64_t) fd,
-		       host_buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_TRANDITION (FSTATFS_SYSCALL, "syscall|fstatfs", (uint64_t) fd,
+		       host_buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 weak_alias (__fstatfs64, fstatfs64)
 

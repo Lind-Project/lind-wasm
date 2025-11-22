@@ -28,9 +28,9 @@
 int
 __chmod (const char *file, mode_t mode)
 {
-  return MAKE_SYSCALL (CHMOD_SYSCALL, "syscall|chmod",
+  return MAKE_TRANDITION (CHMOD_SYSCALL, "syscall|chmod",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
-		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
 libc_hidden_def (__chmod)

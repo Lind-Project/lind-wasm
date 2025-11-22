@@ -43,9 +43,9 @@ __ioctl (int fd, unsigned long int request, ...)
   uint64_t host_ptr
       = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
 
-  return MAKE_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd,
+  return MAKE_TRANDITION (IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd,
 		       (uint64_t) request, host_ptr, NOTUSED, NOTUSED,
-		       NOTUSED);
+		       NOTUSED, WRAPPED_SYSCALL);
 }
 libc_hidden_def (__ioctl)
 weak_alias (__ioctl, ioctl)

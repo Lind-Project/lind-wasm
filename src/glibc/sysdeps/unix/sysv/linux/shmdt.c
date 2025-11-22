@@ -29,7 +29,7 @@ int
 shmdt (const void *shmaddr)
 {
   uint64_t host_shmaddr = TRANSLATE_GUEST_POINTER_TO_HOST (shmaddr);
-  return MAKE_SYSCALL (SHMDT_SYSCALL, "syscall|shmdt",
+  return MAKE_TRANDITION (SHMDT_SYSCALL, "syscall|shmdt",
 		       host_shmaddr, NOTUSED, NOTUSED,
-		       NOTUSED, NOTUSED, NOTUSED);
+		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

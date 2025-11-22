@@ -18,12 +18,13 @@
 #include <errno.h>
 #include <unistd.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Make all changes done to FD actually appear on disk.  */
 int
 fsync (int fd)
 {
-	return MAKE_SYSCALL(162, "syscall|fsync", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_TRANDITION(FSYNC_SYSCALL, "syscall|fsync", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 libc_hidden_def (fsync)
 

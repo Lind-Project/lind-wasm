@@ -33,7 +33,7 @@ shmat (int shmid, const void *shmaddr, int shmflg)
   // This is the recommended way to use shmat for portability
   // Do NOT add null check here - NULL is valid and expected
   uint64_t host_shmaddr = TRANSLATE_GUEST_POINTER_TO_HOST (shmaddr);
-  return MAKE_SYSCALL (SHMAT_SYSCALL, "syscall|shmat", (uint64_t) shmid,
+  return MAKE_TRANDITION (SHMAT_SYSCALL, "syscall|shmat", (uint64_t) shmid,
 		       host_shmaddr, (uint64_t) shmflg,
-		       NOTUSED, NOTUSED, NOTUSED);
+		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
