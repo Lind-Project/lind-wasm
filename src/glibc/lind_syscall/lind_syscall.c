@@ -1,44 +1,43 @@
 #include <errno.h>
 #include <stdint.h> // For uint64_t definition
-/* Indirect system call.  Linux generic implementation.
-   Copyright (C) 1997-2024 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
-
-   The GNU C Library is free software; you can redistribute it and/or
-   modify it under the terms of the GNU Lesser General Public
-   License as published by the Free Software Foundation; either
-   version 2.1 of the License, or (at your option) any later version.
-
-   The GNU C Library is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   Lesser General Public License for more details.
-
-   You should have received a copy of the GNU Lesser General Public
-   License along with the GNU C Library.  If not, see
-   <https://www.gnu.org/licenses/>.  */
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
 int __lind_make_syscall_trampoline(unsigned int callnumber, 
-    unsigned long long callname, 
-    unsigned long long self_cageid, unsigned long long target_cageid,
-    unsigned long long arg1, unsigned long long arg1cageid,
-    unsigned long long arg2, unsigned long long arg2cageid,
-    unsigned long long arg3, unsigned long long arg3cageid,
-    unsigned long long arg4, unsigned long long arg4cageid,
-    unsigned long long arg5, unsigned long long arg5cageid,
-    unsigned long long arg6, unsigned long long arg6cageid
+    uint64_t callname, 
+    uint64_t self_cageid, uint64_t target_cageid,
+    uint64_t arg1, uint64_t arg1cageid,
+    uint64_t arg2, uint64_t arg2cageid,
+    uint64_t arg3, uint64_t arg3cageid,
+    uint64_t arg4, uint64_t arg4cageid,
+    uint64_t arg5, uint64_t arg5cageid,
+    uint64_t arg6, uint64_t arg6cageid
 ) __attribute__((
     __import_module__("lind"),
     __import_name__("make-syscall")
 ));
 
-
 /*
- * Intermediate wrapper used by the MAKE_THREEI macro.
+ * make_threei:
+ *
+ * Unified function used to invoke threei style syscalls.  This is the
+ * core entry point for all syscall transitions into the lind runtime,
+ * including inter-cage calls and grates.  Unlike MAKE_TRANDITION, this function
+ * explicitly specifies both `self_cageid` and `target_cageid`, allowing
+ * fine-grained routing of syscalls across cage boundaries.
+ *
+ * Each logical argument is passed in a (value, cageid) pair, enabling
+ * three-i's interposition layer to perform selective rewriting, mediation,
+ * or redirection.  The final argument, `raw_flag`, determines whether
+ * lind_syscall should apply standard POSIX errno translation or return
+ * the raw trampoline result directly.
+ *
+ * make_threei is designed to be the **canonical** macro for all new
+ * inter-cage or grate-level syscall invocations.  Grates and higher-level
+ * components should call make_threei directly rather than relying on
+ * MAKE_TRANDITION.
  *
  * This function acts as the middle layer between:
- *   (1) the MAKE_THREEI macros in glibc, and
+ *   (1) the MAKE_TRANDITION macros in glibc, and
  *   (2) the actual Wasmtime entry function (__lind_make_syscall_trampoline).
  *
  * It forwards all syscall parameters—including the inter-cage metadata
@@ -65,15 +64,15 @@ int __lind_make_syscall_trampoline(unsigned int callnumber,
  * post-processing at this layer. Other syscalls, however, rely on the standard 
  * POSIX errno translation implemented here.
  */
-int lind_syscall (unsigned int callnumber, 
-    unsigned long long callname, 
-    unsigned long long self_cageid, unsigned long long target_cageid,
-    unsigned long long arg1, unsigned long long arg1cageid,
-    unsigned long long arg2, unsigned long long arg2cageid,
-    unsigned long long arg3, unsigned long long arg3cageid,
-    unsigned long long arg4, unsigned long long arg4cageid,
-    unsigned long long arg5, unsigned long long arg5cageid,
-    unsigned long long arg6, unsigned long long arg6cageid,
+int make_threei (unsigned int callnumber, 
+    uint64_t callname, 
+    uint64_t self_cageid, uint64_t target_cageid,
+    uint64_t arg1, uint64_t arg1cageid,
+    uint64_t arg2, uint64_t arg2cageid,
+    uint64_t arg3, uint64_t arg3cageid,
+    uint64_t arg4, uint64_t arg4cageid,
+    uint64_t arg5, uint64_t arg5cageid,
+    uint64_t arg6, uint64_t arg6cageid,
     int raw)
 {
     int ret = __lind_make_syscall_trampoline(callnumber, 
@@ -119,18 +118,12 @@ int __imported_lind_3i_trampoline_register_syscall(uint64_t targetcage,
     __import_name__("register-syscall")
 ));
 
-
-// Shim between the user-facing 3i API (e.g., register_handler) and the
-// Wasmtime trampoline import (__imported_lind_3i_trampoline_register_syscall).
-// The `lind_` prefix marks this as a Lind-Wasm–specific runtime shim rather 
-// than a generic/app symbol.
-//
 // 3i function call to register or deregister a syscall handler in a target cage
 // targetcage: the cage id where the syscall will be registered
 // targetcallnum: the syscall number to be registered in the target cage
 // this_grate_id: the grate id of the syscall jump ends
 // register_flag: deregister(0) or register(non-0)
-int lind_register_syscall (int64_t targetcage, 
+int register_handler (int64_t targetcage, 
     uint64_t targetcallnum, 
     uint64_t handlefunc_flag, 
     uint64_t this_grate_id,
@@ -148,11 +141,6 @@ int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage
     __import_name__("cp-data-syscall")
 ));
 
-// Shim between the user-facing 3i API (e.g., register_handler) and the
-// Wasmtime trampoline import (__imported_lind_3i_trampoline_register_syscall).
-// The `lind_` prefix marks this as a Lind-Wasm–specific runtime shim rather 
-// than a generic/app symbol.
-//
 // 3i function call to copy data between cages
 // thiscage: the cage id of the caller cage
 // targetcage: the cage id of the target cage
@@ -162,7 +150,7 @@ int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage
 // destcage: the cage id of the destination address
 // len: the length of data to copy
 // copytype: the type of copy, 0 for normal copy, 1 for string copy
-int lind_cp_data(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
+int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
 {
     int ret = __imported_lind_3i_trampoline_cp_data(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, copytype);
     
