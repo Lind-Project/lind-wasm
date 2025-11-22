@@ -21,7 +21,7 @@ int __lind_make_syscall_trampoline(unsigned int callnumber,
  *
  * Unified function used to invoke threei style syscalls.  This is the
  * core entry point for all syscall transitions into the lind runtime,
- * including inter-cage calls and grates.  Unlike MAKE_TRANDITION, this function
+ * including inter-cage calls and grates.  Unlike MAKE_TRADITION, this function
  * explicitly specifies both `self_cageid` and `target_cageid`, allowing
  * fine-grained routing of syscalls across cage boundaries.
  *
@@ -34,10 +34,10 @@ int __lind_make_syscall_trampoline(unsigned int callnumber,
  * make_threei is designed to be the **canonical** macro for all new
  * inter-cage or grate-level syscall invocations.  Grates and higher-level
  * components should call make_threei directly rather than relying on
- * MAKE_TRANDITION.
+ * MAKE_TRADITION.
  *
  * This function acts as the middle layer between:
- *   (1) the MAKE_TRANDITION macros in glibc, and
+ *   (1) the MAKE_TRADITION macros in glibc, and
  *   (2) the actual Wasmtime entry function (__lind_make_syscall_trampoline).
  *
  * It forwards all syscall parameters—including the inter-cage metadata

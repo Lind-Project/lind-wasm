@@ -27,7 +27,7 @@
 int
 __mkdir (const char *path, mode_t mode)
 {
-  return MAKE_TRANDITION (MKDIR_SYSCALL, "syscall|mkdir",
+  return MAKE_TRADITION (MKDIR_SYSCALL, "syscall|mkdir",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (path),
 		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

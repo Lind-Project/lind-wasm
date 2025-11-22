@@ -5,7 +5,7 @@
 __gid_t
 __getegid (void)
 {
-	return MAKE_TRANDITION(GETEGID_SYSCALL, "syscall|getegid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+	return MAKE_TRADITION(GETEGID_SYSCALL, "syscall|getegid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
 weak_alias (__getegid, getegid)

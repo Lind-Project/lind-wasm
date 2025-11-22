@@ -37,7 +37,7 @@ int
 __clock_gettime64 (clockid_t clock_id, struct __timespec64 *tp)
 {
   uint64_t host_tp = TRANSLATE_GUEST_POINTER_TO_HOST (tp);
-  return MAKE_TRANDITION (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
+  return MAKE_TRADITION (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
 		       (uint64_t) clock_id, host_tp,
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
@@ -49,7 +49,7 @@ int
 __clock_gettime (clockid_t clock_id, struct timespec *tp)
 {
   uint64_t host_tp = TRANSLATE_GUEST_POINTER_TO_HOST (tp);
-  return MAKE_TRANDITION (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
+  return MAKE_TRADITION (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
 		       (uint64_t) clock_id, host_tp,
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

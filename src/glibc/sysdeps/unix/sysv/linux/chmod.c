@@ -28,7 +28,7 @@
 int
 __chmod (const char *file, mode_t mode)
 {
-  return MAKE_TRANDITION (CHMOD_SYSCALL, "syscall|chmod",
+  return MAKE_TRADITION (CHMOD_SYSCALL, "syscall|chmod",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
 		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

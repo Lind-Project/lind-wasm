@@ -30,7 +30,7 @@ int
 __truncate64 (const char *path, off64_t length)
 {
   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
-  return MAKE_TRANDITION (TRUNCATE_SYSCALL, "syscall|truncate",
+  return MAKE_TRADITION (TRUNCATE_SYSCALL, "syscall|truncate",
 		       host_path, (uint64_t) length,
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

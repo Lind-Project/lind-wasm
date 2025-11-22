@@ -11,7 +11,7 @@
 #define RAW_SYSCALL 1
 
 /*
- * MAKE_TRANDITION:
+ * MAKE_TRADITION:
  *
  * Legacy macro used inside the glibc compatibility layer for traditional
  * POSIX-style syscalls.  This macro wraps a syscall using the calling
@@ -26,7 +26,7 @@
  * with glibc and legacy POSIX implementations.  New subsystems (e.g., grates)
  * should use MAKE_THREEI directly.
  */
-#define MAKE_TRANDITION(syscall_num, syscall_name, arg1, arg2, arg3, arg4, arg5, arg6, raw_flag) \
+#define MAKE_TRADITION(syscall_num, syscall_name, arg1, arg2, arg3, arg4, arg5, arg6, raw_flag) \
     ({ \
         uint64_t __self = __lind_cageid; \
         make_threei( \

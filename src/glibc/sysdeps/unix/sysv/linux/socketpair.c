@@ -26,7 +26,7 @@ __socketpair (int domain, int type, int protocol, int sv[2])
 {
   uint64_t host_sv = TRANSLATE_GUEST_POINTER_TO_HOST (sv);
   
-  return MAKE_TRANDITION (SOCKETPAIR_SYSCALL, "syscall|socketpair",
+  return MAKE_TRADITION (SOCKETPAIR_SYSCALL, "syscall|socketpair",
 		       (uint64_t) domain, (uint64_t) type, (uint64_t) protocol,
 		       host_sv, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

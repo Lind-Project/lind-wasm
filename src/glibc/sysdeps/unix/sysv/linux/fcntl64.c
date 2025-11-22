@@ -53,9 +53,9 @@ __libc_fcntl64 (int fd, int cmd, ...)
   uint64_t host_arg = TRANSLATE_GUEST_POINTER_TO_HOST (arg);
 
   if (cmd == F_SETLKW || cmd == F_SETLKW64 || cmd == F_OFD_SETLKW)
-    return MAKE_TRANDITION(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, host_arg, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL_CANCELLABLE);
+    return MAKE_TRADITION(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, host_arg, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL_CANCELLABLE);
 
-  return MAKE_TRANDITION(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, host_arg, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+  return MAKE_TRADITION(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, host_arg, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 libc_hidden_def (__libc_fcntl64)
 weak_alias (__libc_fcntl64, __fcntl64)

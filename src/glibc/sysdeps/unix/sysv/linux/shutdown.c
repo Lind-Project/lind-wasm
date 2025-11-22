@@ -23,6 +23,6 @@
 int
 __shutdown (int fd, int how)
 {
-   return MAKE_TRANDITION(SHUTDOWN_SYSCALL, "syscall|shutdown", (uint64_t) fd, (uint64_t) how, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+   return MAKE_TRADITION(SHUTDOWN_SYSCALL, "syscall|shutdown", (uint64_t) fd, (uint64_t) how, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 weak_alias (__shutdown, shutdown)

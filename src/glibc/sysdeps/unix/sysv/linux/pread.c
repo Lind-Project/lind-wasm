@@ -45,7 +45,7 @@ __libc_pread (int fd, void *buf, size_t count, off_t offset)
       return -1;
     }
   
-  return MAKE_TRANDITION (PREAD_SYSCALL, "syscall|pread", (uint64_t) fd,
+  return MAKE_TRADITION (PREAD_SYSCALL, "syscall|pread", (uint64_t) fd,
 		       host_buf, (uint64_t) count,
 		       (uint64_t) offset, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
   // return SYSCALL_CANCEL (pread64, fd, buf, count, SYSCALL_LL_PRW (offset));

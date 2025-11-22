@@ -26,7 +26,7 @@
 int
 __link (const char *from, const char *to)
 {
-  return MAKE_TRANDITION (LINK_SYSCALL, "syscall|link",
+  return MAKE_TRADITION (LINK_SYSCALL, "syscall|link",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (from),
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (to),
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);

@@ -35,7 +35,7 @@ int
 __select64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 	    struct __timeval64 *timeout)
 {
-  return MAKE_TRANDITION (SELECT_SYSCALL, "syscall|select", (uint64_t) nfds,
+  return MAKE_TRADITION (SELECT_SYSCALL, "syscall|select", (uint64_t) nfds,
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (readfds),
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (writefds),
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (exceptfds),

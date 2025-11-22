@@ -29,7 +29,7 @@ __poll (struct pollfd *fds, nfds_t nfds, int timeout)
 {
   uint64_t host_fds = TRANSLATE_GUEST_POINTER_TO_HOST (fds);
   
-  return MAKE_TRANDITION (POLL_SYSCALL, "syscall|poll",
+  return MAKE_TRADITION (POLL_SYSCALL, "syscall|poll",
 		       host_fds, (uint64_t) nfds, (uint64_t) timeout, NOTUSED, NOTUSED,
 		       NOTUSED, WRAPPED_SYSCALL);
 }
