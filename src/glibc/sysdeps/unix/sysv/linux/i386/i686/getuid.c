@@ -5,7 +5,7 @@
 __uid_t
 __getuid (void)
 {
-  return MAKE_SYSCALL0(GETUID_SYSCALL, "syscall|getuid");
+  return MAKE_TRANDITION(GETUID_SYSCALL, "syscall|getuid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
 weak_alias(__getuid, getuid)

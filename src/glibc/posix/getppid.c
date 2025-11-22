@@ -24,7 +24,7 @@
 int
 __getppid (void)
 {
-   return MAKE_SYSCALL(GETPPID_SYSCALL, "syscall|getppid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_TRANDITION(GETPPID_SYSCALL, "syscall|getppid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 stub_warning (getppid)
 

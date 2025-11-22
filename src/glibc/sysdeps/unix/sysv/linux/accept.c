@@ -31,9 +31,9 @@ __libc_accept (int fd, struct sockaddr *addr, socklen_t *len)
   uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
   uint64_t host_len = TRANSLATE_GUEST_POINTER_TO_HOST (len);
   
-  return MAKE_SYSCALL (ACCEPT_SYSCALL, "syscall|accept", (uint64_t) fd,
+  return MAKE_TRANDITION (ACCEPT_SYSCALL, "syscall|accept", (uint64_t) fd,
 		       host_addr, host_len,
-		       NOTUSED, NOTUSED, NOTUSED);
+		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 weak_alias (__libc_accept, accept)
 libc_hidden_def (accept)

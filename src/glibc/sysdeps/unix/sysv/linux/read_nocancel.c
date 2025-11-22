@@ -25,6 +25,6 @@
 ssize_t
 __read_nocancel (int fd, void *buf, size_t nbytes)
 {
-  return MAKE_SYSCALL3(READ_SYSCALL, "syscall|read", (uint64_t)fd, (uint64_t)(uintptr_t)buf, (uint64_t)nbytes);
+  return MAKE_TRANDITION(READ_SYSCALL, "syscall|read", (uint64_t)fd, (uint64_t)(uintptr_t)buf, (uint64_t)nbytes, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 hidden_def (__read_nocancel)

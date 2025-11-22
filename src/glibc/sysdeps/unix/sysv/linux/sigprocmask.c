@@ -30,7 +30,7 @@ __sigprocmask (int how, const sigset_t *set, sigset_t *oset)
    // check for NULL pointer
    if (set)
       rawposix_set = set->__val[0];
-   int retval = MAKE_SYSCALL (SIGPROCMASK_SYSCALL, "syscall|sigprocmask", (uint64_t) how,(uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(set ? &rawposix_set : NULL),(uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(oset ? &rawposix_oset : NULL), NOTUSED, NOTUSED, NOTUSED);
+   int retval = MAKE_TRANDITION (SIGPROCMASK_SYSCALL, "syscall|sigprocmask", (uint64_t) how,(uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(set ? &rawposix_set : NULL),(uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(oset ? &rawposix_oset : NULL), NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
    // check for NULL pointer
    if (oset)
       oset->__val[0] = (unsigned long int) rawposix_oset;

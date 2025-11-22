@@ -25,6 +25,6 @@
 ssize_t
 __write_nocancel (int fd, const void *buf, size_t nbytes)
 {
-  return MAKE_SYSCALL3(WRITE_SYSCALL, "syscall|write", (uint64_t)fd, (uint64_t)(uintptr_t)buf, (uint64_t)nbytes);
+  return MAKE_TRANDITION(WRITE_SYSCALL, "syscall|write", (uint64_t)fd, (uint64_t)(uintptr_t)buf, (uint64_t)nbytes, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 hidden_def (__write_nocancel)

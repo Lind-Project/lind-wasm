@@ -36,9 +36,9 @@ __xstat (int vers, const char *name, struct stat *buf)
 {
   uint64_t host_name = TRANSLATE_GUEST_POINTER_TO_HOST (name);
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-  return MAKE_SYSCALL (XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers,
+  return MAKE_TRANDITION (XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers,
 		       host_name, host_buf,
-		       NOTUSED, NOTUSED, NOTUSED);
+		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
 # endif /* LIB_COMPAT  */

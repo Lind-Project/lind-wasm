@@ -35,7 +35,7 @@ __getdents64 (int fd, void *buf, size_t nbytes)
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
-	return MAKE_SYSCALL(GETDENTS_SYSCALL, "syscall|getdents", (uint64_t) fd, host_buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED);
+	return MAKE_TRANDITION(GETDENTS_SYSCALL, "syscall|getdents", (uint64_t) fd, host_buf, (uint64_t) nbytes, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 libc_hidden_def (__getdents64)
 weak_alias (__getdents64, getdents64)

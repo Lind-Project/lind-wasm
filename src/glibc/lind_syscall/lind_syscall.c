@@ -19,21 +19,72 @@
    <https://www.gnu.org/licenses/>.  */
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
-int lind_syscall_trampoline(unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6) __attribute__((
+int __lind_make_syscall_trampoline(unsigned int callnumber, 
+    unsigned long long callname, 
+    unsigned long long self_cageid, unsigned long long target_cageid,
+    unsigned long long arg1, unsigned long long arg1cageid,
+    unsigned long long arg2, unsigned long long arg2cageid,
+    unsigned long long arg3, unsigned long long arg3cageid,
+    unsigned long long arg4, unsigned long long arg4cageid,
+    unsigned long long arg5, unsigned long long arg5cageid,
+    unsigned long long arg6, unsigned long long arg6cageid
+) __attribute__((
     __import_module__("lind"),
-    __import_name__("lind-syscall")
+    __import_name__("make-syscall")
 ));
 
 
-// Part of Macro MAKE_SYSCALL, take in the number of the syscall and the name of the syscall and 6 argument.
-// callnumber: is the syscall number used in rawposix/rustposix
-// callname: a legacy argument, will be changed after 3i has integrated
-// arg1-arg6: actual argument of the syscall, note that all the pointers passed here is 32-bit virtual wasm address
-//            and should be handled appropriately. This might be changed later and the address translation might be
-//            handled here instead
-int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6, int raw)
+/*
+ * Intermediate wrapper used by the MAKE_THREEI macro.
+ *
+ * This function acts as the middle layer between:
+ *   (1) the MAKE_THREEI macros in glibc, and
+ *   (2) the actual Wasmtime entry function (__lind_make_syscall_trampoline).
+ *
+ * It forwards all syscall parameters—including the inter-cage metadata
+ * (self_cageid, target_cageid, argX_cageid pairs) to the underlying
+ * trampoline, but also optionally performs post-processing on the return
+ * value depending on `raw_flag`.
+ *
+ * The `raw_flag` controls whether this wrapper should apply the standard
+ * errno handling:
+ *
+ *   raw_flag == 0:
+ *       The return value is treated as a complete syscall result.
+ *       Negative values in the range [-255, -1] are interpreted as
+ *       `-errno`, errno is set accordingly, and the wrapper returns -1.
+ *       All other values are returned directly.
+ *
+ *   raw_flag == 1:
+ *       The wrapper does *not* apply any errno translation.
+ *       The raw return value from the trampoline is returned as-is.
+ *
+ * This distinction is required because some syscalls—especially futex-related
+ * operations (e.g., lll_futex_wake, lll_futex_requeue, etc.) expect the
+ * trampoline to return raw -errno value and must not receive additional errno 
+ * post-processing at this layer. Other syscalls, however, rely on the standard 
+ * POSIX errno translation implemented here.
+ */
+int lind_syscall (unsigned int callnumber, 
+    unsigned long long callname, 
+    unsigned long long self_cageid, unsigned long long target_cageid,
+    unsigned long long arg1, unsigned long long arg1cageid,
+    unsigned long long arg2, unsigned long long arg2cageid,
+    unsigned long long arg3, unsigned long long arg3cageid,
+    unsigned long long arg4, unsigned long long arg4cageid,
+    unsigned long long arg5, unsigned long long arg5cageid,
+    unsigned long long arg6, unsigned long long arg6cageid,
+    int raw)
 {
-    int ret = lind_syscall_trampoline(callnumber, callname, arg1, arg2, arg3, arg4, arg5, arg6);
+    int ret = __lind_make_syscall_trampoline(callnumber, 
+        callname, 
+        self_cageid, target_cageid,
+        arg1, arg1cageid,
+        arg2, arg2cageid,
+        arg3, arg3cageid,
+        arg4, arg4cageid,
+        arg5, arg5cageid,
+        arg6, arg6cageid);
     // if raw is set, we do not do any further process to errno handling and directly return the result
     if(raw != 0) return ret;
     // handle the errno

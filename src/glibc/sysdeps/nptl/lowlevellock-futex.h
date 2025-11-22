@@ -58,13 +58,13 @@
 # define __lll_private_flag(fl, private) \
   (((fl) | FUTEX_PRIVATE_FLAG) ^ (private))
 
-# define lll_futex_syscall(nargs, futexp, op, ...)                      \
-  ({                                                                    \
-    long int __ret = MAKE_RAW_SYSCALL##nargs (FUTEX_SYSCALL, "syscall|futex", futexp, op, 	\
-				       __VA_ARGS__);                    \
-    (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (__ret))         	\
-     ? -INTERNAL_SYSCALL_ERRNO (__ret) : 0);                     	\
-  })
+// # define lll_futex_syscall(nargs, futexp, op, ...)                      \
+//   ({                                                                    \
+//     long int __ret = MAKE_TRANDITION##nargs (FUTEX_SYSCALL, "syscall|futex", futexp, op, 	\
+// 				       __VA_ARGS__);                    \
+//     (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (__ret))         	\
+//      ? -INTERNAL_SYSCALL_ERRNO (__ret) : 0);                     	\
+//   })
 
 
 /* For most of these macros, the return value is never really used.
@@ -82,9 +82,8 @@
   ({                                                                    \
   uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
   uint64_t __translated_timeout = TRANSLATE_GUEST_POINTER_TO_HOST(timeout); \
-  lll_futex_syscall (4, __translated_futexp,                          \
-          __lll_private_flag (FUTEX_WAIT, private),        \
-          (uint64_t)(val), __translated_timeout);                      \
+  MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
+        __lll_private_flag (FUTEX_WAIT, private), (uint64_t)(val), __translated_timeout, 0, (uint64_t)0, RAW_SYSCALL); \
   })
 
 /* Verify whether the supplied clockid is supported by
@@ -96,8 +95,8 @@
 # define lll_futex_wake(futexp, nr, private)                            \
   ({                                                                    \
   uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
-  lll_futex_syscall (4, __translated_futexp,                          \
-        __lll_private_flag (FUTEX_WAKE, private), (uint64_t)(nr), 0); \
+  MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
+        __lll_private_flag (FUTEX_WAKE, private), (uint64_t)(nr), 0, 0, (uint64_t)0, RAW_SYSCALL); \
   })
 
 /* Wake up up to NR_WAKE waiters on FUTEXP.  Move up to NR_MOVE of the
@@ -107,9 +106,9 @@
   ({                                                                    \
   uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
   uint64_t __translated_mutex = TRANSLATE_GUEST_POINTER_TO_HOST(mutex); \
-  lll_futex_syscall (6, __translated_futexp,                          \
+  MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", __translated_futexp,                          \
         __lll_private_flag (FUTEX_CMP_REQUEUE, private), \
-        (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val));      \
+        (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val), RAW_SYSCALL); \
   })
 
 /* Wake up up to NR_WAKE waiters on FUTEXP and NR_WAKE2 on FUTEXP2.
@@ -117,8 +116,8 @@
 # define lll_futex_wake_unlock(futexp, nr_wake, nr_wake2, futexp2, private) \
   ({                                                                    \
   uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
-  uint64_t __translated_futexp2 = TRANSLATE_GUEST_POINTER_TO_HOST(futexp2); \
-  lll_futex_syscall (6, __translated_futexp,                          \
+  uint64_t __translated_futexp2 = TRANSLATE_GUEST_POINTER_TO_HOST(futexp2); \             \
+  MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
         __lll_private_flag (FUTEX_WAKE_OP, private),     \
         (uint64_t)(nr_wake), (uint64_t)(nr_wake2), __translated_futexp2,         \
         (uint64_t)(FUTEX_OP_CLEAR_WAKE_IF_GT_ONE));                  \
@@ -128,9 +127,9 @@
 #define lll_futex_timed_unlock_pi(futexp, private)             \
   ({                                                                    \
   uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
-  lll_futex_syscall (4, __translated_futexp,                \
+  MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
         __lll_private_flag (FUTEX_UNLOCK_PI, private),    \
-        0, 0);                        \
+        0, 0, 0, 0, RAW_SYSCALL); \
   })
 
 /* Like lll_futex_requeue, but pairs with lll_futex_wait_requeue_pi
@@ -140,10 +139,9 @@
   ({                                                                    \
   uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
   uint64_t __translated_mutex = TRANSLATE_GUEST_POINTER_TO_HOST(mutex); \
-  lll_futex_syscall (6, __translated_futexp,                          \
-          __lll_private_flag (FUTEX_CMP_REQUEUE_PI,        \
-            private),                    \
-          (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val));      \
+  MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", __translated_futexp,                          \
+        __lll_private_flag (FUTEX_CMP_REQUEUE_PI, private), \
+        (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val), RAW_SYSCALL); \
   })
 
 /* Like lll_futex_wait, but acting as a cancellable entrypoint.  */

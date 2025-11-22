@@ -46,7 +46,7 @@ __futex_abstimed_wait_common32 (unsigned int* futex_word,
     uint64_t host_timeout = TRANSLATE_GUEST_POINTER_TO_HOST(pts32);
 
     // replace with lind syscall
-    return MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op, (uint64_t) expected, host_timeout, 0, (uint64_t)FUTEX_BITSET_MATCH_ANY);
+    return MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op, (uint64_t) expected, host_timeout, 0, (uint64_t)FUTEX_BITSET_MATCH_ANY, RAW_SYSCALL);
 }
 #endif /* ! __ASSUME_TIME64_SYSCALLS */
 
@@ -60,7 +60,7 @@ __futex_abstimed_wait_common64 (unsigned int* futex_word,
     // replace with lind syscall
     uint64_t host_futex_word = TRANSLATE_GUEST_POINTER_TO_HOST(futex_word);
     uint64_t host_abstime = TRANSLATE_GUEST_POINTER_TO_HOST(abstime);
-    return MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op, (uint64_t) expected, host_abstime, 0, (uint64_t)FUTEX_BITSET_MATCH_ANY);
+    return MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op, (uint64_t) expected, host_abstime, 0, (uint64_t)FUTEX_BITSET_MATCH_ANY, RAW_SYSCALL);
 }
 
 static int
@@ -153,7 +153,7 @@ __futex_lock_pi64 (int *futex_word, clockid_t clockid,
 #if __ASSUME_FUTEX_LOCK_PI2
   /* Assume __ASSUME_TIME64_SYSCALLS since FUTEX_LOCK_PI2 was added later.  */
   uint64_t host_abstime = TRANSLATE_GUEST_POINTER_TO_HOST(abstime);
-  err = MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op_pi2, (uint64_t) 0, host_abstime, 0, (uint64_t)0);
+  err = MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op_pi2, (uint64_t) 0, host_abstime, 0, (uint64_t)0, RAW_SYSCALL);
 #else
   /* FUTEX_LOCK_PI does not support clock selection, so for CLOCK_MONOTONIC
      the only option is to use FUTEX_LOCK_PI2.  */
@@ -162,13 +162,13 @@ __futex_lock_pi64 (int *futex_word, clockid_t clockid,
 
 # ifdef __ASSUME_TIME64_SYSCALLS
   uint64_t host_abstime = TRANSLATE_GUEST_POINTER_TO_HOST(abstime);
-  err = MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op_pi, (uint64_t) 0, host_abstime, 0, (uint64_t)0);
+  err = MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op_pi, (uint64_t) 0, host_abstime, 0, (uint64_t)0, RAW_SYSCALL);
 # else
   bool need_time64 = abstime != NULL && !in_int32_t_range (abstime->tv_sec);
   if (need_time64) 
     {
     uint64_t host_abstime = TRANSLATE_GUEST_POINTER_TO_HOST(abstime);
-    err = MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op_pi, (uint64_t) 0, host_abstime, 0, (uint64_t)0);
+    err = MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op_pi, (uint64_t) 0, host_abstime, 0, (uint64_t)0, RAW_SYSCALL);
     }
   else
     {
@@ -179,7 +179,7 @@ __futex_lock_pi64 (int *futex_word, clockid_t clockid,
 	  pts32 = &ts32;
 	}
       uint64_t host_timeout = TRANSLATE_GUEST_POINTER_TO_HOST(pts32);
-      err = MAKE_RAW_SYSCALL(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op_pi, (uint64_t) 0, host_timeout, 0, (uint64_t)0);
+      err = MAKE_TRANDITION(FUTEX_SYSCALL, "syscall|futex", host_futex_word, (uint64_t) op_pi, (uint64_t) 0, host_timeout, 0, (uint64_t)0, RAW_SYSCALL);
     }
 # endif	 /* __ASSUME_TIME64_SYSCALLS */
    /* FUTEX_LOCK_PI2 is not available on this kernel.  */

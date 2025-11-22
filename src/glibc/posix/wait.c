@@ -25,6 +25,6 @@
 __pid_t
 __wait (int *stat_loc)
 {
-   return MAKE_SYSCALL(WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) 0, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(stat_loc), 0, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_TRANDITION(WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) 0, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(stat_loc), 0, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 weak_alias (__wait, wait)

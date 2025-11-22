@@ -29,7 +29,7 @@ __socket (int fd, int type, int domain)
 //   return SOCKETCALL (socket, fd, type, domain);
 // #endif
   // Dennis Edit
-  return MAKE_SYSCALL(SOCKET_SYSCALL, "syscall|socket", (uint64_t) fd, (uint64_t) type, (uint64_t) domain, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_TRANDITION(SOCKET_SYSCALL, "syscall|socket", (uint64_t) fd, (uint64_t) type, (uint64_t) domain, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 libc_hidden_def (__socket)
 weak_alias (__socket, socket)

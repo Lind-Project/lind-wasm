@@ -28,7 +28,7 @@
 int
 __close (int fd)
 {
-  return MAKE_SYSCALL(CLOSE_SYSCALL, "syscall|close", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_TRANDITION(CLOSE_SYSCALL, "syscall|close", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
   // return SYSCALL_CANCEL (close, fd);
 }
 libc_hidden_def (__close)

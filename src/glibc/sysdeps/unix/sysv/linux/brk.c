@@ -41,7 +41,7 @@ weak_alias (__curbrk, ___brk_addr)
 int
 __brk (void *addr)
 {
-   __curbrk = MAKE_SYSCALL(BRK_SYSCALL, "syscall|brk", (uint64_t) addr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   __curbrk = MAKE_TRANDITION(BRK_SYSCALL, "syscall|brk", (uint64_t) addr, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
    if (__curbrk < addr)
    {
       __set_errno (ENOMEM);

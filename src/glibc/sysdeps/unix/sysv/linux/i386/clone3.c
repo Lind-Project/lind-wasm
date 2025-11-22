@@ -11,9 +11,9 @@ int __GI___clone3 (struct clone_args *cl_args, size_t size, int (*func)(void *),
   cl_args->child_tid = TRANSLATE_GUEST_POINTER_TO_HOST(guest_child_tid);
 
   uint64_t host_cl_args = TRANSLATE_GUEST_POINTER_TO_HOST(cl_args);
-  int pid = MAKE_SYSCALL(CLONE_SYSCALL, "syscall|clone3",
+  int pid = MAKE_TRANDITION(CLONE_SYSCALL, "syscall|clone3",
                          host_cl_args,
-                         NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+                         NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 
   // Reinitialize address translation for child processes
   if (pid == 0) {

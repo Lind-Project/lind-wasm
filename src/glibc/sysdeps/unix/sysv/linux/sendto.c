@@ -29,9 +29,9 @@ __libc_sendto (int fd, const void *buf, size_t len, int flags,
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
   
-  return MAKE_SYSCALL (SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd,
+  return MAKE_TRANDITION (SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd,
 		       host_buf, (uint64_t) len, (uint64_t) flags,
-		       host_addr, (uint64_t) addrlen);
+		       host_addr, (uint64_t) addrlen, WRAPPED_SYSCALL);
 }
 weak_alias (__libc_sendto, sendto)
 weak_alias (__libc_sendto, __sendto)

@@ -7,6 +7,6 @@
 int
 fsync (int fd)
 {
-   return MAKE_SYSCALL(FSYNC_SYSCALL, "syscall|fsync", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_TRANDITION(FSYNC_SYSCALL, "syscall|fsync", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 libc_hidden_def (fsync)

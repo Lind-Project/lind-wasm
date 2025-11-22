@@ -58,12 +58,13 @@ impl LindCommonCtx {
         call_number: u32,
         call_name: u64,
         caller: &mut Caller<'_, T>,
-        arg1: u64,
-        arg2: u64,
-        arg3: u64,
-        arg4: u64,
-        arg5: u64,
-        arg6: u64,
+        self_cageid: u64, target_cageid: u64,
+        arg1: u64, arg1cageid: u64,
+        arg2: u64, arg2cageid: u64,
+        arg3: u64, arg3cageid: u64,
+        arg4: u64, arg4cageid: u64,
+        arg5: u64, arg5cageid: u64,
+        arg6: u64, arg6cageid: u64
     ) -> i32 {
         let start_address = get_memory_base(&caller);
         // todo:
@@ -90,19 +91,13 @@ impl LindCommonCtx {
                     self.pid as u64,
                     call_number as u64,
                     call_name as u64,
-                    self.pid as u64, // Set target_cageid same with self_cageid by defualt
-                    arg1,
-                    self.pid as u64,
-                    arg2,
-                    self.pid as u64,
-                    arg3,
-                    self.pid as u64,
-                    arg4,
-                    self.pid as u64,
-                    arg5,
-                    self.pid as u64,
-                    arg6,
-                    self.pid as u64,
+                    target_cageid,
+                    arg1, arg1cageid,
+                    arg2, arg2cageid,
+                    arg3, arg3cageid,
+                    arg4, arg4cageid,
+                    arg5, arg5cageid,
+                    arg6, arg6cageid,
                 )
             }
         }
@@ -176,19 +171,20 @@ pub fn add_to_linker<
     linker: &mut wasmtime::Linker<T>,
     get_cx: impl Fn(&T) -> &LindCommonCtx + Send + Sync + Copy + 'static,
 ) -> anyhow::Result<()> {
-    // attach lind_syscall to wasmtime
+    // attach make_syscall to wasmtime
     linker.func_wrap(
         "lind",
-        "lind-syscall",
+        "make-syscall",
         move |mut caller: Caller<'_, T>,
               call_number: u32,
               call_name: u64,
-              arg1: u64,
-              arg2: u64,
-              arg3: u64,
-              arg4: u64,
-              arg5: u64,
-              arg6: u64|
+              self_cageid: u64, target_cageid: u64,
+              arg1: u64, arg1cageid: u64,
+              arg2: u64, arg2cageid: u64,
+              arg3: u64, arg3cageid: u64,
+              arg4: u64, arg4cageid: u64,
+              arg5: u64, arg5cageid: u64,
+              arg6: u64, arg6cageid: u64|
               -> i32 {
             let host = caller.data().clone();
             let ctx = get_cx(&host);
@@ -197,12 +193,13 @@ pub fn add_to_linker<
                 call_number,
                 call_name,
                 &mut caller,
-                arg1,
-                arg2,
-                arg3,
-                arg4,
-                arg5,
-                arg6,
+                self_cageid, target_cageid,
+                arg1, arg1cageid,
+                arg2, arg2cageid,
+                arg3, arg3cageid,
+                arg4, arg4cageid,
+                arg5, arg5cageid,
+                arg6, arg6cageid,
             );
 
             // TODO: add a signal check here as Linux also has a signal check when transition from kernel to userspace
