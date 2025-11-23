@@ -205,7 +205,7 @@ int _start() {
     __libc_setup_tls();
     __wasi_init_tp();
     __wasi_initialize_environ();
-    __ctype_init();
+    __ctype_init(); // initialize locale
     __lind_init_addr_translation();
     return __main_void();
 }

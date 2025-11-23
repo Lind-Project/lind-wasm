@@ -20,6 +20,8 @@
 #include "localeinfo.h"
 
 #define DEFINE_CATEGORY(category, category_name, items, a) \
+// lind-wasm: these struct needs not to be weak symbols to work correctly in wasm for some reason
+// TODO: should go through here again when locale is fully fixed
 extern struct __locale_data _nl_C_##category; /*weak_extern (_nl_C_##category)*/
 #include "categories.def"
 #undef	DEFINE_CATEGORY
