@@ -40,7 +40,7 @@ __select64 (int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (writefds),
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (exceptfds),
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (timeout),
-		       NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, TRANSLATE_ERRNO_ON);
 
   // Lind-Wasm: Original glibc code removed for compatibility
   // to find original source code refer to (2.39.9000) at

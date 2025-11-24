@@ -44,7 +44,7 @@ __libc_open64 (const char *file, int oflag, ...)
   // Added MAKE_SYSCALL macro to interface with Lind - Qianxi Chen
   uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
   
-  return MAKE_LEGACY_SYSCALL(OPEN_SYSCALL, "syscall|open", host_file, (uint64_t) oflag | O_LARGEFILE, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+  return MAKE_LEGACY_SYSCALL(OPEN_SYSCALL, "syscall|open", host_file, (uint64_t) oflag | O_LARGEFILE, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 strong_alias (__libc_open64, __open64)

@@ -35,7 +35,7 @@ __lstat64_time64 (const char *file, struct __stat64_t64 *buf)
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   return MAKE_LEGACY_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
 		       host_file, host_buf,
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 #if __TIMESIZE != 64
 hidden_def (__lstat64_time64)
@@ -47,7 +47,7 @@ __lstat64 (const char *file, struct stat64 *buf)
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   return MAKE_LEGACY_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
 		       host_file, host_buf,
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 #endif
 hidden_def (__lstat64)

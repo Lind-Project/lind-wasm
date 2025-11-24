@@ -29,6 +29,6 @@ libc_hidden_proto (epoll_ctl)
      uint64_t host_event = TRANSLATE_GUEST_POINTER_TO_HOST (__event);
   return MAKE_LEGACY_SYSCALL (EPOLL_CTL_SYSCALL, "syscall|epoll_ctl",
 		       (uint64_t) __epfd, (uint64_t) __op, (uint64_t) __fd,
-		       host_event, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       host_event, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (epoll_ctl)

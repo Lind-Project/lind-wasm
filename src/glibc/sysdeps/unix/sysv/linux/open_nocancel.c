@@ -46,7 +46,7 @@ __open_nocancel (const char *file, int oflag, ...)
   return MAKE_LEGACY_SYSCALL (OPEN_SYSCALL, "syscall|open",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
 		       (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED,
-		       NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, TRANSLATE_ERRNO_ON);
 }
 hidden_def (__open_nocancel)
 

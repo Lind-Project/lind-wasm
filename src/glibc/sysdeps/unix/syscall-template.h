@@ -7,8 +7,10 @@
 // Define NOTUSED for unused arguments
 #define NOTUSED 0xdeadbeefdeadbeefULL
 
-#define WRAPPED_SYSCALL 0
-#define RAW_SYSCALL 1
+// Define flags for errno translation
+// See comments in [`lind_syscall/lind_syscall.c`] for details
+#define TRANSLATE_ERRNO_ON 1
+#define TRANSLATE_ERRNO_OFF 0
 
 /*
  * MAKE_LEGACY_SYSCALL:
@@ -26,7 +28,7 @@
  * with glibc and legacy POSIX implementations.  New subsystems (e.g., grates)
  * should use make_threei_call directly.
  */
-#define MAKE_LEGACY_SYSCALL(syscall_num, syscall_name, arg1, arg2, arg3, arg4, arg5, arg6, raw_flag) \
+#define MAKE_LEGACY_SYSCALL(syscall_num, syscall_name, arg1, arg2, arg3, arg4, arg5, arg6, translate_errno) \
     ({ \
         uint64_t __self = __lind_cageid; \
         make_threei_call( \
@@ -40,6 +42,6 @@
             (uint64_t)(arg4), __self, \
             (uint64_t)(arg5), __self, \
             (uint64_t)(arg6), __self, \
-            (raw_flag) \
+            (translate_errno) \
         ); \
     })

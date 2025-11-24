@@ -27,7 +27,7 @@ int __lind_make_syscall_trampoline(unsigned int callnumber,
  *
  * Each logical argument is passed in a (value, cageid) pair, enabling
  * three-i's interposition layer to perform selective rewriting, mediation,
- * or redirection.  The final argument, `raw_flag`, determines whether
+ * or redirection.  The final argument, `translate_errno`, determines whether
  * lind_syscall should apply standard POSIX errno translation or return
  * the raw trampoline result directly.
  *
@@ -43,18 +43,18 @@ int __lind_make_syscall_trampoline(unsigned int callnumber,
  * It forwards all syscall parameters—including the inter-cage metadata
  * (self_cageid, target_cageid, argX_cageid pairs) to the underlying
  * trampoline, but also optionally performs post-processing on the return
- * value depending on `raw_flag`.
+ * value depending on `translate_errno`.
  *
- * The `raw_flag` controls whether this wrapper should apply the standard
+ * The `translate_errno` controls whether this wrapper should apply the standard
  * errno handling:
  *
- *   raw_flag == 0:
+ *   translate_errno == 1 (TRANSLATE_ERRNO_ON):
  *       The return value is treated as a complete syscall result.
  *       Negative values in the range [-255, -1] are interpreted as
  *       `-errno`, errno is set accordingly, and the wrapper returns -1.
  *       All other values are returned directly.
  *
- *   raw_flag == 1:
+ *   translate_errno == 0 (TRANSLATE_ERRNO_OFF):
  *       The wrapper does *not* apply any errno translation.
  *       The raw return value from the trampoline is returned as-is.
  *
@@ -73,7 +73,7 @@ int make_threei_call (unsigned int callnumber,
     uint64_t arg4, uint64_t arg4cageid,
     uint64_t arg5, uint64_t arg5cageid,
     uint64_t arg6, uint64_t arg6cageid,
-    int raw)
+    int translate_errno)
 {
     int ret = __lind_make_syscall_trampoline(callnumber, 
         callname, 
@@ -84,8 +84,8 @@ int make_threei_call (unsigned int callnumber,
         arg4, arg4cageid,
         arg5, arg5cageid,
         arg6, arg6cageid);
-    // if raw is set, we do not do any further process to errno handling and directly return the result
-    if(raw != 0) return ret;
+    // if translate_errno is not enabled, we do not do any further process to errno handling and directly return the result
+    if(translate_errno == 0) return ret;
     // handle the errno
     // in rawposix, we use -errno as the return value to indicate the error
     // but this may cause some issues for mmap syscall, because mmap syscall

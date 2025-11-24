@@ -26,7 +26,7 @@
 #include <lind_syscall_num.h>
 
 void __lind_exit(int status) {
-	MAKE_LEGACY_SYSCALL(EXIT_SYSCALL, "syscall|exit", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+	MAKE_LEGACY_SYSCALL(EXIT_SYSCALL, "syscall|exit", (uint64_t) status, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 void

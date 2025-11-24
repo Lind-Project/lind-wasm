@@ -24,7 +24,7 @@ int make_threei_call (unsigned int callnumber,
     uint64_t arg4, uint64_t arg4cageid,
     uint64_t arg5, uint64_t arg5cageid,
     uint64_t arg6, uint64_t arg6cageid,
-    int raw);
+    int translate_errno);
 
 int register_handler(uint64_t targetcage, 
     uint64_t targetcallnum, 

@@ -32,5 +32,5 @@ epoll_wait (int epfd, struct epoll_event *events, int maxevents, int timeout)
   return MAKE_LEGACY_SYSCALL (
       EPOLL_WAIT_SYSCALL, "syscall|epoll_wait", (uint64_t) epfd,
       host_events, (uint64_t) maxevents, (uint64_t) timeout,
-      NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+      NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

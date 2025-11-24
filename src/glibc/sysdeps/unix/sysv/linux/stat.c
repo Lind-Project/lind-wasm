@@ -31,7 +31,7 @@ __stat (const char *fd, struct stat *buf)
   
   return MAKE_LEGACY_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
 		       host_fd, host_buf,
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__stat, stat)
 #endif

@@ -83,7 +83,7 @@
   uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
   uint64_t __translated_timeout = TRANSLATE_GUEST_POINTER_TO_HOST(timeout); \
   MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
-        __lll_private_flag (FUTEX_WAIT, private), (uint64_t)(val), __translated_timeout, 0, (uint64_t)0, RAW_SYSCALL); \
+        __lll_private_flag (FUTEX_WAIT, private), (uint64_t)(val), __translated_timeout, 0, (uint64_t)0, TRANSLATE_ERRNO_OFF); \
   })
 
 /* Verify whether the supplied clockid is supported by
@@ -96,7 +96,7 @@
   ({                                                                    \
   uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
   MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
-        __lll_private_flag (FUTEX_WAKE, private), (uint64_t)(nr), 0, 0, (uint64_t)0, RAW_SYSCALL); \
+        __lll_private_flag (FUTEX_WAKE, private), (uint64_t)(nr), 0, 0, (uint64_t)0, TRANSLATE_ERRNO_OFF); \
   })
 
 /* Wake up up to NR_WAKE waiters on FUTEXP.  Move up to NR_MOVE of the
@@ -108,7 +108,7 @@
   uint64_t __translated_mutex = TRANSLATE_GUEST_POINTER_TO_HOST(mutex); \
   MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp,                          \
         __lll_private_flag (FUTEX_CMP_REQUEUE, private), \
-        (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val), RAW_SYSCALL); \
+        (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val), TRANSLATE_ERRNO_OFF); \
   })
 
 /* Wake up up to NR_WAKE waiters on FUTEXP and NR_WAKE2 on FUTEXP2.
@@ -129,7 +129,7 @@
   uint64_t __translated_futexp = TRANSLATE_GUEST_POINTER_TO_HOST(futexp); \
   MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp, \
         __lll_private_flag (FUTEX_UNLOCK_PI, private),    \
-        0, 0, 0, 0, RAW_SYSCALL); \
+        0, 0, 0, 0, TRANSLATE_ERRNO_OFF); \
   })
 
 /* Like lll_futex_requeue, but pairs with lll_futex_wait_requeue_pi
@@ -141,7 +141,7 @@
   uint64_t __translated_mutex = TRANSLATE_GUEST_POINTER_TO_HOST(mutex); \
   MAKE_LEGACY_SYSCALL(FUTEX_SYSCALL, "syscall|futex", __translated_futexp,                          \
         __lll_private_flag (FUTEX_CMP_REQUEUE_PI, private), \
-        (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val), RAW_SYSCALL); \
+        (uint64_t)(nr_wake), (uint64_t)(nr_move), __translated_mutex, (uint64_t)(val), TRANSLATE_ERRNO_OFF); \
   })
 
 /* Like lll_futex_wait, but acting as a cancellable entrypoint.  */

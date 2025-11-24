@@ -35,5 +35,5 @@ shmat (int shmid, const void *shmaddr, int shmflg)
   uint64_t host_shmaddr = TRANSLATE_GUEST_POINTER_TO_HOST (shmaddr);
   return MAKE_LEGACY_SYSCALL (SHMAT_SYSCALL, "syscall|shmat", (uint64_t) shmid,
 		       host_shmaddr, (uint64_t) shmflg,
-		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

@@ -45,7 +45,7 @@ __libc_open (const char *file, int oflag, ...)
 
   return MAKE_LEGACY_SYSCALL (
       OPEN_SYSCALL, "syscall|open", host_file,
-      (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+      (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
   // return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag, mode);
 }
 libc_hidden_def (__libc_open)

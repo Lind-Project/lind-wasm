@@ -45,7 +45,7 @@ __ioctl (int fd, unsigned long int request, ...)
 
   return MAKE_LEGACY_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd,
 		       (uint64_t) request, host_ptr, NOTUSED, NOTUSED,
-		       NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__ioctl)
 weak_alias (__ioctl, ioctl)

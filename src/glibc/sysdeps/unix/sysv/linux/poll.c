@@ -31,7 +31,7 @@ __poll (struct pollfd *fds, nfds_t nfds, int timeout)
   
   return MAKE_LEGACY_SYSCALL (POLL_SYSCALL, "syscall|poll",
 		       host_fds, (uint64_t) nfds, (uint64_t) timeout, NOTUSED, NOTUSED,
-		       NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__poll)
 weak_alias (__poll, poll)

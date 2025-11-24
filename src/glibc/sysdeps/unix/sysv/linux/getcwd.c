@@ -53,7 +53,7 @@ __getcwd (char *buf, size_t size)
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
   return MAKE_LEGACY_SYSCALL (GETCWD_SYSCALL, "syscall|getcwd",
-		       host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__getcwd)
 weak_alias (__getcwd, getcwd)

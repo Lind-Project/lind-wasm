@@ -28,6 +28,6 @@ __socketpair (int domain, int type, int protocol, int sv[2])
   
   return MAKE_LEGACY_SYSCALL (SOCKETPAIR_SYSCALL, "syscall|socketpair",
 		       (uint64_t) domain, (uint64_t) type, (uint64_t) protocol,
-		       host_sv, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       host_sv, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__socketpair, socketpair)

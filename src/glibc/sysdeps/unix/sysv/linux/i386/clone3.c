@@ -13,7 +13,7 @@ int __GI___clone3 (struct clone_args *cl_args, size_t size, int (*func)(void *),
   uint64_t host_cl_args = TRANSLATE_GUEST_POINTER_TO_HOST(cl_args);
   int pid = MAKE_LEGACY_SYSCALL(CLONE_SYSCALL, "syscall|clone3",
                          host_cl_args,
-                         NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+                         NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 
   // Reinitialize address translation for child processes
   if (pid == 0) {

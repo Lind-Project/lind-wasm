@@ -58,7 +58,7 @@ __fcntl64_nocancel_adjusted (int fd, int cmd, void *arg)
       int res = MAKE_LEGACY_SYSCALL (
 	  FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
 	  (uint64_t) F_GETOWN_EX, NOTUSED,
-	  (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&fex), NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+	  (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&fex), NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
       if (!INTERNAL_SYSCALL_ERROR_P (res))
 	return fex.type == F_OWNER_GID ? -fex.pid : fex.pid;
 
@@ -86,5 +86,5 @@ __fcntl64_nocancel_adjusted (int fd, int cmd, void *arg)
     }
 
   return MAKE_LEGACY_SYSCALL (FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
-		       (uint64_t) cmd, int_arg, ptr_arg, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       (uint64_t) cmd, int_arg, ptr_arg, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

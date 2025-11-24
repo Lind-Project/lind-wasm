@@ -29,6 +29,6 @@ __getsockname (int fd, struct sockaddr *__restrict addr, socklen_t *len)
   
   return MAKE_LEGACY_SYSCALL (GETSOCKNAME_SYSCALL, "syscall|getsockname",
 		       (uint64_t) fd, host_addr, host_len,
-		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__getsockname, getsockname)

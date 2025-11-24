@@ -31,5 +31,5 @@ rename (const char *old, const char *new)
   return MAKE_LEGACY_SYSCALL (RENAME_SYSCALL, "syscall|rename",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (old),
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (new),
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

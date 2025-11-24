@@ -39,7 +39,7 @@ ___fxstat64 (int vers, int fd, struct stat64 *buf)
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   return MAKE_LEGACY_SYSCALL (FXSTAT_SYSCALL, "syscall|fxstat", (uint64_t) vers,
 		       (uint64_t) fd, host_buf,
-		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 #if SHLIB_COMPAT(libc, GLIBC_2_1, GLIBC_2_2)

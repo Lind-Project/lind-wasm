@@ -28,7 +28,7 @@ __access (const char *file, int type)
 {
   return MAKE_LEGACY_SYSCALL (ACCESS_SYSCALL, "syscall|access",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
-		       (uint64_t) type, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       (uint64_t) type, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__access)
 weak_alias (__access, access)

@@ -34,7 +34,7 @@ __setitimer64 (__itimer_which_t which,
   uint64_t host_old = TRANSLATE_GUEST_POINTER_TO_HOST (old_value);
   return MAKE_LEGACY_SYSCALL (SETITIMER_SYSCALL, "syscall|setitimer",
 		       (uint64_t) which, host_new, host_old,
-		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 #if __TIMESIZE != 64

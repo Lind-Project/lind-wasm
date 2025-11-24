@@ -27,6 +27,6 @@
 int
 unlinkat (int fd, const char *name, int flag)
 {
-  return MAKE_LEGACY_SYSCALL(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t)fd, (uint64_t)name, (uint64_t)flag, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+  return MAKE_LEGACY_SYSCALL(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t)fd, (uint64_t)name, (uint64_t)flag, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 stub_warning (unlinkat)

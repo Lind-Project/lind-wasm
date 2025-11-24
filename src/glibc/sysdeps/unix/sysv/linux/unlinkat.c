@@ -29,7 +29,7 @@ __unlinkat (int dirfd, const char *name, int flags)
 {
    uint64_t host_name = TRANSLATE_GUEST_POINTER_TO_HOST (name);
    
-   return MAKE_LEGACY_SYSCALL(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t) dirfd, host_name, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+   return MAKE_LEGACY_SYSCALL(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t) dirfd, host_name, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 weak_alias (__unlinkat, unlinkat)

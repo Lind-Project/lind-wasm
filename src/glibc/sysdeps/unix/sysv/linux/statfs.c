@@ -33,7 +33,7 @@ __statfs (const char *file, struct statfs *buf)
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   return MAKE_LEGACY_SYSCALL (STATFS_SYSCALL, "syscall|statfs",
 		       host_file, host_buf,
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__statfs)
 weak_alias (__statfs, statfs)

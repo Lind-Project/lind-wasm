@@ -26,6 +26,6 @@
 int
 fsync (int fd)
 {
-   return MAKE_LEGACY_SYSCALL(FSYNC_SYSCALL, "syscall|fsync", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+   return MAKE_LEGACY_SYSCALL(FSYNC_SYSCALL, "syscall|fsync", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (fsync)

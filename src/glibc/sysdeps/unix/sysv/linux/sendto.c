@@ -31,7 +31,7 @@ __libc_sendto (int fd, const void *buf, size_t len, int flags,
   
   return MAKE_LEGACY_SYSCALL (SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd,
 		       host_buf, (uint64_t) len, (uint64_t) flags,
-		       host_addr, (uint64_t) addrlen, WRAPPED_SYSCALL);
+		       host_addr, (uint64_t) addrlen, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__libc_sendto, sendto)
 weak_alias (__libc_sendto, __sendto)

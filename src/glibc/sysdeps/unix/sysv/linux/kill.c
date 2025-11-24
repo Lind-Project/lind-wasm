@@ -25,11 +25,11 @@
 int
 __kill (__pid_t a,  int b)
 {
-   return MAKE_LEGACY_SYSCALL(KILL_SYSCALL, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+   return MAKE_LEGACY_SYSCALL(KILL_SYSCALL, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 int
 kill (__pid_t a,  int b)
 {
-   return MAKE_LEGACY_SYSCALL(KILL_SYSCALL, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+   return MAKE_LEGACY_SYSCALL(KILL_SYSCALL, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

@@ -28,7 +28,7 @@
 int
 __close (int fd)
 {
-  return MAKE_LEGACY_SYSCALL(CLOSE_SYSCALL, "syscall|close", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+  return MAKE_LEGACY_SYSCALL(CLOSE_SYSCALL, "syscall|close", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
   // return SYSCALL_CANCEL (close, fd);
 }
 libc_hidden_def (__close)

@@ -39,7 +39,7 @@ __clock_gettime64 (clockid_t clock_id, struct __timespec64 *tp)
   uint64_t host_tp = TRANSLATE_GUEST_POINTER_TO_HOST (tp);
   return MAKE_LEGACY_SYSCALL (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
 		       (uint64_t) clock_id, host_tp,
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 #if __TIMESIZE != 64
@@ -51,7 +51,7 @@ __clock_gettime (clockid_t clock_id, struct timespec *tp)
   uint64_t host_tp = TRANSLATE_GUEST_POINTER_TO_HOST (tp);
   return MAKE_LEGACY_SYSCALL (CLOCK_GETTIME_SYSCALL, "syscall|clock_gettime",
 		       (uint64_t) clock_id, host_tp,
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 #endif

@@ -13,7 +13,7 @@ __GI___mprotect (void *addr, size_t len, int prot)
   
   return MAKE_LEGACY_SYSCALL (MPROTECT_SYSCALL, "syscall|mprotect",
 		       host_addr, (uint64_t) len, (uint64_t) prot, NOTUSED, NOTUSED,
-		       NOTUSED, WRAPPED_SYSCALL);
+		       NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 weak_alias(__GI___mprotect, __mprotect)

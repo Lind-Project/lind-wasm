@@ -78,7 +78,7 @@ static int
 shmctl_syscall (int shmid, int cmd, shmctl_arg_t *buf)
 {
 // #endif
-	return MAKE_LEGACY_SYSCALL(SHMCTL_SYSCALL, "syscall|shmctl", (uint64_t) shmid, (uint64_t) cmd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+	return MAKE_LEGACY_SYSCALL(SHMCTL_SYSCALL, "syscall|shmctl", (uint64_t) shmid, (uint64_t) cmd, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(buf), NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 /* Provide operations to control over shared memory segments.  */
@@ -277,7 +277,7 @@ int
 attribute_compat_text_section
 __old_shmctl (int shmid, int cmd, struct __old_shmid_ds *buf)
 {
-	return MAKE_LEGACY_SYSCALL(SHMCTL_SYSCALL, "syscall|shmctl", (uint64_t) shmid, (uint64_t) cmd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+	return MAKE_LEGACY_SYSCALL(SHMCTL_SYSCALL, "syscall|shmctl", (uint64_t) shmid, (uint64_t) cmd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 compat_symbol (libc, __old_shmctl, shmctl, GLIBC_2_0);
 #endif

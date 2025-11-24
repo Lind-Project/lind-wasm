@@ -32,7 +32,7 @@ __libc_recvfrom (int fd, void *buf, size_t len, int flags,
   
   return MAKE_LEGACY_SYSCALL (RECVFROM_SYSCALL, "syscall|recvfrom", (uint64_t) fd,
 		       host_buf, (uint64_t) len, (uint64_t) flags,
-		       host_addr, host_addrlen, WRAPPED_SYSCALL);
+		       host_addr, host_addrlen, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__libc_recvfrom, recvfrom)
 weak_alias (__libc_recvfrom, __recvfrom)
