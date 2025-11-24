@@ -47,3 +47,4 @@ core
 
 /sysroot
 
+crt1.o
