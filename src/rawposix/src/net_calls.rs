@@ -60,7 +60,7 @@ lazy_static! {
 ///     - positive value: number of file descriptors ready for I/O
 ///     - 0: timeout occurred with no file descriptors ready
 ///     - negative value: error occurred (errno set)
-pub fn poll_syscall(
+pub extern "C" fn poll_syscall(
     cageid: u64,
     fds_arg: u64,
     fds_cageid: u64,
@@ -277,7 +277,7 @@ pub fn poll_syscall(
 ///     - positive value: number of file descriptors ready for I/O
 ///     - 0: timeout occurred with no file descriptors ready
 ///     - negative value: error occurred (errno set)
-pub fn select_syscall(
+pub extern "C" fn select_syscall(
     cageid: u64,
     nfds_arg: u64,
     nfds_cageid: u64,
@@ -525,7 +525,7 @@ pub fn select_syscall(
 /// ## Returns:
 ///     - positive value: file descriptor for the new epoll instance
 ///     - negative value: error occurred (errno set)
-pub fn epoll_create_syscall(
+pub extern "C" fn epoll_create_syscall(
     cageid: u64,
     size_arg: u64,
     size_cageid: u64,
@@ -594,7 +594,7 @@ pub fn epoll_create_syscall(
 /// ## Returns:
 ///     - 0: operation completed successfully
 ///     - negative value: error occurred (errno set)
-pub fn epoll_ctl_syscall(
+pub extern "C" fn epoll_ctl_syscall(
     cageid: u64,
     epfd_arg: u64,
     epfd_cageid: u64,
@@ -745,7 +745,7 @@ pub fn epoll_ctl_syscall(
 ///     - positive value: number of file descriptors ready for I/O
 ///     - 0: timeout occurred with no file descriptors ready
 ///     - negative value: error occurred (errno set)
-pub fn epoll_wait_syscall(
+pub extern "C" fn epoll_wait_syscall(
     cageid: u64,
     epfd_arg: u64,
     epfd_cageid: u64,
@@ -885,7 +885,7 @@ pub fn epoll_wait_syscall(
 /// ## Return:
 ///     - On success: a newly allocated virtual file descriptor within the current cage
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn socket_syscall(
+pub extern "C" fn socket_syscall(
     cageid: u64,
     domain_arg: u64,
     domain_cageid: u64,
@@ -959,7 +959,7 @@ pub fn socket_syscall(
 /// ## Returns:
 ///   - On success: `0`
 ///   - On failure: negative errno value converted via `handle_errno`
-pub fn connect_syscall(
+pub extern "C" fn connect_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1016,7 +1016,7 @@ pub fn connect_syscall(
 /// ## Return:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn bind_syscall(
+pub extern "C" fn bind_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1071,7 +1071,7 @@ pub fn bind_syscall(
 /// ## Return:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn listen_syscall(
+pub extern "C" fn listen_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1128,7 +1128,7 @@ pub fn listen_syscall(
 /// ## Return:
 ///     - On success: new virtual file descriptor associated with the accepted socket
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn accept_syscall(
+pub extern "C" fn accept_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1192,7 +1192,7 @@ pub fn accept_syscall(
 /// ## Return:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn setsockopt_syscall(
+pub extern "C" fn setsockopt_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1246,7 +1246,7 @@ pub fn setsockopt_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn shutdown_syscall(
+pub extern "C" fn shutdown_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1303,7 +1303,7 @@ pub fn shutdown_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn getsockname_syscall(
+pub extern "C" fn getsockname_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1364,7 +1364,7 @@ pub fn getsockname_syscall(
 /// ## Return:
 ///     - On success: number of bytes sent
 ///     - On failure: negative errno indicating the error
-pub fn sendto_syscall(
+pub extern "C" fn sendto_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1431,7 +1431,7 @@ pub fn sendto_syscall(
 /// ## Return:
 ///     - On success: number of bytes received
 ///     - On failure: negative errno indicating the error
-pub fn recvfrom_syscall(
+pub extern "C" fn recvfrom_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1526,7 +1526,7 @@ pub fn recvfrom_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn gethostname_syscall(
+pub extern "C" fn gethostname_syscall(
     cageid: u64,
     name_arg: u64,
     name_cageid: u64,
@@ -1582,7 +1582,7 @@ pub fn gethostname_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn getsockopt_syscall(
+pub extern "C" fn getsockopt_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1644,7 +1644,7 @@ pub fn getsockopt_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn getpeername_syscall(
+pub extern "C" fn getpeername_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1702,7 +1702,7 @@ pub fn getpeername_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn socketpair_syscall(
+pub extern "C" fn socketpair_syscall(
     cageid: u64,
     domain_arg: u64,
     domain_cageid: u64,
