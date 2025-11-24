@@ -148,7 +148,7 @@ impl WasmGrateFnEntryPtr {
 /// - re-check `state` (guard against races while waiting for the lock),
 /// - then invoke `fn_ptr(ctx_ptr, ...)`.
 ///
-/// TODO: Currently, we assume that tid is always 0, because functionalitys not implemented yet.
+/// TODO: implement tid functionality. tid is set to zero for now as a placeholder.
 ///
 /// This data structure is also accessed by the lind-3i crate within Wasmtime
 /// to coordinate re-entry into the correct Wasm execution context.
