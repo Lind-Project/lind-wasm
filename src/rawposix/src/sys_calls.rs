@@ -1006,3 +1006,121 @@ pub extern "C" fn setitimer_syscall(
     }
     0
 }
+
+pub type RawCallFunc = extern "C" fn (
+    cageid: u64,
+    path_arg: u64,
+    path_cageid: u64,
+    oflag_arg: u64,
+    oflag_cageid: u64,
+    mode_arg: u64,
+    mode_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32
+
+/// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
+/// detailed error messages will be printed if set
+pub fn rawposix_start(verbosity: isize) {
+    let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
+    cagetable_init();
+
+    fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
+
+    // Set up standard file descriptors for the init cage
+    // TODO:
+    // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
+    let dev_null = CString::new(format!("{}/dev/null", LIND_ROOT)).unwrap();
+
+    // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
+    // Standard input (fd = 0) is redirected to /dev/null
+    // Standard output (fd = 1) is redirected to /dev/null
+    // Standard error (fd = 2) is set to copy of stdout
+    unsafe {
+        libc::open(dev_null.as_ptr(), libc::O_RDONLY);
+        libc::open(dev_null.as_ptr(), libc::O_WRONLY);
+        libc::dup(1);
+    }
+
+    //init cage is its own parent
+    let initcage = Cage {
+        cageid: 1,
+        cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+        parent: 1,
+        rev_shm: Mutex::new(Vec::new()),
+        main_threadid: RwLock::new(0),
+        interval_timer: IntervalTimer::new(1),
+        epoch_handler: DashMap::new(),
+        signalhandler: DashMap::new(),
+        pending_signals: RwLock::new(vec![]),
+        sigset: AtomicU64::new(0),
+        zombies: RwLock::new(vec![]),
+        child_num: AtomicU64::new(0),
+        vmmap: RwLock::new(Vmmap::new()),
+    };
+
+    // Add cage to cagetable
+    add_cage(
+        1, // cageid
+        initcage,
+    );
+
+    fdtables::init_empty_cage(1);
+    // Set the first 3 fd to STDIN / STDOUT / STDERR
+    // STDIN
+    fdtables::get_specific_virtual_fd(
+        1,
+        STDIN_FILENO as u64,
+        FDKIND_KERNEL,
+        STDIN_FILENO as u64,
+        false,
+        0,
+    )
+    .unwrap();
+    // STDOUT
+    fdtables::get_specific_virtual_fd(
+        1,
+        STDOUT_FILENO as u64,
+        FDKIND_KERNEL,
+        STDOUT_FILENO as u64,
+        false,
+        0,
+    )
+    .unwrap();
+    // STDERR
+    fdtables::get_specific_virtual_fd(
+        1,
+        STDERR_FILENO as u64,
+        FDKIND_KERNEL,
+        STDERR_FILENO as u64,
+        false,
+        0,
+    )
+    .unwrap();
+}
+
+pub fn rawposix_shutdown() {
+    let exitvec = cagetable_clear();
+
+    for cageid in exitvec {
+        exit_syscall(
+            cageid as u64,       // target cageid
+            EXIT_SUCCESS as u64, // status arg
+            cageid as u64,       // status arg's cageid
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        );
+    }
+}
