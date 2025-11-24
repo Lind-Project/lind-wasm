@@ -1007,21 +1007,25 @@ pub extern "C" fn setitimer_syscall(
     0
 }
 
+use super::syscall_table::*;
+use threei::{RAWPOSIX_CAGEID, register_handler};
+use sysdefs::constants::lind_platform_const::LIND_ROOT;
+
 pub type RawCallFunc = extern "C" fn (
-    cageid: u64,
-    path_arg: u64,
-    path_cageid: u64,
-    oflag_arg: u64,
-    oflag_cageid: u64,
-    mode_arg: u64,
-    mode_cageid: u64,
+    target_cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
     arg5_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
-) -> i32
+) -> i32;
 
 /// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
 /// detailed error messages will be printed if set
@@ -1030,6 +1034,23 @@ pub fn rawposix_start(verbosity: isize) {
     cagetable_init();
 
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
+    for &(sysno, func) in SYSCALL_TABLE.iter() {
+        let impl_fn_ptr = func as *const() as u64;
+        let ret = register_handler(
+            impl_fn_ptr,
+            RAWPOSIX_CAGEID,
+            sysno,
+            1, // register
+            RAWPOSIX_CAGEID,
+            0, 0, 0, 0, 0, 0, 0, 0, 0,
+        );
+        if ret != 0 {
+            panic!(
+                "rawposix_start: failed to register syscall {} handler, return code {}",
+                sysno, ret
+            );
+        }
+    }
 
     // Set up standard file descriptors for the init cage
     // TODO:

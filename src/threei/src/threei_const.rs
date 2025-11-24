@@ -56,3 +56,5 @@ pub const STATE_REVOKING: u8 = 1;
 ///
 /// Used in the `state` field of `GrateFnEntry` of wasmtime 3i.
 pub const STATE_DEAD: u8 = 2;
+
+pub const RAWPOSIX_CAGEID: u64 = 777777;
