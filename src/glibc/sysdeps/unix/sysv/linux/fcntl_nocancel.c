@@ -55,7 +55,7 @@ __fcntl64_nocancel_adjusted (int fd, int cmd, void *arg)
   if (cmd == F_GETOWN)
     {
       struct f_owner_ex fex;
-      int res = MAKE_TRADITION (
+      int res = MAKE_LEGACY_SYSCALL (
 	  FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
 	  (uint64_t) F_GETOWN_EX, NOTUSED,
 	  (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (&fex), NOTUSED, NOTUSED, WRAPPED_SYSCALL);
@@ -85,6 +85,6 @@ __fcntl64_nocancel_adjusted (int fd, int cmd, void *arg)
       ptr_arg = 0; /* Unused for integer commands */
     }
 
-  return MAKE_TRADITION (FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
+  return MAKE_LEGACY_SYSCALL (FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd,
 		       (uint64_t) cmd, int_arg, ptr_arg, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

@@ -29,7 +29,7 @@ __stat (const char *fd, struct stat *buf)
   uint64_t host_fd = TRANSLATE_GUEST_POINTER_TO_HOST (fd);
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
-  return MAKE_TRADITION (XSTAT_SYSCALL, "syscall|xstat",
+  return MAKE_LEGACY_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
 		       host_fd, host_buf,
 		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

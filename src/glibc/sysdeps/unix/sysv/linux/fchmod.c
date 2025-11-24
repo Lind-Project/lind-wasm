@@ -8,5 +8,5 @@
 int
 fchmod (int fd, mode_t mode)
 {
-  return MAKE_TRADITION(FCHMOD_SYSCALL, "syscall|fchmod", (uint64_t) fd, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+  return MAKE_LEGACY_SYSCALL(FCHMOD_SYSCALL, "syscall|fchmod", (uint64_t) fd, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

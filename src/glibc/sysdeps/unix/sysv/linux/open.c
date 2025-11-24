@@ -43,7 +43,7 @@ __libc_open (const char *file, int oflag, ...)
 
   uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
 
-  return MAKE_TRADITION (
+  return MAKE_LEGACY_SYSCALL (
       OPEN_SYSCALL, "syscall|open", host_file,
       (uint64_t) oflag, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
   // return SYSCALL_CANCEL (openat, AT_FDCWD, file, oflag, mode);

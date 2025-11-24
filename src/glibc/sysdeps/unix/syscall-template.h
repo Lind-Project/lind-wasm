@@ -11,7 +11,7 @@
 #define RAW_SYSCALL 1
 
 /*
- * MAKE_TRADITION:
+ * MAKE_LEGACY_SYSCALL:
  *
  * Legacy macro used inside the glibc compatibility layer for traditional
  * POSIX-style syscalls.  This macro wraps a syscall using the calling
@@ -20,16 +20,16 @@
  * (`__lind_cageid`).
  *
  * Arguments (arg1..arg6) are paired with the caller's cage ID and forwarded
- * directly into MAKE_THREEI, which performs the actual three-i style call.
+ * directly into make_threei_call, which performs the actual three-i style call.
  *
  * In the long term, this macro exists solely for backward compatibility
  * with glibc and legacy POSIX implementations.  New subsystems (e.g., grates)
- * should use MAKE_THREEI directly.
+ * should use make_threei_call directly.
  */
-#define MAKE_TRADITION(syscall_num, syscall_name, arg1, arg2, arg3, arg4, arg5, arg6, raw_flag) \
+#define MAKE_LEGACY_SYSCALL(syscall_num, syscall_name, arg1, arg2, arg3, arg4, arg5, arg6, raw_flag) \
     ({ \
         uint64_t __self = __lind_cageid; \
-        make_threei( \
+        make_threei_call( \
             (syscall_num), \
             (syscall_name), \
             __self, /* self_cageid */ \

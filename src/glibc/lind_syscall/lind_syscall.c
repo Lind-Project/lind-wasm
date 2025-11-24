@@ -17,11 +17,11 @@ int __lind_make_syscall_trampoline(unsigned int callnumber,
 ));
 
 /*
- * make_threei:
+ * make_threei_call:
  *
  * Unified function used to invoke threei style syscalls.  This is the
  * core entry point for all syscall transitions into the lind runtime,
- * including inter-cage calls and grates.  Unlike MAKE_TRADITION, this function
+ * including inter-cage calls and grates.  Unlike MAKE_LEGACY_SYSCALL, this function
  * explicitly specifies both `self_cageid` and `target_cageid`, allowing
  * fine-grained routing of syscalls across cage boundaries.
  *
@@ -31,13 +31,13 @@ int __lind_make_syscall_trampoline(unsigned int callnumber,
  * lind_syscall should apply standard POSIX errno translation or return
  * the raw trampoline result directly.
  *
- * make_threei is designed to be the **canonical** macro for all new
+ * make_threei_call is designed to be the **canonical** macro for all new
  * inter-cage or grate-level syscall invocations.  Grates and higher-level
- * components should call make_threei directly rather than relying on
- * MAKE_TRADITION.
+ * components should call make_threei_call directly rather than relying on
+ * MAKE_LEGACY_SYSCALL.
  *
  * This function acts as the middle layer between:
- *   (1) the MAKE_TRADITION macros in glibc, and
+ *   (1) the MAKE_LEGACY_SYSCALL macros in glibc, and
  *   (2) the actual Wasmtime entry function (__lind_make_syscall_trampoline).
  *
  * It forwards all syscall parameters—including the inter-cage metadata
@@ -64,7 +64,7 @@ int __lind_make_syscall_trampoline(unsigned int callnumber,
  * post-processing at this layer. Other syscalls, however, rely on the standard 
  * POSIX errno translation implemented here.
  */
-int make_threei (unsigned int callnumber, 
+int make_threei_call (unsigned int callnumber, 
     uint64_t callname, 
     uint64_t self_cageid, uint64_t target_cageid,
     uint64_t arg1, uint64_t arg1cageid,

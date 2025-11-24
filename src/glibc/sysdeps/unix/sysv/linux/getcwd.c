@@ -52,7 +52,7 @@ __getcwd (char *buf, size_t size)
   // Do NOT add null check here - NULL is valid
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
-  return MAKE_TRADITION (GETCWD_SYSCALL, "syscall|getcwd",
+  return MAKE_LEGACY_SYSCALL (GETCWD_SYSCALL, "syscall|getcwd",
 		       host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 libc_hidden_def (__getcwd)

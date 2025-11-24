@@ -31,7 +31,7 @@
 int
 __flock (int fd, int operation)
 {
-  return MAKE_TRADITION(FLOCK_SYSCALL, "syscall|flock", (uint64_t) fd, (uint64_t) operation, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+  return MAKE_LEGACY_SYSCALL(FLOCK_SYSCALL, "syscall|flock", (uint64_t) fd, (uint64_t) operation, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
 weak_alias (__flock, flock)

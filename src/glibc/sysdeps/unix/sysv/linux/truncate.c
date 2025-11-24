@@ -29,7 +29,7 @@ __truncate (const char *path, off_t length)
 {
   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
   
-  return MAKE_TRADITION (TRUNCATE_SYSCALL, "syscall|truncate",
+  return MAKE_LEGACY_SYSCALL (TRUNCATE_SYSCALL, "syscall|truncate",
 		       host_path, (uint64_t) length, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 weak_alias (__truncate, truncate)

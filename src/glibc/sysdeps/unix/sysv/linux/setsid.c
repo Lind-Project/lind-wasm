@@ -7,7 +7,7 @@ __GI_setsid (void)
 {
   /* In lind-wasm, session ID (sid) and process ID (pid) are the same,
      so setsid returns the process ID. */
-  return MAKE_TRADITION(GETPID_SYSCALL, "syscall|getpid(setsid)", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+  return MAKE_LEGACY_SYSCALL(GETPID_SYSCALL, "syscall|getpid(setsid)", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 
 weak_alias(__GI_setsid, __setsid)

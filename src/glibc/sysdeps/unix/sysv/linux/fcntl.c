@@ -46,7 +46,7 @@ __libc_fcntl (int fd, int cmd, ...)
     {
       case F_SETLKW:
       case F_SETLKW64:
-        return MAKE_TRADITION(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, NOTUSED, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(arg), NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+        return MAKE_LEGACY_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, NOTUSED, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(arg), NOTUSED, NOTUSED, WRAPPED_SYSCALL);
       case F_OFD_SETLKW:
         {
           struct flock *flk = (struct flock *) arg;
@@ -58,7 +58,7 @@ __libc_fcntl (int fd, int cmd, ...)
             .l_len = flk->l_len,
             .l_pid = flk->l_pid
           };
-          return MAKE_TRADITION(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, NOTUSED, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(&flk64), NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+          return MAKE_LEGACY_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, NOTUSED, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(&flk64), NOTUSED, NOTUSED, WRAPPED_SYSCALL);
         }
       case F_OFD_GETLK:
       case F_OFD_SETLK:
@@ -72,7 +72,7 @@ __libc_fcntl (int fd, int cmd, ...)
             .l_len = flk->l_len,
             .l_pid = flk->l_pid
           };
-          int ret = MAKE_TRADITION(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, NOTUSED, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(&flk64), NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+          int ret = MAKE_LEGACY_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, NOTUSED, (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(&flk64), NOTUSED, NOTUSED, WRAPPED_SYSCALL);
           if (ret == -1)
             return -1;
           if ((off_t) flk64.l_start != flk64.l_start
@@ -105,7 +105,7 @@ libc_hidden_weak (__fcntl)
 int
 __old_libc_fcntl64 (int fd, int cmd, ...)
 {
-	return MAKE_TRADITION(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
+	return MAKE_LEGACY_SYSCALL(FCNTL_SYSCALL, "syscall|fcntl", (uint64_t) fd, (uint64_t) cmd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 compat_symbol (libc, __old_libc_fcntl64, fcntl, GLIBC_2_0);
 versioned_symbol (libc, __libc_fcntl, fcntl, GLIBC_2_28);

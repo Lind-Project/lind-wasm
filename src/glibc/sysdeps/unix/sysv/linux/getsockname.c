@@ -27,7 +27,7 @@ __getsockname (int fd, struct sockaddr *__restrict addr, socklen_t *len)
   uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
   uint64_t host_len = TRANSLATE_GUEST_POINTER_TO_HOST (len);
   
-  return MAKE_TRADITION (GETSOCKNAME_SYSCALL, "syscall|getsockname",
+  return MAKE_LEGACY_SYSCALL (GETSOCKNAME_SYSCALL, "syscall|getsockname",
 		       (uint64_t) fd, host_addr, host_len,
 		       NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

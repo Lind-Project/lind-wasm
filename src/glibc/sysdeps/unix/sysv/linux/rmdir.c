@@ -29,7 +29,7 @@ __rmdir (const char *path)
 {
   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
   
-  return MAKE_TRADITION (RMDIR_SYSCALL, "syscall|rmdir",
+  return MAKE_LEGACY_SYSCALL (RMDIR_SYSCALL, "syscall|rmdir",
 		       host_path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 weak_alias (__rmdir, rmdir)

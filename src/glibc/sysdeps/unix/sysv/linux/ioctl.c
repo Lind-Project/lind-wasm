@@ -43,7 +43,7 @@ __ioctl (int fd, unsigned long int request, ...)
   uint64_t host_ptr
       = TRANSLATE_GUEST_POINTER_TO_HOST ((void *) (uintptr_t) raw);
 
-  return MAKE_TRADITION (IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd,
+  return MAKE_LEGACY_SYSCALL (IOCTL_SYSCALL, "syscall|ioctl", (uint64_t) fd,
 		       (uint64_t) request, host_ptr, NOTUSED, NOTUSED,
 		       NOTUSED, WRAPPED_SYSCALL);
 }

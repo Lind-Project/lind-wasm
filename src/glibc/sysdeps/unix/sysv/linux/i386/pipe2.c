@@ -7,7 +7,7 @@
 int
 __pipe2 (int pipedes[2], int flags)
 {
-  return MAKE_TRADITION (PIPE2_SYSCALL, "syscall|pipe2",
+  return MAKE_LEGACY_SYSCALL (PIPE2_SYSCALL, "syscall|pipe2",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (pipedes),
 		       (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

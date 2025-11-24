@@ -36,7 +36,7 @@ __fstat (int fd, struct stat *buf)
 
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
 
-  return MAKE_TRADITION (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
+  return MAKE_LEGACY_SYSCALL (FXSTAT_SYSCALL, "syscall|fstat", (uint64_t) fd,
 		       host_buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }
 

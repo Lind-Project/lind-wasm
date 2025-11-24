@@ -37,7 +37,7 @@
 pid_t
 __waitpid (pid_t pid, int *stat_loc, int options)
 {
-  return MAKE_TRADITION (WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) pid,
+  return MAKE_LEGACY_SYSCALL (WAITPID_SYSCALL, "syscall|waitpid", (uint64_t) pid,
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (stat_loc),
 		       (uint64_t) options, NOTUSED, NOTUSED, NOTUSED, WRAPPED_SYSCALL);
 }

@@ -8,14 +8,14 @@
  * sysroot.  It is intended to be installed into the sysroot include path and
  * used by grate authors to:
  *
- *   - Invoke threei style syscalls via make_threei().
+ *   - Invoke threei style syscalls via make_threei_call().
  *   - Register or deregister grate-level syscall handlers via register_handler().
  *   - Copy data between cages in a controlled way via copy_data_between_cages().
  */
 
 #include <stdint.h> // For uint64_t definition
 
-int make_threei (unsigned int callnumber, 
+int make_threei_call (unsigned int callnumber, 
     uint64_t callname, 
     uint64_t self_cageid, uint64_t target_cageid,
     uint64_t arg1, uint64_t arg1cageid,
