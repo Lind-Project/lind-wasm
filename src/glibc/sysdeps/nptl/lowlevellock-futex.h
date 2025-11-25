@@ -58,15 +58,6 @@
 # define __lll_private_flag(fl, private) \
   (((fl) | FUTEX_PRIVATE_FLAG) ^ (private))
 
-// # define lll_futex_syscall(nargs, futexp, op, ...)                      \
-//   ({                                                                    \
-//     long int __ret = MAKE_LEGACY_SYSCALL##nargs (FUTEX_SYSCALL, "syscall|futex", futexp, op, 	\
-// 				       __VA_ARGS__);                    \
-//     (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (__ret))         	\
-//      ? -INTERNAL_SYSCALL_ERRNO (__ret) : 0);                     	\
-//   })
-
-
 /* For most of these macros, the return value is never really used.
   Nevertheless, the protocol is that each one returns a negated errno
   code for failure or zero for success.  (Note that the corresponding
