@@ -5,17 +5,38 @@ use std::sync::Mutex;
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
 ///
-/// <self_cageid, <callnum, (addr, dest_grateid)>
+/// <self_cageid, <callnum, (in_grate_addr, dest_grateid)>
 /// Keys are the grate, the value is a HashMap with a key of the callnum
-/// and the values are a (target_call_index, grate) tuple for the actual handlers...
-type TargetCageMap = HashMap<u64, u64>; // Maps destfunc to dest_grateid
+/// and the values are a (in_grate_addr, grate) tuple for the actual handlers...
+type TargetCageMap = HashMap<u64, u64>; // Maps destfunc in grate addr to dest_grateid
 type CallnumMap = HashMap<u64, TargetCageMap>; // Maps targetcallnum to TargetCageMap
 type CageHandlerTable = HashMap<u64, CallnumMap>; // Maps self_cageid to CallnumMap
 
 lazy_static::lazy_static! {
-    // <self_cageid, <callnum, (target_call_index, dest_grateid)>
+    // <self_cageid, <callnum, (in_grate_addr, dest_grateid)>
     // callnum is mapped to addr, not self
     pub static ref HANDLERTABLE: Mutex<CageHandlerTable> = Mutex::new(HashMap::new());
+}
+
+/// Helper function for debugging.
+/// Prints the current contents of `HANDLERTABLE` in a readable format
+/// to help inspect cage–callnum–target mappings during development.
+pub fn print_handler_table() {
+    let table = HANDLERTABLE.lock().unwrap();
+    println!("=== HANDLERTABLE ===");
+    for (self_cageid, callnum_map) in table.iter() {
+        println!("CageID: {}", self_cageid);
+        for (callnum, target_map) in callnum_map.iter() {
+            println!("  Callnum: {}", callnum);
+            for (destfunc, dest_grateid) in target_map.iter() {
+                println!(
+                    "    destfunc: {} -> dest_grateid: {}",
+                    destfunc, dest_grateid
+                );
+            }
+        }
+    }
+    println!("====================");
 }
 
 /// Checks if a given cage has any registered syscall handlers in HANDLERTABLE.
@@ -93,8 +114,9 @@ pub fn _rm_cage_from_handler(cageid: u64) {
 pub fn register_handler_impl(
     targetcage: u64,
     targetcallnum: u64,
-    handlefunc: u64,
+    register_flag: u64, // 0: deregister, otherwise: register
     handlefunccage: u64,
+    in_grate_fn_ptr_u64: u64,
 ) -> i32 {
     let mut handler_table = HANDLERTABLE.lock().unwrap();
 
@@ -119,7 +141,7 @@ pub fn register_handler_impl(
         // Check if targetcallnum exists
         if let Some(callnum_entry) = cage_entry.get_mut(&targetcallnum) {
             // （targetcage, targetcallnum) exists
-            if handlefunc == 0 {
+            if register_flag == 0 {
                 // If deregistering a single syscall, remove the entry if it exists
                 callnum_entry.retain(|_, dest_grateid| *dest_grateid != handlefunccage);
                 // cleanup empties
@@ -136,7 +158,7 @@ pub fn register_handler_impl(
                 return 0;
             }
 
-            match callnum_entry.get(&handlefunc) {
+            match callnum_entry.get(&in_grate_fn_ptr_u64) {
                 Some(existing_dest_grateid) if *existing_dest_grateid == handlefunccage => {
                     // Already registered with same mapping, do nothing
                     return 0;
@@ -145,19 +167,19 @@ pub fn register_handler_impl(
                     return threei_const::ELINDAPIABORTED as i32; // Return error if a conflicting mapping exists
                 }
                 None => {
-                    // If `handlefunc` not exists, insert
-                    callnum_entry.insert(handlefunc, handlefunccage);
+                    // If `in_grate_fn_ptr` not exists, insert
+                    callnum_entry.insert(in_grate_fn_ptr_u64, handlefunccage);
                     return 0;
                 }
             }
         } else {
             // callnum does not exist yet under this cage
-            if handlefunc == 0 {
+            if register_flag == 0 {
                 // nothing to delete
                 return 0;
             }
             let mut m = HashMap::new();
-            m.insert(handlefunc, handlefunccage);
+            m.insert(in_grate_fn_ptr_u64, handlefunccage);
             cage_entry.insert(targetcallnum, m);
             return 0;
         }
@@ -165,7 +187,7 @@ pub fn register_handler_impl(
 
     // cage does not exist yet
     // Inserts a new mapping in HANDLERTABLE.
-    if handlefunc == 0 {
+    if register_flag == 0 {
         // nothing to delete
         return 0;
     }
@@ -175,7 +197,7 @@ pub fn register_handler_impl(
         .or_insert_with(HashMap::new)
         .entry(targetcallnum)
         .or_insert_with(HashMap::new)
-        .insert(handlefunc, handlefunccage);
+        .insert(in_grate_fn_ptr_u64, handlefunccage);
 
     0
 }
@@ -204,6 +226,6 @@ pub fn copy_handler_table_to_cage_impl(srccage: u64, targetcage: u64) -> u64 {
             "[3i|copy_handler_table_to_cage] srccage {} has no handler table",
             srccage
         );
-        threei_const::ELINDAPIABORTED as u64 // treat missing src table as an error
+        threei_const::ELINDAPIABORTED // treat missing src table as an error
     }
 }

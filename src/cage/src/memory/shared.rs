@@ -148,16 +148,18 @@ impl ShmSegment {
             }
         };
 
-        unsafe {
-            (libc::mmap(
+        let result = unsafe {
+            libc::mmap(
                 shmaddr as *mut c_void,
                 self.size as usize,
                 prot,
                 (MAP_SHARED as i32) | (MAP_FIXED as i32),
                 fobjfdno,
                 0,
-            ) as usize)
-        }
+            ) as usize
+        };
+
+        result
     }
 
     // unmap shared segment, decrease attachments

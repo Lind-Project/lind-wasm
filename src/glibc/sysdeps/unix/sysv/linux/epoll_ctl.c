@@ -20,13 +20,15 @@
 #include <sysdep.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 libc_hidden_proto (epoll_ctl)
 
-int
-epoll_ctl (int __epfd, int __op, int __fd,
-		      struct epoll_event *__event)
+    int epoll_ctl (int __epfd, int __op, int __fd, struct epoll_event *__event)
 {
-   return MAKE_SYSCALL(EPOLL_CTL_SYSCALL, "syscall|epoll_ctl", (uint64_t) __epfd, (uint64_t) __op, (uint64_t) __fd, (uint64_t) __event, NOTUSED, NOTUSED);
+     uint64_t host_event = TRANSLATE_GUEST_POINTER_TO_HOST (__event);
+  return MAKE_SYSCALL (EPOLL_CTL_SYSCALL, "syscall|epoll_ctl",
+		       (uint64_t) __epfd, (uint64_t) __op, (uint64_t) __fd,
+		       host_event, NOTUSED, NOTUSED);
 }
 libc_hidden_def (epoll_ctl)

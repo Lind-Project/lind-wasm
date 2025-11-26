@@ -19,6 +19,7 @@ use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_ba
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
+use wasmtime_lind_3i::take_gratefn_wasm;
 use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
@@ -70,8 +71,8 @@ impl LindCommonCtx {
         match call_number as i32 {
             // clone syscall
             CLONE_SYSCALL => {
-                let clone_args = unsafe { &mut *((arg1 + start_address) as *mut CloneArgStruct) };
-                clone_args.child_tid += start_address;
+                let clone_args = unsafe { &mut *(arg1 as *mut CloneArgStruct) };
+                // clone_args.child_tid += start_address;
                 wasmtime_lind_multi_process::clone_syscall(caller, clone_args)
             }
             // exec syscall
@@ -231,15 +232,18 @@ pub fn add_to_linker<
         "register-syscall",
         move |targetcage: u64,
               targetcallnum: u64,
-              handlefunc_index_in_this_grate: u64,
-              this_grate_id: u64|
+              handlefunc_flag: u64,
+              this_grate_id: u64,
+              in_grate_fn_ptr_u64: u64|
               -> i32 {
+            let entry = take_gratefn_wasm(this_grate_id).unwrap();
+
             register_handler(
-                UNUSED_ARG,
+                in_grate_fn_ptr_u64,
                 targetcage,
                 targetcallnum,
-                UNUSED_ID,
-                handlefunc_index_in_this_grate,
+                entry as u64,
+                handlefunc_flag,
                 this_grate_id,
                 UNUSED_ARG,
                 UNUSED_ID,
@@ -282,6 +286,28 @@ pub fn add_to_linker<
                 UNUSED_ARG, thiscage, targetcage, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG,
                 UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
             ) as i32
+        },
+    )?;
+
+    // export lind-get-memory-base for libc to query base address
+    linker.func_wrap(
+        "lind",
+        "lind-get-memory-base",
+        move |caller: Caller<'_, T>| -> u64 {
+            // Return the base address of memory[0] for the calling instance
+            let base = get_memory_base(&caller);
+            base
+        },
+    )?;
+
+    // export lind-get-cage-id for libc to query the current cage id (pid)
+    linker.func_wrap(
+        "lind",
+        "lind-get-cage-id",
+        move |caller: Caller<'_, T>| -> u64 {
+            let host = caller.data().clone();
+            let ctx = get_cx(&host);
+            ctx.getpid() as u64
         },
     )?;
 

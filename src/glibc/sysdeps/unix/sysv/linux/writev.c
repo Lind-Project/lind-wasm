@@ -19,14 +19,25 @@
 #include <unistd.h>
 #include <sys/uio.h>
 #include <sysdep-cancel.h>
+#include <addr_translation.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <errno.h>
+#include <stdlib.h>
 
 ssize_t
 __writev (int fd, const struct iovec *iov, int iovcnt)
 {
-  // Dennis Edit
-  return MAKE_SYSCALL(WRITEV_SYSCALL, "syscall|writev", (uint64_t) fd, (uint64_t)(uintptr_t) iov, (uint64_t) iovcnt, NOTUSED, NOTUSED, NOTUSED);
+  struct iovec *host_iov = (struct iovec *) iov;
+  for (int i = 0; i < iovcnt; ++i)
+  {
+    host_iov[i].iov_base = TRANSLATE_GUEST_POINTER_TO_HOST (host_iov[i].iov_base);
+  }
+
+  ssize_t ret = MAKE_SYSCALL (WRITEV_SYSCALL, "syscall|writev", (uint64_t) fd,
+			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST(host_iov),
+			      (uint64_t) iovcnt, NOTUSED, NOTUSED, NOTUSED);
+  return ret;
 }
 libc_hidden_def (__writev)
 weak_alias (__writev, writev)
