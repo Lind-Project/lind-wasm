@@ -47,8 +47,8 @@ __writev (int fd, const struct iovec *iov, int iovcnt)
   }
 
   ssize_t ret = MAKE_SYSCALL (WRITEV_SYSCALL, "syscall|writev", (uint64_t) fd,
-                (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST((uintptr_t) host_iov),
-                (uint64_t) iovcnt, NOTUSED, NOTUSED, NOTUSED);
+			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST((uintptr_t) host_iov),
+			      (uint64_t) iovcnt, NOTUSED, NOTUSED, NOTUSED);
   return ret;
 }
 libc_hidden_def (__writev)
