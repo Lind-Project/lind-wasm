@@ -15,7 +15,6 @@ int main() {
     // Create testfiles directory if it doesn't exist
     mkdir("testfiles", 0755);
         
-    // Open file for writing
     fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, 0777); 
     if (fd == -1) {
         perror("open failed");
