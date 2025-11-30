@@ -26,7 +26,9 @@
 struct iovec
   {
     void *iov_base;	/* Pointer to data.  */
+    int __padding1;
     size_t iov_len;	/* Length of data.  */
+    int __padding2;
   };
 
 #endif
