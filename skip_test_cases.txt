@@ -13,6 +13,7 @@ networking_tests/deterministic/uds-getsockname.c
 networking_tests/deterministic/uds-nb-select.c
 networking_tests/non-deterministic/serverclient.c
 networking_tests/non-deterministic/shutdown.c
+networking_tests/non-deterministic/socketepoll.c
 networking_tests/non-deterministic/socketselect.c
 networking_tests/non-deterministic/uds-serverclient.c
 networking_tests/non-deterministic/uds-socketselect.c
