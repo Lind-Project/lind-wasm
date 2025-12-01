@@ -7,6 +7,7 @@ file_tests/deterministic/creat_access.c
 file_tests/deterministic/readlinkat.c
 file_tests/non-deterministic/sc-writev.c
 memory_tests/deterministic/mmaptest.c
+memory_tests/fail/mmap-negative2.c
 networking_tests/deterministic/uds-getsockname.c
 networking_tests/deterministic/uds-nb-select.c
 networking_tests/non-deterministic/serverclient.c
