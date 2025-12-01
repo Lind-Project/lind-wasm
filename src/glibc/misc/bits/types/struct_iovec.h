@@ -26,7 +26,7 @@
 struct iovec
   {
     void *iov_base;	/* Pointer to data.  */
-    int __padding1;
+    int __padding1; /* Included to align the iovec struct size between the wasm32 guest and the host, since void* and size_t are 32-bit in wasm32 */
     size_t iov_len;	/* Length of data.  */
     int __padding2;
   };
