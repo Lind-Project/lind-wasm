@@ -30,7 +30,7 @@ setsockopt_syscall (int fd, int level, int optname, const void *optval,
 {
 uint64_t host_optval = TRANSLATE_GUEST_POINTER_TO_HOST (optval);
 
-return MAKE_SYSCALL(SETSOCKOPT_SYSCALL, "syscall|setsockopt", (uint64_t) fd, (uint64_t) level, (uint64_t) optname, host_optval, len, (uint64_t)0);
+return MAKE_LEGACY_SYSCALL(SETSOCKOPT_SYSCALL, "syscall|setsockopt", (uint64_t) fd, (uint64_t) level, (uint64_t) optname, host_optval, len, (uint64_t)0, TRANSLATE_ERRNO_ON);
 }
 
 #ifndef __ASSUME_TIME64_SYSCALLS

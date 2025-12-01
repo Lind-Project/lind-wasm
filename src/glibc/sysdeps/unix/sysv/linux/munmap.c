@@ -11,8 +11,8 @@ __GI___munmap (void *addr, size_t len)
 {
   uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
   
-  return MAKE_SYSCALL (MUNMAP_SYSCALL, "syscall|munmap",
-		       host_addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL (MUNMAP_SYSCALL, "syscall|munmap",
+		       host_addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 weak_alias(__GI___munmap, __munmap)

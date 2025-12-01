@@ -39,6 +39,6 @@ __readlink (const char *path, char *buf, size_t len)
    uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
    uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
    
-   return MAKE_SYSCALL(READLINK_SYSCALL, "syscall|readlink", host_path, host_buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_LEGACY_SYSCALL(READLINK_SYSCALL, "syscall|readlink", host_path, host_buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__readlink, readlink)

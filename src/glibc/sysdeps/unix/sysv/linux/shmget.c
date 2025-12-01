@@ -28,5 +28,5 @@
 int
 shmget (key_t key, size_t size, int shmflg)
 {
-   return MAKE_SYSCALL(SHMGET_SYSCALL, "syscall|shmget", (uint64_t) key, (uint64_t) size, (uint64_t) shmflg, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_LEGACY_SYSCALL(SHMGET_SYSCALL, "syscall|shmget", (uint64_t) key, (uint64_t) size, (uint64_t) shmflg, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

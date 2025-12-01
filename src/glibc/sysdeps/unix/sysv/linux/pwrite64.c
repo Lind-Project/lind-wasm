@@ -27,7 +27,7 @@ __libc_pwrite64 (int fd, const void *buf, size_t count, off64_t offset)
 {
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
-  return MAKE_SYSCALL(PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd, host_buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL(PWRITE_SYSCALL, "syscall|pwrite", (uint64_t) fd, host_buf, (uint64_t) count, (uint64_t) offset, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 weak_alias (__libc_pwrite64, __pwrite64)
