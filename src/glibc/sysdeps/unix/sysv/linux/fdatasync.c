@@ -27,6 +27,6 @@
 int
 fdatasync (int fd)
 {
-   return MAKE_SYSCALL(FDATASYNC_SYSCALL, "syscall|fdatasync", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_LEGACY_SYSCALL(FDATASYNC_SYSCALL, "syscall|fdatasync", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (fdatasync)

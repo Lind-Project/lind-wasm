@@ -32,9 +32,9 @@ __lstat (const char *file, struct stat *buf)
 
   // BUG: we do not have fstatat syscall in rawposix
   // so let's just use xstat - Qianxi Chen
-  return MAKE_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
+  return MAKE_LEGACY_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
 		       host_file, host_buf,
-		       NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 weak_alias (__lstat, lstat)

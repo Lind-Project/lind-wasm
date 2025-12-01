@@ -27,9 +27,9 @@
 int
 __mkdir (const char *path, mode_t mode)
 {
-  return MAKE_SYSCALL (MKDIR_SYSCALL, "syscall|mkdir",
+  return MAKE_LEGACY_SYSCALL (MKDIR_SYSCALL, "syscall|mkdir",
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (path),
-		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__mkdir)
 weak_alias (__mkdir, mkdir)
