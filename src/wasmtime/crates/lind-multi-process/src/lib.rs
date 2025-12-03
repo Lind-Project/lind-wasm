@@ -1527,6 +1527,17 @@ pub fn longjmp_call<
     0
 }
 
+pub fn getpid_call<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+) -> i32 {
+    let host = caller.data().clone();
+    let ctx = host.get_ctx();
+    ctx.getpid()
+}
+
 // check if the module has the necessary exported Asyncify functions
 fn support_asyncify(module: &Module) -> bool {
     module.get_export(ASYNCIFY_START_UNWIND).is_some()
