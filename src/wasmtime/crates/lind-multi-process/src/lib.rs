@@ -1297,8 +1297,8 @@ impl<
         return Ok(0);
     }
 
-    // Get the pid associated with the context. Currently unused interface
-    pub fn getpid(&self) -> i32 {
+    // Get the cageid associated with the context.
+    pub fn this_cageid(&self) -> i32 {
         self.pid
     }
 
@@ -1525,6 +1525,17 @@ pub fn longjmp_call<
     let _res = ctx.longjmp_call(caller, jmp_buf, retval);
 
     0
+}
+
+pub fn current_cageid<
+    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+    U: Clone + Send + 'static + std::marker::Sync,
+>(
+    caller: &mut Caller<'_, T>,
+) -> i32 {
+    let host = caller.data().clone();
+    let ctx = host.get_ctx();
+    ctx.this_cageid()
 }
 
 // check if the module has the necessary exported Asyncify functions
