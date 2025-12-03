@@ -296,7 +296,7 @@ pub fn add_to_linker<
         "lind",
         "lind-get-cage-id",
         move |mut caller: Caller<'_, T>| -> u64 {
-            wasmtime_lind_multi_process::getpid_call(&mut caller) as u64
+            wasmtime_lind_multi_process::current_cageid(&mut caller) as u64
         },
     )?;
 
