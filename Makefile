@@ -95,6 +95,6 @@ clean:
 .PHONY: distclean
 distclean: clean
 	@echo "removing test outputs & temp files"
-	$(RM) -f results.json report.html
+	$(RM) -f results.json report.html e2e_status
 	$(RM) -r $(LIND_ROOT)/testfiles || true
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete
