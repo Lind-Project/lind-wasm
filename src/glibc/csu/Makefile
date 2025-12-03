@@ -29,6 +29,7 @@ include ../Makeconfig
 routines = \
   $(libc-init) \
   check_fds \
+  inotify \
   dso_handle \
   init-first \
   libc-start \

@@ -20,12 +20,15 @@
 #include <fcntl.h>
 #include <sysdep.h>
 #include <syscall-template.h>
-
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 /* Make a link to FROM called TO.  */
 int
 __link (const char *from, const char *to)
 {
-   return MAKE_SYSCALL(5, "syscall|link", (uint64_t) from, (uint64_t) to, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL (LINK_SYSCALL, "syscall|link",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (from),
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (to),
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
-
 weak_alias (__link, link)

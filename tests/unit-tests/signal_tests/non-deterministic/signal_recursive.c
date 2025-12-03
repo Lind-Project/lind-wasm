@@ -9,7 +9,7 @@
 void handle_signal3(int signal) {
     printf("---Caught signal %d\n", signal);
     printf("---start of signal handler 3\n");
-    sleep(2);
+    sleep(1);
     fork();
     printf("---end of signal handler 3\n");
 }
@@ -17,14 +17,14 @@ void handle_signal3(int signal) {
 void handle_signal2(int signal) {
     printf("--Caught signal %d\n", signal);
     printf("--start of signal handler 2\n");
-    sleep(2);
+    sleep(1);
     printf("--end of signal handler 2\n");
 }
 
 void handle_signal1(int signal) {
     printf("-Caught signal %d\n", signal);
     printf("-start of signal handler 1\n");
-    sleep(2);
+    sleep(1);
     printf("-end of signal handler 1\n");
 }
 
@@ -63,14 +63,14 @@ int main() {
         printf("*child ready to send SIGUSR2\n");
         kill(ppid, SIGUSR2);
         printf("*child sent SIGUSR2\n");
-        sleep(2);
+        sleep(1);
         printf("*child ready to send SIGINT\n");
         kill(ppid, SIGINT);
         printf("*child done kill\n");
     }
     else
     {
-        int counter = 5;
+        int counter = 3;
         while (counter--) {
             printf("parent in loop, pid=%d\n", getpid());
             sleep(1);

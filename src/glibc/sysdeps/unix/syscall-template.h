@@ -2,69 +2,46 @@
 #include <stdint.h> // For uint64_t
 #include <unistd.h>
 #include <lind_syscall.h>
+#include <addr_translation.h>
 
 // Define NOTUSED for unused arguments
 #define NOTUSED 0xdeadbeefdeadbeefULL
 
-#define WARPPED_SYSCALL 0
-#define RAW_SYSCALL 1
+// Define flags for errno translation
+// See comments in [`lind_syscall/lind_syscall.c`] for details
+#define TRANSLATE_ERRNO_ON 1
+#define TRANSLATE_ERRNO_OFF 0
 
-#define MAKE_SYSCALL6(syscallnum, callname, arg1, arg2, arg3, arg4, arg5, arg6) \
-    lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(arg3), \
-                 (unsigned long long)(arg4), (unsigned long long)(arg5), (unsigned long long)(arg6), WARPPED_SYSCALL)
-
-#define MAKE_SYSCALL5(syscallnum, callname, arg1, arg2, arg3, arg4, arg5) \
-lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(arg3), \
-            (unsigned long long)(arg4), (unsigned long long)(arg5), (unsigned long long)(NOTUSED), WARPPED_SYSCALL)
-
-#define MAKE_SYSCALL4(syscallnum, callname, arg1, arg2, arg3, arg4) \
-    lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(arg3), \
-                 (unsigned long long)(arg4), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), WARPPED_SYSCALL)
-
-#define MAKE_SYSCALL3(syscallnum, callname, arg1, arg2, arg3) \
-    lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(arg3), \
-                 (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), WARPPED_SYSCALL)
-
-#define MAKE_SYSCALL2(syscallnum, callname, arg1, arg2) \
-lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(NOTUSED), \
-             (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), WARPPED_SYSCALL)
-
-#define MAKE_SYSCALL1(syscallnum, callname, arg1) \
-lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), \
-             (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), WARPPED_SYSCALL)
-
-#define MAKE_SYSCALL0(syscallnum, callname) \
-lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), \
-             (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), WARPPED_SYSCALL)
-
-#define MAKE_SYSCALL MAKE_SYSCALL6
-
-#define MAKE_RAW_SYSCALL6(syscallnum, callname, arg1, arg2, arg3, arg4, arg5, arg6) \
-    lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(arg3), \
-                 (unsigned long long)(arg4), (unsigned long long)(arg5), (unsigned long long)(arg6), RAW_SYSCALL)
-
-#define MAKE_RAW_SYSCALL5(syscallnum, callname, arg1, arg2, arg3, arg4, arg5) \
-lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(arg3), \
-            (unsigned long long)(arg4), (unsigned long long)(arg5), (unsigned long long)(NOTUSED), RAW_SYSCALL)
-
-#define MAKE_RAW_SYSCALL4(syscallnum, callname, arg1, arg2, arg3, arg4) \
-    lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(arg3), \
-                 (unsigned long long)(arg4), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), RAW_SYSCALL)
-
-#define MAKE_RAW_SYSCALL3(syscallnum, callname, arg1, arg2, arg3) \
-    lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(arg3), \
-                 (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), RAW_SYSCALL)
-
-#define MAKE_RAW_SYSCALL2(syscallnum, callname, arg1, arg2) \
-lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(arg2), (unsigned long long)(NOTUSED), \
-             (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), RAW_SYSCALL)
-
-#define MAKE_RAW_SYSCALL1(syscallnum, callname, arg1) \
-lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(arg1), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), \
-             (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), RAW_SYSCALL)
-
-#define MAKE_RAW_SYSCALL0(syscallnum, callname) \
-lind_syscall(syscallnum, (unsigned long long)(callname), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), \
-             (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), (unsigned long long)(NOTUSED), RAW_SYSCALL)
-
-#define MAKE_RAW_SYSCALL MAKE_RAW_SYSCALL6
+/*
+ * MAKE_LEGACY_SYSCALL:
+ *
+ * Legacy macro used inside the glibc compatibility layer for traditional
+ * POSIX-style syscalls.  This macro wraps a syscall using the calling
+ * convention expected by legacy threei code, and automatically assigns
+ * both the `self_cageid` and `target_cageid` to the current cage
+ * (`__lind_cageid`).
+ *
+ * Arguments (arg1..arg6) are paired with the caller's cage ID and forwarded
+ * directly into make_threei_call, which performs the actual three-i style call.
+ *
+ * In the long term, this macro exists solely for backward compatibility
+ * with glibc and legacy POSIX implementations.  New subsystems (e.g., grates)
+ * should use make_threei_call directly.
+ */
+#define MAKE_LEGACY_SYSCALL(syscall_num, syscall_name, arg1, arg2, arg3, arg4, arg5, arg6, translate_errno) \
+    ({ \
+        uint64_t __self = __lind_cageid; \
+        make_threei_call( \
+            (syscall_num), \
+            (syscall_name), \
+            __self, /* self_cageid */ \
+            __self, /* target_cageid: same as self for traditional syscalls */ \
+            (uint64_t)(arg1), __self, \
+            (uint64_t)(arg2), __self, \
+            (uint64_t)(arg3), __self, \
+            (uint64_t)(arg4), __self, \
+            (uint64_t)(arg5), __self, \
+            (uint64_t)(arg6), __self, \
+            (translate_errno) \
+        ); \
+    })

@@ -20,6 +20,8 @@
 #include <sysdep.h>
 #include <kernel_stat.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 #if !STATFS_IS_STATFS64
 
@@ -27,7 +29,11 @@
 int
 __statfs (const char *file, struct statfs *buf)
 {
-	return MAKE_SYSCALL(26, "syscall|statfs", (uint64_t) file, (uint64_t) buf , NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_file = TRANSLATE_GUEST_POINTER_TO_HOST (file);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  return MAKE_LEGACY_SYSCALL (STATFS_SYSCALL, "syscall|statfs",
+		       host_file, host_buf,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__statfs)
 weak_alias (__statfs, statfs)

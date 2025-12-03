@@ -23,11 +23,12 @@
 #include <errno.h>
 #include <shlib-compat.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 off64_t
 __lseek64 (int fd, off64_t offset, int whence)
 {
-return MAKE_SYSCALL(14, "syscall|lseek", (uint64_t) fd, (uint64_t) offset, (uint64_t) whence, NOTUSED, NOTUSED, NOTUSED);
+return MAKE_LEGACY_SYSCALL(LSEEK_SYSCALL, "syscall|lseek", (uint64_t) fd, (uint64_t) offset, (uint64_t) whence, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 #ifdef  __OFF_T_MATCHES_OFF64_T

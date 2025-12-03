@@ -20,10 +20,11 @@
 #include <unistd.h>
 #include <sysdep.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __dup3 (int fd, int fd2, int flags)
 {
-  return MAKE_SYSCALL(27, "syscall|dup3", (uint64_t) fd, (uint64_t) fd2, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL(DUP3_SYSCALL, "syscall|dup3", (uint64_t) fd, (uint64_t) fd2, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__dup3, dup3)

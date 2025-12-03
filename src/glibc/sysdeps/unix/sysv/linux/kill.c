@@ -20,15 +20,16 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __kill (__pid_t a,  int b)
 {
-   return MAKE_SYSCALL(148, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_LEGACY_SYSCALL(KILL_SYSCALL, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 int
 kill (__pid_t a,  int b)
 {
-   return MAKE_SYSCALL(148, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+   return MAKE_LEGACY_SYSCALL(KILL_SYSCALL, "syscall|kill", (uint64_t) a, (uint64_t) b, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

@@ -1,7 +1,11 @@
 #![allow(dead_code)]
 
+use cfg_if::cfg_if;
+
 use anyhow::{anyhow, Result};
-use rawposix::safeposix::dispatcher::lind_syscall_api;
+use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use threei::threei::make_syscall;
+use wasmtime_lind_3i::remove_gratefn_wasm;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -16,6 +20,7 @@ use wasmtime::{
     InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Trap, Val,
 };
 
+use cage::signal::{lind_signal_init, lind_thread_exit};
 use wasmtime_environ::MemoryIndex;
 
 pub mod clone_constants;
@@ -28,8 +33,6 @@ const ASYNCIFY_START_UNWIND: &str = "asyncify_start_unwind";
 const ASYNCIFY_STOP_UNWIND: &str = "asyncify_stop_unwind";
 const ASYNCIFY_START_REWIND: &str = "asyncify_start_rewind";
 const ASYNCIFY_STOP_REWIND: &str = "asyncify_stop_rewind";
-
-const LIND_FS_ROOT: &str = "/home/lind/lind-wasm/src/RawPOSIX/tmp";
 
 const UNWIND_METADATA_SIZE: u64 = 16;
 
@@ -350,18 +353,26 @@ impl<
         }
         let child_cageid = child_cageid.unwrap();
         let parent_pid = self.pid;
-
         // calling fork in rawposix to fork the cage
-        lind_syscall_api(
-            self.pid as u64,
-            FORK_SYSCALL as u32, // fork syscall
-            0,
-            child_cageid,
-            0,
-            0,
-            0,
-            0,
-            0,
+        // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+        // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+        make_syscall(
+            self.pid as u64,       // self cage id
+            (FORK_SYSCALL) as u64, // syscall num for fork
+            UNUSED_NAME,           // syscall name
+            self.pid as u64,       // target cage id, should be itself
+            child_cageid,          // 1st arg
+            self.pid as u64,       // 1st arg's cage id
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
         );
 
         // use the same engine for parent and child
@@ -411,7 +422,7 @@ impl<
                     }
 
                     // instantiate the module
-                    let instance = instance_pre
+                    let (instance, _) = instance_pre
                         .instantiate_with_lind(
                             &mut store,
                             InstantiateType::InstantiateChild {
@@ -421,15 +432,26 @@ impl<
                         )
                         .unwrap();
 
-                    // retrieve the epoch global
-                    let lind_epoch = instance
-                        .get_export(&mut store, "epoch")
-                        .and_then(|export| export.into_global())
-                        .expect("Failed to find shared_global");
-                    // retrieve the handler (underlying pointer) for the epoch global
-                    let pointer = lind_epoch.get_handler(&mut store);
+                    cfg_if! {
+                        // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                        // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                        // This is intended for debugging only and should not be used in production.
+                        if #[cfg(feature = "disable_signals")] {
+                            let pointer: *mut u64 = &mut 0;
+                        } else {
+                            // retrieve the epoch global
+                            let lind_epoch = instance
+                                .get_export(&mut store, "epoch")
+                                .and_then(|export| export.into_global())
+                                .expect("Failed to find epoch global export!");
+
+                            // retrieve the handler (underlying pointer) for the epoch global
+                            let pointer = lind_epoch.get_handler(&mut store);
+                        }
+                    }
+
                     // initialize the signal for the main thread of forked cage
-                    rawposix::interface::lind_signal_init(
+                    lind_signal_init(
                         child_cageid,
                         pointer,
                         THREAD_START_ID,
@@ -499,22 +521,33 @@ impl<
                         match exit_code {
                             Val::I32(val) => {
                                 // exit the main thread
-                                if rawposix::interface::lind_thread_exit(
-                                    child_cageid,
-                                    THREAD_START_ID as u64,
-                                ) {
+                                if lind_thread_exit(child_cageid, THREAD_START_ID as u64) {
+                                    // Clean up the context from the global table
+                                    // We only register grate calls into the vmctx table during fork+exec (the logic
+                                    // lives in the grate module), so a bare fork currently does not register a vmctx
+                                    // table instance.
+                                    remove_gratefn_wasm(child_cageid as u64);
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
-                                    lind_syscall_api(
-                                        child_cageid,
-                                        EXIT_SYSCALL as u32,
-                                        0,
-                                        *val as u64,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
-                                        0,
+                                    // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                                    // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+                                    make_syscall(
+                                        child_cageid,          // self cage
+                                        (EXIT_SYSCALL) as u64, // syscall num
+                                        UNUSED_NAME,           // syscall name
+                                        child_cageid,          // target cage, should be itself
+                                        *val as u64,           // 1st arg: status
+                                        child_cageid,          // 1st arg's cage id
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
+                                        UNUSED_ARG,
+                                        UNUSED_ID,
                                     );
 
                                     // the cage just exited, decrement the cage counter
@@ -697,15 +730,26 @@ impl<
                         .unwrap();
                     let _ = stack_pointer_setter.call(&mut store, (stack_addr - offset) as i32);
 
-                    // retrieve the epoch global
-                    let lind_epoch = instance
-                        .get_export(&mut store, "epoch")
-                        .and_then(|export| export.into_global())
-                        .expect("Failed to find shared_global");
-                    // retrieve the handler (underlying pointer) for the epoch global
-                    let pointer = lind_epoch.get_handler(&mut store);
+                    cfg_if! {
+                        // The disable_signals feature allows Wasmtime to run Lind binaries without inserting an epoch.
+                        // It sets the signal pointer to 0, so any signals will trigger a fault in RawPOSIX.
+                        // This is intended for debugging only and should not be used in production.
+                        if #[cfg(feature = "disable_signals")] {
+                            let pointer: *mut u64 = &mut 0;
+                        } else {
+                            // retrieve the epoch global
+                            let lind_epoch = instance
+                                .get_export(&mut store, "epoch")
+                                .and_then(|export| export.into_global())
+                                .expect("Failed to find epoch global export!");
+
+                            // retrieve the handler (underlying pointer) for the epoch global
+                            let pointer = lind_epoch.get_handler(&mut store);
+                        }
+                    }
+
                     // initialize the signal for the thread of the cage
-                    rawposix::interface::lind_signal_init(
+                    lind_signal_init(
                         child_cageid as u64,
                         pointer,
                         next_tid as i32,
@@ -763,22 +807,36 @@ impl<
                     match exit_code {
                         Val::I32(val) => {
                             // exit the thread
-                            if rawposix::interface::lind_thread_exit(
+                            if lind_thread_exit(
                                 child_cageid as u64,
                                 next_tid as u64,
                             ) {
+                                // Clean up the context from the global table
+                                if !remove_gratefn_wasm(child_cageid as u64) {
+                                    eprintln!("[wasmtime|pthread_create] Warning: failed to remove context for cage {}", child_cageid);
+                                }
+
                                 // we clean the cage only if this is the last thread in the cage
                                 // exit the cage with the exit code
-                                lind_syscall_api(
-                                    child_cageid as u64,
-                                    EXIT_SYSCALL as u32,
-                                    0,
-                                    *val as u64,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
-                                    0,
+                                // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+                                // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+                                make_syscall(
+                                    (child_cageid) as u64, // self cage
+                                    (EXIT_SYSCALL) as u64, // syscall num
+                                    UNUSED_NAME, // syscall name
+                                    (child_cageid) as u64, // target cage
+                                    *val as u64, // 1st arg: status
+                                    (child_cageid) as u64, // 1st arg's cage id
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
+                                    UNUSED_ID,
+                                    UNUSED_ARG,
                                 );
 
                                 // the cage just exited, decrement the cage counter
@@ -838,11 +896,11 @@ impl<
         let parent_unwind_data_start_sys = address as u64 + parent_unwind_data_start_usr;
 
         // parse the path and argv
-        let path_ptr = ((address as i64) + path) as *const u8;
+        let path_ptr = path as *const u8;
         let path_str;
 
         // NOTE: the address passed from wasm module is 32-bit address
-        let argv_ptr = ((address as i64) + argv) as *const *const u8;
+        let argv_ptr = argv as *const u64;
         let mut args = Vec::new();
         let mut environs = None;
 
@@ -865,13 +923,13 @@ impl<
             // parse the arg pointers
             // Iterate over argv until we encounter a NULL pointer
             loop {
-                let c_str = *(argv_ptr as *const i32).add(i) as *const i32;
+                let c_str = *(argv_ptr.add(i));
 
-                if c_str.is_null() {
+                if c_str == 0 {
                     break; // Stop if we encounter NULL
                 }
 
-                let arg_ptr = ((address as i64) + (c_str as i64)) as *const c_char;
+                let arg_ptr = c_str as *const c_char;
 
                 // Convert it to a Rust String
                 let arg = CStr::from_ptr(arg_ptr).to_string_lossy().into_owned();
@@ -889,7 +947,7 @@ impl<
 
         // NOTE: join method will replace the original path if joined path is an absolute path
         // so must make sure the usr_path is not absolute otherwise it may escape the lind filesystem
-        let real_path = Path::new(LIND_FS_ROOT).join(usr_path);
+        let real_path = Path::new(LIND_ROOT).join(usr_path);
         let real_path_str = String::from(real_path.to_str().unwrap());
 
         // if the file to exec does not exist
@@ -900,7 +958,7 @@ impl<
 
         // parse the environment variables
         if let Some(envs_addr) = envs {
-            let env_ptr = ((address as i64) + envs_addr) as *const *const u8;
+            let env_ptr = envs_addr as *const u64;
             let mut env_vec = Vec::new();
 
             unsafe {
@@ -908,13 +966,13 @@ impl<
 
                 // Iterate over argv until we encounter a NULL pointer
                 loop {
-                    let c_str = *(env_ptr as *const i32).add(i) as *const i32;
+                    let c_str = *(env_ptr.add(i));
 
-                    if c_str.is_null() {
+                    if c_str == 0 {
                         break; // Stop if we encounter NULL
                     }
 
-                    let env_ptr = ((address as i64) + (c_str as i64)) as *const c_char;
+                    let env_ptr = c_str as *const c_char;
 
                     // Convert it to a Rust String
                     let env = CStr::from_ptr(env_ptr).to_string_lossy().into_owned();
@@ -968,17 +1026,25 @@ impl<
 
             // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
             // argument to change the process id. If we pass the same cageid, it would cause some error
-            // lind_exec(cloned_pid as u64, cloned_pid as u64);
-            lind_syscall_api(
-                cloned_pid as u64,
-                EXEC_SYSCALL as u32, // exec syscall
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
+            // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
+            // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
+            make_syscall(
+                cloned_pid as u64,     // self cage id
+                (EXEC_SYSCALL) as u64, // syscall num for exec
+                UNUSED_NAME,           // syscall name
+                cloned_pid as u64,     // target cage id, should be itself
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
+                UNUSED_ARG,
+                UNUSED_ID,
             );
 
             let ret = exec_call(
@@ -1117,7 +1183,7 @@ impl<
             let hash =
                 store.store_unwind_data(unwind_data_start_sys as *const u8, rewind_total_size);
             unsafe {
-                *((cloned_address + jmp_buf as u64) as *mut u64) = hash;
+                std::ptr::write_unaligned((cloned_address + jmp_buf as u64) as *mut u64, hash);
             }
 
             // mark the parent to rewind state
@@ -1188,7 +1254,8 @@ impl<
             // unwind finished and we need to stop the unwind
             let _res = asyncify_stop_unwind_func.call(&mut store, ());
 
-            let hash = unsafe { *((cloned_address + jmp_buf as u64) as *mut u64) };
+            let hash =
+                unsafe { std::ptr::read_unaligned((cloned_address + jmp_buf as u64) as *mut u64) };
             // retrieve the unwind data
             let data = store.retrieve_unwind_data(hash);
 

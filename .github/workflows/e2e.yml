@@ -2,22 +2,122 @@ name: End-to-end testing
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - main
 
-permissions: {}
+permissions:
+  pull-requests: write
 
 jobs:
   docker:
+    # If the workflow was triggered by anything other than a pull_request event 
+    # (e.g., push, workflow_dispatch, schedule, pull_request_target), 
+    # github.event_name != 'pull_request' is true.
+    # github.event.pull_request is only populated on pull_request events. 
+    # It is true when the PR is not a draft (i.e., “Ready for review”).
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    env:
+      REPORT_LOCAL_DIR: test-reports
+      REPORT_LOCAL_FILE: wasm-e2e-report.html
+      COMMENT_LOCAL_FILE: e2e_comment.md
+
     steps:
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@18ce135bb5112fa8ce4ed6c17ab05699d7f3a5e0 # v3.11.0
-      - name: Build e2e
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      # First attempt at build
+      - name: Build e2e (attempt 1)
+        id: build_e2e_try1
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          file: scripts/Dockerfile.e2e
+          file: Docker/Dockerfile.e2e          
+          tags: e2e:latest
+          outputs: type=local,dest=${{ env.REPORT_LOCAL_DIR }}
+
+      # Small backoff if it failed
+      - name: Backoff (after try 1)
+        if: steps.build_e2e_try1.outcome == 'failure'
+        run: sleep 15
+      
+      # Second attempt
+      - name: Build e2e (attempt 2)
+        id: build_e2e_try2
+        if: steps.build_e2e_try1.outcome == 'failure'
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          file: Docker/Dockerfile.e2e          
+          tags: e2e:latest
+          outputs: type=local,dest=${{ env.REPORT_LOCAL_DIR }}
+      
+      # Slightly Longer Backoff if it failed again
+      - name: Backoff (after try 2)
+        if: steps.build_e2e_try2.outcome == 'failure'
+        run: sleep 30
+
+      # Third and final attempt
+      - name: Build e2e (attempt 3)
+        id: build_e2e_try3
+        if: steps.build_e2e_try2.outcome == 'failure'
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          file: Docker/Dockerfile.e2e          
+          tags: e2e:latest
+          outputs: type=local,dest=${{ env.REPORT_LOCAL_DIR }}
+
+      - name: Read test status
+        id: e2e
+        run: |
+          STATUS_FILE="${{ env.REPORT_LOCAL_DIR }}/e2e_status"
+          echo "Checking status file at: $STATUS_FILE"
+          echo "----- File contents (if any) -----"
+          if [[ -f "$STATUS_FILE" ]]; then
+            cat "$STATUS_FILE"
+            # export to step output AND job env
+            cat "$STATUS_FILE" >> "$GITHUB_OUTPUT"   # writes E2E_STATUS=pass|fail
+            cat "$STATUS_FILE" >> "$GITHUB_ENV"
+          else
+            echo "(none)"
+            echo "E2E_STATUS=fail" >> "$GITHUB_OUTPUT"
+            echo "E2E_STATUS=fail" >> "$GITHUB_ENV"
+            echo "::warning file=$STATUS_FILE::Status file missing, defaulting to fail"
+          fi
+          echo "----------------------------------"
+
+      - name: Upload HTML report artifact to report
+        uses: actions/upload-artifact@v5
+        with:
+          name: wasm-e2e-report
+          path: ${{ env.REPORT_LOCAL_DIR }}/${{ env.REPORT_LOCAL_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+      
+      - name: Post PR comment
+        # Run only on branch PRs, not on fork PRs
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const path = `${process.env.REPORT_LOCAL_DIR}/${process.env.COMMENT_LOCAL_FILE}`;
+            const body = fs.readFileSync(path, 'utf8');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });      
+
+      - name: Fail if tests failed
+        if: steps.e2e.outputs.E2E_STATUS == 'fail'
+        run: |
+          echo "Tests failed; failing job after posting the report/comment."
+          exit 1

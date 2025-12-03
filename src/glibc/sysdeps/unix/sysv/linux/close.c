@@ -20,6 +20,7 @@
 #include <sysdep-cancel.h>
 #include <not-cancel.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 /* Close the file descriptor FD.  */
 
@@ -27,7 +28,7 @@
 int
 __close (int fd)
 {
-  return MAKE_SYSCALL(11, "syscall|close", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL(CLOSE_SYSCALL, "syscall|close", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
   // return SYSCALL_CANCEL (close, fd);
 }
 libc_hidden_def (__close)

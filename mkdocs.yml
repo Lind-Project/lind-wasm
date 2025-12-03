@@ -7,17 +7,23 @@ theme:
   features:
     - content.action.edit
 
+plugins:
+  - search
+  - section-index
+
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Internal Documentation:
+    - internal/index.md
     - libc: internal/libc.md
     - Wasmtime: internal/wasmtime.md
     - RawPOSIX: internal/rawposix.md
     - Multi-Processing: internal/multiprocess-support.md
     - Signals: internal/signals.md
+    - Memory: internal/memory.md
   - Contributing:
-    - contribute/README.md
+    - contribute/index.md
     - Development setup: contribute/dev-container.md
     - Rust style guide: contribute/styleguide.md
     - Lind toolchain: contribute/toolchain.md
@@ -26,8 +32,9 @@ nav:
     - Adding to the docs: contribute/add-docs.md
     - Security policy: contribute/security.md
     - Docker Hub release workflow: contribute/docker-release-workflow.md
+    - End-to-End Testing: contribute/e2e-testing.md
   - Community:
-    - community/README.md
+    - community/index.md
     - Team: community/team.md
     - Code of conduct: community/conduct.md
 

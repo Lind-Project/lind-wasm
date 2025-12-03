@@ -1,10 +1,11 @@
 #include <unistd.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 int
 __fchdir (int __fd)
 {
-  return MAKE_SYSCALL(161, "syscall|fchdir", (uint64_t) __fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL(FCHDIR_SYSCALL, "syscall|fchdir", (uint64_t) __fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 weak_alias (__fchdir, fchdir)

@@ -18,10 +18,17 @@
 #include <sys/socket.h>
 #include <socketcall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 int
 __getpeername (int fd, struct sockaddr *__restrict addr, socklen_t *len)
 {
-   return MAKE_SYSCALL(145, "syscall|getpeername", (uint64_t) fd, (uint64_t) addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
+  uint64_t host_len = TRANSLATE_GUEST_POINTER_TO_HOST (len);
+  
+  return MAKE_LEGACY_SYSCALL (GETPEERNAME_SYSCALL, "syscall|getpeername",
+		       (uint64_t) fd, host_addr, host_len,
+		       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__getpeername, getpeername)

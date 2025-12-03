@@ -26,6 +26,7 @@
 # include <xstatconv.h>
 # include <xstatover.h>
 # include <shlib-compat.h>
+#include <lind_syscall_num.h>
 
 # if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
 
@@ -33,9 +34,12 @@
 int
 __fxstat (int vers, int fd, struct stat *buf)
 {
-	return MAKE_SYSCALL(17, "syscall|fxstat", (uint64_t) vers, (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  return MAKE_LEGACY_SYSCALL (FXSTAT_SYSCALL, "syscall|fxstat", (uint64_t) vers,
+		       (uint64_t) fd, host_buf,
+		       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
-# endif /* LIB_COMPAT  */
+# endif /* LIB_COMPAT */
 
 #endif /* XSTAT_IS_XSTAT64  */

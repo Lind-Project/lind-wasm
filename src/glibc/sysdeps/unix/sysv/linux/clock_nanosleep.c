@@ -25,6 +25,8 @@
 #include <shlib-compat.h>
 
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* We can simply use the syscall.  The CPU clocks are not supported
    with this function.  */
@@ -33,5 +35,9 @@ __clock_nanosleep_time64 (clockid_t clock_id, int flags,
 			  const struct __timespec64 *req,
 			  struct __timespec64 *rem)
 {
-  return MAKE_SYSCALL(181, "syscall|nanosleep", (uint64_t) clock_id, (uint64_t) flags, (uint64_t)req, (uint64_t)rem, NOTUSED, NOTUSED);
+  uint64_t host_req = TRANSLATE_GUEST_POINTER_TO_HOST (req);
+  uint64_t host_rem = TRANSLATE_GUEST_POINTER_TO_HOST (rem);
+  return MAKE_LEGACY_SYSCALL (
+      NANOSLEEP_TIME64_SYSCALL, "syscall|nanosleep", (uint64_t) clock_id,
+      (uint64_t) flags, host_req, host_rem, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

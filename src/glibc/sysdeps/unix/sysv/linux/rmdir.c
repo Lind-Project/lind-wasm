@@ -20,11 +20,16 @@
 #include <fcntl.h>
 #include <sysdep.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Remove the directory PATH.  */
 int
 __rmdir (const char *path)
 {
-   return MAKE_SYSCALL(132, "syscall|rmdir", (uint64_t) path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
+  
+  return MAKE_LEGACY_SYSCALL (RMDIR_SYSCALL, "syscall|rmdir",
+		       host_path, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__rmdir, rmdir)

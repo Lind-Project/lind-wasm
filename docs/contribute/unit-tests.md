@@ -21,7 +21,7 @@ cd lind-wasm
 ```
 3. Build Docker Image 
 ```
-docker build --platform=linux/amd64 -f scripts/Dockerfile.e2e -t dev --target base .
+docker build --platform=linux/amd64 -f Docker/Dockerfile.e2e -t dev --target base .
 ```
 4. Run the image 
 ```bash

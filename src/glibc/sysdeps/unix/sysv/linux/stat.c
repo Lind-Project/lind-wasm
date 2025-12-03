@@ -20,13 +20,18 @@
 #include <fcntl.h>
 #include <kernel_stat.h>
 #include <syscall-template.h>
-
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 #if !XSTAT_IS_XSTAT64
 int
 __stat (const char *fd, struct stat *buf)
 {
- return MAKE_SYSCALL(9, "syscall|xstat", (uint64_t) fd, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED, NOTUSED); 
+  uint64_t host_fd = TRANSLATE_GUEST_POINTER_TO_HOST (fd);
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  
+  return MAKE_LEGACY_SYSCALL (XSTAT_SYSCALL, "syscall|xstat",
+		       host_fd, host_buf,
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
-
 weak_alias (__stat, stat)
 #endif

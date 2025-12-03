@@ -18,15 +18,20 @@
 
 #include <errno.h>
 #include <sys/poll.h>
-
 #include <sysdep-cancel.h>
 #include <sys/syscall.h>
 #include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 int
 __poll (struct pollfd *fds, nfds_t nfds, int timeout)
 {
-   return MAKE_SYSCALL(48, "syscall|poll", (uint64_t) fds, (uint64_t) nfds, (uint64_t) timeout, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_fds = TRANSLATE_GUEST_POINTER_TO_HOST (fds);
+  
+  return MAKE_LEGACY_SYSCALL (POLL_SYSCALL, "syscall|poll",
+		       host_fds, (uint64_t) nfds, (uint64_t) timeout, NOTUSED, NOTUSED,
+		       NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__poll)
 weak_alias (__poll, poll)

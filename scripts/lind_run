@@ -1,14 +1,43 @@
-#!/bin/bash
-set -ue
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-# Run passed optionally pre-compiled wasm file in wasmtime
-#
-# Important notes:
-# - call from source code repository root directory
-# - expects `clang` on $PATH
-# - expects `wasmtime` its release build location
+# Run passed (optionally precompiled) wasm file in wasmtime.
 #
 # Usage:
-#   ./scripts/lind_run /path/to/lind-program.[c]wasm
+#   lind_run /path/to/program.[c]wasm
+#   ./scripts/lind_run ./foo.cwasm
+#
+# No assumption about current working directory.
 
-src/wasmtime/target/release/wasmtime run --allow-precompiled --wasi threads=y --wasi preview2=n  "$@"
+# --- repo root discovery (env var -> script dir -> git) ---
+if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
+  REPO_ROOT="${LIND_WASM_ROOT}"
+else
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${SCRIPT_DIR}/../Makefile" ]]; then
+    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+  else
+    if command -v git >/dev/null 2>&1; then
+      REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    else
+      REPO_ROOT=""
+    fi
+  fi
+fi
+
+if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
+  echo "ERROR: Could not locate lind-wasm repo root." >&2
+  echo "Hint: export LIND_WASM_ROOT=/path/to/lind-wasm" >&2
+  exit 2
+fi
+
+WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
+WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime"
+# Fallback to release if selected profile isn't built yet
+if [[ ! -x "${WASMTIME_BIN}" ]]; then
+  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
+  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
+fi
+[[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
+
+exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "$@"
