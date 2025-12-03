@@ -1297,7 +1297,7 @@ impl<
         return Ok(0);
     }
 
-    // Get the pid associated with the context. Currently unused interface
+    // Get the pid associated with the context.
     pub fn getpid(&self) -> i32 {
         self.pid
     }
