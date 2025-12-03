@@ -1297,7 +1297,7 @@ impl<
         return Ok(0);
     }
 
-    // Get the cageid associated with the context. 
+    // Get the cageid associated with the context.
     pub fn this_cageid(&self) -> i32 {
         self.pid
     }
