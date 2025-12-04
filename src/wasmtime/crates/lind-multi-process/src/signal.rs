@@ -46,7 +46,7 @@ pub fn signal_handler<
 
     let host = caller.data().clone();
     let ctx = host.get_ctx();
-    let cageid = ctx.pid as u64;
+    let cageid = ctx.cageid as u64;
 
     // first let's check if the epoch state is in "killed" state
     if cage::signal::thread_check_killed(cageid, ctx.tid as u64) {

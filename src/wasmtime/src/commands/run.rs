@@ -77,10 +77,10 @@ unsafe impl Sync for VmCtxWrapper {}
 /// for cross-instance callbacks.
 ///
 /// Each `WasmCallbackCtx` instance corresponds to one Cage or Grate
-/// process (`pid`) and its runtime context (`VmCtxWrapper`).
+/// process (`cageid`) and its runtime context (`VmCtxWrapper`).
 #[repr(C)]
 struct WasmCallbackCtx {
-    pid: u64,
+    cageid: u64,
     vm: VmCtxWrapper,
 }
 
@@ -447,11 +447,11 @@ impl RunCommand {
     }
 
     // similar to `execute`` function above, except that this function is used by exec_syscall to execute a wasm module given the path
-    // the only big difference from `execute` function above is that pid and next_cageid are passed as argument instead of hard-coded
+    // the only big difference from `execute` function above is that cageid and next_cageid are passed as argument instead of hard-coded
     fn execute_with_lind(
         mut self,
         lind_manager: Arc<LindCageManager>,
-        pid: i32,
+        cageid: i32,
         next_cageid: Arc<AtomicU64>,
     ) -> Result<Vec<Val>> {
         let mut config = self.run.common.config(None, None)?;
@@ -510,7 +510,7 @@ impl RunCommand {
             &mut store,
             &main,
             lind_manager.clone(),
-            Some(pid),
+            Some(cageid),
             Some(next_cageid),
         )?;
 
@@ -567,7 +567,7 @@ impl RunCommand {
         // operations that block in the CLI since the CLI doesn't use async to
         // invoke WebAssembly.
         let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules, pid as u64)
+            self.load_main_module(&mut store, &mut linker, &main, modules, cageid as u64)
                 .with_context(|| {
                     format!(
                         "failed to run child module `{}`",
@@ -710,7 +710,7 @@ impl RunCommand {
         linker: &mut CliLinker,
         module: &RunTarget,
         modules: Vec<(String, Module)>,
-        pid: u64,
+        cageid: u64,
     ) -> Result<Vec<Val>> {
         // The main module might be allowed to have unknown imports, which
         // should be defined as traps:
@@ -748,7 +748,7 @@ impl RunCommand {
                     .instantiate_with_lind(
                         &mut *store,
                         &module,
-                        InstantiateType::InstantiateFirst(pid),
+                        InstantiateType::InstantiateFirst(cageid),
                     )
                     .context(format!(
                         "failed to instantiate {:?}",
@@ -800,14 +800,14 @@ impl RunCommand {
 
                 // initialize the signal for the main thread of the cage
                 lind_signal_init(
-                    pid,
+                    cageid,
                     pointer as *mut u64,
                     THREAD_START_ID,
                     true, /* this is the main thread */
                 );
 
                 // see comments at signal_may_trigger for more details
-                signal_may_trigger(pid);
+                signal_may_trigger(cageid);
 
                 // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
                 // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
@@ -821,7 +821,7 @@ impl RunCommand {
                 // 2) Extract vmctx pointer and put in a Send+Sync wrapper
                 let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
                 let ctx = WasmCallbackCtx {
-                    pid,
+                    cageid,
                     vm: VmCtxWrapper {
                         vmctx: NonNull::new(vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
                     },
@@ -852,7 +852,7 @@ impl RunCommand {
                 // 4) Build entry and store in [`crates::lind-3i`] table
                 let boxed_entry = Box::new(WasmGrateFnEntry { fn_ptr, ctx_ptr });
                 let raw_entry: *const WasmGrateFnEntry = Box::into_raw(boxed_entry);
-                let rc = set_gratefn_wasm(pid, raw_entry);
+                let rc = set_gratefn_wasm(cageid, raw_entry);
                 if rc < 0 {
                     // reclaim memory on error
                     unsafe {
@@ -986,7 +986,7 @@ impl RunCommand {
         store: &mut Store<Host>,
         module: &RunTarget,
         lind_manager: Arc<LindCageManager>,
-        pid: Option<i32>,
+        cageid: Option<i32>,
         next_cageid: Option<Arc<AtomicU64>>,
     ) -> Result<()> {
         let mut cli = self.run.common.wasi.cli;
@@ -1121,9 +1121,9 @@ impl RunCommand {
             wasmtime_lind_common::add_to_linker::<Host, RunCommand>(linker, |host| {
                 host.lind_common_ctx.as_ref().unwrap()
             })?;
-            if let Some(pid) = pid {
-                store.data_mut().lind_common_ctx = Some(LindCommonCtx::new_with_pid(
-                    pid,
+            if let Some(cageid) = cageid {
+                store.data_mut().lind_common_ctx = Some(LindCommonCtx::new_with_cageid(
+                    cageid,
                     next_cageid.clone().unwrap(),
                 )?);
             } else {
@@ -1140,18 +1140,18 @@ impl RunCommand {
             };
             let module = module.unwrap_core();
 
-            // if pid is set, that means this function is called by execute_with_lind (exec-ed wasm instance)
-            if let Some(pid) = pid {
-                store.data_mut().lind_fork_ctx = Some(LindCtx::new_with_pid(
+            // if cageid is set, that means this function is called by execute_with_lind (exec-ed wasm instance)
+            if let Some(cageid) = cageid {
+                store.data_mut().lind_fork_ctx = Some(LindCtx::new_with_cageid(
                     module.clone(),
                     linker.clone(),
                     lind_manager,
                     self.clone(),
-                    pid,
+                    cageid,
                     next_cageid.clone().unwrap(),
                     |host| host.lind_fork_ctx.as_mut().unwrap(),
                     |host| host.fork(),
-                    |run_command, path, args, pid, next_cageid, lind_manager, envs| {
+                    |run_command, path, args, cageid, next_cageid, lind_manager, envs| {
                         // entry point of exec call. Fork self and replace the argument, environment variables and
                         // execution path and starts execution
                         let mut new_run_command = run_command.clone();
@@ -1164,12 +1164,12 @@ impl RunCommand {
                         }
                         new_run_command.execute_with_lind(
                             lind_manager.clone(),
-                            pid,
+                            cageid,
                             next_cageid.clone(),
                         )
                     },
                 )?);
-            // if pid is not set, then this function is called by the first wasm instance
+            // if cageid is not set, then this function is called by the first wasm instance
             } else {
                 store.data_mut().lind_fork_ctx = Some(LindCtx::new(
                     module.clone(),
@@ -1179,7 +1179,7 @@ impl RunCommand {
                     shared_next_cageid.clone(),
                     |host| host.lind_fork_ctx.as_mut().unwrap(),
                     |host| host.fork(),
-                    |run_command, path, args, pid, next_cageid, lind_manager, envs| {
+                    |run_command, path, args, cageid, next_cageid, lind_manager, envs| {
                         let mut new_run_command = run_command.clone();
                         new_run_command.module_and_args = vec![OsString::from(path)];
                         if let Some(envs) = envs {
@@ -1190,7 +1190,7 @@ impl RunCommand {
                         }
                         new_run_command.execute_with_lind(
                             lind_manager.clone(),
-                            pid,
+                            cageid,
                             next_cageid.clone(),
                         )
                     },

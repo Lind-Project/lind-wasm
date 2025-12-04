@@ -7,7 +7,7 @@
 //! time gap between:
 //! (a) initialization
 //! (b) the user’s Wasm code calling `register_handler`.
-//! To bridge this gap, Wasmtime keeps a per-(pid, tid) entry in a local table here.
+//! To bridge this gap, Wasmtime keeps a per-(cageid, tid) entry in a local table here.
 //!
 //! When `register_handler` reaches `crates::lind-common` and is forwarded to 3i, we extract the
 //! staged entry pointer from this table and pass it along to 3i as the canonical source of
@@ -30,7 +30,7 @@ use threei::{threei_const, WasmGrateFnEntry, WasmGrateFnEntryPtr};
 ///
 /// The runtime context includes a pointer to the instance’s `VMContext`, which is required
 /// by Wasmtime to correctly re-enter the target instance with the right execution state.
-/// `GRATE_FN_WASM_TABLE` is a `HashMap<(u64, u64), WasmGrateFnEntryPtr>` keyed by `(pid, tid)`
+/// `GRATE_FN_WASM_TABLE` is a `HashMap<(u64, u64), WasmGrateFnEntryPtr>` keyed by `(cageid, tid)`
 /// that stores one entry per process/thread.
 ///
 /// Todo: We currently use tid = 0 as a placeholder; the multi-thread support is needed in future.
@@ -65,13 +65,13 @@ fn fn_ptr_is_null(
 
 /// Called during module initiation (from [`wasmtime_cli::run.rs`]).
 /// Builds a `WasmGrateFnEntry` from Wasmtime-side state, validates that both the entry pointer and
-/// its `ctx_ptr` are non-null, and stores the boxed entry into `GRATE_FN_WASM_TABLE` under `(pid, 0)`.
+/// its `ctx_ptr` are non-null, and stores the boxed entry into `GRATE_FN_WASM_TABLE` under `(cageid, 0)`.
 ///
 /// Returns `GRATE_OK` on success or `GRATE_ERR` on invalid input.
 ///
 /// This function is `extern "C"` and `unsafe` because it crosses the FFI boundary and dereferences
 /// raw pointers.
-pub extern "C" fn set_gratefn_wasm(pid: u64, entry: *const WasmGrateFnEntry) -> i32 {
+pub extern "C" fn set_gratefn_wasm(cageid: u64, entry: *const WasmGrateFnEntry) -> i32 {
     if entry.is_null() {
         return threei_const::GRATE_ERR;
     }
@@ -87,26 +87,26 @@ pub extern "C" fn set_gratefn_wasm(pid: u64, entry: *const WasmGrateFnEntry) -> 
     };
 
     let mut map = GRATE_FN_WASM_TABLE.write().unwrap();
-    map.insert((pid, 0), handle);
+    map.insert((cageid, 0), handle);
 
     threei_const::GRATE_OK
 }
 
 /// Used by [`lind-common::register_handler`] to fetch the previously staged entry and pass its pointer into 3i.
-/// Performs a read-locked lookup of `(pid, 0)` in `GRATE_FN_WASM_TABLE`  
+/// Performs a read-locked lookup of `(cageid, 0)` in `GRATE_FN_WASM_TABLE`  
 ///
 /// Returns a raw `*const WasmGrateFnEntry` for 3i to consume.
 ///
 /// No ownership is transferred; the entry remains owned by this module until cleanup.
-pub fn take_gratefn_wasm(pid: u64) -> Option<*const WasmGrateFnEntry> {
+pub fn take_gratefn_wasm(cageid: u64) -> Option<*const WasmGrateFnEntry> {
     let map = GRATE_FN_WASM_TABLE.read().unwrap();
-    map.get(&(pid, 0)).map(|h| h.as_ptr())
+    map.get(&(cageid, 0)).map(|h| h.as_ptr())
 }
 
 /// Called when the Wasm module (or its Grate instance) exits.
-/// Removes the `(pid, 0)` entry from `GRATE_FN_WASM_TABLE`
-pub fn remove_gratefn_wasm(pid: u64) -> bool {
+/// Removes the `(cageid, 0)` entry from `GRATE_FN_WASM_TABLE`
+pub fn remove_gratefn_wasm(cageid: u64) -> bool {
     let mut map = GRATE_FN_WASM_TABLE.write().unwrap();
-    map.remove(&(pid, 0));
+    map.remove(&(cageid, 0));
     true
 }
