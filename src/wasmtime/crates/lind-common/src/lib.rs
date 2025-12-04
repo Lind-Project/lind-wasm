@@ -41,12 +41,18 @@ impl LindCommonCtx {
     pub fn new(next_cageid: Arc<AtomicU64>) -> Result<Self> {
         // cage id starts from 1
         let cageid = 1;
-        Ok(Self { cageid, next_cageid })
+        Ok(Self {
+            cageid,
+            next_cageid,
+        })
     }
 
     // create a new lind-common context with cageid provided, used by exec syscall
     pub fn new_with_cageid(cageid: i32, next_cageid: Arc<AtomicU64>) -> Result<Self> {
-        Ok(Self { cageid, next_cageid })
+        Ok(Self {
+            cageid,
+            next_cageid,
+        })
     }
 
     // entry point for lind_syscall in glibc, dispatching syscalls to rawposix or wasmtime

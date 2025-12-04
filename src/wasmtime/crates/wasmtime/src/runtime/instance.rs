@@ -27,7 +27,10 @@ use super::Val;
 
 pub enum InstantiateType {
     InstantiateFirst(u64),
-    InstantiateChild { parent_cageid: u64, child_cageid: u64 },
+    InstantiateChild {
+        parent_cageid: u64,
+        child_cageid: u64,
+    },
 }
 
 /// An instantiated WebAssembly module.
@@ -264,7 +267,7 @@ impl Instance {
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                 make_syscall(
-                    cageid,                   // self cageid
+                    cageid,                // self cageid
                     (MMAP_SYSCALL) as u64, // syscall num
                     0, // since wasmtime operates with lower level memory, it always interacts with underlying os
                     cageid, // target cageid (should be same)

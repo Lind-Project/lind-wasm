@@ -357,12 +357,12 @@ impl<
         // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
         // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
         make_syscall(
-            self.cageid as u64,       // self cage id
+            self.cageid as u64,    // self cage id
             (FORK_SYSCALL) as u64, // syscall num for fork
             UNUSED_NAME,           // syscall name
-            self.cageid as u64,       // target cage id, should be itself
+            self.cageid as u64,    // target cage id, should be itself
             child_cageid,          // 1st arg
-            self.cageid as u64,       // 1st arg's cage id
+            self.cageid as u64,    // 1st arg's cage id
             UNUSED_ARG,
             UNUSED_ID,
             UNUSED_ARG,
@@ -1029,10 +1029,10 @@ impl<
             // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
             // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
             make_syscall(
-                cloned_cageid as u64,     // self cage id
+                cloned_cageid as u64,  // self cage id
                 (EXEC_SYSCALL) as u64, // syscall num for exec
                 UNUSED_NAME,           // syscall name
-                cloned_cageid as u64,     // target cage id, should be itself
+                cloned_cageid as u64,  // target cage id, should be itself
                 UNUSED_ARG,
                 UNUSED_ID,
                 UNUSED_ARG,
@@ -1353,7 +1353,7 @@ impl<
             linker: self.linker.clone(),
             module: self.module.clone(),
             cageid: 0, // cageid is managed by lind-common
-            tid: 1, // thread id starts from 1
+            tid: 1,    // thread id starts from 1
             next_cageid: self.next_cageid.clone(),
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
