@@ -52,8 +52,8 @@ pub struct LindCtx<T, U> {
     // the module associated with the ctx
     module: Module,
 
-    // process id, should be same as cage id
-    pid: i32,
+    // cage id
+    cageid: i32,
 
     // thread id
     tid: i32,
@@ -137,13 +137,13 @@ impl<
         let exec_host = Arc::new(exec);
 
         // cage id starts from 1
-        let pid = CAGE_START_ID;
+        let cageid = CAGE_START_ID;
         let tid = THREAD_START_ID;
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
             linker,
             module: module.clone(),
-            pid,
+            cageid,
             tid,
             next_cageid,
             next_threadid,
@@ -155,23 +155,23 @@ impl<
         })
     }
 
-    // create a new LindContext with provided pid (cageid). This function is used by exec_syscall to create a new lindContext
+    // create a new LindContext with provided cageid (cageid). This function is used by exec_syscall to create a new lindContext
     // Function Argument:
     // * module: wasmtime module object, used to fork a new instance
     // * linker: wasmtime function linker. Used to link the imported functions
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
     // * run_command: used by exec closure below.
-    // * pid: pid(cageid) associated with the context
+    // * cageid: cageid(cageid) associated with the context
     // * next_cageid: a shared cage id counter, managed by lind-common.
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
-    pub fn new_with_pid(
+    pub fn new_with_cageid(
         module: Module,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
         run_command: U,
-        pid: i32,
+        cageid: i32,
         next_cageid: Arc<AtomicU64>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
@@ -198,7 +198,7 @@ impl<
         Ok(Self {
             linker,
             module: module.clone(),
-            pid,
+            cageid,
             tid,
             next_cageid,
             next_threadid,
@@ -352,17 +352,17 @@ impl<
             panic!("running out of cageid!");
         }
         let child_cageid = child_cageid.unwrap();
-        let parent_pid = self.pid;
+        let parent_cageid = self.cageid;
         // calling fork in rawposix to fork the cage
         // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
         // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
         make_syscall(
-            self.pid as u64,       // self cage id
+            self.cageid as u64,    // self cage id
             (FORK_SYSCALL) as u64, // syscall num for fork
             UNUSED_NAME,           // syscall name
-            self.pid as u64,       // target cage id, should be itself
+            self.cageid as u64,    // target cage id, should be itself
             child_cageid,          // 1st arg
-            self.pid as u64,       // 1st arg's cage id
+            self.cageid as u64,    // 1st arg's cage id
             UNUSED_ARG,
             UNUSED_ID,
             UNUSED_ARG,
@@ -405,7 +405,7 @@ impl<
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
-                    child_ctx.pid = child_cageid as i32;
+                    child_ctx.cageid = child_cageid as i32;
 
                     // create a new memory area for child
                     child_ctx.fork_memory(&store_inner, parent_addr_len);
@@ -426,8 +426,8 @@ impl<
                         .instantiate_with_lind(
                             &mut store,
                             InstantiateType::InstantiateChild {
-                                parent_pid: parent_pid as u64,
-                                child_pid: child_cageid,
+                                parent_cageid: parent_cageid as u64,
+                                child_cageid: child_cageid,
                             },
                         )
                         .unwrap();
@@ -641,7 +641,7 @@ impl<
         // retrieve the child host
         let mut child_host = caller.data().clone();
         // get current cageid, child should have the same cageid
-        let child_cageid = self.pid;
+        let child_cageid = self.cageid;
 
         // use the same engine for parent and child
         let engine = self.module.engine().clone();
@@ -706,8 +706,8 @@ impl<
 
                     // get child context
                     let child_ctx = get_cx(&mut child_host);
-                    // set up child pid
-                    child_ctx.pid = child_cageid;
+                    // set up child cageid
+                    child_ctx.cageid = child_cageid;
                     child_ctx.tid = next_tid as i32;
 
                     let instance_pre =
@@ -1013,7 +1013,7 @@ impl<
         let cloned_run_command = self.run_command.clone();
         let cloned_next_cageid = self.next_cageid.clone();
         let cloned_lind_manager = self.lind_manager.clone();
-        let cloned_pid = self.pid;
+        let cloned_cageid = self.cageid;
 
         let exec_call = self.exec_host.clone();
 
@@ -1029,10 +1029,10 @@ impl<
             // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
             // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
             make_syscall(
-                cloned_pid as u64,     // self cage id
+                cloned_cageid as u64,  // self cage id
                 (EXEC_SYSCALL) as u64, // syscall num for exec
                 UNUSED_NAME,           // syscall name
-                cloned_pid as u64,     // target cage id, should be itself
+                cloned_cageid as u64,  // target cage id, should be itself
                 UNUSED_ARG,
                 UNUSED_ID,
                 UNUSED_ARG,
@@ -1051,7 +1051,7 @@ impl<
                 &cloned_run_command,
                 &real_path_str,
                 &args,
-                cloned_pid,
+                cloned_cageid,
                 &cloned_next_cageid,
                 &cloned_lind_manager,
                 &environs,
@@ -1299,7 +1299,7 @@ impl<
 
     // Get the cageid associated with the context.
     pub fn this_cageid(&self) -> i32 {
-        self.pid
+        self.cageid
     }
 
     // get the next cage id
@@ -1352,8 +1352,8 @@ impl<
         let forked_ctx = Self {
             linker: self.linker.clone(),
             module: self.module.clone(),
-            pid: 0, // pid is managed by lind-common
-            tid: 1, // thread id starts from 1
+            cageid: 0, // cageid is managed by lind-common
+            tid: 1,    // thread id starts from 1
             next_cageid: self.next_cageid.clone(),
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
