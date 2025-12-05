@@ -20,7 +20,9 @@
 #include "localeinfo.h"
 
 #define DEFINE_CATEGORY(category, category_name, items, a) \
-extern struct __locale_data _nl_C_##category; weak_extern (_nl_C_##category)
+// lind-wasm: these struct needs not to be weak symbols to work correctly in wasm for some reason
+// TODO: should go through here again when locale is fully fixed
+extern struct __locale_data _nl_C_##category; /*weak_extern (_nl_C_##category)*/
 #include "categories.def"
 #undef	DEFINE_CATEGORY
 
@@ -28,9 +30,6 @@ extern struct __locale_data _nl_C_##category; weak_extern (_nl_C_##category)
 extern const char _nl_C_LC_CTYPE_class[] attribute_hidden;
 extern const char _nl_C_LC_CTYPE_toupper[] attribute_hidden;
 extern const char _nl_C_LC_CTYPE_tolower[] attribute_hidden;
-weak_extern (_nl_C_LC_CTYPE_class)
-weak_extern (_nl_C_LC_CTYPE_toupper)
-weak_extern (_nl_C_LC_CTYPE_tolower)
 
 /* Here we define the locale object maintained by setlocale.
    The references in the initializer are weak, so the parts of
