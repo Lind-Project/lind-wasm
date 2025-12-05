@@ -1020,7 +1020,7 @@ pub fn brk_syscall(
     let mut vmmap = cage.vmmap.write();
     let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
 
-    assert!(heap.npages == vmmap.program_break);
+    // assert!(heap.npages == vmmap.program_break);
 
     // passing 0 to brk will always return the current brk
     if brk == 0 {

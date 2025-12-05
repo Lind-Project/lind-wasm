@@ -1,0 +1,15 @@
+[build]
+target = "wasm32-wasip1"
+
+[target.wasm32-wasip1]
+linker = "/home/lind-wasm-rust/wasip1-clang.sh"
+rustflags = [
+  "-C", "link-self-contained=no",
+  "-C", "link-arg=-Wl,--import-memory",
+  "-C", "link-arg=-Wl,--export-memory",
+  "-C", "link-arg=-Wl,--max-memory=67108864",
+  "-C", "link-arg=-Wl,--export=__stack_pointer",
+  "-C", "link-arg=-Wl,--export=__stack_low",
+  "-C", "target-feature=+crt-static",
+  "--verbose"
+]

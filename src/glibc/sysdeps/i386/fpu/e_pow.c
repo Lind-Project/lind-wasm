@@ -3,6 +3,12 @@
 #include <float.h>
 #include <errno.h>
 
+// double fmod(double x, double y) {
+//     // simple, not-perfect implementation:
+//     return x - trunc(x / y) * y;
+// }
+
+
 double __ieee754_pow(double x, double y) {
     if (isnan(y)) {
         return y;  // If y is NaN, the result is NaN

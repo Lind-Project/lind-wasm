@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+run_cmd() {
+  echo "+ $*"
+  "$@"
+}
+
+
 # Run passed (optionally precompiled) wasm file in wasmtime.
 #
 # Usage:
@@ -31,7 +37,7 @@ if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
   exit 2
 fi
 
-WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
+WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/debug/wasmtime"
 [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
 
-exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "$@"
+run_cmd exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "$@"

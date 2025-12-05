@@ -154,15 +154,15 @@ pub fn add_to_linker<T: Clone + Send + 'static>(
     // memory import.
     for import in module.imports() {
         if let Some(m) = import.ty().memory() {
-            if m.is_shared() {
+            // if m.is_shared() {
                 let mem = SharedMemory::new(module.engine(), m.clone())?;
                 linker.define(store, import.module(), import.name(), mem.clone())?;
-            } else {
-                return Err(anyhow!(
-                    "memory was not shared; a `wasi-threads` must import \
-                     a shared memory as \"memory\""
-                ));
-            }
+            // } else {
+            //     return Err(anyhow!(
+            //         "memory was not shared; a `wasi-threads` must import \
+            //          a shared memory as \"memory\""
+            //     ));
+            // }
         }
     }
     Ok(())

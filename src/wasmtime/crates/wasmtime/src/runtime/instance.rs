@@ -230,7 +230,7 @@ impl Instance {
         imports: Imports<'_>,
         instantiate_type: InstantiateType,
     ) -> Result<(Instance, InstanceId)> {
-        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
+        // let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
         // retrieve the initial memory size
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
@@ -270,7 +270,8 @@ impl Instance {
                     pid, // target cageid (should be same)
                     0, // the first memory region starts from 0
                     pid,
-                    minimal_pages << PAGESHIFT, // size of first memory region
+                    // minimal_pages << PAGESHIFT, // size of first memory region
+                    16777216,
                     pid,
                     (PROT_READ | PROT_WRITE) as u64,
                     pid,
@@ -302,6 +303,8 @@ impl Instance {
                 fork_vmmap(parent_pid as u64, child_pid);
             }
         }
+
+        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if let Some(start) = start {
             instance.start_raw(store, start)?;

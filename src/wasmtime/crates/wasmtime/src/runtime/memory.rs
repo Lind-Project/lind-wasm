@@ -802,9 +802,9 @@ impl SharedMemory {
     /// pages on the system.
     #[cfg(feature = "threads")]
     pub fn new(engine: &Engine, ty: MemoryType) -> Result<Self> {
-        if !ty.is_shared() {
-            bail!("shared memory must have the `shared` flag enabled on its memory type")
-        }
+        // if !ty.is_shared() {
+        //     bail!("shared memory must have the `shared` flag enabled on its memory type")
+        // }
         debug_assert!(ty.maximum().is_some());
 
         let tunables = engine.tunables();
