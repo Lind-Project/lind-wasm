@@ -49,7 +49,7 @@ jobs:
               -A clippy::not_unsafe_ptr_arg_deref \
               -A clippy::absurd_extreme_comparisons
       - name: Install Zizmor via Cargo
-        run: cargo install zizmor --version 1.15.2
+        run: cargo install zizmor --version 1.18.0
 
       - name: Run Zizmor
         env:
