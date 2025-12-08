@@ -27,10 +27,10 @@
 int
 __dup (int fd)
 {
-   return MAKE_LEGACY_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   return MAKE_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 int dup(int fd)
 {
-   return MAKE_LEGACY_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   return MAKE_SYSCALL(DUP_SYSCALL, "syscall|dup", (uint64_t) fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }

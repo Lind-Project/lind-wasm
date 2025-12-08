@@ -19,15 +19,11 @@
 #include <socketcall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
-#include <addr_translation.h>
 
 int
-__bind (int fd, const struct sockaddr *addr, socklen_t len)
+__bind (int fd, const struct sockaddr * addr, socklen_t len)
 {
   // Dennis Edit
-  uint64_t host_addr = TRANSLATE_GUEST_POINTER_TO_HOST (addr);
-  
-  return MAKE_LEGACY_SYSCALL (BIND_SYSCALL, "syscall|bind", (uint64_t) fd,
-		       host_addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  return MAKE_SYSCALL(BIND_SYSCALL, "syscall|bind", (uint64_t) fd, (uint64_t)(uintptr_t) addr, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__bind, bind)

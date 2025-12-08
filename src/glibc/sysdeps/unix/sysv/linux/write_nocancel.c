@@ -19,12 +19,10 @@
 #include <unistd.h>
 #include <sysdep-cancel.h>
 #include <not-cancel.h>
-#include <syscall-template.h>
-#include <lind_syscall_num.h>
 
 ssize_t
 __write_nocancel (int fd, const void *buf, size_t nbytes)
 {
-  return MAKE_LEGACY_SYSCALL(WRITE_SYSCALL, "syscall|write", (uint64_t)fd, (uint64_t)(uintptr_t)buf, (uint64_t)nbytes, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  return INLINE_SYSCALL_CALL (write, fd, buf, nbytes);
 }
 hidden_def (__write_nocancel)

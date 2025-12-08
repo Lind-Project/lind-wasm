@@ -27,7 +27,6 @@
 #include <shlib-compat.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
-#include <addr_translation.h>
 
 #if LIB_COMPAT(libc, GLIBC_2_0, GLIBC_2_33)
 
@@ -36,10 +35,7 @@
 int
 ___xstat64 (int vers, const char *name, struct stat64 *buf)
 {
-   uint64_t host_name = TRANSLATE_GUEST_POINTER_TO_HOST (name);
-   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-   
-   return MAKE_LEGACY_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers, host_name, host_buf, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   return MAKE_SYSCALL(XSTAT_SYSCALL, "syscall|xstat", (uint64_t) vers, (uint64_t) name, (uint64_t) buf, NOTUSED, NOTUSED, NOTUSED);
 }
 
 #if XSTAT_IS_XSTAT64

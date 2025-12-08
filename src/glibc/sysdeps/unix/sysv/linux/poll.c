@@ -22,16 +22,11 @@
 #include <sys/syscall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
-#include <addr_translation.h>
 
 int
 __poll (struct pollfd *fds, nfds_t nfds, int timeout)
 {
-  uint64_t host_fds = TRANSLATE_GUEST_POINTER_TO_HOST (fds);
-  
-  return MAKE_LEGACY_SYSCALL (POLL_SYSCALL, "syscall|poll",
-		       host_fds, (uint64_t) nfds, (uint64_t) timeout, NOTUSED, NOTUSED,
-		       NOTUSED, TRANSLATE_ERRNO_ON);
+   return MAKE_SYSCALL(POLL_SYSCALL, "syscall|poll", (uint64_t) fds, (uint64_t) nfds, (uint64_t) timeout, NOTUSED, NOTUSED, NOTUSED);
 }
 libc_hidden_def (__poll)
 weak_alias (__poll, poll)

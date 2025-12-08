@@ -22,15 +22,12 @@
 #include <sysdep-cancel.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
-#include <addr_translation.h>
 
 /* Change the protections of FILE to MODE.  */
 int
 __chmod (const char *file, mode_t mode)
 {
-  return MAKE_LEGACY_SYSCALL (CHMOD_SYSCALL, "syscall|chmod",
-		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (file),
-		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   return MAKE_SYSCALL(CHMOD_SYSCALL, "syscall|chmod", (uint64_t) file, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 libc_hidden_def (__chmod)

@@ -5,7 +5,7 @@
 int
 __fchdir (int __fd)
 {
-  return MAKE_LEGACY_SYSCALL(FCHDIR_SYSCALL, "syscall|fchdir", (uint64_t) __fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  return MAKE_SYSCALL(FCHDIR_SYSCALL, "syscall|fchdir", (uint64_t) __fd, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 
 weak_alias (__fchdir, fchdir)

@@ -23,6 +23,6 @@
 int
 listen (int fd, int backlog)
 {
-   return MAKE_LEGACY_SYSCALL(LISTEN_SYSCALL, "syscall|listen", (uint64_t) fd, (uint64_t) backlog, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   return MAKE_SYSCALL(LISTEN_SYSCALL, "syscall|listen", (uint64_t) fd, (uint64_t) backlog, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (listen, __listen);

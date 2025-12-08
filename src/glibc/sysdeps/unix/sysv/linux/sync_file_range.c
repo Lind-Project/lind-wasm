@@ -24,5 +24,5 @@
 int
 sync_file_range (int fd, __off64_t offset, __off64_t len, unsigned int flags)
 {
-   return MAKE_LEGACY_SYSCALL(SYNC_FILE_RANGE, "syscall|sync_file_range", (uint64_t) fd, (uint64_t) offset, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   return MAKE_SYSCALL(SYNC_FILE_RANGE, "syscall|sync_file_range", (uint64_t) fd, (uint64_t) offset, (uint64_t) len, (uint64_t) flags, NOTUSED, NOTUSED);
 }

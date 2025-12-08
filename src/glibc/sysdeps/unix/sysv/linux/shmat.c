@@ -20,7 +20,6 @@
 #include <errno.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
-#include <addr_translation.h>
 
 /* Attach the shared memory segment associated with SHMID to the data
    segment of the calling process.  SHMADDR and SHMFLG determine how
@@ -29,11 +28,5 @@
 void *
 shmat (int shmid, const void *shmaddr, int shmflg)
 {
-  // shmaddr CAN be NULL - kernel chooses the address (like mmap)
-  // This is the recommended way to use shmat for portability
-  // Do NOT add null check here - NULL is valid and expected
-  uint64_t host_shmaddr = TRANSLATE_GUEST_POINTER_TO_HOST (shmaddr);
-  return MAKE_LEGACY_SYSCALL (SHMAT_SYSCALL, "syscall|shmat", (uint64_t) shmid,
-		       host_shmaddr, (uint64_t) shmflg,
-		       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   return MAKE_SYSCALL(SHMAT_SYSCALL, "syscall|shmat", (uint64_t) shmid, (uint64_t) shmaddr, (uint64_t) shmflg, NOTUSED, NOTUSED, NOTUSED);
 }

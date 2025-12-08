@@ -22,7 +22,6 @@
 #include <syscall-template.h>
 #include <errno.h>
 #include <lind_syscall_num.h>
-#include <addr_translation.h>
 
 /* Read the contents of the symbolic link PATH into no more than
    LEN bytes of BUF.  The contents are not null-terminated.
@@ -36,9 +35,6 @@
 ssize_t
 __readlink (const char *path, char *buf, size_t len)
 {
-   uint64_t host_path = TRANSLATE_GUEST_POINTER_TO_HOST (path);
-   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
-   
-   return MAKE_LEGACY_SYSCALL(READLINK_SYSCALL, "syscall|readlink", host_path, host_buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+   return MAKE_SYSCALL(READLINK_SYSCALL, "syscall|readlink", (uint64_t) path, (uint64_t)(uintptr_t) buf, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED);
 }
 weak_alias (__readlink, readlink)
