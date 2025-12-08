@@ -101,7 +101,6 @@ impl<
     // * linker: wasmtime function linker. Used to link the imported functions
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
     // * run_command: used by exec closure below.
-    // * next_cageid: a shared cage id counter, managed by lind-common.
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
@@ -156,7 +155,6 @@ impl<
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
     // * run_command: used by exec closure below.
     // * cageid: cageid(cageid) associated with the context
-    // * next_cageid: a shared cage id counter, managed by lind-common.
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
