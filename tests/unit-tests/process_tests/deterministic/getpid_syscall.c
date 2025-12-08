@@ -1,3 +1,14 @@
+/*
+ * getpid() Test Suite
+ * -------------------
+ * Verifies correct getpid() behavior across forked processes.
+ * Covers:
+ *   - Basic getpid() in parent and child
+ *   - Multiple children calling getpid()
+ *   - Nested fork (parent → child → grandchild)
+ *   - Stress test with many rapid forks
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

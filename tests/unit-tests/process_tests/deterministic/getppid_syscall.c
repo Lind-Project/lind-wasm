@@ -1,3 +1,14 @@
+/*
+ * getppid() Test Suite
+ * --------------------
+ * Tests correctness of parent-process identification across forks.
+ * Covers:
+ *   - Basic getppid() in parent and child
+ *   - Multiple children reporting parent PID
+ *   - Nested fork behavior (parent → child → grandchild)
+ *   - Stress test with many forks
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

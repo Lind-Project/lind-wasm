@@ -1,3 +1,14 @@
+/*
+ * getgid() Test Suite
+ * -------------------
+ * Tests correctness of getgid() across parent and child processes.
+ * Covers:
+ *   - Basic getgid() call in parent
+ *   - Inheritance of real GID after fork
+ *   - Multiple children invoking getgid()
+ *   - Light stress test with many forks
+ */
+
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/wait.h>

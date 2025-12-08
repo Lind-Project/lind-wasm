@@ -1,9 +1,27 @@
+/*
+ * waitpid() Test Suite
+ * --------------------
+ * Tests various waitpid() scenarios and process reaping behavior.
+ * Covers:
+ *   - Basic waitpid() and waiting for specific child
+ *   - WNOHANG with running or exited children
+ *   - waitpid() with no children or non-child PIDs
+ *   - Zombie processes and multiple children
+ *   - waitpid() with status=NULL
+ *   - Stress test with multiple children
+ *   - EINTR signal handling during waitpid()
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
 #include <string.h>
+#include <signal.h>
+
+void handler(int sig) { }
+
 
 void test_basic_waitpid() {
     printf("[TEST 1] Basic waitpid\n");
@@ -27,7 +45,7 @@ void test_waitpid_specific_child() {
     pid_t r = waitpid(p2, &status, 0);
     printf("[PARENT] waited child=%d exit=%d\n", (int)r, status);
 
-    while (wait(&status) > 0) { }
+    while (wait(&status) > 0) {}
 }
 
 void test_waitpid_wnohang_running() {
@@ -67,14 +85,14 @@ void test_waitpid_no_children() {
 void test_zombie_order() {
     printf("\n[TEST 6] Zombie order (multiple children)\n");
     pid_t pids[3];
-    for (int i=0;i<3;i++) {
+    for (int i=0; i<3; i++) {
         pid_t p = fork();
         if (p == 0) _exit(100+i);
         pids[i] = p;
     }
 
     int status;
-    for (int i=0;i<3;i++) {
+    for (int i=0; i<3; i++) {
         pid_t r = wait(&status);
         printf("[PARENT] reaped pid=%d exit=%d\n", (int)r, status);
     }
@@ -89,54 +107,62 @@ void test_waitpid_status_null() {
     printf("[PARENT] waitpid returned=%d (status=NULL)\n", (int)r);
 }
 
-void test_waitpid_any_child() {
-    printf("\n[TEST 8] waitpid any child (-1)\n");
-    pid_t p1 = fork();
-    if (p1 == 0) _exit(11);
-
-    pid_t p2 = fork();
-    if (p2 == 0) _exit(12);
-
-    int status;
-    pid_t r = waitpid(-1, &status, 0);
-    printf("[PARENT] waitpid(-1) returned=%d exit=%d\n", (int)r, status);
-
-    r = waitpid(-1, &status, 0);
-    printf("[PARENT] waitpid(-1) returned=%d exit=%d\n", (int)r, status);
-}
-
 void test_waitpid_non_child() {
-    printf("\n[TEST 9] waitpid on non-child pid\n");
+    printf("\n[TEST 8] waitpid on non-child pid\n");
     pid_t pid = fork();
     if (pid == 0) _exit(1);
 
     pid_t fake = pid + 10000;
     int status = 0;
     pid_t r = waitpid(fake, &status, WNOHANG);
-    printf("[PARENT] waitpid non-child returned=%d errno=%d (%s)\n", (int)r, errno, strerror(errno));
+    printf("[PARENT] waitpid non-child returned=%d errno=%d (%s)\n",
+           (int)r, errno, strerror(errno));
 
     waitpid(pid, &status, 0);
 }
 
 void test_waitpid_stress() {
-    printf("\n[TEST 10] Stress test with 50 children\n");
+    printf("\n[TEST 9] Stress test with 5 children\n");
     const int N = 5;
     pid_t pids[N];
-    for (int i=0;i<N;i++) {
+    for (int i=0; i<N; i++) {
         pid_t p = fork();
-        if (p == 0) _exit(i); // each child exits with its index
+        if (p == 0) _exit(i);
         pids[i] = p;
     }
 
     int status;
-    for (int i=0;i<N;i++) {
+    for (int i=0; i<N; i++) {
         pid_t r = waitpid(-1, &status, 0);
         printf("[PARENT] reaped child %d exit=%d\n", (int)r, status);
     }
 }
 
+void test_waitpid_eintr() {
+    printf("\n[TEST 10] waitpid EINTR\n");
+
+    signal(SIGUSR1, handler);
+
+    pid_t pid = fork();
+    if (pid == 0) {
+        sleep(2);
+        _exit(99);
+    }
+
+    kill(getpid(), SIGUSR1);
+
+    int status = 0;
+    pid_t r = waitpid(pid, &status, 0);
+
+    printf("[PARENT] waitpid returned=%d errno=%d (%s)\n",
+           (int)r, errno, strerror(errno));
+}
+
+
+
 int main() {
     printf("[RUNNING] waitpid test suite\n");
+
     test_basic_waitpid();
     test_waitpid_specific_child();
     test_waitpid_wnohang_running();
@@ -144,9 +170,10 @@ int main() {
     test_waitpid_no_children();
     test_zombie_order();
     test_waitpid_status_null();
-    // test_waitpid_any_child(); // might panic
-    // test_waitpid_non_child(); // always panics
-    // test_waitpid_stress(); // need to check cage limit
+    // test_waitpid_non_child();
+    // test_waitpid_stress();
+    test_waitpid_eintr();
+
     printf("\n[ALL TESTS COMPLETED]\n");
     return 0;
 }

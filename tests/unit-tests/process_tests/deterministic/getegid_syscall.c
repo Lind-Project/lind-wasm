@@ -1,3 +1,14 @@
+/*
+ * getegid() Test Suite
+ * --------------------
+ * Tests correct behavior of getegid() across parent/child processes.
+ * Covers:
+ *   - Basic getegid() call
+ *   - Inheritance of effective GID after fork
+ *   - Multiple children calling getegid()
+ *   - Stress test with many rapid forks
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

@@ -1,3 +1,14 @@
+/*
+ * getuid() Test Suite
+ * -------------------
+ * Verifies correct getuid() behavior across forked processes.
+ * Tests:
+ *   - Basic getuid() in parent
+ *   - Child inherits real UID after fork
+ *   - Multiple children calling getuid()
+ *   - Stress test with many forked children
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
