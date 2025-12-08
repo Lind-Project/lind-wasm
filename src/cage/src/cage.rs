@@ -9,7 +9,7 @@ pub use once_cell::sync::Lazy;
 /// interaction and increases efficiency.
 pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
-pub use std::sync::atomic::{AtomicI32, AtomicU64};
+pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 pub use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::data::fs_struct::SigactionStruct;
@@ -148,4 +148,37 @@ pub fn cagetable_clear() -> Vec<usize> {
     }
 
     exitvec
+}
+
+/// Global cage ID allocator shared across all cages and subsystems.
+///
+/// This allocator exists because cage IDs cannot be derived from the
+/// current cage's ID (e.g., `current_id + 1`).  Forking does not
+/// guarantee that the parent cage's numeric ID is the latest assigned:
+///
+/// Example:
+///    - Cage 10 exists
+///    - Other subsystem creates Cage 11
+///    - Cage 10 now calls fork()
+///
+/// In this situation, the next available cage ID must be 12, not 11.
+/// Therefore, we must maintain a globally monotonic counter that tracks
+/// the highest cage ID ever assigned, independent of which cage performs
+/// the fork.
+///
+/// `AtomicU64::fetch_update` ensures unique, monotonic, thread-safe allocation.
+static NEXT_CAGEID: AtomicU64 = AtomicU64::new(1);
+
+/// Allocate the next available cage ID.
+///
+/// Returns `Some(id)` on success, or `None` if the ID space has been exhausted.
+/// The returned `id` is guaranteed to be strictly greater than any previously
+/// allocated ID, even under concurrent calls.
+pub fn alloc_cage_id() -> Option<u64> {
+    match NEXT_CAGEID.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+        (v <= MAX_CAGEID as u64).then_some(v + 1)
+    }) {
+        Ok(v) => Some(v + 1),
+        Err(_) => None,
+    }
 }
