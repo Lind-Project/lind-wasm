@@ -118,5 +118,12 @@ __printf_buffer_to_file_done (struct __printf_buffer_to_file *buf)
   if (__printf_buffer_has_failed (&buf->base))
     return -1;
   __printf_buffer_flush_to_file (buf);
+
+  /* Flush stdout buffer immediately without waiting
+     for it to fill or for the program to exit */
+  if (buf->fp == stdout) {
+    fflush(stdout);
+  }
+
   return __printf_buffer_done (&buf->base);
 }
