@@ -176,7 +176,7 @@ pub fn poll_syscall(
         let start_time = starttimer();
         // Keep track of total duration for our exit check in the poll loop
         let (duration, chunk_timeout) = timeout_setup_ms(original_timeout);
-        
+   
         let ret;
         loop {
             let current_chunk_timeout = if duration == Duration::MAX {
