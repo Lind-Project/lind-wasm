@@ -1,4 +1,4 @@
-use cage::{readtimer, signal_check_trigger, starttimer, timeout_setup_ms};
+use cage::{readtimer, signal_check_trigger, starttimer, timeout_setup_ms, Duration};
 use fdtables;
 use fdtables::epoll_event;
 use lazy_static::lazy_static;
@@ -179,11 +179,17 @@ pub fn poll_syscall(
         
         let ret;
         loop {
+            let current_chunk_timeout = if duration == Duration::MAX {
+                chunk_timeout
+            } else {
+                std::cmp::min(chunk_timeout as u128, duration.saturating_sub(readtimer(start_time)).as_millis()) as i32
+            };
+
             let poll_ret = unsafe {
                 libc::poll(
                     all_kernel_pollfds.as_mut_ptr(),
                     all_kernel_pollfds.len() as libc::nfds_t,
-                    chunk_timeout,
+                    current_chunk_timeout,
                 )
             };
 
@@ -382,17 +388,23 @@ pub fn select_syscall(
     // Keep track of total timeout duration for exit handling later
     let (duration, chunk_timeout) = timeout_setup_ms(timeout_ms);
     // Convert chunk_timeout (ms) to timeval for select
-    let base_chunk_timeout = libc::timeval {
-        tv_sec: 0,
-        tv_usec: (chunk_timeout as i64) * 1000,
-    };
+
     let mut ret;
     loop {
         let mut tmp_readfds = real_readfds.clone();
         let mut tmp_writefds = real_writefds.clone();
         let mut tmp_errorfds = real_errorfds.clone();
 
-        let mut current_timeout = base_chunk_timeout;
+        let current_chunk_ms = if duration == Duration::MAX {
+            chunk_timeout
+        } else {
+            std::cmp::min(chunk_timeout as u128, duration.saturating_sub(readtimer(start_time)).as_millis()) as i32
+        };
+
+        let mut current_timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: (current_chunk_ms as i64) * 1000,
+        };
 
         // Call libc select with proper null handling
         // nfds should be the highest-numbered file descriptor + 1
