@@ -182,7 +182,10 @@ pub fn poll_syscall(
             let current_chunk_timeout = if duration == Duration::MAX {
                 chunk_timeout
             } else {
-                std::cmp::min(chunk_timeout as u128, duration.saturating_sub(readtimer(start_time)).as_millis()) as i32
+                std::cmp::min(
+                    chunk_timeout as u128,
+                    duration.saturating_sub(readtimer(start_time)).as_millis(),
+                ) as i32
             };
 
             let poll_ret = unsafe {
@@ -398,7 +401,10 @@ pub fn select_syscall(
         let current_chunk_ms = if duration == Duration::MAX {
             chunk_timeout
         } else {
-            std::cmp::min(chunk_timeout as u128, duration.saturating_sub(readtimer(start_time)).as_millis()) as i32
+            std::cmp::min(
+                chunk_timeout as u128,
+                duration.saturating_sub(readtimer(start_time)).as_millis(),
+            ) as i32
         };
 
         let mut current_timeout = libc::timeval {
