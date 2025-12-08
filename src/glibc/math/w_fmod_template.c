@@ -19,34 +19,22 @@
 /* Only build wrappers from the templates for the types that define the macro
    below.  This macro is set in math-type-macros-<type>.h in sysdeps/generic
    for each floating-point type.  */
-// #if __USE_WRAPPER_TEMPLATE
+#if __USE_WRAPPER_TEMPLATE
 
-// # include <errno.h>
-// # include <fenv.h>
-// # include <math.h>
-// # include <math_private.h>
+# include <errno.h>
+# include <fenv.h>
+# include <math.h>
+# include <math_private.h>
 
-// FLOAT
-// M_DECL_FUNC (__fmod) (FLOAT x, FLOAT y)
-// {
-//   if (__builtin_expect (isinf (x) || y == 0, 0) && !isnan (y) && !isnan (x))
-//     /* Domain error: fmod(+-Inf,y) or fmod(x,0).
-//        If x or y are nan, these conditions should not be considered.  */
-//     __set_errno (EDOM);
-//   return M_SUF (__ieee754_fmod) (x, y);
-// }
-// declare_mgen_alias (__fmod, fmod)
-
-// #endif /* __USE_WRAPPER_TEMPLATE.  */
-
-#include <math.h>
-#include <math_private.h>
-#include <libm-alias-finite.h>
-
-double fmod(double x, double y) {
-    if (isinf(x) || y == 0)
-        __set_errno(EDOM);
-
-    return __ieee754_fmod(x, y);
+FLOAT
+M_DECL_FUNC (__fmod) (FLOAT x, FLOAT y)
+{
+  if (__builtin_expect (isinf (x) || y == 0, 0) && !isnan (y) && !isnan (x))
+    /* Domain error: fmod(+-Inf,y) or fmod(x,0).
+       If x or y are nan, these conditions should not be considered.  */
+    __set_errno (EDOM);
+  return M_SUF (__ieee754_fmod) (x, y);
 }
+declare_mgen_alias (__fmod, fmod)
 
+#endif /* __USE_WRAPPER_TEMPLATE.  */
