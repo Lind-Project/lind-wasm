@@ -1,4 +1,4 @@
-use cage::{readtimer, signal_check_trigger, starttimer, timeout_setup_ms};
+use cage::{readtimer, signal_check_trigger, starttimer, timeout_setup_ms, Duration};
 use fdtables;
 use fdtables::epoll_event;
 use lazy_static::lazy_static;
@@ -175,15 +175,24 @@ pub fn poll_syscall(
     if !all_kernel_pollfds.is_empty() {
         let start_time = starttimer();
         // Keep track of total duration for our exit check in the poll loop
-        let (duration, _) = timeout_setup_ms(original_timeout);
+        let (duration, chunk_timeout) = timeout_setup_ms(original_timeout);
 
         let ret;
         loop {
+            let current_chunk_timeout = if duration == Duration::MAX {
+                chunk_timeout
+            } else {
+                std::cmp::min(
+                    chunk_timeout as u128,
+                    duration.saturating_sub(readtimer(start_time)).as_millis(),
+                ) as i32
+            };
+
             let poll_ret = unsafe {
                 libc::poll(
                     all_kernel_pollfds.as_mut_ptr(),
                     all_kernel_pollfds.len() as libc::nfds_t,
-                    0, // Trigger instant return from libc poll as we check elapsed time from start_time for our timeout handling logic
+                    current_chunk_timeout,
                 )
             };
 
@@ -380,12 +389,28 @@ pub fn select_syscall(
 
     let start_time = starttimer();
     // Keep track of total timeout duration for exit handling later
-    let (duration, _) = timeout_setup_ms(timeout_ms);
+    let (duration, chunk_timeout) = timeout_setup_ms(timeout_ms);
+    // Convert chunk_timeout (ms) to timeval for select
+
     let mut ret;
     loop {
         let mut tmp_readfds = real_readfds.clone();
         let mut tmp_writefds = real_writefds.clone();
         let mut tmp_errorfds = real_errorfds.clone();
+
+        let current_chunk_ms = if duration == Duration::MAX {
+            chunk_timeout
+        } else {
+            std::cmp::min(
+                chunk_timeout as u128,
+                duration.saturating_sub(readtimer(start_time)).as_millis(),
+            ) as i32
+        };
+
+        let mut current_timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: (current_chunk_ms as i64) * 1000,
+        };
 
         // Call libc select with proper null handling
         // nfds should be the highest-numbered file descriptor + 1
@@ -408,7 +433,7 @@ pub fn select_syscall(
                     std::ptr::null_mut()
                 },
                 if timeout_ptr.is_some() {
-                    &mut zero_timeout as *mut _ // libc select requires timeval struct format
+                    &mut current_timeout as *mut _ // libc select requires timeval struct format
                 } else {
                     std::ptr::null_mut()
                 },
