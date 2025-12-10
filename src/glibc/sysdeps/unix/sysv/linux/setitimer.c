@@ -23,38 +23,37 @@
 #include <tv32-compat.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 int
 __setitimer64 (__itimer_which_t which,
                const struct __itimerval64 *restrict new_value,
                struct __itimerval64 *restrict old_value)
 {
-  return MAKE_SYSCALL(SETITIMER_SYSCALL, "syscall|setitimer", (uint64_t) which, (uint64_t) new_value, (uint64_t) old_value, NOTUSED, NOTUSED, NOTUSED);
+  uint64_t host_new = TRANSLATE_GUEST_POINTER_TO_HOST (new_value);
+  uint64_t host_old = TRANSLATE_GUEST_POINTER_TO_HOST (old_value);
+  return MAKE_LEGACY_SYSCALL (SETITIMER_SYSCALL, "syscall|setitimer",
+		       (uint64_t) which, host_new, host_old,
+		       NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 #if __TIMESIZE != 64
-libc_hidden_def (__setitimer64)
-int
-__setitimer (__itimer_which_t which,
-             const struct itimerval *restrict new_value,
-             struct itimerval *restrict old_value)
+libc_hidden_def (__setitimer64) int __setitimer (
+    __itimer_which_t which, const struct itimerval *restrict new_value,
+    struct itimerval *restrict old_value)
 {
   int ret;
   struct __itimerval64 new64, old64;
 
-  new64.it_interval
-    = valid_timeval_to_timeval64 (new_value->it_interval);
-  new64.it_value
-    = valid_timeval_to_timeval64 (new_value->it_value);
+  new64.it_interval = valid_timeval_to_timeval64 (new_value->it_interval);
+  new64.it_value = valid_timeval_to_timeval64 (new_value->it_value);
 
   ret = __setitimer64 (which, &new64, old_value ? &old64 : NULL);
 
   if (ret == 0 && old_value != NULL)
     {
-      old_value->it_interval
-        = valid_timeval64_to_timeval (old64.it_interval);
-      old_value->it_value
-        = valid_timeval64_to_timeval (old64.it_value);
+      old_value->it_interval = valid_timeval64_to_timeval (old64.it_interval);
+      old_value->it_value = valid_timeval64_to_timeval (old64.it_value);
     }
 
   return ret;

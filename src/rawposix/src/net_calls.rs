@@ -1,4 +1,4 @@
-use cage::{readtimer, signal_check_trigger, starttimer, timeout_setup_ms};
+use cage::{readtimer, signal_check_trigger, starttimer, timeout_setup_ms, Duration};
 use fdtables;
 use fdtables::epoll_event;
 use lazy_static::lazy_static;
@@ -10,7 +10,6 @@ use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
-use sysdefs::data::fs_struct::EpollEvent;
 use sysdefs::data::net_struct::SockAddr;
 use sysdefs::*;
 use typemap::cage_helpers::convert_fd_to_host;
@@ -92,19 +91,12 @@ pub fn poll_syscall(
         return 0; // No FDs to poll
     }
 
-    if fds_arg == 0 {
-        return syscall_error(Errno::EFAULT, "poll_syscall", "pollfd array is null");
-    }
-
     // Convert arguments after validation
     let nfds = sc_convert_sysarg_to_usize(nfds_arg, nfds_cageid, cageid);
     let original_timeout = sc_convert_sysarg_to_i32(timeout_arg, timeout_cageid, cageid);
 
     // Convert pollfd array from user space
     let fds_ptr = sc_convert_buf(fds_arg, fds_cageid, cageid) as *mut libc::pollfd;
-    if fds_ptr.is_null() {
-        return syscall_error(Errno::EFAULT, "poll_syscall", "pollfd array is null");
-    }
 
     // Create safe slice for pollfd array
     let fds_slice = unsafe { std::slice::from_raw_parts_mut(fds_ptr, nfds) };
@@ -183,15 +175,24 @@ pub fn poll_syscall(
     if !all_kernel_pollfds.is_empty() {
         let start_time = starttimer();
         // Keep track of total duration for our exit check in the poll loop
-        let (duration, _) = timeout_setup_ms(original_timeout);
+        let (duration, chunk_timeout) = timeout_setup_ms(original_timeout);
 
         let ret;
         loop {
+            let current_chunk_timeout = if duration == Duration::MAX {
+                chunk_timeout
+            } else {
+                std::cmp::min(
+                    chunk_timeout as u128,
+                    duration.saturating_sub(readtimer(start_time)).as_millis(),
+                ) as i32
+            };
+
             let poll_ret = unsafe {
                 libc::poll(
                     all_kernel_pollfds.as_mut_ptr(),
                     all_kernel_pollfds.len() as libc::nfds_t,
-                    0, // Trigger instant return from libc poll as we check elapsed time from start_time for our timeout handling logic
+                    current_chunk_timeout,
                 )
             };
 
@@ -388,12 +389,28 @@ pub fn select_syscall(
 
     let start_time = starttimer();
     // Keep track of total timeout duration for exit handling later
-    let (duration, _) = timeout_setup_ms(timeout_ms);
+    let (duration, chunk_timeout) = timeout_setup_ms(timeout_ms);
+    // Convert chunk_timeout (ms) to timeval for select
+
     let mut ret;
     loop {
         let mut tmp_readfds = real_readfds.clone();
         let mut tmp_writefds = real_writefds.clone();
         let mut tmp_errorfds = real_errorfds.clone();
+
+        let current_chunk_ms = if duration == Duration::MAX {
+            chunk_timeout
+        } else {
+            std::cmp::min(
+                chunk_timeout as u128,
+                duration.saturating_sub(readtimer(start_time)).as_millis(),
+            ) as i32
+        };
+
+        let mut current_timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: (current_chunk_ms as i64) * 1000,
+        };
 
         // Call libc select with proper null handling
         // nfds should be the highest-numbered file descriptor + 1
@@ -416,7 +433,7 @@ pub fn select_syscall(
                     std::ptr::null_mut()
                 },
                 if timeout_ptr.is_some() {
-                    &mut zero_timeout as *mut _ // libc select requires timeval struct format
+                    &mut current_timeout as *mut _ // libc select requires timeval struct format
                 } else {
                     std::ptr::null_mut()
                 },
@@ -785,17 +802,13 @@ pub fn epoll_wait_syscall(
         );
     }
 
-    if events_arg == 0 {
-        return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "events array is null");
-    }
-
     // Convert events array from user space
     let mut events_ptr = match sc_convert_addr_to_epollevent(events_arg, events_cageid, cageid) {
         Ok(p) => p,
         Err(e) => return syscall_error(Errno::EFAULT, "epoll_wait_syscall", "Invalid address"),
     };
 
-    // We do not let the kernel write epoll events directly into the guest’s
+    // We do not let the kernel write epoll events directly into the guest's
     // linear memory. The kernel reports events using kernel-side identifiers
     // (underfd) in the epoll_event.data field, which are not visible to user space
     // in our model. To preserve isolation and avoid leaking underfd
@@ -850,7 +863,7 @@ pub fn epoll_wait_syscall(
                 return syscall_error(Errno::EINTR, "epoll", "interrupted");
             }
         }
-        // Convert back to rawposix's data structure
+        // Convert back to user's data structure
         // Loop over virtual epollfd to find corresponding mapping relationship between kernel fd and virtual fd
         for i in 0..ret as usize {
             let ret_kernelfd = kernel_events[i].u64;
@@ -859,7 +872,8 @@ pub fn epoll_wait_syscall(
                 .get(&(epfd))
                 .and_then(|kernel_map| kernel_map.get(&(ret_kernelfd as i32)).copied());
 
-            events[i].fd = ret_virtualfd.unwrap() as i32;
+            // Write back to user's buffer: store virtual fd in the u64 data field
+            events[i].u64 = ret_virtualfd.unwrap() as u64;
             events[i].events = kernel_events[i].events;
         }
         return ret;
@@ -975,7 +989,7 @@ pub fn connect_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1032,7 +1046,7 @@ pub fn bind_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1144,7 +1158,7 @@ pub fn accept_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1210,7 +1224,7 @@ pub fn setsockopt_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = sc_convert_addr_to_host(optval_arg, optval_cageid, cageid);
+    let optval = optval_arg as *mut u8;
     let optlen = sc_convert_sysarg_to_u32(optlen_arg, optlen_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation,
@@ -1319,7 +1333,7 @@ pub fn getsockname_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1380,10 +1394,10 @@ pub fn sendto_syscall(
     addrlen_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
-    let sockaddr = sc_convert_addr_to_host(sockaddr_arg, sockaddr_cageid, cageid);
+    let sockaddr = sockaddr_arg as *mut u8;
     let addrlen = sc_convert_sysarg_to_u32(addrlen_arg, addrlen_cageid, cageid);
 
     // We do not need to explicitly handle the NULL case in `sendto`,
@@ -1447,7 +1461,7 @@ pub fn recvfrom_syscall(
     addrlen_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let buf = sc_convert_addr_to_host(buf_arg, buf_cageid, cageid);
+    let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
 
@@ -1479,7 +1493,7 @@ pub fn recvfrom_syscall(
     }
     // Case 2: both non-NULL → caller wants src_addr + addrlen filled
     else if !(addr_nullity || addrlen_nullity) {
-        let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid) as *mut SockAddr;
+        let addr = addr_arg as *mut SockAddr;
 
         let mut src_storage: sockaddr_storage = unsafe { mem::zeroed() };
         let mut src_len: socklen_t = unsafe { mem::size_of::<sockaddr_storage>() as socklen_t };
@@ -1541,7 +1555,7 @@ pub fn gethostname_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
-    let name = sc_convert_addr_to_host(name_arg, name_cageid, cageid);
+    let name = name_arg as *mut u8;
     let len = sc_convert_sysarg_to_usize(len_arg, len_cageid, cageid);
 
     // would check when `secure` flag has been set during compilation,
@@ -1600,7 +1614,7 @@ pub fn getsockopt_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = sc_convert_sysarg_to_i32_ref(optval_arg, optval_cageid, cageid);
+    let optval = optval_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1618,7 +1632,7 @@ pub fn getsockopt_syscall(
             fd,
             level,
             optname,
-            optval as *mut c_int as *mut c_void,
+            optval as *mut c_void,
             &mut optlen as *mut socklen_t,
         )
     };
@@ -1660,7 +1674,7 @@ pub fn getpeername_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = sc_convert_addr_to_host(addr_arg, addr_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default

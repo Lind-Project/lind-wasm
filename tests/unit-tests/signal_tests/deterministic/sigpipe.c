@@ -41,13 +41,13 @@ int main(int argc, char *argv[])
     if (pid == 0) {
         close(pipefd[1]); 
         close(pipefd[0]); // close both pipe ends
-	sleep(3);
+	sleep(1);
         exit(0);
     }
     else
     {                     /* Parent writes buf_str to pipe */
         close(pipefd[0]); /* Close unused read end */
-        while(1) {
+        for(int i = 0; i < 3; i++) {
             write(pipefd[1], buf_str, strlen(buf_str));
             sleep(1);
         }

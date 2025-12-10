@@ -19,10 +19,12 @@
 #include <unistd.h>
 #include <sysdep-cancel.h>
 #include <not-cancel.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 ssize_t
 __read_nocancel (int fd, void *buf, size_t nbytes)
 {
-  return INLINE_SYSCALL_CALL (read, fd, buf, nbytes);
+  return MAKE_LEGACY_SYSCALL(READ_SYSCALL, "syscall|read", (uint64_t)fd, (uint64_t)(uintptr_t)buf, (uint64_t)nbytes, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 hidden_def (__read_nocancel)

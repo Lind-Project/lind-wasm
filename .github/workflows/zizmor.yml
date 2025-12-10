@@ -1,0 +1,29 @@
+name: Zizmor GitHub Actions security check
+
+on:
+  pull_request:
+
+jobs:
+  zizmor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        id: zizmor
+        uses: zizmorcore/zizmor-action@e639db99335bc9038abc0e066dfcd72e23d26fb4
+        with:
+          inputs: |
+            .github/workflows
+          advanced-security: false
+
+      - name: Fail if issues found
+        if: failure()
+        run: exit 1

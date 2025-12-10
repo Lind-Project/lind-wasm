@@ -24,7 +24,7 @@
 int
 __getpid (void)
 {
-  return MAKE_SYSCALL(GETPID_SYSCALL, "syscall|getpid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL(GETPID_SYSCALL, "syscall|getpid", NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__getpid)
 stub_warning (getpid)

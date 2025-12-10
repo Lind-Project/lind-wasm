@@ -1,16 +1,17 @@
 //! Threei (Three Interposition) module
 use cage::memory::check_addr;
-use cage::{get_cage, Cage, MemoryBackingType, VmmapEntry};
 use core::panic;
 use dashmap::DashSet;
-use nodit::interval::ie;
 use once_cell::sync::Lazy;
-use std::sync::Arc;
+use parking_lot::Mutex;
+use std::collections::HashMap;
+use std::ffi::c_void;
+use std::ptr::NonNull;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, RwLock};
 use sysdefs::constants::lind_platform_const;
-use sysdefs::constants::{
-    MAP_ANONYMOUS, MAP_PRIVATE, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
-}; // Used in `copy_data_between_cages`
-use typemap::datatype_conversion::{sc_convert_buf, sc_convert_uaddr_to_host};
+use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
+use typemap::datatype_conversion::sc_convert_uaddr_to_host;
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
@@ -20,47 +21,6 @@ use crate::syscall_table::SYSCALL_TABLE;
 use crate::threei_const;
 
 pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
-const MMAP_SYSCALL: u64 = 9; // mmap syscall number
-
-/// Registers a closure into the `GLOBAL_GRATE` handler table for a specific grateid.
-/// The closure is responsible for handling grate calls by dynamically looking up a Wasm-exported
-/// function by name (following the `<call_name>_grate` suffix convention) and invoking it. This
-/// function assumes that the `GLOBAL_GRATE` table is already initialized or initializes it if
-/// needed. It panics if `grateid` exceeds the preallocated bounds (currently 1024 entries).
-/// This function allows 3i to attach a per-grate function resolution mechanism, without needing
-/// internal dispatch in the Wasm module.
-///
-/// ## Arguments:
-/// - grateid: ID of the grate. Used as the index into `GLOBAL_GRATE`.
-/// - callback: A boxed closure that takes the syscall name pointer and six argument pairs (value
-/// and cage ID) and returns an i32. This closure handles dynamic lookup and execution.
-///
-/// ## Returns:
-/// Always returns 0. Panics if grateid is out of bounds.
-pub fn threei_wasm_func(
-    grateid: u64,
-    mut callback: Box<
-        dyn FnMut(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64) -> i32
-            + 'static,
-    >,
-) -> i32 {
-    let index = grateid as usize;
-    unsafe {
-        if GLOBAL_GRATE.is_none() {
-            _init_global_grate();
-        }
-
-        if let Some(ref mut vec) = GLOBAL_GRATE {
-            if index < vec.len() {
-                vec[index] = Some(callback);
-            } else {
-                panic!("[3i|threei_wasm_func] Index out of bounds: {}", index);
-            }
-        }
-    }
-
-    0
-}
 
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
 pub type RawCallFunc = fn(
@@ -79,105 +39,214 @@ pub type RawCallFunc = fn(
     arg6_cageid: u64,
 ) -> i32;
 
-/// Each entry in the `Vec` corresponds to a specific grate, and the index is used as its identifier
-/// (`grate_id`). The position must be stable even if some grates are removed, so we use `Option` to
-/// allow for "holes" in the vector.
 ///
-/// - The outer `Option` represents whether the entire registry has been initialized.
-/// - The inner `Vec<Option<Box<dyn FnMut(...)>>>` holds optional callback closures per grate.
-/// - The inner `Option` allows a specific grate slot to be empty (e.g., after removal).
-///
-/// Each callback is a boxed closure that handles intercepted syscalls (registered at `threei_wasm_func`).
-/// These callbacks are created dynamically and passed from the Wasmtime runtime.
-/// Example layout:
-///     GLOBAL_GRATE = Some(vec![
-///         Some(Box::new(grate0_handler)),  // grate_id = 0
-///         None,                            // grate_id = 1 (removed or not initialized)
-///         Some(Box::new(grate2_handler)),  // grate_id = 2
-///     ])
-static mut GLOBAL_GRATE: Option<
-    Vec<
-        Option<
-            Box<
-                dyn FnMut(
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                ) -> i32,
-            >,
-        >,
-    >,
-> = None;
 
-/// Initializes the `GLOBAL_GRATE` table if it is not already set.
+/// Represents a callback function entry exported from a Wasm module into the host.
+/// This will be only used in the Wasmtime side to store the function pointer and context
+// and then passed into the 3i side for registration only when the `register_handler` call is made.
 ///
-/// Creates a fixed-size `Vec<Option<Closure>>` (currently 1024 entries) to store per-grate
-/// closures, and sets `GLOBAL_GRATE` to a `Vec<Option<Closure>>` with a fixed number of
-/// entries (currently 1024), each initially set to `None`.
+/// - `fn_ptr`:  Function pointer to the callback function inside the Wasm instance.
+/// - `ctx_ptr`: Raw pointer to the Wasm module's `VMContext`.
 ///
-/// This function should be called before any attempt to insert into or access `GLOBAL_GRATE`.
+/// It is never used or owned or deallocated by the 3i side, and the Wasmtime
+/// runtime is responsible for managing its lifetime.
 ///
-/// ## Arguments:
-/// None
+/// # `WasmGrateFnEntryPtr`
+/// A transparent wrapper around a non-null pointer to a [`WasmGrateFnEntry`].
 ///
-/// ## Returns:
-/// None
-fn _init_global_grate() {
-    // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
-    unsafe {
-        let vec = GLOBAL_GRATE
-            .get_or_insert_with(|| Vec::with_capacity(lind_platform_const::MAX_CAGEID as usize));
-        vec.resize_with(lind_platform_const::MAX_CAGEID as usize, || None);
+/// 1. The address referenced by this pointer is stable and will not be freed or moved
+///    while it is stored in the global table.
+/// 2. Accesses through this pointer are strictly read-only; no concurrent mutation occurs.
+///
+/// # Safety
+/// [`WasmGrateFnEntry`] and [`WasmGrateFnEntryPtr`] are only used for reading access and 3i
+/// will create new [`GrateFnEntry`] instances based on the data read from them.
+/// 1) The object address pointed to by this pointer is stable and will not be released/moved
+/// during its time in the table;
+/// 2) We only perform read-only access (retrieve fields), and do not perform concurrent writes.
+#[repr(C)]
+pub struct WasmGrateFnEntry {
+    pub fn_ptr: extern "C" fn(
+        *mut c_void,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+    ) -> i32,
+    pub ctx_ptr: *mut c_void,
+}
+
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct WasmGrateFnEntryPtr(NonNull<WasmGrateFnEntry>);
+
+unsafe impl Send for WasmGrateFnEntryPtr {}
+unsafe impl Sync for WasmGrateFnEntryPtr {}
+
+impl WasmGrateFnEntryPtr {
+    /// Creates a new wrapper from a raw pointer.
+    ///
+    /// Returns `None` if the pointer is null.
+    #[inline]
+    pub fn new(ptr: *const WasmGrateFnEntry) -> Option<Self> {
+        NonNull::new(ptr as *mut WasmGrateFnEntry).map(WasmGrateFnEntryPtr)
+    }
+
+    /// Returns the raw pointer for FFI or read-only field access.
+    #[inline]
+    pub fn as_ptr(&self) -> *const WasmGrateFnEntry {
+        self.0.as_ptr()
     }
 }
 
-/// Marks the entry corresponding to a grateid in the `GLOBAL_GRATE` table as `None`,
-/// unregistering its associated handler. This function is useful during cage teardown
-/// or dynamic unloading of a grate.
+/// Represents a single Grate function entry only used in the 3i side.
 ///
-/// ## Arguments:
-/// - grateid: The index of the grate to be removed.
+/// This struct is constructed by 3i **after** receiving a `WasmGrateFnEntryPtr`
+/// from the Wasmtime side. 3i **does not** take ownership of Wasmtime-managed
+/// memory; instead, it copies the raw fields (`fn_ptr`, `ctx_ptr`) into this
+/// host-owned entry together with 3i’s own concurrency controls (`state`,
+/// `call_lock`).
 ///
-/// ## Returns:
-/// None
+/// Each entry stores both:
+/// - `fn_ptr`: a callback function pointer used to re-enter the Wasm module
+///   from the host side (i.e., the actual logic Wasmtime executes when invoking
+///   a Grate callback). See [`lind-3i`] and [`Wasmtime::Run`] crate for details.
+/// - `ctx_ptr`: a pointer to the corresponding context information (`VMContext`) needed by
+///    callback function.
+/// - `state`: Lifecycle flag managed by 3i. Values: `ALIVE` -> `REVOKING` -> `DEAD`.
+///   See `threei_const.rs` for more details.
+/// - `call_lock`: Per-entry mutex used to **serialize re-entry** into the same
+///   `(pid, tid)` `VMContext`. This prevents concurrent mutation of shared
+///   Wasm-side state.
+///
+/// Since `VMContext` is per-thread, the global table `GLOBAL_GRATE` is keyed by `(pid, tid)`
+/// to maintain per-Cage and per-thread associations.  
+///
+/// ## Safety model
+/// 3i ensures memory-safety during teardown by following
+/// “revoke-before-free” ordering:
+/// 1) Remove the entry from `GLOBAL_GRATE` (no new handles),
+/// 2) `state = REVOKING`,
+/// 3) acquire `call_lock` (wait until the last in-flight call finishes),
+/// 4) release Wasmtime-side resources (if 3i is responsible), then
+/// 5) `state = DEAD`.
+/// 6) Release `GrateFnEntry`.
+///
+/// Callers always:
+/// - read `state` (must be `ALIVE`),
+/// - lock `call_lock` (serialize re-entry),
+/// - re-check `state` (guard against races while waiting for the lock),
+/// - then invoke `fn_ptr(ctx_ptr, ...)`.
+///
+/// TODO: implement tid functionality. tid is set to zero for now as a placeholder.
+///
+/// This data structure is also accessed by the lind-3i crate within Wasmtime
+/// to coordinate re-entry into the correct Wasm execution context.
+#[repr(C)]
+pub struct GrateFnEntry {
+    pub fn_ptr: extern "C" fn(
+        *mut c_void,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+    ) -> i32,
+    pub ctx_ptr: *mut c_void,
+    pub state: AtomicU8,
+    pub call_lock: Mutex<()>,
+}
+
+/// All re-entries for the same `(pid, tid)` are serialized by `call_lock`.
+/// No two threads call `fn_ptr` concurrently with the same `ctx_ptr`.
+/// Teardown follows revoke-before-free. Once `state = REVOKING`, no new calls are admitted
+unsafe impl Send for GrateFnEntry {}
+unsafe impl Sync for GrateFnEntry {}
+
+/// Global mapping of `(pid, tid)` to `Arc<GrateFnEntry>`.
+///
+/// Used **ONLY** by 3i to look up the appropriate Grate callback and its associated `VMContext` when
+/// performing a re-entry into Wasm.
+pub static GLOBAL_GRATE: Lazy<RwLock<HashMap<(u64, u64), Arc<GrateFnEntry>>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
+
+/// Registers a new `GrateFnEntry` into the global table `GLOBAL_GRATE`.
+/// It takes a `grateid` (representing the Grate instance) and a u64 pointer (`entry_ptr_u64`) to a
+/// `GrateFnEntry` that originates from the Wasmtime side.
+///
+/// The function validates that both the pointer and its contained `fn_ptr` and `ctx_ptr` are non-null
+/// before inserting it into the table.
+///
+/// The key used is `(grateid, 0)`
+/// TODO: the second component (`tid`) is reserved for future per-thread extensions.
+///
+/// Returns 0 on success, -1 on invalid pointer or null context.
+fn _add_global_grate(grateid: u64, entry_ptr_u64: u64) -> i32 {
+    if entry_ptr_u64 == 0 {
+        return -1;
+    }
+
+    let src: &WasmGrateFnEntry = unsafe { &*(entry_ptr_u64 as usize as *const WasmGrateFnEntry) };
+    if src.ctx_ptr.is_null() {
+        return -1;
+    }
+
+    let entry = Arc::new(GrateFnEntry {
+        fn_ptr: src.fn_ptr,
+        ctx_ptr: src.ctx_ptr as *mut c_void,
+        state: AtomicU8::new(threei_const::STATE_ALIVE),
+        call_lock: Mutex::new(()),
+    });
+
+    let mut map = GLOBAL_GRATE.write().unwrap();
+    if map.contains_key(&(grateid, 0)) {
+        panic!(
+            "[3i|_add_global_grate] attempt to overwrite existing grate entry for grateid: {}",
+            grateid
+        );
+    }
+    map.insert((grateid, 0), entry);
+
+    0
+}
+
+/// Removes a `GrateFnEntry` associated with the given `grateid` from the global table.
+/// TODO: the second component (`tid`) is reserved for future per-thread extensions.
 fn _rm_from_global_grate(grateid: u64) {
-    // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
-    unsafe {
-        if let Some(ref mut global_grate) = GLOBAL_GRATE {
-            if grateid < global_grate.len() as u64 {
-                global_grate[grateid as usize] = None;
-            }
-        }
-    }
+    let mut map = GLOBAL_GRATE.write().expect("lock poisoned");
+    map.remove(&(grateid, 0));
 }
 
-/// Executes the registered handler closure for a given grateid, using the syscall name to
-/// dynamically resolve the function to be called.
+/// Invokes a stored Grate callback function (`fn_ptr`) corresponding to the given `grateid`.
+/// The function first looks up `(grateid, 0)` in the global table to retrieve the associated
+/// `GrateFnEntry`.
+/// If found, it performs an unsafe call to the `fn_ptr`, passing in its `ctx_ptr` (the per-thread
+/// `VMContext`) and argument pairs plus `self_cageid`.
+/// This allows the 3i side to re-enter the Wasm runtime and execute a callback inside the Grate module.
 ///
-/// ## Arguments:
-/// - grateid: ID of the target grate (used to locate the closure).
-/// - call_name: Pointer to a UTF-8 encoded syscall name string in the calling Wasm instance.
-/// - self_cageid: ID of the calling cage.
-/// - arg1..arg6: Argument values to be passed to the syscall.
-/// - arg1_cageid..arg6_cageid: Cage IDs corresponding to each argument
-///
-/// ## Returns:
-/// `Some(i32)` if the call succeeds.
-/// `None` if the handler or grate entry is missing.
+/// Returns `Some(i32)` representing the grate call result, or `Some(-1)` if the entry does not exist.
 fn _call_grate_func(
     grateid: u64,
-    call_name: u64,
+    in_grate_fn_ptr_u64: u64,
     self_cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -192,34 +261,39 @@ fn _call_grate_func(
     arg6: u64,
     arg6_cageid: u64,
 ) -> Option<i32> {
-    // syscall_name from glibc is an address ptr inside wasm linear memory, so we need to
-    // manually extract the string content from the address
-    let call_ptr = sc_convert_buf(call_name, self_cageid, self_cageid);
+    let entry = {
+        let map = GLOBAL_GRATE.read().unwrap();
+        map.get(&(grateid, 0)).cloned()
+    }?;
 
-    // Safety: Global mutable static variable GLOBAL_GRATE for mutable access
-    unsafe {
-        let vec = GLOBAL_GRATE.as_mut()?;
-        let func = vec.get_mut(grateid as usize)?.as_mut()?;
-
-        // The closure is then called with the extracted syscall name and the full set of
-        // arguments + their corresponding cage IDs.
-        Some(func(
-            call_ptr as u64,
-            self_cageid,
-            arg1,
-            arg1_cageid,
-            arg2,
-            arg2_cageid,
-            arg3,
-            arg3_cageid,
-            arg4,
-            arg4_cageid,
-            arg5,
-            arg5_cageid,
-            arg6,
-            arg6_cageid,
-        ))
+    if entry.state.load(Ordering::Acquire) != threei_const::STATE_ALIVE {
+        return Some(-1);
     }
+    let _g = entry.call_lock.lock();
+
+    if entry.state.load(Ordering::Acquire) != threei_const::STATE_ALIVE {
+        return Some(-1);
+    }
+
+    let rc = (entry.fn_ptr)(
+        entry.ctx_ptr,
+        in_grate_fn_ptr_u64,
+        self_cageid,
+        arg1,
+        arg1_cageid,
+        arg2,
+        arg2_cageid,
+        arg3,
+        arg3_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    );
+
+    Some(rc)
 }
 
 /// EXITING_TABLE:
@@ -242,20 +316,22 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 ///
 /// Example:
 /// register_handler(
-///     NOTUSED, 7,  34, NOTUSED,
-///    foo, mycagenum,
+///     foo_addr, 7,  34, SOME_ENTRY_PTR,
+///    1, mycagenum,
 ///    ...)
 ///
 ///
 /// If a conflicting mapping exists, the function panics to prevent accidental overwrite.
 ///
-/// If a handler is already registered for this (syscall number, function index) pair with the same
+/// If a handler is already registered for this (syscall number, in grate function address) pair with the same
 /// destination cage, the call is treated as a no-op.
 ///
 /// ## Arguments:
+/// - in_grate_fn_ptr_u64: Pointer to the function inside the grate that will handle this syscall.
 /// - targetcage: The ID of the cage whose syscall table is being modified (i.e., the source of the syscall).
 /// - targetcallnum: The syscall number to interpose on (can be treated as a match-all in some configurations).
-/// - handlefunc: The function index (or exported function address) to register.
+/// - entry_ptr_u64: Pointer to the Grate function entry (contains `fn_ptr` and `ctx_ptr`).
+/// - is_register: The operation flag to indicate whether to register or deregister.
 /// - handlefunccage: The cage (typically a grate) that owns the destination function to be called.
 ///
 /// ## Returns:
@@ -263,11 +339,11 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// ELINDESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
 pub fn register_handler(
-    _callnum: u64,
+    in_grate_fn_ptr_u64: u64,
     targetcage: u64,    // Cage to modify
-    targetcallnum: u64, // Syscall number or match-all indicator. Match-all: 1000.
-    _arg1cage: u64,
-    handlefunc: u64, // Function index to register (for grate, also called destination call) _or_ 0 for deregister
+    targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all.
+    entry_ptr_u64: u64,
+    is_register: u64,    // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
     _arg3cage: u64,
@@ -283,8 +359,17 @@ pub fn register_handler(
         return threei_const::ELINDESRCH as i32;
     }
 
+    // Add the `GrateFnEntry` to the global table
+    _add_global_grate(handlefunccage, entry_ptr_u64);
+
     // Actual implementation is in handler_table module according to feature flag
-    register_handler_impl(targetcage, targetcallnum, handlefunc, handlefunccage)
+    register_handler_impl(
+        targetcage,
+        targetcallnum,
+        is_register,
+        handlefunccage,
+        in_grate_fn_ptr_u64,
+    )
 }
 
 /// This copies the handler table used by a cage to another cage.  
@@ -377,7 +462,7 @@ pub fn copy_handler_table_to_cage(
 pub fn make_syscall(
     self_cageid: u64, // is required to get the cage instance
     syscall_num: u64,
-    syscall_name: u64, // syscall name pointer in the calling Wasm instance
+    _syscall_name: u64, // syscall name pointer in the calling Wasm instance
     target_cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -402,12 +487,12 @@ pub fn make_syscall(
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
     if _check_cage_handler_exist(self_cageid) {
-        if let Some((_call_index, grateid)) = _get_handler(self_cageid, syscall_num) {
-            // <targetcage, targetcallnum, handlefunc_index_in_this_grate, this_grate_id>
+        if let Some((in_grate_fn_ptr_u64, grateid)) = _get_handler(self_cageid, syscall_num) {
+            // <targetcage, targetcallnum, in_grate_fn_ptr_u64, this_grate_id>
             // Theoretically, the complexity is O(1), shouldn't affect performance a lot
             if let Some(ret) = _call_grate_func(
                 grateid,
-                syscall_name,
+                in_grate_fn_ptr_u64,
                 self_cageid,
                 arg1,
                 arg1_cageid,
@@ -464,13 +549,13 @@ pub fn make_syscall(
             arg6,
             arg6_cageid,
         );
-        return ret;
+        ret
     } else {
         eprintln!(
             "[3i|make_syscall] Syscall number {} not found!",
             syscall_num
         );
-        return threei_const::ELINDAPIABORTED as i32;
+        threei_const::ELINDAPIABORTED as i32
     }
 }
 
