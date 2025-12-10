@@ -30,7 +30,7 @@ use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXI
 // each cage has its own lind-common context
 pub struct LindCommonCtx {
     // process id attached to the lind-common context, should be same as cage id
-    pid: i32,
+    cageid: i32,
 
     // next cage id, shared between all lind-common context instance (i.e. all cages)
     next_cageid: Arc<AtomicU64>,
@@ -40,13 +40,19 @@ impl LindCommonCtx {
     // create a new lind-common context, should only be called once for then entire runtime
     pub fn new(next_cageid: Arc<AtomicU64>) -> Result<Self> {
         // cage id starts from 1
-        let pid = 1;
-        Ok(Self { pid, next_cageid })
+        let cageid = 1;
+        Ok(Self {
+            cageid,
+            next_cageid,
+        })
     }
 
-    // create a new lind-common context with pid provided, used by exec syscall
-    pub fn new_with_pid(pid: i32, next_cageid: Arc<AtomicU64>) -> Result<Self> {
-        Ok(Self { pid, next_cageid })
+    // create a new lind-common context with cageid provided, used by exec syscall
+    pub fn new_with_cageid(cageid: i32, next_cageid: Arc<AtomicU64>) -> Result<Self> {
+        Ok(Self {
+            cageid,
+            next_cageid,
+        })
     }
 
     // entry point for lind_syscall in glibc, dispatching syscalls to rawposix or wasmtime
@@ -94,7 +100,7 @@ impl LindCommonCtx {
             EXIT_SYSCALL => wasmtime_lind_multi_process::exit_syscall(caller, arg1 as i32),
             // other syscalls goes into rawposix
             _ => make_syscall(
-                self.pid as u64,
+                self.cageid as u64,
                 call_number as u64,
                 call_name as u64,
                 target_cageid,
@@ -114,37 +120,6 @@ impl LindCommonCtx {
         }
     }
 
-    // setjmp call. This function needs to be handled within wasmtime, but it is not an actual syscall so we use a different routine from lind_syscall
-    pub fn lind_setjmp<
-        T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-        U: Clone + Send + 'static + std::marker::Sync,
-    >(
-        &self,
-        caller: &mut Caller<'_, T>,
-        jmp_buf: u32,
-    ) -> i32 {
-        wasmtime_lind_multi_process::setjmp_call(caller, jmp_buf)
-    }
-
-    // longjmp call. This function needs to be handled within wasmtime, but it is not an actual syscall so we use a different routine from lind_syscall
-    pub fn lind_longjmp<
-        T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-        U: Clone + Send + 'static + std::marker::Sync,
-    >(
-        &self,
-        caller: &mut Caller<'_, T>,
-        jmp_buf: u32,
-        retval: i32,
-    ) -> i32 {
-        wasmtime_lind_multi_process::longjmp_call(caller, jmp_buf, retval)
-    }
-
-    // get current process id/cageid
-    // currently unused interface but may be useful in the future
-    pub fn getpid(&self) -> i32 {
-        self.pid
-    }
-
     // return the next avaliable cageid (cageid increment sequentially)
     fn next_cage_id(&self) -> Option<u64> {
         match self
@@ -161,10 +136,10 @@ impl LindCommonCtx {
     // fork a new lind-common context, used by clone syscall
     pub fn fork(&self) -> Self {
         // cageid is automatically incremented here
-        let next_pid = self.next_cage_id().unwrap();
+        let next_cageid = self.next_cage_id().unwrap();
 
         let forked_ctx = Self {
-            pid: next_pid as i32,
+            cageid: next_cageid as i32,
             next_cageid: self.next_cageid.clone(),
         };
 
@@ -322,14 +297,12 @@ pub fn add_to_linker<
         },
     )?;
 
-    // export lind-get-cage-id for libc to query the current cage id (pid)
+    // export lind-get-cage-id for libc to query the current cage id
     linker.func_wrap(
         "lind",
         "lind-get-cage-id",
-        move |caller: Caller<'_, T>| -> u64 {
-            let host = caller.data().clone();
-            let ctx = get_cx(&host);
-            ctx.getpid() as u64
+        move |mut caller: Caller<'_, T>| -> u64 {
+            wasmtime_lind_multi_process::current_cageid(&mut caller) as u64
         },
     )?;
 
@@ -338,10 +311,7 @@ pub fn add_to_linker<
         "lind",
         "lind-setjmp",
         move |mut caller: Caller<'_, T>, jmp_buf: i32| -> i32 {
-            let host = caller.data().clone();
-            let ctx = get_cx(&host);
-
-            ctx.lind_setjmp(&mut caller, jmp_buf as u32)
+            wasmtime_lind_multi_process::setjmp_call(&mut caller, jmp_buf as u32)
         },
     )?;
 
@@ -350,10 +320,7 @@ pub fn add_to_linker<
         "lind",
         "lind-longjmp",
         move |mut caller: Caller<'_, T>, jmp_buf: i32, retval: i32| -> i32 {
-            let host = caller.data().clone();
-            let ctx = get_cx(&host);
-
-            ctx.lind_longjmp(&mut caller, jmp_buf as u32, retval)
+            wasmtime_lind_multi_process::longjmp_call(&mut caller, jmp_buf as u32, retval)
         },
     )?;
 
