@@ -20,13 +20,19 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sysdep-cancel.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Write up to LENGTH bytes of randomness starting at BUFFER.
    Return the number of bytes written, or -1 on error.  */
 ssize_t
 __getrandom (void *buffer, size_t length, unsigned int flags)
 {
-  return SYSCALL_CANCEL (getrandom, buffer, length, flags);
+   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST(buffer);
+
+  return MAKE_LEGACY_SYSCALL (GETRANDOM_SYSCALL, "syscall|getrandom", (uint64_t) host_buf,
+		       (uint64_t) length, (uint64_t) flags, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__getrandom)
 weak_alias (__getrandom, getrandom)
