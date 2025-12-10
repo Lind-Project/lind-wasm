@@ -78,7 +78,7 @@ command -v "${CLANG_BIN}" >/dev/null 2>&1 || { echo "error: clang not found on P
 run_cmd "${CLANG_BIN}" --sysroot="${SYSROOT}" \
   -pthread --target=wasm32-unknown-wasi \
   -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
-  "$SRC" -g -O0 -lm -lc -o "${OUT_WASM}"
+  "$SRC" -g -O0 -o "${OUT_WASM}"
 
 # --- optimize ---
 run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
