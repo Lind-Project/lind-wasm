@@ -12,7 +12,9 @@ use nodit::NoditMap;
 use nodit::{interval::ie, Interval};
 use std::io;
 use sysdefs::constants::err_const::{syscall_error, Errno};
-use sysdefs::constants::fs_const::{PAGESHIFT, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE};
+use sysdefs::constants::fs_const::{
+    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+};
 
 /// Default number of virtual memory pages in a `vmmap`.
 /// Calculated as 2^(32 - PAGESHIFT), which represents the total pages
@@ -367,6 +369,72 @@ impl Vmmap {
     // - File information (offset and size) when applicable
     // - Any gaps in the address space
     fn debug() {}
+
+    /// Checks if a given address range is readable
+    ///
+    /// This helper function checks whether a memory range starting at the given address
+    /// with the specified length has read permissions. It abstracts away the underlying
+    /// vmmap lookup and protection flag checking logic.
+    ///
+    /// # Arguments
+    /// * `addr` - Virtual memory address to check
+    /// * `length` - Length of the memory region in bytes
+    ///
+    /// # Returns
+    /// * `true` - If the entire range is mapped and readable
+    /// * `false` - If any part of the range is unmapped or not readable
+    pub fn check_addr_read(&mut self, addr: u64, length: usize) -> bool {
+        let page_num = (addr >> PAGESHIFT) as u32;
+        let end_page = ((addr + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32;
+        let npages = end_page - page_num;
+
+        self.check_addr_mapping(page_num, npages, PROT_READ)
+            .is_some()
+    }
+
+    /// Checks if a given address range is writable
+    ///
+    /// This helper function checks whether a memory range starting at the given address
+    /// with the specified length has write permissions. It abstracts away the underlying
+    /// vmmap lookup and protection flag checking logic.
+    ///
+    /// # Arguments
+    /// * `addr` - Virtual memory address to check
+    /// * `length` - Length of the memory region in bytes
+    ///
+    /// # Returns
+    /// * `true` - If the entire range is mapped and writable
+    /// * `false` - If any part of the range is unmapped or not writable
+    pub fn check_addr_write(&mut self, addr: u64, length: usize) -> bool {
+        let page_num = (addr >> PAGESHIFT) as u32;
+        let end_page = ((addr + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32;
+        let npages = end_page - page_num;
+
+        self.check_addr_mapping(page_num, npages, PROT_WRITE)
+            .is_some()
+    }
+
+    /// Checks if a given address range is readable and writable
+    ///
+    /// This helper function checks whether a memory range starting at the given address
+    /// with the specified length has both read and write permissions. It abstracts away
+    /// the underlying vmmap lookup and protection flag checking logic.
+    ///
+    /// # Arguments
+    /// * `addr` - Virtual memory address to check
+    /// * `length` - Length of the memory region in bytes
+    ///
+    /// # Returns
+    /// * `true` - If the entire range is mapped with both read and write permissions
+    /// * `false` - If any part of the range is unmapped or lacks read/write permissions
+    pub fn check_addr_rw(&mut self, addr: u64, length: usize) -> bool {
+        let page_num = (addr >> PAGESHIFT) as u32;
+        let end_page = ((addr + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32;
+        let npages = end_page - page_num;
+
+        self.check_addr_mapping(page_num, npages, PROT_READ | PROT_WRITE)
+            .is_some()
+    }
 }
 
 impl VmmapOps for Vmmap {
