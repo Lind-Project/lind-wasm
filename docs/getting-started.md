@@ -39,8 +39,8 @@ EOF
 Use lind scripts to compile and run your program in the Lind Sandbox.
 
 ```bash
-lind-clang hello.c
-lind-wasm hello.cwasm
+lind_compile hello.c
+lind_run hello.cwasm
 ```
 
 *Here is what happens under the hood:*
