@@ -119,9 +119,9 @@ __printf_buffer_to_file_done (struct __printf_buffer_to_file *buf)
     return -1;
   __printf_buffer_flush_to_file (buf);
 
-  /* Flush stdout buffer immediately without waiting
-     for it to fill or for the program to exit */
-  if (buf->fp == stdout) {
+  /* Flush stdout buffer immediately if it is refered to a terminal,
+     without waiting for it to fill or for the program to exit */
+  if (!isatty(stdout)) {
     fflush(stdout);
   }
 
