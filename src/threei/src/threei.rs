@@ -1,14 +1,12 @@
 //! Threei (Three Interposition) module
 use cage::memory::check_addr;
 use core::panic;
+use dashmap::DashMap;
 use dashmap::DashSet;
+use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
-use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::ffi::c_void;
-use std::ptr::NonNull;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
 use typemap::datatype_conversion::sc_convert_uaddr_to_host;
@@ -39,215 +37,148 @@ pub type RawCallFunc = fn(
     arg6_cageid: u64,
 ) -> i32;
 
-///
+/// In the 3i library, a trampoline function is a runtime-provided function pointer used
+/// to execute grate calls. Each runtime that integrates with 3i supplies its own trampoline
+/// implementation, which defines how control is transferred into that runtime when a grate
+/// call is dispatched.
+pub type GrateTrampolineFn = extern "C" fn(
+    in_grate_fn_ptr_u64: u64,
+    cageid: u64,
+    arg1: u64,
+    arg1cageid: u64,
+    arg2: u64,
+    arg2cageid: u64,
+    arg3: u64,
+    arg3cageid: u64,
+    arg4: u64,
+    arg4cageid: u64,
+    arg5: u64,
+    arg5cageid: u64,
+    arg6: u64,
+    arg6cageid: u64,
+) -> i32;
 
-/// Represents a callback function entry exported from a Wasm module into the host.
-/// This will be only used in the Wasmtime side to store the function pointer and context
-// and then passed into the 3i side for registration only when the `register_handler` call is made.
+/// This table stores trampoline functions associated with runtime identifiers.
 ///
-/// - `fn_ptr`:  Function pointer to the callback function inside the Wasm instance.
-/// - `ctx_ptr`: Raw pointer to the Wasm module's `VMContext`.
-///
-/// It is never used or owned or deallocated by the 3i side, and the Wasmtime
-/// runtime is responsible for managing its lifetime.
-///
-/// # `WasmGrateFnEntryPtr`
-/// A transparent wrapper around a non-null pointer to a [`WasmGrateFnEntry`].
-///
-/// 1. The address referenced by this pointer is stable and will not be freed or moved
-///    while it is stored in the global table.
-/// 2. Accesses through this pointer are strictly read-only; no concurrent mutation occurs.
-///
-/// # Safety
-/// [`WasmGrateFnEntry`] and [`WasmGrateFnEntryPtr`] are only used for reading access and 3i
-/// will create new [`GrateFnEntry`] instances based on the data read from them.
-/// 1) The object address pointed to by this pointer is stable and will not be released/moved
-/// during its time in the table;
-/// 2) We only perform read-only access (retrieve fields), and do not perform concurrent writes.
-#[repr(C)]
-pub struct WasmGrateFnEntry {
-    pub fn_ptr: extern "C" fn(
-        *mut c_void,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-    ) -> i32,
-    pub ctx_ptr: *mut c_void,
+/// `TRAMPOLINE_TABLE` is a global map from `runtime_id` to `GrateTrampolineFn`.
+/// DashMap is used to allow concurrent registration and lookup without a global lock.
+lazy_static! {
+    // <runtime_id, GrateTrampolineFn>
+    pub static ref TRAMPOLINE_TABLE: DashMap<u64, GrateTrampolineFn> = DashMap::new();
 }
 
-#[repr(transparent)]
-#[derive(Clone)]
-pub struct WasmGrateFnEntryPtr(NonNull<WasmGrateFnEntry>);
-
-unsafe impl Send for WasmGrateFnEntryPtr {}
-unsafe impl Sync for WasmGrateFnEntryPtr {}
-
-impl WasmGrateFnEntryPtr {
-    /// Creates a new wrapper from a raw pointer.
-    ///
-    /// Returns `None` if the pointer is null.
-    #[inline]
-    pub fn new(ptr: *const WasmGrateFnEntry) -> Option<Self> {
-        NonNull::new(ptr as *mut WasmGrateFnEntry).map(WasmGrateFnEntryPtr)
-    }
-
-    /// Returns the raw pointer for FFI or read-only field access.
-    #[inline]
-    pub fn as_ptr(&self) -> *const WasmGrateFnEntry {
-        self.0.as_ptr()
-    }
+/// `register_trampoline` registers a trampoline function for the given runtime ID.
+///
+/// todo: In the current implementation, trampolines are registered during runtime
+/// initialization in [wasmtime/run.rs]. This registration logic is expected to move
+/// into lind-boot in the future so that trampoline setup is handled as part of the
+/// system bootstrap process rather than runtime startup.
+pub fn register_trampoline(runtime: u64, f: GrateTrampolineFn) {
+    TRAMPOLINE_TABLE.insert(runtime, f);
 }
 
-/// Represents a single Grate function entry only used in the 3i side.
+/// `get_runtime_trampoline` retrieves the trampoline function associated with the given runtime ID.
+/// It returns a copy of the function pointer if present, or None if the runtime has not registered
+/// a trampoline.
 ///
-/// This struct is constructed by 3i **after** receiving a `WasmGrateFnEntryPtr`
-/// from the Wasmtime side. 3i **does not** take ownership of Wasmtime-managed
-/// memory; instead, it copies the raw fields (`fn_ptr`, `ctx_ptr`) into this
-/// host-owned entry together with 3i’s own concurrency controls (`state`,
-/// `call_lock`).
-///
-/// Each entry stores both:
-/// - `fn_ptr`: a callback function pointer used to re-enter the Wasm module
-///   from the host side (i.e., the actual logic Wasmtime executes when invoking
-///   a Grate callback). See [`lind-3i`] and [`Wasmtime::Run`] crate for details.
-/// - `ctx_ptr`: a pointer to the corresponding context information (`VMContext`) needed by
-///    callback function.
-/// - `state`: Lifecycle flag managed by 3i. Values: `ALIVE` -> `REVOKING` -> `DEAD`.
-///   See `threei_const.rs` for more details.
-/// - `call_lock`: Per-entry mutex used to **serialize re-entry** into the same
-///   `(pid, tid)` `VMContext`. This prevents concurrent mutation of shared
-///   Wasm-side state.
-///
-/// Since `VMContext` is per-thread, the global table `GLOBAL_GRATE` is keyed by `(pid, tid)`
-/// to maintain per-Cage and per-thread associations.  
-///
-/// ## Safety model
-/// 3i ensures memory-safety during teardown by following
-/// “revoke-before-free” ordering:
-/// 1) Remove the entry from `GLOBAL_GRATE` (no new handles),
-/// 2) `state = REVOKING`,
-/// 3) acquire `call_lock` (wait until the last in-flight call finishes),
-/// 4) release Wasmtime-side resources (if 3i is responsible), then
-/// 5) `state = DEAD`.
-/// 6) Release `GrateFnEntry`.
-///
-/// Callers always:
-/// - read `state` (must be `ALIVE`),
-/// - lock `call_lock` (serialize re-entry),
-/// - re-check `state` (guard against races while waiting for the lock),
-/// - then invoke `fn_ptr(ctx_ptr, ...)`.
-///
-/// TODO: implement tid functionality. tid is set to zero for now as a placeholder.
-///
-/// This data structure is also accessed by the lind-3i crate within Wasmtime
-/// to coordinate re-entry into the correct Wasm execution context.
-#[repr(C)]
-pub struct GrateFnEntry {
-    pub fn_ptr: extern "C" fn(
-        *mut c_void,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-    ) -> i32,
-    pub ctx_ptr: *mut c_void,
-    pub state: AtomicU8,
-    pub call_lock: Mutex<()>,
+/// This function is used when performing a grate call in `_call_grate_func`.
+pub fn get_runtime_trampoline(runtime: u64) -> Option<GrateTrampolineFn> {
+    TRAMPOLINE_TABLE.get(&runtime).map(|f| *f)
 }
 
-/// All re-entries for the same `(pid, tid)` are serialized by `call_lock`.
-/// No two threads call `fn_ptr` concurrently with the same `ctx_ptr`.
-/// Teardown follows revoke-before-free. Once `state = REVOKING`, no new calls are admitted
-unsafe impl Send for GrateFnEntry {}
-unsafe impl Sync for GrateFnEntry {}
-
-/// Global mapping of `(pid, tid)` to `Arc<GrateFnEntry>`.
+/// This table maintains a mapping from cage IDs to runtime IDs.
 ///
-/// Used **ONLY** by 3i to look up the appropriate Grate callback and its associated `VMContext` when
-/// performing a re-entry into Wasm.
-pub static GLOBAL_GRATE: Lazy<RwLock<HashMap<(u64, u64), Arc<GrateFnEntry>>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
-
-/// Registers a new `GrateFnEntry` into the global table `GLOBAL_GRATE`.
-/// It takes a `grateid` (representing the Grate instance) and a u64 pointer (`entry_ptr_u64`) to a
-/// `GrateFnEntry` that originates from the Wasmtime side.
+/// In the 3i execution model, each cage is associated with exactly one runtime that is responsible
+/// for executing grate calls on behalf of that cage. This table records that association so that 3i
+/// can determine which runtime trampoline should be used when dispatching a grate call.
 ///
-/// The function validates that both the pointer and its contained `fn_ptr` and `ctx_ptr` are non-null
-/// before inserting it into the table.
-///
-/// The key used is `(grateid, 0)`
-/// TODO: the second component (`tid`) is reserved for future per-thread extensions.
-///
-/// Returns 0 on success, -1 on invalid pointer or null context.
-fn _add_global_grate(grateid: u64, entry_ptr_u64: u64) -> i32 {
-    if entry_ptr_u64 == 0 {
-        return -1;
-    }
-
-    let src: &WasmGrateFnEntry = unsafe { &*(entry_ptr_u64 as usize as *const WasmGrateFnEntry) };
-    if src.ctx_ptr.is_null() {
-        return -1;
-    }
-
-    let entry = Arc::new(GrateFnEntry {
-        fn_ptr: src.fn_ptr,
-        ctx_ptr: src.ctx_ptr as *mut c_void,
-        state: AtomicU8::new(threei_const::STATE_ALIVE),
-        call_lock: Mutex::new(()),
-    });
-
-    let mut map = GLOBAL_GRATE.write().unwrap();
-    if map.contains_key(&(grateid, 0)) {
-        panic!(
-            "[3i|_add_global_grate] attempt to overwrite existing grate entry for grateid: {}",
-            grateid
-        );
-    }
-    map.insert((grateid, 0), entry);
-
-    0
+/// `GRATE_RUNTIME_TABLE` is a global table indexed by `cageid`.
+/// Each entry stores an optional runtime ID. A value of `None` indicates that no runtime has been
+/// associated with the cage yet.
+/// The table is protected by an `RwLock` to allow concurrent reads during grate call dispatch while
+/// still permitting exclusive updates when cages are created or torn down.
+lazy_static! {
+    // The table is pre-allocated to `MAX_CAGEID` entries, all initialized to `None`.
+    // <cageid, runtimeid>
+    pub static ref GRATE_RUNTIME_TABLE: RwLock<Vec<Option<u64>>> =
+        RwLock::new(vec![None; lind_platform_const::MAX_CAGEID as usize]);
 }
 
-/// Removes a `GrateFnEntry` associated with the given `grateid` from the global table.
-/// TODO: the second component (`tid`) is reserved for future per-thread extensions.
-fn _rm_from_global_grate(grateid: u64) {
-    let mut map = GLOBAL_GRATE.write().expect("lock poisoned");
-    map.remove(&(grateid, 0));
+/// `set_cage_runtime` associates a cage with a runtime ID.
+///
+/// This function is called from the [wasmtime/lind-3i] when a cage is created or initialized. At that
+/// point, the runtime responsible for executing grate calls for the cage is known and recorded here.
+pub fn set_cage_runtime(cageid: u64, runtime: u64) {
+    let idx = cageid as usize;
+    let mut table = GRATE_RUNTIME_TABLE.write().unwrap();
+
+    // Set the runtime ID for the given cageid
+    table[idx] = Some(runtime);
 }
 
-/// Invokes a stored Grate callback function (`fn_ptr`) corresponding to the given `grateid`.
-/// The function first looks up `(grateid, 0)` in the global table to retrieve the associated
-/// `GrateFnEntry`.
-/// If found, it performs an unsafe call to the `fn_ptr`, passing in its `ctx_ptr` (the per-thread
-/// `VMContext`) and argument pairs plus `self_cageid`.
-/// This allows the 3i side to re-enter the Wasm runtime and execute a callback inside the Grate module.
+/// `get_cage_runtime` returns the runtime ID associated with the given cage.
 ///
-/// Returns `Some(i32)` representing the grate call result, or `Some(-1)` if the entry does not exist.
+/// This function is called during grate call dispatch, specifically from `_call_grate_func`, to determine
+/// which runtime trampoline should be used to execute the target grate call.
+/// If the cage has no associated runtime or the cage ID is out of bounds, this function returns None.
+pub fn get_cage_runtime(cageid: u64) -> Option<u64> {
+    let idx = cageid as usize;
+    let table = GRATE_RUNTIME_TABLE.read().unwrap();
+
+    // Check bounds
+    if table.is_empty() || idx >= table.len() {
+        return None;
+    }
+
+    // Return the runtime ID if present
+    table[idx]
+}
+
+/// `remove_cage_runtime` removes and returns the runtime ID associated with a cage.
+///
+/// This function is typically used when a cage is being torn down or its runtime association
+/// is no longer valid.
+pub fn remove_cage_runtime(cageid: u64) -> Option<u64> {
+    let idx = cageid as usize;
+    let mut table = GRATE_RUNTIME_TABLE.write().unwrap();
+
+    if table.is_empty() || idx >= table.len() {
+        return None;
+    }
+
+    let old = table[idx];
+    table[idx] = None;
+    old
+}
+
+/// This function is the core grate-call dispatch entry point in the 3i library.
+///
+/// · does not execute grate code itself. Instead, it performs runtime resolution and delegates
+/// the actual execution of the grate function to the runtime associated with the target grate.
+///
+/// Given a `grateid`, this function first determines which runtime is responsible for executing
+/// grate calls for that grate by consulting the cage-to-runtime mapping. If no runtime is found,
+/// this is treated as a fatal configuration error. Once the runtime ID is known, the function
+/// retrieves the corresponding trampoline function registered by that runtime. The trampoline
+/// is a runtime-provided function pointer that defines how to enter the runtime’s execution context
+/// and invoke the requested grate function.
+///
+/// The trampoline is then invoked with:
+/// - the raw function pointer of the target grate function, and
+/// - the grate ID and up to six arguments, each paired with the cage ID from which that argument originates.
+///
+/// This design allows 3i to remain runtime-agnostic: 3i handles routing and metadata, while the
+/// runtime is responsible for:
+/// (1) entering the correct execution context,
+/// (2) performing any required context switches,
+/// (3) executing the grate function,
+/// and returning the result.
+///
+/// In the current implementation, the runtime-side execution logic is provided by Wasmtime. The
+/// trampoline registered for the Wasmtime runtime is `grate_callback_trampoline` in [wasmtime/run.rs].
 fn _call_grate_func(
     grateid: u64,
     in_grate_fn_ptr_u64: u64,
-    self_cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
     arg2: u64,
@@ -261,24 +192,25 @@ fn _call_grate_func(
     arg6: u64,
     arg6_cageid: u64,
 ) -> Option<i32> {
-    let entry = {
-        let map = GLOBAL_GRATE.read().unwrap();
-        map.get(&(grateid, 0)).cloned()
-    }?;
+    let runtimeid = match get_cage_runtime(grateid) {
+        Some(r) => r,
+        None => panic!(
+            "[3i|_call_grate_func] grate runtime not found! grateid: {}",
+            grateid
+        ),
+    };
 
-    if entry.state.load(Ordering::Acquire) != threei_const::STATE_ALIVE {
-        return Some(-1);
-    }
-    let _g = entry.call_lock.lock();
+    let trampoline = match get_runtime_trampoline(runtimeid) {
+        Some(f) => f,
+        None => panic!(
+            "[3i|_call_grate_func] grate trampoline not found! runtimeid: {}",
+            runtimeid
+        ),
+    };
 
-    if entry.state.load(Ordering::Acquire) != threei_const::STATE_ALIVE {
-        return Some(-1);
-    }
-
-    let rc = (entry.fn_ptr)(
-        entry.ctx_ptr,
+    let rc = (trampoline)(
         in_grate_fn_ptr_u64,
-        self_cageid,
+        grateid,
         arg1,
         arg1_cageid,
         arg2,
@@ -342,7 +274,7 @@ pub fn register_handler(
     in_grate_fn_ptr_u64: u64,
     targetcage: u64,    // Cage to modify
     targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all.
-    entry_ptr_u64: u64,
+    runtime_id: u64,
     is_register: u64,    // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
@@ -360,7 +292,11 @@ pub fn register_handler(
     }
 
     // Add the `GrateFnEntry` to the global table
-    _add_global_grate(handlefunccage, entry_ptr_u64);
+    // _add_global_grate(handlefunccage, entry_ptr_u64);
+
+    // todo:
+    // - add a new global table to store the trampoline function pointer per runtime, attached by
+    // a special RUNTIME const
 
     // Actual implementation is in handler_table module according to feature flag
     register_handler_impl(
@@ -493,7 +429,6 @@ pub fn make_syscall(
             if let Some(ret) = _call_grate_func(
                 grateid,
                 in_grate_fn_ptr_u64,
-                self_cageid,
                 arg1,
                 arg1_cageid,
                 arg2,
@@ -529,7 +464,7 @@ pub fn make_syscall(
         _rm_grate_from_handler(self_cageid);
         // currently all cages/grates will store closures in global_grate table, so we need to
         // cleanup whatever its actually a cage/grate
-        _rm_from_global_grate(self_cageid);
+        remove_cage_runtime(self_cageid);
     }
 
     // Regular case (call from cage/grate to rawposix)

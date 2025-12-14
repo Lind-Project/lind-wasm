@@ -1,112 +1,129 @@
-//! This module provides a runtime-local staging table for 3i re-entry metadata when using Wasmtime.
-//! Because we want 3i’s public API to remain runtime-agnostic (so it can be adapted to multiple
-//! runtimes in the future), the actual attachment of the callback function pointer and its
-//! `VMContext` pointer is deferred to the `crates::lind-common` layer when it reroutes `register_handler`.
+//! This module provides a global runtime-state lookup mechanism for lind-3i and lind-wasm, enabling
+//! controlled transfers of execution across cages, grates, and threads.
 //!
-//! During module initialization we capture the target instance’s `VMContext`, but there can be a
-//! time gap between:
-//! (a) initialization
-//! (b) the user’s Wasm code calling `register_handler`.
-//! To bridge this gap, Wasmtime keeps a per-(cageid, tid) entry in a local table here.
+//! In lind-wasm, runtime control is not always confined to a single Wasmtime instance or a single
+//! linear call stack. There are two primary scenarios in which lind-3i must explicitly locate and
+//! re-enter a different runtime state.
 //!
-//! When `register_handler` reaches `crates::lind-common` and is forwarded to 3i, we extract the
-//! staged entry pointer from this table and pass it along to 3i as the canonical source of
-//! callback + context for the target Grate.
-use once_cell::sync::Lazy;
-use std::collections::HashMap;
+//! The first scenario occurs during process-like operations such as `fork`, `exec`, and `exit`. These
+//! operations require Wasmtime to create, clone, or destroy existing Wasm instances. After RawPOSIX
+//! completes the semantic handling of a `fork`, `exec`, or `exit` operation, execution must return to
+//! Wasmtime to continue running Wasm code. Importantly, the cage that performs the `fork`, `exec`, or
+//! `exit` logic is not necessarily the same cage or grate that originally issued the system call. As
+//! a result, lind-3i cannot rely on an implicit “current” runtime state. Instead, it must be able to
+//! retrieve the Wasmtime execution context associated with an arbitrary `(cage_id, thread_id)` pair.
+//!
+//! The second scenario arises during grate calls. Grate calls involve cross-module execution transfers,
+//! where control jumps from one Wasm module to another (for example, from a cage into a grate, or between
+//! grates). Supporting these jumps similarly requires the ability to locate and enter the runtime state
+//! of a different module than the one currently executing.
+//!
+//! To support both scenarios, lind-3i leverages a key property of lind-wasm’s execution model: each Wasmtime
+//! `Store` contains exactly one Wasm `Instance`, and each thread executes within its own independent
+//! store / instance pair.
+//! At module creation time, lind-3i extracts the `VMContext` pointer associated with the newly created instance.
+//! This `VMContext` uniquely identifies the execution state of that `Store` / `Instance`. The pointer is
+//! stored in a global table indexed by `(cage_id, thread_id)`. When lind-3i needs to transfer execution to
+//! another cage or grate, it looks up the corresponding `VMContext` pointer using the target `(cage_id, thread_id)`.
+//! Using Wasmtime’s internal mechanisms, the `VMContext` pointer can be used to recover the associated
+//! `Store` and `Instance`, allowing execution to resume in the correct runtime context.
+//!
+//! The table intentionally stores raw `VMContext` pointers rather than typed store or instance handles.
+//! This design avoids Rust lifetime constraints that would otherwise prevent cross-store and cross-instance
+//! execution transfers. Correctness instead relies on higher-level invariants enforced by lind-wasm, including
+//! the guarantee that `VMContext` pointers remain valid for the lifetime of their associated threads.
+use dashmap::DashMap;
+use lazy_static::lazy_static;
 use std::ffi::c_void;
-use std::sync::RwLock;
-use threei::{threei_const, WasmGrateFnEntry, WasmGrateFnEntryPtr};
+use std::ptr::NonNull;
+use threei::threei_const;
 
-/// The [`VMContext`](wasmtime_runtime::VMContext) is Wasmtime’s low-level runtime state for an
-/// instance. It includes the instance’s memories, tables, globals,
-/// and other execution state needed when entering or re-entering Wasm
-/// code. For more details, see the documentation in `wasmtime_runtime::vmcontext`.
+/// The [`VMContext`](wasmtime_runtime::VMContext) pointer originates from Wasmtime internals and
+/// represents the execution state of a Wasm instance. It includes the instance’s memories, tables,
+/// globals, and other execution state needed when entering or re-entering Wasm code. Because `VMContext`
+/// is an opaque runtime structure, it is stored as a raw pointer (`*mut c_void`) wrapped in a safer
+/// abstraction.  For more details, see the documentation in `wasmtime_runtime::vmcontext`.
 ///
-/// This is used in 3i to support cross-instance calls, allowing syscalls from one
-/// cage to invoke functions in another cage. For example, when a syscall from cage A is
-/// routed to a function in grate B, we need to look up grate B’s runtime context in order
-/// to call the closure inside it.
-///
-/// The runtime context includes a pointer to the instance’s `VMContext`, which is required
-/// by Wasmtime to correctly re-enter the target instance with the right execution state.
-/// `GRATE_FN_WASM_TABLE` is a `HashMap<(u64, u64), WasmGrateFnEntryPtr>` keyed by `(cageid, tid)`
-/// that stores one entry per process/thread.
-///
-/// Todo: We currently use tid = 0 as a placeholder; the multi-thread support is needed in future.
-///
-/// Entries are boxed to keep their addresses stable—3i receives and holds raw pointers to these
-/// entries, so using `Box` ensures pointer validity even if the map rehashes or moves its buckets.
-pub static GRATE_FN_WASM_TABLE: Lazy<RwLock<HashMap<(u64, u64), WasmGrateFnEntryPtr>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
-
-#[inline]
-fn fn_ptr_is_null(
-    p: extern "C" fn(
-        *mut c_void,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-        u64,
-    ) -> i32,
-) -> bool {
-    (p as *const ()).is_null()
+/// `VmCtxWrapper` is a lightweight wrapper around a non-null raw pointer to a `VMContext`.
+/// It uses `NonNull<c_void>` to express the invariant that the pointer must never be null.
+/// The wrapper is `Copy` and `Clone` so it can be cheaply passed around without ownership transfer.
+#[derive(Clone, Copy)]
+pub struct VmCtxWrapper {
+    pub vmctx: NonNull<c_void>,
 }
 
-/// Called during module initiation (from [`wasmtime_cli::run.rs`]).
-/// Builds a `WasmGrateFnEntry` from Wasmtime-side state, validates that both the entry pointer and
-/// its `ctx_ptr` are non-null, and stores the boxed entry into `GRATE_FN_WASM_TABLE` under `(cageid, 0)`.
-///
-/// Returns `GRATE_OK` on success or `GRATE_ERR` on invalid input.
-///
-/// This function is `extern "C"` and `unsafe` because it crosses the FFI boundary and dereferences
-/// raw pointers.
-pub extern "C" fn set_gratefn_wasm(cageid: u64, entry: *const WasmGrateFnEntry) -> i32 {
-    if entry.is_null() {
-        return threei_const::GRATE_ERR;
+/// The `VmCtxWrapper` is assumed to be valid for concurrent access according to lind-wasm’s execution
+/// model.
+unsafe impl Send for VmCtxWrapper {}
+unsafe impl Sync for VmCtxWrapper {}
+
+impl VmCtxWrapper {
+    // exposes the raw mutable pointer
+    #[inline]
+    pub fn as_ptr(self) -> *mut c_void {
+        self.vmctx.as_ptr()
     }
-    let src = unsafe { &*entry };
-    if src.ctx_ptr.is_null() || fn_ptr_is_null(src.fn_ptr) {
-        return threei_const::GRATE_ERR;
-    }
-
-    // Wrap the raw pointer into a WasmGrateFnEntryPtr for safe storage
-    let handle = match WasmGrateFnEntryPtr::new(entry) {
-        Some(h) => h,
-        None => return threei_const::GRATE_ERR,
-    };
-
-    let mut map = GRATE_FN_WASM_TABLE.write().unwrap();
-    map.insert((cageid, 0), handle);
-
-    threei_const::GRATE_OK
 }
 
-/// Used by [`lind-common::register_handler`] to fetch the previously staged entry and pass its pointer into 3i.
-/// Performs a read-locked lookup of `(cageid, 0)` in `GRATE_FN_WASM_TABLE`  
-///
-/// Returns a raw `*const WasmGrateFnEntry` for 3i to consume.
-///
-/// No ownership is transferred; the entry remains owned by this module until cleanup.
-pub fn take_gratefn_wasm(cageid: u64) -> Option<*const WasmGrateFnEntry> {
-    let map = GRATE_FN_WASM_TABLE.read().unwrap();
-    map.get(&(cageid, 0)).map(|h| h.as_ptr())
+/// `CageId` represents a logical isolation domain (similar to a process).
+type CageId = u64;
+/// `ThreadId` represents a thread of execution within a Cage.
+type ThreadId = u64;
+/// `(CageId, ThreadId)` uniquely identify a running Wasm thread.
+/// `CageThreadKey` is a convenience alias used as the key type in the global table.
+type CageThreadKey = (CageId, ThreadId);
+
+/// VMCTX_TABLE is a global concurrent hash map that stores the mapping:
+/// (cage_id, thread_id) -> VmCtxWrapper.
+lazy_static! {
+    /// Global map: <(cage_id, thread_id), VmCtxWrapper>
+    pub static ref VMCTX_TABLE: DashMap<CageThreadKey, VmCtxWrapper> = DashMap::new();
 }
 
-/// Called when the Wasm module (or its Grate instance) exits.
-/// Removes the `(cageid, 0)` entry from `GRATE_FN_WASM_TABLE`
-pub fn remove_gratefn_wasm(cageid: u64) -> bool {
-    let mut map = GRATE_FN_WASM_TABLE.write().unwrap();
-    map.remove(&(cageid, 0));
-    true
+/// `get_vmctx` looks up the `VMContext` associated with a given cage and thread.
+/// It returns a copy of the stored `VmCtxWrapper`, or `None` if no entry exists.
+///
+/// Because `VmCtxWrapper` is `Copy`, each caller receives an independent wrapper value. Modifying
+/// the returned wrapper itself (for example, reassigning the pointer) does not affect other copies
+/// associated with the same `(cage_id, thread_id)` entry. However, this copy semantics applies only
+/// to the wrapper, not to the underlying execution state. All copies still reference the same underlying
+/// `VMContext` and the same cage / grate memory regions.
+///
+/// As a result, concurrent requests that mutate shared cage or grate memory can still introduce data races,
+/// even though each request holds its own `VMContext` copy.
+///
+/// For example, if a grate defines shared mutable state such as: `UID_CONST = 10;` and exposes a function:
+///
+/// ```C
+/// update_by_one() {
+///    UID_CONST++;
+/// }
+/// ```
+///
+/// then multiple concurrent invocations of `update_by_one()` will race on `UID_CONST`, despite each invocation
+/// operating through a separate VmCtxW`rapper copy.
+///
+/// At present, lind-wasm does not enforce synchronization at this level. Grate developers are responsible for
+/// ensuring proper concurrency control whenever their grate code mutates shared memory, for example by using
+/// explicit locking, atomic operations, or other synchronization mechanisms appropriate to their execution model.
+pub fn get_vmctx(cage_id: CageId, thread_id: ThreadId) -> Option<VmCtxWrapper> {
+    VMCTX_TABLE.get(&(cage_id, thread_id)).map(|v| *v)
+}
+
+/// `set_vmctx`
+/// (1) inserts or replaces the `VMContext` associated with a given cage and thread.
+/// (2) It also notifies threei of the runtime type for the cage by calling `threei::set_cage_runtime`.
+/// This is typically called when a Wasm thread starts executing or when its `VMContext` becomes available.
+pub fn set_vmctx(cage_id: CageId, thread_id: ThreadId, vmctx: VmCtxWrapper) {
+    // 1) Notify threei of the cage runtime type
+    threei::set_cage_runtime(cage_id, threei_const::RUNTIME_WASMTIME);
+    // 2) Insert the `VMContext` entry in the global table
+    VMCTX_TABLE.insert((cage_id, thread_id), vmctx);
+}
+
+/// `rm_vmctx` removes the VMContext entry for a given cage and thread.
+/// It returns the removed VmCtxWrapper if one was present.
+/// This is typically called when a thread exits or its execution context is torn down.
+pub fn rm_vmctx(cage_id: CageId, thread_id: ThreadId) -> Option<VmCtxWrapper> {
+    VMCTX_TABLE.remove(&(cage_id, thread_id)).map(|(_, v)| v)
 }

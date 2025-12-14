@@ -29,7 +29,7 @@ use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
-use wasmtime_lind_3i::{remove_gratefn_wasm, set_gratefn_wasm};
+use wasmtime_lind_3i::{get_vmctx, rm_vmctx, set_vmctx, VmCtxWrapper};
 use wasmtime_lind_utils::LindCageManager;
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
@@ -40,7 +40,7 @@ use std::{
     ptr::NonNull,
 };
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::{make_syscall, threei_const, WasmGrateFnEntry};
+use threei::{make_syscall, register_trampoline, threei_const};
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 
 #[cfg(feature = "wasi-nn")]
@@ -60,44 +60,30 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
     Ok((parts[0].into(), parts[1].into()))
 }
 
-/// Wraps a raw Wasmtime `VMContext` pointer for cross-boundary use.
-///
-/// The `VmCtxWrapper` type provides an minimal wrapper around a non-null
-/// pointer to a `VMContext`. It allows the pointer to be passed between
-/// Wasmtime and 3i without exposing the raw pointer everywhere in the
-/// codebase.
-struct VmCtxWrapper {
-    vmctx: NonNull<c_void>,
-}
-
-unsafe impl Send for VmCtxWrapper {}
-unsafe impl Sync for VmCtxWrapper {}
-
-/// Holds both the process identifier and the Wasmtime context needed
-/// for cross-instance callbacks.
-///
-/// Each `WasmCallbackCtx` instance corresponds to one Cage or Grate
-/// process (`cageid`) and its runtime context (`VmCtxWrapper`).
-#[repr(C)]
-struct WasmCallbackCtx {
-    cageid: u64,
-    vm: VmCtxWrapper,
-}
-
 /// The callback function registered with 3i uses a unified Wasm entry
-/// function as the single re-entry point into the Wasm executable. It
-/// receives an address inside grate that identifies the target handler.
+/// function as the single re-entry point into the Wasm executable.
+///
+/// When invoked, this function first uses the provided grateid to
+/// retrieve the corresponding `VMContext` pointer from lind-3i’s global
+/// runtime-state table. The `VMContext` identifies the Wasmtime store and
+/// instance associated with the target grate and allows execution to
+/// re-enter the correct runtime context.
+///
+/// This function receives an address inside grate that identifies the target handler.
 /// When invoked, the callback calls the entry function inside the Wasm
 /// module, passing this address as an argument. The entry function then
 /// dispatches control to the corresponding per-syscall implementation
 /// based on the address provided by `register_handler`.
+///
 /// To complete the bridge between host and guest, the system uses
 /// `Caller::with()` to re-enter the  Wasmtime runtime context from the
 /// host side.
 ///
 /// This function is called by 3i when a syscall is routed to a grate.
+///
+/// todo: Currently this function is sent to 3i from [run::execute] function.
+/// This will be updated to be sent from lind-boot in the future.
 pub extern "C" fn grate_callback_trampoline(
-    ctx: *mut c_void,
     in_grate_fn_ptr_u64: u64,
     cageid: u64,
     arg1: u64,
@@ -115,14 +101,17 @@ pub extern "C" fn grate_callback_trampoline(
 ) -> i32 {
     // Never unwind across the C boundary.
     let res = catch_unwind(AssertUnwindSafe(|| unsafe {
-        // Validatation check
-        if ctx.is_null() {
-            return threei_const::GRATE_ERR;
-        }
+        let threadid = 1; //always 1. Only fork requires threadid passing, and fork is handled specially
+                          // Get the VMContextWrapper from the global table
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid, threadid) {
+            Some(v) => v,
+            None => {
+                return threei_const::GRATE_ERR;
+            }
+        };
 
-        // Convert back to WasmCallbackCtx
-        let ctx = &*(ctx as *const WasmCallbackCtx);
-        let opaque: *mut VMOpaqueContext = ctx.vm.vmctx.as_ptr() as *mut VMOpaqueContext;
+        // Convert back to VMContext
+        let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
         let vmctx_raw: *mut VMContext = VMContext::from_opaque(opaque);
 
         // Re-enter Wasmtime using the stored vmctx pointer
@@ -338,6 +327,10 @@ impl RunCommand {
         // new cage is created
         lind_manager.increment();
 
+        // initialize trampoline entry function pointer for wasmtime runtime.
+        // todo: will remove to lind-boot in the future
+        threei::register_trampoline(threei_const::RUNTIME_WASMTIME, grate_callback_trampoline);
+
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
         // call is made that needs to block on a future a Tokio runtime is
@@ -373,12 +366,7 @@ impl RunCommand {
                 // exit the thread
                 if lind_thread_exit(CAGE_START_ID as u64, THREAD_START_ID as u64) {
                     // Clean up the context from the global table
-                    if !remove_gratefn_wasm(CAGE_START_ID as u64) {
-                        eprintln!(
-                            "[wasmtime|run] Warning: failed to remove context for cage {}",
-                            CAGE_START_ID
-                        );
-                    }
+                    rm_vmctx(CAGE_START_ID as u64, THREAD_START_ID as u64);
 
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
@@ -813,53 +801,19 @@ impl RunCommand {
                 // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
                 // instance boundaries particularly difficult. To overcome this, the design employs low-level context
                 // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
-                // structures.
+                // structures. See more details in [lind-3i/src/lib.rs]
                 // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
                 let grate_storeopaque = store.inner_mut();
                 let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
+                let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
 
                 // 2) Extract vmctx pointer and put in a Send+Sync wrapper
-                let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
-                let ctx = WasmCallbackCtx {
-                    cageid,
-                    vm: VmCtxWrapper {
-                        vmctx: NonNull::new(vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
-                    },
+                let vmctx_wrapper = VmCtxWrapper {
+                    vmctx: NonNull::new(vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
                 };
 
-                // 3) Heap-allocate the context; 3i will keep this pointer until unregister
-                let boxed: Box<WasmCallbackCtx> = Box::new(ctx);
-                let ctx_ptr: *mut c_void = Box::into_raw(boxed) as *mut c_void;
-                // Convert the trampoline to a function pointer
-                let fn_ptr: extern "C" fn(
-                    *mut c_void,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                    u64,
-                ) -> i32 = grate_callback_trampoline;
-
-                // 4) Build entry and store in [`crates::lind-3i`] table
-                let boxed_entry = Box::new(WasmGrateFnEntry { fn_ptr, ctx_ptr });
-                let raw_entry: *const WasmGrateFnEntry = Box::into_raw(boxed_entry);
-                let rc = set_gratefn_wasm(cageid, raw_entry);
-                if rc < 0 {
-                    // reclaim memory on error
-                    unsafe {
-                        drop(Box::from_raw(ctx_ptr as *mut WasmCallbackCtx));
-                    }
-                    return Err(anyhow!("3i rejected registration"));
-                }
+                // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
+                set_vmctx(cageid as u64, THREAD_START_ID as u64, vmctx_wrapper);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),
