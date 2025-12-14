@@ -29,7 +29,7 @@ use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
-use wasmtime_lind_3i::{set_vmctx, get_vmctx, rm_vmctx, VmCtxWrapper};
+use wasmtime_lind_3i::{get_vmctx, rm_vmctx, set_vmctx, VmCtxWrapper};
 use wasmtime_lind_utils::LindCageManager;
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
@@ -40,7 +40,7 @@ use std::{
     ptr::NonNull,
 };
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::{make_syscall, threei_const, register_trampoline};
+use threei::{make_syscall, register_trampoline, threei_const};
 use wasmtime::vm::{VMContext, VMOpaqueContext};
 
 #[cfg(feature = "wasi-nn")]
@@ -61,34 +61,34 @@ fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
 }
 
 /// The callback function registered with 3i uses a unified Wasm entry
-/// function as the single re-entry point into the Wasm executable. 
-/// 
+/// function as the single re-entry point into the Wasm executable.
+///
 /// When invoked, this function first uses the provided grateid to
 /// retrieve the corresponding `VMContext` pointer from lind-3i’s global
 /// runtime-state table. The `VMContext` identifies the Wasmtime store and
 /// instance associated with the target grate and allows execution to
 /// re-enter the correct runtime context.
-/// 
+///
 /// This function receives an address inside grate that identifies the target handler.
 /// When invoked, the callback calls the entry function inside the Wasm
 /// module, passing this address as an argument. The entry function then
 /// dispatches control to the corresponding per-syscall implementation
 /// based on the address provided by `register_handler`.
-/// 
+///
 /// To complete the bridge between host and guest, the system uses
 /// `Caller::with()` to re-enter the  Wasmtime runtime context from the
 /// host side.
 ///
 /// This function is called by 3i when a syscall is routed to a grate.
-/// 
+///
 /// todo: Currently this function is sent to 3i from [run::execute] function.
 /// This will be updated to be sent from lind-boot in the future.
 pub extern "C" fn grate_callback_trampoline(
     in_grate_fn_ptr_u64: u64,
     cageid: u64,
-    arg1: u64, 
+    arg1: u64,
     arg1cageid: u64,
-    arg2: u64, 
+    arg2: u64,
     arg2cageid: u64,
     arg3: u64,
     arg3cageid: u64,
@@ -102,7 +102,7 @@ pub extern "C" fn grate_callback_trampoline(
     // Never unwind across the C boundary.
     let res = catch_unwind(AssertUnwindSafe(|| unsafe {
         let threadid = 1; //always 1. Only fork requires threadid passing, and fork is handled specially
-        // Get the VMContextWrapper from the global table
+                          // Get the VMContextWrapper from the global table
         let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid, threadid) {
             Some(v) => v,
             None => {

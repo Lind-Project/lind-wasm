@@ -3,11 +3,11 @@
 use cfg_if::cfg_if;
 
 use anyhow::{anyhow, Result};
+use std::ffi::c_void;
+use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::threei::make_syscall;
-use wasmtime_lind_3i::{set_vmctx, rm_vmctx, VmCtxWrapper};
-use std::ptr::NonNull;
-use std::ffi::c_void;
+use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -737,7 +737,8 @@ impl<
                     // instantiate the module
                     // let instance = instance_pre.instantiate(&mut store).unwrap();
                     let (instance, grate_instanceid) = instance_pre
-                        .instantiate_with_lind_thread(&mut store).unwrap();
+                        .instantiate_with_lind_thread(&mut store)
+                        .unwrap();
 
                     // we might also want to perserve the offset of current stack pointer to stack bottom
                     // not very sure if this is required, but just keep everything the same from parent seems to be good
@@ -842,10 +843,7 @@ impl<
                     match exit_code {
                         Val::I32(val) => {
                             // exit the thread
-                            if lind_thread_exit(
-                                child_cageid as u64,
-                                next_tid as u64,
-                            ) {
+                            if lind_thread_exit(child_cageid as u64, next_tid as u64) {
                                 // Clean up the context from the global table
                                 rm_vmctx(child_cageid as u64, next_tid as u64);
 
@@ -856,9 +854,9 @@ impl<
                                 make_syscall(
                                     (child_cageid) as u64, // self cage
                                     (EXIT_SYSCALL) as u64, // syscall num
-                                    UNUSED_NAME, // syscall name
+                                    UNUSED_NAME,           // syscall name
                                     (child_cageid) as u64, // target cage
-                                    *val as u64, // 1st arg: status
+                                    *val as u64,           // 1st arg: status
                                     (child_cageid) as u64, // 1st arg's cage id
                                     UNUSED_ID,
                                     UNUSED_ARG,

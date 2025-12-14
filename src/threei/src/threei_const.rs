@@ -25,10 +25,10 @@ pub const GRATE_OK: i32 = 0;
 /// context, or lookup failure).
 pub const GRATE_ERR: i32 = -1;
 /// Runtime identifier for the Wasmtime-based execution environment.
-/// This constant represents the runtime ID assigned to the Wasmtime runtime 
-/// when integrating with the 3i library. It is used to associate cages or 
-/// grates with Wasmtime as their execution backend and to select the corresponding 
+/// This constant represents the runtime ID assigned to the Wasmtime runtime
+/// when integrating with the 3i library. It is used to associate cages or
+/// grates with Wasmtime as their execution backend and to select the corresponding
 /// trampoline function when dispatching grate calls.
-/// 
+///
 /// The value is expected to be globally unique among all runtimes registered with 3i
 pub const RUNTIME_WASMTIME: u64 = 1;

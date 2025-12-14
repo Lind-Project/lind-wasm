@@ -234,7 +234,6 @@ pub fn add_to_linker<
               this_grate_id: u64,
               in_grate_fn_ptr_u64: u64|
               -> i32 {
-
             register_handler(
                 in_grate_fn_ptr_u64,
                 targetcage,
