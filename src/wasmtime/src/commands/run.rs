@@ -1099,6 +1099,15 @@ impl RunCommand {
             }
         }
 
+        // attach Lind common APIs to the linker
+        {
+            let linker = match linker {
+                CliLinker::Core(linker) => linker,
+                _ => bail!("lind does not support components yet"),
+            };
+            wasmtime_lind_common::add_to_linker::<Host, RunCommand>(linker)?;
+        }
+
         // attach Lind-Multi-Process-Context to the host
         {
             let linker = match linker {
