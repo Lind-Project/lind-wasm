@@ -1,13 +1,43 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Run passed (optionally precompiled) wasm file in wasmtime.
+# =============================================================================
+# lind_run: Run a (possibly precompiled) wasm/cwasm program using lind-wasm's
+# customized wasmtime build.
 #
 # Usage:
-#   lind_run /path/to/program.[c]wasm
-#   ./scripts/lind_run ./foo.cwasm
+#   lind_run [--wasmtime-profile=release|debug] <program.wasm|program.cwasm> [wasmtime args...]
 #
-# No assumption about current working directory.
+# Examples:
+#   lind_run ./foo.cwasm
+#   lind_run --wasmtime-profile=debug ./foo.wasm
+#   lind_run ./foo.wasm "hello world"
+# =============================================================================
+
+print_help() {
+  cat <<'EOF'
+Usage:
+  lind_run [OPTIONS] <program.wasm|program.cwasm> [wasmtime args...]
+
+Options:
+  --wasmtime-profile=release|debug
+      Explicitly select which wasmtime build to use.
+      Required if both release and debug binaries exist.
+
+  -h, --help
+      Show this help message and exit.
+
+Notes:
+  - If exactly one of {release, debug} wasmtime binaries exists, it is used automatically.
+  - If both exist, --wasmtime-profile must be specified.
+  - All other arguments are passed through verbatim to `wasmtime run`.
+
+Examples:
+  lind_run ./hello.cwasm
+  lind_run --wasmtime-profile=debug ./hello.wasm
+  lind_run ./hello.wasm "hello world"
+EOF
+}
 
 # --- repo root discovery (env var -> script dir -> git) ---
 if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
@@ -31,13 +61,78 @@ if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
   exit 2
 fi
 
-WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
-WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime"
-# Fallback to release if selected profile isn't built yet
-if [[ ! -x "${WASMTIME_BIN}" ]]; then
-  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
-  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
-fi
-[[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
+# --- Parse optional --wasmtime-profile flag (and strip it from args) ---
+# We only consume flags that are meaningful to this wrapper script.
+# All remaining arguments are forwarded verbatim to `wasmtime run`.
+WASMTIME_PROFILE=""
+PASSTHRU_ARGS=()
 
-exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "$@"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      print_help
+      exit 0
+      ;;
+    --wasmtime-profile=*)
+      WASMTIME_PROFILE="${1#*=}"
+      shift
+      ;;
+    *)
+      PASSTHRU_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Validate profile value early to fail fast and clearly.
+case "${WASMTIME_PROFILE}" in
+  ""|release|debug) : ;;
+  *)
+    echo "error: invalid --wasmtime-profile '${WASMTIME_PROFILE}' (expected release or debug)" >&2
+    exit 2
+    ;;
+esac
+
+# --- Locate candidate wasmtime binaries ---
+TARGET_DIR="${REPO_ROOT}/src/wasmtime/target"
+REL_BIN="${TARGET_DIR}/release/wasmtime"
+DBG_BIN="${TARGET_DIR}/debug/wasmtime"
+
+# Track existence/executability explicitly to avoid ambiguous fallbacks.
+rel_ok=0; dbg_ok=0
+[[ -x "${REL_BIN}" ]] && rel_ok=1
+[[ -x "${DBG_BIN}" ]] && dbg_ok=1
+
+# --- Decide profile/binary ---
+# Policy:
+#   - If user explicitly specifies a profile, honor it strictly.
+#   - Otherwise:
+#       * Use the only available profile if exactly one exists.
+#       * Require explicit disambiguation if both exist.
+if [[ -n "${WASMTIME_PROFILE}" ]]; then
+  WASMTIME_BIN="${TARGET_DIR}/${WASMTIME_PROFILE}/wasmtime"
+  [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found/executable at ${WASMTIME_BIN}" >&2; exit 2; }
+else
+  if [[ ${rel_ok} -eq 1 && ${dbg_ok} -eq 0 ]]; then
+    WASMTIME_PROFILE="release"
+    WASMTIME_BIN="${REL_BIN}"
+  elif [[ ${rel_ok} -eq 0 && ${dbg_ok} -eq 1 ]]; then
+    WASMTIME_PROFILE="debug"
+    WASMTIME_BIN="${DBG_BIN}"
+  elif [[ ${rel_ok} -eq 1 && ${dbg_ok} -eq 1 ]]; then
+    echo "error: both release and debug wasmtime binaries exist:" >&2
+    echo "  ${REL_BIN}" >&2
+    echo "  ${DBG_BIN}" >&2
+    echo "Please specify: --wasmtime-profile {release|debug}" >&2
+    exit 2
+  else
+    echo "error: wasmtime binary not found under ${TARGET_DIR}/{release,debug}/wasmtime" >&2
+    exit 2
+  fi
+fi
+
+# --- Execute wasmtime ---
+# `exec` replaces the current shell process so:
+#   - exit code and signals propagate correctly
+#   - no extra wrapper process remains
+exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "${PASSTHRU_ARGS[@]}"
