@@ -1,13 +1,44 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Cross-compile passed .c file to .wasm and .cwasm files
+# Cross-compile a .c file to .wasm and then precompile to .cwasm via wasmtime.
 #
 # Usage:
-#   lind_compile /path/to/program.c
-#   ./scripts/lind_compile ./tests/unit/printf.c
+#   lind_compile [--wasmtime-profile=release|debug] <path/to/file.c>
 #
-# No assumption about current working directory.
+# Examples:
+#   lind_compile ./tests/unit/printf.c
+#   lind_compile --wasmtime-profile=debug ./foo.c
+#
+# Notes:
+#   - This script does not assume the current working directory.
+#   - wasmtime binary selection:
+#       * If exactly one of {release,debug} exists, it is used automatically.
+#       * If both exist, `--wasmtime-profile` is required.
+
+print_help() {
+  cat <<'EOF'
+Usage:
+  lind_compile [OPTIONS] <path/to/file.c>
+
+Options:
+  --wasmtime-profile=release|debug
+  --wasmtime-profile release|debug
+      Select which wasmtime build to use for precompilation.
+      Required if both release and debug wasmtime binaries exist.
+
+  -h, --help
+      Show this help message and exit.
+
+Outputs:
+  <input>.wasm
+  <input>.cwasm
+
+Examples:
+  lind_compile ./tests/unit/printf.c
+  lind_compile --wasmtime-profile=debug ./hello.c
+EOF
+}
 
 # --- repo root discovery (env var -> script dir -> git) ---
 if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
@@ -31,17 +62,66 @@ if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
   exit 2
 fi
 
+# --- Parse optional flags, keep exactly one positional arg (the .c file) ---
+WASMTIME_PROFILE=""
+SRC_ARG=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      print_help
+      exit 0
+      ;;
+    --wasmtime-profile)
+      shift
+      [[ $# -gt 0 ]] || { echo "error: --wasmtime-profile requires a value (release|debug)" >&2; exit 2; }
+      WASMTIME_PROFILE="$1"
+      shift
+      ;;
+    --wasmtime-profile=*)
+      WASMTIME_PROFILE="${1#*=}"
+      shift
+      ;;
+    -*)
+      echo "error: unknown option: $1" >&2
+      echo "hint: use --help" >&2
+      exit 2
+      ;;
+    *)
+      # first non-flag is the source file; reject extras
+      if [[ -z "${SRC_ARG}" ]]; then
+        SRC_ARG="$1"
+        shift
+      else
+        echo "error: too many arguments: '$1'" >&2
+        echo "usage: $(basename "$0") [--wasmtime-profile=release|debug] </path/to/file.c>" >&2
+        exit 2
+      fi
+      ;;
+  esac
+done
+
 # --- args & path normalization ---
-if [[ "$#" -ne 1 || "${1##*.}" != "c" ]]; then
-  echo "usage: $(basename "$0") </path/to/file.c>" >&2
+# Validate profile value (if provided)
+case "${WASMTIME_PROFILE}" in
+  ""|release|debug) : ;;
+  *)
+    echo "error: invalid --wasmtime-profile '${WASMTIME_PROFILE}' (expected release or debug)" >&2
+    exit 2
+    ;;
+esac
+
+# Require exactly one .c input
+if [[ -z "${SRC_ARG}" || "${SRC_ARG##*.}" != "c" ]]; then
+  echo "usage: $(basename "$0") [--wasmtime-profile=release|debug] </path/to/file.c>" >&2
   exit 2
 fi
 
 # Normalize input path to absolute
-if [[ "$1" = /* ]]; then
-  SRC="$1"
+if [[ "${SRC_ARG}" = /* ]]; then
+  SRC="${SRC_ARG}"
 else
-  SRC="$PWD/$1"
+  SRC="$PWD/${SRC_ARG}"
 fi
 SRC_DIR="$(cd -- "$(dirname -- "$SRC")" && pwd)"
 SRC_BASE="$(basename -- "$SRC")"
@@ -55,19 +135,42 @@ OUT_CWASM="${SRC%.c}.cwasm"
 # --- tool paths & quick checks (anchored to repo) ---
 CLANG_BIN="clang"  # must be on PATH
 WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
-WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
-WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime"
-# Fallback to release if selected profile isn't built yet
-if [[ ! -x "${WASMTIME_BIN}" ]]; then
-  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
-  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
-fi
 SYSROOT="${REPO_ROOT}/src/glibc/sysroot"
 
 command -v "${CLANG_BIN}" >/dev/null 2>&1 || { echo "error: clang not found on PATH" >&2; exit 2; }
 [[ -x "${WASM_OPT_BIN}" ]] || { echo "error: wasm-opt not found at ${WASM_OPT_BIN}" >&2; exit 2; }
-[[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
 [[ -d "${SYSROOT}" ]] || { echo "error: sysroot missing at ${SYSROOT}" >&2; exit 2; }
+
+# --- Decide wasmtime binary (release/debug) ---
+TARGET_DIR="${REPO_ROOT}/src/wasmtime/target"
+REL_BIN="${TARGET_DIR}/release/wasmtime"
+DBG_BIN="${TARGET_DIR}/debug/wasmtime"
+
+rel_ok=0; dbg_ok=0
+[[ -x "${REL_BIN}" ]] && rel_ok=1
+[[ -x "${DBG_BIN}" ]] && dbg_ok=1
+
+if [[ -n "${WASMTIME_PROFILE}" ]]; then
+  WASMTIME_BIN="${TARGET_DIR}/${WASMTIME_PROFILE}/wasmtime"
+  [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found/executable at ${WASMTIME_BIN}" >&2; exit 2; }
+else
+  if [[ ${rel_ok} -eq 1 && ${dbg_ok} -eq 0 ]]; then
+    WASMTIME_PROFILE="release"
+    WASMTIME_BIN="${REL_BIN}"
+  elif [[ ${rel_ok} -eq 0 && ${dbg_ok} -eq 1 ]]; then
+    WASMTIME_PROFILE="debug"
+    WASMTIME_BIN="${DBG_BIN}"
+  elif [[ ${rel_ok} -eq 1 && ${dbg_ok} -eq 1 ]]; then
+    echo "error: both release and debug wasmtime binaries exist:" >&2
+    echo "  ${REL_BIN}" >&2
+    echo "  ${DBG_BIN}" >&2
+    echo "Please specify: --wasmtime-profile {release|debug}" >&2
+    exit 2
+  else
+    echo "error: wasmtime binary not found under ${TARGET_DIR}/{release,debug}/wasmtime" >&2
+    exit 2
+  fi
+fi
 
 # --- compile ---
 "${CLANG_BIN}" --sysroot="${SYSROOT}" \
