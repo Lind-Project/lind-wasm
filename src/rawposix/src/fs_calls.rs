@@ -4221,10 +4221,24 @@ pub fn getrandom_syscall(
     let buflen = sc_convert_sysarg_to_u32(buflen_arg, buflen_arg_cageid, cageid);
     let flags = sc_convert_sysarg_to_u32(flags_arg, flags_arg_cageid, cageid);
 
-    let ret = unsafe { syscall(SYS_getrandom, buf, buflen, flags) as i32 };
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getrandom_syscall"
+        );
+    }
+
+    let ret = unsafe { getrandom(buf as *mut c_void, buflen.try_into().unwrap(), flags) };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getrandom");
     }
-    ret
+
+    // convert isize to i32 safely, as ret shouldn't be larger than 32-bit
+    // due to buflen being u32
+    ret.try_into().unwrap()
 }
