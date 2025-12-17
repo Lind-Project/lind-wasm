@@ -237,8 +237,16 @@ impl Instance {
         // retrieve the initial memory size
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
-        // in wasmtime, one page is 65536 bytes, so we need to convert to pagesize in rawposix
-        let minimal_pages = plan.memory.minimum * 0x10;
+        // in wasmtime, one page is 65536 bytes, so we need to convert to host pagesize
+        // 1. Get minimum bytes from Wasmtime’s own metadata.
+        let min_bytes = plan
+            .memory
+            .minimum_byte_size()
+            .expect("minimum memory size overflow");
+
+        // 2. Convert bytes to pages.
+        let host_page_size: u64 = 1 << PAGESHIFT; // 4 KiB
+        let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
 
         // initialize the memory
         // the memory initialization should happen inside microvisor, so we should discard the original
