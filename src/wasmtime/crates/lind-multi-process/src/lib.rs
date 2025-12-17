@@ -13,13 +13,14 @@ use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Barrier, Mutex, OnceLock};
+use std::sync::{Arc, Barrier};
 use std::thread;
 use wasmtime::{
-    AsContext, AsContextMut, AsyncifyState, Caller, Engine, ExternType, InstanceId,
-    InstantiateType, Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Trap, Val,
+    AsContext, AsContextMut, AsyncifyState, Caller, ExternType, InstanceId, InstantiateType,
+    Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val,
 };
 
+use cage::alloc_cage_id;
 use cage::signal::{lind_signal_init, lind_thread_exit};
 use wasmtime_environ::MemoryIndex;
 
@@ -58,9 +59,6 @@ pub struct LindCtx<T, U> {
     // thread id
     tid: i32,
 
-    // next cage id
-    next_cageid: Arc<AtomicU64>,
-
     // next thread id
     next_threadid: Arc<AtomicU32>,
 
@@ -83,7 +81,6 @@ pub struct LindCtx<T, U> {
                 &str,
                 &Vec<String>,
                 i32,
-                &Arc<AtomicU64>,
                 &Arc<LindCageManager>,
                 &Option<Vec<(String, Option<String>)>>,
             ) -> Result<Vec<Val>>
@@ -104,7 +101,6 @@ impl<
     // * linker: wasmtime function linker. Used to link the imported functions
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
     // * run_command: used by exec closure below.
-    // * next_cageid: a shared cage id counter, managed by lind-common.
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
@@ -113,7 +109,6 @@ impl<
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
         run_command: U,
-        next_cageid: Arc<AtomicU64>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
@@ -121,7 +116,6 @@ impl<
                 &str,
                 &Vec<String>,
                 i32,
-                &Arc<AtomicU64>,
                 &Arc<LindCageManager>,
                 &Option<Vec<(String, Option<String>)>>,
             ) -> Result<Vec<Val>>
@@ -145,7 +139,6 @@ impl<
             module: module.clone(),
             cageid,
             tid,
-            next_cageid,
             next_threadid,
             lind_manager: lind_manager.clone(),
             run_command,
@@ -162,7 +155,6 @@ impl<
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
     // * run_command: used by exec closure below.
     // * cageid: cageid(cageid) associated with the context
-    // * next_cageid: a shared cage id counter, managed by lind-common.
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
@@ -172,7 +164,6 @@ impl<
         lind_manager: Arc<LindCageManager>,
         run_command: U,
         cageid: i32,
-        next_cageid: Arc<AtomicU64>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
@@ -180,7 +171,6 @@ impl<
                 &str,
                 &Vec<String>,
                 i32,
-                &Arc<AtomicU64>,
                 &Arc<LindCageManager>,
                 &Option<Vec<(String, Option<String>)>>,
             ) -> Result<Vec<Val>>
@@ -200,7 +190,6 @@ impl<
             module: module.clone(),
             cageid,
             tid,
-            next_cageid,
             next_threadid,
             lind_manager: lind_manager.clone(),
             run_command,
@@ -347,7 +336,8 @@ impl<
         // retrieve the child host
         let mut child_host = (self.fork_host)(caller.data());
         // get next cage id
-        let child_cageid = self.next_cage_id();
+        let child_cageid = alloc_cage_id();
+
         if let None = child_cageid {
             panic!("running out of cageid!");
         }
@@ -1011,7 +1001,6 @@ impl<
         let store = caller.as_context_mut().0;
 
         let cloned_run_command = self.run_command.clone();
-        let cloned_next_cageid = self.next_cageid.clone();
         let cloned_lind_manager = self.lind_manager.clone();
         let cloned_cageid = self.cageid;
 
@@ -1052,7 +1041,6 @@ impl<
                 &real_path_str,
                 &args,
                 cloned_cageid,
-                &cloned_next_cageid,
                 &cloned_lind_manager,
                 &environs,
             );
@@ -1302,12 +1290,6 @@ impl<
         self.cageid
     }
 
-    // get the next cage id
-    fn next_cage_id(&self) -> Option<u64> {
-        // cageid is managed by lind-common
-        return Some(self.next_cageid.load(Ordering::SeqCst));
-    }
-
     // get the next thread id
     fn next_thread_id(&self) -> Option<u32> {
         match self
@@ -1352,9 +1334,8 @@ impl<
         let forked_ctx = Self {
             linker: self.linker.clone(),
             module: self.module.clone(),
-            cageid: 0, // cageid is managed by lind-common
-            tid: 1,    // thread id starts from 1
-            next_cageid: self.next_cageid.clone(),
+            cageid: 0,                                  // cageid is managed by lind-common
+            tid: 1,                                     // thread id starts from 1
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
             run_command: self.run_command.clone(),

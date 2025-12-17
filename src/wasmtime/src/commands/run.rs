@@ -24,7 +24,6 @@ use wasmtime::{
 
 use wasmtime::{Caller, Instance};
 
-use wasmtime_lind_common::LindCommonCtx;
 use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START_ID};
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
@@ -280,14 +279,7 @@ impl RunCommand {
         let host = Host::default();
         let mut store = Store::new(&engine, host);
         let lind_manager = Arc::new(LindCageManager::new(0));
-        self.populate_with_wasi(
-            &mut linker,
-            &mut store,
-            &main,
-            lind_manager.clone(),
-            None,
-            None,
-        )?;
+        self.populate_with_wasi(&mut linker, &mut store, &main, lind_manager.clone(), None)?;
 
         store.data_mut().limits = self.run.store_limits();
         store.limiter(|t| &mut t.limits);
@@ -452,7 +444,6 @@ impl RunCommand {
         mut self,
         lind_manager: Arc<LindCageManager>,
         cageid: i32,
-        next_cageid: Arc<AtomicU64>,
     ) -> Result<Vec<Val>> {
         let mut config = self.run.common.config(None, None)?;
 
@@ -511,7 +502,6 @@ impl RunCommand {
             &main,
             lind_manager.clone(),
             Some(cageid),
-            Some(next_cageid),
         )?;
 
         store.data_mut().limits = self.run.store_limits();
@@ -987,7 +977,6 @@ impl RunCommand {
         module: &RunTarget,
         lind_manager: Arc<LindCageManager>,
         cageid: Option<i32>,
-        next_cageid: Option<Arc<AtomicU64>>,
     ) -> Result<()> {
         let mut cli = self.run.common.wasi.cli;
 
@@ -1110,26 +1099,13 @@ impl RunCommand {
             }
         }
 
-        // attach Lind-Common-Context to the host
-        let shared_next_cageid = Arc::new(AtomicU64::new(1));
-
+        // attach Lind common APIs to the linker
         {
             let linker = match linker {
                 CliLinker::Core(linker) => linker,
                 _ => bail!("lind does not support components yet"),
             };
-            wasmtime_lind_common::add_to_linker::<Host, RunCommand>(linker, |host| {
-                host.lind_common_ctx.as_ref().unwrap()
-            })?;
-            if let Some(cageid) = cageid {
-                store.data_mut().lind_common_ctx = Some(LindCommonCtx::new_with_cageid(
-                    cageid,
-                    next_cageid.clone().unwrap(),
-                )?);
-            } else {
-                store.data_mut().lind_common_ctx =
-                    Some(LindCommonCtx::new(shared_next_cageid.clone())?);
-            }
+            wasmtime_lind_common::add_to_linker::<Host, RunCommand>(linker)?;
         }
 
         // attach Lind-Multi-Process-Context to the host
@@ -1148,10 +1124,9 @@ impl RunCommand {
                     lind_manager,
                     self.clone(),
                     cageid,
-                    next_cageid.clone().unwrap(),
                     |host| host.lind_fork_ctx.as_mut().unwrap(),
                     |host| host.fork(),
-                    |run_command, path, args, cageid, next_cageid, lind_manager, envs| {
+                    |run_command, path, args, cageid, lind_manager, envs| {
                         // entry point of exec call. Fork self and replace the argument, environment variables and
                         // execution path and starts execution
                         let mut new_run_command = run_command.clone();
@@ -1162,11 +1137,7 @@ impl RunCommand {
                         for arg in args.iter().skip(1) {
                             new_run_command.module_and_args.push(OsString::from(arg));
                         }
-                        new_run_command.execute_with_lind(
-                            lind_manager.clone(),
-                            cageid,
-                            next_cageid.clone(),
-                        )
+                        new_run_command.execute_with_lind(lind_manager.clone(), cageid)
                     },
                 )?);
             // if cageid is not set, then this function is called by the first wasm instance
@@ -1176,10 +1147,9 @@ impl RunCommand {
                     linker.clone(),
                     lind_manager,
                     self.clone(),
-                    shared_next_cageid.clone(),
                     |host| host.lind_fork_ctx.as_mut().unwrap(),
                     |host| host.fork(),
-                    |run_command, path, args, cageid, next_cageid, lind_manager, envs| {
+                    |run_command, path, args, cageid, lind_manager, envs| {
                         let mut new_run_command = run_command.clone();
                         new_run_command.module_and_args = vec![OsString::from(path)];
                         if let Some(envs) = envs {
@@ -1188,11 +1158,7 @@ impl RunCommand {
                         for arg in args.iter().skip(1) {
                             new_run_command.module_and_args.push(OsString::from(arg));
                         }
-                        new_run_command.execute_with_lind(
-                            lind_manager.clone(),
-                            cageid,
-                            next_cageid.clone(),
-                        )
+                        new_run_command.execute_with_lind(lind_manager.clone(), cageid)
                     },
                 )?);
             }
@@ -1302,7 +1268,6 @@ struct Host {
     // access.
     preview2_ctx: Option<Arc<Mutex<wasmtime_wasi::preview1::WasiP1Ctx>>>,
 
-    lind_common_ctx: Option<LindCommonCtx>,
     lind_fork_ctx: Option<LindCtx<Host, RunCommand>>,
 
     #[cfg(feature = "wasi-nn")]
@@ -1344,11 +1309,6 @@ impl Host {
             None => None,
         };
 
-        let forked_lind_common_ctx = match &self.lind_common_ctx {
-            Some(ctx) => Some(ctx.fork()),
-            None => None,
-        };
-
         // besides preview1_ctx, lind_common_ctx and forked_lind_fork_ctx, we do not
         // care about other context since they are not used by glibc so we can just share
         // them between processes
@@ -1356,7 +1316,6 @@ impl Host {
             preview1_ctx: forked_preview1_ctx,
             preview2_ctx: self.preview2_ctx.clone(),
             lind_fork_ctx: forked_lind_fork_ctx,
-            lind_common_ctx: forked_lind_common_ctx,
             #[cfg(feature = "wasi-nn")]
             wasi_nn: self.wasi_nn.clone(),
             #[cfg(feature = "wasi-threads")]
