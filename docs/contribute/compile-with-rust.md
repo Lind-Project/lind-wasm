@@ -1,13 +1,13 @@
 # Compiling Rust Code with `lind-glibc` (Shared Memory Enabled)
 
-To compile Rust programs against **`lind-glibc`**, you must configure Cargo to:
+To compile Rust programs against **`lind-glibc`**, you must configure Rust to:
 
+0. Use the nightly Rust toolchain (because `-Z build-std` is a nightly-only feature)
 1. Use the custom `config.toml` configuration file
 2. Use the custom `wasip1-clang` linker wrapper
 3. Rebuild the Rust standard library (`std`) with these features enabled
 
 ---
-
 ## 1. Cargo Configuration (`.cargo/config.toml`)
 
 Create or modify `.cargo/config.toml` as follows (based on
@@ -126,9 +126,17 @@ After configuring Cargo, compile your Rust project using **nightly** and rebuild
 cargo build -Z build-std=std,panic_abort
 ```
 
+Alternatively, you can add the following to `.cargo/config.toml`, which achieves the same effect and is often easier to avoid missing during builds:
+
+```toml
+[unstable]
+build-std = ["std", "panic_abort"]
+```
+
+This ensures that `std` is always rebuilt with the required features whenever you run `cargo build`.
+
 ### What this does
 
 * Forces Rust to rebuild `std` for `wasm32-wasip1`
 * Applies your `rustflags` to `std` itself
 * Enables atomics + bulk-memory inside `libstd`
-* Requires a nightly Rust toolchain (because `-Z build-std` is a nightly-only feature)
