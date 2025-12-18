@@ -131,10 +131,4 @@ cargo build -Z build-std=std,panic_abort
 * Forces Rust to rebuild `std` for `wasm32-wasip1`
 * Applies your `rustflags` to `std` itself
 * Enables atomics + bulk-memory inside `libstd`
-* Avoids linker errors such as:
-
-```
---shared-memory is disallowed because std was not compiled with atomics
-```
-
-> ⚠️ This requires a **nightly toolchain**, which you already have.
+* Requires a nightly Rust toolchain (because `-Z build-std` is a nightly-only feature)
