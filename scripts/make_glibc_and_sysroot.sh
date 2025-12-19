@@ -107,6 +107,12 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $BUILD/addr_translation.o \
     -c $GLIBC/lind_syscall/addr_translation.c
+    
+# Compile lind debug module
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/lind_debug.o \
+    -c $GLIBC/lind_syscall/lind_debug.c
 
 # Compile crt1.c
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \

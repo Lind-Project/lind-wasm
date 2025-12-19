@@ -24,6 +24,8 @@
 #include <libc-pointer-arith.h>	/* For cast_to_pointer.  */
 #include <stackinfo.h>		/* For _STACK_GROWS_{UP,DOWN}.  */
 
+#include <lind_debug.h>
+
 #define CLONE_ARGS_SIZE_VER0 64 /* sizeof first published struct */
 #define CLONE_ARGS_SIZE_VER1 80 /* sizeof second published struct */
 #define CLONE_ARGS_SIZE_VER2 88 /* sizeof third published struct */
@@ -47,9 +49,7 @@ int
 __clone_internal_fallback (struct clone_args *cl_args,
 			   int (*func) (void *arg), void *arg)
 {
-//   /* Map clone3 arguments to clone arguments.  NB: No need to check
-//      invalid clone3 specific bits in flags nor exit_signal since this
-//      is an internal function.  */
+  lind_debug_panic("__clone_internal_fallback called unexpectedly");
   return 0;
 }
 
