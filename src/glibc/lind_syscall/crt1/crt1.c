@@ -207,5 +207,10 @@ int _start() {
     __wasi_initialize_environ();
     __ctype_init(); //lind-wasm: init ctypes for isalpha etc.
     __lind_init_addr_translation();
+
+#ifndef NO_ASYNCIFY
     return __main_void();
+#else
+    exit(__main_void());
+#endif
 }
