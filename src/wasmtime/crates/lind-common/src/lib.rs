@@ -307,19 +307,11 @@ pub fn add_to_linker<
     )?;
 
     // attach lind-debug-panic to wasmtime
-    linker.func_wrap(
-        "lind",
-        "debug-panic",
-        move |str: u64| -> () {
-            let _panic_str =  unsafe {
-                std::ffi::CStr::from_ptr(str as *const i8)
-                    .to_str()
-                    .unwrap()
-            };
+    linker.func_wrap("lind", "debug-panic", move |str: u64| -> () {
+        let _panic_str = unsafe { std::ffi::CStr::from_ptr(str as *const i8).to_str().unwrap() };
 
-            sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
-        },
-    )?;
+        sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
+    })?;
 
     // attach setjmp to wasmtime
     linker.func_wrap(
