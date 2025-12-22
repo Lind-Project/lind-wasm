@@ -208,6 +208,9 @@ int _start() {
     __ctype_init(); //lind-wasm: init ctypes for isalpha etc.
     __lind_init_addr_translation();
 
+// conditional compilation to ensure exit() is called before program termination,
+// and return __main_void() if NO_ASYNCIFY is defined. exit() depends on asyncify,
+// calling it here will force execution of the program to rely on asyncify
 #ifdef NO_ASYNCIFY
     return __main_void();
 #else
