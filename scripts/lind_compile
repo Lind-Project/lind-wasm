@@ -22,8 +22,8 @@ Usage:
   lind_compile [OPTIONS] <path/to/file.c>
 
 Options:
-  --wasmtime-profile=release|debug
-  --wasmtime-profile release|debug
+  -p=release|debug, --wasmtime-profile=release|debug
+  -p=release|debug, --wasmtime-profile release|debug
       Select which wasmtime build to use for precompilation.
       Required if both release and debug wasmtime binaries exist.
 
@@ -72,13 +72,13 @@ while [[ $# -gt 0 ]]; do
       print_help
       exit 0
       ;;
-    --wasmtime-profile)
+    -p|--wasmtime-profile)
       shift
       [[ $# -gt 0 ]] || { echo "error: --wasmtime-profile requires a value (release|debug)" >&2; exit 2; }
       WASMTIME_PROFILE="$1"
       shift
       ;;
-    --wasmtime-profile=*)
+    -p|--wasmtime-profile=*)
       WASMTIME_PROFILE="${1#*=}"
       shift
       ;;
