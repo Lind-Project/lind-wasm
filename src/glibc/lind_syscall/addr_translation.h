@@ -45,7 +45,7 @@ extern "C"
   static inline uint64_t
   __lind_translate_uaddr_to_host (const uint64_t uaddr, const uint64_t cageid)
   {
-    if (cageid == __lind_cageid) 
+    if (cageid == __lind_cageid)
       return __lind_base + uaddr;
 
     return uaddr;
