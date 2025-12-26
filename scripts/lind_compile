@@ -37,7 +37,7 @@ usage: $(basename "$0") [OPTIONS] <source>
     --precompile-only   : .wasm -> .cwasm
 
   Common options:
-    --print-cmd, --verbose  print the underlying commands that are executed
+    -v, --print-cmd, --verbose  print the underlying commands that are executed
     -h, --help              show this help
 
   Examples:
@@ -84,7 +84,7 @@ while [[ "$#" -gt 0 ]]; do
     --precompile-only)
       set_mode "precompile-only"
       ;;
-    --print-cmd|--verbose)
+    -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
       ;;
     -h|--help)
