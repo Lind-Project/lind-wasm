@@ -290,6 +290,14 @@ pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, cageid: u64) -> u6
         }
     }
 
+    let cage = get_cage(addr_cageid).unwrap();
+    let vmmap = cage.vmmap.read();
+    let base_addr = vmmap.base_address.unwrap() as u64;
+
+    if uaddr < base_addr {
+        return uaddr + base_addr;
+    }
+
     uaddr
 }
 
