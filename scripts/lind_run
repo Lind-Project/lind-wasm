@@ -40,7 +40,6 @@ if [[ ! -x "${WASMTIME_BIN}" ]]; then
 fi
 [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
 
-# --- Path validation ---
 # Get the wasm/cwasm file path from arguments
 WASM_FILE="$1"
 
@@ -78,4 +77,10 @@ if [[ "${WASM_FILE}" != "${LIND_ROOT_ABS}"* ]]; then
   exit 2
 fi
 
-exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "$@"
+# Convert absolute system path to LIND_ROOT-relative path for argv[0]
+LIND_RELATIVE_PATH="${WASM_FILE#${LIND_ROOT_ABS}}"
+# Shift the first argument and replace it with the LIND-relative path
+shift
+
+exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n \
+  "${LIND_RELATIVE_PATH}" "$@"
