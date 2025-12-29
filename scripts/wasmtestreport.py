@@ -351,22 +351,34 @@ def get_expected_output(source_file):
 # ----------------------------------------------------------------------
 def compile_c_to_wasm(source_file):
     source_file = Path(source_file)
-    testcase = str(source_file.with_suffix(''))
     compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
-    
-    logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
+
+    logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}")
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
         logger.debug("File exists and is a regular file!")
     else:
         logger.debug("File not found or it's a directory!")
-
 
     try:
         result = run_subprocess(compile_cmd, label="wasm compile", shell = False)
         if result.returncode != 0:
             return (None, result.stdout + "\n" + result.stderr)
         else:
-            wasm_file = Path(testcase + ".cwasm")
+            # lind_compile now places files in LIND_ROOT
+            # Compute expected output path
+            source_str = str(source_file)
+            if "tests/unit-tests/" in source_str:
+                # Extract relative path after tests/unit-tests/
+                rel_path = source_str.split("tests/unit-tests/")[1]
+                test_dir = Path(rel_path).parent
+                filename = source_file.stem
+                wasm_file = LIND_ROOT / "tests" / test_dir / f"{filename}.cwasm"
+            else:
+                wasm_file = LIND_ROOT / "bin" / f"{source_file.stem}.cwasm"
+
+            if not wasm_file.exists():
+                return (None, f"Expected output not found: {wasm_file}")
+
             return (wasm_file, "")
     except Exception as e:
         return (None, f"Exception during compilation: {str(e)}")
@@ -682,26 +694,27 @@ def analyze_executable_dependencies(tests_to_run):
 def create_required_executables(executable_deps):
     if not executable_deps:
         return
-    
+
     logger.info(f"Creating {len(executable_deps)} required executable(s)")
-    
+
     for exec_path, source_file in executable_deps.items():
         try:
-            # Compile the source file to WASM
+            # Compile the source file to WASM (lind_compile now places it in LIND_ROOT)
             wasm_file, compile_err = compile_c_to_wasm(source_file)
-            
+
             if wasm_file is None:
                 logger.error(f"Failed to compile {source_file}: {compile_err}")
                 continue
-            
-            # Create destination directory in LIND_ROOT
+
+            # Verify it's in the expected location
             dest_path = LIND_ROOT / exec_path
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Copy the compiled WASM to the destination (preserves source for potential reuse)
-            shutil.copy2(str(wasm_file), str(dest_path))
+            if not dest_path.exists():
+                # If not at expected path, create directory and copy
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(wasm_file), str(dest_path))
+
             logger.info(f"Created executable: {dest_path}")
-            
+
         except Exception as e:
             logger.error(f"Failed to create executable {exec_path}: {e}")
 

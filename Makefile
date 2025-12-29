@@ -92,8 +92,15 @@ clean:
 	@echo "cargo clean (wasmtime)"
 	cargo clean --manifest-path src/wasmtime/Cargo.toml
 
+.PHONY: clean-executables
+clean-executables:
+	@echo "Cleaning compiled executables from LIND_ROOT"
+	find $(LIND_ROOT)/tests -type f -name '*.cwasm' -delete 2>/dev/null || true
+	find $(LIND_ROOT)/bin -type f -name '*.cwasm' -delete 2>/dev/null || true
+	find $(LIND_ROOT)/automated_tests -type f -name '*.cwasm' -delete 2>/dev/null || true
+
 .PHONY: distclean
-distclean: clean
+distclean: clean clean-executables
 	@echo "removing test outputs & temp files"
 	$(RM) -f results.json report.html e2e_status
 	$(RM) -r $(LIND_ROOT)/testfiles || true

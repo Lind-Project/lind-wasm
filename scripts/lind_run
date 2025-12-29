@@ -40,4 +40,42 @@ if [[ ! -x "${WASMTIME_BIN}" ]]; then
 fi
 [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
 
+# --- Path validation ---
+# Get the wasm/cwasm file path from arguments
+WASM_FILE="$1"
+
+# Check if file argument is provided
+if [[ -z "${WASM_FILE}" ]]; then
+  echo "error: no wasm/cwasm file specified" >&2
+  echo "usage: $(basename "$0") <file.cwasm> [args...]" >&2
+  exit 2
+fi
+
+# Normalize to absolute path
+if [[ "${WASM_FILE}" != /* ]]; then
+  WASM_FILE="$(cd "$(dirname "${WASM_FILE}")" 2>/dev/null && pwd)/$(basename "${WASM_FILE}")"
+  if [[ $? -ne 0 ]]; then
+    echo "error: cannot resolve path: $1" >&2
+    exit 2
+  fi
+fi
+
+# Validate file is within LIND_ROOT
+LIND_ROOT="${LIND_ROOT:-${REPO_ROOT}/src/tmp}"
+LIND_ROOT_ABS="$(cd "${LIND_ROOT}" 2>/dev/null && pwd)"
+
+if [[ -z "${LIND_ROOT_ABS}" ]]; then
+  echo "error: LIND_ROOT not found at ${LIND_ROOT}" >&2
+  echo "hint: run 'make prepare-lind-root' first" >&2
+  exit 2
+fi
+
+if [[ "${WASM_FILE}" != "${LIND_ROOT_ABS}"* ]]; then
+  echo "error: executable must be in LIND_ROOT" >&2
+  echo "  File: ${WASM_FILE}" >&2
+  echo "  LIND_ROOT: ${LIND_ROOT_ABS}" >&2
+  echo "hint: compile with lind_compile to place executables in LIND_ROOT" >&2
+  exit 2
+fi
+
 exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "$@"
