@@ -694,19 +694,17 @@ def analyze_executable_dependencies(tests_to_run):
 def create_required_executables(executable_deps):
     if not executable_deps:
         return
-
+    
     logger.info(f"Creating {len(executable_deps)} required executable(s)")
 
     for exec_path, source_file in executable_deps.items():
         try:
-            # Compile the source file to WASM (lind_compile now places it in LIND_ROOT)
+            # Compile the source file to WASM
             wasm_file, compile_err = compile_c_to_wasm(source_file)
-
             if wasm_file is None:
                 logger.error(f"Failed to compile {source_file}: {compile_err}")
                 continue
-
-            # Verify it's in the expected location
+            # Create destination directory in LIND_ROOT
             dest_path = LIND_ROOT / exec_path
             if not dest_path.exists():
                 # If not at expected path, create directory and copy
@@ -714,7 +712,6 @@ def create_required_executables(executable_deps):
                 shutil.copy2(str(wasm_file), str(dest_path))
 
             logger.info(f"Created executable: {dest_path}")
-
         except Exception as e:
             logger.error(f"Failed to create executable {exec_path}: {e}")
 
