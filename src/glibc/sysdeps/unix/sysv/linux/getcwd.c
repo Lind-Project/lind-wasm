@@ -52,8 +52,15 @@ __getcwd (char *buf, size_t size)
   // Do NOT add null check here - NULL is valid
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
-  return MAKE_LEGACY_SYSCALL (GETCWD_SYSCALL, "syscall|getcwd",
+  int ret = MAKE_LEGACY_SYSCALL (GETCWD_SYSCALL, "syscall|getcwd",
 		       host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  
+  // raw getcwd syscall returns the number of bytes copied
+  // while glibc wrapper should return the address of the string if success
+  if (ret < 0)
+      return NULL;
+
+  return buf;
 }
 libc_hidden_def (__getcwd)
 weak_alias (__getcwd, getcwd)
