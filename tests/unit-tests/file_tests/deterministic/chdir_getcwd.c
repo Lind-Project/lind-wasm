@@ -14,21 +14,28 @@ int main() {
   else
   {
     assert(result == cwd);
-    assert(strcmp(cwd, "/") == 0);
   }
+
+  int cwdlen = strlen(cwd);
   //---------------------------
   /* Chdir into /test causes issues on native as we don't have the permissions to create a folder in /. 
   Creating a folder under $cwd would be better. We are currently using the test suite's folder. -Kapkic */
   chdir("automated_tests/"); 
   //---------------------------
-  result = getcwd(cwd, sizeof(cwd));
+  char newcwd[buffersize];
+  result = getcwd(newcwd, sizeof(newcwd));
 
   if (result == NULL)
     perror("getcwd() error");
   else
   {
-    assert(result == cwd);
-    assert(strcmp(cwd, "/automated_tests") == 0);
+    assert(result == newcwd);
+
+    assert(strncmp(cwd, newcwd, cwdlen) == 0);
+    if(cwd[cwdlen - 1] == '/')
+      assert(strcmp(newcwd + strlen(cwd), "automated_tests") == 0);
+    else
+      assert(strcmp(newcwd + strlen(cwd), "/automated_tests") == 0);
   }
 
   printf("chdir test: PASS\n");

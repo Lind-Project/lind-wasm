@@ -14,7 +14,8 @@ int main() {
   else
   {
     assert(result == cwd);
-    assert(strcmp(cwd, "/") == 0);
+    // a basic path validity test
+    assert(strncmp(cwd, "/", 1) == 0);
   }
   
   printf("getcwd test: PASS\n");

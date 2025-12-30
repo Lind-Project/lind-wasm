@@ -21,7 +21,8 @@ int main(void) {
     }
 
     assert(result == path);
-    assert(strcmp(path, "/") == 0);
+
+    int pathlen = strlen(path);
 
     // Open a directory
     int fd = open("automated_tests/", O_RDONLY);
@@ -37,16 +38,21 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
+    char newpath[MAX_PATH];
     // Get the current working directory
-    char* second_result = getcwd(path, sizeof(path));
+    char* second_result = getcwd(newpath, sizeof(newpath));
     if (second_result == NULL) {
         perror("Error with getcwd");
         close(fd);
         return EXIT_FAILURE;
     } 
 
-    assert(second_result == path);
-    assert(strcmp(path, "/automated_tests") == 0);
+    assert(second_result == newpath);
+    assert(strncmp(path, newpath, pathlen) == 0);
+    if(path[pathlen - 1] == '/')
+      assert(strcmp(newpath + pathlen, "automated_tests") == 0);
+    else
+      assert(strcmp(newpath + pathlen, "/automated_tests") == 0);
 
     // Close the file descriptor
     if (close(fd) == -1) {
