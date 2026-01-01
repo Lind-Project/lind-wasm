@@ -204,6 +204,9 @@ pub fn check_addr(cageid: u64, arg: u64, length: usize, prot: i32) -> Result<boo
     // Get write lock on virtual memory map
     let mut vmmap = cage.vmmap.write();
 
+    // The input addresses are relative to the host's memory address, however,
+    // `vmmap.check_addr_mapping` operates relative to the cage's memory.
+    // We do this by subtracting cage's the base address.
     let base_addr = vmmap.base_address.unwrap() as u64;
     let arg_uaddr = arg - base_addr;
 

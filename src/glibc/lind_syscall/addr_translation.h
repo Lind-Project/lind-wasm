@@ -55,6 +55,8 @@ extern "C"
 #define TRANSLATE_GUEST_POINTER_TO_HOST(p)                                    \
   __lind_translate_ptr_to_host ((const void *) (p))
 
+// Converts (uaddr, cageid) pair to host address.
+// Useful when address space (cage vs host) is ambigious.
 #define TRANSLATE_UADDR_TO_HOST(uaddr, cageid)                                \
   __lind_translate_uaddr_to_host ((uaddr), (cageid))
 
