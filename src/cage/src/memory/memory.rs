@@ -204,12 +204,9 @@ pub fn check_addr(cageid: u64, arg: u64, length: usize, prot: i32) -> Result<boo
     // Get write lock on virtual memory map
     let mut vmmap = cage.vmmap.write();
 
-    let base_addr = vmmap.base_address.unwrap() as u64;
-    let arg_uaddr = arg - base_addr;
-
     // Calculate page numbers for start and end of region
-    let page_num = (arg_uaddr >> PAGESHIFT) as u32; // Starting page number
-    let end_page = ((arg_uaddr + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32; // Ending page number (rounded up)
+    let page_num = (arg >> PAGESHIFT) as u32; // Starting page number
+    let end_page = ((arg + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32; // Ending page number (rounded up)
     let npages = end_page - page_num; // Total number of pages spanned
 
     // Validate memory mapping and permissions

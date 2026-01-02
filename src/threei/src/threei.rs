@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
+use typemap::datatype_conversion::sc_convert_uaddr_to_host;
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
@@ -869,7 +870,7 @@ pub fn copy_data_between_cages(
             }
             // Try to compute actual string length within limit
             let max_scan = len as usize;
-            let host_src_try = srcaddr;
+            let host_src_try = sc_convert_uaddr_to_host(srcaddr, srccage, thiscage);
             if host_src_try == 0 {
                 eprintln!("[3i|copy] host_src null");
                 return threei_const::ELINDAPIABORTED;
@@ -902,8 +903,8 @@ pub fn copy_data_between_cages(
     }
 
     // Translate user virtual addrs to host pointers
-    let host_src_addr = srcaddr;
-    let host_dest_addr = destaddr;
+    let host_src_addr = sc_convert_uaddr_to_host(srcaddr, srccage, thiscage);
+    let host_dest_addr = sc_convert_uaddr_to_host(destaddr, destcage, thiscage);
     if host_src_addr == 0 || host_dest_addr == 0 {
         // src addr or dest addr is null
         eprintln!("[3i|copy] host addr translate failed");

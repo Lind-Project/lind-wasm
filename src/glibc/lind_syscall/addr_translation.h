@@ -42,21 +42,9 @@ extern "C"
     return __lind_base + (uint64_t) (uintptr_t) p;
   }
 
-  static inline uint64_t
-  __lind_translate_uaddr_to_host (const uint64_t uaddr, const uint64_t cageid)
-  {
-    if (cageid == __lind_cageid)
-      return __lind_base + uaddr;
-
-    return uaddr;
-  }
-
 // Convenience macro for call sites
 #define TRANSLATE_GUEST_POINTER_TO_HOST(p)                                    \
   __lind_translate_ptr_to_host ((const void *) (p))
-
-#define TRANSLATE_UADDR_TO_HOST(uaddr, cageid)                                \
-  __lind_translate_uaddr_to_host ((uaddr), (cageid))
 
 #ifdef __cplusplus
 }
