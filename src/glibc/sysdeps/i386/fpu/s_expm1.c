@@ -30,3 +30,4 @@ double __expm1(double x) {
     }
 }
 
+weak_alias (__expm1, expm1)
