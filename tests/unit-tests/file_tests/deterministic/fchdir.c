@@ -1,6 +1,7 @@
 #undef _GNU_SOURCE
 #define _GNU_SOURCE
 
+#include <assert.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,10 +19,10 @@ int main(void) {
         perror("getcwd() error");
         return EXIT_FAILURE;
     }
-    
-    printf("current working directory is: %s :: %s\n", path, result);
-    fflush(stdout);
-    
+
+    assert(result == path);
+
+    int pathlen = strlen(path);
 
     // Open a directory
     int fd = open("automated_tests/", O_RDONLY);
@@ -37,23 +38,29 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
+    char newpath[MAX_PATH];
     // Get the current working directory
-    char* second_result = getcwd(path, sizeof(path));
+    char* second_result = getcwd(newpath, sizeof(newpath));
     if (second_result == NULL) {
         perror("Error with getcwd");
         close(fd);
         return EXIT_FAILURE;
     } 
-    printf("current working directory is: %s :: %s\n", path, second_result);
-    fflush(stdout);
-    
 
+    assert(second_result == newpath);
+    assert(strncmp(path, newpath, pathlen) == 0);
+    if(path[pathlen - 1] == '/')
+      assert(strcmp(newpath + pathlen, "automated_tests") == 0);
+    else
+      assert(strcmp(newpath + pathlen, "/automated_tests") == 0);
 
     // Close the file descriptor
     if (close(fd) == -1) {
         perror("Error with close");
         return EXIT_FAILURE;
     }
+
+    printf("fchdir test: PASS\n");
 
     return EXIT_SUCCESS;
 }
