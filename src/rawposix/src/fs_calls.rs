@@ -3575,9 +3575,20 @@ pub fn ioctl_syscall(
         );
     }
 
-    // Only support FIONBIO and FIOASYNC. Return error for unsupported requests.
-    if req_arg != FIONBIO as u64 && req_arg != FIOASYNC as u64 {
-        lind_debug_panic("Lind unsupported ioctl request - FIONBIO and FIOASYNC only");
+    // handle FIOCLEX, set close_on_exec flag for the file descriptor
+    if req_arg == FIOCLEX {
+        let ret = match fdtables::set_cloexec(cageid, vfd_arg, true) {
+            Ok(_) => 0,
+            Err(_) => syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor"),
+        };
+
+        return ret;
+    }
+
+    // Besides FIOCLEX, we only support FIONBIO and FIOASYNC right now.
+    // Return error for unsupported requests.
+    if req_arg != FIONBIO as u64 && req_arg != FIOASYNC as u64 as u64 {
+        lind_debug_panic("Lind unsupported ioctl request");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
