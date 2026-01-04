@@ -3336,7 +3336,11 @@ pub fn getcwd_syscall(
         ptr::copy(path.as_ptr(), buf, path.len());
         *buf.add(path.len()) = 0;
     }
-    0
+
+    // std::copy guarantees it copies exactly path.len() bytes.
+    let bytes_written: i32 = path.len().try_into().unwrap();
+
+    bytes_written
 }
 
 /// Truncate a file to a specified length
