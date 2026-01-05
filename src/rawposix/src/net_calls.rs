@@ -1333,14 +1333,11 @@ pub fn getsockname_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    if fd < 0 {
-        return handle_errno(fd, "getsockname");
-    }
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    // Note: arg3 is the addrlen pointer, so it's not unused
-    if !(sc_unusedarg(arg4, arg4_cageid)
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
