@@ -78,6 +78,7 @@ cd $BUILD
   --disable-werror \
   --disable-hidden-plt \
   --disable-profile \
+  --disable-nscd \
   --with-headers=/usr/i686-linux-gnu/include \
   --prefix=$GLIBC/target \
   --host=i686-linux-gnu \
