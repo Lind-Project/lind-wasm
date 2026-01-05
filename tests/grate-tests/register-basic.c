@@ -33,7 +33,7 @@ int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
 
 int geteuid_grate(uint64_t);
 
-int geteuid_grate(uint64_t cageid) { return 2 * geteuid_orig; }
+int geteuid_grate(uint64_t cageid) { return geteuid_orig + 1; }
 
 int main(int argc, char *argv[]) {
   int grateid = getpid();
@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
   int ret = register_handler(grateid, 107, 1, grateid, fn_ptr_addr);
 
   ASSERT(ret, 0);
-  ASSERT(geteuid(), 2 * geteuid_orig);
+  ASSERT(geteuid(), geteuid_orig + 1);
 
   return 0;
 }

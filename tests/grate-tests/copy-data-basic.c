@@ -27,8 +27,6 @@
     }                                                                          \
   } while (0);
 
-static int geteuid_orig = -1;
-
 int pass_fptr_to_wt(uint64_t fn_ptr_uint, uint64_t cageid, uint64_t arg1,
                     uint64_t arg1cage, uint64_t arg2, uint64_t arg2cage,
                     uint64_t arg3, uint64_t arg3cage, uint64_t arg4,
