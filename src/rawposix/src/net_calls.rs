@@ -1339,6 +1339,7 @@ pub fn getsockname_syscall(
     // no-op by default
     if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
         panic!(
