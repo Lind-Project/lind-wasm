@@ -1337,9 +1337,8 @@ pub fn getsockname_syscall(
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    // arg3 is addrlen*, so do NOT treat it as unused
-    if !(sc_unusedarg(arg4, arg4_cageid)
-        && sc_unusedarg(arg5, arg5_cageid)
+    if !(sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
         panic!(
