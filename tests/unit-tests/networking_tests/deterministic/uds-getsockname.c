@@ -36,10 +36,7 @@ int main(int argc, char *argv[])
         perror("GETSOCKNAME ERROR: ");
     }
 
-    const char *p = server_addr2.sun_path;
-    const char *root = "/home/lind/lind-wasm/src/tmp/";
-    if (strncmp(p, root, strlen(root)) == 0) p += strlen(root);
-    printf("sun_path = %s\n", p);
+    printf("sun_path = %s\n", server_addr.sun_path);
 
     close(server_fd);
     unlink(SOCK_PATH);
