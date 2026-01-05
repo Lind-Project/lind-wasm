@@ -1350,24 +1350,8 @@ pub fn getsockname_syscall(
         );
     }
 
-    let addr = addr_arg as *mut u8;
-    let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
-    
-    // Convert addrlen pointer from guest to host
-    let addrlen_ptr = sc_convert_buf(arg3, arg3_cageid, cageid) as *mut socklen_t;
-    if !addrlen_ptr.is_null() {
-        // Read initial addrlen from user's pointer
-        addrlen = unsafe { *addrlen_ptr };
-    }
-
-    let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, &mut addrlen as *mut socklen_t) };
-
-    // Write back the actual length to user's pointer
-    if ret >= 0 && !addrlen_ptr.is_null() {
-        unsafe {
-            *addrlen_ptr = addrlen;
-        }
-    }
+    let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
+    let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, addrlen as *mut u32) };
 
     if ret < 0 {
         let errno = get_errno();
