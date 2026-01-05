@@ -1335,10 +1335,8 @@ pub fn getsockname_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = addr_arg as *mut u8;
 
-    // would check when `secure` flag has been set during compilation,
-    // no-op by default
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
+    // arg3 is addrlen*, so do NOT treat it as unused
+    if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
@@ -1348,13 +1346,37 @@ pub fn getsockname_syscall(
         );
     }
 
-    let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
+    // len pointer (glibc wrapper already translated to host pointer)
+    let lenp = arg3 as *mut socklen_t;
+    if lenp.is_null() {
+        return syscall_error(Errno::EFAULT, "getsockname_syscall", "len is null");
+    }
 
-    let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, addrlen as *mut u32) };
+    // Read initial length and clamp
+    let mut len: socklen_t = unsafe { *lenp };
+    let max_len = mem::size_of::<sockaddr_storage>() as socklen_t;
+    if len > max_len {
+        len = max_len;
+    }
+
+    // Call kernel into temporary buffer (avoid writing into SockAddr directly)
+    let mut storage: sockaddr_storage = unsafe { mem::zeroed() };
+    let ret = unsafe {
+        libc::getsockname(
+            fd as i32,
+            &mut storage as *mut _ as *mut sockaddr,
+            &mut len as *mut socklen_t,
+        )
+    };
 
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getsockname");
+    }
+
+    // Copy into guest-visible SockAddr wrapper + write back len
+    unsafe {
+        copy_out_sockaddr(addr as *mut SockAddr, lenp, &storage);
     }
 
     ret
