@@ -1333,6 +1333,7 @@ pub fn getsockname_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
+    let addr = addr_arg as *mut u8;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1348,6 +1349,7 @@ pub fn getsockname_syscall(
     }
 
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
+
     let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, addrlen as *mut u32) };
 
     if ret < 0 {
