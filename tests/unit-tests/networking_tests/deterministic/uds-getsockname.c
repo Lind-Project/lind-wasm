@@ -8,9 +8,9 @@
 
 #define SOCK_PATH "unix_sock.tmp"
 
-int main()
+int main(int argc, char *argv[])
 {
-    int addrlen;
+    socklen_t addrlen;
     int rc;
     int server_sock;
     struct sockaddr_un server_addr, server_addr2;
@@ -36,7 +36,10 @@ int main()
         perror("GETSOCKNAME ERROR: ");
     }
 
-    printf("sun_path = %s\n", server_addr.sun_path);
+    const char *p = server_addr2.sun_path;
+    const char *root = "/home/lind/lind-wasm/src/tmp/";
+    if (strncmp(p, root, strlen(root)) == 0) p += strlen(root);
+    printf("sun_path = %s\n", p);
 
     close(server_fd);
     unlink(SOCK_PATH);

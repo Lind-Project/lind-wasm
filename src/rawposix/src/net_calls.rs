@@ -1333,12 +1333,14 @@ pub fn getsockname_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = addr_arg as *mut u8;
+    if fd < 0 {
+        return handle_errno(fd, "getsockname");
+    }
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
+    // Note: arg3 is the addrlen pointer, so it's not unused
+    if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
@@ -1348,9 +1350,46 @@ pub fn getsockname_syscall(
         );
     }
 
-    let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
+    // Convert guest pointers to host pointers
+    let addrlen_ptr = sc_convert_buf(arg3, arg3_cageid, cageid) as *mut socklen_t;
+    let initial_addrlen = if !addrlen_ptr.is_null() {
+        unsafe { *addrlen_ptr }
+    } else {
+        mem::size_of::<sockaddr_un>() as socklen_t
+    };
 
-    let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, addrlen as *mut u32) };
+    // Use a temporary buffer for the kernel call
+    let mut addr_storage: sockaddr_storage = unsafe { mem::zeroed() };
+    let mut addrlen: socklen_t = initial_addrlen;
+    
+    // Clamp addrlen to reasonable size
+    let max_len = mem::size_of::<sockaddr_storage>() as socklen_t;
+    if addrlen > max_len {
+        addrlen = max_len;
+    }
+
+    let ret = unsafe {
+        libc::getsockname(
+            fd as i32,
+            &mut addr_storage as *mut _ as *mut sockaddr,
+            &mut addrlen as *mut socklen_t,
+        )
+    };
+
+    // Copy the result back to user's address buffer and update addrlen
+    if ret >= 0 {
+        let user_addr = sc_convert_buf(addr_arg, addr_cageid, cageid) as *mut SockAddr;
+        if !user_addr.is_null() && !addrlen_ptr.is_null() {
+            unsafe {
+                copy_out_sockaddr(user_addr, addrlen_ptr, &addr_storage);
+            }
+        } else if !addrlen_ptr.is_null() {
+            // Only update addrlen if address buffer is null
+            unsafe {
+                *addrlen_ptr = addrlen;
+            }
+        }
+    }
 
     if ret < 0 {
         let errno = get_errno();
