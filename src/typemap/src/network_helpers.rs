@@ -3,7 +3,7 @@
 //! This module provides helpers to translate a guest-provided sockaddr buffer into a
 //! host-usable pointer and to compute the correct socklen_t for Linux. It is used by
 //! our socket-related syscalls to bridge from per-cage virtual memory to host libc calls.
-use crate::datatype_conversion::validate_cageid;
+use crate::datatype_conversion::{sc_convert_buf, validate_cageid};
 use cage::get_cage;
 use libc::{
     sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un, socklen_t,
@@ -84,9 +84,15 @@ pub fn convert_host_sockaddr(
         return (core::ptr::null_mut(), 0);
     }
 
+    // Translate guest pointer to host-accessible pointer
+    let arg_host = sc_convert_buf(arg as u64, arg_cageid, cageid) as *mut u8;
+    if arg_host.is_null() {
+        return (core::ptr::null_mut(), 0);
+    }
+
     // Clone just enough bytes from the incoming buffer into our small helper,
     // so we can read `sa_family` and (for AF_UNIX) examine/prepare the path.
-    let mut saddr = unsafe { SockAddr::clone_to_sockaddr(arg) };
+    let mut saddr = unsafe { SockAddr::clone_to_sockaddr(arg_host) };
 
     let mut out_len: libc::socklen_t = 0;
 
@@ -94,7 +100,7 @@ pub fn convert_host_sockaddr(
         unsafe {
             // Point to the start of `sun_path` inside the *original* buffer.
             // On Linux, `sa_family_t` is u16, so `sun_path` is immediately after 2 bytes.
-            let sun_path_ptr = (arg.add(size_of::<libc::sa_family_t>())) as *mut i8;
+            let sun_path_ptr = (arg_host.add(size_of::<libc::sa_family_t>())) as *mut i8;
 
             // Current path length (for pathname form this is strlen; for abstract form this is 0).
             let path_len = strlen(sun_path_ptr);
@@ -125,7 +131,7 @@ pub fn convert_host_sockaddr(
             }
 
             // Ensure the family field at the head of the original buffer is consistent.
-            ptr::write_unaligned(arg as *mut u16, saddr.sun_family);
+            ptr::write_unaligned(arg_host as *mut u16, saddr.sun_family);
         }
 
         out_len = unsafe { unix_len_from_sun_path(&saddr.sun_path) };
@@ -138,7 +144,7 @@ pub fn convert_host_sockaddr(
         };
     }
 
-    (arg as *mut libc::sockaddr, out_len)
+    (arg_host as *mut libc::sockaddr, out_len)
 }
 
 /// `copy_out_sockaddr` copies a sockaddr structure into a user-provided buffer,

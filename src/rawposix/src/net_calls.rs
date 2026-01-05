@@ -1350,44 +1350,22 @@ pub fn getsockname_syscall(
         );
     }
 
-    // Convert guest pointers to host pointers
-    let addrlen_ptr = sc_convert_buf(arg3, arg3_cageid, cageid) as *mut socklen_t;
-    let initial_addrlen = if !addrlen_ptr.is_null() {
-        unsafe { *addrlen_ptr }
-    } else {
-        mem::size_of::<sockaddr_un>() as socklen_t
-    };
-
-    // Use a temporary buffer for the kernel call
-    let mut addr_storage: sockaddr_storage = unsafe { mem::zeroed() };
-    let mut addrlen: socklen_t = initial_addrlen;
+    let addr = addr_arg as *mut u8;
+    let (finalsockaddr, mut addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
     
-    // Clamp addrlen to reasonable size
-    let max_len = mem::size_of::<sockaddr_storage>() as socklen_t;
-    if addrlen > max_len {
-        addrlen = max_len;
+    // Convert addrlen pointer from guest to host
+    let addrlen_ptr = sc_convert_buf(arg3, arg3_cageid, cageid) as *mut socklen_t;
+    if !addrlen_ptr.is_null() {
+        // Read initial addrlen from user's pointer
+        addrlen = unsafe { *addrlen_ptr };
     }
 
-    let ret = unsafe {
-        libc::getsockname(
-            fd as i32,
-            &mut addr_storage as *mut _ as *mut sockaddr,
-            &mut addrlen as *mut socklen_t,
-        )
-    };
+    let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, &mut addrlen as *mut socklen_t) };
 
-    // Copy the result back to user's address buffer and update addrlen
-    if ret >= 0 {
-        let user_addr = sc_convert_buf(addr_arg, addr_cageid, cageid) as *mut SockAddr;
-        if !user_addr.is_null() && !addrlen_ptr.is_null() {
-            unsafe {
-                copy_out_sockaddr(user_addr, addrlen_ptr, &addr_storage);
-            }
-        } else if !addrlen_ptr.is_null() {
-            // Only update addrlen if address buffer is null
-            unsafe {
-                *addrlen_ptr = addrlen;
-            }
+    // Write back the actual length to user's pointer
+    if ret >= 0 && !addrlen_ptr.is_null() {
+        unsafe {
+            *addrlen_ptr = addrlen;
         }
     }
 
