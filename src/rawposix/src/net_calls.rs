@@ -1335,6 +1335,8 @@ pub fn getsockname_syscall(
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let addr = addr_arg as *mut u8;
 
+    // would check when `secure` flag has been set during compilation,
+    // no-op by default
     // arg3 is addrlen*, so do NOT treat it as unused
     if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
