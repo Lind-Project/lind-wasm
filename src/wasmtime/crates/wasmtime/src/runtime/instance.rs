@@ -227,6 +227,53 @@ impl Instance {
         Ok(instance)
     }
 
+    /// This is a lind-wasm helper for thread creation that mirrors `new_started_impl`, but also returns the `InstanceId`.
+    ///
+    /// Thread creation in lind-wasm does not require the cage-level linear-memory initialization performed by
+    /// `new_started_impl_with_lind`: threads are created within an already-established cage address space, so no vmmap
+    /// initialization, mmap setup, or fork-based memory cloning is needed here, but one thread still needs to create
+    /// a new instance and store. Moreover, lind-3i still requires access to the `InstanceId` so it can later obtain
+    /// the corresponding `VMContext` pointer and recover the correct store/instance runtime state for that
+    /// `(cage_id, thread_id)` entry. See more details in [lind-3i/src/lib.rs].
+    ///
+    /// We introduce this separate function to minimize the surface area of changes to upstream Wasmtime code: modifying
+    /// `new_started_impl` would require touching additional Wasmtime paths that lind-wasm does not need. Instead, this
+    /// helper provides the exact behavior required for lind thread instantiation with minimal disruption.
+    ///
+    /// This function creates the instance, runs the start function if present, and returns `(Instance, InstanceId)` for
+    /// `VMContext` registration and later lookup.
+    pub(crate) unsafe fn new_started_impl_with_lind_thread<T>(
+        store: &mut StoreContextMut<'_, T>,
+        module: &Module,
+        imports: Imports<'_>,
+    ) -> Result<(Instance, InstanceId)> {
+        let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
+
+        if let Some(start) = start {
+            instance.start_raw(store, start)?;
+        }
+        Ok((instance, instanceid))
+    }
+
+    /// This is a lind-wasm extension of Wasmtime’s internal instance creation path.
+    /// Unlike the upstream `new_started_impl`, this function performs lind-specific linear-memory
+    /// initialization so that new cages have the correct RawPOSIX / microvisor-managed memory
+    /// semantics. In lind-wasm, memory setup must happen inside the microvisor layer, so we
+    /// intentionally bypass/override Wasmtime’s default memory initialization behavior and
+    /// initialize the cage’s memory state ourselves.
+    ///
+    /// This function returns `(Instance, InstanceId)` (instead of only `Instance`) because lind-wasm
+    /// needs the `InstanceId` later to recover the corresponding `VMContext` pointer and re-enter the
+    /// correct runtime state during cross-cage / cross-grate transitions. See more details in [lind-3i/src/lib.rs]
+    ///
+    /// The concrete initialization steps depend on `InstantiateType`:
+    /// `InstantiateFirst(cageid)`: creates the first cage’s linear memory, records the memory base address,
+    /// initializes vmmap, and performs a RawPOSIX-backed mmap to establish the initial memory region.
+    /// `InstantiateChild { parent_cageid, child_cageid }`: corresponds to fork semantics. After initializing
+    /// the child’s vmmap using the child’s memory base address, we clone the parent’s memory mappings/state
+    /// into the child (`fork_vmmap`) so that the child starts with an identical address space. After
+    /// lind-specific memory setup is complete, this function runs the module’s start function (if present)
+    /// and returns both the created `instance` and its `InstanceId`.
     pub(crate) unsafe fn new_started_impl_with_lind<T>(
         store: &mut StoreContextMut<'_, T>,
         module: &Module,
@@ -1031,6 +1078,27 @@ impl<T> InstancePre<T> {
         // constructor of `InstancePre` to assert that all the imports we're passing
         // in match the module we're instantiating.
         unsafe { Instance::new_started(&mut store, &self.module, imports.as_ref()) }
+    }
+
+    pub fn instantiate_with_lind_thread(
+        &self,
+        mut store: impl AsContextMut<Data = T>,
+    ) -> Result<(Instance, InstanceId)> {
+        let mut store = store.as_context_mut();
+        let imports = pre_instantiate_raw(
+            &mut store.0,
+            &self.module,
+            &self.items,
+            self.host_funcs,
+            &self.func_refs,
+        )?;
+
+        // This unsafety should be handled by the type-checking performed by the
+        // constructor of `InstancePre` to assert that all the imports we're passing
+        // in match the module we're instantiating.
+        unsafe {
+            Instance::new_started_impl_with_lind_thread(&mut store, &self.module, imports.as_ref())
+        }
     }
 
     pub fn instantiate_with_lind(
