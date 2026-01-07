@@ -12,7 +12,7 @@
 //! `exit` logic is not necessarily the same cage or grate that originally issued the system call. As
 //! a result, lind-3i cannot rely on an implicit “current” runtime state. Instead, it must be able to
 //! retrieve the Wasmtime execution context. For `exec` and `exit` calls, it will retrieve the context
-//! associated with an arbitrary `cage_id`. 
+//! associated with an arbitrary `cage_id`.
 //! todo:
 //! In lind-boot, for `fork` calls, it will retrieve the context according to the context ptr passed from
 //! arguments.
@@ -25,7 +25,7 @@
 //! To support both scenarios, lind-3i leverages a key property of lind-wasm’s execution model: each Wasmtime
 //! `Store` contains exactly one Wasm `Instance`, and each thread executes within its own independent
 //! store / instance pair.
-//! 
+//!
 //! At module creation time, lind-3i extracts the `VMContext` pointer associated with the newly created instance.
 //! This `VMContext` uniquely identifies the execution state of that `Store` / `Instance`. The pointer is
 //! stored in a global table indexed by `cage_id`. When lind-3i needs to transfer execution to
@@ -37,12 +37,12 @@
 //! This design avoids Rust lifetime constraints that would otherwise prevent cross-store and cross-instance
 //! execution transfers. Correctness instead relies on higher-level invariants enforced by lind-wasm, including
 //! the guarantee that `VMContext` pointers remain valid for the lifetime of their associated threads.
+use std::collections::VecDeque;
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use sysdefs::constants::lind_platform_const;
-use std::sync::OnceLock;
-use std::collections::VecDeque;
 use std::sync::Mutex;
+use std::sync::OnceLock;
+use sysdefs::constants::lind_platform_const;
 
 /// The [`VMContext`](wasmtime_runtime::VMContext) pointer originates from Wasmtime internals and
 /// represents the execution state of a Wasm instance. It includes the instance’s memories, tables,
@@ -73,26 +73,26 @@ impl VmCtxWrapper {
 
 /// Global per-cage `VMContext` queues.
 ///
-/// This is a global pool indexed by `cage_id` and will be initialized at the start of lind-wasm 
+/// This is a global pool indexed by `cage_id` and will be initialized at the start of lind-wasm
 /// execution. Each cage owns a dedicated FIFO queue of `VmCtxWrapper` objects.
-/// 
+///
 /// # Lifetime:
 /// Individual queues may be emptied when a cage terminates, but the slot itself is never removed.
 static VMCTX_QUEUES: OnceLock<Vec<Mutex<VecDeque<VmCtxWrapper>>>> = OnceLock::new();
 
 /// Initialize the global `VMContext` pool.
 ///
-/// This function must be called exactly once during lind-wasm startup, before any `VMContext` is 
+/// This function must be called exactly once during lind-wasm startup, before any `VMContext` is
 /// pushed to or retrieved from the pool. It eagerly allocates one empty queue per possible `cage_id`.
 pub fn init_vmctx_pool() {
     VMCTX_QUEUES.get_or_init(|| {
-            (0..lind_platform_const::MAX_CAGEID)
-                .map(|_| Mutex::new(VecDeque::new()))
-                .collect()
-        });
+        (0..lind_platform_const::MAX_CAGEID)
+            .map(|_| Mutex::new(VecDeque::new()))
+            .collect()
+    });
 }
 
-/// `get_vmctx` 
+/// `get_vmctx`
 /// Retrieve a VMContext from the specified cage.
 ///
 /// This performs a FIFO pop from the per-cage queue.

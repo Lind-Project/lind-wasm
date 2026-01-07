@@ -108,7 +108,7 @@ lazy_static! {
 ///
 /// This function is called from the [wasmtime/lind-3i] when a cage is created or initialized. At that
 /// point, the runtime responsible for executing grate calls for the cage is known and recorded here.
-/// 
+///
 /// If a runtime is already set:
 /// - same value => no-op
 /// - different value => panic (logic bug / double-init mismatch)
