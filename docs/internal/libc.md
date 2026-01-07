@@ -50,6 +50,13 @@ glibc automatically generates `.s` files for certain system calls. To address th
 - **Implement `BYTE_COPY_FWD` and `BYTE_COPY_BWD`**: These functions were implemented in C without relying on `memcpy` or `memmove` to ensure compatibility with the WASM environment.
 - **Disable `attribute_relro`**: The original C code places the vtable into the `relro` section in the binary. Since WebAssembly binaries do not have this section, the attribute was disabled.
 
+### 1.5 Disabling Auto-Generated Assembly in `i386` Sysdeps
+
+glibc’s `sysdeps/unix/sysv/linux/i386` hierarchy, including the `i686` subdirectory, relies on build-time logic that automatically generates assembly (`.S`) files for syscall stubs and low-level ABI glue. This mechanism assumes a native assembler and is incompatible with WebAssembly.
+
+To support WASM, the assembly auto-generation logic in these directories was disabled. All generated `.S` files were replaced with manually provided C implementations that preserve the required behavior without relying on architecture-specific assembly. This prevents glibc from emitting or compiling assembly code when targeting WASM while keeping the changes localized to the `i386` Linux sysdeps.
+
+
 ## 2. Modifications and Additions to `crt1.c` for WASI
 
 ### 2.1 WASI-Specific Function Wrappers
