@@ -20,7 +20,6 @@ use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_ba
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
-// use wasmtime_lind_3i::take_gratefn_wasm;
 use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
 // lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
@@ -238,7 +237,7 @@ pub fn add_to_linker<
                 in_grate_fn_ptr_u64,
                 targetcage,
                 targetcallnum,
-                threei_const::RUNTIME_WASMTIME,
+                threei_const::RUNTIME_TYPE_WASMTIME,
                 handlefunc_flag,
                 this_grate_id,
                 UNUSED_ARG,

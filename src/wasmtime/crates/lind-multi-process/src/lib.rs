@@ -6,7 +6,7 @@ use anyhow::{anyhow, Result};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::threei::make_syscall;
+use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
@@ -415,6 +415,8 @@ impl<
                         Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
 
                     let lind_manager = child_ctx.lind_manager.clone();
+                    let linker = child_ctx.linker.clone();
+                    let module = child_ctx.module.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
                     store.set_stack_snapshots(parent_stack_snapshots);
 
@@ -478,7 +480,27 @@ impl<
                     };
 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
-                    let rc = set_vmctx(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
+                    let rc = set_vmctx(child_cageid, vmctx_wrapper);
+
+                    // 4) Notify threei of the cage runtime type
+                    threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
+
+                    for _ in 0..9 {
+                        let (_, backup_cage_instanceid) = linker
+                            .instantiate_with_lind_thread(
+                                &mut store,
+                                &module,
+                            ).unwrap();
+                        let backup_cage_storeopaque = store.inner_mut();
+                        let backup_cage_instancehandler = backup_cage_storeopaque.instance(backup_cage_instanceid);
+                        let backup_vmctx_ptr: *mut c_void = backup_cage_instancehandler.vmctx().cast();
+
+                        let backup_vmctx_wrapper = VmCtxWrapper {
+                            vmctx: NonNull::new(backup_vmctx_ptr).unwrap(),
+                        };
+
+                        set_vmctx(child_cageid, backup_vmctx_wrapper);
+                    }
 
                     barrier_clone.wait();
 
@@ -541,7 +563,12 @@ impl<
                                 // exit the main thread
                                 if lind_thread_exit(child_cageid, THREAD_START_ID as u64) {
                                     // Clean up the context from the global table
-                                    rm_vmctx(child_cageid as u64, THREAD_START_ID as u64);
+                                    if !rm_vmctx(child_cageid as u64) {
+                                        panic!(
+                                            "[wasmtime|fork] Failed to remove VMContext for cage_id {}",
+                                            child_cageid
+                                        );
+                                    }
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
                                     // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -790,7 +817,7 @@ impl<
                     };
 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
-                    let rc = set_vmctx(child_cageid as u64, THREAD_START_ID as u64, vmctx_wrapper);
+                    let rc = set_vmctx(child_cageid as u64, vmctx_wrapper);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -845,7 +872,12 @@ impl<
                             // exit the thread
                             if lind_thread_exit(child_cageid as u64, next_tid as u64) {
                                 // Clean up the context from the global table
-                                rm_vmctx(child_cageid as u64, next_tid as u64);
+                                if !rm_vmctx(child_cageid as u64) {
+                                    panic!(
+                                        "[wasmtime|pthread_create] Failed to remove VMContext for cage_id {}",
+                                        child_cageid
+                                    );
+                                }
 
                                 // we clean the cage only if this is the last thread in the cage
                                 // exit the cage with the exit code

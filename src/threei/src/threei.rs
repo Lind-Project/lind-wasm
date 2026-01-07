@@ -43,7 +43,7 @@ pub type RawCallFunc = fn(
 /// call is dispatched.
 pub type GrateTrampolineFn = extern "C" fn(
     in_grate_fn_ptr_u64: u64,
-    cageid: u64,
+    grateid: u64,
     arg1: u64,
     arg1cageid: u64,
     arg2: u64,
@@ -108,12 +108,22 @@ lazy_static! {
 ///
 /// This function is called from the [wasmtime/lind-3i] when a cage is created or initialized. At that
 /// point, the runtime responsible for executing grate calls for the cage is known and recorded here.
+///
+/// If a runtime is already set:
+/// - same value => no-op
+/// - different value => panic (logic bug / double-init mismatch)
 pub fn set_cage_runtime(cageid: u64, runtime: u64) {
     let idx = cageid as usize;
     let mut table = GRATE_RUNTIME_TABLE.write().unwrap();
 
-    // Set the runtime ID for the given cageid
-    table[idx] = Some(runtime);
+    match table[idx] {
+        None => table[idx] = Some(runtime),
+        Some(existing) if existing == runtime => {}
+        Some(existing) => panic!(
+            "set_cage_runtime mismatch for cageid {}: existing runtime {} != new runtime {}",
+            cageid, existing, runtime
+        ),
+    }
 }
 
 /// `get_cage_runtime` returns the runtime ID associated with the given cage.
@@ -274,7 +284,7 @@ pub fn register_handler(
     in_grate_fn_ptr_u64: u64,
     targetcage: u64,    // Cage to modify
     targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all.
-    runtime_id: u64,
+    _runtime_id: u64,
     is_register: u64,    // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
@@ -290,13 +300,6 @@ pub fn register_handler(
     if EXITING_TABLE.contains(&targetcage) || EXITING_TABLE.contains(&handlefunccage) {
         return threei_const::ELINDESRCH as i32;
     }
-
-    // Add the `GrateFnEntry` to the global table
-    // _add_global_grate(handlefunccage, entry_ptr_u64);
-
-    // todo:
-    // - add a new global table to store the trampoline function pointer per runtime, attached by
-    // a special RUNTIME const
 
     // Actual implementation is in handler_table module according to feature flag
     register_handler_impl(

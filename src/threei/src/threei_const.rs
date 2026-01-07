@@ -31,4 +31,4 @@ pub const GRATE_ERR: i32 = -1;
 /// trampoline function when dispatching grate calls.
 ///
 /// The value is expected to be globally unique among all runtimes registered with 3i
-pub const RUNTIME_WASMTIME: u64 = 1;
+pub const RUNTIME_TYPE_WASMTIME: u64 = 1;
