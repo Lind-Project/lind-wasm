@@ -29,7 +29,7 @@ use wasmtime_lind_multi_process::{LindCtx, LindHost, CAGE_START_ID, THREAD_START
 use wasmtime_lind_utils::lind_syscall_numbers::EXIT_SYSCALL;
 use wasmtime_wasi::WasiView;
 
-use wasmtime_lind_3i::{get_vmctx, rm_vmctx, set_vmctx, VmCtxWrapper};
+use wasmtime_lind_3i::{init_vmctx_pool, get_vmctx, rm_vmctx, set_vmctx, VmCtxWrapper};
 use wasmtime_lind_utils::LindCageManager;
 
 use cage::signal::{lind_signal_init, lind_thread_exit, signal_may_trigger};
@@ -101,12 +101,10 @@ pub extern "C" fn grate_callback_trampoline(
 ) -> i32 {
     // Never unwind across the C boundary.
     let res = catch_unwind(AssertUnwindSafe(|| unsafe {
-        let threadid = 1; //always 1. Only fork requires threadid passing, and fork is handled specially
-                          // Get the VMContextWrapper from the global table
-        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid, threadid) {
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(cageid) {
             Some(v) => v,
             None => {
-                return threei_const::GRATE_ERR;
+                panic!("no VMContext found for cage_id {}", cageid);
             }
         };
 
@@ -326,10 +324,12 @@ impl RunCommand {
         rawposix_start(0);
         // new cage is created
         lind_manager.increment();
+        // initialize vmctx pool
+        init_vmctx_pool();
 
         // initialize trampoline entry function pointer for wasmtime runtime.
         // todo: will remove to lind-boot in the future
-        threei::register_trampoline(threei_const::RUNTIME_WASMTIME, grate_callback_trampoline);
+        threei::register_trampoline(threei_const::RUNTIME_TYPE_WASMTIME, grate_callback_trampoline);
 
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
         // environment when executing the module. Without this whenever a WASI
@@ -366,7 +366,12 @@ impl RunCommand {
                 // exit the thread
                 if lind_thread_exit(CAGE_START_ID as u64, THREAD_START_ID as u64) {
                     // Clean up the context from the global table
-                    rm_vmctx(CAGE_START_ID as u64, THREAD_START_ID as u64);
+                    if !rm_vmctx(CAGE_START_ID as u64) {
+                        panic!(
+                            "[wasmtime|run] Failed to remove VMContext for cage_id {}",
+                            CAGE_START_ID
+                        );
+                    }
 
                     // we clean the cage only if this is the last thread in the cage
                     // exit the cage with the exit code
@@ -732,7 +737,7 @@ impl RunCommand {
         let result = match linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
-                let (instance, grate_instanceid) = linker
+                let (instance, cage_instanceid) = linker
                     .instantiate_with_lind(
                         &mut *store,
                         &module,
@@ -742,6 +747,51 @@ impl RunCommand {
                         "failed to instantiate {:?}",
                         self.module_and_args[0]
                     ))?;
+
+                // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
+                // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
+                // instance boundaries particularly difficult. To overcome this, the design employs low-level context
+                // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
+                // structures. See more details in [lind-3i/src/lib.rs]
+                // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
+                let cage_storeopaque = store.inner_mut();
+                let cage_instancehandler = cage_storeopaque.instance(cage_instanceid);
+                let vmctx_ptr: *mut c_void = cage_instancehandler.vmctx().cast();
+
+                // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                let vmctx_wrapper = VmCtxWrapper {
+                    vmctx: NonNull::new(vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
+                };
+
+                // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
+                set_vmctx(cageid as u64, vmctx_wrapper);
+
+                // 4) Notify threei of the cage runtime type
+                threei::set_cage_runtime(cageid as u64, threei_const::RUNTIME_TYPE_WASMTIME);
+
+                for i in 0..9 {
+                    let (backup_instance, backup_cage_instanceid) = linker
+                        .instantiate_with_lind_thread(
+                            &mut *store,
+                            &module,
+                        )
+                        .context(format!(
+                            "failed to instantiate {:?}",
+                            self.module_and_args[0]
+                        ))?;
+                        
+                    let backup_cage_storeopaque = store.inner_mut();
+                    let backup_cage_instancehandler = backup_cage_storeopaque.instance(backup_cage_instanceid);
+                    let backup_vmctx_ptr: *mut c_void = backup_cage_instancehandler.vmctx().cast();
+
+                    // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                    let backup_vmctx_wrapper = VmCtxWrapper {
+                        vmctx: NonNull::new(backup_vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
+                    };
+
+                    // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
+                    set_vmctx(cageid as u64, backup_vmctx_wrapper);
+                }
 
                 // If `_initialize` is present, meaning a reactor, then invoke
                 // the function.
@@ -796,24 +846,6 @@ impl RunCommand {
 
                 // see comments at signal_may_trigger for more details
                 signal_may_trigger(cageid);
-
-                // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
-                // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
-                // instance boundaries particularly difficult. To overcome this, the design employs low-level context
-                // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
-                // structures. See more details in [lind-3i/src/lib.rs]
-                // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
-                let grate_storeopaque = store.inner_mut();
-                let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
-
-                // 2) Extract vmctx pointer and put in a Send+Sync wrapper
-                let vmctx_wrapper = VmCtxWrapper {
-                    vmctx: NonNull::new(vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
-                };
-
-                // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
-                set_vmctx(cageid as u64, THREAD_START_ID as u64, vmctx_wrapper);
 
                 match func {
                     Some(func) => self.invoke_func(store, func),
