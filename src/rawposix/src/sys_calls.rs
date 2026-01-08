@@ -921,6 +921,45 @@ pub fn sigprocmask_syscall(
     res
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/sched_yield.2.html
+///
+/// Causes the calling thread to relinquish the CPU. The thread is moved to the end
+/// of the queue for its static priority and a new thread gets to run.
+///
+/// ## Returns
+/// On success, returns 0. On error, -1 is returned, and errno is set.
+pub fn sched_yield_syscall(
+    cageid: u64,
+    arg1: u64,
+    arg1cage: u64,
+    arg2: u64,
+    arg2cage: u64,
+    arg3: u64,
+    arg3cage: u64,
+    arg4: u64,
+    arg4cage: u64,
+    arg5: u64,
+    arg5cage: u64,
+    arg6: u64,
+    arg6cage: u64,
+) -> i32 {
+    // Validate that each extra argument is unused.
+    if !(sc_unusedarg(arg1, arg1_cageid)
+        && sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "sched_yield_syscall"
+        );
+    }
+
+    (unsafe { sched_yield() }) as i32
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/setitimer.3p.html
 ///
 /// This syscall allows a cage to set or retrieve the value of an interval timer.
