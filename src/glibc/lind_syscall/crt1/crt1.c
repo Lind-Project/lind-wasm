@@ -2,6 +2,7 @@
 #include <sysexits.h>
 #include <ctype.h>
 #include <addr_translation.h>
+#include <lind_debug.h>
 
 extern char** environ;
 // environ is a global variable that holds the environment variables for a program.
@@ -207,7 +208,9 @@ int _start() {
     __wasi_initialize_environ();
     __ctype_init(); //lind-wasm: init ctypes for isalpha etc.
     __lind_init_addr_translation();
-
+    #ifdef _LIND_DEBUG_H
+    	__lind_debug_import();
+    #endif
 // Lind-Wasm: conditional compilation to ensure exit() is called before program termination,
 // and return __main_void() if NO_ASYNCIFY is defined. exit() depends on asyncify,
 // calling it here will force execution of the program to rely on asyncify which currently cannot be enabled for using gdb
