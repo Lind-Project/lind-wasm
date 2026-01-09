@@ -7,6 +7,7 @@ use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
+use typemap::path_conversion::get_cstr;
 use wasmtime::Caller;
 use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
@@ -228,5 +229,28 @@ pub fn add_to_linker<
         },
     )?;
 
+    #[cfg(feature = "lind_debug")]
+    {
+        linker.func_wrap(
+            "debug",
+            "lind_debug_num",
+            move |_caller: Caller<'_, T>, num: u32| -> u32 {
+                eprintln!("[LIND DEBUG NUM]: {}", num);
+                num // Return the value to the WASM stack
+            },
+        )?;
+
+        linker.func_wrap(
+            "debug",
+            "lind_debug_str",
+            move |caller: Caller<'_, T>, ptr: i32| -> i32 {
+                let mem_base = get_memory_base(&caller);
+                if let Ok(msg) = get_cstr(mem_base + ptr as u64) {
+                    eprintln!("[LIND DEBUG STR]: {}", msg);
+                }
+                ptr // Return the pointer to the WASM stack
+            },
+        )?;
+    }
     Ok(())
 }
