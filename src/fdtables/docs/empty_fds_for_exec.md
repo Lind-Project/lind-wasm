@@ -15,6 +15,7 @@ close handlers called to handle this call.  See [`register_close_handlers`].
 # use fdtables::*;
 # let src_cage_id = threei::TESTING_CAGEID;
 # let cage_id = threei::TESTING_CAGEID3;
+# init_empty_cage(src_cage_id);
 # copy_fdtable_for_cage(src_cage_id,cage_id).unwrap();
 let my_virt_fd = get_unused_virtual_fd(cage_id, 0, 20, true, 17).unwrap();
 let my_virt_fd2 = get_unused_virtual_fd(cage_id, 0, 33, false, 16).unwrap();

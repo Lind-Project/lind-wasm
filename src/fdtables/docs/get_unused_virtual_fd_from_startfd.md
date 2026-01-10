@@ -14,6 +14,7 @@ This is intended for use with `fcntl()` commands like `F_DUPFD` and `F_DUPFD_CLO
 ```
 # use fdtables::*;
 # let cage_id = threei::TESTING_CAGEID;
+# init_empty_cage(cage_id);
 # let underfd: u64 = 10;
 # let fdkind: u32 = 0;
 # let arg: u64 = 2; 

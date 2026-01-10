@@ -17,6 +17,7 @@ an entry with that same realfd, the intermediate close handler is called.
 ```
 # use fdtables::*;
 # let cage_id = threei::TESTING_CAGEID;
+# init_empty_cage(cage_id);
 # let underfd: u64 = 10;
 # let fdkind: u32 = 0;
 # let virtfd: u64 = 1000;

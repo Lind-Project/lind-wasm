@@ -13,6 +13,7 @@ flag or table entry location).
 ```
 # use fdtables::*;
 # let cage_id = threei::TESTING_CAGEID;
+# init_empty_cage(cage_id);
 # let actualfd: u64 = 10;
 # let fdkind: u32 = 0;
 let my_virt_fd = get_unused_virtual_fd(cage_id, fdkind,actualfd, false, 0).unwrap();
