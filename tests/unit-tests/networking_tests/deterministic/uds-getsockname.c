@@ -8,9 +8,9 @@
 
 #define SOCK_PATH "unix_sock.tmp"
 
-int main()
+int main(int argc, char *argv[])
 {
-    int addrlen;
+    socklen_t addrlen;
     int rc;
     int server_sock;
     struct sockaddr_un server_addr, server_addr2;
