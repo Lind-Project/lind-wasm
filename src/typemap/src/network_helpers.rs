@@ -9,6 +9,7 @@ use libc::{
     sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un, socklen_t,
     strlen,
 };
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
 use std::ptr;
 use sysdefs::constants::lind_platform_const::LIND_ROOT;
@@ -99,26 +100,46 @@ pub fn convert_host_sockaddr(
             // Current path length (for pathname form this is strlen; for abstract form this is 0).
             let path_len = strlen(sun_path_ptr);
 
-            // We prefix with LIND_ROOT if it fits; compute the final length in bytes.
-            let lind_root_len = LIND_ROOT.len();
-            let new_path_len = path_len + lind_root_len;
+            // Extract guest path to determine if it's relative or absolute
+            let guest_path_str = if path_len > 0 {
+                match CStr::from_ptr(sun_path_ptr).to_str() {
+                    Ok(s) => s,
+                    Err(_) => "",
+                }
+            } else {
+                ""
+            };
+
+            // Build host path with proper separator
+            let host_path = if guest_path_str.starts_with('/') {
+                // Absolute path: LIND_ROOT + guest_path (guest_path already has leading /)
+                format!("{}{}", LIND_ROOT, guest_path_str)
+            } else if !guest_path_str.is_empty() {
+                // Relative path: LIND_ROOT + "/" + guest_path
+                format!("{}/{}", LIND_ROOT, guest_path_str)
+            } else {
+                // Empty path (abstract socket): just use LIND_ROOT
+                LIND_ROOT.to_string()
+            };
+
+            let new_path_len = host_path.len();
+            let new_path_bytes = host_path.as_bytes();
 
             // Only rewrite in place if the prefixed path still fits into the 108-byte sun_path.
             if new_path_len < 108 {
-                // Shift existing bytes forward to make room for the prefix.
-                ptr::copy(sun_path_ptr, sun_path_ptr.add(lind_root_len), path_len);
-                // Write the prefix at the start
+                // Write the host path at the start
                 ptr::copy_nonoverlapping(
-                    LIND_ROOT.as_ptr(),
+                    new_path_bytes.as_ptr(),
                     sun_path_ptr as *mut u8,
-                    lind_root_len,
+                    new_path_len,
                 );
                 // Zero-fill the remaining tail
                 ptr::write_bytes(sun_path_ptr.add(new_path_len), 0, 108 - new_path_len);
 
                 // Keep our local mirror in sync for length calculation
-                saddr.sun_path[..new_path_len]
-                    .copy_from_slice(core::slice::from_raw_parts(sun_path_ptr, new_path_len));
+                for (i, &b) in new_path_bytes.iter().enumerate() {
+                    saddr.sun_path[i] = b as i8;
+                }
                 for b in &mut saddr.sun_path[new_path_len..] {
                     *b = 0;
                 }
