@@ -27,13 +27,13 @@
 #include <sys/syscall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* If we compile the file for use in ld.so we don't need the feature
    that getcwd() allocates the buffers itself.  */
 #if IS_IN (rtld)
 # define NO_ALLOCATION	1
 #endif
-
 
 /* The "proc" filesystem provides an easy method to retrieve the value.
    For each process, the corresponding directory contains a symbolic link
@@ -45,11 +45,22 @@
 #define GETCWD_RETURN_TYPE	static char *
 #include <sysdeps/posix/getcwd.c>
 
-
 char *
 __getcwd (char *buf, size_t size)
 {
-	return MAKE_SYSCALL(GETCWD_SYSCALL, "syscall|getcwd", (uint64_t) buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  // buf CAN be NULL - this means kernel should allocate the buffer
+  // Do NOT add null check here - NULL is valid
+  uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
+  
+  int ret = MAKE_LEGACY_SYSCALL (GETCWD_SYSCALL, "syscall|getcwd",
+		       host_buf, (uint64_t) size, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
+  
+  // kernel getcwd syscall returns the number of bytes copied
+  // while glibc wrapper should return the address of the string if success
+  if (ret < 0)
+      return NULL;
+
+  return buf;
 }
 libc_hidden_def (__getcwd)
 weak_alias (__getcwd, getcwd)

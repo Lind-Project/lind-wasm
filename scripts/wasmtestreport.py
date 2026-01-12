@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Dict
 import argparse
 import shutil
 import logging
@@ -41,14 +42,16 @@ RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
-LIND_FS_ROOT = Path(os.environ.get("LIND_FS_ROOT", LIND_WASM_BASE / "src/RawPOSIX/tmp")).resolve()
+LIND_ROOT = Path(os.environ.get("LIND_ROOT", LIND_WASM_BASE / "src/tmp")).resolve()
+CC = os.environ.get("CC", "gcc")  # C compiler, defaults to gcc
 
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
 TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
-TESTFILES_DST = LIND_FS_ROOT / "testfiles"
+TESTFILES_DST = LIND_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
 NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
+FAIL_PARENT_NAME = "fail"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 
@@ -63,7 +66,12 @@ error_types = {
     "Lind_wasm_Segmentation_Fault": "Lind Wasm Segmentation Failure",
     "Lind_wasm_Timeout": "Timeout During Lind Wasm run",
     "Unknown_Failure": "Unknown Failure",
-    "Output_mismatch": "GCC and Wasm Output mismatch"
+    "Output_mismatch": "C Compiler and Wasm Output mismatch",
+    "Fail_native_succeeded": "Fail Test: Native Succeeded (Should Fail)",
+    "Fail_wasm_succeeded": "Fail Test: Wasm Succeeded (Should Fail)",
+    "Fail_both_succeeded": "Fail Test: Both Native and Wasm Succeeded (Should Fail)",
+    "Fail_native_compiling": "Fail Test: Native Compilation Failure (Should Succeed)",
+    "Fail_wasm_compiling": "Fail Test: Wasm Compilation Failure (Should Succeed)"
     }
 
 # ----------------------------------------------------------------------
@@ -223,6 +231,32 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     source_file = Path(source_file)
     native_output = source_file.parent / f"{source_file.stem}.o"
     
+    # Prepare any executable dependencies required by this test (like execv targets)
+    executable_backups: Dict[Path, Path] = {}
+    created_native_execs = set()
+    native_dependencies = analyze_executable_dependencies([source_file])
+    for exec_path, dependency_source in native_dependencies.items():
+        dest_path = (LIND_ROOT / exec_path).resolve()
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if dest_path.exists():
+            fd, backup_path = tempfile.mkstemp(prefix=f"{dest_path.name}_orig_", dir=str(dest_path.parent))
+            os.close(fd)
+            shutil.copy2(str(dest_path), backup_path)
+            executable_backups[dest_path] = Path(backup_path)
+
+        dep_compile_cmd = [CC, str(dependency_source), "-o", str(dest_path)]
+        try:
+            dep_proc = run_subprocess(dep_compile_cmd, label="native dep compile", shell=False)
+        except Exception as e:
+            return False, f"Exception compiling dependency {dependency_source}: {e}", "compile_error", "Failure_native_compiling"
+
+        if dep_proc.returncode != 0:
+            error_output = dep_proc.stdout + dep_proc.stderr
+            return False, f"Failed to compile dependency {dependency_source}: {error_output}", "compile_error", "Failure_native_compiling"
+
+        created_native_execs.add(dest_path)
+
     # Ensure paths are absolute to prevent cwd confusion
     if not source_file.is_absolute():
         raise ValueError(f"Source file must be absolute path, got: {source_file}")
@@ -230,9 +264,9 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
         raise ValueError(f"Native output path must be absolute, got: {native_output}")
 
     # Compile
-    compile_cmd = ["gcc", str(source_file), "-o", str(native_output)]
+    compile_cmd = [CC, str(source_file), "-o", str(native_output)]
     try:
-        proc = run_subprocess(compile_cmd, label="gcc compile", cwd=LIND_FS_ROOT, shell=False)
+        proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LIND_ROOT, shell=False)
         if proc.returncode != 0:
             return False, proc.stdout + proc.stderr, "compile_error", "Failure_native_compiling"
     except Exception as e:
@@ -240,7 +274,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     
     # Run
     try:
-        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LIND_FS_ROOT, shell=False, timeout=timeout_sec)
+        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LIND_ROOT, shell=False, timeout=timeout_sec)
         if proc.returncode == 0:
             return True, proc.stdout, 0, None
         else:
@@ -251,8 +285,21 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
         return False, f"Exception: {e}", "unknown_error", "Failure_native_running"
     finally:
         # Clean up native binary
-        if native_output.exists():
-            native_output.unlink()
+        native_output.unlink(missing_ok=True)
+
+        # Restore any executable dependencies that were swapped out
+        for dest_path in created_native_execs:
+            try:
+                dest_path.unlink(missing_ok=True)
+            except (FileNotFoundError, PermissionError) as cleanup_err:
+                logger.debug(f"Failed to remove native dependency {dest_path}: {cleanup_err}")
+
+        for dest_path, backup_path in executable_backups.items():
+            try:
+                if backup_path.exists():
+                    shutil.move(str(backup_path), str(dest_path))
+            except (FileNotFoundError, PermissionError) as restore_err:
+                logger.warning(f"Failed to restore dependency {dest_path} from backup: {restore_err}")
 
 # ----------------------------------------------------------------------
 # Function: get_expected_output
@@ -399,9 +446,81 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 # TODO: Currently for non deterministic cases, we are only compiling and running the test case, success means the compiled test case ran, need to add more specific tests
 # 
 def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic"):
-    """Unified test function for both deterministic and non-deterministic tests"""
+    """Unified test function for both deterministic, non-deterministic and failing tests"""
     source_file = Path(source_file)
     handler = TestResultHandler(result, source_file)
+    
+    # For fail tests, we need to run both native and wasm
+    if test_mode == "fail":
+        # Run native version
+        native_success, native_output, native_retcode, native_error = compile_and_run_native(source_file, timeout_sec)
+        
+        # NOTE: We explicitly early-abort here and report the native compilation failure
+        # rather than treating it as a successful "fail-test".
+        if native_error == "Failure_native_compiling":
+            # Record this specifically as a fail-test native-compilation error so it is
+            # counted alongside other `Fail_*` test categories instead of the generic
+            # compilation error bucket used elsewhere.
+            failure_info = (
+                "=== FAILURE: Native compilation failed during fail-test (expected runtime failure) ===\n"
+                f"Native output:\n{native_output}"
+            )
+            add_test_result(result, str(source_file), "Failure", "Fail_native_compiling", failure_info)
+            return
+        
+        # Compile and run WASM
+        wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
+        if wasm_file is None:
+            # Record this specifically as a fail-test WASM-compilation error so it is
+            # counted alongside other `Fail_*` test categories instead of the generic
+            # Lind_wasm_compiling bucket used elsewhere.
+            failure_info = (
+                "=== FAILURE: Wasm compilation failed during fail-test (expected runtime failure) ===\n"
+                f"Wasm compile output:\n{wasm_compile_error}"
+            )
+            add_test_result(result, str(source_file), "Failure", "Fail_wasm_compiling", failure_info)
+            return
+        
+        try:
+            wasm_retcode, wasm_output = run_compiled_wasm(wasm_file, timeout_sec)
+            
+            # Normalize return codes for comparison
+            native_failed = native_retcode != 0
+            
+            # Check if wasm_retcode is an integer or string
+            if isinstance(wasm_retcode, str):
+                wasm_failed = wasm_retcode in ["timeout", "unknown_error"]  # Explicitly check for failure strings
+            else:
+                wasm_failed = wasm_retcode != 0
+            
+            # Both should fail for this test to pass
+            if native_failed and wasm_failed:
+                # Success: both failed as expected
+                output_info = (
+                    f"Native exit code: {native_retcode}\n"
+                    f"Wasm exit code: {wasm_retcode}\n"
+                    "Both failed as expected."
+                )
+                handler.add_success(output_info)
+            elif not native_failed and not wasm_failed:
+                # Both succeeded when they should have failed
+                failure_info = build_fail_message("both", native_output, wasm_output, native_retcode, wasm_retcode)
+                add_test_result(result, str(source_file), "Failure", "Fail_both_succeeded", failure_info)
+            elif not native_failed:
+                # Only native succeeded
+                failure_info = build_fail_message("native_only", native_output, wasm_output, native_retcode, wasm_retcode)
+                add_test_result(result, str(source_file), "Failure", "Fail_native_succeeded", failure_info)
+            else:
+                # Only wasm succeeded
+                failure_info = build_fail_message("wasm_only", native_output, wasm_output, native_retcode, wasm_retcode)
+                add_test_result(result, str(source_file), "Failure", "Fail_wasm_succeeded", failure_info)
+        
+        finally:
+            # Always clean up WASM file
+            if wasm_file and wasm_file.exists():
+                wasm_file.unlink()
+        
+        return  # Exit early for fail tests
     
     # For deterministic tests, get expected output
     expected_output = None
@@ -412,9 +531,9 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
             return
     
     # Compile and run WASM
-    wasm_file, compile_err = compile_c_to_wasm(source_file)
+    wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
     if wasm_file is None:
-        handler.add_compile_failure(compile_err)
+        handler.add_compile_failure(wasm_compile_error)
         return
     
     try:
@@ -450,6 +569,9 @@ def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIME
 def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
     test_single_file_unified(source_file, result, timeout_sec, "non_deterministic")
 
+def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
+    test_single_file_unified(source_file, result, timeout_sec, "fail")
+
 # ----------------------------------------------------------------------
 # Function: analyze_testfile_dependencies
 #
@@ -474,8 +596,8 @@ def analyze_testfile_dependencies(tests_to_run):
             with open(test_file, 'r') as f:
                 content = f.read()
             
-            # Look for testfiles references in open() calls
-            testfile_pattern = r'open\s*\(\s*"testfiles/([^"]+)"'
+            # Look for any "testfiles/..." string literals in the code
+            testfile_pattern = r'"testfiles/([^"]+)"'
             matches = re.findall(testfile_pattern, content, re.IGNORECASE)
             all_dependencies.update(matches)
             
@@ -488,10 +610,106 @@ def analyze_testfile_dependencies(tests_to_run):
     return all_dependencies
 
 # ----------------------------------------------------------------------
+# Function: analyze_executable_dependencies
+#
+# Purpose:
+#   Analyzes test files to determine which executables they need
+#
+# Variables:
+# - Input:
+#   tests_to_run: List of test files to analyze
+# - Output:
+#   Dictionary mapping executable paths to their source file paths
+#   e.g., {'automated_tests/hello-arg': Path('hello-arg.c')}
+# ----------------------------------------------------------------------
+def analyze_executable_dependencies(tests_to_run):
+    import re
+    
+    executable_deps: Dict[str, Path] = {}
+    
+    for test_file in tests_to_run:
+        try:
+            with open(test_file, 'r') as f:
+                content = f.read()
+            
+            # Look for execv/execve/execl calls with string literal paths
+            # NOTE: This intentionally only matches simple string literals like execv("path", ...)
+            # It does NOT match variable references like execv(argv[0], ...) or macro expansions
+            # This is a deliberate limitation to keep the dependency analysis simple and predictable
+            # Pattern matches: execv("path/to/executable", ...), execl("/bin/ls", ...), etc.
+            exec_pattern = r'exec[vle]+\s*\(\s*"([^"]+)"'
+            matches = re.findall(exec_pattern, content, re.IGNORECASE)
+            
+            for exec_path in matches:
+                exec_name = Path(exec_path).name
+
+                candidate_sources = [
+                    test_file.parent / f"{exec_name}.c",
+                    test_file.resolve().parent / f"{exec_name}.c"
+                ]
+
+                selected_source = None
+                for candidate in candidate_sources:
+                    if candidate.exists():
+                        selected_source = candidate
+                        break
+
+                if selected_source:
+                    executable_deps[exec_path] = selected_source
+                    logger.debug(f"Found executable dependency in {test_file.name}: {exec_path} -> {selected_source.name}")
+                else:
+                    logger.debug(
+                        f"Executable {exec_path} referenced but no matching source found near {test_file}"
+                    )
+                
+        except Exception as e:
+            logger.debug(f"Could not analyze executable dependencies for {test_file}: {e}")
+    
+    return executable_deps
+
+# ----------------------------------------------------------------------
+# Function: create_required_executables
+#
+# Purpose:
+#   Compiles required executables and places them in LIND_ROOT
+#
+# Variables:
+# - Input:
+#   executable_deps: Dictionary mapping executable paths to source files
+# - Output:
+#   None (creates executables in LIND_ROOT)
+# ----------------------------------------------------------------------
+def create_required_executables(executable_deps):
+    if not executable_deps:
+        return
+    
+    logger.info(f"Creating {len(executable_deps)} required executable(s)")
+    
+    for exec_path, source_file in executable_deps.items():
+        try:
+            # Compile the source file to WASM
+            wasm_file, compile_err = compile_c_to_wasm(source_file)
+            
+            if wasm_file is None:
+                logger.error(f"Failed to compile {source_file}: {compile_err}")
+                continue
+            
+            # Create destination directory in LIND_ROOT
+            dest_path = LIND_ROOT / exec_path
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Copy the compiled WASM to the destination (preserves source for potential reuse)
+            shutil.copy2(str(wasm_file), str(dest_path))
+            logger.info(f"Created executable: {dest_path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create executable {exec_path}: {e}")
+
+# ----------------------------------------------------------------------
 # Function: pre_test
 #
 # Purpose:
-#   Creates /src/RawPOSIX/tmp/testfiles directory, 
+#   Creates /src/tmp/testfiles directory, 
 #   Creates readlinkfile.txt file and a soft link to it as readlinkfile(for the purpose of readlinkfile tests)
 #   Copies the required test files from TESTFILES_SRC to TESTFILES_DST defined above
 #
@@ -502,6 +720,9 @@ def analyze_testfile_dependencies(tests_to_run):
 #   None
 # ----------------------------------------------------------------------
 def pre_test(tests_to_run=None):
+    # Ensure LIND_ROOT exists (For CI Environment)
+    os.makedirs(LIND_ROOT, exist_ok=True)
+    
     # If tests_to_run is provided, use selective copying
     if tests_to_run:
         all_dependencies = analyze_testfile_dependencies(tests_to_run)
@@ -548,6 +769,11 @@ def pre_test(tests_to_run=None):
         except OSError:
             # Fallback to copying in case symlink creation fails
             shutil.copy2(readlinkfile_path, symlink_path)
+    
+    # Create required executables
+    if tests_to_run:
+        executable_deps = analyze_executable_dependencies(tests_to_run)
+        create_required_executables(executable_deps)
 
 # ----------------------------------------------------------------------
 # Function: generate_html_report
@@ -693,10 +919,14 @@ def generate_html_report(report):
                     # Extract just the test file name for display
                     test_name = test_path.split('/')[-1]
                     
+                    # For successful tests, just show "Success" instead of full output
+                    # For failures, show the full output for debugging
+                    output_display = "Success" if result['status'].lower() == "success" else result["output"]
+                    
                     html_content.append(
                         f'<tr class="{row_class}"><td>{test_name}</td>'
                         f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
-                        f'<td><pre>{result["output"]}</pre></td></tr>'
+                        f'<td><pre>{output_display}</pre></td></tr>'
                     )
             
             html_content.append('</table>')
@@ -992,9 +1222,50 @@ def run_tests(config, artifacts_root, results, timeout_sec):
             test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
         elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
             test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
+        elif parent_name == FAIL_PARENT_NAME:
+            test_single_file_fail(dest_source, results["fail"], timeout_sec)
         else:
-            # Log warning for tests not in deterministic/non-deterministic folders
-            logger.warning(f"Test file {original_source} is not in a deterministic or non-deterministic folder - skipping")
+            # Log warning for tests not in deterministic/non-deterministic/fail folders
+            logger.warning(f"Test file {original_source} is not in a deterministic, non-deterministic, or fail folder - skipping")
+
+def build_fail_message(case: str, native_output: str, wasm_output: str, native_retcode=None, wasm_retcode=None) -> str:
+    """
+    Build a consistent failure message for fail-tests.
+
+    Args:
+        case: One of "both", "native_only", "wasm_only" describing which succeeded.
+        native_output: Captured native stdout/stderr text.
+        wasm_output: Captured wasm stdout/stderr text.
+        native_retcode: Native return code (optional, included where helpful).
+        wasm_retcode: Wasm return code (optional, included where helpful).
+
+    Returns:
+        A formatted failure string.
+    """
+    if case == "both":
+        return (
+            "=== FAILURE: Both Native and Wasm succeeded when they should fail ===\n"
+            f"Native output:\n{native_output}\n\n"
+            f"Wasm output:\n{wasm_output}"
+        )
+    elif case == "native_only":
+        return (
+            "=== FAILURE: Native succeeded when it should fail ===\n"
+            f"Native output:\n{native_output}\n\n"
+            f"Wasm failed with exit code {wasm_retcode}:\n{wasm_output}"
+        )
+    elif case == "wasm_only":
+        return (
+            "=== FAILURE: Wasm succeeded when it should fail ===\n"
+            f"Wasm output:\n{wasm_output}\n\n"
+            f"Native failed with exit code {native_retcode}:\n{native_output}"
+        )
+    else:
+        return (
+            "=== FAILURE: Unexpected fail-test result ===\n"
+            f"Native (rc={native_retcode}) output:\n{native_output}\n\n"
+            f"Wasm (rc={wasm_retcode}) output:\n{wasm_output}"
+        )
 
 def main():
     os.chdir(LIND_WASM_BASE)
@@ -1028,14 +1299,15 @@ def main():
             os.remove(output_file)
         if os.path.isfile(output_html_file):
             os.remove(output_html_file)
-        logger.debug(Path(LIND_FS_ROOT))
-        for file in Path(LIND_FS_ROOT).iterdir():
+        logger.debug(Path(LIND_ROOT))
+        for file in Path(LIND_ROOT).iterdir():
             file.unlink()
         return
 
     results = {
         "deterministic": get_empty_result(),
-        "non_deterministic": get_empty_result()
+        "non_deterministic": get_empty_result(),
+        "fail": get_empty_result()
     }
 
     # Prepare artifacts root
@@ -1063,9 +1335,9 @@ def main():
         # All the main execution logic goes here
         try:
             shutil.rmtree(TESTFILES_DST)
-            logger.info(f"Testfiles at {LIND_FS_ROOT} deleted")
+            logger.info(f"Testfiles at {LIND_ROOT} deleted")
         except FileNotFoundError as e:
-            logger.error(f"Testfiles not present at {LIND_FS_ROOT}")
+            logger.error(f"Testfiles not present at {LIND_ROOT}")
         
         if clean_testfiles:
             return
@@ -1080,7 +1352,7 @@ def main():
         # Use selective testfile copying based on test dependencies
         pre_test(config['tests_to_run'])
         if pre_test_only:
-            logger.info(f"Testfiles copied to {LIND_FS_ROOT}")
+            logger.info(f"Testfiles copied to {LIND_ROOT}")
             return
 
         # Run all tests
@@ -1119,4 +1391,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

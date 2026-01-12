@@ -242,8 +242,17 @@ impl Instance {
         // retrieve the initial memory size
         let plans = module.compiled_module().module().memory_plans.clone();
         let plan = plans.get(MemoryIndex::from_u32(0)).unwrap();
-        // in wasmtime, one page is 65536 bytes, so we need to convert to pagesize in rawposix
-        let minimal_pages = plan.memory.minimum * 0x10;
+
+        // in wasmtime, one page is 65536 bytes, so we need to convert to host pagesize
+        // 1. Get minimum bytes from Wasmtime’s own metadata.
+        let min_bytes = plan
+            .memory
+            .minimum_byte_size()
+            .expect("minimum memory size overflow");
+
+        // 2. Convert bytes to pages.
+        let host_page_size: u64 = 1 << PAGESHIFT; // 4 KiB
+        let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
         println!("[debug] minimal_pages: {}", minimal_pages);
         let module_meminfo = module.dylink_meminfo().unwrap();
         println!("[debug] module memory size: {}, align: {}", module_meminfo.memory_size, module_meminfo.memory_alignment);
@@ -256,16 +265,16 @@ impl Instance {
         // memory init in wasmtime and do our own initialization here
         //
         // The type of memory initialization depends on the kind of wasm module being instantiated.
-        // In the first case (`InstantiateType::InstantiateFirst(pid)`), we are creating the very
+        // In the first case (`InstantiateType::InstantiateFirst(cageid)`), we are creating the very
         // first cage’s linear memory. After initialization, no additional steps are needed.
         //
-        // In the case of `InstantiateType::InstantiateChild { parent_pid, child_pid }`, which
+        // In the case of `InstantiateType::InstantiateChild { parent_cageid, child_cageid }`, which
         // corresponds to a module created via fork. In this case, after the child’s memory is
         // initialized, we must also copy the parent’s memory state (`fork_vmmap`) into the child t
         // o have correct fork semantics.
         match instantiate_type {
             // InstantiateFirst: this is the first wasm instance
-            InstantiateType::InstantiateFirst(pid) => {
+            InstantiateType::InstantiateFirst(cageid) => {
                 // if this is the first wasm instance, we need to
                 // 1. set memory base address
                 // 2. manually call mmap_syscall to set up the first memory region
@@ -275,31 +284,31 @@ impl Instance {
                 drop(memory_iter);
                 let memory_base = memory.data_ptr(&mut *store) as usize;
 
-                init_vmmap(pid, memory_base, Some(minimal_pages as u32));
+                init_vmmap(cageid, memory_base, Some(minimal_pages as u32));
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
                 make_syscall(
-                    pid,                   // self cageid
+                    cageid,                // self cageid
                     (MMAP_SYSCALL) as u64, // syscall num
                     0, // since wasmtime operates with lower level memory, it always interacts with underlying os
-                    pid, // target cageid (should be same)
+                    cageid, // target cageid (should be same)
                     0, // the first memory region starts from 0
-                    pid,
+                    cageid,
                     // minimal_pages << PAGESHIFT, // size of first memory region
                     // 4096000,
                     module_rounded_size as u64 + (minimal_pages << PAGESHIFT),
-                    pid,
+                    cageid,
                     (PROT_READ | PROT_WRITE) as u64,
-                    pid,
+                    cageid,
                     (MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED) as u64,
-                    pid,
+                    cageid,
                     // we need to pass -1 here, but since make_syscall only accepts u64
                     // and rust does not directly allow things like -1 as u64, so we end up with this weird thing
                     (0 - 1) as u64,
-                    pid,
+                    cageid,
                     0,
-                    pid,
+                    cageid,
                 );
             }
             // InstantiateChild: this is the child wasm instance forked by parent

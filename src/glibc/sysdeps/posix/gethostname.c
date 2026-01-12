@@ -21,6 +21,7 @@
 #include <sys/utsname.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Put the name of the current host in no more than LEN bytes of NAME.
    The result is null-terminated if LEN is large enough for the full
@@ -28,7 +29,9 @@
 int
 __gethostname (char *name, size_t len)
 {
-	return MAKE_SYSCALL(GETHOSTNAME_SYSCALL, "syscall|gethostname", (uint64_t) name, (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL (GETHOSTNAME_SYSCALL, "syscall|gethostname",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (name),
+		       (uint64_t) len, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 weak_alias (__gethostname, gethostname)

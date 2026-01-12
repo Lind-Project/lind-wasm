@@ -2,23 +2,15 @@
 //!
 //! This file provides APIs for converting between different argument types and translation between path from
 //! user's perspective to host's perspective
-use cage::{get_cage, memory::memory::translate_vmmap_addr};
+use cage::get_cage;
 pub use libc::*;
 pub use std::env;
 pub use std::ffi::{CStr, CString};
 pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
+use sysdefs::constants::lind_platform_const::LIND_ROOT;
 pub use sysdefs::constants::{err_const, fs_const};
-
-/// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
-/// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
-/// error will be emitted if the environment variable is not a valid Unicode string). If the environment
-/// variable is not present, then this will expand to None, and will be set to default path.
-pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
-    Some(path) => path,
-    None => "/home/lind/lind-wasm/src/RawPOSIX/tmp",
-};
 
 /// Convert data type from `&str` to `PathBuf`
 ///
@@ -104,10 +96,10 @@ pub fn add_lind_root(cageid: u64, path: &str) -> CString {
 ///
 /// ## Example:
 /// ```
-/// // If LIND_ROOT is "/home/lind/lind-wasm/src/RawPOSIX/tmp"
-/// // and host_path is "/home/lind/lind-wasm/src/RawPOSIX/tmp/foo/bar"
+/// // If LIND_ROOT is "/home/lind/lind-wasm/src/tmp"
+/// // and host_path is "/home/lind/lind-wasm/src/tmp/foo/bar"
 /// // this returns "/foo/bar"
-/// let user_path = strip_lind_root("/home/lind/lind-wasm/src/RawPOSIX/tmp/foo/bar");
+/// let user_path = strip_lind_root("/home/lind/lind-wasm/src/tmp/foo/bar");
 /// assert_eq!(user_path, PathBuf::from("/foo/bar"));
 /// ```
 pub fn strip_lind_root(host_path: &str) -> PathBuf {
@@ -178,8 +170,8 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
         }
     }
     let cage = get_cage(path_arg_cageid).unwrap();
-    let addr = translate_vmmap_addr(&cage, path_arg).unwrap();
-    let path = match get_cstr(addr) {
+
+    let path = match get_cstr(path_arg) {
         Ok(path) => path,
         Err(e) => panic!("{:?}", e),
     };

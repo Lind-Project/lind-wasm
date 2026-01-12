@@ -21,12 +21,15 @@
 #include <sysdep.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Create a directory named PATH with protections MODE.  */
 int
 __mkdir (const char *path, mode_t mode)
 {
-   return MAKE_SYSCALL(MKDIR_SYSCALL, "syscall|mkdir", (uint64_t) path, (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL (MKDIR_SYSCALL, "syscall|mkdir",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (path),
+		       (uint64_t) mode, NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 libc_hidden_def (__mkdir)
 weak_alias (__mkdir, mkdir)

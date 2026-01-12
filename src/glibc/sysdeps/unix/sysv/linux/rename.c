@@ -22,10 +22,14 @@
 #include <errno.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Rename the file OLD to NEW.  */
 int
 rename (const char *old, const char *new)
 {
-   return MAKE_SYSCALL(RENAME_SYSCALL, "syscall|rename", (uint64_t) old, (uint64_t) new, NOTUSED, NOTUSED, NOTUSED, NOTUSED);
+  return MAKE_LEGACY_SYSCALL (RENAME_SYSCALL, "syscall|rename",
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (old),
+		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (new),
+		       NOTUSED, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }

@@ -19,25 +19,14 @@
 #include <fcntl.h>
 #include <stddef.h>
 #include <unistd.h>
+#include <syscall-template.h>
+#include <lind_syscall_num.h>
 
 
 /* Remove the link named NAME.  */
 int
 unlinkat (int fd, const char *name, int flag)
 {
-  if (name == NULL || (flag & AT_REMOVEDIR) != 0)
-    {
-      __set_errno (EINVAL);
-      return -1;
-    }
-
-  if (fd < 0 && fd != AT_FDCWD)
-    {
-      __set_errno (EBADF);
-      return -1;
-    }
-
-  __set_errno (ENOSYS);
-  return -1;
+  return MAKE_LEGACY_SYSCALL(UNLINKAT_SYSCALL, "syscall|unlinkat", (uint64_t)fd, (uint64_t)name, (uint64_t)flag, NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 stub_warning (unlinkat)

@@ -12,11 +12,11 @@ Run the following commands in your terminal to download and shell into an enviro
 that comes with the Lind Sandbox. *You'll need [Docker installed](https://docs.docker.com/engine/install/).*
 
 ```
-docker pull --platform=linux/amd64 securesystemslab/lind-wasm  # this might take a while ...
-docker run --platform=linux/amd64 -it securesystemslab/lind-wasm /bin/bash
+docker pull --platform=linux/amd64 securesystemslab/lind-wasm-dev  # this might take a while ...
+docker run --platform=linux/amd64 -it securesystemslab/lind-wasm-dev /bin/bash
 ```
 
-There is a development environment with tooling and source code available, instructions to be found [here](contribute/dev-container.md)
+This is a development environment with tooling and source code available, additional instructions to be found [here](contribute/dev-container.md)
 
 **2. Write a program**
 
@@ -39,8 +39,8 @@ EOF
 Use lind scripts to compile and run your program in the Lind Sandbox.
 
 ```bash
-./scripts/lind_compile hello.c
-./scripts/lind_run hello.cwasm
+lind-clang hello.c
+lind-wasm hello.cwasm
 ```
 
 *Here is what happens under the hood:*

@@ -21,6 +21,7 @@ nav:
     - RawPOSIX: internal/rawposix.md
     - Multi-Processing: internal/multiprocess-support.md
     - Signals: internal/signals.md
+    - Memory: internal/memory.md
   - Contributing:
     - contribute/index.md
     - Development setup: contribute/dev-container.md
