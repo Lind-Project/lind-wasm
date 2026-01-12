@@ -208,7 +208,7 @@ int _start() {
     __wasi_initialize_environ();
     __ctype_init(); //lind-wasm: init ctypes for isalpha etc.
     __lind_init_addr_translation();
-    #ifdef _LIND_DEBUG_H
+    #ifdef LIND_DEBUG
     	__lind_debug_import();
     #endif
 // Lind-Wasm: conditional compilation to ensure exit() is called before program termination,
