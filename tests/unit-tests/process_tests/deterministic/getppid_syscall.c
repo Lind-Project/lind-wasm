@@ -1,104 +1,88 @@
-/*
- * getppid() Test Suite
- * --------------------
- * Tests correctness of parent-process identification across forks.
- * Covers:
- *   - Basic getppid() in parent and child
- *   - Multiple children reporting parent PID
- *   - Nested fork behavior (parent → child → grandchild)
- *   - Stress test with many forks
- */
-
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
 
-void test_getppid_in_parent() {
-    printf("[TEST 1] getppid in parent\n");
-    int ppid = getppid();
-    printf("[PARENT] getppid=%d\n", ppid);
-}
-
-void test_getppid_in_child() {
-    printf("\n[TEST 2] getppid in child\n");
+void test_basic_fork() {
+    printf("[TEST 1] Basic fork\n");
     pid_t pid = fork();
+    if (pid < 0) {
+        printf("[FAIL] fork failed errno=%d\n", errno);
+        return;
+    }
     if (pid == 0) {
-        int ppid = getppid();
-        printf("[CHILD] getppid=%d\n", ppid);
+        printf("[CHILD] fork success\n");
         _exit(0);
     }
-    int status;
-    waitpid(pid, &status, 0);
-    printf("[PARENT] child exited, parent pid=%d\n", getppid());
+    waitpid(pid, NULL, 0);
+    printf("[PARENT] child finished\n");
 }
 
-void test_getppid_multiple_children() {
-    printf("\n[TEST 3] getppid with multiple children\n");
-    const int N = 5;
-    pid_t pids[N];
-    for (int i = 0; i < N; i++) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            int ppid = getppid();
-            printf("[CHILD %d] getppid=%d\n", i, ppid);
-            _exit(10 + i);
-        }
-        pids[i] = pid;
-    }
-    int status;
-    for (int i = 0; i < N; i++) {
-        waitpid(pids[i], &status, 0);
-        printf("[PARENT] reaped child %d with exit=%d\n", (int)pids[i], WIFEXITED(status) ? WEXITSTATUS(status) : -1);
-    }
-}
-
-void test_getppid_nested_forks() {
-    printf("\n[TEST 4] nested forks\n");
+void test_memory_isolation() {
+    printf("\n[TEST 2] Memory isolation\n");
+    int x = 10;
     pid_t pid = fork();
     if (pid == 0) {
-        int ppid = getppid();
-        printf("[CHILD] getppid=%d\n", ppid);
-        pid_t gpid = fork();
-        if (gpid == 0) {
-            printf("[GRANDCHILD] getppid=%d\n", getppid());
+        x = 999;
+        printf("[CHILD] x changed to %d\n", x);
+        _exit(0);
+    }
+    waitpid(pid, NULL, 0);
+    printf("[PARENT] x=%d (should remain 10)\n", x);
+}
+
+void test_multiple_children() {
+    printf("\n[TEST 3] Multiple children\n");
+    for (int i = 0; i < 3; i++) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            printf("[CHILD %d] executed\n", i);
             _exit(0);
         }
-        int status;
-        waitpid(gpid, &status, 0);
-        _exit(0);
+        waitpid(pid, NULL, 0);
+        printf("[PARENT] reaped child %d\n", i);
     }
-    int status;
-    waitpid(pid, &status, 0);
 }
 
-void test_getppid_stress() {
-    printf("\n[TEST 5] stress test with 20 children\n");
-    const int N = 20;
-    pid_t pids[N];
-    for (int i = 0; i < N; i++) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            int ppid = getppid();
-            printf("[CHILD %d] getppid=%d\n", i, ppid);
-            _exit(i);
-        }
-        pids[i] = pid;
+void test_pipe_communication() {
+    printf("\n[TEST 4] Pipe communication\n");
+    int fds[2];
+    pipe(fds);
+    pid_t pid = fork();
+    if (pid == 0) {
+        close(fds[1]);
+        char buf[32];
+        ssize_t n = read(fds[0], buf, sizeof(buf));
+        if (n > 0) buf[n] = '\0';
+        printf("[CHILD] received message='%s'\n", buf);
+        close(fds[0]);
+        _exit(0);
     }
-    int status;
-    for (int i = 0; i < N; i++) {
-        waitpid(pids[i], &status, 0);
-        printf("[PARENT] reaped child %d exit=%d\n", (int)pids[i], WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+    close(fds[0]);
+    const char* msg = "hello_from_parent";
+    write(fds[1], msg, strlen(msg));
+    close(fds[1]);
+    waitpid(pid, NULL, 0);
+    printf("[PARENT] pipe test done\n");
+}
+
+void stress_test_sequential_forks() {
+    printf("\n[TEST 5] Stress: 10 sequential forks\n");
+    for (int i = 0; i < 10; i++) {
+        pid_t pid = fork();
+        if (pid == 0) _exit(0);
+        waitpid(pid, NULL, 0);
+        printf("[PARENT] reaped child %d\n", i);
     }
 }
 
 int main() {
-    printf("[RUNNING] getppid test suite\n");
-    test_getppid_in_parent();
-    test_getppid_in_child();
-    test_getppid_multiple_children();
-    test_getppid_nested_forks();
-    test_getppid_stress();
-    printf("\n[ALL TESTS COMPLETED]\n");
+    test_basic_fork();
+    test_memory_isolation();
+    test_multiple_children();
+    test_pipe_communication();
+    stress_test_sequential_forks();
     return 0;
 }

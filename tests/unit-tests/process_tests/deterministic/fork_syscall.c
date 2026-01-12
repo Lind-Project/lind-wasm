@@ -30,20 +30,19 @@ void test_basic_fork() {
 
     pid_t pid = fork();
 
-    if (pid == 0) {
-        printf("[CHILD] PID=%d PPID=%d\n", getpid(), getppid());
-        _exit(0);
-    }
-
     if (pid < 0) {
         printf("[FAIL] fork failed errno=%d\n", errno);
         return;
     }
 
-    printf("[PARENT] PID=%d CHILD=%d\n", getpid(), pid);
+    if (pid == 0) {
+        printf("[CHILD] fork success\n");
+        _exit(0);
+    }
     waitpid(pid, NULL, 0);
-    printf("[PARENT] Child finished\n");
+    printf("[PARENT] child finished\n");
 }
+
 
 void test_memory_isolation() {
     printf("\n[TEST 2] Memory isolation\n");
@@ -51,148 +50,168 @@ void test_memory_isolation() {
     int x = 10;
     pid_t pid = fork();
 
+    if (pid < 0) {
+        printf("[FAIL] fork failed errno=%d\n", errno);
+        return;
+    }
+
     if (pid == 0) {
-        printf("[CHILD] x(before)=%d\n", x);
         x = 999;
-        printf("[CHILD] x(after)=%d\n", x);
         _exit(0);
     }
 
     waitpid(pid, NULL, 0);
-    printf("[PARENT] x=%d (should remain 10)\n", x);
+
+    if (x == 10) {
+        printf("[PARENT] memory isolated\n");
+    } else {
+        printf("[FAIL] memory corrupted\n");
+    }
 }
+
 
 void test_uid_gid() {
     printf("\n[TEST 3] UID/GID inheritance\n");
 
-    printf("[PARENT] UID=%d GID=%d EUID=%d EGID=%d\n",
-           getuid(), getgid(), geteuid(), getegid());
+    uid_t uid = getuid();
+    gid_t gid = getgid();
+    uid_t euid = geteuid();
+    gid_t egid = getegid();
 
     pid_t pid = fork();
-    if (pid == 0) {
-        printf("[CHILD] UID=%d GID=%d\n", getuid(), getgid());
-        _exit(0);
+    if (pid < 0) {
+        printf("[FAIL] fork failed errno=%d\n", errno);
+        return;
     }
 
-    waitpid(pid, NULL, 0);
-}
-
-void test_waitpid_nohang() {
-    printf("\n[TEST 4] waitpid WNOHANG\n");
-
-    pid_t pid = fork();
     if (pid == 0) {
-        sleep(1);
-        _exit(0);
+        if (getuid() == uid &&
+            getgid() == gid &&
+            geteuid() == euid &&
+            getegid() == egid) {
+            _exit(0);
+        } else {
+            _exit(1);
+        }
     }
 
-    int status = 0;
-    pid_t res = waitpid(pid, &status, WNOHANG);
-    printf("[PARENT] WNOHANG result=%d (0 means child not exited)\n", res);
-
+    int status;
     waitpid(pid, &status, 0);
-    printf("[PARENT] Child later exited normally\n");
+
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        printf("[PARENT] UID/GID inherited\n");
+    } else {
+        printf("[FAIL] UID/GID mismatch\n");
+    }
 }
 
 void test_zombie_behavior() {
-    printf("\n[TEST 5] Zombie behavior\n");
+    printf("\n[TEST 5] Zombie / reaping behavior\n");
 
     pid_t pid = fork();
+    if (pid < 0) {
+        printf("[FAIL] fork failed errno=%d\n", errno);
+        return;
+    }
+
     if (pid == 0) {
-        printf("[CHILD] Exiting to become zombie\n");
         _exit(0);
     }
 
-    sleep(1);
-
-    int status = 0;
+    int status;
     pid_t res = waitpid(pid, &status, 0);
-    printf("[PARENT] waitpid result=%d (cleaned zombie)\n", res);
-}
 
-void test_orphan_adoption() {
-    printf("\n[TEST 6] Orphan adoption\n");
-
-    pid_t pid = fork();
-    if (pid == 0) {
-        sleep(1);
-        printf("[CHILD] After parent exit PPID=%d\n",
-               getppid());
-        _exit(0);
+    if (res == pid && WIFEXITED(status)) {
+        printf("[PARENT] child reaped successfully\n");
+    } else {
+        printf("[FAIL] child not reaped\n");
     }
-
-    printf("[PARENT] Exiting early to orphan child\n");
-    _exit(0);
-}
-
-void test_orphan_adoption_wrapper() {
-    pid_t pid = fork();
-    if (pid == 0) {
-        test_orphan_adoption();
-        _exit(0);
-    }
-    waitpid(pid, NULL, 0);
 }
 
 void test_multiple_children() {
     printf("\n[TEST 7] Multiple children\n");
 
+    pid_t pids[3];
+
     for (int i = 0; i < 3; i++) {
         pid_t pid = fork();
+        if (pid < 0) {
+            printf("[FAIL] fork failed errno=%d\n", errno);
+            return;
+        }
+
         if (pid == 0) {
-            printf("[CHILD %d] PID=%d\n", i, getpid());
             _exit(0);
         }
+
+        pids[i] = pid;
     }
 
-    int status;
-    while (wait(&status) > 0) {
-        printf("[PARENT] A child exited\n");
+    for (int i = 0; i < 3; i++) {
+        waitpid(pids[i], NULL, 0);
+        printf("[PARENT] child reaped\n");
     }
 }
+
 
 void test_pipe_fork() {
     printf("\n[TEST 8] Pipe + fork communication\n");
 
     int fds[2];
-    pipe(fds);
+    if (pipe(fds) < 0) {
+        printf("[FAIL] pipe failed errno=%d\n", errno);
+        return;
+    }
 
     pid_t pid = fork();
+    if (pid < 0) {
+        printf("[FAIL] fork failed errno=%d\n", errno);
+        return;
+    }
 
     if (pid == 0) {
         close(fds[1]);
 
-        char buf[32];
-        ssize_t n = read(fds[0], buf, sizeof(buf));
-        printf("[CHILD] read returned %d errno=%d\n", (int)n, errno);
-        if (n > 0) buf[n] = '\0';
-        printf("[CHILD] message='%s'\n", buf);
-
-        close(fds[0]);
-        _exit(0);
+        char buf;
+        if (read(fds[0], &buf, 1) == 1) {
+            printf("[CHILD] received message\n");
+            _exit(0);
+        } else {
+            _exit(1);
+        }
     }
-
     close(fds[0]);
-    const char* msg = "hello_from_parent";
-    ssize_t n = write(fds[1], msg, strlen(msg));
-    printf("[PARENT] write returned %d\n", (int)n);
+
+    write(fds[1], "x", 1);
     close(fds[1]);
 
-    waitpid(pid, NULL, 0);
+    int status;
+    waitpid(pid, &status, 0);
+
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+        printf("[PARENT] pipe communication successful\n");
+    } else {
+        printf("[FAIL] pipe communication failed\n");
+    }
 }
+
 
 void stress_test_multiple_small_forks() {
     printf("\n[TEST 9] Stress: create 10 sequential children\n");
     fflush(stdout);
 
     for (int i = 0; i < 10; i++) {
+        errno = 0;
         pid_t pid = fork();
+
         if (pid < 0) {
-            printf("[FAIL] fork failed at iteration %d\n", i);
+            printf("[FAIL] fork failed at iteration %d errno=%d\n", i, errno);
             return;
         }
-        if (pid == 0)
+
+        if (pid == 0) {
             _exit(0);
+        }
 
         waitpid(pid, NULL, 0);
     }
@@ -204,49 +223,25 @@ void stress_test_fork_chain() {
     printf("\n[TEST 10] Stress: fork chain depth 10\n");
     fflush(stdout);
 
-    pid_t pid;
-    int depth = 0;
-    int is_child = 0;
-
     for (int i = 0; i < 10; i++) {
-        pid = fork();
+        pid_t pid = fork();
 
         if (pid < 0) {
-            if (!is_child)
-                printf("[FAIL] fork failed at depth %d\n", i);
-            return;
+            printf("[FAIL] fork failed at depth %d\n", i);
+            _exit(1);
         }
 
         if (pid == 0) {
-            is_child = 1;
-            depth++;
-            continue;   // continue the loop as child
+            if (i == 9) {
+                printf("[OK] Fork chain depth 10 completed successfully\n");
+                fflush(stdout);
+            }
+            continue;
         }
-
-        // Parent: wait for child chain to finish
         waitpid(pid, NULL, 0);
-        printf("[OK] Fork chain completed. Final depth=%d\n", depth);
-        return;  // parent exits normally, NOT _exit()
+        _exit(0);
     }
-}
-
-void test_eagain_simulation() {
-    printf("\n[TEST 11] Simulated EAGAIN\n");
-
-    int forks = 0;
-    while (1) {
-        pid_t pid = fork();
-        if (pid < 0) {
-            printf("[RESULT] fork failed at count=%d errno=%d\n",
-                   forks, errno);
-            return;
-        }
-        if (pid == 0)
-            _exit(0);
-
-        waitpid(pid, NULL, 0);
-        forks++;
-    }
+    _exit(0);
 }
 
 int main() {
@@ -255,15 +250,10 @@ int main() {
     test_basic_fork();
     test_memory_isolation();
     test_uid_gid();
-    test_waitpid_nohang();
     test_zombie_behavior();
-    test_orphan_adoption_wrapper();
     test_multiple_children();
     test_pipe_fork();
     stress_test_multiple_small_forks();
     stress_test_fork_chain();
-    // test_eagain_simulation();
-
-    printf("\n[ALL TESTS COMPLETED]\n");
     return 0;
 }

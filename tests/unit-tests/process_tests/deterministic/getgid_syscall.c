@@ -16,62 +16,90 @@
 #include <errno.h>
 
 void test_getgid_basic() {
-    printf("[TEST 1] getgid in parent\n");
+    printf("[TEST 1] getgid basic\n");
+
     gid_t gid = getgid();
-    printf("[PARENT] getgid returned=%d\n", (int)gid);
+    if (gid >= 0)
+        printf("[OK] getgid returned a valid value\n");
+    else
+        printf("[FAIL] getgid failed\n");
 }
 
 void test_getgid_in_child() {
-    printf("\n[TEST 2] getgid in child\n");
+    printf("\n[TEST 2] getgid inheritance\n");
+
+    gid_t parent_gid = getgid();
     pid_t pid = fork();
+
     if (pid == 0) {
-        gid_t gid = getgid();
-        printf("[CHILD] getgid returned=%d\n", (int)gid);
+        gid_t child_gid = getgid();
+        if (child_gid == parent_gid)
+            printf("[OK] child inherited gid\n");
+        else
+            printf("[FAIL] child gid mismatch\n");
         _exit(0);
-    } else if (pid > 0) {
-        int status;
-        waitpid(pid, &status, 0);
-    } else {
-        printf("[ERROR] fork failed\n");
     }
+
+    waitpid(pid, NULL, 0);
 }
 
 void test_getgid_multiple_children() {
-    printf("\n[TEST 3] getgid with multiple children\n");
-    const int N = 5;
-    pid_t pids[N];
-    for (int i = 0; i < N; i++) {
-        pids[i] = fork();
-        if (pids[i] == 0) {
-            printf("[CHILD %d] getgid=%d\n", i, (int)getgid());
-            _exit(i);
+    printf("\n[TEST 3] getgid consistency across children\n");
+
+    gid_t parent_gid = getgid();
+
+    for (int i = 0; i < 5; i++) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            if (getgid() == parent_gid)
+                _exit(0);
+            else
+                _exit(1);
         }
     }
-    for (int i = 0; i < N; i++) {
+
+    int ok = 1;
+    for (int i = 0; i < 5; i++) {
         int status;
-        waitpid(pids[i], &status, 0);
-        printf("[PARENT] reaped child %d exit=%d\n", (int)pids[i], status);
+        wait(&status);
+        if (WEXITSTATUS(status) != 0)
+            ok = 0;
     }
+
+    if (ok)
+        printf("[OK] all children inherited gid\n");
+    else
+        printf("[FAIL] gid mismatch in children\n");
 }
 
 void test_getgid_stress() {
-    printf("\n[TEST 4] stress test with 20 children calling getgid\n");
-    const int N = 20;
-    pid_t pids[N];
-    for (int i = 0; i < N; i++) {
-        pids[i] = fork();
-        if (pids[i] == 0) {
+    printf("\n[TEST 4] getgid stress\n");
+
+    gid_t parent_gid = getgid();
+
+    for (int i = 0; i < 20; i++) {
+        pid_t pid = fork();
+        if (pid == 0) {
             for (int j = 0; j < 10; j++) {
-                printf("[CHILD %d] call %d getgid=%d\n", i, j, (int)getgid());
+                if (getgid() != parent_gid)
+                    _exit(1);
             }
-            _exit(i);
+            _exit(0);
         }
     }
-    for (int i = 0; i < N; i++) {
+
+    int ok = 1;
+    for (int i = 0; i < 20; i++) {
         int status;
-        waitpid(pids[i], &status, 0);
-        printf("[PARENT] reaped child %d exit=%d\n", (int)pids[i], status);
+        wait(&status);
+        if (WEXITSTATUS(status) != 0)
+            ok = 0;
     }
+
+    if (ok)
+        printf("[OK] stress test passed\n");
+    else
+        printf("[FAIL] stress test failed\n");
 }
 
 int main() {
@@ -80,6 +108,5 @@ int main() {
     test_getgid_in_child();
     test_getgid_multiple_children();
     test_getgid_stress();
-    printf("\n[ALL TESTS COMPLETED]\n");
     return 0;
 }

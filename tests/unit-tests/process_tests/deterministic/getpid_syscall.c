@@ -16,80 +16,121 @@
 #include <errno.h>
 
 void test_getpid_basic() {
-    printf("[TEST 1] getpid in parent\n");
+    printf("[TEST 1] getpid basic\n");
+
     pid_t pid = getpid();
-    printf("[PARENT] getpid returned=%d\n", (int)pid);
+    if (pid > 0)
+        printf("[OK] getpid returned valid pid\n");
+    else
+        printf("[FAIL] getpid returned invalid pid\n");
 }
 
 void test_getpid_in_child() {
-    printf("\n[TEST 2] getpid in child\n");
+    printf("\n[TEST 2] getpid parent/child difference\n");
+
+    pid_t parent_pid = getpid();
     pid_t pid = fork();
+
     if (pid == 0) {
-        int child_pid = getpid();
-        printf("[CHILD] getpid returned=%d\n", (int)child_pid);
+        pid_t child_pid = getpid();
+        if (child_pid != parent_pid)
+            printf("[OK] child pid differs from parent\n");
+        else
+            printf("[FAIL] child pid equals parent\n");
         _exit(0);
-    } else if (pid > 0) {
-        int status;
-        waitpid(pid, &status, 0);
-        printf("[PARENT] child exited, parent pid=%d\n", (int)getpid());
-    } else {
-        printf("[ERROR] fork failed\n");
     }
+
+    waitpid(pid, NULL, 0);
 }
 
 void test_getpid_multiple_children() {
-    printf("\n[TEST 3] getpid with multiple children\n");
+    printf("\n[TEST 3] getpid uniqueness across children\n");
+
     pid_t pids[3];
+
     for (int i = 0; i < 3; i++) {
-        pids[i] = fork();
-        if (pids[i] == 0) {
-            printf("[CHILD %d] getpid=%d\n", i, (int)getpid());
-            _exit(10 + i);
+        pid_t pid = fork();
+        if (pid == 0) {
+            _exit(0);
         }
+        pids[i] = pid;
     }
-    for (int i = 0; i < 3; i++) {
-        int status;
-        waitpid(pids[i], &status, 0);
-        printf("[PARENT] reaped child %d with exit=%d\n", (int)pids[i], status);
-    }
+
+    int unique = 1;
+    if (pids[0] == pids[1] || pids[1] == pids[2] || pids[0] == pids[2])
+        unique = 0;
+
+    for (int i = 0; i < 3; i++)
+        waitpid(pids[i], NULL, 0);
+
+    if (unique)
+        printf("[OK] children received unique pids\n");
+    else
+        printf("[FAIL] pid collision detected\n");
 }
 
 void test_getpid_nested_forks() {
-    printf("\n[TEST 4] nested forks\n");
+    printf("\n[TEST 4] nested fork pid validity\n");
+
+    pid_t parent_pid = getpid();
     pid_t pid = fork();
+
     if (pid == 0) {
-        printf("[CHILD] getpid=%d\n", (int)getpid());
-        pid_t grandchild = fork();
-        if (grandchild == 0) {
-            printf("[GRANDCHILD] getpid=%d\n", (int)getpid());
-            _exit(0);
-        } else if (grandchild > 0) {
-            int status;
-            waitpid(grandchild, &status, 0);
-            _exit(0);
+        pid_t child_pid = getpid();
+        pid_t gc = fork();
+
+        if (gc == 0) {
+            pid_t grandchild_pid = getpid();
+            if (grandchild_pid != child_pid &&
+                grandchild_pid != parent_pid)
+                _exit(0);
+            else
+                _exit(1);
         }
-    } else if (pid > 0) {
-        int status;
-        waitpid(pid, &status, 0);
+
+        int st;
+        waitpid(gc, &st, 0);
+        _exit(WEXITSTATUS(st));
     }
+
+    int st;
+    waitpid(pid, &st, 0);
+
+    if (WEXITSTATUS(st) == 0)
+        printf("[OK] nested fork pids valid\n");
+    else
+        printf("[FAIL] nested fork pid error\n");
 }
 
 void test_getpid_stress() {
-    printf("\n[TEST 5] stress test with 20 children\n");
+    printf("\n[TEST 5] getpid stress\n");
+
     const int N = 20;
     pid_t pids[N];
+    int ok = 1;
+
     for (int i = 0; i < N; i++) {
-        pids[i] = fork();
-        if (pids[i] == 0) {
-            printf("[CHILD %d] getpid=%d\n", i, (int)getpid());
-            _exit(i); // different exit code
+        pid_t pid = fork();
+        if (pid == 0) {
+            if (getpid() > 0)
+                _exit(0);
+            else
+                _exit(1);
         }
+        pids[i] = pid;
     }
+
     for (int i = 0; i < N; i++) {
-        int status;
-        waitpid(pids[i], &status, 0);
-        printf("[PARENT] reaped child %d exit=%d\n", (int)pids[i], status);
+        int st;
+        waitpid(pids[i], &st, 0);
+        if (WEXITSTATUS(st) != 0)
+            ok = 0;
     }
+
+    if (ok)
+        printf("[OK] stress test passed\n");
+    else
+        printf("[FAIL] stress test failed\n");
 }
 
 int main() {
@@ -99,6 +140,5 @@ int main() {
     test_getpid_multiple_children();
     test_getpid_nested_forks();
     test_getpid_stress();
-    printf("\n[ALL TESTS COMPLETED]\n");
     return 0;
 }
