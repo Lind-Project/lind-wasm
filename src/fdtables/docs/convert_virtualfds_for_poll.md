@@ -21,6 +21,7 @@ the same mapping table from your prior call when using this function.)
 # use fdtables::*;
 # use std::collections::HashSet;
 # let cage_id = threei::TESTING_CAGEID;
+# init_empty_cage(cage_id);
 // get_specific_virtual_fd(cage_id, VIRTFD, FDKIND, UNDERFD, CLOEXEC, OPTINFO)
 get_specific_virtual_fd(cage_id, 3, 0, 7, false, 10).unwrap();
 get_specific_virtual_fd(cage_id, 5, 1, 10, false, 123).unwrap();
