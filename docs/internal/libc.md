@@ -50,11 +50,13 @@ glibc automatically generates `.s` files for certain system calls. To address th
 - **Implement `BYTE_COPY_FWD` and `BYTE_COPY_BWD`**: These functions were implemented in C without relying on `memcpy` or `memmove` to ensure compatibility with the WASM environment.
 - **Disable `attribute_relro`**: The original C code places the vtable into the `relro` section in the binary. Since WebAssembly binaries do not have this section, the attribute was disabled.
 
-### 1.5 Disabling Auto-Generated Assembly in `i386` Sysdeps
+### 1.5 Replacing Auto-Generated Assembly in `i386` Sysdeps
 
-glibc’s `sysdeps/unix/sysv/linux/i386` hierarchy, including the `i686` subdirectory, relies on build-time logic that automatically generates assembly (`.S`) files for syscall stubs and low-level ABI glue. This mechanism assumes a native assembler and is incompatible with WebAssembly.
+In upstream glibc, the `sysdeps/unix/sysv/linux/i386` directory (including `i686`) uses build-time rules to generate `.S` assembly files that implement syscall stubs and other low-level glue. This relies on a native assembler and does not work when targeting WebAssembly.
 
-To support WASM, the assembly auto-generation logic in these directories was disabled. All generated `.S` files were replaced with manually provided C implementations that preserve the required behavior without relying on architecture-specific assembly. This prevents glibc from emitting or compiling assembly code when targeting WASM while keeping the changes localized to the `i386` Linux sysdeps.
+In this tree, we do not use those generated assembly stubs. Instead, the syscall implementations that glibc normally provides via generated `.S` files are replaced with C implementations that route through our syscall wrapper (for example, `MAKE_SYSCALL` / `MAKE_LEGACY_SYSCALL` to `rawposix`). This is done by modifying the sysdeps sources themselves, not by adding special build flags.
+
+As a result, glibc no longer generates or compiles assembly for the `i386` sysdeps. The library can be built normally for the WASM target, and the changes remain localized to the `i386` Linux sysdeps directories.
 
 
 ## 2. Modifications and Additions to `crt1.c` for WASI
