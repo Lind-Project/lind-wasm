@@ -54,9 +54,12 @@ glibc automatically generates `.s` files for certain system calls. To address th
 
 In upstream glibc, the `sysdeps/unix/sysv/linux/i386` directory (including `i686`) uses build-time rules to generate `.S` assembly files that implement syscall stubs and other low-level glue. This relies on a native assembler and does not work when targeting WebAssembly.
 
-In this tree, we do not use those generated assembly stubs. Instead, the syscall implementations that glibc normally provides via generated `.S` files are replaced with C implementations that route through our syscall wrapper (for example, `MAKE_SYSCALL` / `MAKE_LEGACY_SYSCALL` to `rawposix`). This is done by modifying the sysdeps sources themselves, not by adding special build flags.
+In this tree, the syscall implementations that glibc normally provides via generated `.S` files are replaced with C implementations in the `i386` / `i686` sysdeps. These implementations use `MAKE_LEGACY_SYSCALL`, which is the syscall wrapper used in the current lind-glibc tree.
 
-As a result, glibc no longer generates or compiles assembly for the `i386` sysdeps. The library can be built normally for the WASM target, and the changes remain localized to the `i386` Linux sysdeps directories.
+System calls issued via `MAKE_LEGACY_SYSCALL` pass through the Wasmtime runtime layer and the 3i routing layer before being forwarded to `rawposix`, reflecting the intended Lind/WASM execution model.
+
+As a result of these changes, glibc no longer generates or compiles assembly for the `i386` sysdeps. The library is built using a Lind-specific glibc build configuration targeting WASM, with all changes localized to the `i386` Linux sysdeps.
+
 
 
 ## 2. Modifications and Additions to `crt1.c` for WASI
