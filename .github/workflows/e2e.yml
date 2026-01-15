@@ -96,7 +96,7 @@ jobs:
           echo "----------------------------------"
 
       - name: Upload HTML report artifact to report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: wasm-e2e-report
           path: ${{ env.REPORT_LOCAL_DIR }}/${{ env.REPORT_LOCAL_FILE }}
@@ -106,7 +106,7 @@ jobs:
       - name: Post PR comment
         # Run only on branch PRs, not on fork PRs
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/github-script@v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
             const fs = require('fs');
