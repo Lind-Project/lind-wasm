@@ -3,6 +3,7 @@
 #include <sys/wait.h>                                                                                                                                                                        
 #include <unistd.h>                                                                                                                                                                          
 #include <errno.h>
+#include <assert.h>
 
 /*
 Test waitpid() with pid=-1 (wait for any child)
@@ -21,10 +22,9 @@ int main()
         return 1;
     }
 
-    if (child_pid == 0) {                                                                                                                                                                    
-          /* Child process - exit with a known status */                                                                                                                                       
-          printf("Child PID=%d, exiting with status 42\n", getpid());                                                                                                                         
-          exit(42);                                                                                                                                                                            
+    if (child_pid == 0) {
+          /* Child process - exit with a known status */
+          exit(42);
     }  
 
     result = waitpid(-1, &status, 0);
@@ -34,11 +34,8 @@ int main()
         return 1;
     }
 
-    /* Verify we got our child's PID */                                                                                                                                                      
-    if (result != child_pid) {                                                                                                                                                               
-        printf("FAIL: Expected PID %d, got %d\n", child_pid, result);                                                                                                                        
-        return 1;                                                                                                                                                                            
-    }
+    /* Verify we got our child's PID */
+    assert(result == child_pid && "waitpid(-1) should return child PID");
 
     /* Check exit status (handle both POSIX and raw formats) */                                                                                                                              
     int exit_code;                                                                                                                                                                           
@@ -50,10 +47,7 @@ int main()
         exit_code = status;                                                                                                                                                                  
     }
 
-    if (exit_code != 42) {                                                                                                                                                                   
-        printf("Test Failed: Expected exit code 42, got %d\n", exit_code);                                                                                                                          
-        return 1;                                                                                                                                                                            
-    }                                                                                                                                                                                        
+    assert(exit_code == 42 && "Child should exit with status 42");                                                                                                                                                                                        
                                                                                                                                                                                                
     printf("Test Passed: waitpid(-1) correctly waited for child\n");                                                                                                                                
     return 0; 
