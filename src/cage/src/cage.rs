@@ -186,11 +186,11 @@ pub fn alloc_cage_id() -> Option<u64> {
 }
 
 mod tests {
-    use super::*
+    use super::*;
 
     #[test]
     fn test_get_cage_out_of_range() {
-        cagetable_init()
+        cagetable_init();
         let larger_cage_id = 9999999;
         let result = get_cage(larger_cage_id);
         assert! {
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_get_cage_valid() {
-        cagetable_init()
+        cagetable_init();
         // Create a cage with ID 2  
         let test_cage = Cage {
             cageid: 2,
