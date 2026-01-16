@@ -82,3 +82,47 @@ cd src/wasmtime
 # Build lind-wasm with the signal-disable feature
 cargo build --features signal-disable
 ```
+
+### Debugging at WASM/WAT Level
+
+Two host-defined functions, `lind_debug_num()` and `lind_debug_str()`, are imported into the compiled WASM binary to support debugging at the WASM/WAT level. These functions facilitate debugging at the WASM/WAT level, allowing for the inspection of stack values and memory contents in environments where traditional debuggers (like GDB) cannot easily attach or provide visibility.
+
+1. Decompile the WASM binary
+
+Convert existing `.wasm` file to `.wat` format:
+
+ `wasm2wat <filename.wasm> --enable-all -o <filename.wat>`
+
+2. Add Debug Calls
+
+Open the `.wat` file and locate the area to inspect. Since these functions return their input back to the stack, you must either use the returned value or drop it to maintain stack integrity.
+
+Example: Debugging an Integer
+
+```
+;; Push a value or local onto the stack
+local.get 0
+;; Call the debugger (prints value to host stderr)
+call $__lind_debug_num
+;; Drop the returned value to keep the stack clean
+drop
+```
+
+Example: Debugging a String
+
+```
+;; Push the memory offset (pointer) where the string starts
+i32.const 1024
+;; Call the debugger (prints value to host stderr)
+call $__lind_debug_str
+;; Drop the returned value to keep the stack clean
+drop
+```
+
+> ⚠️ **Warning:** Use the offset of the pre-defined string in the binary. Defining a new string at an uncalculated offset might result in SIGSEGV.
+
+3. Recompile to WASM
+
+After inserting debug calls, convert the file back to a binary:
+
+`wat2wasm <filename.wat> --enable-threads -o <filename.wasm>`
