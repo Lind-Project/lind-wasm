@@ -204,32 +204,36 @@ mod tests {
         assert! {
             result.is_none(),
             "get_cage should return none when cage_id >= MAX_CAGE_ID"
-        };  
+        };
     }
 
     #[test]
     fn test_get_cage_valid() {
         cagetable_init();
-        // Create a cage with ID 2  
+        // Create a cage with ID 2
         let test_cage = Cage {
             cageid: 2,
             parent: 1,
             cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
-            rev_shm: Mutex::new(Vec::new()),                                                                                                                                                 
-            signalhandler: DashMap::new(),                                                                                                                                                   
-            sigset: AtomicU64::new(0),                                                                                                                                                       
-            pending_signals: RwLock::new(vec![]),                                                                                                                                            
-            epoch_handler: DashMap::new(),                                                                                                                                                   
-            main_threadid: RwLock::new(0),                                                                                                                                                   
-            interval_timer: crate::timer::IntervalTimer::new(2),                                                                                                                             
-            zombies: RwLock::new(vec![]),                                                                                                                                                    
-            child_num: AtomicU64::new(0),                                                                                                                                                    
+            rev_shm: Mutex::new(Vec::new()),
+            signalhandler: DashMap::new(),
+            sigset: AtomicU64::new(0),
+            pending_signals: RwLock::new(vec![]),
+            epoch_handler: DashMap::new(),
+            main_threadid: RwLock::new(0),
+            interval_timer: crate::timer::IntervalTimer::new(2),
+            zombies: RwLock::new(vec![]),
+            child_num: AtomicU64::new(0),
             vmmap: RwLock::new(crate::memory::vmmap::Vmmap::new()),
         };
 
         add_cage(2, tet_cage);
 
         let result = get_cage(2);
-        assert_eq!(result.unwrap().cageid, 2, "Retrieved cage should have correct ID");
+        assert_eq!(
+            result.unwrap().cageid,
+            2,
+            "Retrieved cage should have correct ID"
+        );
     }
 }
