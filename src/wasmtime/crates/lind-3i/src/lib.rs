@@ -13,7 +13,7 @@
 //! a result, lind-3i cannot rely on an implicit “current” runtime state. Instead, it must be able to
 //! retrieve the Wasmtime execution context. For `exec` and `exit` calls, it will retrieve the context
 //! associated with an arbitrary `cage_id`.
-//! todo:
+//! - todo:
 //! In lind-boot, for `fork` calls, it will retrieve the context according to the context ptr passed from
 //! arguments.
 //!
@@ -37,6 +37,10 @@
 //! This design avoids Rust lifetime constraints that would otherwise prevent cross-store and cross-instance
 //! execution transfers. Correctness instead relies on higher-level invariants enforced by lind-wasm, including
 //! the guarantee that `VMContext` pointers remain valid for the lifetime of their associated threads.
+//!
+//! For each pool, a single instance performs full initialization, including lind-specific memory setup,
+//! while additional instances attach to the same linear memory. This design allows a grate to process multiple
+//! concurrent requests to the same Wasm linear memory without duplicating address space state.
 use std::collections::VecDeque;
 use std::ffi::c_void;
 use std::ptr::NonNull;
@@ -93,6 +97,7 @@ pub fn init_vmctx_pool() {
 }
 
 /// `get_vmctx`
+///
 /// Retrieve a VMContext from the specified cage.
 ///
 /// This performs a FIFO pop from the per-cage queue.
@@ -128,8 +133,25 @@ pub fn get_vmctx(cage_id: u64) -> Option<VmCtxWrapper> {
 }
 
 /// `set_vmctx`
-/// inserts or replaces the `VMContext` associated with a given cage and thread.
-/// This is typically called when a Wasm thread starts executing or when its `VMContext` becomes available.
+///
+/// Inserts a `VMContext` into the global per-cage execution pool. Each call registers one executable Wasmtime
+/// instance associated with the given cageid.
+///
+/// In lind-wasm, `VMContext` are preallocated in pools to enable concurrent request handling within a single
+/// cage or grate. At instance execution startup, a fixed number of Wasmtime instances (currently 10) are created
+/// for each cage. One instance is fully initialized using `instantiate_with_lind`, which performs lind-specific
+/// memory setup. The remaining instances are created using `instantiate_with_lind_thread`, and attach to the same
+/// linear memory as the primary instance, serving as backup execution contexts. This is typically called when the
+/// `VMContext` becomes available.
+///
+/// All instances created during this initialization phase are registered through `set_vmctx` and pushed into the
+/// global `VMContext` table. At runtime, execution paths acquire an available context from this pool.
+///
+/// After a grate call finishes execution, the `VMContext` used for that execution is returned to the same pool
+/// and made available for subsequent requests.
+///
+/// The implementation of instance creation and pool population is handled externally, primarily in `run.rs` and
+/// the multi-process initialization logic under `lind-multi-process`.
 pub fn set_vmctx(cage_id: u64, vmctx: VmCtxWrapper) {
     // Insert the `VMContext` entry in the global table
     let queues = VMCTX_QUEUES.get().expect("VMCTX_QUEUES not initialized");
@@ -137,20 +159,28 @@ pub fn set_vmctx(cage_id: u64, vmctx: VmCtxWrapper) {
     q.lock().unwrap().push_back(vmctx);
 }
 
-/// `rm_vmctx` removes the VMContext entry for a given cage and thread.
-/// It returns the removed VmCtxWrapper if one was present.
+/// `rm_vmctx`
+///
+/// Removes the `VMContext` entry for a given cage and thread.
+///
+/// It returns the removed `VmCtxWrapper` if one was present.
 /// This is typically called when a thread exits or its execution context is torn down.
 pub fn rm_vmctx(cage_id: u64) -> bool {
+    // Get the global `VMContext` pooling table
     let Some(queues) = VMCTX_QUEUES.get() else {
+        // Return false if not initialized
         return false;
     };
 
     let idx = cage_id as usize;
 
+    // Get the queue for the given cage_id
     let Some(q) = queues.get(idx) else {
+        // Return false if invalid cage_id or no queue
         return false;
     };
 
+    // Clear the queue for the given cage_id
     let mut guard = q.lock().unwrap();
     guard.clear();
     true

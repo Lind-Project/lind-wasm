@@ -5,7 +5,6 @@ use dashmap::DashMap;
 use dashmap::DashSet;
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
 use std::sync::RwLock;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`

@@ -165,6 +165,7 @@ pub extern "C" fn grate_callback_trampoline(
         })
         .unwrap_or(threei_const::GRATE_ERR)
     };
+    // Push the vmctx back to the global pool
     set_vmctx(cageid, vmctx_wrapper);
     grate_ret
 }
@@ -760,12 +761,14 @@ impl RunCommand {
                     vmctx: NonNull::new(vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
                 };
 
-                // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
+                // 3) Store the vmctx wrapper in the global table for later retrieval during grate calls
                 set_vmctx(cageid, vmctx_wrapper);
 
                 // 4) Notify threei of the cage runtime type
                 threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
+                // 5) Create backup instances to populate the vmctx pool
+                // See more comments in lind-3i/lib.rs
                 for _ in 0..9 {
                     let (_, backup_cage_instanceid) = linker
                         .instantiate_with_lind_thread(&mut *store, &module)
@@ -774,18 +777,19 @@ impl RunCommand {
                             self.module_and_args[0]
                         ))?;
 
+                    // Extract vmctx pointer
                     let backup_cage_storeopaque = store.inner_mut();
                     let backup_cage_instancehandler =
                         backup_cage_storeopaque.instance(backup_cage_instanceid);
                     let backup_vmctx_ptr: *mut c_void = backup_cage_instancehandler.vmctx().cast();
 
-                    // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                    // Put vmctx in a Send+Sync wrapper
                     let backup_vmctx_wrapper = VmCtxWrapper {
                         vmctx: NonNull::new(backup_vmctx_ptr)
                             .ok_or_else(|| anyhow!("null vmctx"))?,
                     };
 
-                    // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
+                    // Store the vmctx wrapper in the global table for later retrieval during grate calls
                     set_vmctx(cageid, backup_vmctx_wrapper);
                 }
 

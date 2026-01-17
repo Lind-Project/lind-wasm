@@ -485,6 +485,8 @@ impl<
                     // 4) Notify threei of the cage runtime type
                     threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
 
+                    // 5) Create backup instances to populate the vmctx pool
+                    // See more comments in lind-3i/lib.rs
                     for _ in 0..9 {
                         let (_, backup_cage_instanceid) = linker
                             .instantiate_with_lind_thread(
