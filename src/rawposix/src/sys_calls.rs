@@ -72,7 +72,12 @@ pub fn fork_syscall(
     fdtables::copy_fdtable_for_cage(child_arg_cageid, child_arg).unwrap();
 
     // Get the self cage
-    let selfcage = get_cage(child_arg_cageid).unwrap();
+    let selfcage = match get_cage(child_arg_cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "fork", "parent cage not found");
+        }
+    };
 
     let parent_vmmap = selfcage.vmmap.read();
     let new_vmmap = parent_vmmap.clone();
@@ -145,7 +150,12 @@ pub fn exec_syscall(
     fdtables::empty_fds_for_exec(cageid);
 
     // Copy necessary data from current cage
-    let selfcage = get_cage(cageid).unwrap();
+    let selfcage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "exec", "cage not found");
+        }
+    };
 
     selfcage.rev_shm.lock().clear();
 
@@ -285,7 +295,12 @@ pub fn waitpid_syscall(
     }
 
     // get the cage instance
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "waitpid", "cage not found");
+        }
+    };
 
     let mut zombies = cage.zombies.write();
     let child_num = cage.child_num.load(Relaxed);
@@ -448,7 +463,12 @@ pub fn getpid_syscall(
         );
     }
 
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "getpid", "cage not found");
+        }
+    };
 
     return cage.cageid as i32;
 }
@@ -486,7 +506,12 @@ pub fn getppid_syscall(
         return syscall_error(Errno::EFAULT, "getppid", "invalid Cage ID");
     }
 
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "getppid", "cage not found");
+        }
+    };
 
     return cage.parent as i32;
 }
@@ -865,7 +890,12 @@ pub fn sigprocmask_syscall(
         );
     }
 
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "sigprocmask", "cage not found");
+        }
+    };
 
     let mut res = 0;
 
@@ -977,7 +1007,12 @@ pub fn setitimer_syscall(
     }
 
     // get the cage instance
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "setitimer", "cage not found");
+        }
+    };
 
     match which {
         ITIMER_REAL => {

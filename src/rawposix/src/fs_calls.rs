@@ -690,7 +690,12 @@ pub fn mmap_syscall(
     let mut fildes = sc_convert_sysarg_to_i32(vfd_arg, vfd_cageid, cageid);
     let mut off = sc_convert_sysarg_to_i64(off_arg, off_cageid, cageid);
 
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "mmap", "cage not found");
+        }
+    };
 
     let mut maxprot = PROT_READ | PROT_WRITE;
 
@@ -942,7 +947,12 @@ pub fn munmap_syscall(
     if len == 0 {
         return syscall_error(Errno::EINVAL, "munmap", "length cannot be zero");
     }
-    let cage = get_cage(addr_cageid).unwrap();
+    let cage = match get_cage(addr_cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "munmap", "cage not found");
+        }
+    };
 
     // check if the provided address is multiple of pages
     let rounded_addr = round_up_page(addr as u64) as usize;
@@ -1040,7 +1050,12 @@ pub fn brk_syscall(
         );
     }
 
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "brk", "cage not found");
+        }
+    };
 
     let mut vmmap = cage.vmmap.write();
     let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
@@ -3324,7 +3339,12 @@ pub fn getcwd_syscall(
         );
     }
 
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "getcwd", "cage not found");
+        }
+    };
     let cwd_container = cage.cwd.read();
     let path = cwd_container.to_str().unwrap();
     // The required size includes the null terminator
@@ -3888,7 +3908,12 @@ pub fn shmat_syscall(
     }
 
     // Get the cage reference.
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "shmat", "cage not found");
+        }
+    };
 
     // If SHM_RDONLY is set in shmflag, then use read-only protection,
     // otherwise default to read–write.
@@ -4048,7 +4073,12 @@ pub fn shmdt_syscall(
     }
 
     // Retrieve the cage reference.
-    let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            return syscall_error(Errno::ESRCH, "shmdt", "cage not found");
+        }
+    };
 
     // Check that the provided address is aligned on a page boundary.
     let rounded_addr = round_up_page(useraddr as u64) as usize;
