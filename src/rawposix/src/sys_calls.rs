@@ -931,17 +931,17 @@ pub fn sigprocmask_syscall(
 pub fn sched_yield_syscall(
     cageid: u64,
     arg1: u64,
-    arg1cage: u64,
+    arg1_cageid: u64,
     arg2: u64,
-    arg2cage: u64,
+    arg2_cageid: u64,
     arg3: u64,
-    arg3cage: u64,
+    arg3_cageid: u64,
     arg4: u64,
-    arg4cage: u64,
+    arg4_cageid: u64,
     arg5: u64,
-    arg5cage: u64,
+    arg5_cageid: u64,
     arg6: u64,
-    arg6cage: u64,
+    arg6_cageid: u64,
 ) -> i32 {
     // Validate that each extra argument is unused.
     if !(sc_unusedarg(arg1, arg1_cageid)
