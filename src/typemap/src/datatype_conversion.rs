@@ -304,7 +304,7 @@ pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, cageid: u64) -> u6
         panic!(
             "sc_convert_uaddr_to_host: invalid uaddr {:#x} - expected a cage-relative address",
             uaddr
-       );
+        );
     }
 
     uaddr + base_addr
