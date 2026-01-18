@@ -290,7 +290,24 @@ pub fn sc_convert_uaddr_to_host(uaddr: u64, addr_cageid: u64, cageid: u64) -> u6
         }
     }
 
-    uaddr
+    // Do not convert on NULL.
+    if uaddr == 0 {
+        return uaddr;
+    }
+
+    let cage = get_cage(addr_cageid).unwrap();
+    let vmmap = cage.vmmap.read();
+    let base_addr = vmmap.base_address.unwrap() as u64;
+
+    // Only convert to host if not already converted.
+    if uaddr >= base_addr {
+        panic!(
+            "sc_convert_uaddr_to_host: invalid uaddr {:#x} - expected a cage-relative address",
+            uaddr
+        );
+    }
+
+    uaddr + base_addr
 }
 
 /// Translates a user-provided address from the Cage's virtual memory into
