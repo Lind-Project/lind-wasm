@@ -246,8 +246,8 @@ pub fn exit_syscall(
 /// zombie list and retrieve the first entry from it (first in, first out).
 pub fn waitpid_syscall(
     cageid: u64,
-    cageid_arg: u64,
-    cageid_arg_cageid: u64,
+    child_cageid_arg: u64,
+    child_cageid_arg_cageid: u64,
     status_arg: u64,
     status_cageid: u64,
     options_arg: u64,
@@ -271,7 +271,8 @@ pub fn waitpid_syscall(
         }
     };
     let options = sc_convert_sysarg_to_i32(options_arg, options_cageid, cageid);
-    let cage_id_to_wait = sc_convert_sysarg_to_i32(cageid_arg, cageid_arg_cageid, cageid);
+    let cage_id_to_wait =
+        sc_convert_sysarg_to_i32(child_cageid_arg, child_cageid_arg_cageid, cageid);
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg4, arg4_cageid)
