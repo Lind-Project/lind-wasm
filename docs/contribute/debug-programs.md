@@ -103,7 +103,7 @@ Convert existing `.wasm` file to `.wat` format:
 
  ```bash
  wasm2wat <filename.wasm> --enable-all -o <filename.wat>
-````
+```
 
 2. Add Debug Calls
 
@@ -131,7 +131,7 @@ call $__lind_debug_str
 drop
 ```
 
-> �~Z| �~O **Warning:** Use the offset of the pre-defined string in the binary. Defining a new string at an uncalculated offset might resultsegmentation fault.
+> ⚠️ **Warning:** Use the offset of the pre-defined string in the binary. Defining a new string at an uncalculated offset might result in segmentation fault.
 
 3. Recompile to WASM
 
