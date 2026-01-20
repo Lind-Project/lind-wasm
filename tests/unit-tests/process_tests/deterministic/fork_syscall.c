@@ -106,7 +106,7 @@ void test_uid_gid() {
 }
 
 void test_zombie_behavior() {
-    printf("\n[TEST 5] Zombie / reaping behavior\n");
+    printf("\n[TEST 4] Zombie / reaping behavior\n");
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -129,7 +129,7 @@ void test_zombie_behavior() {
 }
 
 void test_multiple_children() {
-    printf("\n[TEST 7] Multiple children\n");
+    printf("\n[TEST 5] Multiple children\n");
 
     pid_t pids[3];
 
@@ -155,7 +155,7 @@ void test_multiple_children() {
 
 
 void test_pipe_fork() {
-    printf("\n[TEST 8] Pipe + fork communication\n");
+    printf("\n[TEST 6] Pipe + fork communication\n");
 
     int fds[2];
     if (pipe(fds) < 0) {
@@ -197,7 +197,7 @@ void test_pipe_fork() {
 
 
 void stress_test_multiple_small_forks() {
-    printf("\n[TEST 9] Stress: create 10 sequential children\n");
+    printf("\n[TEST 7] Stress: create 10 sequential children\n");
     fflush(stdout);
 
     for (int i = 0; i < 10; i++) {
@@ -220,7 +220,7 @@ void stress_test_multiple_small_forks() {
 }
 
 void stress_test_fork_chain() {
-    printf("\n[TEST 10] Stress: fork chain depth 10\n");
+    printf("\n[TEST 8] Stress: fork chain depth 10\n");
     fflush(stdout);
 
     for (int i = 0; i < 10; i++) {
