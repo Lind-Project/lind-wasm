@@ -24,8 +24,8 @@ use rawposix::net_calls::{
 };
 use rawposix::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall, getgid_syscall,
-    getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall, setitimer_syscall,
-    sigaction_syscall, sigprocmask_syscall, waitpid_syscall,
+    getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall, sched_yield_syscall,
+    setitimer_syscall, sigaction_syscall, sigprocmask_syscall, waitpid_syscall,
 };
 
 pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
@@ -50,6 +50,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (21, access_syscall),
     (22, pipe_syscall),
     (23, select_syscall),
+    (24, sched_yield_syscall),
     (29, shmget_syscall),
     (30, shmat_syscall),
     (31, shmctl_syscall),
