@@ -45,9 +45,9 @@ __libc_pread (int fd, void *buf, size_t count, off_t offset)
       return -1;
     }
   
-  return MAKE_SYSCALL (PREAD_SYSCALL, "syscall|pread", (uint64_t) fd,
+  return MAKE_LEGACY_SYSCALL (PREAD_SYSCALL, "syscall|pread", (uint64_t) fd,
 		       host_buf, (uint64_t) count,
-		       (uint64_t) offset, NOTUSED, NOTUSED);
+		       (uint64_t) offset, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
   // return SYSCALL_CANCEL (pread64, fd, buf, count, SYSCALL_LL_PRW (offset));
 }
 

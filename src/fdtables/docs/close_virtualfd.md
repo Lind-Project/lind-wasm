@@ -14,6 +14,7 @@ is appropriate given the status of the underlying realfd.  See
 ```
 # use fdtables::*;
 # let cage_id = threei::TESTING_CAGEID;
+# init_empty_cage(cage_id);
 # const underfd:u64 = 209;
 # const fdkind:u32 = 0;
 # const VIRTFD:u64= 345;

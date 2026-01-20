@@ -27,7 +27,7 @@ static int
 getsockopt_syscall (int fd, int level, int optname, void *optval,
 		    socklen_t *len)
 {
-  return MAKE_SYSCALL5(GETSOCKOPT_SYSCALL, "syscall|getsockopt", (uint64_t)fd, (uint64_t)level, (uint64_t)optname, (uint64_t)optval, (uint64_t)len);
+  return MAKE_LEGACY_SYSCALL(GETSOCKOPT_SYSCALL, "syscall|getsockopt", (uint64_t)fd, (uint64_t)level, (uint64_t)optname, (uint64_t)optval, (uint64_t)len, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
 #ifndef __ASSUME_TIME64_SYSCALLS

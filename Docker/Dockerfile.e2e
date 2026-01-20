@@ -53,6 +53,7 @@ RUN apt-get update && \
         autoconf \
         libtool \
         rsync \
+        automake \
         wget \
     && rm -rf /var/lib/apt/lists/*
 

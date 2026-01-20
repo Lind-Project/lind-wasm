@@ -82,3 +82,61 @@ cd src/wasmtime
 # Build lind-wasm with the signal-disable feature
 cargo build --features signal-disable
 ```
+
+### Debugging at WASM/WAT Level
+
+Two host-defined functions, `lind_debug_num()` and `lind_debug_str()`, are imported into the compiled WASM binary to support debugging at the WASM/WAT level. These functions facilitate debugging at the WASM/WAT level, allowing for the inspection of stack values and memory contents in environments where traditional debuggers (like GDB) cannot easily attach or provide visibility.
+
+**Building with the Feature:**
+
+Build the project from the root of the repository with `lind-debug`:
+
+```bash
+make lind-debug
+```
+
+**Usage:**
+
+1. Decompile the WASM binary
+
+Convert existing `.wasm` file to `.wat` format:
+
+ ```bash
+ wasm2wat <filename.wasm> --enable-all -o <filename.wat>
+````
+
+2. Add Debug Calls
+
+Open the `.wat` file and locate the area to inspect. Since these functions return their input back to the stack, you must either use the returned value or drop it to maintain stack integrity.
+
+Example: Debugging an Integer
+
+```wat
+;; Push a value or local onto the stack
+local.get 0
+;; Call the debugger (prints value to host stderr)
+call $__lind_debug_num
+;; Drop the returned value to keep the stack clean
+drop
+```
+
+Example: Debugging a String
+
+```wat
+;; Push the memory offset (pointer) where the string starts
+i32.const 1024
+;; Call the debugger (prints value to host stderr)
+call $__lind_debug_str
+;; Drop the returned value to keep the stack clean
+drop
+```
+
+> �~Z| �~O **Warning:** Use the offset of the pre-defined string in the binary. Defining a new string at an uncalculated offset might resultsegmentation fault.
+
+3. Recompile to WASM
+
+After inserting debug calls, convert the file back to a binary:
+
+```bash
+wat2wasm <filename.wat> --enable-threads -o <filename.wasm>
+```

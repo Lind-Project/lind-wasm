@@ -31,8 +31,8 @@ __libc_send (int fd, const void *buf, size_t len, int flags)
   // `sendto(sockfd, buf, size, flags, NULL, 0);`
   uint64_t host_buf = TRANSLATE_GUEST_POINTER_TO_HOST (buf);
   
-  return MAKE_SYSCALL (SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd,
-		       host_buf, (uint64_t) len, (uint64_t) flags, 0, 0);
+  return MAKE_LEGACY_SYSCALL (SENDTO_SYSCALL, "syscall|sendto", (uint64_t) fd,
+		       host_buf, (uint64_t) len, (uint64_t) flags, 0, 0, TRANSLATE_ERRNO_ON);
 }
 weak_alias (__libc_send, send)
 weak_alias (__libc_send, __send)

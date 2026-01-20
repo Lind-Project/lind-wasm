@@ -21,10 +21,19 @@ wasmtime:
 	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/wasmtime/Cargo.toml --release
 
-.PHONY: wasmtime-debug
-wasmtime-debug:
-	# Build wasmtime in debug mode for faster iteration in devcontainer
-	cargo build --manifest-path src/wasmtime/Cargo.toml
+.PHONY: lind-debug
+lind-debug:
+	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
+	$(MAKE) build_glibc LIND_DEBUG=1
+	
+	# Build Wasmtime with the lind_debug feature enabled
+	cargo build --manifest-path src/wasmtime/Cargo.toml --features lind_debug
+build_glibc:
+	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
+	if [ "$(LIND_DEBUG)" = "1" ]; then \
+		echo "Building glibc with LIND_DEBUG enabled"; \
+		./scripts/make_glibc_and_sysroot.sh; \
+	fi
 
 .PHONY: test
 test: prepare-lind-root
@@ -95,6 +104,6 @@ clean:
 .PHONY: distclean
 distclean: clean
 	@echo "removing test outputs & temp files"
-	$(RM) -f results.json report.html
+	$(RM) -f results.json report.html e2e_status
 	$(RM) -r $(LIND_ROOT)/testfiles || true
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete

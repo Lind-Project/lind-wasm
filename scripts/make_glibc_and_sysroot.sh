@@ -68,6 +68,10 @@ SYS_INCLUDE="-nostdinc -isystem ${RESOURCE_DIR}/include -isystem /usr/i686-linux
 DEFINES="-D_LIBC_REENTRANT -include $BUILD/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
+# Check if LIND_DEBUG is defined (set by build.rs when `lind_debug` is enabled)
+if [ "$LIND_DEBUG" ]; then
+  DEFINES="$DEFINES -DLIND_DEBUG"
+fi
 
 # Build glibc
 rm -rf $BUILD
@@ -78,6 +82,7 @@ cd $BUILD
   --disable-werror \
   --disable-hidden-plt \
   --disable-profile \
+  --disable-nscd \
   --with-headers=/usr/i686-linux-gnu/include \
   --prefix=$GLIBC/target \
   --host=i686-linux-gnu \
@@ -95,6 +100,8 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -c pthread_create.c -MD -MP -MF $BUILD/nptl/pthread_create.o.dt \
     -MT $BUILD/nptl/pthread_create.o
 
+# Compile lind_syscall.c, which contains the make_threei, register_handler, 
+# and copy_data_between_cages functions
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $BUILD/lind_syscall.o \
@@ -105,6 +112,12 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $BUILD/addr_translation.o \
     -c $GLIBC/lind_syscall/addr_translation.c
+    
+# Compile lind debug module
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/lind_debug.o \
+    -c $GLIBC/lind_syscall/lind_debug.c
 
 # Compile crt1.c
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
@@ -129,16 +142,6 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     -c $GLIBC/sysdeps/unix/sysv/linux/x86/elision-unlock.c \
     -MD -MP -MF $GLIBC/build/nptl/elision-unlock.o.dt \
     -MT $GLIBC/build/nptl/elision-unlock.o
-
-$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
-    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $BUILD/register_handler.o \
-    -c $GLIBC/lind_syscall/register_handler.c
-
-$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
-    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
-    -o $BUILD/copy_data_between_cages.o \
-    -c $GLIBC/lind_syscall/copy_data_between_cages.c
 
 # Compile assembly files
 cd ../
@@ -170,7 +173,6 @@ if [ -z "$object_files" ]; then
   exit 1
 fi
 
-
 # Create the sysroot directory structure
 mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 
@@ -198,5 +200,4 @@ cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
 # Copy the crt1.o file into the new sysroot lib directory
 cp "$GLIBC/lind_syscall/crt1.o" "$SYSROOT/lib/wasm32-wasi/"
-cp "$GLIBC/lind_syscall/register_handler.h" "$SYSROOT/include/wasm32-wasi/"
-cp "$GLIBC/lind_syscall/copy_data_between_cages.h" "$SYSROOT/include/wasm32-wasi/"
+cp "$GLIBC/lind_syscall/lind_syscall.h" "$SYSROOT/include/wasm32-wasi/"

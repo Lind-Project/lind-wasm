@@ -17,9 +17,9 @@
 ssize_t
 __libc_readlinkat (int fd, const char *path, char *buf, size_t len)
 {
-  return MAKE_SYSCALL (READLINKAT_SYSCALL, "syscall|readlinkat", (uint64_t) fd,
+  return MAKE_LEGACY_SYSCALL (READLINKAT_SYSCALL, "syscall|readlinkat", (uint64_t) fd,
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (path),
 		       (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (buf),
-		       (uint64_t) len, NOTUSED, NOTUSED);
+		       (uint64_t) len, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 weak_alias(__libc_readlinkat, readlinkat)

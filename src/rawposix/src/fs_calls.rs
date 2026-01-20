@@ -279,21 +279,21 @@ pub fn futex_syscall(
     futex_op_cageid: u64,
     val_arg: u64,
     val_cageid: u64,
-    val2_arg: u64,
-    val2_cageid: u64,
+    timeout_arg: u64,
+    timeout_cageid: u64,
     uaddr2_arg: u64,
     uaddr2_cageid: u64,
     val3_arg: u64,
     val3_cageid: u64,
 ) -> i32 {
-    let uaddr = sc_convert_uaddr_to_host(uaddr_arg, uaddr_cageid, cageid);
+    let uaddr = uaddr_arg;
     let futex_op = sc_convert_sysarg_to_u32(futex_op_arg, futex_op_cageid, cageid);
     let val = sc_convert_sysarg_to_u32(val_arg, val_cageid, cageid);
-    let val2 = sc_convert_uaddr_to_host(val2_arg, val2_cageid, cageid);
-    let uaddr2 = sc_convert_uaddr_to_host(uaddr2_arg, uaddr2_cageid, cageid);
+    let timeout = timeout_arg;
+    let uaddr2 = uaddr2_arg;
     let val3 = sc_convert_sysarg_to_u32(val3_arg, val3_cageid, cageid);
 
-    let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, val2, uaddr2, val3) as i32 };
+    let ret = unsafe { syscall(SYS_futex, uaddr, futex_op, val, timeout, uaddr2, val3) as i32 };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "futex");
@@ -3336,7 +3336,11 @@ pub fn getcwd_syscall(
         ptr::copy(path.as_ptr(), buf, path.len());
         *buf.add(path.len()) = 0;
     }
-    0
+
+    // std::copy guarantees it copies exactly path.len() bytes.
+    let bytes_written: i32 = path.len().try_into().unwrap();
+
+    bytes_written
 }
 
 /// Truncate a file to a specified length
@@ -3575,9 +3579,20 @@ pub fn ioctl_syscall(
         );
     }
 
-    // Only support FIONBIO and FIOASYNC. Return error for unsupported requests.
-    if req_arg != FIONBIO as u64 && req_arg != FIOASYNC as u64 {
-        lind_debug_panic("Lind unsupported ioctl request - FIONBIO and FIOASYNC only");
+    // handle FIOCLEX, set close_on_exec flag for the file descriptor
+    if req_arg == FIOCLEX {
+        let ret = match fdtables::set_cloexec(cageid, vfd_arg, true) {
+            Ok(_) => 0,
+            Err(_) => syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor"),
+        };
+
+        return ret;
+    }
+
+    // Besides FIOCLEX, we only support FIONBIO and FIOASYNC right now.
+    // Return error for unsupported requests.
+    if req_arg != FIONBIO as u64 && req_arg != FIOASYNC as u64 as u64 {
+        lind_debug_panic("Lind unsupported ioctl request");
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
@@ -4159,4 +4174,86 @@ pub fn shmctl_syscall(
     }
 
     0 //shmctl has succeeded!
+}
+
+/// Linux reference: https://man7.org/linux/man-pages/man2/getrandom.2.html
+///
+/// Implements the `getrandom(2)` syscall for a cage. This wrapper converts and
+/// validates all caller-provided arguments, resolves the user buffer pointer into
+/// a host pointer, enforces cage-ownership consistency, and then directly invokes
+/// the host kernel’s `SYS_getrandom` via `syscall()`. Any error from the host is
+/// converted into a cage-appropriate errno using `handle_errno`.
+///
+/// 1) **Parse & validate args**
+///    - `buf_arg` is interpreted as a user pointer and converted to a host pointer
+///      using `sc_convert_uaddr_to_host`, ensuring it belongs to `cageid`.
+///    - `buflen_arg` and `flags_arg` are converted to 32-bit values via
+///      `sc_convert_sysarg_to_u32`, validating cage ownership and rejecting
+///      malformed arguments.
+///    - Unused arguments `arg4..arg6` must be zero; if not, they cause a panic
+///      (enforcing a strict syscall ABI).
+///
+/// 2) **Invoke host syscall**
+///    - Calls `syscall(SYS_getrandom, buf, buflen, flags)` unsafely to request
+///      random bytes from the host kernel.
+///    - On negative return, retrieves `errno` using `get_errno()` and converts it
+///      to a standardized cage-side error with `handle_errno`.
+///
+/// 3) **Return value**
+///    - On success, returns the number of random bytes written (0 ≤ n ≤ buflen).
+///    - On failure, returns a negative errno (`-EINTR`, `-EAGAIN`, `-EINVAL`, etc.).
+///
+/// ## Arguments
+/// * `cageid`            – Cage issuing the syscall; used to validate all arguments.
+/// * `buf_arg`           – Raw user pointer to the destination buffer.
+/// * `buf_arg_cageid`    – Cage ID associated with `buf_arg`.
+/// * `buflen_arg`        – Number of random bytes requested (raw u64).
+/// * `buflen_arg_cageid` – Cage ID associated with `buflen_arg`.
+/// * `flags_arg`         – `getrandom` flags (e.g., `GRND_NONBLOCK`) as raw u64.
+/// * `flags_arg_cageid`  – Cage ID associated with `flags_arg`.
+/// * `arg4..arg6`        – Unused placeholder arguments for syscall ABI; must be zero.
+/// * `arg4_cageid..arg6_cageid` – Cage IDs for unused arguments; checked but unused.
+///
+/// ## Returns
+/// On success: number of bytes written (positive `i32`).  
+/// On failure: a negative errno from `handle_errno`.
+pub fn getrandom_syscall(
+    cageid: u64,
+    buf_arg: u64,
+    buf_arg_cageid: u64,
+    buflen_arg: u64,
+    buflen_arg_cageid: u64,
+    flags_arg: u64,
+    flags_arg_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    let buf = buf_arg;
+    let buflen = sc_convert_sysarg_to_u32(buflen_arg, buflen_arg_cageid, cageid);
+    let flags = sc_convert_sysarg_to_u32(flags_arg, flags_arg_cageid, cageid);
+
+    // Validate unused args
+    if !(sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "getrandom_syscall"
+        );
+    }
+
+    let ret = unsafe { getrandom(buf as *mut c_void, buflen.try_into().unwrap(), flags) };
+    if ret < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "getrandom");
+    }
+
+    // convert isize to i32 safely, as ret shouldn't be larger than 32-bit
+    // due to buflen being u32
+    ret.try_into().unwrap()
 }
