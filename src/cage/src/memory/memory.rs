@@ -9,6 +9,7 @@ use sysdefs::constants::err_const::Errno;
 use sysdefs::constants::fs_const::{
     MAP_SHARED, MREMAP_FIXED, MREMAP_MAYMOVE, PAGESHIFT, PAGESIZE, PROT_READ, PROT_WRITE,
 };
+use sysdefs::logging::lind_debug_panic;
 
 // heap is placed at the very top of the memory
 pub const HEAP_ENTRY_INDEX: u32 = 0;
@@ -26,6 +27,39 @@ pub fn round_up_page(length: u64) -> u64 {
     } else {
         ((length / PAGESIZE as u64) + 1) * PAGESIZE as u64
     }
+}
+
+/// Check if a return value from libc::mmap indicates an error
+///
+/// Valid mmap addresses are always page-aligned. This function uses page alignment
+/// to detect errors, as libc::mmap returns -1 (cast to usize) on error, which is
+/// not page-aligned. As a defensive measure, if an unaligned value is detected that
+/// falls outside the expected errno range (-1 to -PAGESIZE), the function panics.
+///
+/// # Arguments
+/// * `ret` - return value from libc::mmap cast to usize
+///
+/// # Returns
+/// * `bool` - true if ret indicates an error, false if it's a valid address
+pub fn is_mmap_error(ret: usize) -> bool {
+    // Check if page-aligned first (normal case)
+    if ret % PAGESIZE as usize == 0 {
+        return false; // Not an error
+    }
+
+    // If not aligned, verify it's in the valid errno range
+    // Valid errno values are -1 to -PAGESIZE, which when cast to usize are:
+    // usize::MAX - PAGESIZE + 1 to usize::MAX
+    let min_errno = usize::MAX - (PAGESIZE as usize) + 1;
+    if ret >= min_errno {
+        return true; // Valid error in errno range
+    }
+
+    // Unaligned but not in errno range - this should never happen
+    lind_debug_panic(&format!(
+        "mmap returned unaligned address outside errno range: 0x{:x}",
+        ret
+    ));
 }
 
 /// Copies the memory regions from parent to child based on the provided `vmmap` memory layout.
@@ -170,9 +204,15 @@ pub fn check_addr(cageid: u64, arg: u64, length: usize, prot: i32) -> Result<boo
     // Get write lock on virtual memory map
     let mut vmmap = cage.vmmap.write();
 
+    // The input addresses are relative to the host's memory address, however,
+    // `vmmap.check_addr_mapping` operates relative to the cage's memory.
+    // We do this by subtracting cage's the base address.
+    let base_addr = vmmap.base_address.unwrap() as u64;
+    let arg_uaddr = arg - base_addr;
+
     // Calculate page numbers for start and end of region
-    let page_num = (arg >> PAGESHIFT) as u32; // Starting page number
-    let end_page = ((arg + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32; // Ending page number (rounded up)
+    let page_num = (arg_uaddr >> PAGESHIFT) as u32; // Starting page number
+    let end_page = ((arg_uaddr + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32; // Ending page number (rounded up)
     let npages = end_page - page_num; // Total number of pages spanned
 
     // Validate memory mapping and permissions

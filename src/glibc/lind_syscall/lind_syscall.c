@@ -1,41 +1,92 @@
 #include <errno.h>
 #include <stdint.h> // For uint64_t definition
-/* Indirect system call.  Linux generic implementation.
-   Copyright (C) 1997-2024 Free Software Foundation, Inc.
-   This file is part of the GNU C Library.
-
-   The GNU C Library is free software; you can redistribute it and/or
-   modify it under the terms of the GNU Lesser General Public
-   License as published by the Free Software Foundation; either
-   version 2.1 of the License, or (at your option) any later version.
-
-   The GNU C Library is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-   Lesser General Public License for more details.
-
-   You should have received a copy of the GNU Lesser General Public
-   License along with the GNU C Library.  If not, see
-   <https://www.gnu.org/licenses/>.  */
+#include "addr_translation.h"
 
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
-int __imported_wasi_snapshot_preview1_lind_syscall(unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6) __attribute__((
+int __lind_make_syscall_trampoline(unsigned int callnumber, 
+    uint64_t callname, 
+    uint64_t self_cageid, uint64_t target_cageid,
+    uint64_t arg1, uint64_t arg1cageid,
+    uint64_t arg2, uint64_t arg2cageid,
+    uint64_t arg3, uint64_t arg3cageid,
+    uint64_t arg4, uint64_t arg4cageid,
+    uint64_t arg5, uint64_t arg5cageid,
+    uint64_t arg6, uint64_t arg6cageid
+) __attribute__((
     __import_module__("lind"),
-    __import_name__("lind-syscall")
+    __import_name__("make-syscall")
 ));
 
-
-// Part of Macro MAKE_SYSCALL, take in the number of the syscall and the name of the syscall and 6 argument.
-// callnumber: is the syscall number used in rawposix/rustposix
-// callname: a legacy argument, will be changed after 3i has integrated
-// arg1-arg6: actual argument of the syscall, note that all the pointers passed here is 32-bit virtual wasm address
-//            and should be handled appropriately. This might be changed later and the address translation might be
-//            handled here instead
-int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned long long arg1, unsigned long long arg2, unsigned long long arg3, unsigned long long arg4, unsigned long long arg5, unsigned long long arg6, int raw)
+/*
+ * make_threei_call:
+ *
+ * Unified function used to invoke threei style syscalls.  This is the
+ * core entry point for all syscall transitions into the lind runtime,
+ * including inter-cage calls and grates.  Unlike MAKE_LEGACY_SYSCALL, this function
+ * explicitly specifies both `self_cageid` and `target_cageid`, allowing
+ * fine-grained routing of syscalls across cage boundaries.
+ *
+ * Each logical argument is passed in a (value, cageid) pair, enabling
+ * three-i's interposition layer to perform selective rewriting, mediation,
+ * or redirection.  The final argument, `translate_errno`, determines whether
+ * lind_syscall should apply standard POSIX errno translation or return
+ * the raw trampoline result directly.
+ *
+ * make_threei_call is designed to be the **canonical** macro for all new
+ * inter-cage or grate-level syscall invocations.  Grates and higher-level
+ * components should call make_threei_call directly rather than relying on
+ * MAKE_LEGACY_SYSCALL.
+ *
+ * This function acts as the middle layer between:
+ *   (1) the MAKE_LEGACY_SYSCALL macros in glibc, and
+ *   (2) the actual Wasmtime entry function (__lind_make_syscall_trampoline).
+ *
+ * It forwards all syscall parameters—including the inter-cage metadata
+ * (self_cageid, target_cageid, argX_cageid pairs) to the underlying
+ * trampoline, but also optionally performs post-processing on the return
+ * value depending on `translate_errno`.
+ *
+ * The `translate_errno` controls whether this wrapper should apply the standard
+ * errno handling:
+ *
+ *   translate_errno == 1 (TRANSLATE_ERRNO_ON):
+ *       The return value is treated as a complete syscall result.
+ *       Negative values in the range [-255, -1] are interpreted as
+ *       `-errno`, errno is set accordingly, and the wrapper returns -1.
+ *       All other values are returned directly.
+ *
+ *   translate_errno == 0 (TRANSLATE_ERRNO_OFF):
+ *       The wrapper does *not* apply any errno translation.
+ *       The raw return value from the trampoline is returned as-is.
+ *
+ * This distinction is required because some syscalls—especially futex-related
+ * operations (e.g., lll_futex_wake, lll_futex_requeue, etc.) expect the
+ * trampoline to return raw -errno value and must not receive additional errno 
+ * post-processing at this layer. Other syscalls, however, rely on the standard 
+ * POSIX errno translation implemented here.
+ */
+int make_threei_call (unsigned int callnumber, 
+    uint64_t callname, 
+    uint64_t self_cageid, uint64_t target_cageid,
+    uint64_t arg1, uint64_t arg1cageid,
+    uint64_t arg2, uint64_t arg2cageid,
+    uint64_t arg3, uint64_t arg3cageid,
+    uint64_t arg4, uint64_t arg4cageid,
+    uint64_t arg5, uint64_t arg5cageid,
+    uint64_t arg6, uint64_t arg6cageid,
+    int translate_errno)
 {
-    int ret = __imported_wasi_snapshot_preview1_lind_syscall(callnumber, callname, arg1, arg2, arg3, arg4, arg5, arg6);
-    // if raw is set, we do not do any further process to errno handling and directly return the result
-    if(raw != 0) return ret;
+    int ret = __lind_make_syscall_trampoline(callnumber, 
+        callname, 
+        self_cageid, target_cageid,
+        arg1, arg1cageid,
+        arg2, arg2cageid,
+        arg3, arg3cageid,
+        arg4, arg4cageid,
+        arg5, arg5cageid,
+        arg6, arg6cageid);
+    // if translate_errno is not enabled, we do not do any further process to errno handling and directly return the result
+    if(translate_errno == 0) return ret;
     // handle the errno
     // in rawposix, we use -errno as the return value to indicate the error
     // but this may cause some issues for mmap syscall, because mmap syscall
@@ -61,29 +112,25 @@ int lind_syscall (unsigned int callnumber, unsigned long long callname, unsigned
 // Entry point for wasmtime, lind_syscall is an imported function from wasmtime
 int __imported_lind_3i_trampoline_register_syscall(uint64_t targetcage, 
     uint64_t targetcallnum, 
-    uint64_t handlefunc_index_in_this_grate, 
-    uint64_t this_grate_id) __attribute__((
+    uint64_t handlefunc_flag, 
+    uint64_t this_grate_id,
+    uint64_t optional_arg) __attribute__((
     __import_module__("lind"),
     __import_name__("register-syscall")
 ));
 
-
-// Shim between the user-facing 3i API (e.g., register_handler) and the
-// Wasmtime trampoline import (__imported_lind_3i_trampoline_register_syscall).
-// The `lind_` prefix marks this as a Lind-Wasm–specific runtime shim rather 
-// than a generic/app symbol.
-//
 // 3i function call to register or deregister a syscall handler in a target cage
 // targetcage: the cage id where the syscall will be registered
 // targetcallnum: the syscall number to be registered in the target cage
 // this_grate_id: the grate id of the syscall jump ends
 // register_flag: deregister(0) or register(non-0)
-int lind_register_syscall (uint64_t targetcage, 
-    uint64_t targetcallnum,
+int register_handler (int64_t targetcage, 
+    uint64_t targetcallnum, 
+    uint64_t handlefunc_flag, 
     uint64_t this_grate_id,
-    uint64_t register_flag)
+    uint64_t optional_arg)
 {
-    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, register_flag, this_grate_id);
+    int ret = __imported_lind_3i_trampoline_register_syscall(targetcage, targetcallnum, handlefunc_flag, this_grate_id, optional_arg);
     
     return ret;
 }
@@ -95,11 +142,6 @@ int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage
     __import_name__("cp-data-syscall")
 ));
 
-// Shim between the user-facing 3i API (e.g., register_handler) and the
-// Wasmtime trampoline import (__imported_lind_3i_trampoline_register_syscall).
-// The `lind_` prefix marks this as a Lind-Wasm–specific runtime shim rather 
-// than a generic/app symbol.
-//
 // 3i function call to copy data between cages
 // thiscage: the cage id of the caller cage
 // targetcage: the cage id of the target cage
@@ -109,9 +151,18 @@ int __imported_lind_3i_trampoline_cp_data(uint64_t thiscage, uint64_t targetcage
 // destcage: the cage id of the destination address
 // len: the length of data to copy
 // copytype: the type of copy, 0 for normal copy, 1 for string copy
-int lind_cp_data(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
+int copy_data_between_cages(uint64_t thiscage, uint64_t targetcage, uint64_t srcaddr, uint64_t srccage, uint64_t destaddr, uint64_t destcage, uint64_t len, uint64_t copytype)
 {
-    int ret = __imported_lind_3i_trampoline_cp_data(thiscage, targetcage, srcaddr, srccage, destaddr, destcage, len, copytype);
+    int ret = __imported_lind_3i_trampoline_cp_data(
+		thiscage, 
+		targetcage,
+		TRANSLATE_UADDR_TO_HOST(srcaddr, srccage),
+		srccage,
+		TRANSLATE_UADDR_TO_HOST(destaddr, destcage),
+		destcage,
+		len,
+		copytype
+    );
     
     return ret;
 }

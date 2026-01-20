@@ -1,33 +1,256 @@
-#!/bin/bash
-set -ue
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-# Cross-compile passed .c file to .wasm and .cwasm files
+# Cross-compile C programs to wasm / cwasm using the lind-wasm toolchain.
 #
-# Important notes:
-# - call from source code repository root directory
-# - expects `clang` on $PATH
-# - expects `wasm-opt` at its included location
-# - expects `wasmtime` its release build location
+# Default pipeline:
+#   .c -> .wasm (clang) -> (wasm-opt) -> .cwasm (wasmtime compile)
 #
 # Usage:
+#   # full pipeline (default)
+#   lind_compile hello.c
 #
-#   ./scripts/lind_compile /path/to/lind-program.c
+#   # run individual steps
+#   lind_compile --compile-only hello.c      # .c -> .wasm
+#   lind_compile --opt-only hello.wasm       # optimize existing .wasm in place
+#   lind_compile --precompile-only hello.wasm  # .wasm -> .cwasm
+#
+#   # print commands (any mode)
+#   lind_compile --print-cmd hello.c
+#   lind_compile --compile-only --verbose hello.c
+#
+# Notes:
+#   - Options must be specified *before* the source path.
+#   - For compile-only and default modes, the input must be a .c file.
+#   - For opt-only and precompile-only modes, the input must be a .wasm file.
+#
+# No assumption about current working directory.
 
-# Expects exactly one arg, ending with '.c'
-if [[ "$#" -ne 1 || "${1: -2}" != ".c" ]]; then
-    echo "usage: $0 </path/to/*.c file>"
-    exit 1
+usage() {
+  cat >&2 <<EOF
+usage: $(basename "$0") [OPTIONS] <source>
+
+  Modes (at most one, defaults to full pipeline):
+    (no mode flag)      : .c -> .wasm -> (wasm-opt) -> .cwasm
+    --compile-only      : .c -> .wasm
+    --opt-only          : .wasm -> .wasm  (in-place optimization)
+    --precompile-only   : .wasm -> .cwasm
+
+  Common options:
+    -v, --print-cmd, --verbose  print the underlying commands that are executed
+    -h, --help              show this help
+
+  Examples:
+    $(basename "$0") hello.c
+    $(basename "$0") --compile-only hello.c
+    $(basename "$0") --opt-only build/hello.wasm
+    $(basename "$0") --precompile-only build/hello.wasm
+    $(basename "$0") --print-cmd hello.c
+EOF
+}
+
+MODE="full"          # full, compile-only, opt-only, precompile-only
+PRINT_CMDS="false"
+
+set_mode() {
+  local new_mode="$1"
+  if [[ "${MODE}" != "full" && "${MODE}" != "${new_mode}" ]]; then
+    echo "error: multiple mode flags specified (already ${MODE}, got ${new_mode})" >&2
+    usage
+    exit 2
+  fi
+  MODE="${new_mode}"
+}
+
+run_cmd() {
+  # Helper to optionally print and then run a command.
+  if [[ "${PRINT_CMDS}" == "true" ]]; then
+    printf '+ ' >&2
+    printf '%q ' "$@" >&2
+    printf '\n' >&2
+  fi
+  "$@"
+}
+
+# --- option parsing ---
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --compile-only)
+      set_mode "compile-only"
+      ;;
+    --opt-only)
+      set_mode "opt-only"
+      ;;
+    --precompile-only)
+      set_mode "precompile-only"
+      ;;
+    -v|--print-cmd|--verbose)
+      PRINT_CMDS="true"
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "error: unknown option: $1" >&2
+      usage
+      exit 2
+      ;;
+    *)
+      # first non-option: treat as source; stop parsing options
+      break
+      ;;
+  esac
+  shift
+done
+
+if [[ "$#" -ne 1 ]]; then
+  echo "error: expected exactly one source file argument" >&2
+  usage
+  exit 2
 fi
 
-path_c="$1"
-path_wasm="${1%.c}.wasm"
-path_cwasm="${1%.c}.cwasm"
+SRC_ARG="$1"
 
-clang --sysroot=${PWD}/src/glibc/sysroot \
+# --- repo root discovery (env var -> script dir -> git) ---
+if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
+  REPO_ROOT="${LIND_WASM_ROOT}"
+else
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${SCRIPT_DIR}/../Makefile" ]]; then
+    REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+  else
+    if command -v git >/dev/null 2>&1; then
+      REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    else
+      REPO_ROOT=""
+    fi
+  fi
+fi
+
+if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
+  echo "ERROR: Could not locate lind-wasm repo root." >&2
+  echo "Hint: export LIND_WASM_ROOT=/path/to/lind-wasm" >&2
+  exit 2
+fi
+
+# --- args & path normalization ---
+# Normalize input path to absolute
+if [[ "${SRC_ARG}" = /* ]]; then
+  SRC="${SRC_ARG}"
+else
+  SRC="$PWD/${SRC_ARG}"
+fi
+SRC_DIR="$(cd -- "$(dirname -- "${SRC}")" && pwd)"
+SRC_BASE="$(basename -- "${SRC}")"
+SRC="${SRC_DIR}/${SRC_BASE}"
+
+[[ -f "${SRC}" ]] || { echo "error: source not found: ${SRC}" >&2; exit 2; }
+
+EXT="${SRC##*.}"
+
+OUT_WASM=""
+OUT_CWASM=""
+
+case "${MODE}" in
+  full|"compile-only")
+    if [[ "${EXT}" != "c" ]]; then
+      echo "error: ${MODE} mode expects a .c file, got: ${SRC}" >&2
+      usage
+      exit 2
+    fi
+    OUT_WASM="${SRC%.c}.wasm"
+    OUT_CWASM="${SRC%.c}.cwasm"
+    ;;
+  "opt-only"|"precompile-only")
+    if [[ "${EXT}" != "wasm" ]]; then
+      echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
+      usage
+      exit 2
+    fi
+    OUT_WASM="${SRC}"
+    OUT_CWASM="${SRC%.wasm}.cwasm"
+    ;;
+  *)
+    echo "error: internal: unknown mode '${MODE}'" >&2
+    exit 2
+    ;;
+esac
+
+# --- tool paths & quick checks (anchored to repo) ---
+CLANG_BIN="clang"  # must be on PATH
+WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
+WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
+WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime"
+# Fallback to release if selected profile isn't built yet
+if [[ ! -x "${WASMTIME_BIN}" ]]; then
+  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
+  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
+fi
+SYSROOT="${REPO_ROOT}/src/glibc/sysroot"
+
+# Only check tools needed for the selected mode, to be more flexible
+if [[ "${MODE}" == "full" || "${MODE}" == "compile-only" ]]; then
+  command -v "${CLANG_BIN}" >/dev/null 2>&1 || { echo "error: clang not found on PATH" >&2; exit 2; }
+  [[ -d "${SYSROOT}" ]] || { echo "error: sysroot missing at ${SYSROOT}" >&2; exit 2; }
+fi
+
+if [[ "${MODE}" == "full" || "${MODE}" == "opt-only" ]]; then
+  [[ -x "${WASM_OPT_BIN}" ]] || { echo "error: wasm-opt not found at ${WASM_OPT_BIN}" >&2; exit 2; }
+fi
+
+if [[ "${MODE}" == "full" || "${MODE}" == "precompile-only" ]]; then
+  [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
+fi
+
+# --- individual steps ---
+do_compile() {
+  run_cmd "${CLANG_BIN}" --sysroot="${SYSROOT}" \
     -pthread --target=wasm32-unknown-wasi \
     -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
-    "$path_c" -g -O0 -o "$path_wasm"
+    "${SRC}" -g -O0 -o "${OUT_WASM}"
+}
 
-tools/binaryen/bin/wasm-opt --epoch-injection --asyncify -O2 --debuginfo "$path_wasm" -o "$path_wasm"
+do_optimize() {
+  run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
+}
 
-src/wasmtime/target/release/wasmtime compile "$path_wasm" -o "$path_cwasm"
+do_precompile() {
+  run_cmd "${WASMTIME_BIN}" compile "${OUT_WASM}" -o "${OUT_CWASM}"
+}
+
+# --- run selected pipeline ---
+case "${MODE}" in
+  full)
+    do_compile
+    do_optimize
+    do_precompile
+    ;;
+  "compile-only")
+    do_compile
+    ;;
+  "opt-only")
+    do_optimize
+    ;;
+  "precompile-only")
+    do_precompile
+    ;;
+esac
+
+# --- result summary ---
+case "${MODE}" in
+  full|"compile-only"|"opt-only")
+    echo "OK: ${OUT_WASM}"
+    ;;
+esac
+
+case "${MODE}" in
+  full|"precompile-only")
+    echo "OK: ${OUT_CWASM}"
+    ;;
+esac
+

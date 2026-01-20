@@ -1,7 +1,13 @@
+LIND_ROOT ?= src/tmp
 
 .PHONY: build 
 build: sysroot wasmtime
 	@echo "Build complete"
+
+.PHONY: prepare-lind-root
+prepare-lind-root:
+	mkdir -p $(LIND_ROOT)/dev
+	touch $(LIND_ROOT)/dev/null
 
 .PHONY: all
 all: build
@@ -15,10 +21,24 @@ wasmtime:
 	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
 	cargo build --manifest-path src/wasmtime/Cargo.toml --release
 
+.PHONY: lind-debug
+lind-debug:
+	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
+	$(MAKE) build_glibc LIND_DEBUG=1
+	
+	# Build Wasmtime with the lind_debug feature enabled
+	cargo build --manifest-path src/wasmtime/Cargo.toml --features lind_debug
+build_glibc:
+	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
+	if [ "$(LIND_DEBUG)" = "1" ]; then \
+		echo "Building glibc with LIND_DEBUG enabled"; \
+		./scripts/make_glibc_and_sysroot.sh; \
+	fi
+
 .PHONY: test
-test:
+test: prepare-lind-root
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
-	LIND_WASM_BASE=. LIND_FS_ROOT=src/RawPOSIX/tmp \
+	LIND_WASM_BASE=. LIND_ROOT=$(LIND_ROOT) \
 	./scripts/wasmtestreport.py && \
 	cat results.json; \
 	if grep -q '"number_of_failures": [^0]' results.json; then \
@@ -84,6 +104,6 @@ clean:
 .PHONY: distclean
 distclean: clean
 	@echo "removing test outputs & temp files"
-	$(RM) -f results.json report.html
-	$(RM) -r src/RawPOSIX/tmp/testfiles || true
+	$(RM) -f results.json report.html e2e_status
+	$(RM) -r $(LIND_ROOT)/testfiles || true
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete
