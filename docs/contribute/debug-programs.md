@@ -131,7 +131,7 @@ call $__lind_debug_str
 drop
 ```
 
-> ⚠️ **Warning:** Use the offset of the pre-defined string in the binary. Defining a new string at an uncalculated offset might resultsegmentation fault.
+> ⚠️ **Warning:** Use the offset of the pre-defined string in the binary. Defining a new string at an uncalculated offset might result in segmentation fault.
 
 3. Recompile to WASM
 
