@@ -25,3 +25,4 @@ process_tests/non-deterministic/tls_test.c
 signal_tests/deterministic/sigpipe.c
 signal_tests/deterministic/signal_resethand.c
 signal_tests/non-deterministic/signal_recursive.c
+networking_tests/non-deterministic/socketpair.c
