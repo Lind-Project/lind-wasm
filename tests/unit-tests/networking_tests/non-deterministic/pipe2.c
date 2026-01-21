@@ -17,35 +17,20 @@ int main(void) {
   int ret, fd[2];
 
   ret = pipe2(fd, 0);
-  if (ret != 0) {
-    perror("pipe2");
-  }
   assert(ret == 0);
 
   ret = write(fd[1], test_msg, test_msg_len);
-  if (ret < 0) {
-    fprintf(stderr, "write() failed: %s\n", strerror(errno));
-  }
   assert(ret == (int)test_msg_len);
 
   ret = read(fd[0], read_buf, test_msg_len);
-  if (ret < 0) {
-    fprintf(stderr, "read() failed: %s\n", strerror(errno));
-  }
   assert(ret == (int)test_msg_len);
 
   assert(memcmp(read_buf, test_msg, test_msg_len) == 0);
 
   ret = close(fd[0]);
-  if (ret != 0) {
-    fprintf(stderr, "close() failed: %s\n", strerror(errno));
-  }
   assert(ret == 0);
 
   ret = close(fd[1]);
-  if (ret != 0) {
-    fprintf(stderr, "close() failed: %s\n", strerror(errno));
-  }
   assert(ret == 0);
 
   return 0;
