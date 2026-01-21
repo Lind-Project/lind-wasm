@@ -9,7 +9,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
-#undef NDEBUG
 
 int main(void)
 {
