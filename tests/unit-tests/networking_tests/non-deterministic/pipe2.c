@@ -1,6 +1,7 @@
 #undef _GNU_SOURCE
 #define _GNU_SOURCE
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -10,37 +11,42 @@
 #include <unistd.h>
 
 int main(void) {
-  char str[4096] = {0};
+  const char *test_msg = "hi\n";
+  const size_t test_msg_len = 3;
+  char read_buf[4096] = {0};
   int ret, fd[2];
 
-  if (pipe2(fd, 0) < 0) {
-    perror("pipe2()");
-    exit(EXIT_FAILURE);
+  ret = pipe2(fd, 0);
+  if (ret != 0) {
+    perror("pipe2");
   }
-  printf("pipe2() ret: [%d, %d]\n", fd[0], fd[1]);
-  fflush(stdout);
+  assert(ret == 0);
 
-  if ((ret = write(fd[1], "hi\n", 3)) < 0) {
-    printf("write(): %s\n", strerror(errno));
-    exit(EXIT_FAILURE);
+  ret = write(fd[1], test_msg, test_msg_len);
+  if (ret < 0) {
+    fprintf(stderr, "write() failed: %s\n", strerror(errno));
   }
-  printf("write() ret: %d\n", ret);
-  fflush(stdout);
+  assert(ret == (int)test_msg_len);
 
-  if ((ret = read(fd[0], str, 3)) < 0) {
-    printf("read(): %s\n", strerror(errno));
-    exit(EXIT_FAILURE);
+  ret = read(fd[0], read_buf, test_msg_len);
+  if (ret < 0) {
+    fprintf(stderr, "read() failed: %s\n", strerror(errno));
   }
-  printf("read() ret: %d\n", ret);
-  fflush(stdout);
+  assert(ret == (int)test_msg_len);
 
-  for (size_t i = 0; i < sizeof fd / sizeof *fd; i++) {
-    if (close(fd[i]) < 0) {
-      perror("close()");
-      exit(EXIT_FAILURE);
-    }
+  assert(memcmp(read_buf, test_msg, test_msg_len) == 0);
+
+  ret = close(fd[0]);
+  if (ret != 0) {
+    fprintf(stderr, "close() failed: %s\n", strerror(errno));
   }
-  puts(str);
+  assert(ret == 0);
+
+  ret = close(fd[1]);
+  if (ret != 0) {
+    fprintf(stderr, "close() failed: %s\n", strerror(errno));
+  }
+  assert(ret == 0);
 
   return 0;
 }

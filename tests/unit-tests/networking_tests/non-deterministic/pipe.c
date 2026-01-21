@@ -1,6 +1,7 @@
 #undef _GNU_SOURCE
 #define _GNU_SOURCE
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -8,47 +9,42 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <wait.h>
+#undef NDEBUG
 
 int main(void)
 {
-	char str[4096] = {0};
+	const char *test_msg = "hi\n";
+	const size_t test_msg_len = 3;
+	char read_buf[4096] = {0};
 	int ret, fd[2];
 
-	if (pipe(fd) < 0) {
-		perror("pipe()");
-		exit(EXIT_FAILURE);
+	ret = pipe(fd);
+	if (ret != 0) {
+		perror("pipe");
 	}
-	printf("pipe() ret: [%d, %d]\n", fd[0], fd[1]);
+	assert(ret == 0);
 
-	if ((ret = write(fd[1], "hi\n", 3)) < 0) {
-		printf("write(): %s\n", strerror(errno));
-		exit(EXIT_FAILURE);
+	ret = write(fd[1], test_msg, test_msg_len);
+	if (ret < 0) {
+		fprintf(stderr, "write() failed: %s\n", strerror(errno));
 	}
-	printf("write() ret: %d\n", ret);
+	assert(ret == (int)test_msg_len);
 
-	if ((ret = read(fd[0], str, 3)) < 0) {
-		printf("read(): %s\n", strerror(errno));
-		exit(EXIT_FAILURE);
+	ret = read(fd[0], read_buf, test_msg_len);
+	if (ret < 0) {
+		fprintf(stderr, "read() failed: %s\n", strerror(errno));
 	}
-	printf("read() ret: %d\n", ret);
+	assert(ret == (int)test_msg_len);
+
+	assert(memcmp(read_buf, test_msg, test_msg_len) == 0);
 
 	for (size_t i = 0; i < sizeof fd / sizeof *fd; i++) {
-		if (close(fd[i]) < 0) {
-			perror("close()");
-			exit(EXIT_FAILURE);
+		ret = close(fd[i]);
+		if (ret != 0) {
+			fprintf(stderr, "close() failed: %s\n", strerror(errno));
 		}
+		assert(ret == 0);
 	}
-	puts(str);
-
-	/* double close() error injection */
-
-	/*
-	 * if (close(fd[0]) < 0) {
-	 *         perror("second close(fd[0])");
-	 *         exit(EXIT_FAILURE);
-	 * }
-	 */
 
 	return 0;
 }
