@@ -16,23 +16,14 @@ int main(void)
     int status;
 
     ret = pipe(pipefd);
-    if (ret != 0) {
-        fprintf(stderr, "pipe() failed: %s\n", strerror(errno));
-    }
     assert(ret == 0);
 
     cpid = fork();
-    if (cpid < 0) {
-        fprintf(stderr, "fork() failed: %s\n", strerror(errno));
-    }
     assert(cpid >= 0);
 
     if (cpid == 0) {
         /* Child reads from pipe */
         ret = close(pipefd[1]);
-        if (ret != 0) {
-            fprintf(stderr, "close() failed: %s\n", strerror(errno));
-        }
         assert(ret == 0);
 
         char read_buf[test_msg_len];
@@ -40,9 +31,6 @@ int main(void)
         size_t total_read = 0;
         while (total_read < test_msg_len) {
             ret = read(pipefd[0], buf, 1);
-            if (ret < 0) {
-                fprintf(stderr, "read() failed: %s\n", strerror(errno));
-            }
             assert(ret == 1);
             read_buf[total_read] = buf[0];
             total_read++;
@@ -51,36 +39,21 @@ int main(void)
         assert(memcmp(read_buf, test_msg, test_msg_len) == 0);
 
         ret = close(pipefd[0]);
-        if (ret != 0) {
-            fprintf(stderr, "close() failed: %s\n", strerror(errno));
-        }
         assert(ret == 0);
 
         exit(0);
     } else {
         /* Parent writes to pipe */
         ret = close(pipefd[0]);
-        if (ret != 0) {
-            fprintf(stderr, "close() failed: %s\n", strerror(errno));
-        }
         assert(ret == 0);
 
         ret = write(pipefd[1], test_msg, test_msg_len);
-        if (ret < 0) {
-            fprintf(stderr, "write() failed: %s\n", strerror(errno));
-        }
         assert(ret == (int)test_msg_len);
 
         ret = close(pipefd[1]);
-        if (ret != 0) {
-            fprintf(stderr, "close() failed: %s\n", strerror(errno));
-        }
         assert(ret == 0);
 
         pid_t waited_pid = waitpid(cpid, &status, 0);
-        if (waited_pid < 0) {
-            fprintf(stderr, "waitpid() failed: %s\n", strerror(errno));
-        }
         assert(waited_pid == cpid);
         assert(WIFEXITED(status));
         assert(WEXITSTATUS(status) == 0);
