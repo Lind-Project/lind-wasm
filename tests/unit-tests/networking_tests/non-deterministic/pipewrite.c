@@ -1,41 +1,47 @@
-#include <stdio.h> 
-#include <unistd.h> 
-#include <stdlib.h>
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
-
-
-#define MSGSIZE 16 
-
-char* msg1 = "hello, world #1"; 
-char* msg2 = "hello, world #2"; 
-char* msg3 = "hello, world #3"; 
-  
-int main() 
-{ 
-    char inbuf[MSGSIZE]; 
-    int p[2], i; 
-    int len;
-
-    if (pipe(p) < 0) 
-        exit(1); 
-    printf("Made pipe with write end %d and read end %d\n", p[0], p[1]); 
-    /* continued */
-    /* write pipe */
-  
-    len = write(p[1], msg1, MSGSIZE); 
-    printf("wrote %d\n", len);
-    len = write(p[1], msg2, MSGSIZE); 
-    printf("write %d\n", len);
-    len = write(p[1], msg3, MSGSIZE); 
-    printf("wrote %d\n", len);
-
-    printf("wrote three messages to the pipe\n");
-
-    for (i = 0; i < 3; i++) { 
-        /* read pipe */
-        int len = read(p[0], inbuf, MSGSIZE); 
-        printf("msg %d, length %d: % s\n", i, len, inbuf); 
-    } 
+int main(void)
+{
+    const char *msg1 = "one\n";
+    const char *msg2 = "two\n";
+    const char *msg3 = "three\n";
+    const size_t msg1_len = 4;
+    const size_t msg2_len = 4;
+    const size_t msg3_len = 6;
+    const size_t total_len = msg1_len + msg2_len + msg3_len;
+    const char *expected = "one\ntwo\nthree\n";
     
-    return 0; 
+    char read_buf[total_len];
+    int p[2];
+    int ret;
+
+    ret = pipe(p);
+    assert(ret == 0);
+
+    ret = write(p[1], msg1, msg1_len);
+    assert(ret == (int)msg1_len);
+
+    ret = write(p[1], msg2, msg2_len);
+    assert(ret == (int)msg2_len);
+
+    ret = write(p[1], msg3, msg3_len);
+    assert(ret == (int)msg3_len);
+
+    assert(total_len == strlen(expected));
+
+    ret = read(p[0], read_buf, total_len);
+    assert(ret == (int)total_len);
+
+    assert(memcmp(read_buf, expected, total_len) == 0);
+
+    ret = close(p[0]);
+    assert(ret == 0);
+
+    ret = close(p[1]);
+    assert(ret == 0);
+
+    return 0;
 } 

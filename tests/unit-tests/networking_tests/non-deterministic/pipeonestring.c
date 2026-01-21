@@ -1,44 +1,89 @@
-#include <sys/wait.h>
+#include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
-#define BUFSIZE 16
-
-int main(int argc, char *argv[])
+int main(void)
 {
+    const char *test_msg = "Hey Nick!\n";
+    const size_t test_msg_len = strlen(test_msg);
     int pipefd[2];
     pid_t cpid;
-    char buf[BUFSIZE] = {0};
+    int ret;
+    int status;
 
-    if (pipe(pipefd) == -1) {
-        perror("pipe");
-        exit(EXIT_FAILURE);
+    ret = pipe(pipefd);
+    if (ret != 0) {
+        fprintf(stderr, "pipe() failed: %s\n", strerror(errno));
     }
+    assert(ret == 0);
+
     cpid = fork();
-    if (cpid == -1) {
-        perror("fork");
-        exit(EXIT_FAILURE);
+    if (cpid < 0) {
+        fprintf(stderr, "fork() failed: %s\n", strerror(errno));
     }
-    if (cpid == 0) {    /* Child reads from pipe */
-        printf("I'm child with pid: %d\n", cpid);
-        fflush(stdout);
-        close(pipefd[1]);          /* Close unused write end */
-        read(pipefd[0], buf, BUFSIZE);
-        write(STDOUT_FILENO, buf, BUFSIZE);
+    assert(cpid >= 0);
 
-        close(pipefd[0]);
-        _exit(EXIT_SUCCESS);
-    } else {            /* Parent writes argv[1] to pipe */
-        close(pipefd[0]);          /* Close unused read end */
-        printf("about to write to pipe in parent\n");
-        printf("I'm parent with pid: %d\n", cpid);
-        fflush(stdout);
-	    write(pipefd[1], "Hey Nick!\n", strlen("Hey Nick!\n"));
-        close(pipefd[1]);          /* Reader will see EOF */
-        wait(NULL);                /* Wait for child */
-        exit(EXIT_SUCCESS);
+    if (cpid == 0) {
+        /* Child reads from pipe */
+        ret = close(pipefd[1]);
+        if (ret != 0) {
+            fprintf(stderr, "close() failed: %s\n", strerror(errno));
+        }
+        assert(ret == 0);
+
+        char read_buf[test_msg_len];
+        size_t total_read = 0;
+        while (total_read < test_msg_len) {
+            ret = read(pipefd[0], read_buf + total_read, test_msg_len - total_read);
+            if (ret < 0) {
+                fprintf(stderr, "read() failed: %s\n", strerror(errno));
+            }
+            assert(ret > 0);
+            total_read += ret;
+        }
+        assert(total_read == test_msg_len);
+        assert(memcmp(read_buf, test_msg, test_msg_len) == 0);
+
+        ret = close(pipefd[0]);
+        if (ret != 0) {
+            fprintf(stderr, "close() failed: %s\n", strerror(errno));
+        }
+        assert(ret == 0);
+
+        exit(0);
+    } else {
+        /* Parent writes to pipe */
+        ret = close(pipefd[0]);
+        if (ret != 0) {
+            fprintf(stderr, "close() failed: %s\n", strerror(errno));
+        }
+        assert(ret == 0);
+
+        ret = write(pipefd[1], test_msg, test_msg_len);
+        if (ret < 0) {
+            fprintf(stderr, "write() failed: %s\n", strerror(errno));
+        }
+        assert(ret == (int)test_msg_len);
+
+        ret = close(pipefd[1]);
+        if (ret != 0) {
+            fprintf(stderr, "close() failed: %s\n", strerror(errno));
+        }
+        assert(ret == 0);
+
+        pid_t waited_pid = waitpid(cpid, &status, 0);
+        if (waited_pid < 0) {
+            fprintf(stderr, "waitpid() failed: %s\n", strerror(errno));
+        }
+        assert(waited_pid == cpid);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
     }
+
+    return 0;
 }
 
