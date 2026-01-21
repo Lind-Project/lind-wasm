@@ -762,6 +762,16 @@ impl RunCommand {
                 };
 
                 // 3) Store the vmctx wrapper in the global table for later retrieval during grate calls
+                // This function will be called at either the first cage or exec-ed cages. If there is already
+                // a vmctx stored for this cage id, we remove it first to avoid stale vmctx pointer.
+                if cageid != CAGE_START_ID as u64 {
+                    if !rm_vmctx(cageid) {
+                        panic!(
+                            "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
+                            cageid
+                        );
+                    }
+                }
                 set_vmctx(cageid, vmctx_wrapper);
 
                 // 4) Notify threei of the cage runtime type
