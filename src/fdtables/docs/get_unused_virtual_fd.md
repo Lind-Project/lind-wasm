@@ -14,6 +14,7 @@ actually care what fd you are assigned.
 ```
 # use fdtables::*;
 # let cage_id = threei::TESTING_CAGEID;
+# init_empty_cage(cage_id);
 # let underfd: u64 = 10;
 # let fdkind: u32 = 0;
 // Should not error...

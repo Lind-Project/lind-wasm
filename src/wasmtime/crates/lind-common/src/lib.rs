@@ -8,6 +8,7 @@ use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
 use threei::threei_const;
+use typemap::path_conversion::get_cstr;
 use wasmtime::Caller;
 use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
@@ -22,140 +23,13 @@ use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_ba
 // all of them.
 use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
-// lind-common serves as the main entry point when lind_syscall. Any syscalls made in glibc would reach here first,
-// then the syscall would be dispatched into rawposix, or other crates under wasmtime, depending on the syscall, to perform its job
-
-#[derive(Clone)]
-// stores some attributes associated with current runnning wasm instance (i.e. cage)
-// each cage has its own lind-common context
-pub struct LindCommonCtx {
-    // process id attached to the lind-common context, should be same as cage id
-    cageid: i32,
-
-    // next cage id, shared between all lind-common context instance (i.e. all cages)
-    next_cageid: Arc<AtomicU64>,
-}
-
-impl LindCommonCtx {
-    // create a new lind-common context, should only be called once for then entire runtime
-    pub fn new(next_cageid: Arc<AtomicU64>) -> Result<Self> {
-        // cage id starts from 1
-        let cageid = 1;
-        Ok(Self {
-            cageid,
-            next_cageid,
-        })
-    }
-
-    // create a new lind-common context with cageid provided, used by exec syscall
-    pub fn new_with_cageid(cageid: i32, next_cageid: Arc<AtomicU64>) -> Result<Self> {
-        Ok(Self {
-            cageid,
-            next_cageid,
-        })
-    }
-
-    // entry point for lind_syscall in glibc, dispatching syscalls to rawposix or wasmtime
-    pub fn lind_syscall<
-        T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-        U: Clone + Send + 'static + std::marker::Sync,
-    >(
-        &self,
-        call_number: u32,
-        call_name: u64,
-        caller: &mut Caller<'_, T>,
-        self_cageid: u64,
-        target_cageid: u64,
-        arg1: u64,
-        arg1cageid: u64,
-        arg2: u64,
-        arg2cageid: u64,
-        arg3: u64,
-        arg3cageid: u64,
-        arg4: u64,
-        arg4cageid: u64,
-        arg5: u64,
-        arg5cageid: u64,
-        arg6: u64,
-        arg6cageid: u64,
-    ) -> i32 {
-        let start_address = get_memory_base(&caller);
-        // todo:
-        // replacing the execution path by calling to 3i first
-        match call_number as i32 {
-            // clone syscall
-            CLONE_SYSCALL => {
-                let clone_args = unsafe { &mut *(arg1 as *mut CloneArgStruct) };
-                // clone_args.child_tid += start_address;
-                wasmtime_lind_multi_process::clone_syscall(caller, clone_args)
-            }
-            // exec syscall
-            EXEC_SYSCALL => wasmtime_lind_multi_process::exec_syscall(
-                caller,
-                arg1 as i64,
-                arg2 as i64,
-                arg3 as i64,
-            ),
-            // exit syscall
-            EXIT_SYSCALL => wasmtime_lind_multi_process::exit_syscall(caller, arg1 as i32),
-            // other syscalls goes into rawposix
-            _ => make_syscall(
-                self.cageid as u64,
-                call_number as u64,
-                call_name as u64,
-                target_cageid,
-                arg1,
-                arg1cageid,
-                arg2,
-                arg2cageid,
-                arg3,
-                arg3cageid,
-                arg4,
-                arg4cageid,
-                arg5,
-                arg5cageid,
-                arg6,
-                arg6cageid,
-            ),
-        }
-    }
-
-    // return the next avaliable cageid (cageid increment sequentially)
-    fn next_cage_id(&self) -> Option<u64> {
-        match self
-            .next_cageid
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| match v {
-                ..=0x1ffffffe => Some(v + 1),
-                _ => None,
-            }) {
-            Ok(v) => Some(v + 1),
-            Err(_) => None,
-        }
-    }
-
-    // fork a new lind-common context, used by clone syscall
-    pub fn fork(&self) -> Self {
-        // cageid is automatically incremented here
-        let next_cageid = self.next_cage_id().unwrap();
-
-        let forked_ctx = Self {
-            cageid: next_cageid as i32,
-            next_cageid: self.next_cageid.clone(),
-        };
-
-        return forked_ctx;
-    }
-}
-
 // function to expose the handler to wasm module
 // linker: wasmtime's linker to link the imported function to the actual function definition
-// get_cx: function to retrieve LindCommonCtx from caller
 pub fn add_to_linker<
     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     linker: &mut wasmtime::Linker<T>,
-    get_cx: impl Fn(&T) -> &LindCommonCtx + Send + Sync + Copy + 'static,
 ) -> anyhow::Result<()> {
     // attach make_syscall to wasmtime
     linker.func_wrap(
@@ -179,33 +53,48 @@ pub fn add_to_linker<
               arg6: u64,
               arg6cageid: u64|
               -> i32 {
-            let host = caller.data().clone();
-            let ctx = get_cx(&host);
-
-            let retval = ctx.lind_syscall(
-                call_number,
-                call_name,
-                &mut caller,
-                self_cageid,
-                target_cageid,
-                arg1,
-                arg1cageid,
-                arg2,
-                arg2cageid,
-                arg3,
-                arg3cageid,
-                arg4,
-                arg4cageid,
-                arg5,
-                arg5cageid,
-                arg6,
-                arg6cageid,
-            );
-
-            // TODO: add a signal check here as Linux also has a signal check when transition from kernel to userspace
+            // TODO:
+            // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
+            // 2. call clone_syscall / exec_syscall / exit_syscall from rawposix first instead of wasmtime_lind_multi_process in
+            // the future PR
 
-            retval
+            match call_number as i32 {
+                // clone syscall
+                CLONE_SYSCALL => {
+                    let clone_args = unsafe { &mut *(arg1 as *mut CloneArgStruct) };
+                    // clone_args.child_tid += start_address;
+                    wasmtime_lind_multi_process::clone_syscall(&mut caller, clone_args)
+                }
+                // exec syscall
+                EXEC_SYSCALL => wasmtime_lind_multi_process::exec_syscall(
+                    &mut caller,
+                    arg1 as i64,
+                    arg2 as i64,
+                    arg3 as i64,
+                ),
+                // exit syscall
+                EXIT_SYSCALL => wasmtime_lind_multi_process::exit_syscall(&mut caller, arg1 as i32),
+                // other syscalls goes into threei
+                _ => make_syscall(
+                    self_cageid,
+                    call_number as u64,
+                    call_name,
+                    target_cageid,
+                    arg1,
+                    arg1cageid,
+                    arg2,
+                    arg2cageid,
+                    arg3,
+                    arg3cageid,
+                    arg4,
+                    arg4cageid,
+                    arg5,
+                    arg5cageid,
+                    arg6,
+                    arg6cageid,
+                ),
+            }
         },
     )?;
 
@@ -304,6 +193,13 @@ pub fn add_to_linker<
         },
     )?;
 
+    // attach lind-debug-panic to wasmtime
+    linker.func_wrap("lind", "debug-panic", move |str: u64| -> () {
+        let _panic_str = unsafe { std::ffi::CStr::from_ptr(str as *const i8).to_str().unwrap() };
+
+        sysdefs::logging::lind_debug_panic(format!("FROM GUEST: {}", _panic_str).as_str());
+    })?;
+
     // attach setjmp to wasmtime
     linker.func_wrap(
         "lind",
@@ -331,5 +227,28 @@ pub fn add_to_linker<
         },
     )?;
 
+    #[cfg(feature = "lind_debug")]
+    {
+        linker.func_wrap(
+            "debug",
+            "lind_debug_num",
+            move |_caller: Caller<'_, T>, num: u32| -> u32 {
+                eprintln!("[LIND DEBUG NUM]: {}", num);
+                num // Return the value to the WASM stack
+            },
+        )?;
+
+        linker.func_wrap(
+            "debug",
+            "lind_debug_str",
+            move |caller: Caller<'_, T>, ptr: i32| -> i32 {
+                let mem_base = get_memory_base(&caller);
+                if let Ok(msg) = get_cstr(mem_base + ptr as u64) {
+                    eprintln!("[LIND DEBUG STR]: {}", msg);
+                }
+                ptr // Return the pointer to the WASM stack
+            },
+        )?;
+    }
     Ok(())
 }

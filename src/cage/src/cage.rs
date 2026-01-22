@@ -9,7 +9,7 @@ pub use once_cell::sync::Lazy;
 /// interaction and increases efficiency.
 pub use parking_lot::{Mutex, RwLock};
 pub use std::path::{Path, PathBuf};
-pub use std::sync::atomic::{AtomicI32, AtomicU64};
+pub use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 pub use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::MAX_CAGEID;
 use sysdefs::data::fs_struct::SigactionStruct;
@@ -123,7 +123,9 @@ pub fn remove_cage(cageid: u64) {
 }
 
 pub fn get_cage(cageid: u64) -> Option<Arc<Cage>> {
-    check_cageid(cageid);
+    if cageid >= MAX_CAGEID as u64 {
+        return None;
+    }
     unsafe {
         match CAGE_MAP[cageid as usize].as_ref() {
             Some(cage) => Some(cage.clone()),
@@ -148,4 +150,90 @@ pub fn cagetable_clear() -> Vec<usize> {
     }
 
     exitvec
+}
+
+/// Global cage ID allocator shared across all cages and subsystems.
+///
+/// This allocator exists because cage IDs cannot be derived from the
+/// current cage's ID (e.g., `current_id + 1`).  Forking does not
+/// guarantee that the parent cage's numeric ID is the latest assigned:
+///
+/// Example:
+///    - Cage 10 exists
+///    - Other subsystem creates Cage 11
+///    - Cage 10 now calls fork()
+///
+/// In this situation, the next available cage ID must be 12, not 11.
+/// Therefore, we must maintain a globally monotonic counter that tracks
+/// the highest cage ID ever assigned, independent of which cage performs
+/// the fork.
+///
+/// `AtomicU64::fetch_update` ensures unique, monotonic, thread-safe allocation.
+static NEXT_CAGEID: AtomicU64 = AtomicU64::new(1);
+
+/// Allocate the next available cage ID.
+///
+/// Returns `Some(id)` on success, or `None` if the ID space has been exhausted.
+/// The returned `id` is guaranteed to be strictly greater than any previously
+/// allocated ID, even under concurrent calls.
+pub fn alloc_cage_id() -> Option<u64> {
+    match NEXT_CAGEID.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+        (v <= MAX_CAGEID as u64).then_some(v + 1)
+    }) {
+        Ok(v) => Some(v + 1),
+        Err(_) => None,
+    }
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_cage_out_of_range() {
+        cagetable_init();
+        let larger_cage_id = 9999999;
+        let result = get_cage(larger_cage_id);
+        assert! {
+            result.is_none(),
+            "get_cage should return none when cage_id >= MAX_CAGE_ID"
+        };
+
+        // test with max u64 value
+        let max_cage_id = u64::MAX;
+        let result = get_cage(max_cage_id);
+        assert! {
+            result.is_none(),
+            "get_cage should return none when cage_id >= MAX_CAGE_ID"
+        };
+    }
+
+    #[test]
+    fn test_get_cage_valid() {
+        cagetable_init();
+        // Create a cage with ID 2
+        let test_cage = Cage {
+            cageid: 2,
+            parent: 1,
+            cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
+            rev_shm: Mutex::new(Vec::new()),
+            signalhandler: DashMap::new(),
+            sigset: AtomicU64::new(0),
+            pending_signals: RwLock::new(vec![]),
+            epoch_handler: DashMap::new(),
+            main_threadid: RwLock::new(0),
+            interval_timer: crate::timer::IntervalTimer::new(2),
+            zombies: RwLock::new(vec![]),
+            child_num: AtomicU64::new(0),
+            vmmap: RwLock::new(crate::memory::vmmap::Vmmap::new()),
+        };
+
+        add_cage(2, tet_cage);
+
+        let result = get_cage(2);
+        assert_eq!(
+            result.unwrap().cageid,
+            2,
+            "Retrieved cage should have correct ID"
+        );
+    }
 }
