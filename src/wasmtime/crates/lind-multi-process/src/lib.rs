@@ -3,7 +3,7 @@
 use cfg_if::cfg_if;
 
 use anyhow::{anyhow, Result};
-use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::threei::make_syscall;
 use wasmtime_lind_3i::remove_gratefn_wasm;
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
@@ -929,15 +929,8 @@ impl<
             }
         }
 
-        // if user is passing absolute path, we need to first convert it to a relative path
-        // by removing prefix "/" at the beginning, then join with lind filesystem root folder
-        let usr_path = Path::new(path_str)
-            .strip_prefix("/")
-            .unwrap_or(Path::new(path_str));
-
-        // NOTE: join method will replace the original path if joined path is an absolute path
-        // so must make sure the usr_path is not absolute otherwise it may escape the lind filesystem
-        let real_path = Path::new(LIND_ROOT).join(usr_path);
+        // Use the path as-is from the user
+        let real_path = PathBuf::from(path_str);
         let real_path_str = String::from(real_path.to_str().unwrap());
 
         // if the file to exec does not exist

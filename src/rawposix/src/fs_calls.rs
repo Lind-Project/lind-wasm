@@ -15,7 +15,6 @@ use sysdefs::constants::fs_const::{
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
 use sysdefs::constants::sys_const::{DEFAULT_GID, DEFAULT_UID};
-use sysdefs::constants::LIND_ROOT;
 use sysdefs::logging::lind_debug_panic;
 use typemap::cage_helpers::*;
 use typemap::datatype_conversion::*;
@@ -1778,60 +1777,15 @@ pub fn readlink_syscall(
         );
     }
 
-    // We extend the buffer length by `LIND_ROOT.len()` because the host path
-    // is prefixed with `LIND_ROOT``, increasing its length. A new buffer is
-    // allocated instead of reusing the user buffer, since the transformed
-    // path may exceed the original user-allocated region.
-    let libc_buflen = buflen + LIND_ROOT.len();
-    let mut libc_buf = vec![0u8; libc_buflen];
-    let libcret = unsafe {
-        libc::readlink(
-            path.as_ptr(),
-            libc_buf.as_mut_ptr() as *mut c_char,
-            libc_buflen,
-        )
-    };
+    // Call to kernel readlink
+    let bytes_written = unsafe { libc::readlink(path.as_ptr(), buf as *mut libc::c_char, buflen) };
 
-    if libcret < 0 {
+    if bytes_written < 0 {
         let errno = get_errno();
         return handle_errno(errno, "readlink");
     }
-    // Convert the result from readlink to a Rust string
-    let libcbuf_str = unsafe { CStr::from_ptr(libc_buf.as_ptr() as *const c_char) }
-        .to_str()
-        .unwrap();
 
-    // Use libc::getcwd to get the current working directory
-    let mut cwd_buf = vec![0u8; 4096];
-    let cwd_ptr = unsafe { libc::getcwd(cwd_buf.as_mut_ptr() as *mut c_char, cwd_buf.len()) };
-    if cwd_ptr.is_null() {
-        let errno = get_errno();
-        return handle_errno(errno, "getcwd");
-    }
-
-    let pwd = unsafe { CStr::from_ptr(cwd_buf.as_ptr() as *const c_char) }
-        .to_str()
-        .unwrap();
-
-    // Adjust the result to user perspective
-    // Verify if libcbuf_str starts with the current working directory (pwd)
-    let adjusted_result = if libcbuf_str.starts_with(pwd) {
-        libcbuf_str.to_string()
-    } else {
-        format!("{}/{}", pwd, libcbuf_str)
-    };
-    let new_root = format!("{}/", LIND_ROOT);
-    let final_result = adjusted_result
-        .strip_prefix(&new_root)
-        .unwrap_or(&adjusted_result);
-
-    // Check the length and copy the appropriate amount of data to buf
-    let bytes_to_copy = std::cmp::min(buflen, final_result.len());
-    unsafe {
-        std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf, bytes_to_copy);
-    }
-
-    bytes_to_copy as i32
+    bytes_written as i32
 }
 
 /// `readlinkat` reads the value of a symbolic link relative to a directory file descriptor.
@@ -1874,7 +1828,7 @@ pub fn readlinkat_syscall(
     // Type conversion
     let virtual_fd = sc_convert_sysarg_to_i32(dirfd_arg, dirfd_cageid, cageid);
     let path = sc_convert_path_to_host(path_arg, path_cageid, cageid);
-    let buf = buf_arg as *mut u8;
+    let buf = buf_arg as *mut c_char;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
 
     // Validate unused args
@@ -1885,62 +1839,26 @@ pub fn readlinkat_syscall(
         );
     }
 
-    // We extend the buffer length by `LIND_ROOT.len()` because the host path
-    // is prefixed with `LIND_ROOT``, increasing its length. A new buffer is
-    // allocated instead of reusing the user buffer, since the transformed
-    // path may exceed the original user-allocated region.
-    let libc_buflen = buflen + LIND_ROOT.len();
-    let mut libc_buf = vec![0u8; libc_buflen];
-
-    let libcret = if virtual_fd == libc::AT_FDCWD {
-        // Case 1: AT_FDCWD - path is already converted by sc_convert_path_to_host
-        unsafe {
-            libc::readlink(
-                path.as_ptr(),
-                libc_buf.as_mut_ptr() as *mut c_char,
-                libc_buflen,
-            )
-        }
+    let ret = if virtual_fd == libc::AT_FDCWD {
+        unsafe { libc::readlink(path.as_ptr(), buf, buflen) }
     } else {
         // Case 2: Specific directory fd
         let kernel_fd = convert_fd_to_host(virtual_fd as u64, dirfd_cageid, cageid);
         // Return error
         if kernel_fd < 0 {
-            return handle_errno(kernel_fd, "read");
+            return handle_errno(kernel_fd, "readlinkat");
         }
 
         // path is already converted by sc_convert_path_to_host
-        unsafe {
-            libc::readlinkat(
-                kernel_fd,
-                path.as_ptr(),
-                libc_buf.as_mut_ptr() as *mut c_char,
-                libc_buflen,
-            )
-        }
+        unsafe { libc::readlinkat(kernel_fd, path.as_ptr(), buf, buflen) }
     };
 
-    if libcret < 0 {
+    if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "readlinkat");
     }
 
-    // Convert the result from readlink to a Rust string
-    let libcbuf_str = unsafe { CStr::from_ptr(libc_buf.as_ptr() as *const c_char) }
-        .to_str()
-        .unwrap();
-
-    // Adjust the result to remove LIND_ROOT prefix if present
-    let new_root = format!("{}/", LIND_ROOT);
-    let final_result = libcbuf_str.strip_prefix(&new_root).unwrap_or(libcbuf_str);
-
-    // Check the length and copy the appropriate amount of data to buf
-    let bytes_to_copy = std::cmp::min(buflen, final_result.len());
-    unsafe {
-        std::ptr::copy_nonoverlapping(final_result.as_ptr(), buf as *mut u8, bytes_to_copy);
-    }
-
-    bytes_to_copy as i32
+    ret as i32
 }
 
 //------------------RENAME SYSCALL------------------
@@ -2522,7 +2440,7 @@ pub fn fchdir_syscall(
     if !cwd_ptr.is_null() {
         if let Some(cage) = get_cage(cageid) {
             let host_path = unsafe { std::ffi::CStr::from_ptr(cwd_ptr) }.to_string_lossy();
-            let user_path = strip_lind_root(&host_path);
+            let user_path = PathBuf::from(host_path.as_ref());
             let mut cwd = cage.cwd.write();
             *cwd = Arc::new(user_path);
         }
@@ -3081,8 +2999,7 @@ pub fn chdir_syscall(
 
     // Update the cage's current working directory
     if let Some(cage) = get_cage(cageid) {
-        let host_path = path.to_string_lossy();
-        let user_path = strip_lind_root(&host_path);
+        let user_path = PathBuf::from(path.to_string_lossy().as_ref());
         let mut cwd = cage.cwd.write();
         *cwd = Arc::new(user_path);
     }
