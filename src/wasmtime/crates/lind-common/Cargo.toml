@@ -21,3 +21,7 @@ wasmtime-lind-utils = { path = "../lind-utils" }
 sysdefs = { path = "../sysdefs" }
 wasmtime-lind-3i = { path = "../lind-3i" }
 cage = { path = "../cage" }
+typemap = { path = "../typemap" }
+
+[features]
+lind_debug = []

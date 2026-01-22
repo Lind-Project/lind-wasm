@@ -68,6 +68,10 @@ SYS_INCLUDE="-nostdinc -isystem ${RESOURCE_DIR}/include -isystem /usr/i686-linux
 DEFINES="-D_LIBC_REENTRANT -include $BUILD/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
+# Check if LIND_DEBUG is defined (set by build.rs when `lind_debug` is enabled)
+if [ "$LIND_DEBUG" ]; then
+  DEFINES="$DEFINES -DLIND_DEBUG"
+fi
 
 # Build glibc
 rm -rf $BUILD
@@ -78,6 +82,7 @@ cd $BUILD
   --disable-werror \
   --disable-hidden-plt \
   --disable-profile \
+  --disable-nscd \
   --with-headers=/usr/i686-linux-gnu/include \
   --prefix=$GLIBC/target \
   --host=i686-linux-gnu \
@@ -107,6 +112,12 @@ $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
     $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
     -o $BUILD/addr_translation.o \
     -c $GLIBC/lind_syscall/addr_translation.c
+    
+# Compile lind debug module
+$CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
+    $INCLUDE_PATHS $SYS_INCLUDE $DEFINES $EXTRA_DEFINES \
+    -o $BUILD/lind_debug.o \
+    -c $GLIBC/lind_syscall/lind_debug.c
 
 # Compile crt1.c
 $CC $CFLAGS $WARNINGS $EXTRA_FLAGS \
