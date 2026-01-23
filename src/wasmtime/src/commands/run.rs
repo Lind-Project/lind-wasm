@@ -315,8 +315,14 @@ impl RunCommand {
                         let dylink_info = dylink_info.as_ref().unwrap();
 
                         let size = dylink_info.memory_size;
-                        let align = dylink_info.memory_alignment;
+                        let mut align = {
+                            // minimal memory alignment for lind: 8 bytes (2^3)
+                            if dylink_info.memory_alignment < 3 { 3 }
+                            else { dylink_info.memory_alignment }
+                        };
+                        align = (1 << align) - 1;
                         memory_size = (size + align) & !align;
+                        println!("[debug] main module dylink_info memory size: {}, alignment: {}, after align: {}", size, align, memory_size);
                     }
                     #[cfg(feature = "component-model")]
                     RunTarget::Component(_) => {
@@ -335,6 +341,7 @@ impl RunCommand {
                 // println!("[debug]: main module memory size: {}", memory_size);
                 let stack_low_num = memory_size as i32 + 1024; // reserve first 1024 bytes for guard page
                 let stack_high_num = stack_low_num + 65536; // stack size
+                println!("[debug] main module stack pointer starts from {}", stack_high_num);
                 let stack_low = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_low_num)).unwrap();
                 let stack_high = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
                 linker.define(&mut store, "GOT.mem", "__stack_low", stack_low);
@@ -347,7 +354,8 @@ impl RunCommand {
                 // }
 
                 // for main module, both memory base and table base starts from zero
-                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
+                println!("[debug] define main module memory base");
+                let memory_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(1024)).unwrap();
                 let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Const), Val::I32(0)).unwrap();
                 linker.define(&mut store, "env", "__memory_base", memory_base);
                 linker.define(&mut store, "env", "__table_base", table_base);

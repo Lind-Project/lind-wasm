@@ -257,7 +257,12 @@ impl<T> Linker<T> {
     pub fn define_weak_imports_as_traps(&mut self, module: &Module) -> anyhow::Result<()> {
         // for weak symbols, it should be resolved to NULL if it is not defined by any module
         // in wasm, we will instead link these symbols into a panic function
-        let weak_imports = module.dylink_importinfo().unwrap();
+        let weak_imports = module.dylink_importinfo();
+        if weak_imports.is_none() {
+            println!("[debug]: no weak imports found");
+            return Ok(());
+        }
+        let weak_imports = weak_imports.unwrap();
         for import in module.imports() {
             // only trap the weak symbols that are NOT already defined
             if let Err(import_err) = self._get_by_import(&import) {
@@ -914,6 +919,9 @@ impl<T> Linker<T> {
                 let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base)).unwrap();
                 module_linker.define(&mut store, "env", "__table_base", table_base);
 
+                // TODO: temporarily direct unknown imports into traps
+                module_linker.define_unknown_imports_as_traps(module);
+
                 println!("[debug] library instantiate");
                 let (instance, _) = module_linker.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib(handler))?;
 
@@ -952,11 +960,16 @@ impl<T> Linker<T> {
                 for (name, global) in globals {
                     let val = global.get(&mut store);
                     // relocate the variable
+                    println!("[debug] add {} to {} ({})", val.i32().unwrap() as u32, memory_base, name);
                     let val = val.i32().unwrap() as u32 + memory_base;
                     if got.update_entry_if_exist(&name, val) {
                         println!("[debug] update GOT.mem.{} to {}", name, val);
                     }
                 }
+
+                // println!("[debug] library init addr translation");
+                // let addr_init_func = instance.get_func(&mut store, "lind_init_addr_translation").unwrap();
+                // addr_init_func.typed::<(), ()>(&store)?.call(&mut store, ())?;
 
                 // if let Some(export) = instance.get_export(&mut store, "lib_function") {
                 //     if let Extern::Func(func) = export {

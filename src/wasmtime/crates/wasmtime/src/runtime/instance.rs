@@ -284,7 +284,8 @@ impl Instance {
                 drop(memory_iter);
                 let memory_base = memory.data_ptr(&mut *store) as usize;
 
-                init_vmmap(cageid, memory_base, Some(minimal_pages as u32));
+                let module_page = module_rounded_size >> PAGESHIFT;
+                init_vmmap(cageid, memory_base, Some(minimal_pages as u32 + module_page));
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
@@ -371,17 +372,41 @@ impl Instance {
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
         if let Some(start) = start {
+            println!("[debug] start func");
             instance.start_raw(store, start)?;
         }
 
         match instantiate_type {
+            InstantiateType::InstantiateFirst(_) => {
+                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                println!("[debug] main module start reloc func");
+                let res = reloc.call(store.as_context_mut(), ());
+                println!("[debug] main module reloc result: {:?}", res);
+
+                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    println!("[debug] main module start __wasm_apply_tls_relocs");
+                    let res = init.call(store.as_context_mut(), ());
+                    println!("[debug] main module __wasm_apply_tls_relocs result: {:?}", res);
+                }
+            },
+            InstantiateType::InstantiateChild{parent_pid, child_pid} => {
+                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                println!("[debug] child start reloc func");
+                let res = reloc.call(store.as_context_mut(), ());
+                println!("[debug] child reloc result: {:?}", res);
+            },
             InstantiateType::InstantiateLib(_) => {
                 let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
                 println!("[debug] library start reloc func");
                 let res = reloc.call(store.as_context_mut(), ());
-                println!("[debug] reloc result: {:?}", res);
-            },
-            _ => {}
+                println!("[debug] library reloc result: {:?}", res);
+
+                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    println!("[debug] library start __wasm_apply_tls_relocs");
+                    let res = init.call(store.as_context_mut(), ());
+                    println!("[debug] library __wasm_apply_tls_relocs result: {:?}", res);
+                }
+            }
         }
 
         Ok((instance, instanceid))

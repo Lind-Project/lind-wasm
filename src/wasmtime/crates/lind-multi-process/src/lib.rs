@@ -416,8 +416,8 @@ impl<
                         .instantiate_with_lind(
                             &mut store,
                             InstantiateType::InstantiateChild {
-                                parent_cageid: parent_cageid as u64,
-                                child_cageid: child_cageid,
+                                parent_pid: parent_cageid as u64,
+                                child_pid: child_cageid,
                             },
                         )
                         .unwrap();
