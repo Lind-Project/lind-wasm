@@ -109,8 +109,9 @@ ENV LIND_WASM_ROOT=/home/${USERNAME}/lind-wasm
 USER root
 RUN install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_compile /usr/local/bin/lind_compile \
  && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_run     /usr/local/bin/lind_run     \
+ && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/cargo-lind_compile	/usr/local/bin/cargo-lind_compile \ 
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
- && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
 USER ${USERNAME}
 
 CMD ["/bin/bash"]
