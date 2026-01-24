@@ -1052,6 +1052,13 @@ pub fn setitimer_syscall(
 /// detailed error messages will be printed if set
 pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
+    unsafe {
+        let tmp_path = CString::new("/tmp").unwrap();
+        libc::mkdir(tmp_path.as_ptr(), 0o755);
+        let ret = libc::chroot(tmp_path.as_ptr());
+        let root = CString::new("/").unwrap();
+        libc::chdir(root.as_ptr());
+    }
     cagetable_init();
 
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
