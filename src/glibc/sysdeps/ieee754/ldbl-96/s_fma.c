@@ -51,8 +51,9 @@ __fma (double x, double y, double z)
     }
 
   fenv_t env;
-  feholdexcept (&env);
-  fesetround (FE_TONEAREST);
+  // lind-wasm: disable floating point environment settings
+  // feholdexcept (&env);
+  // fesetround (FE_TONEAREST);
 
   /* Multiplication m1 + m2 = x * y using Dekker's algorithm.  */
 #define C ((1ULL << (LDBL_MANT_DIG + 1) / 2) + 1)
@@ -75,27 +76,27 @@ __fma (double x, double y, double z)
   /* Ensure the arithmetic is not scheduled after feclearexcept call.  */
   math_force_eval (m2);
   math_force_eval (a2);
-  feclearexcept (FE_INEXACT);
+  // feclearexcept (FE_INEXACT);
 
   /* If the result is an exact zero, ensure it has the correct sign.  */
   if (a1 == 0 && m2 == 0)
     {
-      feupdateenv (&env);
+      // feupdateenv (&env);
       /* Ensure that round-to-nearest value of z + m1 is not reused.  */
       z = math_opt_barrier (z);
       return z + m1;
     }
 
-  fesetround (FE_TOWARDZERO);
+  // fesetround (FE_TOWARDZERO);
   /* Perform m2 + a2 addition with round to odd.  */
   a2 = a2 + m2;
 
   /* Add that to a1 again using rounding to odd.  */
   union ieee854_long_double u;
   u.d = a1 + a2;
-  if ((u.ieee.mantissa1 & 1) == 0 && u.ieee.exponent != 0x7fff)
-    u.ieee.mantissa1 |= fetestexcept (FE_INEXACT) != 0;
-  feupdateenv (&env);
+  // if ((u.ieee.mantissa1 & 1) == 0 && u.ieee.exponent != 0x7fff)
+  //   u.ieee.mantissa1 |= fetestexcept (FE_INEXACT) != 0;
+  // feupdateenv (&env);
 
   /* Add finally round to double precision.  */
   return u.d;

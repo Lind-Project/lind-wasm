@@ -157,6 +157,12 @@ $CC --target=wasm32-wasi-threads -matomics \
 # First, remove the existing sysroot directory to start cleanly
 rm -rf "$SYSROOT"
 
+# manually delete duplicated symbols
+# TODO: we need to eventually figure out why there are
+#       duplicated symbols and how we are supposed to deal
+#       with it. For now, we just delete one of the duplicated object file
+rm $BUILD/nscd/res_hconf.o
+
 # Find all .o files recursively in the source directory, ignoring stamp.o
 object_files=$(find "$BUILD" -type f -name '*.o' \
   ! -name 'stamp.o' \
@@ -184,7 +190,12 @@ filtered_objects=$(
 )
 llvm-ar rcs "$SYSROOT_ARCHIVE" $filtered_objects
 
+# pthread library placeholder
 llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
+# math library placeholder
+llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libm.a"
+# dylink library placeholder
+llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libdl.a"
 
 # Check if llvm-ar succeeded
 if [ $? -eq 0 ]; then
