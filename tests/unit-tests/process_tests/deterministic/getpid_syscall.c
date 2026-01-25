@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <stdbool.h>
+#include <errno.h>
 
 /* ---------- TEST 1: Basic getpid ---------- */
 void test_getpid_basic() {
@@ -25,7 +26,13 @@ void test_getpid_in_child() {
         _exit(0);
     }
 
-    pid_t res = waitpid(pid, NULL, 0);
+    pid_t res;
+    int attempts = 0;
+    do {
+        res = waitpid(pid, NULL, 0);
+        attempts++;
+        assert(attempts < 100000);
+    } while (res == -1 && errno == EINTR);
     assert(res == pid);
 }
 
@@ -55,8 +62,16 @@ void test_getpid_multiple_children() {
     }
 
     /* Reap children in any order */
-    for (int i = 0; i < N; i++) {
+    int reaped_count = 0;
+    int attempts = 0;
+    while (reaped_count < N) {
         pid_t res = waitpid(-1, NULL, 0);
+        attempts++;
+        assert(attempts < 100000);
+
+        if (res == -1 && errno == EINTR) {
+            continue;
+        }
         assert(res > 0);
 
         bool found = false;
@@ -65,6 +80,7 @@ void test_getpid_multiple_children() {
                 assert(!reaped[j]);
                 reaped[j] = true;
                 found = true;
+                reaped_count++;
                 break;
             }
         }
@@ -95,12 +111,24 @@ void test_getpid_nested_forks() {
             _exit(0);
         }
 
-        pid_t r = waitpid(gc, NULL, 0);
+        pid_t r;
+        int attempts = 0;
+        do {
+            r = waitpid(gc, NULL, 0);
+            attempts++;
+            assert(attempts < 100000);
+        } while (r == -1 && errno == EINTR);
         assert(r == gc);
         _exit(0);
     }
 
-    pid_t r = waitpid(pid, NULL, 0);
+    pid_t r;
+    int attempts = 0;
+    do {
+        r = waitpid(pid, NULL, 0);
+        attempts++;
+        assert(attempts < 100000);
+    } while (r == -1 && errno == EINTR);
     assert(r == pid);
 }
 
@@ -122,8 +150,17 @@ void test_getpid_stress() {
         pids[i] = pid;
     }
 
-    for (int i = 0; i < N; i++) {
+    int reaped_count = 0;
+    int attempts = 0;
+    while (reaped_count < N) {
         pid_t res = waitpid(-1, NULL, 0);
+        attempts++;
+        assert(attempts < 100000);
+
+        if (res == -1 && errno == EINTR) {
+            continue;
+        }
+
         assert(res > 0);
 
         bool found = false;
@@ -132,6 +169,7 @@ void test_getpid_stress() {
                 assert(!reaped[j]);
                 reaped[j] = true;
                 found = true;
+                reaped_count++;
                 break;
             }
         }
