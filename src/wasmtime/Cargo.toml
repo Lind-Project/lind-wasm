@@ -362,6 +362,9 @@ semver = { version = "1.0.17", default-features = false }
 # various features. Most features are enabled by default but most embeddings
 # likely won't need all features.
 [features]
+
+lind_debug = ["wasmtime-lind-common/lind_debug"]
+
 default = [
   # All subcommands are included by default.
   "run",

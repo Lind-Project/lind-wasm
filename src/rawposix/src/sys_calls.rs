@@ -246,8 +246,8 @@ pub fn exit_syscall(
 /// zombie list and retrieve the first entry from it (first in, first out).
 pub fn waitpid_syscall(
     cageid: u64,
-    cageid_arg: u64,
-    cageid_arg_cageid: u64,
+    child_cageid_arg: u64,
+    child_cageid_arg_cageid: u64,
     status_arg: u64,
     status_cageid: u64,
     options_arg: u64,
@@ -271,6 +271,8 @@ pub fn waitpid_syscall(
         }
     };
     let options = sc_convert_sysarg_to_i32(options_arg, options_cageid, cageid);
+    let cage_id_to_wait =
+        sc_convert_sysarg_to_i32(child_cageid_arg, child_cageid_arg_cageid, cageid);
     // would check when `secure` flag has been set during compilation,
     // no-op by default
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -303,7 +305,7 @@ pub fn waitpid_syscall(
     // cageid <= 0 means wait for ANY child
     // cageid < 0 actually refers to wait for any child process whose process group ID equals -pid
     // but we do not have the concept of process group in lind, so let's just treat it as cageid == 0
-    if cageid_arg <= 0 {
+    if cage_id_to_wait <= 0 {
         loop {
             if zombies.len() == 0 && (options & WNOHANG > 0) {
                 // if there is no pending zombies and WNOHANG is set
@@ -338,7 +340,7 @@ pub fn waitpid_syscall(
         // first let's check if the cageid is in the zombie list
         if let Some(index) = zombies
             .iter()
-            .position(|zombie| zombie.cageid == cageid_arg as u64)
+            .position(|zombie| zombie.cageid == cage_id_to_wait as u64)
         {
             // find the cage in zombie list, remove it from the list and break
             zombie_opt = Some(zombies.remove(index));
@@ -348,7 +350,7 @@ pub fn waitpid_syscall(
             // 2. the cage has exited, but it is not the child of this cage, or
             // 3. the cage does not exist
             // we need to make sure the child is still running, and it is the child of this cage
-            let child = get_cage(cageid_arg as u64);
+            let child = get_cage(cage_id_to_wait as u64);
             if let Some(child_cage) = child {
                 // make sure the child's parent is correct
                 if child_cage.parent != cage.cageid {
@@ -384,7 +386,7 @@ pub fn waitpid_syscall(
                 // let's check if the zombie list contains the cage
                 if let Some(index) = zombies
                     .iter()
-                    .position(|zombie| zombie.cageid == cageid_arg as u64)
+                    .position(|zombie| zombie.cageid == cage_id_to_wait as u64)
                 {
                     // find the cage in zombie list, remove it from the list and break
                     zombie_opt = Some(zombies.remove(index));
@@ -919,6 +921,45 @@ pub fn sigprocmask_syscall(
         }
     }
     res
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/sched_yield.2.html
+///
+/// Causes the calling thread to relinquish the CPU. The thread is moved to the end
+/// of the queue for its static priority and a new thread gets to run.
+///
+/// ## Returns
+/// On success, returns 0. On error, -1 is returned, and errno is set.
+pub fn sched_yield_syscall(
+    cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate that each extra argument is unused.
+    if !(sc_unusedarg(arg1, arg1_cageid)
+        && sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        panic!(
+            "{}: unused arguments contain unexpected values -- security violation",
+            "sched_yield_syscall"
+        );
+    }
+
+    (unsafe { sched_yield() }) as i32
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/setitimer.3p.html

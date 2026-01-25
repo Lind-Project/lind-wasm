@@ -68,6 +68,10 @@ SYS_INCLUDE="-nostdinc -isystem ${RESOURCE_DIR}/include -isystem /usr/i686-linux
 DEFINES="-D_LIBC_REENTRANT -include $BUILD/libc-modules.h -DMODULE_NAME=libc"
 EXTRA_DEFINES="-include ../include/libc-symbols.h -DPIC -DTOP_NAMESPACE=glibc"
 
+# Check if LIND_DEBUG is defined (set by build.rs when `lind_debug` is enabled)
+if [ "$LIND_DEBUG" ]; then
+  DEFINES="$DEFINES -DLIND_DEBUG"
+fi
 
 # Build glibc
 rm -rf $BUILD
