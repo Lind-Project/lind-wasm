@@ -1,60 +1,87 @@
-#include <stdio.h>
-#include <stdlib.h>
+#define _GNU_SOURCE
+#include <assert.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/types.h>
 
+/* ---------- TEST 1: Basic getuid ---------- */
 void test_getuid_basic() {
-    printf("[TEST 1] getuid in parent\n");
-    int uid = getuid();
-    printf("[PARENT] getuid returned=%d\n", uid);
+    uid_t uid = getuid();
+    assert(uid >= 0);
 }
 
+/* ---------- TEST 2: Inheritance after fork ---------- */
 void test_getuid_in_child() {
-    printf("\n[TEST 2] getuid in child\n");
+    uid_t parent_uid = getuid();
+
     pid_t pid = fork();
+    assert(pid >= 0);
+
     if (pid == 0) {
-        int uid = getuid();
-        printf("[CHILD] getuid returned=%d\n", uid);
+        assert(getuid() == parent_uid);
         _exit(0);
     }
-    waitpid(pid, NULL, 0);
-    printf("[PARENT] child exited, parent getuid=%d\n", getuid());
+
+    int status;
+    pid_t res = waitpid(pid, &status, 0);
+    assert(res == pid);
+    assert(WIFEXITED(status));
+    assert(WEXITSTATUS(status) == 0);
 }
 
+/* ---------- TEST 3: Multiple children consistency ---------- */
 void test_getuid_multiple_children() {
-    printf("\n[TEST 3] getuid with multiple children\n");
     const int N = 4;
+    uid_t parent_uid = getuid();
+
     for (int i = 0; i < N; i++) {
         pid_t pid = fork();
+        assert(pid >= 0);
+
         if (pid == 0) {
-            int uid = getuid();
-            printf("[CHILD %d] getuid=%d\n", i, uid);
-            _exit(i);  // deterministic exit code
+            assert(getuid() == parent_uid);
+            _exit(0);
         }
-        waitpid(pid, NULL, 0); // serialize children
-        printf("[PARENT] reaped child %d\n", i);
+    }
+
+    for (int i = 0; i < N; i++) {
+        int status;
+        pid_t res = wait(&status);
+        assert(res > 0);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
     }
 }
 
+/* ---------- TEST 4: Stress test ---------- */
 void test_getuid_stress() {
-    printf("\n[TEST 4] Stress test with 2 sequential children\n");
-    const int N = 2;
-    for (int i = 0; i < N; i++) {
+    const int CHILDREN = 2;
+    const int CALLS = 10;
+
+    uid_t parent_uid = getuid();
+
+    for (int i = 0; i < CHILDREN; i++) {
         pid_t pid = fork();
+        assert(pid >= 0);
+
         if (pid == 0) {
-            for (int j = 0; j < 10; j++) {
-                int uid = getuid();
-                printf("[CHILD %d] call %d getuid=%d\n", i, j, uid);
+            for (int j = 0; j < CALLS; j++) {
+                assert(getuid() == parent_uid);
             }
-            _exit(i);  // deterministic exit code
+            _exit(0);
         }
-        waitpid(pid, NULL, 0); // serialize children
-        printf("[PARENT] reaped child %d\n", i);
+    }
+
+    for (int i = 0; i < CHILDREN; i++) {
+        int status;
+        pid_t res = wait(&status);
+        assert(res > 0);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
     }
 }
 
 int main() {
-    printf("[RUNNING] getuid test suite\n");
     test_getuid_basic();
     test_getuid_in_child();
     test_getuid_multiple_children();

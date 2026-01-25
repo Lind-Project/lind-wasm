@@ -1,140 +1,132 @@
-/*
- * getpid() Test Suite
- * -------------------
- * Verifies correct getpid() behavior across forked processes.
- * Covers:
- *   - Basic getpid() in parent and child
- *   - Multiple children calling getpid()
- *   - Nested fork (parent → child → grandchild)
- *   - Stress test with many rapid forks
- */
-
-#include <stdio.h>
-#include <stdlib.h>
+#define _GNU_SOURCE
+#include <assert.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <errno.h>
+#include <sys/types.h>
 
+/* ---------- TEST 1: Basic getpid ---------- */
 void test_getpid_basic() {
-    printf("[TEST 1] getpid basic\n");
-
     pid_t pid = getpid();
-    if (pid > 0)
-        printf("[OK] getpid returned valid pid\n");
-    else
-        printf("[FAIL] getpid returned invalid pid\n");
+    assert(pid > 0);
 }
 
+/* ---------- TEST 2: Parent / child PID difference ---------- */
 void test_getpid_in_child() {
-    printf("\n[TEST 2] getpid parent/child difference\n");
-
     pid_t parent_pid = getpid();
+
     pid_t pid = fork();
+    assert(pid >= 0);
 
     if (pid == 0) {
         pid_t child_pid = getpid();
-        if (child_pid != parent_pid)
-            printf("[OK] child pid differs from parent\n");
-        else
-            printf("[FAIL] child pid equals parent\n");
+        assert(child_pid > 0);
+        assert(child_pid != parent_pid);
         _exit(0);
     }
 
-    waitpid(pid, NULL, 0);
+    int status;
+    pid_t res = waitpid(pid, &status, 0);
+    assert(res == pid);
+    assert(WIFEXITED(status));
+    assert(WEXITSTATUS(status) == 0);
 }
 
+/* ---------- TEST 3: Uniqueness across multiple children ---------- */
 void test_getpid_multiple_children() {
-    printf("\n[TEST 3] getpid uniqueness across children\n");
+    const int N = 3;
+    pid_t pids[N];
 
-    pid_t pids[3];
-
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < N; i++) {
         pid_t pid = fork();
+        assert(pid >= 0);
+
         if (pid == 0) {
+            assert(getpid() > 0);
             _exit(0);
         }
+
         pids[i] = pid;
     }
 
-    int unique = 1;
-    if (pids[0] == pids[1] || pids[1] == pids[2] || pids[0] == pids[2])
-        unique = 0;
+    /* Parent sees fork return values must be unique */
+    assert(pids[0] != pids[1]);
+    assert(pids[0] != pids[2]);
+    assert(pids[1] != pids[2]);
 
-    for (int i = 0; i < 3; i++)
-        waitpid(pids[i], NULL, 0);
-
-    if (unique)
-        printf("[OK] children received unique pids\n");
-    else
-        printf("[FAIL] pid collision detected\n");
+    for (int i = 0; i < N; i++) {
+        int status;
+        pid_t res = waitpid(pids[i], &status, 0);
+        assert(res == pids[i]);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
+    }
 }
 
+/* ---------- TEST 4: Nested forks (parent → child → grandchild) ---------- */
 void test_getpid_nested_forks() {
-    printf("\n[TEST 4] nested fork pid validity\n");
-
     pid_t parent_pid = getpid();
+
     pid_t pid = fork();
+    assert(pid >= 0);
 
     if (pid == 0) {
         pid_t child_pid = getpid();
+        assert(child_pid > 0);
+        assert(child_pid != parent_pid);
+
         pid_t gc = fork();
+        assert(gc >= 0);
 
         if (gc == 0) {
             pid_t grandchild_pid = getpid();
-            if (grandchild_pid != child_pid &&
-                grandchild_pid != parent_pid)
-                _exit(0);
-            else
-                _exit(1);
+            assert(grandchild_pid > 0);
+            assert(grandchild_pid != child_pid);
+            assert(grandchild_pid != parent_pid);
+            _exit(0);
         }
 
         int st;
-        waitpid(gc, &st, 0);
-        _exit(WEXITSTATUS(st));
+        pid_t res = waitpid(gc, &st, 0);
+        assert(res == gc);
+        assert(WIFEXITED(st));
+        assert(WEXITSTATUS(st) == 0);
+        _exit(0);
     }
 
     int st;
-    waitpid(pid, &st, 0);
-
-    if (WEXITSTATUS(st) == 0)
-        printf("[OK] nested fork pids valid\n");
-    else
-        printf("[FAIL] nested fork pid error\n");
+    pid_t res = waitpid(pid, &st, 0);
+    assert(res == pid);
+    assert(WIFEXITED(st));
+    assert(WEXITSTATUS(st) == 0);
 }
 
+/* ---------- TEST 5: Stress test ---------- */
 void test_getpid_stress() {
-    printf("\n[TEST 5] getpid stress\n");
-
     const int N = 20;
     pid_t pids[N];
-    int ok = 1;
 
     for (int i = 0; i < N; i++) {
         pid_t pid = fork();
+        assert(pid >= 0);
+
         if (pid == 0) {
-            if (getpid() > 0)
-                _exit(0);
-            else
-                _exit(1);
+            assert(getpid() > 0);
+            _exit(0);
         }
+
         pids[i] = pid;
     }
 
     for (int i = 0; i < N; i++) {
-        int st;
-        waitpid(pids[i], &st, 0);
-        if (WEXITSTATUS(st) != 0)
-            ok = 0;
+        int status;
+        pid_t res = waitpid(pids[i], &status, 0);
+        assert(res == pids[i]);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
     }
-
-    if (ok)
-        printf("[OK] stress test passed\n");
-    else
-        printf("[FAIL] stress test failed\n");
 }
 
 int main() {
-    printf("[RUNNING] getpid test suite\n");
     test_getpid_basic();
     test_getpid_in_child();
     test_getpid_multiple_children();

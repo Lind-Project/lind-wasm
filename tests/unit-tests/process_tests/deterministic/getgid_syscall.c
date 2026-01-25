@@ -1,109 +1,87 @@
-/*
- * getgid() Test Suite
- * -------------------
- * Tests correctness of getgid() across parent and child processes.
- * Covers:
- *   - Basic getgid() call in parent
- *   - Inheritance of real GID after fork
- *   - Multiple children invoking getgid()
- *   - Light stress test with many forks
- */
-
-#include <stdio.h>
+#define _GNU_SOURCE
+#include <assert.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <stdlib.h>
-#include <errno.h>
+#include <sys/types.h>
 
+/* ---------- TEST 1: Basic getgid ---------- */
 void test_getgid_basic() {
-    printf("[TEST 1] getgid basic\n");
-
     gid_t gid = getgid();
-    if (gid >= 0)
-        printf("[OK] getgid returned a valid value\n");
-    else
-        printf("[FAIL] getgid failed\n");
+    assert(gid >= 0);
 }
 
+/* ---------- TEST 2: Inheritance after fork ---------- */
 void test_getgid_in_child() {
-    printf("\n[TEST 2] getgid inheritance\n");
-
     gid_t parent_gid = getgid();
+
     pid_t pid = fork();
+    assert(pid >= 0);
 
     if (pid == 0) {
-        gid_t child_gid = getgid();
-        if (child_gid == parent_gid)
-            printf("[OK] child inherited gid\n");
-        else
-            printf("[FAIL] child gid mismatch\n");
+        assert(getgid() == parent_gid);
         _exit(0);
     }
 
-    waitpid(pid, NULL, 0);
+    int status;
+    pid_t res = waitpid(pid, &status, 0);
+    assert(res == pid);
+    assert(WIFEXITED(status));
+    assert(WEXITSTATUS(status) == 0);
 }
 
+/* ---------- TEST 3: Multiple children consistency ---------- */
 void test_getgid_multiple_children() {
-    printf("\n[TEST 3] getgid consistency across children\n");
-
+    const int N = 5;
     gid_t parent_gid = getgid();
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < N; i++) {
         pid_t pid = fork();
+        assert(pid >= 0);
+
         if (pid == 0) {
-            if (getgid() == parent_gid)
-                _exit(0);
-            else
-                _exit(1);
+            assert(getgid() == parent_gid);
+            _exit(0);
         }
     }
 
-    int ok = 1;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < N; i++) {
         int status;
-        wait(&status);
-        if (WEXITSTATUS(status) != 0)
-            ok = 0;
+        pid_t res = wait(&status);
+        assert(res > 0);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
     }
-
-    if (ok)
-        printf("[OK] all children inherited gid\n");
-    else
-        printf("[FAIL] gid mismatch in children\n");
 }
 
+/* ---------- TEST 4: Stress test ---------- */
 void test_getgid_stress() {
-    printf("\n[TEST 4] getgid stress\n");
+    const int CHILDREN = 20;
+    const int CALLS = 10;
 
     gid_t parent_gid = getgid();
 
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < CHILDREN; i++) {
         pid_t pid = fork();
+        assert(pid >= 0);
+
         if (pid == 0) {
-            for (int j = 0; j < 10; j++) {
-                if (getgid() != parent_gid)
-                    _exit(1);
+            for (int j = 0; j < CALLS; j++) {
+                assert(getgid() == parent_gid);
             }
             _exit(0);
         }
     }
 
-    int ok = 1;
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < CHILDREN; i++) {
         int status;
-        wait(&status);
-        if (WEXITSTATUS(status) != 0)
-            ok = 0;
+        pid_t res = wait(&status);
+        assert(res > 0);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
     }
-
-    if (ok)
-        printf("[OK] stress test passed\n");
-    else
-        printf("[FAIL] stress test failed\n");
 }
 
 int main() {
-    printf("[RUNNING] getgid test suite\n");
     test_getgid_basic();
     test_getgid_in_child();
     test_getgid_multiple_children();

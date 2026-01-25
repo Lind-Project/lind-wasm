@@ -1,80 +1,117 @@
-#include <stdio.h>
+#define _GNU_SOURCE
+#include <assert.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <stdlib.h>
-#include <errno.h>
+#include <sys/types.h>
 #include <string.h>
 
+/* ---------- TEST 1: Basic fork ---------- */
 void test_basic_fork() {
-    printf("[TEST 1] Basic fork\n");
     pid_t pid = fork();
-    if (pid < 0) {
-        printf("[FAIL] fork failed errno=%d\n", errno);
-        return;
-    }
+    assert(pid >= 0);
+
     if (pid == 0) {
-        printf("[CHILD] fork success\n");
         _exit(0);
     }
-    waitpid(pid, NULL, 0);
-    printf("[PARENT] child finished\n");
+
+    int status;
+    pid_t res = waitpid(pid, &status, 0);
+    assert(res == pid);
+    assert(WIFEXITED(status));
+    assert(WEXITSTATUS(status) == 0);
 }
 
+/* ---------- TEST 2: Memory isolation ---------- */
 void test_memory_isolation() {
-    printf("\n[TEST 2] Memory isolation\n");
     int x = 10;
     pid_t pid = fork();
+    assert(pid >= 0);
+
     if (pid == 0) {
         x = 999;
-        printf("[CHILD] x changed to %d\n", x);
         _exit(0);
     }
+
     waitpid(pid, NULL, 0);
-    printf("[PARENT] x=%d (should remain 10)\n", x);
+    assert(x == 10);
 }
 
+/* ---------- TEST 3: Multiple children ---------- */
 void test_multiple_children() {
-    printf("\n[TEST 3] Multiple children\n");
-    for (int i = 0; i < 3; i++) {
+    const int N = 3;
+    pid_t pids[N];
+
+    for (int i = 0; i < N; i++) {
         pid_t pid = fork();
+        assert(pid >= 0);
+
         if (pid == 0) {
-            printf("[CHILD %d] executed\n", i);
             _exit(0);
         }
-        waitpid(pid, NULL, 0);
-        printf("[PARENT] reaped child %d\n", i);
+
+        pids[i] = pid;
+    }
+
+    for (int i = 0; i < N; i++) {
+        int status;
+        pid_t res = waitpid(pids[i], &status, 0);
+        assert(res == pids[i]);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
     }
 }
 
+/* ---------- TEST 4: Pipe communication ---------- */
 void test_pipe_communication() {
-    printf("\n[TEST 4] Pipe communication\n");
     int fds[2];
-    pipe(fds);
+    assert(pipe(fds) == 0);
+
+    const char *msg = "hello_from_parent";
+    size_t len = strlen(msg);
+
     pid_t pid = fork();
+    assert(pid >= 0);
+
     if (pid == 0) {
         close(fds[1]);
-        char buf[32];
+
+        char buf[64];
         ssize_t n = read(fds[0], buf, sizeof(buf));
-        if (n > 0) buf[n] = '\0';
-        printf("[CHILD] received message='%s'\n", buf);
+        assert(n == (ssize_t)len);
+        assert(memcmp(buf, msg, len) == 0);
+
         close(fds[0]);
         _exit(0);
     }
+
     close(fds[0]);
-    const char* msg = "hello_from_parent";
-    write(fds[1], msg, strlen(msg));
+    assert(write(fds[1], msg, len) == (ssize_t)len);
     close(fds[1]);
-    waitpid(pid, NULL, 0);
-    printf("[PARENT] pipe test done\n");
+
+    int status;
+    pid_t res = waitpid(pid, &status, 0);
+    assert(res == pid);
+    assert(WIFEXITED(status));
+    assert(WEXITSTATUS(status) == 0);
 }
 
+/* ---------- TEST 5: Stress: sequential forks ---------- */
 void stress_test_sequential_forks() {
-    printf("\n[TEST 5] Stress: 10 sequential forks\n");
-    for (int i = 0; i < 10; i++) {
+    const int N = 10;
+
+    for (int i = 0; i < N; i++) {
         pid_t pid = fork();
-        if (pid == 0) _exit(0);
-        waitpid(pid, NULL, 0);
-        printf("[PARENT] reaped child %d\n", i);
+        assert(pid >= 0);
+
+        if (pid == 0) {
+            _exit(0);
+        }
+
+        int status;
+        pid_t res = waitpid(pid, &status, 0);
+        assert(res == pid);
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
     }
 }
 
