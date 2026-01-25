@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <assert.h>
+#include <errno.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -23,7 +24,13 @@ void test_getgid_in_child() {
         _exit(0);
     }
 
-    pid_t res = waitpid(pid, NULL, 0);
+    pid_t res;
+    int attempts = 0;
+    do {
+        res = waitpid(pid, NULL, 0);
+        attempts++;
+        assert(attempts < 100000);
+    } while (res == -1 && errno == EINTR);
     assert(res == pid);
 }
 
@@ -51,8 +58,16 @@ void test_getgid_multiple_children() {
         pids[i] = pid;
     }
 
-    for (int i = 0; i < N; i++) {
+    int reaped_count = 0;
+    int attempts = 0;
+    while (reaped_count < N) {
         pid_t res = waitpid(-1, NULL, 0);
+        attempts++;
+        assert(attempts < 100000);
+
+        if (res == -1 && errno == EINTR) {
+            continue;
+        }
         assert(res > 0);
 
         bool found = false;
@@ -61,6 +76,7 @@ void test_getgid_multiple_children() {
                 assert(!reaped[j]);
                 reaped[j] = true;
                 found = true;
+                reaped_count++;
                 break;
             }
         }
@@ -96,8 +112,16 @@ void test_getgid_stress() {
         pids[i] = pid;
     }
 
-    for (int i = 0; i < CHILDREN; i++) {
+    int reaped_count = 0;
+    int attempts = 0;
+    while (reaped_count < CHILDREN) {
         pid_t res = waitpid(-1, NULL, 0);
+        attempts++;
+        assert(attempts < 100000);
+
+        if (res == -1 && errno == EINTR) {
+            continue;
+        }
         assert(res > 0);
 
         bool found = false;
@@ -106,6 +130,7 @@ void test_getgid_stress() {
                 assert(!reaped[j]);
                 reaped[j] = true;
                 found = true;
+                reaped_count++;
                 break;
             }
         }
