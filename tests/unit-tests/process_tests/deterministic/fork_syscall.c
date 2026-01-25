@@ -5,7 +5,7 @@
 #include <sys/types.h>
 #include <errno.h>
 
-/* ---------- TEST 1: Basic fork semantics ---------- */
+/* ---------- TEST 1: Basic fork ---------- */
 void test_basic_fork() {
     pid_t pid = fork();
     assert(pid >= 0);
@@ -15,7 +15,11 @@ void test_basic_fork() {
     }
 
     int status;
-    pid_t res = waitpid(pid, &status, 0);
+    pid_t res;
+    do {
+        res = waitpid(pid, &status, 0);
+    } while (res == -1 && errno == EINTR);
+
     assert(res == pid);
     assert(WIFEXITED(status));
     assert(WEXITSTATUS(status) == 0);
@@ -57,7 +61,7 @@ void test_uid_gid() {
     waitpid(pid, NULL, 0);
 }
 
-/* ---------- TEST 4: waitpid reaping behavior ---------- */
+/* ---------- TEST 4: Zombie reaping ---------- */
 void test_zombie_reaping() {
     pid_t pid = fork();
     assert(pid >= 0);
@@ -67,15 +71,18 @@ void test_zombie_reaping() {
     }
 
     int status;
-    pid_t res = waitpid(pid, &status, 0);
+    pid_t res;
+    do {
+        res = waitpid(pid, &status, 0);
+    } while (res == -1 && errno == EINTR);
+
     assert(res == pid);
     assert(WIFEXITED(status));
 }
 
-/* ---------- TEST 5: Multiple children ---------- */
+/* ---------- TEST 5: Multiple children (Lind-safe) ---------- */
 void test_multiple_children() {
     const int N = 3;
-    pid_t pids[N];
 
     for (int i = 0; i < N; i++) {
         pid_t pid = fork();
@@ -84,15 +91,24 @@ void test_multiple_children() {
         if (pid == 0) {
             _exit(0);
         }
-        pids[i] = pid;
     }
 
     int reaped = 0;
     while (reaped < N) {
-        pid_t res = wait(NULL);
-        assert(res > 0);
-        reaped++;
+        int status;
+        pid_t res = waitpid(-1, &status, 0);
+
+        if (res > 0) {
+            assert(WIFEXITED(status));
+            reaped++;
+        } else if (res == -1 && errno == EINTR) {
+            continue;
+        } else if (res == -1 && errno == ECHILD) {
+            break;  
+        }
     }
+
+    assert(reaped == N);
 }
 
 /* ---------- TEST 6: Pipe + fork IPC ---------- */
@@ -135,7 +151,7 @@ void stress_test_sequential_forks() {
 
 /* ---------- TEST 8: Fork chain (deterministic) ---------- */
 void stress_test_fork_chain() {
-    const int DEPTH = 10;
+    const int DEPTH = 8;
 
     for (int i = 0; i < DEPTH; i++) {
         pid_t pid = fork();

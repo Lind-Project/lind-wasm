@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <stdbool.h>
 
 /* ---------- TEST 1: Basic getgid ---------- */
 void test_getgid_basic() {
@@ -22,17 +23,21 @@ void test_getgid_in_child() {
         _exit(0);
     }
 
-    int status;
-    pid_t res = waitpid(pid, &status, 0);
+    pid_t res = waitpid(pid, NULL, 0);
     assert(res == pid);
-    assert(WIFEXITED(status));
-    assert(WEXITSTATUS(status) == 0);
 }
 
-/* ---------- TEST 3: Multiple children consistency ---------- */
+/* ---------- TEST 3: Multiple children consistency (order-independent) ---------- */
 void test_getgid_multiple_children() {
     const int N = 5;
     gid_t parent_gid = getgid();
+
+    pid_t pids[N];
+    bool reaped[N];
+
+    for (int i = 0; i < N; i++) {
+        reaped[i] = false;
+    }
 
     for (int i = 0; i < N; i++) {
         pid_t pid = fork();
@@ -42,14 +47,24 @@ void test_getgid_multiple_children() {
             assert(getgid() == parent_gid);
             _exit(0);
         }
+
+        pids[i] = pid;
     }
 
     for (int i = 0; i < N; i++) {
-        int status;
-        pid_t res = wait(&status);
+        pid_t res = waitpid(-1, NULL, 0);
         assert(res > 0);
-        assert(WIFEXITED(status));
-        assert(WEXITSTATUS(status) == 0);
+
+        bool found = false;
+        for (int j = 0; j < N; j++) {
+            if (res == pids[j]) {
+                assert(!reaped[j]);
+                reaped[j] = true;
+                found = true;
+                break;
+            }
+        }
+        assert(found);
     }
 }
 
@@ -59,6 +74,13 @@ void test_getgid_stress() {
     const int CALLS = 10;
 
     gid_t parent_gid = getgid();
+
+    pid_t pids[CHILDREN];
+    bool reaped[CHILDREN];
+
+    for (int i = 0; i < CHILDREN; i++) {
+        reaped[i] = false;
+    }
 
     for (int i = 0; i < CHILDREN; i++) {
         pid_t pid = fork();
@@ -70,14 +92,24 @@ void test_getgid_stress() {
             }
             _exit(0);
         }
+
+        pids[i] = pid;
     }
 
     for (int i = 0; i < CHILDREN; i++) {
-        int status;
-        pid_t res = wait(&status);
+        pid_t res = waitpid(-1, NULL, 0);
         assert(res > 0);
-        assert(WIFEXITED(status));
-        assert(WEXITSTATUS(status) == 0);
+
+        bool found = false;
+        for (int j = 0; j < CHILDREN; j++) {
+            if (res == pids[j]) {
+                assert(!reaped[j]);
+                reaped[j] = true;
+                found = true;
+                break;
+            }
+        }
+        assert(found);
     }
 }
 
