@@ -229,14 +229,6 @@ pub fn add_to_linker<
         },
     )?;
 
-    linker.func_wrap(
-        "lind",
-        "epoch_callback",
-        move |mut caller: Caller<'_, T>| {
-            wasmtime_lind_multi_process::signal::signal_handler(&mut caller);
-        },
-    )?;
-
     #[cfg(feature = "lind_debug")]
     {
         linker.func_wrap(
