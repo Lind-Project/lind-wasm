@@ -1,11 +1,11 @@
 # Compiling Rust Code with `lind-glibc` (Shared Memory Enabled)
 
-To compile Rust programs against **`lind-glibc`**, you must configure Rust to:
+To compile Rust programs against **`lind-glibc`**:
 
-0. Use the nightly Rust toolchain (because `-Z build-std` is a nightly-only feature)
-1. Use the custom `config.toml` configuration file
-2. Use the custom `wasip1-clang` linker wrapper
-3. Rebuild the Rust standard library (`std`) with these features enabled
+- Ensure that the `scripts/cargo-lind_compile` script exists in `PATH`
+- Run `cargo lind_compile`
+
+The build configurations used by `cargo lind_compile` can also be set manually as detailed below.
 
 ---
 ## 1. Cargo Configuration (`.cargo/config.toml`)
