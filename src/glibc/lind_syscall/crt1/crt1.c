@@ -203,11 +203,11 @@ int __unused_function_pointer() {
 void *___dummy_reference __attribute__((used)) = __unused_function_pointer;
 
 int _start() {
+    __lind_init_addr_translation(); // iniatilize cageids before anything else executes
     __libc_setup_tls();
     __wasi_init_tp();
     __wasi_initialize_environ();
     __ctype_init(); //lind-wasm: init ctypes for isalpha etc.
-    __lind_init_addr_translation();
     #ifdef LIND_DEBUG
     	__lind_debug_import();
     #endif
