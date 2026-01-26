@@ -267,7 +267,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     # Compile
     compile_cmd = [CC, str(source_file), "-o", str(native_output)]
     try:
-        proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LIND_ROOT, shell=False)
+        proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LINDFS_ROOT, shell=False)
         if proc.returncode != 0:
             return False, proc.stdout + proc.stderr, "compile_error", "Failure_native_compiling"
     except Exception as e:
@@ -275,7 +275,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     
     # Run
     try:
-        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LIND_ROOT, shell=False, timeout=timeout_sec)
+        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LINDFS_ROOT, shell=False, timeout=timeout_sec)
         if proc.returncode == 0:
             return True, proc.stdout, 0, None
         else:
@@ -795,7 +795,8 @@ def pre_test(tests_to_run=None):
     open(readlinkfile_path, 'a').close()
     if not symlink_path.exists():
         try:
-            os.symlink(readlinkfile_path, symlink_path)
+            # Use relative path for symlink target to work correctly in chroot
+            os.symlink("readlinkfile.txt", symlink_path)
         except OSError:
             # Fallback to copying in case symlink creation fails
             shutil.copy2(readlinkfile_path, symlink_path)
