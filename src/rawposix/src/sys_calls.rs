@@ -25,6 +25,8 @@ use sysdefs::constants::sys_const::{
 };
 use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
 use typemap::datatype_conversion::*;
+use super::syscall_table::*;
+use threei::{RAWPOSIX_CAGEID, register_handler, RUNTIME_TYPE_WASMTIME};
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
 ///
@@ -39,7 +41,7 @@ use typemap::datatype_conversion::*;
 ///
 /// Actual operations of the address space is handled by wasmtime when creating a new
 /// instance for the child cage.
-pub fn fork_syscall(
+pub extern "C" fn fork_syscall(
     cageid: u64,
     child_arg: u64,        // Child's cage id
     child_arg_cageid: u64, // Child's cage id arguments cageid
@@ -111,7 +113,7 @@ pub fn fork_syscall(
 /// managing process attributes and threads (terminating unnecessary threads). This allows us to fully implement
 /// the exec functionality while aligning with POSIX standards. Cage fields remained in exec():
 /// cageid, cwd, parent, interval_timer
-pub fn exec_syscall(
+pub extern "C" fn exec_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -176,7 +178,7 @@ pub fn exec_syscall(
 /// The exit function causes normal process(Cage) termination
 /// The termination entails unmapping all memory references
 /// Removing the cage object from the cage table, closing all open files which is removing corresponding fdtable
-pub fn exit_syscall(
+pub extern "C" fn exit_syscall(
     cageid: u64,
     status_arg: u64,
     status_cageid: u64,
@@ -244,7 +246,7 @@ pub fn exit_syscall(
 /// waitpid_syscall utilizes the zombie list stored in cage struct. When a cage exited, a zombie entry will be inserted
 /// into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
 /// zombie list and retrieve the first entry from it (first in, first out).
-pub fn waitpid_syscall(
+pub extern "C" fn waitpid_syscall(
     cageid: u64,
     child_cageid_arg: u64,
     child_cageid_arg_cageid: u64,
@@ -419,7 +421,7 @@ pub fn waitpid_syscall(
 ///
 /// ## Returns
 /// Get the parent cage ID
-pub fn getpid_syscall(
+pub extern "C" fn getpid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -460,7 +462,7 @@ pub fn getpid_syscall(
 ///
 /// ## Returns
 /// Get the parent cage ID
-pub fn getppid_syscall(
+pub extern "C" fn getppid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -498,7 +500,7 @@ pub fn getppid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn getgid_syscall(
+pub extern "C" fn getgid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -536,7 +538,7 @@ pub fn getgid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn getegid_syscall(
+pub extern "C" fn getegid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -574,7 +576,7 @@ pub fn getegid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn getuid_syscall(
+pub extern "C" fn getuid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -612,7 +614,7 @@ pub fn getuid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn geteuid_syscall(
+pub extern "C" fn geteuid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -663,7 +665,7 @@ pub fn geteuid_syscall(
 /// # Returns
 /// * `0` on success.
 /// * Negative errno wrapped via `syscall_error` on failure.
-pub fn sigaction_syscall(
+pub extern "C" fn sigaction_syscall(
     cageid: u64,
     sig_arg: u64,
     sig_arg_cageid: u64,
@@ -744,7 +746,7 @@ pub fn sigaction_syscall(
 /// * `EFAULT` – Reserved arguments were not unused.
 /// * `EINVAL` – Invalid target cage ID or signal number.
 /// * `ESRCH` – Target cage does not exist.
-pub fn kill_syscall(
+pub extern "C" fn kill_syscall(
     cageid: u64,
     target_cage_arg: u64,
     target_cage_arg_cageid: u64,
@@ -838,7 +840,7 @@ pub fn kill_syscall(
 /// ## Errors
 /// * `EFAULT` – Reserved arguments were not unused.
 /// * `EINVAL` – Invalid value passed for `how`.
-pub fn sigprocmask_syscall(
+pub extern "C" fn sigprocmask_syscall(
     cageid: u64,
     how_arg: u64,
     how_cageid: u64,
@@ -930,7 +932,7 @@ pub fn sigprocmask_syscall(
 ///
 /// ## Returns
 /// On success, returns 0. On error, -1 is returned, and errno is set.
-pub fn sched_yield_syscall(
+pub extern "C" fn sched_yield_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -987,7 +989,7 @@ pub fn sched_yield_syscall(
 /// ## Returns
 /// * `0` on success.
 /// * Negative errno (`EFAULT`, etc.) on failure.
-pub fn setitimer_syscall(
+pub extern "C" fn setitimer_syscall(
     cageid: u64,
     which_arg: u64,
     which_arg_cageid: u64,
@@ -1048,6 +1050,22 @@ pub fn setitimer_syscall(
     0
 }
 
+pub type RawCallFunc = extern "C" fn (
+    target_cageid: u64,
+    arg1: u64,
+    arg1_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32;
+
 /// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
 /// detailed error messages will be printed if set
 pub fn rawposix_start(verbosity: isize) {
@@ -1055,6 +1073,25 @@ pub fn rawposix_start(verbosity: isize) {
     cagetable_init();
 
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
+
+    for &(sysno, func) in SYSCALL_TABLE.iter() {
+        let impl_fn_ptr = func as *const() as u64;
+        let ret = register_handler(
+            impl_fn_ptr,
+            1, // current cageid
+            sysno,
+            RUNTIME_TYPE_WASMTIME, // runtime id
+            1, // register
+            RAWPOSIX_CAGEID,
+            0, 0, 0, 0, 0, 0, 0, 0,
+        );
+        if ret != 0 {
+            panic!(
+                "rawposix_start: failed to register syscall {} handler, return code {}",
+                sysno, ret
+            );
+        }
+    }
 
     // Set up standard file descriptors for the init cage
     // TODO:
