@@ -3,9 +3,15 @@
 To compile Rust programs against **`lind-glibc`**:
 
 - Ensure that the `scripts/cargo-lind_compile` script exists in `PATH`
-- Run `cargo lind_compile`
+- Run `cargo lind_compile` at the root of your Rust crate.
 
-The build configurations used by `cargo lind_compile` can also be set manually as detailed below.
+`cargo-lind-compile` is a drop-in replace for `cargo build`. It supports the same flags (such as --release) and is intended to be used in same contexts.
+
+Internally, `cargo lind_compile` runs `cargo build` with the configurations detailed below.
+
+It then runs `lind-compile --opt-only` on this output `.wasm` binary to optimize it in place.
+
+Alternatively, you can use `lind-cargo-build` at the root of your Rust crate to run this script.
 
 ---
 ## 1. Cargo Configuration (`.cargo/config.toml`)
