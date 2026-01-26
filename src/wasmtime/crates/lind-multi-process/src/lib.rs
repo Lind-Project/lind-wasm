@@ -67,8 +67,8 @@ pub struct LindCtx<T, U> {
     // used to keep track of how many active cages are running
     lind_manager: Arc<LindCageManager>,
 
-    // from run.rs, used for exec call
-    run_command: U,
+    webasm: Vec<u8>,
+    config: U,
 
     // get LindCtx from host
     get_cx: Arc<dyn Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static>,
@@ -79,6 +79,7 @@ pub struct LindCtx<T, U> {
     // exec the host
     exec_host: Arc<
         dyn Fn(
+                &Vec<u8>,
                 &U,
                 &str,
                 &Vec<String>,
@@ -110,10 +111,12 @@ impl<
         module: Module,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
-        run_command: U,
+        webasm: Vec<u8>,
+        config: U,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
+                &Vec<u8>,
                 &U,
                 &str,
                 &Vec<String>,
@@ -143,7 +146,8 @@ impl<
             tid,
             next_threadid,
             lind_manager: lind_manager.clone(),
-            run_command,
+            webasm,
+            config,
             get_cx,
             fork_host,
             exec_host,
@@ -164,11 +168,13 @@ impl<
         module: Module,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
-        run_command: U,
+        webasm: Vec<u8>,
+        config: U,
         cageid: i32,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
+                &Vec<u8>,
                 &U,
                 &str,
                 &Vec<String>,
@@ -194,7 +200,8 @@ impl<
             tid,
             next_threadid,
             lind_manager: lind_manager.clone(),
-            run_command,
+            webasm,
+            config,
             get_cx,
             fork_host,
             exec_host,
@@ -1065,7 +1072,8 @@ impl<
 
         let store = caller.as_context_mut().0;
 
-        let cloned_run_command = self.run_command.clone();
+        let cloned_webasm = self.webasm.clone();
+        let cloned_config = self.config.clone();
         let cloned_lind_manager = self.lind_manager.clone();
         let cloned_cageid = self.cageid;
 
@@ -1102,7 +1110,8 @@ impl<
             );
 
             let ret = exec_call(
-                &cloned_run_command,
+                &cloned_webasm,
+                &cloned_config,
                 &real_path_str,
                 &args,
                 cloned_cageid,
@@ -1403,7 +1412,8 @@ impl<
             tid: 1,                                     // thread id starts from 1
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
-            run_command: self.run_command.clone(),
+            webasm: self.webasm.clone(),
+            config: self.config.clone(),
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
