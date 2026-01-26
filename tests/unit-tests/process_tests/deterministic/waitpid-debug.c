@@ -1,0 +1,29 @@
+#include <assert.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+int main()
+{
+    pid_t cpid;
+    cpid = fork();
+    assert(cpid >= 0);
+
+    if (cpid == 0) {
+        exit(0);           /* terminate child */
+    } else {
+        int status;
+        pid_t waited_pid = waitpid(cpid, &status, 0);
+        if (waited_pid < 0) {
+            perror("waitpid");
+            fprintf(stderr, "errno = %d\n", errno);
+            exit(1);
+        }
+        assert(WIFEXITED(status));
+        assert(WEXITSTATUS(status) == 0);
+    }
+
+    return 0;
+}
