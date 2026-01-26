@@ -46,9 +46,13 @@ lind-wasm hello.cwasm
 *Here is what happens under the hood:*
 
 1.  `lind_compile` compiles `hello.c` into a WebAssembly (WASM)
-binary using headers etc. from *lind-glibc*.
+binary that is linked against *lind-glibc*.
 1. `lind_run` runs the compiled wasm using *lind-wasm* runtime
 and the *lind-posix* microvisor.
+
+--- 
+
+To compile a Rust crate into a *lind-glibc* linked WASM binary, follow this guide: [Compiling Rust Code with `lind-glibc`](./contribute/compile-with-rust.md)
 
 ## What's next!
 
