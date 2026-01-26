@@ -1350,7 +1350,7 @@ pub fn fcntl_syscall(
 ///
 /// ## Implementation Details:
 ///  - The path arguments are translated from the RawPOSIX perspective into host kernel paths
-///    using `sc_convert_path_to_host`, which applies `LIND_ROOT` prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which applies path normalization relative to the cage's CWD.
 ///  - The unused arguments are validated with `sc_unusedarg`; any unexpected values are treated
 ///    as a security violation.
 ///  - The underlying `libc::link()` is invoked with the translated paths.
@@ -1410,7 +1410,7 @@ pub fn link_syscall(
 ///
 /// ## Implementation Details:
 ///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
-///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which handles path normalization relative to the cage's CWD.
 ///  - We pas .
 ///  - The underlying libc::stat() is called and results are copied to the user buffer.
 ///
@@ -1725,13 +1725,13 @@ pub fn sync_file_range_syscall(
 /// requires handling the paths for both the input passed to the Rust kernel libc and the output buffer
 /// returned by the kernel libc.
 ///
-/// For the input path, the transformation is straightforward: we prepend the LIND_ROOT prefix to convert
-/// the user's relative path into a host-compatible absolute path.
-/// However, for the output buffer, we need to first verify whether the path written to buf is an absolute
-/// path. If it is not, we prepend the current working directory to make it absolute. Next, we remove the
-/// LIND_ROOT prefix to adjust the path to the user's perspective. Finally, we truncate the adjusted result
-/// to fit within the user-provided buflen, ensuring compliance with the behavior described in the Linux
-/// readlink man page, which states that truncation is performed silently if the buffer is too small.
+/// For the input path, the transformation is straightforward: we normalize it relative to the cage's CWD
+/// to convert the user's relative path into an absolute path within the chroot jail.
+/// For the output buffer, we need to first verify whether the path written to buf is an absolute
+/// path. If it is not, we prepend the current working directory to make it absolute. The result
+/// is then truncated to fit within the user-provided buflen, ensuring compliance with the behavior
+/// described in the Linux readlink man page, which states that truncation is performed silently if
+/// the buffer is too small.
 ///
 /// ## Input:
 /// - `cageid`: Identifier of the current Cage
@@ -1871,7 +1871,7 @@ pub fn readlinkat_syscall(
 ///
 /// ## Implementation Details:
 ///  - Both paths are converted from the RawPOSIX perspective to the host kernel perspective
-///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which handles path normalization relative to the cage's CWD.
 ///  - The underlying libc::rename() is called with both converted paths.
 ///  - This can move files across directories within the same filesystem.
 ///
@@ -1927,7 +1927,7 @@ pub fn rename_syscall(
 ///
 /// ## Implementation Details:
 ///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
-///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which handles path normalization relative to the cage's CWD.
 ///  - The underlying libc::unlink() is called with the converted path.
 ///
 /// ## Return Value:
@@ -1986,8 +1986,8 @@ pub fn unlink_syscall(
 /// There are two cases:
 /// Case 1: When `dirfd` is AT_FDCWD:
 /// - RawPOSIX maintains its own notion of the current working directory.
-/// - We convert the provided relative `pathname` (using `convpath` and `normpath`) into a host-absolute
-///   path by prepending the LIND_ROOT prefix.
+/// - We convert the provided relative `pathname` (using `convpath` and `normpath`) into an absolute
+///   path relative to the cage's CWD within the chroot jail.
 /// - After this conversion, the path is already absolute from the host’s perspective, so `AT_FDCWD`
 ///   doesn't actually rely on the host’s working directory. This avoids mismatches between RawPOSIX
 ///   and the host environment.
@@ -2034,7 +2034,7 @@ pub fn unlinkat_syscall(
     let kernel_fd = if dirfd == AT_FDCWD {
         // Case 1: When AT_FDCWD is used.
         // Convert the provided pathname from the RawPOSIX working directory (which is different from the host's)
-        // into a host-absolute path by prepending LIND_ROOT.
+        // into an absolute path within the chroot jail.
         c_path = sc_convert_path_to_host(pathname_arg, pathname_cageid, cageid);
         AT_FDCWD
     } else {
@@ -2071,7 +2071,7 @@ pub fn unlinkat_syscall(
 ///  - `mode`: Accessibility check mode (F_OK, R_OK, W_OK, X_OK or combinations).
 /// ## Implementation Details:
 ///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
-///    using `sc_convert_path_to_host`, which handles the LIND_ROOT prefixing and path normalization.
+///    using `sc_convert_path_to_host`, which handles path normalization relative to the cage's CWD.
 ///  - The mode parameter is passed directly to the underlying libc::access() call.
 /// ## Return Value:
 ///  - `0` on success (file is accessible in the requested mode).

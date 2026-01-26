@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use sysdefs::constants::lind_platform_const::FDKIND_KERNEL;
+use sysdefs::constants::lind_platform_const::{LINDFS_ROOT, FDKIND_KERNEL};
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
@@ -1053,11 +1053,24 @@ pub fn setitimer_syscall(
 pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
     unsafe {
-        let tmp_path = CString::new("/tmp").unwrap();
-        libc::mkdir(tmp_path.as_ptr(), 0o755);
-        let ret = libc::chroot(tmp_path.as_ptr());
+        let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
+        libc::mkdir(lindfs_path.as_ptr(), 0o775);
+        let ret = libc::chroot(lindfs_path.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chroot to {}: {}",
+                LINDFS_ROOT,
+                std::io::Error::last_os_error()
+            );
+        }
         let root = CString::new("/").unwrap();
-        libc::chdir(root.as_ptr());
+        let ret = libc::chdir(root.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chdir to / after chroot: {}",
+                std::io::Error::last_os_error()
+            )
+        }
     }
     cagetable_init();
 
