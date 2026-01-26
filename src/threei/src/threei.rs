@@ -11,15 +11,14 @@ use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_c
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
-    copy_handler_table_to_cage_impl, register_handler_impl,
+    copy_handler_table_to_cage_impl, register_handler_impl, print_handler_table,
 };
-use crate::syscall_table::SYSCALL_TABLE;
 use crate::threei_const;
 
 pub const EXIT_SYSCALL: u64 = 60; // exit syscall number. Public for tests.
 
 /// Function pointer type for rawposix syscall functions in SYSCALL_TABLE.
-pub type RawCallFunc = fn(
+pub type RawCallFunc = extern "C" fn(
     target_cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -420,11 +419,42 @@ pub fn make_syscall(
         return threei_const::ELINDESRCH as i32;
     }
 
+    // Cleanup two global tables for exit syscall
+    if syscall_num == EXIT_SYSCALL {
+        // todo: potential refinement here
+        // since `_rm_grate_from_handler` searches all entries and remove desired entries..
+        // to make things work as fast as possible, I use brute force here to perform cleanup
+        _rm_grate_from_handler(self_cageid);
+        // currently all cages/grates will store closures in global_grate table, so we need to
+        // cleanup whatever its actually a cage/grate
+        remove_cage_runtime(self_cageid);
+    }
+
     // TODO:
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
     if _check_cage_handler_exist(self_cageid) {
         if let Some((in_grate_fn_ptr_u64, grateid)) = _get_handler(self_cageid, syscall_num) {
+            // RawPOSIX special case: directly call the function pointer
+            if grateid == threei_const::RAWPOSIX_CAGEID {
+                let func: RawCallFunc = unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
+                return func(
+                    target_cageid, 
+                    arg1,
+                    arg1_cageid,
+                    arg2,
+                    arg2_cageid,
+                    arg3,
+                    arg3_cageid,
+                    arg4,
+                    arg4_cageid,
+                    arg5,
+                    arg5_cageid,
+                    arg6,
+                    arg6_cageid,
+                );
+            }
+            // Grate case: call into the corresponding grate function
             // <targetcage, targetcallnum, in_grate_fn_ptr_u64, this_grate_id>
             // Theoretically, the complexity is O(1), shouldn't affect performance a lot
             if let Some(ret) = _call_grate_func(
@@ -457,42 +487,13 @@ pub fn make_syscall(
         }
     }
 
-    // Cleanup two global tables for exit syscall
-    if syscall_num == EXIT_SYSCALL {
-        // todo: potential refinement here
-        // since `_rm_grate_from_handler` searches all entries and remove desired entries..
-        // to make things work as fast as possible, I use brute force here to perform cleanup
-        _rm_grate_from_handler(self_cageid);
-        // currently all cages/grates will store closures in global_grate table, so we need to
-        // cleanup whatever its actually a cage/grate
-        remove_cage_runtime(self_cageid);
-    }
-
-    // Regular case (call from cage/grate to rawposix)
-    if let Some(&(_, syscall_func)) = SYSCALL_TABLE.iter().find(|&&(num, _)| num == syscall_num) {
-        let ret = syscall_func(
-            target_cageid,
-            arg1,
-            arg1_cageid,
-            arg2,
-            arg2_cageid,
-            arg3,
-            arg3_cageid,
-            arg4,
-            arg4_cageid,
-            arg5,
-            arg5_cageid,
-            arg6,
-            arg6_cageid,
-        );
-        ret
-    } else {
-        eprintln!(
-            "[3i|make_syscall] Syscall number {} not found!",
-            syscall_num
-        );
-        threei_const::ELINDAPIABORTED as i32
-    }
+    // debug purpose
+    print_handler_table();
+    panic!(
+        "[3i|make_syscall] syscall number {} not found in handler table for cage {}!",
+        syscall_num,
+        self_cageid
+    );
 }
 
 /***************************** trigger_harsh_cage_exit & harsh_cage_exit *****************************/
