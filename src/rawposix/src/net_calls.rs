@@ -1606,35 +1606,28 @@ pub fn getsockopt_syscall(
     optname_cageid: u64,
     optval_arg: u64,
     optval_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
+    optlen_arg: u64,
+    optlen_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = optval_arg as *mut u8;
+    let optval = sc_convert_uaddr_to_host(optval_arg, optval_cageid, cageid) as *mut c_void;
+    let optlen = sc_convert_uaddr_to_host(optlen_arg, optlen_cageid, cageid) as *mut socklen_t;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+    if !sc_unusedarg(arg6, arg6_cageid) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
             "getsockopt_syscall"
         );
     }
 
-    let mut optlen: socklen_t = 4;
-
     let ret = unsafe {
-        libc::getsockopt(
-            fd,
-            level,
-            optname,
-            optval as *mut c_void,
-            &mut optlen as *mut socklen_t,
-        )
+        libc::getsockopt(fd, level, optname, optval, optlen)
     };
     if ret < 0 {
         let errno = get_errno();
