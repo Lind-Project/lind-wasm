@@ -95,7 +95,6 @@ fn create_package_from_cli() -> Result<Package, Box<dyn std::error::Error>> {
 }
 
 fn read_all_from_fd(fd: RawFd) -> Result<Vec<u8>> {
-    // from_raw_fd 会接管这个 fd，File drop 的时候会自动 close
     unsafe {
         let mut file = File::from_raw_fd(fd);
         let mut buf = Vec::new();
