@@ -1626,9 +1626,7 @@ pub fn getsockopt_syscall(
         );
     }
 
-    let ret = unsafe {
-        libc::getsockopt(fd, level, optname, optval, optlen)
-    };
+    let ret = unsafe { libc::getsockopt(fd, level, optname, optval, optlen) };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getsockopt");
