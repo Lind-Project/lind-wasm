@@ -3,14 +3,6 @@ use wasmtime::{raise_trap, AsContext, AsContextMut, AsyncifyState, Caller, Trap}
 
 use crate::LindHost;
 
-// default signal handler actions
-enum SignalDefaultHandler {
-    Terminate, // terminate the process
-    Ignore,    // ignore the signal
-    Stop,      // stop the current process
-    Continue,  // resume the stopped process
-}
-
 // handle all the epoch callback
 // this is where the wasm instance is directed when epoch is triggered
 // this function could possibly be on the callstack of the Asyncify operation
