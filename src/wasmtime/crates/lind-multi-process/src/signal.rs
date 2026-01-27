@@ -73,25 +73,31 @@ pub fn signal_handler<
         if signal_handler == SIG_DFL as u32 {
             // default handler
             // look up the signal's default handler
-            match signal_default_handler_dispatcher(signo) {
-                SignalDefaultHandler::Terminate => {
+            match sysdefs::constants::signal_default_handler_dispatcher(signo) {
+                sysdefs::constants::SignalDefaultHandler::Terminate => {
                     // if we are supposed to be terminated, switch the epoch state of all other threads
                     // to "killed" state and perform a suicide
                     cage::signal::epoch_kill_all(cageid);
                     thread_suicide();
                 }
-                SignalDefaultHandler::Ignore => {
-                    continue;
+                sysdefs::constants::SignalDefaultHandler::Ignore => {
+                    // NOTE: normally this should not be reached since
+                    //       ignored signal would not be queued when sending
+                    //       let's be aggressive and panic if it reaches
+                    unreachable!();
                 }
-                SignalDefaultHandler::Stop => {
+                sysdefs::constants::SignalDefaultHandler::Stop => {
                     // TODO: support STOP signals
                     eprintln!("Warning: STOP signal received but currently not supported!");
                     continue;
                 }
-                SignalDefaultHandler::Continue => {
+                sysdefs::constants::SignalDefaultHandler::Continue => {
                     // TODO: support CONTINUE signals
                     eprintln!("Warning: CONTINUE signal received but currently not supported!");
                     continue;
+                }
+                sysdefs::constants::SignalDefaultHandler::NONEXIST => {
+                    panic!("signal_handler: NONEXIST signal received!");
                 }
             }
         } else if signal_handler == SIG_IGN as u32 {
@@ -149,43 +155,4 @@ pub fn thread_suicide() -> ! {
         raise_trap(err.into());
     }
     unreachable!();
-}
-
-// maps each signal to its default handler
-// see https://man7.org/linux/man-pages/man7/signal.7.html for more information
-fn signal_default_handler_dispatcher(signo: i32) -> SignalDefaultHandler {
-    match signo {
-        sysdefs::constants::SIGHUP => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGINT => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGQUIT => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGILL => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGTRAP => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGABRT => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGBUS => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGFPE => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGKILL => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGUSR1 => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGSEGV => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGUSR2 => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGPIPE => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGALRM => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGTERM => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGSTKFLT => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGCHLD => SignalDefaultHandler::Ignore,
-        sysdefs::constants::SIGCONT => SignalDefaultHandler::Continue,
-        sysdefs::constants::SIGSTOP => SignalDefaultHandler::Stop,
-        sysdefs::constants::SIGTSTP => SignalDefaultHandler::Stop,
-        sysdefs::constants::SIGTTIN => SignalDefaultHandler::Stop,
-        sysdefs::constants::SIGTTOU => SignalDefaultHandler::Stop,
-        sysdefs::constants::SIGURG => SignalDefaultHandler::Ignore,
-        sysdefs::constants::SIGXCPU => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGXFSZ => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGVTALRM => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGPROF => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGWINCH => SignalDefaultHandler::Ignore,
-        sysdefs::constants::SIGIO => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGPWR => SignalDefaultHandler::Terminate,
-        sysdefs::constants::SIGSYS => SignalDefaultHandler::Terminate,
-        _ => panic!("invalid signal number!"),
-    }
 }
