@@ -15,6 +15,7 @@ FROM ubuntu:22.04
 # --- Build arguments ---
 ARG USERNAME=lind
 ARG BRANCH_NAME=main
+ARG REPO_URL="https://github.com/Lind-Project/lind-wasm.git"
 ARG LLVM_VERSION="llvmorg-18.1.8"
 ARG CLANG_PACKAGE="clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04"
 
@@ -74,7 +75,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal
 
 # --- Clone the repo as user ---
-RUN git clone --branch "${BRANCH_NAME}" --single-branch https://github.com/Lind-Project/lind-wasm.git
+RUN git clone --branch "${BRANCH_NAME}" --single-branch "${REPO_URL}" /home/${USERNAME}/lind-wasm
 
 # --- Enable discovery of all branches, then fetch them ---
 WORKDIR /home/${USERNAME}/lind-wasm
@@ -100,8 +101,7 @@ ENV PATH="/usr/local/bin:/home/${USERNAME}/.cargo/bin:/home/${USERNAME}/go/bin:$
 ENV CLANG="/home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}"
 
 # --- Prebuild ---
-ENV WASMTIME_PROFILE=debug
-RUN make sysroot && make wasmtime-debug
+RUN make lind-debug
 
 # --- Make lind_* available from anywhere in the dev container ---
 # Tell scripts where the repo is (they are installed to /usr/local/bin)
@@ -109,10 +109,8 @@ ENV LIND_WASM_ROOT=/home/${USERNAME}/lind-wasm
 USER root
 RUN install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_compile /usr/local/bin/lind_compile \
  && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/lind_run     /usr/local/bin/lind_run     \
- && install -D -m 0755 /home/${USERNAME}/lind-wasm/scripts/cargo-lind_compile	/usr/local/bin/cargo-lind_compile \ 
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
- && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm \
- && ln -sf /usr/local/bin/cargo-lind_compile     /usr/local/bin/lind-cargo-build
+ && ln -sf /usr/local/bin/lind_run     /usr/local/bin/lind-wasm
 USER ${USERNAME}
 
 CMD ["/bin/bash"]
