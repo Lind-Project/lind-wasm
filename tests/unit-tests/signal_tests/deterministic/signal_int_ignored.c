@@ -28,9 +28,6 @@ int main(void) {
         _exit(0);
     }
 
-    // Parent
-    printf("parent: pid=%ld, child=%ld\n", (long)getpid(), (long)child);
-
     int status;
     for (;;) {
         printf("parent: calling waitpid() (will block)...\n");
