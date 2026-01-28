@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
-#include <errno.h>
 
 /* ---------- TEST 1: Basic fork ---------- */
 void test_basic_fork() {
@@ -15,11 +14,7 @@ void test_basic_fork() {
     }
 
     int status;
-    pid_t res;
-    do {
-        res = waitpid(pid, &status, 0);
-    } while (res == -1 && errno == EINTR);
-
+    pid_t res = waitpid(pid, &status, 0);
     assert(res == pid);
     assert(WIFEXITED(status));
     assert(WEXITSTATUS(status) == 0);
@@ -71,11 +66,7 @@ void test_zombie_reaping() {
     }
 
     int status;
-    pid_t res;
-    do {
-        res = waitpid(pid, &status, 0);
-    } while (res == -1 && errno == EINTR);
-
+    pid_t res = waitpid(pid, &status, 0);
     assert(res == pid);
     assert(WIFEXITED(status));
 }
@@ -93,22 +84,12 @@ void test_multiple_children() {
         }
     }
 
-    int reaped = 0;
-    while (reaped < N) {
+    for (int i = 0; i < N; i++) {
         int status;
         pid_t res = waitpid(-1, &status, 0);
-
-        if (res > 0) {
-            assert(WIFEXITED(status));
-            reaped++;
-        } else if (res == -1 && errno == EINTR) {
-            continue;
-        } else if (res == -1 && errno == ECHILD) {
-            break;  
-        }
+        assert(res > 0);
+        assert(WIFEXITED(status));
     }
-
-    assert(reaped == N);
 }
 
 /* ---------- TEST 6: Pipe + fork IPC ---------- */

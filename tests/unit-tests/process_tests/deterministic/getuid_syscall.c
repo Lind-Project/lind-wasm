@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
-#include <errno.h>
 
 /* ---------- TEST 1: Basic getuid ---------- */
 void test_getuid_basic() {
@@ -24,13 +23,7 @@ void test_getuid_in_child() {
     }
 
     int status;
-    pid_t res;
-    int attempts = 0;
-    do {
-        res = waitpid(pid, &status, 0);
-        attempts++;
-        assert(attempts < 100000);
-    } while (res == -1 && errno == EINTR);
+    pid_t res = waitpid(pid, &status, 0);
     assert(res == pid);
     assert(WIFEXITED(status));
     assert(WEXITSTATUS(status) == 0);
@@ -53,13 +46,7 @@ void test_getuid_multiple_children() {
 
     for (int i = 0; i < N; i++) {
         int status;
-        pid_t res;
-        int attempts = 0;
-        do {
-            res = wait(&status);
-            attempts++;
-            assert(attempts < 100000);
-        } while (res == -1 && errno == EINTR);
+        pid_t res = wait(&status);
         assert(res > 0);
         assert(WIFEXITED(status));
         assert(WEXITSTATUS(status) == 0);
@@ -87,13 +74,7 @@ void test_getuid_stress() {
 
     for (int i = 0; i < CHILDREN; i++) {
         int status;
-        pid_t res;
-        int attempts = 0;
-        do {
-            res = wait(&status);
-            attempts++;
-            assert(attempts < 100000);
-        } while (res == -1 && errno == EINTR);
+        pid_t res = wait(&status);
         assert(res > 0);
         assert(WIFEXITED(status));
         assert(WEXITSTATUS(status) == 0);

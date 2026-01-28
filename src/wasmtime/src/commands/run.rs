@@ -1106,6 +1106,18 @@ impl RunCommand {
                 _ => bail!("lind does not support components yet"),
             };
             wasmtime_lind_common::add_to_linker::<Host, RunCommand>(linker)?;
+
+            // Some test binaries are optimized with epoch injection and end up importing an
+            // `epoch_callback` host function. Depending on toolchain/version, this import may
+            // be placed under either the Lind module namespace or the WASI snapshot namespace.
+            // The WASI snapshot variant is already provided by the Lind common linker; only add
+            // a shim for the Lind-module variant when it is missing.
+            if linker
+                .get(&mut *store, "lind", "epoch_callback")
+                .is_none()
+            {
+                linker.func_wrap("lind", "epoch_callback", || -> () {})?;
+            }
         }
 
         // attach Lind-Multi-Process-Context to the host

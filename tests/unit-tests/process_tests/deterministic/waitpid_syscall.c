@@ -16,14 +16,7 @@ void test_waitpid_basic() {
     }
 
     int status;
-    pid_t r;
-    int attempts = 0;
-    do {
-        r = waitpid(pid, &status, 0);
-        attempts++;
-        assert(attempts < 100000);
-    } while (r == -1 && errno == EINTR);
-
+    pid_t r = waitpid(pid, &status, 0);
     assert(r == pid);
 }
 
@@ -40,25 +33,14 @@ void test_waitpid_wnohang() {
     }
 
     int status;
-    pid_t r;
-    int attempts = 0;
-    do {
-        r = waitpid(pid, &status, WNOHANG);
-        attempts++;
-        assert(attempts < 100000);
-    } while (r == -1 && errno == EINTR);
+    pid_t r = waitpid(pid, &status, WNOHANG);
 
     /* Either child not exited yet (0) or already reaped (pid) */
     assert(r == 0 || r == pid);
 
     /* Ensure the child is eventually reaped */
     if (r == 0) {
-        attempts = 0;
-        do {
-            r = waitpid(pid, &status, 0);
-            attempts++;
-            assert(attempts < 100000);
-        } while (r == -1 && errno == EINTR);
+        r = waitpid(pid, &status, 0);
         assert(r == pid);
     }
 
@@ -77,13 +59,7 @@ void test_waitpid_status_null() {
         _exit(0);
     }
 
-    pid_t r;
-    int attempts = 0;
-    do {
-        r = waitpid(pid, NULL, 0);
-        attempts++;
-        assert(attempts < 100000);
-    } while (r == -1 && errno == EINTR);
+    pid_t r = waitpid(pid, NULL, 0);
     assert(r == pid);
 }
 
@@ -112,13 +88,7 @@ void test_waitpid_multiple_sequential() {
             _exit(0);
         }
 
-        pid_t r;
-        int attempts = 0;
-        do {
-            r = waitpid(pid, NULL, 0);
-            attempts++;
-            assert(attempts < 100000);
-        } while (r == -1 && errno == EINTR);
+        pid_t r = waitpid(pid, NULL, 0);
         assert(r == pid);
     }
 }

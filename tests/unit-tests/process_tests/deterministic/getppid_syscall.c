@@ -5,7 +5,6 @@
 #include <sys/types.h>
 #include <string.h>
 #include <stdbool.h>
-#include <errno.h>
 
 /* ---------- TEST 1: Basic fork ---------- */
 void test_basic_fork() {
@@ -17,13 +16,7 @@ void test_basic_fork() {
     }
 
     int status;
-    pid_t res;
-    int attempts = 0;
-    do {
-        res = waitpid(pid, &status, 0);
-        attempts++;
-        assert(attempts < 100000);
-    } while (res == -1 && errno == EINTR);
+    pid_t res = waitpid(pid, &status, 0);
     assert(res == pid);
 }
 
@@ -38,13 +31,7 @@ void test_memory_isolation() {
         _exit(0);
     }
 
-    pid_t res;
-    int attempts = 0;
-    do {
-        res = waitpid(pid, NULL, 0);
-        attempts++;
-        assert(attempts < 100000);
-    } while (res == -1 && errno == EINTR);
+    pid_t res = waitpid(pid, NULL, 0);
     assert(x == 10);
 }
 
@@ -66,15 +53,8 @@ void test_multiple_children() {
     }
 
     int reaped_count = 0;
-    int attempts = 0;
     while (reaped_count < N) {
         pid_t res = waitpid(-1, NULL, 0);
-        attempts++;
-        assert(attempts < 100000);
-
-        if (res == -1 && errno == EINTR) {
-            continue;
-        }
         assert(res > 0);
 
         bool found = false;
@@ -118,13 +98,7 @@ void test_pipe_communication() {
     assert(write(fds[1], msg, len) == (ssize_t)len);
     close(fds[1]);
 
-    pid_t res;
-    int attempts = 0;
-    do {
-        res = waitpid(pid, NULL, 0);
-        attempts++;
-        assert(attempts < 100000);
-    } while (res == -1 && errno == EINTR);
+    pid_t res = waitpid(pid, NULL, 0);
     assert(res == pid);
 }
 
@@ -140,13 +114,7 @@ void stress_test_sequential_forks() {
             _exit(0);
         }
 
-        pid_t res;
-        int attempts = 0;
-        do {
-            res = waitpid(pid, NULL, 0);
-            attempts++;
-            assert(attempts < 100000);
-        } while (res == -1 && errno == EINTR);
+        pid_t res = waitpid(pid, NULL, 0);
         assert(res == pid);
     }
 }
