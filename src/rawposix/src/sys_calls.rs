@@ -97,6 +97,24 @@ pub fn fork_syscall(
     selfcage.child_num.fetch_add(1, SeqCst);
 
     add_cage(child_arg, cageobj);
+
+    threei::copy_handler_table_to_cage(
+        UNUSED_ARG,
+        child_arg, // child cageid
+        child_arg_cageid, // parent cageid
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    );
+
     0
 }
 
