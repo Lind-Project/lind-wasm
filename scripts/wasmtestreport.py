@@ -724,35 +724,7 @@ def pre_test(tests_to_run=None):
     # Ensure LINDFS_ROOT exists with required subdirectories (For CI Environment)
     os.makedirs(LINDFS_ROOT, exist_ok=True)
     os.makedirs(LINDFS_ROOT / "automated_tests", exist_ok=True)
-    os.makedirs(LINDFS_ROOT / "dev", exist_ok=True)
-
-    # Create /dev/null if it doesn't exist
-    dev_null_path = LINDFS_ROOT / "dev" / "null"
-    if not dev_null_path.exists():
-        try:
-            # Try to create the device node
-            import subprocess
-            result = subprocess.run(
-                ["mknod", str(dev_null_path), "c", "1", "3"],
-                check=True,
-                capture_output=True,
-                text=True
-            )
-            os.chmod(dev_null_path, 0o666)
-            logger.info(f"Created /dev/null at {dev_null_path}")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to create /dev/null: {e.stderr}")
-            logger.error("This test runner requires root privileges (use sudo).")
-            logger.error("The chroot() system call used by lind-wasm requires root access.")
-            raise SystemExit(1)
-        except PermissionError as e:
-            logger.error(f"Permission denied creating /dev/null: {e}")
-            logger.error("Please run this script with sudo.")
-            raise SystemExit(1)
-        except FileNotFoundError:
-            logger.error("mknod command not found. Cannot create /dev/null.")
-            raise SystemExit(1)
-
+    
     # If tests_to_run is provided, use selective copying
     if tests_to_run:
         all_dependencies = analyze_testfile_dependencies(tests_to_run)
