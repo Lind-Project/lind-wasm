@@ -7,7 +7,7 @@ use super::threei::RawCallFunc;
 use rawposix::fs_calls::{
     access_syscall, brk_syscall, chdir_syscall, chmod_syscall, clock_gettime_syscall,
     close_syscall, dup2_syscall, dup3_syscall, dup_syscall, fchdir_syscall, fchmod_syscall,
-    fcntl_syscall, fdatasync_syscall, fstat_syscall, fstatfs_syscall, fsync_syscall,
+    fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatfs_syscall, fsync_syscall,
     ftruncate_syscall, futex_syscall, getcwd_syscall, getdents_syscall, getrandom_syscall,
     ioctl_syscall, link_syscall, lseek_syscall, mkdir_syscall, mmap_syscall, mprotect_syscall,
     munmap_syscall, nanosleep_time64_syscall, open_syscall, pipe2_syscall, pipe_syscall,
@@ -79,6 +79,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (62, kill_syscall),
     (67, shmdt_syscall),
     (72, fcntl_syscall),
+    (73, flock_syscall),
     (74, fsync_syscall),
     (75, fdatasync_syscall),
     (76, truncate_syscall),
