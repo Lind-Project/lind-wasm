@@ -79,6 +79,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (62, kill_syscall),
     (67, shmdt_syscall),
     (72, fcntl_syscall),
+    (73, flock_syscall),
     (74, fsync_syscall),
     (75, fdatasync_syscall),
     (76, truncate_syscall),
