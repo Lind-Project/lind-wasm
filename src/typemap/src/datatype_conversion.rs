@@ -35,7 +35,7 @@ fn is_unused(val: u64, placeholder: u64) -> bool {
 
 pub fn sc_unusedarg(arg: u64, arg_cageid: u64) -> bool {
     #[cfg(feature = "secure")]
-    return is_unused(arg, UNUSED_ARG) && is_unused(arg_cageid, UNUSED_ID);
+    return is_unused(arg, UNUSED_ARG);
 
     #[cfg(feature = "fast")]
     return true;
