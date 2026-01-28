@@ -611,8 +611,6 @@ pub fn epoll_create_syscall(
 ///     - positive value: file descriptor for the new epoll instance
 ///     - negative value: error occurred (errno=EINVAL if invalid flags are passed)
 
-
-
 pub fn epoll_create1_syscall(
     cageid: u64,
     flags_arg: u64,
@@ -665,7 +663,6 @@ pub fn epoll_create1_syscall(
     // Return virtual epfd
     virtual_epfd as i32
 }
-
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
 ///
