@@ -11,6 +11,7 @@ use std::str::Utf8Error;
 pub use std::{mem, ptr};
 use sysdefs::constants::lind_platform_const::LIND_ROOT;
 pub use sysdefs::constants::{err_const, fs_const};
+use crate::cage_helpers::validate_cageid;
 
 /// Convert data type from `&str` to `PathBuf`
 ///
@@ -166,7 +167,7 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(path_arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
     let cage = get_cage(path_arg_cageid).unwrap();
@@ -182,7 +183,7 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     // Check if exceeds the max path
     #[cfg(feature = "secure")]
     {
-        let total_length = LIND_ROOT.len() + relative_path.len();
+        let total_length = (LIND_ROOT.len() + relative_path.len()) as i32;
 
         if total_length >= PATH_MAX {
             panic!("Path exceeds PATH_MAX (4096)");

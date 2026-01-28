@@ -60,6 +60,7 @@ wasmtime-lind-common = { path = "crates/lind-common" }
 wasmtime-lind-utils = { path = "crates/lind-utils" }
 wasmtime-wasi-http = { workspace = true, optional = true }
 rawposix = { workspace = true }
+typemap = { workspace = true }
 threei = { workspace = true }
 cage = { workspace = true, optional = false }
 fdtables = { workspace = true }
@@ -230,6 +231,7 @@ wasmtime-wit-bindgen = { path = "crates/wit-bindgen", version = "=23.0.0" }
 test-programs-artifacts = { path = 'crates/test-programs/artifacts' }
 threei = { path = "crates/threei" }
 rawposix = { path = "crates/rawposix" }
+typemap = { path = "crates/typemap", default-features = false }
 fdtables = { path = "crates/fdtables" }
 sysdefs = { path = "crates/sysdefs" }
 cage = { path = "crates/cage" }
@@ -360,6 +362,8 @@ semver = { version = "1.0.17", default-features = false }
 # various features. Most features are enabled by default but most embeddings
 # likely won't need all features.
 [features]
+
+secure = ["typemap/secure"]
 
 lind_debug = ["wasmtime-lind-common/lind_debug"]
 
