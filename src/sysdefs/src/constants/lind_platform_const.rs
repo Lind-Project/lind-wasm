@@ -41,3 +41,6 @@ pub const UNUSED_ARG: u64 = 0xDEADBEEF_DEADBEEF;
 pub const UNUSED_ID: u64 = 0xCAFEBABE_CAFEBABE;
 /// Placeholder for unused syscall name
 pub const UNUSED_NAME: u64 = 0xFEEDFACE_FEEDFACE;
+
+pub const RAWPOSIX_CAGEID: u64 = 777777;
+pub const WASMTIME_CAGEID: u64 = 888888;

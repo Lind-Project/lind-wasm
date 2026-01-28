@@ -2,12 +2,15 @@
 
 use cfg_if::cfg_if;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Result, Context};
 use std::ffi::c_void;
 use std::ptr::NonNull;
+use std::fs::File;
+use std::io::Read;
 use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
-use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper};
+use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper, get_vmctx};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -21,12 +24,13 @@ use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ExternType, InstanceId, InstantiateType,
     Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val,
 };
+use wasmtime::vm::{VMContext, VMOpaqueContext};
 
 use cage::alloc_cage_id;
 use cage::signal::{lind_signal_init, lind_thread_exit};
 use wasmtime_environ::MemoryIndex;
 
-pub mod clone_constants;
+// pub mod clone_constants;
 pub mod signal;
 
 pub const CAGE_START_ID: i32 = 1; // cage id starts from 1
@@ -286,7 +290,7 @@ impl<
     // 4. create a new wasm instance from same module
     // 5. fork the memory region to child (including saved unwind context)
     // 6. start the rewind for both parent and child
-    pub fn fork_call(&self, mut caller: &mut Caller<'_, T>) -> Result<i32> {
+    pub fn fork_call(&self, mut caller: &mut Caller<'_, T>, child_cageid: u64) -> Result<i32> {
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -344,35 +348,8 @@ impl<
 
         // retrieve the child host
         let mut child_host = (self.fork_host)(caller.data());
-        // get next cage id
-        let child_cageid = alloc_cage_id();
-
-        if let None = child_cageid {
-            panic!("running out of cageid!");
-        }
-        let child_cageid = child_cageid.unwrap();
+        
         let parent_cageid = self.cageid;
-        // calling fork in rawposix to fork the cage
-        // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
-        // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
-        make_syscall(
-            self.cageid as u64,    // self cage id
-            (FORK_SYSCALL) as u64, // syscall num for fork
-            UNUSED_NAME,           // syscall name
-            self.cageid as u64,    // target cage id, should be itself
-            child_cageid,          // 1st arg
-            self.cageid as u64,    // 1st arg's cage id
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-            UNUSED_ARG,
-            UNUSED_ID,
-        );
 
         // use the same engine for parent and child
         let engine = self.module.engine().clone();
@@ -558,43 +535,7 @@ impl<
                             .get(0)
                             .expect("_start function does not have a return value");
                         match exit_code {
-                            Val::I32(val) => {
-                                // exit the main thread
-                                if lind_thread_exit(child_cageid, THREAD_START_ID as u64) {
-                                    // Clean up the context from the global table
-                                    if !rm_vmctx(child_cageid as u64) {
-                                        panic!(
-                                            "[wasmtime|fork] Failed to remove VMContext for cage_id {}",
-                                            child_cageid
-                                        );
-                                    }
-                                    // we clean the cage only if this is the last thread in the cage
-                                    // exit the cage with the exit code
-                                    // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
-                                    // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
-                                    make_syscall(
-                                        child_cageid,          // self cage
-                                        (EXIT_SYSCALL) as u64, // syscall num
-                                        UNUSED_NAME,           // syscall name
-                                        child_cageid,          // target cage, should be itself
-                                        *val as u64,           // 1st arg: status
-                                        child_cageid,          // 1st arg's cage id
-                                        UNUSED_ARG,
-                                        UNUSED_ID,
-                                        UNUSED_ARG,
-                                        UNUSED_ID,
-                                        UNUSED_ARG,
-                                        UNUSED_ID,
-                                        UNUSED_ARG,
-                                        UNUSED_ID,
-                                        UNUSED_ARG,
-                                        UNUSED_ID,
-                                    );
-
-                                    // the cage just exited, decrement the cage counter
-                                    lind_manager.decrement();
-                                }
-                            }
+                            Val::I32(val) => {}
                             _ => {
                                 eprintln!("unexpected _start function return type!");
                             }
@@ -806,17 +747,17 @@ impl<
                     // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
                     // structures. See more details in [lind-3i/src/lib.rs]
                     // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
-                    let grate_storeopaque = store.inner_mut();
-                    let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                    // let grate_storeopaque = store.inner_mut();
+                    // let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
+                    // let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
 
-                    // 2) Extract vmctx pointer and put in a Send+Sync wrapper
-                    let vmctx_wrapper = VmCtxWrapper {
-                        vmctx: NonNull::new(vmctx_ptr).unwrap(),
-                    };
+                    // // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                    // let vmctx_wrapper = VmCtxWrapper {
+                    //     vmctx: NonNull::new(vmctx_ptr).unwrap(),
+                    // };
 
-                    // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
-                    let rc = set_vmctx(child_cageid as u64, vmctx_wrapper);
+                    // // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
+                    // let rc = set_vmctx(child_cageid as u64, vmctx_wrapper);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -867,44 +808,7 @@ impl<
                         .get(0)
                         .expect("_start function does not have a return value");
                     match exit_code {
-                        Val::I32(val) => {
-                            // exit the thread
-                            if lind_thread_exit(child_cageid as u64, next_tid as u64) {
-                                // Clean up the context from the global table
-                                if !rm_vmctx(child_cageid as u64) {
-                                    panic!(
-                                        "[wasmtime|pthread_create] Failed to remove VMContext for cage_id {}",
-                                        child_cageid
-                                    );
-                                }
-
-                                // we clean the cage only if this is the last thread in the cage
-                                // exit the cage with the exit code
-                                // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
-                                // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
-                                make_syscall(
-                                    (child_cageid) as u64, // self cage
-                                    (EXIT_SYSCALL) as u64, // syscall num
-                                    UNUSED_NAME,           // syscall name
-                                    (child_cageid) as u64, // target cage
-                                    *val as u64,           // 1st arg: status
-                                    (child_cageid) as u64, // 1st arg's cage id
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
-                                );
-
-                                // the cage just exited, decrement the cage counter
-                                lind_manager.decrement();
-                            }
-                        }
+                        Val::I32(val) => {}
                         _ => {
                             eprintln!("unexpected _start function return type: {:?}", exit_code);
                         }
@@ -922,6 +826,7 @@ impl<
             // set up asyncify state and thread return value for parent
             store.set_asyncify_state(AsyncifyState::Rewind(next_tid as i32));
 
+            println!("pthread_create: thread {} creation finished", next_tid);
             // return InvokeAgain here would make parent re-invoke main
             return Ok(OnCalledAction::InvokeAgain);
         }));
@@ -929,6 +834,7 @@ impl<
         // set asyncify state to unwind for parent
         store.set_asyncify_state(AsyncifyState::Unwind);
 
+        println!("pthread_create: parent unwind started");
         // after returning from here, unwind process should start
         return Ok(0);
     }
@@ -1072,6 +978,11 @@ impl<
 
         let store = caller.as_context_mut().0;
 
+        let mut exec_file = File::open(&real_path_str)
+            .expect("Failed to open exec file");
+        let mut exec_webasm = Vec::new();
+        exec_file.read_to_end(&mut exec_webasm).context("Failed to read exec file")?;
+
         let cloned_webasm = self.webasm.clone();
         let cloned_config = self.config.clone();
         let cloned_lind_manager = self.lind_manager.clone();
@@ -1090,27 +1001,35 @@ impl<
             // argument to change the process id. If we pass the same cageid, it would cause some error
             // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
             // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
-            make_syscall(
-                cloned_cageid as u64,  // self cage id
-                (EXEC_SYSCALL) as u64, // syscall num for exec
-                UNUSED_NAME,           // syscall name
-                cloned_cageid as u64,  // target cage id, should be itself
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-            );
+            // make_syscall(
+            //     cloned_cageid as u64,  // self cage id
+            //     (EXEC_SYSCALL) as u64, // syscall num for exec
+            //     UNUSED_NAME,           // syscall name
+            //     cloned_cageid as u64,  // target cage id, should be itself
+            //     UNUSED_ARG,
+            //     UNUSED_ID,
+            //     UNUSED_ARG,
+            //     UNUSED_ID,
+            //     UNUSED_ARG,
+            //     UNUSED_ID,
+            //     UNUSED_ARG,
+            //     UNUSED_ID,
+            //     UNUSED_ARG,
+            //     UNUSED_ID,
+            //     UNUSED_ARG,
+            //     UNUSED_ID,
+            // );
+            
+            if !rm_vmctx(cloned_cageid as u64) {
+                panic!(
+                    "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
+                    cloned_cageid
+                );
+            }
+    
 
             let ret = exec_call(
-                &cloned_webasm,
+                &exec_webasm,
                 &cloned_config,
                 &real_path_str,
                 &args,
@@ -1133,7 +1052,24 @@ impl<
     // technically this is pthread_exit syscall
     // actual exit syscall that would kill other threads is not supported yet
     // TODO: exit_call should be switched to epoch interrupt method later
-    pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32) {
+    pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32, is_last_thread: u64) {
+        println!(
+            "[wasmtime|exit] Cage {} Thread {} exiting with code {}, is_last_thread={}",
+            self.cageid,
+            self.tid,
+            code,
+            is_last_thread
+        );
+        if is_last_thread == 1 {
+            // Clean up the context from the global table
+            if !rm_vmctx(self.cageid as u64) {
+                panic!(
+                    "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
+                    self.cageid
+                );
+            }
+            self.lind_manager.decrement();
+        }
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -1438,10 +1374,11 @@ pub fn lind_fork<
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     caller: &mut Caller<'_, T>,
+    child_cageid: u64,
 ) -> Result<i32> {
     let host = caller.data().clone();
     let ctx = host.get_ctx();
-    ctx.fork_call(caller)
+    ctx.fork_call(caller, child_cageid)
 }
 
 // entry point of pthread_create syscall
@@ -1471,81 +1408,197 @@ pub fn catch_rewind<
     ctx.catch_rewind(caller)
 }
 
-// entry point of clone_syscall, called by lind-common
-pub fn clone_syscall<
-    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-    U: Clone + Send + 'static + std::marker::Sync,
->(
-    caller: &mut Caller<'_, T>,
-    args: &mut clone_constants::CloneArgStruct,
-) -> i32 {
-    // first let's check if the process is currently in rewind state
-    let rewind_res = catch_rewind(caller);
-    if rewind_res.is_some() {
-        return rewind_res.unwrap();
-    }
-
+pub fn clone_syscall<T, U>(
+    cageid: u64,
+    clone_arg: u64,        // Child's cage id
+    clone_arg_cageid: u64, // Child's cage id arguments cageid
+    parent_cageid: u64,
+    _arg2_cageid: u64,
+    child_cageid: u64,
+    _arg3_cageid: u64,
+    _arg4: u64,
+    _arg4_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i32
+where
+    T: LindHost<T, U> + Clone + Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
+{
+    let args = unsafe { &mut *(clone_arg as *mut sys_struct::CloneArgStruct) };
     // get the flags
     let flags = args.flags;
     // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
     // otherwise, we are creating a process (i.e. fork)
-    let isthread = flags & (clone_constants::CLONE_VM);
+    let isthread = flags & (sys_const::CLONE_VM);
+    
+    unsafe {
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(parent_cageid) {
+            Some(v) => v,
+            None => {
+                panic!("no VMContext found for cage_id {}", parent_cageid);
+            }
+        };
+        // Convert back to VMContext
+        let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 
-    if isthread == 0 {
-        match lind_fork(caller) {
-            Ok(res) => res,
-            Err(_e) => -1,
-        }
-    } else {
-        // pthread_create
-        match lind_pthread_create(
-            caller,
-            args.stack as u32,
-            args.stack_size as u32,
-            args.child_tid,
-        ) {
-            Ok(res) => res,
-            Err(_e) => -1,
-        }
+        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+
+        Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
+            if isthread == 0 {
+                match lind_fork(&mut caller, child_cageid) {
+                    Ok(res) => res,
+                    Err(_e) => -1,
+                }
+            } else {
+                // pthread_create
+                match lind_pthread_create(
+                    &mut caller,
+                    args.stack as u32,
+                    args.stack_size as u32,
+                    args.child_tid,
+                ) {
+                    Ok(res) => res,
+                    Err(_e) => -1,
+                }
+            }
+        });
     }
+    
+    0
 }
+
 
 // entry point of exec_syscall, called by lind-common
-pub fn exec_syscall<
-    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-    U: Clone + Send + 'static + std::marker::Sync,
->(
-    caller: &mut Caller<'_, T>,
-    path: i64,
-    argv: i64,
-    envs: i64,
-) -> i32 {
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
+// pub fn exec_syscall<
+//     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+//     U: Clone + Send + 'static + std::marker::Sync,
+// >(
+//     caller: &mut Caller<'_, T>,
+//     path: i64,
+//     argv: i64,
+//     envs: i64,
+// ) -> i32 {
+//     let host = caller.data().clone();
+//     let ctx = host.get_ctx();
 
-    match ctx.execve_call(caller, path, argv, Some(envs)) {
-        Ok(ret) => ret,
-        Err(e) => {
-            log::error!("failed to exec: {}", e);
-            -1
-        }
+//     match ctx.execve_call(caller, path, argv, Some(envs)) {
+//         Ok(ret) => ret,
+//         Err(e) => {
+//             log::error!("failed to exec: {}", e);
+//             -1
+//         }
+//     }
+// }
+
+pub fn exec_syscall<T, U>(
+    cageid: u64,
+    path: u64,        
+    path_cageid: u64, 
+    argv: u64,
+    argv_cageid: u64,
+    envs: u64,
+    envs_cageid: u64,
+    _arg4: u64,
+    _arg4_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i32
+where
+    T: LindHost<T, U> + Clone + Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
+{
+    unsafe {
+        println!("exec_syscall called with cageid: {}, path addr: {:#x}, argv addr: {:#x}, envs addr: {:#x}", path_cageid, path, argv, envs);
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(path_cageid) {
+            Some(v) => v,
+            None => {
+                panic!("no VMContext found for cage_id {}", path_cageid);
+            }
+        };
+        // Convert back to VMContext
+        let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
+
+        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+
+        Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
+            let host = caller.data().clone();
+            let ctx = host.get_ctx();
+
+            match ctx.execve_call(&mut caller, path as i64, argv as i64, Some(envs as i64)) {
+                Ok(ret) => ret,
+                Err(e) => {
+                    log::error!("failed to exec: {}", e);
+                    -1
+                }
+            }
+        })
     }
 }
 
-pub fn exit_syscall<
-    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-    U: Clone + Send + 'static + std::marker::Sync,
->(
-    caller: &mut Caller<'_, T>,
-    exit_code: i32,
-) -> i32 {
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
+// pub fn exit_syscall<
+//     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
+//     U: Clone + Send + 'static + std::marker::Sync,
+// >(
+//     caller: &mut Caller<'_, T>,
+//     exit_code: i32,
+// ) -> i32 {
+//     let host = caller.data().clone();
+//     let ctx = host.get_ctx();
 
-    ctx.exit_call(caller, exit_code);
+//     ctx.exit_call(caller, exit_code);
 
-    // exit syscall should not fail
-    0
+//     // exit syscall should not fail
+//     0
+// }
+
+pub fn exit_syscall<T, U>(
+    cageid: u64,
+    exit_code: u64,        
+    exit_code_cageid: u64, 
+    is_last_thread: u64,
+    _arg2_cageid: u64,
+    _arg3: u64,
+    _arg3_cageid: u64,
+    _arg4: u64,
+    _arg4_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i32
+where
+    T: LindHost<T, U> + Clone + Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
+{
+    unsafe {
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(exit_code_cageid) {
+            Some(v) => v,
+            None => {
+                panic!("no VMContext found for cage_id {}", exit_code_cageid);
+            }
+        };
+        // Convert back to VMContext
+        let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
+
+        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+
+        println!("[lind-multi|exit_entry] cageid: {}, exit_code: {}, is_last_thread: {}, vmctx_ptr: {:p}", exit_code_cageid, exit_code, is_last_thread, vmctx_raw);
+
+        Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
+            let host = caller.data().clone();
+            let ctx = host.get_ctx();
+
+            ctx.exit_call(&mut caller, exit_code as i32, is_last_thread);
+
+            // exit syscall should not fail
+            0
+        })
+    }
 }
 
 pub fn setjmp_call<
@@ -1593,6 +1646,16 @@ pub fn current_cageid<
     let ctx = host.get_ctx();
     ctx.this_cageid()
 }
+
+pub fn current_tid<T, U>(
+    caller: &mut Caller<'_, T>,
+) -> i32
+where
+    T: LindHost<T, U> + Clone + Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,   
+    {
+        caller.data().get_ctx().tid as i32
+    }
 
 // check if the module has the necessary exported Asyncify functions
 fn support_asyncify(module: &Module) -> bool {
