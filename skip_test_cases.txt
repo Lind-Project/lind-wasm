@@ -1,7 +1,6 @@
 file_tests/deterministic/dup2.c
 file_tests/deterministic/dup3.c
 file_tests/deterministic/cloexec.c
-file_tests/deterministic/flock.c
 file_tests/deterministic/popen.c
 file_tests/deterministic/creat_access.c
 file_tests/deterministic/readlinkat.c
