@@ -349,6 +349,10 @@ pub fn copy_handler_table_to_cage(
     copy_handler_table_to_cage_impl(srccage, targetcage)
 }
 
+pub fn if_exiting_table_contains(cageid: u64) -> bool {
+    EXITING_TABLE.contains(&cageid)
+}
+
 /// actually performs a call.  Not interposable
 ///
 /// This actually performs a threei call.  It is not interposable.  This
@@ -421,13 +425,17 @@ pub fn make_syscall(
 
     // Cleanup two global tables for exit syscall
     if syscall_num == EXIT_SYSCALL {
-        // todo: potential refinement here
-        // since `_rm_grate_from_handler` searches all entries and remove desired entries..
-        // to make things work as fast as possible, I use brute force here to perform cleanup
-        _rm_grate_from_handler(self_cageid);
-        // currently all cages/grates will store closures in global_grate table, so we need to
-        // cleanup whatever its actually a cage/grate
-        remove_cage_runtime(self_cageid);
+        // if arg2 == 1 {
+        //     // todo: potential refinement here
+        //     // since `_rm_grate_from_handler` searches all entries and remove desired entries..
+        //     // to make things work as fast as possible, I use brute force here to perform cleanup
+        //     _rm_grate_from_handler(self_cageid);
+        //     // currently all cages/grates will store closures in global_grate table, so we need to
+        //     // cleanup whatever its actually a cage/grate
+        //     remove_cage_runtime(self_cageid);
+        // }
+        // Mark this cage as exiting (block all future calls to it)
+        // EXITING_TABLE.insert(targetcage);
     }
 
     // TODO:
@@ -436,7 +444,7 @@ pub fn make_syscall(
     if _check_cage_handler_exist(self_cageid) {
         if let Some((in_grate_fn_ptr_u64, grateid)) = _get_handler(self_cageid, syscall_num) {
             // RawPOSIX special case: directly call the function pointer
-            if grateid == threei_const::RAWPOSIX_CAGEID {
+            if grateid == lind_platform_const::RAWPOSIX_CAGEID || grateid == lind_platform_const::WASMTIME_CAGEID {
                 let func: RawCallFunc = unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
                 return func(
                     target_cageid, 
@@ -490,9 +498,10 @@ pub fn make_syscall(
     // debug purpose
     print_handler_table();
     panic!(
-        "[3i|make_syscall] syscall number {} not found in handler table for cage {}!",
+        "[3i|make_syscall] syscall number {} not found in handler table for cage {}, targetcage {}!",
         syscall_num,
-        self_cageid
+        self_cageid,
+        target_cageid,
     );
 }
 

@@ -252,25 +252,6 @@ pub extern "C" fn close_syscall(
 /// ## Returns:
 ///     - On success: 0 or number of woken threads depending on futex operation
 ///     - On failure: a negative errno value indicating the syscall error
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/futex.2.html
-///
-/// The Linux `futex()` syscall provides a mechanism for fast user-space locking. It allows a process or thread
-/// to wait for or wake another process or thread on a shared memory location without invoking heavy kernel-side
-/// synchronization primitives unless contention arises. This implementation wraps the futex syscall, allowing
-/// direct invocation with the relevant arguments passed from the current cage context.
-///
-/// Input:
-///     - cageid: current cageid
-///     - uaddr_arg: pointer to the futex word in user memory
-///     - futex_op_arg: operation code indicating futex command type
-///     - val_arg: value expected at uaddr or the number of threads to wake
-///     - val2_arg: timeout or other auxiliary parameter depending on operation
-///     - uaddr2_arg: second address used for requeueing operations
-///     - val3_arg: additional value for some futex operations
-///
-/// ## Returns:
-///     - On success: 0 or number of woken threads depending on futex operation
-///     - On failure: a negative errno value indicating the syscall error
 pub extern "C" fn futex_syscall(
     cageid: u64,
     uaddr_arg: u64,
@@ -1043,7 +1024,14 @@ pub extern "C" fn brk_syscall(
     let cage = get_cage(cageid).unwrap();
 
     let mut vmmap = cage.vmmap.write();
-    let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
+
+    let heap = match vmmap.find_page(HEAP_ENTRY_INDEX) {
+        Some(entry) => entry.clone(),
+        None => {
+            panic!("brk [cageid: {}]: cannot find heap entry in vmmap", cageid);
+        }
+    };
+    // let heap = vmmap.find_page(HEAP_ENTRY_INDEX).unwrap().clone();
 
     assert!(heap.npages == vmmap.program_break);
 

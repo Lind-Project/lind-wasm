@@ -268,7 +268,13 @@ pub fn lind_signal_init(cageid: u64, epoch_handler: *mut u64, threadid: i32, is_
 // clean up signal stuff for an exited thread
 // return true if this is the last thread in the cage, otherwise return false
 pub fn lind_thread_exit(cageid: u64, thread_id: u64) -> bool {
-    let cage = get_cage(cageid).unwrap();
+    // let cage = get_cage(cageid).unwrap();
+    let cage = match get_cage(cageid) {
+        Some(c) => c,
+        None => {
+            panic!("cageid {} does not exist!", cageid);
+        }
+    };
     // lock the main threadid until all the related fields including epoch_handler finishes its updating
     let mut threadid_guard = cage.main_threadid.write();
     let main_threadid = *threadid_guard as u64;

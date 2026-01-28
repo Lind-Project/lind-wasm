@@ -9,7 +9,7 @@ use std::os::fd::FromRawFd;
 use std::os::unix::io::{IntoRawFd, RawFd};
 use std::ptr::NonNull;
 use std::sync::Arc;
-use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::{make_syscall, threei_const};
 use wasi_common::sync::Dir;
 use wasi_common::sync::WasiCtxBuilder;
@@ -276,6 +276,102 @@ impl LindHost<HostCtx, Option<Config>> for HostCtx {
     }
 }
 
+pub extern "C" fn clone_syscall_entry(
+    cageid: u64,
+    clone_arg: u64,       
+    clone_arg_cageid: u64, 
+    parent_cageid: u64,
+    arg2_cageid: u64,
+    child_cageid: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    wasmtime_lind_multi_process::clone_syscall::<HostCtx, Option<Config>>(
+        cageid,
+        clone_arg,     
+        clone_arg_cageid, 
+        parent_cageid,
+        arg2_cageid,
+        child_cageid,
+        arg3_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    )
+}
+
+pub extern "C" fn exec_syscall_entry(
+    cageid: u64,
+    path_arg: u64,        
+    path_arg_cageid: u64, 
+    argv: u64,
+    argv_cageid: u64,
+    envs: u64,
+    envs_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    wasmtime_lind_multi_process::exec_syscall::<HostCtx, Option<Config>>(
+        cageid,
+        path_arg,
+        path_arg_cageid,
+        argv,
+        argv_cageid,
+        envs,
+        envs_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    )
+}
+
+pub extern "C" fn exit_syscall_entry(
+    cageid: u64,
+    exit_code: u64,        
+    exit_code_cageid: u64, 
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    wasmtime_lind_multi_process::exit_syscall::<HostCtx, Option<Config>>(
+        cageid,
+        exit_code,
+        exit_code_cageid,
+        arg2,
+        arg2_cageid,
+        arg3,
+        arg3_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    )
+}
+
 pub fn execute(package: Package) -> anyhow::Result<Vec<Val>> {
     let Package { wasmbin, config } = package;
     let Config { args, env } = &config;
@@ -310,6 +406,41 @@ pub fn execute(package: Package) -> anyhow::Result<Vec<Val>> {
         grate_callback_trampoline,
     );
 
+    let fp_clone: extern "C" fn(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64) -> i32 = clone_syscall_entry;
+    let clone_call_u64: u64 = fp_clone as usize as u64; 
+    threei::register_handler(
+        clone_call_u64,
+        RAWPOSIX_CAGEID, // self cageid
+        56, // clone syscall number
+        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
+        1, // register
+        WASMTIME_CAGEID, // target cageid
+        0, 0, 0, 0, 0, 0, 0, 0,
+    );
+
+    let fp_exec: extern "C" fn(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64) -> i32 = exec_syscall_entry;
+    let exec_call_u64: u64 = fp_exec as usize as u64; 
+    threei::register_handler(
+        exec_call_u64,
+        RAWPOSIX_CAGEID, // self cageid
+        59, // exec syscall number
+        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
+        1, // register
+        WASMTIME_CAGEID, // target cageid
+        0, 0, 0, 0, 0, 0, 0, 0,
+    );
+
+    let fp_exit: extern "C" fn(u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64, u64) -> i32 = exit_syscall_entry;
+    let exit_call_u64: u64 = fp_exit as usize as u64; 
+    threei::register_handler(
+        exit_call_u64,
+        RAWPOSIX_CAGEID, // self cageid
+        60, // exit syscall number
+        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
+        1, // register
+        WASMTIME_CAGEID, // target cageid
+        0, 0, 0, 0, 0, 0, 0, 0,
+    );
     // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
     // so we manually add them to the linker without checking the input
     let mut linker = trace_span!("setup linker").in_scope(|| Linker::new(&engine));
@@ -407,42 +538,7 @@ pub fn execute(package: Package) -> anyhow::Result<Vec<Val>> {
             if let Val::I32(res) = retval {
                 code = *res;
             }
-            // exit the thread
-            if lind_thread_exit(CAGE_START_ID as u64, THREAD_START_ID as u64) {
-                // Clean up the context from the global table
-                if !rm_vmctx(CAGE_START_ID as u64) {
-                    panic!(
-                        "[wasmtime|run] Failed to remove VMContext for cage_id {}",
-                        CAGE_START_ID
-                    );
-                }
-
-                // we clean the cage only if this is the last thread in the cage
-                // exit the cage with the exit code
-                // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
-                // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
-                make_syscall(
-                    1,                     // self cage id
-                    (EXIT_SYSCALL) as u64, // syscall num
-                    UNUSED_NAME,           // syscall name
-                    1,                     // target cage id, should be itself
-                    code as u64,           // Exit type
-                    1,                     // self cage id
-                    UNUSED_ARG,
-                    UNUSED_ID,
-                    UNUSED_ARG,
-                    UNUSED_ID,
-                    UNUSED_ARG,
-                    UNUSED_ID,
-                    UNUSED_ARG,
-                    UNUSED_ID,
-                    UNUSED_ARG,
-                    UNUSED_ID,
-                );
-
-                // main cage exits
-                lind_manager.decrement();
-            }
+            
             // we wait until all other cage exits
             lind_manager.wait();
             // after all cage exits, finalize the lind
@@ -643,14 +739,14 @@ fn load_main_module(
     // 3) Store the vmctx wrapper in the global table for later retrieval during grate calls
     // This function will be called at either the first cage or exec-ed cages. If there is already
     // a vmctx stored for this cage id, we remove it first to avoid stale vmctx pointer.
-    if cageid != CAGE_START_ID as u64 {
-        if !rm_vmctx(cageid) {
-            panic!(
-                "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
-                cageid
-            );
-        }
-    }
+    // if cageid != CAGE_START_ID as u64 {
+    //     if !rm_vmctx(cageid) {
+    //         panic!(
+    //             "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
+    //             cageid
+    //         );
+    //     }
+    // }
     set_vmctx(cageid, vmctx_wrapper);
 
     // 4) Notify threei of the cage runtime type
