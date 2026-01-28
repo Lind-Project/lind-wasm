@@ -43,12 +43,13 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
 LIND_ROOT = Path(os.environ.get("LIND_ROOT", LIND_WASM_BASE / "src/tmp")).resolve()
+LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
 CC = os.environ.get("CC", "gcc")  # C compiler, defaults to gcc
 
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
 TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
-TESTFILES_DST = LIND_ROOT / "testfiles"
+TESTFILES_DST = LINDFS_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
 NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 FAIL_PARENT_NAME = "fail"
@@ -236,7 +237,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     created_native_execs = set()
     native_dependencies = analyze_executable_dependencies([source_file])
     for exec_path, dependency_source in native_dependencies.items():
-        dest_path = (LIND_ROOT / exec_path).resolve()
+        dest_path = (LINDFS_ROOT / exec_path).resolve()
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
         if dest_path.exists():
@@ -266,7 +267,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     # Compile
     compile_cmd = [CC, str(source_file), "-o", str(native_output)]
     try:
-        proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LIND_ROOT, shell=False)
+        proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LINDFS_ROOT, shell=False)
         if proc.returncode != 0:
             return False, proc.stdout + proc.stderr, "compile_error", "Failure_native_compiling"
     except Exception as e:
@@ -274,7 +275,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     
     # Run
     try:
-        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LIND_ROOT, shell=False, timeout=timeout_sec)
+        proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LINDFS_ROOT, shell=False, timeout=timeout_sec)
         if proc.returncode == 0:
             return True, proc.stdout, 0, None
         else:
@@ -671,13 +672,13 @@ def analyze_executable_dependencies(tests_to_run):
 # Function: create_required_executables
 #
 # Purpose:
-#   Compiles required executables and places them in LIND_ROOT
+#   Compiles required executables and places them in LINDFS_ROOT
 #
 # Variables:
 # - Input:
 #   executable_deps: Dictionary mapping executable paths to source files
 # - Output:
-#   None (creates executables in LIND_ROOT)
+#   None (creates executables in LINDFS_ROOT)
 # ----------------------------------------------------------------------
 def create_required_executables(executable_deps):
     if not executable_deps:
@@ -694,8 +695,8 @@ def create_required_executables(executable_deps):
                 logger.error(f"Failed to compile {source_file}: {compile_err}")
                 continue
             
-            # Create destination directory in LIND_ROOT
-            dest_path = LIND_ROOT / exec_path
+            # Create destination directory in LINDFS_ROOT
+            dest_path = LINDFS_ROOT / exec_path
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Copy the compiled WASM to the destination (preserves source for potential reuse)
@@ -720,8 +721,9 @@ def create_required_executables(executable_deps):
 #   None
 # ----------------------------------------------------------------------
 def pre_test(tests_to_run=None):
-    # Ensure LIND_ROOT exists (For CI Environment)
-    os.makedirs(LIND_ROOT, exist_ok=True)
+    # Ensure LINDFS_ROOT exists with required subdirectories (For CI Environment)
+    os.makedirs(LINDFS_ROOT, exist_ok=True)
+    os.makedirs(LINDFS_ROOT / "automated_tests", exist_ok=True)
     
     # If tests_to_run is provided, use selective copying
     if tests_to_run:
@@ -765,7 +767,8 @@ def pre_test(tests_to_run=None):
     open(readlinkfile_path, 'a').close()
     if not symlink_path.exists():
         try:
-            os.symlink(readlinkfile_path, symlink_path)
+            # Use relative path for symlink target to work correctly in chroot
+            os.symlink("readlinkfile.txt", symlink_path)
         except OSError:
             # Fallback to copying in case symlink creation fails
             shutil.copy2(readlinkfile_path, symlink_path)
@@ -1335,9 +1338,9 @@ def main():
         # All the main execution logic goes here
         try:
             shutil.rmtree(TESTFILES_DST)
-            logger.info(f"Testfiles at {LIND_ROOT} deleted")
+            logger.info(f"Testfiles at {TESTFILES_DST} deleted")
         except FileNotFoundError as e:
-            logger.error(f"Testfiles not present at {LIND_ROOT}")
+            logger.error(f"Testfiles not present at {TESTFILES_DST}")
         
         if clean_testfiles:
             return
@@ -1352,7 +1355,7 @@ def main():
         # Use selective testfile copying based on test dependencies
         pre_test(config['tests_to_run'])
         if pre_test_only:
-            logger.info(f"Testfiles copied to {LIND_ROOT}")
+            logger.info(f"Testfiles copied to {TESTFILES_DST}")
             return
 
         # Run all tests
