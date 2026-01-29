@@ -14,7 +14,6 @@ int main(int argc, char** argv) {
         snprintf(fd1buf, 8, "%d", fd1);
         snprintf(fd2buf, 8, "%d", fd2);
         char *const nargv[] = {argv[0], fd1buf, fd2buf, NULL};
-        printf("%s", argv[0]);
         execve(argv[0], nargv, nenvp);
     } else {
         struct stat statbuf;
