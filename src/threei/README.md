@@ -13,22 +13,22 @@ Note also, that 3i can be used for other inter-cage calls, like RPC.   This docu
 
 3i converts file system calls and RPC system calls into userspace function calls, thereby reducing additional overhead and security risks associated with frequent kernel interactions.
 
-## 3i Function Calls 
+### 3i Function Calls 
 
 |           Caller           |       Callee     |           Function            |  Interposable | Remarks |
 |----------------------------|------------------|-------------------------------|---------------|---------------|
-|   WASM / NaCl / RawPOSIX   |         3i       | `trigger_harsh_cage_exit`     |      No       |See detailed explaination below|
-|         3i / grate         | grate / RawPOSIX | `harsh_cage_exit`             |      Yes      |See detailed explaination below|
-|           grate            |         3i       | `register_handler`            |      Yes      |Register new handler information to scall table|
-|           grate            |         3i       | `copy_handler_table_to_cage`  |      Yes      |Passes the handler table to the target cage|
+|           grate            |         3i       | `register_handler`            |      Yes      |Register a handler for a syscall|
+|           grate            |         3i       | `copy_handler_table_to_cage`  |      Yes      |Overwrites the entire syscall handler table of a cage|
 |           grate            |         3i       | `copy_data_between_cages`     |      Yes      |Copies memory across cages|
-|           grate            |         3i       | `make_syscall`                |      No       |Route the call to the corresponding handler and deal with error situations|
+|           grate            |         3i       | `make_syscall`                |      No       |Call the registered handler for a syscall|
+|   WASM / NaCl / RawPOSIX   |         3i       | `trigger_harsh_cage_exit`     |      No       |Kill a cage: See detailed explanation below|
+|         3i / grate         | grate / RawPOSIX | `harsh_cage_exit`             |      Yes      |Notify a cage was killed: See detailed explaination below|
 
 *NOTE: Interposable in the table means whether these calls are made via the system call table and thus whether or not a grate could alter their behavior*
 
 #### `trigger_harsh_cage_exit` and `harsh_cage_exit`  
 
-`trigger_harsh_cage_exit` is triggered by the caging or signaling infrastructure to indicate that a cage will (uncleanly) exit. After receiving notification, 3i will cleanup the 3i data structure (which is the system call table) and then 3i will go through the respective grates until reaching 3i's version of the call by triggering `harsh_cage_exit`. This call can be thought of as notifying the grates and microvisor of the harsh exit of a program whose memory state cannot be relied upon. This is unlike the `exit_syscall`, which is performed by a functioning program with intact memory as part of its termination.. 
+This is essentially a way for grates to clean up if a cage was abruptly killed (perhaps due to a signal).  `trigger_harsh_cage_exit` is triggered by the caging or signaling infrastructure to indicate that a cage will (uncleanly) exit. After receiving notification, 3i will cleanup the 3i data structure (which is the system call table) and then 3i will go through the respective grates until reaching 3i's version of the call by triggering `harsh_cage_exit`. This call can be thought of as notifying the grates and microvisor of the harsh exit of a program whose memory state cannot be relied upon. This is unlike the `exit_syscall`, which is performed by a functioning program with intact memory as part of its termination.
 
 ## Build and Testing
 
