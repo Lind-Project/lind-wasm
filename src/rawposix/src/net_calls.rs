@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD, EPOLL_CLOEXEC};
+use sysdefs::constants::net_const::{EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
 use sysdefs::data::net_struct::SockAddr;
 use sysdefs::*;
@@ -639,10 +639,9 @@ pub fn epoll_create1_syscall(
     // Convert size argument
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
-    //Validates that the flags argument contains only allowed bits (EPOLL_CLOEXEC), 
+    //Validates that the flags argument contains only allowed bits (EPOLL_CLOEXEC),
     //returning EINVAL if any unknown flags are detected.
-    if (flags & !EPOLL_CLOEXEC) != 0
-    {
+    if (flags & !EPOLL_CLOEXEC) != 0 {
         return syscall_error(Errno::EINVAL, "epoll_create1_syscall", "Invalid flags");
     }
     // Create the kernel epoll instance
