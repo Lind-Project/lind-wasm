@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
+use sysdefs::constants::net_const::{EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
 use sysdefs::data::net_struct::SockAddr;
 use sysdefs::*;
@@ -580,6 +580,83 @@ pub fn epoll_create_syscall(
 
     // Get the virtual epfd and register to fdtables
     let virtual_epfd = fdtables::epoll_create_empty(cageid, false).unwrap();
+    fdtables::epoll_add_underfd(cageid, virtual_epfd, FDKIND_KERNEL, kernel_fd as u64);
+
+    // Return virtual epfd
+    virtual_epfd as i32
+}
+
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_create.2.html
+///
+/// Linux `epoll_create1()` creates an epoll instance and returns a file descriptor referring to that instance.
+/// If flags is 0, then, other than the fact that the obsolete size argument is dropped, epoll_create1() is the same as epoll_create().  
+/// The following value can be included in flags to obtain different behavior:
+
+///       EPOLL_CLOEXEC
+///              Set the close-on-exec (FD_CLOEXEC) flag on the new file descriptor
+///
+/// ## Implementation Approach:
+/// Creates a new virtual epoll file descriptor that maps to an internal epoll instance using fdtables::epoll_create_empty()
+/// and registers it in the file descriptor table. If `EPOLL_CLOEXEC` is set, the resulting virtual epoll file descriptor will be
+/// marked close-on-exec (`FD_CLOEXEC`), ensuring that it is automatically closed during an `exec` operation. If invalid flags
+/// are passed, then EINVAL error is set and -1 is returned.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier.
+///     - flags_arg: Bitmask of flags (only `EPOLL_CLOEXEC` is recognized).
+///     - flags_cageid: cage ID for flags_arg validation.
+///     - arg2-arg6: unused arguments with their respective cage IDs.
+///
+/// ## Returns:
+///     - positive value: file descriptor for the new epoll instance
+///     - negative value: error occurred (errno=EINVAL if invalid flags are passed)
+
+pub fn epoll_create1_syscall(
+    cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "epoll_create1_syscall", "Invalid Cage ID");
+    }
+
+    // Convert size argument
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    //Validates that the flags argument contains only allowed bits (EPOLL_CLOEXEC),
+    //returning EINVAL if any unknown flags are detected.
+    if (flags & !EPOLL_CLOEXEC) != 0 {
+        return syscall_error(Errno::EINVAL, "epoll_create1_syscall", "Invalid flags");
+    }
+    // Create the kernel epoll instance
+    let kernel_fd = unsafe { libc::epoll_create1(flags) };
+
+    if kernel_fd < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "epoll_create1_syscall");
+    }
+
+    //Checks if `EPOLL_CLOEXEC` is set
+    let should_cloexec = (flags & EPOLL_CLOEXEC) != 0;
+
+    // Get the virtual epfd and register to fdtables
+    let virtual_epfd = fdtables::epoll_create_empty(cageid, should_cloexec).unwrap();
     fdtables::epoll_add_underfd(cageid, virtual_epfd, FDKIND_KERNEL, kernel_fd as u64);
 
     // Return virtual epfd
@@ -1632,36 +1709,27 @@ pub fn getsockopt_syscall(
     optname_cageid: u64,
     optval_arg: u64,
     optval_cageid: u64,
-    arg5: u64,
-    arg5_cageid: u64,
+    optlen_arg: u64,
+    optlen_cageid: u64,
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
     let level = sc_convert_sysarg_to_i32(level_arg, level_cageid, cageid);
     let optname = sc_convert_sysarg_to_i32(optname_arg, optname_cageid, cageid);
-    let optval = optval_arg as *mut u8;
+    let optval = sc_convert_uaddr_to_host(optval_arg, optval_cageid, cageid) as *mut c_void;
+    let optlen = sc_convert_uaddr_to_host(optlen_arg, optlen_cageid, cageid) as *mut socklen_t;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg5, arg5_cageid) && sc_unusedarg(arg6, arg6_cageid)) {
+    if !sc_unusedarg(arg6, arg6_cageid) {
         panic!(
             "{}: unused arguments contain unexpected values -- security violation",
             "getsockopt_syscall"
         );
     }
 
-    let mut optlen: socklen_t = 4;
-
-    let ret = unsafe {
-        libc::getsockopt(
-            fd,
-            level,
-            optname,
-            optval as *mut c_void,
-            &mut optlen as *mut socklen_t,
-        )
-    };
+    let ret = unsafe { libc::getsockopt(fd, level, optname, optval, optlen) };
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getsockopt");

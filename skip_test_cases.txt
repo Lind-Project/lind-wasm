@@ -3,12 +3,11 @@ file_tests/deterministic/popen.c
 file_tests/non-deterministic/sc-writev.c
 memory_tests/fail/mmap-negative2.c
 networking_tests/deterministic/uds-nb-select.c
-networking_tests/deterministic/getsockopt.c
 networking_tests/non-deterministic/serverclient.c
 networking_tests/non-deterministic/shutdown.c
 networking_tests/non-deterministic/socketepoll.c
 networking_tests/non-deterministic/socketselect.c
-networking_tests/non-deterministic/uds-serverclient.c
+networking_tests/deterministic/uds-serverclient.c
 networking_tests/non-deterministic/uds-socketselect.c
 process_tests/non-deterministic/fork.c
 process_tests/non-deterministic/template.c

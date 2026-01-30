@@ -31,12 +31,16 @@ if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
   exit 2
 fi
 
-WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
-WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime"
-# Fallback to release if selected profile isn't built yet
+WASMTIME_BIN="${REPO_ROOT}/build/wasmtime"
+# Fallback to release if build artifact isn't present yet
 if [[ ! -x "${WASMTIME_BIN}" ]]; then
-  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
-  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
+  ALT="${REPO_ROOT}/build/wasmtime-debug"
+  if [[ -x "${ALT}" ]]; then
+    WASMTIME_BIN="${ALT}"
+  else
+    ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
+    [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
+  fi
 fi
 [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
 
