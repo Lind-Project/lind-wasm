@@ -5,6 +5,9 @@
 //! linear call stack. There are two primary scenarios in which lind-3i must explicitly locate and
 //! re-enter a different runtime state.
 //!
+//! ---
+//! ## Scenario 1: Process-like operations (`fork`, `exec`, `exit`)
+//!
 //! The first scenario occurs during process-like operations such as `fork`, `exec`, and `exit`. These
 //! operations require Wasmtime to create, clone, or destroy existing Wasm instances. After RawPOSIX
 //! completes the semantic handling of a `fork`, `exec`, or `exit` operation, execution must return to
@@ -13,18 +16,30 @@
 //! a result, lind-3i cannot rely on an implicit “current” runtime state. Instead, it must be able to
 //! retrieve the Wasmtime execution context. For `exec` and `exit` calls, it will retrieve the context
 //! associated with an arbitrary `cage_id`.
-//! - todo:
-//! In lind-boot, for `fork` calls, it will retrieve the context according to the context ptr passed from
-//! arguments.
+//!
+//! ---
+//! ## Scenario 2: Grate calls (cross-module execution transfers)
 //!
 //! The second scenario arises during grate calls. Grate calls involve cross-module execution transfers,
 //! where control jumps from one Wasm module to another (for example, from a cage into a grate, or between
 //! grates). Supporting these jumps similarly requires the ability to locate and enter the runtime state
 //! of a different module than the one currently executing.
 //!
+//! ---
 //! To support both scenarios, lind-3i leverages a key property of lind-wasm’s execution model: each Wasmtime
 //! `Store` contains exactly one Wasm `Instance`, and each thread executes within its own independent
 //! store / instance pair.
+//!
+//! ---
+//! ## VMContext storage model
+//!
+//! VMContext pointers are stored globally and indexed by `cage_id`. Two distinct
+//! structures are used:
+//!
+//! 1. **Per-cage VMContext queues (`VMCTX_QUEUES`)**
+//!    - Represent the default execution pool for a cage or grate.
+//!    - Conceptually correspond to the *main thread* (`tid == 1`).
+//!    - Used by normal execution paths, including grate calls.
 //!
 //! At module creation time, lind-3i extracts the `VMContext` pointer associated with the newly created instance.
 //! This `VMContext` uniquely identifies the execution state of that `Store` / `Instance`. The pointer is
@@ -33,7 +48,15 @@
 //! Using Wasmtime’s internal mechanisms, the `VMContext` pointer can be used to recover the associated
 //! `Store` and `Instance`, allowing execution to resume in the correct runtime context.
 //!
-//! The table intentionally stores raw `VMContext` pointers rather than typed store or instance handles.
+//! 2. **Per-cage thread VMContext tables (`VMCTX_THREADS`)**
+//!    - Used *only* for non-main threads (`tid != 1`).
+//!    - Applicable exclusively to pthread-related syscalls and thread `exit`.
+//!    - Each `(cage_id, tid)` maps to at most one `VMContext`.
+//!
+//! Grate calls never consult the thread table and always acquire execution
+//! contexts from the main per-cage queue.
+//!
+//! The tables intentionally store raw `VMContext` pointers rather than typed store or instance handles.
 //! This design avoids Rust lifetime constraints that would otherwise prevent cross-store and cross-instance
 //! execution transfers. Correctness instead relies on higher-level invariants enforced by lind-wasm, including
 //! the guarantee that `VMContext` pointers remain valid for the lifetime of their associated threads.
@@ -41,11 +64,17 @@
 //! For each pool, a single instance performs full initialization, including lind-specific memory setup,
 //! while additional instances attach to the same linear memory. This design allows a grate to process multiple
 //! concurrent requests to the same Wasm linear memory without duplicating address space state.
-use std::collections::VecDeque;
+//!
+//! ---
+//! ## Concurrency note
+//!
+//! This module provides *execution routing*, not synchronization. Multiple
+//! VMContext instances may share the same linear memory. Grate developers are
+//! responsible for ensuring proper synchronization when mutating shared state.
+use std::collections::{HashMap, VecDeque};
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::sync::Mutex;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use sysdefs::constants::lind_platform_const;
 
 /// The [`VMContext`](wasmtime_runtime::VMContext) pointer originates from Wasmtime internals and
@@ -75,14 +104,23 @@ impl VmCtxWrapper {
     }
 }
 
-/// Global per-cage `VMContext` queues.
+/// Global per-cage `VMContext` execution pools.
 ///
-/// This is a global pool indexed by `cage_id` and will be initialized at the start of lind-wasm
-/// execution. Each cage owns a dedicated FIFO queue of `VmCtxWrapper` objects.
+/// Each cage owns a dedicated FIFO queue of `VMContext` entries. This queue represents the default
+/// execution pool and is conceptually associated with the main thread (`tid == 1`).
 ///
-/// # Lifetime:
-/// Individual queues may be emptied when a cage terminates, but the slot itself is never removed.
+/// Normal execution paths and all grate calls acquire `VMContexts` exclusively
+/// from this pool.
 static VMCTX_QUEUES: OnceLock<Vec<Mutex<VecDeque<VmCtxWrapper>>>> = OnceLock::new();
+
+/// Per-cage thread-specific `VMContext` table.
+///
+/// This table is used *only* for non-main threads (`tid != 1`) and exists to support pthread-related
+/// syscalls and thread `exit`.
+///
+/// Each `(cage_id, tid)` maps to at most one `VMContext`. No pooling is performed.
+/// This table is not consulted for normal execution or grate calls.
+static VMCTX_THREADS: OnceLock<Vec<Mutex<HashMap<u64, VmCtxWrapper>>>> = OnceLock::new();
 
 /// Initialize the global `VMContext` pool.
 ///
@@ -94,13 +132,19 @@ pub fn init_vmctx_pool() {
             .map(|_| Mutex::new(VecDeque::new()))
             .collect()
     });
+
+    VMCTX_THREADS.get_or_init(|| {
+        (0..lind_platform_const::MAX_CAGEID)
+            .map(|_| Mutex::new(HashMap::new()))
+            .collect()
+    });
 }
 
 /// `get_vmctx`
 ///
 /// Retrieve a VMContext from the specified cage.
 ///
-/// This performs a FIFO pop from the per-cage queue.
+/// This performs a FIFO pop from the main-thread (`tid == 1`) execution queue.
 ///
 /// # Note on concurrency semantics:
 /// Because `VmCtxWrapper` is `Copy`, each caller receives an independent wrapper value. Modifying
@@ -184,4 +228,40 @@ pub fn rm_vmctx(cage_id: u64) -> bool {
     let mut guard = q.lock().unwrap();
     guard.clear();
     true
+}
+
+/// Register a VMContext for a non-main thread (`tid != 1`).
+///
+/// This is used exclusively for pthread-related syscalls and thread exit.
+/// Grate calls and normal execution never consult this table.
+pub fn set_vmctx_thread(cage_id: u64, tid: u64, vmctx: VmCtxWrapper) {
+    debug_assert!(tid != 1, "use set_vmctx_tid1 for tid==1");
+
+    let tables = VMCTX_THREADS.get().expect("VMCTX_THREADS not initialized");
+    let t = tables.get(cage_id as usize).expect("invalid cage_id");
+    t.lock().unwrap().insert(tid, vmctx);
+}
+
+/// Look up the VMContext for a non-main thread (`tid != 1`).
+///
+/// Returns `None` if the thread has exited or was never registered.
+pub fn get_vmctx_thread(cage_id: u64, tid: u64) -> Option<VmCtxWrapper> {
+    debug_assert!(tid != 1, "use get_vmctx_tid1 for tid==1");
+
+    let tables = VMCTX_THREADS.get().expect("VMCTX_THREADS not initialized");
+    let t = tables.get(cage_id as usize).expect("invalid cage_id");
+    t.lock().unwrap().get(&tid).copied()
+}
+
+/// tid != 1: remove a single thread entry
+pub fn rm_vmctx_thread(cage_id: u64, tid: u64) -> bool {
+    debug_assert!(tid != 1, "tid==1 should clear pool differently if needed");
+
+    let Some(tables) = VMCTX_THREADS.get() else {
+        return false;
+    };
+    let Some(t) = tables.get(cage_id as usize) else {
+        return false;
+    };
+    t.lock().unwrap().remove(&tid).is_some()
 }

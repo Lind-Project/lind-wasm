@@ -7,7 +7,9 @@ use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::{threei::make_syscall, threei_const};
-use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper};
+use wasmtime_lind_3i::{
+    get_vmctx, get_vmctx_thread, rm_vmctx, set_vmctx, set_vmctx_thread, VmCtxWrapper,
+};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -808,8 +810,8 @@ impl<
                         vmctx: NonNull::new(vmctx_ptr).unwrap(),
                     };
 
-                    // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
-                    let rc = set_vmctx(child_cageid as u64, vmctx_wrapper);
+                    // 3) Store the vmctx wrapper in the global thread table for later retrieval during syscalls
+                    let rc = set_vmctx_thread(child_cageid as u64, next_tid as u64, vmctx_wrapper);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
