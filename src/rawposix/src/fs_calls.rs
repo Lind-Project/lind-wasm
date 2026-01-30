@@ -279,6 +279,11 @@ pub extern "C" fn futex_syscall(
         let errno = get_errno();
         return handle_errno(errno, "futex");
     }
+
+    println!(
+        "[futex_syscall] cageid: {}, uaddr: {:x}, futex_op: {}, val: {}, timeout: {}, uaddr2: {:x}, val3: {}, ret: {}",
+        cageid, uaddr, futex_op, val, timeout, uaddr2, val3, ret
+    );
     ret
 }
 

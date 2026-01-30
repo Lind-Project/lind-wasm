@@ -10,7 +10,8 @@ use std::io::Read;
 use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
-use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper, get_vmctx};
+use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper, get_vmctx, set_vmctx_thread, get_vmctx_thread};
+// use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper, get_vmctx};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -747,17 +748,17 @@ impl<
                     // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
                     // structures. See more details in [lind-3i/src/lib.rs]
                     // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
-                    // let grate_storeopaque = store.inner_mut();
-                    // let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                    // let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                    let grate_storeopaque = store.inner_mut();
+                    let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
 
-                    // // 2) Extract vmctx pointer and put in a Send+Sync wrapper
-                    // let vmctx_wrapper = VmCtxWrapper {
-                    //     vmctx: NonNull::new(vmctx_ptr).unwrap(),
-                    // };
+                    // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                    let vmctx_wrapper = VmCtxWrapper {
+                        vmctx: NonNull::new(vmctx_ptr).unwrap(),
+                    };
 
-                    // // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
-                    // let rc = set_vmctx(child_cageid as u64, vmctx_wrapper);
+                    // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
+                    let rc = set_vmctx_thread(child_cageid as u64, next_tid as u64, vmctx_wrapper);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -802,7 +803,7 @@ impl<
                         eprintln!("Error: {:?}", e);
                         return 0;
                     }
-
+                    
                     // get the exit code of the module
                     let exit_code = results
                         .get(0)
@@ -1068,6 +1069,10 @@ impl<
                     self.cageid
                 );
             }
+            println!(
+                "[wasmtime|exit] Cage {} all threads exited, cleaning up cage context",
+                self.cageid
+            );
             self.lind_manager.decrement();
         }
         // get the base address of the memory
@@ -1560,8 +1565,8 @@ pub fn exit_syscall<T, U>(
     cageid: u64,
     exit_code: u64,        
     exit_code_cageid: u64, 
+    tid: u64,
     is_last_thread: u64,
-    _arg2_cageid: u64,
     _arg3: u64,
     _arg3_cageid: u64,
     _arg4: u64,
@@ -1576,18 +1581,28 @@ where
     U: Clone + Send + Sync + 'static,
 {
     unsafe {
-        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(exit_code_cageid) {
-            Some(v) => v,
-            None => {
-                panic!("no VMContext found for cage_id {}", exit_code_cageid);
+        let vmctx_wrapper: VmCtxWrapper = if tid == 1 {
+            match get_vmctx(exit_code_cageid) {
+                Some(v) => v,
+                None => {
+                    panic!("no VMContext found for cage_id {}", exit_code_cageid);
+                }
+            }
+        } else {
+            match get_vmctx_thread(exit_code_cageid, tid) {
+                Some(v) => v,
+                None => {
+                    panic!("no VMContext found for cage_id {}", exit_code_cageid);
+                }
             }
         };
+        
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 
         let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
 
-        println!("[lind-multi|exit_entry] cageid: {}, exit_code: {}, is_last_thread: {}, vmctx_ptr: {:p}", exit_code_cageid, exit_code, is_last_thread, vmctx_raw);
+        println!("[lind-multi|exit_entry] cageid: {}, tid: {}, is_last_thread: {}, vmctx_ptr: {:p}", exit_code_cageid, tid, is_last_thread, vmctx_raw);
 
         Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             let host = caller.data().clone();

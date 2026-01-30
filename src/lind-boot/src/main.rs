@@ -552,6 +552,8 @@ pub fn execute(package: Package) -> anyhow::Result<Vec<Val>> {
         }
     }
 
+    println!("Wasm execution in cage {} finished.",  CAGE_START_ID);
+
     result
 }
 
@@ -659,6 +661,8 @@ pub fn execute_with_lind(
         load_main_module(&mut wstore, &mut linker, &module, cageid as u64, &args)
             .with_context(|| format!("failed to run main module"))
     });
+
+    println!("Wasm execution in cage {} finished.",  CAGE_START_ID);
 
     result
 }

@@ -67,13 +67,10 @@ pub fn add_to_linker<
             }
 
             if call_number as i32 == EXIT_SYSCALL {
-                if threei::if_exiting_table_contains(self_cageid) {
-                    println!("[lind-common|make_syscall] cage {} is already exiting, skip exit syscall", self_cageid);
-                    return 0;
-                }
                 let tid = wasmtime_lind_multi_process::current_tid(&mut caller);
                 println!("[lind-common|make_syscall] exit syscall, cageid: {}, tid: {}, target: {}", self_cageid, tid, target_cageid);
-                return make_syscall(
+                
+                let ret = make_syscall(
                     self_cageid,
                     call_number as u64,
                     call_name,
@@ -91,6 +88,8 @@ pub fn add_to_linker<
                     arg6,
                     arg6cageid,
                 );
+                println!("[lind-common|make_syscall] exit syscall, cageid: {}, tid: {}, target: {}, ret: {}", self_cageid, tid, target_cageid, ret);
+                return ret;
             }
             
             let ret = match call_number as i32 {

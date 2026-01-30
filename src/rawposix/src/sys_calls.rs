@@ -306,8 +306,8 @@ pub extern "C" fn exit_syscall(
         WASMTIME_CAGEID,
         status_arg,
         status_cageid,
+        tid, 
         is_last_thread, // represent the last thread exiting
-        UNUSED_ID, 
         UNUSED_ARG, UNUSED_ID, 
         UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
     )
