@@ -23,4 +23,10 @@ process_tests/non-deterministic/template.c
 process_tests/non-deterministic/tls_test.c
 signal_tests/deterministic/sigpipe.c
 signal_tests/fail/signal_resethand.c
-signal_tests/non-deterministic/signal_recursive.c
+signal_tests/deterministic/signal_recursive.c
+process_tests/deterministic/thread-test.c
+signal_tests/deterministic/signal.c
+signal_tests/deterministic/signal_longjmp.c
+signal_tests/deterministic/signal_nodefer.c
+signal_tests/deterministic/signal_procmask.c
+signal_tests/deterministic/signal_sa_mask.c
