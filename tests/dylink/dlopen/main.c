@@ -1,44 +1,34 @@
 #include <stdio.h>
-#include <unistd.h>
-#include <string.h>
+#include <stdlib.h>
+#include <dlfcn.h>
 
-int __lind_debug_num(int num) __attribute__((
-    __import_module__("lind"),
-    __import_name__("lind-debug-num")
-));
+int main(void) {
+    void *handle;
+    void (*hello_func)(const char*);
+    char *error;
 
-int __lind_dlopen(char* filename) __attribute__((
-    __import_module__("lind"),
-    __import_name__("dlopen")
-));
+    /* Load the math library */
+    handle = dlopen("lib.wasm", RTLD_LAZY);
+    if (!handle) {
+        fprintf(stderr, "dlopen failed: %s\n", dlerror());
+        return 1;
+    }
 
-int __lind_dlsym(void* handle, char* symbol) __attribute__((
-    __import_module__("lind"),
-    __import_name__("dlsym")
-));
+    /* Clear any existing error */
+    dlerror();
 
-typedef void (*func_type)(char*);
+    /* Get symbol */
+    *(void **)(&hello_func) = dlsym(handle, "hello");
+    error = dlerror();
+    if (error) {
+        fprintf(stderr, "dlsym failed: %s\n", error);
+        dlclose(handle);
+        return 1;
+    }
 
-void main_function(char *str)
-{
-    printf("from main function: %s\n", str);
-}
+    hello_func("main module");
 
-void make_call(func_type func, char* arg)
-{
-    printf("make_call: func index: %d\n", func);
-    func(arg);
-}
-
-char *data = "string from main process!";
-
-int main()
-{
-    void* handle = (void *) __lind_dlopen("lib.wasm");
-    func_type (*myfunc)(func_type) = (func_type (*)(func_type)) __lind_dlsym(handle, "myfunc");
-    func_type main_func = main_function;
-    make_call(main_func, data);
-    func_type lib_func = myfunc(main_function);
-    make_call(lib_func, data);
+    /* Close the library */
+    dlclose(handle);
     return 0;
 }

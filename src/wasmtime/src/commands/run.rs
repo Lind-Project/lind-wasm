@@ -412,7 +412,7 @@ impl RunCommand {
             let dlopen = move |mut caller: wasmtime::Caller<'_, Host>, lib: i32| -> i32 {
                 let base = get_memory_base(&mut caller);
                 let path = typemap::get_cstr(base + lib as u64).unwrap();
-                println!("[debug] dlopen {}", path);
+                println!("[debug] dlopen path \"{}\"", path);
 
                 run_cmd.load_library_module(&mut caller, cloned_linker.clone(), cloned_lind_got.clone(), path) as i32
             };
@@ -442,6 +442,12 @@ impl RunCommand {
                 val
             };
 
+            let dlclose = move |mut caller: wasmtime::Caller<'_, Host>, handle: i32| -> i32 {
+                println!("[debug] dlclose handle {}", handle);
+                // to do: implement dlclose
+                0
+            };
+
             let mut guard = linker.lock().unwrap();
             if let CliLinker::Core(linker) = &mut *guard {
                 linker.func_wrap(
@@ -454,6 +460,12 @@ impl RunCommand {
                     "lind",
                     "dlsym",
                     dlsym,
+                ).unwrap();
+
+                linker.func_wrap(
+                    "lind",
+                    "dlclose",
+                    dlclose,
                 ).unwrap();
             }
         }
@@ -569,6 +581,16 @@ impl RunCommand {
                     CliLinker::Component(_) => {
                         bail!("--preload cannot be used with components");
                     }
+                }
+            }
+        }
+
+        {
+            let mut guard = linker.lock().unwrap();
+            if let CliLinker::Core(linker) = &mut *guard {
+                if let RunTarget::Core(module) = &main {
+                    // TODO: temporarily direct unknown imports into traps
+                    linker.define_unknown_imports_as_traps(module);
                 }
             }
         }
@@ -983,6 +1005,7 @@ impl RunCommand {
         let result = match guard_linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
+                
                 let (instance, grate_instanceid) = linker
                     .instantiate_with_lind(
                         &mut *store,

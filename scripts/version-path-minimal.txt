@@ -1,6 +1,5 @@
 ./posix/Versions
 ./stdlib/Versions
-./mach/Versions
 ./misc/Versions
 ./io/Versions
 ./sysdeps/unix/sysv/linux/Versions
@@ -15,3 +14,9 @@
 ./elf/Versions
 ./socket/Versions
 ./ctype/Versions
+./wcsmbs/Versions
+./time/Versions
+./nptl/Versions
+./locale/Versions
+./signal/Versions
+./dlfcn/Versions

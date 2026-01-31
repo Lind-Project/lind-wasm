@@ -244,6 +244,7 @@ impl<T> Linker<T> {
         for import in module.imports() {
             if let Err(import_err) = self._get_by_import(&import) {
                 if let ExternType::Func(func_ty) = import_err.ty() {
+                    println!("[debug] Warning: link undefined symbol \"{}\" to trap", import.name());
                     self.func_new(import.module(), import.name(), func_ty, move |_, _, _| {
                         bail!(import_err.clone());
                     })?;
@@ -960,7 +961,7 @@ impl<T> Linker<T> {
                 for (name, global) in globals {
                     let val = global.get(&mut store);
                     // relocate the variable
-                    println!("[debug] add {} to {} ({})", val.i32().unwrap() as u32, memory_base, name);
+                    // println!("[debug] add {} to {} ({})", val.i32().unwrap() as u32, memory_base, name);
                     let val = val.i32().unwrap() as u32 + memory_base;
                     if got.update_entry_if_exist(&name, val) {
                         println!("[debug] update GOT.mem.{} to {}", name, val);
