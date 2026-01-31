@@ -14,7 +14,7 @@ networking_tests/non-deterministic/serverclient.c
 networking_tests/non-deterministic/shutdown.c
 networking_tests/non-deterministic/socketepoll.c
 networking_tests/non-deterministic/socketselect.c
-networking_tests/non-deterministic/uds-serverclient.c
+networking_tests/deterministic/uds-serverclient.c
 networking_tests/non-deterministic/uds-socketselect.c
 process_tests/deterministic/forkdup.c
 process_tests/deterministic/forkexecuid.c
