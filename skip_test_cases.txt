@@ -20,7 +20,7 @@ process_tests/deterministic/forkdup.c
 process_tests/deterministic/forkexecuid.c
 process_tests/non-deterministic/fork.c
 process_tests/non-deterministic/template.c
-process_tests/non-deterministic/tls_test.c
+process_tests/deterministic/tls_test.c
 signal_tests/deterministic/sigpipe.c
 signal_tests/fail/signal_resethand.c
 signal_tests/deterministic/signal_recursive.c
