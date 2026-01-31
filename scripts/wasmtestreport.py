@@ -42,7 +42,6 @@ RUN_FOLDERS = [] # Add folders to be run, only test cases in these folders will 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
-LIND_ROOT = Path(os.environ.get("LIND_ROOT", LIND_WASM_BASE / "src/tmp")).resolve()
 LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
 CC = os.environ.get("CC", "gcc")  # C compiler, defaults to gcc
 
@@ -710,7 +709,7 @@ def create_required_executables(executable_deps):
 # Function: pre_test
 #
 # Purpose:
-#   Creates /src/tmp/testfiles directory, 
+#   Creates lindfs/testfiles directory, 
 #   Creates readlinkfile.txt file and a soft link to it as readlinkfile(for the purpose of readlinkfile tests)
 #   Copies the required test files from TESTFILES_SRC to TESTFILES_DST defined above
 #
@@ -724,7 +723,7 @@ def pre_test(tests_to_run=None):
     # Ensure LINDFS_ROOT exists with required subdirectories (For CI Environment)
     os.makedirs(LINDFS_ROOT, exist_ok=True)
     os.makedirs(LINDFS_ROOT / "automated_tests", exist_ok=True)
-    
+
     # If tests_to_run is provided, use selective copying
     if tests_to_run:
         all_dependencies = analyze_testfile_dependencies(tests_to_run)
@@ -1302,9 +1301,6 @@ def main():
             os.remove(output_file)
         if os.path.isfile(output_html_file):
             os.remove(output_html_file)
-        logger.debug(Path(LIND_ROOT))
-        for file in Path(LIND_ROOT).iterdir():
-            file.unlink()
         return
 
     results = {
