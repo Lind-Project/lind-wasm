@@ -25,7 +25,7 @@ void test_readlinkat() {
     int dirfd = open("testfiles/", O_RDONLY);
     assert(dirfd != -1 && "Failed to open directory");
 
-    len = readlinkat(dirfd, VALID_SYMBOLIC_PATH, buf, sizeof(buf));
+    len = readlinkat(dirfd, "readlinkfile", buf, sizeof(buf));
     assert(len != -1 && "Test Case 2: readlinkat should succeed");                                                                    
     buf[len] = '\0';                                                                                                                  
     assert(strcmp(buf, "readlinkfile.txt") == 0 && "Test Case 2: wrong symlink target");                                              
