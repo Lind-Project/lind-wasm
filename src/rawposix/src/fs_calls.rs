@@ -1849,8 +1849,19 @@ pub fn readlinkat_syscall(
             return handle_errno(kernel_fd, "readlinkat");
         }
 
-        // path is already converted by sc_convert_path_to_host
-        unsafe { libc::readlinkat(kernel_fd, path.as_ptr(), buf, buflen) }
+        let raw_path = match get_cstr(path_arg) {
+            Ok(p) => p,
+            Err(_) => {
+                return syscall_error(
+                    Errno::EINVAL,
+                    "readlinkat",
+                    "invalid  
+        path",
+                )
+            }
+        };
+
+        unsafe { libc::readlinkat(kernel_fd, raw_path.as_ptr(), buf, buflen) }
     };
 
     if ret < 0 {
