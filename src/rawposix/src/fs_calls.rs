@@ -1861,7 +1861,7 @@ pub fn readlinkat_syscall(
             }
         };
 
-        unsafe { libc::readlinkat(kernel_fd, raw_path.as_ptr(), buf, buflen) }
+        unsafe { libc::readlinkat(kernel_fd, raw_path.as_ptr() as *const c_char, buf, buflen) }
     };
 
     if ret < 0 {
