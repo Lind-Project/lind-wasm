@@ -219,7 +219,7 @@ do_compile() {
   run_cmd "${CLANG_BIN}" --sysroot="${SYSROOT}" \
     -pthread --target=wasm32-unknown-wasi \
     -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
-    "${SRC}" -g -O0 -o "${OUT_WASM}"
+    "${SRC}"  -lm -g -O0 -o "${OUT_WASM}"
 }
 
 do_optimize() {
