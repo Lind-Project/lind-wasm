@@ -164,17 +164,6 @@ mkdir -p "$SYSROOT/include/wasm32-wasi" "$SYSROOT/lib/wasm32-wasi"
 
 "$SCRIPT_DIR/make_archive.sh"
 
-llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
-
-# Check if llvm-ar succeeded
-if [ $? -eq 0 ]; then
-  echo "Successfully created $SYSROOT_ARCHIVE with the following .o files:"
-  echo "$object_files"
-else
-  echo "Failed to create the archive."
-  exit 1
-fi
-
 # Copy all files from the external include directory to the new sysroot include directory
 cp -r "$GLIBC/target/include/"* "$SYSROOT/include/wasm32-wasi/"
 
