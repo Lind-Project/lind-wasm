@@ -1,7 +1,6 @@
 #!/bin/bash
 #
-# Build glibc and generate a sysroot for clang to cross-compile lind programs
-#
+# Create static archive files for multiple glibc modules after the glibc build process creates object files
 # IMPORTANT NOTES:
 # - call from source code repository root directory
 # - expects `clang` and other llvm binaries on $PATH
@@ -10,7 +9,6 @@
 set -x
 
 CC="clang"
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 HOME_DIR=$(dirname "${SCRIPT_DIR}")
 GLIBC="$HOME_DIR/src/glibc"
 BUILD="$GLIBC/build"
@@ -18,12 +16,11 @@ SYSROOT="$GLIBC/sysroot"
 SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
 LIB_PATH="$SYSROOT/lib/wasm32-wasi"
 
-# Build libc.a
 
 # 1. Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-# --- Function Definition ---
+# Function that creates .a file from a list of objects read from arg1
 create_archive() {
     local input_list_name="$1"    # e.g., "libc_objects.txt"
     local output_archive="$2"     # e.g., "libc.a" (full path or relative)
@@ -51,8 +48,6 @@ create_archive() {
         FULL_PATH="$BUILD/$obj"
         
         if [ -f "$FULL_PATH" ]; then
-            # NOTE: I removed the 'llvm-nm' pipe because piping to echo 
-            # ignores the grep result. If you simply want to add the file, use this:
             echo "$FULL_PATH" >> "$response_file"
             ((count++))            
         else
@@ -87,7 +82,7 @@ for file in "$SCRIPT_DIR/object_lists/"*; do
 
     filename=$(basename "$file")
 
-    # CASE 1: Ends with "_objects_shared.txt"
+    # CASE 1: Ends with "_objects_shared.txt, then create $LIBNAME_pic.a"
     if [[ "$filename" == *"_objects_shared.txt" ]]; then
         # Extract LIBNAME (remove suffix)
         LIBNAME="${filename%_objects_shared.txt}"
@@ -97,7 +92,7 @@ for file in "$SCRIPT_DIR/object_lists/"*; do
         # Call function
         create_archive "$filename" "$OUTPUT_ARCHIVE"
 
-    # CASE 2: Ends with "_objects.txt"
+    # CASE 2: Ends with "_objects.txt, then create $LIBNAME.a"
     elif [[ "$filename" == *"_objects.txt" ]]; then
         # Extract LIBNAME (remove suffix)
         LIBNAME="${filename%_objects.txt}"
@@ -114,3 +109,11 @@ done
 
 #libpthread.a is created as a placeholder since -pthread flag is used for lind_compile
 llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
+
+# Check if llvm-ar succeeded
+if [ $? -eq 0 ]; then
+  echo "SUCCESS: Created archive libpthread.a"
+else
+  echo "Failed to create the archive libpthread.a"
+  return 1
+fi
