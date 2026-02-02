@@ -1,6 +1,7 @@
 file_tests/deterministic/flock.c
 file_tests/deterministic/popen.c
 file_tests/non-deterministic/sc-writev.c
+memory_tests/deterministic/mmaptest.c
 memory_tests/fail/mmap-negative2.c
 networking_tests/deterministic/uds-nb-select.c
 networking_tests/non-deterministic/serverclient.c
@@ -13,5 +14,6 @@ process_tests/non-deterministic/fork.c
 process_tests/non-deterministic/template.c
 process_tests/non-deterministic/tls_test.c
 signal_tests/deterministic/sigpipe.c
+signal_tests/deterministic/signal_SIGCHLD.c
 signal_tests/fail/signal_resethand.c
 signal_tests/non-deterministic/signal_recursive.c
