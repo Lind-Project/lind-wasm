@@ -683,6 +683,7 @@ impl<
             let builder = thread::Builder::new().name(format!("lind-thread-{}", next_tid));
             builder
                 .spawn(move || {
+                    println!("pthread_create: thread {} creation start...", next_tid);
                     // create a new instance
                     let store_inner = Store::<T>::new_inner(&engine);
 
@@ -1421,7 +1422,7 @@ pub fn clone_syscall<T, U>(
     clone_arg: u64,        // Child's cage id
     clone_arg_cageid: u64, // Child's cage id arguments cageid
     parent_cageid: u64,
-    _arg2_cageid: u64,
+    parent_tid: u64,
     child_cageid: u64,
     _arg3_cageid: u64,
     _arg4: u64,
@@ -1443,12 +1444,22 @@ where
     let isthread = flags & (sys_const::CLONE_VM);
 
     unsafe {
-        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(parent_cageid) {
-            Some(v) => v,
-            None => {
-                panic!("no VMContext found for cage_id {}", parent_cageid);
+        let vmctx_wrapper: VmCtxWrapper = if isthread == 0 || parent_tid == 1{
+            match get_vmctx(parent_cageid) {
+                Some(v) => v,
+                None => {
+                    panic!("no VMContext found for cage_id {}", parent_cageid);
+                }
+            }
+        } else {
+            match get_vmctx_thread(parent_cageid, parent_tid) {
+                Some(v) => v,
+                None => {
+                    panic!("no VMContext found for cage_id {}", parent_cageid);
+                }
             }
         };
+        
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 

@@ -66,6 +66,26 @@ pub fn add_to_linker<
                 if rewind_res.is_some() {
                     return rewind_res.unwrap();
                 }
+                let tid = wasmtime_lind_multi_process::current_tid(&mut caller);
+                println!("[lind-common|make_syscall] clone syscall, cageid: {}, tid: {}", self_cageid, tid);
+                return make_syscall(
+                    self_cageid,
+                    call_number as u64,
+                    call_name,
+                    target_cageid,
+                    arg1,
+                    arg1cageid,
+                    tid as u64,
+                    arg2cageid,
+                    arg3,
+                    arg3cageid,
+                    arg4,
+                    arg4cageid,
+                    arg5,
+                    arg5cageid,
+                    arg6,
+                    arg6cageid,
+                );
             }
 
             if call_number as i32 == EXIT_SYSCALL {

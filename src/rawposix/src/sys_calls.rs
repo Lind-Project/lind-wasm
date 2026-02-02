@@ -48,7 +48,7 @@ pub extern "C" fn fork_syscall(
     cageid: u64,
     clone_arg: u64,        // Child's cage id
     clone_arg_cageid: u64, // Child's cage id arguments cageid
-    arg2: u64,
+    parent_tid: u64,
     arg2_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
@@ -62,8 +62,7 @@ pub extern "C" fn fork_syscall(
     let args = unsafe { &mut *(clone_arg as *mut sys_struct::CloneArgStruct) };
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -142,7 +141,7 @@ pub extern "C" fn fork_syscall(
         clone_arg,
         clone_arg_cageid,
         parent_cageid,
-        UNUSED_ID,
+        parent_tid,
         child_cageid,
         UNUSED_ID,
         UNUSED_ARG,
