@@ -2,13 +2,14 @@
 #
 # Create static archive files for multiple glibc modules after the glibc build process creates object files
 # IMPORTANT NOTES:
-# - call from source code repository root directory
 # - expects `clang` and other llvm binaries on $PATH
-# - expects GLIBC source in $PWD/src/glibc
 #
 set -x
 
 CC="clang"
+# 1. Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
 HOME_DIR=$(dirname "${SCRIPT_DIR}")
 GLIBC="$HOME_DIR/src/glibc"
 BUILD="$GLIBC/build"
@@ -16,9 +17,6 @@ SYSROOT="$GLIBC/sysroot"
 SYSROOT_ARCHIVE="$SYSROOT/lib/wasm32-wasi/libc.a"
 LIB_PATH="$SYSROOT/lib/wasm32-wasi"
 
-
-# 1. Get the directory where this script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Function that creates .a file from a list of objects read from arg1
 create_archive() {
