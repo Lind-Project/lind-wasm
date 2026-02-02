@@ -4,22 +4,9 @@ id: Overview
 
 # Lind-Wasm
 
-Lind is a sandbox that isolates different applications in the same address space. Thus, conceptually, it executes different applications (which traditionally would be different processes) in separate, non-overlapping parts of a single address space, under a single, non-privileged Linux process.   To provide memory safety, control flow integrity, memory isolation, and similar properties, this version of Lind executes applications using WebAssembly for software fault isolation.  Lind also contains a custom kernel microvisor, written in Rust, to limit the potential damage of bugs or security flaws in an application.
+Lind is a sandbox that isolates different applications in the same address space. Thus, conceptually, it executes different applications (which traditionally would be different processes) in separate, non-overlapping parts of a single address space, under a single, non-privileged Linux process.   To provide memory safety, control flow integrity, memory isolation, and similar properties, this version of Lind executes applications using [WebAssembly](webassembly.org) for software fault isolation.  Lind also contains a custom kernel microvisor, written in Rust, to limit the potential damage of bugs or security flaws in an application.
 
 In Old Norse, Old High German and Old English a "lind" is a shield constructed with two layers of linden wood. Linden wood shields are lightweight, and do not split easily, an appropriate metaphor for a sandboxing system which is lightweight and which provides layered security.
-
-## Core Concepts
-
-- **Cage**: This term describes the isolated memory namespace that an application executes in.  It is analogous to a process in Linux. 
-    - Can run legacy code compiled with Wasm as a target
-    - Protects and isolates memory, control flow, etc.
-- **Microvisor**: RawPOSIX is a small kernel running within the Lind process.  This is analogous to the Linux kernel.  Note, however, that this and all of the rest of Lind runs as an unprivileged Linux process.
-    - Provides a POSIXish interface (runs most Linux programs)
-    - Handles file descriptor separation, fork, exec, signals, threading, etc.
-- **3i (three eye)**: Capability-based POSIX interface to call between cages or into the microvisor.  This is conceptually similar to a programmable system call table and IPC interface. 
-    - Each cage has a separate system call table which can be independently changed to redirect into other cages or the microvisor
-    - Fast, isolated calling between cages
-    - Enables complex functionality (system call filtering, file systems, proxies, etc.) to be external to the microvisor
 
 ## Technology Overview
 
@@ -46,10 +33,23 @@ When performing system calls, it is often useful for a grate to be able to pass 
 - A child inherits system call handlers from its parent on fork. Thus, if cage A was forked by cage B, cage A will have the same system call handlers as cage B
 - An ancestor can change the system call table for its decendents and perform calls on their behalf.
 
+## Core Concepts
+
+- **Cage**: This term describes the isolated memory namespace that an application executes in.  It is analogous to a process in Linux. 
+    - Can run legacy code compiled with Wasm as a target
+    - Protects and isolates memory, control flow, etc.
+- **Microvisor**: RawPOSIX is a small kernel analogous to Linux running within the unprivileged Lind process. This is analogous to the Linux kernel.  Note, however, that this and all of the rest of Lind runs as an unprivileged Linux process.
+    - Provides a POSIX-like interface (runs most Linux programs)
+    - Handles file descriptor separation, fork, exec, signals, threading, etc.
+- **3i (pronounced "three-I")**: Capability-based POSIX interface to call between cages or into the microvisor.  This is conceptually similar to a programmable system call table and IPC interface. 
+    - Each cage has a separate system call table which can be independently changed to redirect into other cages or the microvisor
+    - Fast, isolated calling between cages
+    - Enables complex functionality (system call filtering, file systems, proxies, etc.) to be external to the microvisor
+
 ## Components
 
 ### Wasmtime (our caging technology)
-Wasmtime is a fast and secure runtime for WebAssembly designed by the Bytecode Alliance. Lind-wasm uses wasmtime as a runtime with added support for multi-processing via Asyncify.
+Wasmtime is a fast and secure runtime for WebAssembly designed by the [Bytecode Alliance](bytecodealliance.org). Lind-wasm uses wasmtime as a runtime with added support for multi-processing via Asyncify.
 
 ### lind-glibc
 
@@ -68,3 +68,10 @@ Provides normal POSIX system calls including:
 
 ### 3i Implementation
 The intra-process interposable interface (3i) enables secure and efficient cage communication with speed similar to a function call. It provides POSIX interfaces between cages with interposition capabilities, enabling fine-grained security and access control by supporting the construction of grates.
+
+## Frequent Q&A
+
+### How hard is it to use Lind-Wasm?
+
+Lind-Wasm aims to minimize application changes.  
+Most applications can run without source-level modifications and only need to be recompiled using `clang-16` with Lind-Wasm–related feature flags.
