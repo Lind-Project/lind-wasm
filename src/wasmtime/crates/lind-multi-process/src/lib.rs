@@ -101,6 +101,7 @@ impl<
     // * linker: wasmtime function linker. Used to link the imported functions
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
     // * run_command: used by exec closure below.
+    // * cageid: cageid(cageid) associated with the context
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
@@ -109,6 +110,7 @@ impl<
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
         run_command: U,
+        cageid: Option<i32>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
@@ -131,60 +133,9 @@ impl<
         let exec_host = Arc::new(exec);
 
         // cage id starts from 1
-        let cageid = CAGE_START_ID;
+        let cageid = cageid.unwrap_or(CAGE_START_ID);
         let tid = THREAD_START_ID;
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
-        Ok(Self {
-            linker,
-            module: module.clone(),
-            cageid,
-            tid,
-            next_threadid,
-            lind_manager: lind_manager.clone(),
-            run_command,
-            get_cx,
-            fork_host,
-            exec_host,
-        })
-    }
-
-    // create a new LindContext with provided cageid (cageid). This function is used by exec_syscall to create a new lindContext
-    // Function Argument:
-    // * module: wasmtime module object, used to fork a new instance
-    // * linker: wasmtime function linker. Used to link the imported functions
-    // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
-    // * run_command: used by exec closure below.
-    // * cageid: cageid(cageid) associated with the context
-    // * get_cx: get lindContext from Host object
-    // * fork_host: closure to fork a host
-    // * exec: closure for the exec syscall entry
-    pub fn new_with_cageid(
-        module: Module,
-        linker: Linker<T>,
-        lind_manager: Arc<LindCageManager>,
-        run_command: U,
-        cageid: i32,
-        get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
-        fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
-        exec: impl Fn(
-                &U,
-                &str,
-                &Vec<String>,
-                i32,
-                &Arc<LindCageManager>,
-                &Option<Vec<(String, Option<String>)>>,
-            ) -> Result<Vec<Val>>
-            + Send
-            + Sync
-            + 'static,
-    ) -> Result<Self> {
-        let get_cx = Arc::new(get_cx);
-        let fork_host = Arc::new(fork_host);
-        let exec_host = Arc::new(exec);
-
-        let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32));
-        let tid = THREAD_START_ID;
-
         Ok(Self {
             linker,
             module: module.clone(),
