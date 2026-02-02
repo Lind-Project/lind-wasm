@@ -2,15 +2,18 @@
 
 use cfg_if::cfg_if;
 
-use anyhow::{anyhow, Result, Context};
+use anyhow::{anyhow, Context, Result};
 use std::ffi::c_void;
-use std::ptr::NonNull;
 use std::fs::File;
 use std::io::Read;
+use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
-use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper, get_vmctx};
+use wasmtime_lind_3i::{
+    get_vmctx, get_vmctx_thread, rm_vmctx, set_vmctx, set_vmctx_thread, VmCtxWrapper,
+};
+// use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper, get_vmctx};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -20,11 +23,11 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
+use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ExternType, InstanceId, InstantiateType,
     Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val,
 };
-use wasmtime::vm::{VMContext, VMOpaqueContext};
 
 use cage::alloc_cage_id;
 use cage::signal::{lind_signal_init, lind_thread_exit};
@@ -71,8 +74,9 @@ pub struct LindCtx<T, U> {
     // used to keep track of how many active cages are running
     lind_manager: Arc<LindCageManager>,
 
-    webasm: Vec<u8>,
-    config: U,
+    // webasm: Vec<u8>,
+    // config: U,
+    lindboot_cli: U,
 
     // get LindCtx from host
     get_cx: Arc<dyn Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static>,
@@ -83,7 +87,7 @@ pub struct LindCtx<T, U> {
     // exec the host
     exec_host: Arc<
         dyn Fn(
-                &Vec<u8>,
+                // &Vec<u8>,
                 &U,
                 &str,
                 &Vec<String>,
@@ -108,6 +112,7 @@ impl<
     // * linker: wasmtime function linker. Used to link the imported functions
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
     // * run_command: used by exec closure below.
+    // * cageid: cageid associated with the context
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
@@ -115,12 +120,11 @@ impl<
         module: Module,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
-        webasm: Vec<u8>,
-        config: U,
+        lindboot_cli: U,
+        cageid: Option<i32>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
-                &Vec<u8>,
                 &U,
                 &str,
                 &Vec<String>,
@@ -140,7 +144,7 @@ impl<
         let exec_host = Arc::new(exec);
 
         // cage id starts from 1
-        let cageid = CAGE_START_ID;
+        let cageid = cageid.unwrap_or(CAGE_START_ID);
         let tid = THREAD_START_ID;
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
         Ok(Self {
@@ -150,8 +154,7 @@ impl<
             tid,
             next_threadid,
             lind_manager: lind_manager.clone(),
-            webasm,
-            config,
+            lindboot_cli,
             get_cx,
             fork_host,
             exec_host,
@@ -168,49 +171,46 @@ impl<
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
-    pub fn new_with_cageid(
-        module: Module,
-        linker: Linker<T>,
-        lind_manager: Arc<LindCageManager>,
-        webasm: Vec<u8>,
-        config: U,
-        cageid: i32,
-        get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
-        fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
-        exec: impl Fn(
-                &Vec<u8>,
-                &U,
-                &str,
-                &Vec<String>,
-                i32,
-                &Arc<LindCageManager>,
-                &Option<Vec<(String, Option<String>)>>,
-            ) -> Result<Vec<Val>>
-            + Send
-            + Sync
-            + 'static,
-    ) -> Result<Self> {
-        let get_cx = Arc::new(get_cx);
-        let fork_host = Arc::new(fork_host);
-        let exec_host = Arc::new(exec);
+    // pub fn new_with_cageid(
+    //     module: Module,
+    //     linker: Linker<T>,
+    //     lind_manager: Arc<LindCageManager>,
+    //     lindboot_cli: U,
+    //     cageid: i32,
+    //     get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
+    //     fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
+    //     exec: impl Fn(
+    //             &U,
+    //             &str,
+    //             &Vec<String>,
+    //             i32,
+    //             &Arc<LindCageManager>,
+    //             &Option<Vec<(String, Option<String>)>>,
+    //         ) -> Result<Vec<Val>>
+    //         + Send
+    //         + Sync
+    //         + 'static,
+    // ) -> Result<Self> {
+    //     let get_cx = Arc::new(get_cx);
+    //     let fork_host = Arc::new(fork_host);
+    //     let exec_host = Arc::new(exec);
 
-        let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32));
-        let tid = THREAD_START_ID;
+    //     let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32));
+    //     let tid = THREAD_START_ID;
 
-        Ok(Self {
-            linker,
-            module: module.clone(),
-            cageid,
-            tid,
-            next_threadid,
-            lind_manager: lind_manager.clone(),
-            webasm,
-            config,
-            get_cx,
-            fork_host,
-            exec_host,
-        })
-    }
+    //     Ok(Self {
+    //         linker,
+    //         module: module.clone(),
+    //         cageid,
+    //         tid,
+    //         next_threadid,
+    //         lind_manager: lind_manager.clone(),
+    //         lindboot_cli,
+    //         get_cx,
+    //         fork_host,
+    //         exec_host,
+    //     })
+    // }
 
     // The way multi-processing works depends on Asyncify from Binaryen. Asyncify marks the process into 3 states:
     // normal state, unwind state and rewind state.
@@ -348,7 +348,7 @@ impl<
 
         // retrieve the child host
         let mut child_host = (self.fork_host)(caller.data());
-        
+
         let parent_cageid = self.cageid;
 
         // use the same engine for parent and child
@@ -463,13 +463,13 @@ impl<
                     // See more comments in lind-3i/lib.rs
                     for _ in 0..9 {
                         let (_, backup_cage_instanceid) = linker
-                            .instantiate_with_lind_thread(
-                                &mut store,
-                                &module,
-                            ).unwrap();
+                            .instantiate_with_lind_thread(&mut store, &module)
+                            .unwrap();
                         let backup_cage_storeopaque = store.inner_mut();
-                        let backup_cage_instancehandler = backup_cage_storeopaque.instance(backup_cage_instanceid);
-                        let backup_vmctx_ptr: *mut c_void = backup_cage_instancehandler.vmctx().cast();
+                        let backup_cage_instancehandler =
+                            backup_cage_storeopaque.instance(backup_cage_instanceid);
+                        let backup_vmctx_ptr: *mut c_void =
+                            backup_cage_instancehandler.vmctx().cast();
 
                         let backup_vmctx_wrapper = VmCtxWrapper {
                             vmctx: NonNull::new(backup_vmctx_ptr).unwrap(),
@@ -747,17 +747,17 @@ impl<
                     // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
                     // structures. See more details in [lind-3i/src/lib.rs]
                     // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
-                    // let grate_storeopaque = store.inner_mut();
-                    // let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
-                    // let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+                    let grate_storeopaque = store.inner_mut();
+                    let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
 
-                    // // 2) Extract vmctx pointer and put in a Send+Sync wrapper
-                    // let vmctx_wrapper = VmCtxWrapper {
-                    //     vmctx: NonNull::new(vmctx_ptr).unwrap(),
-                    // };
+                    // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                    let vmctx_wrapper = VmCtxWrapper {
+                        vmctx: NonNull::new(vmctx_ptr).unwrap(),
+                    };
 
-                    // // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
-                    // let rc = set_vmctx(child_cageid as u64, vmctx_wrapper);
+                    // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
+                    let rc = set_vmctx_thread(child_cageid as u64, next_tid as u64, vmctx_wrapper);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -978,13 +978,14 @@ impl<
 
         let store = caller.as_context_mut().0;
 
-        let mut exec_file = File::open(&real_path_str)
-            .expect("Failed to open exec file");
-        let mut exec_webasm = Vec::new();
-        exec_file.read_to_end(&mut exec_webasm).context("Failed to read exec file")?;
+        // let mut exec_file = File::open(&real_path_str)
+        //     .expect("Failed to open exec file");
+        // let mut exec_webasm = Vec::new();
+        // exec_file.read_to_end(&mut exec_webasm).context("Failed to read exec file")?;
 
-        let cloned_webasm = self.webasm.clone();
-        let cloned_config = self.config.clone();
+        // let cloned_webasm = self.webasm.clone();
+        // let cloned_config = self.config.clone();
+        let cloned_lindboot_cli = self.lindboot_cli.clone();
         let cloned_lind_manager = self.lind_manager.clone();
         let cloned_cageid = self.cageid;
 
@@ -1019,18 +1020,23 @@ impl<
             //     UNUSED_ARG,
             //     UNUSED_ID,
             // );
-            
+
             if !rm_vmctx(cloned_cageid as u64) {
                 panic!(
                     "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
                     cloned_cageid
                 );
             }
-    
+
+            println!(
+                "[wasmtime|exec] Cage {} exec-ing new module: {}",
+                cloned_cageid, real_path_str
+            );
 
             let ret = exec_call(
-                &exec_webasm,
-                &cloned_config,
+                // &exec_webasm,
+                // &cloned_config,
+                &cloned_lindboot_cli,
                 &real_path_str,
                 &args,
                 cloned_cageid,
@@ -1055,10 +1061,7 @@ impl<
     pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32, is_last_thread: u64) {
         println!(
             "[wasmtime|exit] Cage {} Thread {} exiting with code {}, is_last_thread={}",
-            self.cageid,
-            self.tid,
-            code,
-            is_last_thread
+            self.cageid, self.tid, code, is_last_thread
         );
         if is_last_thread == 1 {
             // Clean up the context from the global table
@@ -1068,6 +1071,10 @@ impl<
                     self.cageid
                 );
             }
+            println!(
+                "[wasmtime|exit] Cage {} all threads exited, cleaning up cage context",
+                self.cageid
+            );
             self.lind_manager.decrement();
         }
         // get the base address of the memory
@@ -1348,8 +1355,9 @@ impl<
             tid: 1,                                     // thread id starts from 1
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
-            webasm: self.webasm.clone(),
-            config: self.config.clone(),
+            // webasm: self.webasm.clone(),
+            // config: self.config.clone(),
+            lindboot_cli: self.lindboot_cli.clone(),
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
@@ -1433,7 +1441,7 @@ where
     // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
     // otherwise, we are creating a process (i.e. fork)
     let isthread = flags & (sys_const::CLONE_VM);
-    
+
     unsafe {
         let vmctx_wrapper: VmCtxWrapper = match get_vmctx(parent_cageid) {
             Some(v) => v,
@@ -1466,10 +1474,9 @@ where
             }
         });
     }
-    
+
     0
 }
-
 
 // entry point of exec_syscall, called by lind-common
 // pub fn exec_syscall<
@@ -1495,8 +1502,8 @@ where
 
 pub fn exec_syscall<T, U>(
     cageid: u64,
-    path: u64,        
-    path_cageid: u64, 
+    path: u64,
+    path_cageid: u64,
     argv: u64,
     argv_cageid: u64,
     envs: u64,
@@ -1558,10 +1565,10 @@ where
 
 pub fn exit_syscall<T, U>(
     cageid: u64,
-    exit_code: u64,        
-    exit_code_cageid: u64, 
+    exit_code: u64,
+    exit_code_cageid: u64,
+    tid: u64,
     is_last_thread: u64,
-    _arg2_cageid: u64,
     _arg3: u64,
     _arg3_cageid: u64,
     _arg4: u64,
@@ -1576,18 +1583,31 @@ where
     U: Clone + Send + Sync + 'static,
 {
     unsafe {
-        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(exit_code_cageid) {
-            Some(v) => v,
-            None => {
-                panic!("no VMContext found for cage_id {}", exit_code_cageid);
+        let vmctx_wrapper: VmCtxWrapper = if tid == 1 {
+            match get_vmctx(exit_code_cageid) {
+                Some(v) => v,
+                None => {
+                    panic!("no VMContext found for cage_id {}", exit_code_cageid);
+                }
+            }
+        } else {
+            match get_vmctx_thread(exit_code_cageid, tid) {
+                Some(v) => v,
+                None => {
+                    panic!("no VMContext found for cage_id {}", exit_code_cageid);
+                }
             }
         };
+
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 
         let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
 
-        println!("[lind-multi|exit_entry] cageid: {}, exit_code: {}, is_last_thread: {}, vmctx_ptr: {:p}", exit_code_cageid, exit_code, is_last_thread, vmctx_raw);
+        println!(
+            "[lind-multi|exit_entry] cageid: {}, tid: {}, is_last_thread: {}, vmctx_ptr: {:p}",
+            exit_code_cageid, tid, is_last_thread, vmctx_raw
+        );
 
         Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             let host = caller.data().clone();
@@ -1647,15 +1667,13 @@ pub fn current_cageid<
     ctx.this_cageid()
 }
 
-pub fn current_tid<T, U>(
-    caller: &mut Caller<'_, T>,
-) -> i32
+pub fn current_tid<T, U>(caller: &mut Caller<'_, T>) -> i32
 where
     T: LindHost<T, U> + Clone + Send + Sync + 'static,
-    U: Clone + Send + Sync + 'static,   
-    {
-        caller.data().get_ctx().tid as i32
-    }
+    U: Clone + Send + Sync + 'static,
+{
+    caller.data().get_ctx().tid as i32
+}
 
 // check if the module has the necessary exported Asyncify functions
 fn support_asyncify(module: &Module) -> bool {

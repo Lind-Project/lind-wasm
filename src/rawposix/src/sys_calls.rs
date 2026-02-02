@@ -1,6 +1,7 @@
 //! System syscalls implementation
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
+use super::syscall_table::*;
 use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
@@ -18,16 +19,17 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID, RAWPOSIX_CAGEID};
+use sysdefs::constants::lind_platform_const::{
+    FDKIND_KERNEL, LIND_ROOT, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
+};
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
 use sysdefs::{constants::sys_const, data::sys_struct};
-use typemap::datatype_conversion::*;
-use super::syscall_table::*;
 use threei::{register_handler, RUNTIME_TYPE_WASMTIME};
+use typemap::datatype_conversion::*;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
 ///
@@ -82,7 +84,6 @@ pub extern "C" fn fork_syscall(
     let mut child_cageid = 0;
     // if fork
     if isthread == 0 {
-        
         child_cageid = cage::alloc_cage_id().unwrap();
 
         // Modify the fdtable manually
@@ -140,11 +141,17 @@ pub extern "C" fn fork_syscall(
         WASMTIME_CAGEID,
         clone_arg,
         clone_arg_cageid,
-        parent_cageid, UNUSED_ID, 
-        child_cageid, UNUSED_ID, 
-        UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
+        parent_cageid,
+        UNUSED_ID,
+        child_cageid,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     )
-    
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exec.3.html
@@ -220,9 +227,16 @@ pub extern "C" fn exec_syscall(
         WASMTIME_CAGEID,
         path,
         path_cageid,
-        argv, argv_cageid, 
-        envs, envs_cageid, 
-        UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
+        argv,
+        argv_cageid,
+        envs,
+        envs_cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     )
 }
 
@@ -293,11 +307,14 @@ pub extern "C" fn exit_syscall(
             }
             remove_cage(selfcageid);
         }
-        
+
         // return 0;
     }
 
-    println!("[rawposix|exit_syscall] cage {}, tid {} exiting with status {}, is_last_thread={}", selfcageid, tid, status, is_last_thread);
+    println!(
+        "[rawposix|exit_syscall] cage {}, tid {} exiting with status {}, is_last_thread={}",
+        selfcageid, tid, status, is_last_thread
+    );
     // status
     threei::make_syscall(
         RAWPOSIX_CAGEID,
@@ -306,10 +323,16 @@ pub extern "C" fn exit_syscall(
         WASMTIME_CAGEID,
         status_arg,
         status_cageid,
+        tid,
         is_last_thread, // represent the last thread exiting
-        UNUSED_ID, 
-        UNUSED_ARG, UNUSED_ID, 
-        UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID, UNUSED_ARG, UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
     )
 }
 
@@ -1123,7 +1146,7 @@ pub extern "C" fn setitimer_syscall(
     0
 }
 
-pub type RawCallFunc = extern "C" fn (
+pub type RawCallFunc = extern "C" fn(
     target_cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -1139,20 +1162,25 @@ pub type RawCallFunc = extern "C" fn (
     arg6_cageid: u64,
 ) -> i32;
 
-pub fn register_rawposix_syscall(
-    self_cageid: u64,
-) -> i32 {
+pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
     let mut ret = 0;
     for &(sysno, func) in SYSCALL_TABLE.iter() {
-        let impl_fn_ptr = func as *const() as u64;
+        let impl_fn_ptr = func as *const () as u64;
         ret = register_handler(
             impl_fn_ptr,
             self_cageid, // current cageid
             sysno,
             RUNTIME_TYPE_WASMTIME, // runtime id
-            1, // register
+            1,                     // register
             RAWPOSIX_CAGEID,
-            0, 0, 0, 0, 0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
         );
         if ret != 0 {
             panic!(

@@ -10,7 +10,7 @@ use threei::threei::{
 use threei::threei_const;
 use typemap::path_conversion::get_cstr;
 use wasmtime::Caller;
-use wasmtime_lind_multi_process::{get_memory_base, LindHost, catch_rewind};
+use wasmtime_lind_multi_process::{catch_rewind, get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
 // involve operations like setting up stack memory that must be performed
@@ -21,7 +21,9 @@ use wasmtime_lind_multi_process::{get_memory_base, LindHost, catch_rewind};
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
-use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
+use wasmtime_lind_utils::lind_syscall_numbers::{
+    CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL,
+};
 
 // function to expose the handler to wasm module
 // linker: wasmtime's linker to link the imported function to the actual function definition
@@ -67,13 +69,9 @@ pub fn add_to_linker<
             }
 
             if call_number as i32 == EXIT_SYSCALL {
-                if threei::if_exiting_table_contains(self_cageid) {
-                    println!("[lind-common|make_syscall] cage {} is already exiting, skip exit syscall", self_cageid);
-                    return 0;
-                }
                 let tid = wasmtime_lind_multi_process::current_tid(&mut caller);
                 println!("[lind-common|make_syscall] exit syscall, cageid: {}, tid: {}, target: {}", self_cageid, tid, target_cageid);
-                return make_syscall(
+                let ret = make_syscall(
                     self_cageid,
                     call_number as u64,
                     call_name,
@@ -91,8 +89,9 @@ pub fn add_to_linker<
                     arg6,
                     arg6cageid,
                 );
+                println!("[lind-common|make_syscall] exit syscall, cageid: {}, tid: {}, target: {}, ret: {}", self_cageid, tid, target_cageid, ret);
+                return ret;
             }
-            
             let ret = match call_number as i32 {
                 // exec syscall
                 // EXEC_SYSCALL => wasmtime_lind_multi_process::exec_syscall(

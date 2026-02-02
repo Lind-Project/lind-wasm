@@ -279,6 +279,11 @@ pub extern "C" fn futex_syscall(
         let errno = get_errno();
         return handle_errno(errno, "futex");
     }
+
+    println!(
+        "[futex_syscall] cageid: {}, uaddr: {:x}, futex_op: {}, val: {}, timeout: {}, uaddr2: {:x}, val3: {}, ret: {}",
+        cageid, uaddr, futex_op, val, timeout, uaddr2, val3, ret
+    );
     ret
 }
 
@@ -1140,7 +1145,10 @@ pub extern "C" fn brk_syscall(
 ///
 /// On error:
 /// Return error num EBADF(Bad File Descriptor)
-pub extern "C" fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry, Errno> {
+pub extern "C" fn _fcntl_helper(
+    cageid: u64,
+    vfd_arg: u64,
+) -> Result<fdtables::FDTableEntry, Errno> {
     if vfd_arg > MAXFD as u64 {
         return Err(Errno::EBADF);
     }
