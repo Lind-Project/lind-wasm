@@ -253,9 +253,10 @@ pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
 ///
 /// # Returns
 /// * `Ok(true)` - If the entire range is mapped and readable
+/// * `Err(Errno::EINVAL)` - If the cage does not exist
 /// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or not readable
 pub fn check_addr_read(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let mut vmmap = cage.vmmap.write();
 
     if vmmap.check_addr_read(addr, length) {
@@ -277,9 +278,10 @@ pub fn check_addr_read(cageid: u64, addr: u64, length: usize) -> Result<bool, Er
 ///
 /// # Returns
 /// * `Ok(true)` - If the entire range is mapped and writable
+/// * `Err(Errno::EINVAL)` - If the cage does not exist
 /// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or not writable
 pub fn check_addr_write(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let mut vmmap = cage.vmmap.write();
 
     if vmmap.check_addr_write(addr, length) {
@@ -301,9 +303,10 @@ pub fn check_addr_write(cageid: u64, addr: u64, length: usize) -> Result<bool, E
 ///
 /// # Returns
 /// * `Ok(true)` - If the entire range is mapped with both read and write permissions
+/// * `Err(Errno::EINVAL)` - If the cage does not exist
 /// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or lacks read/write permissions
 pub fn check_addr_rw(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
-    let cage = get_cage(cageid).unwrap();
+    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let mut vmmap = cage.vmmap.write();
 
     if vmmap.check_addr_rw(addr, length) {

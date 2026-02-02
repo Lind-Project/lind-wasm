@@ -10,11 +10,8 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
 use sysdefs::constants::lind_platform_const;
-<<<<<<< HEAD
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
-=======
 use typemap::datatype_conversion::sc_convert_uaddr_to_host;
->>>>>>> cb22b63f0 (Add helper functions for vmmap range accessibility check)
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
