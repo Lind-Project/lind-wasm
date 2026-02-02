@@ -12,7 +12,7 @@
 
 int main() {
   int file_perm = S_IRUSR | S_IWUSR; // set file permissions
-  int fd = open(FILE, O_WRONLY | O_CREAT | O_TRUNC, file_perm);
+  int fd = creat(FILE, file_perm);
   if (fd == -1) {
     perror("ERROR WITH CREATE");
     exit(EXIT_FAILURE);
