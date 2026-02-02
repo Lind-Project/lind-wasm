@@ -7,7 +7,7 @@
 //!
 //! ---
 //! ## Scenario 1: Process-like operations (`fork`, `exec`, `exit`)
-//! 
+//!
 //! The first scenario occurs during process-like operations such as `fork`, `exec`, and `exit`. These
 //! operations require Wasmtime to create, clone, or destroy existing Wasm instances. After RawPOSIX
 //! completes the semantic handling of a `fork`, `exec`, or `exit` operation, execution must return to
@@ -19,7 +19,7 @@
 //!
 //! ---
 //! ## Scenario 2: Grate calls (cross-module execution transfers)
-//! 
+//!
 //! The second scenario arises during grate calls. Grate calls involve cross-module execution transfers,
 //! where control jumps from one Wasm module to another (for example, from a cage into a grate, or between
 //! grates). Supporting these jumps similarly requires the ability to locate and enter the runtime state
@@ -32,7 +32,7 @@
 //!
 //! ---
 //! ## VMContext storage model
-//! 
+//!
 //! VMContext pointers are stored globally and indexed by `cage_id`. Two distinct
 //! structures are used:
 //!
@@ -40,7 +40,7 @@
 //!    - Represent the default execution pool for a cage or grate.
 //!    - Conceptually correspond to the *main thread* (`tid == 1`).
 //!    - Used by normal execution paths, including grate calls.
-//! 
+//!
 //! At module creation time, lind-3i extracts the `VMContext` pointer associated with the newly created instance.
 //! This `VMContext` uniquely identifies the execution state of that `Store` / `Instance`. The pointer is
 //! stored in a global table indexed by `cage_id`. When lind-3i needs to transfer execution to
@@ -52,7 +52,7 @@
 //!    - Used *only* for non-main threads (`tid != 1`).
 //!    - Applicable exclusively to pthread-related syscalls and thread `exit`.
 //!    - Each `(cage_id, tid)` maps to at most one `VMContext`.
-//! 
+//!
 //! Grate calls never consult the thread table and always acquire execution
 //! contexts from the main per-cage queue.
 //!
@@ -64,14 +64,14 @@
 //! For each pool, a single instance performs full initialization, including lind-specific memory setup,
 //! while additional instances attach to the same linear memory. This design allows a grate to process multiple
 //! concurrent requests to the same Wasm linear memory without duplicating address space state.
-//! 
+//!
 //! ---
 //! ## Concurrency note
 //!
 //! This module provides *execution routing*, not synchronization. Multiple
 //! VMContext instances may share the same linear memory. Grate developers are
 //! responsible for ensuring proper synchronization when mutating shared state.
-use std::collections::{VecDeque, HashMap};
+use std::collections::{HashMap, VecDeque};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::sync::{Mutex, OnceLock};
@@ -106,7 +106,7 @@ impl VmCtxWrapper {
 
 /// Global per-cage `VMContext` execution pools.
 ///
-/// Each cage owns a dedicated FIFO queue of `VMContext` entries. This queue represents the default 
+/// Each cage owns a dedicated FIFO queue of `VMContext` entries. This queue represents the default
 /// execution pool and is conceptually associated with the main thread (`tid == 1`).
 ///
 /// Normal execution paths and all grate calls acquire `VMContexts` exclusively
@@ -115,7 +115,7 @@ static VMCTX_QUEUES: OnceLock<Vec<Mutex<VecDeque<VmCtxWrapper>>>> = OnceLock::ne
 
 /// Per-cage thread-specific `VMContext` table.
 ///
-/// This table is used *only* for non-main threads (`tid != 1`) and exists to support pthread-related 
+/// This table is used *only* for non-main threads (`tid != 1`) and exists to support pthread-related
 /// syscalls and thread `exit`.
 ///
 /// Each `(cage_id, tid)` maps to at most one `VMContext`. No pooling is performed.
@@ -257,7 +257,11 @@ pub fn get_vmctx_thread(cage_id: u64, tid: u64) -> Option<VmCtxWrapper> {
 pub fn rm_vmctx_thread(cage_id: u64, tid: u64) -> bool {
     debug_assert!(tid != 1, "tid==1 should clear pool differently if needed");
 
-    let Some(tables) = VMCTX_THREADS.get() else { return false; };
-    let Some(t) = tables.get(cage_id as usize) else { return false; };
+    let Some(tables) = VMCTX_THREADS.get() else {
+        return false;
+    };
+    let Some(t) = tables.get(cage_id as usize) else {
+        return false;
+    };
     t.lock().unwrap().remove(&tid).is_some()
 }

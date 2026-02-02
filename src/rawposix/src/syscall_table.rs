@@ -3,7 +3,6 @@
 //! https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
 //! https://filippo.io/linux-syscall-table/
 //! Keep these in sync with glibc's lind_syscall_num.h
-use super::sys_calls::RawCallFunc;
 use super::fs_calls::{
     access_syscall, brk_syscall, chdir_syscall, chmod_syscall, clock_gettime_syscall,
     close_syscall, dup2_syscall, dup3_syscall, dup_syscall, fchdir_syscall, fchmod_syscall,
@@ -22,6 +21,7 @@ use super::net_calls::{
     getsockopt_syscall, listen_syscall, poll_syscall, recvfrom_syscall, select_syscall,
     sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
 };
+use super::sys_calls::RawCallFunc;
 use super::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall, getgid_syscall,
     getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall, sched_yield_syscall,

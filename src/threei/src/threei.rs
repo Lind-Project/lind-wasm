@@ -11,7 +11,7 @@ use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_c
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
-    copy_handler_table_to_cage_impl, register_handler_impl, print_handler_table,
+    copy_handler_table_to_cage_impl, print_handler_table, register_handler_impl,
 };
 use crate::threei_const;
 
@@ -444,10 +444,13 @@ pub fn make_syscall(
     if _check_cage_handler_exist(self_cageid) {
         if let Some((in_grate_fn_ptr_u64, grateid)) = _get_handler(self_cageid, syscall_num) {
             // RawPOSIX special case: directly call the function pointer
-            if grateid == lind_platform_const::RAWPOSIX_CAGEID || grateid == lind_platform_const::WASMTIME_CAGEID {
-                let func: RawCallFunc = unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
+            if grateid == lind_platform_const::RAWPOSIX_CAGEID
+                || grateid == lind_platform_const::WASMTIME_CAGEID
+            {
+                let func: RawCallFunc =
+                    unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
                 return func(
-                    target_cageid, 
+                    target_cageid,
                     arg1,
                     arg1_cageid,
                     arg2,
