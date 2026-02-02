@@ -27,10 +27,6 @@ wasmtime: build-dir
 	cargo build --manifest-path src/wasmtime/Cargo.toml --release
 	cp src/wasmtime/target/release/wasmtime $(WASMTIME_BIN)
 
-.PHONY: wasmtime-debug
-wasmtime-debug: build-dir
-	cargo build --manifest-path src/wasmtime/Cargo.toml
-	cp src/wasmtime/target/debug/wasmtime $(WASMTIME_DEBUG_BIN)
 
 .PHONY: lind-debug
 lind-debug: build-dir
@@ -39,7 +35,7 @@ lind-debug: build-dir
 	
 	# Build Wasmtime with the lind_debug feature enabled
 	cargo build --manifest-path src/wasmtime/Cargo.toml --features lind_debug
-	cp src/wasmtime/target/debug/wasmtime $(WASMTIME_DEBUG_BIN)
+	cp src/wasmtime/target/debug/wasmtime $(WASMTIME_BIN)
 build_glibc:
 	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
 	if [ "$(LIND_DEBUG)" = "1" ]; then \

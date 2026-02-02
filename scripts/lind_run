@@ -34,13 +34,8 @@ fi
 WASMTIME_BIN="${REPO_ROOT}/build/wasmtime"
 # Fallback to release if build artifact isn't present yet
 if [[ ! -x "${WASMTIME_BIN}" ]]; then
-  ALT="${REPO_ROOT}/build/wasmtime-debug"
-  if [[ -x "${ALT}" ]]; then
-    WASMTIME_BIN="${ALT}"
-  else
-    ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
-    [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
-  fi
+  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
+  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
 fi
 [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
 
