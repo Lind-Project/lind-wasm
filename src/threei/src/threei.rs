@@ -56,7 +56,8 @@ pub type GrateTrampolineFn = extern "C" fn(
     arg6cageid: u64,
 ) -> i32;
 
-/// This table stores trampoline functions associated with runtime identifiers.
+/// This table stores trampoline functions associated with runtime identifiers, where a
+/// runtime identifier denotes the execution environment of the executable (e.g., Wasmtime)
 ///
 /// `TRAMPOLINE_TABLE` is a global map from `runtime_id` to `GrateTrampolineFn`.
 /// DashMap is used to allow concurrent registration and lookup without a global lock.
