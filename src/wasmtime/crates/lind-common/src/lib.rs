@@ -220,7 +220,7 @@ pub fn add_to_linker<
 
     // epoch callback function
     linker.func_wrap(
-        "wasi_snapshot_preview1",
+        "lind",
         "epoch_callback",
         move |mut caller: Caller<'_, T>| {
             wasmtime_lind_multi_process::signal::signal_handler(&mut caller);

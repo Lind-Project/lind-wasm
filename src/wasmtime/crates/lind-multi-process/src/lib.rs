@@ -15,7 +15,7 @@ use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
 use std::ffi::CStr;
 use std::os::raw::c_char;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
@@ -105,6 +105,7 @@ impl<
     // * linker: wasmtime function linker. Used to link the imported functions
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
     // * run_command: used by exec closure below.
+    // * cageid: cageid(cageid) associated with the context
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
@@ -113,6 +114,7 @@ impl<
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
         run_command: U,
+        cageid: Option<i32>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
         exec: impl Fn(
@@ -135,60 +137,9 @@ impl<
         let exec_host = Arc::new(exec);
 
         // cage id starts from 1
-        let cageid = CAGE_START_ID;
+        let cageid = cageid.unwrap_or(CAGE_START_ID);
         let tid = THREAD_START_ID;
         let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32)); // cageid starts from 1
-        Ok(Self {
-            linker,
-            module: module.clone(),
-            cageid,
-            tid,
-            next_threadid,
-            lind_manager: lind_manager.clone(),
-            run_command,
-            get_cx,
-            fork_host,
-            exec_host,
-        })
-    }
-
-    // create a new LindContext with provided cageid (cageid). This function is used by exec_syscall to create a new lindContext
-    // Function Argument:
-    // * module: wasmtime module object, used to fork a new instance
-    // * linker: wasmtime function linker. Used to link the imported functions
-    // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
-    // * run_command: used by exec closure below.
-    // * cageid: cageid(cageid) associated with the context
-    // * get_cx: get lindContext from Host object
-    // * fork_host: closure to fork a host
-    // * exec: closure for the exec syscall entry
-    pub fn new_with_cageid(
-        module: Module,
-        linker: Linker<T>,
-        lind_manager: Arc<LindCageManager>,
-        run_command: U,
-        cageid: i32,
-        get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
-        fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
-        exec: impl Fn(
-                &U,
-                &str,
-                &Vec<String>,
-                i32,
-                &Arc<LindCageManager>,
-                &Option<Vec<(String, Option<String>)>>,
-            ) -> Result<Vec<Val>>
-            + Send
-            + Sync
-            + 'static,
-    ) -> Result<Self> {
-        let get_cx = Arc::new(get_cx);
-        let fork_host = Arc::new(fork_host);
-        let exec_host = Arc::new(exec);
-
-        let next_threadid = Arc::new(AtomicU32::new(THREAD_START_ID as u32));
-        let tid = THREAD_START_ID;
-
         Ok(Self {
             linker,
             module: module.clone(),
@@ -996,15 +947,8 @@ impl<
             }
         }
 
-        // if user is passing absolute path, we need to first convert it to a relative path
-        // by removing prefix "/" at the beginning, then join with lind filesystem root folder
-        let usr_path = Path::new(path_str)
-            .strip_prefix("/")
-            .unwrap_or(Path::new(path_str));
-
-        // NOTE: join method will replace the original path if joined path is an absolute path
-        // so must make sure the usr_path is not absolute otherwise it may escape the lind filesystem
-        let real_path = Path::new(LIND_ROOT).join(usr_path);
+        // Use the path as-is from the user
+        let real_path = PathBuf::from(path_str);
         let real_path_str = String::from(real_path.to_str().unwrap());
 
         // if the file to exec does not exist

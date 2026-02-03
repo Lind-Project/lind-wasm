@@ -31,12 +31,10 @@ if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
   exit 2
 fi
 
-WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
-WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime"
-# Fallback to release if selected profile isn't built yet
+WASMTIME_BIN="${REPO_ROOT}/build/wasmtime"
 if [[ ! -x "${WASMTIME_BIN}" ]]; then
-  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
-  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
+  echo "ERROR: wasmtime missing: ${WASMTIME_BIN}" >&2
+  exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
 fi
 [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
 

@@ -184,14 +184,15 @@ esac
 # --- tool paths & quick checks (anchored to repo) ---
 CLANG_BIN="clang"  # must be on PATH
 WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
-WASMTIME_PROFILE="${WASMTIME_PROFILE:-release}"
-WASMTIME_BIN="${REPO_ROOT}/src/wasmtime/target/${WASMTIME_PROFILE}/wasmtime"
-# Fallback to release if selected profile isn't built yet
+WASMTIME_BIN="${REPO_ROOT}/build/wasmtime"
 if [[ ! -x "${WASMTIME_BIN}" ]]; then
-  ALT="${REPO_ROOT}/src/wasmtime/target/release/wasmtime"
-  [[ -x "${ALT}" ]] && WASMTIME_BIN="${ALT}"
+  echo "ERROR: wasmtime missing: ${WASMTIME_BIN}" >&2
+  exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
 fi
-SYSROOT="${REPO_ROOT}/src/glibc/sysroot"
+SYSROOT="${SYSROOT:-${REPO_ROOT}/build/sysroot}"
+if [[ ! -d "${SYSROOT}" ]]; then
+  SYSROOT="${REPO_ROOT}/src/glibc/sysroot"
+fi
 
 # Only check tools needed for the selected mode, to be more flexible
 if [[ "${MODE}" == "full" || "${MODE}" == "compile-only" ]]; then
@@ -253,4 +254,3 @@ case "${MODE}" in
     echo "OK: ${OUT_CWASM}"
     ;;
 esac
-

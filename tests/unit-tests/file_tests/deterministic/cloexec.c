@@ -5,6 +5,8 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 
+#define BINARY_PATH "automated_tests/cloexec"
+
 int main(int argc, char** argv) {
     if(argc == 1) {
         char *const nenvp[] = {NULL};
@@ -13,8 +15,8 @@ int main(int argc, char** argv) {
         char fd1buf[8], fd2buf[8];
         snprintf(fd1buf, 8, "%d", fd1);
         snprintf(fd2buf, 8, "%d", fd2);
-        char *const nargv[] = {argv[0], fd1buf, fd2buf, NULL};
-        execve(argv[0], nargv, nenvp);
+        char *const nargv[] = {BINARY_PATH, fd1buf, fd2buf, NULL};
+        execve(BINARY_PATH, nargv, nenvp);
     } else {
         struct stat statbuf;
         int fd1 = atoi(argv[1]);

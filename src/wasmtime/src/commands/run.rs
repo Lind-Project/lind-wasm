@@ -1112,52 +1112,26 @@ impl RunCommand {
             };
             let module = module.unwrap_core();
 
-            // if cageid is set, that means this function is called by execute_with_lind (exec-ed wasm instance)
-            if let Some(cageid) = cageid {
-                store.data_mut().lind_fork_ctx = Some(LindCtx::new_with_cageid(
-                    module.clone(),
-                    linker.clone(),
-                    lind_manager,
-                    self.clone(),
-                    cageid,
-                    |host| host.lind_fork_ctx.as_mut().unwrap(),
-                    |host| host.fork(),
-                    |run_command, path, args, cageid, lind_manager, envs| {
-                        // entry point of exec call. Fork self and replace the argument, environment variables and
-                        // execution path and starts execution
-                        let mut new_run_command = run_command.clone();
-                        new_run_command.module_and_args = vec![OsString::from(path)];
-                        if let Some(envs) = envs {
-                            new_run_command.run.vars = envs.clone();
-                        }
-                        for arg in args.iter().skip(1) {
-                            new_run_command.module_and_args.push(OsString::from(arg));
-                        }
-                        new_run_command.execute_with_lind(lind_manager.clone(), cageid)
-                    },
-                )?);
-            // if cageid is not set, then this function is called by the first wasm instance
-            } else {
-                store.data_mut().lind_fork_ctx = Some(LindCtx::new(
-                    module.clone(),
-                    linker.clone(),
-                    lind_manager,
-                    self.clone(),
-                    |host| host.lind_fork_ctx.as_mut().unwrap(),
-                    |host| host.fork(),
-                    |run_command, path, args, cageid, lind_manager, envs| {
-                        let mut new_run_command = run_command.clone();
-                        new_run_command.module_and_args = vec![OsString::from(path)];
-                        if let Some(envs) = envs {
-                            new_run_command.run.vars = envs.clone();
-                        }
-                        for arg in args.iter().skip(1) {
-                            new_run_command.module_and_args.push(OsString::from(arg));
-                        }
-                        new_run_command.execute_with_lind(lind_manager.clone(), cageid)
-                    },
-                )?);
-            }
+            store.data_mut().lind_fork_ctx = Some(LindCtx::new(
+                module.clone(),
+                linker.clone(),
+                lind_manager,
+                self.clone(),
+                cageid,
+                |host| host.lind_fork_ctx.as_mut().unwrap(),
+                |host| host.fork(),
+                |run_command, path, args, cageid, lind_manager, envs| {
+                    let mut new_run_command = run_command.clone();
+                    new_run_command.module_and_args = vec![OsString::from(path)];
+                    if let Some(envs) = envs {
+                        new_run_command.run.vars = envs.clone();
+                    }
+                    for arg in args.iter().skip(1) {
+                        new_run_command.module_and_args.push(OsString::from(arg));
+                    }
+                    new_run_command.execute_with_lind(lind_manager.clone(), cageid)
+                },
+            )?);
         }
 
         // must create wasi_threads context here, because pre_instance requires all
