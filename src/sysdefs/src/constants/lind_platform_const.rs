@@ -6,12 +6,6 @@
 /// Used to validate path lengths during operations to prevent overflow.
 pub const PATH_MAX: usize = 4096;
 
-/// Note: LIND_ROOT is deprecated in favor of chroot-based isolation.
-pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
-    Some(path) => path,
-    None => "/home/lind/lind-wasm/src/tmp",
-};
-
 /// Root directory for lind filesystem used for chroot-based isolation.
 pub const LINDFS_ROOT: &str = "/home/lind/lind-wasm/lindfs";
 
