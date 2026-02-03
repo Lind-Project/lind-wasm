@@ -8,6 +8,7 @@
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
 use cage::get_cage;
 use std::error::Error;
+use std::os::raw::c_char;
 use sysdefs::constants::lind_platform_const::{MAX_CAGEID, PATH_MAX};
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use sysdefs::constants::Errno;
@@ -149,6 +150,25 @@ pub fn sc_convert_sysarg_to_i32_ref<'a>(arg: u64, arg_cageid: u64, cageid: u64) 
     }
 
     unsafe { &mut *(arg as *mut i32) }
+}
+
+/// Converts a u64 syscall argument to a mutable c_char pointer.
+/// ## Arguments:
+/// - `arg`: The u64 syscall argument (pointer value from WASM)
+/// - `arg_cageid`: The cage ID associated with the argument
+/// - `cageid`: The calling cage ID (used for validation in secure mode)
+///
+/// ## Returns:
+/// - `*mut c_char`: A mutable pointer to c_char
+pub fn sc_convert_to_cchar_mut(arg: u64, arg_cageid: u64, cageid: u64) -> *mut c_char {
+    #[cfg(feature = "secure")]
+    {
+        if !validate_cageid(arg_cageid, cageid) {
+            panic!("Invalid Cage ID");
+        }
+    }
+
+    arg as *mut c_char
 }
 
 /// ## Arguments:
