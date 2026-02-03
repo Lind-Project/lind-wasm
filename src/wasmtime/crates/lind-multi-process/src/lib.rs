@@ -5,7 +5,7 @@ use cfg_if::cfg_if;
 use anyhow::{anyhow, Result};
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::{
     get_vmctx, get_vmctx_thread, rm_vmctx, set_vmctx, set_vmctx_thread, VmCtxWrapper,
