@@ -31,3 +31,36 @@ The system distinguishes between forcing an exit and handling the cleanup, mirro
 - `trigger_harsh_cage_exit` (Non-Interposable): This call is triggered by the infrastructure to force a cage to exit. It cannot be intercepted by a grate, acting as an absolute revocation of execution rights.
 
 - `harsh_cage_exit` (Interposable): This acts as a notification that a descendant has exited uncleanly. It is interposable, allowing grates to perform necessary cleanup (like updating the 3i data structure) in response to the failure.
+
+## Example: The "Ransomware Aquarium" (Virtualization without Overhead)
+To understand the power of Grates compared to traditional ACLs (Access Control Lists), consider the scenario of executing a suspicious legacy binary—perhaps a game mod or an old invoice parser—that behaves like ransomware.
+
+### The Problem with ACLs
+In a traditional system, if the user  suspects a program is malicious, they  might deny it write access to their  files (ACL: `chmod -w`).
+
+**The Result**: The program attempts to write, receives an `EACCES` (Permission Denied) error from the kernel, and likely crashes or detects it is being sandboxed. 
+
+### The Grate Solution: A Reality Distortion Field
+In Lind-Wasm, we can wrap the suspicious program in a "Shadow Copy" Grate. Because the Grate interposes on system calls via the 3i interface, it can virtualize the application's environment.
+
+- **The Setup**: The ransomware runs inside a Cage, with a Grate interposed above it.
+
+- **The Bait (READ)**: The ransomware calls `open()` and `read()` on `critical_data.txt`. The Grate intercepts the call, deems it safe, and passes it up to the file system. The ransomware gets the real data.
+
+- **The Trap (WRITE)**: The ransomware attempts to encrypt the data and calls `write()` to overwrite the file.
+
+- **The Interception**: The Grate catches the write call.
+
+- **The Virtualization**: Instead of passing the call to the actual file system, the Grate writes the encrypted data to a temporary, throwaway memory buffer.
+
+- **The Deception**: The Grate returns SUCCESS (e.g., "wrote 1024 bytes") to the ransomware.
+
+- **The Outcome**: The ransomware believes it has successfully encrypted your files and displays its ransom note. In reality, your files on disk are untouched. You can simply terminate the Cage.
+
+### Why This Matters
+This demonstrates that a Grate is not just a security gatekeeper; it is a programmable environment.
+
+- **Custom VM Behavior**: The Grate creates a custom "Virtual Machine" where files behave exactly how we want them to (e.g., "writes disappear into the void"), but it does so without the heavy overhead of a traditional VM.
+
+- **Zero-Overhead**: Because 3i converts system calls into simple userspace function calls, this sophisticated interception happens with function-call speed, rather than the heavy context switching of a kernel trap.
+- **Flexible Environment**: Since a Lind Grate works by syscall interposition, it can operate in any environment.  A container system like Docker, for example, is fundamentally a namespace within a host OS, and require a kernel with the appropriate mechanisms to support containerization.  Docker, for example, runs only on Linux and OS/X systems; Windows requires installation of a Linux VM (WSL), which actually runs the containers.  In contrast, since Lind isolates applications within a single process, it can run anywhere.
