@@ -4,7 +4,7 @@
 # Multi-stage Dockerfile for lind-wasm end-to-end testing and image creation
 #
 # - Installs build dependencies
-# - Builds wasmtime, glibc and sysroot for clang cross-compilation
+# - Builds lind-boot, glibc and sysroot for clang cross-compilation
 # - A. Runs end-to-end tests (default)
 # - B. Creates Docker image with lind-wasm toolchain
 #
@@ -85,11 +85,11 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 
-# Build wasmtime
-FROM base as build-wasmtime
+# Build lind-boot
+FROM base as build-lind-boot
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
-COPY --parents src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs Makefile rust-toolchain.toml .
-RUN make wasmtime
+COPY --parents src/lind-boot src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs Makefile rust-toolchain.toml .
+RUN make lind-boot
 
 
 # Build glibc and generate sysroot
@@ -102,7 +102,7 @@ RUN make sysroot
 # Build Docker image that includes the full lind-wasm toolchain
 # NOTE: Lind-wasm source code is not included
 FROM base AS release
-COPY --from=build-wasmtime --parents  src/wasmtime/target .
+COPY --from=build-lind-boot --parents  src/lind-boot/target .
 COPY --from=build-glibc --parents src/glibc/sysroot .
 COPY --parents scripts tests tools skip_test_cases.txt .
 
@@ -120,7 +120,7 @@ COPY --parents scripts tests tools skip_test_cases.txt Makefile .
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time
 # and cache layers. This means they are not preserved in the resulting image.
-RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmtime/target \
+RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lind-boot/target \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
     make test && \
     OUT_DIR=/ REPORT_PATH=/report.html make md_generation
