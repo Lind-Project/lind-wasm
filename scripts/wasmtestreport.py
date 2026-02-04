@@ -8,10 +8,18 @@
 #   "./wasmtestreport.py --output newresult" to change the output file(The new file will be newresult.json)
 #   "./wasmtestreport.py --generate-html" to generate the html file
 #   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 10"
+#   "./wasmtestreport.py --compile-flags -pthread -lpthread -O2 -g"
+#   (flags are collected until the next option starting with "--")
 #
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
 #   NOTE: without the last two testfiles arguments, we will always copy the test cases and then run the tests
+#   Per-directory compile flags can be specified by adding a "compile_flags.json" file next
+#   to tests (or in a parent test directory) with {"compile-flags": [...]}.
+#   Example compile_flags.json:
+#   {
+#     "compile-flags": ["-pthread", "-lpthread", "-O2", "-g"]
+#   }
 import json
 import os
 import subprocess
@@ -21,6 +29,7 @@ import argparse
 import shutil
 import logging
 import tempfile
+import sys
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -43,7 +52,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
 LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
-CC = os.environ.get("CC", "gcc")  # C compiler, defaults to gcc
+CC = os.environ.get("CC", "clang")  # C compiler, defaults to clang
 
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
@@ -54,6 +63,10 @@ NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 FAIL_PARENT_NAME = "fail"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
+GLOBAL_COMPILE_FLAGS = []
+DIR_FLAGS = []
+LOCAL_FLAGS_FILENAME = "compile_flags.json"
+LOCAL_FLAGS_CACHE = {}
 
 
 error_types = {
@@ -87,6 +100,119 @@ error_types = {
 def is_segmentation_fault(returncode):
     return returncode in (134, 139)
 # ----------------------------------------------------------------------
+
+def load_dir_flags(flags_path: Path):
+    if not flags_path:
+        return []
+    try:
+        with open(flags_path, "r") as f:
+            raw_data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Failed to load dir flags from {flags_path}: {exc}") from exc
+
+    if not isinstance(raw_data, dict):
+        raise ValueError("Directory flags JSON must be an object mapping paths to flag configs.")
+
+    entries = []
+    for key, value in raw_data.items():
+        if not isinstance(key, str):
+            raise ValueError("Directory flags keys must be strings.")
+        if not isinstance(value, dict):
+            raise ValueError(f"Directory flags entry for {key} must be an object.")
+
+        lind_flags = value.get("lind", [])
+        native_flags = value.get("native", [])
+
+        if not isinstance(lind_flags, list) or not all(isinstance(f, str) for f in lind_flags):
+            raise ValueError(f"Directory flags 'lind' for {key} must be a list of strings.")
+        if not isinstance(native_flags, list) or not all(isinstance(f, str) for f in native_flags):
+            raise ValueError(f"Directory flags 'native' for {key} must be a list of strings.")
+
+        entries.append((Path(key), {"lind": lind_flags, "native": native_flags}))
+
+    entries.sort(key=lambda item: len(item[0].parts), reverse=True)
+    return entries
+
+def load_flags_file(flags_path: Path):
+    try:
+        contents = flags_path.read_text()
+        logger.info("Loaded compile flags file %s:\n%s", flags_path, contents)
+        raw_data = json.loads(contents)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Failed to load compile flags from {flags_path}: {exc}") from exc
+
+    if not isinstance(raw_data, dict):
+        raise ValueError("Compile flags JSON must be an object.")
+
+    compile_flags = raw_data.get("compile-flags")
+    if compile_flags is not None:
+        if not isinstance(compile_flags, list) or not all(isinstance(f, str) for f in compile_flags):
+            raise ValueError(f"Compile flags 'compile-flags' in {flags_path} must be a list of strings.")
+        return {"lind": compile_flags, "native": compile_flags}
+
+    lind_flags = raw_data.get("lind", [])
+    native_flags = raw_data.get("native", [])
+
+    if not isinstance(lind_flags, list) or not all(isinstance(f, str) for f in lind_flags):
+        raise ValueError(f"Compile flags 'lind' in {flags_path} must be a list of strings.")
+    if not isinstance(native_flags, list) or not all(isinstance(f, str) for f in native_flags):
+        raise ValueError(f"Compile flags 'native' in {flags_path} must be a list of strings.")
+
+    return {"lind": lind_flags, "native": native_flags}
+
+def find_local_flags(source_file: Path):
+    source_dir = Path(source_file).parent.resolve()
+    if source_dir in LOCAL_FLAGS_CACHE:
+        return LOCAL_FLAGS_CACHE[source_dir]
+
+    try:
+        relative_dir = source_dir.resolve().relative_to(TEST_FILE_BASE.resolve())
+    except ValueError:
+        relative_dir = None
+
+    current_dir = source_dir
+    while True:
+        flags_path = current_dir / LOCAL_FLAGS_FILENAME
+        if flags_path.is_file():
+            try:
+                flags = load_flags_file(flags_path)
+                LOCAL_FLAGS_CACHE[source_dir] = flags
+                return flags
+            except ValueError as exc:
+                raise ValueError(f"{exc} (referenced from {source_file})") from exc
+
+        if relative_dir is None:
+            break
+
+        if current_dir.resolve() == TEST_FILE_BASE.resolve():
+            break
+
+        current_dir = current_dir.parent
+
+    LOCAL_FLAGS_CACHE[source_dir] = {"lind": [], "native": []}
+    return LOCAL_FLAGS_CACHE[source_dir]
+
+def resolve_compile_flags(source_file: Path, kind: str):
+    if kind not in ("lind", "native"):
+        raise ValueError(f"Unknown compile flag kind: {kind}")
+
+    base_flags = GLOBAL_COMPILE_FLAGS
+    selected_flags = []
+    source_file = Path(source_file)
+
+    try:
+        rel_path = source_file.resolve().relative_to(TEST_FILE_BASE.resolve())
+    except ValueError:
+        rel_path = source_file.resolve()
+
+    for dir_path, flags in DIR_FLAGS:
+        if rel_path.parts[:len(dir_path.parts)] == dir_path.parts:
+            selected_flags = flags.get(kind, [])
+            break
+
+    local_flags = find_local_flags(source_file)
+
+    return [*base_flags, *selected_flags, *local_flags.get(kind, [])]
 
 # Function: get_empty_result
 #
@@ -245,7 +371,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
             shutil.copy2(str(dest_path), backup_path)
             executable_backups[dest_path] = Path(backup_path)
 
-        dep_compile_cmd = [CC, str(dependency_source), "-o", str(dest_path)]
+        dep_compile_cmd = [CC, str(dependency_source), *resolve_compile_flags(dependency_source, "native"), "-o", str(dest_path)]
         try:
             dep_proc = run_subprocess(dep_compile_cmd, label="native dep compile", shell=False)
         except Exception as e:
@@ -264,7 +390,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
         raise ValueError(f"Native output path must be absolute, got: {native_output}")
 
     # Compile
-    compile_cmd = [CC, str(source_file), "-o", str(native_output)]
+    compile_cmd = [CC, str(source_file), *resolve_compile_flags(source_file, "native"), "-o", str(native_output)]
     try:
         proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LINDFS_ROOT, shell=False)
         if proc.returncode != 0:
@@ -352,7 +478,7 @@ def get_expected_output(source_file):
 def compile_c_to_wasm(source_file):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file, *resolve_compile_flags(source_file, "lind")]
     
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
@@ -1027,7 +1153,34 @@ def check_timeout(value):
 # - Output:
 #   Returns a dictionary with the parsed arguments
 # ----------------------------------------------------------------------
-def parse_arguments():
+def extract_option_values(argv, option):
+    values = []
+    remaining = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == option:
+            i += 1
+            while i < len(argv) and not argv[i].startswith("--"):
+                values.append(argv[i])
+                i += 1
+            continue
+        if arg.startswith(f"{option}="):
+            values.append(arg.split("=", 1)[1])
+            i += 1
+            continue
+        remaining.append(arg)
+        i += 1
+    return values, remaining
+
+def parse_arguments(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+
+    compile_flags, argv = extract_option_values(argv, "--compile-flags")
+    lind_flags, argv = extract_option_values(argv, "--lind-compile-flags")
+    native_flags, argv = extract_option_values(argv, "--native-compile-flags")
+
     parser = argparse.ArgumentParser(description="Specify folders to skip or run.")
     parser.add_argument("--skip", nargs="*", default=SKIP_FOLDERS, help="List of folders to be skipped")
     parser.add_argument("--run", nargs="*", default=RUN_FOLDERS, help="List of folders to be run")
@@ -1042,8 +1195,12 @@ def parse_arguments():
     parser.add_argument("--debug", action="store_true", help="Enable detailed stdout/stderr output for subprocesses")
     parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
     parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
+    parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
+    parser.add_argument("--lind-compile-flags", nargs="*", default=lind_flags, help="Deprecated: use --compile-flags instead")
+    parser.add_argument("--native-compile-flags", nargs="*", default=native_flags, help="Deprecated: use --compile-flags instead")
+    parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     return args
 
 def compare_test_results(file1, file2):
@@ -1195,7 +1352,14 @@ def setup_test_file_in_artifacts(original_source, artifacts_root):
         expected_dir_dst = dest_dir / EXPECTED_DIRECTORY
         if not expected_dir_dst.exists():
             shutil.copytree(expected_dir_src, expected_dir_dst)
-    
+            
+    # Copy local compile flags file if present so artifacts-based builds can find it.
+    flags_src = original_source.parent / LOCAL_FLAGS_FILENAME
+    if flags_src.is_file():
+        flags_dst = dest_dir / LOCAL_FLAGS_FILENAME
+        if not flags_dst.exists():
+            shutil.copy2(flags_src, flags_dst)
+
     return dest_source
 
 # ----------------------------------------------------------------------
@@ -1270,6 +1434,7 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
         )
 
 def main():
+    global GLOBAL_COMPILE_FLAGS, DIR_FLAGS
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
@@ -1283,6 +1448,17 @@ def main():
     clean_results = args.clean_results
     artifacts_dir_arg = args.artifacts_dir
     keep_artifacts = args.keep_artifacts
+    deprecated_flags = [*args.lind_compile_flags, *args.native_compile_flags]
+    if deprecated_flags:
+        logger.warning("Deprecated flags provided; use --compile-flags instead.")
+    GLOBAL_COMPILE_FLAGS = [*args.compile_flags, *deprecated_flags]
+
+    if args.dir_flags:
+        try:
+            DIR_FLAGS = load_dir_flags(args.dir_flags)
+        except ValueError as exc:
+            logger.error(str(exc))
+            return
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
