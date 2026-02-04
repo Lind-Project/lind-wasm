@@ -135,8 +135,9 @@ def load_dir_flags(flags_path: Path):
 
 def load_flags_file(flags_path: Path):
     try:
-        with open(flags_path, "r") as f:
-            raw_data = json.load(f)
+        contents = flags_path.read_text()
+        logger.info("Loaded compile flags file %s:\n%s", flags_path, contents)
+        raw_data = json.loads(contents)
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Failed to load compile flags from {flags_path}: {exc}") from exc
 
