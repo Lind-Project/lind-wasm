@@ -5,9 +5,14 @@
 /// Maximum allowed path length in Lind.  
 /// Used to validate path lengths during operations to prevent overflow.
 pub const PATH_MAX: usize = 4096;
-
-/// Root directory for lind filesystem used for chroot-based isolation.
-pub const LINDFS_ROOT: &str = "/home/lind/lind-wasm/lindfs";
+/// If the `LIND_ROOT` environment variable is present at compile time, this will expand into an expression
+/// of type Option<&'static str> whose value is Some of the value of the environment variable (a compilation
+/// error will be emitted if the environment variable is not a valid Unicode string). If the environment
+/// variable is not present, then this will expand to None, and will be set to default path.
+pub const LIND_ROOT: &str = match option_env!("LIND_ROOT") {
+    Some(path) => path,
+    None => "/home/lind/lind-wasm/src/tmp",
+};
 
 /// ===== Lind specific =====
 ///
@@ -36,3 +41,6 @@ pub const UNUSED_ARG: u64 = 0xDEADBEEF_DEADBEEF;
 pub const UNUSED_ID: u64 = 0xCAFEBABE_CAFEBABE;
 /// Placeholder for unused syscall name
 pub const UNUSED_NAME: u64 = 0xFEEDFACE_FEEDFACE;
+
+pub const RAWPOSIX_CAGEID: u64 = 777777;
+pub const WASMTIME_CAGEID: u64 = 888888;

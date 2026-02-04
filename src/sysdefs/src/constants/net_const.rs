@@ -336,5 +336,5 @@ pub const EPOLLET: i32 = 1 << 31; // Edge-triggered
 pub const EPOLL_CTL_ADD: i32 = 1; // Add a file descriptor
 pub const EPOLL_CTL_DEL: i32 = 2; // Remove a file descriptor
 pub const EPOLL_CTL_MOD: i32 = 3; // Change event registration
-pub const EPOLL_CLOEXEC: i32 = 0o2000000; // Close on exec (Value equals to O_CLOEXEC)
+
 pub const FD_SET_MAX_FD: i32 = 1024; // Maximum file descriptor for fd_set
