@@ -1,4 +1,4 @@
-use crate::{cli::CliOptions, host::HostCtx};
+use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx};
 use anyhow::anyhow;
 use threei::threei_const;
 use wasmtime::vm::{VMContext, VMOpaqueContext};
