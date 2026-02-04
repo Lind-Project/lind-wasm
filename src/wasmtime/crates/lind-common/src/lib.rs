@@ -243,7 +243,7 @@ pub fn add_to_linker<
             "lind_debug_str",
             move |caller: Caller<'_, T>, ptr: i32| -> i32 {
                 let mem_base = get_memory_base(&caller);
-                if let Ok(msg) = get_cstr(mem_base + ptr as u64) {
+                if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
                     eprintln!("[LIND DEBUG STR]: {}", msg);
                 }
                 ptr // Return the pointer to the WASM stack
