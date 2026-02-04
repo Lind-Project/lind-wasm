@@ -1,7 +1,7 @@
 LIND_ROOT ?= src/tmp
 
 .PHONY: build 
-build: sysroot wasmtime
+build: sysroot lind-boot
 	@echo "Build complete"
 
 .PHONY: prepare-lind-root
@@ -16,18 +16,18 @@ all: build
 sysroot:
 	./scripts/make_glibc_and_sysroot.sh
 
-.PHONY: wasmtime
-wasmtime:
-	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
-	cargo build --manifest-path src/wasmtime/Cargo.toml --release
+.PHONY: lind-boot
+lind-boot:
+	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
+	cargo build --manifest-path src/lind-boot/Cargo.toml --release
 
 .PHONY: lind-debug
 lind-debug:
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
 	$(MAKE) build_glibc LIND_DEBUG=1
 	
-	# Build Wasmtime with the lind_debug feature enabled
-	cargo build --manifest-path src/wasmtime/Cargo.toml --features lind_debug
+	# Build lind-boot with the lind_debug feature enabled
+	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
 build_glibc:
 	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
@@ -62,6 +62,7 @@ md_generation:
 
 .PHONY: lint
 lint:
+	cargo fmt --check --all --manifest-path src/lind-boot/Cargo.toml
 	cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
 	cargo clippy \
 	    --manifest-path src/wasmtime/Cargo.toml \
@@ -75,6 +76,7 @@ lint:
 .PHONY: format
 format:
 	cargo fmt --all --manifest-path src/wasmtime/Cargo.toml
+	cargo fmt --all --manifest-path src/lind-boot/Cargo.toml
  
 
 .PHONY: docs-serve
@@ -98,8 +100,8 @@ clean:
 	    ! -path 'src/glibc/target/lib/grcrt1.o' \
 	    ! -path 'src/glibc/target/lib/rcrt1.o' \
 	    -exec rm -f {} +
-	@echo "cargo clean (wasmtime)"
-	cargo clean --manifest-path src/wasmtime/Cargo.toml
+	@echo "cargo clean (lind-boot)"
+	cargo clean --manifest-path src/lind-boot/Cargo.toml
 
 .PHONY: distclean
 distclean: clean
