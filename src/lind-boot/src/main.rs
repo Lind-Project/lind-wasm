@@ -3,7 +3,7 @@ mod lind_wasmtime;
 
 use crate::{cli::CliOptions, lind_wasmtime::execute_wasmtime};
 use clap::Parser;
-use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
+use rawposix::init::{rawposix_shutdown, rawposix_start};
 
 /// Entry point of the lind-boot executable.
 ///

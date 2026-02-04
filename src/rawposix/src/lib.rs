@@ -4,6 +4,7 @@
 // within the Lind-WASM sandbox environment using the 3i (Three Interposition) system.
 
 pub mod fs_calls;
+pub mod init;
 pub mod net_calls;
 pub mod sys_calls;
 pub mod syscall_table;

@@ -15,13 +15,13 @@ use super::fs_calls::{
     stat_syscall, statfs_syscall, sync_file_range_syscall, truncate_syscall, unlink_syscall,
     unlinkat_syscall, write_syscall, writev_syscall,
 };
+use super::init::RawCallFunc;
 use super::net_calls::{
     accept_syscall, bind_syscall, connect_syscall, epoll_create_syscall, epoll_ctl_syscall,
     epoll_wait_syscall, gethostname_syscall, getpeername_syscall, getsockname_syscall,
     getsockopt_syscall, listen_syscall, poll_syscall, recvfrom_syscall, select_syscall,
     sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall, socketpair_syscall,
 };
-use super::sys_calls::RawCallFunc;
 use super::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall, getgid_syscall,
     getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall, sched_yield_syscall,
