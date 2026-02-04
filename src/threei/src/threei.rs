@@ -1,5 +1,5 @@
 //! Threei (Three Interposition) module
-use cage::memory::check_addr;
+use cage::memory::{check_addr, check_addr_read, check_addr_rw};
 use core::panic;
 use dashmap::DashSet;
 use once_cell::sync::Lazy;
@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, RwLock};
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
+use typemap::datatype_conversion::sc_convert_uaddr_to_host;
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
@@ -714,9 +715,48 @@ fn _validate_len(len: u64, max: u64) -> Result<(), u64> {
 }
 
 /// Helper function to validate that a given memory range is valid in a cage.
+/// Uses the new vmmap helper functions to check range accessibility.
+/// Returns Ok(()) if the range is valid and accessible.
+/// Logs an error and returns Err(error_code) if the range is invalid.
+#[inline]
+fn _validate_range_read(cage: u64, addr: u64, len: usize, what: &str) -> Result<(), u64> {
+    match check_addr_read(cage, addr, len) {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            eprintln!(
+                "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
+                addr, len, what
+            );
+            Err(threei_const::ELINDAPIABORTED)
+        }
+    }
+}
+
+/// Helper function to validate that a given memory range has read/write access in a cage.
+/// Uses the new vmmap helper functions to check range accessibility.
+/// Returns Ok(()) if the range is valid and accessible with read/write permissions.
+/// Logs an error and returns Err(error_code) if the range is invalid.
+#[inline]
+fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<(), u64> {
+    match check_addr_rw(cage, addr, len) {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            eprintln!(
+                "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
+                addr, len, what
+            );
+            Err(threei_const::ELINDAPIABORTED)
+        }
+    }
+}
+
+/// Helper function to validate that a given memory range is valid in a cage.
 /// Calls check_addr with the given cage, start address, length, and protection flags.
 /// Returns Ok(()) if the range is valid and accessible.
 /// Logs an error and returns Err(error_code) if the range is invalid.
+///
+/// Note: This function is kept for backward compatibility. Consider using
+/// _validate_range_read or _validate_range_rw for better clarity.
 #[inline]
 fn _validate_range(cage: u64, addr: u64, len: usize, prot: i32, what: &str) -> Result<(), u64> {
     match check_addr(cage, addr, len, prot) {
@@ -863,7 +903,7 @@ pub fn copy_data_between_cages(
         // strncpy: copy until '\0' or len limit, whichever comes first
         Ok(CopyType::Strncpy) => {
             // Validate that the source range is readable for at least `len` bytes
-            if let Err(_e) = check_addr(srccage, srcaddr, len as usize, PROT_READ) {
+            if let Err(_e) = check_addr_read(srccage, srcaddr, len as usize) {
                 eprintln!("[3i|copy] src precheck failed at start {:x}", srcaddr);
                 return threei_const::ELINDAPIABORTED;
             }
@@ -888,16 +928,10 @@ pub fn copy_data_between_cages(
     };
 
     // Validate that src and dest ranges are accessible
-    if let Err(code) = _validate_range(srccage, srcaddr, copy_len, PROT_READ, "source") {
+    if let Err(code) = _validate_range_read(srccage, srcaddr, copy_len, "source") {
         return code;
     }
-    if let Err(code) = _validate_range(
-        destcage,
-        destaddr,
-        copy_len,
-        PROT_READ | PROT_WRITE,
-        "destination",
-    ) {
+    if let Err(code) = _validate_range_rw(destcage, destaddr, copy_len, "destination") {
         return code;
     }
 
