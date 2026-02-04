@@ -16,12 +16,18 @@ pub struct CliOptions {
     #[arg(long)]
     pub allow_precompile: bool,
 
-    /// Path to the wasm file to run
-    #[arg(value_name = "WASM_FILE")]
-    pub wasm_file: String,
+    // / Path to the wasm file to run
+    // #[arg(value_name = "WASM_FILE")]
+    // pub wasm_file: String,
 
-    /// Arguments passed to the wasm program
-    #[arg(trailing_var_arg = true)]
+    // /// Arguments passed to the wasm program
+    // #[arg(trailing_var_arg = true)]
+    // pub args: Vec<String>,
+    /// First item is WASM file (argv[0]), rest are program args (argv[1..])
+    ///
+    /// Example:
+    ///   lind-wasm prog.wasm a b c
+    #[arg(value_name = "WASM_FILE", required = true, num_args = 1.., trailing_var_arg = true)]
     pub args: Vec<String>,
 
     /// Pass an environment variable to the program.
@@ -41,4 +47,10 @@ pub fn parse_env_var(s: &str) -> Result<(String, Option<String>), String> {
         parts.next().unwrap().to_string(),
         parts.next().map(|s| s.to_string()),
     ))
+}
+
+impl CliOptions {
+    pub fn wasm_file(&self) -> &str {
+        &self.args[0]
+    }
 }

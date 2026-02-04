@@ -1,10 +1,9 @@
 mod cli;
-mod execute;
-mod host;
-mod trampoline;
+mod lind_wasmtime;
 
-use crate::{cli::CliOptions, execute::execute};
+use crate::{cli::CliOptions, lind_wasmtime::execute_wasmtime};
 use clap::Parser;
+use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
 
 /// Entry point of the lind-boot executable.
 ///
@@ -18,6 +17,15 @@ use clap::Parser;
 /// handling semantics are delegated to `execute.rs`.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lindboot_cli = CliOptions::parse();
-    execute(lindboot_cli)?;
+    // Initialize RawPOSIX, also registered RawPOSIX syscalls to 3i
+    rawposix_start(0);
+
+    // Execute with user-selected runtime. Can be switched to other runtime implementation
+    // in the future (e.g.: MPK).
+    execute_wasmtime(lindboot_cli)?;
+
+    // after all cage exits, finalize the lind
+    rawposix_shutdown();
+
     Ok(())
 }

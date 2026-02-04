@@ -27,9 +27,9 @@ impl AsMut<wasi_common::WasiCtx> for HostCtx {
 
 impl HostCtx {
     /// Performs a partial deep clone of the host context. It explicitly forks the WASI preview1
-    /// context(`preview1_ctx`), the lind multi-process context (`lind_fork_ctx`), and the lind common
-    /// context (`lind_common_ctx`). Other parts of the context, such as `wasi_threads`, are shared
-    /// between forks since they are not required to be process-isolated.
+    /// context(`preview1_ctx`), the lind multi-process context (`lind_fork_ctx`). Other parts of
+    /// the context, such as `wasi_threads`, are shared between forks since they are not required
+    /// to be process-isolated.
     pub fn fork(&self) -> Self {
         // we want to do a real fork for wasi_preview1 context since glibc uses the environment variable
         // related interface here
@@ -38,15 +38,12 @@ impl HostCtx {
             None => None,
         };
 
-        // and we also want to fork the lind-common context and lind-multi-process context
+        // and we also want to fork lind-multi-process context
         let forked_lind_fork_ctx = match &self.lind_fork_ctx {
             Some(ctx) => Some(ctx.fork()),
             None => None,
         };
 
-        // besides preview1_ctx, lind_common_ctx and forked_lind_fork_ctx, we do not
-        // care about other context since they are not used by glibc so we can just share
-        // them between processes
         let forked_host = Self {
             preview1_ctx: forked_preview1_ctx,
             lind_fork_ctx: forked_lind_fork_ctx,

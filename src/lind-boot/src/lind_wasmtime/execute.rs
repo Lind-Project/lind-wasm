@@ -1,7 +1,6 @@
-use crate::{cli::CliOptions, host::HostCtx, trampoline::*};
+use crate::{cli::CliOptions, lind_wasmtime::host::HostCtx, lind_wasmtime::trampoline::*};
 use anyhow::{Context, Result, anyhow, bail};
 use cage::signal::{lind_signal_init, signal_may_trigger};
-use rawposix::sys_calls::{rawposix_shutdown, rawposix_start};
 use std::ffi::c_void;
 use std::path::Path;
 use std::ptr::NonNull;
@@ -15,8 +14,6 @@ use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx};
 use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, THREAD_START_ID};
 use wasmtime_lind_utils::{LindCageManager, lind_syscall_numbers::EXIT_SYSCALL};
 use wasmtime_wasi_threads::WasiThreadsCtx;
-
-static HOME_DIR_PATH: &str = "/home";
 
 /// Boots the Lind + RawPOSIX + 3i runtime and executes the initial Wasm program
 /// in the first cage.
@@ -45,9 +42,9 @@ static HOME_DIR_PATH: &str = "/home";
 /// starting cage, and runs the program's entrypoint. On successful completion it
 /// waits for all cages to exit before shutting down RawPOSIX, ensuring runtime-wide
 /// cleanup happens only after the last process terminates.
-pub fn execute(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
+pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     // -- Initialize the Wasmtime execution environment --
-    let wasm_file_path = Path::new(&lindboot_cli.wasm_file);
+    let wasm_file_path = Path::new(lindboot_cli.wasm_file());
     let args = lindboot_cli.args.clone();
     let wt_config = wasmtime::Config::new();
     let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
@@ -59,8 +56,7 @@ pub fn execute(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     let lind_manager = Arc::new(LindCageManager::new(0));
     // new cage is created
     lind_manager.increment();
-    // Initialize RawPOSIX, also registered RawPOSIX syscalls to 3i
-    rawposix_start(0);
+
     // Initialize vmctx pool
     init_vmctx_pool();
     // Initialize trampoline entry function pointer for wasmtime runtime.
@@ -69,106 +65,6 @@ pub fn execute(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         threei_const::RUNTIME_TYPE_WASMTIME,
         grate_callback_trampoline,
     );
-
-    // Register syscall handlers (clone/exec/exit) with 3i
-    // let fp_clone: extern "C" fn(
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    // ) -> i32 = clone_syscall_entry;
-    // let clone_call_u64: u64 = fp_clone as usize as u64;
-    // threei::register_handler(
-    //     clone_call_u64,
-    //     RAWPOSIX_CAGEID,                     // self cageid
-    //     56,                                  // clone syscall number
-    //     threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-    //     1,                                   // register
-    //     WASMTIME_CAGEID,                     // target cageid
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    // );
-
-    // let fp_exec: extern "C" fn(
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    // ) -> i32 = exec_syscall_entry;
-    // let exec_call_u64: u64 = fp_exec as usize as u64;
-    // threei::register_handler(
-    //     exec_call_u64,
-    //     RAWPOSIX_CAGEID,                     // self cageid
-    //     59,                                  // exec syscall number
-    //     threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-    //     1,                                   // register
-    //     WASMTIME_CAGEID,                     // target cageid
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    // );
-
-    // let fp_exit: extern "C" fn(
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    //     u64,
-    // ) -> i32 = exit_syscall_entry;
-    // let exit_call_u64: u64 = fp_exit as usize as u64;
-    // threei::register_handler(
-    //     exit_call_u64,
-    //     RAWPOSIX_CAGEID,                     // self cageid
-    //     60,                                  // exit syscall number
-    //     threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
-    //     1,                                   // register
-    //     WASMTIME_CAGEID,                     // target cageid
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    //     0,
-    // );
 
     // -- Load module and Attach host APIs --
     // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
@@ -207,8 +103,6 @@ pub fn execute(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
 
             // we wait until all other cage exits
             lind_manager.wait();
-            // after all cage exits, finalize the lind
-            rawposix_shutdown();
         }
         Err(e) => {
             // Exit the process if Wasmtime understands the error;
@@ -217,8 +111,6 @@ pub fn execute(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
             return Err(wasi_common::maybe_exit_on_error(e));
         }
     }
-
-    println!("Wasm execution in cage {} finished.", CAGE_START_ID);
 
     result
 }
@@ -242,12 +134,7 @@ pub fn execute_with_lind(
     cageid: u64,
 ) -> Result<Vec<Val>> {
     // -- Initialize the Wasmtime execution environment --
-    println!(
-        "[execute_with_lind] Starting Wasm execution in cage {}...\n with cliopts args: {:?}",
-        cageid, lind_boot.args
-    );
-    let wasm_file_path = Path::new(&lind_boot.wasm_file);
-    println!("[execute_with_lind] Wasm file path: {:?}", wasm_file_path);
+    let wasm_file_path = Path::new(lind_boot.wasm_file());
     let args = lind_boot.args.clone();
     let mut wt_config = wasmtime::Config::new();
     let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
@@ -274,8 +161,6 @@ pub fn execute_with_lind(
         load_main_module(&mut wstore, &mut linker, &module, cageid as u64, &args)
             .with_context(|| format!("failed to run main module"))
     });
-
-    println!("Wasm execution in cage {} finished.", CAGE_START_ID);
 
     result
 }
@@ -304,13 +189,47 @@ fn attach_api(
     cageid: Option<i32>,
 ) -> Result<()> {
     // Setup WASI-p1
-    // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
-    // so we manually add them to the linker without checking the input
+    // --- Why we still attach a WASI preview1 context (WasiCtx) even though we don't use wasi-libc ---
+    //
+    // Our guest is linked with our customized glibc, whose startup path still follows a WASI-style ABI
+    // for *process metadata* (argv/environ). Concretely, our glibc crt1 `_start` expands to:
+    //
+    //   _start()
+    //     -> __wasi_initialize_environ()
+    //          -> __wasi_environ_sizes_get()
+    //          -> __wasi_environ_get()
+    //     -> __main_void()
+    //          -> __wasi_args_sizes_get()
+    //          -> __wasi_args_get()
+    //     -> main(argc, argv, environ)
+    //
+    // The functions __wasi_* above are thin wrappers around imported WASI preview1 symbols:
+    //
+    //   __imported_wasi_snapshot_preview1_args_sizes_get  (import "wasi_snapshot_preview1" "args_sizes_get")
+    //   __imported_wasi_snapshot_preview1_args_get        (import "wasi_snapshot_preview1" "args_get")
+    //   __imported_wasi_snapshot_preview1_environ_sizes_get (import "wasi_snapshot_preview1" "environ_sizes_get")
+    //   __imported_wasi_snapshot_preview1_environ_get       (import "wasi_snapshot_preview1" "environ_get")
+    //
+    // Therefore, even if we bypass wasi-libc and implement syscalls via glibc/RawPOSIX,
+    // the guest still expects the *WASI preview1 argument and environment APIs* to exist,
+    // otherwise argc/argv/environ cannot be initialized during crt startup (argv[i] becomes NULL,
+    // environ becomes empty, or the module traps if the imports are missing).
+    //
+    // The following two steps are required:
+    //   1) Add WASI preview1 functions to the Wasmtime linker (so the imports resolve).
+    //   2) Populate a WasiCtx as the backing store for argv/env/std{in,out,err}, so that
+    //      args_get/environ_get return meaningful data.
+    //
+    // Note: This is about process metadata plumbing. Our "real" syscalls are still handled
+    // by glibc/RawPOSIX.
     wasi_common::sync::add_to_linker(&mut linker, |s: &mut HostCtx| {
         AsMut::<wasi_common::WasiCtx>::as_mut(s)
     });
 
     let mut builder = WasiCtxBuilder::new();
+    builder.inherit_stdio().args(&lindboot_cli.args);
+    builder.inherit_stdin();
+    builder.inherit_stderr();
     wstore.data_mut().preview1_ctx = Some(builder.build());
 
     // Setup WASI-thread
@@ -336,7 +255,7 @@ fn attach_api(
             |lindboot_cli, path, args, cageid, lind_manager, envs| {
                 let mut new_lindboot_cli = lindboot_cli.clone();
                 new_lindboot_cli.args = vec![String::from(path)];
-                new_lindboot_cli.wasm_file = path.to_string();
+                // new_lindboot_cli.wasm_file = path.to_string();
                 if let Some(envs) = envs {
                     new_lindboot_cli.vars = envs.clone();
                 }
@@ -368,9 +287,8 @@ fn load_main_module(
     args: &[String],
 ) -> Result<Vec<Val>> {
     // todo:
-    // I don't setup `epoch_handler` since it seems to be used for https, which is not required
-    // for TriSeal. I'm not fully sure about this, but it works now.
-
+    // I don't setup `epoch_handler` since it seems not being used by our previous implementation.
+    // Not sure if this is related to our thread exit problem
     let (instance, cage_instanceid) = linker
         .instantiate_with_lind(
             &mut *store,
@@ -413,7 +331,7 @@ fn load_main_module(
         true, /* this is the main thread */
     );
 
-    // // see comments at signal_may_trigger for more details
+    // see comments at signal_may_trigger for more details
     signal_may_trigger(cageid);
 
     // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s

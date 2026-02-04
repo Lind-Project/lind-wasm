@@ -8,11 +8,13 @@ At a high level, lind-boot sits at the boundary between the command-line interfa
 
 ```csharp
 src/
-├── main.rs        # CLI entry point
-├── cli.rs         # Command-line argument parsing
-├── execute.rs     # Core execution logic and cage lifecycle
-├── host.rs        # Host context (WASI + Lind state)
-└── trampoline.rs  # 3i callback & syscall entry trampolines 
+├── main.rs
+├── cli.rs
+└── lind-wasmtime/
+    ├── mod.rs
+    ├── execute.rs
+    ├── host.rs
+    └── trampoline.rs
 ```
 
 ## How To Use
