@@ -47,8 +47,9 @@ static HOME_DIR_PATH: &str = "/home";
 /// cleanup happens only after the last process terminates.
 pub fn execute(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
     // -- Initialize the Wasmtime execution environment --
-    let wasm_file_path = Path::new(&lindboot_cli.wasm_file);
+    let wasm_file_path = Path::new(lindboot_cli.wasm_file());
     let args = lindboot_cli.args.clone();
+    println!("[lind-boot] args received: {:?}", args);
     let wt_config = wasmtime::Config::new();
     let engine = Engine::new(&wt_config).context("failed to create execution engine")?;
     let host = HostCtx::default();
@@ -246,7 +247,7 @@ pub fn execute_with_lind(
         "[execute_with_lind] Starting Wasm execution in cage {}...\n with cliopts args: {:?}",
         cageid, lind_boot.args
     );
-    let wasm_file_path = Path::new(&lind_boot.wasm_file);
+    let wasm_file_path = Path::new(lind_boot.wasm_file());
     println!("[execute_with_lind] Wasm file path: {:?}", wasm_file_path);
     let args = lind_boot.args.clone();
     let mut wt_config = wasmtime::Config::new();
@@ -311,6 +312,9 @@ fn attach_api(
     });
 
     let mut builder = WasiCtxBuilder::new();
+    builder.inherit_stdio().args(&lindboot_cli.args);
+    builder.inherit_stdin();
+    builder.inherit_stderr();
     wstore.data_mut().preview1_ctx = Some(builder.build());
 
     // Setup WASI-thread
@@ -336,7 +340,7 @@ fn attach_api(
             |lindboot_cli, path, args, cageid, lind_manager, envs| {
                 let mut new_lindboot_cli = lindboot_cli.clone();
                 new_lindboot_cli.args = vec![String::from(path)];
-                new_lindboot_cli.wasm_file = path.to_string();
+                // new_lindboot_cli.wasm_file = path.to_string();
                 if let Some(envs) = envs {
                     new_lindboot_cli.vars = envs.clone();
                 }
@@ -459,6 +463,7 @@ fn load_main_module(
         set_vmctx(cageid, backup_vmctx_wrapper);
     }
 
+    println!("[lind-boot|execute] args passed to invoke_func: {:?}", args);
     match func {
         Some(func) => invoke_func(store, func, &args),
         None => Ok(vec![]),
