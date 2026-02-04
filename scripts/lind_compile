@@ -39,6 +39,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
   Common options:
     -v, --print-cmd, --verbose  print the underlying commands that are executed
     --print-args, --debug-args  print parsed arguments after option handling
+    --no-default-clang-flags    do not add lind_compile's default clang flags
     -h, --help              show this help
 
   Additional clang args:
@@ -51,6 +52,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
     $(basename "$0") --opt-only build/hello.wasm
     $(basename "$0") --precompile-only build/hello.wasm
     $(basename "$0") --print-cmd hello.c
+    $(basename "$0") --no-default-clang-flags hello.c -- -target=wasm32-unknown-wasi
     $(basename "$0") hello.c -- -lm
     $(basename "$0") hello.c -lm
 EOF
@@ -59,6 +61,7 @@ EOF
 MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
 PRINT_ARGS="false"
+NO_DEFAULT_CLANG_FLAGS="false"
 ORIGINAL_ARGS=("$@")
 
 set_mode() {
@@ -98,6 +101,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --print-args|--debug-args)
       PRINT_ARGS="true"
+      ;;
+    --no-default-clang-flags)
+      NO_DEFAULT_CLANG_FLAGS="true"
       ;;
     -h|--help)
       usage
@@ -237,10 +243,21 @@ fi
 
 # --- individual steps ---
 do_compile() {
-  run_cmd "${CLANG_BIN}" --sysroot="${SYSROOT}" \
-    -pthread --target=wasm32-unknown-wasi \
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
-    -g -O0 "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}"
+  local -a default_clang_flags=(
+    "--sysroot=${SYSROOT}"
+    -pthread
+    --target=wasm32-unknown-wasi
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low
+    -g
+    -O0
+  )
+
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    default_clang_flags=()
+  fi
+
+  run_cmd "${CLANG_BIN}" "${default_clang_flags[@]}" \
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}"
 }
 
 do_optimize() {
