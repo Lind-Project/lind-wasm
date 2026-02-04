@@ -1,0 +1,33 @@
+# Grates and Capabilities in Lind-Wasm
+## Introduction
+Lind-Wasm utilizes a single-process sandbox approach involving Cages (isolation boundaries) and Grates (interposition layers) to execute programs safely. While Cages provide the memory isolation, Grates provide the control logic. Together, they implement a capability-based security model where access rights are explicitly managed rather than implicitly granted.
+
+## Capabilities vs. Access Control Lists (ACLs)
+To understand the architecture of Lind-Wasm, it is essential to distinguish between Access Control Lists (ACLs) and Capability-based security.
+- **ACLs (Identity-Based)**: In traditional systems (like standard Unix file permissions), security is based on identity. The system checks "Who are you?" against a centralized list to determine if you are allowed to perform an action. This requires the kernel to mediate every check, often resulting in rigid, coarse-grained permissions.
+- **Capabilities (Token-Based)**: In contrast, a capability model is based on possession. A "capability" is an unforgeable token (like a key or a specific function pointer) that inherently grants the right to perform an action. If a process holds the capability, it can use it; if it doesn't, the action is impossible. This allows for delegation (passing a key to a child process) and fine-grained confinement (giving a process only the specific keys it needs) without constantly querying a central authority.
+The commonly-used examples of  capabilities are house keys and car keys.  The car doesn't demand that the driver prove their identity; instead, the drive's posession of the key is sufficient provof that the driver hass the authority to drive the car.
+In Lind-Wasm, the 3i system implements this capability model. Instead of checking a user ID, the system enforces security via the syscall table. A Cage possesses the "capability" to invoke a system call only if that specific handler exists in its table. By controlling which handlers are placed in a Cage's table, Grates can precisely define the capabilities available to the application.
+## The 3i System: The Capability Bus
+The core of this model is the 3i (Intra-process Inter-cage Interface) system.
+- The Mechanism: 3i provides a "syscall table with customized jump endpoints for each cage/grate".
+- Capability Equivalent: This syscall table acts as the cage's Capability List. A cage cannot invoke a system function unless it has been explicitly granted a handler in its table.
+- Efficiency: 3i converts system calls and RPC calls into userspace function calls, avoiding the overhead and security risks of frequent kernel interactions.
+
+## Grates: The Policy Enforcers
+A **Grate** acts as a capability wrapper or proxy. It encapsulates external functionality and can interpose on system calls for one or more cages.
+### 1. Interposition and Filtering
+Grates can "change, filter, block, etc. system calls". This allows for:
+- Fine-Grained Control: Monitoring calls externally to the kernel without exposing unnecessary information.
+- Functionality Extension: Adding features (like new file systems or tracing) without modifying the microvisor's Trusted Computing Base (TCB).
+### 2. Inheritance Hierarchy
+Grates operate on an inheritance model similar to capability delegation:
+- Delegation: A child cage inherits system calls from its parent upon forking.
+- Stacking: If a grate interposes on another grate, it inherits the parent's behavior changes. This allows grates to place restrictions on all descendant cages.
+
+## Lifecycle and Safety
+The system distinguishes between forcing an exit and handling the cleanup, mirroring capability revocation and notification:
+
+- `trigger_harsh_cage_exit` (Non-Interposable): This call is triggered by the infrastructure to force a cage to exit. It cannot be intercepted by a grate, acting as an absolute revocation of execution rights.
+
+- `harsh_cage_exit` (Interposable): This acts as a notification that a descendant has exited uncleanly. It is interposable, allowing grates to perform necessary cleanup (like updating the 3i data structure) in response to the failure.
