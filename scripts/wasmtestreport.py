@@ -1352,7 +1352,14 @@ def setup_test_file_in_artifacts(original_source, artifacts_root):
         expected_dir_dst = dest_dir / EXPECTED_DIRECTORY
         if not expected_dir_dst.exists():
             shutil.copytree(expected_dir_src, expected_dir_dst)
-    
+            
+    # Copy local compile flags file if present so artifacts-based builds can find it.
+    flags_src = original_source.parent / LOCAL_FLAGS_FILENAME
+    if flags_src.is_file():
+        flags_dst = dest_dir / LOCAL_FLAGS_FILENAME
+        if not flags_dst.exists():
+            shutil.copy2(flags_src, flags_dst)
+
     return dest_source
 
 # ----------------------------------------------------------------------
