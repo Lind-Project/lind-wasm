@@ -6,7 +6,7 @@ use std::path::Path;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
-use threei::{make_syscall, threei_const};
+use threei::threei_const;
 use wasi_common::sync::Dir;
 use wasi_common::sync::WasiCtxBuilder;
 use wasmtime::{AsContextMut, Engine, Func, InstantiateType, Linker, Module, Store, Val, ValType};
