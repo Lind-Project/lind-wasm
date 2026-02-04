@@ -349,10 +349,6 @@ pub fn copy_handler_table_to_cage(
     copy_handler_table_to_cage_impl(srccage, targetcage)
 }
 
-pub fn if_exiting_table_contains(cageid: u64) -> bool {
-    EXITING_TABLE.contains(&cageid)
-}
-
 /// actually performs a call.  Not interposable
 ///
 /// This actually performs a threei call.  It is not interposable.  This
@@ -421,21 +417,6 @@ pub fn make_syscall(
     // contain cases that can directly redirect a syscall when self_cageid == target_id, which will bypass the handlertable check
     if EXITING_TABLE.contains(&target_cageid) && syscall_num != EXIT_SYSCALL {
         return threei_const::ELINDESRCH as i32;
-    }
-
-    // Cleanup two global tables for exit syscall
-    if syscall_num == EXIT_SYSCALL {
-        // if arg2 == 1 {
-        //     // todo: potential refinement here
-        //     // since `_rm_grate_from_handler` searches all entries and remove desired entries..
-        //     // to make things work as fast as possible, I use brute force here to perform cleanup
-        //     _rm_grate_from_handler(self_cageid);
-        //     // currently all cages/grates will store closures in global_grate table, so we need to
-        //     // cleanup whatever its actually a cage/grate
-        //     remove_cage_runtime(self_cageid);
-        // }
-        // Mark this cage as exiting (block all future calls to it)
-        // EXITING_TABLE.insert(targetcage);
     }
 
     // TODO:

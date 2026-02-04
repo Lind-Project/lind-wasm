@@ -304,13 +304,13 @@ pub extern "C" fn exit_syscall(
             remove_cage(selfcageid);
         }
 
-        // return 0;
     }
 
     println!(
         "[rawposix|exit_syscall] cage {}, tid {} exiting with status {}, is_last_thread={}",
         selfcageid, tid, status, is_last_thread
     );
+    
     // status
     threei::make_syscall(
         RAWPOSIX_CAGEID,
