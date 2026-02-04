@@ -3,9 +3,13 @@
 use cfg_if::cfg_if;
 
 use anyhow::{anyhow, Result};
+use std::ffi::c_void;
+use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
-use threei::threei::make_syscall;
-use wasmtime_lind_3i::remove_gratefn_wasm;
+use threei::{threei::make_syscall, threei_const};
+use wasmtime_lind_3i::{
+    get_vmctx, get_vmctx_thread, rm_vmctx, set_vmctx, set_vmctx_thread, VmCtxWrapper,
+};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
 use wasmtime_lind_utils::{parse_env_var, LindCageManager};
 
@@ -354,6 +358,8 @@ impl<
                         Arc::new(child_ctx.linker.instantiate_pre(&child_ctx.module).unwrap());
 
                     let lind_manager = child_ctx.lind_manager.clone();
+                    let linker = child_ctx.linker.clone();
+                    let module = child_ctx.module.clone();
                     let mut store = Store::new_with_inner(&engine, child_host, store_inner);
                     store.set_stack_snapshots(parent_stack_snapshots);
 
@@ -363,7 +369,7 @@ impl<
                     }
 
                     // instantiate the module
-                    let (instance, _) = instance_pre
+                    let (instance, grate_instanceid) = instance_pre
                         .instantiate_with_lind(
                             &mut store,
                             InstantiateType::InstantiateChild {
@@ -401,7 +407,45 @@ impl<
 
                     // new cage created, increment the cage counter
                     lind_manager.increment();
-                    // create the cage in rustposix via rustposix fork
+                    // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
+                    // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
+                    // instance boundaries particularly difficult. To overcome this, the design employs low-level context
+                    // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
+                    // structures. See more details in [lind-3i/src/lib.rs]
+                    // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
+                    let grate_storeopaque = store.inner_mut();
+                    let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+
+                    // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                    let vmctx_wrapper = VmCtxWrapper {
+                        vmctx: NonNull::new(vmctx_ptr).unwrap(),
+                    };
+
+                    // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
+                    let rc = set_vmctx(child_cageid, vmctx_wrapper);
+
+                    // 4) Notify threei of the cage runtime type
+                    threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
+
+                    // 5) Create backup instances to populate the vmctx pool
+                    // See more comments in lind-3i/lib.rs
+                    for _ in 0..9 {
+                        let (_, backup_cage_instanceid) = linker
+                            .instantiate_with_lind_thread(
+                                &mut store,
+                                &module,
+                            ).unwrap();
+                        let backup_cage_storeopaque = store.inner_mut();
+                        let backup_cage_instancehandler = backup_cage_storeopaque.instance(backup_cage_instanceid);
+                        let backup_vmctx_ptr: *mut c_void = backup_cage_instancehandler.vmctx().cast();
+
+                        let backup_vmctx_wrapper = VmCtxWrapper {
+                            vmctx: NonNull::new(backup_vmctx_ptr).unwrap(),
+                        };
+
+                        set_vmctx(child_cageid, backup_vmctx_wrapper);
+                    }
 
                     barrier_clone.wait();
 
@@ -464,10 +508,12 @@ impl<
                                 // exit the main thread
                                 if lind_thread_exit(child_cageid, THREAD_START_ID as u64) {
                                     // Clean up the context from the global table
-                                    // We only register grate calls into the vmctx table during fork+exec (the logic
-                                    // lives in the grate module), so a bare fork currently does not register a vmctx
-                                    // table instance.
-                                    remove_gratefn_wasm(child_cageid as u64);
+                                    if !rm_vmctx(child_cageid as u64) {
+                                        panic!(
+                                            "[wasmtime|fork] Failed to remove VMContext for cage_id {}",
+                                            child_cageid
+                                        );
+                                    }
                                     // we clean the cage only if this is the last thread in the cage
                                     // exit the cage with the exit code
                                     // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
@@ -661,7 +707,10 @@ impl<
                     store.set_is_thread(true);
 
                     // instantiate the module
-                    let instance = instance_pre.instantiate(&mut store).unwrap();
+                    // let instance = instance_pre.instantiate(&mut store).unwrap();
+                    let (instance, grate_instanceid) = instance_pre
+                        .instantiate_with_lind_thread(&mut store)
+                        .unwrap();
 
                     // we might also want to perserve the offset of current stack pointer to stack bottom
                     // not very sure if this is required, but just keep everything the same from parent seems to be good
@@ -696,6 +745,24 @@ impl<
                         next_tid as i32,
                         false, /* this is not the main thread */
                     );
+
+                    // The main challenge in enabling dynamic syscall interposition between grates and 3i lies in Rust’s
+                    // strict lifetime and ownership system, which makes retrieving the Wasmtime runtime context across
+                    // instance boundaries particularly difficult. To overcome this, the design employs low-level context
+                    // capture by extracting and storing vmctx pointers from Wasmtime’s internal `StoreOpaque` and `InstanceHandler`
+                    // structures. See more details in [lind-3i/src/lib.rs]
+                    // 1) Get StoreOpaque & InstanceHandler to extract vmctx pointer
+                    let grate_storeopaque = store.inner_mut();
+                    let grate_instancehandler = grate_storeopaque.instance(grate_instanceid);
+                    let vmctx_ptr: *mut c_void = grate_instancehandler.vmctx().cast();
+
+                    // 2) Extract vmctx pointer and put in a Send+Sync wrapper
+                    let vmctx_wrapper = VmCtxWrapper {
+                        vmctx: NonNull::new(vmctx_ptr).unwrap(),
+                    };
+
+                    // 3) Store the vmctx wrapper in the global thread table for later retrieval during syscalls
+                    let rc = set_vmctx_thread(child_cageid as u64, next_tid as u64, vmctx_wrapper);
 
                     // get the asyncify_rewind_start and module start function
                     let child_rewind_start;
@@ -748,13 +815,13 @@ impl<
                     match exit_code {
                         Val::I32(val) => {
                             // exit the thread
-                            if lind_thread_exit(
-                                child_cageid as u64,
-                                next_tid as u64,
-                            ) {
+                            if lind_thread_exit(child_cageid as u64, next_tid as u64) {
                                 // Clean up the context from the global table
-                                if !remove_gratefn_wasm(child_cageid as u64) {
-                                    eprintln!("[wasmtime|pthread_create] Warning: failed to remove context for cage {}", child_cageid);
+                                if !rm_vmctx(child_cageid as u64) {
+                                    panic!(
+                                        "[wasmtime|pthread_create] Failed to remove VMContext for cage_id {}",
+                                        child_cageid
+                                    );
                                 }
 
                                 // we clean the cage only if this is the last thread in the cage
@@ -764,9 +831,9 @@ impl<
                                 make_syscall(
                                     (child_cageid) as u64, // self cage
                                     (EXIT_SYSCALL) as u64, // syscall num
-                                    UNUSED_NAME, // syscall name
+                                    UNUSED_NAME,           // syscall name
                                     (child_cageid) as u64, // target cage
-                                    *val as u64, // 1st arg: status
+                                    *val as u64,           // 1st arg: status
                                     (child_cageid) as u64, // 1st arg's cage id
                                     UNUSED_ID,
                                     UNUSED_ARG,

@@ -1,5 +1,5 @@
 //! Threei (Three Interposition) module
-use cage::memory::check_addr;
+use cage::memory::{check_addr, check_addr_read, check_addr_rw};
 use core::panic;
 use dashmap::DashMap;
 use dashmap::DashSet;
@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 use std::sync::RwLock;
 use sysdefs::constants::lind_platform_const;
 use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_cages`
+use typemap::datatype_conversion::sc_convert_uaddr_to_host;
 
 use crate::handler_table::{
     _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
@@ -55,7 +56,8 @@ pub type GrateTrampolineFn = extern "C" fn(
     arg6cageid: u64,
 ) -> i32;
 
-/// This table stores trampoline functions associated with runtime identifiers.
+/// This table stores trampoline functions associated with runtime identifiers, where a
+/// runtime identifier denotes the execution environment of the executable (e.g., Wasmtime)
 ///
 /// `TRAMPOLINE_TABLE` is a global map from `runtime_id` to `GrateTrampolineFn`.
 /// DashMap is used to allow concurrent registration and lookup without a global lock.
@@ -269,7 +271,6 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// - in_grate_fn_ptr_u64: Pointer to the function inside the grate that will handle this syscall.
 /// - targetcage: The ID of the cage whose syscall table is being modified (i.e., the source of the syscall).
 /// - targetcallnum: The syscall number to interpose on (can be treated as a match-all in some configurations).
-/// - entry_ptr_u64: Pointer to the Grate function entry (contains `fn_ptr` and `ctx_ptr`).
 /// - is_register: The operation flag to indicate whether to register or deregister.
 /// - handlefunccage: The cage (typically a grate) that owns the destination function to be called.
 ///
@@ -279,9 +280,9 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
 pub fn register_handler(
     in_grate_fn_ptr_u64: u64,
-    targetcage: u64,    // Cage to modify
-    targetcallnum: u64, // Syscall number or match-all indicator. todo: Match-all.
-    _runtime_id: u64,
+    targetcage: u64,     // Cage to modify
+    targetcallnum: u64,  // Syscall number or match-all indicator. todo: Match-all.
+    _runtime_id: u64,    // Currently unused, reserved for future potential use
     is_register: u64,    // 0 for deregister
     handlefunccage: u64, // Grate cage id _or_ Deregister flag (`THREEI_DEREGISTER`) or additional information
     _arg3: u64,
@@ -645,9 +646,48 @@ fn _validate_len(len: u64, max: u64) -> Result<(), u64> {
 }
 
 /// Helper function to validate that a given memory range is valid in a cage.
+/// Uses the new vmmap helper functions to check range accessibility.
+/// Returns Ok(()) if the range is valid and accessible.
+/// Logs an error and returns Err(error_code) if the range is invalid.
+#[inline]
+fn _validate_range_read(cage: u64, addr: u64, len: usize, what: &str) -> Result<(), u64> {
+    match check_addr_read(cage, addr, len) {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            eprintln!(
+                "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
+                addr, len, what
+            );
+            Err(threei_const::ELINDAPIABORTED)
+        }
+    }
+}
+
+/// Helper function to validate that a given memory range has read/write access in a cage.
+/// Uses the new vmmap helper functions to check range accessibility.
+/// Returns Ok(()) if the range is valid and accessible with read/write permissions.
+/// Logs an error and returns Err(error_code) if the range is invalid.
+#[inline]
+fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<(), u64> {
+    match check_addr_rw(cage, addr, len) {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            eprintln!(
+                "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
+                addr, len, what
+            );
+            Err(threei_const::ELINDAPIABORTED)
+        }
+    }
+}
+
+/// Helper function to validate that a given memory range is valid in a cage.
 /// Calls check_addr with the given cage, start address, length, and protection flags.
 /// Returns Ok(()) if the range is valid and accessible.
 /// Logs an error and returns Err(error_code) if the range is invalid.
+///
+/// Note: This function is kept for backward compatibility. Consider using
+/// _validate_range_read or _validate_range_rw for better clarity.
 #[inline]
 fn _validate_range(cage: u64, addr: u64, len: usize, prot: i32, what: &str) -> Result<(), u64> {
     match check_addr(cage, addr, len, prot) {
@@ -794,7 +834,7 @@ pub fn copy_data_between_cages(
         // strncpy: copy until '\0' or len limit, whichever comes first
         Ok(CopyType::Strncpy) => {
             // Validate that the source range is readable for at least `len` bytes
-            if let Err(_e) = check_addr(srccage, srcaddr, len as usize, PROT_READ) {
+            if let Err(_e) = check_addr_read(srccage, srcaddr, len as usize) {
                 eprintln!("[3i|copy] src precheck failed at start {:x}", srcaddr);
                 return threei_const::ELINDAPIABORTED;
             }
@@ -819,16 +859,10 @@ pub fn copy_data_between_cages(
     };
 
     // Validate that src and dest ranges are accessible
-    if let Err(code) = _validate_range(srccage, srcaddr, copy_len, PROT_READ, "source") {
+    if let Err(code) = _validate_range_read(srccage, srcaddr, copy_len, "source") {
         return code;
     }
-    if let Err(code) = _validate_range(
-        destcage,
-        destaddr,
-        copy_len,
-        PROT_READ | PROT_WRITE,
-        "destination",
-    ) {
+    if let Err(code) = _validate_range_rw(destcage, destaddr, copy_len, "destination") {
         return code;
     }
 
