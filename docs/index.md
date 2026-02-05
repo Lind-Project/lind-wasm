@@ -4,7 +4,7 @@ id: Overview
 
 # Lind-Wasm
 
-Lind is a sandbox that isolates different applications in the same address space. Thus, conceptually, it executes different applications (which traditionally would be different processes) in separate, non-overlapping parts of a single address space, under a single, non-privileged Linux process.   To provide memory safety, control flow integrity, memory isolation, and similar properties, this version of Lind executes applications using [WebAssembly](webassembly.org) for software fault isolation.  Lind also contains a custom kernel microvisor, written in Rust, to limit the potential damage of bugs or security flaws in an application.
+Lind is a sandbox that isolates different applications in the same address space. Thus, conceptually, it executes different applications (which traditionally would be different processes) in separate, non-overlapping parts of a single address space, under a single, non-privileged Linux process.   To provide memory safety, control flow integrity, memory isolation, and similar properties, this version of Lind executes applications using [WebAssembly](webassembly.org) for software fault isolation.  Lind also contains a custom kernel microvisor, written in Rust, which performs strict type checking and safe type conversion (e.g., between 32-bit and 64-bit representations), and enforces resource management and file-system isolation, thereby limiting the potential damage caused by bugs or security flaws in an application.
 
 In Old Norse, Old High German and Old English a "lind" is a shield constructed with two layers of linden wood. Linden wood shields are lightweight, and do not split easily, an appropriate metaphor for a sandboxing system which is lightweight and which provides layered security.
 
@@ -49,7 +49,7 @@ When performing system calls, it is often useful for a grate to be able to pass 
 ## Components
 
 ### Wasmtime (our caging technology)
-Wasmtime is a fast and secure runtime for WebAssembly designed by the [Bytecode Alliance](bytecodealliance.org). Lind-wasm uses wasmtime as a runtime with added support for multi-processing via Asyncify.
+[Wasmtime](https://wasmtime.dev) is a fast and secure runtime for WebAssembly designed by the [Bytecode Alliance](bytecodealliance.org). Lind-wasm uses wasmtime as a runtime with added support for multi-processing via Asyncify.
 
 ### lind-glibc
 
@@ -74,4 +74,4 @@ The intra-process interposable interface (3i) enables secure and efficient cage 
 ### How hard is it to use Lind-Wasm?
 
 Lind-Wasm aims to minimize application changes.  
-Most applications can run without source-level modifications and only need to be recompiled using `clang-16` with Lind-Wasm–related feature flags.
+Most applications can run without source-level modifications and only need to be recompiled using `clang` with Lind-Wasm–related feature flags.
