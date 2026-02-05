@@ -38,4 +38,10 @@ if [[ ! -x "${WASMTIME_BIN}" ]]; then
 fi
 [[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
 
+# Check if we need to re-exec with sudo
+if [[ $EUID -ne 0 ]]; then
+  # Not running as root, re-exec with sudo
+  exec sudo -E "$0" "$@"
+fi
+
 exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "$@"
