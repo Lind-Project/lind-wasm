@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Cross-compile C programs to wasm / cwasm using the lind-wasm toolchain.
+# Cross-compile C programs to wasm using the lind-wasm toolchain.
 #
 # Default pipeline:
-#   .c -> .wasm (clang) -> (wasm-opt) -> .cwasm (wasmtime compile)
+#   .c -> .wasm (clang) -> (wasm-opt)
 #
 # Usage:
 #   # full pipeline (default)
@@ -13,7 +13,6 @@ set -Eeuo pipefail
 #   # run individual steps
 #   lind_compile --compile-only hello.c      # .c -> .wasm
 #   lind_compile --opt-only hello.wasm       # optimize existing .wasm in place
-#   lind_compile --precompile-only hello.wasm  # .wasm -> .cwasm
 #
 #   # print commands (any mode)
 #   lind_compile --print-cmd hello.c
@@ -31,10 +30,9 @@ usage() {
 usage: $(basename "$0") [OPTIONS] <source>
 
   Modes (at most one, defaults to full pipeline):
-    (no mode flag)      : .c -> .wasm -> (wasm-opt) -> .cwasm
+    (no mode flag)      : .c -> .wasm -> (wasm-opt)
     --compile-only      : .c -> .wasm
     --opt-only          : .wasm -> .wasm  (in-place optimization)
-    --precompile-only   : .wasm -> .cwasm
 
   Common options:
     -v, --print-cmd, --verbose  print the underlying commands that are executed
@@ -44,7 +42,6 @@ usage: $(basename "$0") [OPTIONS] <source>
     $(basename "$0") hello.c
     $(basename "$0") --compile-only hello.c
     $(basename "$0") --opt-only build/hello.wasm
-    $(basename "$0") --precompile-only build/hello.wasm
     $(basename "$0") --print-cmd hello.c
 EOF
 }
@@ -81,9 +78,9 @@ while [[ "$#" -gt 0 ]]; do
     --opt-only)
       set_mode "opt-only"
       ;;
-    --precompile-only)
-      set_mode "precompile-only"
-      ;;
+    # --precompile-only)
+    #   set_mode "precompile-only"
+    #   ;;
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
       ;;
@@ -166,14 +163,22 @@ case "${MODE}" in
     OUT_WASM="${SRC%.c}.wasm"
     OUT_CWASM="${SRC%.c}.cwasm"
     ;;
-  "opt-only"|"precompile-only")
+  # "opt-only"|"precompile-only")
+  #   if [[ "${EXT}" != "wasm" ]]; then
+  #     echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
+  #     usage
+  #     exit 2
+  #   fi
+  #   OUT_WASM="${SRC}"
+  #   OUT_CWASM="${SRC%.wasm}.cwasm"
+  #   ;;
+  "opt-only")
     if [[ "${EXT}" != "wasm" ]]; then
       echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
       usage
       exit 2
     fi
     OUT_WASM="${SRC}"
-    OUT_CWASM="${SRC%.wasm}.cwasm"
     ;;
   *)
     echo "error: internal: unknown mode '${MODE}'" >&2
@@ -248,9 +253,9 @@ case "${MODE}" in
     ;;
 esac
 
-case "${MODE}" in
-  full|"precompile-only")
-    echo "OK: ${OUT_CWASM}"
-    ;;
-esac
+# case "${MODE}" in
+#   full|"precompile-only")
+#     echo "OK: ${OUT_CWASM}"
+#     ;;
+# esac
 

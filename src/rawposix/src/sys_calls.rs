@@ -41,6 +41,9 @@ use typemap::datatype_conversion::*;
 ///
 /// Actual operations of the address space is handled by wasmtime when creating a new
 /// instance for the child cage.
+/// 
+/// After RawPOSIX finishes, the clone syscall will be sent to runtime platform 
+/// (e.g.: Wasmtime) for runtime associate operations
 pub extern "C" fn fork_syscall(
     cageid: u64,
     clone_arg: u64,        // Child's cage id

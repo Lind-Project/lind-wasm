@@ -11,7 +11,7 @@ use sysdefs::constants::lind_platform_const::{LIND_ROOT, UNUSED_ARG, UNUSED_ID, 
 use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::{
-    get_vmctx, get_vmctx_thread, rm_vmctx, set_vmctx, set_vmctx_thread, VmCtxWrapper,
+    get_vmctx, get_vmctx_thread, rm_vmctx, set_vmctx, set_vmctx_thread, VmCtxWrapper, rm_vmctx_thread
 };
 // use wasmtime_lind_3i::{rm_vmctx, set_vmctx, VmCtxWrapper, get_vmctx};
 use wasmtime_lind_utils::lind_syscall_numbers::{EXEC_SYSCALL, EXIT_SYSCALL, FORK_SYSCALL};
@@ -535,7 +535,14 @@ impl<
                             .get(0)
                             .expect("_start function does not have a return value");
                         match exit_code {
-                            Val::I32(val) => {}
+                            Val::I32(val) => {
+                                if !rm_vmctx(child_cageid as u64) {
+                                    panic!(
+                                        "[wasmtime|fork] Failed to remove existing VMContext for cage_id {}",
+                                        child_cageid
+                                    );
+                                }
+                            }
                             _ => {
                                 eprintln!("unexpected _start function return type!");
                             }
@@ -809,7 +816,14 @@ impl<
                         .get(0)
                         .expect("_start function does not have a return value");
                     match exit_code {
-                        Val::I32(val) => {}
+                        Val::I32(val) => {
+                            if !rm_vmctx_thread(child_cageid as u64, next_tid as u64) {
+                                panic!(
+                                    "[wasmtime|thread] Failed to remove existing VMContext for cage_id {}, tid {}",
+                                    child_cageid, next_tid
+                                );
+                            }
+                        }
                         _ => {
                             eprintln!("unexpected _start function return type: {:?}", exit_code);
                         }
@@ -1419,8 +1433,8 @@ pub fn catch_rewind<
 
 pub fn clone_syscall<T, U>(
     cageid: u64,
-    clone_arg: u64,        // Child's cage id
-    clone_arg_cageid: u64, // Child's cage id arguments cageid
+    clone_arg: u64,        
+    clone_arg_cageid: u64, 
     parent_cageid: u64,
     parent_tid: u64,
     child_cageid: u64,
@@ -1558,22 +1572,6 @@ where
     }
 }
 
-// pub fn exit_syscall<
-//     T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-//     U: Clone + Send + 'static + std::marker::Sync,
-// >(
-//     caller: &mut Caller<'_, T>,
-//     exit_code: i32,
-// ) -> i32 {
-//     let host = caller.data().clone();
-//     let ctx = host.get_ctx();
-
-//     ctx.exit_call(caller, exit_code);
-
-//     // exit syscall should not fail
-//     0
-// }
-
 pub fn exit_syscall<T, U>(
     cageid: u64,
     exit_code: u64,
@@ -1678,6 +1676,7 @@ pub fn current_cageid<
     ctx.this_cageid()
 }
 
+// Get thread id of current caller
 pub fn current_tid<T, U>(caller: &mut Caller<'_, T>) -> i32
 where
     T: LindHost<T, U> + Clone + Send + Sync + 'static,

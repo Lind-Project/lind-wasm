@@ -17,7 +17,8 @@ use rawposix::init::{rawposix_shutdown, rawposix_start};
 /// handling semantics are delegated to `execute.rs`.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lindboot_cli = CliOptions::parse();
-    // Initialize RawPOSIX, also registered RawPOSIX syscalls to 3i
+
+    // Initialize RawPOSIX and register RawPOSIX syscalls with 3i
     rawposix_start(0);
 
     // Execute with user-selected runtime. Can be switched to other runtime implementation

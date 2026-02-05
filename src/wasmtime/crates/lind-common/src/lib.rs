@@ -61,99 +61,111 @@ pub fn add_to_linker<
             // 2. call clone_syscall / exec_syscall / exit_syscall from rawposix first instead of wasmtime_lind_multi_process in
             // the future PR
 
+            
+            // 1) clone: check rewind
+            // if call_number as i32 == CLONE_SYSCALL {
+            //     if let Some(rewind_res) = catch_rewind(&mut caller) {
+            //         return rewind_res;
+            //     }
+            // }
+
+            // if call_number as i32 == EXIT_SYSCALL {
+            //     let tid = wasmtime_lind_multi_process::current_tid(&mut caller);
+            //     println!("[lind-common|make_syscall] exit syscall, cageid: {}, tid: {}, target: {}", self_cageid, tid, target_cageid);
+            //     let ret = make_syscall(
+            //         self_cageid,
+            //         call_number as u64,
+            //         call_name,
+            //         target_cageid,
+            //         arg1,
+            //         arg1cageid,
+            //         tid as u64,
+            //         arg2cageid,
+            //         arg3,
+            //         arg3cageid,
+            //         arg4,
+            //         arg4cageid,
+            //         arg5,
+            //         arg5cageid,
+            //         arg6,
+            //         arg6cageid,
+            //     );
+            //     println!("[lind-common|make_syscall] exit syscall, cageid: {}, tid: {}, target: {}, ret: {}", self_cageid, tid, target_cageid, ret);
+            //     return ret;
+            // }
+
+            // // Replace second arg for clone syscall
+            // let final_arg2 = if call_number as i32 == CLONE_SYSCALL {
+            //     let tid = wasmtime_lind_multi_process::current_tid(&mut caller) as u64;
+            //     tid 
+            // } else {
+            //     arg2
+            // };
+
+            // let ret = make_syscall(
+            //     self_cageid,
+            //     call_number as u64,
+            //     call_name,
+            //     target_cageid,
+            //     arg1,
+            //     arg1cageid,
+            //     final_arg2,
+            //     arg2cageid,
+            //     arg3,
+            //     arg3cageid,
+            //     arg4,
+            //     arg4cageid,
+            //     arg5,
+            //     arg5cageid,
+            //     arg6,
+            //     arg6cageid,
+            // );
+
+
+            // if call_number == 202 {
+            //     println!("[lind-common|make_syscall] futex syscall, cageid: {}, ret: {}", self_cageid, ret);
+            // } else if call_number == 56 {
+            //     println!("[lind-common|make_syscall] clone syscall, cageid: {}, ret: {}", self_cageid, ret);
+            // } else if call_number == 59 {
+            //     println!("[lind-common|make_syscall] exec syscall, cageid: {}, ret: {}, arg1_cageid: {}", self_cageid, ret, arg1cageid);
+            // } else if call_number == 60 {
+            //     println!("[lind-common|make_syscall] exit syscall, cageid: {}, ret: {}", self_cageid, ret);
+            // }
+
+            // ret
             if call_number as i32 == CLONE_SYSCALL {
-                let rewind_res = catch_rewind(&mut caller);
-                if rewind_res.is_some() {
-                    return rewind_res.unwrap();
+                if let Some(rewind_res) = wasmtime_lind_multi_process::catch_rewind(&mut caller) {
+                    return rewind_res;
                 }
-                let tid = wasmtime_lind_multi_process::current_tid(&mut caller);
-                println!("[lind-common|make_syscall] clone syscall, cageid: {}, tid: {}", self_cageid, tid);
-                return make_syscall(
-                    self_cageid,
-                    call_number as u64,
-                    call_name,
-                    target_cageid,
-                    arg1,
-                    arg1cageid,
-                    tid as u64,
-                    arg2cageid,
-                    arg3,
-                    arg3cageid,
-                    arg4,
-                    arg4cageid,
-                    arg5,
-                    arg5cageid,
-                    arg6,
-                    arg6cageid,
-                );
             }
 
-            if call_number as i32 == EXIT_SYSCALL {
-                let tid = wasmtime_lind_multi_process::current_tid(&mut caller);
-                println!("[lind-common|make_syscall] exit syscall, cageid: {}, tid: {}, target: {}", self_cageid, tid, target_cageid);
-                let ret = make_syscall(
-                    self_cageid,
-                    call_number as u64,
-                    call_name,
-                    target_cageid,
-                    arg1,
-                    arg1cageid,
-                    tid as u64,
-                    arg2cageid,
-                    arg3,
-                    arg3cageid,
-                    arg4,
-                    arg4cageid,
-                    arg5,
-                    arg5cageid,
-                    arg6,
-                    arg6cageid,
-                );
-                println!("[lind-common|make_syscall] exit syscall, cageid: {}, tid: {}, target: {}, ret: {}", self_cageid, tid, target_cageid, ret);
-                return ret;
-            }
-            let ret = match call_number as i32 {
-                // exec syscall
-                // EXEC_SYSCALL => wasmtime_lind_multi_process::exec_syscall(
-                //     &mut caller,
-                //     arg1 as i64,
-                //     arg2 as i64,
-                //     arg3 as i64,
-                // ),
-                // exit syscall
-                // EXIT_SYSCALL => wasmtime_lind_multi_process::exit_syscall(&mut caller, arg1 as i32),
-                // other syscalls goes into threei
-                _ => make_syscall(
-                    self_cageid,
-                    call_number as u64,
-                    call_name,
-                    target_cageid,
-                    arg1,
-                    arg1cageid,
-                    arg2,
-                    arg2cageid,
-                    arg3,
-                    arg3cageid,
-                    arg4,
-                    arg4cageid,
-                    arg5,
-                    arg5cageid,
-                    arg6,
-                    arg6cageid,
-                ),
+            let final_arg2 = if matches!(
+                call_number as i32,
+                CLONE_SYSCALL | EXEC_SYSCALL
+            ) {
+                wasmtime_lind_multi_process::current_tid(&mut caller) as u64
+            } else {
+                arg2
             };
-
-            if call_number == 202 {
-                println!("[lind-common|make_syscall] futex syscall, cageid: {}, ret: {}", self_cageid, ret);
-            } else if call_number == 56 {
-                println!("[lind-common|make_syscall] clone syscall, cageid: {}, ret: {}", self_cageid, ret);
-            } else if call_number == 59 {
-                println!("[lind-common|make_syscall] exec syscall, cageid: {}, ret: {}, arg1_cageid: {}", self_cageid, ret, arg1cageid);
-            } else if call_number == 60 {
-                println!("[lind-common|make_syscall] exit syscall, cageid: {}, ret: {}", self_cageid, ret);
-            }
-
-            ret
+            
+            make_syscall(
+                self_cageid,
+                call_number as u64,
+                call_name,
+                target_cageid,
+                arg1,
+                arg1cageid,
+                final_arg2,
+                arg2cageid,
+                arg3,
+                arg3cageid,
+                arg4,
+                arg4cageid,
+                arg5,
+                arg5cageid,
+                arg6,
+                arg6cageid,
+            )
         },
     )?;
 

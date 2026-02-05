@@ -16,13 +16,6 @@ pub struct CliOptions {
     #[arg(long)]
     pub allow_precompile: bool,
 
-    // / Path to the wasm file to run
-    // #[arg(value_name = "WASM_FILE")]
-    // pub wasm_file: String,
-
-    // /// Arguments passed to the wasm program
-    // #[arg(trailing_var_arg = true)]
-    // pub args: Vec<String>,
     /// First item is WASM file (argv[0]), rest are program args (argv[1..])
     ///
     /// Example:
