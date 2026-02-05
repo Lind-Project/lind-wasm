@@ -37,4 +37,10 @@ if [[ ! -x "${LINDBOOT_BIN}" ]]; then
 fi
 [[ -x "${LINDBOOT_BIN}" ]] || { echo "error: lind-boot not found at ${LINDBOOT_BIN}" >&2; exit 2; }
 
+# Check if we need to re-exec with sudo
+if [[ $EUID -ne 0 ]]; then
+  # Not running as root, re-exec with sudo
+  exec sudo -E "$0" "$@"
+fi
+
 exec "${LINDBOOT_BIN}" "$@"
