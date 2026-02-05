@@ -106,7 +106,7 @@ pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
 /// - `verbosity`: controls runtime logging verbosity.
 pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
-                                    
+
     unsafe {
         let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
         libc::mkdir(lindfs_path.as_ptr(), 0o775);
@@ -126,9 +126,9 @@ pub fn rawposix_start(verbosity: isize) {
                 std::io::Error::last_os_error()
             )
         }
-    }           
+    }
 
-    // init cage table             
+    // init cage table
     cagetable_init();
 
     // register kernel close to fdtables

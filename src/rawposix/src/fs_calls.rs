@@ -1132,7 +1132,7 @@ pub extern "C" fn brk_syscall(
 ///
 /// On error:
 /// Return error num EBADF(Bad File Descriptor)
-pub extern "C" fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry, Errno> {
+pub fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry, Errno> {
     if vfd_arg > MAXFD as u64 {
         return Err(Errno::EBADF);
     }

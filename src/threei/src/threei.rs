@@ -11,7 +11,7 @@ use sysdefs::constants::{PROT_READ, PROT_WRITE}; // Used in `copy_data_between_c
 use typemap::datatype_conversion::sc_convert_uaddr_to_host;
 
 use crate::handler_table::{
-    _check_cage_handler_exist, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
+    _check_cage_handler_exists, _get_handler, _rm_cage_from_handler, _rm_grate_from_handler,
     copy_handler_table_to_cage_impl, print_handler_table, register_handler_impl,
 };
 use crate::threei_const;
@@ -423,7 +423,7 @@ pub fn make_syscall(
     // TODO:
     // if there's a better to handle
     // now if only one syscall in cage has been registered, then every call of that cage will check (extra overhead)
-    if _check_cage_handler_exist(self_cageid) {
+    if _check_cage_handler_exists(self_cageid) {
         if let Some((in_grate_fn_ptr_u64, grateid)) = _get_handler(self_cageid, syscall_num) {
             // RawPOSIX special case: directly call the function pointer
             if grateid == lind_platform_const::RAWPOSIX_CAGEID
@@ -480,8 +480,6 @@ pub fn make_syscall(
         }
     }
 
-    // debug purpose
-    print_handler_table();
     panic!(
         "[3i|make_syscall] syscall number {} not found in handler table for cage {}, targetcage {}!",
         syscall_num,
