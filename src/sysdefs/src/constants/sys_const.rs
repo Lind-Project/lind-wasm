@@ -112,55 +112,6 @@ pub const SIG_ERR: i32 = -1; // Error return
 pub const SIG_DFL: i32 = 0; // Default action
 pub const SIG_IGN: i32 = 1; // Ignore signal
 
-// default signal handler actions
-#[derive(PartialEq)]
-pub enum SignalDefaultHandler {
-    Terminate, // terminate the process
-    Ignore,    // ignore the signal
-    Stop,      // stop the current process
-    Continue,  // resume the stopped process
-    NONEXIST,  // signal not exist
-}
-
-// maps each signal to its default handler
-// see https://man7.org/linux/man-pages/man7/signal.7.html for more information
-pub fn signal_default_handler_dispatcher(signo: i32) -> SignalDefaultHandler {
-    match signo {
-        SIGHUP => SignalDefaultHandler::Terminate,
-        SIGINT => SignalDefaultHandler::Terminate,
-        SIGQUIT => SignalDefaultHandler::Terminate,
-        SIGILL => SignalDefaultHandler::Terminate,
-        SIGTRAP => SignalDefaultHandler::Terminate,
-        SIGABRT => SignalDefaultHandler::Terminate,
-        SIGBUS => SignalDefaultHandler::Terminate,
-        SIGFPE => SignalDefaultHandler::Terminate,
-        SIGKILL => SignalDefaultHandler::Terminate,
-        SIGUSR1 => SignalDefaultHandler::Terminate,
-        SIGSEGV => SignalDefaultHandler::Terminate,
-        SIGUSR2 => SignalDefaultHandler::Terminate,
-        SIGPIPE => SignalDefaultHandler::Terminate,
-        SIGALRM => SignalDefaultHandler::Terminate,
-        SIGTERM => SignalDefaultHandler::Terminate,
-        SIGSTKFLT => SignalDefaultHandler::Terminate,
-        SIGCHLD => SignalDefaultHandler::Ignore,
-        SIGCONT => SignalDefaultHandler::Continue,
-        SIGSTOP => SignalDefaultHandler::Stop,
-        SIGTSTP => SignalDefaultHandler::Stop,
-        SIGTTIN => SignalDefaultHandler::Stop,
-        SIGTTOU => SignalDefaultHandler::Stop,
-        SIGURG => SignalDefaultHandler::Ignore,
-        SIGXCPU => SignalDefaultHandler::Terminate,
-        SIGXFSZ => SignalDefaultHandler::Terminate,
-        SIGVTALRM => SignalDefaultHandler::Terminate,
-        SIGPROF => SignalDefaultHandler::Terminate,
-        SIGWINCH => SignalDefaultHandler::Ignore,
-        SIGIO => SignalDefaultHandler::Terminate,
-        SIGPWR => SignalDefaultHandler::Terminate,
-        SIGSYS => SignalDefaultHandler::Terminate,
-        _ => SignalDefaultHandler::NONEXIST,
-    }
-}
-
 // Timer types
 pub const ITIMER_REAL: i32 = 0; // Real-time timer
 
@@ -179,3 +130,33 @@ pub const FUTEX_WAKE_BITSET: i32 = 10;
 pub const FUTEX_WAIT_REQUEUE_PI: i32 = 11;
 pub const FUTEX_CMP_REQUEUE_PI: i32 = 12;
 pub const FUTEX_LOCK_PI2: i32 = 13;
+
+/* Cloning flags.  */
+pub const CSIGNAL: u64 = 0x000000ff; /* Signal mask to be sent at exit.  */
+pub const CLONE_VM: u64 = 0x00000100; /* Set if VM shared between processes.  */
+pub const CLONE_FS: u64 = 0x00000200; /* Set if fs info shared between processes.  */
+pub const CLONE_FILES: u64 = 0x00000400; /* Set if open files shared between processes.  */
+pub const CLONE_SIGHAND: u64 = 0x00000800; /* Set if signal handlers shared.  */
+pub const CLONE_PIDFD: u64 = 0x00001000; /* Set if a pidfd should be placed in parent.  */
+pub const CLONE_PTRACE: u64 = 0x00002000; /* Set if tracing continues on the child.  */
+pub const CLONE_VFORK: u64 = 0x00004000; /* Set if the parent wants the child to wake it up on mm_release.  */
+pub const CLONE_PARENT: u64 = 0x00008000; /* Set if we want to have the same parent as the cloner.  */
+pub const CLONE_THREAD: u64 = 0x00010000; /* Set to add to same thread group.  */
+pub const CLONE_NEWNS: u64 = 0x00020000; /* Set to create new namespace.  */
+pub const CLONE_SYSVSEM: u64 = 0x00040000; /* Set to shared SVID SEM_UNDO semantics.  */
+pub const CLONE_SETTLS: u64 = 0x00080000; /* Set TLS info.  */
+pub const CLONE_PARENT_SETTID: u64 = 0x00100000; /* Store TID in userlevel buffer before MM copy.  */
+pub const CLONE_CHILD_CLEARTID: u64 = 0x00200000; /* Register exit futex and memory location to clear.  */
+pub const CLONE_DETACHED: u64 = 0x00400000; /* Create clone detached.  */
+pub const CLONE_UNTRACED: u64 = 0x00800000; /* Set if the tracing process can't force CLONE_PTRACE on this clone.  */
+pub const CLONE_CHILD_SETTID: u64 = 0x01000000; /* Store TID in userlevel buffer in the child.  */
+pub const CLONE_NEWCGROUP: u64 = 0x02000000; /* New cgroup namespace.  */
+pub const CLONE_NEWUTS: u64 = 0x04000000; /* New utsname group.  */
+pub const CLONE_NEWIPC: u64 = 0x08000000; /* New ipcs.  */
+pub const CLONE_NEWUSER: u64 = 0x10000000; /* New user namespace.  */
+pub const CLONE_NEWPID: u64 = 0x20000000; /* New pid namespace.  */
+pub const CLONE_NEWNET: u64 = 0x40000000; /* New network namespace.  */
+pub const CLONE_IO: u64 = 0x80000000; /* Clone I/O context.  */
+/* cloning flags intersect with CSIGNAL so can be used only with unshare and
+clone3 syscalls.  */
+pub const CLONE_NEWTIME: u64 = 0x00000080; /* New time namespace */
