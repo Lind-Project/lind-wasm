@@ -73,8 +73,6 @@ pub fn add_to_linker<
                     arg2 as i64,
                     arg3 as i64,
                 ),
-                // exit syscall
-                EXIT_SYSCALL => wasmtime_lind_multi_process::exit_syscall(&mut caller, arg1 as i32),
                 // other syscalls goes into threei
                 _ => make_syscall(
                     self_cageid,

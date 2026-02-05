@@ -173,14 +173,30 @@ pub fn exec_syscall(
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
 ///
-/// The exit function causes normal process(Cage) termination
-/// The termination entails unmapping all memory references
-/// Removing the cage object from the cage table, closing all open files which is removing corresponding fdtable
-pub fn exit_syscall(
+/// RawPOSIX-side implementation of the `exit` syscall.
+///
+/// This function performs **userspace process / thread teardown** inside
+/// RawPOSIX before transferring control back to Wasmtime via 3i.
+///
+/// Its responsibilities are split into two phases:
+///
+/// 1. **RawPOSIX-side state transition**
+///    - Convert and validate syscall arguments
+///    - Perform thread exit
+///    - Detect whether this is the **last thread** of the cage
+///    - If so, clean up all cage-level resources (FD tables, cage table, zombies)
+///
+/// 2. **Control transfer back to Wasmtime**
+///    - Invoke the Wasmtime re-entry trampoline via `threei::make_syscall`
+///    - Pass `is_last_thread` so Wasmtime can complete execution teardown
+///
+/// RawPOSIX itself does **not** return to Wasm execution after this point;
+/// control is conceptually handed off to Wasmtime for final termination.
+pub extern "C" fn exit_syscall(
     cageid: u64,
     status_arg: u64,
     status_cageid: u64,
-    arg2: u64,
+    tid: u64,
     arg2_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
@@ -194,8 +210,7 @@ pub fn exit_syscall(
     let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -206,36 +221,79 @@ pub fn exit_syscall(
         );
     }
 
-    // Cleanup fdtable
-    let _ = fdtables::remove_cage_from_fdtable(cageid);
+    // Since `exit_syscall` may be interposed by a grate, we treat the
+    // argument's cageid as the effective operation cage.
+    let selfcageid = status_cageid;
+    // Indicates whether the exiting thread is the last live thread
+    // in the cage (0 = no, 1 = yes).
+    let mut is_last_thread = 0;
 
-    // Cleanup cage table
-    // Get the self cage
-    //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
-    if let Some(selfcage) = get_cage(cageid) {
-        if selfcage.parent != cageid {
-            let parent_cage = get_cage(selfcage.parent);
-            if let Some(parent) = parent_cage {
-                parent.child_num.fetch_sub(1, SeqCst);
-                let mut zombie_vec = parent.zombies.write();
-                zombie_vec.push(Zombie {
-                    cageid: cageid,
-                    exit_code: status,
-                });
-            } else {
-                // if parent already exited
-                // BUG: we currently do not handle the situation where a parent has exited already
+    // Perform thread exit inside RawPOSIX.
+    //
+    // `lind_thread_exit` returns true iff this thread was the last
+    // remaining thread of the cage.
+    if cage::lind_thread_exit(selfcageid, tid) {
+        // Need to perform cage-level resource cleanup
+        is_last_thread = 1;
+
+        // Cleanup fdtable
+        fdtables::remove_cage_from_fdtable(selfcageid);
+
+        // Cleanup cage table and process hierarchy state.
+        //
+        // If the cage has a parent, we:
+        //   - Decrement the parent's child count
+        //   - Record this cage as a zombie
+        //   - Send SIGCHLD to the parent
+        //
+        //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
+        if let Some(selfcage) = get_cage(selfcageid) {
+            if selfcage.parent != selfcageid {
+                let parent_cage = get_cage(selfcage.parent);
+                if let Some(parent) = parent_cage {
+                    parent.child_num.fetch_sub(1, SeqCst);
+                    let mut zombie_vec = parent.zombies.write();
+                    zombie_vec.push(Zombie {
+                        cageid: selfcageid,
+                        exit_code: status,
+                    });
+                } else {
+                    // if parent already exited
+                    // BUG: we currently do not handle the situation where a parent has exited already
+                }
             }
-        }
 
-        // if the cage has parent (i.e. it is not the "root" cage)
-        if cageid != selfcage.parent {
-            lind_send_signal(selfcage.parent, SIGCHLD);
+            // if the cage has parent (i.e. it is not the "root" cage)
+            if selfcageid != selfcage.parent {
+                // Notify parent via SIGCHLD if this is not the root cage.
+                lind_send_signal(selfcage.parent, SIGCHLD);
+            }
+
+            // Remove the cage from the global cage table.
+            remove_cage(selfcageid);
         }
-        remove_cage(cageid);
     }
 
-    status
+    // Call wasmtime
+    // See comments in wasmtime/lind-multi-process
+    threei::make_syscall(
+        RAWPOSIX_CAGEID,
+        60, // exit syscall number
+        UNUSED_NAME,
+        WASMTIME_CAGEID,
+        status_arg,
+        status_cageid,
+        tid,
+        is_last_thread, // represent the last thread exiting
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/waitpid.3p.html
