@@ -56,9 +56,6 @@ pub fn add_to_linker<
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
-            // 2. call clone_syscall / exec_syscall / exit_syscall from rawposix first instead of wasmtime_lind_multi_process in
-            // the future PR
-
             match call_number as i32 {
                 // clone syscall
                 CLONE_SYSCALL => {
@@ -66,13 +63,6 @@ pub fn add_to_linker<
                     // clone_args.child_tid += start_address;
                     wasmtime_lind_multi_process::clone_syscall(&mut caller, clone_args)
                 }
-                // exec syscall
-                EXEC_SYSCALL => wasmtime_lind_multi_process::exec_syscall(
-                    &mut caller,
-                    arg1 as i64,
-                    arg2 as i64,
-                    arg3 as i64,
-                ),
                 // exit syscall
                 EXIT_SYSCALL => wasmtime_lind_multi_process::exit_syscall(&mut caller, arg1 as i32),
                 // other syscalls goes into threei
