@@ -69,8 +69,8 @@ pub struct LindCtx<T, U> {
     // used to keep track of how many active cages are running
     lind_manager: Arc<LindCageManager>,
 
-    // from run.rs, used for exec call
-    run_command: U,
+    // from lind-boot, used for exec call
+    lindboot_cli: U,
 
     // get LindCtx from host
     get_cx: Arc<dyn Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static>,
@@ -104,8 +104,8 @@ impl<
     // * module: wasmtime module object, used to fork a new instance
     // * linker: wasmtime function linker. Used to link the imported functions
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
-    // * run_command: used by exec closure below.
-    // * cageid: cageid(cageid) associated with the context
+    // * lindboot_cli: used by exec closure below.
+    // * cageid: cageid associated with the context
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
@@ -113,7 +113,7 @@ impl<
         module: Module,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
-        run_command: U,
+        lindboot_cli: U,
         cageid: Option<i32>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
@@ -147,7 +147,7 @@ impl<
             tid,
             next_threadid,
             lind_manager: lind_manager.clone(),
-            run_command,
+            lindboot_cli,
             get_cx,
             fork_host,
             exec_host,
