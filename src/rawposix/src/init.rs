@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering::*};
 use std::sync::Arc;
 use sysdefs::constants::{
-    EXIT_SUCCESS, FDKIND_KERNEL, LIND_ROOT, RAWPOSIX_CAGEID, STDERR_FILENO, STDIN_FILENO,
+    EXIT_SUCCESS, FDKIND_KERNEL, LINDFS_ROOT, RAWPOSIX_CAGEID, STDERR_FILENO, STDIN_FILENO,
     STDOUT_FILENO, VERBOSE,
 };
 use threei::{register_handler, RUNTIME_TYPE_WASMTIME};
