@@ -10,3 +10,9 @@ clang+llvm-*
 src/glibc/build/
 src/tmp/
 build/
+lindfs/
+
+#Ignore testing results
+e2e_status
+report.html
+results.json
