@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID, UNUSED_NAME};
+use sysdefs::{constants::sys_const, data::sys_struct};
 use threei::{threei::make_syscall, threei_const};
 use wasmtime_lind_3i::{
     get_vmctx, get_vmctx_thread, rm_vmctx, rm_vmctx_thread, set_vmctx, set_vmctx_thread,
@@ -20,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
+use wasmtime::vm::{VMContext, VMOpaqueContext};
 use wasmtime::{
     AsContext, AsContextMut, AsyncifyState, Caller, ExternType, InstanceId, InstantiateType,
     Linker, Module, OnCalledAction, SharedMemory, Store, StoreOpaque, Val,
@@ -1293,7 +1295,7 @@ impl<
             tid: 1,                                     // thread id starts from 1
             next_threadid: Arc::new(AtomicU32::new(1)), // thread id starts from 1
             lind_manager: self.lind_manager.clone(),
-            run_command: self.run_command.clone(),
+            lindboot_cli: self.lindboot_cli.clone(),
             get_cx: self.get_cx.clone(),
             fork_host: self.fork_host.clone(),
             exec_host: self.exec_host.clone(),
@@ -1318,10 +1320,11 @@ pub fn lind_fork<
     U: Clone + Send + 'static + std::marker::Sync,
 >(
     caller: &mut Caller<'_, T>,
+    child_cageid: u64,
 ) -> Result<i32> {
     let host = caller.data().clone();
     let ctx = host.get_ctx();
-    ctx.fork_call(caller)
+    ctx.fork_call(caller, child_cageid)
 }
 
 // entry point of pthread_create syscall
