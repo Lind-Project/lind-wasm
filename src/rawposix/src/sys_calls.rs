@@ -230,7 +230,7 @@ pub extern "C" fn exit_syscall(
 
     // Perform thread exit inside RawPOSIX.
     //
-    // `lind_thread_exit` returns true iff this thread was the last
+    // `lind_thread_exit` returns true if this thread was the last
     // remaining thread of the cage.
     if cage::lind_thread_exit(selfcageid, tid) {
         // Need to perform cage-level resource cleanup
