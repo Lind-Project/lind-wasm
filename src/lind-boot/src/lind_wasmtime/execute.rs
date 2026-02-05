@@ -66,6 +66,106 @@ pub fn execute_wasmtime(lindboot_cli: CliOptions) -> anyhow::Result<Vec<Val>> {
         grate_callback_trampoline,
     );
 
+    // Register syscall handlers (clone/exec/exit) with 3i
+    let fp_clone: extern "C" fn(
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+    ) -> i32 = clone_syscall_entry;
+    let clone_call_u64: u64 = fp_clone as usize as u64;
+    threei::register_handler(
+        clone_call_u64,
+        RAWPOSIX_CAGEID,                     // self cageid
+        56,                                  // clone syscall number
+        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
+        1,                                   // register
+        WASMTIME_CAGEID,                     // target cageid
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    );
+
+    let fp_exec: extern "C" fn(
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+    ) -> i32 = exec_syscall_entry;
+    let exec_call_u64: u64 = fp_exec as usize as u64;
+    threei::register_handler(
+        exec_call_u64,
+        RAWPOSIX_CAGEID,                     // self cageid
+        59,                                  // exec syscall number
+        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
+        1,                                   // register
+        WASMTIME_CAGEID,                     // target cageid
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    );
+
+    let fp_exit: extern "C" fn(
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+        u64,
+    ) -> i32 = exit_syscall_entry;
+    let exit_call_u64: u64 = fp_exit as usize as u64;
+    threei::register_handler(
+        exit_call_u64,
+        RAWPOSIX_CAGEID,                     // self cageid
+        60,                                  // exit syscall number
+        threei_const::RUNTIME_TYPE_WASMTIME, // runtime id
+        1,                                   // register
+        WASMTIME_CAGEID,                     // target cageid
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    );
+
     // -- Load module and Attach host APIs --
     // Set up the WASI. In lind-wasm, we predefine all the features we need are `thread` and `wasipreview1`
     // so we manually add them to the linker without checking the input

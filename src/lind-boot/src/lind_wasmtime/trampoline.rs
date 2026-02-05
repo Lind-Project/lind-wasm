@@ -118,3 +118,126 @@ pub extern "C" fn grate_callback_trampoline(
     set_vmctx(cageid, vmctx_wrapper);
     grate_ret
 }
+
+/// Entry points for Wasmtime-backed multi-process syscalls.
+///
+/// These functions serve as the *host-side syscall entry stubs* for
+/// Wasmtime-based multi-process support in Lind. They are exposed as
+/// `extern "C"` function pointers and registered with 3i during the
+/// initial runtime bootstrap in `execute_wasmtime()`.
+///
+/// At startup, `execute_wasmtime()` installs these function pointers into the
+/// RawPOSIX handler table of the initial cage via `register_handler`.
+/// This registration happens exactly once: during `fork()`, RawPOSIX
+/// clones the parent cage’s handler table into the child, so all forked
+/// processes automatically inherit these handlers. In contrast, `exec()`
+/// replaces the guest program within an existing cage and therefore does
+/// not require rebuilding or modifying the handler table in the lind runtime.
+///
+/// All syscalls in Lind first pass through RawPOSIX and 3i. For syscalls
+/// such as `clone`, `exec`, and `exit`, RawPOSIX alone is insufficient,
+/// because correct semantics require coordinated interaction with the
+/// Wasmtime runtime (e.g., process creation, re-instantiation, or teardown
+/// of execution state). These entry functions explicitly bridge that gap
+/// by returning control from RawPOSIX/3i back into the Wasmtime-aware
+/// multi-process implementation.
+///
+/// Each function is a thin forwarding stub that delegates the actual
+/// syscall semantics to `wasmtime_lind_multi_process`, which performs
+/// the required runtime-sensitive operations while preserving POSIX
+/// behavior in a fully userspace implementation.
+pub extern "C" fn clone_syscall_entry(
+    cageid: u64,
+    clone_arg: u64,
+    clone_arg_cageid: u64,
+    parent_cageid: u64,
+    arg2_cageid: u64,
+    child_cageid: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    wasmtime_lind_multi_process::clone_syscall::<HostCtx, CliOptions>(
+        cageid,
+        clone_arg,
+        clone_arg_cageid,
+        parent_cageid,
+        arg2_cageid,
+        child_cageid,
+        arg3_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    )
+}
+
+pub extern "C" fn exec_syscall_entry(
+    cageid: u64,
+    path_arg: u64,
+    path_arg_cageid: u64,
+    argv: u64,
+    argv_cageid: u64,
+    envs: u64,
+    envs_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    wasmtime_lind_multi_process::exec_syscall::<HostCtx, CliOptions>(
+        cageid,
+        path_arg,
+        path_arg_cageid,
+        argv,
+        argv_cageid,
+        envs,
+        envs_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    )
+}
+
+pub extern "C" fn exit_syscall_entry(
+    cageid: u64,
+    exit_code: u64,
+    exit_code_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    wasmtime_lind_multi_process::exit_syscall::<HostCtx, CliOptions>(
+        cageid,
+        exit_code,
+        exit_code_cageid,
+        arg2,
+        arg2_cageid,
+        arg3,
+        arg3_cageid,
+        arg4,
+        arg4_cageid,
+        arg5,
+        arg5_cageid,
+        arg6,
+        arg6_cageid,
+    )
+}
