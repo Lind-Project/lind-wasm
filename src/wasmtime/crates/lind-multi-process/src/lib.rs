@@ -69,6 +69,7 @@ pub struct LindCtx<T, U> {
     // used to keep track of how many active cages are running
     lind_manager: Arc<LindCageManager>,
 
+    // from lind-boot, used for exec call
     lindboot_cli: U,
 
     // get LindCtx from host
