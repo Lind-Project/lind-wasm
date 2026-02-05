@@ -106,9 +106,32 @@ pub fn register_rawposix_syscall(self_cageid: u64) -> i32 {
 /// - `verbosity`: controls runtime logging verbosity.
 pub fn rawposix_start(verbosity: isize) {
     let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
-                                    // init cage table
+                                    
+    unsafe {
+        let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
+        libc::mkdir(lindfs_path.as_ptr(), 0o775);
+        let ret = libc::chroot(lindfs_path.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chroot to {}: {}",
+                LINDFS_ROOT,
+                std::io::Error::last_os_error()
+            );
+        }
+        let root = CString::new("/").unwrap();
+        let ret = libc::chdir(root.as_ptr());
+        if ret != 0 {
+            panic!(
+                "Failed to chdir to / after chroot: {}",
+                std::io::Error::last_os_error()
+            )
+        }
+    }           
+
+    // init cage table             
     cagetable_init();
 
+    // register kernel close to fdtables
     fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
 
     // register syscalls for init cage
@@ -117,7 +140,7 @@ pub fn rawposix_start(verbosity: isize) {
     // Set up standard file descriptors for the init cage
     // TODO:
     // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
-    let dev_null = CString::new(format!("{}/dev/null", LIND_ROOT)).unwrap();
+    let dev_null = CString::new("/dev/null").unwrap();
 
     // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
     // Standard input (fd = 0) is redirected to /dev/null
