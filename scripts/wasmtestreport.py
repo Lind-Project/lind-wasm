@@ -7,6 +7,7 @@
 #   "./wasmtestreport.py --timeout 10" to run with a timeout of 10 seconds 
 #   "./wasmtestreport.py --output newresult" to change the output file(The new file will be newresult.json)
 #   "./wasmtestreport.py --generate-html" to generate the html file
+#   "./wasmtestreport.py --allow-pre-compiled" to run tests with .cwasm binaries instead of .wasm binaries
 #   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 10"
 #
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
@@ -338,7 +339,7 @@ def get_expected_output(source_file):
 #   Given a path to a .c file, calls `lind_compile` to compile it into wasm.
 #
 # Variables:
-# - Input: source_file - path to the .c file.
+# - Input: source_file - path to the .c file, allow_precompiled (bool) - if True, use a precompiled `.cwasm` binary.
 # - Output: (wasm_file, error_message).
 #       If compilation succeeds, returns paths to the wasm and empty string for error_message.
 #       On failure, returns (None, <error_message>).
@@ -349,7 +350,7 @@ def get_expected_output(source_file):
 # Note:
 #   Dependancy on the script `lind_compile`.
 # ----------------------------------------------------------------------
-def compile_c_to_wasm(source_file):
+def compile_c_to_wasm(source_file, allow_precompiled=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
     compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
@@ -366,7 +367,10 @@ def compile_c_to_wasm(source_file):
         if result.returncode != 0:
             return (None, result.stdout + "\n" + result.stderr)
         else:
-            wasm_file = Path(testcase + ".cwasm")
+            # Return the generated artifact: .cwasm when precompiled, otherwise .wasm
+            wasm_file = Path(testcase + (".cwasm" if allow_precompiled else ".wasm"))
+            if not wasm_file.exists():
+                return (None, f"Expected wasm output not found: {wasm_file}")
             return (wasm_file, "")
     except Exception as e:
         return (None, f"Exception during compilation: {str(e)}")
@@ -433,6 +437,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 #   source_file : The test case file path.
 #   result : The results dictionary.
 #   timeout_sec : Timeout for the run in seconds.
+#   allow_precompiled (bool) : If True, use precompiled `.cwasm` artifacts, use `.wasm` files otherwise.
 # - Output
 #   Updates 'result' dictionary.
 #
@@ -445,7 +450,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 # ----------------------------------------------------------------------
 # TODO: Currently for non deterministic cases, we are only compiling and running the test case, success means the compiled test case ran, need to add more specific tests
 # 
-def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic"):
+def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic", allow_precompiled=False):
     """Unified test function for both deterministic, non-deterministic and failing tests"""
     source_file = Path(source_file)
     handler = TestResultHandler(result, source_file)
@@ -469,7 +474,7 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
             return
         
         # Compile and run WASM
-        wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
+        wasm_file, wasm_compile_error = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
         if wasm_file is None:
             # Record this specifically as a fail-test WASM-compilation error so it is
             # counted alongside other `Fail_*` test categories instead of the generic
@@ -531,7 +536,7 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
             return
     
     # Compile and run WASM
-    wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
+    wasm_file, wasm_compile_error = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
     if wasm_file is None:
         handler.add_compile_failure(wasm_compile_error)
         return
@@ -563,14 +568,14 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
             wasm_file.unlink()
 
 # Wrapper functions for deterministic and non-deterministic tests
-def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    test_single_file_unified(source_file, result, timeout_sec, "deterministic")
+def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT, allow_precompiled=False):
+    test_single_file_unified(source_file, result, timeout_sec, "deterministic", allow_precompiled=allow_precompiled)
 
-def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    test_single_file_unified(source_file, result, timeout_sec, "non_deterministic")
+def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT, allow_precompiled=False):
+    test_single_file_unified(source_file, result, timeout_sec, "non_deterministic", allow_precompiled=allow_precompiled)
 
-def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    test_single_file_unified(source_file, result, timeout_sec, "fail")
+def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT, allow_precompiled=False):
+    test_single_file_unified(source_file, result, timeout_sec, "fail", allow_precompiled=allow_precompiled)
 
 # ----------------------------------------------------------------------
 # Function: analyze_testfile_dependencies
@@ -676,10 +681,11 @@ def analyze_executable_dependencies(tests_to_run):
 # Variables:
 # - Input:
 #   executable_deps: Dictionary mapping executable paths to source files
+#   allow_precompiled (bool): If True, use `.cwasm`, use`.wasm` otherwise
 # - Output:
 #   None (creates executables in LINDFS_ROOT)
 # ----------------------------------------------------------------------
-def create_required_executables(executable_deps):
+def create_required_executables(executable_deps, allow_precompiled=False):
     if not executable_deps:
         return
     
@@ -687,8 +693,8 @@ def create_required_executables(executable_deps):
     
     for exec_path, source_file in executable_deps.items():
         try:
-            # Compile the source file to WASM
-            wasm_file, compile_err = compile_c_to_wasm(source_file)
+            # Compile the source file to WASM or precompiled .cwasm depending on flag
+            wasm_file, compile_err = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
             
             if wasm_file is None:
                 logger.error(f"Failed to compile {source_file}: {compile_err}")
@@ -716,10 +722,11 @@ def create_required_executables(executable_deps):
 # Variables:
 # - Input:
 #   tests_to_run: Optional list of test files to analyze for dependencies
+#   allow_precompiled (bool): If True: use .cwasm, use .wasm otherwise
 # - Output:
 #   None
 # ----------------------------------------------------------------------
-def pre_test(tests_to_run=None):
+def pre_test(tests_to_run=None, allow_precompiled=False):
     # Ensure LINDFS_ROOT exists with required subdirectories (For CI Environment)
     os.makedirs(LINDFS_ROOT, exist_ok=True)
     os.makedirs(LINDFS_ROOT / "automated_tests", exist_ok=True)
@@ -775,7 +782,7 @@ def pre_test(tests_to_run=None):
     # Create required executables
     if tests_to_run:
         executable_deps = analyze_executable_dependencies(tests_to_run)
-        create_required_executables(executable_deps)
+        create_required_executables(executable_deps, allow_precompiled=allow_precompiled)
 
 # ----------------------------------------------------------------------
 # Function: generate_html_report
@@ -1040,6 +1047,7 @@ def parse_arguments():
     parser.add_argument("--clean-results", action="store_true", help="Flag to clean up result files")
     parser.add_argument("--testfiles", type=Path, nargs = "+", help="Run one or more specific test files")
     parser.add_argument("--debug", action="store_true", help="Enable detailed stdout/stderr output for subprocesses")
+    parser.add_argument("--allow-pre-compiled", action="store_true", dest="allow_pre_compiled", help="Allow compiling/running precompiled .cwasm files (default: .wasm)")
     parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
     parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
 
@@ -1158,7 +1166,10 @@ def setup_test_environment(args):
             if should_run_file(test_case, config['run_folders_paths'], 
                                config['skip_folders_paths'], config['skip_test_cases'])
         ]
-    
+
+    # Propagate allow_precompiled flag into the config
+    config['allow_precompiled'] = bool(getattr(args, 'allow_pre_compiled', False))
+
     return config
 
 # ----------------------------------------------------------------------
@@ -1221,11 +1232,11 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         # Determine test type and run appropriate test
         parent_name = original_source.parent.name
         if parent_name == DETERMINISTIC_PARENT_NAME:
-            test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
+            test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
-            test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
+            test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         elif parent_name == FAIL_PARENT_NAME:
-            test_single_file_fail(dest_source, results["fail"], timeout_sec)
+            test_single_file_fail(dest_source, results["fail"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         else:
             # Log warning for tests not in deterministic/non-deterministic/fail folders
             logger.warning(f"Test file {original_source} is not in a deterministic, non-deterministic, or fail folder - skipping")
@@ -1349,7 +1360,7 @@ def main():
             return
 
         # Use selective testfile copying based on test dependencies
-        pre_test(config['tests_to_run'])
+        pre_test(config['tests_to_run'], allow_precompiled=config.get('allow_precompiled', False))
         if pre_test_only:
             logger.info(f"Testfiles copied to {TESTFILES_DST}")
             return
