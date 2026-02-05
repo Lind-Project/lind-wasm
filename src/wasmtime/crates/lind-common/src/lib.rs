@@ -63,8 +63,13 @@ pub fn add_to_linker<
                     // clone_args.child_tid += start_address;
                     wasmtime_lind_multi_process::clone_syscall(&mut caller, clone_args)
                 }
-                // exit syscall
-                EXIT_SYSCALL => wasmtime_lind_multi_process::exit_syscall(&mut caller, arg1 as i32),
+                // exec syscall
+                EXEC_SYSCALL => wasmtime_lind_multi_process::exec_syscall(
+                    &mut caller,
+                    arg1 as i64,
+                    arg2 as i64,
+                    arg3 as i64,
+                ),
                 // other syscalls goes into threei
                 _ => make_syscall(
                     self_cageid,

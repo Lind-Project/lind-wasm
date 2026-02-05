@@ -32,15 +32,12 @@ void __lind_exit(int status) {
 void
 _exit (int status)
 {
-  while (1)
-    {
-      // exit without doing any cleanup
-      __lind_exit(status);
+  // exit without doing any cleanup
+  __lind_exit(status);
 
 #ifdef ABORT_INSTRUCTION
-      ABORT_INSTRUCTION;
+  ABORT_INSTRUCTION;
 #endif
-    }
 }
 rtld_hidden_def (_exit)
 weak_alias (_exit, _Exit)
