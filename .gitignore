@@ -8,7 +8,6 @@ clang+llvm-*
 
 #Ignore Build artifacts
 src/glibc/build/
-src/tmp/
 build/
 lindfs/
 
