@@ -112,6 +112,55 @@ pub const SIG_ERR: i32 = -1; // Error return
 pub const SIG_DFL: i32 = 0; // Default action
 pub const SIG_IGN: i32 = 1; // Ignore signal
 
+// default signal handler actions
+#[derive(PartialEq)]
+pub enum SignalDefaultHandler {
+    Terminate, // terminate the process
+    Ignore,    // ignore the signal
+    Stop,      // stop the current process
+    Continue,  // resume the stopped process
+    NONEXIST,  // signal not exist
+}
+
+// maps each signal to its default handler
+// see https://man7.org/linux/man-pages/man7/signal.7.html for more information
+pub fn signal_default_handler_dispatcher(signo: i32) -> SignalDefaultHandler {
+    match signo {
+        SIGHUP => SignalDefaultHandler::Terminate,
+        SIGINT => SignalDefaultHandler::Terminate,
+        SIGQUIT => SignalDefaultHandler::Terminate,
+        SIGILL => SignalDefaultHandler::Terminate,
+        SIGTRAP => SignalDefaultHandler::Terminate,
+        SIGABRT => SignalDefaultHandler::Terminate,
+        SIGBUS => SignalDefaultHandler::Terminate,
+        SIGFPE => SignalDefaultHandler::Terminate,
+        SIGKILL => SignalDefaultHandler::Terminate,
+        SIGUSR1 => SignalDefaultHandler::Terminate,
+        SIGSEGV => SignalDefaultHandler::Terminate,
+        SIGUSR2 => SignalDefaultHandler::Terminate,
+        SIGPIPE => SignalDefaultHandler::Terminate,
+        SIGALRM => SignalDefaultHandler::Terminate,
+        SIGTERM => SignalDefaultHandler::Terminate,
+        SIGSTKFLT => SignalDefaultHandler::Terminate,
+        SIGCHLD => SignalDefaultHandler::Ignore,
+        SIGCONT => SignalDefaultHandler::Continue,
+        SIGSTOP => SignalDefaultHandler::Stop,
+        SIGTSTP => SignalDefaultHandler::Stop,
+        SIGTTIN => SignalDefaultHandler::Stop,
+        SIGTTOU => SignalDefaultHandler::Stop,
+        SIGURG => SignalDefaultHandler::Ignore,
+        SIGXCPU => SignalDefaultHandler::Terminate,
+        SIGXFSZ => SignalDefaultHandler::Terminate,
+        SIGVTALRM => SignalDefaultHandler::Terminate,
+        SIGPROF => SignalDefaultHandler::Terminate,
+        SIGWINCH => SignalDefaultHandler::Ignore,
+        SIGIO => SignalDefaultHandler::Terminate,
+        SIGPWR => SignalDefaultHandler::Terminate,
+        SIGSYS => SignalDefaultHandler::Terminate,
+        _ => SignalDefaultHandler::NONEXIST,
+    }
+}
+
 // Timer types
 pub const ITIMER_REAL: i32 = 0; // Real-time timer
 
