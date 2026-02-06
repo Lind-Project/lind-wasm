@@ -1438,8 +1438,9 @@ pub fn clone_syscall<
 /// Conceptually, the execution flow is:
 ///   Wasm
 ///     -> Wasmtime lind-common trampoline
+///     -> 3i dispatch with grateid=RAWPOSIX
 ///     -> RawPOSIX syscall handling
-///     -> 3i dispatch
+///     -> 3i dispatch with grateid=WASMTIME
 ///     -> **back to Wasmtime**
 ///
 /// `exec_syscall` is the point where we re-enter Wasmtime execution and
