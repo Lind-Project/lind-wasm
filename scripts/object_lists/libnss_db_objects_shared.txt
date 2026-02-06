@@ -1,0 +1,14 @@
+nss/libnss_db_pic.a
+nss/db-ethers.os
+nss/db-grp.os
+nss/db-netgrp.os
+nss/db-proto.os
+nss/db-pwd.os
+nss/db-service.os
+nss/db-sgrp.os
+nss/db-spwd.os
+nss/db-rpc.os
+nss/db-initgroups.os
+nss/db-open.os
+nss/db-init.os
+nss/hash-string.os
