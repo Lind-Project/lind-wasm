@@ -50,7 +50,6 @@ TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
 TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
 TESTFILES_DST = LINDFS_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
-NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 FAIL_PARENT_NAME = "fail"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
@@ -420,33 +419,8 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     except Exception as e:
         return ("unknown_error", f"Exception during wasm run: {str(e)}")
 
-# ----------------------------------------------------------------------
-# Function: test_single_file_non_deterministic
-#
-# Purpose:
-#   Compiles and runs a single test the given test case is compiled into wasm and run. 
-#   
-#   Logs results (success/failure/timeouts/seg faults)
-#
-# Variables:
-# - Input
-#   source_file : The test case file path.
-#   result : The results dictionary.
-#   timeout_sec : Timeout for the run in seconds.
-# - Output
-#   Updates 'result' dictionary.
-#
-# Exceptions:
-#   Recorded into 'result'.
-#
-# Note:
-#   Cleans up generated files(wasm/cwasm)
-#   Segmentation Fault is identified by return code of 134/139
-# ----------------------------------------------------------------------
-# TODO: Currently for non deterministic cases, we are only compiling and running the test case, success means the compiled test case ran, need to add more specific tests
-# 
 def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic"):
-    """Unified test function for both deterministic, non-deterministic and failing tests"""
+    """Unified test function for deterministic and failing tests"""
     source_file = Path(source_file)
     handler = TestResultHandler(result, source_file)
     
@@ -554,7 +528,6 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
                     )
                     add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info)
             else:
-                # Non-deterministic test - just check it ran successfully
                 handler.add_success(wasm_output)
     
     finally:
@@ -562,12 +535,9 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
         if wasm_file and wasm_file.exists():
             wasm_file.unlink()
 
-# Wrapper functions for deterministic and non-deterministic tests
+# Wrapper functions for deterministic and fail tests
 def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
     test_single_file_unified(source_file, result, timeout_sec, "deterministic")
-
-def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    test_single_file_unified(source_file, result, timeout_sec, "non_deterministic")
 
 def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
     test_single_file_unified(source_file, result, timeout_sec, "fail")
@@ -1222,13 +1192,11 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         parent_name = original_source.parent.name
         if parent_name == DETERMINISTIC_PARENT_NAME:
             test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
-        elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
-            test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
         elif parent_name == FAIL_PARENT_NAME:
             test_single_file_fail(dest_source, results["fail"], timeout_sec)
         else:
-            # Log warning for tests not in deterministic/non-deterministic/fail folders
-            logger.warning(f"Test file {original_source} is not in a deterministic, non-deterministic, or fail folder - skipping")
+            # Log warning for tests not in deterministic/fail folders
+            logger.warning(f"Test file {original_source} is not in a deterministic or fail folder - skipping")
 
 def build_fail_message(case: str, native_output: str, wasm_output: str, native_retcode=None, wasm_retcode=None) -> str:
     """
@@ -1305,7 +1273,6 @@ def main():
 
     results = {
         "deterministic": get_empty_result(),
-        "non_deterministic": get_empty_result(),
         "fail": get_empty_result()
     }
 
