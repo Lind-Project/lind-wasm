@@ -47,11 +47,13 @@ CC = os.environ.get("CC", "gcc")  # C compiler, defaults to gcc
 
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
+GRATE_TEST_BASE = LIND_WASM_BASE / "tests" / "grate-tests"
 TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
 TESTFILES_DST = LINDFS_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
 NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 FAIL_PARENT_NAME = "fail"
+GRATE_PARENT_NAME = "grate-tests"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 
@@ -349,11 +351,15 @@ def get_expected_output(source_file):
 # Note:
 #   Dependancy on the script `lind_compile`.
 # ----------------------------------------------------------------------
-def compile_c_to_wasm(source_file):
+def compile_c_to_wasm(source_file, grate=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
-    
+
+    if grate:
+        compile_cmd = [os.path.join(LIND_TOOL_PATH, "grate_compile"), source_file]
+    else:
+        compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
+
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
         logger.debug("File exists and is a regular file!")
@@ -529,9 +535,10 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
         if not success:
             add_test_result(result, str(source_file), "Failure", error_type, error_msg)
             return
-    
+
+    is_grate = test_mode == "grate"
     # Compile and run WASM
-    wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
+    wasm_file, wasm_compile_error = compile_c_to_wasm(source_file, grate=is_grate)
     if wasm_file is None:
         handler.add_compile_failure(wasm_compile_error)
         return
@@ -571,6 +578,9 @@ def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_
 
 def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
     test_single_file_unified(source_file, result, timeout_sec, "fail")
+
+def test_single_file_grate(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
+    test_single_file_unified(source_file, result, timeout_sec, "grate")
 
 # ----------------------------------------------------------------------
 # Function: analyze_testfile_dependencies
@@ -1152,7 +1162,7 @@ def setup_test_environment(args):
     if args.testfiles:
         config['tests_to_run'] = [Path(f).resolve() for f in args.testfiles]
     else:
-        test_cases = list(TEST_FILE_BASE.rglob("*.c"))
+        test_cases = list(TEST_FILE_BASE.rglob("*.c")) + list(GRATE_TEST_BASE.rglob("*.c"))
         config['tests_to_run'] = [
             test_case for test_case in test_cases
             if should_run_file(test_case, config['run_folders_paths'], 
@@ -1226,6 +1236,8 @@ def run_tests(config, artifacts_root, results, timeout_sec):
             test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec)
         elif parent_name == FAIL_PARENT_NAME:
             test_single_file_fail(dest_source, results["fail"], timeout_sec)
+        elif parent_name == GRATE_PARENT_NAME:
+            test_single_file_grate(dest_source, results["grate"], timeout_sec)
         else:
             # Log warning for tests not in deterministic/non-deterministic/fail folders
             logger.warning(f"Test file {original_source} is not in a deterministic, non-deterministic, or fail folder - skipping")
@@ -1306,7 +1318,8 @@ def main():
     results = {
         "deterministic": get_empty_result(),
         "non_deterministic": get_empty_result(),
-        "fail": get_empty_result()
+        "fail": get_empty_result(),
+        "grate": get_empty_result()
     }
 
     # Prepare artifacts root
