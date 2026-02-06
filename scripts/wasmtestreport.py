@@ -21,6 +21,7 @@ import argparse
 import shutil
 import logging
 import tempfile
+import time
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -868,13 +869,13 @@ def generate_html_report(report):
             
             # Generate table with category headers
             html_content.append('<table class="test-results-table">')
-            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Output</th></tr>')
+            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Duration (s)</th><th>Output</th></tr>')
             
             # Sort categories for consistent output
             for category in sorted(test_categories.keys()):
                 # Add category header row
                 category_display = category.replace('_', ' ').title()
-                html_content.append(f'<tr class="test-type-header"><td colspan="4">{category_display}</td></tr>')
+                html_content.append(f'<tr class="test-type-header"><td colspan="5">{category_display}</td></tr>')
                 
                 # Sort tests within category
                 test_cases_in_category = sorted(test_categories[category], key=lambda x: x[0])
@@ -894,10 +895,11 @@ def generate_html_report(report):
                     # For successful tests, just show "Success" instead of full output
                     # For failures, show the full output for debugging
                     output_display = "Success" if result['status'].lower() == "success" else result["output"]
+                    duration_display = result.get("elapsed_seconds", "N/A")
                     
                     html_content.append(
                         f'<tr class="{row_class}"><td>{test_name}</td>'
-                        f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
+                        f'<td>{result["status"]}</td><td>{result["error_type"]}</td><td>{duration_display}</td>'
                         f'<td><pre>{output_display}</pre></td></tr>'
                     )
             
@@ -1191,12 +1193,22 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         # Determine test type and run appropriate test
         parent_name = original_source.parent.name
         if parent_name == DETERMINISTIC_PARENT_NAME:
+            start_time = time.perf_counter()
             test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
+            elapsed = round(time.perf_counter() - start_time, 3)
+            test_entry = results["deterministic"]["test_cases"].get(str(dest_source))
         elif parent_name == FAIL_PARENT_NAME:
+            start_time = time.perf_counter()
             test_single_file_fail(dest_source, results["fail"], timeout_sec)
+            elapsed = round(time.perf_counter() - start_time, 3)
+            test_entry = results["fail"]["test_cases"].get(str(dest_source))
         else:
             # Log warning for tests not in deterministic/fail folders
             logger.warning(f"Test file {original_source} is not in a deterministic or fail folder - skipping")
+            continue
+
+        if test_entry is not None:
+            test_entry["elapsed_seconds"] = elapsed
 
 def build_fail_message(case: str, native_output: str, wasm_output: str, native_retcode=None, wasm_retcode=None) -> str:
     """
