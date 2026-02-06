@@ -12,7 +12,6 @@ clang \
     -Wl,--export=__stack_low \
     -Wl,--allow-undefined \
     -Wl,--unresolved-symbols=import-dynamic \
-    -Wl,--export-if-defined=var \
     main.c -g -O0 -o main.wasm
 
 # emscripten reference:

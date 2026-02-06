@@ -371,13 +371,18 @@ impl Instance {
         
         let (instance, start, instanceid) = Instance::new_raw(store.0, module, imports)?;
 
-        if let Some(start) = start {
-            println!("[debug] start func");
-            instance.start_raw(store, start)?;
-        }
+        // if let Some(start) = start {
+        //     println!("[debug] start func");
+        //     instance.start_raw(store, start)?;
+        // }
 
         match instantiate_type {
             InstantiateType::InstantiateFirst(_) => {
+                if let Some(start) = start {
+                    println!("[debug] start func main");
+                    instance.start_raw(store, start)?;
+                }
+
                 let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
                 println!("[debug] main module start reloc func");
                 let res = reloc.call(store.as_context_mut(), ());
@@ -390,22 +395,32 @@ impl Instance {
                 }
             },
             InstantiateType::InstantiateChild{parent_pid, child_pid} => {
+                if let Some(start) = start {
+                    println!("[debug] start func child");
+                    instance.start_raw(store, start)?;
+                }
+
                 let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
                 println!("[debug] child start reloc func");
                 let res = reloc.call(store.as_context_mut(), ());
                 println!("[debug] child reloc result: {:?}", res);
             },
             InstantiateType::InstantiateLib(_) => {
-                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
-                println!("[debug] library start reloc func");
-                let res = reloc.call(store.as_context_mut(), ());
-                println!("[debug] library reloc result: {:?}", res);
+                // if let Some(start) = start {
+                //     println!("[debug] start func library index: {:?}", start);
+                //     instance.start_raw(store, start)?;
+                // }
 
-                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
-                    println!("[debug] library start __wasm_apply_tls_relocs");
-                    let res = init.call(store.as_context_mut(), ());
-                    println!("[debug] library __wasm_apply_tls_relocs result: {:?}", res);
-                }
+                // let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                // println!("[debug] library start reloc func");
+                // let res = reloc.call(store.as_context_mut(), ());
+                // println!("[debug] library reloc result: {:?}", res);
+
+                // if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                //     println!("[debug] library start __wasm_apply_tls_relocs");
+                //     let res = init.call(store.as_context_mut(), ());
+                //     println!("[debug] library __wasm_apply_tls_relocs result: {:?}", res);
+                // }
             }
         }
 
@@ -555,7 +570,7 @@ impl Instance {
         Instance(store.store_data_mut().insert(handle))
     }
 
-    fn start_raw<T>(&self, store: &mut StoreContextMut<'_, T>, start: FuncIndex) -> Result<()> {
+    pub fn start_raw<T>(&self, store: &mut StoreContextMut<'_, T>, start: FuncIndex) -> Result<()> {
         let id = store.0.store_data()[self.0].id;
         // If a start function is present, invoke it. Make sure we use all the
         // trap-handling configuration in `store` as well.

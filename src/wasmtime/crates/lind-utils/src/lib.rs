@@ -103,4 +103,20 @@ impl LindGOT {
             return None;
         }
     }
+
+    pub fn warning_undefined(&self) {
+        let mut _counter = 23333;
+        for (name, handler) in self.global_offset_table.clone() {
+            let val = unsafe {
+                *(handler as *mut u32)
+            };
+            if val == 0 {
+                unsafe {
+                    *(handler as *mut u32) = _counter;
+                }
+                _counter += 1;
+                println!("[debug] Warning: GOT entry \"{}\" unresolved (debug to {})", name, _counter - 1);
+            }
+        }
+    }
 }

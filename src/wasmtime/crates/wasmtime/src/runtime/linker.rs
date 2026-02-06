@@ -920,6 +920,8 @@ impl<T> Linker<T> {
                 let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base)).unwrap();
                 module_linker.define(&mut store, "env", "__table_base", table_base);
 
+                // self.allow_shadowing(false);
+
                 // TODO: temporarily direct unknown imports into traps
                 module_linker.define_unknown_imports_as_traps(module);
 
@@ -990,6 +992,21 @@ impl<T> Linker<T> {
                 // }
                 // self.allow_shadowing(false);
 
+                if let Some(start) = module.compiled_module().module().start_func {
+                    println!("[debug] start func library");
+                    instance.start_raw(&mut store.as_context_mut(), start)?;
+                }
+
+                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                println!("[debug] library start reloc func");
+                let res = reloc.call(store.as_context_mut(), ());
+                println!("[debug] library reloc result: {:?}", res);
+
+                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    println!("[debug] library start __wasm_apply_tls_relocs");
+                    let res = init.call(store.as_context_mut(), ());
+                    println!("[debug] library __wasm_apply_tls_relocs result: {:?}", res);
+                }
 
                 println!("[debug] library instance");
                 self.instance(store, module_name, instance)
@@ -1037,6 +1054,9 @@ impl<T> Linker<T> {
                 let handler = memory_base.get_handler_as_u32(&mut store);
                 let table_base = Global::new(&mut store, GlobalType::new(ValType::I32, crate::Mutability::Const), Val::I32(table_base)).unwrap();
                 module_linker.define(&mut store, "env", "__table_base", table_base);
+
+                // TODO: temporarily direct unknown imports into traps
+                module_linker.define_unknown_imports_as_traps(module);
 
                 println!("[debug] library instantiate");
                 let (instance, _) = module_linker.instantiate_with_lind(&mut store, &module, InstantiateType::InstantiateLib(handler))?;
@@ -1306,6 +1326,12 @@ impl<T> Linker<T> {
                 bail!("import of `{}` defined twice", desc)
             }
             Entry::Occupied(mut o) => {
+                let module = &self.strings[key.module];
+                let desc = match self.strings.get(key.name) {
+                    Some(name) => format!("{}::{}", module, name),
+                    None => module.to_string(),
+                };
+                println!("[debug]: warning: {:?} definition overwrite", desc);
                 o.insert(item);
             }
             Entry::Vacant(v) => {

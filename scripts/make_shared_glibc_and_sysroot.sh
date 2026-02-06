@@ -3319,5 +3319,5 @@ wasm-ld \
     --export-if-defined=__lind_init_addr_translation \
     --export-if-defined="__wasm_apply_tls_relocs" \
     --export-if-defined=environ \
-    $filtered_objects -o "$SYSROOT/lib/wasm32-wasi/libc.wasm"
+    $filtered_objects -o "$SYSROOT/lib/wasm32-wasi/glibc.wasm"
 

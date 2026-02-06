@@ -6,6 +6,7 @@
 )]
 
 use cfg_if::cfg_if;
+use sysdefs::constants::LIND_ROOT;
 
 use crate::common::{Profile, RunCommon, RunTarget};
 
@@ -340,7 +341,7 @@ impl RunCommand {
                 // calculate the stack address for main module
                 // println!("[debug]: main module memory size: {}", memory_size);
                 let stack_low_num = memory_size as i32 + 1024; // reserve first 1024 bytes for guard page
-                let stack_high_num = stack_low_num + 65536; // stack size
+                let stack_high_num = stack_low_num + 8388608; // 8 MB of default stack size
                 println!("[debug] main module stack pointer starts from {}", stack_high_num);
                 let stack_low = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_low_num)).unwrap();
                 let stack_high = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
@@ -499,7 +500,9 @@ impl RunCommand {
         if let RunTarget::Core(m) = &main {
             modules.push((String::new(), m.clone()));
         }
+        println!("[debug]: preload list: {:?}", self.preloads);
         for (name, path) in self.preloads.iter() {
+            println!("[debug]: preload {}", name);
             // Read the wasm module binary either as `*.wat` or a raw binary
             let module = match self.run.load_module(&engine, path)? {
                 RunTarget::Core(m) => m,
@@ -507,9 +510,19 @@ impl RunCommand {
                 RunTarget::Component(_) => bail!("components cannot be loaded with `--preload`"),
             };
             modules.push((name.clone(), module.clone()));
+        }
+
+        // before load all libraries, let define the GOT entries
+        for (name, module) in modules.iter().skip(1) {
+            let mut linker_guard = linker.lock().unwrap();
+            if let CliLinker::Core(linker) = &mut *linker_guard {
+                let mut got_guard = lind_got.lock().unwrap();
+                linker.define_GOT_dispatcher(&mut store, &module, &mut *got_guard);
+            }
+        }
 
             // Add the module's functions to the linker.
-
+            for (name, module) in modules.iter().skip(1) {
             {
                 let mut guard = linker.lock().unwrap();
                 match &mut *guard {
@@ -522,7 +535,7 @@ impl RunCommand {
                         let table_start = table.size(&mut store) as i32;
 
                         for (name, val) in module.raw_exports() {
-                            println!("[debug]: library export {:?}: {:?}", name, val);
+                            // println!("[debug]: library export {:?}: {:?}", name, val);
                             // match name.as_str() {
                             //     "__wasm_apply_data_relocs" => { continue; }
                             //     _ => {}
@@ -554,10 +567,10 @@ impl RunCommand {
                         // linker.define(&mut store, name, "__indirect_function_table", table);
 
                         // link GOT entries
-                        {
-                            let mut guard = lind_got.lock().unwrap();
-                            linker.define_GOT_dispatcher(&mut store, &module, &mut *guard);
-                        }
+                        // {
+                        //     let mut guard = lind_got.lock().unwrap();
+                        //     linker.define_GOT_dispatcher(&mut store, &module, &mut *guard);
+                        // }
 
                         // let mut module_linker = linker.clone();
                         // module_linker.define(&mut store, "env", "__table_base", table_base);
@@ -566,10 +579,9 @@ impl RunCommand {
                         // link other instances of the library into the main linker
                         {
                             let mut guard = lind_got.lock().unwrap();
-                            linker.module(&mut store, name, &module, &mut table, table_start, &*guard).context(format!(
-                                "failed to process preload `{}` at `{}`",
+                            linker.module(&mut store, &name, &module, &mut table, table_start, &*guard).context(format!(
+                                "failed to process preload `{}`",
                                 name,
-                                path.display()
                             ))?;
                         }
                     }
@@ -593,6 +605,11 @@ impl RunCommand {
                     linker.define_unknown_imports_as_traps(module);
                 }
             }
+        }
+
+        {
+            let mut guard = lind_got.lock().unwrap();
+            guard.warning_undefined();
         }
 
         // Pre-emptively initialize and install a Tokio runtime ambiently in the
@@ -1210,9 +1227,17 @@ impl RunCommand {
         let engine = main_module.engine();
         // let mut store = main_module.as_context_mut();
 
+        let base_path = Path::new(LIND_ROOT);
+        let library_path = Path::new(library_name);
+        let library_path = library_path.strip_prefix("/").unwrap_or(library_path);
+
+        let library_full_path = base_path.join(library_path);
+        let library_full_path_str = library_full_path.to_str().unwrap();
+        println!("[debug] base_path: {:?}, library_full_path: {:?}", base_path, library_full_path);
+
         let library = self
             .run
-            .load_module(&engine, Path::new(library_name)).unwrap();
+            .load_module(&engine, Path::new(library_full_path_str)).unwrap();
         let lib_module = match library {
             RunTarget::Core(module) => module,
             _ => { unreachable!() }
@@ -1236,9 +1261,9 @@ impl RunCommand {
 
                     {
                         let mut guard = lind_got.lock().unwrap();
-                        handle = linker.module_dyn(&mut main_module, library_name, &lib_module, table_size as i32, &*guard).context(format!(
+                        handle = linker.module_dyn(&mut main_module, library_full_path_str, &lib_module, table_size as i32, &*guard).context(format!(
                             "failed to process library `{}`",
-                            library_name
+                            library_full_path_str
                         )).unwrap();
                     }
                 },
