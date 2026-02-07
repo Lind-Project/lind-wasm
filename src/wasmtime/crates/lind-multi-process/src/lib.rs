@@ -1486,15 +1486,12 @@ pub fn exec_syscall<
 /// bridging execution back from the Lind / RawPOSIX world into Wasmtime.
 ///
 /// Conceptually, the execution flow is:
-///
-/// ```text
 ///   Wasm
 ///     -> Wasmtime lind-common trampoline
-///     -> 3i dispatch
+///     -> 3i dispatch with grateid=RAWPOSIX
 ///     -> RawPOSIX syscall handling
-///     -> 3i dispatch
+///     -> 3i dispatch with grateid=WASMTIME
 ///     -> **back to Wasmtime**
-/// ```
 ///
 /// During `lind-boot` initialization, this function is extracted as a raw
 /// `u64` function pointer and registered into the **3i handler table**.
@@ -1543,22 +1540,13 @@ where
     U: Clone + Send + Sync + 'static,
 {
     unsafe {
-        // Resolve the correct VMContext wrapper based on thread identity.
-        // The main thread (tid == 1) uses the main thread's VMContext, while
-        // other threads use their per-thread VMContext entries.
-        let vmctx_wrapper: VmCtxWrapper = if tid == 1 {
-            match get_vmctx(exit_code_cageid) {
-                Some(v) => v,
-                None => {
-                    panic!("no VMContext found for cage_id {}", exit_code_cageid);
-                }
-            }
-        } else {
-            match get_vmctx_thread(exit_code_cageid, tid) {
-                Some(v) => v,
-                None => {
-                    panic!("no VMContext found for cage_id {}", exit_code_cageid);
-                }
+        // Resolve the correct VMContext wrapper based on thread id.
+        // Since `exit` is thread-specific, we always use `tid` to resolve the context,
+        // even for the main thread (`tid == 1`).
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx_thread(exit_code_cageid, tid) {
+            Some(v) => v,
+            None => {
+                panic!("no VMContext found for cage_id {}", exit_code_cageid);
             }
         };
 
