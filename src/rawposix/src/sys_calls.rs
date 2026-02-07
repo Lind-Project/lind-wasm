@@ -170,7 +170,12 @@ pub extern "C" fn fork_syscall(
         );
     }
 
-    // Delegate execution back to Wasmtime via 3i.
+    // Delegate execution back to binary runtime (currently only support Wasmtime,
+    // but could be extended to other runtime ie: MPK in the future) via 3i.
+    //
+    // Call from RawPOSIX (selfcageid = RawPOSIX_CAGEID) into
+    // Wasmtime(targetcageid = WASMTIME_CAGEID)
+    // to complete the clone/fork operation.
     //
     // Wasmtime will:
     //   - Resolve the correct VMContext

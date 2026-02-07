@@ -398,7 +398,7 @@ impl<
                     };
 
                     // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
-                    let rc = set_vmctx(child_cageid, vmctx_wrapper);
+                    let rc = set_vmctx_thread(child_cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
                     // 4) Notify threei of the cage runtime type
                     threei::set_cage_runtime(child_cageid, threei_const::RUNTIME_TYPE_WASMTIME);
@@ -479,14 +479,7 @@ impl<
                             .get(0)
                             .expect("_start function does not have a return value");
                         match exit_code {
-                            Val::I32(val) => {
-                                if !rm_vmctx(child_cageid as u64) {
-                                    panic!(
-                                        "[wasmtime|fork] Failed to remove existing VMContext for cage_id {}",
-                                        child_cageid
-                                    );
-                                }
-                            }
+                            Val::I32(val) => {}
                             _ => {
                                 eprintln!("unexpected _start function return type!");
                             }
@@ -1360,12 +1353,11 @@ pub fn catch_rewind<
 /// complete cloning semantics that must be implemented inside the runtime.
 ///
 /// Conceptually, the execution flow is:
-///
 ///   Wasm
 ///     -> Wasmtime lind-common trampoline
-///     -> 3i dispatch
+///     -> 3i dispatch with grateid=RAWPOSIX
 ///     -> RawPOSIX syscall handling (decides fork vs thread)
-///     -> 3i dispatch
+///     -> 3i dispatch with grateid=WASMTIME
 ///     -> **back to Wasmtime (this function)**
 ///         -> lind_fork / lind_pthread_create
 ///
@@ -1384,14 +1376,8 @@ pub fn catch_rewind<
 /// ## VMContext resolution
 ///
 /// We must re-enter the correct Wasmtime instance/thread, so we resolve the
-/// appropriate `VMContext` using the parent cage and (when needed) the parent tid:
-///
-/// - If this is a **process clone** (`CLONE_VM` not set), we use the main thread VMContext.
-/// - If this is a **thread clone**, we use the per-thread VMContext for `parent_tid`,
-///   except that `parent_tid == 1` uses the cage-level VMContext.
-///
-/// This ensures the runtime re-entry occurs on the correct execution context
-/// before invoking `lind_fork` / `lind_pthread_create`.
+/// appropriate `VMContext` using the parent cage and the parent tid from the active
+/// per-thread VMContext table. See more details on [lind-3i/src/lib.rs].
 pub fn clone_syscall<T, U>(
     cageid: u64,
     clone_arg: u64,
@@ -1426,19 +1412,10 @@ where
         // For fork-like clones we always use cage-level VMContext.
         // For thread clones we use the per-thread VMContext of `parent_tid`,
         // except that `parent_tid == 1` uses cage-level VMContext.
-        let vmctx_wrapper: VmCtxWrapper = if isthread == 0 || parent_tid == 1 {
-            match get_vmctx(parent_cageid) {
-                Some(v) => v,
-                None => {
-                    panic!("no VMContext found for cage_id {}", parent_cageid);
-                }
-            }
-        } else {
-            match get_vmctx_thread(parent_cageid, parent_tid) {
-                Some(v) => v,
-                None => {
-                    panic!("no VMContext found for cage_id {}", parent_cageid);
-                }
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx_thread(parent_cageid, parent_tid) {
+            Some(v) => v,
+            None => {
+                panic!("no VMContext found for cage_id {}", parent_cageid);
             }
         };
 
@@ -1446,7 +1423,7 @@ where
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
         let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
 
-        Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
+        let ret = Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
             if isthread == 0 {
                 // fork
                 match lind_fork(&mut caller, child_cageid) {
@@ -1466,9 +1443,10 @@ where
                 }
             }
         });
-    }
 
-    0
+        set_vmctx_thread(parent_cageid, parent_tid, vmctx_wrapper);
+        return ret;
+    }
 }
 
 // entry point of exec_syscall, called by lind-common
