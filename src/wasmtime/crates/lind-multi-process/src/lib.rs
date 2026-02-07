@@ -1488,12 +1488,13 @@ where
     U: Clone + Send + Sync + 'static,
 {
     unsafe {
-        let vmctx_wrapper: VmCtxWrapper = match get_vmctx(path_cageid) {
-            Some(v) => v,
-            None => {
-                panic!("no VMContext found for cage_id {}", path_cageid);
-            }
-        };
+        let vmctx_wrapper: VmCtxWrapper =
+            match get_vmctx_thread(path_cageid, THREAD_START_ID as u64) {
+                Some(v) => v,
+                None => {
+                    panic!("no VMContext found for cage_id {}", path_cageid);
+                }
+            };
         // Convert back to VMContext
         let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 
