@@ -259,7 +259,10 @@ pub fn check_addr_read(cageid: u64, addr: u64, length: usize) -> Result<bool, Er
     let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let mut vmmap = cage.vmmap.write();
 
-    if vmmap.check_addr_read(addr, length) {
+    let base_addr = vmmap.base_address.unwrap() as u64;
+    let uaddr = addr - base_addr;
+
+    if vmmap.check_addr_read(uaddr, length) {
         Ok(true)
     } else {
         Err(Errno::EFAULT)
@@ -284,7 +287,10 @@ pub fn check_addr_write(cageid: u64, addr: u64, length: usize) -> Result<bool, E
     let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let mut vmmap = cage.vmmap.write();
 
-    if vmmap.check_addr_write(addr, length) {
+    let base_addr = vmmap.base_address.unwrap() as u64;
+    let uaddr = addr - base_addr;
+
+    if vmmap.check_addr_write(uaddr, length) {
         Ok(true)
     } else {
         Err(Errno::EFAULT)
@@ -309,7 +315,10 @@ pub fn check_addr_rw(cageid: u64, addr: u64, length: usize) -> Result<bool, Errn
     let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
     let mut vmmap = cage.vmmap.write();
 
-    if vmmap.check_addr_rw(addr, length) {
+    let base_addr = vmmap.base_address.unwrap() as u64;
+    let uaddr = addr - base_addr;
+
+    if vmmap.check_addr_rw(uaddr, length) {
         Ok(true)
     } else {
         Err(Errno::EFAULT)
