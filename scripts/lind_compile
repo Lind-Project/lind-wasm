@@ -190,6 +190,7 @@ esac
 CLANG_BIN="clang"  # must be on PATH
 WASM_OPT_BIN="${REPO_ROOT}/tools/binaryen/bin/wasm-opt"
 LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
+LINDFS_ROOT="${REPO_ROOT}/lindfs"
 if [[ ! -x "${LINDBOOT_BIN}" ]]; then
   echo "ERROR: lind-boot missing: ${LINDBOOT_BIN}" >&2
   exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
@@ -229,15 +230,21 @@ do_optimize() {
 #   run_cmd "${LINDBOOT_BIN}" compile "${OUT_WASM}" -o "${OUT_CWASM}"
 # }
 
+cp_to_lindfs() {
+  cp "${OUT_WASM}" "${LINDFS_ROOT}"
+}
+
 # --- run selected pipeline ---
 case "${MODE}" in
   full)
     do_compile
     do_optimize
     # do_precompile
+    cp_to_lindfs
     ;;
   "compile-only")
     do_compile
+    cp_to_lindfs
     ;;
   "opt-only")
     do_optimize

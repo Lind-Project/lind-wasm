@@ -1,6 +1,5 @@
 use clap::*;
 
-/// Simple program to greet a person
 #[derive(Debug, Parser, Clone)]
 #[command(name = "lind-boot")]
 pub struct CliOptions {
