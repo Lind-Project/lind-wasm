@@ -399,7 +399,13 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 #   the first line in stdout by the script which is the command itself
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
-    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file]
+    # Convert wasm_file path relative to lindfs. If this fails, propagate the error.
+    try:
+        wasm_file_relative = wasm_file.relative_to(LINDFS_ROOT)
+    except ValueError as e:
+        return (".wasm file not found in LINDFS_ROOT", f"Exception: {str(e)}")
+    
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file_relative]
     
     logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
@@ -1048,7 +1054,7 @@ def parse_arguments():
     parser.add_argument("--testfiles", type=Path, nargs = "+", help="Run one or more specific test files")
     parser.add_argument("--debug", action="store_true", help="Enable detailed stdout/stderr output for subprocesses")
     parser.add_argument("--allow-pre-compiled", action="store_true", dest="allow_pre_compiled", help="Allow compiling/running precompiled .cwasm files (default: .wasm)")
-    parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
+    parser.add_argument("--artifacts-dir", default="", help="Directory to store build artifacts. This path is created within LINDFS_ROOT")
     parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
 
     args = parser.parse_args()
@@ -1142,6 +1148,7 @@ def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None):
 # ----------------------------------------------------------------------
 def setup_test_environment(args):
     """Setup test environment and return configuration"""
+
     config = {
         'skip_folders_paths': [Path(sf) for sf in args.skip],
         'run_folders_paths': [Path(rf) for rf in args.run],
@@ -1282,6 +1289,9 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
 
 def main():
     os.chdir(LIND_WASM_BASE)
+    # Ensure that LINDFS_ROOT exists before compiling/running tests.
+    LINDFS_ROOT.mkdir(exist_ok=True)
+    
     args = parse_arguments()
     skip_folders = args.skip
     run_folders = args.run
@@ -1323,7 +1333,7 @@ def main():
     # Prepare artifacts root
     created_temp_dir = False
     if artifacts_dir_arg:
-        artifacts_root = artifacts_dir_arg.resolve()
+        artifacts_root = LINDFS_ROOT / artifacts_dir_arg
         try:
             artifacts_root.mkdir(parents=True, exist_ok=True)
             # Test writability using tempfile
@@ -1334,7 +1344,7 @@ def main():
             return
     else:
         try:
-            artifacts_root = Path(tempfile.mkdtemp(prefix="wasmtest_artifacts_"))
+            artifacts_root = Path(tempfile.mkdtemp(dir=LINDFS_ROOT, prefix="wasmtest_artifacts_"))
             created_temp_dir = True
         except OSError as e:
             logger.error(f"Cannot create temporary artifacts directory: {e}")
