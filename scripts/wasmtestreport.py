@@ -51,7 +51,6 @@ TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
 TESTFILES_SRC = LIND_WASM_BASE / "tests" / "testfiles"
 TESTFILES_DST = LINDFS_ROOT / "testfiles"
 DETERMINISTIC_PARENT_NAME = "deterministic"
-NON_DETERMINISTIC_PARENT_NAME = "non-deterministic"
 FAIL_PARENT_NAME = "fail"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
@@ -565,7 +564,6 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
                     )
                     add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info)
             else:
-                # Non-deterministic test - just check it ran successfully
                 handler.add_success(wasm_output)
     
     finally:
@@ -1245,8 +1243,8 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         elif parent_name == FAIL_PARENT_NAME:
             test_single_file_fail(dest_source, results["fail"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         else:
-            # Log warning for tests not in deterministic/non-deterministic/fail folders
-            logger.warning(f"Test file {original_source} is not in a deterministic, non-deterministic, or fail folder - skipping")
+            # Log warning for tests not in deterministic/fail folders
+            logger.warning(f"Test file {original_source} is not in a deterministic or fail folder - skipping")
 
 def build_fail_message(case: str, native_output: str, wasm_output: str, native_retcode=None, wasm_retcode=None) -> str:
     """
@@ -1326,7 +1324,6 @@ def main():
 
     results = {
         "deterministic": get_empty_result(),
-        "non_deterministic": get_empty_result(),
         "fail": get_empty_result()
     }
 
