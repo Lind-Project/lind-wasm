@@ -10,7 +10,7 @@ use sysdefs::constants::lind_platform_const::{RAWPOSIX_CAGEID, WASMTIME_CAGEID};
 use threei::threei_const;
 use wasi_common::sync::WasiCtxBuilder;
 use wasmtime::{AsContextMut, Engine, Func, InstantiateType, Linker, Module, Store, Val, ValType};
-use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx};
+use wasmtime_lind_3i::{VmCtxWrapper, init_vmctx_pool, rm_vmctx, set_vmctx, set_vmctx_thread};
 use wasmtime_lind_multi_process::{CAGE_START_ID, LindCtx, THREAD_START_ID};
 use wasmtime_lind_utils::LindCageManager;
 use wasmtime_wasi_threads::WasiThreadsCtx;
@@ -34,11 +34,11 @@ use wasmtime_wasi_threads::WasiThreadsCtx;
 /// the parent process's handler table into the child, so children automatically
 /// inherit all registered handlers without additional registration. In contrast,
 /// `exec()` replaces the guest program within an existing cage and does not require
-/// rebuilding the handler table. Specail needs will be handled per user request in
+/// rebuilding the handler table. Special needs will be handled per user request in
 /// their implementation through `register_handler` via glibc.
 ///
 /// After initialization, the function attaches all host-side APIs (WASI preview1,
-/// WASI threads, and Lind contexts) to the linker, instantiates the module into the
+/// WASI threads, and Lind contexts) to the wasmtime linker, instantiates the module into the
 /// starting cage, and runs the program's entrypoint. On successful completion it
 /// waits for all cages to exit before shutting down RawPOSIX, ensuring runtime-wide
 /// cleanup happens only after the last process terminates.
@@ -445,9 +445,9 @@ fn load_main_module(
         vmctx: NonNull::new(vmctx_ptr).ok_or_else(|| anyhow!("null vmctx"))?,
     };
 
-    // 3) Store the vmctx wrapper in the global table for later retrieval during grate calls
+    // 3) Store the vmctx wrapper in the global table for later retrieval during grate calls or other syscalls
     // This function will be called at either the first cage or exec-ed cages.
-    set_vmctx(cageid, vmctx_wrapper);
+    set_vmctx_thread(cageid, THREAD_START_ID as u64, vmctx_wrapper);
 
     // 4) Notify threei of the cage runtime type
     threei::set_cage_runtime(cageid, threei_const::RUNTIME_TYPE_WASMTIME);
