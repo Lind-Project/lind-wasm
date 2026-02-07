@@ -1381,18 +1381,22 @@ pub fn shutdown_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getsockname.2.html
 ///
 /// The Linux `getsockname()` syscall retrieves the current address to which the socket
-/// is bound.  
-/// This implementation resolves the virtual file descriptor to the host kernel file descriptor,
-/// converts the user-space sockaddr structure into its host representation, and invokes
-/// the host kernel `getsockname()`.
+/// is bound.
+///
+/// This implementation follows the isolation pattern: instead of letting the kernel write
+/// directly to guest memory, we use an intermediate host-side buffer. The kernel writes
+/// to `sockaddr_storage`, then we use `copy_out_sockaddr()` to translate and copy the
+/// result into the guest's SockAddr structure. This ensures proper isolation and allows
+/// for any necessary path transformations (e.g., for Unix domain sockets in chroot).
 ///
 /// ## Input:
 ///     - cageid: identifier of the current cage
 ///     - fd_arg: virtual file descriptor of the socket
-///     - addr_arg: pointer to a buffer in user space where the address will be stored
+///     - addr_arg: pointer to a SockAddr buffer in user space where the address will be stored
+///     - addrlen_arg: pointer to socklen_t in user space (input: buffer size, output: actual size)
 ///
 /// ## Return:
-///     - On success: 0  
+///     - On success: 0
 ///     - On failure: negative errno indicating the error
 pub fn getsockname_syscall(
     cageid: u64,
@@ -1400,8 +1404,8 @@ pub fn getsockname_syscall(
     fd_cageid: u64,
     addr_arg: u64,
     addr_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
+    addrlen_arg: u64,
+    addrlen_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -1410,12 +1414,12 @@ pub fn getsockname_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = addr_arg as *mut u8;
+    let user_addr = addr_arg as *mut SockAddr;
+    let lenp = addrlen_arg as *mut socklen_t;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
+    if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
@@ -1425,13 +1429,35 @@ pub fn getsockname_syscall(
         );
     }
 
-    let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
+    if lenp.is_null() {
+        return syscall_error(Errno::EFAULT, "getsockname_syscall", "len is null");
+    }
 
-    let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, addrlen as *mut u32) };
+    // Read initial length and clamp to storage size
+    let mut len: socklen_t = unsafe { *lenp };
+    let max_len = mem::size_of::<sockaddr_storage>() as socklen_t;
+    if len > max_len {
+        len = max_len;
+    }
+
+    // Call kernel into temporary buffer (avoid writing into SockAddr directly)
+    let mut storage: sockaddr_storage = unsafe { mem::zeroed() };
+    let ret = unsafe {
+        libc::getsockname(
+            fd as i32,
+            &mut storage as *mut _ as *mut sockaddr,
+            &mut len as *mut socklen_t,
+        )
+    };
 
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getsockname");
+    }
+
+    // Copy into guest-visible SockAddr wrapper + write back len
+    unsafe {
+        copy_out_sockaddr(user_addr, lenp, &storage);
     }
 
     ret

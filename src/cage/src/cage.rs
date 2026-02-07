@@ -227,7 +227,7 @@ mod tests {
             vmmap: RwLock::new(crate::memory::vmmap::Vmmap::new()),
         };
 
-        add_cage(2, tet_cage);
+        add_cage(2, test_cage);
 
         let result = get_cage(2);
         assert_eq!(

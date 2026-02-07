@@ -1128,6 +1128,43 @@ impl<T> Linker<T> {
             .instantiate(store)
     }
 
+    /// Instantiates a Wasm module as a new lind-wasm thread and returns both the created instance
+    /// and its `InstanceId`. This function is used when creating a new thread within an existing cage.
+    /// Unlike cage creation, thread instantiation does not require any lind-specific memory initialization
+    /// or vmmap manipulation, because the thread executes within an already-established address space.
+    ///
+    /// The primary difference from Wasmtime’s standard instantiation path is that this function returns
+    /// the `InstanceId`. Lind-3i relies on the `InstanceId` to later recover the `VMContext` pointer
+    /// associated with this thread, enabling cross-cage and cross-grate runtime transfers.
+    ///
+    /// Internally, this function reuses Wasmtime’s pre-instantiation logic and delegates the actual
+    /// instantiation to `instantiate_with_lind_thread` on the prepared instance, minimizing
+    /// divergence from upstream Wasmtime behavior.
+    pub fn instantiate_with_lind_thread(
+        &self,
+        mut store: impl AsContextMut<Data = T>,
+        module: &Module,
+    ) -> Result<(Instance, InstanceId)> {
+        self._instantiate_pre(module, Some(store.as_context_mut().0))?
+            .instantiate_with_lind_thread(store)
+    }
+
+    /// Instantiates a Wasm module as a new lind-wasm cage and returns both the created instance and
+    /// its `InstanceId`.
+    ///
+    /// This function extends Wasmtime’s standard instantiation path with lind-wasm–specific initialization
+    /// logic required for correct RawPOSIX semantics. Depending on `InstantiateType`, this may involve
+    /// initializing the first cage’s linear memory, setting up vmmap state, or cloning an existing cage’s
+    /// memory when implementing `fork` semantics.
+    ///
+    /// As with thread instantiation, this function returns the `InstanceId` so that lind-3i can later obtain
+    /// the corresponding `VMContext` pointer and re-enter the correct Wasmtime runtime state during cross-cage
+    /// or cross-grate execution.
+    ///
+    /// The separation between `instantiate_with_lind` and `instantiate_with_lind_thread` is intentional:
+    /// cage creation and thread creation have different memory semantics in lind-wasm, and keeping them
+    /// as distinct entry points minimizes changes to upstream Wasmtime code while making the required
+    /// lind-specific behavior explicit.
     pub fn instantiate_with_lind(
         &self,
         mut store: impl AsContextMut<Data = T>,

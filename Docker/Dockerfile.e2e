@@ -114,14 +114,19 @@ RUN make sysroot
 
 # Build Docker image that includes the full lind-wasm toolchain
 # NOTE: Lind-wasm source code is not included
+# Build Docker image that includes the full lind-wasm toolchain
+# NOTE: Lind-wasm source code is not included
 FROM base AS release
-COPY --from=build-wasmtime --parents  src/wasmtime/target .
+
+COPY --from=build-wasmtime --parents src/wasmtime/target .
 COPY --from=build-wasmtime --parents build/wasmtime .
+RUN chmod 0755 /build/wasmtime
 COPY --from=build-glibc --parents src/glibc/sysroot .
 COPY --from=build-glibc --parents build/sysroot .
 COPY --parents scripts tests tools skip_test_cases.txt .
 
 ENV LIND_WASM_ROOT=/
+
 RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
  && install -D -m 0755 /scripts/lind_run     /usr/local/bin/lind_run     \
  && ln -sf /usr/local/bin/lind_compile /usr/local/bin/lind-clang \
@@ -131,14 +136,17 @@ RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
 # Run all tests, print results, and exit with 1, if any test fails; 0 otherwise
 FROM base AS test
 COPY --parents scripts tests tools skip_test_cases.txt Makefile .
+RUN chmod 0755 /scripts/wasmtestreport.py /scripts/lind_compile /scripts/lind_run
 # Create symlink so hardcoded paths in wasmtime match Docker environment
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time
 # and cache layers. This means they are not preserved in the resulting image.
 RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmtime/target \
+    --mount=from=build-wasmtime,source=build/wasmtime,destination=/build/wasmtime \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
     make test && \
     OUT_DIR=/ REPORT_PATH=/report.html make md_generation
+
 
 FROM scratch AS artifacts
 COPY --from=test /report.html /wasm-e2e-report.html

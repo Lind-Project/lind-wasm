@@ -11,7 +11,6 @@ use libc::{
 };
 use std::os::raw::{c_char, c_void};
 use std::ptr;
-use sysdefs::constants::lind_platform_const::LIND_ROOT;
 use sysdefs::constants::net_const::AF_UNIX;
 use sysdefs::constants::{syscall_error, Errno};
 use sysdefs::data::net_struct::{SockAddr, SockPair};
@@ -57,16 +56,12 @@ unsafe fn unix_len_from_sun_path(sun_path: &[i8; 108]) -> libc::socklen_t {
     }
 }
 
-/// `convert_host_sockaddr` first interprets the incoming pointer as a sockaddr buffer
-/// and clones just the bytes it needs into our internal `SockAddr` helper so we can
-/// safely inspect `sa_family` and, for `AF_UNIX`, stage any path rewriting without
-/// risking accidental corruption of the caller’s memory. That local `SockAddr` is
-/// used to decide what the correct `socklen_t` should be and, in the `AF_UNIX` case,
-/// to compute and prepare the prefixed path. After that decision, the function
-/// performs any required edits in place on the original buffer (e.g., shifting the
-/// existing path, inserting the `LIND_ROOT` prefix, zero-filling the tail, and
-/// ensuring the family field is consistent), then returns the original pointer
-/// (now containing the modified bytes) together with the computed length.
+/// `convert_host_sockaddr` interprets the incoming pointer as a sockaddr buffer                                                                                                             
+/// and clones just the bytes it needs into our internal `SockAddr` helper so we can                                                                                                         
+/// safely inspect `sa_family`. That local `SockAddr` is used to decide what the                                                                                                             
+/// correct `socklen_t` should be. For `AF_UNIX` addresses, the function computes                                                                                                            
+/// the proper length according to Linux kernel rules. The function returns the                                                                                                              
+/// original pointer together with the computed length.
 pub fn convert_host_sockaddr(
     arg: *mut u8,
     arg_cageid: u64,
@@ -91,43 +86,6 @@ pub fn convert_host_sockaddr(
     let mut out_len: libc::socklen_t = 0;
 
     if (saddr.sun_family as i32) == AF_UNIX {
-        unsafe {
-            // Point to the start of `sun_path` inside the *original* buffer.
-            // On Linux, `sa_family_t` is u16, so `sun_path` is immediately after 2 bytes.
-            let sun_path_ptr = (arg.add(size_of::<libc::sa_family_t>())) as *mut i8;
-
-            // Current path length (for pathname form this is strlen; for abstract form this is 0).
-            let path_len = strlen(sun_path_ptr);
-
-            // We prefix with LIND_ROOT if it fits; compute the final length in bytes.
-            let lind_root_len = LIND_ROOT.len();
-            let new_path_len = path_len + lind_root_len;
-
-            // Only rewrite in place if the prefixed path still fits into the 108-byte sun_path.
-            if new_path_len < 108 {
-                // Shift existing bytes forward to make room for the prefix.
-                ptr::copy(sun_path_ptr, sun_path_ptr.add(lind_root_len), path_len);
-                // Write the prefix at the start
-                ptr::copy_nonoverlapping(
-                    LIND_ROOT.as_ptr(),
-                    sun_path_ptr as *mut u8,
-                    lind_root_len,
-                );
-                // Zero-fill the remaining tail
-                ptr::write_bytes(sun_path_ptr.add(new_path_len), 0, 108 - new_path_len);
-
-                // Keep our local mirror in sync for length calculation
-                saddr.sun_path[..new_path_len]
-                    .copy_from_slice(core::slice::from_raw_parts(sun_path_ptr, new_path_len));
-                for b in &mut saddr.sun_path[new_path_len..] {
-                    *b = 0;
-                }
-            }
-
-            // Ensure the family field at the head of the original buffer is consistent.
-            ptr::write_unaligned(arg as *mut u16, saddr.sun_family);
-        }
-
         out_len = unsafe { unix_len_from_sun_path(&saddr.sun_path) };
     } else {
         // Non-UNIX families: we don’t modify the buffer; length is the canonical sizeof(*).
