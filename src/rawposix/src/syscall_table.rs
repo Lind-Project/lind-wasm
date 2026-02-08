@@ -3,8 +3,7 @@
 //! https://github.com/torvalds/linux/blob/v6.16-rc1/arch/x86/entry/syscalls/syscall_64.tbl
 //! https://filippo.io/linux-syscall-table/
 //! Keep these in sync with glibc's lind_syscall_num.h
-use super::threei::RawCallFunc;
-use rawposix::fs_calls::{
+use super::fs_calls::{
     access_syscall, brk_syscall, chdir_syscall, chmod_syscall, clock_gettime_syscall,
     close_syscall, dup2_syscall, dup3_syscall, dup_syscall, fchdir_syscall, fchmod_syscall,
     fcntl_syscall, fdatasync_syscall, flock_syscall, fstat_syscall, fstatfs_syscall, fsync_syscall,
@@ -16,14 +15,15 @@ use rawposix::fs_calls::{
     stat_syscall, statfs_syscall, sync_file_range_syscall, truncate_syscall, unlink_syscall,
     unlinkat_syscall, write_syscall, writev_syscall,
 };
-use rawposix::net_calls::{
+use super::init::RawCallFunc;
+use super::net_calls::{
     accept_syscall, bind_syscall, connect_syscall, epoll_create1_syscall, epoll_create_syscall,
     epoll_ctl_syscall, epoll_wait_syscall, gethostname_syscall, getpeername_syscall,
     getsockname_syscall, getsockopt_syscall, listen_syscall, poll_syscall, recvfrom_syscall,
     select_syscall, sendto_syscall, setsockopt_syscall, shutdown_syscall, socket_syscall,
     socketpair_syscall,
 };
-use rawposix::sys_calls::{
+use super::sys_calls::{
     exec_syscall, exit_syscall, fork_syscall, getegid_syscall, geteuid_syscall, getgid_syscall,
     getpid_syscall, getppid_syscall, getuid_syscall, kill_syscall, sched_yield_syscall,
     setitimer_syscall, sigaction_syscall, sigprocmask_syscall, waitpid_syscall,
@@ -73,6 +73,7 @@ pub const SYSCALL_TABLE: &[(u64, RawCallFunc)] = &[
     (53, socketpair_syscall),
     (54, setsockopt_syscall),
     (55, getsockopt_syscall),
+    (56, fork_syscall),
     (57, fork_syscall),
     (59, exec_syscall),
     (60, exit_syscall),

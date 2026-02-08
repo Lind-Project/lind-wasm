@@ -56,9 +56,6 @@ pub fn add_to_linker<
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
-            // 2. call clone_syscall / exec_syscall / exit_syscall from rawposix first instead of wasmtime_lind_multi_process in
-            // the future PR
-
             match call_number as i32 {
                 // clone syscall
                 CLONE_SYSCALL => {

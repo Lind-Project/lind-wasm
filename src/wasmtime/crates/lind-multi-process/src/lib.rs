@@ -69,8 +69,8 @@ pub struct LindCtx<T, U> {
     // used to keep track of how many active cages are running
     lind_manager: Arc<LindCageManager>,
 
-    // from run.rs, used for exec call
-    run_command: U,
+    // from lind-boot, used for exec call
+    lindboot_cli: U,
 
     // get LindCtx from host
     get_cx: Arc<dyn Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static>,
@@ -104,8 +104,8 @@ impl<
     // * module: wasmtime module object, used to fork a new instance
     // * linker: wasmtime function linker. Used to link the imported functions
     // * lind_manager: global lind cage counter. Used to make sure the wasmtime runtime would only exit after all cages have exited
-    // * run_command: used by exec closure below.
-    // * cageid: cageid(cageid) associated with the context
+    // * lindboot_cli: used by exec closure below.
+    // * cageid: cageid associated with the context
     // * get_cx: get lindContext from Host object
     // * fork_host: closure to fork a host
     // * exec: closure for the exec syscall entry
@@ -113,7 +113,7 @@ impl<
         module: Module,
         linker: Linker<T>,
         lind_manager: Arc<LindCageManager>,
-        run_command: U,
+        lindboot_cli: U,
         cageid: Option<i32>,
         get_cx: impl Fn(&mut T) -> &mut LindCtx<T, U> + Send + Sync + 'static,
         fork_host: impl Fn(&T) -> T + Send + Sync + 'static,
@@ -147,7 +147,7 @@ impl<
             tid,
             next_threadid,
             lind_manager: lind_manager.clone(),
-            run_command,
+            lindboot_cli,
             get_cx,
             fork_host,
             exec_host,
@@ -1011,7 +1011,7 @@ impl<
 
         let store = caller.as_context_mut().0;
 
-        let cloned_run_command = self.run_command.clone();
+        let cloned_lindboot_cli = self.lindboot_cli.clone();
         let cloned_lind_manager = self.lind_manager.clone();
         let cloned_cageid = self.cageid;
 
@@ -1024,31 +1024,15 @@ impl<
             // for exec, we do not need to do rewind after unwinding is done
             store.set_asyncify_state(AsyncifyState::Normal);
 
-            // to-do: exec should not change the process id/cage id, however, the exec call from rustposix takes an
-            // argument to change the process id. If we pass the same cageid, it would cause some error
-            // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
-            // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
-            make_syscall(
-                cloned_cageid as u64,  // self cage id
-                (EXEC_SYSCALL) as u64, // syscall num for exec
-                UNUSED_NAME,           // syscall name
-                cloned_cageid as u64,  // target cage id, should be itself
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-                UNUSED_ARG,
-                UNUSED_ID,
-            );
+            if !rm_vmctx(cloned_cageid as u64) {
+                panic!(
+                    "[wasmtime|run] Failed to remove existing VMContext for cage_id {}",
+                    cloned_cageid
+                );
+            }
 
             let ret = exec_call(
-                &cloned_run_command,
+                &cloned_lindboot_cli,
                 &real_path_str,
                 &args,
                 cloned_cageid,
@@ -1458,25 +1442,88 @@ pub fn clone_syscall<
     }
 }
 
-// entry point of exec_syscall, called by lind-common
-pub fn exec_syscall<
-    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-    U: Clone + Send + 'static + std::marker::Sync,
->(
-    caller: &mut Caller<'_, T>,
-    path: i64,
-    argv: i64,
-    envs: i64,
-) -> i32 {
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
+/// Entry point for `execve` after RawPOSIX-side processing.
+///
+/// This function represents the *return-to-Wasmtime* boundary after RawPOSIX
+/// has finished its syscall-level work for `execve`.
+///
+/// Conceptually, the execution flow is:
+///   Wasm
+///     -> Wasmtime lind-common trampoline
+///     -> 3i dispatch with grateid=RAWPOSIX
+///     -> RawPOSIX syscall handling
+///     -> 3i dispatch with grateid=WASMTIME
+///     -> **back to Wasmtime**
+///
+/// `exec_syscall` is the point where we re-enter Wasmtime execution and
+/// continue with Wasmtime-specific logic (e.g., instantiating the new module,
+/// updating the caller context, and transferring control).
+///
+/// The function pointer of `exec_syscall` is registered into the 3i handler
+/// table during lind-boot initialization (see `lind-boot/execute.rs` for the
+/// detailed registration logic).
+///
+/// From that point on, 3i may invoke this function as a callback when an
+/// `execve` syscall requires Wasmtime-side continuation.
+///
+/// ---
+///
+/// Cage ID semantics:
+///
+/// Due to the presence of *grates*, the cage that *issues* the syscall is not
+/// necessarily the cage whose Wasmtime instance must be resumed.
+///
+/// In particular, path-related arguments may originate from a different cage
+/// than `cageid`. Therefore, we explicitly use `path_cageid` as the *source
+/// cage ID* when retrieving the `VMContext`.
+///
+/// This reflects the logical ownership of the address space that contains
+/// the `path` argument. For the conceptual model behind this separation,
+/// see the Grate/API documentation.
+pub fn exec_syscall<T, U>(
+    cageid: u64,
+    path: u64,
+    path_cageid: u64,
+    argv: u64,
+    argv_cageid: u64,
+    envs: u64,
+    envs_cageid: u64,
+    _arg4: u64,
+    _arg4_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i32
+where
+    T: LindHost<T, U> + Clone + Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
+{
+    unsafe {
+        let vmctx_wrapper: VmCtxWrapper =
+            match get_vmctx_thread(path_cageid, THREAD_START_ID as u64) {
+                Some(v) => v,
+                None => {
+                    panic!("no VMContext found for cage_id {}", path_cageid);
+                }
+            };
+        // Convert back to VMContext
+        let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
 
-    match ctx.execve_call(caller, path, argv, Some(envs)) {
-        Ok(ret) => ret,
-        Err(e) => {
-            log::error!("failed to exec: {}", e);
-            -1
-        }
+        let vmctx_raw: *mut VMContext = unsafe { VMContext::from_opaque(opaque) };
+
+        Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
+            let host = caller.data().clone();
+            let ctx = host.get_ctx();
+
+            match ctx.execve_call(&mut caller, path as i64, argv as i64, Some(envs as i64)) {
+                Ok(ret) => ret,
+                Err(e) => {
+                    log::error!("failed to exec: {}", e);
+                    -1
+                }
+            }
+        })
     }
 }
 
