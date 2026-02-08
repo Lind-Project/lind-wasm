@@ -17,6 +17,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+use sysdefs::constants::lind_platform_const::{
+    RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
+};
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
