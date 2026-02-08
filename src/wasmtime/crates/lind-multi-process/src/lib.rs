@@ -1637,6 +1637,15 @@ pub fn current_cageid<
     ctx.this_cageid()
 }
 
+// Get thread id of current caller
+pub fn current_tid<T, U>(caller: &mut Caller<'_, T>) -> i32
+where
+    T: LindHost<T, U> + Clone + Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
+{
+    caller.data().get_ctx().tid as i32
+}
+
 // check if the module has the necessary exported Asyncify functions
 fn support_asyncify(module: &Module) -> bool {
     module.get_export(ASYNCIFY_START_UNWIND).is_some()
