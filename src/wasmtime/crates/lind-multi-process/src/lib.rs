@@ -1051,10 +1051,22 @@ impl<
     }
 
     // exit syscall
-    // technically this is pthread_exit syscall
     // actual exit syscall that would kill other threads is not supported yet
     // TODO: exit_call should be switched to epoch interrupt method later
-    pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32) {
+    pub fn exit_call(&self, mut caller: &mut Caller<'_, T>, code: i32, is_last_thread: u64) {
+        if is_last_thread == 1 {
+            // Clean up the context from the global table
+            // If not last thread, cleanup will be handled after each call.
+            // For example: in fork_call or main execution routine in lind-boot
+            if !rm_vmctx(self.cageid as u64) {
+                panic!(
+                    "[wasmtime|exit] Failed to remove VMContext for cage_id {}",
+                    self.cageid
+                );
+            }
+            // Decrement the global cage count
+            self.lind_manager.decrement();
+        }
         // get the base address of the memory
         let handle = caller.as_context().0.instance(InstanceId::from_index(0));
         let defined_memory = handle.get_memory(MemoryIndex::from_u32(0));
@@ -1515,20 +1527,95 @@ where
     }
 }
 
-pub fn exit_syscall<
-    T: LindHost<T, U> + Clone + Send + 'static + std::marker::Sync,
-    U: Clone + Send + 'static + std::marker::Sync,
->(
-    caller: &mut Caller<'_, T>,
-    exit_code: i32,
-) -> i32 {
-    let host = caller.data().clone();
-    let ctx = host.get_ctx();
+/// Re-entering Wasmtime trampoline for the `exit` syscall.
+///
+/// This function serves as the **Wasmtime re-entry trampoline** for `exit`,
+/// bridging execution back from the Lind / RawPOSIX world into Wasmtime.
+///
+/// Conceptually, the execution flow is:
+///   Wasm
+///     -> Wasmtime lind-common trampoline
+///     -> 3i dispatch with grateid=RAWPOSIX
+///     -> RawPOSIX syscall handling
+///     -> 3i dispatch with grateid=WASMTIME
+///     -> **back to Wasmtime**
+///
+/// During `lind-boot` initialization, this function is extracted as a raw
+/// `u64` function pointer and registered into the **3i handler table**.
+/// All subsequent `exit` syscalls are routed through this trampoline.
+///
+/// ## Thread exit vs. Cage (process) exit
+///
+/// The `exit` syscall must distinguish between **Thread exit** (non-last thread)
+/// and **Cage / process exit** (or last thread exit) This distinction is resolved
+/// in RawPOSIX, which determines whether the exiting thread is the last live
+/// thread in the cage. The result is passed back through the `is_last_thread`
+/// flag:
+///
+/// - `0`: not the last thread
+/// - `1`: last thread (entire cage must be torn down)
+///
+/// Resource cleanup for the entire cage is triggered only when
+/// `is_last_thread == 1` in exit_call implementation.
+///
+/// ## VMContext resolution
+///
+/// Since each thread owns a distinct `VMContext`, we must use `tid` to
+/// resolve the correct context:
+/// - `tid == 1`: main thread VMContext
+/// - otherwise: per-thread VMContext
+///
+/// This VMContext is then used to re-enter Wasmtime and invoke
+/// `ctx.exit_call`, completing the control transfer.
+pub fn exit_syscall<T, U>(
+    cageid: u64,
+    exit_code: u64,
+    exit_code_cageid: u64,
+    tid: u64,
+    is_last_thread: u64,
+    _arg3: u64,
+    _arg3_cageid: u64,
+    _arg4: u64,
+    _arg4_cageid: u64,
+    _arg5: u64,
+    _arg5_cageid: u64,
+    _arg6: u64,
+    _arg6_cageid: u64,
+) -> i32
+where
+    T: LindHost<T, U> + Clone + Send + Sync + 'static,
+    U: Clone + Send + Sync + 'static,
+{
+    unsafe {
+        // Resolve the correct VMContext wrapper based on thread id.
+        // Since `exit` is thread-specific, we always use `tid` to resolve the context,
+        // even for the main thread (`tid == 1`).
+        let vmctx_wrapper: VmCtxWrapper = match get_vmctx_thread(exit_code_cageid, tid) {
+            Some(v) => v,
+            None => {
+                panic!("no VMContext found for cage_id {}", exit_code_cageid);
+            }
+        };
 
-    ctx.exit_call(caller, exit_code);
+        // Convert the stored opaque pointer back into a concrete VMContext
+        // so that we can safely re-enter Wasmtime execution.
+        let opaque: *mut VMOpaqueContext = vmctx_wrapper.as_ptr() as *mut VMOpaqueContext;
+        let vmctx_raw: *mut VMContext = VMContext::from_opaque(opaque);
 
-    // exit syscall should not fail
-    0
+        // Re-enter Wasmtime with the recovered VMContext.
+        Caller::with(vmctx_raw, |mut caller: Caller<'_, T>| {
+            let host = caller.data().clone();
+            let ctx = host.get_ctx();
+
+            // Delegate exit handling back to Wasmtime.
+            // `is_last_thread` determines whether this is a thread exit
+            // or a full cage (process) exit.
+            ctx.exit_call(&mut caller, exit_code as i32, is_last_thread);
+
+            // `exit` syscall is not expected to fail.
+            0
+        })
+    }
 }
 
 pub fn setjmp_call<
