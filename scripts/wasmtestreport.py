@@ -413,7 +413,7 @@ def get_expected_output(source_file):
 def compile_c_to_wasm(source_file, allow_precompiled=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file.name, *resolve_compile_flags(source_file, "lind")]
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file, *resolve_compile_flags(source_file, "lind")]
     
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
@@ -459,7 +459,8 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 #   the first line in stdout by the script which is the command itself
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
-    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file]
+    wasm_file = Path(wasm_file)
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file.name]
     
     logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
