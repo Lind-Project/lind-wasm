@@ -22,6 +22,7 @@ use sysdefs::constants::sys_const::{
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
+use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
@@ -111,12 +112,12 @@ pub extern "C" fn fork_syscall(
 /// cageid, cwd, parent, interval_timer
 pub extern "C" fn exec_syscall(
     cageid: u64,
-    arg1: u64,
-    arg1_cageid: u64,
-    arg2: u64,
-    arg2_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
+    path: u64,
+    path_cageid: u64,
+    argv: u64,
+    argv_cageid: u64,
+    envs: u64,
+    envs_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -126,10 +127,7 @@ pub extern "C" fn exec_syscall(
 ) -> i32 {
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg1, arg1_cageid)
-        && sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
+    if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
@@ -139,11 +137,12 @@ pub extern "C" fn exec_syscall(
         );
     }
 
+    let self_cageid = path_cageid;
     // Empty fd with flag should_cloexec
-    fdtables::empty_fds_for_exec(cageid);
+    fdtables::empty_fds_for_exec(self_cageid);
 
     // Copy necessary data from current cage
-    let selfcage = get_cage(cageid).unwrap();
+    let selfcage = get_cage(self_cageid).unwrap();
 
     selfcage.rev_shm.lock().clear();
 
@@ -166,7 +165,24 @@ pub extern "C" fn exec_syscall(
     *threadid_guard = 0;
     drop(threadid_guard);
 
-    0
+    threei::make_syscall(
+        RAWPOSIX_CAGEID,
+        59, // exec syscall number
+        UNUSED_NAME,
+        WASMTIME_CAGEID,
+        path,
+        path_cageid,
+        argv,
+        argv_cageid,
+        envs,
+        envs_cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
