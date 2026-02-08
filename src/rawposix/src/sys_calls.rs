@@ -1,11 +1,10 @@
 //! System syscalls implementation
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
-use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
-use cage::{add_cage, cagetable_clear, cagetable_init, get_cage, remove_cage, Cage, Zombie};
+use cage::{add_cage, get_cage, remove_cage, Cage, Zombie};
 use dashmap::DashMap;
 use fdtables;
 use libc::sched_yield;
@@ -18,9 +17,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use sysdefs::constants::lind_platform_const::{
-    FDKIND_KERNEL, LIND_ROOT, RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
-};
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
@@ -42,7 +38,7 @@ use typemap::datatype_conversion::*;
 ///
 /// Actual operations of the address space is handled by wasmtime when creating a new
 /// instance for the child cage.
-pub fn fork_syscall(
+pub extern "C" fn fork_syscall(
     cageid: u64,
     child_arg: u64,        // Child's cage id
     child_arg_cageid: u64, // Child's cage id arguments cageid
@@ -114,9 +110,7 @@ pub fn fork_syscall(
 /// managing process attributes and threads (terminating unnecessary threads). This allows us to fully implement
 /// the exec functionality while aligning with POSIX standards. Cage fields remained in exec():
 /// cageid, cwd, parent, interval_timer
-///
-/// After RawPOSIX finishes operation, it will go back to wasmtime to continue with Wasmtime-specific logic.
-pub fn exec_syscall(
+pub extern "C" fn exec_syscall(
     cageid: u64,
     path: u64,
     path_cageid: u64,
@@ -196,7 +190,7 @@ pub fn exec_syscall(
 /// The exit function causes normal process(Cage) termination
 /// The termination entails unmapping all memory references
 /// Removing the cage object from the cage table, closing all open files which is removing corresponding fdtable
-pub fn exit_syscall(
+pub extern "C" fn exit_syscall(
     cageid: u64,
     status_arg: u64,
     status_cageid: u64,
@@ -264,7 +258,7 @@ pub fn exit_syscall(
 /// waitpid_syscall utilizes the zombie list stored in cage struct. When a cage exited, a zombie entry will be inserted
 /// into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
 /// zombie list and retrieve the first entry from it (first in, first out).
-pub fn waitpid_syscall(
+pub extern "C" fn waitpid_syscall(
     cageid: u64,
     child_cageid_arg: u64,
     child_cageid_arg_cageid: u64,
@@ -439,7 +433,7 @@ pub fn waitpid_syscall(
 ///
 /// ## Returns
 /// Get the parent cage ID
-pub fn getpid_syscall(
+pub extern "C" fn getpid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -480,7 +474,7 @@ pub fn getpid_syscall(
 ///
 /// ## Returns
 /// Get the parent cage ID
-pub fn getppid_syscall(
+pub extern "C" fn getppid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -518,7 +512,7 @@ pub fn getppid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn getgid_syscall(
+pub extern "C" fn getgid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -556,7 +550,7 @@ pub fn getgid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn getegid_syscall(
+pub extern "C" fn getegid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -594,7 +588,7 @@ pub fn getegid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn getuid_syscall(
+pub extern "C" fn getuid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -632,7 +626,7 @@ pub fn getuid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn geteuid_syscall(
+pub extern "C" fn geteuid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -683,7 +677,7 @@ pub fn geteuid_syscall(
 /// # Returns
 /// * `0` on success.
 /// * Negative errno wrapped via `syscall_error` on failure.
-pub fn sigaction_syscall(
+pub extern "C" fn sigaction_syscall(
     cageid: u64,
     sig_arg: u64,
     sig_arg_cageid: u64,
@@ -764,7 +758,7 @@ pub fn sigaction_syscall(
 /// * `EFAULT` – Reserved arguments were not unused.
 /// * `EINVAL` – Invalid target cage ID or signal number.
 /// * `ESRCH` – Target cage does not exist.
-pub fn kill_syscall(
+pub extern "C" fn kill_syscall(
     cageid: u64,
     target_cage_arg: u64,
     target_cage_arg_cageid: u64,
@@ -858,7 +852,7 @@ pub fn kill_syscall(
 /// ## Errors
 /// * `EFAULT` – Reserved arguments were not unused.
 /// * `EINVAL` – Invalid value passed for `how`.
-pub fn sigprocmask_syscall(
+pub extern "C" fn sigprocmask_syscall(
     cageid: u64,
     how_arg: u64,
     how_cageid: u64,
@@ -950,7 +944,7 @@ pub fn sigprocmask_syscall(
 ///
 /// ## Returns
 /// On success, returns 0. On error, -1 is returned, and errno is set.
-pub fn sched_yield_syscall(
+pub extern "C" fn sched_yield_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -1007,7 +1001,7 @@ pub fn sched_yield_syscall(
 /// ## Returns
 /// * `0` on success.
 /// * Negative errno (`EFAULT`, etc.) on failure.
-pub fn setitimer_syscall(
+pub extern "C" fn setitimer_syscall(
     cageid: u64,
     which_arg: u64,
     which_arg_cageid: u64,
@@ -1066,126 +1060,4 @@ pub fn setitimer_syscall(
         _ => { /* ITIMER_VIRTUAL and ITIMER_PROF is not implemented*/ }
     }
     0
-}
-
-/// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
-/// detailed error messages will be printed if set
-pub fn rawposix_start(verbosity: isize) {
-    let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
-    unsafe {
-        let lindfs_path = CString::new(LINDFS_ROOT).unwrap();
-        libc::mkdir(lindfs_path.as_ptr(), 0o775);
-        let ret = libc::chroot(lindfs_path.as_ptr());
-        if ret != 0 {
-            panic!(
-                "Failed to chroot to {}: {}",
-                LINDFS_ROOT,
-                std::io::Error::last_os_error()
-            );
-        }
-        let root = CString::new("/").unwrap();
-        let ret = libc::chdir(root.as_ptr());
-        if ret != 0 {
-            panic!(
-                "Failed to chdir to / after chroot: {}",
-                std::io::Error::last_os_error()
-            )
-        }
-    }
-    cagetable_init();
-
-    fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
-
-    // Set up standard file descriptors for the init cage
-    // TODO:
-    // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
-    let dev_null = CString::new("/dev/null").unwrap();
-
-    // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
-    // Standard input (fd = 0) is redirected to /dev/null
-    // Standard output (fd = 1) is redirected to /dev/null
-    // Standard error (fd = 2) is set to copy of stdout
-    unsafe {
-        libc::open(dev_null.as_ptr(), libc::O_RDONLY);
-        libc::open(dev_null.as_ptr(), libc::O_WRONLY);
-        libc::dup(1);
-    }
-
-    //init cage is its own parent
-    let initcage = Cage {
-        cageid: 1,
-        cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
-        parent: 1,
-        rev_shm: Mutex::new(Vec::new()),
-        main_threadid: RwLock::new(0),
-        interval_timer: IntervalTimer::new(1),
-        epoch_handler: DashMap::new(),
-        signalhandler: DashMap::new(),
-        pending_signals: RwLock::new(vec![]),
-        sigset: AtomicU64::new(0),
-        zombies: RwLock::new(vec![]),
-        child_num: AtomicU64::new(0),
-        vmmap: RwLock::new(Vmmap::new()),
-    };
-
-    // Add cage to cagetable
-    add_cage(
-        1, // cageid
-        initcage,
-    );
-
-    fdtables::init_empty_cage(1);
-    // Set the first 3 fd to STDIN / STDOUT / STDERR
-    // STDIN
-    fdtables::get_specific_virtual_fd(
-        1,
-        STDIN_FILENO as u64,
-        FDKIND_KERNEL,
-        STDIN_FILENO as u64,
-        false,
-        0,
-    )
-    .unwrap();
-    // STDOUT
-    fdtables::get_specific_virtual_fd(
-        1,
-        STDOUT_FILENO as u64,
-        FDKIND_KERNEL,
-        STDOUT_FILENO as u64,
-        false,
-        0,
-    )
-    .unwrap();
-    // STDERR
-    fdtables::get_specific_virtual_fd(
-        1,
-        STDERR_FILENO as u64,
-        FDKIND_KERNEL,
-        STDERR_FILENO as u64,
-        false,
-        0,
-    )
-    .unwrap();
-}
-
-pub fn rawposix_shutdown() {
-    let exitvec = cagetable_clear();
-
-    for cageid in exitvec {
-        exit_syscall(
-            cageid as u64,       // target cageid
-            EXIT_SUCCESS as u64, // status arg
-            cageid as u64,       // status arg's cageid
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        );
-    }
 }
