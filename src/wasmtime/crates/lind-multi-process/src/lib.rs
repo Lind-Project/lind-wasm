@@ -700,7 +700,7 @@ impl<
                         vmctx: NonNull::new(vmctx_ptr).unwrap(),
                     };
 
-                    // 3) Store the vmctx wrapper in the global thread table for later retrieval during syscalls
+                    // 3) Store the vmctx wrapper in the global table for later retrieval during syscalls
                     let rc = set_vmctx_thread(child_cageid as u64, next_tid as u64, vmctx_wrapper);
 
                     // get the asyncify_rewind_start and module start function
@@ -753,41 +753,11 @@ impl<
                         .expect("_start function does not have a return value");
                     match exit_code {
                         Val::I32(val) => {
-                            // exit the thread
-                            if lind_thread_exit(child_cageid as u64, next_tid as u64) {
-                                // Clean up the context from the global table
-                                if !rm_vmctx(child_cageid as u64) {
-                                    panic!(
-                                        "[wasmtime|pthread_create] Failed to remove VMContext for cage_id {}",
-                                        child_cageid
-                                    );
-                                }
-
-                                // we clean the cage only if this is the last thread in the cage
-                                // exit the cage with the exit code
-                                // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
-                                // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
-                                make_syscall(
-                                    (child_cageid) as u64, // self cage
-                                    (EXIT_SYSCALL) as u64, // syscall num
-                                    UNUSED_NAME,           // syscall name
-                                    (child_cageid) as u64, // target cage
-                                    *val as u64,           // 1st arg: status
-                                    (child_cageid) as u64, // 1st arg's cage id
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
-                                    UNUSED_ID,
-                                    UNUSED_ARG,
+                            if !rm_vmctx_thread(child_cageid as u64, next_tid as u64) {
+                                panic!(
+                                    "[wasmtime|thread] Failed to remove existing VMContext for cage_id {}, tid {}",
+                                    child_cageid, next_tid
                                 );
-
-                                // the cage just exited, decrement the cage counter
-                                lind_manager.decrement();
                             }
                         }
                         _ => {
