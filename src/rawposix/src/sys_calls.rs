@@ -25,7 +25,26 @@ use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
 use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/clone.2.html
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
+///
+/// ## Unified clone handling
+///
+/// In Linux, both `fork` and `pthread_create` are implemented as special
+/// cases of the `clone` syscall, distinguished by the presence of
+/// `CLONE_VM`. RawPOSIX follows the same model and exposes a unified
+/// `clone` entry point, but splits responsibility along abstraction
+/// boundaries.
+///
+/// RawPOSIX is responsible for **Cage-level structure**, not instruction-level
+/// execution or address-space manipulation. As a result, RawPOSIX only expands
+/// the **fork-like subset** of `clone` (i.e., when `CLONE_VM` is *not* set).
+///
+/// After performing any required Cage-level setup, control is transferred
+/// back to Wasmtime via the 3i dispatch mechanism, where both fork and
+/// thread creation semantics are completed.
+///
+/// ## fork
 ///
 /// We implement `fork` in user space because a Cage is not a host kernel process,
 /// and its granularity does not align with the host kernel’s notion of processes.
@@ -38,11 +57,18 @@ use typemap::datatype_conversion::*;
 ///
 /// Actual operations of the address space is handled by wasmtime when creating a new
 /// instance for the child cage.
+///
+/// ## thread
+///
+/// When `CLONE_VM` *is* set, the operation corresponds to thread creation
+/// (`pthread_create`). In this case, no new Cage is created. Threads share the same
+/// Cage. Address space and execution context must be duplicated or adjusted within
+/// the WebAssembly runtime.
 pub extern "C" fn fork_syscall(
     cageid: u64,
-    child_arg: u64,        // Child's cage id
-    child_arg_cageid: u64, // Child's cage id arguments cageid
-    arg2: u64,
+    clone_arg: u64,        // Child's cage id
+    clone_arg_cageid: u64, // Child's cage id arguments cageid
+    parent_tid: u64,
     arg2_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
@@ -53,10 +79,11 @@ pub extern "C" fn fork_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    // Extract the ABI-level clone argument structure
+    let args = unsafe { &mut *(clone_arg as *mut sys_struct::CloneArgStruct) };
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -67,36 +94,110 @@ pub extern "C" fn fork_syscall(
         );
     }
 
-    // Modify the fdtable manually
-    fdtables::copy_fdtable_for_cage(child_arg_cageid, child_arg).unwrap();
+    // Determine clone semantics from flags.
+    //
+    // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
+    // otherwise, we are creating a process (i.e. fork)
+    let flags = args.flags;
+    let isthread = flags & (sys_const::CLONE_VM);
 
-    // Get the self cage
-    let selfcage = get_cage(child_arg_cageid).unwrap();
+    // Effective parent cage ID.
+    //
+    // Since fork may be interposed by a grate, we treat the argument's
+    // cageid as the operation's identity.
+    let parent_cageid = clone_arg_cageid;
+    let mut child_cageid = 0;
 
-    let parent_vmmap = selfcage.vmmap.read();
-    let new_vmmap = parent_vmmap.clone();
+    // Fork path: create a new cage
+    if isthread == 0 {
+        // Allocate a fresh cage ID for the child.
+        child_cageid = cage::alloc_cage_id().unwrap();
 
-    let cageobj = Cage {
-        cageid: child_arg,
-        cwd: RwLock::new(selfcage.cwd.read().clone()),
-        parent: child_arg_cageid,
-        rev_shm: Mutex::new(Vec::new()),
-        main_threadid: RwLock::new(0),
-        interval_timer: IntervalTimer::new(child_arg),
-        epoch_handler: DashMap::new(),
-        pending_signals: RwLock::new(vec![]),
-        signalhandler: selfcage.signalhandler.clone(),
-        sigset: AtomicU64::new(0),
-        zombies: RwLock::new(vec![]),
-        child_num: AtomicU64::new(0),
-        vmmap: RwLock::new(new_vmmap),
-    };
+        // Duplicate the parent's file descriptor table.
+        fdtables::copy_fdtable_for_cage(parent_cageid, child_cageid).unwrap();
 
-    // increment child counter for parent
-    selfcage.child_num.fetch_add(1, SeqCst);
+        // Get the self cage
+        let selfcage = get_cage(parent_cageid).unwrap();
 
-    add_cage(child_arg, cageobj);
-    0
+        // Clone the parent's virtual memory map
+        let parent_vmmap = selfcage.vmmap.read();
+        let new_vmmap = parent_vmmap.clone();
+
+        // Creat the child cage object
+        let cageobj = Cage {
+            cageid: child_cageid,
+            cwd: RwLock::new(selfcage.cwd.read().clone()),
+            parent: parent_cageid,
+            rev_shm: Mutex::new(Vec::new()),
+            main_threadid: RwLock::new(0),
+            interval_timer: IntervalTimer::new(child_cageid),
+            epoch_handler: DashMap::new(),
+            pending_signals: RwLock::new(vec![]),
+            signalhandler: selfcage.signalhandler.clone(),
+            sigset: AtomicU64::new(0),
+            zombies: RwLock::new(vec![]),
+            child_num: AtomicU64::new(0),
+            vmmap: RwLock::new(new_vmmap),
+        };
+
+        // increment child counter for parent
+        selfcage.child_num.fetch_add(1, SeqCst);
+
+        // Register the new cage to global cage table
+        add_cage(child_cageid, cageobj);
+
+        // Copy the 3i handler table from parent to child.
+        //
+        // This ensures that the child process inherits all syscall
+        // interposition and routing behavior, including RawPOSIX's
+        // syscall implementation
+        threei::copy_handler_table_to_cage(
+            UNUSED_ARG,
+            child_cageid,
+            parent_cageid,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+        );
+    }
+
+    // Delegate execution back to binary runtime (currently only support Wasmtime,
+    // but could be extended to other runtime ie: MPK in the future) via 3i.
+    //
+    // Call from RawPOSIX (selfcageid = RawPOSIX_CAGEID) into
+    // Wasmtime(targetcageid = WASMTIME_CAGEID)
+    // to complete the clone/fork operation.
+    //
+    // Wasmtime will:
+    //   - Resolve the correct VMContext
+    //   - Complete fork semantics
+    //   - Resume execution in parent and child
+    threei::make_syscall(
+        RAWPOSIX_CAGEID,
+        56, // clone syscall number
+        UNUSED_NAME,
+        WASMTIME_CAGEID,
+        clone_arg,
+        clone_arg_cageid,
+        parent_cageid,
+        parent_tid,
+        child_cageid,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exec.3.html
