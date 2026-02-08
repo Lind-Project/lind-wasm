@@ -19,7 +19,7 @@ int main(void) {
 	int fd = open(FILENAME, O_RDONLY, 0);
 	assert(fd != -1);
 	//Execute mmap
-	void* mmappedData = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE, fd, 0);
+	void* mmappedData = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE, MAP_POPULATE, fd, 0);
 	assert(mmappedData != MAP_FAILED);
 	//Write the mmapped data to stdout (= FD #1)
 	write(1, mmappedData, filesize);
