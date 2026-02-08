@@ -27,7 +27,7 @@ set -Eeuo pipefail
 
 usage() {
   cat >&2 <<EOF
-usage: $(basename "$0") [OPTIONS] <source>
+usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
 
   Modes (at most one, defaults to full pipeline):
     (no mode flag)      : .c -> .wasm -> (wasm-opt) -> .cwasm
@@ -36,18 +36,30 @@ usage: $(basename "$0") [OPTIONS] <source>
 
   Common options:
     -v, --print-cmd, --verbose  print the underlying commands that are executed
+    --print-args, --debug-args  print parsed arguments after option handling
+    --no-default-clang-flags    do not add lind_compile's optional clang flags
     -h, --help              show this help
+
+  Additional clang args:
+    Any extra arguments after the source file are passed through to clang.
+    Use -- to separate lind_compile flags from clang flags if needed.
 
   Examples:
     $(basename "$0") hello.c
     $(basename "$0") --compile-only hello.c
     $(basename "$0") --opt-only build/hello.wasm
     $(basename "$0") --print-cmd hello.c
+    $(basename "$0") --no-default-clang-flags hello.c -- -target=wasm32-unknown-wasi
+    $(basename "$0") hello.c -- -lm
+    $(basename "$0") hello.c -lm
 EOF
 }
 
 MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
+PRINT_ARGS="false"
+NO_DEFAULT_CLANG_FLAGS="false"
+ORIGINAL_ARGS=("$@")
 
 set_mode() {
   local new_mode="$1"
@@ -84,6 +96,12 @@ while [[ "$#" -gt 0 ]]; do
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
       ;;
+    --print-args|--debug-args)
+      PRINT_ARGS="true"
+      ;;
+    --no-default-clang-flags)
+      NO_DEFAULT_CLANG_FLAGS="true"
+      ;;
     -h|--help)
       usage
       exit 0
@@ -105,13 +123,28 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-if [[ "$#" -ne 1 ]]; then
-  echo "error: expected exactly one source file argument" >&2
+if [[ "$#" -lt 1 ]]; then
+  echo "error: expected a source file argument" >&2
   usage
   exit 2
 fi
 
 SRC_ARG="$1"
+shift
+EXTRA_CLANG_ARGS=("$@")
+if [[ "${#EXTRA_CLANG_ARGS[@]}" -gt 0 && "${EXTRA_CLANG_ARGS[0]}" == "--" ]]; then
+  EXTRA_CLANG_ARGS=("${EXTRA_CLANG_ARGS[@]:1}")
+fi
+if [[ "${PRINT_ARGS}" == "true" ]]; then
+  printf '[DEBUG] original args: ' >&2
+  printf '%q ' "${ORIGINAL_ARGS[@]}" >&2
+  printf '\n' >&2
+  printf '[DEBUG] mode: %s\n' "${MODE}" >&2
+  printf '[DEBUG] src arg: %s\n' "${SRC_ARG}" >&2
+  printf '[DEBUG] extra clang args: ' >&2
+  printf '%q ' "${EXTRA_CLANG_ARGS[@]}" >&2
+  printf '\n' >&2
+fi
 
 # --- repo root discovery (env var -> script dir -> git) ---
 if [[ -n "${LIND_WASM_ROOT:-}" && -d "${LIND_WASM_ROOT}" ]]; then
@@ -214,12 +247,51 @@ fi
 #   [[ -x "${LINDBOOT_BIN}" ]] || { echo "error: lind-boot not found at ${LINDBOOT_BIN}" >&2; exit 2; }
 # fi
 
+# --- debug output (post-normalization) ---
+if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compile-only" ) ]]; then
+  debug_mandatory_clang_flags=(
+    "--sysroot=${SYSROOT}"
+    --target=wasm32-unknown-wasi
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low
+  )
+  debug_default_clang_flags=(
+    -pthread
+    -g
+    -O0
+  )
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    debug_default_clang_flags=()
+  fi
+  printf '[DEBUG] mandatory clang args: ' >&2
+  printf '%q ' "${debug_mandatory_clang_flags[@]}" >&2
+  printf '\n' >&2
+  printf '[DEBUG] default clang args: ' >&2
+  printf '%q ' "${debug_default_clang_flags[@]}" >&2
+  printf '\n' >&2
+  printf '[DEBUG] effective clang args: ' >&2
+  printf '%q ' "${debug_mandatory_clang_flags[@]}" "${debug_default_clang_flags[@]}" "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}" >&2
+  printf '\n' >&2
+fi
+
 # --- individual steps ---
 do_compile() {
-  run_cmd "${CLANG_BIN}" --sysroot="${SYSROOT}" \
-    -pthread --target=wasm32-unknown-wasi \
-    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low \
-    "${SRC}" -g -O0 -o "${OUT_WASM}"
+  local -a mandatory_clang_flags=(
+    "--sysroot=${SYSROOT}"
+    --target=wasm32-unknown-wasi
+    -Wl,--import-memory,--export-memory,--max-memory=67108864,--export="__stack_pointer",--export=__stack_low
+  )
+  local -a default_clang_flags=(
+    -pthread
+    -g
+    -O0
+  )
+
+  if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
+    default_clang_flags=()
+  fi
+
+  run_cmd "${CLANG_BIN}" "${mandatory_clang_flags[@]}" "${default_clang_flags[@]}" \
+    "${EXTRA_CLANG_ARGS[@]}" "${SRC}" -o "${OUT_WASM}"
 }
 
 do_optimize() {
