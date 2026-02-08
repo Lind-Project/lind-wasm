@@ -413,7 +413,7 @@ def get_expected_output(source_file):
 def compile_c_to_wasm(source_file, allow_precompiled=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file, *resolve_compile_flags(source_file, "lind")]
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file.name, *resolve_compile_flags(source_file, "lind")]
     
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
@@ -459,13 +459,7 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 #   the first line in stdout by the script which is the command itself
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
-    # Convert wasm_file path relative to lindfs. If this fails, propagate the error.
-    try:
-        wasm_file_relative = wasm_file.relative_to(LINDFS_ROOT)
-    except ValueError as e:
-        return (".wasm file not found in LINDFS_ROOT", f"Exception: {str(e)}")
-    
-    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file_relative]
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file]
     
     logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
@@ -490,34 +484,8 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     except Exception as e:
         return ("unknown_error", f"Exception during wasm run: {str(e)}")
 
-# ----------------------------------------------------------------------
-# Function: test_single_file_non_deterministic
-#
-# Purpose:
-#   Compiles and runs a single test the given test case is compiled into wasm and run. 
-#   
-#   Logs results (success/failure/timeouts/seg faults)
-#
-# Variables:
-# - Input
-#   source_file : The test case file path.
-#   result : The results dictionary.
-#   timeout_sec : Timeout for the run in seconds.
-#   allow_precompiled (bool) : If True, use precompiled `.cwasm` artifacts, use `.wasm` files otherwise.
-# - Output
-#   Updates 'result' dictionary.
-#
-# Exceptions:
-#   Recorded into 'result'.
-#
-# Note:
-#   Cleans up generated files(wasm/cwasm)
-#   Segmentation Fault is identified by return code of 134/139
-# ----------------------------------------------------------------------
-# TODO: Currently for non deterministic cases, we are only compiling and running the test case, success means the compiled test case ran, need to add more specific tests
-# 
 def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic", allow_precompiled=False):
-    """Unified test function for both deterministic, non-deterministic and failing tests"""
+    """Unified test function for deterministic and failing tests"""
     source_file = Path(source_file)
     handler = TestResultHandler(result, source_file)
     
@@ -632,12 +600,9 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
         if wasm_file and wasm_file.exists():
             wasm_file.unlink()
 
-# Wrapper functions for deterministic and non-deterministic tests
+# Wrapper functions for deterministic and fail tests
 def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT, allow_precompiled=False):
     test_single_file_unified(source_file, result, timeout_sec, "deterministic", allow_precompiled=allow_precompiled)
-
-def test_single_file_non_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT, allow_precompiled=False):
-    test_single_file_unified(source_file, result, timeout_sec, "non_deterministic", allow_precompiled=allow_precompiled)
 
 def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT, allow_precompiled=False):
     test_single_file_unified(source_file, result, timeout_sec, "fail", allow_precompiled=allow_precompiled)
@@ -1137,7 +1102,7 @@ def parse_arguments(argv=None):
     parser.add_argument("--testfiles", type=Path, nargs = "+", help="Run one or more specific test files")
     parser.add_argument("--debug", action="store_true", help="Enable detailed stdout/stderr output for subprocesses")
     parser.add_argument("--allow-pre-compiled", action="store_true", dest="allow_pre_compiled", help="Allow compiling/running precompiled .cwasm files (default: .wasm)")
-    parser.add_argument("--artifacts-dir", default="", help="Directory to store build artifacts. This path is created within LINDFS_ROOT")
+    parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
     parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
     parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
     parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
@@ -1233,7 +1198,6 @@ def run_subprocess(cmd, label="", cwd=None, shell=False, timeout=None):
 # ----------------------------------------------------------------------
 def setup_test_environment(args):
     """Setup test environment and return configuration"""
-
     config = {
         'skip_folders_paths': [Path(sf) for sf in args.skip],
         'run_folders_paths': [Path(rf) for rf in args.run],
@@ -1258,10 +1222,10 @@ def setup_test_environment(args):
             if should_run_file(test_case, config['run_folders_paths'], 
                                config['skip_folders_paths'], config['skip_test_cases'])
         ]
-
+    
     # Propagate allow_precompiled flag into the config
     config['allow_precompiled'] = bool(getattr(args, 'allow_pre_compiled', False))
-
+    
     return config
 
 # ----------------------------------------------------------------------
@@ -1325,8 +1289,6 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         parent_name = original_source.parent.name
         if parent_name == DETERMINISTIC_PARENT_NAME:
             test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec, allow_precompiled=config['allow_precompiled'])
-        elif parent_name == NON_DETERMINISTIC_PARENT_NAME:
-            test_single_file_non_deterministic(dest_source, results["non_deterministic"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         elif parent_name == FAIL_PARENT_NAME:
             test_single_file_fail(dest_source, results["fail"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         else:
@@ -1375,9 +1337,6 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
 def main():
     global GLOBAL_COMPILE_FLAGS, DIR_FLAGS
     os.chdir(LIND_WASM_BASE)
-    # Ensure that LINDFS_ROOT exists before compiling/running tests.
-    LINDFS_ROOT.mkdir(exist_ok=True)
-    
     args = parse_arguments()
     skip_folders = args.skip
     run_folders = args.run
@@ -1426,7 +1385,7 @@ def main():
     # Prepare artifacts root
     created_temp_dir = False
     if artifacts_dir_arg:
-        artifacts_root = LINDFS_ROOT / artifacts_dir_arg
+        artifacts_root = artifacts_dir_arg.resolve()
         try:
             artifacts_root.mkdir(parents=True, exist_ok=True)
             # Test writability using tempfile
@@ -1437,7 +1396,7 @@ def main():
             return
     else:
         try:
-            artifacts_root = Path(tempfile.mkdtemp(dir=LINDFS_ROOT, prefix="wasmtest_artifacts_"))
+            artifacts_root = Path(tempfile.mkdtemp(prefix="wasmtest_artifacts_"))
             created_temp_dir = True
         except OSError as e:
             logger.error(f"Cannot create temporary artifacts directory: {e}")
