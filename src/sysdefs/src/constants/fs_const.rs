@@ -153,7 +153,7 @@ pub const PROT_MASK: u32 = 0x7;
 pub const MAP_SHARED: u32 = 0x01; // Share changes with other processes
 pub const MAP_PRIVATE: u32 = 0x02; // Changes are private to this process
 pub const MAP_SHARING_MASK: u32 = 0x03; // Mask to isolate sharing bits
-
+pub const MAP_POPULATE: u32 = 0x8000; // Override lazy loading of pages
 pub const MAP_ANON: u32 = 0x20; // Don't use a file descriptor
 
 // ===== Page Size Constants =====
