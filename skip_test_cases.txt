@@ -1,5 +1,4 @@
 file_tests/deterministic/popen.c
-memory_tests/deterministic/mmaptest.c
 memory_tests/fail/mmap-negative2.c
 networking_tests/deterministic/uds-nb-select.c
 networking_tests/deterministic/uds-serverclient.c

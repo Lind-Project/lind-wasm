@@ -7,6 +7,7 @@ use sysdefs::constants::lind_platform_const::{UNUSED_ARG, UNUSED_ID};
 use threei::threei::{
     copy_data_between_cages, copy_handler_table_to_cage, make_syscall, register_handler,
 };
+use threei::threei_const;
 use typemap::path_conversion::get_cstr;
 use wasmtime::Caller;
 use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
@@ -20,7 +21,6 @@ use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_ba
 // `UNUSED_ID` / `UNUSED_ARG` / `UNUSED_NAME` is a placeholder argument
 // for functions that require a fixed number of parameters but do not utilize
 // all of them.
-use wasmtime_lind_3i::take_gratefn_wasm;
 use wasmtime_lind_utils::lind_syscall_numbers::{CLONE_SYSCALL, EXEC_SYSCALL, EXIT_SYSCALL};
 
 // function to expose the handler to wasm module
@@ -122,13 +122,11 @@ pub fn add_to_linker<
               this_grate_id: u64,
               in_grate_fn_ptr_u64: u64|
               -> i32 {
-            let entry = take_gratefn_wasm(this_grate_id).unwrap();
-
             register_handler(
                 in_grate_fn_ptr_u64,
                 targetcage,
                 targetcallnum,
-                entry as u64,
+                threei_const::RUNTIME_TYPE_WASMTIME,
                 handlefunc_flag,
                 this_grate_id,
                 UNUSED_ARG,
@@ -245,7 +243,7 @@ pub fn add_to_linker<
             "lind_debug_str",
             move |caller: Caller<'_, T>, ptr: i32| -> i32 {
                 let mem_base = get_memory_base(&caller);
-                if let Ok(msg) = get_cstr(mem_base + ptr as u64) {
+                if let Ok(msg) = get_cstr(mem_base + (ptr as u32) as u64) {
                     eprintln!("[LIND DEBUG STR]: {}", msg);
                 }
                 ptr // Return the pointer to the WASM stack
