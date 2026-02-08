@@ -342,7 +342,7 @@ impl RunCommand {
                 // println!("[debug]: main module memory size: {}", memory_size);
                 let stack_low_num = memory_size as i32 + 1024; // reserve first 1024 bytes for guard page
                 let stack_high_num = stack_low_num + 8388608; // 8 MB of default stack size
-                println!("[debug] main module stack pointer starts from {}", stack_high_num);
+                println!("[debug] main module stack pointer starts from {} to {}", stack_low_num, stack_high_num);
                 let stack_low = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_low_num)).unwrap();
                 let stack_high = Global::new(&mut store, GlobalType::new(ValType::I32, wasmtime::Mutability::Var), Val::I32(stack_high_num)).unwrap();
                 linker.define(&mut store, "GOT.mem", "__stack_low", stack_low);

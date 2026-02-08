@@ -252,7 +252,8 @@ impl Instance {
 
         // 2. Convert bytes to pages.
         let host_page_size: u64 = 1 << PAGESHIFT; // 4 KiB
-        let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
+        // let minimal_pages = (min_bytes + host_page_size - 1) / host_page_size; // ceil_div
+        let minimal_pages = 2048 + 1; // stack size + guard page, reference to run.rs
         println!("[debug] minimal_pages: {}", minimal_pages);
         let module_meminfo = module.dylink_meminfo().unwrap();
         println!("[debug] module memory size: {}, align: {}", module_meminfo.memory_size, module_meminfo.memory_alignment);
@@ -285,7 +286,11 @@ impl Instance {
                 let memory_base = memory.data_ptr(&mut *store) as usize;
 
                 let module_page = module_rounded_size >> PAGESHIFT;
+                // let stack_size = 8388608;
                 init_vmmap(cageid, memory_base, Some(minimal_pages as u32 + module_page));
+                // init_vmmap(cageid, memory_base, Some((stack_size >> PAGESHIFT) as u32 + module_page));
+
+                println!("[debug] main module allocate {} + {} bytes", module_rounded_size as u64, (minimal_pages << PAGESHIFT));
 
                 // This is a direct underlying RawPOSIX call, so the `name` field will not be used.
                 // We pass `0` here as a placeholder to avoid any unnecessary performance overhead.
