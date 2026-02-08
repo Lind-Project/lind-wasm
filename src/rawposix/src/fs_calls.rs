@@ -701,7 +701,7 @@ pub fn mmap_syscall(
     let allowed_flags =
         MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32;
     if flags & !allowed_flags != 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "Unsupported mmap flags");
+        lind_debug_panic("Unsupported mmap flag detected! Only MAP_FIXED, MAP_SHARED, MAP_PRIVATE and MAP_ANONYMOUS allowed");
     }
 
     if prot & PROT_EXEC > 0 {
