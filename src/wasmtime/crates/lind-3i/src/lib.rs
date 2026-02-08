@@ -5,6 +5,12 @@
 //! linear call stack. There are two primary scenarios in which lind-3i must explicitly locate and
 //! re-enter a different runtime state.
 //!
+//! Importantly, not all re-entries into Wasmtime are equivalent. Some operations require resuming
+//! execution in the *same continuation context* (i.e., the same instance and asyncify state),
+//! while others only require access to a compatible instance that shares the same linear memory.
+//!
+//! The mechanisms in this module distinguish between these cases explicitly.
+//!
 //! ---
 //! ## Scenario 1: Process-like operations (`fork`, `exec`, `exit`)
 //!
@@ -14,8 +20,20 @@
 //! Wasmtime to continue running Wasm code. Importantly, the cage that performs the `fork`, `exec`, or
 //! `exit` logic is not necessarily the same cage or grate that originally issued the system call. As
 //! a result, lind-3i cannot rely on an implicit “current” runtime state. Instead, it must be able to
-//! retrieve the Wasmtime execution context. For `exec` and `exit` calls, it will retrieve the context
-//! associated with an arbitrary `cage_id`.
+//! retrieve the Wasmtime execution context.
+//!
+//! These operations are also continuation-sensitive, which means that the execution must resume in
+//! the *same Wasmtime instance* that originally issued the syscall.
+//!
+//! In particular, `fork` / `exit` rely on Asyncify to suspend and later resume execution via paired
+//! `start_unwind` / `stop_unwind` and `start_rewind` / `stop_rewind` operations. These transitions
+//! must occur within the same continuation context, which is the same Wasmtime instance and
+//! associated asyncify runtime state. Resuming execution in a different instance, even one that
+//! shares linear memory, breaks this invariant and can result in missed callbacks or incorrect
+//! return values.
+//!
+//! As a result, lind-3i must be able to retrieve *the active execution context* corresponding
+//! to a specific `(cage_id, tid)` when handling these operations.
 //!
 //! ---
 //! ## Scenario 2: Grate calls (cross-module execution transfers)
@@ -36,10 +54,12 @@
 //! VMContext pointers are stored globally and indexed by `cage_id`. Two distinct
 //! structures are used:
 //!
-//! 1. **Per-cage VMContext queues (`VMCTX_QUEUES`)**
-//!    - Represent the default execution pool for a cage or grate.
-//!    - Conceptually correspond to the *main thread* (`tid == 1`).
-//!    - Used by normal execution paths, including grate calls.
+//! 1. Backup VMContext pools (`VMCTX_QUEUES`)
+//! - Indexed by `cage_id`.
+//! - Store pools of *backup* instances created during module instantiation.
+//! - Used exclusively for continuation-insensitive operations, such as grate calls.
+//! - Instances in this pool may share linear memory but must never be used to resume a suspended
+//!   asyncify continuation.
 //!
 //! At module creation time, lind-3i extracts the `VMContext` pointer associated with the newly created instance.
 //! This `VMContext` uniquely identifies the execution state of that `Store` / `Instance`. The pointer is
@@ -48,10 +68,17 @@
 //! Using Wasmtime’s internal mechanisms, the `VMContext` pointer can be used to recover the associated
 //! `Store` and `Instance`, allowing execution to resume in the correct runtime context.
 //!
-//! 2. **Per-cage thread VMContext tables (`VMCTX_THREADS`)**
-//!    - Used *only* for non-main threads (`tid != 1`).
-//!    - Applicable exclusively to pthread-related syscalls and thread `exit`.
-//!    - Each `(cage_id, tid)` maps to at most one `VMContext`.
+//! These instances enable concurrent execution over shared memory without duplicating address
+//! space state.
+//!
+//! 2. Active per-thread VMContext table (`VMCTX_THREADS`)
+//! - Indexed by `(cage_id, tid)`.
+//! - Stores exactly one active instance per thread.
+//! - Used exclusively for continuation-sensitive operations, including:
+//!   - `fork`
+//!   - `exec`
+//!   - `exit`
+//!   - thread creation and termination
 //!
 //! Grate calls never consult the thread table and always acquire execution
 //! contexts from the main per-cage queue.
@@ -113,13 +140,11 @@ impl VmCtxWrapper {
 /// from this pool.
 static VMCTX_QUEUES: OnceLock<Vec<Mutex<VecDeque<VmCtxWrapper>>>> = OnceLock::new();
 
-/// Per-cage thread-specific `VMContext` table.
+/// Per-cage, per-thread *active* `VMContext` table.
 ///
-/// This table is used *only* for non-main threads (`tid != 1`) and exists to support pthread-related
-/// syscalls and thread `exit`.
-///
-/// Each `(cage_id, tid)` maps to at most one `VMContext`. No pooling is performed.
-/// This table is not consulted for normal execution or grate calls.
+/// This table stores the *currently active* Wasmtime execution context for each thread and is
+/// used exclusively for **continuation-sensitive operations** that must resume execution in the
+/// same Wasmtime instance that originally issued the syscall.
 static VMCTX_THREADS: OnceLock<Vec<Mutex<HashMap<u64, VmCtxWrapper>>>> = OnceLock::new();
 
 /// Initialize the global `VMContext` pool.
@@ -230,7 +255,7 @@ pub fn rm_vmctx(cage_id: u64) -> bool {
     true
 }
 
-/// Register a VMContext for a non-main thread (`tid != 1`).
+/// Register a VMContext according to `(cage_id, tid)` in the per-thread active table.
 ///
 /// This is used exclusively for pthread-related syscalls and thread exit.
 /// Grate calls and normal execution never consult this table.
@@ -242,7 +267,7 @@ pub fn set_vmctx_thread(cage_id: u64, tid: u64, vmctx: VmCtxWrapper) {
     t.lock().unwrap().insert(tid, vmctx);
 }
 
-/// Look up the VMContext for a non-main thread (`tid != 1`).
+/// Look up the VMContext
 ///
 /// Returns `None` if the thread has exited or was never registered.
 pub fn get_vmctx_thread(cage_id: u64, tid: u64) -> Option<VmCtxWrapper> {
@@ -253,7 +278,7 @@ pub fn get_vmctx_thread(cage_id: u64, tid: u64) -> Option<VmCtxWrapper> {
     t.lock().unwrap().get(&tid).copied()
 }
 
-/// tid != 1: remove a single thread entry
+/// Remove a single thread entry
 pub fn rm_vmctx_thread(cage_id: u64, tid: u64) -> bool {
     debug_assert!(tid != 1, "tid==1 should clear pool differently if needed");
 

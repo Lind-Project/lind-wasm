@@ -1,11 +1,11 @@
 LIND_ROOT ?= src/tmp
 BUILD_DIR ?= build
 SYSROOT_DIR ?= $(BUILD_DIR)/sysroot
-WASMTIME_BIN ?= $(BUILD_DIR)/wasmtime
-WASMTIME_DEBUG_BIN ?= $(BUILD_DIR)/wasmtime-debug
+LINDBOOT_BIN ?= $(BUILD_DIR)/lind-boot
+LINDBOOT_DEBUG_BIN ?= $(BUILD_DIR)/lind-boot-debug
 
 .PHONY: build 
-build: sysroot wasmtime
+build: sysroot lind-boot
 	@echo "Build complete"
 
 .PHONY: prepare-lind-root
@@ -21,11 +21,11 @@ sysroot: build-dir
 	./scripts/make_glibc_and_sysroot.sh
 	$(MAKE) sync-sysroot
 
-.PHONY: wasmtime
-wasmtime: build-dir
-	# Build wasmtime with `--release` flag for faster runtime (e.g. for tests)
-	cargo build --manifest-path src/wasmtime/Cargo.toml --release
-	cp src/wasmtime/target/release/wasmtime $(WASMTIME_BIN)
+.PHONY: lind-boot
+lind-boot: build-dir
+	# Build lind-boot with `--release` flag for faster runtime (e.g. for tests)
+	cargo build --manifest-path src/lind-boot/Cargo.toml --release
+	cp src/lind-boot/target/release/lind-boot $(LINDBOOT_BIN)
 
 
 .PHONY: lind-debug
@@ -33,9 +33,9 @@ lind-debug: build-dir
 	# Build glibc with LIND_DEBUG enabled (by setting the LIND_DEBUG variable)
 	$(MAKE) build_glibc LIND_DEBUG=1
 	
-	# Build Wasmtime with the lind_debug feature enabled
-	cargo build --manifest-path src/wasmtime/Cargo.toml --features lind_debug
-	cp src/wasmtime/target/debug/wasmtime $(WASMTIME_BIN)
+	# Build lind-boot with the lind_debug feature enabled
+	cargo build --manifest-path src/lind-boot/Cargo.toml --features lind_debug
+	cp src/lind-boot/target/debug/lind-boot $(LINDBOOT_BIN)
 build_glibc:
 	# build sysroot passing -DLIND_DEBUG if LIND_DEBUG is set
 	if [ "$(LIND_DEBUG)" = "1" ]; then \
@@ -81,8 +81,9 @@ md_generation:
 .PHONY: lint
 lint:
 	cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
+	cargo fmt --check --all --manifest-path src/lind-boot/Cargo.toml
 	cargo clippy \
-	    --manifest-path src/wasmtime/Cargo.toml \
+	    --manifest-path src/lind-boot/Cargo.toml \
 	    --all-features \
 	    --keep-going \
 	    -- \
@@ -93,6 +94,7 @@ lint:
 .PHONY: format
 format:
 	cargo fmt --all --manifest-path src/wasmtime/Cargo.toml
+	cargo fmt --all --manifest-path src/lind-boot/Cargo.toml
  
 
 .PHONY: docs-serve
@@ -116,8 +118,8 @@ clean:
 	    ! -path 'src/glibc/target/lib/grcrt1.o' \
 	    ! -path 'src/glibc/target/lib/rcrt1.o' \
 	    -exec rm -f {} +
-	@echo "cargo clean (wasmtime)"
-	cargo clean --manifest-path src/wasmtime/Cargo.toml
+	@echo "cargo clean (lind-boot)"
+	cargo clean --manifest-path src/lind-boot/Cargo.toml
 
 .PHONY: distclean
 distclean: clean

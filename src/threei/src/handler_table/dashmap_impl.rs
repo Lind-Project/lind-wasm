@@ -54,7 +54,7 @@ pub fn print_handler_table() {
 /// ## Returns:
 /// true if the cage has at least one handler registered.
 /// false otherwise.
-pub fn _check_cage_handler_exist(cageid: u64) -> bool {
+pub fn _check_cage_handler_exists(cageid: u64) -> bool {
     HANDLERTABLE.contains_key(&cageid)
 }
 
