@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
         snprintf(fd1buf, 8, "%d", fd1);
         snprintf(fd2buf, 8, "%d", fd2);
         char *const nargv[] = {BINARY_PATH, fd1buf, fd2buf, NULL};
-        execve(BINARY_PATH, nargv, nenvp);
+        execve("automated_tests/cloexec", nargv, nenvp);
     } else {
         struct stat statbuf;
         int fd1 = atoi(argv[1]);

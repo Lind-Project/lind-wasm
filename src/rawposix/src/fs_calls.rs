@@ -8,9 +8,9 @@ use libc::c_void;
 use std::sync::Arc;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::fs_const::{
-    FIOASYNC, FIONBIO, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_PRIVATE,
-    MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
-    SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
+    FIOASYNC, FIONBIO, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_POPULATE,
+    MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ,
+    PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
 };
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
@@ -60,7 +60,7 @@ pub fn kernel_close(fdentry: fdtables::FDTableEntry, _count: u64) {
 ///
 /// ## Returns:
 /// same with man page
-pub fn open_syscall(
+pub extern "C" fn open_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -131,7 +131,7 @@ pub fn open_syscall(
 /// ## Returns:
 ///     - On success, the number of bytes read is returned (zero indicates end of file).
 ///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn read_syscall(
+pub extern "C" fn read_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -191,7 +191,7 @@ pub fn read_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error (EBADF, EINTR, EIO).
-pub fn close_syscall(
+pub extern "C" fn close_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -251,26 +251,7 @@ pub fn close_syscall(
 /// ## Returns:
 ///     - On success: 0 or number of woken threads depending on futex operation
 ///     - On failure: a negative errno value indicating the syscall error
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/futex.2.html
-///
-/// The Linux `futex()` syscall provides a mechanism for fast user-space locking. It allows a process or thread
-/// to wait for or wake another process or thread on a shared memory location without invoking heavy kernel-side
-/// synchronization primitives unless contention arises. This implementation wraps the futex syscall, allowing
-/// direct invocation with the relevant arguments passed from the current cage context.
-///
-/// Input:
-///     - cageid: current cageid
-///     - uaddr_arg: pointer to the futex word in user memory
-///     - futex_op_arg: operation code indicating futex command type
-///     - val_arg: value expected at uaddr or the number of threads to wake
-///     - val2_arg: timeout or other auxiliary parameter depending on operation
-///     - uaddr2_arg: second address used for requeueing operations
-///     - val3_arg: additional value for some futex operations
-///
-/// ## Returns:
-///     - On success: 0 or number of woken threads depending on futex operation
-///     - On failure: a negative errno value indicating the syscall error
-pub fn futex_syscall(
+pub extern "C" fn futex_syscall(
     cageid: u64,
     uaddr_arg: u64,
     uaddr_cageid: u64,
@@ -316,7 +297,7 @@ pub fn futex_syscall(
 ///     - Upon successful completion of this call, we return the number of bytes written. This number will never be greater
 ///         than `count`. The value returned may be less than `count` if the write_syscall() was interrupted by a signal, or
 ///         if the file is a pipe or FIFO or special file and has fewer than `count` bytes immediately available for writing.
-pub fn write_syscall(
+pub extern "C" fn write_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -373,7 +354,7 @@ pub fn write_syscall(
 ///
 /// ## Returns:
 ///     - return zero on success.  On error, -1 is returned and errno is set to indicate the error.
-pub fn mkdir_syscall(
+pub extern "C" fn mkdir_syscall(
     cageid: u64,
     path_arg: u64,
     path_arg_cageid: u64,
@@ -427,7 +408,7 @@ pub fn mkdir_syscall(
 /// ## Return:
 /// On success, zero is returned.  On error, -1 is returned, errno is
 /// set to indicate the error, and pipefd is left unchanged.
-pub fn pipe_syscall(
+pub extern "C" fn pipe_syscall(
     cageid: u64,
     pipefd_arg: u64,
     pipefd_cageid: u64,
@@ -538,7 +519,7 @@ pub fn pipe_syscall(
 /// ## Return:
 /// On success, zero is returned.  On error, -1 is returned, errno is
 /// set to indicate the error, and pipefd is left unchanged.
-pub fn pipe2_syscall(
+pub extern "C" fn pipe2_syscall(
     cageid: u64,
     pipefd_arg: u64,
     pipefd_cageid: u64,
@@ -661,7 +642,7 @@ pub fn pipe2_syscall(
 ///
 /// # Returns
 /// * `u32` - Result of the `mmap` operation. See "man mmap" for details
-pub fn mmap_syscall(
+pub extern "C" fn mmap_syscall(
     cageid: u64,
     addr_arg: u64,
     addr_cageid: u64,
@@ -698,10 +679,13 @@ pub fn mmap_syscall(
     // 1. Prevent security issues (e.g., MAP_FIXED_NOREPLACE being ignored)
     // 2. Maintain program correctness (e.g., MAP_SHARED_VALIDATE expects validation)
     // 3. Make debugging easier by failing fast rather than having mysterious behavior later
-    let allowed_flags =
-        MAP_FIXED as i32 | MAP_SHARED as i32 | MAP_PRIVATE as i32 | MAP_ANONYMOUS as i32;
+    let allowed_flags = MAP_FIXED as i32
+        | MAP_SHARED as i32
+        | MAP_PRIVATE as i32
+        | MAP_ANONYMOUS as i32
+        | MAP_POPULATE as i32;
     if flags & !allowed_flags != 0 {
-        return syscall_error(Errno::EINVAL, "mmap", "Unsupported mmap flags");
+        lind_debug_panic("Unsupported mmap flag detected! Only MAP_FIXED, MAP_SHARED, MAP_PRIVATE, MAP_POPULATE AND MAP_ANONYMOUS allowed");
     }
 
     if prot & PROT_EXEC > 0 {
@@ -854,7 +838,7 @@ pub fn mmap_syscall(
 /// - On success: valid page-aligned memory address
 /// - On failure: -1 cast to usize (non-page-aligned, caller should check alignment, get_errno and handle_errno)
 /// - On fd translation error: negative errno value cast to usize (non-page-aligned)
-pub fn mmap_inner(
+pub extern "C" fn mmap_inner(
     cageid: u64,
     addr: *mut u8,
     len: usize,
@@ -909,7 +893,7 @@ pub fn mmap_inner(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn munmap_syscall(
+pub extern "C" fn munmap_syscall(
     cageid: u64,
     addr_arg: u64,
     addr_cageid: u64,
@@ -1010,7 +994,7 @@ pub fn munmap_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn brk_syscall(
+pub extern "C" fn brk_syscall(
     cageid: u64,
     brk_arg: u64,
     brk_cageid: u64,
@@ -1199,7 +1183,7 @@ pub fn _fcntl_helper(cageid: u64, vfd_arg: u64) -> Result<fdtables::FDTableEntry
 ///     - On error, -1 is returned and errno is set to indicate the error.
 ///
 /// TODO: `F_GETOWN`, `F_SETOWN`, `F_GETOWN_EX`, `F_SETOWN_EX`, `F_GETSIG`, and `F_SETSIG` are used to manage I/O availability signals.
-pub fn fcntl_syscall(
+pub extern "C" fn fcntl_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -1359,7 +1343,7 @@ pub fn fcntl_syscall(
 /// ## Return Value:
 ///  - `0` on success.
 ///  - `-1` on failure, with `errno` set appropriately.
-pub fn link_syscall(
+pub extern "C" fn link_syscall(
     cageid: u64,
     oldpath_arg: u64,
     oldpath_cageid: u64,
@@ -1411,13 +1395,12 @@ pub fn link_syscall(
 /// ## Implementation Details:
 ///  - The path is converted from the RawPOSIX perspective to the host kernel perspective
 ///    using `sc_convert_path_to_host`, which handles path normalization relative to the cage's CWD.
-///  - We pas .
 ///  - The underlying libc::stat() is called and results are copied to the user buffer.
 ///
 /// ## Return Value:
 ///  - `0` on success.
 ///  - `-1` on failure, with `errno` set appropriately.
-pub fn stat_syscall(
+pub extern "C" fn stat_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -1488,7 +1471,7 @@ pub fn stat_syscall(
 /// ## Return Value:
 /// - `0` on success  
 /// - `-1` on failure, with `errno` set appropriately
-pub fn statfs_syscall(
+pub extern "C" fn statfs_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -1545,7 +1528,7 @@ pub fn statfs_syscall(
 /// ## Return Value:
 ///  - `0` on success.
 ///  - `-1` on failure, with `errno` set appropriately.
-pub fn fsync_syscall(
+pub extern "C" fn fsync_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1607,7 +1590,7 @@ pub fn fsync_syscall(
 /// ## Return Value:
 ///  - `0` on success.
 ///  - `-1` on failure, with `errno` set appropriately.
-pub fn fdatasync_syscall(
+pub extern "C" fn fdatasync_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1672,7 +1655,7 @@ pub fn fdatasync_syscall(
 /// ## Return Value:
 ///  - `0` on success.
 ///  - `-1` on failure, with `errno` set appropriately.
-pub fn sync_file_range_syscall(
+pub extern "C" fn sync_file_range_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1746,7 +1729,7 @@ pub fn sync_file_range_syscall(
 /// ## Return:
 /// - On success: number of bytes placed in `buf` (not null-terminated)  
 /// - On failure: `-1`, with `errno` set appropriately
-pub fn readlink_syscall(
+pub extern "C" fn readlink_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -1810,7 +1793,7 @@ pub fn readlink_syscall(
 /// ## Return Value:
 ///  - Number of bytes placed in `buf` on success.
 ///  - `-1` on failure, with `errno` set appropriately.
-pub fn readlinkat_syscall(
+pub extern "C" fn readlinkat_syscall(
     cageid: u64,
     dirfd_arg: u64,
     dirfd_cageid: u64,
@@ -1889,7 +1872,7 @@ pub fn readlinkat_syscall(
 /// ## Return Value:
 ///  - `0` on success.
 ///  - `-1` on failure, with `errno` set appropriately.
-pub fn rename_syscall(
+pub extern "C" fn rename_syscall(
     cageid: u64,
     oldpath_arg: u64,
     oldpath_cageid: u64,
@@ -1944,7 +1927,7 @@ pub fn rename_syscall(
 /// ## Return Value:
 ///  - `0` on success.
 ///  - `-1` on failure, with `errno` set appropriately.
-pub fn unlink_syscall(
+pub extern "C" fn unlink_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -2011,7 +1994,7 @@ pub fn unlink_syscall(
 /// ## Return Value:
 /// - `0` on success.
 /// - `-1` on failure, with `errno` set appropriately.
-pub fn unlinkat_syscall(
+pub extern "C" fn unlinkat_syscall(
     cageid: u64,
     dirfd_arg: u64,
     dirfd_cageid: u64,
@@ -2087,7 +2070,7 @@ pub fn unlinkat_syscall(
 /// ## Return Value:
 ///  - `0` on success (file is accessible in the requested mode).
 ///  - `-1` on failure, with `errno` set appropriately.
-pub fn access_syscall(
+pub extern "C" fn access_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -2151,7 +2134,7 @@ pub fn access_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on failure, with errno set appropriately.
-pub fn clock_gettime_syscall(
+pub extern "C" fn clock_gettime_syscall(
     cageid: u64,
     clockid_arg: u64,
     clockid_cageid: u64,
@@ -2202,7 +2185,7 @@ pub fn clock_gettime_syscall(
 /// ## Returns:
 ///     - On success, the new file descriptor is returned.
 ///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn dup_syscall(
+pub extern "C" fn dup_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2250,7 +2233,7 @@ pub fn dup_syscall(
 /// ## Returns:
 ///     - On success, returns the new file descriptor.
 ///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn dup2_syscall(
+pub extern "C" fn dup2_syscall(
     cageid: u64,
     old_vfd_arg: u64,
     old_vfd_cageid: u64,
@@ -2325,7 +2308,7 @@ pub fn dup2_syscall(
 /// ## Returns:
 ///     - On success, returns the new file descriptor.
 ///     - On error, -1 is returned and errno is set to indicate the error (EBADF or EINVAL).
-pub fn dup3_syscall(
+pub extern "C" fn dup3_syscall(
     cageid: u64,
     old_vfd_arg: u64,
     old_vfd_cageid: u64,
@@ -2406,7 +2389,7 @@ pub fn dup3_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn fchdir_syscall(
+pub extern "C" fn fchdir_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2479,7 +2462,7 @@ pub fn fchdir_syscall(
 /// ## Returns:
 ///     - On success, the number of bytes written is returned.
 ///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn writev_syscall(
+pub extern "C" fn writev_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2537,7 +2520,7 @@ pub fn writev_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn fstat_syscall(
+pub extern "C" fn fstat_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2603,7 +2586,7 @@ pub fn fstat_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn ftruncate_syscall(
+pub extern "C" fn ftruncate_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2662,7 +2645,7 @@ pub fn ftruncate_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn fstatfs_syscall(
+pub extern "C" fn fstatfs_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2730,7 +2713,7 @@ pub fn fstatfs_syscall(
 ///     - On success, the number of bytes read is returned.
 ///     - On end of directory, 0 is returned.
 ///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn getdents_syscall(
+pub extern "C" fn getdents_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2789,7 +2772,7 @@ pub fn getdents_syscall(
 /// ## Returns:
 ///     - On success, the resulting offset location as measured in bytes from the beginning of the file is returned.
 ///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn lseek_syscall(
+pub extern "C" fn lseek_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2851,7 +2834,7 @@ pub fn lseek_syscall(
 /// ## Returns:
 ///     - On success, the number of bytes read is returned (zero indicates end of file).
 ///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn pread_syscall(
+pub extern "C" fn pread_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2911,7 +2894,7 @@ pub fn pread_syscall(
 /// ## Returns:
 ///     - On success, the number of bytes written is returned.
 ///     - On error, -1 is returned and errno is set to indicate the error.
-pub fn pwrite_syscall(
+pub extern "C" fn pwrite_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -2968,7 +2951,7 @@ pub fn pwrite_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn chdir_syscall(
+pub extern "C" fn chdir_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -3034,7 +3017,7 @@ pub fn chdir_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn rmdir_syscall(
+pub extern "C" fn rmdir_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -3095,7 +3078,7 @@ pub fn rmdir_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn chmod_syscall(
+pub extern "C" fn chmod_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -3156,7 +3139,7 @@ pub fn chmod_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn fchmod_syscall(
+pub extern "C" fn fchmod_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -3219,7 +3202,7 @@ pub fn fchmod_syscall(
 /// ## Returns:
 ///     - On success, returns 0 after copying the current working directory path to the buffer.
 ///     - On error, returns -1 and errno is set to indicate the error.
-pub fn getcwd_syscall(
+pub extern "C" fn getcwd_syscall(
     cageid: u64,
     buf_arg: u64,
     buf_cageid: u64,
@@ -3284,7 +3267,7 @@ pub fn getcwd_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on error, with errno set to indicate the error.
-pub fn truncate_syscall(
+pub extern "C" fn truncate_syscall(
     cageid: u64,
     path_arg: u64,
     path_cageid: u64,
@@ -3349,7 +3332,7 @@ pub fn truncate_syscall(
 /// ## Returns:
 ///     - 0 on success.
 ///     - -1 on failure, with errno set appropriately.
-pub fn nanosleep_time64_syscall(
+pub extern "C" fn nanosleep_time64_syscall(
     cageid: u64,
     clockid_arg: u64,
     clockid_cageid: u64,
@@ -3404,7 +3387,7 @@ pub fn nanosleep_time64_syscall(
 /// ## Returns:
 ///     - 0 on success
 ///     - -1 on error with appropriate errno set
-pub fn mprotect_syscall(
+pub extern "C" fn mprotect_syscall(
     cageid: u64,
     addr_arg: u64,
     addr_cageid: u64,
@@ -3478,7 +3461,7 @@ pub fn mprotect_syscall(
 ///     - Usually, on success zero is returned. A few ioctl() operations use the return value
 ///       as an output parameter and return a nonnegative value on success.
 ///     - On error, -1 is returned, and errno is set to indicate the error.
-pub fn ioctl_syscall(
+pub extern "C" fn ioctl_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -3560,7 +3543,7 @@ pub fn ioctl_syscall(
 /// ## Returns:
 ///     - 0 on success
 ///     - -1 on error, with errno set to indicate the error (EBADF, EINTR, EINVAL, ENOLCK, EWOULDBLOCK)
-pub fn flock_syscall(
+pub extern "C" fn flock_syscall(
     cageid: u64,
     vfd_arg: u64,
     vfd_cageid: u64,
@@ -3654,7 +3637,7 @@ pub fn flock_syscall(
 ///
 /// ## Returns:
 /// On success, it returns the segment ID; on failure, it returns an appropriate error code.
-pub fn shmget_syscall(
+pub extern "C" fn shmget_syscall(
     cageid: u64,
     key_arg: u64,
     key_cageid: u64,
@@ -3779,7 +3762,7 @@ pub fn shmget_syscall(
 /// # Errors
 /// * `EINVAL` - If the provided address is not page-aligned
 /// * `ENOMEM` - If there is insufficient memory to complete the attachment
-pub fn shmat_syscall(
+pub extern "C" fn shmat_syscall(
     cageid: u64,
     shmid_arg: u64,
     shmid_cageid: u64,
@@ -3947,7 +3930,7 @@ pub fn shmat_syscall(
 ///
 /// # Returns
 /// * `i32` - 0 for success and negative errno for failure
-pub fn shmdt_syscall(
+pub extern "C" fn shmdt_syscall(
     cageid: u64,
     shmaddr_arg: u64,
     shmaddr_cageid: u64,
@@ -4042,7 +4025,7 @@ pub fn shmdt_syscall(
 /// On invalid identifiers or
 /// unsupported commands, it returns `-EINVAL` via `syscall_error`; on success,
 /// returns `0`.
-pub fn shmctl_syscall(
+pub extern "C" fn shmctl_syscall(
     cageid: u64,
     shmid_arg: u64,
     shmid_cageid: u64,
@@ -4145,7 +4128,7 @@ pub fn shmctl_syscall(
 /// ## Returns
 /// On success: number of bytes written (positive `i32`).  
 /// On failure: a negative errno from `handle_errno`.
-pub fn getrandom_syscall(
+pub extern "C" fn getrandom_syscall(
     cageid: u64,
     buf_arg: u64,
     buf_arg_cageid: u64,
