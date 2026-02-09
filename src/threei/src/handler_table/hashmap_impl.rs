@@ -1,6 +1,7 @@
 use crate::threei_const;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use sysdefs::constants::RAWPOSIX_CAGEID;
 
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
@@ -67,7 +68,12 @@ pub fn _get_handler(self_cageid: u64, syscall_num: u64) -> Option<(u64, u64)> {
     handler_table
         .get(&self_cageid) // Get the first HashMap<u64, HashMap<u64, u64>>
         .and_then(|sub_table| sub_table.get(&syscall_num)) // Get the second HashMap<u64, u64>
-        .and_then(|map| map.iter().next()) // Extract the first (key, value) pair
+        .and_then(|map| {
+            // In case a non RAWPOSIX_CAGEID grate exists, use that.
+            map.iter()
+                .find(|(_, &grateid)| grateid != RAWPOSIX_CAGEID)
+                .or_else(|| map.iter().next())
+        })
         .map(|(&call_index, &grateid)| (call_index, grateid)) // Convert to (u64, u64)
 }
 

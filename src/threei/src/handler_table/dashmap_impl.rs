@@ -1,6 +1,7 @@
 use crate::threei_const;
 use dashmap::DashMap;
 use std::sync::Mutex;
+use sysdefs::constants::RAWPOSIX_CAGEID;
 
 /// HANDLERTABLE:
 /// A nested hash map used to define fine-grained per-syscall interposition rules.
@@ -68,12 +69,16 @@ pub fn _check_cage_handler_exists(cageid: u64) -> bool {
 /// `Some((call_index_in_grate, dest_grateid))` if a handler mapping exists.
 /// `None` if no mapping is found.
 pub fn _get_handler(self_cageid: u64, syscall_num: u64) -> Option<(u64, u64)> {
-    HANDLERTABLE
-        .get(&self_cageid)?
-        .get(&syscall_num)?
+    let call_map = HANDLERTABLE.get(&self_cageid)?;
+    let target_map = call_map.get(&syscall_num)?;
+
+    // Use non-RAWPOSIX_CAGEID if it exists.
+    let fn_ptr_map = target_map
         .iter()
-        .next()
-        .map(|e| (*e.key(), *e.value()))
+        .find(|e| *e.value() != RAWPOSIX_CAGEID)
+        .or_else(|| target_map.iter().next())
+        .map(|e| (*e.key(), *e.value()));
+    fn_ptr_map
 }
 
 /// Removes **ALL** handler entries across all cages that point to a specific grateid.
