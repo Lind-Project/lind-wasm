@@ -197,25 +197,6 @@ pub fn check_and_convert_addr_ext(
     Ok(vmmap.base_address.unwrap() as u64 + arg)
 }
 
-pub fn check_addr(cageid: u64, arg: u64, length: usize, prot: i32) -> Result<bool, Errno> {
-    // search from the table and get the item from
-    let cage = get_cage(cageid).unwrap();
-
-    // Get write lock on virtual memory map
-    let mut vmmap = cage.vmmap.write();
-
-    // Calculate page numbers for start and end of region
-    let page_num = (arg >> PAGESHIFT) as u32; // Starting page number
-    let end_page = ((arg + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32; // Ending page number (rounded up)
-    let npages = end_page - page_num; // Total number of pages spanned
-
-    // Validate memory mapping and permissions
-    if vmmap.check_addr_mapping(page_num, npages, prot).is_none() {
-        return Err(Errno::EFAULT); // Return error if mapping invalid
-    }
-    Ok(true)
-}
-
 /// This function translates a virtual memory address to a physical address by adding the base address
 /// of the `vmmap` to the given argument. This translation is needed because the system uses a
 /// virtualized address space within each cage, where guest-visible addresses are offsets from the
