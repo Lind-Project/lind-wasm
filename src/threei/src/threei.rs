@@ -1,5 +1,5 @@
 //! Threei (Three Interposition) module
-use cage::memory::{check_addr, check_addr_read, check_addr_rw};
+use cage::memory::{check_addr_read, check_addr_rw};
 use core::panic;
 use dashmap::DashMap;
 use dashmap::DashSet;
@@ -668,27 +668,6 @@ fn _validate_range_read(cage: u64, addr: u64, len: usize, what: &str) -> Result<
 #[inline]
 fn _validate_range_rw(cage: u64, addr: u64, len: usize, what: &str) -> Result<(), u64> {
     match check_addr_rw(cage, addr, len) {
-        Ok(_) => Ok(()),
-        Err(_) => {
-            eprintln!(
-                "[3i|copy] range invalid: addr={:#x}, len={}, what={:?}",
-                addr, len, what
-            );
-            Err(threei_const::ELINDAPIABORTED)
-        }
-    }
-}
-
-/// Helper function to validate that a given memory range is valid in a cage.
-/// Calls check_addr with the given cage, start address, length, and protection flags.
-/// Returns Ok(()) if the range is valid and accessible.
-/// Logs an error and returns Err(error_code) if the range is invalid.
-///
-/// Note: This function is kept for backward compatibility. Consider using
-/// _validate_range_read or _validate_range_rw for better clarity.
-#[inline]
-fn _validate_range(cage: u64, addr: u64, len: usize, prot: i32, what: &str) -> Result<(), u64> {
-    match check_addr(cage, addr, len, prot) {
         Ok(_) => Ok(()),
         Err(_) => {
             eprintln!(
