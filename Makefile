@@ -1,4 +1,4 @@
-LIND_ROOT ?= src/tmp
+LINDFS_ROOT ?= lindfs
 BUILD_DIR ?= build
 SYSROOT_DIR ?= $(BUILD_DIR)/sysroot
 LINDBOOT_BIN ?= $(BUILD_DIR)/lind-boot
@@ -10,8 +10,8 @@ build: sysroot lind-boot
 
 .PHONY: prepare-lind-root
 prepare-lind-root:
-	mkdir -p $(LIND_ROOT)/dev
-	touch $(LIND_ROOT)/dev/null
+	mkdir -p $(LINDFS_ROOT)/dev
+	touch $(LINDFS_ROOT)/dev/null
 
 .PHONY: all
 all: build
@@ -56,7 +56,7 @@ sync-sysroot:
 .PHONY: test
 test: prepare-lind-root
 	# NOTE: `grep` workaround required for lack of meaningful exit code in wasmtestreport.py
-	LIND_WASM_BASE=. LIND_ROOT=$(LIND_ROOT) \
+	LIND_WASM_BASE=. LINDFS_ROOT=$(LINDFS_ROOT) \
 	./scripts/wasmtestreport.py && \
 	cat results.json; \
 	if grep -q '"number_of_failures": [^0]' results.json; then \
@@ -125,5 +125,5 @@ clean:
 distclean: clean
 	@echo "removing test outputs & temp files"
 	$(RM) -f results.json report.html e2e_status
-	$(RM) -r $(LIND_ROOT)/testfiles || true
+	$(RM) -r $(LINDFS_ROOT)/testfiles || true
 	find tests -type f \( -name '*.wasm' -o -name '*.cwasm' -o -name '*.o' \) -delete
