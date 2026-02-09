@@ -10,7 +10,7 @@ use threei::threei::{
 use threei::threei_const;
 use typemap::path_conversion::get_cstr;
 use wasmtime::Caller;
-use wasmtime_lind_multi_process::{clone_constants::CloneArgStruct, get_memory_base, LindHost};
+use wasmtime_lind_multi_process::{get_memory_base, LindHost};
 // These syscalls (`clone`, `exec`, `exit`, `fork`) require special handling
 // inside Lind Wasmtime before delegating to RawPOSIX. For example, they may
 // involve operations like setting up stack memory that must be performed
@@ -56,45 +56,60 @@ pub fn add_to_linker<
             // TODO:
             // 1. add a signal check here as Linux also has a signal check when transition from kernel to userspace
             // However, Asyncify management in this function should be carefully rethinking if adding signal check here
-            // 2. call clone_syscall / exec_syscall / exit_syscall from rawposix first instead of wasmtime_lind_multi_process in
-            // the future PR
 
-            match call_number as i32 {
-                // clone syscall
-                CLONE_SYSCALL => {
-                    let clone_args = unsafe { &mut *(arg1 as *mut CloneArgStruct) };
-                    // clone_args.child_tid += start_address;
-                    wasmtime_lind_multi_process::clone_syscall(&mut caller, clone_args)
+            // With Asyncify enabled, an unwind/rewind resumes Wasmtime execution by re-entering
+            // the original call site. This means the same hostcall/trampoline path can be
+            // executed multiple times while representing a *single* logical operation.
+            //
+            // `clone` is particularly sensitive here: during a logical `clone`, the lind
+            // trampoline can be re-entered multiple times (e.g., 3 times) after unwind/rewind.
+            // If we forward the syscall to RawPOSIX on every re-entry, we will perform the
+            // operation multiple times.
+            //
+            // In lind-boot we forward syscalls directly to RawPOSIX, so we replicate the state
+            // check here to early-return when we are on a rewind replay path.
+            if call_number as i32 == CLONE_SYSCALL {
+                if let Some(rewind_res) = wasmtime_lind_multi_process::catch_rewind(&mut caller) {
+                    return rewind_res;
                 }
-                // exec syscall
-                EXEC_SYSCALL => wasmtime_lind_multi_process::exec_syscall(
-                    &mut caller,
-                    arg1 as i64,
-                    arg2 as i64,
-                    arg3 as i64,
-                ),
-                // exit syscall
-                EXIT_SYSCALL => wasmtime_lind_multi_process::exit_syscall(&mut caller, arg1 as i32),
-                // other syscalls goes into threei
-                _ => make_syscall(
-                    self_cageid,
-                    call_number as u64,
-                    call_name,
-                    target_cageid,
-                    arg1,
-                    arg1cageid,
-                    arg2,
-                    arg2cageid,
-                    arg3,
-                    arg3cageid,
-                    arg4,
-                    arg4cageid,
-                    arg5,
-                    arg5cageid,
-                    arg6,
-                    arg6cageid,
-                ),
             }
+
+            // Some thread-related operations must be executed against a specific thread's
+            // VMContext (e.g., pthread_create/exit). Because syscalls may be interposed/routed
+            // through 3i functionality and the effective thread instance cannot be reliably derived
+            // from self/target cage IDs or per-argument cage IDs, we explicitly attach the *current*
+            // source thread id (tid) for selected syscalls. (Note: `self_cageid == target_cageid` means
+            // the syscall executes from cage)
+            //
+            // Concretely, for CLONE/EXEC we override arg2 with the current tid so that, when the call back
+            // to wasmtime, it can resolve the correct thread instance deterministically, independent of
+            // interposition or cross-cage routing.
+            let final_arg2 = if self_cageid == target_cageid
+                && matches!(call_number as i32, CLONE_SYSCALL | EXIT_SYSCALL)
+            {
+                wasmtime_lind_multi_process::current_tid(&mut caller) as u64
+            } else {
+                arg2
+            };
+
+            make_syscall(
+                self_cageid,
+                call_number as u64,
+                call_name,
+                target_cageid,
+                arg1,
+                arg1cageid,
+                final_arg2,
+                arg2cageid,
+                arg3,
+                arg3cageid,
+                arg4,
+                arg4cageid,
+                arg5,
+                arg5cageid,
+                arg6,
+                arg6cageid,
+            )
         },
     )?;
 

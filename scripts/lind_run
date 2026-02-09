@@ -4,8 +4,7 @@ set -Eeuo pipefail
 # Run passed (optionally precompiled) wasm file in wasmtime.
 #
 # Usage:
-#   lind_run /path/to/program.[c]wasm
-#   ./scripts/lind_run ./foo.cwasm
+#   lind_run /path/to/program.wasm
 #
 # No assumption about current working directory.
 
@@ -31,12 +30,12 @@ if [[ -z "${REPO_ROOT}" || ! -d "${REPO_ROOT}" ]]; then
   exit 2
 fi
 
-WASMTIME_BIN="${REPO_ROOT}/build/wasmtime"
-if [[ ! -x "${WASMTIME_BIN}" ]]; then
-  echo "ERROR: wasmtime missing: ${WASMTIME_BIN}" >&2
+LINDBOOT_BIN="${REPO_ROOT}/build/lind-boot"
+if [[ ! -x "${LINDBOOT_BIN}" ]]; then
+  echo "ERROR: lind-boot missing: ${LINDBOOT_BIN}" >&2
   exit 127 # Note: This is the traditional "command not found" exit code, can be changed as needed
 fi
-[[ -x "${WASMTIME_BIN}" ]] || { echo "error: wasmtime not found at ${WASMTIME_BIN}" >&2; exit 2; }
+[[ -x "${LINDBOOT_BIN}" ]] || { echo "error: lind-boot not found at ${LINDBOOT_BIN}" >&2; exit 2; }
 
 # Check if we need to re-exec with sudo
 if [[ $EUID -ne 0 ]]; then
@@ -44,4 +43,4 @@ if [[ $EUID -ne 0 ]]; then
   exec sudo -E "$0" "$@"
 fi
 
-exec "${WASMTIME_BIN}" run --allow-precompiled --wasi threads=y --wasi preview2=n "$@"
+exec "${LINDBOOT_BIN}" "$@"

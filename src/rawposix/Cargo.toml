@@ -15,6 +15,7 @@ fdtables = { path = "../fdtables" }
 sysdefs = { path = "../sysdefs" }
 typemap = { path = "../typemap" }
 cage = { path = "../cage" }
+threei = { path = "../threei" }
 
 [features]
 default = ["fast"]

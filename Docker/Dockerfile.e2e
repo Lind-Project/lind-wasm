@@ -4,7 +4,7 @@
 # Multi-stage Dockerfile for lind-wasm end-to-end testing and image creation
 #
 # - Installs build dependencies
-# - Builds wasmtime, glibc and sysroot for clang cross-compilation
+# - Builds lind-boot, glibc and sysroot for clang cross-compilation
 # - A. Runs end-to-end tests (default)
 # - B. Creates Docker image with lind-wasm toolchain
 #
@@ -85,10 +85,10 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 
-# Build wasmtime
-FROM base as build-wasmtime
+# Build lind-boot
+FROM base as build-lind-boot
 # NOTE: Using 'make' risks cache invalidation on unrelated Makefile changes
-COPY --parents src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs Makefile rust-toolchain.toml .
+COPY --parents src/lind-boot src/wasmtime src/rawposix src/cage src/threei src/typemap src/fdtables src/sysdefs Makefile rust-toolchain.toml .
 RUN rm -f src/wasmtime/crates/cage \
     src/wasmtime/crates/threei \
     src/wasmtime/crates/fdtables \
@@ -101,7 +101,7 @@ RUN rm -f src/wasmtime/crates/cage \
  && ln -s ../../typemap src/wasmtime/crates/typemap \
  && ln -s ../../sysdefs src/wasmtime/crates/sysdefs \
  && ln -s ../../rawposix src/wasmtime/crates/rawposix
-RUN make wasmtime
+RUN make lind-boot
 
 
 # Build glibc and generate sysroot
@@ -118,9 +118,9 @@ RUN make sysroot
 # NOTE: Lind-wasm source code is not included
 FROM base AS release
 
-COPY --from=build-wasmtime --parents src/wasmtime/target .
-COPY --from=build-wasmtime --parents build/wasmtime .
-RUN chmod 0755 /build/wasmtime
+COPY --from=build-lind-boot --parents src/lind-boot/target .
+COPY --from=build-lind-boot --parents build/lind-boot .
+RUN chmod 0755 /build/lind-boot
 COPY --from=build-glibc --parents src/glibc/sysroot .
 COPY --from=build-glibc --parents build/sysroot .
 COPY --parents scripts tests tools skip_test_cases.txt .
@@ -141,8 +141,8 @@ RUN chmod 0755 /scripts/wasmtestreport.py /scripts/lind_compile /scripts/lind_ru
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time
 # and cache layers. This means they are not preserved in the resulting image.
-RUN --mount=from=build-wasmtime,source=src/wasmtime/target,destination=src/wasmtime/target \
-    --mount=from=build-wasmtime,source=build/wasmtime,destination=/build/wasmtime \
+RUN --mount=from=build-lind-boot,source=src/lind-boot/target,destination=src/lind-boot/target \
+    --mount=from=build-lind-boot,source=build/lind-boot,destination=/build/lind-boot \
     --mount=from=build-glibc,source=src/glibc/sysroot,destination=src/glibc/sysroot \
     make test && \
     OUT_DIR=/ REPORT_PATH=/report.html make md_generation
