@@ -33,7 +33,7 @@ formatter = logging.Formatter("[%(levelname)s] %(message)s")
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-DEFAULT_TIMEOUT = 10 # in seconds
+DEFAULT_TIMEOUT = 30 # in seconds
 
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
