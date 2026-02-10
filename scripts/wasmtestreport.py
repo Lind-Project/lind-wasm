@@ -7,7 +7,10 @@
 #   "./wasmtestreport.py --timeout 10" to run with a timeout of 10 seconds 
 #   "./wasmtestreport.py --output newresult" to change the output file(The new file will be newresult.json)
 #   "./wasmtestreport.py --generate-html" to generate the html file
+#   "./wasmtestreport.py --allow-pre-compiled" to run tests with .cwasm binaries instead of .wasm binaries
 #   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 10"
+#   "./wasmtestreport.py --compile-flags -pthread -lpthread -O2 -g"
+#   (flags are collected until the next option starting with "--")
 #
 #   "./wasmtestreport.py --pre-test-only" to copy the testfiles to lind fs root(does not run tests)
 #   "./wasmtestreport.py --clean-testfiles" to delete the testfiles from lind fs root(does not run tests)
@@ -16,12 +19,12 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict
 import argparse
 import shutil
 import logging
 import tempfile
 import time
+import sys
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -44,7 +47,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 LIND_WASM_BASE = Path(os.environ.get("LIND_WASM_BASE", REPO_ROOT)).resolve()
 LINDFS_ROOT = Path(os.environ.get("LINDFS_ROOT", LIND_WASM_BASE / "lindfs")).resolve()
-CC = os.environ.get("CC", "gcc")  # C compiler, defaults to gcc
+CC = os.environ.get("CC", "clang")  # C compiler, defaults to clang
 
 LIND_TOOL_PATH = LIND_WASM_BASE / "scripts"
 TEST_FILE_BASE = LIND_WASM_BASE / "tests" / "unit-tests"
@@ -54,6 +57,9 @@ DETERMINISTIC_PARENT_NAME = "deterministic"
 FAIL_PARENT_NAME = "fail"
 EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
+GLOBAL_COMPILE_FLAGS = []
+DIR_FLAGS = []
+MATH_TEST_DIR = Path(os.environ.get("MATH_TEST_DIR", "math"))
 
 
 error_types = {
@@ -87,6 +93,62 @@ error_types = {
 def is_segmentation_fault(returncode):
     return returncode in (134, 139)
 # ----------------------------------------------------------------------
+
+def load_dir_flags(flags_path: Path):
+    if not flags_path:
+        return []
+    try:
+        with open(flags_path, "r") as f:
+            raw_data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Failed to load dir flags from {flags_path}: {exc}") from exc
+
+    if not isinstance(raw_data, dict):
+        raise ValueError("Directory flags JSON must be an object mapping paths to flag configs.")
+
+    entries = []
+    for key, value in raw_data.items():
+        if not isinstance(key, str):
+            raise ValueError("Directory flags keys must be strings.")
+        if not isinstance(value, dict):
+            raise ValueError(f"Directory flags entry for {key} must be an object.")
+
+        lind_flags = value.get("lind", [])
+        native_flags = value.get("native", [])
+
+        if not isinstance(lind_flags, list) or not all(isinstance(f, str) for f in lind_flags):
+            raise ValueError(f"Directory flags 'lind' for {key} must be a list of strings.")
+        if not isinstance(native_flags, list) or not all(isinstance(f, str) for f in native_flags):
+            raise ValueError(f"Directory flags 'native' for {key} must be a list of strings.")
+
+        entries.append((Path(key), {"lind": lind_flags, "native": native_flags}))
+
+    entries.sort(key=lambda item: len(item[0].parts), reverse=True)
+    return entries
+
+def resolve_compile_flags(source_file: Path, kind: str):
+    if kind not in ("lind", "native"):
+        raise ValueError(f"Unknown compile flag kind: {kind}")
+
+    base_flags = GLOBAL_COMPILE_FLAGS
+    selected_flags = []
+    source_file = Path(source_file)
+
+    try:
+        rel_path = source_file.resolve().relative_to(TEST_FILE_BASE.resolve())
+    except ValueError:
+        rel_path = source_file.resolve()
+
+    for dir_path, flags in DIR_FLAGS:
+        if rel_path.parts[:len(dir_path.parts)] == dir_path.parts:
+            selected_flags = flags.get(kind, [])
+            break
+
+    extra_flags = []
+    if rel_path.parts and rel_path.parts[0] == MATH_TEST_DIR.name:
+        extra_flags.append("-lm")
+
+    return [*base_flags, *selected_flags, *extra_flags]
 
 # Function: get_empty_result
 #
@@ -245,7 +307,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
             shutil.copy2(str(dest_path), backup_path)
             executable_backups[dest_path] = Path(backup_path)
 
-        dep_compile_cmd = [CC, str(dependency_source), "-o", str(dest_path)]
+        dep_compile_cmd = [CC, str(dependency_source), *resolve_compile_flags(dependency_source, "native"), "-o", str(dest_path)]
         try:
             dep_proc = run_subprocess(dep_compile_cmd, label="native dep compile", shell=False)
         except Exception as e:
@@ -264,7 +326,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
         raise ValueError(f"Native output path must be absolute, got: {native_output}")
 
     # Compile
-    compile_cmd = [CC, str(source_file), "-o", str(native_output)]
+    compile_cmd = [CC, str(source_file), *resolve_compile_flags(source_file, "native"), "-o", str(native_output)]
     try:
         proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LINDFS_ROOT, shell=False)
         if proc.returncode != 0:
@@ -340,7 +402,7 @@ def get_expected_output(source_file, timeout_sec=DEFAULT_TIMEOUT):
 #   Given a path to a .c file, calls `lind_compile` to compile it into wasm.
 #
 # Variables:
-# - Input: source_file - path to the .c file.
+# - Input: source_file - path to the .c file, allow_precompiled (bool) - if True, use a precompiled `.cwasm` binary.
 # - Output: (wasm_file, error_message).
 #       If compilation succeeds, returns paths to the wasm and empty string for error_message.
 #       On failure, returns (None, <error_message>).
@@ -351,10 +413,10 @@ def get_expected_output(source_file, timeout_sec=DEFAULT_TIMEOUT):
 # Note:
 #   Dependancy on the script `lind_compile`.
 # ----------------------------------------------------------------------
-def compile_c_to_wasm(source_file):
+def compile_c_to_wasm(source_file, allow_precompiled=False):
     source_file = Path(source_file)
     testcase = str(source_file.with_suffix(''))
-    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file]
+    compile_cmd = [os.path.join(LIND_TOOL_PATH, "lind_compile"), source_file, *resolve_compile_flags(source_file, "lind")]
     
     logger.debug(f"Running command: {' '.join(map(str, compile_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_compile")):
@@ -368,7 +430,10 @@ def compile_c_to_wasm(source_file):
         if result.returncode != 0:
             return (None, result.stdout + "\n" + result.stderr)
         else:
-            wasm_file = Path(testcase + ".cwasm")
+            # Return the generated artifact: .cwasm when precompiled, otherwise .wasm
+            wasm_file = Path(testcase + (".cwasm" if allow_precompiled else ".wasm"))
+            if not wasm_file.exists():
+                return (None, f"Expected wasm output not found: {wasm_file}")
             return (wasm_file, "")
     except Exception as e:
         return (None, f"Exception during compilation: {str(e)}")
@@ -397,7 +462,8 @@ def compile_c_to_wasm(source_file):
 #   the first line in stdout by the script which is the command itself
 # ----------------------------------------------------------------------
 def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
-    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file]
+    wasm_file = Path(wasm_file)
+    run_cmd = [os.path.join(LIND_TOOL_PATH, "lind_run"), wasm_file.name]
     
     logger.debug(f"Running command: {' '.join(map(str, run_cmd))}") 
     if os.path.isfile(os.path.join(LIND_TOOL_PATH, "lind_run")):
@@ -422,7 +488,7 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
     except Exception as e:
         return ("unknown_error", f"Exception during wasm run: {str(e)}")
 
-def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic"):
+def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic", allow_precompiled=False):
     """Unified test function for deterministic and failing tests"""
     source_file = Path(source_file)
     handler = TestResultHandler(result, source_file)
@@ -450,7 +516,7 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
             return native_elapsed, lind_elapsed
         
         # Compile and run WASM
-        wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
+        wasm_file, wasm_compile_error = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
         if wasm_file is None:
             # Record this specifically as a fail-test WASM-compilation error so it is
             # counted alongside other `Fail_*` test categories instead of the generic
@@ -514,7 +580,7 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
             return native_elapsed, lind_elapsed
     
     # Compile and run WASM
-    wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
+    wasm_file, wasm_compile_error = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
     if wasm_file is None:
         handler.add_compile_failure(wasm_compile_error)
         return native_elapsed, lind_elapsed
@@ -549,11 +615,11 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
     return native_elapsed, lind_elapsed
 
 # Wrapper functions for deterministic and fail tests
-def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    return test_single_file_unified(source_file, result, timeout_sec, "deterministic")
+def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT, allow_precompiled=False):
+    test_single_file_unified(source_file, result, timeout_sec, "deterministic", allow_precompiled=allow_precompiled)
 
-def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    return test_single_file_unified(source_file, result, timeout_sec, "fail")
+def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT, allow_precompiled=False):
+    test_single_file_unified(source_file, result, timeout_sec, "fail", allow_precompiled=allow_precompiled)
 
 # ----------------------------------------------------------------------
 # Function: analyze_testfile_dependencies
@@ -659,10 +725,11 @@ def analyze_executable_dependencies(tests_to_run):
 # Variables:
 # - Input:
 #   executable_deps: Dictionary mapping executable paths to source files
+#   allow_precompiled (bool): If True, use `.cwasm`, use`.wasm` otherwise
 # - Output:
 #   None (creates executables in LINDFS_ROOT)
 # ----------------------------------------------------------------------
-def create_required_executables(executable_deps):
+def create_required_executables(executable_deps, allow_precompiled=False):
     if not executable_deps:
         return
     
@@ -670,8 +737,8 @@ def create_required_executables(executable_deps):
     
     for exec_path, source_file in executable_deps.items():
         try:
-            # Compile the source file to WASM
-            wasm_file, compile_err = compile_c_to_wasm(source_file)
+            # Compile the source file to WASM or precompiled .cwasm depending on flag
+            wasm_file, compile_err = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
             
             if wasm_file is None:
                 logger.error(f"Failed to compile {source_file}: {compile_err}")
@@ -699,10 +766,11 @@ def create_required_executables(executable_deps):
 # Variables:
 # - Input:
 #   tests_to_run: Optional list of test files to analyze for dependencies
+#   allow_precompiled (bool): If True: use .cwasm, use .wasm otherwise
 # - Output:
 #   None
 # ----------------------------------------------------------------------
-def pre_test(tests_to_run=None):
+def pre_test(tests_to_run=None, allow_precompiled=False):
     # Ensure LINDFS_ROOT exists with required subdirectories (For CI Environment)
     os.makedirs(LINDFS_ROOT, exist_ok=True)
     os.makedirs(LINDFS_ROOT / "automated_tests", exist_ok=True)
@@ -758,7 +826,7 @@ def pre_test(tests_to_run=None):
     # Create required executables
     if tests_to_run:
         executable_deps = analyze_executable_dependencies(tests_to_run)
-        create_required_executables(executable_deps)
+        create_required_executables(executable_deps, allow_precompiled=allow_precompiled)
 
 # ----------------------------------------------------------------------
 # Function: generate_html_report
@@ -1012,7 +1080,31 @@ def check_timeout(value):
 # - Output:
 #   Returns a dictionary with the parsed arguments
 # ----------------------------------------------------------------------
-def parse_arguments():
+def extract_option_values(argv, option):
+    values = []
+    remaining = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == option:
+            i += 1
+            while i < len(argv) and not argv[i].startswith("--"):
+                values.append(argv[i])
+                i += 1
+            continue
+        if arg.startswith(f"{option}="):
+            values.append(arg.split("=", 1)[1])
+            i += 1
+            continue
+        remaining.append(arg)
+        i += 1
+    return values, remaining
+
+def parse_arguments(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+
+    compile_flags, argv = extract_option_values(argv, "--compile-flags")
     parser = argparse.ArgumentParser(description="Specify folders to skip or run.")
     parser.add_argument("--skip", nargs="*", default=SKIP_FOLDERS, help="List of folders to be skipped")
     parser.add_argument("--run", nargs="*", default=RUN_FOLDERS, help="List of folders to be run")
@@ -1025,10 +1117,13 @@ def parse_arguments():
     parser.add_argument("--clean-results", action="store_true", help="Flag to clean up result files")
     parser.add_argument("--testfiles", type=Path, nargs = "+", help="Run one or more specific test files")
     parser.add_argument("--debug", action="store_true", help="Enable detailed stdout/stderr output for subprocesses")
+    parser.add_argument("--allow-pre-compiled", action="store_true", dest="allow_pre_compiled", help="Allow compiling/running precompiled .cwasm files (default: .wasm)")
     parser.add_argument("--artifacts-dir", type=Path, help="Directory to store build artifacts (default: temp dir)")
     parser.add_argument("--keep-artifacts", action="store_true", help="Keep artifacts directory after run for troubleshooting")
+    parser.add_argument("--compile-flags", nargs="*", default=compile_flags, help="Extra flags passed to both lind_compile and the native compiler; values may start with '-' (e.g. --compile-flags -pthread -lpthread -O2 -g)")
+    parser.add_argument("--dir-flags", type=Path, help="Path to JSON file mapping directories to lind/native flags")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     return args
 
 def compare_test_results(file1, file2):
@@ -1144,6 +1239,9 @@ def setup_test_environment(args):
                                config['skip_folders_paths'], config['skip_test_cases'])
         ]
     
+    # Propagate allow_precompiled flag into the config
+    config['allow_precompiled'] = bool(getattr(args, 'allow_pre_compiled', False))
+    
     return config
 
 # ----------------------------------------------------------------------
@@ -1180,7 +1278,7 @@ def setup_test_file_in_artifacts(original_source, artifacts_root):
         expected_dir_dst = dest_dir / EXPECTED_DIRECTORY
         if not expected_dir_dst.exists():
             shutil.copytree(expected_dir_src, expected_dir_dst)
-    
+            
     return dest_source
 
 # ----------------------------------------------------------------------
@@ -1206,11 +1304,9 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         # Determine test type and run appropriate test
         parent_name = original_source.parent.name
         if parent_name == DETERMINISTIC_PARENT_NAME:
-            native_elapsed, lind_elapsed = test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
-            test_entry = results["deterministic"]["test_cases"].get(str(dest_source))
+            test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         elif parent_name == FAIL_PARENT_NAME:
-            native_elapsed, lind_elapsed = test_single_file_fail(dest_source, results["fail"], timeout_sec)
-            test_entry = results["fail"]["test_cases"].get(str(dest_source))
+            test_single_file_fail(dest_source, results["fail"], timeout_sec, allow_precompiled=config['allow_precompiled'])
         else:
             # Log warning for tests not in deterministic/fail folders
             logger.warning(f"Test file {original_source} is not in a deterministic or fail folder - skipping")
@@ -1260,6 +1356,7 @@ def build_fail_message(case: str, native_output: str, wasm_output: str, native_r
         )
 
 def main():
+    global GLOBAL_COMPILE_FLAGS, DIR_FLAGS
     os.chdir(LIND_WASM_BASE)
     args = parse_arguments()
     skip_folders = args.skip
@@ -1273,6 +1370,14 @@ def main():
     clean_results = args.clean_results
     artifacts_dir_arg = args.artifacts_dir
     keep_artifacts = args.keep_artifacts
+    GLOBAL_COMPILE_FLAGS = [*args.compile_flags]
+
+    if args.dir_flags:
+        try:
+            DIR_FLAGS = load_dir_flags(args.dir_flags)
+        except ValueError as exc:
+            logger.error(str(exc))
+            return
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
@@ -1338,7 +1443,7 @@ def main():
             return
 
         # Use selective testfile copying based on test dependencies
-        pre_test(config['tests_to_run'])
+        pre_test(config['tests_to_run'], allow_precompiled=config.get('allow_precompiled', False))
         if pre_test_only:
             logger.info(f"Testfiles copied to {TESTFILES_DST}")
             return

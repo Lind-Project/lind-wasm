@@ -383,8 +383,11 @@ impl Vmmap {
     /// * `Some((page_num, npages))` - The starting page number and number of pages
     /// * `None` - If the calculation would overflow
     fn calculate_page_range(&self, addr: u64, length: usize) -> Option<(u32, u32)> {
-        let page_num = (addr >> PAGESHIFT) as u32;
-        let end_addr = addr
+        let base_addr = self.base_address.unwrap() as u64;
+        let uaddr = addr - base_addr;
+
+        let page_num = (uaddr >> PAGESHIFT) as u32;
+        let end_addr = uaddr
             .checked_add(length as u64)?
             .checked_add(PAGESIZE as u64 - 1)?;
         let end_page = (end_addr >> PAGESHIFT) as u32;
