@@ -197,31 +197,6 @@ pub fn check_and_convert_addr_ext(
     Ok(vmmap.base_address.unwrap() as u64 + arg)
 }
 
-pub fn check_addr(cageid: u64, arg: u64, length: usize, prot: i32) -> Result<bool, Errno> {
-    // search from the table and get the item from
-    let cage = get_cage(cageid).unwrap();
-
-    // Get write lock on virtual memory map
-    let mut vmmap = cage.vmmap.write();
-
-    // The input addresses are relative to the host's memory address, however,
-    // `vmmap.check_addr_mapping` operates relative to the cage's memory.
-    // We do this by subtracting cage's the base address.
-    let base_addr = vmmap.base_address.unwrap() as u64;
-    let arg_uaddr = arg - base_addr;
-
-    // Calculate page numbers for start and end of region
-    let page_num = (arg_uaddr >> PAGESHIFT) as u32; // Starting page number
-    let end_page = ((arg_uaddr + length as u64 + PAGESIZE as u64 - 1) >> PAGESHIFT) as u32; // Ending page number (rounded up)
-    let npages = end_page - page_num; // Total number of pages spanned
-
-    // Validate memory mapping and permissions
-    if vmmap.check_addr_mapping(page_num, npages, prot).is_none() {
-        return Err(Errno::EFAULT); // Return error if mapping invalid
-    }
-    Ok(true)
-}
-
 /// This function translates a virtual memory address to a physical address by adding the base address
 /// of the `vmmap` to the given argument. This translation is needed because the system uses a
 /// virtualized address space within each cage, where guest-visible addresses are offsets from the
@@ -239,4 +214,79 @@ pub fn translate_vmmap_addr(cage: &Cage, arg: u64) -> Result<u64, Errno> {
     // Get read lock on virtual memory map
     let vmmap = cage.vmmap.read();
     Ok(vmmap.base_address.unwrap() as u64 + arg)
+}
+
+/// Checks if a given address range is readable for a specific cage
+///
+/// This is a high-level wrapper that retrieves the cage's vmmap and checks
+/// if the specified memory range has read permissions.
+///
+/// # Arguments
+/// * `cageid` - The cage identifier
+/// * `addr` - Virtual memory address to check
+/// * `length` - Length of the memory region in bytes
+///
+/// # Returns
+/// * `Ok(true)` - If the entire range is mapped and readable
+/// * `Err(Errno::EINVAL)` - If the cage does not exist
+/// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or not readable
+pub fn check_addr_read(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
+    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
+    let mut vmmap = cage.vmmap.write();
+
+    if vmmap.check_addr_read(addr, length) {
+        Ok(true)
+    } else {
+        Err(Errno::EFAULT)
+    }
+}
+
+/// Checks if a given address range is writable for a specific cage
+///
+/// This is a high-level wrapper that retrieves the cage's vmmap and checks
+/// if the specified memory range has write permissions.
+///
+/// # Arguments
+/// * `cageid` - The cage identifier
+/// * `addr` - Virtual memory address to check
+/// * `length` - Length of the memory region in bytes
+///
+/// # Returns
+/// * `Ok(true)` - If the entire range is mapped and writable
+/// * `Err(Errno::EINVAL)` - If the cage does not exist
+/// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or not writable
+pub fn check_addr_write(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
+    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
+    let mut vmmap = cage.vmmap.write();
+
+    if vmmap.check_addr_write(addr, length) {
+        Ok(true)
+    } else {
+        Err(Errno::EFAULT)
+    }
+}
+
+/// Checks if a given address range is readable and writable for a specific cage
+///
+/// This is a high-level wrapper that retrieves the cage's vmmap and checks
+/// if the specified memory range has both read and write permissions.
+///
+/// # Arguments
+/// * `cageid` - The cage identifier
+/// * `addr` - Virtual memory address to check
+/// * `length` - Length of the memory region in bytes
+///
+/// # Returns
+/// * `Ok(true)` - If the entire range is mapped with both read and write permissions
+/// * `Err(Errno::EINVAL)` - If the cage does not exist
+/// * `Err(Errno::EFAULT)` - If any part of the range is unmapped or lacks read/write permissions
+pub fn check_addr_rw(cageid: u64, addr: u64, length: usize) -> Result<bool, Errno> {
+    let cage = get_cage(cageid).ok_or(Errno::EINVAL)?;
+    let mut vmmap = cage.vmmap.write();
+
+    if vmmap.check_addr_rw(addr, length) {
+        Ok(true)
+    } else {
+        Err(Errno::EFAULT)
+    }
 }

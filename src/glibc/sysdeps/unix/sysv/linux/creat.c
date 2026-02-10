@@ -27,11 +27,7 @@
 int
 __creat (const char *file, mode_t mode)
 {
-# ifdef __NR_creat
-  return SYSCALL_CANCEL (creat, file, mode);
-# else
   return __open (file, O_WRONLY | O_CREAT | O_TRUNC, mode);
-# endif
 }
 weak_alias (__creat, creat)
 

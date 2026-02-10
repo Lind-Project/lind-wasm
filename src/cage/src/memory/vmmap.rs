@@ -12,7 +12,9 @@ use nodit::NoditMap;
 use nodit::{interval::ie, Interval};
 use std::io;
 use sysdefs::constants::err_const::{syscall_error, Errno};
-use sysdefs::constants::fs_const::{PAGESHIFT, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE};
+use sysdefs::constants::fs_const::{
+    PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE,
+};
 
 /// Default number of virtual memory pages in a `vmmap`.
 /// Calculated as 2^(32 - PAGESHIFT), which represents the total pages
@@ -367,6 +369,112 @@ impl Vmmap {
     // - File information (offset and size) when applicable
     // - Any gaps in the address space
     fn debug() {}
+
+    /// Calculates the page number and number of pages for a given address and length.
+    ///
+    /// This helper function converts a byte address range into page numbers,
+    /// handling overflow safely with checked arithmetic.
+    ///
+    /// # Arguments
+    /// * `addr` - Virtual memory address (in bytes)
+    /// * `length` - Length of the memory region in bytes
+    ///
+    /// # Returns
+    /// * `Some((page_num, npages))` - The starting page number and number of pages
+    /// * `None` - If the calculation would overflow
+    fn calculate_page_range(&self, addr: u64, length: usize) -> Option<(u32, u32)> {
+        let base_addr = self.base_address.unwrap() as u64;
+        let uaddr = addr - base_addr;
+
+        let page_num = (uaddr >> PAGESHIFT) as u32;
+        let end_addr = uaddr
+            .checked_add(length as u64)?
+            .checked_add(PAGESIZE as u64 - 1)?;
+        let end_page = (end_addr >> PAGESHIFT) as u32;
+        let npages = end_page.checked_sub(page_num)?;
+        Some((page_num, npages))
+    }
+
+    /// Checks if a given address range is readable
+    ///
+    /// This helper function checks whether a memory range starting at the given address
+    /// with the specified length has read permissions. It abstracts away the underlying
+    /// vmmap lookup and protection flag checking logic.
+    ///
+    /// # Arguments
+    /// * `addr` - Virtual memory address to check
+    /// * `length` - Length of the memory region in bytes
+    ///
+    /// # Returns
+    /// * `true` - If the entire range is mapped and readable, or if length is 0
+    /// * `false` - If any part of the range is unmapped, not readable, or if overflow occurs
+    pub fn check_addr_read(&mut self, addr: u64, length: usize) -> bool {
+        // Zero-length check is trivially true
+        if length == 0 {
+            return true;
+        }
+
+        let Some((page_num, npages)) = self.calculate_page_range(addr, length) else {
+            return false; // Overflow occurred
+        };
+
+        self.check_addr_mapping(page_num, npages, PROT_READ)
+            .is_some()
+    }
+
+    /// Checks if a given address range is writable
+    ///
+    /// This helper function checks whether a memory range starting at the given address
+    /// with the specified length has write permissions. It abstracts away the underlying
+    /// vmmap lookup and protection flag checking logic.
+    ///
+    /// # Arguments
+    /// * `addr` - Virtual memory address to check
+    /// * `length` - Length of the memory region in bytes
+    ///
+    /// # Returns
+    /// * `true` - If the entire range is mapped and writable, or if length is 0
+    /// * `false` - If any part of the range is unmapped, not writable, or if overflow occurs
+    pub fn check_addr_write(&mut self, addr: u64, length: usize) -> bool {
+        // Zero-length check is trivially true
+        if length == 0 {
+            return true;
+        }
+
+        let Some((page_num, npages)) = self.calculate_page_range(addr, length) else {
+            return false; // Overflow occurred
+        };
+
+        self.check_addr_mapping(page_num, npages, PROT_WRITE)
+            .is_some()
+    }
+
+    /// Checks if a given address range is readable and writable
+    ///
+    /// This helper function checks whether a memory range starting at the given address
+    /// with the specified length has both read and write permissions. It abstracts away
+    /// the underlying vmmap lookup and protection flag checking logic.
+    ///
+    /// # Arguments
+    /// * `addr` - Virtual memory address to check
+    /// * `length` - Length of the memory region in bytes
+    ///
+    /// # Returns
+    /// * `true` - If the entire range is mapped with both read and write permissions, or if length is 0
+    /// * `false` - If any part of the range is unmapped, lacks read/write permissions, or if overflow occurs
+    pub fn check_addr_rw(&mut self, addr: u64, length: usize) -> bool {
+        // Zero-length check is trivially true
+        if length == 0 {
+            return true;
+        }
+
+        let Some((page_num, npages)) = self.calculate_page_range(addr, length) else {
+            return false; // Overflow occurred
+        };
+
+        self.check_addr_mapping(page_num, npages, PROT_READ | PROT_WRITE)
+            .is_some()
+    }
 }
 
 impl VmmapOps for Vmmap {
@@ -2050,5 +2158,288 @@ mod tests {
             space.is_none(),
             "Should return None when no space available"
         );
+    }
+
+    /// Test: check_addr_read returns true for readable region
+    /// Expected: Should return true when the entire range has PROT_READ
+    #[test]
+    fn test_check_addr_read_success() {
+        let mut vmmap = Vmmap::new();
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        // Add a readable region at pages 10-19 (addresses 0x10000-0x19FFF for 4KB pages)
+        vmmap
+            .add_entry_with_overwrite(
+                10,
+                10,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        // Check read access within the region (address in bytes: page 10 = 10 << 12 = 40960)
+        let addr = (10 << PAGESHIFT) as u64;
+        let length = (5 << PAGESHIFT) as usize; // 5 pages
+        assert!(
+            vmmap.check_addr_read(addr, length),
+            "Should return true for readable region"
+        );
+    }
+
+    /// Test: check_addr_read returns false for non-readable region
+    /// Expected: Should return false when region has PROT_NONE
+    /// Note: check_addr_mapping enforces PROT_READ for any protection that exists,
+    /// so we need to use PROT_NONE to test the failure case
+    #[test]
+    fn test_check_addr_read_failure_no_read_prot() {
+        let mut vmmap = Vmmap::new();
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        // Add a region with no permissions (PROT_NONE)
+        vmmap
+            .add_entry_with_overwrite(
+                10,
+                10,
+                PROT_NONE,
+                PROT_NONE,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        let addr = (10 << PAGESHIFT) as u64;
+        let length = (5 << PAGESHIFT) as usize;
+        assert!(
+            !vmmap.check_addr_read(addr, length),
+            "Should return false for PROT_NONE region"
+        );
+    }
+
+    /// Test: check_addr_write returns true for writable region
+    /// Expected: Should return true when the entire range has PROT_WRITE
+    #[test]
+    fn test_check_addr_write_success() {
+        let mut vmmap = Vmmap::new();
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        // Add a writable region
+        vmmap
+            .add_entry_with_overwrite(
+                10,
+                10,
+                PROT_WRITE | PROT_READ,
+                PROT_WRITE | PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        let addr = (10 << PAGESHIFT) as u64;
+        let length = (5 << PAGESHIFT) as usize;
+        assert!(
+            vmmap.check_addr_write(addr, length),
+            "Should return true for writable region"
+        );
+    }
+
+    /// Test: check_addr_write returns false for read-only region
+    /// Expected: Should return false when region lacks PROT_WRITE
+    #[test]
+    fn test_check_addr_write_failure_no_write_prot() {
+        let mut vmmap = Vmmap::new();
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        // Add a read-only region
+        vmmap
+            .add_entry_with_overwrite(
+                10,
+                10,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        let addr = (10 << PAGESHIFT) as u64;
+        let length = (5 << PAGESHIFT) as usize;
+        assert!(
+            !vmmap.check_addr_write(addr, length),
+            "Should return false for non-writable region"
+        );
+    }
+
+    /// Test: check_addr_rw returns true for read-write region
+    /// Expected: Should return true when the entire range has both PROT_READ and PROT_WRITE
+    #[test]
+    fn test_check_addr_rw_success() {
+        let mut vmmap = Vmmap::new();
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        // Add a read-write region
+        vmmap
+            .add_entry_with_overwrite(
+                10,
+                10,
+                PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        let addr = (10 << PAGESHIFT) as u64;
+        let length = (5 << PAGESHIFT) as usize;
+        assert!(
+            vmmap.check_addr_rw(addr, length),
+            "Should return true for read-write region"
+        );
+    }
+
+    /// Test: check_addr_rw returns false for read-only region
+    /// Expected: Should return false when region lacks PROT_WRITE
+    #[test]
+    fn test_check_addr_rw_failure_read_only() {
+        let mut vmmap = Vmmap::new();
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        // Add a read-only region
+        vmmap
+            .add_entry_with_overwrite(
+                10,
+                10,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        let addr = (10 << PAGESHIFT) as u64;
+        let length = (5 << PAGESHIFT) as usize;
+        assert!(
+            !vmmap.check_addr_rw(addr, length),
+            "Should return false for read-only region"
+        );
+    }
+
+    /// Test: check_addr_read returns false for unmapped region
+    /// Expected: Should return false when address is not mapped
+    #[test]
+    fn test_check_addr_read_unmapped_region() {
+        let mut vmmap = Vmmap::new();
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        // Don't add any entries - region is unmapped
+        let addr = (10 << PAGESHIFT) as u64;
+        let length = (5 << PAGESHIFT) as usize;
+        assert!(
+            !vmmap.check_addr_read(addr, length),
+            "Should return false for unmapped region"
+        );
+    }
+
+    /// Test: Zero-length check returns true
+    /// Expected: Zero-length access should always succeed
+    #[test]
+    fn test_check_addr_zero_length() {
+        let mut vmmap = Vmmap::new();
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        // Even with no mappings, zero-length should succeed
+        let addr = (10 << PAGESHIFT) as u64;
+        assert!(
+            vmmap.check_addr_read(addr, 0),
+            "Zero-length read check should return true"
+        );
+        assert!(
+            vmmap.check_addr_write(addr, 0),
+            "Zero-length write check should return true"
+        );
+        assert!(
+            vmmap.check_addr_rw(addr, 0),
+            "Zero-length rw check should return true"
+        );
+    }
+
+    /// Test: check_addr_read handles partial region coverage
+    /// Expected: Should return false when request spans beyond mapped region
+    #[test]
+    fn test_check_addr_read_partial_coverage() {
+        let mut vmmap = Vmmap::new();
+        vmmap.start_address = 0;
+        vmmap.end_address = 1000;
+
+        // Add a small readable region at pages 10-14
+        vmmap
+            .add_entry_with_overwrite(
+                10,
+                5,
+                PROT_READ,
+                PROT_READ,
+                0,
+                MemoryBackingType::Anonymous,
+                0,
+                0,
+                0,
+            )
+            .unwrap();
+
+        // Try to read 10 pages starting from page 10 (spans into unmapped area)
+        let addr = (10 << PAGESHIFT) as u64;
+        let length = (10 << PAGESHIFT) as usize;
+        assert!(
+            !vmmap.check_addr_read(addr, length),
+            "Should return false when request spans beyond mapped region"
+        );
+    }
+
+    /// Test: calculate_page_range helper function
+    /// Expected: Should correctly calculate page numbers from addresses
+    #[test]
+    fn test_calculate_page_range() {
+        let vmmap = Vmmap::new();
+
+        // Test basic calculation: 1 page
+        let result = vmmap.calculate_page_range(0, PAGESIZE as usize);
+        assert_eq!(result, Some((0, 1)), "Single page at start");
+
+        // Test calculation spanning multiple pages
+        let addr = (10 << PAGESHIFT) as u64;
+        let length = (5 << PAGESHIFT) as usize;
+        let result = vmmap.calculate_page_range(addr, length);
+        assert_eq!(result, Some((10, 5)), "5 pages starting at page 10");
+
+        // Test with non-page-aligned length (should round up)
+        let result = vmmap.calculate_page_range(0, 1);
+        assert_eq!(result, Some((0, 1)), "1 byte should still be 1 page");
     }
 }
