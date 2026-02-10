@@ -1298,6 +1298,11 @@ def run_tests(config, artifacts_root, results, timeout_sec):
     
     for i, original_source in enumerate(config['tests_to_run']):
         logger.info(f"[{i+1}/{total_count}] {original_source}")
+
+        # Ensure these are always defined before any branch logic below.
+        test_entry = None
+        native_elapsed = None
+        lind_elapsed = None
         
         dest_source = setup_test_file_in_artifacts(original_source, artifacts_root)
         
