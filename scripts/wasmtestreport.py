@@ -311,7 +311,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
 # - Input: source_file - path to the .c file
 # - Output: (success, output, error_msg, error_type) tuple
 # ----------------------------------------------------------------------
-def get_expected_output(source_file):
+def get_expected_output(source_file, timeout_sec=DEFAULT_TIMEOUT):
     """Get expected output from file or native execution"""
     source_file = Path(source_file)
     expected_output_file = source_file.parent / EXPECTED_DIRECTORY / f"{source_file.stem}.output"
@@ -320,15 +320,17 @@ def get_expected_output(source_file):
         try:
             with open(expected_output_file, 'r') as f:
                 logger.info(f"Expected output found at {expected_output_file}")
-                return True, f.read(), None, None
+                return True, f.read(), None, None, None
         except Exception as e:
-            return False, None, f"Exception: {e}", "Failure_reading_expected_file"
+            return False, None, f"Exception: {e}", "Failure_reading_expected_file", None
     
     # Fall back to native execution
     # TODO: Add expected output support later
     # logger.info(f"No expected output found at {expected_output_file}")
-    success, output, returncode, error_type = compile_and_run_native(source_file)
-    return success, output, f"Native execution: {output}" if not success else None, error_type
+    native_start = time.perf_counter()
+    success, output, returncode, error_type = compile_and_run_native(source_file, timeout_sec)
+    native_elapsed = round(time.perf_counter() - native_start, 3)
+    return success, output, f"Native execution: {output}" if not success else None, error_type, native_elapsed
 
 
 # ----------------------------------------------------------------------
@@ -424,11 +426,15 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
     """Unified test function for deterministic and failing tests"""
     source_file = Path(source_file)
     handler = TestResultHandler(result, source_file)
+    native_elapsed = None
+    lind_elapsed = None
     
     # For fail tests, we need to run both native and wasm
     if test_mode == "fail":
         # Run native version
+        native_start = time.perf_counter()
         native_success, native_output, native_retcode, native_error = compile_and_run_native(source_file, timeout_sec)
+        native_elapsed = round(time.perf_counter() - native_start, 3)
         
         # NOTE: We explicitly early-abort here and report the native compilation failure
         # rather than treating it as a successful "fail-test".
@@ -441,7 +447,7 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
                 f"Native output:\n{native_output}"
             )
             add_test_result(result, str(source_file), "Failure", "Fail_native_compiling", failure_info)
-            return
+            return native_elapsed, lind_elapsed
         
         # Compile and run WASM
         wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
@@ -454,10 +460,12 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
                 f"Wasm compile output:\n{wasm_compile_error}"
             )
             add_test_result(result, str(source_file), "Failure", "Fail_wasm_compiling", failure_info)
-            return
+            return native_elapsed, lind_elapsed
         
         try:
+            lind_start = time.perf_counter()
             wasm_retcode, wasm_output = run_compiled_wasm(wasm_file, timeout_sec)
+            lind_elapsed = round(time.perf_counter() - lind_start, 3)
             
             # Normalize return codes for comparison
             native_failed = native_retcode != 0
@@ -495,24 +503,26 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
             if wasm_file and wasm_file.exists():
                 wasm_file.unlink()
         
-        return  # Exit early for fail tests
+        return native_elapsed, lind_elapsed  # Exit early for fail tests
     
     # For deterministic tests, get expected output
     expected_output = None
     if test_mode == "deterministic":
-        success, expected_output, error_msg, error_type = get_expected_output(source_file)
+        success, expected_output, error_msg, error_type, native_elapsed = get_expected_output(source_file, timeout_sec)
         if not success:
             add_test_result(result, str(source_file), "Failure", error_type, error_msg)
-            return
+            return native_elapsed, lind_elapsed
     
     # Compile and run WASM
     wasm_file, wasm_compile_error = compile_c_to_wasm(source_file)
     if wasm_file is None:
         handler.add_compile_failure(wasm_compile_error)
-        return
+        return native_elapsed, lind_elapsed
     
     try:
+        lind_start = time.perf_counter()
         retcode, wasm_output = run_compiled_wasm(wasm_file, timeout_sec)
+        lind_elapsed = round(time.perf_counter() - lind_start, 3)
         
         # Handle WASM execution result
         if handler.handle_return_code(retcode, wasm_output, is_native=False):
@@ -536,12 +546,14 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
         if wasm_file and wasm_file.exists():
             wasm_file.unlink()
 
+    return native_elapsed, lind_elapsed
+
 # Wrapper functions for deterministic and fail tests
 def test_single_file_deterministic(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    test_single_file_unified(source_file, result, timeout_sec, "deterministic")
+    return test_single_file_unified(source_file, result, timeout_sec, "deterministic")
 
 def test_single_file_fail(source_file, result, timeout_sec=DEFAULT_TIMEOUT):
-    test_single_file_unified(source_file, result, timeout_sec, "fail")
+    return test_single_file_unified(source_file, result, timeout_sec, "fail")
 
 # ----------------------------------------------------------------------
 # Function: analyze_testfile_dependencies
@@ -869,13 +881,13 @@ def generate_html_report(report):
             
             # Generate table with category headers
             html_content.append('<table class="test-results-table">')
-            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Duration (s)</th><th>Output</th></tr>')
+            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Native Time (s)</th><th>Lind Time (s)</th><th>Output</th></tr>')
             
             # Sort categories for consistent output
             for category in sorted(test_categories.keys()):
                 # Add category header row
                 category_display = category.replace('_', ' ').title()
-                html_content.append(f'<tr class="test-type-header"><td colspan="5">{category_display}</td></tr>')
+                html_content.append(f'<tr class="test-type-header"><td colspan="6">{category_display}</td></tr>')
                 
                 # Sort tests within category
                 test_cases_in_category = sorted(test_categories[category], key=lambda x: x[0])
@@ -895,11 +907,12 @@ def generate_html_report(report):
                     # For successful tests, just show "Success" instead of full output
                     # For failures, show the full output for debugging
                     output_display = "Success" if result['status'].lower() == "success" else result["output"]
-                    duration_display = result.get("elapsed_seconds", "N/A")
+                    native_time_display = result.get("native_elapsed_seconds", "N/A")
+                    lind_time_display = result.get("lind_elapsed_seconds", "N/A")
                     
                     html_content.append(
                         f'<tr class="{row_class}"><td>{test_name}</td>'
-                        f'<td>{result["status"]}</td><td>{result["error_type"]}</td><td>{duration_display}</td>'
+                        f'<td>{result["status"]}</td><td>{result["error_type"]}</td><td>{native_time_display}</td><td>{lind_time_display}</td>'
                         f'<td><pre>{output_display}</pre></td></tr>'
                     )
             
@@ -1193,14 +1206,10 @@ def run_tests(config, artifacts_root, results, timeout_sec):
         # Determine test type and run appropriate test
         parent_name = original_source.parent.name
         if parent_name == DETERMINISTIC_PARENT_NAME:
-            start_time = time.perf_counter()
-            test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
-            elapsed = round(time.perf_counter() - start_time, 3)
+            native_elapsed, lind_elapsed = test_single_file_deterministic(dest_source, results["deterministic"], timeout_sec)
             test_entry = results["deterministic"]["test_cases"].get(str(dest_source))
         elif parent_name == FAIL_PARENT_NAME:
-            start_time = time.perf_counter()
-            test_single_file_fail(dest_source, results["fail"], timeout_sec)
-            elapsed = round(time.perf_counter() - start_time, 3)
+            native_elapsed, lind_elapsed = test_single_file_fail(dest_source, results["fail"], timeout_sec)
             test_entry = results["fail"]["test_cases"].get(str(dest_source))
         else:
             # Log warning for tests not in deterministic/fail folders
@@ -1208,7 +1217,8 @@ def run_tests(config, artifacts_root, results, timeout_sec):
             continue
 
         if test_entry is not None:
-            test_entry["elapsed_seconds"] = elapsed
+            test_entry["native_elapsed_seconds"] = native_elapsed if native_elapsed is not None else "N/A"
+            test_entry["lind_elapsed_seconds"] = lind_elapsed if lind_elapsed is not None else "N/A"
 
 def build_fail_message(case: str, native_output: str, wasm_output: str, native_retcode=None, wasm_retcode=None) -> str:
     """
