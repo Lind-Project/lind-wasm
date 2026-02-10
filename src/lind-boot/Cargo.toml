@@ -5,6 +5,7 @@ edition = "2024"
 
 [features]
 disable_signals = []
+secure = ["typemap/secure"]
 
 [dependencies]
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }
@@ -14,6 +15,7 @@ rawposix = { path = "../wasmtime/crates/rawposix" }
 cage = { path = "../wasmtime/crates/cage" }
 threei = { path = "../wasmtime/crates/threei" }
 sysdefs = { path = "../wasmtime/crates/sysdefs" }
+typemap = { path = "../wasmtime/crates/typemap" }
 wasi-common = { path = "../wasmtime/crates/wasi-common", features = ["sync"] ,default-features = false }
 wasmtime-lind-3i = { path = "../wasmtime/crates/lind-3i" }
 wasmtime = { path = "../wasmtime/crates/wasmtime", features = ["cranelift", "pooling-allocator", "gc", "threads"], default-features = false }
