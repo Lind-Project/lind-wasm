@@ -6,6 +6,7 @@
 //! Function naming convention:
 //! - All functions starting with `sc_` are **public APIs** exposed to other libraries. Example: `sc_convert_sysarg_to_i32`.
 //! - All other functions are **internal helpers** (inner functions) used only inside this library.
+use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
 use std::error::Error;
 use std::os::raw::c_char;
@@ -15,7 +16,6 @@ use sysdefs::constants::Errno;
 use sysdefs::data::fs_struct::{
     FSData, ITimerVal, PipeArray, ShmidsStruct, SigactionStruct, SigsetType, StatData,
 };
-use crate::cage_helpers::validate_cageid;
 
 /// `sc_unusedarg()` is the security check function used to validate all unused args. This
 /// will return true in default mode, and check if `arg` with `arg_cageid` are all null in
