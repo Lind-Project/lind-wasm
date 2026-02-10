@@ -44,7 +44,7 @@ pub fn convert_fd_to_host(virtual_fd: u64, arg_cageid: u64, cageid: u64) -> i32 
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            return -EINVAL;
+            return -(Errno::EINVAL as i32);
         }
     }
     // Find corresponding virtual fd instance from `fdtable` subsystem

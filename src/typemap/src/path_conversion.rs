@@ -2,6 +2,7 @@
 //!
 //! This file provides APIs for converting between different argument types and translation between path from
 //! user's perspective to host's perspective
+use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
 pub use libc::*;
 pub use std::env;
@@ -9,6 +10,7 @@ pub use std::ffi::{CStr, CString};
 pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
+pub use sysdefs::constants::lind_platform_const::PATH_MAX;
 pub use sysdefs::constants::{err_const, fs_const};
 
 /// Convert data type from `&str` to `PathBuf`
@@ -113,7 +115,7 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(path_arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
     let cage = get_cage(path_arg_cageid).unwrap();

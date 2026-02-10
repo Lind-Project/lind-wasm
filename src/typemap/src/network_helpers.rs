@@ -3,7 +3,7 @@
 //! This module provides helpers to translate a guest-provided sockaddr buffer into a
 //! host-usable pointer and to compute the correct socklen_t for Linux. It is used by
 //! our socket-related syscalls to bridge from per-cage virtual memory to host libc calls.
-use crate::datatype_conversion::validate_cageid;
+use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
 use libc::{
     sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un, socklen_t,
@@ -195,7 +195,7 @@ pub fn convert_sockpair<'a>(
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(arg_cageid, cageid) {
-            return -1;
+            return Err(-1);
         }
     }
 
