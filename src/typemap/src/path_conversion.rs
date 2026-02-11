@@ -2,6 +2,7 @@
 //!
 //! This file provides APIs for converting between different argument types and translation between path from
 //! user's perspective to host's perspective
+use crate::cage_helpers::validate_cageid;
 use cage::get_cage;
 pub use libc::*;
 pub use std::env;
@@ -9,7 +10,7 @@ pub use std::ffi::{CStr, CString};
 pub use std::path::{Component, PathBuf};
 use std::str::Utf8Error;
 pub use std::{mem, ptr};
-use sysdefs::constants::lind_platform_const::LIND_ROOT;
+pub use sysdefs::constants::lind_platform_const::PATH_MAX;
 pub use sysdefs::constants::{err_const, fs_const};
 
 /// Convert data type from `&str` to `PathBuf`
@@ -62,63 +63,11 @@ pub fn normpath(origp: PathBuf, cageid: u64) -> PathBuf {
     newp
 }
 
-/// This function first normalizes the path, then add `LIND_ROOT` at the beginning.
-/// This function is mostly used by path argument translation function in `syscall_conv`
-///
-/// ## Arguments:
-///     - cageid: used for normalizing path
-///     - path: the user seen path
-///
-/// ## Returns:
-///     - c_path: path location from host's perspective
-pub fn add_lind_root(cageid: u64, path: &str) -> CString {
-    // Convert data type from &str into *const i8
-    let relpath = normpath(convpath(path), cageid);
-    let relative_path = relpath.to_str().unwrap();
-
-    let full_path = format!("{}{}", LIND_ROOT, relative_path);
-    let c_path = CString::new(full_path).unwrap();
-    c_path
-}
-
-/// Remove LIND_ROOT prefix from a host path to convert it back to user perspective.
-///
-/// This function is the reverse of `add_lind_root`. It strips the LIND_ROOT prefix from an
-/// absolute host path and returns the path as it should appear to the user (cage). This is
-/// primarily used when retrieving paths from the kernel (e.g., via `getcwd()`) that need to
-/// be stored in cage state or returned to user space.
-///
-/// ## Arguments:
-///     - host_path: The full host path including LIND_ROOT prefix
-///
-/// ## Returns:
-///     - PathBuf representing the path from user's perspective (without LIND_ROOT)
-///
-/// ## Example:
-/// ```
-/// // If LIND_ROOT is "/home/lind/lind-wasm/src/tmp"
-/// // and host_path is "/home/lind/lind-wasm/src/tmp/foo/bar"
-/// // this returns "/foo/bar"
-/// let user_path = strip_lind_root("/home/lind/lind-wasm/src/tmp/foo/bar");
-/// assert_eq!(user_path, PathBuf::from("/foo/bar"));
-/// ```
-pub fn strip_lind_root(host_path: &str) -> PathBuf {
-    if let Ok(stripped) = PathBuf::from(host_path).strip_prefix(LIND_ROOT) {
-        // Prepend "/" to make it an absolute path from user's perspective
-        PathBuf::from("/").join(stripped)
-    } else {
-        // If path doesn't start with LIND_ROOT, return it as-is
-        // This shouldn't normally happen but provides a fallback
-        PathBuf::from(host_path)
-    }
-}
-
 /// This function provides two operations: first, it translates path pointer address from WASM environment
-/// to kernel system address; then, it adjusts the path from user's perspective to host's perspective,
-/// which is adding `LIND_ROOT` before the path arguments. Considering actual syscall implementation
-/// logic needs to pass string pointer to underlying rust libc, so this function will return `CString`
-/// always using arg_cageid to translate. (TODO: the logic here might be different according to 3i/grate
-/// implementation)
+/// to kernel system address; then, it normalizes the path relative to the cage's current working directory
+/// (for relative paths) or root (for absolute paths). The syscall implementation logic needs to pass a
+/// string pointer to underlying rust libc, so this function returns `CString`, always using arg_cageid
+/// to translate. (TODO: the logic here might be different according to 3i/grate implementation)
 ///     - If arg_cageid != cageid: this call is sent by grate. We need to translate according to cage
 ///     - If arg_cageid == cageid: this call is sent by cage, we can use either one
 ///
@@ -148,12 +97,12 @@ pub fn get_cstr<'a>(arg: u64) -> Result<&'a str, i32> {
     return Err(-1);
 }
 
-/// Convert received path pointer into a normalized `CString` path in the host cage.
+/// Convert received path pointer into a normalized `CString` path.
 ///
 /// This function first validates cross-cage access if `secure` feature is enabled.
 /// After translating the given path pointer from virtual address to the real address,
-/// this function reads and normalizes the path relative to the cage's CWD or root.
-/// Finally prefixes the path with the host-defined `LIND_ROOT`, then constructs a `CString`.
+/// this function reads and normalizes the path relative to the cage's CWD or root,
+/// then constructs a `CString` for use with libc syscalls.
 ///
 /// ## Arguments:
 /// path_arg: virtual address of the path string
@@ -166,7 +115,7 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     #[cfg(feature = "secure")]
     {
         if !validate_cageid(path_arg_cageid, cageid) {
-            panic!("Invalide Cage ID");
+            panic!("Invalid Cage ID");
         }
     }
     let cage = get_cage(path_arg_cageid).unwrap();
@@ -182,16 +131,14 @@ pub fn sc_convert_path_to_host(path_arg: u64, path_arg_cageid: u64, cageid: u64)
     // Check if exceeds the max path
     #[cfg(feature = "secure")]
     {
-        let total_length = LIND_ROOT.len() + relative_path.len();
-
-        if total_length >= PATH_MAX {
+        if relative_path.len() >= PATH_MAX {
             panic!("Path exceeds PATH_MAX (4096)");
         }
     }
 
     // CString will handle the case when string is not terminated by `\0`, but will return error if `\0` is
     // contained within the string.
-    let full_path = format!("{}{}", LIND_ROOT, relative_path);
+    let full_path = relative_path.to_string();
     match CString::new(full_path) {
         Ok(c_path) => c_path,
         Err(_) => panic!("String contains internal null byte"),

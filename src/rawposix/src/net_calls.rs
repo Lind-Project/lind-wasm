@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
-use sysdefs::constants::net_const::{EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
+use sysdefs::constants::net_const::{EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
 use sysdefs::data::net_struct::SockAddr;
 use sysdefs::*;
@@ -59,7 +59,7 @@ lazy_static! {
 ///     - positive value: number of file descriptors ready for I/O
 ///     - 0: timeout occurred with no file descriptors ready
 ///     - negative value: error occurred (errno set)
-pub fn poll_syscall(
+pub extern "C" fn poll_syscall(
     cageid: u64,
     fds_arg: u64,
     fds_cageid: u64,
@@ -278,7 +278,7 @@ pub fn poll_syscall(
 ///     - positive value: number of file descriptors ready for I/O
 ///     - 0: timeout occurred with no file descriptors ready
 ///     - negative value: error occurred (errno set)
-pub fn select_syscall(
+pub extern "C" fn select_syscall(
     cageid: u64,
     nfds_arg: u64,
     nfds_cageid: u64,
@@ -542,7 +542,7 @@ pub fn select_syscall(
 /// ## Returns:
 ///     - positive value: file descriptor for the new epoll instance
 ///     - negative value: error occurred (errno set)
-pub fn epoll_create_syscall(
+pub extern "C" fn epoll_create_syscall(
     cageid: u64,
     size_arg: u64,
     size_cageid: u64,
@@ -586,6 +586,83 @@ pub fn epoll_create_syscall(
     virtual_epfd as i32
 }
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_create.2.html
+///
+/// Linux `epoll_create1()` creates an epoll instance and returns a file descriptor referring to that instance.
+/// If flags is 0, then, other than the fact that the obsolete size argument is dropped, epoll_create1() is the same as epoll_create().  
+/// The following value can be included in flags to obtain different behavior:
+
+///       EPOLL_CLOEXEC
+///              Set the close-on-exec (FD_CLOEXEC) flag on the new file descriptor
+///
+/// ## Implementation Approach:
+/// Creates a new virtual epoll file descriptor that maps to an internal epoll instance using fdtables::epoll_create_empty()
+/// and registers it in the file descriptor table. If `EPOLL_CLOEXEC` is set, the resulting virtual epoll file descriptor will be
+/// marked close-on-exec (`FD_CLOEXEC`), ensuring that it is automatically closed during an `exec` operation. If invalid flags
+/// are passed, then EINVAL error is set and -1 is returned.
+///
+/// ## Arguments:
+///     - cageid: current cage identifier.
+///     - flags_arg: Bitmask of flags (only `EPOLL_CLOEXEC` is recognized).
+///     - flags_cageid: cage ID for flags_arg validation.
+///     - arg2-arg6: unused arguments with their respective cage IDs.
+///
+/// ## Returns:
+///     - positive value: file descriptor for the new epoll instance
+///     - negative value: error occurred (errno=EINVAL if invalid flags are passed)
+
+pub extern "C" fn epoll_create1_syscall(
+    cageid: u64,
+    flags_arg: u64,
+    flags_cageid: u64,
+    arg2: u64,
+    arg2_cageid: u64,
+    arg3: u64,
+    arg3_cageid: u64,
+    arg4: u64,
+    arg4_cageid: u64,
+    arg5: u64,
+    arg5_cageid: u64,
+    arg6: u64,
+    arg6_cageid: u64,
+) -> i32 {
+    // Validate unused arguments
+    if !(sc_unusedarg(arg2, arg2_cageid)
+        && sc_unusedarg(arg3, arg3_cageid)
+        && sc_unusedarg(arg4, arg4_cageid)
+        && sc_unusedarg(arg5, arg5_cageid)
+        && sc_unusedarg(arg6, arg6_cageid))
+    {
+        return syscall_error(Errno::EFAULT, "epoll_create1_syscall", "Invalid Cage ID");
+    }
+
+    // Convert size argument
+    let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
+
+    //Validates that the flags argument contains only allowed bits (EPOLL_CLOEXEC),
+    //returning EINVAL if any unknown flags are detected.
+    if (flags & !EPOLL_CLOEXEC) != 0 {
+        return syscall_error(Errno::EINVAL, "epoll_create1_syscall", "Invalid flags");
+    }
+    // Create the kernel epoll instance
+    let kernel_fd = unsafe { libc::epoll_create1(flags) };
+
+    if kernel_fd < 0 {
+        let errno = get_errno();
+        return handle_errno(errno, "epoll_create1_syscall");
+    }
+
+    //Checks if `EPOLL_CLOEXEC` is set
+    let should_cloexec = (flags & EPOLL_CLOEXEC) != 0;
+
+    // Get the virtual epfd and register to fdtables
+    let virtual_epfd = fdtables::epoll_create_empty(cageid, should_cloexec).unwrap();
+    fdtables::epoll_add_underfd(cageid, virtual_epfd, FDKIND_KERNEL, kernel_fd as u64);
+
+    // Return virtual epfd
+    virtual_epfd as i32
+}
+
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/epoll_ctl.2.html
 ///
 /// Linux `epoll_ctl()` performs control operations on an epoll instance.
@@ -611,7 +688,7 @@ pub fn epoll_create_syscall(
 /// ## Returns:
 ///     - 0: operation completed successfully
 ///     - negative value: error occurred (errno set)
-pub fn epoll_ctl_syscall(
+pub extern "C" fn epoll_ctl_syscall(
     cageid: u64,
     epfd_arg: u64,
     epfd_cageid: u64,
@@ -762,7 +839,7 @@ pub fn epoll_ctl_syscall(
 ///     - positive value: number of file descriptors ready for I/O
 ///     - 0: timeout occurred with no file descriptors ready
 ///     - negative value: error occurred (errno set)
-pub fn epoll_wait_syscall(
+pub extern "C" fn epoll_wait_syscall(
     cageid: u64,
     epfd_arg: u64,
     epfd_cageid: u64,
@@ -899,7 +976,7 @@ pub fn epoll_wait_syscall(
 /// ## Return:
 ///     - On success: a newly allocated virtual file descriptor within the current cage
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn socket_syscall(
+pub extern "C" fn socket_syscall(
     cageid: u64,
     domain_arg: u64,
     domain_cageid: u64,
@@ -973,7 +1050,7 @@ pub fn socket_syscall(
 /// ## Returns:
 ///   - On success: `0`
 ///   - On failure: negative errno value converted via `handle_errno`
-pub fn connect_syscall(
+pub extern "C" fn connect_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1030,7 +1107,7 @@ pub fn connect_syscall(
 /// ## Return:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn bind_syscall(
+pub extern "C" fn bind_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1085,7 +1162,7 @@ pub fn bind_syscall(
 /// ## Return:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn listen_syscall(
+pub extern "C" fn listen_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1142,7 +1219,7 @@ pub fn listen_syscall(
 /// ## Return:
 ///     - On success: new virtual file descriptor associated with the accepted socket
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn accept_syscall(
+pub extern "C" fn accept_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1206,7 +1283,7 @@ pub fn accept_syscall(
 /// ## Return:
 ///     - On success: 0
 ///     - On failure: a negative errno value indicating the syscall error
-pub fn setsockopt_syscall(
+pub extern "C" fn setsockopt_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1260,7 +1337,7 @@ pub fn setsockopt_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn shutdown_syscall(
+pub extern "C" fn shutdown_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1304,27 +1381,31 @@ pub fn shutdown_syscall(
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/getsockname.2.html
 ///
 /// The Linux `getsockname()` syscall retrieves the current address to which the socket
-/// is bound.  
-/// This implementation resolves the virtual file descriptor to the host kernel file descriptor,
-/// converts the user-space sockaddr structure into its host representation, and invokes
-/// the host kernel `getsockname()`.
+/// is bound.
+///
+/// This implementation follows the isolation pattern: instead of letting the kernel write
+/// directly to guest memory, we use an intermediate host-side buffer. The kernel writes
+/// to `sockaddr_storage`, then we use `copy_out_sockaddr()` to translate and copy the
+/// result into the guest's SockAddr structure. This ensures proper isolation and allows
+/// for any necessary path transformations (e.g., for Unix domain sockets in chroot).
 ///
 /// ## Input:
 ///     - cageid: identifier of the current cage
 ///     - fd_arg: virtual file descriptor of the socket
-///     - addr_arg: pointer to a buffer in user space where the address will be stored
+///     - addr_arg: pointer to a SockAddr buffer in user space where the address will be stored
+///     - addrlen_arg: pointer to socklen_t in user space (input: buffer size, output: actual size)
 ///
 /// ## Return:
-///     - On success: 0  
+///     - On success: 0
 ///     - On failure: negative errno indicating the error
-pub fn getsockname_syscall(
+pub extern "C" fn getsockname_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
     addr_arg: u64,
     addr_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
+    addrlen_arg: u64,
+    addrlen_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -1333,12 +1414,12 @@ pub fn getsockname_syscall(
     arg6_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    let addr = addr_arg as *mut u8;
+    let user_addr = addr_arg as *mut SockAddr;
+    let lenp = addrlen_arg as *mut socklen_t;
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
+    if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
@@ -1348,13 +1429,35 @@ pub fn getsockname_syscall(
         );
     }
 
-    let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
+    if lenp.is_null() {
+        return syscall_error(Errno::EFAULT, "getsockname_syscall", "len is null");
+    }
 
-    let ret = unsafe { libc::getsockname(fd as i32, finalsockaddr, addrlen as *mut u32) };
+    // Read initial length and clamp to storage size
+    let mut len: socklen_t = unsafe { *lenp };
+    let max_len = mem::size_of::<sockaddr_storage>() as socklen_t;
+    if len > max_len {
+        len = max_len;
+    }
+
+    // Call kernel into temporary buffer (avoid writing into SockAddr directly)
+    let mut storage: sockaddr_storage = unsafe { mem::zeroed() };
+    let ret = unsafe {
+        libc::getsockname(
+            fd as i32,
+            &mut storage as *mut _ as *mut sockaddr,
+            &mut len as *mut socklen_t,
+        )
+    };
 
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "getsockname");
+    }
+
+    // Copy into guest-visible SockAddr wrapper + write back len
+    unsafe {
+        copy_out_sockaddr(user_addr, lenp, &storage);
     }
 
     ret
@@ -1378,7 +1481,7 @@ pub fn getsockname_syscall(
 /// ## Return:
 ///     - On success: number of bytes sent
 ///     - On failure: negative errno indicating the error
-pub fn sendto_syscall(
+pub extern "C" fn sendto_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1445,7 +1548,7 @@ pub fn sendto_syscall(
 /// ## Return:
 ///     - On success: number of bytes received
 ///     - On failure: negative errno indicating the error
-pub fn recvfrom_syscall(
+pub extern "C" fn recvfrom_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1540,7 +1643,7 @@ pub fn recvfrom_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn gethostname_syscall(
+pub extern "C" fn gethostname_syscall(
     cageid: u64,
     name_arg: u64,
     name_cageid: u64,
@@ -1596,7 +1699,7 @@ pub fn gethostname_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn getsockopt_syscall(
+pub extern "C" fn getsockopt_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1649,7 +1752,7 @@ pub fn getsockopt_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn getpeername_syscall(
+pub extern "C" fn getpeername_syscall(
     cageid: u64,
     fd_arg: u64,
     fd_cageid: u64,
@@ -1707,7 +1810,7 @@ pub fn getpeername_syscall(
 /// ## Return:
 ///     - On success: 0  
 ///     - On failure: negative errno indicating the error
-pub fn socketpair_syscall(
+pub extern "C" fn socketpair_syscall(
     cageid: u64,
     domain_arg: u64,
     domain_cageid: u64,
