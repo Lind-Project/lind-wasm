@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 # Usage
-#   "./wasmtestreport" to run with default settings(5 second timeout and all tests inside unit-tests folder)
+#   "./wasmtestreport" to run with default settings(30 second timeout and all tests inside unit-tests folder)
 #   "./wasmtestreport.py --skip-folders config_tests file_tests" to skip the test cases in those folders
 #   "./wasmtestreport.py --run-folders config_tests file_tests" to run test cases in folder1 and folder2 only
-#   "./wasmtestreport.py --timeout 10" to run with a timeout of 10 seconds 
+#   "./wasmtestreport.py --timeout 30" to run with a timeout of 30 seconds 
 #   "./wasmtestreport.py --output newresult" to change the output file(The new file will be newresult.json)
 #   "./wasmtestreport.py --generate-html" to generate the html file
 #   "./wasmtestreport.py --allow-pre-compiled" to run tests with .cwasm binaries instead of .wasm binaries
-#   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 10"
+#   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 30"
 #   "./wasmtestreport.py --compile-flags -pthread -lpthread -O2 -g"
 #   (flags are collected until the next option starting with "--")
 #
@@ -423,7 +423,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
 #
 # Variables:
 # - Input: source_file - path to the .c file
-# - Output: (success, output, error_msg, error_type) tuple
+# - Output: (success, output, error_msg, error_type, timing_info) tuple
 # ----------------------------------------------------------------------
 def get_expected_output(source_file):
     """Get expected output from file or native execution"""
@@ -434,15 +434,15 @@ def get_expected_output(source_file):
         try:
             with open(expected_output_file, 'r') as f:
                 logger.info(f"Expected output found at {expected_output_file}")
-                return True, f.read(), None, None
+                return True, f.read(), None, None, build_timing_info()
         except Exception as e:
-            return False, None, f"Exception: {e}", "Failure_reading_expected_file"
+            return False, None, f"Exception: {e}", "Failure_reading_expected_file", build_timing_info()
     
     # Fall back to native execution
     # TODO: Add expected output support later
     # logger.info(f"No expected output found at {expected_output_file}")
-    success, output, returncode, error_type, _ = compile_and_run_native(source_file)
-    return success, output, f"Native execution: {output}" if not success else None, error_type
+    success, output, returncode, error_type, timing_info = compile_and_run_native(source_file)
+    return success, output, f"Native execution: {output}" if not success else None, error_type, timing_info
 
 
 # ----------------------------------------------------------------------
@@ -625,15 +625,16 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
     
     # For deterministic tests, get expected output
     expected_output = None
+    native_timing = build_timing_info()
     if test_mode == "deterministic":
-        success, expected_output, error_msg, error_type = get_expected_output(source_file)
+        success, expected_output, error_msg, error_type, native_timing = get_expected_output(source_file)
         if not success:
-            add_test_result(result, str(source_file), "Failure", error_type, error_msg)
+            add_test_result(result, str(source_file), "Failure", error_type, error_msg, timing_info=native_timing)
             return
     
     # Compile and run WASM
     wasm_file, wasm_compile_error, wasm_compile_time = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
-    timing_info = build_timing_info(wasm_compile_time_sec=wasm_compile_time)
+    timing_info = merge_timing_info(native_timing, build_timing_info(wasm_compile_time_sec=wasm_compile_time))
     if wasm_file is None:
         handler.add_compile_failure(wasm_compile_error, timing_info=timing_info)
         return
