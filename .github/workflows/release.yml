@@ -22,7 +22,7 @@ jobs:
 
       # Build 'test' stage (default) to run tests
       - name: Test
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@601a80b39c9405e50806ae38af30926f9d957c47 # v6.19.1
         with:
           platforms: linux/amd64
           cache-from: type=gha
@@ -44,7 +44,7 @@ jobs:
 
       # Build 'release' stage and push to Dockerhub
       - name: Release and push
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@601a80b39c9405e50806ae38af30926f9d957c47 # v6.19.1
         with:
           target: release
           push: true
