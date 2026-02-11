@@ -47,7 +47,7 @@ RawPOSIX is a small, trusted runtime component that provides POSIX-compatible sy
 
 ### Wasmtime
 
-Lind-Wasm uses Wasmtime as the WebAssembly runtime responsible for executing cages. Wasmtime provides fast execution, memory isolation, and a well-defined embedding API.
+Lind-Wasm uses [Wasmtime](https://github.com/bytecodealliance/wasmtime) as the WebAssembly runtime responsible for executing cages. Wasmtime provides fast execution, memory isolation, and a well-defined embedding API.
 
 ### lind-glibc
 
