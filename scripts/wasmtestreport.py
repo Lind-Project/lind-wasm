@@ -239,6 +239,10 @@ def add_test_result(result, file_path, status, error_type, output, timing_info=N
         "status": status,
         "error_type": error_type,
         "output": output,
+        # Legacy keys kept for external consumers that still expect top-level timing fields.
+        "native_time": native_total,
+        "wasm_time": wasm_total,
+        "total_time": total_time,
         "timing": {
             **merged_timing,
             "native_time_sec": native_total,
@@ -784,7 +788,7 @@ def create_required_executables(executable_deps, allow_precompiled=False):
     for exec_path, source_file in executable_deps.items():
         try:
             # Compile the source file to WASM or precompiled .cwasm depending on flag
-            wasm_file, compile_err = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
+            wasm_file, compile_err, _ = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
             
             if wasm_file is None:
                 logger.error(f"Failed to compile {source_file}: {compile_err}")
@@ -873,6 +877,34 @@ def pre_test(tests_to_run=None, allow_precompiled=False):
     if tests_to_run:
         executable_deps = analyze_executable_dependencies(tests_to_run)
         create_required_executables(executable_deps, allow_precompiled=allow_precompiled)
+
+def format_time_cell(value):
+    return "N/A" if value is None else f"{value:.6f}s"
+
+
+def get_row_time_values(result):
+    timing = result.get("timing", {}) if isinstance(result, dict) else {}
+
+    native_time = timing.get("native_time_sec")
+    wasm_time = timing.get("wasm_time_sec")
+    total_time = timing.get("total_time_sec")
+
+    # Backward compatibility for older result shapes / external consumers.
+    if native_time is None:
+        native_time = result.get("native_time") if isinstance(result, dict) else None
+    if wasm_time is None:
+        wasm_time = result.get("wasm_time") if isinstance(result, dict) else None
+    if total_time is None:
+        total_time = result.get("total_time") if isinstance(result, dict) else None
+
+    # If total wasn't explicitly stored, derive it from available components.
+    if total_time is None:
+        partials = [value for value in (native_time, wasm_time) if value is not None]
+        if partials:
+            total_time = round(sum(partials), 6)
+
+    return native_time, wasm_time, total_time
+
 
 # ----------------------------------------------------------------------
 # Function: generate_html_report
@@ -995,13 +1027,13 @@ def generate_html_report(report):
             
             # Generate table with category headers
             html_content.append('<table class="test-results-table">')
-            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Output</th></tr>')
+            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Native Time</th><th>Wasm Time</th><th>Total Time</th><th>Output</th></tr>')
             
             # Sort categories for consistent output
             for category in sorted(test_categories.keys()):
                 # Add category header row
                 category_display = category.replace('_', ' ').title()
-                html_content.append(f'<tr class="test-type-header"><td colspan="4">{category_display}</td></tr>')
+                html_content.append(f'<tr class="test-type-header"><td colspan="7">{category_display}</td></tr>')
                 
                 # Sort tests within category
                 test_cases_in_category = sorted(test_categories[category], key=lambda x: x[0])
@@ -1022,9 +1054,14 @@ def generate_html_report(report):
                     # For failures, show the full output for debugging
                     output_display = "Success" if result['status'].lower() == "success" else result["output"]
                     
+                    native_time, wasm_time, total_time = get_row_time_values(result)
+
                     html_content.append(
                         f'<tr class="{row_class}"><td>{test_name}</td>'
                         f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
+                        f'<td>{format_time_cell(native_time)}</td>'
+                        f'<td>{format_time_cell(wasm_time)}</td>'
+                        f'<td>{format_time_cell(total_time)}</td>'
                         f'<td><pre>{output_display}</pre></td></tr>'
                     )
             
