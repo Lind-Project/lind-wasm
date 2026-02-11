@@ -25,7 +25,9 @@ jobs:
           persist-credentials: false
 
       - name: Format
-        run: cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
+        run: |
+          cargo fmt --check --all --manifest-path src/wasmtime/Cargo.toml
+          cargo fmt --check --all --manifest-path src/lind-boot/Cargo.toml
 
       # Using rust nightly, invalidates cache every day
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
@@ -38,10 +40,10 @@ jobs:
 
       - name: Clippy
         run: |
-          # Run clippy over wasmtime and its dependencies
+          # Run clippy over lind-boot and its dependencies
           # See `cargo clippy` and `cargo check` for available options
           cargo clippy \
-              --manifest-path src/wasmtime/Cargo.toml \
+              --manifest-path src/lind-boot/Cargo.toml \
               --all-features \
               --keep-going \
               -- \
