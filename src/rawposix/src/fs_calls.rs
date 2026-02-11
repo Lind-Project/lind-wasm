@@ -11,6 +11,7 @@ use sysdefs::constants::fs_const::{
     FIOASYNC, FIONBIO, F_GETLK64, F_SETLK64, F_SETLKW64, MAP_ANONYMOUS, MAP_FIXED, MAP_POPULATE,
     MAP_PRIVATE, MAP_SHARED, O_CLOEXEC, PAGESHIFT, PAGESIZE, PROT_EXEC, PROT_NONE, PROT_READ,
     PROT_WRITE, SHMMAX, SHMMIN, SHM_DEST, SHM_RDONLY, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
+    TIOCGWINSZ,
 };
 
 use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, MAXFD, UNUSED_ARG, UNUSED_ID};
@@ -3478,6 +3479,7 @@ pub extern "C" fn ioctl_syscall(
 ) -> i32 {
     // Type conversion
     let ptrunion = ptrunion_arg as *mut u8;
+    let req = sc_convert_sysarg_to_u32(req_arg, req_cageid, cageid);
 
     // Validate unused args
     if !(sc_unusedarg(arg4, arg4_cageid)
@@ -3491,7 +3493,7 @@ pub extern "C" fn ioctl_syscall(
     }
 
     // handle FIOCLEX, set close_on_exec flag for the file descriptor
-    if req_arg == FIOCLEX {
+    if req as u64 == FIOCLEX {
         let ret = match fdtables::set_cloexec(cageid, vfd_arg, true) {
             Ok(_) => 0,
             Err(_) => syscall_error(Errno::EBADF, "ioctl", "Bad File Descriptor"),
@@ -3500,9 +3502,9 @@ pub extern "C" fn ioctl_syscall(
         return ret;
     }
 
-    // Besides FIOCLEX, we only support FIONBIO and FIOASYNC right now.
+    // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, and TIOCGWINSZ right now.
     // Return error for unsupported requests.
-    if req_arg != FIONBIO as u64 && req_arg != FIOASYNC as u64 as u64 {
+    if req != FIONBIO && req != FIOASYNC && req != TIOCGWINSZ {
         lind_debug_panic("Lind unsupported ioctl request");
     }
 
@@ -3513,7 +3515,7 @@ pub extern "C" fn ioctl_syscall(
 
     let vfd = wrappedvfd.unwrap();
 
-    let ret = unsafe { libc::ioctl(vfd.underfd as i32, req_arg, ptrunion as *mut c_void) };
+    let ret = unsafe { libc::ioctl(vfd.underfd as i32, req as u64, ptrunion as *mut c_void) };
 
     if ret < 0 {
         let errno = get_errno();
