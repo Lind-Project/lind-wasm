@@ -1,11 +1,10 @@
 //! System syscalls implementation
 //!
 //! This module contains all system calls that are being emulated/faked in Lind.
-use crate::fs_calls::kernel_close;
 use cage::memory::vmmap::{VmmapOps, *};
 use cage::signal::signal::{convert_signal_mask, lind_send_signal, signal_check_trigger};
 use cage::timer::IntervalTimer;
-use cage::{add_cage, cagetable_clear, cagetable_init, get_cage, remove_cage, Cage, Zombie};
+use cage::{add_cage, get_cage, remove_cage, Cage, Zombie};
 use dashmap::DashMap;
 use fdtables;
 use libc::sched_yield;
@@ -18,15 +17,37 @@ use std::sync::Arc;
 use std::time::Duration;
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno, VERBOSE};
 use sysdefs::constants::fs_const::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-use sysdefs::constants::lind_platform_const::{FDKIND_KERNEL, LIND_ROOT};
+use sysdefs::constants::lind_platform_const::{
+    RAWPOSIX_CAGEID, UNUSED_ARG, UNUSED_ID, UNUSED_NAME, WASMTIME_CAGEID,
+};
 use sysdefs::constants::sys_const::{
     DEFAULT_GID, DEFAULT_UID, EXIT_SUCCESS, ITIMER_REAL, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK,
     SIG_SETMASK, SIG_UNBLOCK, WNOHANG,
 };
 use sysdefs::data::fs_struct::{ITimerVal, SigactionStruct};
+use sysdefs::{constants::sys_const, data::sys_struct};
 use typemap::datatype_conversion::*;
 
+/// Reference to Linux: https://man7.org/linux/man-pages/man2/clone.2.html
 /// Reference to Linux: https://man7.org/linux/man-pages/man2/fork.2.html
+///
+/// ## Unified clone handling
+///
+/// In Linux, both `fork` and `pthread_create` are implemented as special
+/// cases of the `clone` syscall, distinguished by the presence of
+/// `CLONE_VM`. RawPOSIX follows the same model and exposes a unified
+/// `clone` entry point, but splits responsibility along abstraction
+/// boundaries.
+///
+/// RawPOSIX is responsible for **Cage-level structure**, not instruction-level
+/// execution or address-space manipulation. As a result, RawPOSIX only expands
+/// the **fork-like subset** of `clone` (i.e., when `CLONE_VM` is *not* set).
+///
+/// After performing any required Cage-level setup, control is transferred
+/// back to Wasmtime via the 3i dispatch mechanism, where both fork and
+/// thread creation semantics are completed.
+///
+/// ## fork
 ///
 /// We implement `fork` in user space because a Cage is not a host kernel process,
 /// and its granularity does not align with the host kernel’s notion of processes.
@@ -39,11 +60,18 @@ use typemap::datatype_conversion::*;
 ///
 /// Actual operations of the address space is handled by wasmtime when creating a new
 /// instance for the child cage.
-pub fn fork_syscall(
+///
+/// ## thread
+///
+/// When `CLONE_VM` *is* set, the operation corresponds to thread creation
+/// (`pthread_create`). In this case, no new Cage is created. Threads share the same
+/// Cage. Address space and execution context must be duplicated or adjusted within
+/// the WebAssembly runtime.
+pub extern "C" fn fork_syscall(
     cageid: u64,
-    child_arg: u64,        // Child's cage id
-    child_arg_cageid: u64, // Child's cage id arguments cageid
-    arg2: u64,
+    clone_arg: u64,        // Child's cage id
+    clone_arg_cageid: u64, // Child's cage id arguments cageid
+    parent_tid: u64,
     arg2_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
@@ -54,10 +82,11 @@ pub fn fork_syscall(
     arg6: u64,
     arg6_cageid: u64,
 ) -> i32 {
+    // Extract the ABI-level clone argument structure
+    let args = unsafe { &mut *(clone_arg as *mut sys_struct::CloneArgStruct) };
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -68,36 +97,110 @@ pub fn fork_syscall(
         );
     }
 
-    // Modify the fdtable manually
-    fdtables::copy_fdtable_for_cage(child_arg_cageid, child_arg).unwrap();
+    // Determine clone semantics from flags.
+    //
+    // if CLONE_VM is set, we are creating a new thread (i.e. pthread_create)
+    // otherwise, we are creating a process (i.e. fork)
+    let flags = args.flags;
+    let isthread = flags & (sys_const::CLONE_VM);
 
-    // Get the self cage
-    let selfcage = get_cage(child_arg_cageid).unwrap();
+    // Effective parent cage ID.
+    //
+    // Since fork may be interposed by a grate, we treat the argument's
+    // cageid as the operation's identity.
+    let parent_cageid = clone_arg_cageid;
+    let mut child_cageid = 0;
 
-    let parent_vmmap = selfcage.vmmap.read();
-    let new_vmmap = parent_vmmap.clone();
+    // Fork path: create a new cage
+    if isthread == 0 {
+        // Allocate a fresh cage ID for the child.
+        child_cageid = cage::alloc_cage_id().unwrap();
 
-    let cageobj = Cage {
-        cageid: child_arg,
-        cwd: RwLock::new(selfcage.cwd.read().clone()),
-        parent: child_arg_cageid,
-        rev_shm: Mutex::new(Vec::new()),
-        main_threadid: RwLock::new(0),
-        interval_timer: IntervalTimer::new(child_arg),
-        epoch_handler: DashMap::new(),
-        pending_signals: RwLock::new(vec![]),
-        signalhandler: selfcage.signalhandler.clone(),
-        sigset: AtomicU64::new(0),
-        zombies: RwLock::new(vec![]),
-        child_num: AtomicU64::new(0),
-        vmmap: RwLock::new(new_vmmap),
-    };
+        // Duplicate the parent's file descriptor table.
+        fdtables::copy_fdtable_for_cage(parent_cageid, child_cageid).unwrap();
 
-    // increment child counter for parent
-    selfcage.child_num.fetch_add(1, SeqCst);
+        // Get the self cage
+        let selfcage = get_cage(parent_cageid).unwrap();
 
-    add_cage(child_arg, cageobj);
-    0
+        // Clone the parent's virtual memory map
+        let parent_vmmap = selfcage.vmmap.read();
+        let new_vmmap = parent_vmmap.clone();
+
+        // Creat the child cage object
+        let cageobj = Cage {
+            cageid: child_cageid,
+            cwd: RwLock::new(selfcage.cwd.read().clone()),
+            parent: parent_cageid,
+            rev_shm: Mutex::new(Vec::new()),
+            main_threadid: RwLock::new(0),
+            interval_timer: IntervalTimer::new(child_cageid),
+            epoch_handler: DashMap::new(),
+            pending_signals: RwLock::new(vec![]),
+            signalhandler: selfcage.signalhandler.clone(),
+            sigset: AtomicU64::new(0),
+            zombies: RwLock::new(vec![]),
+            child_num: AtomicU64::new(0),
+            vmmap: RwLock::new(new_vmmap),
+        };
+
+        // increment child counter for parent
+        selfcage.child_num.fetch_add(1, SeqCst);
+
+        // Register the new cage to global cage table
+        add_cage(child_cageid, cageobj);
+
+        // Copy the 3i handler table from parent to child.
+        //
+        // This ensures that the child process inherits all syscall
+        // interposition and routing behavior, including RawPOSIX's
+        // syscall implementation
+        threei::copy_handler_table_to_cage(
+            UNUSED_ARG,
+            child_cageid,
+            parent_cageid,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+            UNUSED_ARG,
+            UNUSED_ID,
+        );
+    }
+
+    // Delegate execution back to binary runtime (currently only support Wasmtime,
+    // but could be extended to other runtime ie: MPK in the future) via 3i.
+    //
+    // Call from RawPOSIX (selfcageid = RawPOSIX_CAGEID) into
+    // Wasmtime(targetcageid = WASMTIME_CAGEID)
+    // to complete the clone/fork operation.
+    //
+    // Wasmtime will:
+    //   - Resolve the correct VMContext
+    //   - Complete fork semantics
+    //   - Resume execution in parent and child
+    threei::make_syscall(
+        RAWPOSIX_CAGEID,
+        56, // clone syscall number
+        UNUSED_NAME,
+        WASMTIME_CAGEID,
+        clone_arg,
+        clone_arg_cageid,
+        parent_cageid,
+        parent_tid,
+        child_cageid,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exec.3.html
@@ -111,14 +214,14 @@ pub fn fork_syscall(
 /// managing process attributes and threads (terminating unnecessary threads). This allows us to fully implement
 /// the exec functionality while aligning with POSIX standards. Cage fields remained in exec():
 /// cageid, cwd, parent, interval_timer
-pub fn exec_syscall(
+pub extern "C" fn exec_syscall(
     cageid: u64,
-    arg1: u64,
-    arg1_cageid: u64,
-    arg2: u64,
-    arg2_cageid: u64,
-    arg3: u64,
-    arg3_cageid: u64,
+    path: u64,
+    path_cageid: u64,
+    argv: u64,
+    argv_cageid: u64,
+    envs: u64,
+    envs_cageid: u64,
     arg4: u64,
     arg4_cageid: u64,
     arg5: u64,
@@ -128,10 +231,7 @@ pub fn exec_syscall(
 ) -> i32 {
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg1, arg1_cageid)
-        && sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
-        && sc_unusedarg(arg4, arg4_cageid)
+    if !(sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
     {
@@ -141,11 +241,12 @@ pub fn exec_syscall(
         );
     }
 
+    let self_cageid = path_cageid;
     // Empty fd with flag should_cloexec
-    fdtables::empty_fds_for_exec(cageid);
+    fdtables::empty_fds_for_exec(self_cageid);
 
     // Copy necessary data from current cage
-    let selfcage = get_cage(cageid).unwrap();
+    let selfcage = get_cage(self_cageid).unwrap();
 
     selfcage.rev_shm.lock().clear();
 
@@ -168,19 +269,52 @@ pub fn exec_syscall(
     *threadid_guard = 0;
     drop(threadid_guard);
 
-    0
+    threei::make_syscall(
+        RAWPOSIX_CAGEID,
+        59, // exec syscall number
+        UNUSED_NAME,
+        WASMTIME_CAGEID,
+        path,
+        path_cageid,
+        argv,
+        argv_cageid,
+        envs,
+        envs_cageid,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/exit.3.html
 ///
-/// The exit function causes normal process(Cage) termination
-/// The termination entails unmapping all memory references
-/// Removing the cage object from the cage table, closing all open files which is removing corresponding fdtable
-pub fn exit_syscall(
+/// RawPOSIX-side implementation of the `exit` syscall.
+///
+/// This function performs **userspace process / thread teardown** inside
+/// RawPOSIX before transferring control back to Wasmtime via 3i.
+///
+/// Its responsibilities are split into two phases:
+///
+/// 1. **RawPOSIX-side state transition**
+///    - Convert and validate syscall arguments
+///    - Perform thread exit
+///    - Detect whether this is the **last thread** of the cage
+///    - If so, clean up all cage-level resources (FD tables, cage table, zombies)
+///
+/// 2. **Control transfer back to Wasmtime**
+///    - Invoke the Wasmtime re-entry trampoline via `threei::make_syscall`
+///    - Pass `is_last_thread` so Wasmtime can complete execution teardown
+///
+/// RawPOSIX itself does **not** return to Wasm execution after this point;
+/// control is conceptually handed off to Wasmtime for final termination.
+pub extern "C" fn exit_syscall(
     cageid: u64,
     status_arg: u64,
     status_cageid: u64,
-    arg2: u64,
+    tid: u64,
     arg2_cageid: u64,
     arg3: u64,
     arg3_cageid: u64,
@@ -194,8 +328,7 @@ pub fn exit_syscall(
     let status = sc_convert_sysarg_to_i32(status_arg, status_cageid, cageid);
     // would check when `secure` flag has been set during compilation,
     // no-op by default
-    if !(sc_unusedarg(arg2, arg2_cageid)
-        && sc_unusedarg(arg3, arg3_cageid)
+    if !(sc_unusedarg(arg3, arg3_cageid)
         && sc_unusedarg(arg4, arg4_cageid)
         && sc_unusedarg(arg5, arg5_cageid)
         && sc_unusedarg(arg6, arg6_cageid))
@@ -206,36 +339,79 @@ pub fn exit_syscall(
         );
     }
 
-    // Cleanup fdtable
-    let _ = fdtables::remove_cage_from_fdtable(cageid);
+    // Since `exit_syscall` may be interposed by a grate, we treat the
+    // argument's cageid as the effective operation cage.
+    let selfcageid = status_cageid;
+    // Indicates whether the exiting thread is the last live thread
+    // in the cage (0 = no, 1 = yes).
+    let mut is_last_thread = 0;
 
-    // Cleanup cage table
-    // Get the self cage
-    //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
-    if let Some(selfcage) = get_cage(cageid) {
-        if selfcage.parent != cageid {
-            let parent_cage = get_cage(selfcage.parent);
-            if let Some(parent) = parent_cage {
-                parent.child_num.fetch_sub(1, SeqCst);
-                let mut zombie_vec = parent.zombies.write();
-                zombie_vec.push(Zombie {
-                    cageid: cageid,
-                    exit_code: status,
-                });
-            } else {
-                // if parent already exited
-                // BUG: we currently do not handle the situation where a parent has exited already
+    // Perform thread exit inside RawPOSIX.
+    //
+    // `lind_thread_exit` returns true if this thread was the last
+    // remaining thread of the cage.
+    if cage::lind_thread_exit(selfcageid, tid) {
+        // Need to perform cage-level resource cleanup
+        is_last_thread = 1;
+
+        // Cleanup fdtable
+        fdtables::remove_cage_from_fdtable(selfcageid);
+
+        // Cleanup cage table and process hierarchy state.
+        //
+        // If the cage has a parent, we:
+        //   - Decrement the parent's child count
+        //   - Record this cage as a zombie
+        //   - Send SIGCHLD to the parent
+        //
+        //may not be removable in case of lindrustfinalize, we don't unwrap the remove result
+        if let Some(selfcage) = get_cage(selfcageid) {
+            if selfcage.parent != selfcageid {
+                let parent_cage = get_cage(selfcage.parent);
+                if let Some(parent) = parent_cage {
+                    parent.child_num.fetch_sub(1, SeqCst);
+                    let mut zombie_vec = parent.zombies.write();
+                    zombie_vec.push(Zombie {
+                        cageid: selfcageid,
+                        exit_code: status,
+                    });
+                } else {
+                    // if parent already exited
+                    // BUG: we currently do not handle the situation where a parent has exited already
+                }
             }
-        }
 
-        // if the cage has parent (i.e. it is not the "root" cage)
-        if cageid != selfcage.parent {
-            lind_send_signal(selfcage.parent, SIGCHLD);
+            // if the cage has parent (i.e. it is not the "root" cage)
+            if selfcageid != selfcage.parent {
+                // Notify parent via SIGCHLD if this is not the root cage.
+                lind_send_signal(selfcage.parent, SIGCHLD);
+            }
+
+            // Remove the cage from the global cage table.
+            remove_cage(selfcageid);
         }
-        remove_cage(cageid);
     }
 
-    status
+    // Call wasmtime
+    // See comments in wasmtime/lind-multi-process
+    threei::make_syscall(
+        RAWPOSIX_CAGEID,
+        60, // exit syscall number
+        UNUSED_NAME,
+        WASMTIME_CAGEID,
+        status_arg,
+        status_cageid,
+        tid,
+        is_last_thread, // represent the last thread exiting
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+        UNUSED_ARG,
+        UNUSED_ID,
+    )
 }
 
 /// Reference to Linux: https://man7.org/linux/man-pages/man3/waitpid.3p.html
@@ -244,7 +420,7 @@ pub fn exit_syscall(
 /// waitpid_syscall utilizes the zombie list stored in cage struct. When a cage exited, a zombie entry will be inserted
 /// into the end of its parent's zombie list. Then when parent wants to wait for any of child, it could just check its
 /// zombie list and retrieve the first entry from it (first in, first out).
-pub fn waitpid_syscall(
+pub extern "C" fn waitpid_syscall(
     cageid: u64,
     child_cageid_arg: u64,
     child_cageid_arg_cageid: u64,
@@ -419,7 +595,7 @@ pub fn waitpid_syscall(
 ///
 /// ## Returns
 /// Get the parent cage ID
-pub fn getpid_syscall(
+pub extern "C" fn getpid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -460,7 +636,7 @@ pub fn getpid_syscall(
 ///
 /// ## Returns
 /// Get the parent cage ID
-pub fn getppid_syscall(
+pub extern "C" fn getppid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -498,7 +674,7 @@ pub fn getppid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn getgid_syscall(
+pub extern "C" fn getgid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -536,7 +712,7 @@ pub fn getgid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn getegid_syscall(
+pub extern "C" fn getegid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -574,7 +750,7 @@ pub fn getegid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn getuid_syscall(
+pub extern "C" fn getuid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -612,7 +788,7 @@ pub fn getuid_syscall(
 ///
 /// ## Returns
 /// These functions are always successful and never modify errno.
-pub fn geteuid_syscall(
+pub extern "C" fn geteuid_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -663,7 +839,7 @@ pub fn geteuid_syscall(
 /// # Returns
 /// * `0` on success.
 /// * Negative errno wrapped via `syscall_error` on failure.
-pub fn sigaction_syscall(
+pub extern "C" fn sigaction_syscall(
     cageid: u64,
     sig_arg: u64,
     sig_arg_cageid: u64,
@@ -744,7 +920,7 @@ pub fn sigaction_syscall(
 /// * `EFAULT` – Reserved arguments were not unused.
 /// * `EINVAL` – Invalid target cage ID or signal number.
 /// * `ESRCH` – Target cage does not exist.
-pub fn kill_syscall(
+pub extern "C" fn kill_syscall(
     cageid: u64,
     target_cage_arg: u64,
     target_cage_arg_cageid: u64,
@@ -838,7 +1014,7 @@ pub fn kill_syscall(
 /// ## Errors
 /// * `EFAULT` – Reserved arguments were not unused.
 /// * `EINVAL` – Invalid value passed for `how`.
-pub fn sigprocmask_syscall(
+pub extern "C" fn sigprocmask_syscall(
     cageid: u64,
     how_arg: u64,
     how_cageid: u64,
@@ -930,7 +1106,7 @@ pub fn sigprocmask_syscall(
 ///
 /// ## Returns
 /// On success, returns 0. On error, -1 is returned, and errno is set.
-pub fn sched_yield_syscall(
+pub extern "C" fn sched_yield_syscall(
     cageid: u64,
     arg1: u64,
     arg1_cageid: u64,
@@ -987,7 +1163,7 @@ pub fn sched_yield_syscall(
 /// ## Returns
 /// * `0` on success.
 /// * Negative errno (`EFAULT`, etc.) on failure.
-pub fn setitimer_syscall(
+pub extern "C" fn setitimer_syscall(
     cageid: u64,
     which_arg: u64,
     which_arg_cageid: u64,
@@ -1046,106 +1222,4 @@ pub fn setitimer_syscall(
         _ => { /* ITIMER_VIRTUAL and ITIMER_PROF is not implemented*/ }
     }
     0
-}
-
-/// Those functions are required by wasmtime to create the first cage. `verbosity` indicates whether
-/// detailed error messages will be printed if set
-pub fn rawposix_start(verbosity: isize) {
-    let _ = VERBOSE.set(verbosity); //assigned to suppress unused result warning
-    cagetable_init();
-
-    fdtables::register_close_handlers(FDKIND_KERNEL, fdtables::NULL_FUNC, kernel_close);
-
-    // Set up standard file descriptors for the init cage
-    // TODO:
-    // Replace the hardcoded values with variables (possibly by adding a LIND-specific constants file)
-    let dev_null = CString::new(format!("{}/dev/null", LIND_ROOT)).unwrap();
-
-    // Make sure that the standard file descriptors (stdin, stdout, stderr) are always valid
-    // Standard input (fd = 0) is redirected to /dev/null
-    // Standard output (fd = 1) is redirected to /dev/null
-    // Standard error (fd = 2) is set to copy of stdout
-    unsafe {
-        libc::open(dev_null.as_ptr(), libc::O_RDONLY);
-        libc::open(dev_null.as_ptr(), libc::O_WRONLY);
-        libc::dup(1);
-    }
-
-    //init cage is its own parent
-    let initcage = Cage {
-        cageid: 1,
-        cwd: RwLock::new(Arc::new(PathBuf::from("/"))),
-        parent: 1,
-        rev_shm: Mutex::new(Vec::new()),
-        main_threadid: RwLock::new(0),
-        interval_timer: IntervalTimer::new(1),
-        epoch_handler: DashMap::new(),
-        signalhandler: DashMap::new(),
-        pending_signals: RwLock::new(vec![]),
-        sigset: AtomicU64::new(0),
-        zombies: RwLock::new(vec![]),
-        child_num: AtomicU64::new(0),
-        vmmap: RwLock::new(Vmmap::new()),
-    };
-
-    // Add cage to cagetable
-    add_cage(
-        1, // cageid
-        initcage,
-    );
-
-    fdtables::init_empty_cage(1);
-    // Set the first 3 fd to STDIN / STDOUT / STDERR
-    // STDIN
-    fdtables::get_specific_virtual_fd(
-        1,
-        STDIN_FILENO as u64,
-        FDKIND_KERNEL,
-        STDIN_FILENO as u64,
-        false,
-        0,
-    )
-    .unwrap();
-    // STDOUT
-    fdtables::get_specific_virtual_fd(
-        1,
-        STDOUT_FILENO as u64,
-        FDKIND_KERNEL,
-        STDOUT_FILENO as u64,
-        false,
-        0,
-    )
-    .unwrap();
-    // STDERR
-    fdtables::get_specific_virtual_fd(
-        1,
-        STDERR_FILENO as u64,
-        FDKIND_KERNEL,
-        STDERR_FILENO as u64,
-        false,
-        0,
-    )
-    .unwrap();
-}
-
-pub fn rawposix_shutdown() {
-    let exitvec = cagetable_clear();
-
-    for cageid in exitvec {
-        exit_syscall(
-            cageid as u64,       // target cageid
-            EXIT_SUCCESS as u64, // status arg
-            cageid as u64,       // status arg's cageid
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        );
-    }
 }

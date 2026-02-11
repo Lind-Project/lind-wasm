@@ -6,6 +6,7 @@ shift
 # Determine profile from arguments
 PROFILE="debug"
 CARGO_ARGS=("--target" "wasm32-wasip1")
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 
 for arg in "$@"; do
     if [ "$arg" = "--release" ] || [ "$arg" = "-r" ]; then
@@ -37,13 +38,8 @@ WASMTIME_BIN="${WASMTIME_BIN:-wasmtime}"
 echo "Building with profile: $PROFILE"
 cargo +nightly build -Z build-std=std,panic_abort "${CARGO_ARGS[@]}"
 
-# Find the wasm file in the appropriate profile directory
-OUT_WASM=$(find "target/wasm32-wasip1/$PROFILE" -maxdepth 1 -name "*.wasm" ! -name "*deps*" 2>/dev/null | head -n1)
-
-if [ -z "$OUT_WASM" ]; then
-    echo "Error: No wasm file found in target/wasm32-wasip1/$PROFILE"
-    exit 1
-fi
-
-echo "----------------"
-exec lind_compile --opt-only "$OUT_WASM"
+echo "-------------------------------"
+# Find the wasm files in the appropriate profile directory
+for f in $(find "$CARGO_TARGET_DIR/wasm32-wasip1/$PROFILE" -name "*.wasm" ! -name "*deps*" 2>/dev/null| sort -r); do
+        lind_compile --opt-only "$f" 2> /dev/null || true
+done
