@@ -3505,7 +3505,7 @@ pub extern "C" fn ioctl_syscall(
     // Besides FIOCLEX, we only support FIONBIO, FIOASYNC, and TIOCGWINSZ right now.
     // Return error for unsupported requests.
     if req != FIONBIO && req != FIOASYNC && req != TIOCGWINSZ {
-        lind_debug_panic("Lind unsupported ioctl request");
+        lind_debug_panic(&format!("Lind unsupported ioctl request: {}", req_arg));
     }
 
     let wrappedvfd = fdtables::translate_virtual_fd(cageid, vfd_arg);
