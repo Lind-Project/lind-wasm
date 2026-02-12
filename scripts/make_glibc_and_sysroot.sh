@@ -9,7 +9,7 @@
 #
 set -x
 
-CC="clang"
+CC="${CC:-clang}"
 GLIBC="$PWD/src/glibc"
 BUILD="$GLIBC/build"
 SYSROOT="$GLIBC/sysroot"
@@ -61,7 +61,7 @@ INCLUDE_PATHS="
 "
 
 
-RESOURCE_DIR="$(clang --target=wasm32-unknown-wasi -print-resource-dir)"
+RESOURCE_DIR="$($CC --target=wasm32-unknown-wasi -print-resource-dir)"
 SYS_INCLUDE="-nostdinc -isystem ${RESOURCE_DIR}/include -isystem /usr/i686-linux-gnu/include"
 
 #SYS_INCLUDE="-nostdinc -isystem $CLANG/lib/clang/18/include -isystem /usr/i686-linux-gnu/include"
@@ -88,7 +88,7 @@ cd $BUILD
   --host=i686-linux-gnu \
   --build=i686-linux-gnu \
   CFLAGS=" -matomics -mbulk-memory -O2 -g" \
-  CC="clang --target=wasm32-unknown-wasi -v -Wno-int-conversion"
+  CC="$CC --target=wasm32-unknown-wasi -v -Wno-int-conversion"
 
 make -j$(($(nproc) * 2)) --keep-going 2>&1 THREAD_MODEL=posix | tee check.log
 

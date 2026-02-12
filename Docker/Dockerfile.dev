@@ -99,6 +99,7 @@ USER ${USERNAME}
 # --- Fix PATH ---
 ENV PATH="/usr/local/bin:/home/${USERNAME}/.cargo/bin:/home/${USERNAME}/go/bin:$PATH"
 ENV CLANG="/home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}"
+ENV CC="/home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}/bin/clang"
 ENV MATH_TEST_DIR="math_tests"
 RUN mkdir -p /home/${USERNAME}/lind-wasm/tests/unit-tests/${MATH_TEST_DIR}/deterministic
 
