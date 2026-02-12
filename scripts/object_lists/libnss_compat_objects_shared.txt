@@ -1,0 +1,5 @@
+nss/compat-grp.os
+nss/compat-pwd.os
+nss/compat-spwd.os
+nss/compat-initgroups.os
+nss/nisdomain.os

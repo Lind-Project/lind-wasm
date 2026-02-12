@@ -7,3 +7,4 @@ __GI___sched_getscheduler (__pid_t __pid)
 }
 
 weak_alias(__GI___sched_getscheduler, __sched_getscheduler)
+weak_alias(__GI___sched_getscheduler, sched_getscheduler)
