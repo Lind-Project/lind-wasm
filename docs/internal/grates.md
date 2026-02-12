@@ -6,11 +6,13 @@ Grates allow policy and system services to be implemented outside the trusted ru
 
 ## Why grates exist
 
-3i enables cages to intercept system calls from other cages. Because writing such interception logic is lightweight and common, Lind gives these cages the special name “grates.”
+In traditional Linux systems, extending or intercepting system calls typically requires kernel modifications, kernel modules, or mechanisms such as eBPF. These approaches are privileged, restricted in what they can safely do, and difficult to compose into larger systems.
 
-This design allows functionality such as logging, filtering, virtualization, and service implementation to be expressed as ordinary user-space programs.
+Grates allow this functionality to be implemented entirely in user space. Because they are ordinary cages, grates can implement services that are impractical or impossible to build using kernel hooks alone — such as an in-memory filesystem, custom networking stacks, or rich virtualization layers — while remaining outside the trusted runtime.
 
-## Composition
+3i makes this possible by allowing cages to register handlers for other cages’ system calls. Since writing such interception logic is lightweight and common, Lind gives these cages the special name “grates.”
+
+## Composability
 
 Grates are composable. A grate may itself have another grate beneath it that provides additional functionality. This mirrors the Unix philosophy of building complex behavior from small, composable components.
 
@@ -20,48 +22,36 @@ In practice, grates are composed using two patterns: stacking and clamping.
 
 Stacking is the most common form of grate composition. Grates are arranged in a linear chain, and system calls flow through them sequentially.  This is analogous to how output flows through a Unix pipeline from one process's stdio to another's stdout.  Note that in a Unix pipeline, the output is often transformed in the process, including creating new emissions to stderr or other files.  Similarly, a grate may pass system calls below (e.g., strace), may transform them (e.g., a file encryption grate), omit them (e.g., seccomp), perform different calls (e.g., a network filesystem), etc. in whatever means it has been designed to do.
 
-When a system call reaches a grate in a stack, the grate may choose one of the following behaviors:
-
-1. **Intercept, handle, and pass down**  
-   The grate performs some action and then issues a new 3i call so the system call continues to the next handler.  
-   This is analogous to tracing or logging tools that observe calls without changing semantics.
-
-2. **Intercept and handle without passing down**  
-   The grate fully handles the system call and returns a result to the caller without forwarding it further.  
-   This is common for virtualization or user-space service implementations.
-
-3. **Not intercept**  
-   The grate does not register a handler for the system call. The call bypasses the grate and is routed by 3i to the next handler.
-
-4. **Block**  
-   The grate intercepts the system call and denies it, returning an error without forwarding it further.  
-   This is analogous to policy enforcement mechanisms such as seccomp.
-
-Each grate makes its decision independently. The overall behavior emerges from their composition.
+Each grate independently decides how to handle the system call before optionally issuing a new 3i call to continue routing. The overall behavior emerges from their composition.
 
 ## Clamping
 
-Clamping is used when an ancestor grate wants to enforce a specific syscall routing structure on its descendants.
+Clamping is used when an ancestor grate needs to divide a resource namespace so that a single system call may be routed to different implementations depending on policy.
 
-The key distinction between stacking and clamping is when interposition occurs:
+For example:
 
-- Stacking interposes at system call execution time.
-- Clamping interposes at system call registration time.
+- A filesystem namespace grate may route `/repo` to an in-memory filesystem grate while routing `/out` to the host filesystem.
+- A networking namespace grate may examine the destination of `send` and route traffic for certain IP/port combinations to one networking grate and others to a different one.
+- A time namespace grate may virtualize clocks for some cages while allowing others to observe host time.
 
-In clamping, an ancestor grate interposes on calls to `register_handler` made by a descendant. When a descendant attempts to install a handler for a child cage, the ancestor substitutes its own handler instead.
+In these cases, the original system call interface is preserved for the application — for example, the application still invokes `write`.
 
-As a result, system calls issued by the child are always routed to the ancestor grate first.
+However, the ancestor grate may register additional internal syscall numbers. For example, a namespace grate may allow the normal `write` syscall number to continue routing toward RawPOSIX (or a grate stacked below it), while registering a new internal syscall number such as `write_imfs` for an in-memory filesystem grate.
 
-When a system call reaches the ancestor grate, it issues a new 3i call. The call is then routed according to the ancestor’s policy, which may direct it to:
-- a service grate
-- another grate further down the stack
-- or eventually to RawPOSIX via normal 3i routing
+When `write` is invoked by a child cage, the namespace grate examines the arguments (such as the file descriptor or path) and decides how to route the call. It may issue a new 3i call using the original `write` number to continue normal routing, or issue a call using the internal `write_imfs` number to direct the operation to the in-memory filesystem grate.
 
-Service grates do not receive system calls directly from applications; they are invoked only when explicitly chosen by the ancestor grate.
+Clamping allows a grate to divide a namespace while preserving the original application-visible syscall interface.
+
 
 ## Acting on behalf of other cages
 
-A grate may perform system calls on behalf of another cage so that the system behaves as though the originating cage made the call. This is required for correct semantics in operations such as process creation and memory management.
+A grate may perform system calls on behalf of another cage so that the system behaves as though the originating cage made the call.
+
+For example, if a cage invokes `fork` and a grate simply performs `fork` using its own identity, the grate — not the originating cage — would be duplicated. Instead, the grate must issue `make_syscall` specifying the original cage as the target so that the new process state is associated with the correct cage.
+
+Similarly, if a grate interposes on `mmap`, it may need to ensure that the resulting memory mapping is installed in the calling cage’s address space rather than its own.
+
+By allowing a grate to specify the target cage for a system call, 3i preserves POSIX semantics while still enabling interposition.
 
 ## Cross-cage buffers
 
