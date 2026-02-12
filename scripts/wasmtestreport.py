@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 # Usage
-#   "./wasmtestreport" to run with default settings(5 second timeout and all tests inside unit-tests folder)
+#   "./wasmtestreport" to run with default settings(30 second timeout and all tests inside unit-tests folder)
 #   "./wasmtestreport.py --skip-folders config_tests file_tests" to skip the test cases in those folders
 #   "./wasmtestreport.py --run-folders config_tests file_tests" to run test cases in folder1 and folder2 only
-#   "./wasmtestreport.py --timeout 10" to run with a timeout of 10 seconds 
+#   "./wasmtestreport.py --timeout 30" to run with a timeout of 30 seconds 
 #   "./wasmtestreport.py --output newresult" to change the output file(The new file will be newresult.json)
 #   "./wasmtestreport.py --generate-html" to generate the html file
 #   "./wasmtestreport.py --allow-pre-compiled" to run tests with .cwasm binaries instead of .wasm binaries
-#   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 10"
+#   The arguments can be stacked eg: "./wasmtestreport.py --generate-html --skip-folders config_tests file_tests --timeout 30"
 #   "./wasmtestreport.py --compile-flags -pthread -lpthread -O2 -g"
 #   (flags are collected until the next option starting with "--")
 #
@@ -24,6 +24,7 @@ import shutil
 import logging
 import tempfile
 import sys
+import time
 
 # Configure logger
 logger = logging.getLogger("wasmtestreport")
@@ -35,7 +36,7 @@ formatter = logging.Formatter("[%(levelname)s] %(message)s")
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-DEFAULT_TIMEOUT = 10 # in seconds
+DEFAULT_TIMEOUT = 30 # in seconds
 
 JSON_OUTPUT = "results.json"
 HTML_OUTPUT = "report.html"
@@ -179,6 +180,28 @@ def get_empty_result():
     return result
 
 
+def build_timing_info(**overrides):
+    timing_info = {
+        "native_compile_time_sec": None,
+        "native_run_time_sec": None,
+        "wasm_compile_time_sec": None,
+        "wasm_run_time_sec": None,
+    }
+    timing_info.update({k: v for k, v in overrides.items() if k in timing_info})
+    return timing_info
+
+
+def merge_timing_info(*timing_infos):
+    merged = build_timing_info()
+    for timing_info in timing_infos:
+        if not timing_info:
+            continue
+        for key, value in timing_info.items():
+            if key in merged and value is not None:
+                merged[key] = value
+    return merged
+
+
 # ----------------------------------------------------------------------
 # Function: add_test_result
 #
@@ -196,12 +219,30 @@ def get_empty_result():
 # - Output: Modifies 'result' variable, no return
 #
 # ----------------------------------------------------------------------
-def add_test_result(result, file_path, status, error_type, output):
+def add_test_result(result, file_path, status, error_type, output, timing_info=None):
+    merged_timing = merge_timing_info(timing_info)
+
+    native_total = None
+    if merged_timing["native_compile_time_sec"] is not None or merged_timing["native_run_time_sec"] is not None:
+        native_total = (merged_timing["native_compile_time_sec"] or 0.0) + (merged_timing["native_run_time_sec"] or 0.0)
+
+    wasm_total = None
+    if merged_timing["wasm_compile_time_sec"] is not None or merged_timing["wasm_run_time_sec"] is not None:
+        wasm_total = (merged_timing["wasm_compile_time_sec"] or 0.0) + (merged_timing["wasm_run_time_sec"] or 0.0)
+
     result["total_test_cases"] += 1
     result["test_cases"][file_path] = {
         "status": status,
         "error_type": error_type,
-        "output": output
+        "output": output,
+        # Legacy keys kept for external consumers that still expect top-level timing fields.
+        "native_time": native_total,
+        "wasm_time": wasm_total,
+        "timing": {
+            **merged_timing,
+            "native_time_sec": native_total,
+            "wasm_time_sec": wasm_total,
+        },
     }
 
     if status.lower() == "success":
@@ -243,37 +284,37 @@ class TestResultHandler:
         self.result = result_dict
         self.source_file = str(source_file)
     
-    def add_success(self, output=""):
-        add_test_result(self.result, self.source_file, "Success", None, output)
+    def add_success(self, output="", timing_info=None):
+        add_test_result(self.result, self.source_file, "Success", None, output, timing_info=timing_info)
     
-    def add_compile_failure(self, error_msg, is_native=False):
+    def add_compile_failure(self, error_msg, is_native=False, timing_info=None):
         error_type = "Failure_native_compiling" if is_native else "Lind_wasm_compiling"
-        add_test_result(self.result, self.source_file, "Failure", error_type, error_msg)
+        add_test_result(self.result, self.source_file, "Failure", error_type, error_msg, timing_info=timing_info)
     
-    def add_runtime_failure(self, error_msg, is_native=False):
+    def add_runtime_failure(self, error_msg, is_native=False, timing_info=None):
         error_type = "Failure_native_running" if is_native else "Lind_wasm_runtime"
-        add_test_result(self.result, self.source_file, "Failure", error_type, error_msg)
+        add_test_result(self.result, self.source_file, "Failure", error_type, error_msg, timing_info=timing_info)
     
-    def add_timeout(self, output, is_native=False):
+    def add_timeout(self, output, is_native=False, timing_info=None):
         error_type = "Native_Timeout" if is_native else "Lind_wasm_Timeout"
-        add_test_result(self.result, self.source_file, "Failure", error_type, output)
+        add_test_result(self.result, self.source_file, "Failure", error_type, output, timing_info=timing_info)
     
-    def add_segfault(self, output, is_native=False):
+    def add_segfault(self, output, is_native=False, timing_info=None):
         error_type = "Native_Segmentation_Fault" if is_native else "Lind_wasm_Segmentation_Fault"
-        add_test_result(self.result, self.source_file, "Failure", error_type, output)
+        add_test_result(self.result, self.source_file, "Failure", error_type, output, timing_info=timing_info)
     
-    def handle_return_code(self, returncode, output, is_native=False):
+    def handle_return_code(self, returncode, output, is_native=False, timing_info=None):
         """Handle return code patterns consistently"""
         if returncode == 0:
             return True  # Success case, let caller handle
         elif returncode == "timeout":
-            self.add_timeout(output, is_native)
+            self.add_timeout(output, is_native, timing_info=timing_info)
         elif returncode == "unknown_error":
-            self.add_runtime_failure(output, is_native)
+            self.add_runtime_failure(output, is_native, timing_info=timing_info)
         elif is_segmentation_fault(returncode):
-            self.add_segfault(output, is_native)
+            self.add_segfault(output, is_native, timing_info=timing_info)
         else:
-            add_test_result(self.result, self.source_file, "Failure", "Unknown_Failure", output)
+            add_test_result(self.result, self.source_file, "Failure", "Unknown_Failure", output, timing_info=timing_info)
         return False
 
 
@@ -310,11 +351,11 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
         try:
             dep_proc = run_subprocess(dep_compile_cmd, label="native dep compile", shell=False)
         except Exception as e:
-            return False, f"Exception compiling dependency {dependency_source}: {e}", "compile_error", "Failure_native_compiling"
+            return False, f"Exception compiling dependency {dependency_source}: {e}", "compile_error", "Failure_native_compiling", build_timing_info()
 
         if dep_proc.returncode != 0:
             error_output = dep_proc.stdout + dep_proc.stderr
-            return False, f"Failed to compile dependency {dependency_source}: {error_output}", "compile_error", "Failure_native_compiling"
+            return False, f"Failed to compile dependency {dependency_source}: {error_output}", "compile_error", "Failure_native_compiling", build_timing_info()
 
         created_native_execs.add(dest_path)
 
@@ -324,26 +365,32 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
     if not native_output.is_absolute():
         raise ValueError(f"Native output path must be absolute, got: {native_output}")
 
+    timing_info = build_timing_info()
+
     # Compile
     compile_cmd = [CC, str(source_file), *resolve_compile_flags(source_file, "native"), "-o", str(native_output)]
     try:
+        compile_start = time.perf_counter()
         proc = run_subprocess(compile_cmd, label=f"{CC} compile", cwd=LINDFS_ROOT, shell=False)
+        timing_info["native_compile_time_sec"] = round(time.perf_counter() - compile_start, 6)
         if proc.returncode != 0:
-            return False, proc.stdout + proc.stderr, "compile_error", "Failure_native_compiling"
+            return False, proc.stdout + proc.stderr, "compile_error", "Failure_native_compiling", timing_info
     except Exception as e:
-        return False, f"Exception: {e}", "compile_error", "Failure_native_compiling"
+        return False, f"Exception: {e}", "compile_error", "Failure_native_compiling", timing_info
     
     # Run
     try:
+        run_start = time.perf_counter()
         proc = run_subprocess(["stdbuf", "-oL", str(native_output)], label="native run", cwd=LINDFS_ROOT, shell=False, timeout=timeout_sec)
+        timing_info["native_run_time_sec"] = round(time.perf_counter() - run_start, 6)
         if proc.returncode == 0:
-            return True, proc.stdout, 0, None
+            return True, proc.stdout, 0, None, timing_info
         else:
-            return False, proc.stdout + proc.stderr, proc.returncode, "Failure_native_running"
+            return False, proc.stdout + proc.stderr, proc.returncode, "Failure_native_running", timing_info
     except subprocess.TimeoutExpired:
-        return False, f"Timed Out (timeout: {timeout_sec}s)", "timeout", "Native_Timeout"
+        return False, f"Timed Out (timeout: {timeout_sec}s)", "timeout", "Native_Timeout", timing_info
     except Exception as e:
-        return False, f"Exception: {e}", "unknown_error", "Failure_native_running"
+        return False, f"Exception: {e}", "unknown_error", "Failure_native_running", timing_info
     finally:
         # Clean up native binary
         native_output.unlink(missing_ok=True)
@@ -370,7 +417,7 @@ def compile_and_run_native(source_file, timeout_sec=DEFAULT_TIMEOUT):
 #
 # Variables:
 # - Input: source_file - path to the .c file
-# - Output: (success, output, error_msg, error_type) tuple
+# - Output: (success, output, error_msg, error_type, timing_info) tuple
 # ----------------------------------------------------------------------
 def get_expected_output(source_file):
     """Get expected output from file or native execution"""
@@ -381,15 +428,15 @@ def get_expected_output(source_file):
         try:
             with open(expected_output_file, 'r') as f:
                 logger.info(f"Expected output found at {expected_output_file}")
-                return True, f.read(), None, None
+                return True, f.read(), None, None, build_timing_info()
         except Exception as e:
-            return False, None, f"Exception: {e}", "Failure_reading_expected_file"
+            return False, None, f"Exception: {e}", "Failure_reading_expected_file", build_timing_info()
     
     # Fall back to native execution
     # TODO: Add expected output support later
     # logger.info(f"No expected output found at {expected_output_file}")
-    success, output, returncode, error_type = compile_and_run_native(source_file)
-    return success, output, f"Native execution: {output}" if not success else None, error_type
+    success, output, returncode, error_type, timing_info = compile_and_run_native(source_file)
+    return success, output, f"Native execution: {output}" if not success else None, error_type, timing_info
 
 
 # ----------------------------------------------------------------------
@@ -423,17 +470,19 @@ def compile_c_to_wasm(source_file, allow_precompiled=False):
 
 
     try:
+        compile_start = time.perf_counter()
         result = run_subprocess(compile_cmd, label="wasm compile", shell = False)
+        compile_time = round(time.perf_counter() - compile_start, 6)
         if result.returncode != 0:
-            return (None, result.stdout + "\n" + result.stderr)
+            return (None, result.stdout + "\n" + result.stderr, compile_time)
         else:
             # Return the generated artifact: .cwasm when precompiled, otherwise .wasm
             wasm_file = Path(testcase + (".cwasm" if allow_precompiled else ".wasm"))
             if not wasm_file.exists():
-                return (None, f"Expected wasm output not found: {wasm_file}")
-            return (wasm_file, "")
+                return (None, f"Expected wasm output not found: {wasm_file}", compile_time)
+            return (wasm_file, "", compile_time)
     except Exception as e:
-        return (None, f"Exception during compilation: {str(e)}")
+        return (None, f"Exception during compilation: {str(e)}", None)
 
 # ----------------------------------------------------------------------
 # Function: run_compiled_wasm
@@ -470,7 +519,9 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
 
 
     try:
+        run_start = time.perf_counter()
         proc = run_subprocess(run_cmd,label="wasm run",timeout=timeout_sec, cwd=None, shell = False)
+        run_time = round(time.perf_counter() - run_start, 6)
         full_output = proc.stdout + proc.stderr
         
         #removing the first line in output as it is the command being run by the bash script
@@ -478,12 +529,12 @@ def run_compiled_wasm(wasm_file, timeout_sec=DEFAULT_TIMEOUT):
         filtered_lines = lines[1:]
         filtered_output = "\n".join(filtered_lines)
 
-        return (proc.returncode, full_output)
+        return (proc.returncode, full_output, run_time)
 
     except subprocess.TimeoutExpired as e:
-        return ("timeout", f"Timed Out (timeout: {timeout_sec}s)")
+        return ("timeout", f"Timed Out (timeout: {timeout_sec}s)", None)
     except Exception as e:
-        return ("unknown_error", f"Exception during wasm run: {str(e)}")
+        return ("unknown_error", f"Exception during wasm run: {str(e)}", None)
 
 def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, test_mode="deterministic", allow_precompiled=False):
     """Unified test function for deterministic and failing tests"""
@@ -493,7 +544,7 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
     # For fail tests, we need to run both native and wasm
     if test_mode == "fail":
         # Run native version
-        native_success, native_output, native_retcode, native_error = compile_and_run_native(source_file, timeout_sec)
+        native_success, native_output, native_retcode, native_error, native_timing = compile_and_run_native(source_file, timeout_sec)
         
         # NOTE: We explicitly early-abort here and report the native compilation failure
         # rather than treating it as a successful "fail-test".
@@ -505,11 +556,13 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
                 "=== FAILURE: Native compilation failed during fail-test (expected runtime failure) ===\n"
                 f"Native output:\n{native_output}"
             )
-            add_test_result(result, str(source_file), "Failure", "Fail_native_compiling", failure_info)
+            add_test_result(result, str(source_file), "Failure", "Fail_native_compiling", failure_info, timing_info=native_timing)
             return
         
         # Compile and run WASM
-        wasm_file, wasm_compile_error = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
+        wasm_file, wasm_compile_error, wasm_compile_time = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
+        wasm_timing = build_timing_info(wasm_compile_time_sec=wasm_compile_time)
+        combined_timing = merge_timing_info(native_timing, wasm_timing)
         if wasm_file is None:
             # Record this specifically as a fail-test WASM-compilation error so it is
             # counted alongside other `Fail_*` test categories instead of the generic
@@ -518,11 +571,13 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
                 "=== FAILURE: Wasm compilation failed during fail-test (expected runtime failure) ===\n"
                 f"Wasm compile output:\n{wasm_compile_error}"
             )
-            add_test_result(result, str(source_file), "Failure", "Fail_wasm_compiling", failure_info)
+            add_test_result(result, str(source_file), "Failure", "Fail_wasm_compiling", failure_info, timing_info=combined_timing)
             return
         
         try:
-            wasm_retcode, wasm_output = run_compiled_wasm(wasm_file, timeout_sec)
+            wasm_retcode, wasm_output, wasm_run_time = run_compiled_wasm(wasm_file, timeout_sec)
+            wasm_timing["wasm_run_time_sec"] = wasm_run_time
+            combined_timing = merge_timing_info(native_timing, wasm_timing)
             
             # Normalize return codes for comparison
             native_failed = native_retcode != 0
@@ -541,19 +596,19 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
                     f"Wasm exit code: {wasm_retcode}\n"
                     "Both failed as expected."
                 )
-                handler.add_success(output_info)
+                handler.add_success(output_info, timing_info=combined_timing)
             elif not native_failed and not wasm_failed:
                 # Both succeeded when they should have failed
                 failure_info = build_fail_message("both", native_output, wasm_output, native_retcode, wasm_retcode)
-                add_test_result(result, str(source_file), "Failure", "Fail_both_succeeded", failure_info)
+                add_test_result(result, str(source_file), "Failure", "Fail_both_succeeded", failure_info, timing_info=combined_timing)
             elif not native_failed:
                 # Only native succeeded
                 failure_info = build_fail_message("native_only", native_output, wasm_output, native_retcode, wasm_retcode)
-                add_test_result(result, str(source_file), "Failure", "Fail_native_succeeded", failure_info)
+                add_test_result(result, str(source_file), "Failure", "Fail_native_succeeded", failure_info, timing_info=combined_timing)
             else:
                 # Only wasm succeeded
                 failure_info = build_fail_message("wasm_only", native_output, wasm_output, native_retcode, wasm_retcode)
-                add_test_result(result, str(source_file), "Failure", "Fail_wasm_succeeded", failure_info)
+                add_test_result(result, str(source_file), "Failure", "Fail_wasm_succeeded", failure_info, timing_info=combined_timing)
         
         finally:
             # Always clean up WASM file
@@ -564,27 +619,30 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
     
     # For deterministic tests, get expected output
     expected_output = None
+    native_timing = build_timing_info()
     if test_mode == "deterministic":
-        success, expected_output, error_msg, error_type = get_expected_output(source_file)
+        success, expected_output, error_msg, error_type, native_timing = get_expected_output(source_file)
         if not success:
-            add_test_result(result, str(source_file), "Failure", error_type, error_msg)
+            add_test_result(result, str(source_file), "Failure", error_type, error_msg, timing_info=native_timing)
             return
     
     # Compile and run WASM
-    wasm_file, wasm_compile_error = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
+    wasm_file, wasm_compile_error, wasm_compile_time = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
+    timing_info = merge_timing_info(native_timing, build_timing_info(wasm_compile_time_sec=wasm_compile_time))
     if wasm_file is None:
-        handler.add_compile_failure(wasm_compile_error)
+        handler.add_compile_failure(wasm_compile_error, timing_info=timing_info)
         return
     
     try:
-        retcode, wasm_output = run_compiled_wasm(wasm_file, timeout_sec)
+        retcode, wasm_output, wasm_run_time = run_compiled_wasm(wasm_file, timeout_sec)
+        timing_info["wasm_run_time_sec"] = wasm_run_time
         
         # Handle WASM execution result
-        if handler.handle_return_code(retcode, wasm_output, is_native=False):
+        if handler.handle_return_code(retcode, wasm_output, is_native=False, timing_info=timing_info):
             # Success case - check output for deterministic tests
             if test_mode == "deterministic" and expected_output is not None:
                 if wasm_output.strip() == expected_output.strip():
-                    handler.add_success(wasm_output)
+                    handler.add_success(wasm_output, timing_info=timing_info)
                 else:
                     mismatch_info = (
                         "=== Expected Output ===\n"
@@ -592,9 +650,9 @@ def test_single_file_unified(source_file, result, timeout_sec=DEFAULT_TIMEOUT, t
                         "=== WASM Output ===\n"
                         f"{wasm_output.strip()}\n"
                     )
-                    add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info)
+                    add_test_result(result, str(source_file), "Failure", "Output_mismatch", mismatch_info, timing_info=timing_info)
             else:
-                handler.add_success(wasm_output)
+                handler.add_success(wasm_output, timing_info=timing_info)
     
     finally:
         # Always clean up WASM file
@@ -725,7 +783,7 @@ def create_required_executables(executable_deps, allow_precompiled=False):
     for exec_path, source_file in executable_deps.items():
         try:
             # Compile the source file to WASM or precompiled .cwasm depending on flag
-            wasm_file, compile_err = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
+            wasm_file, compile_err, _ = compile_c_to_wasm(source_file, allow_precompiled=allow_precompiled)
             
             if wasm_file is None:
                 logger.error(f"Failed to compile {source_file}: {compile_err}")
@@ -814,6 +872,25 @@ def pre_test(tests_to_run=None, allow_precompiled=False):
     if tests_to_run:
         executable_deps = analyze_executable_dependencies(tests_to_run)
         create_required_executables(executable_deps, allow_precompiled=allow_precompiled)
+
+def format_time_cell(value):
+    return "N/A" if value is None else f"{value:.6f}s"
+
+
+def get_row_time_values(result):
+    timing = result.get("timing", {}) if isinstance(result, dict) else {}
+
+    native_time = timing.get("native_time_sec")
+    wasm_time = timing.get("wasm_time_sec")
+
+    # Backward compatibility for older result shapes / external consumers.
+    if native_time is None:
+        native_time = result.get("native_time") if isinstance(result, dict) else None
+    if wasm_time is None:
+        wasm_time = result.get("wasm_time") if isinstance(result, dict) else None
+
+    return native_time, wasm_time
+
 
 # ----------------------------------------------------------------------
 # Function: generate_html_report
@@ -936,13 +1013,13 @@ def generate_html_report(report):
             
             # Generate table with category headers
             html_content.append('<table class="test-results-table">')
-            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Output</th></tr>')
+            html_content.append('<tr><th>Test Case</th><th>Status</th><th>Error Type</th><th>Native Time</th><th>Wasm Time</th><th>Output</th></tr>')
             
             # Sort categories for consistent output
             for category in sorted(test_categories.keys()):
                 # Add category header row
                 category_display = category.replace('_', ' ').title()
-                html_content.append(f'<tr class="test-type-header"><td colspan="4">{category_display}</td></tr>')
+                html_content.append(f'<tr class="test-type-header"><td colspan="6">{category_display}</td></tr>')
                 
                 # Sort tests within category
                 test_cases_in_category = sorted(test_categories[category], key=lambda x: x[0])
@@ -963,9 +1040,13 @@ def generate_html_report(report):
                     # For failures, show the full output for debugging
                     output_display = "Success" if result['status'].lower() == "success" else result["output"]
                     
+                    native_time, wasm_time = get_row_time_values(result)
+
                     html_content.append(
                         f'<tr class="{row_class}"><td>{test_name}</td>'
                         f'<td>{result["status"]}</td><td>{result["error_type"]}</td>'
+                        f'<td>{format_time_cell(native_time)}</td>'
+                        f'<td>{format_time_cell(wasm_time)}</td>'
                         f'<td><pre>{output_display}</pre></td></tr>'
                     )
             
