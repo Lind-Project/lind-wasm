@@ -18,7 +18,7 @@ In practice, grates are composed using two patterns: stacking and clamping.
 
 ## Stacking
 
-Stacking is the most common form of grate composition. Grates are arranged in a linear chain, and system calls flow through them sequentially.
+Stacking is the most common form of grate composition. Grates are arranged in a linear chain, and system calls flow through them sequentially.  This is analogous to how output flows through a Unix pipeline from one process's stdio to another's stdout.  Note that in a Unix pipeline, the output is often transformed in the process, including creating new emissions to stderr or other files.  Similarly, a grate may pass system calls below (e.g., strace), may transform them (e.g., a file encryption grate), omit them (e.g., seccomp), perform different calls (e.g., a network filesystem), etc. in whatever means it has been designed to do.
 
 When a system call reaches a grate in a stack, the grate may choose one of the following behaviors:
 
