@@ -8,6 +8,8 @@ Lind is a sandboxing system that runs multiple mutually untrusted applications w
 
 Unlike traditional process isolation, Lind provides strong intra-process isolation while preserving POSIX semantics and avoiding kernel modifications or privileged execution.
 
+In Old Norse, Old High German, and Old English, a “lind” is a shield constructed with two layers of linden wood. Linden wood shields are lightweight and resistant to splitting — an appropriate metaphor for a sandboxing system built from layered isolation technologies.
+
 Lind-Wasm is a realization of Lind that uses WebAssembly for software fault isolation and a small trusted runtime to enforce isolation and mediate system calls.
 
 ## Technology Overview
@@ -31,7 +33,7 @@ Grates are commonly used to implement policy and system services outside the tru
 
 ### 3i
 
-The intra-process interposable interface (3i) provides a programmable system call routing mechanism between cages, grates, and the microvisor.
+The Intercage Interposition Interface (3i) provides a programmable system call routing mechanism between cages, grates, and the microvisor.
 
 Each cage has its own system call table, which may route system calls to:
 - another cage acting as a grate
