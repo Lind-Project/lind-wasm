@@ -6,6 +6,7 @@ edition = "2024"
 [features]
 disable_signals = []
 secure = ["typemap/secure"]
+lind_debug = ["wasmtime-lind-common/lind_debug"]
 
 [dependencies]
 wasmtime-lind-common = { path = "../wasmtime/crates/lind-common" }

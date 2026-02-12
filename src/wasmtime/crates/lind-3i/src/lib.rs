@@ -260,8 +260,6 @@ pub fn rm_vmctx(cage_id: u64) -> bool {
 /// This is used exclusively for pthread-related syscalls and thread exit.
 /// Grate calls and normal execution never consult this table.
 pub fn set_vmctx_thread(cage_id: u64, tid: u64, vmctx: VmCtxWrapper) {
-    debug_assert!(tid != 1, "use set_vmctx_tid1 for tid==1");
-
     let tables = VMCTX_THREADS.get().expect("VMCTX_THREADS not initialized");
     let t = tables.get(cage_id as usize).expect("invalid cage_id");
     t.lock().unwrap().insert(tid, vmctx);
@@ -271,8 +269,6 @@ pub fn set_vmctx_thread(cage_id: u64, tid: u64, vmctx: VmCtxWrapper) {
 ///
 /// Returns `None` if the thread has exited or was never registered.
 pub fn get_vmctx_thread(cage_id: u64, tid: u64) -> Option<VmCtxWrapper> {
-    debug_assert!(tid != 1, "use get_vmctx_tid1 for tid==1");
-
     let tables = VMCTX_THREADS.get().expect("VMCTX_THREADS not initialized");
     let t = tables.get(cage_id as usize).expect("invalid cage_id");
     t.lock().unwrap().get(&tid).copied()
@@ -280,8 +276,6 @@ pub fn get_vmctx_thread(cage_id: u64, tid: u64) -> Option<VmCtxWrapper> {
 
 /// Remove a single thread entry
 pub fn rm_vmctx_thread(cage_id: u64, tid: u64) -> bool {
-    debug_assert!(tid != 1, "tid==1 should clear pool differently if needed");
-
     let Some(tables) = VMCTX_THREADS.get() else {
         return false;
     };
