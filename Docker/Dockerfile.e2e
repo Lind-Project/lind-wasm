@@ -72,6 +72,8 @@ RUN set -euo pipefail; \
 
 COPY src/glibc/wasi /${CLANG}/lib/clang/18/lib/wasi
 ENV PATH="/${CLANG}/bin:${PATH}"
+ENV MATH_TEST_DIR="math_tests"
+RUN mkdir -p /tests/unit-tests/${MATH_TEST_DIR}/deterministic
 
 # --- Install libtinfo5 ---
 RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
@@ -124,6 +126,7 @@ RUN chmod 0755 /build/lind-boot
 COPY --from=build-glibc --parents src/glibc/sysroot .
 COPY --from=build-glibc --parents build/sysroot .
 COPY --parents scripts tests tools skip_test_cases.txt .
+RUN mkdir -p /tests/unit-tests/${MATH_TEST_DIR}/deterministic
 
 ENV LIND_WASM_ROOT=/
 
@@ -137,6 +140,7 @@ RUN install -D -m 0755 /scripts/lind_compile /usr/local/bin/lind_compile \
 FROM base AS test
 COPY --parents scripts tests tools skip_test_cases.txt Makefile .
 RUN chmod 0755 /scripts/wasmtestreport.py /scripts/lind_compile /scripts/lind_run
+RUN mkdir -p /tests/unit-tests/${MATH_TEST_DIR}/deterministic
 # Create symlink so hardcoded paths in wasmtime match Docker environment
 RUN mkdir -p /home/lind && ln -sf / /home/lind/lind-wasm
 # NOTE: Build artifacts from prior stages are only mounted, to save COPY time
