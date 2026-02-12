@@ -26,7 +26,7 @@ int main() {
     munmap(addr, pageSize);
 
     // Try to read from the unmapped memory
-    int test = addr[0]; // Potential segmentation fault or undefined behavior here
+    volatile int test = addr[0]; // Potential segmentation fault or undefined behavior here
 
     return 0; // Return successfully (unlikely to reach this point without a fault)
 }
