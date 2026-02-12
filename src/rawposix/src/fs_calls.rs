@@ -935,7 +935,7 @@ pub extern "C" fn munmap_syscall(
     }
 
     let vmmap = cage.vmmap.read();
-    let sysaddr = vmmap.user_to_sys(rounded_addr as u32);
+    let sysaddr = rounded_addr;
     drop(vmmap);
 
     let rounded_length = round_up_page(len as u64) as usize;
@@ -970,7 +970,8 @@ pub extern "C" fn munmap_syscall(
 
     let mut vmmap = cage.vmmap.write();
 
-    vmmap.remove_entry(rounded_addr as u32 >> PAGESHIFT, len as u32 >> PAGESHIFT);
+    let user_addr = vmmap.sys_to_user(rounded_addr) as u32;
+    vmmap.remove_entry(user_addr >> PAGESHIFT, len as u32 >> PAGESHIFT);
 
     0
 }
