@@ -1132,6 +1132,22 @@ impl<T> Linker<T> {
                 // }
                 // self.allow_shadowing(false);
 
+                if let Some(start) = module.compiled_module().module().start_func {
+                    println!("[debug] start func library");
+                    instance.start_raw(&mut store.as_context_mut(), start)?;
+                }
+
+                let reloc = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_data_relocs").unwrap();
+                println!("[debug] library start reloc func");
+                let res = reloc.call(store.as_context_mut(), ());
+                println!("[debug] library reloc result: {:?}", res);
+
+                if let Ok(init) = instance.get_typed_func::<(), ()>(store.as_context_mut(), "__wasm_apply_tls_relocs") {
+                    println!("[debug] library start __wasm_apply_tls_relocs");
+                    let res = init.call(store.as_context_mut(), ());
+                    println!("[debug] library __wasm_apply_tls_relocs result: {:?}", res);
+                }
+
 
                 println!("[debug] library instance");
                 self.instance(store, module_name, instance);

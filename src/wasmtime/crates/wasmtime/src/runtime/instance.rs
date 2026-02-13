@@ -287,6 +287,7 @@ impl Instance {
 
                 let module_page = module_rounded_size >> PAGESHIFT;
                 // let stack_size = 8388608;
+                // todo: heap guard page?
                 init_vmmap(cageid, memory_base, Some(minimal_pages as u32 + module_page));
                 // init_vmmap(cageid, memory_base, Some((stack_size >> PAGESHIFT) as u32 + module_page));
 
