@@ -184,8 +184,14 @@ filtered_objects=$(
 )
 llvm-ar rcs "$SYSROOT_ARCHIVE" $filtered_objects
 
-# Provide a libm archive so `-lm` works in wasm links.
-cp "$SYSROOT_ARCHIVE" "$SYSROOT/lib/wasm32-wasi/libm.a"
+# Include the glibc-produced libm.a directly into the wasm sysroot.
+# No fallback/shim path: if libm.a is missing, fail loudly.
+GLIBC_LIBM_ARCHIVE="$GLIBC/target/lib/libm.a"
+if [ ! -f "$GLIBC_LIBM_ARCHIVE" ]; then
+  echo "ERROR: expected glibc libm archive not found: $GLIBC_LIBM_ARCHIVE" >&2
+  exit 1
+fi
+cp "$GLIBC_LIBM_ARCHIVE" "$SYSROOT/lib/wasm32-wasi/libm.a"
 
 llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
 
