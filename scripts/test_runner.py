@@ -4,6 +4,7 @@
 Behavior:
 - Discovers harness modules in scripts/harnesses/.
 - Executes each module exposing run_harness(...).
+- Provides a shared subprocess echo helper that harnesses can reuse.
 - Writes each harness JSON payload to reports/<harness>.json (or module override).
 - Writes optional HTML payloads when provided by a harness.
 """
@@ -12,7 +13,9 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import inspect
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -58,13 +61,43 @@ def discover_harness_modules(selected: set[str] | None = None) -> list[str]:
     return modules
 
 
+def execute_with_echo(command: list[str], cwd: Path, prefix: str) -> tuple[int, str]:
+    """Run command and stream output lines with a prefix.
+
+    Returns:
+        tuple(return_code, combined_output)
+    """
+    output_lines: list[str] = []
+    proc = subprocess.Popen(
+        command,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        print(f"[{prefix}] {line}", end="")
+        output_lines.append(line)
+
+    proc.wait()
+    return proc.returncode, "".join(output_lines)
+
+
 def run_harness(module_name: str, forward_args: list[str]) -> dict[str, Any]:
     module = importlib.import_module(f"{HARNESS_PACKAGE}.{module_name}")
     runner = getattr(module, "run_harness", None)
     if runner is None or not callable(runner):
         raise RuntimeError(f"Harness module '{module_name}' does not define callable run_harness(...)")
 
-    result = runner(forward_args=forward_args)
+    kwargs: dict[str, Any] = {"forward_args": forward_args}
+    signature = inspect.signature(runner)
+    if "execute_with_echo" in signature.parameters:
+        kwargs["execute_with_echo"] = execute_with_echo
+
+    result = runner(**kwargs)
     if not isinstance(result, dict):
         raise RuntimeError(f"Harness module '{module_name}' returned non-dict result")
 

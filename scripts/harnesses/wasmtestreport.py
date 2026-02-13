@@ -7,13 +7,18 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WASM_REPORT_SCRIPT = REPO_ROOT / "scripts" / "wasmtestreport.py"
 
+EchoExecutor = Callable[[list[str], Path, str], tuple[int, str]]
 
-def run_wasmtestreport(extra_args: list[str] | None = None) -> tuple[dict[str, Any], str]:
+
+def run_wasmtestreport(
+    extra_args: list[str] | None = None,
+    execute_with_echo: EchoExecutor | None = None,
+) -> tuple[dict[str, Any], str]:
     """Execute the wasm test reporter and return parsed JSON and HTML output."""
     args = ["python3", str(WASM_REPORT_SCRIPT)]
     if extra_args:
@@ -25,13 +30,21 @@ def run_wasmtestreport(extra_args: list[str] | None = None) -> tuple[dict[str, A
         html_out = tmp_path / "report.html"
 
         args.extend(["--output", str(json_out), "--report", str(html_out)])
-        proc = subprocess.run(args, capture_output=True, text=True, cwd=REPO_ROOT)
 
-        if proc.returncode != 0:
-            raise RuntimeError(
-                "scripts/wasmtestreport.py failed "
-                f"with exit code {proc.returncode}.\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
-            )
+        if execute_with_echo is not None:
+            return_code, combined_output = execute_with_echo(args, REPO_ROOT, "wasmtestreport")
+            if return_code != 0:
+                raise RuntimeError(
+                    "scripts/wasmtestreport.py failed "
+                    f"with exit code {return_code}.\nCombined output:\n{combined_output}"
+                )
+        else:
+            proc = subprocess.run(args, capture_output=True, text=True, cwd=REPO_ROOT)
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    "scripts/wasmtestreport.py failed "
+                    f"with exit code {proc.returncode}.\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+                )
 
         report_data = json.loads(json_out.read_text(encoding="utf-8"))
         html_data = html_out.read_text(encoding="utf-8")
@@ -39,9 +52,15 @@ def run_wasmtestreport(extra_args: list[str] | None = None) -> tuple[dict[str, A
     return report_data, html_data
 
 
-def run_harness(forward_args: list[str] | None = None) -> dict[str, Any]:
+def run_harness(
+    forward_args: list[str] | None = None,
+    execute_with_echo: EchoExecutor | None = None,
+) -> dict[str, Any]:
     """Execute this harness using the shared test-runner contract."""
-    report_data, html_data = run_wasmtestreport(extra_args=forward_args)
+    report_data, html_data = run_wasmtestreport(
+        extra_args=forward_args,
+        execute_with_echo=execute_with_echo,
+    )
     return {
         "name": "wasm",
         "json_filename": "wasm.json",
