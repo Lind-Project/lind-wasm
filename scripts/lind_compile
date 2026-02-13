@@ -37,6 +37,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
   Common options:
     -v, --print-cmd, --verbose  print the underlying commands that are executed
     --print-args, --debug-args  print parsed arguments after option handling
+    --compile-grate             add grate-specific clang flags automatically
     --no-default-clang-flags    do not add lind_compile's optional clang flags
     -h, --help              show this help
 
@@ -47,6 +48,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
   Examples:
     $(basename "$0") hello.c
     $(basename "$0") --compile-only hello.c
+    $(basename "$0") --compile-grate hello.c
     $(basename "$0") --opt-only build/hello.wasm
     $(basename "$0") --print-cmd hello.c
     $(basename "$0") --no-default-clang-flags hello.c -- -target=wasm32-unknown-wasi
@@ -59,6 +61,7 @@ MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
 PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
+COMPILE_GRATE="false"
 ORIGINAL_ARGS=("$@")
 
 set_mode() {
@@ -101,6 +104,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --no-default-clang-flags)
       NO_DEFAULT_CLANG_FLAGS="true"
+      ;;
+    --compile-grate)
+      COMPILE_GRATE="true"
       ;;
     -h|--help)
       usage
@@ -259,6 +265,9 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
     -g
     -O0
   )
+  if [[ "${COMPILE_GRATE}" == "true" ]]; then
+    debug_default_clang_flags+=(--export-pass-fptr-to-wt)
+  fi
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     debug_default_clang_flags=()
   fi
@@ -285,6 +294,9 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
     -g
     -O0
   )
+  if [[ "${COMPILE_GRATE}" == "true" ]]; then
+    debug_default_clang_flags+=(--export-pass-fptr-to-wt)
+  fi
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     debug_default_clang_flags=()
   fi
@@ -311,6 +323,10 @@ do_compile() {
     -g
     -O0
   )
+
+  if [[ "${COMPILE_GRATE}" == "true" ]]; then
+    default_clang_flags+=(--export-pass-fptr-to-wt)
+  fi
 
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     default_clang_flags=()
