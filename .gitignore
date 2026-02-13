@@ -15,3 +15,6 @@ lindfs/
 e2e_status
 report.html
 results.json
+
+#Ignore python cache
+__pycache__/
