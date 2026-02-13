@@ -184,6 +184,9 @@ filtered_objects=$(
 )
 llvm-ar rcs "$SYSROOT_ARCHIVE" $filtered_objects
 
+# Provide a libm archive so `-lm` works in wasm links.
+cp "$SYSROOT_ARCHIVE" "$SYSROOT/lib/wasm32-wasi/libm.a"
+
 llvm-ar crs "$GLIBC/sysroot/lib/wasm32-wasi/libpthread.a"
 
 # Check if llvm-ar succeeded
