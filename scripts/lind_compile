@@ -92,10 +92,7 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --opt-only)
       set_mode "opt-only"
-      ;;
-    # --precompile-only)
-    #   set_mode "precompile-only"
-    #   ;;
+      ;;    
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
       ;;
@@ -201,16 +198,7 @@ case "${MODE}" in
     fi
     OUT_WASM="${SRC%.c}.wasm"
     OUT_CWASM="${SRC%.c}.cwasm"
-    ;;
-  # "opt-only"|"precompile-only")
-  #   if [[ "${EXT}" != "wasm" ]]; then
-  #     echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
-  #     usage
-  #     exit 2
-  #   fi
-  #   OUT_WASM="${SRC}"
-  #   OUT_CWASM="${SRC%.wasm}.cwasm"
-  #   ;;
+    ;;  
   "opt-only")
     if [[ "${EXT}" != "wasm" ]]; then
       echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
@@ -248,10 +236,6 @@ fi
 if [[ "${MODE}" == "full" || "${MODE}" == "opt-only" ]]; then
   [[ -x "${WASM_OPT_BIN}" ]] || { echo "error: wasm-opt not found at ${WASM_OPT_BIN}" >&2; exit 2; }
 fi
-
-# if [[ "${MODE}" == "full" || "${MODE}" == "precompile-only" ]]; then
-#   [[ -x "${LINDBOOT_BIN}" ]] || { echo "error: lind-boot not found at ${LINDBOOT_BIN}" >&2; exit 2; }
-# fi
 
 # --- debug output (post-normalization) ---
 if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compile-only" ) ]]; then
@@ -340,10 +324,6 @@ do_optimize() {
   run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
 }
 
-# do_precompile() {
-#   run_cmd "${LINDBOOT_BIN}" compile "${OUT_WASM}" -o "${OUT_CWASM}"
-# }
-
 cp_to_lindfs() {
   cp "${OUT_WASM}" "${LINDFS_ROOT}"
 }
@@ -353,7 +333,6 @@ case "${MODE}" in
   full)
     do_compile
     do_optimize
-    # do_precompile
     cp_to_lindfs
     ;;
   "compile-only")
@@ -362,10 +341,7 @@ case "${MODE}" in
     ;;
   "opt-only")
     do_optimize
-    ;;
-  # "precompile-only")
-  #   do_precompile
-  #   ;;
+    ;;  
 esac
 
 # --- result summary ---
@@ -374,9 +350,3 @@ case "${MODE}" in
     echo "OK: ${OUT_WASM}"
     ;;
 esac
-
-# case "${MODE}" in
-#   full|"precompile-only")
-#     echo "OK: ${OUT_CWASM}"
-#     ;;
-# esac
