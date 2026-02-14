@@ -42,6 +42,8 @@ __GI___uname (struct utsname *name)
   strncpy (name->release, UNAME_RELEASE, sizeof (name->release));
   strncpy (name->version, UNAME_VERSION, sizeof (name->version));
   strncpy (name->machine, UNAME_MACHINE, sizeof (name->machine));
+
+  return 0;
 }
 
 weak_alias(__GI___uname, __uname)
