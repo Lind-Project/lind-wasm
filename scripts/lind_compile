@@ -37,6 +37,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
   Common options:
     -v, --print-cmd, --verbose  print the underlying commands that are executed
     --print-args, --debug-args  print parsed arguments after option handling
+    --compile-grate             add grate-specific clang flags automatically
     --no-default-clang-flags    do not add lind_compile's optional clang flags
     -h, --help              show this help
 
@@ -47,6 +48,7 @@ usage: $(basename "$0") [OPTIONS] <source> [-- <clang args>]
   Examples:
     $(basename "$0") hello.c
     $(basename "$0") --compile-only hello.c
+    $(basename "$0") --compile-grate hello.c
     $(basename "$0") --opt-only build/hello.wasm
     $(basename "$0") --print-cmd hello.c
     $(basename "$0") --no-default-clang-flags hello.c -- -target=wasm32-unknown-wasi
@@ -59,6 +61,7 @@ MODE="full"          # full, compile-only, opt-only, precompile-only
 PRINT_CMDS="false"
 PRINT_ARGS="false"
 NO_DEFAULT_CLANG_FLAGS="false"
+COMPILE_GRATE="false"
 ORIGINAL_ARGS=("$@")
 
 set_mode() {
@@ -89,10 +92,7 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --opt-only)
       set_mode "opt-only"
-      ;;
-    # --precompile-only)
-    #   set_mode "precompile-only"
-    #   ;;
+      ;;    
     -v|--print-cmd|--verbose)
       PRINT_CMDS="true"
       ;;
@@ -101,6 +101,9 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --no-default-clang-flags)
       NO_DEFAULT_CLANG_FLAGS="true"
+      ;;
+    --compile-grate)
+      COMPILE_GRATE="true"
       ;;
     -h|--help)
       usage
@@ -195,16 +198,7 @@ case "${MODE}" in
     fi
     OUT_WASM="${SRC%.c}.wasm"
     OUT_CWASM="${SRC%.c}.cwasm"
-    ;;
-  # "opt-only"|"precompile-only")
-  #   if [[ "${EXT}" != "wasm" ]]; then
-  #     echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
-  #     usage
-  #     exit 2
-  #   fi
-  #   OUT_WASM="${SRC}"
-  #   OUT_CWASM="${SRC%.wasm}.cwasm"
-  #   ;;
+    ;;  
   "opt-only")
     if [[ "${EXT}" != "wasm" ]]; then
       echo "error: ${MODE} mode expects a .wasm file, got: ${SRC}" >&2
@@ -243,10 +237,6 @@ if [[ "${MODE}" == "full" || "${MODE}" == "opt-only" ]]; then
   [[ -x "${WASM_OPT_BIN}" ]] || { echo "error: wasm-opt not found at ${WASM_OPT_BIN}" >&2; exit 2; }
 fi
 
-# if [[ "${MODE}" == "full" || "${MODE}" == "precompile-only" ]]; then
-#   [[ -x "${LINDBOOT_BIN}" ]] || { echo "error: lind-boot not found at ${LINDBOOT_BIN}" >&2; exit 2; }
-# fi
-
 # --- debug output (post-normalization) ---
 if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compile-only" ) ]]; then
   debug_mandatory_clang_flags=(
@@ -259,6 +249,9 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
     -g
     -O0
   )
+  if [[ "${COMPILE_GRATE}" == "true" ]]; then
+    debug_default_clang_flags+=(--export-pass-fptr-to-wt)
+  fi
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     debug_default_clang_flags=()
   fi
@@ -285,6 +278,9 @@ if [[ "${PRINT_ARGS}" == "true" && ( "${MODE}" == "full" || "${MODE}" == "compil
     -g
     -O0
   )
+  if [[ "${COMPILE_GRATE}" == "true" ]]; then
+    debug_default_clang_flags+=(--export-pass-fptr-to-wt)
+  fi
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     debug_default_clang_flags=()
   fi
@@ -312,6 +308,10 @@ do_compile() {
     -O0
   )
 
+  if [[ "${COMPILE_GRATE}" == "true" ]]; then
+    default_clang_flags+=(--export-pass-fptr-to-wt)
+  fi
+
   if [[ "${NO_DEFAULT_CLANG_FLAGS}" == "true" ]]; then
     default_clang_flags=()
   fi
@@ -324,10 +324,6 @@ do_optimize() {
   run_cmd "${WASM_OPT_BIN}" --epoch-injection --asyncify -O2 --debuginfo "${OUT_WASM}" -o "${OUT_WASM}"
 }
 
-# do_precompile() {
-#   run_cmd "${LINDBOOT_BIN}" compile "${OUT_WASM}" -o "${OUT_CWASM}"
-# }
-
 cp_to_lindfs() {
   cp "${OUT_WASM}" "${LINDFS_ROOT}"
 }
@@ -337,7 +333,6 @@ case "${MODE}" in
   full)
     do_compile
     do_optimize
-    # do_precompile
     cp_to_lindfs
     ;;
   "compile-only")
@@ -346,10 +341,7 @@ case "${MODE}" in
     ;;
   "opt-only")
     do_optimize
-    ;;
-  # "precompile-only")
-  #   do_precompile
-  #   ;;
+    ;;  
 esac
 
 # --- result summary ---
@@ -358,9 +350,3 @@ case "${MODE}" in
     echo "OK: ${OUT_WASM}"
     ;;
 esac
-
-# case "${MODE}" in
-#   full|"precompile-only")
-#     echo "OK: ${OUT_CWASM}"
-#     ;;
-# esac
