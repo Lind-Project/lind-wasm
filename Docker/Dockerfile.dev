@@ -99,6 +99,7 @@ USER ${USERNAME}
 # --- Fix PATH ---
 ENV PATH="/usr/local/bin:/home/${USERNAME}/.cargo/bin:/home/${USERNAME}/go/bin:$PATH"
 ENV CLANG="/home/${USERNAME}/lind-wasm/${CLANG_PACKAGE}"
+ENV MATH_TEST_DIR="math_tests"
 
 # --- Prebuild ---
 RUN make lind-debug
