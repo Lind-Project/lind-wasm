@@ -18,7 +18,8 @@ nav:
     - internal/index.md
     - libc: internal/libc.md
     - Wasmtime: internal/wasmtime.md
-    - Threei and Grate: internal/3i.md
+    - Threei: internal/3i.md
+    - Grates: internal/grates.md
     - RawPOSIX: internal/rawposix.md
     - Multi-Processing: internal/multiprocess-support.md
     - Signals: internal/signals.md
