@@ -15,6 +15,7 @@ use sysdefs::*;
 use typemap::cage_helpers::convert_fd_to_host;
 use typemap::datatype_conversion::*;
 use typemap::network_helpers::{convert_host_sockaddr, convert_sockpair, copy_out_sockaddr};
+use typemap::recvmsg_structs::{GuestIovec, GuestMsghdr};
 
 /// `epoll_ctl` handles registering, modifying, and removing the watch set, while `epoll_wait`
 /// simply gathers ready events based on what's already registered and writes them back to the
@@ -1629,35 +1630,6 @@ pub extern "C" fn recvfrom_syscall(
     0
 }
 
-// Guest (wasm32/ILP32) structures for recvmsg pointer translation
-#[inline(always)]
-fn is_probably_host_ptr(addr: u64) -> bool {
-    addr >= (1u64 << 32)
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-struct GuestMsghdr {
-    msg_name: u32,
-    msg_namelen: u32,
-    msg_iov: u32,
-    msg_iovlen: u32,
-    msg_control: u32,
-    msg_controllen: u32,
-    msg_flags: u32,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-struct GuestIovec {
-    iov_base: u32,
-    iov_len: u32,
-}
-
-// Compile-time layout validation
-const _: () = assert!(mem::size_of::<GuestMsghdr>() == 28 && mem::align_of::<GuestMsghdr>() == 4);
-const _: () = assert!(mem::size_of::<GuestIovec>() == 8 && mem::align_of::<GuestIovec>() == 4);
-
 /// recvmsg syscall: receive message from socket (wasm32 guest to host pointer translation).
 /// Reads guest msghdr/iovec (ILP32 32-bit layout), translates pointers to host,
 /// calls libc::recvmsg, copies back output fields.
@@ -1692,23 +1664,13 @@ pub extern "C" fn recvmsg_syscall(
     }
     let flags = sc_convert_sysarg_to_i32(flags_arg, flags_cageid, cageid);
 
-    // glibc recvmsg.c passes TRANSLATE_GUEST_POINTER_TO_HOST(msg), so msg_arg can be an already
-    // host pointer (0x7b.../0x7f...). Do not call sc_convert_uaddr_to_host on it. Inner pointers
-    // in GuestMsghdr (msg_iov, msg_name, msg_control, iov_base) are u32 cage-relative; translate those.
-    let msg_ptr = if is_probably_host_ptr(msg_arg) {
-        msg_arg as *const GuestMsghdr
-    } else {
-        sc_convert_uaddr_to_host(msg_arg, msg_cageid, cageid) as *const GuestMsghdr
-    };
-    let guest_msg = unsafe { *msg_ptr };
-
-    if guest_msg.msg_control == 0 && guest_msg.msg_controllen > 0 {
-        return syscall_error(
-            Errno::EFAULT,
-            "recvmsg_syscall",
-            "msg_control null but controllen > 0",
-        );
+    // glibc recvmsg.c passes TRANSLATE_GUEST_POINTER_TO_HOST(msg), so msg_arg is a host pointer
+    // to a guest-layout (wasm32/ILP32) msghdr.
+    if msg_arg == 0 {
+        return syscall_error(Errno::EFAULT, "recvmsg_syscall", "msg is null");
     }
+    let msg_ptr = msg_arg as *const GuestMsghdr;
+    let guest_msg = unsafe { *msg_ptr };
 
     let iovlen = guest_msg.msg_iovlen as usize;
     if iovlen == 0 || iovlen > 1024 {
