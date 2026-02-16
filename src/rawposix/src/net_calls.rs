@@ -7,9 +7,9 @@ use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::io::Write;
-use std::time::Instant;
 use std::mem;
 use std::ptr;
+use std::time::Instant;
 
 /// Trace netlink-related syscalls when LIND_TRACE_NETLINK=1 (e.g. for getifaddrs debugging).
 #[inline(always)]
@@ -1193,7 +1193,10 @@ pub extern "C" fn bind_syscall(
     let (finalsockaddr, addrlen) = convert_host_sockaddr(addr, addr_cageid, cageid);
 
     let ret = unsafe { libc::bind(fd, finalsockaddr, addrlen) };
-    trace_netlink(&format!("bind fd={} addrlen={} -> ret={}", fd, addrlen, ret));
+    trace_netlink(&format!(
+        "bind fd={} addrlen={} -> ret={}",
+        fd, addrlen, ret
+    ));
     if ret < 0 {
         let errno = get_errno();
         return handle_errno(errno, "bind");
@@ -1596,7 +1599,11 @@ pub extern "C" fn sendto_syscall(
                 nlmsg_len, nlmsg_type, nlmsg_flags, nlmsg_seq, nlmsg_pid
             );
             if slice.len() > 16 {
-                let hex_str: String = slice[16..].iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                let hex_str: String = slice[16..]
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ");
                 eprintln!("[LIND_TRACE_NETLINK]   buf[16..32] hex={}", hex_str);
             }
         }
@@ -1760,9 +1767,15 @@ const _GUEST_MSGHDR_SIZE: usize = mem::size_of::<GuestMsghdr>();
 const _GUEST_MSGHDR_ALIGN: usize = mem::align_of::<GuestMsghdr>();
 const _GUEST_IOVEC_SIZE: usize = mem::size_of::<GuestIovec>();
 const _GUEST_IOVEC_ALIGN: usize = mem::align_of::<GuestIovec>();
-const _: () = assert!(_GUEST_MSGHDR_SIZE == 28, "GuestMsghdr size must match wasm32 struct msghdr (7×4)");
+const _: () = assert!(
+    _GUEST_MSGHDR_SIZE == 28,
+    "GuestMsghdr size must match wasm32 struct msghdr (7×4)"
+);
 const _: () = assert!(_GUEST_MSGHDR_ALIGN == 4, "GuestMsghdr align must be 4");
-const _: () = assert!(_GUEST_IOVEC_SIZE == 8, "GuestIovec size must match wasm32 struct iovec (4+4, no padding)");
+const _: () = assert!(
+    _GUEST_IOVEC_SIZE == 8,
+    "GuestIovec size must match wasm32 struct iovec (4+4, no padding)"
+);
 const _: () = assert!(_GUEST_IOVEC_ALIGN == 4, "GuestIovec align must be 4");
 const _: () = assert!(std::mem::offset_of!(GuestMsghdr, msg_name) == 0);
 const _: () = assert!(std::mem::offset_of!(GuestMsghdr, msg_namelen) == 4);
@@ -1819,7 +1832,10 @@ pub extern "C" fn recvmsg_syscall(
         && sc_unusedarg(arg6, arg6_cageid))
     {
         if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-            eprintln!("EARLY_RETURN: recvmsg invalid_cage_id errno={}", Errno::EFAULT as i32);
+            eprintln!(
+                "EARLY_RETURN: recvmsg invalid_cage_id errno={}",
+                Errno::EFAULT as i32
+            );
         }
         return syscall_error(Errno::EFAULT, "recvmsg_syscall", "Invalid Cage ID");
     }
@@ -1846,24 +1862,39 @@ pub extern "C" fn recvmsg_syscall(
     // in GuestMsghdr (msg_iov, msg_name, msg_control, iov_base) are u32 cage-relative; translate those.
     let msg_ptr = if is_probably_host_ptr(msg_arg) {
         if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-            eprintln!("[LIND_TRACE_NETLINK] recvmsg msg_arg={:#x} treated as host pointer", msg_arg);
+            eprintln!(
+                "[LIND_TRACE_NETLINK] recvmsg msg_arg={:#x} treated as host pointer",
+                msg_arg
+            );
         }
         msg_arg as *const GuestMsghdr
     } else {
         if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-            eprintln!("[LIND_TRACE_NETLINK] recvmsg msg_arg={:#x} treated as cage-relative", msg_arg);
+            eprintln!(
+                "[LIND_TRACE_NETLINK] recvmsg msg_arg={:#x} treated as cage-relative",
+                msg_arg
+            );
         }
         sc_convert_uaddr_to_host(msg_arg, msg_cageid, cageid) as *const GuestMsghdr
     };
     let guest_msg = unsafe { *msg_ptr };
     if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-        eprintln!("RAWPOSIX_TRACE: recvmsg after copying GuestMsghdr iovlen={}", guest_msg.msg_iovlen);
-        eprintln!("[LIND_TRACE_NETLINK] recvmsg guest_msg.msg_iov={:#x} (before translating)", guest_msg.msg_iov as u64);
+        eprintln!(
+            "RAWPOSIX_TRACE: recvmsg after copying GuestMsghdr iovlen={}",
+            guest_msg.msg_iovlen
+        );
+        eprintln!(
+            "[LIND_TRACE_NETLINK] recvmsg guest_msg.msg_iov={:#x} (before translating)",
+            guest_msg.msg_iov as u64
+        );
     }
 
     if guest_msg.msg_control == 0 && guest_msg.msg_controllen > 0 {
         if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-            eprintln!("EARLY_RETURN: recvmsg msg_control_null_controllen_gt0 errno={}", Errno::EFAULT as i32);
+            eprintln!(
+                "EARLY_RETURN: recvmsg msg_control_null_controllen_gt0 errno={}",
+                Errno::EFAULT as i32
+            );
         }
         return syscall_error(
             Errno::EFAULT,
@@ -1876,13 +1907,12 @@ pub extern "C" fn recvmsg_syscall(
     const IOV_LEN_MAX: usize = 1024;
     if iovlen == 0 || iovlen > IOV_LEN_MAX {
         if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-            eprintln!("EARLY_RETURN: recvmsg msg_iovlen_out_of_range errno={}", Errno::EINVAL as i32);
+            eprintln!(
+                "EARLY_RETURN: recvmsg msg_iovlen_out_of_range errno={}",
+                Errno::EINVAL as i32
+            );
         }
-        return syscall_error(
-            Errno::EINVAL,
-            "recvmsg_syscall",
-            "msg_iovlen out of range",
-        );
+        return syscall_error(Errno::EINVAL, "recvmsg_syscall", "msg_iovlen out of range");
     }
 
     let iov_array_host = sc_convert_uaddr_to_host(guest_msg.msg_iov as u64, msg_cageid, cageid);
@@ -1919,7 +1949,10 @@ pub extern "C" fn recvmsg_syscall(
         });
     }
     if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-        eprintln!("RAWPOSIX_TRACE: recvmsg after building host iovec iovlen={}", host_iov.len());
+        eprintln!(
+            "RAWPOSIX_TRACE: recvmsg after building host iovec iovlen={}",
+            host_iov.len()
+        );
     }
 
     let msg_name = if guest_msg.msg_name == 0 {
@@ -1976,7 +2009,10 @@ pub extern "C" fn recvmsg_syscall(
         let first_len = host_iov[0].iov_len;
         if first_len > 0 && host_iov[0].iov_base.is_null() {
             if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-                eprintln!("EARLY_RETURN: recvmsg iov0_base_null_len_gt0 errno={}", Errno::EFAULT as i32);
+                eprintln!(
+                    "EARLY_RETURN: recvmsg iov0_base_null_len_gt0 errno={}",
+                    Errno::EFAULT as i32
+                );
             }
             return syscall_error(
                 Errno::EFAULT,
