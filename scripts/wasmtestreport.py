@@ -831,19 +831,13 @@ def pre_test(tests_to_run=None, allow_precompiled=False):
         copied_count = 0
         missing_files = []
         
-        # Files we create in pre_test below; do not require them from TESTFILES_SRC
-        created_by_pre_test = {"readlinkfile.txt", "readlinkfile"}
-
         for filename in all_dependencies:
             src_file = TESTFILES_SRC / filename
             dst_file = TESTFILES_DST / filename
-            logger.debug(f"Testfile dependency: src={src_file} dst={dst_file}")
-
-            if filename in created_by_pre_test:
-                logger.debug(f"Skipping {filename} (created by pre_test)")
-                continue
+            
             if src_file.exists():
                 try:
+                    # Create parent directories if needed
                     dst_file.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src_file, dst_file)
                     copied_count += 1
@@ -853,7 +847,7 @@ def pre_test(tests_to_run=None, allow_precompiled=False):
             else:
                 missing_files.append(filename)
                 logger.debug(f"Referenced file not found in testfiles: {filename}")
-
+        
         logger.info(f"Selective copy: {copied_count} files copied, {len(missing_files)} missing")
         
     else:
@@ -1496,8 +1490,8 @@ def main():
         try:
             shutil.rmtree(TESTFILES_DST)
             logger.info(f"Testfiles at {TESTFILES_DST} deleted")
-        except FileNotFoundError:
-            logger.debug(f"Testfiles not present at {TESTFILES_DST}")
+        except FileNotFoundError as e:
+            logger.error(f"Testfiles not present at {TESTFILES_DST}")
         
         if clean_testfiles:
             return
