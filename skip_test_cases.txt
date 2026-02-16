@@ -12,5 +12,4 @@ signal_tests/deterministic/signal_longjmp.c
 signal_tests/deterministic/signal_nodefer.c
 signal_tests/deterministic/signal_procmask.c
 signal_tests/deterministic/signal_sa_mask.c
-networking_tests/deterministic/getifaddrs.c
 signal_tests/deterministic/signal_int_thread.c
