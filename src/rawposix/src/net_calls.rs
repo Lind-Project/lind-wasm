@@ -5,18 +5,8 @@ use lazy_static::lazy_static;
 use libc::*;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
-use std::env;
-use std::io::Write;
-use std::mem;
-use std::ptr;
 use std::time::Instant;
-
-/// Heuristic: host pointers (from glibc TRANSLATE_GUEST_POINTER_TO_HOST) are full 64-bit
-/// addresses (e.g. 0x7b..., 0x7f...). Cage-relative wasm32 addresses are small (< 4GB).
-#[inline(always)]
-fn is_probably_host_ptr(addr: u64) -> bool {
-    addr >= (1u64 << 32)
-}
+use std::{mem, ptr};
 use sysdefs::constants::err_const::{get_errno, handle_errno, syscall_error, Errno};
 use sysdefs::constants::net_const::{EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD};
 use sysdefs::constants::FDKIND_KERNEL;
@@ -442,7 +432,11 @@ pub extern "C" fn select_syscall(
                 } else {
                     std::ptr::null_mut()
                 },
-                &mut current_timeout,
+                if timeout_ptr.is_some() {
+                    &mut current_timeout as *mut _ // libc select requires timeval struct format
+                } else {
+                    std::ptr::null_mut()
+                },
             )
         };
 
@@ -716,9 +710,9 @@ pub extern "C" fn epoll_ctl_syscall(
         return syscall_error(Errno::EFAULT, "epoll_ctl_syscall", "Invalid Cage ID");
     }
 
-    // Resolve epoll fd: use epfd_cageid (cage that owns the epoll instance).
+    // Get the underfd of type FDKIND_KERNEL to the vitual fd
     // Details see documentation on fdtables/epoll_get_underfd_hashmap.md
-    let epfd = *fdtables::epoll_get_underfd_hashmap(epfd_cageid, epfd_arg)
+    let epfd = *fdtables::epoll_get_underfd_hashmap(cageid, epfd_arg)
         .unwrap()
         .get(&FDKIND_KERNEL)
         .unwrap();
@@ -728,12 +722,9 @@ pub extern "C" fn epoll_ctl_syscall(
         return syscall_error(Errno::EINVAL, "epoll_ctl_syscall", "Invalid operation");
     }
 
-    // Translate the target fd (the one being added/modified/removed) using fd_cageid, not the
-    // calling cage. The fd may belong to a different cage (e.g. inter-cage epoll), and within
-    // a single cage the virtual fd number can map to a different host fd than the calling
-    // cage's view would imply (e.g. netlink socket host fd 9 vs virtual fd 7). Using cageid
-    // here caused epoll_ctl to add the wrong host fd, so epoll_wait never saw the socket.
-    let wrappedvfd = fdtables::translate_virtual_fd(fd_cageid, fd_arg);
+    // Translate virtual FDs to kernel FDs. We only need to translate this since this is a
+    // normal fd, not epfd
+    let wrappedvfd = fdtables::translate_virtual_fd(cageid, fd_arg);
     if wrappedvfd.is_err() {
         return syscall_error(Errno::EBADF, "epoll_ctl_syscall", "Bad File Descriptor");
     }
@@ -775,12 +766,6 @@ pub extern "C" fn epoll_ctl_syscall(
         .unwrap_or(ptr::null_mut());
 
     // Call actual kernel epoll_ctl
-    if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-        eprintln!(
-            "[LIND_TRACE_NETLINK] epoll_ctl epfd={} op={} fd_arg(virt)={} vfd.underfd(kernel)={}",
-            epfd, op, fd_arg, vfd.underfd
-        );
-    }
     let ret = unsafe { libc::epoll_ctl(epfd as i32, op, vfd.underfd as i32, kernel_epoll_event) };
 
     if ret < 0 {
@@ -1009,15 +994,6 @@ pub extern "C" fn socket_syscall(
     let domain = sc_convert_sysarg_to_i32(domain_arg, domain_cageid, cageid);
     let socktype = sc_convert_sysarg_to_i32(socktype_arg, socktype_cageid, cageid);
     let protocol = sc_convert_sysarg_to_i32(protocol_arg, protocol_cageid, cageid);
-
-    // AF_NETLINK (16) is Linux-specific; reject on non-Linux host so behavior is explicit.
-    if domain == libc::AF_NETLINK && !cfg!(target_os = "linux") {
-        return syscall_error(
-            Errno::EAFNOSUPPORT,
-            "socket_syscall",
-            "PF_NETLINK not supported on non-Linux host",
-        );
-    }
 
     // would check when `secure` flag has been set during compilation,
     // no-op by default
@@ -1521,12 +1497,6 @@ pub extern "C" fn sendto_syscall(
     addrlen_cageid: u64,
 ) -> i32 {
     let fd = convert_fd_to_host(fd_arg, fd_cageid, cageid);
-    if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-        eprintln!(
-            "[LIND_TRACE_NETLINK] sendto fd_arg={} fd_cageid={} cageid={} -> host_fd={}",
-            fd_arg, fd_cageid, cageid, fd
-        );
-    }
     let buf = buf_arg as *mut u8;
     let buflen = sc_convert_sysarg_to_usize(buflen_arg, buflen_cageid, cageid);
     let flag = sc_convert_sysarg_to_i32(flag_arg, flag_cageid, cageid);
@@ -1540,43 +1510,6 @@ pub extern "C" fn sendto_syscall(
     // to be mutable.
     let (finalsockaddr, addrlen) = convert_host_sockaddr(sockaddr, sockaddr_cageid, cageid);
 
-    // Enhanced netlink tracing: fd, len; dst sockaddr_nl (nl_pid, nl_groups); first 32 bytes of buffer / nlmsghdr
-    if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-        eprintln!("[LIND_TRACE_NETLINK] sendto fd={} len={}", fd, buflen);
-        if addrlen >= 12 && !sockaddr.is_null() {
-            let host_saddr = sc_convert_buf(sockaddr_arg, sockaddr_cageid, cageid) as *const u8;
-            let slice = unsafe { std::slice::from_raw_parts(host_saddr, 12) };
-            let nl_family = u16::from_ne_bytes([slice[0], slice[1]]);
-            let nl_pid = u32::from_ne_bytes([slice[4], slice[5], slice[6], slice[7]]);
-            let nl_groups = u32::from_ne_bytes([slice[8], slice[9], slice[10], slice[11]]);
-            eprintln!(
-                "[LIND_TRACE_NETLINK]   dst sockaddr_nl nl_family={} nl_pid={} nl_groups={}",
-                nl_family, nl_pid, nl_groups
-            );
-        }
-        if buflen >= 16 {
-            let host_buf = sc_convert_buf(buf_arg, buf_cageid, cageid);
-            let slice = unsafe { std::slice::from_raw_parts(host_buf, buflen.min(32)) };
-            let nlmsg_len = u32::from_ne_bytes([slice[0], slice[1], slice[2], slice[3]]);
-            let nlmsg_type = u16::from_ne_bytes([slice[4], slice[5]]);
-            let nlmsg_flags = u16::from_ne_bytes([slice[6], slice[7]]);
-            let nlmsg_seq = u32::from_ne_bytes([slice[8], slice[9], slice[10], slice[11]]);
-            let nlmsg_pid = u32::from_ne_bytes([slice[12], slice[13], slice[14], slice[15]]);
-            eprintln!(
-                "[LIND_TRACE_NETLINK]   nlmsghdr nlmsg_len={} nlmsg_type={} nlmsg_flags={} nlmsg_seq={} nlmsg_pid={}",
-                nlmsg_len, nlmsg_type, nlmsg_flags, nlmsg_seq, nlmsg_pid
-            );
-            if slice.len() > 16 {
-                let hex_str: String = slice[16..]
-                    .iter()
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                eprintln!("[LIND_TRACE_NETLINK]   buf[16..32] hex={}", hex_str);
-            }
-        }
-    }
-
     let ret = unsafe {
         libc::sendto(
             fd,
@@ -1587,17 +1520,10 @@ pub extern "C" fn sendto_syscall(
             addrlen,
         ) as i32
     };
-    let errno_after = get_errno();
-    if env::var("LIND_TRACE_NETLINK").as_deref() == Ok("1") {
-        eprintln!(
-            "RAWPOSIX_TRACE: sendto fd_arg={} host_fd={} ret={} errno={}",
-            fd_arg, fd, ret, errno_after
-        );
-        let _ = std::io::stderr().flush();
-    }
 
     if ret < 0 {
-        return handle_errno(errno_after, "sendto");
+        let errno = get_errno();
+        return handle_errno(errno, "sendto");
     }
 
     ret
@@ -1703,8 +1629,12 @@ pub extern "C" fn recvfrom_syscall(
     0
 }
 
-/// Guest (wasm32/ILP32) layout for struct msghdr: 32-bit pointers and size_t.
-/// Matches glibc sysdeps/unix/sysv/linux/bits/socket.h for ILP32 (void*, socklen_t, size_t, int all 4 bytes).
+// Guest (wasm32/ILP32) structures for recvmsg pointer translation
+#[inline(always)]
+fn is_probably_host_ptr(addr: u64) -> bool {
+    addr >= (1u64 << 32)
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct GuestMsghdr {
@@ -1717,8 +1647,6 @@ struct GuestMsghdr {
     msg_flags: u32,
 }
 
-/// Guest (wasm32/ILP32) layout for struct iovec. Actual runtime layout is 8 bytes
-/// (void* iov_base; size_t iov_len) with no padding, matching Linux kernel and common ILP32 ABI.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct GuestIovec {
@@ -1726,46 +1654,15 @@ struct GuestIovec {
     iov_len: u32,
 }
 
-// Compile-time layout validation against wasm32 (ILP32).
-const _GUEST_MSGHDR_SIZE: usize = mem::size_of::<GuestMsghdr>();
-const _GUEST_MSGHDR_ALIGN: usize = mem::align_of::<GuestMsghdr>();
-const _GUEST_IOVEC_SIZE: usize = mem::size_of::<GuestIovec>();
-const _GUEST_IOVEC_ALIGN: usize = mem::align_of::<GuestIovec>();
-const _: () = assert!(
-    _GUEST_MSGHDR_SIZE == 28,
-    "GuestMsghdr size must match wasm32 struct msghdr (7×4)"
-);
-const _: () = assert!(_GUEST_MSGHDR_ALIGN == 4, "GuestMsghdr align must be 4");
-const _: () = assert!(
-    _GUEST_IOVEC_SIZE == 8,
-    "GuestIovec size must match wasm32 struct iovec (4+4, no padding)"
-);
-const _: () = assert!(_GUEST_IOVEC_ALIGN == 4, "GuestIovec align must be 4");
-const _: () = assert!(std::mem::offset_of!(GuestMsghdr, msg_name) == 0);
-const _: () = assert!(std::mem::offset_of!(GuestMsghdr, msg_namelen) == 4);
-const _: () = assert!(std::mem::offset_of!(GuestMsghdr, msg_iov) == 8);
-const _: () = assert!(std::mem::offset_of!(GuestMsghdr, msg_iovlen) == 12);
-const _: () = assert!(std::mem::offset_of!(GuestMsghdr, msg_control) == 16);
-const _: () = assert!(std::mem::offset_of!(GuestMsghdr, msg_controllen) == 20);
-const _: () = assert!(std::mem::offset_of!(GuestMsghdr, msg_flags) == 24);
-const _: () = assert!(std::mem::offset_of!(GuestIovec, iov_base) == 0);
-const _: () = assert!(std::mem::offset_of!(GuestIovec, iov_len) == 4);
+// Compile-time layout validation
+const _: () = assert!(mem::size_of::<GuestMsghdr>() == 28 && mem::align_of::<GuestMsghdr>() == 4);
+const _: () = assert!(mem::size_of::<GuestIovec>() == 8 && mem::align_of::<GuestIovec>() == 4);
 
-/// Reference to Linux: https://man7.org/linux/man-pages/man2/recvmsg.2.html
-///
-/// The Linux `recvmsg()` syscall receives a message from a socket using a msghdr.
-/// Guest is wasm32 (32-bit pointers/size_t); we read guest msghdr/iovec with ILP32 layout,
-/// build host msghdr with translated pointers, call libc::recvmsg, then copy back output fields.
-///
-/// ## Input:
-///     - cageid: identifier of the current cage
-///     - fd_arg: virtual file descriptor
-///     - msg_arg: pointer to struct msghdr in guest memory (32-bit layout)
-///     - flags_arg: flags (e.g. 0)
-///
-/// ## Return:
-///     - On success: number of bytes received
-///     - On failure: negative errno
+/// recvmsg syscall: receive message from socket (wasm32 guest to host pointer translation).
+/// Reads guest msghdr/iovec (ILP32 32-bit layout), translates pointers to host,
+/// calls libc::recvmsg, copies back output fields.
+/// Returns: bytes received on success, negative errno on failure.
+/// Reference: https://man7.org/linux/man-pages/man2/recvmsg.2.html
 pub extern "C" fn recvmsg_syscall(
     cageid: u64,
     fd_arg: u64,
@@ -1809,13 +1706,12 @@ pub extern "C" fn recvmsg_syscall(
         return syscall_error(
             Errno::EFAULT,
             "recvmsg_syscall",
-            "msg_control is null but msg_controllen > 0",
+            "msg_control null but controllen > 0",
         );
     }
 
     let iovlen = guest_msg.msg_iovlen as usize;
-    const IOV_LEN_MAX: usize = 1024;
-    if iovlen == 0 || iovlen > IOV_LEN_MAX {
+    if iovlen == 0 || iovlen > 1024 {
         return syscall_error(Errno::EINVAL, "recvmsg_syscall", "msg_iovlen out of range");
     }
 
@@ -1857,16 +1753,9 @@ pub extern "C" fn recvmsg_syscall(
         msg_flags: 0,
     };
 
-    // Validate: for netlink recv, we need at least one iov with non-null base and positive len
-    if iovlen > 0 {
-        let first_len = host_iov[0].iov_len;
-        if first_len > 0 && host_iov[0].iov_base.is_null() {
-            return syscall_error(
-                Errno::EFAULT,
-                "recvmsg_syscall",
-                "iov[0].iov_base null after translation but iov_len > 0",
-            );
-        }
+    // Validate iov: need non-null base if iov_len > 0
+    if iovlen > 0 && host_iov[0].iov_len > 0 && host_iov[0].iov_base.is_null() {
+        return syscall_error(Errno::EFAULT, "recvmsg_syscall", "iov_base null with iov_len > 0");
     }
 
     let ret = unsafe { libc::recvmsg(fd, &mut host_msg, flags) as i32 };
