@@ -1717,7 +1717,11 @@ pub extern "C" fn recvmsg_syscall(
 
     // Validate iov: need non-null base if iov_len > 0
     if iovlen > 0 && host_iov[0].iov_len > 0 && host_iov[0].iov_base.is_null() {
-        return syscall_error(Errno::EFAULT, "recvmsg_syscall", "iov_base null with iov_len > 0");
+        return syscall_error(
+            Errno::EFAULT,
+            "recvmsg_syscall",
+            "iov_base null with iov_len > 0",
+        );
     }
 
     let ret = unsafe { libc::recvmsg(fd, &mut host_msg, flags) as i32 };

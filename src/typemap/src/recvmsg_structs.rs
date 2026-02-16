@@ -21,4 +21,3 @@ pub struct GuestIovec {
 
 const _: () = assert!(mem::size_of::<GuestMsghdr>() == 28 && mem::align_of::<GuestMsghdr>() == 4);
 const _: () = assert!(mem::size_of::<GuestIovec>() == 8 && mem::align_of::<GuestIovec>() == 4);
-
