@@ -59,7 +59,7 @@ EXPECTED_DIRECTORY = Path("./expected")
 SKIP_TESTS_FILE = "skip_test_cases.txt"
 GLOBAL_COMPILE_FLAGS = []
 DIR_FLAGS = []
-MATH_TEST_DIR = Path(os.environ.get("MATH_TEST_DIR", "math"))
+MATH_TEST_DIR = os.environ.get("MATH_TEST_DIR")
 
 
 error_types = {
@@ -145,7 +145,7 @@ def resolve_compile_flags(source_file: Path, kind: str):
             break
 
     extra_flags = []
-    if rel_path.parts and rel_path.parts[0] == MATH_TEST_DIR.name:
+    if MATH_TEST_DIR and rel_path.parts and rel_path.parts[0] == MATH_TEST_DIR:
         extra_flags.append("-lm")
 
     return [*base_flags, *selected_flags, *extra_flags]

@@ -72,6 +72,7 @@ RUN set -euo pipefail; \
 
 COPY src/glibc/wasi /${CLANG}/lib/clang/18/lib/wasi
 ENV PATH="/${CLANG}/bin:${PATH}"
+ENV MATH_TEST_DIR="math_tests"
 
 # --- Install libtinfo5 ---
 RUN wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
