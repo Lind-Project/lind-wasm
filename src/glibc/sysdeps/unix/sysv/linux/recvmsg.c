@@ -24,12 +24,39 @@
 
 /* Lind: use legacy syscall 47 so rawposix recvmsg_syscall can translate
    guest msghdr/iovec and perform host recvmsg.  */
-ssize_t
-__libc_recvmsg (int fd, struct msghdr *msg, int flags)
+static int
+__recvmsg_syscall (int fd, struct msghdr *msg, int flags)
 {
   return MAKE_LEGACY_SYSCALL (RECVMSG_SYSCALL, "syscall|recvmsg", (uint64_t) fd,
 			      (uint64_t)(uintptr_t) msg, (uint64_t) flags,
 			      NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
+
+ssize_t
+__libc_recvmsg64 (int fd, struct msghdr *msg, int flags)
+{
+  ssize_t r;
+#if __TIMESIZE != 64
+  socklen_t orig_controllen = msg != NULL ? msg->msg_controllen : 0;
+#endif
+
+  r = __recvmsg_syscall (fd, msg, flags);
+
+#if __TIMESIZE != 64
+  if (r >= 0 && orig_controllen != 0)
+    __convert_scm_timestamps (msg, orig_controllen);
+#endif
+
+  return r;
+}
+#if __TIMESIZE != 64
+weak_alias (__libc_recvmsg64, __recvmsg64)
+
+ssize_t
+__libc_recvmsg (int fd, struct msghdr *msg, int flags)
+{
+  return __recvmsg_syscall (fd, msg, flags);
+}
+#endif
 weak_alias (__libc_recvmsg, recvmsg)
 weak_alias (__libc_recvmsg, __recvmsg)
