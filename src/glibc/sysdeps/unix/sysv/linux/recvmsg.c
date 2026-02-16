@@ -21,6 +21,7 @@
 #include <socketcall.h>
 #include <syscall-template.h>
 #include <lind_syscall_num.h>
+#include <addr_translation.h>
 
 /* Lind: use legacy syscall 47 so rawposix recvmsg_syscall can translate
    guest msghdr/iovec and perform host recvmsg.  */
@@ -28,7 +29,8 @@ static int
 __recvmsg_syscall (int fd, struct msghdr *msg, int flags)
 {
   return MAKE_LEGACY_SYSCALL (RECVMSG_SYSCALL, "syscall|recvmsg", (uint64_t) fd,
-			      (uint64_t)(uintptr_t) msg, (uint64_t) flags,
+			      (uint64_t) TRANSLATE_GUEST_POINTER_TO_HOST (msg),
+			      (uint64_t) flags,
 			      NOTUSED, NOTUSED, NOTUSED, TRANSLATE_ERRNO_ON);
 }
 
