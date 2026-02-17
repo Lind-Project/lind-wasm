@@ -37,10 +37,9 @@ The `dylink.0` section within WASM shared libraries is parsed and its contents a
 3. When dlsym() is invoked, correspond lind function, fetches the address of the function passed as argument, and invokes it.
 
 ### Linear Memory Changes
-		- For statically linked binary which has fixed addresses, the memory layout is fixed. stack comes first, followed by dta and heap.
-		- In dynamically linked binary, since the code is compiled as position-independent, the memory layout can be determined at runtime. The memory layout is as follows:
+For statically linked binary which has fixed addresses, the memory layout is fixed. stack comes first, followed by dta and heap. In dynamically linked binary, since the code is compiled as position-independent, the memory layout can be determined at runtime. The memory layout is as follows:
 
-	![Alt text for the image](linear_memory.jpg "Memory Layout (linear memory) in case of wasm binaries with dynamic loading")
+	![Memory Layout (linear memory) in case of wasm binaries with dynamic loading](images/linear_memory.jpg)
 
 
 # Generating a WASM Binary for C/C++ applications (Static build)
