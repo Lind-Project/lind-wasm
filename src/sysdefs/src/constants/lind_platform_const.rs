@@ -63,3 +63,22 @@ pub const RAWPOSIX_CAGEID: u64 = 777777;
 ///   call to the corresponding Wasmtime entry function rather than
 ///   treating it as a RawPOSIX syscall or grate calls.
 pub const WASMTIME_CAGEID: u64 = 888888;
+/// Logical target Cage ID representing the **3i control layer itself**.
+///
+/// This constant is a *virtual target identifier* used to route calls
+/// to 3i's own operations rather than to a concrete cage or the
+/// RawPOSIX/Wasmtime layers.
+///
+/// Unlike `RAWPOSIX_CAGEID` and `WASMTIME_CAGEID`, which represent
+/// execution backends, `THREEI_CAGEID` is intended for meta-level
+/// operations that modify or mediate the 3i dispatch system.
+///
+/// ## Usage scenarios
+/// - Used when interposing on 3i-specific management syscalls such as
+///   `register_handler` and `copy_data_between_cages`.
+/// - It will be registered as the `target_cageid` for these syscalls
+///   during `lind-boot` initialization in RawPOSIX.
+/// - At dispatch time, 3i interprets this value as a request to route
+///   the call through its internal control-layer logic rather than
+///   forwarding it to RawPOSIX or Wasmtime.
+pub const THREEI_CAGEID: u64 = 999999;

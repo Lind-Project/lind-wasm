@@ -278,7 +278,7 @@ pub static EXITING_TABLE: Lazy<DashSet<u64>> = Lazy::new(|| DashSet::new());
 /// 0 on success.
 /// ELINDESRCH if either the source (targetcage) or destination (handlefunccage) is in the EXITING state.
 /// Panics if there is an attempt to overwrite an existing handler with a different destination cage.
-pub fn register_handler(
+pub extern "C" fn register_handler(
     in_grate_fn_ptr_u64: u64,
     targetcage: u64,     // Cage to modify
     targetcallnum: u64,  // Syscall number or match-all indicator. todo: Match-all.
@@ -324,7 +324,7 @@ pub fn register_handler(
 /// - 0 on success.
 /// - `ELINDESRCH` if either source or target cage is in the EXITING state.
 /// - `ELINDAPIABORTED` if srccage has no existing handler table.
-pub fn copy_handler_table_to_cage(
+pub extern "C" fn copy_handler_table_to_cage(
     _callnum: u64,
     targetcage: u64,
     srccage: u64,
@@ -432,6 +432,28 @@ pub fn make_syscall(
                 let func: RawCallFunc =
                     unsafe { std::mem::transmute::<u64, RawCallFunc>(in_grate_fn_ptr_u64) };
                 return func(
+                    target_cageid,
+                    arg1,
+                    arg1_cageid,
+                    arg2,
+                    arg2_cageid,
+                    arg3,
+                    arg3_cageid,
+                    arg4,
+                    arg4_cageid,
+                    arg5,
+                    arg5_cageid,
+                    arg6,
+                    arg6_cageid,
+                );
+            }
+            // Threei special case: if the call is an interposed 3i call
+            if grateid == lind_platform_const::THREEI_CAGEID {
+                // threei special case: directly call the function pointer
+                let func: GrateTrampolineFn =
+                    unsafe { std::mem::transmute::<u64, GrateTrampolineFn>(in_grate_fn_ptr_u64) };
+                return func(
+                    self_cageid,
                     target_cageid,
                     arg1,
                     arg1_cageid,
