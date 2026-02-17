@@ -1,36 +1,47 @@
 # Dynamic Loading in wasmtime
 
-- Have implemented dynamic loading support in Wasmtime. For applications that are compiled as dynamically linked executables or shared libraries, we are able to support both capabilities below:
-	- Launch the application while injecting all required dependent libraries using the `--preload` option (similar to `LD_PRELOAD`).
-	- Ensure that `dlopen()`, `dlsym()`, and `dlclose()` are properly resolved at runtime and corresponding libraries loaded.
+## Current Status
+Have implemented dynamic loading support in Wasmtime. For applications that are compiled as dynamically linked executables or shared libraries, we are able to support both capabilities below:
+1. Launch the application while injecting all required dependent libraries using the `--preload` option (similar to `LD_PRELOAD`).
+2. Ensure that `dlopen()`, `dlsym()`, and `dlclose()` are properly resolved at runtime and corresponding libraries loaded.
 
 	  
-- Additional Features to be added:
-	- Support for fork, threads and signals within the shared libraries
+## Additional Features to be added:
+Support for fork, threads and signals within the shared libraries have to be added.
 	  
-- Changes Made to wasm:
-	- rawposix is added as a submodule to wasmtime. Systems calls like `mmap` are redirected to rawposix.
+## Changes made to implement dynamic loading:
 
-- Dynamic loading changes:
-	- Parse the `dylink.0` section within shared libraries (load_module). load_module is responsible for parsing the WASM binary to extract its section contents including code, data, imports, exports etc.
-	- Instantiate the dynamic libraries which are passed using `--preload`
-		- Allocate memory for the shared libraries by invoking mmap within rawposix
-		- Relocations are applied by invoking `__wasm_apply_data_relocs` and `__wasm_apply_tls_relocs` which are functions within the wasm binary added in the compilation/linking phase.
-		- Global Offset Table (GOT) is created and stored in wasmtime. Implemented using a Hash Table which maps symbols to their addresses.
-		- Once all modules are loaded into memory, resolve the final address for all functions (GOT.func) and data (GOT.mem) within the GOT table. This is done by the Linker which is part of wasmtime.
-	- Handling dynamic libraries which are loaded via dlopen()
-		- When dlopen(), dlsym() and dlclose() with glibc invokes their respective implementations within Lind.
-		- when lind dlopen is invoked, it does the following:
-			- Gets the full path of the library by prepending LIND_ROOT to the library name
-			- Loads the module/library which involves parsing the wasm file and extracting its section contents including code, data, imports, exports etc.
-			- Appends the table with the table of main_module. table refers to indirect function call table. 
-			- Instantiate the library which involves
-				- Allocate memory for the shared library by invoking mmap within rawposix
-				- Relocations are applied by invoking `__wasm_apply_data_relocs` and `__wasm_apply_tls_relocs` which are functions within the wasm binary added in the compilation/linking phase.
-				- Resolve the final address for all functions (GOT.func) and data (GOT.mem) within the GOT table. 
-	- Linear Memory Changes
+In general, to load and instantiate and run wasm applications with Lind, wasmtime is modified to interact with rawposix for invoking system calls like `mmap.`
+
+Following changes are done to wasmtime, to implement dynamic loading.
+
+### Parsing the dynamic section 
+The `dylink.0` section within WASM shared libraries is parsed and its contents are stored. load_module is responsible for parsing the WASM binary to extract its section cont	ents including code, data, imports, exports etc.
+
+### Instantiate the dynamic libraries which are passed using `--preload`
+1. Allocate memory for the shared libraries by invoking mmap within rawposix
+2. Relocations are applied by invoking `__wasm_apply_data_relocs` and `__wasm_apply_tls_relocs` which are functions within the wasm binary added in the compilation/linking phase.
+3. Global Offset Table (GOT) is created and stored in wasmtime. Implemented using a Hash Table which maps symbols to their addresses.
+4. Once all modules are loaded into memory, resolve the final address for all functions (GOT.func) and data (GOT.mem) within the GOT table. This is done by the Linker which is part of wasmtime.
+### Handling dynamic libraries which are loaded via dlopen()
+1. When dlopen(), dlsym() and dlclose() with glibc invokes their respective implementations within Lind.
+2. when lind dlopen is invoked, it does the following:
+	- Gets the full path of the library by prepending LIND_ROOT to the library name
+	- Loads the module/library which involves parsing the wasm file and extracting its section contents including code, data, imports, exports etc.
+	- Appends the table with the table of main_module. table refers to indirect function call table. 
+	- Instantiate the library which involves
+	- Allocate memory for the shared library by invoking mmap within rawposix
+	- Relocations are applied by invoking `__wasm_apply_data_relocs` and `__wasm_apply_tls_relocs` which are functions within the wasm binary added in the compilation/linking phase.
+	- Resolve the final address for all functions (GOT.func) and data (GOT.mem) within the GOT table. 
+
+3. When dlsym() is invoked, correspond lind function, fetches the address of the function passed as argument, and invokes it.
+
+### Linear Memory Changes
 		- For statically linked binary which has fixed addresses, the memory layout is fixed. stack comes first, followed by dta and heap.
 		- In dynamically linked binary, since the code is compiled as position-independent, the memory layout can be determined at runtime. The memory layout is as follows:
+
+	![Alt text for the image](linear_memory.jpg "Memory Layout (linear memory) in case of wasm binaries with dynamic loading")
+
 
 # Generating a WASM Binary for C/C++ applications (Static build)
 Let us first explore a WASM binary and steps required to create a WASM binary (build) and then run it.
