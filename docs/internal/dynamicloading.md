@@ -1,5 +1,17 @@
 # Dynamic Loading in wasmtime
 
+## Motivation
+Dynamic loading reduces the memory footprint by allowing libraries to be loaded only when needed, rather than linking them statically at compile time. It also eliminates the need to recompile the application when a dependent library changes, provided the interface remains compatible. Additonally, in the applications we test, libraries are loaded at runtime using `dlopen()` and `dlsym()`. Therefore, to correctly support these applications, dynamic loading functionality is required.
+
+## Design Decisions
+### How Dynamic Loading works in Linux
+
+When a program is executed on Linux, the kernel creates a new process image using execve() and maps the ELF executable into the process’s virtual address space. For statically linked binaries, the kernel sets up the stack and auxiliary data structures and transfers control directly to the program’s entry point. For dynamically linked binaries, the ELF header contains a PT_INTERP segment specifying the dynamic loader (typically `/lib64/ld-linux-x86-64.so.2`). The kernel maps this loader into the same process, transfers control to it, and the loader then loads required shared libraries, resolves symbols, performs relocations, and finally jumps to the program entry point. Crucially, the dynamic loader and the main executable share the same virtual address space and execute within the same process; the loader is not a separate process.
+
+In contrast, WebAssembly (WASM) binaries are not executed directly by the operating system. They run inside a runtime such as Wasmtime, which parses and validates the module, JIT-compiles the code, and instantiates the module. Instantiation involves allocating linear memory—a contiguous, sandboxed memory region —initializing globals and tables, and copying data segments into memory. Unlike ELF binaries, WASM modules do not rely on OS-level virtual memory mapping for code or libraries. Instead, execution and memory management are handled entirely within the runtime, which enforces isolation, bounds checking, and memory safety. 
+
+In the Lind system, dynamic loading support is implemented by extending Wasmtime’s parsing and instantiation mechanisms. Calls such as `dlopen`, `dlsym`, and `dlclose` from glibc are redirected to runtime-provided implementations. The runtime then loads additional WASM modules, allocates memory, resolves symbols, and performs relocation handling—all within the sandboxed environment. Integrating the dynamic loader inside the runtime is necessary because WebAssembly linking requires direct, synchronous modification of internal runtime state, such as function tables and memory bounds, which an external process cannot access without prohibitive serialization overhead. Keeping the dynamic loader internal also avoids the latency of inter-process communication, ensuring that module instantiation remains fast, secure, and fully within the trusted computing base.
+
 ## Current Status
 Have implemented dynamic loading support in Wasmtime. For applications that are compiled as dynamically linked executables or shared libraries, we are able to support both capabilities below:
 1. Launch the application while injecting all required dependent libraries using the `--preload` option (similar to `LD_PRELOAD`).
@@ -11,12 +23,10 @@ Support for fork, threads and signals within the shared libraries have to be add
 	  
 ## Changes made to implement dynamic loading:
 
-In general, to load and instantiate and run wasm applications with Lind, wasmtime is modified to interact with rawposix for invoking system calls like `mmap.`
-
-Following changes are done to wasmtime, to implement dynamic loading.
+"To execute WebAssembly applications within Lind, Wasmtime is modified to interface with RawPOSIX for handling system calls such as `mmap`. Specifically, the following changes were implemented in Wasmtime to support dynamic loading:"
 
 ### Parsing the dynamic section 
-The `dylink.0` section within WASM shared libraries is parsed and its contents are stored. load_module is responsible for parsing the WASM binary to extract its section cont	ents including code, data, imports, exports etc.
+The `dylink.0` custom section within WASM shared libraries is parsed to retrieve dynamic linking metadata. The `load_module` function is responsible for parsing the entire WASM binary to extract all section contents, including code, data, imports, exports, and the dynamic linking information.
 
 ### Instantiate the dynamic libraries which are passed using `--preload`
 1. Allocate memory for the shared libraries by invoking mmap within rawposix
@@ -37,9 +47,8 @@ The `dylink.0` section within WASM shared libraries is parsed and its contents a
 3. When dlsym() is invoked, correspond lind function, fetches the address of the function passed as argument, and invokes it.
 
 ### Linear Memory Changes
-For statically linked binary which has fixed addresses, the memory layout is fixed. stack comes first, followed by dta and heap. In dynamically linked binary, since the code is compiled as position-independent, the memory layout can be determined at runtime. The memory layout is as follows:
-
-	![Memory Layout (linear memory) in case of wasm binaries with dynamic loading](images/linear_memory.jpg)
+For statically linked binary which has fixed addresses, the memory layout is fixed. Stack comes first, followed by data and heap. In dynamically linked binary, since the code is compiled as position-independent, the memory layout can be determined at runtime. The memory layout for current implementation is as follows:
+![Memory Layout (linear memory) in case of wasm binaries with dynamic loading](images/linear_memory.png)
 
 
 # Generating a WASM Binary for C/C++ applications (Static build)
