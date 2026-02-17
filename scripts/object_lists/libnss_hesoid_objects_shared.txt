@@ -1,0 +1,5 @@
+hesiod/hesiod.os
+hesiod/hesiod-grp.os
+hesiod/hesiod-proto.os
+hesiod/hesiod-pwd.os
+hesiod/hesiod-service.os
